@@ -68,6 +68,14 @@ pub enum NotificationKind {
     FirstRaid,
     /// A work order is filed and accepted — `Game::queue_work_order`.
     FirstWorkOrder,
+    /// Static reaches the player for the first time — the movement hook in
+    /// `game/turn.rs`, on the step where `Terrain::event` is live on the
+    /// destination tile. Fired at the same site the effect is applied, not
+    /// on the epoch boundary `Game::note_static_turnover` announces from —
+    /// that fires for every biome turnover regardless of where the player
+    /// is standing, and a player three biomes away must not be told
+    /// something happened to them that didn't.
+    FirstStatic,
 
     // --- Milestones: `Always`, news about a moment that has happened again ---
     /// A portal holds and a new sector resolves — `Game::enter_next_zone`.
@@ -118,12 +126,13 @@ impl NotificationKind {
     /// scroll to forgive. `Perk::all`'s shape and its reason: a walk over
     /// the whole enum is what makes a census non-vacuous, and the array
     /// length fails to compile when a variant is added without being listed.
-    pub fn all() -> [NotificationKind; 7] {
+    pub fn all() -> [NotificationKind; 8] {
         [
             NotificationKind::BaseFounding,
             NotificationKind::FirstDescent,
             NotificationKind::FirstRaid,
             NotificationKind::FirstWorkOrder,
+            NotificationKind::FirstStatic,
             NotificationKind::Breach,
             NotificationKind::ContractClosed,
             NotificationKind::OnboardingMission,
@@ -182,6 +191,18 @@ impl NotificationKind {
                 color: GlyphColor::Yellow,
                 repeat: Repeat::OnceEver,
             },
+            NotificationKind::FirstStatic => NotificationDef {
+                title: "Static",
+                body: "That is Static, not the ground itself — interference riding on \
+                       top of the terrain, tied to the whole biome you are standing in rather \
+                       than to this one tile.\n\nIt runs on its own clock. Given time it clears, \
+                       and something else may settle over the same ground later. There is \
+                       nothing here to switch off.",
+                sprite: None,
+                glyph: '~',
+                color: GlyphColor::Orange,
+                repeat: Repeat::OnceEver,
+            },
             NotificationKind::Breach => NotificationDef {
                 title: "Breach",
                 body: "The portal holds long enough. A new sector resolves around you — new \
@@ -229,6 +250,7 @@ impl NotificationKind {
             NotificationKind::FirstDescent => "tutorial_first_descent",
             NotificationKind::FirstRaid => "tutorial_first_raid",
             NotificationKind::FirstWorkOrder => "tutorial_first_work_order",
+            NotificationKind::FirstStatic => "tutorial_first_static",
             NotificationKind::Breach => "milestone_breach",
             NotificationKind::ContractClosed => "milestone_contract",
             NotificationKind::OnboardingMission => "onboarding_mission",

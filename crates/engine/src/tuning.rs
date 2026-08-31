@@ -2767,30 +2767,122 @@ pub const MAX_PROFILE_STARTING_PROGRAMS: u32 = 1;
 pub const MAX_NEMESES: usize = 10;
 
 // ---------------------------------------------------------------------------
-// Environment effects
+// Ground conditions
 // ---------------------------------------------------------------------------
 
 /// Most of the player's maximum Integrity a single step onto ambient ground
-/// may cost, as a fraction (see `environment::EnvironmentEffect::Attrition`).
+/// may cost, as a fraction (see `environment::EnvironmentEffect`).
 ///
-/// A playability bound rather than content, which is why it is here and not
-/// in the `.ron`. Terrain is not a fight: it cannot be fled, refused or
-/// out-levelled, and a step is the cheapest action in the game. An authored
-/// `0.5` is death in two steps with no decision in between, and the file
-/// that wrote it would look no different from one that meant it. Set so a
-/// sector of the worst legal ground is a supply problem rather than a
-/// countdown — crossing it wants planning, not luck.
+/// A playability bound, checked against the **folded** effect rather than
+/// any one source: ground and a later weather layer both add into
+/// `attrition_percent`, so a pair that each stay well inside this ceiling on
+/// their own can still sum past it. Terrain is not a fight — it cannot be
+/// fled, refused or out-levelled, and a step is the cheapest action in the
+/// game — so a folded `0.5` would be death in two steps with no decision in
+/// between. Set so a sector of the worst legal ground is a supply problem
+/// rather than a countdown — crossing it wants planning, not luck.
 pub const MAX_ENVIRONMENT_ATTRITION: f32 = 0.05;
 
 /// Most extra ticks a single step onto ambient ground may cost, on top of
 /// the one every step already costs.
 ///
-/// The bound is against a hang the player cannot tell from a crash: a tick
-/// runs the whole schedule, and an authored `10_000` would stop the game
-/// dead on one keypress with no way to tell what happened. Three is already
-/// a step that costs four, which is as slow as ground can be before walking
-/// stops being the way you get anywhere.
+/// Also a ceiling on the fold rather than on ground alone, for the same
+/// reason `MAX_ENVIRONMENT_ATTRITION` is: a tick runs the whole schedule,
+/// and a summed drag the player cannot tell from a hang is worse than a
+/// single source authoring one. Three is already a step that costs four,
+/// which is as slow as ground can be before walking stops being the way you
+/// get anywhere.
 pub const MAX_ENVIRONMENT_DRAG_TICKS: u32 = 3;
+
+/// Most `EnvironmentEffect::min_damage` may reach, once folded.
+///
+/// Also a ceiling on the fold rather than on ground alone, for
+/// `MAX_ENVIRONMENT_ATTRITION`'s own reason: the floor is what actually
+/// decides the bite at low level, since `bite` takes the summed percentage
+/// or the summed floor, whichever is larger, and the percentage does not
+/// overtake a floor of 2 until `max_hp` reaches roughly 57. Set with
+/// headroom over the highest shipped fold (Null Sector's `DanglingReads` +
+/// `LeakingMemory`, 1 + 1 = 2) rather than equal to it —
+/// `MAX_STATIC_AMBUSH_MULT`'s own reasoning: a ceiling that exactly
+/// restates the content is not a guard.
+pub const MAX_ENVIRONMENT_MIN_DAMAGE: i32 = 4;
+
+/// Most `EnvironmentEffect::ambush_mult` may multiply
+/// `RANDOM_ENCOUNTER_CHANCE` by, once folded.
+///
+/// Ground itself never sets this above `1.0` — the term exists so a later
+/// weather layer has somewhere to land without a second field appearing on
+/// the struct then. Set above `SignalNoise`'s own authored `x2.0` rather
+/// than equal to it: a ceiling exactly at the one shipped value that reaches
+/// it is a restatement of the content, not a guard, and would be
+/// unreachable for every combination actually on the table (Null Sector's
+/// `SignalNoise` folded with `LeakingMemory` still tops out at `x2.0`, since
+/// only `SignalNoise` touches the term at all). Room enough that a second
+/// ambush-multiplying source could fold in without instantly saturating.
+pub const MAX_STATIC_AMBUSH_MULT: f32 = 2.5;
+
+/// `GroundCondition::DanglingReads`'s attrition, folded with any live
+/// weather claiming Null Sector.
+pub const DANGLING_READS_ATTRITION: f32 = 0.02;
+/// `DanglingReads`'s floor.
+pub const DANGLING_READS_FLOOR: i32 = 1;
+
+/// `GroundCondition::ThermalLoad`'s attrition.
+pub const THERMAL_LOAD_ATTRITION: f32 = 0.03;
+/// `ThermalLoad`'s floor.
+pub const THERMAL_LOAD_FLOOR: i32 = 2;
+
+/// `GroundCondition::LockContention`'s extra step cost, on top of the one
+/// every step already costs.
+pub const LOCK_CONTENTION_DRAG_TICKS: u32 = 1;
+
+// ---------------------------------------------------------------------------
+// Static weather
+// ---------------------------------------------------------------------------
+
+/// Ticks in one weather epoch — how long a `StaticEvent` (or clear ground)
+/// stands before `static_at` re-derives it. Every biome in a zone turns over
+/// at the same instant, which is invisible in play: the player is standing
+/// in one biome at a time.
+pub const STATIC_EPOCH_TICKS: u64 = 150;
+
+/// The implicit "nothing is live" weight every biome's pool carries beside
+/// its events' own weights, so most epochs in most biomes are clear.
+pub const STATIC_CLEAR_WEIGHT: u32 = 3;
+
+/// `StaticEvent::LeakingMemory`'s pool weight, against `STATIC_CLEAR_WEIGHT`
+/// and whatever else claims Null Sector.
+pub const LEAKING_MEMORY_WEIGHT: u32 = 1;
+/// `LeakingMemory`'s extra attrition, added on top of Null Sector's own
+/// `DanglingReads` — the shipped case for "no event is attrition-only except
+/// on ground that is already attrition."
+pub const LEAKING_MEMORY_ATTRITION: f32 = 0.015;
+/// `LeakingMemory`'s extra floor, added to `DanglingReads`'s own.
+pub const LEAKING_MEMORY_FLOOR: i32 = 1;
+
+/// `StaticEvent::ThreadStorm`'s pool weight.
+pub const THREAD_STORM_WEIGHT: u32 = 1;
+/// `ThreadStorm`'s extra step cost, on top of the one every step costs.
+pub const THREAD_STORM_DRAG_TICKS: u32 = 1;
+/// `ThreadStorm`'s multiplier on `RANDOM_ENCOUNTER_CHANCE`.
+pub const THREAD_STORM_AMBUSH_MULT: f32 = 1.5;
+
+/// `StaticEvent::PacketFlood`'s pool weight.
+pub const PACKET_FLOOD_WEIGHT: u32 = 1;
+/// `PacketFlood`'s extra step cost. Open Grid otherwise carries no standing
+/// condition at all — this is the one thing that ever taxes it.
+pub const PACKET_FLOOD_DRAG_TICKS: u32 = 1;
+/// `PacketFlood`'s multiplier on `RANDOM_ENCOUNTER_CHANCE`.
+pub const PACKET_FLOOD_AMBUSH_MULT: f32 = 1.6;
+
+/// `StaticEvent::SignalNoise`'s pool weight — claimed twice, once in
+/// Deadlock's pool and once in Null Sector's, so this one number prices
+/// both without a second field.
+pub const SIGNAL_NOISE_WEIGHT: u32 = 1;
+/// `SignalNoise`'s multiplier on `RANDOM_ENCOUNTER_CHANCE`. Carries no
+/// damage term at all — the shipped case for an event felt entirely
+/// through what it lets happen to you rather than through a bigger number.
+pub const SIGNAL_NOISE_AMBUSH_MULT: f32 = 2.0;
 
 // ---------------------------------------------------------------------------
 // Sector traits

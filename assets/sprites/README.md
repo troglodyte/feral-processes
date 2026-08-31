@@ -32,8 +32,8 @@ under a green con-colour goes black. Shade with **value**, not hue.
 A missing sprite is not an error. `Painter::sprite` returns `false` when
 it has nothing under that name and the caller draws the `glyph` instead,
 so deleting this directory restores the glyph map exactly — the same
-supported way deleting `assets/environment/` restores the pre-effects
-game. That is what lets a modded species ship without a sprite rather
+supported way deleting `assets/sectors/` restores undifferentiated
+zones. That is what lets a modded species ship without a sprite rather
 than shipping invisible.
 
 ## What is here

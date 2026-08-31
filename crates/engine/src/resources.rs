@@ -599,6 +599,14 @@ pub struct RunFeats {
     pub deeds: Vec<crate::contracts::Deed>,
 }
 
+/// Which ground conditions this **session** has already described.
+///
+/// Not saved, on `RunFeats`' precedent above: a reload re-announces a
+/// condition's description, and that is cheaper than a save field for
+/// flavour text nothing else depends on.
+#[derive(Resource, Default)]
+pub struct SeenConditions(pub Vec<crate::environment::GroundCondition>);
+
 /// This tick's answer to "what does the base supply, what do its machines
 /// draw, and which of them lost the cut" — `game::base::power::ledger`'s
 /// result, parked where the systems downstream of it can read it.

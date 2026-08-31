@@ -41,7 +41,7 @@ Three tiers, and which one you want depends on what you are doing:
 | notifications | `references/notifications.md` | 5 |
 | species and data (classes, stat shapes, censuses) | `references/species.md` | 3 |
 | help pages and documentation | `references/help.md` | 3 |
-| the ground (terrain effects) | `references/ground.md` | 1 |
+| the ground (terrain effects, Static weather) | `references/ground.md` | 3 |
 
 ## Adding a seam
 

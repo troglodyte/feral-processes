@@ -1,9 +1,9 @@
 //! The turn loop: advancing the clock, moving, and the actions a player
 //! spends a turn on.
 
-use crate::environment::EnvironmentEffect;
 use crate::game::pursuit::pursuit_field;
 use crate::game::spawning::SpawnEscalation;
+use crate::resources::SeenConditions;
 use crate::tuning::{
     NEST_AGGRO_LEASH_RADIUS, NEST_PATH_SEARCH_MARGIN, NEST_PURSUIT_STEPS_PER_TICK,
     RANDOM_ENCOUNTER_CHANCE,
@@ -155,6 +155,15 @@ impl Game {
         if self.is_game_over().is_some() {
             return;
         }
+        // Captured here, at the one place the clock actually advances,
+        // rather than at each of the thirty-odd call sites that spend a
+        // tick — a verb-by-verb list of "and also announce a boundary" is
+        // exactly how `idle_tick` and the crafting/building/trading paths
+        // went silent on this in the first place. A single tick can cross
+        // at most one epoch boundary (the clock only ever moves by one), so
+        // this fires at most once per call regardless of how many verbs
+        // share this function.
+        let epoch_before = self.static_epoch();
         // Before the ambient roll, not after: the roll's density gate reads
         // `local_hostile_count`, and asking it about ground that has not been
         // stocked yet would answer "empty" and spend a spawn filling in what
@@ -229,6 +238,7 @@ impl Game {
         // buff, not base upkeep the player paused by staying home.
         self.tick_field_buffs();
         self.world.resource_mut::<GameClock>().tick += 1;
+        self.note_static_turnover(epoch_before);
     }
 
     /// Moves every provoked nest guardian one step closer to the player and
@@ -506,8 +516,7 @@ impl Game {
             .resource_mut::<WorldMap>()
             .tile(pos.x, pos.y)
             .biome;
-        let to = self.world.resource_mut::<WorldMap>().tile(nx, ny);
-        let walkable = to.walkable;
+        let walkable = self.world.resource_mut::<WorldMap>().tile(nx, ny).walkable;
         let mut drag_ticks = 0;
         if walkable {
             let mut p = self.world.get_mut::<Position>(player).unwrap();
@@ -522,21 +531,45 @@ impl Game {
             // keeps underground. Through `apply_damage`, the one code path
             // that lowers a creature's HP, which is what makes mitigation
             // and every other incoming-damage rule apply for free.
-            let effect = self.ground_effect(nx, ny).map(|d| d.effect);
-            match effect {
-                Some(EnvironmentEffect::Attrition {
-                    hp_percent,
-                    min_damage,
-                }) => {
-                    let max_hp = self.world.get::<Stats>(player).map_or(0, |s| s.max_hp);
-                    let bite = ((max_hp as f32 * hp_percent).round() as i32).max(min_damage);
-                    self.apply_damage(player, bite);
-                }
-                Some(EnvironmentEffect::Drag { extra_ticks }) => drag_ticks = extra_ticks,
-                None => {}
+            let terrain = self.terrain_at(nx, ny);
+            let max_hp = self.world.get::<Stats>(player).map_or(0, |s| s.max_hp);
+            self.apply_damage(player, terrain.effect.bite(max_hp));
+            drag_ticks = terrain.effect.extra_ticks;
+            // Fired here, where the effect actually lands, and not from
+            // `note_static_turnover`'s epoch boundary — that fires for
+            // every biome's turnover regardless of where the player is
+            // standing, and "you were told" must not come apart from "it
+            // happened to you". Unconditional at this site: the once-only
+            // rule is `Repeat::OnceEver`, and it lives inside
+            // `queue_notification`, not here.
+            if terrain.event.is_some() {
+                self.notify(crate::notifications::NotificationKind::FirstStatic);
             }
-            if to.biome != from {
-                self.log(format!("You cross into {}.", to.biome.name()));
+            if terrain.biome != from {
+                // The condition's name joins the crossing line rather than
+                // getting one of its own — unclaimed ground (`condition:
+                // None`) must read exactly as it did before this feature,
+                // which is what `for_biome`'s own neutral case already
+                // guarantees.
+                match terrain.condition {
+                    Some(condition) => self.log(format!(
+                        "You cross into {} — {}.",
+                        terrain.biome.name(),
+                        condition.def().name
+                    )),
+                    None => self.log(format!("You cross into {}.", terrain.biome.name())),
+                }
+                // First meeting, once per session: `description` otherwise
+                // has no reader at all. `SeenConditions` is session-only —
+                // see its doc comment — so a reload re-announces, which is
+                // cheaper than a save field for flavour text.
+                if let Some(condition) = terrain.condition {
+                    let seen = &mut self.world.resource_mut::<SeenConditions>().0;
+                    if !seen.contains(&condition) {
+                        seen.push(condition);
+                        self.log(condition.def().description);
+                    }
+                }
             }
             // Only a step that actually covered ground draws an ambush —
             // every branch above returned already, so walking into a
@@ -551,12 +584,99 @@ impl Game {
         // can start a fight — `nest_aggro_tick` is the precedent — so the
         // rest of them are dropped the moment one does, rather than
         // resolving a world the player is no longer standing in while a
-        // battle waits on the screen.
+        // battle waits on the screen. Each of these ticks — and the one
+        // above — makes its own `note_static_turnover` call from inside
+        // `tick_inner`, so a `Drag` step spending several ticks still
+        // announces at most once: only the one tick that actually crosses a
+        // boundary has anything to say.
         for _ in 0..drag_ticks {
             if self.is_game_over().is_some() || self.has_active_battle() {
                 break;
             }
             self.tick();
+        }
+    }
+
+    /// Announces weather arriving or clearing under the player, if the tick
+    /// `tick_inner` just took crossed a weather epoch boundary. Called from
+    /// `tick_inner` itself, once per tick, right after the clock advances —
+    /// the one place the clock actually moves, rather than a second call
+    /// site threaded through every verb that spends a tick. A single tick
+    /// only ever moves the clock forward by one, so it can cross at most one
+    /// boundary; this cannot fire more than once for it.
+    ///
+    /// This is what makes standing still (`Game::idle_tick`), crafting,
+    /// building, trading and every other tick-spending verb announce a
+    /// boundary exactly like a step does — the previous version of this
+    /// hook was reachable only from `move_player`, so a boundary crossed
+    /// while the player stood still, worked a bench, or traded was missed
+    /// forever: nothing about the previous epoch is stored, so the next
+    /// step's own comparison could not see back past it.
+    ///
+    /// Fires only for the biome the player is standing in *now* — the other
+    /// biomes turning over silently is the point, or a boundary would cost
+    /// five lines of spam. The comparison is `static_in_epoch(biome,
+    /// epoch_before)` against `static_in_epoch(biome, static_epoch())`, both
+    /// pure calls: nothing about the previous epoch is stored anywhere,
+    /// which is what keeps a save/load mid-epoch from re-announcing.
+    ///
+    /// Gated through `Game::environment_biome_at` — zone 1 and the base's
+    /// own `Platform` floor never carry weather, so announcing a turnover
+    /// there would describe an effect that never actually bites. Reading
+    /// that gate rather than carrying a second copy of its two checks is
+    /// what keeps this in step with `terrain_at`'s own refusal.
+    ///
+    /// **Also refuses underground and in base space**, which
+    /// `environment_biome_at` alone does not: `Position` stays pinned to the
+    /// surface entrance (Stack) or the anchor tile (base) in both locales —
+    /// the same pinning `terrain_row`'s own guard exists for — so without
+    /// this a boundary turning over at the entrance tile would announce
+    /// weather at a place the player is not standing while they are four
+    /// frames down or safely inside the base pocket. `move_player` already
+    /// refused both states before this was ever reachable from anywhere but
+    /// itself; called from `tick_inner`, every tick-spending verb in both
+    /// locales reaches this and needs the same refusal.
+    ///
+    /// **Also refuses while a battle is active.** `move_player` used to be
+    /// the only caller, and it refuses outright on `has_active_battle()`, so
+    /// this was structurally unreachable during a fight. Moving the call
+    /// into `tick_inner` opened three battle-active paths to it — the
+    /// ambush early return's own `tick()`, an ordinary combat round's
+    /// `tick()`, and a failed jack-out's `tick()` — and `MessageSource::
+    /// Field` is not one the battle pane filters out, so a boundary crossed
+    /// mid-fight would interleave a weather line into the fight's own
+    /// narration. A boundary genuinely crossed during a battle is simply
+    /// never announced: nothing about the epoch is stored, so there is
+    /// nothing to announce late, and the player reads the weather off the
+    /// map pane's border the moment the fight ends.
+    pub(crate) fn note_static_turnover(&mut self, epoch_before: u64) {
+        let epoch_after = self.static_epoch();
+        if epoch_after == epoch_before {
+            return;
+        }
+        if self.is_underground() || self.in_base() || self.has_active_battle() {
+            return;
+        }
+        let player = self.player_entity();
+        let pos = *self.world.get::<Position>(player).unwrap();
+        let Some(biome) = self.environment_biome_at(pos.x, pos.y) else {
+            return;
+        };
+        let before = self.static_in_epoch(biome, epoch_before);
+        let after = self.static_in_epoch(biome, epoch_after);
+        match (before, after) {
+            (None, Some(event)) => self.log(format!(
+                "Static: {} settles over {}. {}",
+                event.def().name,
+                biome.name(),
+                event.def().description
+            )),
+            (Some(event), None) => self.log(format!(
+                "Static: {} clears from {}.",
+                event.def().name,
+                biome.name()
+            )),
+            _ => {}
         }
     }
 
@@ -586,24 +706,27 @@ impl Game {
     /// `maybe_spawn_wild_creature` performs: that cap bounds the population
     /// of *idle* programs the player walked away from, and an ambush pack
     /// is about to be resolved rather than left to roam.
+    ///
+    /// One `terrain_at` call, not a second tile lookup: the tile is already
+    /// in `WorldMap`'s chunk cache from the step that led here, and its
+    /// `effect.ambush_mult` is what a live weather event scales this roll
+    /// by — `EnvironmentEffect::fold`'s multiplicative term, reaching a roll
+    /// rather than a bite.
     pub(crate) fn maybe_ambush(&mut self) {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
         let player = self.player_entity();
         let pos = *self.world.get::<Position>(player).unwrap();
-        if self
-            .world
-            .resource_mut::<WorldMap>()
-            .tile(pos.x, pos.y)
-            .biome
-            == Biome::Platform
-        {
+        let terrain = self.terrain_at(pos.x, pos.y);
+        if terrain.biome == Biome::Platform {
             return;
         }
         let ambushed = {
             let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_bool(RANDOM_ENCOUNTER_CHANCE)
+            rng.0.random_bool(
+                (RANDOM_ENCOUNTER_CHANCE * terrain.effect.ambush_mult as f64).clamp(0.0, 1.0),
+            )
         };
         if !ambushed {
             return;

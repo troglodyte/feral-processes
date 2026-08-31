@@ -632,6 +632,11 @@ pub(super) fn draw_playing_base(
     // inside `draw_status_panel`, which only ever needed `&Game` before
     // this and shouldn't have to start borrowing mutably just to draw.
     let buffs = game.active_buffs();
+    // Read here, like `stock_rows`/`attention`/`status`/`buffs` above,
+    // rather than inline at the surface branch's `draw_map_frame` call —
+    // `Game::terrain_row` takes `&mut self` and this is where every other
+    // such call already lands before the borrows below.
+    let terrain = game.terrain_row();
     // Mounted on the log pane's top border by `draw_log_pane` at the end of
     // this function, so it is built here — before the `game` borrow it needs
     // — and held until then.
@@ -648,9 +653,12 @@ pub(super) fn draw_playing_base(
         }
         // No surface entities are fetched down here, so there is nothing to
         // count hostiles among — the threat readout names what the surface
-        // map shows, not what a stack frame's own view holds.
+        // map shows, not what a stack frame's own view holds. `None` for the
+        // same reason: a Stack frame has no biome for the ground readout to
+        // name.
         hud::map_frame::draw_map_frame(
             regions.map_pane,
+            None,
             hud::map_frame::Threat {
                 hostiles: 0,
                 shielded: game.raid_defense_active(),
@@ -672,6 +680,7 @@ pub(super) fn draw_playing_base(
         let hostiles = entities.iter().filter(|e| e.is_hostile).count();
         hud::map_frame::draw_map_frame(
             regions.map_pane,
+            terrain,
             hud::map_frame::Threat {
                 hostiles,
                 shielded: game.raid_defense_active(),
@@ -1585,6 +1594,20 @@ mod tests {
         app
     }
 
+    /// What the map frame's left mount actually draws for `app`'s game right
+    /// now — `Game::terrain_row` through the same `ground_pieces` the
+    /// renderer calls, rather than a hardcoded string that would drift the
+    /// moment the ground readout's wording changed. Read before
+    /// `draw_playing_base` runs, since `terrain_row` needs `&mut Game`.
+    fn ground_label(app: &mut feral_processes_app_core::App) -> String {
+        let row = app
+            .game
+            .as_mut()
+            .and_then(|g| g.terrain_row())
+            .expect("a fresh surface game has ground for the border to read");
+        hud::map_frame::ground_pieces(&row)[0].0.clone()
+    }
+
     /// **The trap Task 4 exists to close.** `border_strip` paints its own
     /// background quad, so calling `draw_map_frame` before the pane's
     /// contents lets the map's own fill paint straight over the frame's
@@ -1714,6 +1737,7 @@ mod tests {
     #[test]
     fn the_map_frame_draws_after_the_map() {
         let mut app = playing_app();
+        let label = ground_label(&mut app);
         let mut fx = Fx::new();
         let m = ui_metrics(900.0);
         let (regions, shapes) = with_painter(|p| {
@@ -1747,13 +1771,13 @@ mod tests {
         let title = shapes
             .iter()
             .position(|cs| {
-                matches!(&cs.shape, bevy_egui::egui::Shape::Text(t) if t.galley.text() == "SECTOR MAP")
+                matches!(&cs.shape, bevy_egui::egui::Shape::Text(t) if t.galley.text().contains(&label))
             })
-            .expect("the map frame paints its title");
+            .unwrap_or_else(|| panic!("the map frame never painted its ground readout {label:?}"));
 
         assert!(
             title > map_bg,
-            "the map's background painted at {map_bg}, SECTOR MAP at {title} — \
+            "the map's background painted at {map_bg}, the {label:?} readout at {title} — \
              the frame drew before the map, so its own fill painted over the label"
         );
     }
@@ -1763,9 +1787,9 @@ mod tests {
     /// reaches upward past `map_pane.y` by `size/2 + pad/2` — and
     /// `map_pane.y` used to sit exactly on the status bar's own bottom edge.
     /// `draw_status_bar` paints its opaque fill *after* `draw_map_frame` has
-    /// already run, so the top of that quad — and the top of "SECTOR MAP"'s
-    /// and the THREAT readout's glyph caps riding on it — painted straight
-    /// through the bar.
+    /// already run, so the top of that quad — and the top of the ground
+    /// readout's and the THREAT readout's glyph caps riding on it — painted
+    /// straight through the bar.
     ///
     /// Asserted against the real painted quad rather than a region number:
     /// `the_playing_screen_draws_inside_its_regions` already checks
@@ -1775,6 +1799,7 @@ mod tests {
     #[test]
     fn the_map_frames_top_strips_clear_the_status_bar() {
         let mut app = playing_app();
+        let ground = ground_label(&mut app);
         let mut fx = Fx::new();
         let m = ui_metrics(900.0);
         let (regions, shapes) = with_painter(|p| {
@@ -1787,12 +1812,12 @@ mod tests {
 
         let status_bottom = regions.status_bar.y + regions.status_bar.h;
 
-        // "SECTOR MAP" (Mount::TopLeft) and the THREAT readout
+        // The ground readout (Mount::TopLeft) and the THREAT readout
         // (Mount::TopRight) both ride the map pane's top border. Each paints
         // its background quad immediately before its own glyphs
         // (`strip::border_strip`'s ordering rule), so the nearest preceding
         // filled rect *is* that quad.
-        for label in ["SECTOR MAP", "THREAT"] {
+        for label in [ground.as_str(), "THREAT"] {
             let text_idx = shapes
                 .iter()
                 .position(|cs| {
@@ -2162,7 +2187,7 @@ mod tests {
 
     /// ...and with nothing loaded the map is exactly what it was. This is
     /// what makes `assets/sprites/` deletable, the same supported way
-    /// `assets/environment/` is.
+    /// `assets/sectors/` is.
     #[test]
     fn an_empty_sprite_table_leaves_the_glyph_map_alone() {
         let (images, glyphs) = drawn_map(SpriteTable::default());

@@ -5858,24 +5858,29 @@ requiring a proof. It reads `spread` alongside `power` now
 (`average_move_range`), so a species that swings wide is projected as
 swinging wide rather than as swinging for its average every time.
 
-### The ground
+### `Game::terrain_at` is the one door onto ground and weather alike, and `environment_biome_at` is the one gate behind it
 
-**`Game::ground_effect` is the one door onto what terrain does to you, and
-the zone-1 gate lives inside it.**
+**`Game::terrain_at` is the one door onto what terrain does to you, and
+`environment_biome_at` is the single definition of its gates.**
 
-Ambient effects are keyed to the biome and loaded from
-`assets/environment/*.ron`. Three things could each have held the zone-1
-rule — the loader, the reader, or the hook in `move_player` — and only one of
-them survives a second consumer.
+This used to be `Game::ground_effect`, reading `EnvironmentDb` — a loaded
+`assets/environment/*.ron` catalogue — behind the same zone-1 rule argued
+below. The 2026-08-31 Static weather change deleted that catalogue (the
+environment is now `crates/engine/src/environment.rs`, a Rust enum with an
+exhaustive `def()`, on `notifications.rs`'s shape) and renamed the reader for
+what it now returns, but the argument for where the gate lives did not
+change, because the same three candidates were on the table again: the
+catalogue, the reader, or the hook in `move_player`.
 
-The loader is wrong because a db is not a place: `EnvironmentDb` has no idea
-what zone the party is in, and giving it one would make the same install load
-differently depending on when it was asked. The hook is wrong for the reason
-this repo has hit four times elsewhere: a rule at a call site is a rule that
-holds until the second call site appears, and the obvious second one is
-already visible — a screen that names the ground you are standing on, an
-examine line, a scan. Either would read the db directly, get an answer, and
-show the player a hazard that zone 1 does not apply.
+The catalogue is wrong because a table is not a place: nothing in
+`GroundCondition` or `StaticEvent` knows what zone the party is in, and
+giving it one would make the same lookup answer differently depending on when
+it was asked. The hook is wrong for the reason this repo has hit four times
+elsewhere: a rule at a call site is a rule that holds until the second call
+site appears, and the second one arrived within the same change —
+`maybe_ambush` needed the same biome the movement hook already had, and
+initially read `WorldMap::tile` a second time to get it rather than asking
+`terrain_at`.
 
 So the reader holds it, and the reader takes a *coordinate* rather than a
 biome. Taking a biome would have been a smaller function and would have let
@@ -5883,19 +5888,38 @@ the caller do the map lookup it was doing anyway; it would also have meant
 every caller could get the same answer without going through the gate, which
 is the property the whole arrangement exists for.
 
-**The trap is that the biome's name is deliberately on the other side of
-it.** Zone 1's neutrality is about *effects* — the opening zone is where a
-run learns the game, and ground that bites there is a tax on the tutorial
-rather than an exception to it. None of that argues for hiding what the
-ground is called, and the first player-facing name the terrain has ever had
-would be a strange thing to withhold from a new player specifically.
+**The gate itself split into a second function mid-build, for the same
+reason.** Weather's readout needs to know, on the tick an epoch boundary is
+crossed, whether the player's *current* biome takes weather at all —
+`Game::note_static_turnover` — and that is the zone-1-and-`Platform` check
+again, at a second call site that does not go through `terrain_at` (it has no
+use for a folded `EnvironmentEffect`, only for whether one exists). The first
+version of that function carried its own copy of both checks. It was
+extracted to `Game::environment_biome_at(x, y) -> Option<Biome>` — `None` if
+the location takes no environment effects at all — and both `terrain_at` and
+`note_static_turnover` call it now. Two copies of "is this zone 1 or the base
+slab" is exactly how the neutral-zone-1 rule lapses, which is the trap this
+repo's own CLAUDE.md already named before weather gave it a second caller to
+prove the point on.
+
+**The trap is that the biome's *name* is deliberately on the other side of
+the gate.** Zone 1's neutrality is about *effects* — the opening zone is
+where a run learns the game, and ground that bites there is a tax on the
+tutorial rather than an exception to it. None of that argues for hiding what
+the ground is called, and the first player-facing name the terrain has ever
+had would be a strange thing to withhold from a new player specifically. So
+`environment_biome_at` returns `None` for "no effects here" while `terrain_at`
+still resolves the real biome for its neutral return — the outer `WorldMap`
+lookup happens once, before the gate is consulted, and its result survives
+into both arms.
 
 The shape of the mistake is a later change that "tidies" the hook by wrapping
 the whole block, name included, in the gate. It looks like a simplification
 and it costs a run's first three zones their only sense of place.
 `zone_one_takes_no_bite_but_still_names_the_ground` is what refuses it, and
-it asserts both halves in one function on purpose: the effect half alone
-passes against exactly the bare early return being guarded against.
+`zone_one_terrain_and_turnover_agree_on_no_weather` is the same shape for the
+second gate site, asserting `terrain_at` and the turnover log agree on "no
+weather" from the same forced epoch boundary.
 
 Three smaller rules, each with the same one-place shape:
 
@@ -5914,12 +5938,108 @@ Three smaller rules, each with the same one-place shape:
   direct write to `Stats::hp` would silently make Ablative Layer stop working
   on the one damage source it most obviously should.
 
-The load-time refusals are argued in `assets/environment/README.md`, since
-they are the modding contract rather than an engine seam. The one worth
-repeating here is that the base slab may not be claimed: it is the one safe
-ground in the game, nothing spawns there and no ambush fires there, and a
-base is stamped over whatever terrain it lands on — so ground that bit there
-would make the safe floor depend on where the player happened to build.
+The load-time refusals `EnvironmentDef::fault` used to perform — a bad
+`hp_percent`, a bad `extra_ticks`, a claim on `Platform` — are gone along
+with the loader they guarded; see the next entry for where that check went.
+The one worth repeating here is that the base slab may not be claimed: it is
+the one safe ground in the game, nothing spawns there and no ambush fires
+there, and a base is stamped over whatever terrain it lands on — so ground
+that bit there would make the safe floor depend on where the player happened
+to build. `environment_biome_at` refuses `Biome::Platform` for exactly this
+reason, in the resolver, where the mechanism has always lived.
+
+### `EnvironmentEffect` stopped being a one-of the day weather needed to stack with ground
+
+**Ground and weather fold into one `EnvironmentEffect`, and the fold is
+additive on every term except the ambush multiplier, which multiplies.**
+
+Before Static weather, `EnvironmentEffect` was `Attrition { hp_percent,
+min_damage }` or `Drag { extra_ticks }` — a Rust enum mirroring the `.ron`
+schema's own one-of. That shape cannot express a single event that both
+slows the player down and makes an ambush more likely (`ThreadStorm` and
+`PacketFlood` both do exactly this), and every caller that had to combine
+ground with something else would have needed its own case-split to do it.
+
+So `EnvironmentEffect` became a struct carrying all four terms at once —
+`attrition_percent`, `min_damage`, `extra_ticks`, `ambush_mult` — with
+`EnvironmentEffect::NONE` as the identity (no bite, no drag, `ambush_mult:
+1.0`) and `fold` combining two effects: the three attrition-and-drag terms
+add, the ambush multiplier multiplies. `clamped` then cuts the *folded* sum
+down to `MAX_ENVIRONMENT_ATTRITION`, `MAX_ENVIRONMENT_DRAG_TICKS` and
+`MAX_STATIC_AMBUSH_MULT`, and `bite` prices the summed percentage and summed
+floor through one `max(max_hp * pct, min)` — a single floor-at-the-minimum
+rather than one per source, so two attrition sources stacking are not double-
+floored the way two separate `apply_damage` calls would double them.
+
+**The trap: the rename from `ground_effect` to `terrain_at` fails to compile
+at every call site, but this shape change does not.** A reader that
+destructures the old `Attrition`/`Drag` enum will not build against a struct,
+but code that already holds an `EnvironmentEffect` and reads only
+`attrition_percent` and `min_damage` off it — the two terms that existed
+before weather — compiles clean and silently drops `extra_ticks` and
+`ambush_mult` from whatever it does next. There is exactly one production
+reader, the hook in `game/turn.rs`, and the test that holds it,
+`ground_and_weather_effects_stack`, asserts all three fold terms (the summed
+attrition, the summed floor, the multiplied ambush) in one function rather
+than checking the bite alone — the same "assert both halves together" shape
+`zone_one_takes_no_bite_but_still_names_the_ground` already used for the
+zone-1 gate.
+
+The three load-time refusals `EnvironmentDef::fault` used to perform moved to
+a compile-time census instead of a startup check:
+`every_condition_stays_inside_its_ceiling` and the matching `StaticEvent`
+census walk both `all()` arrays and assert every authored magnitude is inside
+its ceiling *on its own*, which is strictly stronger than the old warning —
+a build fails rather than a player seeing a warning they cannot act on. The
+ceilings themselves stayed in `tuning.rs` at their old values
+(`MAX_ENVIRONMENT_ATTRITION`, `MAX_ENVIRONMENT_DRAG_TICKS`); only their doc
+comments changed, from arguing about what a stranger's file might author to
+arguing about what the *fold* might exceed even when both halves are inside
+their own ceiling.
+
+### Which Static event is live is derived from `(seed, zone, biome, epoch)`, and there is no save field
+
+**A weather event is never stored — `Game::static_at` derives it fresh from
+the world seed, the zone, the biome and the current epoch, every time it is
+asked.**
+
+```
+epoch = current_tick() / STATIC_EPOCH_TICKS
+seed  = static_seed(world_seed, zone, biome, epoch)   // FNV-1a, folded a
+                                                       // byte at a time
+event = derive::index(seed, total_weight) reduced against each biome's pool,
+        clear weight (STATIC_CLEAR_WEIGHT) checked first
+```
+
+This is the third instance of a derivation this repo already established
+twice — `Game::sortie_board_seed` (`game/sortie.rs`) and `Game::board_seed`
+(`game/contracts.rs`) — and it buys the same four things every time: no save
+field, no `SAVE_FORMAT_VERSION` bump, no `resources::GameRng` draw (worldgen
+must never draw from it — `stack::generate`'s rule), and nothing a player can
+save-scum by reloading. `static_seed` folds each of its four words through
+`game::contracts::fold` (the same byte-at-a-time FNV-1a helper
+`sortie_board_seed` and `board_seed` already share) rather than XORing whole
+words together, because one XOR-then-multiply round only carries a
+difference about as wide as the multiplying prime (~41 bits) upward — a word
+folded in whole, differing only in its low bits, would never reach bit 63,
+which is the bit `derive::index` actually reads. `Biome`'s own enum
+discriminant is not what gets folded in: `Biome` derives `Serialize`, so its
+discriminant is save-adjacent, and a private `biome_ord` function gives
+`static_seed` a stable integer that does not silently re-roll every
+existing world's weather the day a `Biome` variant is inserted or reordered.
+
+**A fixed epoch length rather than a per-event duration is the traded-off
+decision here.** A per-event length reads better in the fiction — a Thread
+Storm should be short and violent, a Signal Noise event might linger — but
+"when did this one start" is not a value `static_at` can derive from the
+clock alone; it would have to be recorded the moment the event began, which
+is a save field and a migration for what is otherwise flavour. The fixed
+`STATIC_EPOCH_TICKS` avoids that at the cost that every biome in a zone turns
+over at the same instant, on the same clock. That cost is invisible in play
+because the player is only ever standing in one biome at a time — a fact the
+log readout leans on directly: arrival and clearing (`Game::
+note_static_turnover`, `game/turn.rs`) only ever announce for the biome
+under the player's feet, so the other biomes turning over is silent.
 
 ### The manual's index is a menu and a page is a document
 

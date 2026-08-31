@@ -1,277 +1,184 @@
-//! The environment database: loading it, refusing a file that would make
-//! the game unplayable, and the one reader that resolves a tile to an
+//! The ground catalogue, and the one reader that resolves a tile to an
 //! effect.
 //!
 //! Nothing here draws from `resources::GameRng`. Ambient ground is a
 //! property of the *place*, resolved from the biome every time it is asked
-//! rather than rolled or stored.
+//! rather than rolled or stored. The catalogue itself is Rust now, so these
+//! tests build `EnvironmentEffect`s and `GroundCondition`s by hand rather
+//! than writing scratch `.ron` files — there is no loader left to exercise.
 
-use crate::environment::{EnvironmentDb, EnvironmentEffect};
-use crate::tests::support::{
-    ScratchAssets, assets_dir_with_environment, enlist, scratch_assets_dir,
+use crate::environment::{EnvironmentEffect, GroundCondition};
+use crate::tuning::{
+    MAX_ENVIRONMENT_ATTRITION, MAX_ENVIRONMENT_DRAG_TICKS, MAX_ENVIRONMENT_MIN_DAMAGE,
+    MAX_STATIC_AMBUSH_MULT,
 };
-use crate::tuning::{MAX_ENVIRONMENT_ATTRITION, MAX_ENVIRONMENT_DRAG_TICKS};
 use crate::world::Biome;
 
-/// A scratch environment directory holding `files` as `(filename, body)`.
-///
-/// Built on the `ScratchAssets` RAII guard rather than a hand-rolled `/tmp`
-/// path: a panic between creation and a manual cleanup call leaks the
-/// directory, and `Drop` runs on an unwind.
-fn env_dir(tag: &str, files: &[(&str, &str)]) -> ScratchAssets {
-    let dir = scratch_assets_dir(tag);
-    std::fs::create_dir_all(&dir).unwrap();
-    for (name, body) in files {
-        std::fs::write(dir.join(name), body).unwrap();
-    }
-    dir
-}
-
-const COLD: &str = r#"(
-    id: "cold",
-    name: "Standing Frost",
-    description: "The floor pulls heat out of anything that stops on it.",
-    biomes: [Deadlock],
-    effect: Attrition(hp_percent: 0.02, min_damage: 1),
-)"#;
-
-/// Attrition with room to mitigate and enough bite to be lethal from 1 HP.
-const HARSH: &str = r#"(
-    id: "harsh",
-    name: "Hard Frost",
-    description: "The floor takes what it can get.",
-    biomes: [Deadlock],
-    effect: Attrition(hp_percent: 0.05, min_damage: 4),
-)"#;
+// -------------------------------------------------------------- the catalogue
 
 #[test]
-fn a_well_formed_environment_file_loads_and_answers_for_its_biome() {
-    let dir = env_dir("env_ok", &[("cold.ron", COLD)]);
-    let (db, warnings) = EnvironmentDb::load_dir(&dir).unwrap();
-
-    assert!(warnings.is_empty(), "warnings were {warnings:?}");
-    let def = db.for_biome(Biome::Deadlock).expect("the file claimed it");
-    assert_eq!(def.id, "cold");
+fn for_biome_claims_the_three_ground_conditions() {
     assert_eq!(
-        def.effect,
-        EnvironmentEffect::Attrition {
-            hp_percent: 0.02,
-            min_damage: 1
-        }
+        GroundCondition::for_biome(Biome::NullSector),
+        Some(GroundCondition::DanglingReads)
     );
-    assert!(
-        db.for_biome(Biome::OpenGrid).is_none(),
-        "an unclaimed biome is neutral ground"
+    assert_eq!(
+        GroundCondition::for_biome(Biome::Mainframe),
+        Some(GroundCondition::ThermalLoad)
     );
-}
-
-#[test]
-fn a_malformed_environment_file_is_skipped_and_the_others_still_load() {
-    let dir = env_dir(
-        "env_bad",
-        &[("cold.ron", COLD), ("broken.ron", "(id: \"broken\"")],
-    );
-    let (db, warnings) = EnvironmentDb::load_dir(&dir).unwrap();
-
-    assert_eq!(warnings.len(), 1, "{warnings:?}");
-    assert!(warnings[0].contains("broken"), "{warnings:?}");
-    assert!(
-        db.for_biome(Biome::Deadlock).is_some(),
-        "one bad mod file must not take the rest of the directory with it"
+    assert_eq!(
+        GroundCondition::for_biome(Biome::Deadlock),
+        Some(GroundCondition::LockContention)
     );
 }
 
-/// The base slab is the one safe ground in the game — nothing spawns there
-/// and no ambush fires. That is not a file's decision to revoke.
+/// Unclaimed is the common case — most of the map has to read as scenery,
+/// not as a tax on walking. `Platform` is here too: the base's own floor
+/// must never be claimed, whatever a future condition's biome list says.
 #[test]
-fn an_environment_file_claiming_the_base_slab_is_refused() {
-    const SLAB: &str = r#"(
-    id: "slab",
-    name: "Bad Idea",
-    description: "Ground that bites where the base stands.",
-    biomes: [Platform],
-    effect: Attrition(hp_percent: 0.01, min_damage: 1),
-)"#;
-    let dir = env_dir("env_slab", &[("slab.ron", SLAB)]);
-    let (db, warnings) = EnvironmentDb::load_dir(&dir).unwrap();
-
-    assert_eq!(warnings.len(), 1, "{warnings:?}");
-    assert!(warnings[0].contains("Platform"), "{warnings:?}");
-    assert!(db.for_biome(Biome::Platform).is_none());
-}
-
-#[test]
-fn an_environment_file_over_either_ceiling_is_refused() {
-    let bite = format!(
-        r#"(
-    id: "bite",
-    name: "Far Too Much",
-    description: "Death in two steps.",
-    biomes: [Deadlock],
-    effect: Attrition(hp_percent: {}, min_damage: 1),
-)"#,
-        MAX_ENVIRONMENT_ATTRITION + 0.01
-    );
-    let drag = format!(
-        r#"(
-    id: "drag",
-    name: "Far Too Slow",
-    description: "A step that never finishes.",
-    biomes: [NullSector],
-    effect: Drag(extra_ticks: {}),
-)"#,
-        MAX_ENVIRONMENT_DRAG_TICKS + 1
-    );
-    let dir = env_dir("env_ceiling", &[("bite.ron", &bite), ("drag.ron", &drag)]);
-    let (db, warnings) = EnvironmentDb::load_dir(&dir).unwrap();
-
-    assert_eq!(warnings.len(), 2, "{warnings:?}");
-    assert!(db.for_biome(Biome::Deadlock).is_none());
-    assert!(db.for_biome(Biome::NullSector).is_none());
-}
-
-/// Directory order is not stable across platforms, so resolving a clash
-/// silently by whichever file was read first would make a modder's game
-/// differ from the one they tested. It is an authoring error and it says so,
-/// naming both files.
-#[test]
-fn two_files_claiming_one_biome_refuse_the_second_and_name_both() {
-    const RIVAL: &str = r#"(
-    id: "rival",
-    name: "Also Frost",
-    description: "The same ground, claimed twice.",
-    biomes: [Deadlock],
-    effect: Drag(extra_ticks: 1),
-)"#;
-    let dir = env_dir("env_clash", &[("a_cold.ron", COLD), ("b_rival.ron", RIVAL)]);
-    let (db, warnings) = EnvironmentDb::load_dir(&dir).unwrap();
-
-    assert_eq!(warnings.len(), 1, "{warnings:?}");
-    assert!(warnings[0].contains("cold"), "{warnings:?}");
-    assert!(warnings[0].contains("rival"), "{warnings:?}");
-    let def = db
-        .for_biome(Biome::Deadlock)
-        .expect("the first still loads");
-    assert_eq!(def.id, "cold");
-}
-
-/// A hole in the map is unreachable, not wrong. A mod naming all six biomes
-/// for convenience must not be nagged about the two nobody can stand on.
-#[test]
-fn an_environment_file_claiming_an_unwalkable_biome_loads_without_complaint() {
-    const HOLES: &str = r#"(
-    id: "holes",
-    name: "Nowhere",
-    description: "Ground that cannot be reached.",
-    biomes: [DataVoid, BlackIce],
-    effect: Drag(extra_ticks: 1),
-)"#;
-    let dir = env_dir("env_holes", &[("holes.ron", HOLES)]);
-    let (db, warnings) = EnvironmentDb::load_dir(&dir).unwrap();
-
-    assert!(warnings.is_empty(), "warnings were {warnings:?}");
-    assert!(db.for_biome(Biome::BlackIce).is_some());
-}
-
-/// Deleting `assets/environment/` must restore today's game exactly, the
-/// same supported way deleting `assets/sectors/` already is.
-#[test]
-fn an_absent_environment_directory_loads_silently_to_an_empty_db() {
-    let dir = scratch_assets_dir("env_absent");
-    let (db, warnings) = EnvironmentDb::load_dir(&dir).unwrap();
-
-    assert!(warnings.is_empty(), "warnings were {warnings:?}");
+fn for_biome_leaves_the_rest_of_the_map_neutral() {
     for biome in [
-        Biome::DataVoid,
-        Biome::Deadlock,
-        Biome::NullSector,
-        Biome::Mainframe,
         Biome::OpenGrid,
+        Biome::DataVoid,
         Biome::BlackIce,
         Biome::Platform,
     ] {
-        assert!(db.for_biome(biome).is_none());
+        assert!(
+            GroundCondition::for_biome(biome).is_none(),
+            "{biome:?} should be neutral ground"
+        );
     }
+}
+
+/// Walks the array rather than naming three conditions by hand, so the
+/// array length is what fails to compile when a fourth is added without
+/// words to go with it.
+#[test]
+fn every_condition_has_a_name_and_a_description() {
+    for condition in GroundCondition::all() {
+        let def = condition.def();
+        assert!(!def.name.is_empty(), "{condition:?} has no name");
+        assert!(
+            !def.description.is_empty(),
+            "{condition:?} has no description"
+        );
+    }
+}
+
+/// Replaces `EnvironmentDef::fault`'s three load-time refusals: nothing here
+/// is authored by a stranger any more, so the ceilings are a compile-time
+/// census over the shipped catalogue instead of a startup check.
+#[test]
+fn every_condition_stays_inside_its_ceiling() {
+    for condition in GroundCondition::all() {
+        let effect = condition.def().effect;
+        assert!(
+            (0.0..=MAX_ENVIRONMENT_ATTRITION).contains(&effect.attrition_percent),
+            "{condition:?} authors attrition_percent {}",
+            effect.attrition_percent
+        );
+        assert!(
+            (0..=MAX_ENVIRONMENT_MIN_DAMAGE).contains(&effect.min_damage),
+            "{condition:?} authors min_damage {}",
+            effect.min_damage
+        );
+        assert!(
+            effect.extra_ticks <= MAX_ENVIRONMENT_DRAG_TICKS,
+            "{condition:?} authors extra_ticks {}",
+            effect.extra_ticks
+        );
+        assert!(
+            effect.ambush_mult <= MAX_STATIC_AMBUSH_MULT,
+            "{condition:?} authors ambush_mult {}",
+            effect.ambush_mult
+        );
+    }
+}
+
+/// The guard on the one-of → all-of shape change: a reader that only looks
+/// at the attrition terms and ignores the rest would compile clean and
+/// silently drop both drag and the ambush multiplier, so all four terms are
+/// asserted together against two hand-built effects.
+#[test]
+fn fold_adds_attrition_and_drag_and_multiplies_ambush() {
+    let a = EnvironmentEffect {
+        attrition_percent: 0.25,
+        min_damage: 1,
+        extra_ticks: 1,
+        ambush_mult: 1.5,
+    };
+    let b = EnvironmentEffect {
+        attrition_percent: 0.5,
+        min_damage: 2,
+        extra_ticks: 2,
+        ambush_mult: 2.0,
+    };
+
+    let folded = a.fold(b);
+
+    assert_eq!(folded.attrition_percent, 0.75, "attrition adds");
+    assert_eq!(folded.min_damage, 3, "the floor adds");
+    assert_eq!(folded.extra_ticks, 3, "drag adds");
+    assert_eq!(folded.ambush_mult, 3.0, "the ambush term multiplies");
+}
+
+/// Built by hand rather than off the shipped conditions, so this does not
+/// depend on their magnitudes staying where they are.
+#[test]
+fn clamped_cuts_each_term_to_its_ceiling() {
+    let excessive = EnvironmentEffect {
+        attrition_percent: MAX_ENVIRONMENT_ATTRITION + 1.0,
+        min_damage: MAX_ENVIRONMENT_MIN_DAMAGE + 5,
+        extra_ticks: MAX_ENVIRONMENT_DRAG_TICKS + 5,
+        ambush_mult: MAX_STATIC_AMBUSH_MULT + 1.0,
+    };
+
+    let clamped = excessive.clamped();
+
+    assert_eq!(clamped.attrition_percent, MAX_ENVIRONMENT_ATTRITION);
+    assert_eq!(
+        clamped.min_damage, MAX_ENVIRONMENT_MIN_DAMAGE,
+        "the floor has a ceiling too"
+    );
+    assert_eq!(clamped.extra_ticks, MAX_ENVIRONMENT_DRAG_TICKS);
+    assert_eq!(clamped.ambush_mult, MAX_STATIC_AMBUSH_MULT);
+}
+
+#[test]
+fn bite_is_the_floored_percentage_and_zero_for_none() {
+    let effect = EnvironmentEffect {
+        attrition_percent: 0.1,
+        min_damage: 3,
+        extra_ticks: 0,
+        ambush_mult: 1.0,
+    };
+    assert_eq!(
+        effect.bite(100),
+        10,
+        "the percentage wins once it clears the floor"
+    );
+    assert_eq!(
+        effect.bite(20),
+        3,
+        "the floor wins when the percentage would round under it"
+    );
+
+    assert_eq!(
+        EnvironmentEffect::NONE.bite(1000),
+        0,
+        "a no-attrition effect must not deal the floor"
+    );
 }
 
 // ---------------------------------------------------------------- the reader
 
-use crate::resources::ZoneLevel;
+use crate::components::{ActiveFieldBuff, BuffSource, FieldBuffKind, Position, Stats};
+use crate::resources::{MessageLog, Party, ZoneLevel};
+use crate::tests::support::{
+    descend, enlist, spawn_tamed, spawn_wild_on_player_tile, stand_in_base, test_assets_dir,
+};
 use crate::world::{Tile, WorldMap};
 use crate::{DifficultyMode, Game};
-
-/// A game standing on `biome` at `zone`, with the environment directory
-/// holding exactly `files`.
-fn game_standing_on(tag: &str, files: &[(&str, &str)], zone: u32, biome: Biome) -> Game {
-    let dir = assets_dir_with_environment(tag, files);
-    let mut game = Game::new(16, DifficultyMode::Forgiving, &dir).unwrap();
-    game.world.resource_mut::<ZoneLevel>().0 = zone;
-    let pos = *game
-        .world
-        .get::<crate::components::Position>(game.player_entity())
-        .unwrap();
-    game.world.resource_mut::<WorldMap>().set_override(
-        pos.x,
-        pos.y,
-        Tile {
-            biome,
-            walkable: true,
-            rock_shade: None,
-        },
-    );
-    game
-}
-
-fn player_tile(game: &Game) -> (i32, i32) {
-    let pos = *game
-        .world
-        .get::<crate::components::Position>(game.player_entity())
-        .unwrap();
-    (pos.x, pos.y)
-}
-
-#[test]
-fn ground_effect_answers_for_a_claimed_biome_past_zone_one() {
-    let mut game = game_standing_on("env_read", &[("cold.ron", COLD)], 2, Biome::Deadlock);
-    let (x, y) = player_tile(&game);
-
-    assert_eq!(
-        game.ground_effect(x, y).map(|d| d.id.as_str()),
-        Some("cold")
-    );
-}
-
-/// The gate lives inside `ground_effect` so it cannot lapse at a second
-/// call site. A test that read the db directly would be asserting about
-/// the wrong thing entirely.
-#[test]
-fn ground_effect_is_empty_at_zone_one() {
-    let mut game = game_standing_on("env_zone1", &[("cold.ron", COLD)], 1, Biome::Deadlock);
-    let (x, y) = player_tile(&game);
-
-    assert!(game.ground_effect(x, y).is_none());
-}
-
-#[test]
-fn ground_effect_never_answers_for_the_base_slab() {
-    let mut game = game_standing_on("env_slab_read", &[("cold.ron", COLD)], 2, Biome::Platform);
-    let (x, y) = player_tile(&game);
-
-    assert!(game.ground_effect(x, y).is_none());
-}
-
-#[test]
-fn ground_effect_is_empty_for_an_unclaimed_biome() {
-    let mut game = game_standing_on("env_unclaimed", &[("cold.ron", COLD)], 2, Biome::OpenGrid);
-    let (x, y) = player_tile(&game);
-
-    assert!(game.ground_effect(x, y).is_none());
-}
-
-// ------------------------------------------------------------- the hook
-
-use crate::components::{ActiveFieldBuff, BuffSource, FieldBuffKind, Position, Stats};
-use crate::resources::{MessageLog, Party};
 
 /// Stands the player on `from` with `to` one step east, both written
 /// through the override overlay, and clears anything squatting on the
@@ -316,11 +223,16 @@ fn player_hp(game: &Game) -> i32 {
     game.world.get::<Stats>(game.player_entity()).unwrap().hp
 }
 
-/// A game past zone 1 with `files` installed, standing on Open Grid with
-/// one step east onto `onto`.
-fn game_about_to_step(tag: &str, files: &[(&str, &str)], onto: Biome) -> Game {
-    let dir = assets_dir_with_environment(tag, files);
-    let mut game = Game::new(16, DifficultyMode::Forgiving, &dir).unwrap();
+fn clock(game: &Game) -> u64 {
+    game.world.resource::<crate::resources::GameClock>().tick
+}
+
+/// A game past zone 1, standing on Open Grid with one step east onto
+/// `onto`. The shipped catalogue is fixed Rust now, so there is no per-test
+/// asset directory to build — every test runs against the real
+/// `assets/` tree.
+fn game_about_to_step(onto: Biome) -> Game {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     game.world.resource_mut::<ZoneLevel>().0 = 2;
     step_from_onto(&mut game, Biome::OpenGrid, onto, true);
     game
@@ -328,7 +240,12 @@ fn game_about_to_step(tag: &str, files: &[(&str, &str)], onto: Biome) -> Game {
 
 #[test]
 fn a_step_onto_attrition_ground_costs_integrity() {
-    let mut game = game_about_to_step("env_bite", &[("cold.ron", COLD)], Biome::Deadlock);
+    let mut game = game_about_to_step(Biome::NullSector);
+    // Pinned to a clear epoch: the expected figure below is ground-only, so
+    // this states that no live weather is folded in rather than silently
+    // depending on epoch 0 happening to be clear for this seed and zone.
+    let epoch = clear_epoch(&game, Biome::NullSector);
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS + 1);
     let max_hp = game
         .world
         .get::<Stats>(game.player_entity())
@@ -344,13 +261,12 @@ fn a_step_onto_attrition_ground_costs_integrity() {
 
 #[test]
 fn a_step_that_bounces_off_a_wall_costs_no_integrity() {
-    let dir = assets_dir_with_environment("env_bite_wall", &[("cold.ron", COLD)]);
-    let mut game = Game::new(16, DifficultyMode::Forgiving, &dir).unwrap();
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     game.world.resource_mut::<ZoneLevel>().0 = 2;
-    // Unwalkable Deadlock is unreachable on a generated map, which is the
+    // Unwalkable Null Sector is unreachable on a generated map, which is the
     // point: what is under test is that the bite rides the *step*, and the
     // only way to hold everything else steady is to make the tile refuse.
-    step_from_onto(&mut game, Biome::OpenGrid, Biome::Deadlock, false);
+    step_from_onto(&mut game, Biome::OpenGrid, Biome::NullSector, false);
     let before = player_hp(&game);
 
     game.move_player(1, 0);
@@ -363,8 +279,8 @@ fn a_step_that_bounces_off_a_wall_costs_no_integrity() {
 /// something that is not a fight.
 #[test]
 fn attrition_never_touches_the_party() {
-    let mut game = game_about_to_step("env_party", &[("cold.ron", COLD)], Biome::Deadlock);
-    let member = crate::tests::support::spawn_tamed(&mut game, 10, 3);
+    let mut game = game_about_to_step(Biome::NullSector);
+    let member = spawn_tamed(&mut game, 10, 3);
     enlist(&mut game, member);
     let before = game.world.get::<Stats>(member).unwrap().hp;
     assert!(game.world.resource::<Party>().0.contains(&member));
@@ -379,7 +295,7 @@ fn attrition_never_touches_the_party() {
 /// "simplifying" the hook into a direct write to `Stats::hp`.
 #[test]
 fn a_mitigation_buff_reduces_the_bite() {
-    let mut game = game_about_to_step("env_mitigated", &[("harsh.ron", HARSH)], Biome::Deadlock);
+    let mut game = game_about_to_step(Biome::Mainframe);
     let player = game.player_entity();
     {
         let mut stats = game.world.get_mut::<Stats>(player).unwrap();
@@ -387,7 +303,7 @@ fn a_mitigation_buff_reduces_the_bite() {
         stats.hp = 400;
     }
     let unmitigated = {
-        let mut probe = game_about_to_step("env_probe", &[("harsh.ron", HARSH)], Biome::Deadlock);
+        let mut probe = game_about_to_step(Biome::Mainframe);
         let p = probe.player_entity();
         {
             let mut stats = probe.world.get_mut::<Stats>(p).unwrap();
@@ -419,16 +335,22 @@ fn a_mitigation_buff_reduces_the_bite() {
 }
 
 /// The one place in this phase where two systems meet at a lethal edge:
-/// ground that kills must not then roll an ambush onto the corpse.
+/// ground that kills must not then roll an ambush onto the corpse. Null
+/// Sector with a forced live `LeakingMemory` epoch, so weather is in the sum
+/// that kills — `maybe_ambush`'s `is_game_over` gate does not know or care
+/// how many sources contributed to the damage.
 #[test]
 fn attrition_that_kills_does_not_then_start_an_ambush() {
     // Permadeath, because a Forgiving death reboots the player to full
     // Integrity inside the very tick this is asserting about — the corpse
     // the test needs to look at would be gone before it could.
-    let dir = assets_dir_with_environment("env_lethal", &[("harsh.ron", HARSH)]);
-    let mut game = Game::new(16, DifficultyMode::Permadeath, &dir).unwrap();
+    let mut game = Game::new(16, DifficultyMode::Permadeath, &test_assets_dir()).unwrap();
     game.world.resource_mut::<ZoneLevel>().0 = 2;
-    step_from_onto(&mut game, Biome::OpenGrid, Biome::Deadlock, true);
+    step_from_onto(&mut game, Biome::OpenGrid, Biome::NullSector, true);
+    let epoch = (0..2000u64)
+        .find(|&e| game.static_in_epoch(Biome::NullSector, e) == Some(StaticEvent::LeakingMemory))
+        .expect("LeakingMemory must be reachable in Null Sector's pool");
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS + 1);
     {
         let mut stats = game.world.get_mut::<Stats>(game.player_entity()).unwrap();
         stats.hp = 1;
@@ -447,10 +369,9 @@ fn attrition_that_kills_does_not_then_start_an_ambush() {
 /// a bare early return that also swallowed the name.
 #[test]
 fn zone_one_takes_no_bite_but_still_names_the_ground() {
-    let dir = assets_dir_with_environment("env_zone1_hook", &[("cold.ron", COLD)]);
-    let mut game = Game::new(16, DifficultyMode::Forgiving, &dir).unwrap();
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     assert_eq!(game.world.resource::<ZoneLevel>().0, 1);
-    step_from_onto(&mut game, Biome::OpenGrid, Biome::Deadlock, true);
+    step_from_onto(&mut game, Biome::OpenGrid, Biome::NullSector, true);
     let before = player_hp(&game);
 
     game.move_player(1, 0);
@@ -461,32 +382,44 @@ fn zone_one_takes_no_bite_but_still_names_the_ground() {
             .resource::<MessageLog>()
             .lines
             .iter()
-            .any(|l| l.text.contains(Biome::Deadlock.name())),
+            .any(|l| l.text.contains(Biome::NullSector.name())),
         "the ground is named from the first step of a run"
     );
 }
 
-const SLOW: &str = r#"(
-    id: "slow",
-    name: "Thrashing",
-    description: "Every step here waits its turn behind something else.",
-    biomes: [NullSector],
-    effect: Drag(extra_ticks: 1),
-)"#;
+/// The base's own floor never bites, whatever a stray `Platform` tile turns
+/// up under it — the refusal lives inside `Game::terrain_at`, not at the
+/// call site.
+#[test]
+fn platform_takes_no_effect() {
+    let mut game = game_about_to_step(Biome::Platform);
+    let before = player_hp(&game);
 
-fn clock(game: &Game) -> u64 {
-    game.world.resource::<crate::resources::GameClock>().tick
+    game.move_player(1, 0);
+
+    assert_eq!(player_hp(&game), before, "the base's own floor never bites");
 }
 
 #[test]
 fn a_step_onto_drag_ground_costs_the_extra_ticks() {
-    let mut plain = game_about_to_step("env_drag_plain", &[("slow.ron", SLOW)], Biome::OpenGrid);
+    let mut plain = game_about_to_step(Biome::OpenGrid);
+    // Pinned to a clear epoch: Open Grid's own live event (`PacketFlood`)
+    // carries a drag tick, so "an ordinary step is one tick" is only true
+    // when nothing is live — stated explicitly rather than inherited from
+    // epoch 0.
+    let plain_epoch = clear_epoch(&plain, Biome::OpenGrid);
+    set_tick(&mut plain, plain_epoch * STATIC_EPOCH_TICKS + 1);
     let before = clock(&plain);
     plain.move_player(1, 0);
     let ordinary = clock(&plain) - before;
     assert_eq!(ordinary, 1, "an ordinary step is one tick");
 
-    let mut game = game_about_to_step("env_drag", &[("slow.ron", SLOW)], Biome::NullSector);
+    let mut game = game_about_to_step(Biome::Deadlock);
+    // Deadlock's only claimed event, `SignalNoise`, carries no drag term of
+    // its own, so this pin is about stating the dependency rather than
+    // fixing a live risk — the same discipline as the Open Grid half above.
+    let epoch = clear_epoch(&game, Biome::Deadlock);
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS + 1);
     let before = clock(&game);
 
     game.move_player(1, 0);
@@ -498,7 +431,7 @@ fn a_step_onto_drag_ground_costs_the_extra_ticks() {
 /// damage. Read off `Stats` rather than a downstream consequence.
 #[test]
 fn drag_ground_takes_no_integrity() {
-    let mut game = game_about_to_step("env_drag_hp", &[("slow.ron", SLOW)], Biome::NullSector);
+    let mut game = game_about_to_step(Biome::Deadlock);
     let before = player_hp(&game);
 
     game.move_player(1, 0);
@@ -512,18 +445,7 @@ fn drag_ground_takes_no_integrity() {
 /// the player is no longer standing in, while a fight waits on the screen.
 #[test]
 fn a_drag_step_stops_ticking_the_moment_a_battle_opens() {
-    const SLOWEST: &str = r#"(
-    id: "slowest",
-    name: "Hard Thrash",
-    description: "A step that takes most of a shift.",
-    biomes: [NullSector],
-    effect: Drag(extra_ticks: 3),
-)"#;
-    let mut game = game_about_to_step(
-        "env_drag_fight",
-        &[("slow.ron", SLOWEST)],
-        Biome::NullSector,
-    );
+    let mut game = game_about_to_step(Biome::Deadlock);
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
     // A provoked guardian already standing beside the destination reaches
     // the player on the step's very first tick, which is the only
@@ -542,5 +464,1020 @@ fn a_drag_step_stops_ticking_the_moment_a_battle_opens() {
         clock(&game) - before,
         1,
         "the remaining drag ticks must not run behind a fight the player has not seen"
+    );
+}
+
+#[test]
+fn the_crossing_line_names_a_biome_change_and_nothing_within_one_biome() {
+    let mut same = game_about_to_step(Biome::OpenGrid);
+
+    same.move_player(1, 0);
+
+    assert!(
+        !same
+            .world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .any(|l| l.text.contains("cross into")),
+        "a step that stays within one biome logs nothing about crossing"
+    );
+
+    let mut crossing = game_about_to_step(Biome::NullSector);
+
+    crossing.move_player(1, 0);
+
+    assert!(
+        crossing
+            .world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .any(|l| l.text.contains("cross into")),
+        "a step across a biome boundary names the crossing"
+    );
+}
+
+// ---------------------------------------------------------------- the weather
+
+use crate::environment::StaticEvent;
+use crate::notifications::NotificationKind;
+use crate::resources::{GameClock, GameRng};
+use crate::tests::support::reseed_rng;
+use crate::tuning::STATIC_EPOCH_TICKS;
+
+#[test]
+fn every_static_event_has_a_name_a_description_and_a_pool() {
+    for event in StaticEvent::all() {
+        let def = event.def();
+        assert!(!def.name.is_empty(), "{event:?} has no name");
+        assert!(!def.description.is_empty(), "{event:?} has no description");
+        assert!(!def.biomes.is_empty(), "{event:?} claims no biome");
+    }
+}
+
+/// The census over ceilings from phase 1, extended to the fourth event kind.
+#[test]
+fn every_static_event_stays_inside_its_ceiling() {
+    for event in StaticEvent::all() {
+        let effect = event.def().effect;
+        assert!(
+            (0.0..=MAX_ENVIRONMENT_ATTRITION).contains(&effect.attrition_percent),
+            "{event:?} authors attrition_percent {}",
+            effect.attrition_percent
+        );
+        assert!(
+            (0..=MAX_ENVIRONMENT_MIN_DAMAGE).contains(&effect.min_damage),
+            "{event:?} authors min_damage {}",
+            effect.min_damage
+        );
+        assert!(
+            effect.extra_ticks <= MAX_ENVIRONMENT_DRAG_TICKS,
+            "{event:?} authors extra_ticks {}",
+            effect.extra_ticks
+        );
+        assert!(
+            effect.ambush_mult <= MAX_STATIC_AMBUSH_MULT,
+            "{event:?} authors ambush_mult {}",
+            effect.ambush_mult
+        );
+    }
+}
+
+/// The base's own floor, and the two biomes that are holes in the map, must
+/// never grow weather — the same rule `for_biome_leaves_the_rest_of_the_map_neutral`
+/// holds for `GroundCondition`.
+#[test]
+fn no_static_event_claims_platform_or_a_hole_in_the_map() {
+    for event in StaticEvent::all() {
+        for biome in [Biome::Platform, Biome::DataVoid, Biome::BlackIce] {
+            assert!(!event.claims(biome), "{event:?} must not claim {biome:?}");
+        }
+    }
+}
+
+/// Every claimed biome must be one `WorldMap::classify` can actually stamp
+/// on the surface, or the event ships unreachable.
+#[test]
+fn every_claimed_biome_is_one_classify_can_produce() {
+    let producible = [
+        Biome::Deadlock,
+        Biome::NullSector,
+        Biome::Mainframe,
+        Biome::OpenGrid,
+    ];
+    for event in StaticEvent::all() {
+        for &biome in event.def().biomes {
+            assert!(
+                producible.contains(&biome),
+                "{event:?} claims {biome:?}, which classify never produces"
+            );
+        }
+    }
+}
+
+/// The spec's reach argument: Deadlock alone is only the dominant biome in a
+/// `cold_storage` sector, so an event claiming only Deadlock would ship as
+/// unreachable as `LockContention` already is. This is the guard against
+/// shipping a second one nobody meets.
+#[test]
+fn signal_noise_claims_a_biome_besides_deadlock() {
+    assert!(
+        StaticEvent::SignalNoise
+            .def()
+            .biomes
+            .iter()
+            .any(|&biome| biome != Biome::Deadlock),
+        "SignalNoise must reach past Deadlock alone"
+    );
+}
+
+fn fresh_game(seed: u32) -> Game {
+    Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
+}
+
+fn set_tick(game: &mut Game, tick: u64) {
+    game.world.resource_mut::<GameClock>().tick = tick;
+}
+
+/// The first epoch, from 0, in which `biome`'s weather is clear. A fixture
+/// that wants ground-only numbers must land on an epoch that states so
+/// rather than trusting whatever epoch 0 happens to resolve to for its seed
+/// and zone — a coincidence that a changed weight, a changed `biome_ord`, or
+/// a fifth event claiming the biome would silently flip.
+fn clear_epoch(game: &Game, biome: Biome) -> u64 {
+    (0..2000u64)
+        .find(|&e| game.static_in_epoch(biome, e).is_none())
+        .expect("clear ground must be reachable in every shipped biome's pool")
+}
+
+#[test]
+fn static_at_is_stable_within_one_epoch() {
+    let mut game = fresh_game(500);
+    // Well clear of either edge of the epoch, so `+ 1` cannot cross a
+    // boundary by construction.
+    let start = 7 * STATIC_EPOCH_TICKS + 3;
+    set_tick(&mut game, start);
+    let a = game.static_at(Biome::NullSector);
+
+    set_tick(&mut game, start + 1);
+    let b = game.static_at(Biome::NullSector);
+
+    assert_eq!(a, b, "two ticks inside the same epoch must agree");
+}
+
+/// Over many epochs a single biome must turn over, and both a live event and
+/// clear ground must be reachable — otherwise `STATIC_CLEAR_WEIGHT` or a
+/// pool weight is wrong, or the fold itself never varies.
+#[test]
+fn static_at_changes_across_epochs() {
+    let game = fresh_game(500);
+    let answers: Vec<Option<StaticEvent>> = (0..300u64)
+        .map(|epoch| game.static_in_epoch(Biome::NullSector, epoch))
+        .collect();
+
+    assert!(
+        answers.iter().any(|a| *a != answers[0]),
+        "weather never turned over across 300 epochs"
+    );
+    assert!(
+        answers.contains(&None),
+        "clear ground must be reachable in Null Sector's pool"
+    );
+    assert!(
+        answers.iter().any(|a| a.is_some()),
+        "a live event must be reachable in Null Sector's pool"
+    );
+}
+
+/// The worldgen rule: a derivation must not draw from the shared `GameRng`,
+/// or it would not survive a save/load and would shift every later roll in
+/// the run.
+#[test]
+fn static_at_draws_no_game_rng() {
+    use rand::RngExt;
+    let mut game = fresh_game(501);
+    reseed_rng(&mut game, 4242);
+
+    for epoch in 0..100u64 {
+        let _ = game.static_in_epoch(Biome::Mainframe, epoch);
+    }
+    let _ = game.static_at(Biome::OpenGrid);
+
+    let mut untouched: rand::rngs::StdRng = rand::SeedableRng::seed_from_u64(4242);
+    let expected: u64 = untouched.random();
+    let actual: u64 = game.world.resource_mut::<GameRng>().0.random();
+    assert_eq!(
+        actual, expected,
+        "static_at moved the shared RNG stream, so it would shift every later \
+         roll in the run"
+    );
+}
+
+/// The derivation reads the world seed, the zone and the clock — all three
+/// survive a real save and load, so the answer must too.
+#[test]
+fn static_at_survives_a_save_and_load_round_trip() {
+    let mut game = fresh_game(502);
+    set_tick(&mut game, 40 * STATIC_EPOCH_TICKS + 10);
+    let biomes = [
+        Biome::NullSector,
+        Biome::Mainframe,
+        Biome::OpenGrid,
+        Biome::Deadlock,
+    ];
+    let before: Vec<Option<StaticEvent>> = biomes.iter().map(|&b| game.static_at(b)).collect();
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_static_weather_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let after: Vec<Option<StaticEvent>> = biomes.iter().map(|&b| loaded.static_at(b)).collect();
+
+    assert_eq!(
+        before, after,
+        "weather is derived, never stored — a reload must not move it"
+    );
+}
+
+/// Two biomes whose pools are the **same shape** — Mainframe's `{clear×3,
+/// ThreadStorm}` and Open Grid's `{clear×3, PacketFlood}`, each a single
+/// weight-1 event against `STATIC_CLEAR_WEIGHT`, both a pool of 4 — differing
+/// only in the biome word `static_seed` mixes in, must not answer *live or
+/// clear* identically epoch for epoch. A hash that let the biome wash out
+/// would make every claimed biome's weather turn over in lockstep, which
+/// would read as one global weather flag rather than a property of the
+/// place.
+///
+/// **Same-shaped pools, not merely different ones**: the original version of
+/// this test compared Null Sector against Mainframe, whose pools are `{clear
+/// ×3, LeakingMemory, SignalNoise}` (total 5) against `{clear×3,
+/// ThreadStorm}` (total 4). `assert_ne!` held there even with `biome_ord`
+/// deleted from `static_seed` entirely, because a different pool *size*
+/// changes what `derive::index` reduces regardless of the biome word — the
+/// two sequences differed for a reason that had nothing to do with the
+/// biome reaching the hash. Comparing which epochs are *live* (`is_some()`)
+/// between two pools of identical size and shape is what isolates the
+/// biome word's own contribution: with it deleted, Mainframe's and Open
+/// Grid's live/clear sequences become bit-identical.
+///
+/// This does **not** guard `derive::index` against `%`: that reduction's
+/// documented failure is a *two-entry* pool reading nothing but its seed's
+/// lowest bit, and these pools are 4 entries each with a varying epoch
+/// folded in last, so `%` decorrelates these two sequences too.
+/// `derive::index` stays the implementation regardless — it is the global
+/// rule and the rest of the codebase's convention — but this test's reach is
+/// the decorrelation itself, not a choice between the two reductions.
+#[test]
+fn adjacent_biomes_decorrelate_across_epochs() {
+    let game = fresh_game(503);
+    let mainframe_live: Vec<bool> = (0..200u64)
+        .map(|epoch| game.static_in_epoch(Biome::Mainframe, epoch).is_some())
+        .collect();
+    let open_grid_live: Vec<bool> = (0..200u64)
+        .map(|epoch| game.static_in_epoch(Biome::OpenGrid, epoch).is_some())
+        .collect();
+
+    assert_ne!(
+        mainframe_live, open_grid_live,
+        "two same-shaped pools folding the same seed, zone and epoch must not \
+         agree on which epochs are live"
+    );
+}
+
+// ------------------------------------------------------- weather reaches the player
+
+/// The guard on the fold reaching `terrain_at`: a reader that took only the
+/// bite would compile clean and silently drop the drag and ambush terms, so
+/// all three are asserted together, the shape
+/// `fold_adds_attrition_and_drag_and_multiplies_ambush` already checked for
+/// `EnvironmentEffect` alone. Null Sector is the one biome where a ground
+/// condition and a weather event both claim the same tile, which is what
+/// makes stacking observable here rather than merely folding onto `NONE`.
+#[test]
+fn ground_and_weather_effects_stack() {
+    let mut game = game_about_to_step(Biome::NullSector);
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let (nx, ny) = (pos.x + 1, pos.y);
+    let epoch = (0..2000u64)
+        .find(|&e| game.static_in_epoch(Biome::NullSector, e) == Some(StaticEvent::LeakingMemory))
+        .expect("LeakingMemory must be reachable in Null Sector's pool");
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS + 1);
+
+    let terrain = game.terrain_at(nx, ny);
+
+    assert_eq!(terrain.event, Some(StaticEvent::LeakingMemory));
+    let ground = GroundCondition::DanglingReads.def().effect;
+    let weather = StaticEvent::LeakingMemory.def().effect;
+    assert_eq!(
+        terrain.effect.attrition_percent,
+        ground.attrition_percent + weather.attrition_percent,
+        "attrition sums"
+    );
+    assert_eq!(
+        terrain.effect.min_damage,
+        ground.min_damage + weather.min_damage,
+        "the floor sums"
+    );
+    assert_eq!(
+        terrain.effect.extra_ticks,
+        ground.extra_ticks + weather.extra_ticks,
+        "drag sums"
+    );
+    assert_eq!(
+        terrain.effect.ambush_mult,
+        ground.ambush_mult * weather.ambush_mult,
+        "the ambush term multiplies"
+    );
+}
+
+/// The one-call guard: `apply_damage`'s mitigation floors any positive
+/// damage at 1, so two sources billed through two calls floor twice.
+/// Chosen so the numbers only pull apart under that per-call floor — small
+/// enough that each source's own attrition rounds away to nothing and only
+/// its `min_damage` survives, and mitigated hard enough that even the
+/// summed bite rounds under 1 before the floor catches it once.
+#[test]
+fn ground_and_weather_attrition_lands_as_one_bite() {
+    let mut game = game_about_to_step(Biome::NullSector);
+    let epoch = (0..2000u64)
+        .find(|&e| game.static_in_epoch(Biome::NullSector, e) == Some(StaticEvent::LeakingMemory))
+        .expect("LeakingMemory must be reachable in Null Sector's pool");
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS + 1);
+    let player = game.player_entity();
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 5;
+        stats.hp = 5;
+    }
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Mitigation,
+            name: "Ablative Layer".into(),
+            power: 60,
+            remaining: 100,
+            interval: 1,
+            source: BuffSource::Routine,
+        },
+    );
+
+    game.move_player(1, 0);
+
+    assert_eq!(
+        5 - player_hp(&game),
+        1,
+        "the summed attrition must land through one apply_damage call — \
+         one call per source would each floor at 1 and cost 2"
+    );
+}
+
+#[test]
+fn zone_one_takes_no_weather() {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert_eq!(game.world.resource::<ZoneLevel>().0, 1);
+    step_from_onto(&mut game, Biome::OpenGrid, Biome::NullSector, true);
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let (nx, ny) = (pos.x + 1, pos.y);
+    // Forced live so a zone-1 read that skipped the gate would be caught —
+    // the gate itself does not consult the clock, so any epoch would
+    // otherwise pass this test by coincidence.
+    let epoch = (0..2000u64)
+        .find(|&e| game.static_in_epoch(Biome::NullSector, e).is_some())
+        .expect("a live epoch must be reachable in Null Sector's pool");
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS + 1);
+
+    let terrain = game.terrain_at(nx, ny);
+
+    assert_eq!(terrain.event, None, "zone 1 takes no weather");
+    assert_eq!(terrain.effect, EnvironmentEffect::NONE);
+    assert_eq!(
+        terrain.biome,
+        Biome::NullSector,
+        "the ground is still named"
+    );
+}
+
+#[test]
+fn platform_takes_no_weather() {
+    let mut game = game_about_to_step(Biome::Platform);
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let (nx, ny) = (pos.x + 1, pos.y);
+
+    let terrain = game.terrain_at(nx, ny);
+
+    assert_eq!(terrain.event, None, "the base's own floor takes no weather");
+    assert_eq!(terrain.effect, EnvironmentEffect::NONE);
+}
+
+/// `Game::environment_biome_at` is the one gate `terrain_at` and
+/// `note_static_turnover` both read — Task 4 shipped `note_static_turnover`
+/// with its own copy of these two checks, which is exactly the shape
+/// CLAUDE.md's ground section warns about: nothing fails to compile when
+/// one copy is edited and the other is not. Testing the shared predicate
+/// directly, rather than only through `terrain_at`, is what would catch a
+/// future edit to this one definition going wrong for *either* caller —
+/// `zone_one_takes_no_weather` and `platform_takes_no_weather` above only
+/// ever exercised it through `terrain_at`.
+#[test]
+fn environment_biome_at_refuses_zone_one_and_platform() {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert_eq!(game.world.resource::<ZoneLevel>().0, 1);
+    assert_eq!(
+        game.environment_biome_at(0, 0),
+        None,
+        "zone 1 refuses everywhere, whatever the biome"
+    );
+
+    game.world.resource_mut::<ZoneLevel>().0 = 2;
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    game.world.resource_mut::<WorldMap>().set_override(
+        pos.x,
+        pos.y,
+        Tile {
+            biome: Biome::Platform,
+            walkable: true,
+            rock_shade: None,
+        },
+    );
+    assert_eq!(
+        game.environment_biome_at(pos.x, pos.y),
+        None,
+        "the base's own floor refuses past zone 1 too"
+    );
+
+    game.world.resource_mut::<WorldMap>().set_override(
+        pos.x,
+        pos.y,
+        Tile {
+            biome: Biome::NullSector,
+            walkable: true,
+            rock_shade: None,
+        },
+    );
+    assert_eq!(
+        game.environment_biome_at(pos.x, pos.y),
+        Some(Biome::NullSector),
+        "an ordinary biome past zone 1 takes environment effects"
+    );
+}
+
+/// A single ambush attempt on a fresh, independently seeded fixture: builds
+/// the game, stamps the player's own tile as `Mainframe`, sets the clock to
+/// `tick`, reseeds `GameRng` to `rng_seed`, then reports whether that one
+/// `maybe_ambush` call started a battle. Independent games rather than one
+/// game looped, so a battle starting on one trial never blocks the next.
+fn ambush_fires(seed: u32, rng_seed: u64, tick: u64) -> bool {
+    let mut game = fresh_game(seed);
+    game.world.resource_mut::<ZoneLevel>().0 = 2;
+    let player = game.player_entity();
+    let pos = *game.world.get::<Position>(player).unwrap();
+    game.world.resource_mut::<WorldMap>().set_override(
+        pos.x,
+        pos.y,
+        Tile {
+            biome: Biome::Mainframe,
+            walkable: true,
+            rock_shade: None,
+        },
+    );
+    set_tick(&mut game, tick);
+    reseed_rng(&mut game, rng_seed);
+    game.maybe_ambush();
+    game.has_active_battle()
+}
+
+/// The multiplier reaches the roll, not just the number on `Terrain`: the
+/// same 400 seeded trials, once with Mainframe's epoch forced to
+/// `ThreadStorm` and once forced clear, must ambush more often live than
+/// clear. Asserted as a **difference**, never an absolute rate — an
+/// absolute is a seed-luck test that fails the day an unrelated change
+/// shifts the RNG stream, and `-p feral-processes-engine` vs `--workspace`
+/// already shift it differently for identical source.
+#[test]
+fn ambush_multiplier_reaches_the_roll() {
+    let seed = 900;
+    let mut probe = fresh_game(seed);
+    probe.world.resource_mut::<ZoneLevel>().0 = 2;
+    let live_epoch = (0..2000u64)
+        .find(|&e| probe.static_in_epoch(Biome::Mainframe, e) == Some(StaticEvent::ThreadStorm))
+        .expect("ThreadStorm must be reachable in Mainframe's pool");
+    let clear_epoch = (0..2000u64)
+        .find(|&e| probe.static_in_epoch(Biome::Mainframe, e).is_none())
+        .expect("clear must be reachable in Mainframe's pool");
+
+    let trials = 400u64;
+    let live_hits = (0..trials)
+        .filter(|&i| ambush_fires(seed, i, live_epoch * STATIC_EPOCH_TICKS + 1))
+        .count();
+    let clear_hits = (0..trials)
+        .filter(|&i| ambush_fires(seed, i, clear_epoch * STATIC_EPOCH_TICKS + 1))
+        .count();
+
+    assert!(
+        live_hits > clear_hits,
+        "a live ambush multiplier must ambush more often: live {live_hits} \
+         vs clear {clear_hits} across {trials} trials"
+    );
+}
+
+/// `a_mitigation_buff_reduces_the_bite`'s shape, over the stacked
+/// ground-and-weather bite rather than ground alone — mitigation goes
+/// through `apply_damage`, which does not know how many sources summed into
+/// the number it received.
+#[test]
+fn mitigation_blunts_the_stacked_bite() {
+    let mut game = game_about_to_step(Biome::NullSector);
+    let epoch = (0..2000u64)
+        .find(|&e| game.static_in_epoch(Biome::NullSector, e) == Some(StaticEvent::LeakingMemory))
+        .expect("LeakingMemory must be reachable in Null Sector's pool");
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS + 1);
+    let player = game.player_entity();
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 400;
+        stats.hp = 400;
+    }
+    let unmitigated = {
+        // Same seed as `game_about_to_step` uses, so the same epoch answers
+        // the same way for this probe.
+        let mut probe = game_about_to_step(Biome::NullSector);
+        set_tick(&mut probe, epoch * STATIC_EPOCH_TICKS + 1);
+        let p = probe.player_entity();
+        {
+            let mut stats = probe.world.get_mut::<Stats>(p).unwrap();
+            stats.max_hp = 400;
+            stats.hp = 400;
+        }
+        probe.move_player(1, 0);
+        400 - player_hp(&probe)
+    };
+    assert!(unmitigated > 1, "the fixture has to have room to mitigate");
+
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Mitigation,
+            name: "Ablative Layer".into(),
+            power: 50,
+            remaining: 100,
+            interval: 1,
+            source: BuffSource::Routine,
+        },
+    );
+    game.move_player(1, 0);
+
+    assert!(
+        400 - player_hp(&game) < unmitigated,
+        "mitigation must blunt the stacked ground-and-weather bite the same \
+         way it blunts the ground alone"
+    );
+}
+
+/// `attrition_never_touches_the_party`'s shape, with a live weather event
+/// folded into the ground's bite — corrupting the party would route program
+/// deaths, and on Permadeath the run-ending path, through something that is
+/// not a fight.
+#[test]
+fn party_untouched_by_weather() {
+    let mut game = game_about_to_step(Biome::NullSector);
+    let epoch = (0..2000u64)
+        .find(|&e| game.static_in_epoch(Biome::NullSector, e) == Some(StaticEvent::LeakingMemory))
+        .expect("LeakingMemory must be reachable in Null Sector's pool");
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS + 1);
+    let member = spawn_tamed(&mut game, 10, 3);
+    enlist(&mut game, member);
+    let before = game.world.get::<Stats>(member).unwrap().hp;
+    assert!(game.world.resource::<Party>().0.contains(&member));
+
+    game.move_player(1, 0);
+
+    assert_eq!(game.world.get::<Stats>(member).unwrap().hp, before);
+}
+
+// ------------------------------------------------------------- the readout
+
+/// Trigger 1: the crossing line gains the condition's name, joined onto the
+/// existing biome line rather than getting one of its own.
+#[test]
+fn crossing_line_names_the_condition() {
+    let mut game = game_about_to_step(Biome::NullSector);
+
+    game.move_player(1, 0);
+
+    let condition_name = GroundCondition::DanglingReads.def().name;
+    assert!(
+        game.world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .any(|l| l.text.contains(Biome::NullSector.name()) && l.text.contains(condition_name)),
+        "the crossing line must name both the biome and its condition"
+    );
+}
+
+/// Trigger 1's other half: unclaimed ground must read exactly as it did
+/// before this feature — no condition name appended to a biome that has
+/// none.
+#[test]
+fn crossing_into_unclaimed_ground_names_no_condition() {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.resource_mut::<ZoneLevel>().0 = 2;
+    step_from_onto(&mut game, Biome::NullSector, Biome::OpenGrid, true);
+
+    game.move_player(1, 0);
+
+    assert!(
+        game.world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .any(|l| l.text == format!("You cross into {}.", Biome::OpenGrid.name())),
+        "Open Grid must read exactly as it does today"
+    );
+}
+
+/// Trigger 2: the condition's description is read for the first time this
+/// session, and never again — leaving and crossing back must not repeat it.
+/// Counted on the **raw** log rather than a folded entry count:
+/// `message_history` collapses repeats into one entry with a `repeats`
+/// count, so counting entries would pass even if the line fired five times.
+#[test]
+fn condition_description_fires_once_per_session() {
+    let mut game = game_about_to_step(Biome::NullSector);
+    let description = GroundCondition::DanglingReads.def().description;
+
+    game.move_player(1, 0); // cross into Null Sector: first sight
+    game.move_player(-1, 0); // leave, back onto Open Grid
+    game.move_player(1, 0); // cross back into Null Sector: already seen
+
+    let count = game
+        .world
+        .resource::<MessageLog>()
+        .lines
+        .iter()
+        .filter(|l| l.text.contains(description))
+        .count();
+    assert_eq!(
+        count, 1,
+        "the description must fire exactly once per session, not once per crossing"
+    );
+}
+
+/// The epoch a Null-Sector run just crossed into `LeakingMemory`, with the
+/// epoch *before* it forced clear — the `None -> Some` half of the
+/// boundary, the only direction that is an arrival.
+fn null_sector_arrival_epoch(game: &Game) -> u64 {
+    (1..2000u64)
+        .find(|&e| {
+            game.static_in_epoch(Biome::NullSector, e) == Some(StaticEvent::LeakingMemory)
+                && game.static_in_epoch(Biome::NullSector, e - 1).is_none()
+        })
+        .expect("a clear-to-LeakingMemory transition must be reachable in Null Sector")
+}
+
+/// A game standing on `biome` already — both the current tile and the one
+/// step east are `biome` — so a further step inside it logs no crossing
+/// line at all and only `note_static_turnover`'s own message can appear.
+fn game_standing_on(biome: Biome) -> Game {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.resource_mut::<ZoneLevel>().0 = 2;
+    step_from_onto(&mut game, biome, biome, true);
+    game
+}
+
+/// Trigger 3: weather arriving fires on the tick that crosses the epoch
+/// boundary, names the biome the player stands in, and carries the event's
+/// description.
+#[test]
+fn weather_arrival_fires_on_the_boundary_in_the_players_biome() {
+    let mut game = game_standing_on(Biome::NullSector);
+    let epoch = null_sector_arrival_epoch(&game);
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS - 1);
+
+    game.move_player(1, 0);
+
+    let description = StaticEvent::LeakingMemory.def().description;
+    let lines = &game.world.resource::<MessageLog>().lines;
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.text.contains(description) && l.text.contains(Biome::NullSector.name())),
+        "the arrival line must name the biome and carry the event's description"
+    );
+}
+
+/// Trigger 4: the same boundary, the other way — a live event clearing.
+#[test]
+fn weather_clearing_fires_on_the_boundary_the_other_way() {
+    let mut game = game_standing_on(Biome::NullSector);
+    let epoch = (1..2000u64)
+        .find(|&e| {
+            game.static_in_epoch(Biome::NullSector, e - 1) == Some(StaticEvent::LeakingMemory)
+                && game.static_in_epoch(Biome::NullSector, e).is_none()
+        })
+        .expect("a LeakingMemory-to-clear transition must be reachable in Null Sector");
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS - 1);
+
+    game.move_player(1, 0);
+
+    let name = StaticEvent::LeakingMemory.def().name;
+    let lines = &game.world.resource::<MessageLog>().lines;
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.text.contains(name) && l.text.contains(Biome::NullSector.name())),
+        "the clearing line must name the event and the biome"
+    );
+}
+
+/// The requirement behind moving the hook into `tick_inner`: a player who
+/// never takes another step must still be told. `App::update_realtime`
+/// calls `Game::idle_tick` once a second whenever the player stands on the
+/// surface — before this fix that path never called
+/// `note_static_turnover` at all, and because nothing about the previous
+/// epoch is stored, a boundary crossed this way was missed *forever*, not
+/// merely delayed until the next step.
+#[test]
+fn idle_tick_announces_a_weather_boundary_while_standing_still() {
+    let mut game = game_standing_on(Biome::NullSector);
+    let epoch = null_sector_arrival_epoch(&game);
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS - 1);
+
+    game.idle_tick();
+
+    let description = StaticEvent::LeakingMemory.def().description;
+    assert!(
+        game.world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .any(|l| l.text.contains(description) && l.text.contains(Biome::NullSector.name())),
+        "standing still across a weather boundary must still announce it"
+    );
+}
+
+/// The fifth trigger, and the one full-screen rather than a log line:
+/// standing onto a tile with a live event queues `FirstStatic` once, and a
+/// second such step must not queue it again — the once-only rule is
+/// `Repeat::OnceEver` inside `queue_notification`, not a second check at
+/// this call site. Fired from the movement hook itself (the same place the
+/// bite lands), not from `note_static_turnover`'s epoch boundary, which is
+/// what `turnover_in_a_biome_the_player_is_not_standing_in_is_silent` above
+/// already holds to a different rule.
+#[test]
+fn first_live_weather_step_queues_the_tutorial_once() {
+    let mut game = game_standing_on(Biome::NullSector);
+    let epoch = (0..2000u64)
+        .find(|&e| game.static_in_epoch(Biome::NullSector, e).is_some())
+        .expect("a live epoch must be reachable in Null Sector's pool");
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS + 1);
+    while game.take_notification().is_some() {} // drain the run's own opening briefing
+
+    game.move_player(1, 0);
+
+    let title = NotificationKind::FirstStatic.def().title;
+    let queued: Vec<_> = std::iter::from_fn(|| game.take_notification()).collect();
+    assert!(
+        queued.iter().any(|n| n.title == title),
+        "a step onto live weather must queue the FirstStatic tutorial"
+    );
+
+    game.move_player(-1, 0);
+    game.move_player(1, 0);
+
+    let queued_again: Vec<_> = std::iter::from_fn(|| game.take_notification()).collect();
+    assert!(
+        !queued_again.iter().any(|n| n.title == title),
+        "a second live-weather step must not requeue an OnceEver tutorial"
+    );
+}
+
+/// Trigger 3/4's boundary: the other four biomes turning over must stay
+/// silent. The player stands in Open Grid while Null Sector's own boundary
+/// crosses into `LeakingMemory`.
+#[test]
+fn turnover_in_a_biome_the_player_is_not_standing_in_is_silent() {
+    let mut game = game_standing_on(Biome::OpenGrid);
+    let epoch = null_sector_arrival_epoch(&game);
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS - 1);
+
+    game.move_player(1, 0);
+
+    let description = StaticEvent::LeakingMemory.def().description;
+    assert!(
+        !game
+            .world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .any(|l| l.text.contains(description)),
+        "weather turning over in a biome the player isn't standing in must stay silent"
+    );
+}
+
+/// `terrain_at` and `note_static_turnover` reading the same
+/// `environment_biome_at` means a zone-1 player crossing straight through a
+/// live-weather arrival cannot see one caller refuse it while the other
+/// announces it — the seam Task 4's two independent copies of the same two
+/// checks put at risk. Asserted on the actual arrival boundary rather than
+/// an arbitrary tick, so this exercises exactly the moment
+/// `weather_arrival_fires_on_the_boundary_in_the_players_biome` fires the
+/// notice at zone 2.
+#[test]
+fn zone_one_terrain_and_turnover_agree_on_no_weather() {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert_eq!(game.world.resource::<ZoneLevel>().0, 1);
+    step_from_onto(&mut game, Biome::OpenGrid, Biome::NullSector, true);
+    let epoch = null_sector_arrival_epoch(&game);
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS - 1);
+
+    game.move_player(1, 0);
+
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    assert_eq!(
+        game.terrain_at(pos.x, pos.y).event,
+        None,
+        "terrain_at must refuse weather at zone 1"
+    );
+    let description = StaticEvent::LeakingMemory.def().description;
+    assert!(
+        !game
+            .world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .any(|l| l.text.contains(description)),
+        "note_static_turnover must refuse the same arrival terrain_at refuses"
+    );
+}
+
+/// The regression this branch's own last fix introduced: moving
+/// `note_static_turnover`'s call into `tick_inner` made it reachable from
+/// battle-active paths (the ambush early return's own `tick()`, an ordinary
+/// combat round's, a failed jack-out's) that `move_player`'s
+/// `has_active_battle()` refusal used to keep this function from ever
+/// seeing. `MessageSource::Field` is not something the battle pane filters
+/// out, so a boundary crossed there would interleave a weather line into
+/// the fight's own narration. Both halves in one test, `zone_one_takes_no_
+/// weather`'s shape: a guard that silently disabled the feature everywhere
+/// would pass a battle-only assertion just as well as the real fix.
+#[test]
+fn turnover_is_silent_during_battle_but_still_fires_outside_one() {
+    let mut battle = game_standing_on(Biome::NullSector);
+    let epoch = null_sector_arrival_epoch(&battle);
+    set_tick(&mut battle, epoch * STATIC_EPOCH_TICKS - 1);
+    let wild = spawn_wild_on_player_tile(&mut battle);
+    battle.start_battle(vec![wild]);
+    assert!(
+        battle.has_active_battle(),
+        "the fixture never started a fight"
+    );
+
+    battle.tick();
+
+    let description = StaticEvent::LeakingMemory.def().description;
+    assert!(
+        !battle
+            .world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .any(|l| l.text.contains(description)),
+        "a boundary crossed mid-battle must not interleave a weather line into the fight"
+    );
+
+    let mut outside = game_standing_on(Biome::NullSector);
+    set_tick(&mut outside, epoch * STATIC_EPOCH_TICKS - 1);
+
+    outside.tick();
+
+    assert!(
+        outside
+            .world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .any(|l| l.text.contains(description)),
+        "the same boundary crossed outside a battle must still announce it, or the \
+         guard would silently disable the feature everywhere rather than just in battle"
+    );
+}
+
+/// Nothing about the previous epoch is stored anywhere — `static_epoch` and
+/// `static_in_epoch` are both pure calls, never a saved field — so landing a
+/// save/load comfortably inside a live epoch (well clear of the boundary
+/// itself) and then taking a further step still inside that same epoch must
+/// not manufacture a crossing that never happened. `MessageLog` itself is
+/// not saved (both `Game` constructors reset it to `default`), so this
+/// cannot be "the old line survived the round trip" — it is asserting that
+/// the round trip does not fabricate a *new* one, which is what a stray
+/// stored "last known epoch" defaulting to 0 after load would do.
+#[test]
+fn save_load_mid_epoch_does_not_reannounce_arrival() {
+    let mut game = game_standing_on(Biome::NullSector);
+    let epoch = null_sector_arrival_epoch(&game);
+    set_tick(
+        &mut game,
+        epoch * STATIC_EPOCH_TICKS + STATIC_EPOCH_TICKS / 2,
+    );
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_static_weather_turnover_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    // Two more steps well inside the same epoch, crossing no boundary.
+    loaded.move_player(1, 0);
+    loaded.move_player(-1, 0);
+
+    let description = StaticEvent::LeakingMemory.def().description;
+    assert!(
+        !loaded
+            .world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .any(|l| l.text.contains(description)),
+        "a save/load landing mid-epoch must not fabricate an arrival that never happened"
+    );
+}
+
+// -------------------------------------------------------------- terrain_row
+
+/// The engine hands the renderer already-resolved names — a claimed biome
+/// with a live event carries both.
+#[test]
+fn terrain_row_names_the_ground_and_the_live_weather() {
+    let mut game = game_standing_on(Biome::NullSector);
+    let epoch = null_sector_arrival_epoch(&game);
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS);
+
+    let row = game.terrain_row().expect("the surface always has a biome");
+
+    assert_eq!(row.biome, Biome::NullSector.name());
+    assert_eq!(
+        row.condition,
+        Some(GroundCondition::DanglingReads.def().name)
+    );
+    assert_eq!(row.event, Some(StaticEvent::LeakingMemory.def().name));
+}
+
+/// Unclaimed ground names the biome and nothing else — `for_biome`'s own
+/// neutral case, read back through the row rather than the catalogue.
+#[test]
+fn terrain_row_names_nothing_extra_on_unclaimed_ground() {
+    let mut game = game_standing_on(Biome::OpenGrid);
+    // Pinned to a clear epoch — Open Grid's own weather (`PacketFlood`)
+    // would otherwise put a live event under `row.event`, which this test
+    // must not depend on epoch 0 happening to avoid.
+    let epoch = clear_epoch(&game, Biome::OpenGrid);
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS);
+
+    let row = game.terrain_row().expect("the surface always has a biome");
+
+    assert_eq!(row.biome, Biome::OpenGrid.name());
+    assert_eq!(row.condition, None);
+    assert_eq!(row.event, None);
+}
+
+/// The one case the border strip must draw nothing for: a Stack frame has
+/// no biome, the same reason the threat readout counts no hostiles down
+/// there.
+#[test]
+fn terrain_row_is_none_underground() {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.resource_mut::<ZoneLevel>().0 = 2;
+    descend(&mut game);
+    assert!(game.is_underground(), "the fixture never got underground");
+
+    assert!(
+        game.terrain_row().is_none(),
+        "a Stack frame has no biome for the border to read"
+    );
+}
+
+/// The base pocket is the one place in the game that must never read as
+/// hostile — `enter_base` pins `Position` to the anchor tile, same as the
+/// Stack pins it to the surface entrance, so without the `in_base` guard
+/// this would name the anchor's own ground and any weather live over it
+/// while the party is safely inside.
+#[test]
+fn terrain_row_is_none_in_base() {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.resource_mut::<ZoneLevel>().0 = 2;
+    stand_in_base(&mut game);
+    assert!(game.in_base(), "the fixture never got into base space");
+
+    assert!(
+        game.terrain_row().is_none(),
+        "the base pocket has no biome for the border to read"
     );
 }

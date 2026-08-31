@@ -98,8 +98,8 @@ impl RockDef {
     /// nothing loadable.
     ///
     /// An empty directory is a supported install: it restores *uniform*
-    /// rock, the same supported way deleting `assets/environment/` restores
-    /// the pre-effects game. It does **not** restore the one-shot — the
+    /// rock, the same supported way deleting `assets/sectors/` restores
+    /// undifferentiated zones. It does **not** restore the one-shot — the
     /// fallback carries the same floor of 2 that ordinary rock does, because
     /// the swing floor is a bug fix and not content, and someone deleting
     /// this directory is asking for one kind of rock rather than for their

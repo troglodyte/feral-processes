@@ -170,7 +170,7 @@ fn bite_is_the_floored_percentage_and_zero_for_none() {
 
 use crate::components::{ActiveFieldBuff, BuffSource, FieldBuffKind, Position, Stats};
 use crate::resources::{MessageLog, Party, ZoneLevel};
-use crate::tests::support::{descend, enlist, spawn_tamed, test_assets_dir};
+use crate::tests::support::{descend, enlist, spawn_tamed, stand_in_base, test_assets_dir};
 use crate::world::{Tile, WorldMap};
 use crate::{DifficultyMode, Game};
 
@@ -1371,5 +1371,23 @@ fn terrain_row_is_none_underground() {
     assert!(
         game.terrain_row().is_none(),
         "a Stack frame has no biome for the border to read"
+    );
+}
+
+/// The base pocket is the one place in the game that must never read as
+/// hostile — `enter_base` pins `Position` to the anchor tile, same as the
+/// Stack pins it to the surface entrance, so without the `in_base` guard
+/// this would name the anchor's own ground and any weather live over it
+/// while the party is safely inside.
+#[test]
+fn terrain_row_is_none_in_base() {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.resource_mut::<ZoneLevel>().0 = 2;
+    stand_in_base(&mut game);
+    assert!(game.in_base(), "the fixture never got into base space");
+
+    assert!(
+        game.terrain_row().is_none(),
+        "the base pocket has no biome for the border to read"
     );
 }

@@ -106,17 +106,19 @@ impl Game {
         }
     }
 
-    /// What the map pane's border reads. `None` underground — a Stack
-    /// frame has no biome, which is the same reason the threat readout
-    /// counts no hostiles down there.
+    /// What the map pane's border reads. `None` underground or in base
+    /// space — a Stack frame has no biome, which is the same reason the
+    /// threat readout counts no hostiles down there, and the base pocket is
+    /// the one place in the game that must never read as hostile.
     ///
     /// Reads the player's `Position`, which stays pinned to the surface
-    /// entrance while the party is underground — `is_underground` is
-    /// checked first rather than trusted to fall out of `terrain_at`, or
-    /// this would report the entrance's ground as if the party were
+    /// entrance while the party is underground and to the anchor tile while
+    /// they are in base space — `is_underground`/`in_base` are checked
+    /// first rather than trusted to fall out of `terrain_at`, or this would
+    /// report the entrance's or the anchor's ground as if the party were
     /// standing on it.
     pub fn terrain_row(&mut self) -> Option<TerrainRow> {
-        if self.is_underground() {
+        if self.is_underground() || self.in_base() {
             return None;
         }
         let player = self.player_entity();

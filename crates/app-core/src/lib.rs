@@ -508,10 +508,37 @@ fn swap_stats_column(stats: &str) -> String {
 /// whether the player is acting quickly or sitting on a menu.
 const AUTOSAVE_INTERVAL_TICKS: u64 = 50;
 
+/// How many idle ticks the world takes per real second while the player
+/// sits on `Mode::Playing` and touches nothing — the one knob for how fast
+/// the world runs against the wall clock.
+///
+/// **Everything in the game is priced in ticks, so this rebalances
+/// nothing**: raids, need decay, caravans, production and a hauler's step
+/// all keep their existing rates relative to each other. What it changes is
+/// how much world time a real second buys. At `1` a base's idle staff drift
+/// one tile every six seconds and a dig swing takes twelve, which reads as
+/// frozen rather than as working.
+///
+/// **Two constants in the engine are pinned to this and nothing makes them
+/// fail to compile when it moves**: `tuning::WANDER_COOLDOWN_MIN_TICKS` /
+/// `MAX_TICKS` and `tuning::WILD_SPAWN_CHANCE`, which together hold the
+/// map's wild programs at the wall-clock pace they had at `1` while the
+/// base speeds up. Raising this without raising those gives wild programs
+/// the speed-up too. `a_wild_program_waits_out_its_cooldown_between_moves`
+/// in the engine is the gate on the first pair; the pairing itself is
+/// prose, on both ends.
+///
+/// Must divide 1000 evenly — `REALTIME_TICK_INTERVAL` is integer
+/// milliseconds, so a `3` here is silently 3.003 ticks a second.
+/// `tick_rate_divides_a_real_second_exactly` holds that.
+const WORLD_SPEED_MULTIPLIER: u32 = 2;
+
 /// Wall-clock spacing between idle ticks (see `App::update_realtime`) —
-/// the world keeps moving once a second even while the player just sits on
-/// `Mode::Playing` and touches nothing.
-const REALTIME_TICK_INTERVAL: Duration = Duration::from_secs(1);
+/// the world keeps moving while the player just sits on `Mode::Playing`
+/// and touches nothing. Derived, so `WORLD_SPEED_MULTIPLIER` is the only
+/// number to edit.
+const REALTIME_TICK_INTERVAL: Duration =
+    Duration::from_millis(1000 / WORLD_SPEED_MULTIPLIER as u64);
 
 /// How fast battle narration scrolls into the log pane, in lines per second.
 ///

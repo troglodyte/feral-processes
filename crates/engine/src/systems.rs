@@ -21,7 +21,8 @@ use crate::structures::StructureDb;
 use crate::tuning::{
     DEFAULT_BASE_INT, DEFAULT_BASE_SPEED, LEECH_YIELD_BONUS, MEMORY_MORALE_MAX_SHIFT,
     MEMORY_MORALE_PER_POINT, MINING_SUCCESS_BASE, MINING_SUCCESS_PER_INT, MINING_SUCCESS_PER_LEVEL,
-    NEST_TETHER_RADIUS, NODE_PAYOUT_ZONE_BONUS, WORK_TICKS_PER_SPEED,
+    NEST_TETHER_RADIUS, NODE_PAYOUT_ZONE_BONUS, WANDER_COOLDOWN_MAX_TICKS,
+    WANDER_COOLDOWN_MIN_TICKS, WORK_TICKS_PER_SPEED,
 };
 use crate::tuning::{
     HUNGER_DECAY_PER_TICK, NEED_STRAIN_MAX_SHIFT, NEED_STRAIN_PER_POINT, WORK_XP_LEVEL_CAP,
@@ -156,7 +157,9 @@ pub fn wander_ai_system(
             ai.cooldown -= 1;
             continue;
         }
-        ai.cooldown = rng.0.random_range(2..6);
+        ai.cooldown = rng
+            .0
+            .random_range(WANDER_COOLDOWN_MIN_TICKS..WANDER_COOLDOWN_MAX_TICKS);
         let dx = rng.0.random_range(-1..=1);
         let dy = rng.0.random_range(-1..=1);
         if dx == 0 && dy == 0 {

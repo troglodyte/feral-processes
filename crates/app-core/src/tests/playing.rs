@@ -319,3 +319,17 @@ fn space_toggles_the_log_pane_underground_too() {
         app.status_line
     );
 }
+
+/// `REALTIME_TICK_INTERVAL` is whole milliseconds, so a `WORLD_SPEED_MULTIPLIER`
+/// that doesn't divide 1000 loses the remainder in silence — a `3` there is
+/// 333ms, which is 3.003 ticks a second rather than 3, and drifts against
+/// every wall-clock figure the constant's own doc quotes.
+#[test]
+fn tick_rate_divides_a_real_second_exactly() {
+    assert_eq!(
+        REALTIME_TICK_INTERVAL * WORLD_SPEED_MULTIPLIER,
+        Duration::from_secs(1),
+        "WORLD_SPEED_MULTIPLIER of {WORLD_SPEED_MULTIPLIER} does not divide 1000ms evenly, \
+         so the world runs at a rate the constant does not claim"
+    );
+}

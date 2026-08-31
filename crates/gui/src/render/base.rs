@@ -493,6 +493,19 @@ fn draw_depth(painter: &Painter, r: Rect, ink: Color) {
 /// tile that can be drawn has all four of its neighbours in hand. An absent
 /// neighbour therefore means the outermost fetched ring, which is off-pane —
 /// it draws nothing rather than guessing.
+/// `cloud` reaches the grid line and deliberately not the rim.
+///
+/// The rim is the edge of the walkable world and is the map's one glow —
+/// see below — and a passing shadow has no business putting the edge of the
+/// world out. The grid line is the substrate the ground is printed on, so
+/// it goes under a cloud with the ground it belongs to. Left lit, it would
+/// *gain* against ground dimmed by `CLOUD_DEPTH` — `GRID_LEVEL` is already
+/// only a little under `GROUND_LEVEL` — and a mesh would surface inside
+/// every shadow.
+///
+/// `vig` and `cloud` stay two arguments rather than one product for exactly
+/// that reason: the rim takes only the first.
+#[allow(clippy::too_many_arguments)]
 fn draw_tile_edges(
     painter: &Painter,
     tiles: &[Vec<Tile>],
@@ -501,6 +514,7 @@ fn draw_tile_edges(
     cell: Rect,
     tint: Color,
     vig: f32,
+    cloud: f32,
 ) {
     let here = tiles[ry][rx].biome;
     let neighbour = |dx: i32, dy: i32| -> Option<Biome> {
@@ -541,7 +555,14 @@ fn draw_tile_edges(
             // Right and bottom only — an edge is shared, and both owners
             // drawing it would double the alpha on every interior line while
             // the pane's outer edges stayed single.
-            painter.line(x1, y1, x2, y2, 1.0, at_level(tint, GRID_LEVEL * vig));
+            painter.line(
+                x1,
+                y1,
+                x2,
+                y2,
+                1.0,
+                at_level(tint, GRID_LEVEL * vig * cloud),
+            );
         }
     }
 }
@@ -934,6 +955,12 @@ fn draw_surface_map(
     // anchor. Ungated, the ring follows the party onto the zone map and
     // claims something the ground there cannot answer.
     let cutting = base_pos.is_some() && game.mining();
+    // Cloud shadows are the zone map's alone. Base space is a pocket cut
+    // out of rock with no sky over it, and the Stack draws through
+    // `render/stack.rs` and never reaches here at all — so this one flag is
+    // the whole of the gate. Read once for the same reason `hues` is: it is
+    // a property of the locale, not of a tile.
+    let outdoors = base_pos.is_none();
     let spawn_point = game.zone_spawn_point();
     let shield_outline = fx.shield_outline(game.raid_defense_active());
     // Read once for the whole map: the sector is a property of the zone, so
@@ -1093,7 +1120,20 @@ fn draw_surface_map(
             // Bare ground only. Where something is standing, the background
             // carries the damage-dimmed glyph colour, and jittering that
             // would muddy a structure's durability read.
-            let shade = if occupied { 1.0 } else { tile_shade(world) };
+            // The cloud rides `shade` and not `vig`, which buys three
+            // things. `occupied` already excludes it, so a shadow falls on
+            // bare ground only — the rule the shade jitter and the biome
+            // pattern already follow, and for their reason: a moving dim
+            // over a structure would muddy the durability wash. The glyph
+            // path below takes `vig` alone, so what stands on the ground
+            // stays lit under a cloud. And `vignette` goes on meaning the
+            // Power reserve and nothing else.
+            let cloud = if outdoors { fx.cloud_shade(world) } else { 1.0 };
+            let shade = if occupied {
+                1.0
+            } else {
+                tile_shade(world) * cloud
+            };
             let vig = vignette(
                 px + tile_px / 2.0 - (pane.x + pane.w / 2.0),
                 py + tile_px / 2.0 - (pane.y + pane.h / 2.0),
@@ -1114,7 +1154,7 @@ fn draw_surface_map(
             // muddy the durability read.
             if !occupied {
                 draw_biome(painter, tile.biome, cell, at_level(biome_color, dim), world);
-                draw_tile_edges(painter, &tiles, rx, ry, cell, biome_color, vig);
+                draw_tile_edges(painter, &tiles, rx, ry, cell, biome_color, vig, cloud);
             }
             // A structure the crew has not raised yet: a flat dark slab with
             // a darker edge, drawn over the ground and under everything that
@@ -2196,6 +2236,52 @@ mod tests {
         assert!(
             glyphs.iter().any(|g| g == "@"),
             "the player must still be drawn as a glyph: {glyphs:?}"
+        );
+    }
+
+    /// The zone map drawn at `at` seconds, with effects live. The party is
+    /// left standing where a new run puts it, on the surface — which is the
+    /// half of the cloud gate this fixture exists to see.
+    fn drawn_surface_at(at: f64) -> Vec<bevy_egui::egui::epaint::ClippedShape> {
+        let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets())
+            .expect("the shipped assets must load");
+        let mut fx = Fx::new();
+        fx.begin_frame(at, Vec::new(), Vec::new(), false);
+        let (tile_px, glyph_px) = crate::text::map_cell(1);
+        let (_, shapes) = with_painter(|p| {
+            let status = game.player_status();
+            draw_surface_map(
+                &mut game,
+                &mut fx,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                tile_px,
+                glyph_px,
+                &status,
+                None,
+            );
+        });
+        shapes
+    }
+
+    /// The two halves of the cloud gate, and they are asserted together on
+    /// purpose. The zone-map half alone passes against a renderer that
+    /// shadows base space too — where a drifting patch would read as the
+    /// ceiling of a pocket underground doing something it cannot do.
+    #[test]
+    fn clouds_drift_over_the_zone_map_and_never_over_base_space() {
+        let (surface_early, _) = painted_fills_and_strokes(&drawn_surface_at(0.0));
+        let (surface_later, _) = painted_fills_and_strokes(&drawn_surface_at(60.0));
+        assert_ne!(
+            surface_early, surface_later,
+            "the ground must be shaded differently a minute of wind later"
+        );
+
+        let (base_early, _) = painted_fills_and_strokes(&drawn_base_at(0.0, false, true));
+        let (base_later, _) = painted_fills_and_strokes(&drawn_base_at(60.0, false, true));
+        assert_eq!(
+            base_early, base_later,
+            "base space has no sky and must not change with the clock"
         );
     }
 

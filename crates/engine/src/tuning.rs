@@ -2587,24 +2587,33 @@ pub const FAILOVER_REPAIR_PER_LEVEL: u32 = 1;
 // Routine slots
 // ─────────────────────────────────────────────────────────────────────────
 
-/// Slots a companion has at level 1 before any per-level growth, then one
-/// more for every `COMPANION_ROUTINE_SLOT_PER_LEVEL` levels. The floor of 1
-/// in `abilities::companion_routine_slots` is what keeps a level-1 program
-/// from having nowhere to hold its innate kit.
+/// Slots granted per step of level growth, for the player and companions
+/// alike. Two: a routine kit is the one place the game asks you to displace
+/// something you already have, and at one slot a step every install past the
+/// first was a trade rather than a choice. Doubling the grant rather than the
+/// step rate keeps every slot landing on the level it always did.
+pub const ROUTINE_SLOTS_PER_STEP: u32 = 2;
+
+/// Slots a companion has at level 1 before any per-level growth, then
+/// `ROUTINE_SLOTS_PER_STEP` more for every `COMPANION_ROUTINE_SLOT_PER_LEVEL`
+/// levels. The floor of 1 in `abilities::companion_routine_slots` is what
+/// keeps a level-1 program from having nowhere to hold its innate kit.
 pub const COMPANION_ROUTINE_SLOT_BASE: u32 = 0;
 
-/// Levels a companion needs per additional routine slot. Halved by
-/// `HP_PER_LEVEL`'s `K = 2` alongside `TALENT_START_LEVEL`, so a companion
-/// still tops out at the same number of slots it always did.
+/// Levels a companion needs per grant of `ROUTINE_SLOTS_PER_STEP` slots.
+/// Halved by `HP_PER_LEVEL`'s `K = 2` alongside `TALENT_START_LEVEL`, so a
+/// companion still reaches its ceiling at the level it always did.
 pub const COMPANION_ROUTINE_SLOT_PER_LEVEL: u32 = 1;
 
-/// Most routines a companion can hold at once, reached at level 12.
-pub const COMPANION_ROUTINE_SLOT_CAP: u32 = 6;
+/// Most routines a companion can hold at once, still reached at level 6 —
+/// `ROUTINE_SLOTS_PER_STEP` doubled the kit without moving the level it
+/// tops out at.
+pub const COMPANION_ROUTINE_SLOT_CAP: u32 = 12;
 
-/// Slots the player has at level 1. One, and `decompile` occupies it — a new
-/// game pre-installs that ability, so the player's first *free* slot is the
-/// one `PLAYER_ROUTINE_SLOT_PER_LEVEL` grants.
-pub const PLAYER_ROUTINE_SLOT_BASE: u32 = 1;
+/// Slots the player has at level 1. Two, and `decompile` occupies one — a new
+/// game pre-installs that ability, so the player starts with one free slot
+/// rather than having to reach `PLAYER_ROUTINE_SLOT_PER_LEVEL` for it.
+pub const PLAYER_ROUTINE_SLOT_BASE: u32 = 2;
 
 /// Levels the player needs per additional routine slot. Deliberately far
 /// slower than a companion's: researched routines are meant to be a choice
@@ -2613,10 +2622,10 @@ pub const PLAYER_ROUTINE_SLOT_BASE: u32 = 1;
 /// progress it used to rather than twice as much.
 pub const PLAYER_ROUTINE_SLOT_PER_LEVEL: u32 = 5;
 
-/// Most routines the player can hold at once, reached at level 25. The
+/// Most routines the player can hold at once, still reached at level 25. The
 /// player has no level ceiling (`progression::add_xp` takes `None`), so this
 /// clamp is the only thing bounding their slots.
-pub const PLAYER_ROUTINE_SLOT_CAP: u32 = 6;
+pub const PLAYER_ROUTINE_SLOT_CAP: u32 = 12;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Wild routines and ability scaling

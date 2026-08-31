@@ -1,9 +1,9 @@
 # Routines and field buffs
 
-A routine is an ability sitting in a slot. Levels buy slots — you and a fresh program both start
-with exactly one, and six is the ceiling for anybody. That first slot is already occupied, so
-installing something new almost always means displacing something old, and a program's innate
-routine, once displaced, is gone.
+A routine is an ability sitting in a slot. Levels buy slots in pairs — you and a fresh program both
+start with two, and twelve is the ceiling for anybody. One of your two already holds Decompile, and a
+program arrives with its innate kit in its own, so installing something new eventually means
+displacing something old, and a program's innate routine, once displaced, is gone.
 
 Routines reach you four ways.
 

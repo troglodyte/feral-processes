@@ -1898,6 +1898,47 @@ pub(super) fn install_routine_for_test(game: &mut Game, entity: Entity, ability:
         .unwrap_or_else(|e| panic!("installing {ability}: {e}"));
 }
 
+/// `count` routine ids a test can park in a kit to fill it — catalogue
+/// order, skipping `avoid` and anything one-of-a-kind (`decompile` is
+/// refused a second home by design).
+pub(super) fn spare_routine_ids(game: &Game, count: usize, avoid: &[&str]) -> Vec<String> {
+    let mut ids: Vec<String> = game
+        .world
+        .resource::<AbilityDb>()
+        .all()
+        .filter(|def| !def.exclusive)
+        .map(|def| def.id.clone())
+        .filter(|id| !avoid.contains(&id.as_str()))
+        .collect();
+    ids.sort();
+    ids.truncate(count);
+    assert_eq!(
+        ids.len(),
+        count,
+        "the catalogue is short of routines to fill a kit with"
+    );
+    ids
+}
+
+/// Installs routines into `entity` until only `spare` slots are free, so a
+/// test about the full-kit branch says how much room it wants rather than
+/// restating how many slots a level happens to buy.
+pub(super) fn fill_routine_slots(game: &mut Game, entity: Entity, spare: usize, avoid: &[&str]) {
+    let kit = |game: &Game| {
+        game.world
+            .get::<Routines>(entity)
+            .map(|r| r.0.clone())
+            .unwrap_or_default()
+    };
+    while kit(game).len() + spare < game.routine_slots(entity) {
+        let installed = kit(game);
+        let mut taken: Vec<&str> = avoid.to_vec();
+        taken.extend(installed.iter().map(|id| id.as_str()));
+        let id = spare_routine_ids(game, 1, &taken).remove(0);
+        install_routine_for_test(game, entity, &id);
+    }
+}
+
 /// How many *ordinary* (unfused) copies of `item` the player is carrying.
 pub(super) fn held(game: &Game, item: &ItemId) -> u32 {
     held_at(game, item, 0)

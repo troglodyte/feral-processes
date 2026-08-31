@@ -27,7 +27,7 @@ pub const DECOMPILE_ABILITY_ID: &str = "decompile";
 /// level-1 companion would otherwise have nowhere to put the kit its species
 /// grants it at level 1.
 fn routine_slots(level: u32, base: u32, per_level: u32, cap: u32) -> usize {
-    (base + level / per_level).clamp(1, cap) as usize
+    (base + crate::tuning::ROUTINE_SLOTS_PER_STEP * (level / per_level)).clamp(1, cap) as usize
 }
 
 /// How many routines a companion at `level` can hold — see
@@ -1230,11 +1230,11 @@ mod tests {
     }
 
     #[test]
-    fn companion_slots_grow_one_per_level_up_to_the_cap() {
-        // A slot a level against `TALENT_START_LEVEL` of 6 lands a companion
-        // on the same six slots it used to reach at level 12 — the ceiling
-        // moved in level units and stayed put in power.
-        let expected = [(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)];
+    fn companion_slots_grow_two_per_level_up_to_the_cap() {
+        // `ROUTINE_SLOTS_PER_STEP` slots a level against `TALENT_START_LEVEL`
+        // of 6: the ceiling still arrives at level 6, with twice the kit
+        // waiting there.
+        let expected = [(1, 2), (2, 4), (3, 6), (4, 8), (5, 10), (6, 12)];
         for (level, slots) in expected {
             assert_eq!(
                 companion_routine_slots(level),
@@ -1250,20 +1250,20 @@ mod tests {
     }
 
     #[test]
-    fn player_slots_grow_one_per_five_levels_so_the_first_free_one_lands_at_5() {
+    fn player_slots_grow_two_per_five_levels_and_one_is_free_from_the_start() {
         assert_eq!(
             player_routine_slots(1),
-            1,
-            "the starting slot holds decompile"
+            2,
+            "decompile holds one of the two a new game opens with"
         );
-        assert_eq!(player_routine_slots(4), 1, "still nothing free at 4");
+        assert_eq!(player_routine_slots(4), 2, "no second grant before 5");
         assert_eq!(
             player_routine_slots(5),
-            2,
-            "the first free slot arrives at 5"
+            4,
+            "the first grant is a pair, like every one after it"
         );
-        assert_eq!(player_routine_slots(24), 5);
-        assert_eq!(player_routine_slots(25), 6);
+        assert_eq!(player_routine_slots(24), 10);
+        assert_eq!(player_routine_slots(25), 12);
         assert_eq!(
             player_routine_slots(9_999),
             crate::tuning::PLAYER_ROUTINE_SLOT_CAP as usize,

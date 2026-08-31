@@ -1,7 +1,7 @@
 //! Raids against the base — damage, shields, guards, effects, and regeneration.
 
 use super::support::*;
-use crate::components::Downed;
+use crate::components::{Disgruntled, Downed, Grievance};
 use crate::game::base::upkeep::DEV_HIT_DAMAGE_PERCENT;
 use crate::tuning::{
     FAILOVER_REPAIR_PER_LEVEL, MEDIC_REPAIR_PER_INTERVAL, NEST_DURABILITY, RAID_DAMAGE,
@@ -433,6 +433,90 @@ fn a_base_at_the_raid_staff_minimum_can_still_be_raided() {
     }
     panic!(
         "raid_check never damaged the structure across 300 seeds at the RAID_MIN_BASE_STAFF floor — the staff gate may be over-blocking"
+    );
+}
+
+/// A program that has **downed tools** does not count either, and the two
+/// words are not the same state: `components::Downed` is a body that died
+/// and was benched, `Disgruntled { DownedTools }` is one whose morale ran
+/// far enough under that it stopped working. Neither will defend anything,
+/// so neither may be counted toward a floor whose whole purpose is that
+/// somebody is there to absorb the hit.
+///
+/// This is the shape the floor was originally written against and missed:
+/// a base whose entire staff had downed tools read as fully staffed, took
+/// sweep after sweep with nobody lifting a finger, and lost its machines —
+/// the failure `RAID_MIN_BASE_STAFF`'s own doc says it exists to prevent.
+#[test]
+fn a_staff_program_that_downed_tools_does_not_count_toward_the_raid_minimum() {
+    for seed in 0..300u32 {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        spawn_min_raid_staff(&mut game);
+        let staff = game.base_staff();
+        assert_eq!(staff.len(), RAID_MIN_BASE_STAFF);
+        game.world.entity_mut(staff[0]).insert(Disgruntled {
+            grievance: Grievance::DownedTools,
+        });
+        let structure = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "mining_node".to_string(),
+                },
+                Position { x: 5, y: 5 },
+                Durability { hp: 30, max_hp: 30 },
+            ))
+            .id();
+
+        for _ in 0..RAID_ATTEMPTS_PER_SEED {
+            game.raid_check();
+        }
+
+        assert_eq!(
+            game.world.get::<Durability>(structure).unwrap().hp,
+            30,
+            "one program that downed tools drops the base back below the floor"
+        );
+    }
+}
+
+/// The lesser rung is not the same answer. A `Sulking` program still works
+/// — it just will not take a post it holds a grudge against — so it is a
+/// body that defends and must keep counting. Without this the fix above
+/// reads as "any `Disgruntled` marker disables raids", which collapses the
+/// two-rung ladder `Grievance` exists to be.
+#[test]
+fn a_sulking_staff_program_still_counts_toward_the_raid_minimum() {
+    for seed in 0..300u32 {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        spawn_min_raid_staff(&mut game);
+        let staff = game.base_staff();
+        game.world.entity_mut(staff[0]).insert(Disgruntled {
+            grievance: Grievance::Sulking,
+        });
+        let structure = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "mining_node".to_string(),
+                },
+                Position { x: 5, y: 5 },
+                Durability { hp: 30, max_hp: 30 },
+            ))
+            .id();
+
+        for _ in 0..RAID_ATTEMPTS_PER_SEED {
+            game.raid_check();
+            let Some(durability) = game.world.get::<Durability>(structure) else {
+                return;
+            };
+            if durability.hp < 30 {
+                return;
+            }
+        }
+    }
+    panic!(
+        "raid_check never fired across 300 seeds with one sulking program — a sulking body still defends and must still count"
     );
 }
 

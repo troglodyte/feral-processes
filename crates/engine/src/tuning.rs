@@ -2243,12 +2243,13 @@ pub const BASE_PET_CAPACITY: usize = 3;
 /// structure comes under raid, if any exist.
 pub const RAID_CHANCE_PER_TICK: f64 = 0.012;
 
-/// The fewest **undowned** base-staff programs (`Game::base_staff`, minus
-/// `components::Downed`) the base must have before a raid may fire at all.
-/// An opening base has too few bodies to absorb attrition — a raid or two
-/// back to back can down the whole staff, and once every program is
-/// `Downed` there is nobody left to defend the next one, so the base never
-/// recovers. Checked in `Game::raid_check` **after** the chance roll, so a
+/// The fewest base-staff programs that could actually *defend*
+/// (`Game::defending_base_staff_count` — `Game::base_staff`, minus
+/// `components::Downed` and minus anything that has downed tools) the base
+/// must have before a raid may fire at all. An opening base has too few
+/// bodies to absorb attrition — a raid or two back to back can down the
+/// whole staff, and once no program is left standing there is nobody to
+/// defend the next one, so the base never recovers. Checked in `Game::raid_check` **after** the chance roll, so a
 /// raid that would have missed anyway still consumes the same draw from
 /// `GameRng` and this gate cannot shift any other test's RNG stream.
 ///

@@ -525,6 +525,16 @@ impl Game {
             let max_hp = self.world.get::<Stats>(player).map_or(0, |s| s.max_hp);
             self.apply_damage(player, terrain.effect.bite(max_hp));
             drag_ticks = terrain.effect.extra_ticks;
+            // Fired here, where the effect actually lands, and not from
+            // `note_static_turnover`'s epoch boundary — that fires for
+            // every biome's turnover regardless of where the player is
+            // standing, and "you were told" must not come apart from "it
+            // happened to you". Unconditional at this site: the once-only
+            // rule is `Repeat::OnceEver`, and it lives inside
+            // `queue_notification`, not here.
+            if terrain.event.is_some() {
+                self.notify(crate::notifications::NotificationKind::FirstStatic);
+            }
             if terrain.biome != from {
                 // The condition's name joins the crossing line rather than
                 // getting one of its own — unclaimed ground (`condition:

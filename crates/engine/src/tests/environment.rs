@@ -479,6 +479,7 @@ fn the_crossing_line_names_a_biome_change_and_nothing_within_one_biome() {
 // ---------------------------------------------------------------- the weather
 
 use crate::environment::StaticEvent;
+use crate::notifications::NotificationKind;
 use crate::resources::{GameClock, GameRng};
 use crate::tests::support::reseed_rng;
 use crate::tuning::STATIC_EPOCH_TICKS;
@@ -1143,6 +1144,42 @@ fn weather_clearing_fires_on_the_boundary_the_other_way() {
             .iter()
             .any(|l| l.text.contains(name) && l.text.contains(Biome::NullSector.name())),
         "the clearing line must name the event and the biome"
+    );
+}
+
+/// The fifth trigger, and the one full-screen rather than a log line:
+/// standing onto a tile with a live event queues `FirstStatic` once, and a
+/// second such step must not queue it again — the once-only rule is
+/// `Repeat::OnceEver` inside `queue_notification`, not a second check at
+/// this call site. Fired from the movement hook itself (the same place the
+/// bite lands), not from `note_static_turnover`'s epoch boundary, which is
+/// what `turnover_in_a_biome_the_player_is_not_standing_in_is_silent` above
+/// already holds to a different rule.
+#[test]
+fn first_live_weather_step_queues_the_tutorial_once() {
+    let mut game = game_standing_on(Biome::NullSector);
+    let epoch = (0..2000u64)
+        .find(|&e| game.static_in_epoch(Biome::NullSector, e).is_some())
+        .expect("a live epoch must be reachable in Null Sector's pool");
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS + 1);
+    while game.take_notification().is_some() {} // drain the run's own opening briefing
+
+    game.move_player(1, 0);
+
+    let title = NotificationKind::FirstStatic.def().title;
+    let queued: Vec<_> = std::iter::from_fn(|| game.take_notification()).collect();
+    assert!(
+        queued.iter().any(|n| n.title == title),
+        "a step onto live weather must queue the FirstStatic tutorial"
+    );
+
+    game.move_player(-1, 0);
+    game.move_player(1, 0);
+
+    let queued_again: Vec<_> = std::iter::from_fn(|| game.take_notification()).collect();
+    assert!(
+        !queued_again.iter().any(|n| n.title == title),
+        "a second live-weather step must not requeue an OnceEver tutorial"
     );
 }
 

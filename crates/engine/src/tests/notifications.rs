@@ -291,6 +291,7 @@ fn every_notification_kind_is_fired_by_a_named_site() {
             NotificationKind::FirstDescent => "Game::descend_to",
             NotificationKind::FirstRaid => "Game::run_raid",
             NotificationKind::FirstWorkOrder => "Game::queue_work_order",
+            NotificationKind::FirstStatic => "Game::move_player, the movement hook",
             NotificationKind::Breach => "Game::enter_next_zone",
             NotificationKind::ContractClosed => "Game::complete_contract",
             NotificationKind::OnboardingMission => "Game::ensure_tutorial_held",
@@ -316,7 +317,8 @@ fn tutorials_latch_and_milestones_do_not() {
             NotificationKind::BaseFounding
             | NotificationKind::FirstDescent
             | NotificationKind::FirstRaid
-            | NotificationKind::FirstWorkOrder => Repeat::OnceEver,
+            | NotificationKind::FirstWorkOrder
+            | NotificationKind::FirstStatic => Repeat::OnceEver,
             // The chain runs on every new game, so a briefing latched across
             // runs would leave a second playthrough's missions unexplained.
             NotificationKind::Breach

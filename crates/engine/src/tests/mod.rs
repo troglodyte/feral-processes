@@ -46,6 +46,7 @@ mod nemesis;
 mod notifications;
 mod party;
 mod perks;
+mod permadeath;
 mod policy;
 mod power;
 mod raids;

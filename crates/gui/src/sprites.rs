@@ -30,7 +30,7 @@ use crate::paint::SpriteTable;
 /// asset server is available anyway. This is the minimum proof — when
 /// sprites become a `sprite:` field on species and structures, the names
 /// come from the asset files and this list goes away.
-const SPRITES: &[&str] = &["player"];
+const SPRITES: &[&str] = &["player", "anchor"];
 
 /// Where the loaded sprites live between the asset server and the renderer.
 #[derive(Resource, Default)]

@@ -1198,11 +1198,28 @@ fn draw_surface_map(
                 // had one — and a miss falls back to that glyph, which is
                 // what keeps `assets/sprites/` optional.
                 //
-                // The player alone, and by name: this is the minimum proof
-                // of the texture path. When `sprite:` becomes a field on
-                // species and structures, the name comes off the view and
-                // this literal goes away.
-                let sprite = actor.filter(|ev| ev.is_player).map(|_| "player");
+                // Two fixtures, and both by name on purpose. Neither is
+                // content — the player is a *role* and the anchor is a
+                // permanent feature of every zone — so neither has a `.ron`
+                // file with a `sprite:` field to read one off. When species
+                // and structures get that field the name comes off the view
+                // for them; these two stay written here.
+                //
+                // The anchor is the case the sprite seam was worth building
+                // for. Its `#` was chosen by elimination rather than by
+                // meaning — `>` and `<` were claimed by Stack links and
+                // Blue and Cyan were reserved, see `Game::new`'s anchor
+                // spawn — so it is the one glyph on this map that says
+                // nothing at all about what stands there.
+                let sprite = actor.and_then(|ev| {
+                    if ev.is_player {
+                        Some("player")
+                    } else if ev.is_anchor {
+                        Some("anchor")
+                    } else {
+                        None
+                    }
+                });
                 // Centred on the cell, not on measured ink: a square sprite
                 // has neither side bearing nor descender. `glyph_px` and not
                 // `tile_px`, so the sprite keeps the glyph's margin inside
@@ -2186,8 +2203,21 @@ mod tests {
     /// Draws one surface map and reports what landed: the textured meshes,
     /// and the text of every glyph painted.
     fn drawn_map(sprites: SpriteTable) -> (usize, Vec<String>) {
+        drawn_map_with(sprites, 0)
+    }
+
+    /// How far the party has to walk before the anchor it spawned on top of
+    /// is a cell of its own. One step is enough; the constant is named so
+    /// the assertion above can say what zero means.
+    const STEPS_OFF_THE_ANCHOR: usize = 1;
+
+    /// `drawn_map`, with the party walked `steps` tiles east first.
+    fn drawn_map_with(sprites: SpriteTable, steps: usize) -> (usize, Vec<String>) {
         let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets())
             .expect("the shipped assets must load");
+        for _ in 0..steps {
+            game.move_player(1, 0);
+        }
         let mut fx = Fx::new();
         let (tile_px, glyph_px) = crate::text::map_cell(1);
         let (_, shapes) = with_sprites(sprites, |p| {
@@ -2222,6 +2252,35 @@ mod tests {
         assert!(
             !glyphs.iter().any(|g| g == "@"),
             "the '@' must give way to the sprite, not sit under it: {glyphs:?}"
+        );
+    }
+
+    /// The anchor gets the same treatment, and it needs its own test: it is
+    /// the one map fixture that is neither a creature nor a `Structure`, so
+    /// nothing the player's case exercises picks it out.
+    ///
+    /// The party has to step off it first. `Game::new` spawns the anchor
+    /// *under* the player, and the player wins a shared tile, so a fresh run
+    /// draws no anchor at all — asserted here rather than assumed, or the
+    /// test would pass against a renderer that never selected the sprite.
+    #[test]
+    fn the_anchor_sprite_stands_in_for_the_hash() {
+        let mut table = SpriteTable::default();
+        table.insert("anchor", bevy_egui::egui::TextureId::User(2));
+
+        let (under, _) = drawn_map_with(table.clone(), 0);
+        assert_eq!(
+            under, 0,
+            "the party stands on the anchor at spawn and hides it, so this \
+             fixture proves nothing until it moves"
+        );
+
+        let (images, glyphs) = drawn_map_with(table, STEPS_OFF_THE_ANCHOR);
+
+        assert_eq!(images, 1, "exactly one sprite, the anchor's");
+        assert!(
+            !glyphs.iter().any(|g| g == "#"),
+            "the '#' must give way to the sprite, not sit under it: {glyphs:?}"
         );
     }
 

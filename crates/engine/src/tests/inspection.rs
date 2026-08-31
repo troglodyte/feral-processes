@@ -2356,3 +2356,32 @@ fn a_player_manifest_reports_what_the_run_holds() {
          snapshot dressed as a run fact"
     );
 }
+
+/// The anchor is the one thing on the surface map that is neither a
+/// creature nor a `Structure`, so `is_structure` and `is_player` both say
+/// nothing about it and a renderer picking art for it had nothing to read.
+/// `is_anchor` is that read — and it must be *exclusive*, or the sprite
+/// meant for the portal lands on every wild program on the map.
+#[test]
+fn the_anchor_is_the_one_entity_its_flag_names() {
+    let mut game = Game::new(3200, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    let views = game.view_entities(40, 40);
+    let anchors: Vec<_> = views.iter().filter(|v| v.is_anchor).collect();
+
+    assert_eq!(
+        anchors.len(),
+        1,
+        "exactly one entity on the map is the anchor, and every other view \
+         must say so: {:?}",
+        views
+            .iter()
+            .map(|v| (&v.label, v.is_anchor))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        anchors[0].label, "The Anchor",
+        "the flag has to be on the anchor itself, not on whatever happens \
+         to share its tile"
+    );
+}

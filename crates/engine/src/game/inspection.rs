@@ -871,6 +871,7 @@ impl Game {
                 let is_companion = self.world.resource::<Party>().0.contains(&entity);
                 let is_hostile = self.world.get::<Hostile>(entity).is_some();
                 let is_structure = self.world.get::<Structure>(entity).is_some();
+                let is_anchor = self.world.get::<BaseAnchor>(entity).is_some();
                 let is_home = self
                     .world
                     .get::<Structure>(entity)
@@ -933,6 +934,7 @@ impl Game {
                     is_companion,
                     is_hostile,
                     is_structure,
+                    is_anchor,
                     is_home,
                     tier,
                     ceiling,
@@ -1521,6 +1523,7 @@ impl Game {
                     is_companion: false,
                     is_hostile: false,
                     is_structure: true,
+                    is_anchor: false,
                     machine_status: None,
                     linked_edges: Vec::new(),
                     is_home: kind == HOME_STRUCTURE_ID,

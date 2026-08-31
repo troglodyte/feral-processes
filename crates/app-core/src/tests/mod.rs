@@ -34,3 +34,4 @@ mod stack_market;
 mod telemetry;
 mod trade;
 mod transfer;
+mod watch;

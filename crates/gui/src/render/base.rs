@@ -640,6 +640,13 @@ pub(super) fn draw_playing_base(
             cursor,
             anchor: app.excavate_anchor,
         });
+    // Before the `game` borrow, like `plan` and `log_filter` above — and
+    // this one is a *read that releases*: `App::watch_center` drops
+    // `App::watching` the moment the engine stops answering, which is the
+    // single rule behind "the program was dissolved, dispatched, taken into
+    // the party, or the party left base space".
+    let watch = app.watch_center();
+    let watching = app.watching;
     let Some(game) = &mut app.game else { return };
 
     let stock_rows = game.base_stock();
@@ -658,6 +665,10 @@ pub(super) fn draw_playing_base(
     // `Game::terrain_row` takes `&mut self` and this is where every other
     // such call already lands before the borrows below.
     let terrain = game.terrain_row();
+    // Read here for `terrain`'s reason. `None` unless the camera is actually
+    // on something, so the frame's ground readout keeps its mount for all
+    // the time nobody is watching anything.
+    let watch_label = watching.map(|e| game.creature_label(e));
     // Mounted on the log pane's top border by `draw_log_pane` at the end of
     // this function, so it is built here — before the `game` borrow it needs
     // — and held until then.
@@ -684,6 +695,9 @@ pub(super) fn draw_playing_base(
                 hostiles: 0,
                 shielded: game.raid_defense_active(),
             },
+            // Never underground: watching is base space's, and the Stack
+            // view is a corridor projection with no camera to move.
+            None,
             painter,
             m,
         );
@@ -697,6 +711,10 @@ pub(super) fn draw_playing_base(
             glyph_px,
             &status,
             plan,
+            // The party's own cell unless the camera has been sent
+            // somewhere: `base_pos` is `Some` only in base space, which is
+            // exactly where the pinned `Position` is the wrong answer.
+            watch.unwrap_or_else(|| game.base_pos().unwrap_or(status.position)),
         );
         let hostiles = entities.iter().filter(|e| e.is_hostile).count();
         hud::map_frame::draw_map_frame(
@@ -706,6 +724,7 @@ pub(super) fn draw_playing_base(
                 hostiles,
                 shielded: game.raid_defense_active(),
             },
+            watch_label.as_deref(),
             painter,
             m,
         );
@@ -874,6 +893,7 @@ fn draw_surface_map(
     glyph_px: u16,
     status: &feral_processes_engine::PlayerStatus,
     plan: Option<PlanCursor>,
+    center: (i32, i32),
 ) -> Vec<EntityView> {
     // Two rings wider than the pane can show. The first is the tile the
     // camera's sub-tile offset slides in from, without which the trailing
@@ -897,7 +917,6 @@ fn draw_surface_map(
     // space, which is exactly when the pinned tile is already the right
     // answer.
     let base_pos = game.base_pos();
-    let center = base_pos.unwrap_or(status.position);
     // Every `VisualEffect` the engine queues names a *structure's* tile —
     // all three `Game::push_effect` callers are structure damage — so the
     // whole queue is base-space by construction. This pane draws one space
@@ -914,9 +933,9 @@ fn draw_surface_map(
     // whole grid is drawn against the same one.
     let floor = vignette_floor(status.power);
     let (off_x, off_y) = fx.camera_offset(center, painter.delta());
-    let tiles = game.view_tiles(hw, hh);
+    let tiles = game.view_tiles_at(center, hw, hh);
     let entities: Vec<_> = game
-        .view_entities(hw, hh)
+        .view_entities_at(center, hw, hh)
         .into_iter()
         // A tamed program is drawn while it is out on an errand, while it is
         // on a job with no glyph at the far end — a builder walking its
@@ -2231,6 +2250,7 @@ mod tests {
                 glyph_px,
                 &status,
                 None,
+                status.position,
             );
         });
         (painted_images(&shapes).len(), painted_text(&shapes))
@@ -2318,6 +2338,7 @@ mod tests {
                 glyph_px,
                 &status,
                 None,
+                status.position,
             );
         });
         shapes
@@ -2391,6 +2412,7 @@ mod tests {
                 glyph_px,
                 &status,
                 None,
+                status.position,
             );
         });
         shapes
@@ -2931,6 +2953,108 @@ mod tests {
             "the nemesis mark's bottom ({}) reaches into the staffed mark's \
              row (starts at {staffed_y})",
             nemesis.y + nemesis.h
+        );
+    }
+
+    /// **The whole camera feature is one value.** `draw_surface_map` takes
+    /// the tile it centres on rather than deriving it, so the watched
+    /// program's cell moves the tile window, the entity window and the
+    /// camera's own slide together — and the `@`, which is the one glyph
+    /// that must end up drawn *off* centre.
+    ///
+    /// Asserted as a shift rather than an absolute position: the pane's
+    /// centre is a function of the window size and the strip insets, and a
+    /// test that recomputed it would be re-deriving the layout it is meant
+    /// to be checking.
+    #[test]
+    fn the_map_draws_around_the_tile_it_is_handed() {
+        let mut app = playing_app();
+        let pane = Rect::new(0.0, 0.0, 800.0, 500.0);
+        let (tile_px, glyph_px) = map_cell(app.zoom);
+        let home = app.game.as_ref().unwrap().player_status().position;
+
+        let mut at = |center: (i32, i32)| {
+            let mut fx = Fx::new();
+            let game = app.game.as_mut().unwrap();
+            let status = game.player_status();
+            let (_, shapes) = with_painter(|p| {
+                // Twice, because the camera eases toward its target: the
+                // first call seeds it and the second is drawn from a camera
+                // that has arrived.
+                for _ in 0..2 {
+                    draw_surface_map(
+                        game, &mut fx, p, pane, tile_px, glyph_px, &status, None, center,
+                    );
+                }
+            });
+            crate::paint::painted_text_boxes(&shapes)
+                .into_iter()
+                .find(|(_, text, _)| text == "@")
+                .map(|(_, _, rect)| rect)
+                .expect("the map draws the player")
+        };
+
+        let anchored = at(home);
+        let shifted = at((home.0 + 3, home.1));
+
+        assert!(
+            (anchored.x - shifted.x - tile_px * 3.0).abs() < 1.0,
+            "centring three tiles east must push the `@` three tiles west: \
+             {} then {}, against a {tile_px}px tile",
+            anchored.x,
+            shifted.x
+        );
+        assert!(
+            (anchored.y - shifted.y).abs() < 1.0,
+            "an axis that was not moved must not drift: {} then {}",
+            anchored.y,
+            shifted.y
+        );
+    }
+
+    /// The watch line replaces the ground readout rather than claiming a
+    /// border of its own. `map_pane`'s bottom border carries nothing by
+    /// design — a strip there would either cover the map's bottom row of
+    /// tiles or make the grid re-lay itself the moment `w` was pressed — and
+    /// the ground readout is ambient, where "you are looking somewhere else,
+    /// and here is the way back" is not.
+    #[test]
+    fn the_frame_says_who_is_being_watched_instead_of_the_ground() {
+        let mut app = playing_app();
+        let m = ui_metrics(900.0);
+        let ground = ground_label(&mut app);
+        let row = app.game.as_mut().unwrap().terrain_row();
+        let threat = hud::map_frame::Threat {
+            hostiles: 0,
+            shielded: false,
+        };
+        let pane = Rect::new(0.0, 0.0, 1200.0, 600.0);
+
+        let (_, shapes) = with_painter(|p| {
+            hud::map_frame::draw_map_frame(pane, row, threat, Some("Ivy"), p, &m);
+        });
+        let text = crate::paint::painted_text(&shapes).join("");
+        assert!(
+            text.contains("Ivy"),
+            "the strip must name who the camera is on: {text:?}"
+        );
+        assert!(
+            text.contains("Esc"),
+            "and the way back, or the camera is a trap: {text:?}"
+        );
+        assert!(
+            !text.contains(&ground),
+            "the ground readout gives up the mount rather than sharing it: \
+             {text:?} still holds {ground:?}"
+        );
+
+        let (_, shapes) = with_painter(|p| {
+            hud::map_frame::draw_map_frame(pane, row, threat, None, p, &m);
+        });
+        let text = crate::paint::painted_text(&shapes).join("");
+        assert!(
+            text.contains(&ground) && !text.contains("Esc"),
+            "and takes it straight back when the watch ends: {text:?}"
         );
     }
 }

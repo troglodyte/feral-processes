@@ -30,6 +30,13 @@ pub(super) struct ManifestNav {
     /// the roster — rather than to the map. Which of the two is app-core's
     /// business (`ManifestOrigin`); the footer only has to know there is one.
     pub(super) back_to_list: bool,
+    /// `w` sends the map's camera to this program and goes back to the map.
+    ///
+    /// False for anything the sim does not walk — a party member, your
+    /// wielded program, a squad away on a sortie, a guard — and for every
+    /// program when the party is not in base space, which is where staff
+    /// stand. `Game::watch_position` is the one rule; this is its `is_some`.
+    pub(super) watchable: bool,
 }
 
 pub(super) fn draw_manifest(
@@ -89,6 +96,9 @@ pub(super) fn draw_manifest(
     let mut footer = Vec::new();
     if nav.cyclable {
         footer.push("←/→ other programs");
+    }
+    if nav.watchable {
+        footer.push("[w] watch");
     }
     footer.push(if nav.back_to_list {
         "Esc back to list"
@@ -1433,6 +1443,57 @@ mod tests {
                 "EQUIPMENT",
                 "ROUTINES",
             ],
+        );
+    }
+
+    /// The footer is the only place `w` is advertised, so it has to be
+    /// gated on the same answer `App::start_watching` refuses on — a key
+    /// offered on a party member's sheet and then refused reads as the
+    /// feature being broken, and one never offered at all reads as it not
+    /// existing.
+    #[test]
+    fn the_footer_offers_w_exactly_when_watching_would_work() {
+        let m = ui_metrics(900.0);
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut game = feral_processes_engine::Game::new(
+            7,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            &root.join("assets"),
+        )
+        .expect("the shipped assets must load");
+        let subject = game.manifest_subjects()[0];
+
+        let footer = |watchable| {
+            let mut game = feral_processes_engine::Game::new(
+                7,
+                feral_processes_engine::DifficultyMode::Forgiving,
+                &root.join("assets"),
+            )
+            .expect("the shipped assets must load");
+            let (_, shapes) = with_painter(|p| {
+                draw_manifest(
+                    &mut game,
+                    Some(subject),
+                    ManifestNav {
+                        cyclable: false,
+                        back_to_list: false,
+                        watchable,
+                    },
+                    None,
+                    p,
+                    &m,
+                );
+            });
+            crate::paint::painted_text(&shapes).join("")
+        };
+
+        assert!(
+            footer(true).contains("[w] watch"),
+            "the key has to be on the sheet or nobody finds it"
+        );
+        assert!(
+            !footer(false).contains("[w] watch"),
+            "and must not be offered where it would be refused"
         );
     }
 }

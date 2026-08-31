@@ -1543,6 +1543,17 @@ pub struct App {
     /// The structure picked in `Mode::Remove`, awaiting confirmation from
     /// `Mode::RemoveConfirm` if it's the Home (see `Game::remove_structure`).
     pending_remove_structure: Option<Entity>,
+    /// Which owned program the map's camera is following, if any — started
+    /// with `w` on that program's manifest and handed back by `Esc`, by a
+    /// step, or by the program ceasing to be watchable.
+    ///
+    /// **Transient, and deliberately not saved**, `BattleReveal`'s
+    /// precedent: a loaded game opens on the party, so this costs no
+    /// `SAVE_FORMAT_VERSION` bump. Read every frame through
+    /// [`App::watch_center`], which is also what releases it — the release
+    /// cannot be a list of things that might end a watch, because a list is
+    /// what grows a case short.
+    pub watching: Option<Entity>,
     /// Whose stat sheet `Mode::Manifest` is showing — the player, a program
     /// you own, or the wild one `Mode::InspectDirection` just found.
     pub pending_manifest: Option<Entity>,

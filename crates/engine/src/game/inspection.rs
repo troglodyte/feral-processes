@@ -76,7 +76,26 @@ impl Game {
     /// absent (solid) → `Biome::Entropy`, all three walkable exactly as
     /// `Biome::walkable` already says.
     pub fn view_tiles(&mut self, half_w: i32, half_h: i32) -> Vec<Vec<Tile>> {
-        if let Some((cx, cy)) = self.base_pos() {
+        let center = self.scan_center();
+        self.view_tiles_at((center.x, center.y), half_w, half_h)
+    }
+
+    /// [`Game::view_tiles`], centred where the caller says rather than on the
+    /// party.
+    ///
+    /// **The centre moves; the space does not.** Which grid is read is still
+    /// `base_pos`, because that is the party's own locale and the map draws
+    /// one space at a time — `center` only ever names a cell *within* it.
+    /// `Game::watch_position` is the one thing that hands this anything but
+    /// `scan_center`, and it refuses outside base space for that reason.
+    pub fn view_tiles_at(
+        &mut self,
+        center: (i32, i32),
+        half_w: i32,
+        half_h: i32,
+    ) -> Vec<Vec<Tile>> {
+        let (cx, cy) = center;
+        if self.base_pos().is_some() {
             let grid = self.world.resource::<crate::base_grid::BaseGrid>();
             // Hoisted out of the loop: this runs per tile per frame, and a
             // resource lookup per cell for a value that cannot change inside
@@ -111,13 +130,12 @@ impl Game {
             }
             return rows;
         }
-        let center = *self.world.get::<Position>(self.player_entity()).unwrap();
         let mut world_map = self.world.resource_mut::<WorldMap>();
         let mut rows = Vec::new();
         for ty in -half_h..=half_h {
             let mut row = Vec::new();
             for tx in -half_w..=half_w {
-                row.push(world_map.tile(center.x + tx, center.y + ty));
+                row.push(world_map.tile(cx + tx, cy + ty));
             }
             rows.push(row);
         }
@@ -259,6 +277,48 @@ impl Game {
         self.wears_job_mark(entity)
             || (self.program_role(entity) == Some(ProgramRole::Staff)
                 && self.world.get::<Task>(entity).is_none())
+    }
+
+    /// Where the camera sits while the player is watching `entity`, or
+    /// `None` if that program cannot be watched at all.
+    ///
+    /// **One door for both questions.** The manifest's `[w] watch` footer is
+    /// offered exactly when this is `Some`, and the camera reads the same
+    /// call every frame to find its centre and to notice the moment it must
+    /// let go — so what the screen offers and what the camera can hold
+    /// cannot drift apart.
+    ///
+    /// **Deliberately not `position_is_honest`**, which is the neighbouring
+    /// rule and the wrong one here. That answers "may the map *draw* this
+    /// program", and `mark_sits_on_the_post` makes it `false` for a worker
+    /// standing at its machine — the body is hidden under the machine's own
+    /// glyph, so a base at rest reads as buildings. Its `Position` is the
+    /// post's tile and perfectly live. Gated on that flag the camera would
+    /// release the instant the body arrived where the player was watching it
+    /// go, which is the one moment the feature exists for.
+    ///
+    /// What this asks instead is whether the sim *walks* the body. That is
+    /// `ProgramRole::Staff` less the guards: `role_of` already holds out the
+    /// party, the wielded program and anything away on a sortie, and
+    /// `TaskKind::Guard` is the fourth — nothing ever walks a guard to what
+    /// it guards, so it stands wherever it was when it was assigned. All
+    /// four keep a `Position` that is never written again, and parking the
+    /// camera on one claims the program is somewhere it isn't.
+    ///
+    /// Refused outside base space, where staff stand: the map draws one
+    /// space at a time (`stands_in_base_space`) and a base-space cell drawn
+    /// over the zone surface is the aliasing every other map-facing view
+    /// already refuses.
+    pub fn watch_position(&self, entity: Entity) -> Option<(i32, i32)> {
+        self.base_pos()?;
+        if self.program_role(entity) != Some(ProgramRole::Staff) {
+            return None;
+        }
+        if self.world.get::<Task>(entity).map(|t| t.kind) == Some(TaskKind::Guard) {
+            return None;
+        }
+        let pos = self.world.get::<Position>(entity)?;
+        Some((pos.x, pos.y))
     }
 
     /// Whether `entity`'s `Position` is a cell of base space rather than a
@@ -762,8 +822,29 @@ impl Game {
     /// once — and read through `scan_center` instead, which is the base's
     /// half of that.
     pub fn view_entities(&mut self, half_w: i32, half_h: i32) -> Vec<EntityView> {
-        let in_base = self.in_base();
         let center = self.scan_center();
+        self.view_entities_at((center.x, center.y), half_w, half_h)
+    }
+
+    /// [`Game::view_entities`], centred where the caller says rather than on
+    /// the party — [`Game::view_tiles_at`]'s counterpart, and the other half
+    /// of what the watch camera re-points.
+    ///
+    /// The player is still placed at `scan_center` rather than at `center`:
+    /// this is the map's only source of the `@`, and while the camera is
+    /// elsewhere the player is exactly what must be drawn *off* centre.
+    pub fn view_entities_at(
+        &mut self,
+        center: (i32, i32),
+        half_w: i32,
+        half_h: i32,
+    ) -> Vec<EntityView> {
+        let in_base = self.in_base();
+        let party = self.scan_center();
+        let center = Position {
+            x: center.0,
+            y: center.1,
+        };
         let player = self.player_entity();
         let mut query = self.world.query::<(Entity, &Position, &Glyph)>();
         let hits: Vec<(Entity, Position, Glyph)> = query
@@ -776,7 +857,7 @@ impl Game {
             // whatever base-space cell the anchor's surface coordinates
             // aliased onto and left it there however far the party walked.
             // A no-op on the surface, where `scan_center` *is* that tile.
-            .map(|(e, p, g)| (e, if e == player { center } else { *p }, *g))
+            .map(|(e, p, g)| (e, if e == player { party } else { *p }, *g))
             .filter(|(_, p, _)| {
                 (p.x - center.x).abs() <= half_w && (p.y - center.y).abs() <= half_h
             })

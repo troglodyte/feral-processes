@@ -27,8 +27,40 @@ fn stepped(game: &mut Game, dx: i32, dy: i32) -> bool {
     game.current_tick() > before || game.is_game_over().is_some()
 }
 
+/// Which keys hand the map's camera back to the party — see `App::watching`.
+///
+/// Esc is the advertised way out. The eight movement keys are here because
+/// walking while the camera sits somewhere else is walking blind, and the
+/// player who presses a direction has already stopped watching whether or
+/// not they thought of it that way.
+fn releases_the_camera(key: GameKey) -> bool {
+    matches!(
+        key,
+        GameKey::Esc
+            | GameKey::Up
+            | GameKey::Down
+            | GameKey::Left
+            | GameKey::Right
+            | GameKey::Char('k')
+            | GameKey::Char('j')
+            | GameKey::Char('h')
+            | GameKey::Char('l')
+    )
+}
+
 impl App {
     pub(crate) fn handle_playing_key(&mut self, key: GameKey) {
+        // Watching is a camera, not a mode: every other key still does
+        // exactly what it does, which is what keeps this from needing a
+        // refusal path of its own. Esc consumes the press, having nothing
+        // else to do on this screen; a step releases and **still steps**,
+        // because a swallowed movement key reads as the game having frozen.
+        if self.watching.is_some() && releases_the_camera(key) {
+            self.watching = None;
+            if key == GameKey::Esc {
+                return;
+            }
+        }
         match key {
             // The two group menus. Seventeen keys used to sit on this
             // screen doing what these two now reach; see `group_menu.rs`

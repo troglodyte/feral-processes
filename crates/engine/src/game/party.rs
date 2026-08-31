@@ -232,7 +232,7 @@ impl Game {
     /// roster carries the tier as its own short tag instead, outside the
     /// column. A `CustomName` gets the prefix too, which is right: renaming
     /// a program does not make it ordinary.
-    pub(crate) fn creature_label(&self, entity: Entity) -> String {
+    pub fn creature_label(&self, entity: Entity) -> String {
         match self.creature_name(entity) {
             Some(name) => {
                 let named = match self.rarity_of(entity).label() {

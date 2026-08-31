@@ -143,6 +143,10 @@ impl App {
     /// Unlike the popup this replaced, the manifest doesn't close on any key
     /// — ←/→ page between subjects, so only Esc leaves.
     pub(crate) fn handle_manifest_key(&mut self, key: GameKey) {
+        if key == GameKey::Char('w') {
+            self.start_watching();
+            return;
+        }
         let step = match key {
             GameKey::Left => -1,
             GameKey::Right => 1,
@@ -163,6 +167,55 @@ impl App {
         };
         let next = (current as isize + step).rem_euclid(subjects.len() as isize) as usize;
         self.pending_manifest = Some(subjects[next]);
+    }
+
+    /// `w` on a manifest: put the map's camera on this program and go watch
+    /// it.
+    ///
+    /// **Drops the whole sheet rather than backing into the list it was
+    /// opened from**, which is where the roster route reaches this. Watching
+    /// happens on the map, so `leave_manifest`'s return-to-your-list rule is
+    /// the wrong one here — there would be nothing to see behind the list.
+    ///
+    /// `Game::watch_position` is the one gate. The footer offers `w` exactly
+    /// when it answers `Some`, so this refusal is only ever reached by a
+    /// player pressing a key the screen did not advertise — but it is a
+    /// sentence rather than a swallowed press, because a key that does
+    /// nothing at all reads as the feature being broken.
+    fn start_watching(&mut self) {
+        let watchable = self
+            .pending_manifest
+            .zip(self.game.as_ref())
+            .is_some_and(|(e, g)| g.watch_position(e).is_some());
+        if !watchable {
+            self.refuse(
+                "You can only watch a program the base is working — one in \
+                 the party, in your hand, away on a sortie or standing guard \
+                 isn't somewhere you can look.",
+            );
+            return;
+        }
+        self.watching = self.pending_manifest;
+        self.pending_manifest = None;
+        self.status_line = None;
+        self.mode = Mode::Playing;
+    }
+
+    /// Where the map's camera is centred, or `None` when it is on the party.
+    ///
+    /// **The read is also the release.** Asking `Game::watch_position` every
+    /// frame and dropping `App::watching` the moment it answers `None` is
+    /// what makes "the program was dissolved / dispatched / taken into the
+    /// party / the party left base space" one rule instead of a list of
+    /// endings that grows a case short. The engine's door already knows all
+    /// of them; nothing here restates any.
+    pub fn watch_center(&mut self) -> Option<(i32, i32)> {
+        let entity = self.watching?;
+        let at = self.game.as_ref()?.watch_position(entity);
+        if at.is_none() {
+            self.watching = None;
+        }
+        at
     }
 
     /// Esc from the manifest: back to the list it was opened from, or to the

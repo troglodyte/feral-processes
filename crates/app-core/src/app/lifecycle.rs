@@ -55,6 +55,7 @@ impl App {
             menu_origin: None,
             etch_return: None,
             pending_remove_structure: None,
+            watching: None,
             pending_manifest: None,
             pending_structure_manifest: None,
             pending_description: None,

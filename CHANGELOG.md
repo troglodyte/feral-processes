@@ -33,6 +33,21 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.60
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+- **Cloud shadows drift across the zone map: soft patches of shade, off-axis
+  and slow enough to be caught rather than watched.**
+- **They are pure atmosphere and mean nothing.** A shadow crossing a biome
+  under a Static event is not that event and does not mark it — Static claims
+  a whole biome at a time and still reads out on the map pane's border.
+- **Base space and the Stack have no sky, and neither takes a shadow.**
+- **A cloud falls on bare ground only**, so a structure's damage wash and a
+  glyph's own colour are never dimmed by something passing overhead.
+- **The vignette goes on meaning the Power reserve alone**, which is why the
+  shade rides the per-tile jitter instead.
+
 ## 0.13.59
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

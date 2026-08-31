@@ -2799,12 +2799,62 @@ pub const MAX_ENVIRONMENT_DRAG_TICKS: u32 = 3;
 ///
 /// Ground itself never sets this above `1.0` — the term exists so a later
 /// weather layer has somewhere to land without a second field appearing on
-/// the struct then. The ceiling still has to hold from day one: an unbounded
-/// multiplier could turn a chance roll into a certainty, which reads as a
-/// scripted ambush rather than bad luck. Doubling the baseline chance is
-/// already the difference between "usually fine" and "expect it every
-/// crossing".
-pub const MAX_STATIC_AMBUSH_MULT: f32 = 2.0;
+/// the struct then. Set above `SignalNoise`'s own authored `x2.0` rather
+/// than equal to it: a ceiling exactly at the one shipped value that reaches
+/// it is a restatement of the content, not a guard, and would be
+/// unreachable for every combination actually on the table (Null Sector's
+/// `SignalNoise` folded with `LeakingMemory` still tops out at `x2.0`, since
+/// only `SignalNoise` touches the term at all). Room enough that a second
+/// ambush-multiplying source could fold in without instantly saturating.
+pub const MAX_STATIC_AMBUSH_MULT: f32 = 2.5;
+
+// ---------------------------------------------------------------------------
+// Static weather
+// ---------------------------------------------------------------------------
+
+/// Ticks in one weather epoch — how long a `StaticEvent` (or clear ground)
+/// stands before `static_at` re-derives it. Every biome in a zone turns over
+/// at the same instant, which is invisible in play: the player is standing
+/// in one biome at a time.
+pub const STATIC_EPOCH_TICKS: u64 = 150;
+
+/// The implicit "nothing is live" weight every biome's pool carries beside
+/// its events' own weights, so most epochs in most biomes are clear.
+pub const STATIC_CLEAR_WEIGHT: u32 = 3;
+
+/// `StaticEvent::LeakingMemory`'s pool weight, against `STATIC_CLEAR_WEIGHT`
+/// and whatever else claims Null Sector.
+pub const LEAKING_MEMORY_WEIGHT: u32 = 1;
+/// `LeakingMemory`'s extra attrition, added on top of Null Sector's own
+/// `DanglingReads` — the shipped case for "no event is attrition-only except
+/// on ground that is already attrition."
+pub const LEAKING_MEMORY_ATTRITION: f32 = 0.015;
+/// `LeakingMemory`'s extra floor, added to `DanglingReads`'s own.
+pub const LEAKING_MEMORY_FLOOR: i32 = 1;
+
+/// `StaticEvent::ThreadStorm`'s pool weight.
+pub const THREAD_STORM_WEIGHT: u32 = 1;
+/// `ThreadStorm`'s extra step cost, on top of the one every step costs.
+pub const THREAD_STORM_DRAG_TICKS: u32 = 1;
+/// `ThreadStorm`'s multiplier on `RANDOM_ENCOUNTER_CHANCE`.
+pub const THREAD_STORM_AMBUSH_MULT: f32 = 1.5;
+
+/// `StaticEvent::PacketFlood`'s pool weight.
+pub const PACKET_FLOOD_WEIGHT: u32 = 1;
+/// `PacketFlood`'s extra step cost. Open Grid otherwise carries no standing
+/// condition at all — this is the one thing that ever taxes it.
+pub const PACKET_FLOOD_DRAG_TICKS: u32 = 1;
+/// `PacketFlood`'s multiplier on `RANDOM_ENCOUNTER_CHANCE`.
+pub const PACKET_FLOOD_AMBUSH_MULT: f32 = 1.6;
+
+/// `StaticEvent::SignalNoise`'s pool weight — claimed twice, once in
+/// Deadlock's pool and once in Null Sector's, so this one number prices
+/// both without a second field.
+pub const SIGNAL_NOISE_WEIGHT: u32 = 1;
+/// `SignalNoise`'s multiplier on `RANDOM_ENCOUNTER_CHANCE`. Carries no
+/// damage term at all — the shipped case for an event felt entirely
+/// through what it lets happen to you rather than through a bigger number.
+pub const SIGNAL_NOISE_AMBUSH_MULT: f32 = 2.0;
 
 // ---------------------------------------------------------------------------
 // Sector traits

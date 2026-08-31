@@ -28,7 +28,11 @@
 //! `game/environment.rs`.
 
 use crate::tuning::{
+    LEAKING_MEMORY_ATTRITION, LEAKING_MEMORY_FLOOR, LEAKING_MEMORY_WEIGHT,
     MAX_ENVIRONMENT_ATTRITION, MAX_ENVIRONMENT_DRAG_TICKS, MAX_STATIC_AMBUSH_MULT,
+    PACKET_FLOOD_AMBUSH_MULT, PACKET_FLOOD_DRAG_TICKS, PACKET_FLOOD_WEIGHT,
+    SIGNAL_NOISE_AMBUSH_MULT, SIGNAL_NOISE_WEIGHT, THREAD_STORM_AMBUSH_MULT,
+    THREAD_STORM_DRAG_TICKS, THREAD_STORM_WEIGHT,
 };
 use crate::world::Biome;
 
@@ -186,5 +190,117 @@ impl GroundCondition {
                 },
             },
         }
+    }
+}
+
+/// One weather event's authored copy — `StaticEvent`'s mirror of
+/// `ConditionDef`. `biomes` is a slice rather than a single `Biome` because
+/// `SignalNoise` claims two; every other event claims one.
+#[derive(Clone, Copy, Debug)]
+pub struct StaticDef {
+    /// What the player calls this event, distinct from both the biome's
+    /// name and any standing `GroundCondition` claiming the same ground.
+    pub name: &'static str,
+    /// The sentence under that name.
+    pub description: &'static str,
+    /// The biomes this event's pool is drawn into. Non-empty for every
+    /// shipped event — an event nothing can claim would never be seen.
+    pub biomes: &'static [Biome],
+    /// This event's weight in its biome's pool, against
+    /// `crate::tuning::STATIC_CLEAR_WEIGHT` and any other event sharing the
+    /// pool. Per-event rather than a single shared constant, so one event
+    /// can be made rarer without touching the others.
+    pub weight: u32,
+    /// What standing under this weather does, on top of whatever the ground
+    /// itself already does — folded, never substituted, by
+    /// `Game::terrain_at`.
+    pub effect: EnvironmentEffect,
+}
+
+/// A weather event live somewhere on the map right now — "Static" is the
+/// player's word for the whole layer. Which event, if any, is live in a
+/// biome is derived from the clock in `game/environment.rs`; nothing here
+/// is stored, and there is no save field to migrate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StaticEvent {
+    LeakingMemory,
+    ThreadStorm,
+    PacketFlood,
+    SignalNoise,
+}
+
+impl StaticEvent {
+    /// Every event, for the censuses — `GroundCondition::all`'s shape: the
+    /// array length fails to compile when a fifth event ships without being
+    /// listed.
+    pub fn all() -> [StaticEvent; 4] {
+        [
+            StaticEvent::LeakingMemory,
+            StaticEvent::ThreadStorm,
+            StaticEvent::PacketFlood,
+            StaticEvent::SignalNoise,
+        ]
+    }
+
+    /// What this event says, costs and claims. **Exhaustive by
+    /// construction** — `GroundCondition::def`'s rule: a table lookup with a
+    /// fallback would ship a new variant blank, so this stays a match until
+    /// somebody writes the words.
+    pub fn def(self) -> StaticDef {
+        match self {
+            StaticEvent::LeakingMemory => StaticDef {
+                name: "Leaking Memory",
+                description: "Something here allocated and never freed. The leak is still running.",
+                biomes: &[Biome::NullSector],
+                weight: LEAKING_MEMORY_WEIGHT,
+                effect: EnvironmentEffect {
+                    attrition_percent: LEAKING_MEMORY_ATTRITION,
+                    min_damage: LEAKING_MEMORY_FLOOR,
+                    extra_ticks: 0,
+                    ambush_mult: 1.0,
+                },
+            },
+            StaticEvent::ThreadStorm => StaticDef {
+                name: "Thread Storm",
+                description: "Threads spawn faster than anything here can schedule them.",
+                biomes: &[Biome::Mainframe],
+                weight: THREAD_STORM_WEIGHT,
+                effect: EnvironmentEffect {
+                    attrition_percent: 0.0,
+                    min_damage: 0,
+                    extra_ticks: THREAD_STORM_DRAG_TICKS,
+                    ambush_mult: THREAD_STORM_AMBUSH_MULT,
+                },
+            },
+            StaticEvent::PacketFlood => StaticDef {
+                name: "Packet Flood",
+                description: "Traffic saturates every link at once, and whatever else is out here rides it in with you.",
+                biomes: &[Biome::OpenGrid],
+                weight: PACKET_FLOOD_WEIGHT,
+                effect: EnvironmentEffect {
+                    attrition_percent: 0.0,
+                    min_damage: 0,
+                    extra_ticks: PACKET_FLOOD_DRAG_TICKS,
+                    ambush_mult: PACKET_FLOOD_AMBUSH_MULT,
+                },
+            },
+            StaticEvent::SignalNoise => StaticDef {
+                name: "Signal Noise",
+                description: "The air is thick with garbled signal, and picking a target out of it works both ways.",
+                biomes: &[Biome::Deadlock, Biome::NullSector],
+                weight: SIGNAL_NOISE_WEIGHT,
+                effect: EnvironmentEffect {
+                    attrition_percent: 0.0,
+                    min_damage: 0,
+                    extra_ticks: 0,
+                    ambush_mult: SIGNAL_NOISE_AMBUSH_MULT,
+                },
+            },
+        }
+    }
+
+    /// Whether this event's pool is drawn into `biome`.
+    pub fn claims(self, biome: Biome) -> bool {
+        self.def().biomes.contains(&biome)
     }
 }

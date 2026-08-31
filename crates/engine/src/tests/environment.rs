@@ -468,3 +468,216 @@ fn the_crossing_line_names_a_biome_change_and_nothing_within_one_biome() {
         "a step across a biome boundary names the crossing"
     );
 }
+
+// ---------------------------------------------------------------- the weather
+
+use crate::environment::StaticEvent;
+use crate::resources::{GameClock, GameRng};
+use crate::tests::support::reseed_rng;
+use crate::tuning::STATIC_EPOCH_TICKS;
+
+#[test]
+fn every_static_event_has_a_name_a_description_and_a_pool() {
+    for event in StaticEvent::all() {
+        let def = event.def();
+        assert!(!def.name.is_empty(), "{event:?} has no name");
+        assert!(!def.description.is_empty(), "{event:?} has no description");
+        assert!(!def.biomes.is_empty(), "{event:?} claims no biome");
+    }
+}
+
+/// The census over ceilings from phase 1, extended to the fourth event kind.
+#[test]
+fn every_static_event_stays_inside_its_ceiling() {
+    for event in StaticEvent::all() {
+        let effect = event.def().effect;
+        assert!(
+            (0.0..=MAX_ENVIRONMENT_ATTRITION).contains(&effect.attrition_percent),
+            "{event:?} authors attrition_percent {}",
+            effect.attrition_percent
+        );
+        assert!(
+            effect.min_damage >= 0,
+            "{event:?} authors min_damage {}",
+            effect.min_damage
+        );
+        assert!(
+            effect.extra_ticks <= MAX_ENVIRONMENT_DRAG_TICKS,
+            "{event:?} authors extra_ticks {}",
+            effect.extra_ticks
+        );
+        assert!(
+            effect.ambush_mult <= MAX_STATIC_AMBUSH_MULT,
+            "{event:?} authors ambush_mult {}",
+            effect.ambush_mult
+        );
+    }
+}
+
+/// The base's own floor, and the two biomes that are holes in the map, must
+/// never grow weather — the same rule `for_biome_leaves_the_rest_of_the_map_neutral`
+/// holds for `GroundCondition`.
+#[test]
+fn no_static_event_claims_platform_or_a_hole_in_the_map() {
+    for event in StaticEvent::all() {
+        for biome in [Biome::Platform, Biome::DataVoid, Biome::BlackIce] {
+            assert!(!event.claims(biome), "{event:?} must not claim {biome:?}");
+        }
+    }
+}
+
+/// Every claimed biome must be one `WorldMap::classify` can actually stamp
+/// on the surface, or the event ships unreachable.
+#[test]
+fn every_claimed_biome_is_one_classify_can_produce() {
+    let producible = [
+        Biome::Deadlock,
+        Biome::NullSector,
+        Biome::Mainframe,
+        Biome::OpenGrid,
+    ];
+    for event in StaticEvent::all() {
+        for &biome in event.def().biomes {
+            assert!(
+                producible.contains(&biome),
+                "{event:?} claims {biome:?}, which classify never produces"
+            );
+        }
+    }
+}
+
+/// The spec's reach argument: Deadlock alone is only the dominant biome in a
+/// `cold_storage` sector, so an event claiming only Deadlock would ship as
+/// unreachable as `LockContention` already is. This is the guard against
+/// shipping a second one nobody meets.
+#[test]
+fn signal_noise_claims_a_biome_besides_deadlock() {
+    assert!(
+        StaticEvent::SignalNoise
+            .def()
+            .biomes
+            .iter()
+            .any(|&biome| biome != Biome::Deadlock),
+        "SignalNoise must reach past Deadlock alone"
+    );
+}
+
+fn fresh_game(seed: u32) -> Game {
+    Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
+}
+
+fn set_tick(game: &mut Game, tick: u64) {
+    game.world.resource_mut::<GameClock>().tick = tick;
+}
+
+#[test]
+fn static_at_is_stable_within_one_epoch() {
+    let mut game = fresh_game(500);
+    // Well clear of either edge of the epoch, so `+ 1` cannot cross a
+    // boundary by construction.
+    let start = 7 * STATIC_EPOCH_TICKS + 3;
+    set_tick(&mut game, start);
+    let a = game.static_at(Biome::NullSector);
+
+    set_tick(&mut game, start + 1);
+    let b = game.static_at(Biome::NullSector);
+
+    assert_eq!(a, b, "two ticks inside the same epoch must agree");
+}
+
+/// Over many epochs a single biome must turn over, and both a live event and
+/// clear ground must be reachable — otherwise `STATIC_CLEAR_WEIGHT` or a
+/// pool weight is wrong, or the fold itself never varies.
+#[test]
+fn static_at_changes_across_epochs() {
+    let game = fresh_game(500);
+    let answers: Vec<Option<StaticEvent>> = (0..300u64)
+        .map(|epoch| game.static_in_epoch(Biome::NullSector, epoch))
+        .collect();
+
+    assert!(
+        answers.iter().any(|a| *a != answers[0]),
+        "weather never turned over across 300 epochs"
+    );
+    assert!(
+        answers.contains(&None),
+        "clear ground must be reachable in Null Sector's pool"
+    );
+    assert!(
+        answers.iter().any(|a| a.is_some()),
+        "a live event must be reachable in Null Sector's pool"
+    );
+}
+
+/// The worldgen rule: a derivation must not draw from the shared `GameRng`,
+/// or it would not survive a save/load and would shift every later roll in
+/// the run.
+#[test]
+fn static_at_draws_no_game_rng() {
+    use rand::RngExt;
+    let mut game = fresh_game(501);
+    reseed_rng(&mut game, 4242);
+
+    for epoch in 0..100u64 {
+        let _ = game.static_in_epoch(Biome::Mainframe, epoch);
+    }
+    let _ = game.static_at(Biome::OpenGrid);
+
+    let mut untouched: rand::rngs::StdRng = rand::SeedableRng::seed_from_u64(4242);
+    let expected: u64 = untouched.random();
+    let actual: u64 = game.world.resource_mut::<GameRng>().0.random();
+    assert_eq!(
+        actual, expected,
+        "static_at moved the shared RNG stream, so it would shift every later \
+         roll in the run"
+    );
+}
+
+/// The derivation reads the world seed, the zone and the clock — all three
+/// survive a real save and load, so the answer must too.
+#[test]
+fn static_at_survives_a_save_and_load_round_trip() {
+    let mut game = fresh_game(502);
+    set_tick(&mut game, 40 * STATIC_EPOCH_TICKS + 10);
+    let biomes = [
+        Biome::NullSector,
+        Biome::Mainframe,
+        Biome::OpenGrid,
+        Biome::Deadlock,
+    ];
+    let before: Vec<Option<StaticEvent>> = biomes.iter().map(|&b| game.static_at(b)).collect();
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_static_weather_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let after: Vec<Option<StaticEvent>> = biomes.iter().map(|&b| loaded.static_at(b)).collect();
+
+    assert_eq!(
+        before, after,
+        "weather is derived, never stored — a reload must not move it"
+    );
+}
+
+/// What `derive::index`'s high-bit reduction buys, and what `%` would
+/// silently break: two biomes folding the same seed and zone must not track
+/// each other epoch for epoch.
+#[test]
+fn adjacent_biomes_decorrelate_across_epochs() {
+    let game = fresh_game(503);
+    let null_sector: Vec<Option<StaticEvent>> = (0..200u64)
+        .map(|epoch| game.static_in_epoch(Biome::NullSector, epoch))
+        .collect();
+    let mainframe: Vec<Option<StaticEvent>> = (0..200u64)
+        .map(|epoch| game.static_in_epoch(Biome::Mainframe, epoch))
+        .collect();
+
+    assert_ne!(
+        null_sector, mainframe,
+        "two biomes folding the same seed, zone and epoch must not answer identically"
+    );
+}

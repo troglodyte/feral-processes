@@ -3,6 +3,7 @@
 
 use crate::game::pursuit::pursuit_field;
 use crate::game::spawning::SpawnEscalation;
+use crate::resources::SeenConditions;
 use crate::tuning::{
     NEST_AGGRO_LEASH_RADIUS, NEST_PATH_SEARCH_MARGIN, NEST_PURSUIT_STEPS_PER_TICK,
     RANDOM_ENCOUNTER_CHANCE,
@@ -525,7 +526,30 @@ impl Game {
             self.apply_damage(player, terrain.effect.bite(max_hp));
             drag_ticks = terrain.effect.extra_ticks;
             if terrain.biome != from {
-                self.log(format!("You cross into {}.", terrain.biome.name()));
+                // The condition's name joins the crossing line rather than
+                // getting one of its own — unclaimed ground (`condition:
+                // None`) must read exactly as it did before this feature,
+                // which is what `for_biome`'s own neutral case already
+                // guarantees.
+                match terrain.condition {
+                    Some(condition) => self.log(format!(
+                        "You cross into {} — {}.",
+                        terrain.biome.name(),
+                        condition.def().name
+                    )),
+                    None => self.log(format!("You cross into {}.", terrain.biome.name())),
+                }
+                // First meeting, once per session: `description` otherwise
+                // has no reader at all. `SeenConditions` is session-only —
+                // see its doc comment — so a reload re-announces, which is
+                // cheaper than a save field for flavour text.
+                if let Some(condition) = terrain.condition {
+                    let seen = &mut self.world.resource_mut::<SeenConditions>().0;
+                    if !seen.contains(&condition) {
+                        seen.push(condition);
+                        self.log(condition.def().description);
+                    }
+                }
             }
             // Only a step that actually covered ground draws an ambush —
             // every branch above returned already, so walking into a
@@ -535,6 +559,11 @@ impl Game {
             // `is_game_over` itself.
             self.maybe_ambush();
         }
+        // Before the tick that may cross a weather epoch boundary, so
+        // `note_static_turnover` below can compare what was live in the
+        // epoch this step started in against what is live in the epoch it
+        // ends in.
+        let epoch_before = self.static_epoch();
         self.tick();
         // Slow ground is the one step that costs more than a turn. A tick
         // can start a fight — `nest_aggro_tick` is the precedent — so the
@@ -546,6 +575,61 @@ impl Game {
                 break;
             }
             self.tick();
+        }
+        // After the drag loop, not inside it: a `Drag` step spends several
+        // ticks, and calling this per tick would announce one turnover per
+        // tick spent rather than once for the step.
+        self.note_static_turnover(epoch_before);
+    }
+
+    /// Announces weather arriving or clearing under the player, if the tick
+    /// (or ticks — see the drag loop in `move_player`) just taken crossed a
+    /// weather epoch boundary. Called once per player step, after every
+    /// tick that step spent.
+    ///
+    /// Fires only for the biome the player is standing in *now* — the other
+    /// biomes turning over silently is the point, or a boundary would cost
+    /// five lines of spam. The comparison is `static_in_epoch(biome,
+    /// epoch_before)` against `static_in_epoch(biome, static_epoch())`, both
+    /// pure calls: nothing about the previous epoch is stored anywhere,
+    /// which is what keeps a save/load mid-epoch from re-announcing.
+    ///
+    /// Gated the way `terrain_at` gates weather itself — zone 1 and the
+    /// base's own `Platform` floor never carry weather, so announcing a
+    /// turnover there would describe an effect that never actually bites.
+    pub(crate) fn note_static_turnover(&mut self, epoch_before: u64) {
+        let epoch_after = self.static_epoch();
+        if epoch_after == epoch_before {
+            return;
+        }
+        if self.world.resource::<ZoneLevel>().0 <= 1 {
+            return;
+        }
+        let player = self.player_entity();
+        let pos = *self.world.get::<Position>(player).unwrap();
+        let biome = self
+            .world
+            .resource_mut::<WorldMap>()
+            .tile(pos.x, pos.y)
+            .biome;
+        if biome == Biome::Platform {
+            return;
+        }
+        let before = self.static_in_epoch(biome, epoch_before);
+        let after = self.static_in_epoch(biome, epoch_after);
+        match (before, after) {
+            (None, Some(event)) => self.log(format!(
+                "Static: {} settles over {}. {}",
+                event.def().name,
+                biome.name(),
+                event.def().description
+            )),
+            (Some(event), None) => self.log(format!(
+                "Static: {} clears from {}.",
+                event.def().name,
+                biome.name()
+            )),
+            _ => {}
         }
     }
 

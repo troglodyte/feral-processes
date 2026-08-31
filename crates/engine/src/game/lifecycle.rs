@@ -200,6 +200,7 @@ impl Game {
         world.insert_resource(crate::resources::Sorties::default());
         world.insert_resource(crate::resources::Trace::default());
         world.insert_resource(crate::resources::RunFeats::default());
+        world.insert_resource(crate::resources::SeenConditions::default());
         // Both doors, like `RunFeats` beside it, and empty at both. Nothing
         // restores this from a save because nothing saves it: it is a
         // per-tick cache of `game::base::power::ledger`, and
@@ -488,6 +489,7 @@ impl Game {
         world.insert_resource(crate::resources::Sorties::default());
         world.insert_resource(crate::resources::Trace::default());
         world.insert_resource(crate::resources::RunFeats::default());
+        world.insert_resource(crate::resources::SeenConditions::default());
         // Both doors, like `RunFeats` beside it, and empty at both. Nothing
         // restores this from a save because nothing saves it: it is a
         // per-tick cache of `game::base::power::ledger`, and

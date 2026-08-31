@@ -957,3 +957,204 @@ fn party_untouched_by_weather() {
 
     assert_eq!(game.world.get::<Stats>(member).unwrap().hp, before);
 }
+
+// ------------------------------------------------------------- the readout
+
+/// Trigger 1: the crossing line gains the condition's name, joined onto the
+/// existing biome line rather than getting one of its own.
+#[test]
+fn crossing_line_names_the_condition() {
+    let mut game = game_about_to_step(Biome::NullSector);
+
+    game.move_player(1, 0);
+
+    let condition_name = GroundCondition::DanglingReads.def().name;
+    assert!(
+        game.world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .any(|l| l.text.contains(Biome::NullSector.name()) && l.text.contains(condition_name)),
+        "the crossing line must name both the biome and its condition"
+    );
+}
+
+/// Trigger 1's other half: unclaimed ground must read exactly as it did
+/// before this feature — no condition name appended to a biome that has
+/// none.
+#[test]
+fn crossing_into_unclaimed_ground_names_no_condition() {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.resource_mut::<ZoneLevel>().0 = 2;
+    step_from_onto(&mut game, Biome::NullSector, Biome::OpenGrid, true);
+
+    game.move_player(1, 0);
+
+    assert!(
+        game.world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .any(|l| l.text == format!("You cross into {}.", Biome::OpenGrid.name())),
+        "Open Grid must read exactly as it does today"
+    );
+}
+
+/// Trigger 2: the condition's description is read for the first time this
+/// session, and never again — leaving and crossing back must not repeat it.
+/// Counted on the **raw** log rather than a folded entry count:
+/// `message_history` collapses repeats into one entry with a `repeats`
+/// count, so counting entries would pass even if the line fired five times.
+#[test]
+fn condition_description_fires_once_per_session() {
+    let mut game = game_about_to_step(Biome::NullSector);
+    let description = GroundCondition::DanglingReads.def().description;
+
+    game.move_player(1, 0); // cross into Null Sector: first sight
+    game.move_player(-1, 0); // leave, back onto Open Grid
+    game.move_player(1, 0); // cross back into Null Sector: already seen
+
+    let count = game
+        .world
+        .resource::<MessageLog>()
+        .lines
+        .iter()
+        .filter(|l| l.text.contains(description))
+        .count();
+    assert_eq!(
+        count, 1,
+        "the description must fire exactly once per session, not once per crossing"
+    );
+}
+
+/// The epoch a Null-Sector run just crossed into `LeakingMemory`, with the
+/// epoch *before* it forced clear — the `None -> Some` half of the
+/// boundary, the only direction that is an arrival.
+fn null_sector_arrival_epoch(game: &Game) -> u64 {
+    (1..2000u64)
+        .find(|&e| {
+            game.static_in_epoch(Biome::NullSector, e) == Some(StaticEvent::LeakingMemory)
+                && game.static_in_epoch(Biome::NullSector, e - 1).is_none()
+        })
+        .expect("a clear-to-LeakingMemory transition must be reachable in Null Sector")
+}
+
+/// A game standing on `biome` already — both the current tile and the one
+/// step east are `biome` — so a further step inside it logs no crossing
+/// line at all and only `note_static_turnover`'s own message can appear.
+fn game_standing_on(biome: Biome) -> Game {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.resource_mut::<ZoneLevel>().0 = 2;
+    step_from_onto(&mut game, biome, biome, true);
+    game
+}
+
+/// Trigger 3: weather arriving fires on the tick that crosses the epoch
+/// boundary, names the biome the player stands in, and carries the event's
+/// description.
+#[test]
+fn weather_arrival_fires_on_the_boundary_in_the_players_biome() {
+    let mut game = game_standing_on(Biome::NullSector);
+    let epoch = null_sector_arrival_epoch(&game);
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS - 1);
+
+    game.move_player(1, 0);
+
+    let description = StaticEvent::LeakingMemory.def().description;
+    let lines = &game.world.resource::<MessageLog>().lines;
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.text.contains(description) && l.text.contains(Biome::NullSector.name())),
+        "the arrival line must name the biome and carry the event's description"
+    );
+}
+
+/// Trigger 4: the same boundary, the other way — a live event clearing.
+#[test]
+fn weather_clearing_fires_on_the_boundary_the_other_way() {
+    let mut game = game_standing_on(Biome::NullSector);
+    let epoch = (1..2000u64)
+        .find(|&e| {
+            game.static_in_epoch(Biome::NullSector, e - 1) == Some(StaticEvent::LeakingMemory)
+                && game.static_in_epoch(Biome::NullSector, e).is_none()
+        })
+        .expect("a LeakingMemory-to-clear transition must be reachable in Null Sector");
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS - 1);
+
+    game.move_player(1, 0);
+
+    let name = StaticEvent::LeakingMemory.def().name;
+    let lines = &game.world.resource::<MessageLog>().lines;
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.text.contains(name) && l.text.contains(Biome::NullSector.name())),
+        "the clearing line must name the event and the biome"
+    );
+}
+
+/// Trigger 3/4's boundary: the other four biomes turning over must stay
+/// silent. The player stands in Open Grid while Null Sector's own boundary
+/// crosses into `LeakingMemory`.
+#[test]
+fn turnover_in_a_biome_the_player_is_not_standing_in_is_silent() {
+    let mut game = game_standing_on(Biome::OpenGrid);
+    let epoch = null_sector_arrival_epoch(&game);
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS - 1);
+
+    game.move_player(1, 0);
+
+    let description = StaticEvent::LeakingMemory.def().description;
+    assert!(
+        !game
+            .world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .any(|l| l.text.contains(description)),
+        "weather turning over in a biome the player isn't standing in must stay silent"
+    );
+}
+
+/// Nothing about the previous epoch is stored anywhere — `static_epoch` and
+/// `static_in_epoch` are both pure calls, never a saved field — so landing a
+/// save/load comfortably inside a live epoch (well clear of the boundary
+/// itself) and then taking a further step still inside that same epoch must
+/// not manufacture a crossing that never happened. `MessageLog` itself is
+/// not saved (both `Game` constructors reset it to `default`), so this
+/// cannot be "the old line survived the round trip" — it is asserting that
+/// the round trip does not fabricate a *new* one, which is what a stray
+/// stored "last known epoch" defaulting to 0 after load would do.
+#[test]
+fn save_load_mid_epoch_does_not_reannounce_arrival() {
+    let mut game = game_standing_on(Biome::NullSector);
+    let epoch = null_sector_arrival_epoch(&game);
+    set_tick(
+        &mut game,
+        epoch * STATIC_EPOCH_TICKS + STATIC_EPOCH_TICKS / 2,
+    );
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_static_weather_turnover_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    // Two more steps well inside the same epoch, crossing no boundary.
+    loaded.move_player(1, 0);
+    loaded.move_player(-1, 0);
+
+    let description = StaticEvent::LeakingMemory.def().description;
+    assert!(
+        !loaded
+            .world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .any(|l| l.text.contains(description)),
+        "a save/load landing mid-epoch must not fabricate an arrival that never happened"
+    );
+}

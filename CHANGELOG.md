@@ -33,6 +33,27 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.62
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+- **The world runs at two ticks a real second, where it ran at one.** The
+  base read as frozen — idle staff drifted a tile every six seconds and a
+  dig swing took twelve — and `WORLD_SPEED_MULTIPLIER` in app-core is now
+  the one knob for it.
+- **Nothing is rebalanced by that**, because every rate in the game is
+  priced in ticks: raids, need decay, caravans and production all keep
+  their rates relative to each other, and what changes is how much world
+  time a real second buys.
+- **Wild programs on the map keep the wall-clock pace they had**, held
+  there by two constants pinned to the new knob — the wander cooldown,
+  hoisted out of `wander_ai_system` into `WANDER_COOLDOWN_MIN_TICKS` /
+  `MAX_TICKS`, and a halved `WILD_SPAWN_CHANCE`.
+- **A nest guardian is deliberately not held back**, so a pursuer and the
+  player both move at two tiles a second and you still outrun a chase in a
+  straight line without ever shaking it.
+- **The spec for wanderers in the Stack is written and nothing is built.**
+
 ## 0.13.61
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

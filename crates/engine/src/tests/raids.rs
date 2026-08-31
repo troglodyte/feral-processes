@@ -360,6 +360,46 @@ fn a_base_below_the_raid_staff_minimum_takes_no_raid() {
     }
 }
 
+/// The design rule itself, pinned against the **literal 4** rather than
+/// against `RAID_MIN_BASE_STAFF`: a base of four is still an opening base,
+/// and a GC Entropy Sweep does not start until a fifth body is standing in
+/// it. Every other test in this file reads the constant and so moves with
+/// it — none of them can tell one floor from another, which is exactly what
+/// this pins.
+///
+/// Four is already past the whole roster before a Data Cache
+/// (`BASE_PET_CAPACITY`, 3), so this is also the statement that raids wait
+/// for the base to have grown a roster structure first.
+#[test]
+fn four_undowned_staff_is_still_below_the_raid_floor() {
+    for seed in 0..300u32 {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        for _ in 0..4 {
+            spawn_tamed(&mut game, 10, 3);
+        }
+        let structure = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "mining_node".to_string(),
+                },
+                Position { x: 5, y: 5 },
+                Durability { hp: 30, max_hp: 30 },
+            ))
+            .id();
+
+        for _ in 0..RAID_ATTEMPTS_PER_SEED {
+            game.raid_check();
+        }
+
+        assert_eq!(
+            game.world.get::<Durability>(structure).unwrap().hp,
+            30,
+            "four staff is an opening base and must never take a raid"
+        );
+    }
+}
+
 /// The mirror of the test above: a base that clears the floor is exactly as
 /// raidable as before this gate existed. Uses `spawn_min_raid_staff`, which
 /// spawns precisely `RAID_MIN_BASE_STAFF` — the boundary itself, not

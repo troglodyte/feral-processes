@@ -2251,7 +2251,16 @@ pub const RAID_CHANCE_PER_TICK: f64 = 0.012;
 /// recovers. Checked in `Game::raid_check` **after** the chance roll, so a
 /// raid that would have missed anyway still consumes the same draw from
 /// `GameRng` and this gate cannot shift any other test's RNG stream.
-pub const RAID_MIN_BASE_STAFF: usize = 3;
+///
+/// **Above `BASE_PET_CAPACITY` (3) on purpose**, so raids cannot begin
+/// until the base has grown a roster structure — a Data Cache, the one
+/// shipped `pet_slot_bonus` — or the player has taken the roster perk. A
+/// floor at or below the opening capacity meant a base being swept while
+/// its whole roster was still the three programs it started with, which is
+/// the attrition this constant exists to hold off. Pinned against the
+/// literal by `four_undowned_staff_is_still_below_the_raid_floor`, because
+/// every other raid test reads this constant and so moves with it.
+pub const RAID_MIN_BASE_STAFF: usize = 5;
 
 /// Damage a raid deals to a structure's `Durability` when it has no
 /// assigned cronjob worker defending it. Deliberately small relative to

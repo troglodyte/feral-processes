@@ -24,8 +24,33 @@ This is a correction, adopted after `0.3.0` — everything from `v0.2.0` to
 which is a changelog nobody can read and a version number that says nothing
 about what is installed.
 
+**An entry is one bold sentence.** Earlier sections lead each bullet with a
+bold claim and follow it with a paragraph explaining it; from `0.13.58` the
+claim is the whole entry. The argument behind a change lives in its commit
+message and in `docs/seams.md`, both of which keep it — a changelog that
+restates them is one nobody reads.
+
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
+
+## 0.13.58
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+- **The surface map's vignette floor answers to the Power reserve, 0.75 at a
+  full one down to 0.60 at an empty one.**
+- **The Stack corridor says the same thing down the axis it has: the fog
+  thickens as the reserve drains, and the cell the party stands in front of
+  is identical at every reserve.**
+- **Neither half dims what the player must not miss — the surface floor
+  stops well short of illegible, and `MARK_FOG` takes no reserve term.**
+- **No engine number moves; `view_cone` and `visible_rows` hand over the
+  cells they always did, so this is a look and not a sight-range change.**
+- **`hud::log_frame`'s `POWER_MAX` points at `components::POWER_MAX` rather
+  than a hand-copied `100.0` whose own doc comment named it.**
+- **Notification copy is a table in Rust, not a catalogue on disk:
+  `assets/notifications/` and `NotificationDb` are gone, `NotificationKind`
+  is the census and `NotificationKind::def` the copy.**
 
 ## 0.13.57
 

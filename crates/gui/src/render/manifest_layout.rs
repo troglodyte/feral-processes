@@ -66,10 +66,11 @@ pub(super) const MAX_AFFINITY_ROWS: usize = 2;
 /// alone would clear today's shipped worst case: this is the only defence
 /// against a mod-maximal `MOVES` list regardless of packer, and the
 /// headroom has value on its own, at the owner's explicit call. A separate
-/// constant rather than lowering `MAX_SECTION_ROWS` itself: 6 is also
-/// `COMPANION_ROUTINE_SLOT_CAP`, so shrinking it would trim a player's full
-/// 6-slot routine kit — nothing shipped has more than 2 moves, so this trims
-/// nothing that exists today, only a mod.
+/// constant rather than lowering `MAX_SECTION_ROWS` itself: at 6 rows the
+/// ROUTINES box already spends its last line on a "+N more" note for a kit
+/// near `COMPANION_ROUTINE_SLOT_CAP`, and lowering the shared cap would take
+/// that from every box — nothing shipped has more than 2 moves, so this
+/// trims nothing that exists today, only a mod.
 ///
 /// **Lowered from 4 to 3 to pay for the need rows in WORK.** That is the
 /// trade this page always makes: the program page has the least clearance in

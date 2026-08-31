@@ -114,16 +114,20 @@ fn evicting_a_manually_installed_priority_boost_is_logged() {
     // the only way to run out of slots: an ordinary level-up brings a slot
     // along with the unlock it grants.
     let (mut game, medic) = game_with_contending_unlocks_companion();
-    set_level(&mut game, medic, 2); // two slots: hot_patch, plus one free
+    // The level is written straight in rather than levelled into, so the two
+    // unlocks on the level-3 rung are still waiting when the kit is packed.
+    game.world.get_mut::<Experience>(medic).unwrap().level = 3;
     install_routine_for_test(&mut game, medic, crate::abilities::FALLBACK_ABILITY_ID);
     assert_eq!(
         game.world.get::<Routines>(medic).unwrap().0,
         vec!["hot_patch".to_string(), "priority_boost".to_string()],
         "a deliberate install, not the tame-time fallback"
     );
+    // One free slot against two unlocks: the first lands in it and the
+    // second has to evict, which is the branch this test is about.
+    fill_routine_slots(&mut game, medic, 1, &["sandbox", "cascade_overflow"]);
 
-    // Three slots, and hot_patch plus two unlocks to put in them.
-    set_level(&mut game, medic, 3);
+    game.install_unlocked_routines(medic, 2, 3);
 
     let routines = &game.world.get::<Routines>(medic).unwrap().0;
     assert!(
@@ -411,7 +415,10 @@ fn etch_is_refused_unknown_blankless_and_during_battle() {
 #[test]
 fn install_is_refused_diskless_slotless_duplicated_and_during_battle() {
     let mut game = Game::new(24, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let pet = spawn_tamed(&mut game, 10, 3); // level 1: exactly one slot, already full
+    let pet = spawn_tamed(&mut game, 10, 3);
+    // The slotless refusal is what this first leg is about, so the kit is
+    // filled rather than assumed full — a level-1 program has room now.
+    fill_routine_slots(&mut game, pet, 0, &["sandbox"]);
 
     let err = game.install_disk(pet, "sandbox").unwrap_err();
     assert!(
@@ -419,7 +426,7 @@ fn install_is_refused_diskless_slotless_duplicated_and_during_battle() {
         "slots full is checked before the disk, so a full slot never eats one: {err}"
     );
 
-    set_level(&mut game, pet, 4); // a free slot, but no disk to fill it from
+    set_level(&mut game, pet, 4); // free slots, but no disk to fill one from
     let err = game.install_disk(pet, "sandbox").unwrap_err();
     assert!(
         err.contains("not carrying"),
@@ -636,13 +643,21 @@ fn researching_a_node_teaches_the_routine_rather_than_installing_or_stocking_it(
 }
 
 #[test]
-fn a_new_game_starts_with_decompile_installed_in_the_players_only_slot() {
+fn a_new_game_starts_with_decompile_installed_in_the_players_first_slot() {
     let game = Game::new(51, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let slots = game.routine_view(game.player_entity());
-    assert_eq!(slots.len(), 1, "level 1 gives the player exactly one slot");
+    assert_eq!(
+        slots.len(),
+        crate::abilities::player_routine_slots(1),
+        "the view is one row per slot the level buys"
+    );
     assert_eq!(
         slots[0].ability.as_deref(),
         Some(crate::abilities::DECOMPILE_ABILITY_ID)
+    );
+    assert!(
+        slots[1..].iter().all(|s| s.ability.is_none()),
+        "decompile is the only thing a new game pre-installs"
     );
 }
 
@@ -933,9 +948,9 @@ fn a_carrier_of_an_ability_less_species_is_not_given_the_fallback() {
     );
 }
 
-/// A level-1 program has one slot, and six shipped species grant an ability
-/// at level 1. The carried routine wins the slot; the species ability is
-/// lost, and logged rather than silently dropped.
+/// Six shipped species grant an ability at level 1. A carrier whose kit is
+/// already full keeps what it was carrying; the species ability is lost, and
+/// logged rather than silently dropped.
 #[test]
 fn a_species_ability_displaced_by_a_carried_routine_is_logged_as_lost() {
     let mut game = Game::new(5503, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -956,17 +971,20 @@ fn a_species_ability_displaced_by_a_carried_routine_is_logged_as_lost() {
     let carrier = game
         .spawn_wild_creature(&species.id, spawn.x + 2, spawn.y)
         .unwrap();
+    game.world.entity_mut(carrier).insert(Experience::default());
+    // A carried kit with no room left, built from the catalogue rather than
+    // from how many slots level 1 happens to buy.
+    let carried = spare_routine_ids(&game, game.routine_slots(carrier), &[&displaced]);
     game.world
         .entity_mut(carrier)
-        .insert(Routines(vec!["bastion".to_string()]));
-    game.world.entity_mut(carrier).insert(Experience::default());
+        .insert(Routines(carried.clone()));
 
     game.install_innate_routines(carrier);
 
     assert_eq!(
         game.world.get::<Routines>(carrier).unwrap().0,
-        vec!["bastion".to_string()],
-        "one slot at level 1, and the carried routine takes it"
+        carried,
+        "the kit is full, and what it was carrying keeps every slot"
     );
     let displaced_name = game.ability_display_name(&displaced);
     assert!(
@@ -1004,11 +1022,15 @@ fn a_level_up_unlock_never_evicts_a_carried_routine() {
         .spawn_wild_creature(&species.id, spawn.x + 2, spawn.y)
         .unwrap();
     game.world.entity_mut(pet).insert(Experience::default());
-    game.world
-        .entity_mut(pet)
-        .insert(Routines(vec!["cold_boot".to_string()]));
+    let mut carried = vec!["cold_boot".to_string()];
+    carried.extend(spare_routine_ids(
+        &game,
+        game.routine_slots(pet) - 1,
+        &["cold_boot", &unlock.id],
+    ));
+    game.world.entity_mut(pet).insert(Routines(carried));
 
-    // One slot, already holding the prize, and the unlock now lands.
+    // A full kit holding the prize, and the unlock now lands.
     game.install_unlocked_routines(pet, 1, unlock.level);
 
     assert!(

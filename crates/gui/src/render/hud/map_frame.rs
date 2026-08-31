@@ -274,7 +274,12 @@ mod tests {
     #[test]
     fn the_widest_weather_and_ground_pair_fits_beside_the_widest_threat_at_1280x720() {
         let m = ui_metrics(720.0);
-        let (_, shapes) = with_painter(|p| {
+        // The closure returns which names it picked as widest, so the
+        // assertions below check the row that was actually drawn rather
+        // than re-deriving "widest" a second way — the two used to
+        // disagree whenever the UI face stopped being monospace, since one
+        // measured real advance and the other counted characters.
+        let ((chosen_event, chosen_condition), shapes) = with_painter(|p| {
             let widest = |names: &[&'static str]| -> &'static str {
                 names
                     .iter()
@@ -290,10 +295,12 @@ mod tests {
                 .iter()
                 .map(|c| c.def().name)
                 .collect();
+            let chosen_event = widest(&event_names);
+            let chosen_condition = widest(&condition_names);
             let row = TerrainRow {
                 biome: "Null Sector",
-                condition: Some(widest(&condition_names)),
-                event: Some(widest(&event_names)),
+                condition: Some(chosen_condition),
+                event: Some(chosen_event),
             };
 
             // The widest `THREAT` readout: a two-digit hostile count against
@@ -317,30 +324,18 @@ mod tests {
             let char_w = p.measure_ui_advance("M", m.font_size);
             let regions = crate::render::hud::layout::regions(1280.0, 720.0, char_w, &m, false);
             draw_map_frame(regions.map_pane, Some(row), threat, p, &m);
+
+            (chosen_event, chosen_condition)
         });
 
-        // Reconstructed from the same catalogues rather than the `row` built
-        // inside the closure, since that value does not escape it.
-        let widest_name = |names: &[&'static str]| -> &'static str {
-            names
-                .iter()
-                .max_by_key(|n| n.chars().count())
-                .expect("at least one shipped value")
-        };
-        let event_names: Vec<&'static str> =
-            StaticEvent::all().iter().map(|e| e.def().name).collect();
-        let condition_names: Vec<&'static str> = GroundCondition::all()
-            .iter()
-            .map(|c| c.def().name)
-            .collect();
         let text = painted_text(&shapes).join("");
         assert!(
-            text.contains(widest_name(&event_names)),
+            text.contains(chosen_event),
             "the widest weather segment did not survive beside THREAT at \
              1280x720: {text:?}"
         );
         assert!(
-            text.contains(widest_name(&condition_names)),
+            text.contains(chosen_condition),
             "the widest ground segment did not survive beside THREAT at \
              1280x720: {text:?}"
         );

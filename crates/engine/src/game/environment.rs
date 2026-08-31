@@ -14,7 +14,14 @@ use crate::tuning::{STATIC_CLEAR_WEIGHT, STATIC_EPOCH_TICKS};
 use crate::world::{Biome, WorldMap};
 
 /// What the ground at `(x, y)` is, and what it does to whoever stands on it.
-pub struct Terrain {
+///
+/// `pub(crate)`, like `terrain_at` below: every caller is inside this crate
+/// (`move_player`, `note_static_turnover`, `terrain_row` and this module's
+/// own tests), so a `pub` that no external crate could actually name — the
+/// `game::environment` module itself is `pub(crate)` — said something that
+/// was not true. `TerrainRow` is `terrain_row`'s own already-resolved
+/// export for the renderer.
+pub(crate) struct Terrain {
     pub biome: Biome,
     pub condition: Option<GroundCondition>,
     /// The weather event live in this biome right now, if any. Folded into
@@ -76,7 +83,7 @@ impl Game {
     ///
     /// `&mut self` because `WorldMap::tile` generates its chunk on demand;
     /// nothing here writes anything the caller can observe.
-    pub fn terrain_at(&mut self, x: i32, y: i32) -> Terrain {
+    pub(crate) fn terrain_at(&mut self, x: i32, y: i32) -> Terrain {
         let biome = self.world.resource_mut::<WorldMap>().tile(x, y).biome;
         let Some(biome) = self.environment_biome_at(x, y) else {
             return Terrain {

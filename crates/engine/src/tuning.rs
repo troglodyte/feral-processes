@@ -2794,6 +2794,19 @@ pub const MAX_ENVIRONMENT_ATTRITION: f32 = 0.05;
 /// get anywhere.
 pub const MAX_ENVIRONMENT_DRAG_TICKS: u32 = 3;
 
+/// Most `EnvironmentEffect::min_damage` may reach, once folded.
+///
+/// Also a ceiling on the fold rather than on ground alone, for
+/// `MAX_ENVIRONMENT_ATTRITION`'s own reason: the floor is what actually
+/// decides the bite at low level, since `bite` takes the summed percentage
+/// or the summed floor, whichever is larger, and the percentage does not
+/// overtake a floor of 2 until `max_hp` reaches roughly 57. Set with
+/// headroom over the highest shipped fold (Null Sector's `DanglingReads` +
+/// `LeakingMemory`, 1 + 1 = 2) rather than equal to it —
+/// `MAX_STATIC_AMBUSH_MULT`'s own reasoning: a ceiling that exactly
+/// restates the content is not a guard.
+pub const MAX_ENVIRONMENT_MIN_DAMAGE: i32 = 4;
+
 /// Most `EnvironmentEffect::ambush_mult` may multiply
 /// `RANDOM_ENCOUNTER_CHANCE` by, once folded.
 ///
@@ -2807,6 +2820,21 @@ pub const MAX_ENVIRONMENT_DRAG_TICKS: u32 = 3;
 /// only `SignalNoise` touches the term at all). Room enough that a second
 /// ambush-multiplying source could fold in without instantly saturating.
 pub const MAX_STATIC_AMBUSH_MULT: f32 = 2.5;
+
+/// `GroundCondition::DanglingReads`'s attrition, folded with any live
+/// weather claiming Null Sector.
+pub const DANGLING_READS_ATTRITION: f32 = 0.02;
+/// `DanglingReads`'s floor.
+pub const DANGLING_READS_FLOOR: i32 = 1;
+
+/// `GroundCondition::ThermalLoad`'s attrition.
+pub const THERMAL_LOAD_ATTRITION: f32 = 0.03;
+/// `ThermalLoad`'s floor.
+pub const THERMAL_LOAD_FLOOR: i32 = 2;
+
+/// `GroundCondition::LockContention`'s extra step cost, on top of the one
+/// every step already costs.
+pub const LOCK_CONTENTION_DRAG_TICKS: u32 = 1;
 
 // ---------------------------------------------------------------------------
 // Static weather

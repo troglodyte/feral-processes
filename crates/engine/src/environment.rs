@@ -28,11 +28,12 @@
 //! `game/environment.rs`.
 
 use crate::tuning::{
-    LEAKING_MEMORY_ATTRITION, LEAKING_MEMORY_FLOOR, LEAKING_MEMORY_WEIGHT,
-    MAX_ENVIRONMENT_ATTRITION, MAX_ENVIRONMENT_DRAG_TICKS, MAX_STATIC_AMBUSH_MULT,
+    DANGLING_READS_ATTRITION, DANGLING_READS_FLOOR, LEAKING_MEMORY_ATTRITION, LEAKING_MEMORY_FLOOR,
+    LEAKING_MEMORY_WEIGHT, LOCK_CONTENTION_DRAG_TICKS, MAX_ENVIRONMENT_ATTRITION,
+    MAX_ENVIRONMENT_DRAG_TICKS, MAX_ENVIRONMENT_MIN_DAMAGE, MAX_STATIC_AMBUSH_MULT,
     PACKET_FLOOD_AMBUSH_MULT, PACKET_FLOOD_DRAG_TICKS, PACKET_FLOOD_WEIGHT,
-    SIGNAL_NOISE_AMBUSH_MULT, SIGNAL_NOISE_WEIGHT, THREAD_STORM_AMBUSH_MULT,
-    THREAD_STORM_DRAG_TICKS, THREAD_STORM_WEIGHT,
+    SIGNAL_NOISE_AMBUSH_MULT, SIGNAL_NOISE_WEIGHT, THERMAL_LOAD_ATTRITION, THERMAL_LOAD_FLOOR,
+    THREAD_STORM_AMBUSH_MULT, THREAD_STORM_DRAG_TICKS, THREAD_STORM_WEIGHT,
 };
 use crate::world::Biome;
 
@@ -69,10 +70,6 @@ impl EnvironmentEffect {
         ambush_mult: 1.0,
     };
 
-    pub fn is_none(self) -> bool {
-        self == EnvironmentEffect::NONE
-    }
-
     /// Stacks `self` under `other`: attrition, the floor and drag add; the
     /// ambush multiplier multiplies. The shape a later weather layer folds
     /// into the ground with, so "the ground you know is still doing what it
@@ -93,7 +90,7 @@ impl EnvironmentEffect {
     pub(crate) fn clamped(self) -> EnvironmentEffect {
         EnvironmentEffect {
             attrition_percent: self.attrition_percent.min(MAX_ENVIRONMENT_ATTRITION),
-            min_damage: self.min_damage,
+            min_damage: self.min_damage.min(MAX_ENVIRONMENT_MIN_DAMAGE),
             extra_ticks: self.extra_ticks.min(MAX_ENVIRONMENT_DRAG_TICKS),
             ambush_mult: self.ambush_mult.min(MAX_STATIC_AMBUSH_MULT),
         }
@@ -163,8 +160,8 @@ impl GroundCondition {
                 name: "Dangling Reads",
                 description: "Nothing here is addressed. What you touch answers with garbage.",
                 effect: EnvironmentEffect {
-                    attrition_percent: 0.02,
-                    min_damage: 1,
+                    attrition_percent: DANGLING_READS_ATTRITION,
+                    min_damage: DANGLING_READS_FLOOR,
                     extra_ticks: 0,
                     ambush_mult: 1.0,
                 },
@@ -173,8 +170,8 @@ impl GroundCondition {
                 name: "Thermal Load",
                 description: "Waste heat pours off machinery that has not stopped in years.",
                 effect: EnvironmentEffect {
-                    attrition_percent: 0.03,
-                    min_damage: 2,
+                    attrition_percent: THERMAL_LOAD_ATTRITION,
+                    min_damage: THERMAL_LOAD_FLOOR,
                     extra_ticks: 0,
                     ambush_mult: 1.0,
                 },
@@ -185,7 +182,7 @@ impl GroundCondition {
                 effect: EnvironmentEffect {
                     attrition_percent: 0.0,
                     min_damage: 0,
-                    extra_ticks: 1,
+                    extra_ticks: LOCK_CONTENTION_DRAG_TICKS,
                     ambush_mult: 1.0,
                 },
             },

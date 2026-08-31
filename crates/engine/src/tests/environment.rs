@@ -9,7 +9,8 @@
 
 use crate::environment::{EnvironmentEffect, GroundCondition};
 use crate::tuning::{
-    MAX_ENVIRONMENT_ATTRITION, MAX_ENVIRONMENT_DRAG_TICKS, MAX_STATIC_AMBUSH_MULT,
+    MAX_ENVIRONMENT_ATTRITION, MAX_ENVIRONMENT_DRAG_TICKS, MAX_ENVIRONMENT_MIN_DAMAGE,
+    MAX_STATIC_AMBUSH_MULT,
 };
 use crate::world::Biome;
 
@@ -77,7 +78,7 @@ fn every_condition_stays_inside_its_ceiling() {
             effect.attrition_percent
         );
         assert!(
-            effect.min_damage >= 0,
+            (0..=MAX_ENVIRONMENT_MIN_DAMAGE).contains(&effect.min_damage),
             "{condition:?} authors min_damage {}",
             effect.min_damage
         );
@@ -127,7 +128,7 @@ fn fold_adds_attrition_and_drag_and_multiplies_ambush() {
 fn clamped_cuts_each_term_to_its_ceiling() {
     let excessive = EnvironmentEffect {
         attrition_percent: MAX_ENVIRONMENT_ATTRITION + 1.0,
-        min_damage: 5,
+        min_damage: MAX_ENVIRONMENT_MIN_DAMAGE + 5,
         extra_ticks: MAX_ENVIRONMENT_DRAG_TICKS + 5,
         ambush_mult: MAX_STATIC_AMBUSH_MULT + 1.0,
     };
@@ -135,7 +136,10 @@ fn clamped_cuts_each_term_to_its_ceiling() {
     let clamped = excessive.clamped();
 
     assert_eq!(clamped.attrition_percent, MAX_ENVIRONMENT_ATTRITION);
-    assert_eq!(clamped.min_damage, 5, "min_damage has no ceiling to cut");
+    assert_eq!(
+        clamped.min_damage, MAX_ENVIRONMENT_MIN_DAMAGE,
+        "the floor has a ceiling too"
+    );
     assert_eq!(clamped.extra_ticks, MAX_ENVIRONMENT_DRAG_TICKS);
     assert_eq!(clamped.ambush_mult, MAX_STATIC_AMBUSH_MULT);
 }
@@ -235,6 +239,11 @@ fn game_about_to_step(onto: Biome) -> Game {
 #[test]
 fn a_step_onto_attrition_ground_costs_integrity() {
     let mut game = game_about_to_step(Biome::NullSector);
+    // Pinned to a clear epoch: the expected figure below is ground-only, so
+    // this states that no live weather is folded in rather than silently
+    // depending on epoch 0 happening to be clear for this seed and zone.
+    let epoch = clear_epoch(&game, Biome::NullSector);
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS + 1);
     let max_hp = game
         .world
         .get::<Stats>(game.player_entity())
@@ -392,12 +401,23 @@ fn platform_takes_no_effect() {
 #[test]
 fn a_step_onto_drag_ground_costs_the_extra_ticks() {
     let mut plain = game_about_to_step(Biome::OpenGrid);
+    // Pinned to a clear epoch: Open Grid's own live event (`PacketFlood`)
+    // carries a drag tick, so "an ordinary step is one tick" is only true
+    // when nothing is live — stated explicitly rather than inherited from
+    // epoch 0.
+    let plain_epoch = clear_epoch(&plain, Biome::OpenGrid);
+    set_tick(&mut plain, plain_epoch * STATIC_EPOCH_TICKS + 1);
     let before = clock(&plain);
     plain.move_player(1, 0);
     let ordinary = clock(&plain) - before;
     assert_eq!(ordinary, 1, "an ordinary step is one tick");
 
     let mut game = game_about_to_step(Biome::Deadlock);
+    // Deadlock's only claimed event, `SignalNoise`, carries no drag term of
+    // its own, so this pin is about stating the dependency rather than
+    // fixing a live risk — the same discipline as the Open Grid half above.
+    let epoch = clear_epoch(&game, Biome::Deadlock);
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS + 1);
     let before = clock(&game);
 
     game.move_player(1, 0);
@@ -505,7 +525,7 @@ fn every_static_event_stays_inside_its_ceiling() {
             effect.attrition_percent
         );
         assert!(
-            effect.min_damage >= 0,
+            (0..=MAX_ENVIRONMENT_MIN_DAMAGE).contains(&effect.min_damage),
             "{event:?} authors min_damage {}",
             effect.min_damage
         );
@@ -576,6 +596,17 @@ fn fresh_game(seed: u32) -> Game {
 
 fn set_tick(game: &mut Game, tick: u64) {
     game.world.resource_mut::<GameClock>().tick = tick;
+}
+
+/// The first epoch, from 0, in which `biome`'s weather is clear. A fixture
+/// that wants ground-only numbers must land on an epoch that states so
+/// rather than trusting whatever epoch 0 happens to resolve to for its seed
+/// and zone — a coincidence that a changed weight, a changed `biome_ord`, or
+/// a fifth event claiming the biome would silently flip.
+fn clear_epoch(game: &Game, biome: Biome) -> u64 {
+    (0..2000u64)
+        .find(|&e| game.static_in_epoch(biome, e).is_none())
+        .expect("clear ground must be reachable in every shipped biome's pool")
 }
 
 #[test]
@@ -1350,6 +1381,11 @@ fn terrain_row_names_the_ground_and_the_live_weather() {
 #[test]
 fn terrain_row_names_nothing_extra_on_unclaimed_ground() {
     let mut game = game_standing_on(Biome::OpenGrid);
+    // Pinned to a clear epoch — Open Grid's own weather (`PacketFlood`)
+    // would otherwise put a live event under `row.event`, which this test
+    // must not depend on epoch 0 happening to avoid.
+    let epoch = clear_epoch(&game, Biome::OpenGrid);
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS);
 
     let row = game.terrain_row().expect("the surface always has a biome");
 

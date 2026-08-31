@@ -19,9 +19,12 @@ const SHADE_JITTER: f32 = 0.08;
 /// down here dims a hostile standing at the pane's edge — and an empty
 /// reserve is precisely when the player can least afford to miss one. The
 /// gap between the two is meant to be felt at a glance and read through
-/// regardless.
-const VIGNETTE_FLOOR_FULL: f32 = 0.75;
-const VIGNETTE_FLOOR_EMPTY: f32 = 0.60;
+/// regardless. These are the numbers that decide that legibility on the
+/// whole map — `CLOUD_DEPTH` does not, since a shadow never touches a
+/// glyph — so a request to darken the map is answered here last and by the
+/// smallest step that reads.
+const VIGNETTE_FLOOR_FULL: f32 = 0.68;
+const VIGNETTE_FLOOR_EMPTY: f32 = 0.52;
 
 /// The staffed mark's side, as a fraction of the tile, and how far it is held
 /// off the tile's edges. The inset is not cosmetic: `outline_open` drops the

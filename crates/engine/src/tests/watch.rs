@@ -5,7 +5,7 @@ use super::support::*;
 use crate::components::{
     Creature, Glyph, GlyphColor, Position, Stats, Structure, Tamed, Task, TaskKind,
 };
-use crate::resources::{Sorties, Sortie, WieldedProgram};
+use crate::resources::{Sortie, Sorties, WieldedProgram};
 use crate::*;
 
 /// A base with a Home standing, the party inside it, and the tutorial out of

@@ -1,4 +1,4 @@
-//! The map pane's frame, and the two strips mounted on it.
+//! The map pane's frame, and the strips mounted on it.
 //!
 //! The pane's ground readout and threat readout ride its **top** border. Its
 //! bottom border carries nothing: the player's vitals used to ride it, and
@@ -73,6 +73,21 @@ fn weather_pieces(row: &TerrainRow) -> Vec<Piece> {
     }
 }
 
+/// The watch segment: who the camera is on, and the key that hands it back.
+///
+/// The way out is part of the label rather than a hint elsewhere on the
+/// screen, because a camera the player cannot find the release for is a
+/// stuck game — and `Esc` is the only key here that consumes its press, the
+/// eight movement keys releasing the camera *and* still stepping.
+fn watch_pieces(name: &str) -> Vec<Piece> {
+    vec![
+        ("WATCHING ".to_string(), palette::EMPHASIS, true),
+        (name.to_string(), palette::LABEL, false),
+        sep(),
+        ("Esc to return".to_string(), palette::LABEL, false),
+    ]
+}
+
 /// The measured advance of `pieces`' concatenated text, at the strip's own
 /// size — the same measurement [`fitting`] and `border_strip` take
 /// internally, exposed here so a caller can size a budget against another
@@ -94,13 +109,28 @@ pub(in crate::render) fn draw_map_frame(
     pane: Rect,
     ground: Option<TerrainRow>,
     threat: Threat,
+    watching: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
     painter.rect_lines(pane.x, pane.y, pane.w, pane.h, 2.0, palette::PANE_BORDER);
 
     let pieces = threat_pieces(threat);
-    if let Some(row) = ground {
+    if let Some(name) = watching {
+        // **The watch line takes the ground's mount rather than a border of
+        // its own.** `map_pane`'s bottom border deliberately carries nothing
+        // (see `hud::layout`), and a strip mounted there would either cover
+        // the map's bottom row of tiles or make the pane buy the height and
+        // re-lay the whole grid the moment `w` was pressed. The ground
+        // readout is ambient and the player can spare it for the seconds
+        // they are looking elsewhere; "you are looking somewhere else, and
+        // here is the way back" cannot be spared, so it wins the mount
+        // outright rather than sharing it and being the segment `fitting`
+        // drops in a narrow window.
+        let avail = (pane.w - m.inset * 2.0 - advance_of(&pieces, painter, m)).max(0.0);
+        let shown = fitting(&[watch_pieces(name)], avail, painter, m);
+        draw_pieces(pane, Mount::TopLeft, &shown, painter, m);
+    } else if let Some(row) = ground {
         // Measured, not estimated: the row has no wrap and no clip, so the
         // left mount's budget is sized against the right mount's *real*
         // width, not a character count of it.
@@ -210,7 +240,7 @@ mod tests {
             // segment plus one pixel and no more.
             let pane_w = m.inset * 2.0 + threat_w + weather_w + 1.0;
             let pane = Rect::new(0.0, 0.0, pane_w, 200.0);
-            draw_map_frame(pane, Some(row), threat, p, &m);
+            draw_map_frame(pane, Some(row), threat, None, p, &m);
         });
         let text = painted_text(&shapes).join("");
         assert!(
@@ -240,6 +270,7 @@ mod tests {
                     hostiles: 0,
                     shielded: false,
                 },
+                None,
                 p,
                 &m,
             );
@@ -323,7 +354,7 @@ mod tests {
 
             let char_w = p.measure_ui_advance("M", m.font_size);
             let regions = crate::render::hud::layout::regions(1280.0, 720.0, char_w, &m, false);
-            draw_map_frame(regions.map_pane, Some(row), threat, p, &m);
+            draw_map_frame(regions.map_pane, Some(row), threat, None, p, &m);
 
             (chosen_event, chosen_condition)
         });

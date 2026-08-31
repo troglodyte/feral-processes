@@ -66,6 +66,7 @@ mod throw;
 mod trade;
 mod transfer;
 mod turn;
+mod watch;
 mod wielded;
 mod wild_density_probe;
 mod work_orders;

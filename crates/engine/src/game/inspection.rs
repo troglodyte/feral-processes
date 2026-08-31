@@ -261,6 +261,48 @@ impl Game {
                 && self.world.get::<Task>(entity).is_none())
     }
 
+    /// Where the camera sits while the player is watching `entity`, or
+    /// `None` if that program cannot be watched at all.
+    ///
+    /// **One door for both questions.** The manifest's `[w] watch` footer is
+    /// offered exactly when this is `Some`, and the camera reads the same
+    /// call every frame to find its centre and to notice the moment it must
+    /// let go — so what the screen offers and what the camera can hold
+    /// cannot drift apart.
+    ///
+    /// **Deliberately not `position_is_honest`**, which is the neighbouring
+    /// rule and the wrong one here. That answers "may the map *draw* this
+    /// program", and `mark_sits_on_the_post` makes it `false` for a worker
+    /// standing at its machine — the body is hidden under the machine's own
+    /// glyph, so a base at rest reads as buildings. Its `Position` is the
+    /// post's tile and perfectly live. Gated on that flag the camera would
+    /// release the instant the body arrived where the player was watching it
+    /// go, which is the one moment the feature exists for.
+    ///
+    /// What this asks instead is whether the sim *walks* the body. That is
+    /// `ProgramRole::Staff` less the guards: `role_of` already holds out the
+    /// party, the wielded program and anything away on a sortie, and
+    /// `TaskKind::Guard` is the fourth — nothing ever walks a guard to what
+    /// it guards, so it stands wherever it was when it was assigned. All
+    /// four keep a `Position` that is never written again, and parking the
+    /// camera on one claims the program is somewhere it isn't.
+    ///
+    /// Refused outside base space, where staff stand: the map draws one
+    /// space at a time (`stands_in_base_space`) and a base-space cell drawn
+    /// over the zone surface is the aliasing every other map-facing view
+    /// already refuses.
+    pub fn watch_position(&self, entity: Entity) -> Option<(i32, i32)> {
+        self.base_pos()?;
+        if self.program_role(entity) != Some(ProgramRole::Staff) {
+            return None;
+        }
+        if self.world.get::<Task>(entity).map(|t| t.kind) == Some(TaskKind::Guard) {
+            return None;
+        }
+        let pos = self.world.get::<Position>(entity)?;
+        Some((pos.x, pos.y))
+    }
+
     /// Whether `entity`'s `Position` is a cell of base space rather than a
     /// tile of the zone surface — the space tag every map-facing view
     /// filters on.

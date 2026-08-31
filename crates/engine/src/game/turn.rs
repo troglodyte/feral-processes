@@ -1,7 +1,6 @@
 //! The turn loop: advancing the clock, moving, and the actions a player
 //! spends a turn on.
 
-use crate::environment::EnvironmentEffect;
 use crate::game::pursuit::pursuit_field;
 use crate::game::spawning::SpawnEscalation;
 use crate::tuning::{
@@ -506,8 +505,7 @@ impl Game {
             .resource_mut::<WorldMap>()
             .tile(pos.x, pos.y)
             .biome;
-        let to = self.world.resource_mut::<WorldMap>().tile(nx, ny);
-        let walkable = to.walkable;
+        let walkable = self.world.resource_mut::<WorldMap>().tile(nx, ny).walkable;
         let mut drag_ticks = 0;
         if walkable {
             let mut p = self.world.get_mut::<Position>(player).unwrap();
@@ -522,21 +520,12 @@ impl Game {
             // keeps underground. Through `apply_damage`, the one code path
             // that lowers a creature's HP, which is what makes mitigation
             // and every other incoming-damage rule apply for free.
-            let effect = self.ground_effect(nx, ny).map(|d| d.effect);
-            match effect {
-                Some(EnvironmentEffect::Attrition {
-                    hp_percent,
-                    min_damage,
-                }) => {
-                    let max_hp = self.world.get::<Stats>(player).map_or(0, |s| s.max_hp);
-                    let bite = ((max_hp as f32 * hp_percent).round() as i32).max(min_damage);
-                    self.apply_damage(player, bite);
-                }
-                Some(EnvironmentEffect::Drag { extra_ticks }) => drag_ticks = extra_ticks,
-                None => {}
-            }
-            if to.biome != from {
-                self.log(format!("You cross into {}.", to.biome.name()));
+            let terrain = self.terrain_at(nx, ny);
+            let max_hp = self.world.get::<Stats>(player).map_or(0, |s| s.max_hp);
+            self.apply_damage(player, terrain.effect.bite(max_hp));
+            drag_ticks = terrain.effect.extra_ticks;
+            if terrain.biome != from {
+                self.log(format!("You cross into {}.", terrain.biome.name()));
             }
             // Only a step that actually covered ground draws an ambush —
             // every branch above returned already, so walking into a

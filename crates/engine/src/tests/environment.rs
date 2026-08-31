@@ -1,277 +1,178 @@
-//! The environment database: loading it, refusing a file that would make
-//! the game unplayable, and the one reader that resolves a tile to an
+//! The ground catalogue, and the one reader that resolves a tile to an
 //! effect.
 //!
 //! Nothing here draws from `resources::GameRng`. Ambient ground is a
 //! property of the *place*, resolved from the biome every time it is asked
-//! rather than rolled or stored.
+//! rather than rolled or stored. The catalogue itself is Rust now, so these
+//! tests build `EnvironmentEffect`s and `GroundCondition`s by hand rather
+//! than writing scratch `.ron` files — there is no loader left to exercise.
 
-use crate::environment::{EnvironmentDb, EnvironmentEffect};
-use crate::tests::support::{
-    ScratchAssets, assets_dir_with_environment, enlist, scratch_assets_dir,
+use crate::environment::{EnvironmentEffect, GroundCondition};
+use crate::tuning::{
+    MAX_ENVIRONMENT_ATTRITION, MAX_ENVIRONMENT_DRAG_TICKS, MAX_STATIC_AMBUSH_MULT,
 };
-use crate::tuning::{MAX_ENVIRONMENT_ATTRITION, MAX_ENVIRONMENT_DRAG_TICKS};
 use crate::world::Biome;
 
-/// A scratch environment directory holding `files` as `(filename, body)`.
-///
-/// Built on the `ScratchAssets` RAII guard rather than a hand-rolled `/tmp`
-/// path: a panic between creation and a manual cleanup call leaks the
-/// directory, and `Drop` runs on an unwind.
-fn env_dir(tag: &str, files: &[(&str, &str)]) -> ScratchAssets {
-    let dir = scratch_assets_dir(tag);
-    std::fs::create_dir_all(&dir).unwrap();
-    for (name, body) in files {
-        std::fs::write(dir.join(name), body).unwrap();
-    }
-    dir
-}
-
-const COLD: &str = r#"(
-    id: "cold",
-    name: "Standing Frost",
-    description: "The floor pulls heat out of anything that stops on it.",
-    biomes: [Deadlock],
-    effect: Attrition(hp_percent: 0.02, min_damage: 1),
-)"#;
-
-/// Attrition with room to mitigate and enough bite to be lethal from 1 HP.
-const HARSH: &str = r#"(
-    id: "harsh",
-    name: "Hard Frost",
-    description: "The floor takes what it can get.",
-    biomes: [Deadlock],
-    effect: Attrition(hp_percent: 0.05, min_damage: 4),
-)"#;
+// -------------------------------------------------------------- the catalogue
 
 #[test]
-fn a_well_formed_environment_file_loads_and_answers_for_its_biome() {
-    let dir = env_dir("env_ok", &[("cold.ron", COLD)]);
-    let (db, warnings) = EnvironmentDb::load_dir(&dir).unwrap();
-
-    assert!(warnings.is_empty(), "warnings were {warnings:?}");
-    let def = db.for_biome(Biome::Deadlock).expect("the file claimed it");
-    assert_eq!(def.id, "cold");
+fn for_biome_claims_the_three_ground_conditions() {
     assert_eq!(
-        def.effect,
-        EnvironmentEffect::Attrition {
-            hp_percent: 0.02,
-            min_damage: 1
-        }
+        GroundCondition::for_biome(Biome::NullSector),
+        Some(GroundCondition::DanglingReads)
     );
-    assert!(
-        db.for_biome(Biome::OpenGrid).is_none(),
-        "an unclaimed biome is neutral ground"
+    assert_eq!(
+        GroundCondition::for_biome(Biome::Mainframe),
+        Some(GroundCondition::ThermalLoad)
     );
-}
-
-#[test]
-fn a_malformed_environment_file_is_skipped_and_the_others_still_load() {
-    let dir = env_dir(
-        "env_bad",
-        &[("cold.ron", COLD), ("broken.ron", "(id: \"broken\"")],
-    );
-    let (db, warnings) = EnvironmentDb::load_dir(&dir).unwrap();
-
-    assert_eq!(warnings.len(), 1, "{warnings:?}");
-    assert!(warnings[0].contains("broken"), "{warnings:?}");
-    assert!(
-        db.for_biome(Biome::Deadlock).is_some(),
-        "one bad mod file must not take the rest of the directory with it"
+    assert_eq!(
+        GroundCondition::for_biome(Biome::Deadlock),
+        Some(GroundCondition::LockContention)
     );
 }
 
-/// The base slab is the one safe ground in the game — nothing spawns there
-/// and no ambush fires. That is not a file's decision to revoke.
+/// Unclaimed is the common case — most of the map has to read as scenery,
+/// not as a tax on walking. `Platform` is here too: the base's own floor
+/// must never be claimed, whatever a future condition's biome list says.
 #[test]
-fn an_environment_file_claiming_the_base_slab_is_refused() {
-    const SLAB: &str = r#"(
-    id: "slab",
-    name: "Bad Idea",
-    description: "Ground that bites where the base stands.",
-    biomes: [Platform],
-    effect: Attrition(hp_percent: 0.01, min_damage: 1),
-)"#;
-    let dir = env_dir("env_slab", &[("slab.ron", SLAB)]);
-    let (db, warnings) = EnvironmentDb::load_dir(&dir).unwrap();
-
-    assert_eq!(warnings.len(), 1, "{warnings:?}");
-    assert!(warnings[0].contains("Platform"), "{warnings:?}");
-    assert!(db.for_biome(Biome::Platform).is_none());
-}
-
-#[test]
-fn an_environment_file_over_either_ceiling_is_refused() {
-    let bite = format!(
-        r#"(
-    id: "bite",
-    name: "Far Too Much",
-    description: "Death in two steps.",
-    biomes: [Deadlock],
-    effect: Attrition(hp_percent: {}, min_damage: 1),
-)"#,
-        MAX_ENVIRONMENT_ATTRITION + 0.01
-    );
-    let drag = format!(
-        r#"(
-    id: "drag",
-    name: "Far Too Slow",
-    description: "A step that never finishes.",
-    biomes: [NullSector],
-    effect: Drag(extra_ticks: {}),
-)"#,
-        MAX_ENVIRONMENT_DRAG_TICKS + 1
-    );
-    let dir = env_dir("env_ceiling", &[("bite.ron", &bite), ("drag.ron", &drag)]);
-    let (db, warnings) = EnvironmentDb::load_dir(&dir).unwrap();
-
-    assert_eq!(warnings.len(), 2, "{warnings:?}");
-    assert!(db.for_biome(Biome::Deadlock).is_none());
-    assert!(db.for_biome(Biome::NullSector).is_none());
-}
-
-/// Directory order is not stable across platforms, so resolving a clash
-/// silently by whichever file was read first would make a modder's game
-/// differ from the one they tested. It is an authoring error and it says so,
-/// naming both files.
-#[test]
-fn two_files_claiming_one_biome_refuse_the_second_and_name_both() {
-    const RIVAL: &str = r#"(
-    id: "rival",
-    name: "Also Frost",
-    description: "The same ground, claimed twice.",
-    biomes: [Deadlock],
-    effect: Drag(extra_ticks: 1),
-)"#;
-    let dir = env_dir("env_clash", &[("a_cold.ron", COLD), ("b_rival.ron", RIVAL)]);
-    let (db, warnings) = EnvironmentDb::load_dir(&dir).unwrap();
-
-    assert_eq!(warnings.len(), 1, "{warnings:?}");
-    assert!(warnings[0].contains("cold"), "{warnings:?}");
-    assert!(warnings[0].contains("rival"), "{warnings:?}");
-    let def = db
-        .for_biome(Biome::Deadlock)
-        .expect("the first still loads");
-    assert_eq!(def.id, "cold");
-}
-
-/// A hole in the map is unreachable, not wrong. A mod naming all six biomes
-/// for convenience must not be nagged about the two nobody can stand on.
-#[test]
-fn an_environment_file_claiming_an_unwalkable_biome_loads_without_complaint() {
-    const HOLES: &str = r#"(
-    id: "holes",
-    name: "Nowhere",
-    description: "Ground that cannot be reached.",
-    biomes: [DataVoid, BlackIce],
-    effect: Drag(extra_ticks: 1),
-)"#;
-    let dir = env_dir("env_holes", &[("holes.ron", HOLES)]);
-    let (db, warnings) = EnvironmentDb::load_dir(&dir).unwrap();
-
-    assert!(warnings.is_empty(), "warnings were {warnings:?}");
-    assert!(db.for_biome(Biome::BlackIce).is_some());
-}
-
-/// Deleting `assets/environment/` must restore today's game exactly, the
-/// same supported way deleting `assets/sectors/` already is.
-#[test]
-fn an_absent_environment_directory_loads_silently_to_an_empty_db() {
-    let dir = scratch_assets_dir("env_absent");
-    let (db, warnings) = EnvironmentDb::load_dir(&dir).unwrap();
-
-    assert!(warnings.is_empty(), "warnings were {warnings:?}");
+fn for_biome_leaves_the_rest_of_the_map_neutral() {
     for biome in [
-        Biome::DataVoid,
-        Biome::Deadlock,
-        Biome::NullSector,
-        Biome::Mainframe,
         Biome::OpenGrid,
+        Biome::DataVoid,
         Biome::BlackIce,
         Biome::Platform,
     ] {
-        assert!(db.for_biome(biome).is_none());
+        assert!(
+            GroundCondition::for_biome(biome).is_none(),
+            "{biome:?} should be neutral ground"
+        );
     }
+}
+
+/// Walks the array rather than naming three conditions by hand, so the
+/// array length is what fails to compile when a fourth is added without
+/// words to go with it.
+#[test]
+fn every_condition_has_a_name_and_a_description() {
+    for condition in GroundCondition::all() {
+        let def = condition.def();
+        assert!(!def.name.is_empty(), "{condition:?} has no name");
+        assert!(
+            !def.description.is_empty(),
+            "{condition:?} has no description"
+        );
+    }
+}
+
+/// Replaces `EnvironmentDef::fault`'s three load-time refusals: nothing here
+/// is authored by a stranger any more, so the ceilings are a compile-time
+/// census over the shipped catalogue instead of a startup check.
+#[test]
+fn every_condition_stays_inside_its_ceiling() {
+    for condition in GroundCondition::all() {
+        let effect = condition.def().effect;
+        assert!(
+            (0.0..=MAX_ENVIRONMENT_ATTRITION).contains(&effect.attrition_percent),
+            "{condition:?} authors attrition_percent {}",
+            effect.attrition_percent
+        );
+        assert!(
+            effect.min_damage >= 0,
+            "{condition:?} authors min_damage {}",
+            effect.min_damage
+        );
+        assert!(
+            effect.extra_ticks <= MAX_ENVIRONMENT_DRAG_TICKS,
+            "{condition:?} authors extra_ticks {}",
+            effect.extra_ticks
+        );
+        assert!(
+            effect.ambush_mult <= MAX_STATIC_AMBUSH_MULT,
+            "{condition:?} authors ambush_mult {}",
+            effect.ambush_mult
+        );
+    }
+}
+
+/// The guard on the one-of → all-of shape change: a reader that only looks
+/// at the attrition terms and ignores the rest would compile clean and
+/// silently drop both drag and the ambush multiplier, so all four terms are
+/// asserted together against two hand-built effects.
+#[test]
+fn fold_adds_attrition_and_drag_and_multiplies_ambush() {
+    let a = EnvironmentEffect {
+        attrition_percent: 0.25,
+        min_damage: 1,
+        extra_ticks: 1,
+        ambush_mult: 1.5,
+    };
+    let b = EnvironmentEffect {
+        attrition_percent: 0.5,
+        min_damage: 2,
+        extra_ticks: 2,
+        ambush_mult: 2.0,
+    };
+
+    let folded = a.fold(b);
+
+    assert_eq!(folded.attrition_percent, 0.75, "attrition adds");
+    assert_eq!(folded.min_damage, 3, "the floor adds");
+    assert_eq!(folded.extra_ticks, 3, "drag adds");
+    assert_eq!(folded.ambush_mult, 3.0, "the ambush term multiplies");
+}
+
+/// Built by hand rather than off the shipped conditions, so this does not
+/// depend on their magnitudes staying where they are.
+#[test]
+fn clamped_cuts_each_term_to_its_ceiling() {
+    let excessive = EnvironmentEffect {
+        attrition_percent: MAX_ENVIRONMENT_ATTRITION + 1.0,
+        min_damage: 5,
+        extra_ticks: MAX_ENVIRONMENT_DRAG_TICKS + 5,
+        ambush_mult: MAX_STATIC_AMBUSH_MULT + 1.0,
+    };
+
+    let clamped = excessive.clamped();
+
+    assert_eq!(clamped.attrition_percent, MAX_ENVIRONMENT_ATTRITION);
+    assert_eq!(clamped.min_damage, 5, "min_damage has no ceiling to cut");
+    assert_eq!(clamped.extra_ticks, MAX_ENVIRONMENT_DRAG_TICKS);
+    assert_eq!(clamped.ambush_mult, MAX_STATIC_AMBUSH_MULT);
+}
+
+#[test]
+fn bite_is_the_floored_percentage_and_zero_for_none() {
+    let effect = EnvironmentEffect {
+        attrition_percent: 0.1,
+        min_damage: 3,
+        extra_ticks: 0,
+        ambush_mult: 1.0,
+    };
+    assert_eq!(
+        effect.bite(100),
+        10,
+        "the percentage wins once it clears the floor"
+    );
+    assert_eq!(
+        effect.bite(20),
+        3,
+        "the floor wins when the percentage would round under it"
+    );
+
+    assert_eq!(
+        EnvironmentEffect::NONE.bite(1000),
+        0,
+        "a no-attrition effect must not deal the floor"
+    );
 }
 
 // ---------------------------------------------------------------- the reader
 
-use crate::resources::ZoneLevel;
+use crate::components::{ActiveFieldBuff, BuffSource, FieldBuffKind, Position, Stats};
+use crate::resources::{MessageLog, Party, ZoneLevel};
+use crate::tests::support::{enlist, spawn_tamed, test_assets_dir};
 use crate::world::{Tile, WorldMap};
 use crate::{DifficultyMode, Game};
-
-/// A game standing on `biome` at `zone`, with the environment directory
-/// holding exactly `files`.
-fn game_standing_on(tag: &str, files: &[(&str, &str)], zone: u32, biome: Biome) -> Game {
-    let dir = assets_dir_with_environment(tag, files);
-    let mut game = Game::new(16, DifficultyMode::Forgiving, &dir).unwrap();
-    game.world.resource_mut::<ZoneLevel>().0 = zone;
-    let pos = *game
-        .world
-        .get::<crate::components::Position>(game.player_entity())
-        .unwrap();
-    game.world.resource_mut::<WorldMap>().set_override(
-        pos.x,
-        pos.y,
-        Tile {
-            biome,
-            walkable: true,
-            rock_shade: None,
-        },
-    );
-    game
-}
-
-fn player_tile(game: &Game) -> (i32, i32) {
-    let pos = *game
-        .world
-        .get::<crate::components::Position>(game.player_entity())
-        .unwrap();
-    (pos.x, pos.y)
-}
-
-#[test]
-fn ground_effect_answers_for_a_claimed_biome_past_zone_one() {
-    let mut game = game_standing_on("env_read", &[("cold.ron", COLD)], 2, Biome::Deadlock);
-    let (x, y) = player_tile(&game);
-
-    assert_eq!(
-        game.ground_effect(x, y).map(|d| d.id.as_str()),
-        Some("cold")
-    );
-}
-
-/// The gate lives inside `ground_effect` so it cannot lapse at a second
-/// call site. A test that read the db directly would be asserting about
-/// the wrong thing entirely.
-#[test]
-fn ground_effect_is_empty_at_zone_one() {
-    let mut game = game_standing_on("env_zone1", &[("cold.ron", COLD)], 1, Biome::Deadlock);
-    let (x, y) = player_tile(&game);
-
-    assert!(game.ground_effect(x, y).is_none());
-}
-
-#[test]
-fn ground_effect_never_answers_for_the_base_slab() {
-    let mut game = game_standing_on("env_slab_read", &[("cold.ron", COLD)], 2, Biome::Platform);
-    let (x, y) = player_tile(&game);
-
-    assert!(game.ground_effect(x, y).is_none());
-}
-
-#[test]
-fn ground_effect_is_empty_for_an_unclaimed_biome() {
-    let mut game = game_standing_on("env_unclaimed", &[("cold.ron", COLD)], 2, Biome::OpenGrid);
-    let (x, y) = player_tile(&game);
-
-    assert!(game.ground_effect(x, y).is_none());
-}
-
-// ------------------------------------------------------------- the hook
-
-use crate::components::{ActiveFieldBuff, BuffSource, FieldBuffKind, Position, Stats};
-use crate::resources::{MessageLog, Party};
 
 /// Stands the player on `from` with `to` one step east, both written
 /// through the override overlay, and clears anything squatting on the
@@ -316,11 +217,16 @@ fn player_hp(game: &Game) -> i32 {
     game.world.get::<Stats>(game.player_entity()).unwrap().hp
 }
 
-/// A game past zone 1 with `files` installed, standing on Open Grid with
-/// one step east onto `onto`.
-fn game_about_to_step(tag: &str, files: &[(&str, &str)], onto: Biome) -> Game {
-    let dir = assets_dir_with_environment(tag, files);
-    let mut game = Game::new(16, DifficultyMode::Forgiving, &dir).unwrap();
+fn clock(game: &Game) -> u64 {
+    game.world.resource::<crate::resources::GameClock>().tick
+}
+
+/// A game past zone 1, standing on Open Grid with one step east onto
+/// `onto`. The shipped catalogue is fixed Rust now, so there is no per-test
+/// asset directory to build — every test runs against the real
+/// `assets/` tree.
+fn game_about_to_step(onto: Biome) -> Game {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     game.world.resource_mut::<ZoneLevel>().0 = 2;
     step_from_onto(&mut game, Biome::OpenGrid, onto, true);
     game
@@ -328,7 +234,7 @@ fn game_about_to_step(tag: &str, files: &[(&str, &str)], onto: Biome) -> Game {
 
 #[test]
 fn a_step_onto_attrition_ground_costs_integrity() {
-    let mut game = game_about_to_step("env_bite", &[("cold.ron", COLD)], Biome::Deadlock);
+    let mut game = game_about_to_step(Biome::NullSector);
     let max_hp = game
         .world
         .get::<Stats>(game.player_entity())
@@ -344,13 +250,12 @@ fn a_step_onto_attrition_ground_costs_integrity() {
 
 #[test]
 fn a_step_that_bounces_off_a_wall_costs_no_integrity() {
-    let dir = assets_dir_with_environment("env_bite_wall", &[("cold.ron", COLD)]);
-    let mut game = Game::new(16, DifficultyMode::Forgiving, &dir).unwrap();
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     game.world.resource_mut::<ZoneLevel>().0 = 2;
-    // Unwalkable Deadlock is unreachable on a generated map, which is the
+    // Unwalkable Null Sector is unreachable on a generated map, which is the
     // point: what is under test is that the bite rides the *step*, and the
     // only way to hold everything else steady is to make the tile refuse.
-    step_from_onto(&mut game, Biome::OpenGrid, Biome::Deadlock, false);
+    step_from_onto(&mut game, Biome::OpenGrid, Biome::NullSector, false);
     let before = player_hp(&game);
 
     game.move_player(1, 0);
@@ -363,8 +268,8 @@ fn a_step_that_bounces_off_a_wall_costs_no_integrity() {
 /// something that is not a fight.
 #[test]
 fn attrition_never_touches_the_party() {
-    let mut game = game_about_to_step("env_party", &[("cold.ron", COLD)], Biome::Deadlock);
-    let member = crate::tests::support::spawn_tamed(&mut game, 10, 3);
+    let mut game = game_about_to_step(Biome::NullSector);
+    let member = spawn_tamed(&mut game, 10, 3);
     enlist(&mut game, member);
     let before = game.world.get::<Stats>(member).unwrap().hp;
     assert!(game.world.resource::<Party>().0.contains(&member));
@@ -379,7 +284,7 @@ fn attrition_never_touches_the_party() {
 /// "simplifying" the hook into a direct write to `Stats::hp`.
 #[test]
 fn a_mitigation_buff_reduces_the_bite() {
-    let mut game = game_about_to_step("env_mitigated", &[("harsh.ron", HARSH)], Biome::Deadlock);
+    let mut game = game_about_to_step(Biome::Mainframe);
     let player = game.player_entity();
     {
         let mut stats = game.world.get_mut::<Stats>(player).unwrap();
@@ -387,7 +292,7 @@ fn a_mitigation_buff_reduces_the_bite() {
         stats.hp = 400;
     }
     let unmitigated = {
-        let mut probe = game_about_to_step("env_probe", &[("harsh.ron", HARSH)], Biome::Deadlock);
+        let mut probe = game_about_to_step(Biome::Mainframe);
         let p = probe.player_entity();
         {
             let mut stats = probe.world.get_mut::<Stats>(p).unwrap();
@@ -425,10 +330,9 @@ fn attrition_that_kills_does_not_then_start_an_ambush() {
     // Permadeath, because a Forgiving death reboots the player to full
     // Integrity inside the very tick this is asserting about — the corpse
     // the test needs to look at would be gone before it could.
-    let dir = assets_dir_with_environment("env_lethal", &[("harsh.ron", HARSH)]);
-    let mut game = Game::new(16, DifficultyMode::Permadeath, &dir).unwrap();
+    let mut game = Game::new(16, DifficultyMode::Permadeath, &test_assets_dir()).unwrap();
     game.world.resource_mut::<ZoneLevel>().0 = 2;
-    step_from_onto(&mut game, Biome::OpenGrid, Biome::Deadlock, true);
+    step_from_onto(&mut game, Biome::OpenGrid, Biome::Mainframe, true);
     {
         let mut stats = game.world.get_mut::<Stats>(game.player_entity()).unwrap();
         stats.hp = 1;
@@ -447,10 +351,9 @@ fn attrition_that_kills_does_not_then_start_an_ambush() {
 /// a bare early return that also swallowed the name.
 #[test]
 fn zone_one_takes_no_bite_but_still_names_the_ground() {
-    let dir = assets_dir_with_environment("env_zone1_hook", &[("cold.ron", COLD)]);
-    let mut game = Game::new(16, DifficultyMode::Forgiving, &dir).unwrap();
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     assert_eq!(game.world.resource::<ZoneLevel>().0, 1);
-    step_from_onto(&mut game, Biome::OpenGrid, Biome::Deadlock, true);
+    step_from_onto(&mut game, Biome::OpenGrid, Biome::NullSector, true);
     let before = player_hp(&game);
 
     game.move_player(1, 0);
@@ -461,32 +364,33 @@ fn zone_one_takes_no_bite_but_still_names_the_ground() {
             .resource::<MessageLog>()
             .lines
             .iter()
-            .any(|l| l.text.contains(Biome::Deadlock.name())),
+            .any(|l| l.text.contains(Biome::NullSector.name())),
         "the ground is named from the first step of a run"
     );
 }
 
-const SLOW: &str = r#"(
-    id: "slow",
-    name: "Thrashing",
-    description: "Every step here waits its turn behind something else.",
-    biomes: [NullSector],
-    effect: Drag(extra_ticks: 1),
-)"#;
+/// The base's own floor never bites, whatever a stray `Platform` tile turns
+/// up under it — the refusal lives inside `Game::terrain_at`, not at the
+/// call site.
+#[test]
+fn platform_takes_no_effect() {
+    let mut game = game_about_to_step(Biome::Platform);
+    let before = player_hp(&game);
 
-fn clock(game: &Game) -> u64 {
-    game.world.resource::<crate::resources::GameClock>().tick
+    game.move_player(1, 0);
+
+    assert_eq!(player_hp(&game), before, "the base's own floor never bites");
 }
 
 #[test]
 fn a_step_onto_drag_ground_costs_the_extra_ticks() {
-    let mut plain = game_about_to_step("env_drag_plain", &[("slow.ron", SLOW)], Biome::OpenGrid);
+    let mut plain = game_about_to_step(Biome::OpenGrid);
     let before = clock(&plain);
     plain.move_player(1, 0);
     let ordinary = clock(&plain) - before;
     assert_eq!(ordinary, 1, "an ordinary step is one tick");
 
-    let mut game = game_about_to_step("env_drag", &[("slow.ron", SLOW)], Biome::NullSector);
+    let mut game = game_about_to_step(Biome::Deadlock);
     let before = clock(&game);
 
     game.move_player(1, 0);
@@ -498,7 +402,7 @@ fn a_step_onto_drag_ground_costs_the_extra_ticks() {
 /// damage. Read off `Stats` rather than a downstream consequence.
 #[test]
 fn drag_ground_takes_no_integrity() {
-    let mut game = game_about_to_step("env_drag_hp", &[("slow.ron", SLOW)], Biome::NullSector);
+    let mut game = game_about_to_step(Biome::Deadlock);
     let before = player_hp(&game);
 
     game.move_player(1, 0);
@@ -512,18 +416,7 @@ fn drag_ground_takes_no_integrity() {
 /// the player is no longer standing in, while a fight waits on the screen.
 #[test]
 fn a_drag_step_stops_ticking_the_moment_a_battle_opens() {
-    const SLOWEST: &str = r#"(
-    id: "slowest",
-    name: "Hard Thrash",
-    description: "A step that takes most of a shift.",
-    biomes: [NullSector],
-    effect: Drag(extra_ticks: 3),
-)"#;
-    let mut game = game_about_to_step(
-        "env_drag_fight",
-        &[("slow.ron", SLOWEST)],
-        Biome::NullSector,
-    );
+    let mut game = game_about_to_step(Biome::Deadlock);
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
     // A provoked guardian already standing beside the destination reaches
     // the player on the step's very first tick, which is the only
@@ -542,5 +435,36 @@ fn a_drag_step_stops_ticking_the_moment_a_battle_opens() {
         clock(&game) - before,
         1,
         "the remaining drag ticks must not run behind a fight the player has not seen"
+    );
+}
+
+#[test]
+fn the_crossing_line_names_a_biome_change_and_nothing_within_one_biome() {
+    let mut same = game_about_to_step(Biome::OpenGrid);
+
+    same.move_player(1, 0);
+
+    assert!(
+        !same
+            .world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .any(|l| l.text.contains("cross into")),
+        "a step that stays within one biome logs nothing about crossing"
+    );
+
+    let mut crossing = game_about_to_step(Biome::NullSector);
+
+    crossing.move_player(1, 0);
+
+    assert!(
+        crossing
+            .world
+            .resource::<MessageLog>()
+            .lines
+            .iter()
+            .any(|l| l.text.contains("cross into")),
+        "a step across a biome boundary names the crossing"
     );
 }

@@ -2767,30 +2767,44 @@ pub const MAX_PROFILE_STARTING_PROGRAMS: u32 = 1;
 pub const MAX_NEMESES: usize = 10;
 
 // ---------------------------------------------------------------------------
-// Environment effects
+// Ground conditions
 // ---------------------------------------------------------------------------
 
 /// Most of the player's maximum Integrity a single step onto ambient ground
-/// may cost, as a fraction (see `environment::EnvironmentEffect::Attrition`).
+/// may cost, as a fraction (see `environment::EnvironmentEffect`).
 ///
-/// A playability bound rather than content, which is why it is here and not
-/// in the `.ron`. Terrain is not a fight: it cannot be fled, refused or
-/// out-levelled, and a step is the cheapest action in the game. An authored
-/// `0.5` is death in two steps with no decision in between, and the file
-/// that wrote it would look no different from one that meant it. Set so a
-/// sector of the worst legal ground is a supply problem rather than a
-/// countdown — crossing it wants planning, not luck.
+/// A playability bound, checked against the **folded** effect rather than
+/// any one source: ground and a later weather layer both add into
+/// `attrition_percent`, so a pair that each stay well inside this ceiling on
+/// their own can still sum past it. Terrain is not a fight — it cannot be
+/// fled, refused or out-levelled, and a step is the cheapest action in the
+/// game — so a folded `0.5` would be death in two steps with no decision in
+/// between. Set so a sector of the worst legal ground is a supply problem
+/// rather than a countdown — crossing it wants planning, not luck.
 pub const MAX_ENVIRONMENT_ATTRITION: f32 = 0.05;
 
 /// Most extra ticks a single step onto ambient ground may cost, on top of
 /// the one every step already costs.
 ///
-/// The bound is against a hang the player cannot tell from a crash: a tick
-/// runs the whole schedule, and an authored `10_000` would stop the game
-/// dead on one keypress with no way to tell what happened. Three is already
-/// a step that costs four, which is as slow as ground can be before walking
-/// stops being the way you get anywhere.
+/// Also a ceiling on the fold rather than on ground alone, for the same
+/// reason `MAX_ENVIRONMENT_ATTRITION` is: a tick runs the whole schedule,
+/// and a summed drag the player cannot tell from a hang is worse than a
+/// single source authoring one. Three is already a step that costs four,
+/// which is as slow as ground can be before walking stops being the way you
+/// get anywhere.
 pub const MAX_ENVIRONMENT_DRAG_TICKS: u32 = 3;
+
+/// Most `EnvironmentEffect::ambush_mult` may multiply
+/// `RANDOM_ENCOUNTER_CHANCE` by, once folded.
+///
+/// Ground itself never sets this above `1.0` — the term exists so a later
+/// weather layer has somewhere to land without a second field appearing on
+/// the struct then. The ceiling still has to hold from day one: an unbounded
+/// multiplier could turn a chance roll into a certainty, which reads as a
+/// scripted ambush rather than bad luck. Doubling the baseline chance is
+/// already the difference between "usually fine" and "expect it every
+/// crossing".
+pub const MAX_STATIC_AMBUSH_MULT: f32 = 2.0;
 
 // ---------------------------------------------------------------------------
 // Sector traits

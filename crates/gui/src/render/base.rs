@@ -922,8 +922,8 @@ fn draw_surface_map(
     // whole queue is base-space by construction. This pane draws one space
     // at a time, so on the surface those coordinates would land on
     // unrelated open ground: the same cross-space aliasing `view_entities`
-    // and the spawn-point outline below both refuse, and the structure
-    // being flashed is not even drawn there to explain it.
+    // refuses now, and the structure being flashed is not even drawn there
+    // to explain it.
     //
     // Suppressed rather than moved to the anchor: a raid already reaches a
     // player who is out of the base through the log pane's own flash and a
@@ -980,7 +980,6 @@ fn draw_surface_map(
     // the whole of the gate. Read once for the same reason `hues` is: it is
     // a property of the locale, not of a tile.
     let outdoors = base_pos.is_none();
-    let spawn_point = game.zone_spawn_point();
     let shield_outline = fx.shield_outline(game.raid_defense_active());
     // Read once for the whole map: the sector is a property of the zone, so
     // asking per tile would be the same answer several thousand times.
@@ -1328,28 +1327,6 @@ fn draw_surface_map(
                     mark.h,
                     at_level(hud::palette::glyph(GlyphColor::Cyan), vig),
                 );
-            }
-            // Marks where the player materialized on breaching into this
-            // zone (see `Game::zone_spawn_point`) — an outline rather than
-            // replacing the glyph, so whatever's actually standing there
-            // (the player, a creature, a rebuilt structure) still reads
-            // clearly on top of it. `spawn_point` is a surface coordinate,
-            // so this only means anything while the pane is drawing the
-            // surface — comparing it against a base-space `center` would be
-            // the same cross-space aliasing `view_entities` refuses now.
-            if base_pos.is_none() {
-                let spawn_rx = spawn_point.0 - center.0 + hw;
-                let spawn_ry = spawn_point.1 - center.1 + hh;
-                if rx as i32 == spawn_rx && ry as i32 == spawn_ry {
-                    painter.rect_lines(
-                        px,
-                        py,
-                        tile_px - 1.0,
-                        tile_px - 1.0,
-                        2.0,
-                        hud::palette::glyph(GlyphColor::Magenta),
-                    );
-                }
             }
             // The base-space mirror of that outline: an armed bump is a mode
             // with no other trace on the screen — the log said so once, at

@@ -516,9 +516,9 @@ impl Game {
     }
 
     /// Where the player materialized on breaching into the current zone —
-    /// see `resources::ZoneSpawnPoint`. Marked on the map so a player can
-    /// navigate back toward the (comparatively) safer ground near it, per
-    /// `distance_stat_multiplier`.
+    /// see `resources::ZoneSpawnPoint`. Not drawn on the map: the outline
+    /// that used to mark it was removed, and what the point still decides is
+    /// the centre `in_opening_ring` and `frames_at` measure from.
     pub fn zone_spawn_point(&self) -> (i32, i32) {
         let p = self.world.resource::<ZoneSpawnPoint>();
         (p.x, p.y)

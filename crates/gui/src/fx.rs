@@ -123,10 +123,16 @@ const CLOUD_DEPTH: f32 = 0.22;
 /// diagonal one bands the map along its diagonal — `tile_hash`'s reason for
 /// mixing its two axes with different constants, arrived at again here.
 ///
-/// Slow enough that the motion is caught rather than watched: at 0.32 the
-/// leading edge crosses a tile about every three seconds and a whole patch
-/// takes the better part of a minute to pass over you.
-const CLOUD_WIND: (f32, f32) = (0.32, 0.13);
+/// Slow enough that the motion is caught rather than watched: at 0.64 the
+/// leading edge crosses a tile about every second and a half and a whole
+/// patch takes a little over half a minute to pass over you.
+///
+/// Doubled from the (0.32, 0.13) it shipped at, which read as still — the
+/// `CLOUD_EDGE0`..`CLOUD_EDGE1` band spreads the leading edge over several
+/// tiles by design, so at three seconds a tile no single tile visibly
+/// changed inside the time a player looks at one. The direction is
+/// deliberately untouched; only the rate moved.
+const CLOUD_WIND: (f32, f32) = (0.64, 0.26);
 
 /// How large a patch is, in tiles, as the wavelength of the field's slowest
 /// component. Around half a screen at zoom 1, so a cloud is a thing the map

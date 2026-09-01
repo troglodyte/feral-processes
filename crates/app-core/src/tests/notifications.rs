@@ -43,10 +43,10 @@ fn a_notification_waits_for_the_map_and_is_not_dropped() {
     assert!(app.pending_notification.is_some());
 }
 
-/// Any key dismisses, and the queue drains one at a time rather than the
+/// Esc dismisses, and the queue drains one at a time rather than the
 /// last one arriving alone.
 #[test]
-fn each_key_dismisses_one_and_the_last_returns_to_the_map() {
+fn esc_dismisses_one_and_the_last_returns_to_the_map() {
     let mut app = test_app(9102);
     queue(
         &mut app,
@@ -56,11 +56,11 @@ fn each_key_dismisses_one_and_the_last_returns_to_the_map() {
         &mut app,
         feral_processes_engine::notifications::NotificationKind::ContractClosed,
     );
-    app.handle_key(GameKey::Char('.'));
+    app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Notification);
     let first = app.pending_notification.clone().expect("one on screen");
 
-    app.handle_key(GameKey::Char('x'));
+    app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Notification, "the second one follows");
     let second = app.pending_notification.clone().expect("two queued");
     assert_ne!(first.title, second.title, "not the same one twice");
@@ -68,6 +68,36 @@ fn each_key_dismisses_one_and_the_last_returns_to_the_map() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
     assert!(app.pending_notification.is_none(), "the subject is cleared");
+}
+
+/// Anything but Esc must leave the notification exactly as it was — the
+/// player reading it must not lose it to an incidental keypress. `.` and
+/// `x` stand in for "any ordinary key"; neither is special-cased anywhere
+/// near this path.
+#[test]
+fn only_esc_dismisses_a_notification() {
+    let mut app = test_app(9105);
+    queue(
+        &mut app,
+        feral_processes_engine::notifications::NotificationKind::Breach,
+    );
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Notification);
+    let shown = app.pending_notification.clone().expect("one on screen");
+
+    for key in [GameKey::Char('.'), GameKey::Char('x'), GameKey::Enter] {
+        app.handle_key(key);
+        assert_eq!(
+            app.mode,
+            Mode::Notification,
+            "{key:?} must not dismiss the notification"
+        );
+        assert_eq!(
+            app.pending_notification.as_ref(),
+            Some(&shown),
+            "{key:?} must not change which notification is on screen"
+        );
+    }
 }
 
 /// `Mode::Playing` and nothing else. The four stood in here are the four

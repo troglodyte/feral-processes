@@ -1,4 +1,4 @@
-//! The full-screen notification: one moment, centred, dismissed by any key.
+//! The full-screen notification: one moment, centred, dismissed by Esc.
 //!
 //! The only screen in the game that is neither a popup over the map nor a
 //! pane of it. It draws through `Painter` alone — the drawing seam is not
@@ -56,7 +56,7 @@ pub(super) fn draw_notification(note: &Notification, painter: &Painter, m: &Metr
         .detail
         .as_deref()
         .map_or(0.0, |d| m.gap + painter.measure_ui(d, body_size).height);
-    let hint = "Press any key to continue";
+    let hint = "Press Esc to continue";
     let hint_h = painter.measure_ui(hint, m.small()).height;
 
     let block = art_size + m.gap + title_h + m.gap + body_h + detail_h + m.gap * 2.0 + hint_h;
@@ -221,7 +221,7 @@ mod tests {
             for (kind, def) in shipped() {
                 let lines = wrapped_body(def.body, columns.max(20));
                 let title_h = p.measure_ui(def.title, m.title() + 6).height;
-                let hint_h = p.measure_ui("Press any key to continue", m.small()).height;
+                let hint_h = p.measure_ui("Press Esc to continue", m.small()).height;
                 let block = m.line_height * ART_CELLS
                     + m.gap
                     + title_h
@@ -285,7 +285,7 @@ mod tests {
                     .replace("{description}", &mission.description);
                 let lines = wrapped_body(&body, columns.max(20));
                 let title_h = p.measure_ui(&mission.name, m.title() + 6).height;
-                let hint_h = p.measure_ui("Press any key to continue", m.small()).height;
+                let hint_h = p.measure_ui("Press Esc to continue", m.small()).height;
                 let block = m.line_height * ART_CELLS
                     + m.gap
                     + title_h
@@ -361,7 +361,7 @@ mod tests {
                 );
                 let lines = wrapped_body(&body, columns.max(20));
                 let title_h = p.measure_ui(def.title, m.title() + 6).height;
-                let hint_h = p.measure_ui("Press any key to continue", m.small()).height;
+                let hint_h = p.measure_ui("Press Esc to continue", m.small()).height;
                 let detail_h = m.gap + p.measure_ui(&row.reward_line, m.font_size).height;
                 let block = m.line_height * ART_CELLS
                     + m.gap
@@ -491,7 +491,7 @@ mod tests {
         // text this fixture draws with no detail set.
         assert_eq!(
             texts,
-            vec![">", "T", "B", "Press any key to continue"],
+            vec![">", "T", "B", "Press Esc to continue"],
             "an absent detail must draw nothing beyond the glyph, title, body and hint"
         );
     }

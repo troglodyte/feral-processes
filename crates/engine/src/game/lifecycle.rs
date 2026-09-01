@@ -1939,12 +1939,8 @@ impl Game {
 
         let rewards: Vec<(Reward, Option<MainStat>)> = {
             let db = self.world.resource::<AchievementDb>();
-            self.world
-                .resource::<Profile>()
-                .earned
-                .iter()
-                .filter_map(|e| db.get(&e.id).map(|def| (def.reward.clone(), e.rolled_stat)))
-                .collect()
+            let profile = self.world.resource::<Profile>();
+            crate::achievements::profile_rewards(profile, db)
         };
         if rewards.is_empty() {
             return;

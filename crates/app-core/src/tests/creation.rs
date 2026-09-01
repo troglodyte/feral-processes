@@ -8,6 +8,7 @@
 
 use super::support::*;
 use crate::*;
+use feral_processes_engine::achievements::{AchievementId, Earned, roll_main_stat};
 use feral_processes_engine::save;
 use feral_processes_engine::species::AffinityClass;
 use feral_processes_engine::tuning::{
@@ -450,13 +451,136 @@ fn reopening_the_wizard_starts_clean() {
     assert_eq!(app.creation_difficulty(), None);
 }
 
-/// A stub a later task fills in. Asserted so the seam is real rather than
-/// only compiled: the summary reads it, and an empty preview must draw as
-/// no rows rather than as a blank one.
+/// A fresh app has no earned rungs at all — the empty-catalogue guarantee
+/// every reader of `Profile` carries, checked here rather than assumed: an
+/// empty preview must draw as no rows rather than a blank one.
 #[test]
-fn the_profile_preview_is_empty_for_now() {
-    let app = opened("preview");
+fn an_empty_profile_previews_nothing() {
+    let app = opened("empty_preview");
     assert!(app.profile_preview_rows().is_empty());
+}
+
+/// One rung of each `Reward` kind, earned before the wizard ever opens —
+/// what a returning player's record would look like. The `RandomMainStat`
+/// rung's roll is deliberately forced to differ from what a *fresh*
+/// `roll_main_stat` call on the same id would produce, so this only passes
+/// if the preview reads `Earned::rolled_stat` — the recorded answer — and
+/// not a re-roll.
+fn profile_with_every_reward_kind() -> Profile {
+    let stat_rung: AchievementId = "breach_zone_2".into();
+    let fresh_roll = roll_main_stat(&stat_rung);
+    let recorded_roll = MainStat::all()
+        .into_iter()
+        .find(|stat| *stat != fresh_roll)
+        .expect("MainStat::all() has more than one variant");
+
+    let mut profile = Profile::default();
+    profile.record(Earned {
+        id: stat_rung,
+        first_tick: 1,
+        permadeath: false,
+        rolled_stat: Some(recorded_roll),
+    });
+    profile.record(Earned {
+        id: "stack_depth_5".into(), // PerkPoints(1)
+        first_tick: 2,
+        permadeath: false,
+        rolled_stat: None,
+    });
+    profile.record(Earned {
+        id: "stack_depth_8".into(), // StartingProgram("scrapper")
+        first_tick: 3,
+        permadeath: false,
+        rolled_stat: None,
+    });
+    profile
+}
+
+/// Same shape as `wizard_app`, but `profile.ron` is seeded with `profile`
+/// before the app ever reads it — the state a previous run's earning would
+/// have left on disk.
+fn wizard_app_with_profile(name: &str, profile: &Profile) -> App {
+    let assets_dir = test_assets_dir();
+    let root = std::env::temp_dir().join(format!(
+        "feral_processes_creation_{name}_{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("saves")).unwrap();
+    let profile_path = root.join("profile.ron");
+    profile.save(&profile_path).unwrap();
+    App::new(
+        assets_dir,
+        root.join("saves"),
+        root.join("history.log"),
+        profile_path,
+        arenas_dir(),
+        root.join("telemetry.jsonl"),
+    )
+}
+
+/// Which `PlayerStatus` field a `Reward::RandomMainStat` axis lands on —
+/// mirrors the match in `Game::grant_profile_rewards`, by call rather than
+/// copy: `stat_field` is test-only scaffolding to read the *result*, not a
+/// second statement of what pays what.
+fn stat_field(stat: MainStat, status: &feral_processes_engine::views::PlayerStatus) -> i32 {
+    match stat {
+        MainStat::Atk => status.atk,
+        MainStat::Def => status.mitigation,
+        MainStat::Integrity => status.max_hp,
+        MainStat::Decompiler => status.decompiler,
+    }
+}
+
+/// The load-bearing test for Task 8: the preview and the payout must agree,
+/// because they are the same call. Builds a profile with all three reward
+/// kinds, reads the preview, starts the run, and checks the actual `Stats`,
+/// `perk_points` and roster against exactly what the preview claimed —
+/// against a same-choice baseline run with an empty profile, so the
+/// assertion needs no hardcoded knowledge of `PLAYER_BASE_STATS` beyond what
+/// `tuning.rs` already states elsewhere.
+#[test]
+fn the_preview_matches_what_is_paid() {
+    let profile = profile_with_every_reward_kind();
+    let recorded_stat = profile.earned[0].rolled_stat.unwrap();
+
+    let mut app = wizard_app_with_profile("matches_paid", &profile);
+    let rows = app.profile_preview_rows();
+    assert_eq!(
+        rows,
+        vec![
+            format!("+1 {}", recorded_stat.label()),
+            "+1 Perk Point".to_string(),
+            "start with a scrapper".to_string(),
+        ]
+    );
+
+    let mut baseline = wizard_app_with_profile("matches_paid_baseline", &Profile::default());
+    baseline.start_new_game(DifficultyMode::Forgiving, &CharacterChoice::default());
+    settle(&mut baseline);
+    let baseline_status = baseline.game.as_ref().unwrap().player_status();
+
+    app.start_new_game(DifficultyMode::Forgiving, &CharacterChoice::default());
+    settle(&mut app);
+    let status = app.game.as_ref().unwrap().player_status();
+
+    assert_eq!(
+        stat_field(recorded_stat, &status),
+        stat_field(recorded_stat, &baseline_status) + 1,
+        "the stat the preview named did not move by what it claimed"
+    );
+    assert_eq!(status.perk_points, baseline_status.perk_points + 1);
+
+    let pets = app.game.as_mut().unwrap().owned_pets();
+    assert_eq!(
+        pets.len(),
+        baseline.game.as_mut().unwrap().owned_pets().len() + 1
+    );
+    assert!(
+        pets[0].name.contains("Scrapper"),
+        "expected the granted program to be a Scrapper, got {:?}",
+        pets[0].name
+    );
 }
 
 /// The class picked on step two is what prices the routine rows on step

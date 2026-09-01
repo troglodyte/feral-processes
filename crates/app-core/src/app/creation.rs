@@ -567,11 +567,17 @@ impl App {
     /// What the cross-run profile is about to grant this run, one line per
     /// reward, for the Summary step to show before the run starts.
     ///
-    /// Empty for now; a later task fills it in from `Profile` and
-    /// `AchievementDb` through the one derivation `grant_profile_rewards`
-    /// also pays from — a preview that disagreed with what is actually paid
-    /// would be worse than no preview.
+    /// Reads `feral_processes_engine::achievements::profile_rewards`, the
+    /// same derivation `Game::grant_profile_rewards` pays from — a preview
+    /// that disagreed with what is actually paid would be worse than no
+    /// preview, since the player is deciding who to be on the strength of
+    /// it.
     pub fn profile_preview_rows(&self) -> Vec<String> {
-        Vec::new()
+        feral_processes_engine::achievements::profile_rewards(&self.profile, &self.achievement_db)
+            .into_iter()
+            .map(|(reward, rolled)| {
+                feral_processes_engine::achievements::preview_line(&reward, rolled)
+            })
+            .collect()
     }
 }

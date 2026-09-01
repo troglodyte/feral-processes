@@ -510,6 +510,28 @@ pub(super) fn popup_max_rows(screen_h: f32, size: PopupSize, m: &Metrics) -> usi
         .max(0.0) as usize
 }
 
+/// Whether a `draw_popup` call with these arguments would turn its scroll
+/// on — i.e. whether every `Row::Item` fits on screen at once.
+///
+/// The character-creation wizard is the one screen in the game that
+/// deliberately never wants this to happen: unlike a trade or deploy list,
+/// which is fine paging through a long catalogue, the wizard promises "no
+/// scroll" as a design choice, and this is what a height test holds that
+/// promise against — see `creation::the_tallest_creation_step_fits_its_screen`.
+#[cfg(test)]
+pub(super) fn popup_scrolls(
+    screen_h: f32,
+    size: PopupSize,
+    rows: &[Row],
+    refusal: Option<&str>,
+    m: &Metrics,
+) -> bool {
+    let status = refusal
+        .map(|s| wrap_text(s, status_wrap_columns(size)).len())
+        .unwrap_or(0);
+    popup_layout(screen_h, popup_fractions(size).1, rows, status, m).scrolling
+}
+
 /// `status` is how many lines a refusal drawn under the title takes up.
 /// Counted here rather than prepended to `rows` because `Row` is not
 /// `Clone` and `rows` is borrowed — and because it must not join the
@@ -569,6 +591,33 @@ fn popup_layout<'a>(
     }
 }
 
+/// The pixel box a `draw_popup` call with these arguments would occupy.
+///
+/// Exposed so a caller can paint something of its own inside that box — the
+/// character-creation wizard's Look-step preview cell — without a second
+/// copy of the sizing math to fall out of step with `draw_popup`'s own box:
+/// this is the one call both sides make, `draw_popup` included.
+pub(super) fn popup_rect(
+    size: PopupSize,
+    rows: &[Row],
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) -> Rect {
+    let (pct_w, pct_h) = popup_fractions(size);
+    let status = refusal
+        .map(|s| wrap_text(s, status_wrap_columns(size)).len())
+        .unwrap_or(0);
+    let layout = popup_layout(painter.screen_h(), pct_h, rows, status, m);
+    let w = painter.screen_w() * pct_w;
+    Rect::new(
+        (painter.screen_w() - w) / 2.0,
+        (painter.screen_h() - layout.h) / 2.0,
+        w,
+        layout.h,
+    )
+}
+
 /// Draws a bordered popup: `title`, a `status` line if the player's last
 /// action was refused, then `rows`.
 ///
@@ -592,7 +641,7 @@ pub(super) fn draw_popup(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let (pct_w, pct_h) = popup_fractions(size);
+    let (_, pct_h) = popup_fractions(size);
     let status_lines: Vec<Row> = refusal
         .map(|s| wrap_text(s, status_wrap_columns(size)))
         .unwrap_or_default()
@@ -600,10 +649,7 @@ pub(super) fn draw_popup(
         .map(|line| Row::TextColored(line, RED))
         .collect();
     let layout = popup_layout(painter.screen_h(), pct_h, rows, status_lines.len(), m);
-    let w = painter.screen_w() * pct_w;
-    let h = layout.h;
-    let x = (painter.screen_w() - w) / 2.0;
-    let y = (painter.screen_h() - h) / 2.0;
+    let Rect { x, y, w, h } = popup_rect(size, rows, refusal, painter, m);
 
     painter.rect(x, y, w, h, PANEL_BG);
     painter.rect_lines(x, y, w, h, 2.0, BORDER);

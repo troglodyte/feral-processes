@@ -441,10 +441,10 @@ impl App {
         }
         // Left and Right page the wizard — but only on the steps that do
         // not spend, where the two keys already mean "take one" and "put
-        // one back" (`Mode::Transfer`'s rule, which those two screens
-        // share). Those two are the steps a player cannot leave early
-        // anyway, so what pages them is Enter and Esc.
-        if !matches!(self.creation_step, CreationStep::Kit | CreationStep::Points) {
+        // one back" (`Mode::Transfer`'s rule, which those screens share).
+        // Those are the steps a player cannot leave early anyway, so what
+        // pages them is Enter and Esc.
+        if !self.creation_step.spends() {
             match key {
                 GameKey::Left => {
                     if let Some(prev) = self.creation_step.prev() {

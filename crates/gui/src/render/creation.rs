@@ -280,7 +280,8 @@ fn plain_footer(step: CreationStep) -> &'static str {
     match step {
         CreationStep::Difficulty => "[p]/[f] picks; Esc backs out to the menu",
         CreationStep::Class => "Up/Down + Enter picks; Left/Right pages; Esc goes back",
-        // Written by `footer` above, which is the only caller.
+        // Written by `footer` above, which is the only caller — every
+        // step `CreationStep::spends` names carries a live figure.
         CreationStep::Kit | CreationStep::Points | CreationStep::Perks => "",
         // One arm, because the two halves of a look are one key table —
         // an icon row and a swatch row are picked the same way and skipped

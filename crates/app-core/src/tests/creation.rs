@@ -1056,7 +1056,71 @@ fn the_perk_step_reaches_the_started_run() {
     );
 }
 
-/// **An allowance you can still spend is not a decision you have made.**
+/// **On a step that spends, the arrows spend** — they are not the page
+/// keys there, which is the whole reason the two budget steps were carved
+/// out of the paging block.
+///
+/// The Perks step shipped outside that carve-out for one release: its own
+/// footer said "Left/Right buys", and Left walked back to the stat pool
+/// while Right refused as a page-forward. Only the Shift and Ctrl variants
+/// reached the basket at all.
+///
+/// Asserted on all three, because the carve-out is one list and a fourth
+/// budget added outside it would land exactly here again.
+#[test]
+fn a_spending_step_gives_its_arrows_to_the_basket() {
+    let mut app = opened("arrows_spend");
+    press(&mut app, ch('1'));
+
+    // The probe direction differs because the Points step opens on a
+    // rolled spread that already spends the pool — Right there is refused
+    // for having nothing affordable, which is not the question.
+    for (step, probe, undo) in [
+        (CreationStep::Kit, GameKey::Right, GameKey::Left),
+        (CreationStep::Points, GameKey::Left, GameKey::Right),
+        (CreationStep::Perks, GameKey::Right, GameKey::Left),
+    ] {
+        assert_eq!(app.creation_step(), step, "the walk fell out of step");
+        let before = app.creation_choice().clone();
+        press(&mut app, probe);
+        assert_eq!(
+            app.creation_step(),
+            step,
+            "{step:?} paged on {probe:?} instead of spending"
+        );
+        assert_ne!(
+            app.creation_choice(),
+            &before,
+            "{step:?} did nothing on {probe:?}"
+        );
+        press(&mut app, undo);
+        assert_eq!(
+            app.creation_step(),
+            step,
+            "{step:?} paged on {undo:?} instead of spending"
+        );
+        assert_eq!(
+            app.creation_choice(),
+            &before,
+            "{step:?} did not undo what {probe:?} did"
+        );
+
+        match step {
+            CreationStep::Kit => {
+                spend_the_kit(&mut app);
+                press(&mut app, GameKey::Enter);
+                skip_the_look(&mut app);
+            }
+            CreationStep::Points => {
+                spend_the_points(&mut app);
+                press(&mut app, GameKey::Enter);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// **An allowance you can still spend is not a decision you have made.**/// **An allowance you can still spend is not a decision you have made.**
 /// Both budget steps refuse to be left while anything on them is
 /// affordable, and both say why — walking past the Points screen with the
 /// pool untouched was the whole reason the figure went on the footer, and

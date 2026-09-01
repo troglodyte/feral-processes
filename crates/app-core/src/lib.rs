@@ -970,6 +970,24 @@ impl CreationStep {
         self.index().checked_sub(1).map(|i| Self::ALL[i])
     }
 
+    /// Whether this step hands out an allowance and spends it — the Kit
+    /// step's Credits, the Points step's pool, the Perks step's Perk
+    /// Points.
+    ///
+    /// **One list, because three things read it and they must agree.** A
+    /// spending step gives Left/Right to its basket (`Mode::Transfer`'s
+    /// rule) rather than to paging, refuses to be left while anything on
+    /// it is still affordable, and writes its own live footer. The Perks
+    /// step shipped in the first two of those and outside the paging
+    /// carve-out, so its own footer said "Left/Right buys" while Left
+    /// walked back to the stat pool.
+    pub fn spends(self) -> bool {
+        matches!(
+            self,
+            CreationStep::Kit | CreationStep::Points | CreationStep::Perks
+        )
+    }
+
     /// The step's heading, for the renderer's popup title.
     pub fn title(self) -> &'static str {
         match self {

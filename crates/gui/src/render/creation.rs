@@ -94,7 +94,9 @@ fn step_rows(app: &App, step: CreationStep) -> Vec<Row> {
 fn build_row(step: CreationStep, row: &CreationRow, i: usize, selected: bool) -> Row {
     let text = row_line(row);
     let label = match step {
-        CreationStep::Points | CreationStep::Name | CreationStep::Summary => text,
+        CreationStep::Kit | CreationStep::Points | CreationStep::Name | CreationStep::Summary => {
+            text
+        }
         _ => format!("[{}] {text}", feral_processes_app_core::menu_shortcut(i)),
     };
     let base = item_row(label, selected);
@@ -145,8 +147,14 @@ fn row_line(row: &CreationRow) -> String {
         // ceiling is the whole allowance, so a bar would be 25 cells wide on
         // most of two dozen rows. The remaining allowance rides the footer
         // instead, where it is read once rather than inferred per row.
+        // An untaken row shows no count at all: at two dozen rows a column
+        // of `x0` is the loudest thing on the screen and says nothing.
         CreationRow::Item { row, taken } => {
-            format!("{:<24} {:>2}c   x{taken}", row.name, row.price)
+            let held = match taken {
+                0 => String::new(),
+                n => format!("x{n}"),
+            };
+            format!("{:<24} {:>2}c   {held}", row.name, row.price)
         }
         CreationRow::Routine(routine) => {
             format!(

@@ -1147,6 +1147,7 @@ pub(super) fn test_pet(name: &str, gear: &str) -> PetInfo {
         mitigation: 5,
         power: 19,
         party_slot: Some(0),
+        role: feral_processes_app_core::ProgramRole::InParty,
         activity: "in party".to_string(),
         quality: None,
         fusions: 0,

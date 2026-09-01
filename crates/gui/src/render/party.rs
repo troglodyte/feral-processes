@@ -3,6 +3,7 @@
 use super::inventory::equipped_row;
 use super::popup::*;
 use super::*;
+use feral_processes_app_core::ProgramRole;
 
 /// The help lines above the roster.
 ///
@@ -255,19 +256,42 @@ fn companion_row_lines(shortcut: char, p: &PetInfo) -> Vec<String> {
     wrapped_row_lines(head, &tags)
 }
 
-pub(super) fn draw_companion_menu(
-    game: &mut Game,
-    selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let pets = game.owned_pets();
-    let mut rows: Vec<_> = companion_help().into_iter().map(text_row).collect();
-    if pets.is_empty() {
-        rows.push(text_row("(you don't have any compiled programs yet)"));
+/// What a run of one role is called on the roster.
+///
+/// Exhaustive on `ProgramRole`, `cell_mark`'s rule: a fifth role reaching a
+/// fallback here would be listed under whichever heading sorted in front of
+/// it. `Wielded` is named because the heading only ever appears for a player
+/// who has already found the key — the easter egg is the key, and it is
+/// `companion_help` that is held to never printing it.
+fn role_heading(role: ProgramRole) -> &'static str {
+    match role {
+        ProgramRole::InParty => "In your party",
+        ProgramRole::Wielded => "Carried as your weapon",
+        ProgramRole::Sortie => "Away on a sortie",
+        ProgramRole::Staff => "Base staff",
     }
+}
+
+/// The roster proper: a heading per run of one role, then that role's
+/// programs.
+///
+/// `Game::owned_pets` is already sorted into a run per `ProgramRole`, so the
+/// heading is emitted **on the change** rather than counted up front —
+/// `draw_caravan`'s rule, and for its reason: a run of one still gets its
+/// heading and the list needs no second walk. They are `Row::TextColored`,
+/// so `i` — which is what the shortcut and app-core's pick both index
+/// through — never sees them.
+///
+/// Split out of `draw_companion_menu` so the grouping is measurable without
+/// a window; the drawing half needs a `Game` and this half does not.
+fn companion_page_rows(pets: &[PetInfo], selected: usize) -> Vec<Row> {
+    let mut rows = Vec::new();
+    let mut run: Option<ProgramRole> = None;
     for (i, p) in pets.iter().enumerate() {
+        if run != Some(p.role) {
+            rows.push(Row::TextColored(role_heading(p.role).to_string(), TEXT));
+            run = Some(p.role);
+        }
         // No row colour of its own: `fusion_row` already loses to CRITICAL
         // below, and a third meaning on that axis makes all three unreadable.
         let critical = hp_critical(p.hp, p.max_hp);
@@ -301,6 +325,22 @@ pub(super) fn draw_companion_menu(
             rows.push(colored(line, false));
         }
     }
+    rows
+}
+
+pub(super) fn draw_companion_menu(
+    game: &mut Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let pets = game.owned_pets();
+    let mut rows: Vec<_> = companion_help().into_iter().map(text_row).collect();
+    if pets.is_empty() {
+        rows.push(text_row("(you don't have any compiled programs yet)"));
+    }
+    rows.extend(companion_page_rows(&pets, selected));
     draw_popup("Party", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -526,6 +566,54 @@ mod tests {
     use super::*;
     use crate::paint::with_painter;
     use crate::text::ui_metrics;
+
+    /// One heading per run of a role, and — the thing that can silently
+    /// break — the shortcut on the *n*th program still reads `n`.
+    ///
+    /// The headings are `Row::TextColored` and must never touch the counter
+    /// the shortcut and app-core's pick both index through. Off by one,
+    /// `[c]` renames what `[b]` names and nothing anywhere fails.
+    #[test]
+    fn the_roster_heads_each_role_without_moving_a_shortcut() {
+        let pet = |name: &str, role: ProgramRole| PetInfo {
+            role,
+            party_slot: matches!(role, ProgramRole::InParty).then_some(0),
+            ..test_pet(name, "w|a|m")
+        };
+        // In `owned_pets`' order: the party leads, staff is what is left.
+        let pets = vec![
+            pet("aa", ProgramRole::InParty),
+            pet("bb", ProgramRole::InParty),
+            pet("cc", ProgramRole::Staff),
+        ];
+        let rows = companion_page_rows(&pets, 0);
+
+        let headings: Vec<&str> = rows
+            .iter()
+            .filter_map(|r| match r {
+                Row::TextColored(t, _) => Some(t.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            headings,
+            vec!["In your party", "Base staff"],
+            "one heading per run, and never one per row"
+        );
+
+        let shortcuts: Vec<char> = rows
+            .iter()
+            .filter_map(|r| match r {
+                Row::Item { text, .. } => text.strip_prefix('[').and_then(|t| t.chars().next()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            shortcuts,
+            (0..3).map(menu_shortcut).collect::<Vec<_>>(),
+            "a heading moved a shortcut off the program it belongs to"
+        );
+    }
 
     /// `draw_row` clamps a row vertically and nothing clamps it
     /// horizontally, so a footer wider than its popup silently runs off the

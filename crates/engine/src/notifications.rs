@@ -80,9 +80,23 @@ pub enum NotificationKind {
     // --- Milestones: `Always`, news about a moment that has happened again ---
     /// A portal holds and a new sector resolves — `Game::enter_next_zone`.
     Breach,
-    /// A contract is settled and paid out — `Game::complete_contract`. The
-    /// one firing site that attaches a `detail`.
+    /// A contract is settled and paid out — `Game::complete_contract`.
+    ///
+    /// **Templated, and its holes are the contract's own words.** A screen
+    /// reading the same sentence for every contract in the game is what it
+    /// replaced: what was asked is `Game::objective_line`, the same
+    /// derivation `views::ContractRow` and the completion log line use, and
+    /// the payout rides `detail`.
     ContractClosed,
+    /// An onboarding mission is settled — `Game::complete_contract`, the
+    /// **other** half of the same branch `ContractClosed` is one arm of.
+    ///
+    /// A kind of its own rather than a fill on `ContractClosed`, because that
+    /// copy is false twice over during onboarding: there is no Broker
+    /// standing for the chain's first several missions, and the board is
+    /// deliberately empty until the chain ends. One def carries one body, so
+    /// two bodies is two kinds.
+    OnboardingComplete,
     /// The onboarding chain has handed out a mission —
     /// `Game::ensure_tutorial_held`.
     ///
@@ -126,7 +140,7 @@ impl NotificationKind {
     /// scroll to forgive. `Perk::all`'s shape and its reason: a walk over
     /// the whole enum is what makes a census non-vacuous, and the array
     /// length fails to compile when a variant is added without being listed.
-    pub fn all() -> [NotificationKind; 8] {
+    pub fn all() -> [NotificationKind; 9] {
         [
             NotificationKind::BaseFounding,
             NotificationKind::FirstDescent,
@@ -135,6 +149,7 @@ impl NotificationKind {
             NotificationKind::FirstStatic,
             NotificationKind::Breach,
             NotificationKind::ContractClosed,
+            NotificationKind::OnboardingComplete,
             NotificationKind::OnboardingMission,
         ]
     }
@@ -219,10 +234,18 @@ impl NotificationKind {
             },
             NotificationKind::ContractClosed => NotificationDef {
                 title: "Contract Closed",
-                body: "The Broker marks the contract settled and pays out, more contracts are \
-                       available.",
+                body: "{name}\n\nCOMPLETED: {objective}\n\nThe Broker marks it settled and pays \
+                       out. Fresh work is on the board.",
                 sprite: None,
                 glyph: '$',
+                color: GlyphColor::Green,
+                repeat: Repeat::Always,
+            },
+            NotificationKind::OnboardingComplete => NotificationDef {
+                title: "Mission Complete",
+                body: "{name}\n\nCOMPLETED: {objective}\n\n{progress}",
+                sprite: None,
+                glyph: '!',
                 color: GlyphColor::Green,
                 repeat: Repeat::Always,
             },
@@ -257,6 +280,9 @@ impl NotificationKind {
             NotificationKind::FirstStatic => "tutorial_first_static",
             NotificationKind::Breach => "milestone_breach",
             NotificationKind::ContractClosed => "milestone_contract",
+            // New, so no `profile.ron` holds it — and `Always` besides, so
+            // nothing is ever latched under it.
+            NotificationKind::OnboardingComplete => "onboarding_complete",
             NotificationKind::OnboardingMission => "onboarding_mission",
         }
     }
@@ -284,7 +310,9 @@ pub struct Notification {
     pub color: GlyphColor,
     /// A figure the firing site knows and the authored copy cannot: a
     /// contract's payout, worded through the same `Game::reward_line` the
-    /// log line uses. **Not a field on `NotificationDef`** — it is drawn
+    /// log line uses — on both completion screens, since a mission of the
+    /// onboarding chain pays exactly as a Broker's contract does.
+    /// **Not a field on `NotificationDef`** — it is drawn
     /// from live game state at the moment the notification fires, so it is a
     /// parameter to the door (`Game::notify_with_detail`) rather than
     /// something the table could ever hold. `None` for every site that has

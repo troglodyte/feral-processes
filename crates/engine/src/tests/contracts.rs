@@ -923,6 +923,196 @@ fn completing_a_contract_puts_the_payout_on_the_notification_and_it_matches_the_
     );
 }
 
+/// Finishing a contract sums it up **in the contract's own words** — what it
+/// asked for, on the log line and on the alert screen alike.
+///
+/// Asserted against `views::ContractRow::objective_line`, the same derivation
+/// the contracts screen draws, rather than against a hand-written phrase: a
+/// summary that worded the objective a second way would pass a literal and
+/// still be the copy that drifts.
+///
+/// The line is counted, not merely found. `message_log` is the **raw** log, so
+/// a completion announced twice shows up here — where `message_history` folds
+/// repeats and would hide it.
+#[test]
+fn a_finished_contract_is_summed_up_in_its_own_words() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def(
+            "nursery",
+            Objective::Terminate {
+                species: Some("drone".to_string()),
+                count: 1,
+            },
+            vec![Reward::Credits(40), Reward::Xp(25)],
+        ),
+        1,
+    );
+    let row = game
+        .active_contracts()
+        .into_iter()
+        .find(|r| r.id == ContractId::from("nursery"))
+        .expect("the contract is in hand before it settles");
+    let _ = std::iter::from_fn(|| game.take_notification()).count();
+
+    game.tick();
+
+    let announced: Vec<String> = game
+        .message_log(20)
+        .into_iter()
+        .filter(|l| l.text.starts_with("CONTRACT COMPLETE:"))
+        .map(|l| l.text)
+        .collect();
+    assert_eq!(
+        announced.len(),
+        1,
+        "a completion is announced exactly once: {announced:?}"
+    );
+    assert!(
+        announced[0].contains(&row.name) && announced[0].contains(&row.objective_line),
+        "the completion line says what was asked, in the words the screen used \
+         ({:?}): {:?}",
+        row.objective_line,
+        announced[0]
+    );
+
+    let notice = std::iter::from_fn(|| game.take_notification())
+        .find(|n| n.title == "Contract Closed")
+        .expect("completing a contract fires milestone_contract");
+    assert!(
+        notice.body.contains(&row.name) && notice.body.contains(&row.objective_line),
+        "the alert screen names the contract and what it asked for, rather than \
+         one sentence every contract in the game shares: {:?}",
+        notice.body
+    );
+    assert_eq!(
+        notice.detail.as_deref(),
+        Some(row.reward_line.as_str()),
+        "and still quotes the payout"
+    );
+}
+
+/// The chain gets its **own** completion, not the Broker's.
+///
+/// `ContractClosed`'s copy says the Broker files the job and that fresh work is
+/// on the board. Both are false during onboarding: there is no Broker standing
+/// for the first several missions, and the board is deliberately empty until
+/// the chain ends.
+#[test]
+fn finishing_an_onboarding_mission_says_so_in_the_chains_own_words() {
+    // Not `fresh`, which files the whole chain as done — this is about a run
+    // still running it.
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let row = game
+        .active_contracts()
+        .into_iter()
+        .find(|r| r.tutorial)
+        .expect("a new run holds the chain's first mission");
+    let chain = game.world.resource::<ContractDb>().tutorial_chain().len();
+    assert!(chain > 1, "the census needs a chain to be a step of");
+    // The hand-out briefing is already queued; drop it so what is left came
+    // from the completion.
+    let _ = std::iter::from_fn(|| game.take_notification()).count();
+    finish_held(&mut game, &row.id);
+
+    game.tick();
+
+    let announced: Vec<String> = game
+        .message_log(30)
+        .into_iter()
+        .filter(|l| l.text.starts_with("ONBOARDING COMPLETE:"))
+        .map(|l| l.text)
+        .collect();
+    assert_eq!(
+        announced.len(),
+        1,
+        "an onboarding mission closes on its own line, once: {announced:?}"
+    );
+    assert!(
+        announced[0].contains(&row.name) && announced[0].contains(&row.objective_line),
+        "and it says which mission and what it asked: {:?}",
+        announced[0]
+    );
+
+    let shown: Vec<_> = std::iter::from_fn(|| game.take_notification()).collect();
+    let notice = shown
+        .iter()
+        .find(|n| n.title == "Mission Complete")
+        .unwrap_or_else(|| panic!("no onboarding completion screen: {shown:?}"));
+    assert!(
+        notice.body.contains(&row.name) && notice.body.contains(&row.objective_line),
+        "the screen sums the mission up: {:?}",
+        notice.body
+    );
+    assert!(
+        notice.body.contains(&format!("of {chain}")),
+        "and says where the run is in the chain, out of {chain}: {:?}",
+        notice.body
+    );
+    assert_eq!(notice.detail.as_deref(), Some(row.reward_line.as_str()));
+    assert!(
+        !shown.iter().any(|n| n.title == "Contract Closed"),
+        "the Broker settles nothing here — there isn't one: {shown:?}"
+    );
+}
+
+/// The last mission of the chain says the board is open, because that is the
+/// moment `board_defs` stops suppressing it and nothing else tells the player.
+#[test]
+fn the_chains_last_mission_says_the_board_is_open() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let chain: Vec<ContractId> = game
+        .world
+        .resource::<ContractDb>()
+        .tutorial_chain()
+        .iter()
+        .map(|d| d.id.clone())
+        .collect();
+    let last = chain.last().expect("the chain has a last step").clone();
+    let last_def = game
+        .world
+        .resource::<ContractDb>()
+        .get(&last)
+        .expect("the last step resolves")
+        .clone();
+    {
+        let mut held = game.world.resource_mut::<ActiveContracts>();
+        held.active.clear();
+        held.done = chain[..chain.len() - 1].to_vec();
+    }
+    give(&mut game, last_def, 0);
+    finish_held(&mut game, &last);
+    let _ = std::iter::from_fn(|| game.take_notification()).count();
+
+    game.tick();
+
+    let shown: Vec<_> = std::iter::from_fn(|| game.take_notification()).collect();
+    let notice = shown
+        .iter()
+        .find(|n| n.title == "Mission Complete")
+        .unwrap_or_else(|| panic!("no onboarding completion screen: {shown:?}"));
+    assert!(
+        notice.body.to_lowercase().contains("board"),
+        "the last mission is where the board opens, and this is what says so: {:?}",
+        notice.body
+    );
+    assert!(!game.in_tutorial(), "and the chain really is over");
+}
+
+/// Fills a held contract's progress to its target, so the settle is what is
+/// under test rather than the counting. `give_finished`'s trick for a contract
+/// already in hand.
+fn finish_held(game: &mut Game, id: &ContractId) {
+    let mut held = game.world.resource_mut::<ActiveContracts>();
+    let slot = held
+        .active
+        .iter_mut()
+        .find(|c| c.def.id == *id)
+        .expect("the contract is in hand");
+    slot.progress = slot.def.objective.target();
+}
+
 #[test]
 fn a_gear_reward_is_always_ordinary() {
     let mut game = fresh();

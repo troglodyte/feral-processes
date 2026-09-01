@@ -309,6 +309,80 @@ mod tests {
         });
     }
 
+    /// **Both completion screens are templates too, and both carry a
+    /// `detail`.** The census two tests up measures `{objective}` — eleven
+    /// characters — where the screen draws a whole objective line, and
+    /// `{progress}` where it draws a sentence, so on its own it says nothing
+    /// about what a player sees when a contract settles.
+    ///
+    /// Every shipped contract and every template at its widest is checked, on
+    /// whichever of the two screens its own `tutorial` flag picks, at the
+    /// longest payout the shipped assets can word. `{progress}` is measured at
+    /// **every step of the real chain** through the engine's own
+    /// `onboarding_progress_line` rather than a phrase written here — the
+    /// sentence exists once, and a census measuring a second copy of it is
+    /// measuring the copy.
+    #[test]
+    fn every_completion_screen_fits_its_screen_once_filled() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(53, DifficultyMode::Forgiving, assets).expect("shipped assets");
+        let rows = game.contract_catalogue();
+        assert!(
+            rows.iter().any(|r| r.tutorial) && rows.iter().any(|r| !r.tutorial),
+            "the census must reach both screens, or half of it passes vacuously"
+        );
+        let steps = rows.iter().filter(|r| r.tutorial).count();
+        let progress = (0..=steps)
+            .map(|done| feral_processes_engine::contracts::onboarding_progress_line(done, steps))
+            .max_by_key(|line| line.chars().count())
+            .expect("the range is never empty");
+
+        let m = crate::text::ui_metrics(720.0);
+        crate::paint::with_painter(|p| {
+            let h = 720.0;
+            let w = 1280.0;
+            let columns = ((w * BODY_WIDTH_FRACTION) / p.measure_ui_advance("M", m.font_size))
+                .floor() as usize;
+            for row in &rows {
+                let kind = if row.tutorial {
+                    NotificationKind::OnboardingComplete
+                } else {
+                    NotificationKind::ContractClosed
+                };
+                let def = kind.def();
+                let body = def
+                    .body
+                    .replace("{name}", &row.name)
+                    .replace("{objective}", &row.objective_line)
+                    .replace("{progress}", &progress);
+                assert!(
+                    !body.contains('{'),
+                    "{kind} has a hole this census does not fill: {body:?}"
+                );
+                let lines = wrapped_body(&body, columns.max(20));
+                let title_h = p.measure_ui(def.title, m.title() + 6).height;
+                let hint_h = p.measure_ui("Press any key to continue", m.small()).height;
+                let detail_h = m.gap + p.measure_ui(&row.reward_line, m.font_size).height;
+                let block = m.line_height * ART_CELLS
+                    + m.gap
+                    + title_h
+                    + m.gap
+                    + lines.len() as f32 * m.line_height
+                    + detail_h
+                    + m.gap * 2.0
+                    + hint_h;
+                assert!(
+                    block + 2.0 * m.pad < h,
+                    "{}'s completion screen is {block}px in a {h}px window ({} lines) — this \
+                     screen has no scroll, so shorten the contract's name or its objective \
+                     wording",
+                    row.id,
+                    lines.len()
+                );
+            }
+        });
+    }
+
     /// A title is drawn large and **does not wrap**, so an over-long one runs
     /// off both edges rather than being clipped anywhere it could be seen.
     #[test]

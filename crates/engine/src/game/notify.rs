@@ -15,22 +15,28 @@ impl Game {
         self.queue_notification(kind, &[], None)
     }
 
-    /// `notify`, with a figure the authored copy could not have carried —
-    /// `Game::complete_contract`'s payout is the one caller today.
-    pub fn notify_with_detail(&mut self, kind: NotificationKind, detail: Option<String>) -> bool {
-        self.queue_notification(kind, &[], detail)
-    }
-
-    /// `notify`, with `{hole}` placeholders in the title and body replaced.
+    /// `notify`, with `{hole}` placeholders in the title and body replaced and
+    /// an optional figure the authored copy could not have carried.
     ///
-    /// It exists so one arm can be written once and read for many subjects:
-    /// the onboarding chain's briefing is one def filled from whichever
-    /// mission was just handed out, rather than eleven arms each repeating a
-    /// mission's own name and description. A hole no caller names is left
-    /// standing rather than blanked, so it is visible to a census instead of
-    /// reading as a missing word.
-    pub fn notify_filled(&mut self, kind: NotificationKind, fills: &[(&str, &str)]) -> bool {
-        self.queue_notification(kind, fills, None)
+    /// The holes exist so one arm can be written once and read for many
+    /// subjects: the onboarding chain's briefing is one def filled from
+    /// whichever mission was just handed out, rather than eleven arms each
+    /// repeating a mission's own name and description. A hole no caller names
+    /// is left standing rather than blanked, so it is visible to a census
+    /// instead of reading as a missing word.
+    ///
+    /// **Both extras on one wrapper, not one each.** They were two wrappers
+    /// while nothing wanted both; a completion screen that words the contract
+    /// *and* quotes its payout wants both, and the choice there is a fourth
+    /// wrapper for the fourth combination or one that carries what the door
+    /// carries. This is the second.
+    pub fn notify_filled(
+        &mut self,
+        kind: NotificationKind,
+        fills: &[(&str, &str)],
+        detail: Option<String>,
+    ) -> bool {
+        self.queue_notification(kind, fills, detail)
     }
 
     /// The **one door**. It reads the def, checks the latch and pushes a
@@ -41,10 +47,10 @@ impl Game {
     ///
     /// The two extras are **parameters on that one door**, not doors of
     /// their own — `pursuit_field`'s shape over `walk_field`. They are
-    /// orthogonal and the three public names above are the combinations
-    /// anything actually asks for: a figure the copy could not know
-    /// (`detail`), and holes in the copy the caller fills (`fills`). A
-    /// fourth wrapper is a signal to re-read the call site, not to add one.
+    /// orthogonal: a figure the copy could not know (`detail`), and holes in
+    /// the copy the caller fills (`fills`). A third wrapper is a signal to
+    /// re-read the call site, not to add one — `notify` for a site with
+    /// nothing to add, `notify_filled` for one that has.
     ///
     /// **The only way this returns `false` is a spent `OnceEver` latch.**
     /// It used to have a second refusal — "no file defines this id" — which

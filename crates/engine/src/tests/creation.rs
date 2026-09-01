@@ -342,3 +342,38 @@ fn the_player_view_carries_its_look_and_nothing_else_does() {
     }
     assert!(saw_player, "the player must appear in its own view");
 }
+
+/// **The anti-drift gate for the wizard's catalogue.** `CreationCatalogue`
+/// exists because the wizard runs before any `Game` does, and the failure
+/// it opens is a preview that disagrees with the run it is previewing. Both
+/// halves are asserted against the real `assets/` — the class rows *and*
+/// the class-priced starter rows — for every shipped class, because the
+/// pricing is the half a second copy of the formula would silently get
+/// wrong.
+#[test]
+fn the_creation_catalogue_agrees_with_the_game() {
+    let catalogue = CreationCatalogue::load(&test_assets_dir()).unwrap();
+    let game = Game::new(90_017, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    let from_game = game.class_rows();
+    let from_catalogue = catalogue.class_rows();
+    assert!(
+        !from_game.is_empty(),
+        "the shipped assets must carry classes, or this test proves nothing"
+    );
+    assert_eq!(from_game.len(), from_catalogue.len());
+    for (a, b) in from_game.iter().zip(from_catalogue.iter()) {
+        assert_eq!(a.class, b.class);
+        assert_eq!(a.name, b.name);
+        assert_eq!(a.axes, b.axes, "the spread summary drifted");
+        assert_eq!(a.kit, b.kit, "the kit summary drifted");
+    }
+
+    for class in AffinityClass::ALL.iter().copied().map(Some).chain([None]) {
+        assert_eq!(
+            game.starter_routine_rows(class),
+            catalogue.starter_rows(class),
+            "the starter pool priced differently for {class:?}"
+        );
+    }
+}

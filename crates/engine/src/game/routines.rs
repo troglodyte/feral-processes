@@ -3,7 +3,6 @@
 
 use crate::components::Routines;
 use crate::species::AffinityClass;
-use crate::tuning::AFFINITY_NEUTRAL;
 use crate::*;
 
 impl Game {
@@ -72,100 +71,10 @@ impl Game {
     /// What a routine does, in one line, with its magnitudes already scaled
     /// for an invoker at `level` with `affinity`.
     ///
-    /// **Exhaustive on `AbilityEffect`**, the rule `render/stack.rs`'s
-    /// `cell_mark` records: as a `_ =>` arm an eleventh effect would ship
-    /// with the page silently saying nothing about it.
+    /// A call, not a copy: `abilities::effect_label` owns the body, because
+    /// the creation wizard prices its routine rows with no `Game` to ask.
     fn routine_effect_label(&self, def: &AbilityDef, level: u32, affinity: f32) -> String {
-        use crate::abilities::{scaled_hp_power, scaled_range, scaled_stat_power};
-        match &def.effect {
-            AbilityEffect::Damage {
-                power,
-                spread,
-                status,
-            } => {
-                let band = scaled_range(
-                    crate::battle::DamageRange::centred(*power, *spread),
-                    level,
-                    affinity,
-                );
-                let mut line = format!("Damage {}", self.damage_range_label(band));
-                // The rider's chance is a property of the move and is not
-                // scaled by anything, so it prints as authored.
-                if let Some(status) = status {
-                    line.push_str(&format!(
-                        ", {:.0}% to inflict {}",
-                        status.chance * 100.0,
-                        status.kind.label()
-                    ));
-                }
-                line
-            }
-            AbilityEffect::Heal { power, spread } => {
-                let band = scaled_range(
-                    crate::battle::DamageRange::centred(*power, *spread),
-                    level,
-                    affinity,
-                );
-                format!("Restores {} Integrity", self.damage_range_label(band))
-            }
-            AbilityEffect::Buff {
-                kind,
-                power,
-                duration,
-            } => format!(
-                "{} {:+} for {duration} rounds",
-                kind.label(),
-                scaled_stat_power(*power, level, affinity)
-            ),
-            AbilityEffect::Debuff {
-                kind,
-                power,
-                duration,
-            } => format!(
-                "Inflicts {} ({}) for {duration} rounds",
-                kind.label(),
-                scaled_hp_power(*power, level, affinity)
-            ),
-            AbilityEffect::Drain {
-                power,
-                spread,
-                heal_fraction,
-            } => {
-                let band = scaled_range(
-                    crate::battle::DamageRange::centred(*power, *spread),
-                    level,
-                    affinity,
-                );
-                format!(
-                    "Damage {}, healing the invoker {:.0}% of it",
-                    self.damage_range_label(band),
-                    heal_fraction * 100.0
-                )
-            }
-            AbilityEffect::Cleanse => "Clears the recipient's status condition".to_string(),
-            AbilityEffect::Decompile => "Attempts a capture, spending a catalyst".to_string(),
-            AbilityEffect::FieldBuff {
-                kind,
-                power,
-                duration,
-                interval,
-            } => {
-                let magnitude =
-                    kind.magnitude_label(scaled_stat_power(*power, level, affinity), *interval);
-                // A `0` here is an until-rest buff whose count nothing
-                // reads, never a buff that expires the turn it is run —
-                // see `AbilityEffect::FieldBuff::duration`.
-                match kind.runs_until_rest() {
-                    true => format!("{magnitude} until the party rests"),
-                    false => format!("{magnitude} for {duration} turns"),
-                }
-            }
-            AbilityEffect::Phase => "Steps the party through one solid cell".to_string(),
-            AbilityEffect::Jump => {
-                "Moves the party to a cell you point at, fatally if it is solid".to_string()
-            }
-            AbilityEffect::Symlink => "Returns the party to the base anchor".to_string(),
-        }
+        crate::abilities::effect_label(def, level, affinity)
     }
 
     /// The starter pool for the creation wizard's Routine step — every
@@ -182,27 +91,9 @@ impl Game {
     /// can't be called here. Every row still reads through the one clamped
     /// class-plus-perk formula either path uses.
     pub fn starter_routine_rows(&self, class: Option<AffinityClass>) -> Vec<StarterRoutineRow> {
-        let level = 1;
-        let db = self.world.resource::<AbilityDb>();
-        let mut rows: Vec<StarterRoutineRow> = db
-            .all()
-            .filter(|def| def.starter)
-            .map(|def| {
-                let affinity = match def.effect.affinity_kind() {
-                    Some(kind) => self.player_affinity_for(class, kind),
-                    None => AFFINITY_NEUTRAL,
-                };
-                StarterRoutineRow {
-                    id: def.id.clone(),
-                    name: def.name.clone(),
-                    description: def.description.clone(),
-                    effect: self.routine_effect_label(def, level, affinity),
-                    power_cost: crate::abilities::routine_power_cost(def),
-                }
-            })
-            .collect();
-        rows.sort_by(|a, b| a.id.cmp(&b.id));
-        rows
+        crate::abilities::starter_rows(self.world.resource::<AbilityDb>(), |kind| {
+            self.player_affinity_for(class, kind)
+        })
     }
 
     /// `entity`'s slots in menu order, filled and empty alike.

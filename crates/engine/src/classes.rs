@@ -163,11 +163,63 @@ fn format_axes(affinities: &Affinities) -> String {
 
 /// `"3x Core Fragment, 4x Power Cell"`-style summary of a kit, for the same
 /// reason `format_axes` exists.
-fn format_kit(game: &Game, kit: &[(ItemId, u32)]) -> String {
+fn format_kit(items: &crate::items_db::ItemDb, kit: &[(ItemId, u32)]) -> String {
     kit.iter()
-        .map(|(item, qty)| format!("{qty}x {}", game.item_name(item)))
+        .map(|(item, qty)| {
+            let name = items
+                .get(item.as_str())
+                .map(|d| d.name.as_str())
+                .unwrap_or_else(|| item.as_str());
+            format!("{qty}x {name}")
+        })
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+/// `class`'s spread for `kind`, straight off a `ClassDb`. `AFFINITY_NEUTRAL`
+/// for no class and for a class the db cannot resolve — the resolver half
+/// of the empty-directory property.
+///
+/// A free function rather than a `Game` method because the creation wizard
+/// prices a class before any `Game` exists: `CreationCatalogue` and
+/// `Game::class_affinity` are its two callers, so neither can drift from
+/// the other by re-deriving the lookup.
+pub fn class_affinity(db: &ClassDb, class: Option<AffinityClass>, kind: AffinityKind) -> f32 {
+    let Some(class) = class else {
+        return crate::tuning::AFFINITY_NEUTRAL;
+    };
+    db.get(class)
+        .map(|def| def.affinities.get(kind))
+        .unwrap_or(crate::tuning::AFFINITY_NEUTRAL)
+}
+
+/// `Game::ability_affinity`'s player-arm sum, taken apart from the entity:
+/// a resolved class spread plus `perks::affinity_bonus`, clamped at
+/// `AFFINITY_MAX`. **The one place that combination is written.**
+/// `Game::affinity_with_perk` passes the player's own perks; the creation
+/// wizard passes `None`, because a player being created has none.
+pub fn affinity_with_perk(
+    class_affinity: f32,
+    perks: Option<&crate::components::Perks>,
+    kind: AffinityKind,
+) -> f32 {
+    (class_affinity + crate::perks::affinity_bonus(perks, kind)).min(crate::tuning::AFFINITY_MAX)
+}
+
+/// One row per loaded class, in `ClassDb::iter`'s order. The creation
+/// screen's rows, derived once — `Game::class_rows` and
+/// `CreationCatalogue::class_rows` are both calls to this.
+pub fn class_rows(classes: &ClassDb, items: &crate::items_db::ItemDb) -> Vec<views::ClassRow> {
+    classes
+        .iter()
+        .map(|def| views::ClassRow {
+            class: def.class,
+            name: def.name.clone(),
+            description: def.description.clone(),
+            axes: format_axes(&def.affinities),
+            kit: format_kit(items, &def.kit),
+        })
+        .collect()
 }
 
 impl Game {
@@ -190,14 +242,7 @@ impl Game {
     /// class the player is only considering, not yet committed to the
     /// entity.
     fn class_affinity(&self, class: Option<AffinityClass>, kind: AffinityKind) -> f32 {
-        let Some(class) = class else {
-            return crate::tuning::AFFINITY_NEUTRAL;
-        };
-        self.world
-            .resource::<ClassDb>()
-            .get(class)
-            .map(|def| def.affinities.get(kind))
-            .unwrap_or(crate::tuning::AFFINITY_NEUTRAL)
+        class_affinity(self.world.resource::<ClassDb>(), class, kind)
     }
 
     /// The perk half of `ability_affinity`'s player arm — a resolved class
@@ -208,8 +253,7 @@ impl Game {
     /// `player_affinity_for` below with an explicit class's — so neither
     /// path can drift from the other by re-deriving the sum itself.
     pub(crate) fn affinity_with_perk(&self, class_affinity: f32, kind: AffinityKind) -> f32 {
-        (class_affinity + crate::perks::affinity_bonus(self.player_perks(), kind))
-            .min(crate::tuning::AFFINITY_MAX)
+        affinity_with_perk(class_affinity, self.player_perks(), kind)
     }
 
     /// `ability_affinity`'s player-arm formula in full, for an explicit
@@ -228,16 +272,9 @@ impl Game {
     /// One row per loaded class, in `ClassDb::iter`'s order, for the
     /// creation screen.
     pub fn class_rows(&self) -> Vec<views::ClassRow> {
-        self.world
-            .resource::<ClassDb>()
-            .iter()
-            .map(|def| views::ClassRow {
-                class: def.class,
-                name: def.name.clone(),
-                description: def.description.clone(),
-                axes: format_axes(&def.affinities),
-                kit: format_kit(self, &def.kit),
-            })
-            .collect()
+        class_rows(
+            self.world.resource::<ClassDb>(),
+            self.world.resource::<crate::items_db::ItemDb>(),
+        )
     }
 }

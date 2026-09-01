@@ -148,3 +148,65 @@ impl Game {
         }
     }
 }
+
+/// The three databases the creation wizard reads, loaded on their own.
+///
+/// The wizard runs **before any `Game` exists** — the difficulty it picks is
+/// a `Game::new_with` argument — so it cannot ask a `World` for its rows.
+/// This is `App`'s `help_db`/`achievement_db` precedent one directory
+/// wider: a screen reachable with no run in progress owns the catalogue it
+/// draws from.
+///
+/// Nothing here derives anything itself. `class_rows` and `starter_rows`
+/// are calls to `classes::class_rows` and `abilities::starter_rows`, the
+/// same two functions `Game::class_rows` and `Game::starter_routine_rows`
+/// call — a preview that disagreed with what the run actually granted would
+/// be worse than no preview.
+pub struct CreationCatalogue {
+    classes: crate::classes::ClassDb,
+    items: crate::items_db::ItemDb,
+    abilities: crate::abilities::AbilityDb,
+}
+
+impl CreationCatalogue {
+    /// Loads the three directories the wizard needs from `assets_dir`.
+    /// Warnings are dropped rather than surfaced: `Game::new_with` loads the
+    /// same files a moment later and replays every one of them into the log,
+    /// so reporting here would double each line.
+    ///
+    /// Etched disks are deliberately not synthesised — `ItemDb` is read here
+    /// for kit *names* only, and every kit names an authored item.
+    pub fn load(assets_dir: &std::path::Path) -> std::io::Result<Self> {
+        let (abilities, _) = crate::abilities::AbilityDb::load_dir(&assets_dir.join("abilities"))?;
+        let (items, _) = crate::items_db::ItemDb::load_dir(&assets_dir.join("items"), &abilities)?;
+        // Absent-is-silent, `ClassDb`'s own contract: an empty catalogue
+        // leaves the class step with no rows, which is the pre-class game.
+        let (classes, _) = crate::classes::ClassDb::load_dir(&assets_dir.join("classes"))?;
+        Ok(Self {
+            classes,
+            items,
+            abilities,
+        })
+    }
+
+    /// One row per loaded class — `Game::class_rows`' own derivation.
+    pub fn class_rows(&self) -> Vec<views::ClassRow> {
+        crate::classes::class_rows(&self.classes, &self.items)
+    }
+
+    /// The starter pool, priced through `class`'s spread —
+    /// `Game::starter_routine_rows`' own derivation, with no perk term
+    /// because a player being created has no unlocked perks yet.
+    pub fn starter_rows(
+        &self,
+        class: Option<AffinityClass>,
+    ) -> Vec<crate::views::StarterRoutineRow> {
+        crate::abilities::starter_rows(&self.abilities, |kind| {
+            crate::classes::affinity_with_perk(
+                crate::classes::class_affinity(&self.classes, class, kind),
+                None,
+                kind,
+            )
+        })
+    }
+}

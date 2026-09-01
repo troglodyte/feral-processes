@@ -30,6 +30,22 @@ const VIGNETTE_FLOOR_EMPTY: f32 = 0.60;
 const STAFFED_MARK: f32 = 0.28;
 const STAFFED_MARK_INSET: f32 = 2.0;
 
+/// What a Repair Bay wears while a program is recovering in it.
+///
+/// **A glyph and not a rect**, unlike the two marks a machine wears: those
+/// say something about a *job* and share the corners with each other, while
+/// this says a body is lying in this building. A cross is the one shape a
+/// player already reads as that without being told, and it needs the middle
+/// of the tile to be one.
+///
+/// It draws **over** the Bay's own `r` rather than beside it. The shipped Bay
+/// authors `radius: 0`, which `offshift::in_reach` reads as *standing beside
+/// it* — a structure's own tile is blocked, so no program ever stands on one
+/// — and that is what leaves the middle of the Bay's tile free to be written
+/// on. A Bay whose def widened its reach would still be drawn on: the mark
+/// names the Bay, not the body.
+const RECOVERY_MARK: char = '+';
+
 /// A pending build site's slab and its edge.
 ///
 /// **Grey, and deliberately colourless.** Every other channel on this map is
@@ -1289,6 +1305,29 @@ fn draw_surface_map(
                     Color::new(ORANGE.r * vig, ORANGE.g * vig, ORANGE.b * vig, ORANGE.a),
                 );
             }
+            // A Bay with somebody in it, drawn on the same layer as the
+            // build caret and for the same reason: it is a mark that needs
+            // the middle of the tile and a vertical offset, and the glyph
+            // path above has neither to give it.
+            //
+            // **Base space, gated the way the raid flash is.** A Bay stands
+            // in base space and `EntityView::recovering` is derived from
+            // base-space `Position`s, so on the zone map this cell's
+            // coordinates mean something else entirely — the cross-space
+            // aliasing `view_entities` and the spawn-point outline both
+            // refuse. The structure would not be in `entities` out there
+            // anyway; the gate is what keeps that an assertion rather than a
+            // coincidence.
+            if base_pos.is_some() {
+                draw_recovery_mark(
+                    painter,
+                    structure,
+                    fx,
+                    Rect::new(px, py, tile_px, tile_px),
+                    glyph_px,
+                    vig,
+                );
+            }
             // A rare-spawn tier draws as a bar along the top edge rather
             // than by recolouring the glyph, because the glyph's colour is
             // usually spoken for: a hostile is tinted by `difficulty_color`
@@ -1585,6 +1624,45 @@ fn tile_origin_px(
 /// A tile outline with the sides in `open` left off — the sides this
 /// machine shares with one it is joined to.
 ///
+/// The bouncing `+` a Repair Bay wears while somebody is recovering in it,
+/// or nothing at all for every other cell on the map.
+///
+/// **The gate lives in here rather than at the call site**, so a test can
+/// hold both halves: a Bay with a body in it draws the mark and everything
+/// else — an empty Bay included — draws nothing. `EntityView::recovering` is
+/// the engine's own answer, derived from the same `Bays::serving` the heal
+/// runs through, so the mark cannot claim a Bay the heal is not working.
+///
+/// It rides `Fx::centred_bob`, the build caret's curve: the caret's argument
+/// applies unchanged here — the rest position is the middle of the tile with
+/// room on both sides, where `staffed_bob`'s upward-only form would sit the
+/// mark high in the cell for its whole cycle. Sharing the curve is also what
+/// keeps a base with a build site and a busy Bay in it reading as one map
+/// rather than two animations, and the phase key being the *entity* spreads
+/// two Bays out of step.
+fn draw_recovery_mark(
+    painter: &Painter,
+    structure: Option<&EntityView>,
+    fx: &Fx,
+    cell: Rect,
+    glyph_px: u16,
+    vig: f32,
+) {
+    let Some(ev) = structure.filter(|ev| ev.recovering) else {
+        return;
+    };
+    let glyph = RECOVERY_MARK.to_string();
+    let dims = painter.measure_map(&glyph, glyph_px);
+    let lift = fx.centred_bob(ev.entity);
+    painter.map(
+        &glyph,
+        cell.x + (cell.w - dims.width) / 2.0,
+        cell.y + (cell.h + dims.height) / 2.0 - lift,
+        glyph_px,
+        at_level(hud::palette::THREAT, vig),
+    );
+}
+
 /// `EntityView::linked_edges` is symmetric for this to work: both halves of
 /// a shared wall have to go, and dropping only the consumer's side would
 /// leave a single line between the pair that reads as a rendering fault
@@ -1642,6 +1720,111 @@ mod tests {
 
     fn test_assets() -> std::path::PathBuf {
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets")
+    }
+
+    /// One tile of the map, at the origin, big enough for the mark to have
+    /// somewhere to bounce.
+    const CELL: f32 = 20.0;
+    const CELL_GLYPH_PX: u16 = 16;
+
+    /// A Repair Bay as the map sees one, with or without a body in it.
+    fn bay_view(recovering: bool) -> EntityView {
+        EntityView {
+            entity: Entity::PLACEHOLDER,
+            pos: (0, 0),
+            glyph: 'r',
+            color: GlyphColor::White,
+            label: "Repair Bay".into(),
+            is_player: false,
+            is_tamed: false,
+            is_companion: false,
+            is_hostile: false,
+            is_structure: true,
+            is_anchor: false,
+            is_home: false,
+            tier: None,
+            ceiling: None,
+            max_tier: None,
+            is_boss: false,
+            nemesis: false,
+            can_work: false,
+            can_trade: false,
+            issues_contracts: false,
+            structure_worker: None,
+            wears_job_mark: false,
+            position_is_honest: true,
+            structure_attended: false,
+            recovering,
+            build: None,
+            output_stranded: false,
+            hp_fraction: None,
+            level: None,
+            durability: None,
+            fusions: 0,
+            rarity: Rarity::Ordinary,
+            machine_status: None,
+            linked_edges: Vec::new(),
+        }
+    }
+
+    /// Where the `+` was painted this frame, or `None` if it was not.
+    fn mark_y(shapes: &[bevy_egui::egui::epaint::ClippedShape]) -> Option<f32> {
+        shapes.iter().find_map(|cs| match &cs.shape {
+            bevy_egui::egui::Shape::Text(t) if t.galley.text() == "+" => Some(t.pos.y),
+            _ => None,
+        })
+    }
+
+    fn recovery_mark_at(fx: &Fx, ev: &EntityView) -> Option<f32> {
+        let (_, shapes) = with_painter(|p| {
+            draw_recovery_mark(
+                p,
+                Some(ev),
+                fx,
+                Rect::new(0.0, 0.0, CELL, CELL),
+                CELL_GLYPH_PX,
+                1.0,
+            )
+        });
+        mark_y(&shapes)
+    }
+
+    /// The whole of what this mark ships, in the three states that matter:
+    /// it is drawn on a Bay with somebody recovering in it, it is drawn on
+    /// *nothing* else, and it moves.
+    ///
+    /// The motion is not decoration and is asserted rather than assumed —
+    /// `draw_recovery_mark` reads `Fx::centred_bob`, and a mark pinned to the
+    /// middle of the tile would paint an identical shape every frame and pass
+    /// a test that only looked for the glyph. Sampled across a spread of
+    /// frame times rather than at one hand-picked half period, so retuning
+    /// the bob's rate cannot turn this into a failure that means nothing.
+    #[test]
+    fn a_repair_bay_wears_a_bouncing_mark_only_while_somebody_is_recovering() {
+        let mut fx = Fx::new();
+        fx.begin_frame(0.0, Vec::new(), Vec::new(), false);
+
+        assert!(
+            recovery_mark_at(&fx, &bay_view(true)).is_some(),
+            "a Bay with a program recovering in it must wear the mark"
+        );
+        assert!(
+            recovery_mark_at(&fx, &bay_view(false)).is_none(),
+            "a Bay standing empty must draw nothing at all"
+        );
+
+        let busy = bay_view(true);
+        let ys: Vec<f32> = [0.0, 0.15, 0.3, 0.45, 0.6, 0.75]
+            .into_iter()
+            .map(|now| {
+                fx.begin_frame(now, Vec::new(), Vec::new(), false);
+                recovery_mark_at(&fx, &busy).expect("the mark is drawn every frame")
+            })
+            .collect();
+        assert!(
+            ys.iter().any(|y| (y - ys[0]).abs() > 0.5),
+            "the mark must bounce, not sit still: {ys:?}"
+        );
     }
 
     /// A fresh `App` with a game already in progress, for a test that draws

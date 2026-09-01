@@ -12,7 +12,9 @@ use crate::game::base::hauling::{NoPost, step_to_post};
 use crate::game::base::offshift::in_reach;
 use crate::resources::Locale;
 use crate::structures::{StructureDb, StructureId};
+use crate::tuning::BAY_ADMISSION_HP_FRACTION;
 use bevy_ecs::prelude::Entity;
+use std::collections::HashSet;
 
 use crate::Game;
 
@@ -65,6 +67,22 @@ impl Bays {
             .min_by_key(|(p, _, _)| ((p.x - from.x).abs().max((p.y - from.y).abs()), p.x, p.y))
             .copied()
     }
+
+    /// The Bay currently serving a program standing at `here`, with the rate
+    /// it heals at — the nearest one, when that one is in reach.
+    ///
+    /// **The one expression of "this program is in a Bay."** `nearest` picks
+    /// a candidate and `in_reach` accepts or rejects it, and the pair is
+    /// asked twice: once by `run_repair_bays` to decide who to heal, once by
+    /// `Game::occupied_repair_bays` to decide which Bay the map marks as
+    /// busy. Written out at both sites the mark would be free to drift off
+    /// the heal — a Bay lighting up for a program lying a tile too far away,
+    /// or going dark on one it is healing — with nothing failing to compile
+    /// and the fault reading as a rendering bug.
+    pub(crate) fn serving(&self, here: Position) -> Option<(Position, i32)> {
+        let (site, rate, radius) = self.nearest(here)?;
+        in_reach(here, site, radius).then_some((site, rate))
+    }
 }
 
 impl Game {
@@ -107,12 +125,9 @@ impl Game {
         downed.sort();
         for (x, y, program) in downed {
             let here = Position { x, y };
-            let Some((site, rate, radius)) = bays.nearest(here) else {
+            let Some((_, rate)) = bays.serving(here) else {
                 continue;
             };
-            if !in_reach(here, site, radius) {
-                continue;
-            }
             // `restore_hp` caps at `max_hp` itself, so a Bay cannot overheal
             // and a rate of zero — a mod's negative one, floored — simply
             // lands nothing.
@@ -148,6 +163,110 @@ impl Game {
             sites.iter().map(|(kind, pos)| (kind, pos)),
             self.world.resource::<StructureDb>(),
         )
+    }
+
+    /// Marks every badly hurt staff program `Downed`, so the base's existing
+    /// recovery machinery collects it.
+    ///
+    /// **A second door onto `components::Downed`, and the widening is the
+    /// feature.** `bench_or_dissolve` was the only one, which meant a Bay
+    /// served programs that had been *killed* and benched — and nothing
+    /// else. A staff program that merely came out of a raid at a sliver of
+    /// Integrity had no recovery route at all once resting stopped mending
+    /// the base's own pool, and under Permadeath, where the bench does not
+    /// exist and `Downed` is never inserted, a Bay served literally nobody.
+    ///
+    /// **Insertion is the whole of what this does**, and that is what keeps
+    /// the rest of the feature free. The `on_shift` filter already drops a
+    /// `Downed` body, `schedule_base_labour`'s diff already frees its post
+    /// unconditionally, `drift_idle_staff` already walks it to a Bay, and
+    /// `run_repair_bays` already heals it and lifts the marker at full — so
+    /// the four sites that make a Bay work needed no edit, and the map's `+`
+    /// followed for the same reason. A parallel "hurt" marker beside
+    /// `Downed` would have been an edit at every one of them and a fifth
+    /// state for each to disagree about.
+    ///
+    /// **`Staff` alone, and the role filter is the `staff` argument rather
+    /// than a test in here.** The one caller passes `Game::base_staff`, which
+    /// *is* the `Game::program_role` derivation — so a party member, a
+    /// wielded program and a squad away on a sortie are all absent by
+    /// construction, and re-asking inside the loop was a second copy of that
+    /// question which no real call could ever answer differently.
+    /// `update_disgruntled` takes the same list on the same terms and makes
+    /// the same omission. What the roles mean here: a party member and a
+    /// wielded program are the player's to mend by resting, and a `Sortie`
+    /// program is not in the base to be walked anywhere — it is admitted, if
+    /// it is still hurt, on the first beat after it comes home as `Staff`.
+    ///
+    /// **Nothing is admitted while no Bay stands.** `Downed` is a one-way
+    /// door without one — `a_downed_program_with_no_bay_standing_stays_down`
+    /// is the shipped rule — which is the right price for a program that
+    /// died and quite the wrong one for a program that is merely hurt:
+    /// benching it would delete a worker from the base for the rest of the
+    /// run and never say so. With no Bay, a hurt program keeps working.
+    ///
+    /// Run beside `update_disgruntled`, before the posting half of
+    /// `schedule_base_labour` reads `on_shift` — that function's rule: a body
+    /// that leaves the line this tick must not also be handed a job this
+    /// tick.
+    pub(crate) fn admit_the_badly_hurt(&mut self, staff: &[Entity], bays: &Bays) {
+        if bays.is_empty() {
+            return;
+        }
+        for &worker in staff {
+            if self.world.get::<Downed>(worker).is_some() {
+                continue;
+            }
+            // The entry test is asked only of a body still working, which is
+            // `update_disgruntled`'s asymmetry and the reason there is no
+            // release line here: nothing in this loop can take the marker
+            // off, so the boundary has no back edge to flicker across.
+            let Some(stats) = self.world.get::<Stats>(worker) else {
+                continue;
+            };
+            if stats.max_hp <= 0 || stats.hp <= 0 {
+                continue;
+            }
+            if stats.hp_fraction() >= BAY_ADMISSION_HP_FRACTION {
+                continue;
+            }
+            self.world.entity_mut(worker).insert(Downed);
+            let name = self.creature_label(worker);
+            self.log_base(format!("{name} breaks off for repairs."));
+        }
+    }
+
+    /// The tile of every Bay currently serving a downed program.
+    ///
+    /// What `EntityView::recovering` is built from, and it is derived on
+    /// every look rather than stored: a program reaching full Integrity, one
+    /// taking its last step into reach, and a Bay being demolished under one
+    /// all change the answer with nothing to notice they did —
+    /// `build_views`' own reason for rebuilding `attended` per call.
+    ///
+    /// Keyed by tile because that is what the map has in hand. A Bay's
+    /// `Position` is a structure's own tile and no two structures share one,
+    /// so the tile identifies the Bay as well as its `Entity` would.
+    ///
+    /// **The same pass `run_repair_bays` makes**, through `Bays::serving`:
+    /// a Bay wears the mark exactly while it is healing somebody, so a
+    /// player watching the map and a program's Integrity climbing are
+    /// reading one fact.
+    pub(crate) fn occupied_repair_bays(&mut self) -> HashSet<(i32, i32)> {
+        let bays = self.repair_bays();
+        if bays.is_empty() {
+            return HashSet::new();
+        }
+        let downed: Vec<Position> = {
+            let mut query = self
+                .world
+                .query_filtered::<&Position, bevy_ecs::prelude::With<Downed>>();
+            query.iter(&self.world).copied().collect()
+        };
+        downed
+            .into_iter()
+            .filter_map(|here| bays.serving(here).map(|(site, _)| (site.x, site.y)))
+            .collect()
     }
 
     /// One step toward the nearest Repair Bay, or `NoPost` when there is

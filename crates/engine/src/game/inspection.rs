@@ -941,6 +941,11 @@ impl Game {
                 .any(|(kind, room)| *room > 0 && db.get(kind).is_some_and(|d| d.stores))
         };
 
+        // The Bays with somebody in them, base-wide and rebuilt per call for
+        // `anywhere_to_unload`'s reason: a program reaching full Integrity
+        // has to stop marking its Bay without anything having to notice.
+        let recovering_bays = self.occupied_repair_bays();
+
         let player_power = self.player_power();
         let mut linked_edges = self.linked_edges_by_structure();
 
@@ -978,6 +983,7 @@ impl Game {
                 let wears_job_mark = self.wears_job_mark(entity);
                 let position_is_honest = self.position_is_honest(entity);
                 let structure_attended = is_structure && attended.contains(&entity);
+                let recovering = is_structure && recovering_bays.contains(&(pos.x, pos.y));
                 let output_stranded = is_structure
                     && !anywhere_to_unload
                     && self
@@ -1029,6 +1035,7 @@ impl Game {
                     wears_job_mark,
                     position_is_honest,
                     structure_attended,
+                    recovering,
                     output_stranded,
                     hp_fraction,
                     level,

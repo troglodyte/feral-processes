@@ -482,7 +482,14 @@ impl Game {
     ///
     /// The benched arm leaves the program at 1 HP carrying
     /// `components::Downed`, still `Tamed` and therefore still staff by
-    /// derivation. `systems::repair_system` is what clears it.
+    /// derivation. `Game::run_repair_bays` is what clears it, at full HP.
+    ///
+    /// **No longer the only writer of that marker.**
+    /// `Game::admit_the_badly_hurt` inserts it too, for a staff program that
+    /// has fallen below `tuning::BAY_ADMISSION_HP_FRACTION` without dying —
+    /// so this remains the one door a *death* goes through, which is what
+    /// the difficulty branch here is about, and is not the one door onto
+    /// `Downed`.
     pub(crate) fn bench_or_dissolve(&mut self, creature: Entity) -> String {
         if *self.world.resource::<DifficultyMode>() == DifficultyMode::Permadeath {
             return self.dissolve_tamed_program(creature);

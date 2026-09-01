@@ -857,6 +857,12 @@ impl Game {
         // that downs tools this tick must not also be handed a job this
         // tick.
         self.update_disgruntled(&staff);
+        // The third gate on this line, and it sits with the other two for
+        // their reason: a body that breaks off for repairs this tick must
+        // not also be handed a job this tick. It inserts `Downed`, which
+        // every stage below — the `on_shift` filter, the drift's Bay arm,
+        // the diff's unconditional free — already knows what to do with.
+        self.admit_the_badly_hurt(&staff, &bays);
         if staff.is_empty() {
             // A valid, quiet state: orders queue and report normally and
             // nothing is posted. The status screen says the base has nobody

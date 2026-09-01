@@ -33,6 +33,18 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.66
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+- **A base with nothing that services a need no longer earns a grudge for
+  it.** The program is still told, in the same sentence as before; what it
+  stops doing is holding the base to account for a building the player may
+  not have researched, may not have the materials for, and has never been
+  told they want.
+- **A walled-off amenity still earns one**, which is the half of this with an
+  errand attached — the base had an answer and could not deliver it.
+
 ## 0.13.65
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

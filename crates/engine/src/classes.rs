@@ -177,11 +177,20 @@ impl Game {
     /// `ClassDb` cannot resolve, the resolver half of the empty-directory
     /// property.
     pub(crate) fn player_class_affinity(&self, kind: AffinityKind) -> f32 {
-        let Some(class) = self
+        let class = self
             .world
             .get::<PlayerIdentity>(self.player_entity())
-            .and_then(|identity| identity.class)
-        else {
+            .and_then(|identity| identity.class);
+        self.class_affinity(class, kind)
+    }
+
+    /// `class`'s spread for `kind` alone, no perk term — `player_class_affinity`'s
+    /// resolve, but for an explicit `class` argument instead of the one on
+    /// `PlayerIdentity`. Exists so `player_affinity_for` below can price a
+    /// class the player is only considering, not yet committed to the
+    /// entity.
+    fn class_affinity(&self, class: Option<AffinityClass>, kind: AffinityKind) -> f32 {
+        let Some(class) = class else {
             return crate::tuning::AFFINITY_NEUTRAL;
         };
         self.world
@@ -189,6 +198,31 @@ impl Game {
             .get(class)
             .map(|def| def.affinities.get(kind))
             .unwrap_or(crate::tuning::AFFINITY_NEUTRAL)
+    }
+
+    /// The perk half of `ability_affinity`'s player arm — a resolved class
+    /// spread plus `perks::affinity_bonus`'s per-kind perk bonus (`Perk::
+    /// DamageAffinity`, `HealAffinity`, ...), clamped at `AFFINITY_MAX`. The
+    /// one place that combination is computed: `ability_affinity` calls it
+    /// with `player_class_affinity`'s resolve (the entity's own class),
+    /// `player_affinity_for` below with an explicit class's — so neither
+    /// path can drift from the other by re-deriving the sum itself.
+    pub(crate) fn affinity_with_perk(&self, class_affinity: f32, kind: AffinityKind) -> f32 {
+        (class_affinity + crate::perks::affinity_bonus(self.player_perks(), kind))
+            .min(crate::tuning::AFFINITY_MAX)
+    }
+
+    /// `ability_affinity`'s player-arm formula in full, for an explicit
+    /// `class` rather than the one on `PlayerIdentity`. This is the door
+    /// `starter_routine_rows` prices a row through against a class the
+    /// creation wizard's player has only picked, not yet committed to the
+    /// entity.
+    pub(crate) fn player_affinity_for(
+        &self,
+        class: Option<AffinityClass>,
+        kind: AffinityKind,
+    ) -> f32 {
+        self.affinity_with_perk(self.class_affinity(class, kind), kind)
     }
 
     /// One row per loaded class, in `ClassDb::iter`'s order, for the

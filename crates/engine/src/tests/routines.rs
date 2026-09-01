@@ -1119,30 +1119,29 @@ fn no_starter_choice_leaves_the_slot_empty() {
 
 /// `starter_routine_rows` is genuinely computed through the same doors
 /// `routine_detail` (the etch-picker's inspect page) uses — `Game::
-/// ability_affinity` and `routine_power_cost` — rather than echoing each
-/// file's authored `description` or `power_cost` back verbatim. Checked
-/// against `checksum_repair`, which carries no status rider to complicate
-/// the expected string: at level 1 and `AFFINITY_NEUTRAL` its Heal band is
-/// `abilities::scaled_range` of `power: 25, spread: 6`, not the raw 19–31
-/// the file's own `description` quotes.
+/// player_affinity_for` (the class half of `ability_affinity`'s player arm,
+/// callable against a class not yet written to `PlayerIdentity`) and
+/// `routine_power_cost` — rather than echoing each file's authored
+/// `description` or `power_cost` back verbatim, or ignoring `class`
+/// entirely. Checked against `checksum_repair`, a Heal routine with no
+/// status rider to complicate the expected string.
 ///
-/// **What this does not yet prove, and why**: the row's numbers are
-/// supposed to move with the chosen *class* — "the same routine reads
-/// differently for a Striker and a Medic" is the design's own framing for
-/// this step. They do not, today: `Game::ability_affinity`'s player arm
-/// prices off the player's perks only, and the class term
-/// (`Game::player_class_affinity`, off a sibling task's `ClassDb`) had not
-/// merged into this branch as of this test. The second half of this test
-/// pins that down explicitly — every class prices identically — so a
-/// reader finds a failing assertion, not silent surprise, the day that
-/// stops being true; flip it to assert an actual difference once the class
-/// term lands.
+/// The design's own framing for this step is "the same routine reads
+/// differently for a Striker and a Medic"
+/// (`docs/superpowers/specs/2026-09-01-character-creation-design.md`), and
+/// it names a *direction*, not just a difference: Striker damps Heal to 0.8
+/// and Medic raises it to 1.3 (`assets/classes/striker.ron`,
+/// `assets/classes/medic.ron`). Each expected band below is computed with
+/// that exact authored multiplier through the real `scaled_range`, so a
+/// wiring bug that reads the wrong `AffinityKind` (e.g. `Damage` for a Heal
+/// effect) or swaps which class damps and which raises fails this test even
+/// though the two rows would still merely "differ".
 #[test]
 fn starter_rows_are_priced_through_the_class() {
     let game = Game::new(9004, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let rows = game.starter_routine_rows(Some(AffinityClass::Striker));
+    let neutral_rows = game.starter_routine_rows(None);
 
-    let ids: Vec<_> = rows.iter().map(|r| r.id.clone()).collect();
+    let ids: Vec<_> = neutral_rows.iter().map(|r| r.id.clone()).collect();
     assert_eq!(
         ids,
         vec![
@@ -1152,54 +1151,71 @@ fn starter_rows_are_priced_through_the_class() {
             "siphon_cycles".to_string(),
             "stack_smash".to_string(),
         ],
-        "the pool is exactly the five shipped starters, id-sorted"
+        "the pool is exactly the five shipped starters, id-sorted, unfiltered by class"
     );
 
-    let heal = rows.iter().find(|r| r.id == "checksum_repair").unwrap();
     let def = game
         .world
         .resource::<crate::abilities::AbilityDb>()
         .get("checksum_repair")
         .unwrap();
-    let expected_band = crate::abilities::scaled_range(
+    let neutral_band = crate::abilities::scaled_range(
         crate::battle::DamageRange::centred(25, 6),
         1,
         crate::tuning::AFFINITY_NEUTRAL,
     );
+    let neutral_heal = neutral_rows
+        .iter()
+        .find(|r| r.id == "checksum_repair")
+        .unwrap();
     assert_eq!(
-        heal.effect,
+        neutral_heal.effect,
         format!(
             "Restores {} Integrity",
-            game.damage_range_label(expected_band)
+            game.damage_range_label(neutral_band)
         ),
-        "the row's effect text must be the level-1, neutral-affinity band — not the file's raw prose"
+        "with no class the row must still read the level-1, neutral-affinity band through \
+         routine_effect_label — not the file's raw prose"
     );
     assert_eq!(
-        heal.power_cost,
+        neutral_heal.power_cost,
         crate::abilities::routine_power_cost(def),
         "power_cost must be the real charge, not the file's raw power_cost"
     );
 
-    // See the doc comment: this is today's real behaviour, not the design's
-    // eventual one.
-    for class in [
-        AffinityClass::Striker,
-        AffinityClass::Bastion,
-        AffinityClass::Medic,
-        AffinityClass::Saboteur,
-        AffinityClass::Leech,
-    ] {
-        assert_eq!(
-            game.starter_routine_rows(Some(class)),
-            rows,
-            "class {class:?} priced differently from Striker — `starter_routine_rows` now \
-             reads a class term that this test was written before; update the assertion \
-             above to expect the difference"
-        );
-    }
+    let striker_heal = game
+        .starter_routine_rows(Some(AffinityClass::Striker))
+        .into_iter()
+        .find(|r| r.id == "checksum_repair")
+        .unwrap();
+    let medic_heal = game
+        .starter_routine_rows(Some(AffinityClass::Medic))
+        .into_iter()
+        .find(|r| r.id == "checksum_repair")
+        .unwrap();
+
+    let striker_band =
+        crate::abilities::scaled_range(crate::battle::DamageRange::centred(25, 6), 1, 0.8);
+    let medic_band =
+        crate::abilities::scaled_range(crate::battle::DamageRange::centred(25, 6), 1, 1.3);
     assert_eq!(
-        game.starter_routine_rows(None),
-        rows,
-        "no class must not panic and must price the same as any other class today"
+        striker_heal.effect,
+        format!(
+            "Restores {} Integrity",
+            game.damage_range_label(striker_band)
+        ),
+        "a Striker damps Heal to 0.8 — the row must price through that spread, not the \
+         neutral one"
+    );
+    assert_eq!(
+        medic_heal.effect,
+        format!("Restores {} Integrity", game.damage_range_label(medic_band)),
+        "a Medic raises Heal to 1.3 — the row must price through that spread, not the \
+         neutral one"
+    );
+    assert_ne!(
+        striker_heal.effect, medic_heal.effect,
+        "a Striker and a Medic must read checksum_repair differently — the whole point of \
+         pricing rows through `class`"
     );
 }

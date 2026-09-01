@@ -33,6 +33,18 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.72
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+- **A badly hurt staff program takes itself to a Repair Bay.** Anyone left
+  under a fifth of their Integrity breaks off, walks there and comes back at
+  full — where a Bay used to serve only a program killed in a Forgiving run,
+  which made it an inert building under Permadeath.
+- **A Repair Bay wears a bouncing red `+` while somebody is in it.** The
+  building you paid for gave no sign it was doing its job, and two busy Bays
+  bounce out of step.
+
 ## 0.13.71
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

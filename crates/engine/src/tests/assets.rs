@@ -2609,3 +2609,53 @@ fn the_shipped_tutorial_chain_is_well_formed() {
         }
     }
 }
+
+/// The class censuses, over the **real** `assets/classes/` rather than a
+/// fixture — see `crates/engine/src/classes.rs`'s own doc comment for the
+/// contract these hold to.
+mod classes {
+    use super::*;
+    use crate::classes::ClassDb;
+    use crate::species::AffinityClass;
+
+    fn shipped() -> ClassDb {
+        let (db, warnings) = ClassDb::load_dir(&test_assets_dir().join("classes")).unwrap();
+        assert!(
+            warnings.is_empty(),
+            "shipped classes must load clean: {warnings:?}"
+        );
+        db
+    }
+
+    /// Driven by the enum rather than by naming five files, so a sixth
+    /// class fails this test the day it is added rather than shipping
+    /// unpickable — `cell_mark`'s rule.
+    #[test]
+    fn every_class_has_a_file() {
+        let db = shipped();
+        for class in AffinityClass::ALL {
+            assert!(db.get(class).is_some(), "{class:?} has no class file");
+        }
+    }
+
+    /// A kit naming an item that does not exist must fail the build, not
+    /// silently hand the player an empty pack.
+    #[test]
+    fn every_class_kit_item_exists() {
+        let db = shipped();
+        let (abilities, _) =
+            crate::abilities::AbilityDb::load_dir(&test_assets_dir().join("abilities")).unwrap();
+        let (items, _) =
+            crate::items_db::ItemDb::load_dir(&test_assets_dir().join("items"), &abilities)
+                .unwrap();
+        for def in db.iter() {
+            for (item, _) in &def.kit {
+                assert!(
+                    items.get(item.as_str()).is_some(),
+                    "{:?}'s kit names an item that does not exist: {item}",
+                    def.class
+                );
+            }
+        }
+    }
+}

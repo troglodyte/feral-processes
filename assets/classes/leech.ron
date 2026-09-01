@@ -1,0 +1,7 @@
+(
+    class: Leech,
+    name: "Leech",
+    description: "Feeds off what it fights. Drain routines land harder; buff routines land softer.",
+    affinities: (drain: 1.3, buff: 0.8),
+    kit: [("core_fragment", 5), ("power_cell", 3), ("ice_breaker", 2), ("cache_grain", 1)],
+)

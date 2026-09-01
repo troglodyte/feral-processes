@@ -2257,3 +2257,18 @@ pub struct TransferRow {
     pub carried: u32,
     pub can_put: u32,
 }
+
+/// One class offered on the creation screen — see `Game::class_rows`.
+///
+/// `axes` and `kit` are pre-formatted in the engine (`classes::format_axes`,
+/// `classes::format_kit`) so the two renderers cannot word one class's
+/// trade differently — `Game::copy_name`'s reason.
+pub struct ClassRow {
+    pub class: AffinityClass,
+    pub name: String,
+    pub description: String,
+    /// `"+Heal  -Damage"`-style summary of the spread.
+    pub axes: String,
+    /// `"3x Core Fragment, 4x Power Cell"`-style summary of the kit.
+    pub kit: String,
+}

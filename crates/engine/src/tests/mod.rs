@@ -16,6 +16,7 @@ mod building;
 mod caravans;
 mod catalog;
 mod chains;
+mod classes;
 mod combat;
 mod combat_abilities;
 mod combat_packs;

@@ -159,6 +159,7 @@ impl Game {
     ) -> std::io::Result<Self> {
         let AssetDbs {
             abilities: ability_db,
+            classes: class_db,
             achievements: achievement_db,
             contracts: contract_db,
             descriptions: description_db,
@@ -188,6 +189,7 @@ impl Game {
 
         let mut world = World::new();
         world.insert_resource(ability_db);
+        world.insert_resource(class_db);
         world.insert_resource(species_db);
         world.insert_resource(structure_db);
         world.insert_resource(research_db);
@@ -404,6 +406,7 @@ impl Game {
         }
         let AssetDbs {
             abilities: ability_db,
+            classes: class_db,
             achievements: achievement_db,
             contracts: contract_db,
             descriptions: description_db,
@@ -447,6 +450,7 @@ impl Game {
 
         let mut world = World::new();
         world.insert_resource(ability_db);
+        world.insert_resource(class_db);
         world.insert_resource(species_db);
         world.insert_resource(structure_db);
         world.insert_resource(research_db);
@@ -2036,6 +2040,7 @@ impl Game {
 /// accumulated for the caller to push into the message log.
 struct AssetDbs {
     abilities: AbilityDb,
+    classes: crate::classes::ClassDb,
     achievements: crate::achievements::AchievementDb,
     contracts: crate::contracts::ContractDb,
     descriptions: crate::descriptions::DescriptionDb,
@@ -2093,6 +2098,11 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     warnings.extend(items.synthesise_etched_disks(&abilities));
     let (perks, perk_warnings) = PerkDb::load_dir(&assets_dir.join("perks"))?;
     warnings.extend(perk_warnings);
+    // Same absent-is-silent rule again — see `ClassDb`'s own doc. An empty
+    // catalogue leaves the creation screen's class step with nothing to
+    // offer and every axis resolving neutral, which is the pre-class game.
+    let (classes, class_warnings) = crate::classes::ClassDb::load_dir(&assets_dir.join("classes"))?;
+    warnings.extend(class_warnings);
     // Not absent-is-silent, unlike `AffixDb` and `SectorDb`: every level a
     // Kernel Ring buys is spent in one of these trees, so a missing directory
     // is an install fault rather than a supported state. The `?` surfaces it
@@ -2184,6 +2194,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     }
     Ok(AssetDbs {
         abilities,
+        classes,
         talents,
         achievements,
         contracts,

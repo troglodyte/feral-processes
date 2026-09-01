@@ -1,0 +1,7 @@
+(
+    class: Saboteur,
+    name: "Saboteur",
+    description: "Wears an enemy down before the party ever touches it. Debuff routines land harder; repair routines land softer.",
+    affinities: (debuff: 1.3, heal: 0.8),
+    kit: [("ice_breaker", 5), ("core_fragment", 4), ("power_cell", 2), ("access_shard", 2)],
+)

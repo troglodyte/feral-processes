@@ -932,8 +932,13 @@ impl Game {
             return AFFINITY_NEUTRAL;
         };
         if actor == self.player_entity() {
-            let affinity =
-                AFFINITY_NEUTRAL + crate::perks::affinity_bonus(self.player_perks(), kind);
+            // Additive, matching this arm's existing shape: a class's
+            // spread stands in for the flat `AFFINITY_NEUTRAL` a perk bonus
+            // used to be added to, so a class plus a maxed affinity perk
+            // reaches the same ceiling sooner rather than exceeding it —
+            // see `classes` module doc comment.
+            let affinity = self.player_class_affinity(kind)
+                + crate::perks::affinity_bonus(self.player_perks(), kind);
             return affinity.min(AFFINITY_MAX);
         }
         let species = self

@@ -256,11 +256,30 @@ fn a_wild_program_waits_out_its_cooldown_between_moves() {
         ))
         .id();
 
+    // `ensure_local_population` runs every tick and can spawn more
+    // `Hostile`+`WanderAi` creatures near the player. `wander_ai_system`'s
+    // query has no stable order, so a second wanderer racing this one for
+    // `GameRng` draws would make the mean below depend on bevy's iteration
+    // order rather than on the wander formula this test asserts about —
+    // swept out every tick so `wanderer` is always the only entity a
+    // wander tick can draw for.
+    let despawn_other_wanderers = |game: &mut Game| {
+        let strays: Vec<Entity> = {
+            let mut query = game.world.query_filtered::<Entity, With<WanderAi>>();
+            query.iter(&game.world).filter(|&e| e != wanderer).collect()
+        };
+        for stray in strays {
+            game.world.despawn(stray);
+        }
+    };
+    despawn_other_wanderers(&mut game);
+
     let mut gaps: Vec<u64> = Vec::new();
     let mut last_move: Option<u64> = None;
     let mut prev = start;
     for step in 1..=1500u64 {
         game.tick();
+        despawn_other_wanderers(&mut game);
         let Some(now) = game.world.get::<Position>(wanderer).copied() else {
             break;
         };

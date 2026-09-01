@@ -178,7 +178,13 @@ fn the_summary_step_commits_the_choice() {
     press(&mut app, ch(menu_shortcut(icons + 2))); // the third swatch
     press(&mut app, ch('n'));
 
-    // Two units of Integrity on the first row that is Integrity.
+    // The step opens on a rolled spread that already spends the pool —
+    // clear it so exactly two units of Integrity is this test's own spend,
+    // not whatever the roll happened to leave there.
+    for i in 0..MainStat::all().len() {
+        app.menu_selected = i;
+        press(&mut app, GameKey::ShiftLeft);
+    }
     let integrity = MainStat::all()
         .iter()
         .position(|s| *s == MainStat::Integrity)
@@ -265,7 +271,19 @@ fn the_roll_leaves_a_finished_character_alone() {
     press(&mut app, ch(menu_shortcut(1))); // the second icon
     press(&mut app, ch(menu_shortcut(CREATION_ICONS.len() + 2))); // the third swatch
     press(&mut app, ch('n'));
-    press(&mut app, GameKey::Right); // a point on the highlighted axis
+    // The Points step now opens on a rolled spread that already spends the
+    // whole pool, so every axis sits at its own ceiling the instant the
+    // step is entered — Right/ShiftRight on any of them refuses. Only a
+    // leftward move has room, and since the roll spent the pool somewhere,
+    // some axis is guaranteed to hold at least one unit to take from.
+    let axis = app
+        .creation_choice()
+        .stats
+        .iter()
+        .position(|&units| units > 0)
+        .expect("a roll that spends the pool must spend it on some axis");
+    app.menu_selected = axis;
+    press(&mut app, GameKey::Left); // a point taken off the highlighted axis
     press(&mut app, GameKey::Enter);
     press(&mut app, ch('1')); // a starter routine
     press(&mut app, GameKey::Enter); // no name
@@ -339,7 +357,13 @@ fn points_cannot_be_overspent() {
     press(&mut app, ch('n'));
     assert_eq!(app.creation_step(), CreationStep::Points);
 
-    // Fill the first axis to the whole pool, then ask for one more.
+    // The step opens on a rolled spread that already spends the pool —
+    // clear it so "fill the first axis, then ask for one more" is this
+    // test's own doing rather than a coincidence of whatever was rolled.
+    for i in 0..MainStat::all().len() {
+        app.menu_selected = i;
+        press(&mut app, GameKey::ShiftLeft);
+    }
     app.menu_selected = 0;
     press(&mut app, GameKey::ShiftRight);
     assert_eq!(app.creation_points_left(), 0);
@@ -372,6 +396,15 @@ fn the_points_step_sees_a_modifier() {
     press(&mut app, ch('1'));
     press(&mut app, ch('n'));
     let axis = |want: MainStat| MainStat::all().iter().position(|s| *s == want).unwrap();
+
+    // The step now opens on a rolled spread that already spends the whole
+    // pool, which is what this test's own "the whole pool fits on it"
+    // assumption depends on being false-going-in — clear every axis first
+    // so this test still starts from an empty pool regardless of the roll.
+    for i in 0..MainStat::all().len() {
+        app.menu_selected = i;
+        press(&mut app, GameKey::ShiftLeft);
+    }
 
     // Integrity costs one point, so the whole pool fits on it — which is
     // what makes a *target* observably different from a single step. Def
@@ -661,5 +694,134 @@ fn the_routine_rows_are_priced_through_the_chosen_class() {
     assert_ne!(
         striker, medic,
         "two classes priced the same pool identically — the class term is not reaching the rows"
+    );
+}
+
+/// The Points step opens on a rolled spread rather than a blank form — the
+/// spec's own words, and until this test the actual gap: `advance_creation`
+/// moved the cursor and nothing seeded `stats`, so it opened at `[0; 0; 0;
+/// 0]` and cost `Some(0)` instead.
+#[test]
+fn the_points_step_opens_on_a_full_spread() {
+    let mut app = opened("full_spread");
+    press(&mut app, ch('1')); // a class
+    press(&mut app, ch('n')); // -> Points, no icon or swatch picked
+    assert_eq!(app.creation_step(), CreationStep::Points);
+    assert_eq!(
+        app.creation_choice().cost(),
+        Some(CREATION_STAT_POINTS),
+        "the step opened on {:?}, not a rolled spread",
+        app.creation_choice().stats
+    );
+}
+
+/// The rolled spread is a starting point, not a fixed one — the player must
+/// still be able to move points around, and moving them must not create or
+/// destroy any: `cost()` reads the same pool figure before and after.
+#[test]
+fn a_rolled_spread_can_be_redistributed() {
+    let mut app = opened("redistribute");
+    press(&mut app, ch('1'));
+    press(&mut app, ch('n'));
+    assert_eq!(app.creation_step(), CreationStep::Points);
+    assert_eq!(app.creation_choice().cost(), Some(CREATION_STAT_POINTS));
+
+    // Atk, Integrity and Decompiler all cost one point a unit; Def costs
+    // three, and two units of Def alone already outspends a five-point
+    // pool, so a one-point axis is guaranteed to hold at least one point
+    // for a roll that spent the pool at all — moving a point between two
+    // of them is a like-for-like swap the total spend cannot see.
+    let one_point_axes: Vec<usize> = MainStat::all()
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| **s != MainStat::Def)
+        .map(|(i, _)| i)
+        .collect();
+    let from = *one_point_axes
+        .iter()
+        .find(|&&i| app.creation_choice().stats[i] > 0)
+        .expect("a one-point axis always holds what Def alone could not");
+    let to = *one_point_axes.iter().find(|&&i| i != from).unwrap();
+
+    app.menu_selected = from;
+    press(&mut app, GameKey::Left);
+    app.menu_selected = to;
+    press(&mut app, GameKey::Right);
+
+    assert_eq!(
+        app.creation_choice().cost(),
+        Some(CREATION_STAT_POINTS),
+        "moving a point between two one-point axes must not change the total spend"
+    );
+}
+
+/// A spread the player redistributed by hand must survive walking away from
+/// the step and back — the seed is a starting point, and re-entering must
+/// not silently replace what was built on top of it. `Decided::stats` is
+/// what the entry seed checks; `spend_on_row` is what sets it the moment an
+/// arrow key actually changes a row.
+#[test]
+fn reentering_points_keeps_a_hand_made_spread() {
+    let mut app = opened("reenter_points");
+    press(&mut app, ch('1'));
+    press(&mut app, ch('n'));
+    assert_eq!(app.creation_step(), CreationStep::Points);
+
+    // A spread deliberately unlike anything the roll would leave alone:
+    // clear every axis, then put the whole pool on Decompiler alone.
+    for i in 0..MainStat::all().len() {
+        app.menu_selected = i;
+        press(&mut app, GameKey::ShiftLeft);
+    }
+    let decompiler = MainStat::all()
+        .iter()
+        .position(|s| *s == MainStat::Decompiler)
+        .unwrap();
+    app.menu_selected = decompiler;
+    press(&mut app, GameKey::ShiftRight);
+    let made = app.creation_choice().stats;
+    assert_eq!(app.creation_choice().cost(), Some(CREATION_STAT_POINTS));
+
+    press(&mut app, GameKey::Enter); // -> Routine
+    assert_eq!(app.creation_step(), CreationStep::Routine);
+    press(&mut app, ch('n')); // no routine -> Name
+    assert_eq!(app.creation_step(), CreationStep::Name);
+    press(&mut app, GameKey::Esc); // -> Routine
+    press(&mut app, GameKey::Esc); // -> Points, re-entered
+
+    assert_eq!(app.creation_step(), CreationStep::Points);
+    assert_eq!(
+        app.creation_choice().stats,
+        made,
+        "re-entering the step reseeded a spread the player had already made"
+    );
+}
+
+/// `[R]` must still be free to reroll the points after the step's own seed
+/// has already run — a seed is not the hand-made decision `Decided::stats`
+/// records. Checked directly against the flag rather than by comparing two
+/// random draws, which are not guaranteed to differ and so cannot
+/// black-box-prove a reroll actually ran.
+#[test]
+fn the_seed_does_not_mark_the_points_step_decided() {
+    let mut app = opened("seed_not_decided");
+    press(&mut app, ch('1'));
+    press(&mut app, ch('n'));
+    assert_eq!(app.creation_step(), CreationStep::Points);
+    assert!(
+        !app.creation_decided.stats_decided(),
+        "the rolled spread must not read as a hand-made decision"
+    );
+
+    press(&mut app, ch('R'));
+    assert_eq!(
+        app.creation_step(),
+        CreationStep::Summary,
+        "R must still be live for the points once the step's own seed has run"
+    );
+    assert_eq!(
+        app.creation_choice().cost(),
+        Some(CREATION_STAT_POINTS),
+        "the reroll still spends exactly the pool"
     );
 }

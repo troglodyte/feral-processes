@@ -24,6 +24,14 @@
 //! is a commitment rather than a shape, and a roll that could hand a player
 //! permadeath they never picked is not a convenience. `[R]` on the first
 //! step is refused instead.
+//!
+//! **The Points step opens on a roll, not a blank form** —
+//! `enter_creation_step` seeds it the moment the cursor lands there, once,
+//! never inside [`App::creation_rows`] (rebuilt every frame; rolling there
+//! would reroll every frame too). The seed does not set `Decided::stats`:
+//! it is not a hand-made choice, so `[R]` stays free to replace it and
+//! re-entering the step after it *has* been touched by hand does not
+//! stomp the player's own spread.
 
 use crate::*;
 use feral_processes_engine::abilities::AbilityId;
@@ -92,6 +100,15 @@ impl Decided {
     fn all(&self) -> bool {
         self.class && self.icon && self.colour && self.stats && self.routine
     }
+
+    /// Test-only window onto `stats`, because two random draws are not
+    /// guaranteed to differ and so cannot black-box-prove the entry seed
+    /// left this flag alone — the field is private to this module, so a
+    /// black-box test in `tests/creation.rs` has no other way to ask.
+    #[cfg(test)]
+    pub(crate) fn stats_decided(&self) -> bool {
+        self.stats
+    }
 }
 
 /// What one unit of `stat` costs out of the pool.
@@ -151,6 +168,30 @@ impl Roll {
     fn below(&mut self, n: usize) -> usize {
         (self.next() % n as u64) as usize
     }
+}
+
+/// A random spread that spends **exactly** `CREATION_STAT_POINTS`: one unit
+/// bought at a time from whichever axes are still affordable, so the loop
+/// can only halt once nothing affordable is left. That makes the pool
+/// invariant (`cost() == Some(CREATION_STAT_POINTS)`) a consequence of the
+/// construction rather than something checked after the fact — there is no
+/// path through this loop that can under- or over-spend. Shared by the
+/// step's own entry seed and by `roll_the_rest`'s `[R]`, so the two can
+/// never quote different odds for the same pool.
+fn roll_points_spread(roll: &mut Roll) -> [u32; 4] {
+    let mut stats = [0u32; 4];
+    let costs: Vec<u32> = MainStat::all().iter().map(|s| stat_cost(*s)).collect();
+    let mut left = CREATION_STAT_POINTS;
+    loop {
+        let affordable: Vec<usize> = (0..costs.len()).filter(|i| costs[*i] <= left).collect();
+        if affordable.is_empty() {
+            break;
+        }
+        let axis = affordable[roll.below(affordable.len())];
+        stats[axis] += 1;
+        left -= costs[axis];
+    }
+    stats
 }
 
 impl App {
@@ -315,11 +356,7 @@ impl App {
             // The Name step types text, so Esc is the only way out of it —
             // and a typed `R` there must not be a reroll.
             match self.creation_step.prev() {
-                Some(prev) => {
-                    self.creation_step = prev;
-                    self.menu_selected = 0;
-                    self.status_line = None;
-                }
+                Some(prev) => self.enter_creation_step(prev),
                 None => {
                     self.status_line = None;
                     self.mode = Mode::MainMenu;
@@ -345,12 +382,25 @@ impl App {
     /// Moves to the next step, or commits on the last one.
     fn advance_creation(&mut self) {
         match self.creation_step.next() {
-            Some(next) => {
-                self.creation_step = next;
-                self.menu_selected = 0;
-                self.status_line = None;
-            }
+            Some(next) => self.enter_creation_step(next),
             None => self.commit_creation(),
+        }
+    }
+
+    /// Lands the cursor on `step` — Esc and every forward advance's shared
+    /// door. Seeds the Points step's roll on the way in, and only there:
+    /// **once**, on arrival, never inside [`App::creation_rows`], which is
+    /// rebuilt every frame and would reroll on every one of them. Guarded
+    /// on `!creation_decided.stats` so a spread the player has already
+    /// redistributed by hand survives walking away and back — the seed
+    /// itself never sets that flag, since it is not the hand-made decision
+    /// the flag records.
+    fn enter_creation_step(&mut self, step: CreationStep) {
+        self.creation_step = step;
+        self.menu_selected = 0;
+        self.status_line = None;
+        if step == CreationStep::Points && !self.creation_decided.stats {
+            self.creation_choice.stats = roll_points_spread(&mut Roll::new());
         }
     }
 
@@ -601,19 +651,7 @@ impl App {
         }
 
         if !self.creation_decided.stats {
-            self.creation_choice.stats = [0; 4];
-            let costs: Vec<u32> = MainStat::all().iter().map(|s| stat_cost(*s)).collect();
-            let mut left = CREATION_STAT_POINTS;
-            loop {
-                let affordable: Vec<usize> =
-                    (0..costs.len()).filter(|i| costs[*i] <= left).collect();
-                if affordable.is_empty() {
-                    break;
-                }
-                let axis = affordable[roll.below(affordable.len())];
-                self.creation_choice.stats[axis] += 1;
-                left -= costs[axis];
-            }
+            self.creation_choice.stats = roll_points_spread(&mut roll);
         }
 
         if !self.creation_decided.routine {

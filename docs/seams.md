@@ -522,6 +522,61 @@ gate — it loads a checked-in v29 `dev-saves/` template rather than a
 hand-written string, and is what would catch the drain being dropped in a
 later tidy-up.
 
+### A run that ends is written into its save, and `Game::load` is what refuses it
+
+**A run that ends is written into its save, and `Game::load` is what
+refuses it.** Permadeath shipped costing a `DifficultyMode` tag, a harsher
+`end_battle` and a FLATLINE line, and buying nothing: `resources::GameOver`
+is a resource and was persisted nowhere, so the file left behind by a death
+was whatever `maybe_autosave` last wrote — at most `AUTOSAVE_INTERVAL_TICKS`
+(50) before it, and with no record that the player had died at all. It sat
+in the load list looking like any other run, and reloading it gave back a
+clean one. Not a zombie, not a penalty: the death simply had not happened.
+`handle_game_over_key` dropping `self.game` was the entire consequence.
+
+`SaveData::game_over: Option<String>` is the fix, and it is the *reason*
+rather than a flag because two surfaces want to say what ended and
+`history_summary` already proves that string is the sentence to say it
+with. Additive behind `#[serde(default)]`, so no `SAVE_FORMAT_VERSION`
+bump and no `dev-saves/` recapture — a file written before it existed
+loads as a run still going, which is what it was.
+
+Four things decide where each half lives.
+
+**The write is unconditional in `Game::save`** (`game_over:
+self.is_game_over()`), not a special path taken by the ending. It is `None`
+for the whole of a live run, so an autosave carries it as truthfully as the
+seal does, and there is no branch to forget.
+
+**Nothing branches on `DifficultyMode`.** `GameOver::reason` is written in
+exactly one place — `difficulty::death_handling_system`'s Permadeath arm —
+so the difficulty check is already spent, and a second copy of it here is
+the copy that would drift. A Forgiving death is a reboot and writes no
+reason, which is why its save stays loadable with no rule of its own.
+
+**The refusal is in `Game::load`, not `load_from_file`.** Two callers need
+to read a dead save: `App::list_saves` builds its summary from one to label
+it `FLATLINED`, and `savetool dump` has to be able to open one. So the
+refusal is the *game's* and not the *format's* — a developer can still
+dump, clear the field and pack a run back to life, which is what makes this
+safe to enforce at all.
+
+**The seal is app-core's, under `check_game_over`'s existing latch and
+below its arena return.** The engine does not know where the slot is;
+`current_save_path` is the `App`'s. It shares `history_written` because it
+is the same event — the run just ended, record it once — and it sits below
+the `in_arena()` early return for that call's own reason: an arena session
+touches no disk, and a fight lost against a `Save` player source carrying
+Permadeath is not the run. A failed write is surfaced rather than
+swallowed, in `flush_profile_writes`' wording, because it is the one
+failure that hands the run back.
+
+**What this deliberately does not close** is quitting. `Mode::QuitRunConfirm`
+still offers "quit without saving", so a Permadeath player can rewind to the
+last autosave to undo a bad fight — at most 50 ticks. Save-on-exit and
+delete-on-load were both weighed and left; the second costs the whole run to
+a power cut, and neither is what "you died and reloaded" meant.
+
 ### Destroying a tamed program has two paths, not one
 
 **Destroying a tamed program has two paths, not one.**

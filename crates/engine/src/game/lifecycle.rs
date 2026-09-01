@@ -368,6 +368,16 @@ impl Game {
 
     pub fn load(path: &Path, assets_dir: &Path) -> std::io::Result<Self> {
         let data = save::load_from_file(path)?;
+        // Permadeath's one guarantee, and it is enforced here rather than in
+        // `load_from_file` on purpose: the load list reads a dead slot to
+        // label it, and `savetool` has to be able to dump one. The refusal
+        // is the game's, not the format's.
+        if let Some(reason) = &data.game_over {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("that run is over — it {reason}. Its signal is gone from the Grid."),
+            ));
+        }
         let AssetDbs {
             abilities: ability_db,
             achievements: achievement_db,
@@ -1617,6 +1627,10 @@ impl Game {
             seed: self.world.resource::<WorldMap>().seed(),
             tick: self.world.resource::<GameClock>().tick,
             difficulty: *self.world.resource::<DifficultyMode>(),
+            // Written on every save, not only the one the ending takes:
+            // it is `None` for the whole of a live run, so an autosave
+            // carries it as truthfully as the seal does.
+            game_over: self.is_game_over(),
             player: save::PlayerSave {
                 position: (pos.x, pos.y),
                 hp: stats.hp,

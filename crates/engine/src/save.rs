@@ -792,6 +792,29 @@ pub struct SaveData {
     pub seed: u32,
     pub tick: u64,
     pub difficulty: DifficultyMode,
+    /// Why this run ended, if it has — `resources::GameOver::reason`, which
+    /// is written in exactly one place, `difficulty::death_handling_system`'s
+    /// Permadeath arm. `Game::load` refuses a save carrying one.
+    ///
+    /// This is the whole of what makes Permadeath permanent. `GameOver` is a
+    /// resource and was persisted nowhere, so a flatline left the slot
+    /// holding the last autosave — at most `AUTOSAVE_INTERVAL_TICKS` before
+    /// the death, and with no record of it. The mode cost a harsher
+    /// `end_battle` and bought nothing the player could not undo from the
+    /// main menu.
+    ///
+    /// The reason rather than a bare flag, because the load list and the
+    /// refusal both want to say *what* ended, and `history_summary` already
+    /// proves that string is the sentence to say it with.
+    ///
+    /// Additive behind `#[serde(default)]`, so it costs no
+    /// `SAVE_FORMAT_VERSION` bump and no `dev-saves/` recapture: a file
+    /// written before it existed loads as a run still going, which is
+    /// exactly what that run was. `savetool` reads and writes it like any
+    /// other field, so a developer can still dump, clear and pack a dead
+    /// run back to life — the refusal is the game's, not the format's.
+    #[serde(default)]
+    pub game_over: Option<String>,
     pub player: PlayerSave,
     pub creatures: Vec<CreatureSave>,
     pub structures: Vec<StructureSave>,
@@ -1326,6 +1349,7 @@ mod tests {
             seed: 1,
             tick: 0,
             difficulty: DifficultyMode::Forgiving,
+            game_over: None,
             player: PlayerSave {
                 position: (0, 0),
                 hp: 30,

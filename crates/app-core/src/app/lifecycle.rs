@@ -153,9 +153,17 @@ impl App {
                 let summary = feral_processes_engine::save::load_from_file(&path)
                     .ok()
                     .map(|data| {
+                        // A run that ended says so in place of its clock:
+                        // the tick it stopped at is the one figure that
+                        // cannot help anyone here, and the slot is not
+                        // loadable.
+                        let state = match data.game_over {
+                            Some(_) => "FLATLINED".to_string(),
+                            None => format!("tick {}", data.tick),
+                        };
                         format!(
-                            "Lv{} · Zone {} · {:?} · tick {}",
-                            data.player.level, data.zone, data.difficulty, data.tick
+                            "Lv{} · Zone {} · {:?} · {state}",
+                            data.player.level, data.zone, data.difficulty
                         )
                     });
                 (
@@ -512,6 +520,29 @@ impl App {
         }
     }
 
+    /// Writes the ended run back over its own slot, so the flatline reaches
+    /// disk. `SaveData::game_over` is what `Game::load` refuses on, and
+    /// without this the file is still the last autosave — a run with no
+    /// record of the death and at most `AUTOSAVE_INTERVAL_TICKS` behind it,
+    /// which is what let a Permadeath player reload out of one.
+    ///
+    /// Under the same latch as the history line and below `check_game_over`'s
+    /// arena return, for that call's own reason: an arena session touches no
+    /// disk, and a fight lost against a Permadeath save is not the run.
+    ///
+    /// A failed write is surfaced rather than swallowed — it is the one
+    /// failure that hands the run back — and it is `flush_profile_writes`'
+    /// wording because it is the same kind of news.
+    fn seal_run(&mut self) {
+        let Some(path) = self.current_save_path.clone() else {
+            return;
+        };
+        let Some(game) = &mut self.game else { return };
+        if let Err(e) = game.save(&path) {
+            self.status_line = Some(format!("Could not seal the run: {e}"));
+        }
+    }
+
     /// Guarded separately from `after_tick` rather than folded into it,
     /// because it is not a post-tick concern and is not called from there:
     /// its three callers are the battle tail, the trade screen and the map,
@@ -539,6 +570,7 @@ impl App {
                 let _ = game.write_history(&self.history_path);
             }
             self.history_written = true;
+            self.seal_run();
         }
         // The other exit from `Mode::BattleResult`: a run that ends on the
         // losing round never gets a key press on the results screen, so

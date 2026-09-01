@@ -2607,6 +2607,7 @@ fn hold_is_met_by_what_the_player_is_carrying() {
         zone: 1,
         standing: Vec::new(),
         carried: vec![(ItemId::from(crate::items::ids::CORE_FRAGMENT), 11)],
+        posted: false,
     };
     assert!(!objective.already_met(&state), "eleven is not twelve");
     state.carried[0].1 = 12;
@@ -2642,6 +2643,7 @@ fn hold_is_not_met_by_an_empty_pack() {
         zone: 1,
         standing: Vec::new(),
         carried: Vec::new(),
+        posted: false,
     };
     assert!(!objective.already_met(&state));
 }
@@ -2946,6 +2948,109 @@ mod deed_sites {
         let machine = spawn_machine_at(&mut game, "mining_node", 2, 0);
         game.set_standing_job(machine, false, false).unwrap();
         assert!(!deeds(&game).contains(&Deed::PostedStaff));
+    }
+
+    /// A machine already kept worked when the mission arrives satisfies it.
+    ///
+    /// The deed alone could not: `RunFeats::deeds` is drained every tick, so
+    /// a job set before the mission was handed out is gone by the time
+    /// anything asks. The only way left was to turn the job **off** and on
+    /// again — which pulls the body off the machine and is the opposite of
+    /// what the mission asks for.
+    #[test]
+    fn a_machine_already_kept_worked_finishes_the_mission() {
+        let mut game = Game::new(32, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        stand_in_base(&mut game);
+        let machine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+        game.set_standing_job(machine, true, false).unwrap();
+        // The tick that drains the deed, long before the mission exists.
+        game.tick();
+
+        give(
+            &mut game,
+            def(
+                "already_posted",
+                Objective::Perform {
+                    deed: Deed::PostedStaff,
+                },
+                vec![Reward::Xp(1)],
+            ),
+            0,
+        );
+        game.tick();
+
+        assert!(
+            game.world
+                .resource::<crate::resources::ActiveContracts>()
+                .done
+                .contains(&ContractId::from("already_posted")),
+            "a machine already kept staffed is a machine kept staffed"
+        );
+    }
+
+    /// The control the one above is worthless without: a mission that
+    /// finishes itself against a base with nothing kept worked would pass it
+    /// and delete the objective.
+    #[test]
+    fn a_base_with_nothing_kept_worked_does_not_finish_the_mission() {
+        let mut game = Game::new(33, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        stand_in_base(&mut game);
+        spawn_machine_at(&mut game, "mining_node", 2, 0);
+
+        give(
+            &mut game,
+            def(
+                "nothing_posted",
+                Objective::Perform {
+                    deed: Deed::PostedStaff,
+                },
+                vec![Reward::Xp(1)],
+            ),
+            0,
+        );
+        game.tick();
+
+        assert!(
+            !game
+                .world
+                .resource::<crate::resources::ActiveContracts>()
+                .done
+                .contains(&ContractId::from("nothing_posted")),
+            "a machine standing idle is not a machine kept staffed"
+        );
+    }
+
+    /// A *guard* job is not a work job, and the state check must read the
+    /// same half of `StandingJob` the deed did.
+    #[test]
+    fn a_standing_guard_alone_does_not_finish_the_mission() {
+        let mut game = Game::new(34, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        stand_in_base(&mut game);
+        let machine = spawn_machine_at(&mut game, "mining_node", 2, 0);
+        game.set_standing_job(machine, false, true).unwrap();
+        game.tick();
+
+        give(
+            &mut game,
+            def(
+                "guard_only",
+                Objective::Perform {
+                    deed: Deed::PostedStaff,
+                },
+                vec![Reward::Xp(1)],
+            ),
+            0,
+        );
+        game.tick();
+
+        assert!(
+            !game
+                .world
+                .resource::<crate::resources::ActiveContracts>()
+                .done
+                .contains(&ContractId::from("guard_only")),
+            "keeping a guard on it is not keeping it running"
+        );
     }
 
     /// **The scheduler is not the player.** `post_worker`'s only non-test

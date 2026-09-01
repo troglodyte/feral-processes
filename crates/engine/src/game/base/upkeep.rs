@@ -328,21 +328,35 @@ impl Game {
         // After the roll, `maybe_spawn_wild_creature`'s reason: a miss must
         // leave the RNG stream untouched by this gate, so a base too thin to
         // survive attrition still costs nothing but the draw already taken.
-        if self.undowned_base_staff_count() < RAID_MIN_BASE_STAFF {
+        if self.defending_base_staff_count() < RAID_MIN_BASE_STAFF {
             return;
         }
         self.run_raid();
     }
 
-    /// How many base-staff programs (`Game::base_staff`) are not currently
-    /// `Downed` — the population `RAID_MIN_BASE_STAFF` is measured against.
-    /// A downed program cannot defend the base or absorb the next raid, so
-    /// counting it toward the floor would let a base already reduced to
-    /// wreckage keep taking hits.
-    fn undowned_base_staff_count(&self) -> usize {
+    /// How many base-staff programs (`Game::base_staff`) could actually
+    /// defend the base — the population `RAID_MIN_BASE_STAFF` is measured
+    /// against. A body that cannot defend or absorb the next raid must not
+    /// be counted toward the floor, or a base already reduced to wreckage
+    /// keeps taking hits.
+    ///
+    /// **Two states, not one, and the names are the trap.**
+    /// `components::Downed` is a program that died and was benched;
+    /// `Disgruntled { DownedTools }` is one whose morale ran far enough
+    /// under that it stopped working. Neither will lift a finger, and only
+    /// the first was checked here at first — so a base whose whole staff had
+    /// downed tools read as fully staffed and was swept until its machines
+    /// were gone, which is exactly the failure the floor exists to prevent.
+    ///
+    /// The morale half is `has_downed_tools` **called**, not restated: it is
+    /// the same question `schedule_base_labour`'s `on_shift` filter asks,
+    /// and a copy here would be the one that forgets `Grievance` has two
+    /// rungs. A `Sulking` program still works and still counts.
+    fn defending_base_staff_count(&self) -> usize {
         self.base_staff()
             .into_iter()
             .filter(|&e| self.world.get::<Downed>(e).is_none())
+            .filter(|&e| !self.has_downed_tools(e))
             .count()
     }
 

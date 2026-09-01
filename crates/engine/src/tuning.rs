@@ -2243,15 +2243,25 @@ pub const BASE_PET_CAPACITY: usize = 3;
 /// structure comes under raid, if any exist.
 pub const RAID_CHANCE_PER_TICK: f64 = 0.012;
 
-/// The fewest **undowned** base-staff programs (`Game::base_staff`, minus
-/// `components::Downed`) the base must have before a raid may fire at all.
-/// An opening base has too few bodies to absorb attrition — a raid or two
-/// back to back can down the whole staff, and once every program is
-/// `Downed` there is nobody left to defend the next one, so the base never
-/// recovers. Checked in `Game::raid_check` **after** the chance roll, so a
+/// The fewest base-staff programs that could actually *defend*
+/// (`Game::defending_base_staff_count` — `Game::base_staff`, minus
+/// `components::Downed` and minus anything that has downed tools) the base
+/// must have before a raid may fire at all. An opening base has too few
+/// bodies to absorb attrition — a raid or two back to back can down the
+/// whole staff, and once no program is left standing there is nobody to
+/// defend the next one, so the base never recovers. Checked in `Game::raid_check` **after** the chance roll, so a
 /// raid that would have missed anyway still consumes the same draw from
 /// `GameRng` and this gate cannot shift any other test's RNG stream.
-pub const RAID_MIN_BASE_STAFF: usize = 3;
+///
+/// **Above `BASE_PET_CAPACITY` (3) on purpose**, so raids cannot begin
+/// until the base has grown a roster structure — a Data Cache, the one
+/// shipped `pet_slot_bonus` — or the player has taken the roster perk. A
+/// floor at or below the opening capacity meant a base being swept while
+/// its whole roster was still the three programs it started with, which is
+/// the attrition this constant exists to hold off. Pinned against the
+/// literal by `four_undowned_staff_is_still_below_the_raid_floor`, because
+/// every other raid test reads this constant and so moves with it.
+pub const RAID_MIN_BASE_STAFF: usize = 5;
 
 /// Damage a raid deals to a structure's `Durability` when it has no
 /// assigned cronjob worker defending it. Deliberately small relative to
@@ -3557,9 +3567,26 @@ pub const MORALE_SULKS_AT: f32 = -8.0;
 
 /// Morale at or below which a program stops taking postings altogether.
 ///
-/// Roughly two maxed grudges' worth. Above zero it would fire on a program
-/// that is merely having an ordinary week, which is not acting out.
-pub const MORALE_DOWNS_TOOLS_AT: f32 = -18.0;
+/// **Below what any single memory can reach**, which is the whole of what
+/// this number is for: downing tools takes a *pattern* of things going
+/// wrong, never one of them. Held by
+/// `no_single_memory_can_down_a_programs_tools` against the real
+/// `assets/memories/`, with `two_bad_memories_can_still_down_a_programs_tools`
+/// as the control — a rung nothing can reach is a deleted feature.
+///
+/// This was -18, "roughly two maxed grudges' worth", and that reading
+/// counted a memory's `valence` alone. A grudge is not its valence: it is
+/// valence x `strike_cap` x `DISPOSITION_MEMORY_SWING`, so the worst single
+/// memory the game ships (`mauled_by`, -8 at a cap of 4, felt by an
+/// `Abrasive` program) reaches **-44.8** and cleared the old line more than
+/// twice over on its own. `frayed_here` did it too, on a base that simply
+/// had nothing servicing a need — a standdown the player could neither
+/// prevent nor answer, lasting longer than the run that earned it.
+///
+/// The mild rung is deliberately still reachable from one memory: a single
+/// bad experience makes a program sulk, and that is what the ladder's first
+/// step is for.
+pub const MORALE_DOWNS_TOOLS_AT: f32 = -50.0;
 
 /// Morale at which a disgruntled program goes back to work.
 ///

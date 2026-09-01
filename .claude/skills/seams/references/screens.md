@@ -7,6 +7,32 @@
   refused *by version*. **A positional tuple is the one shape this does not
   save you from** — prefer a named struct, or the next property costs a legacy
   field.
+- **A run that ends is written into its save, and `Game::load` is what
+  refuses it.** `resources::GameOver` is a resource and was persisted
+  nowhere, so a Permadeath flatline left the slot holding the last autosave
+  — at most `AUTOSAVE_INTERVAL_TICKS` (50) behind the death and with no
+  record of it — and reloading gave back a clean run. `SaveData::game_over`
+  is the *reason*, not a flag: `history_summary` already proves that string
+  is the sentence, and the load list spends it as `FLATLINED`. Additive
+  behind `#[serde(default)]`, so no bump. Four placements are load-bearing.
+  `Game::save` writes it **unconditionally** — `None` for a live run, so an
+  autosave is as truthful as the seal and there is no branch to forget.
+  **Nothing branches on `DifficultyMode`**: `death_handling_system`'s
+  Permadeath arm is the only writer of a reason, so the check is spent, and
+  a Forgiving reboot leaves its save loadable with no rule of its own. The
+  refusal is in **`Game::load`, never `load_from_file`** — `list_saves`
+  reads a dead save to label it and `savetool dump` must open one, so the
+  refusal is the game's and not the format's, and a developer can still
+  clear the field and pack a run back to life. And the **seal is
+  app-core's**, since `current_save_path` is the `App`'s: it rides
+  `check_game_over`'s `history_written` latch (same event, recorded once)
+  and sits **below** its `in_arena()` return, or a lost arena fight against
+  a Permadeath save would end the run that was never fought. A failed write
+  is surfaced in `flush_profile_writes`' wording — it is the one failure
+  that hands the run back. **Quitting is deliberately not closed**:
+  `Mode::QuitRunConfirm` still offers "quit without saving", so a rewind of
+  up to 50 ticks survives; save-on-exit and delete-on-load were weighed and
+  left.
 - **A log line carries two independent axes, `MessageKind` and
   `MessageSource`.** Kind has three consumers that each mean something
   different by it, which is why "this came from the base" is a second field.

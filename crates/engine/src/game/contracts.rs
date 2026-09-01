@@ -50,18 +50,23 @@ pub fn contract_system(
     // tile while the party is underground, so a depth taken from it would be a
     // surface coordinate.
     locale: Res<Locale>,
-    structures: Query<&Structure>,
+    // One query rather than two: `StandingJob` only ever sits on a
+    // structure, and both facts below are read off the same iteration.
+    structures: Query<(&Structure, Option<&crate::components::StandingJob>)>,
     player: Query<&Inventory, With<crate::components::Player>>,
 ) {
     let state = crate::contracts::ObjectiveState {
         depth: contract_depth(&locale),
         zone: zone.0,
-        standing: structures.iter().map(|s| s.kind.clone()).collect(),
+        standing: structures.iter().map(|(s, _)| s.kind.clone()).collect(),
         carried: player
             .iter()
             .next()
             .map(|inv| inv.items.clone())
             .unwrap_or_default(),
+        posted: structures
+            .iter()
+            .any(|(_, job)| job.is_some_and(|j| j.work)),
     };
 
     for contract in &mut held.active {
@@ -72,7 +77,15 @@ pub fn contract_system(
                 .iter()
                 .filter(|killed| species.as_ref().is_none_or(|want| *want == **killed))
                 .count() as u32,
-            Objective::Perform { deed } => feats.deeds.iter().filter(|d| *d == deed).count() as u32,
+            // Both halves: the keypress that set the job, and the job
+            // standing there already when the mission arrived. They agree
+            // whenever both fire, and `progress` is capped at `target`
+            // below, so counting both is one branch fewer than telling them
+            // apart for no observable difference.
+            Objective::Perform { deed } => {
+                feats.deeds.iter().filter(|d| *d == deed).count() as u32
+                    + u32::from(deed.already_true(&state))
+            }
             // Not here — see the module doc.
             Objective::Deliver { .. } => 0,
             // The state-shaped ones advance by exactly the predicate
@@ -612,6 +625,12 @@ impl Game {
                 zone,
                 standing: self.standing_structures(),
                 carried: Vec::new(),
+                // `depth`'s and `carried`'s reason exactly: a standing job
+                // is toggled from a screen, so a board answered from the
+                // live value would gain and lose a slot as the player set
+                // and cleared one, and `swap_remove` reshuffles every other
+                // slot with it.
+                posted: false,
             })
     }
 

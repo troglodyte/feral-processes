@@ -2234,6 +2234,79 @@ fn the_recovery_is_announced_once_and_not_every_tick() {
     );
 }
 
+/// Which Bays the map would mark as busy, by tile.
+fn occupied_bay_tiles(game: &mut Game) -> Vec<(i32, i32)> {
+    game.view_entities(20, 20)
+        .into_iter()
+        .filter(|v| v.recovering)
+        .map(|v| v.pos)
+        .collect()
+}
+
+/// **The mark is the heal, asked a second way.** `EntityView::recovering` is
+/// what the map draws its bouncing `+` from, and it has to answer for the
+/// same three states `run_repair_bays` acts on: somebody in reach, somebody
+/// out of reach, and nobody down at all. A flag that merely said "this is a
+/// Repair Bay" would pass a draw test and light an empty Bay up forever.
+///
+/// The Bay is *placed* rather than hand-spawned, unlike the fixture the
+/// other Bay tests share: `spawn_machine_at` writes no `Glyph`, and
+/// `view_entities` selects on one — so a hand-spawned machine is on no map
+/// and has no view to carry the flag.
+#[test]
+fn a_bay_reports_itself_occupied_only_while_a_program_is_recovering_in_it() {
+    let mut game = Game::new(3505, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 200);
+    place_now(&mut game, "repair_bay", 2, 0).expect("a Repair Bay is buildable from the start");
+    let site = find_structure_by_kind(&mut game, "repair_bay").unwrap();
+    let at = *game.world.get::<Position>(site).unwrap();
+    let bay = (at.x, at.y);
+
+    let program = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(program).insert(Downed);
+    game.world.get_mut::<Stats>(program).unwrap().hp = 1;
+    *game.world.get_mut::<Position>(program).unwrap() = Position {
+        x: at.x + 1,
+        y: at.y,
+    };
+
+    assert_eq!(
+        occupied_bay_tiles(&mut game),
+        vec![bay],
+        "a downed program lying in the Bay is what marks it"
+    );
+
+    // The same rejection `a_downed_program_out_of_reach_of_the_bay_is_not_
+    // repaired` makes: a body lying across the base is not in this Bay, and
+    // a mark that ignored reach would say it was.
+    *game.world.get_mut::<Position>(program).unwrap() = Position { x: -4, y: -4 };
+    assert!(
+        occupied_bay_tiles(&mut game).is_empty(),
+        "a program out of reach must not light the Bay up"
+    );
+
+    // Back in reach, and healed off the bench. The `Downed` marker coming
+    // off is what ends the recovery, so it is what has to end the mark.
+    *game.world.get_mut::<Position>(program).unwrap() = Position {
+        x: bay.0 + 1,
+        y: bay.1,
+    };
+    assert_eq!(occupied_bay_tiles(&mut game), vec![bay]);
+    for _ in 0..20 {
+        game.run_repair_bays();
+    }
+    assert!(
+        game.world.get::<Downed>(program).is_none(),
+        "the fixture must actually reach full Integrity"
+    );
+    assert!(
+        occupied_bay_tiles(&mut game).is_empty(),
+        "a Bay standing empty is quiet; the mark says somebody is in it"
+    );
+}
+
 /// The player's decision, pinned: without a Bay a downed program stays down
 /// for as long as the run lasts. Nothing else heals it, and there is no
 /// timer quietly doing the job.

@@ -793,6 +793,19 @@ pub struct EntityView {
     /// builder wears it for the whole job. Distinct from `structure_worker`,
     /// which counts any `Task` wherever its holder happens to be.
     pub structure_attended: bool,
+    /// If this is a structure, whether it is a Repair Bay with a downed
+    /// program in reach of it right now — see `Game::occupied_repair_bays`.
+    ///
+    /// A sibling of `structure_attended` above rather than a `MachineStatus`
+    /// or a second `structure_worker`: a Bay runs no job, so it has no status
+    /// to be in, and the program lying in it holds no `Task`, so nothing in
+    /// the posting vocabulary describes it. It is the same shape those two
+    /// have — a fact about a structure the map draws a mark from — and is
+    /// derived per call for the same reason.
+    ///
+    /// **Not "is this structure a Bay."** A Bay standing empty is quiet; the
+    /// mark exists to say somebody is in it.
+    pub recovering: bool,
     /// If this is a structure, whether its output buffer is full while
     /// nothing in the base can take a load — no depot built, or every depot
     /// already full.

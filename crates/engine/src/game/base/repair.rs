@@ -13,6 +13,7 @@ use crate::game::base::offshift::in_reach;
 use crate::resources::Locale;
 use crate::structures::{StructureDb, StructureId};
 use bevy_ecs::prelude::Entity;
+use std::collections::HashSet;
 
 use crate::Game;
 
@@ -65,6 +66,22 @@ impl Bays {
             .min_by_key(|(p, _, _)| ((p.x - from.x).abs().max((p.y - from.y).abs()), p.x, p.y))
             .copied()
     }
+
+    /// The Bay currently serving a program standing at `here`, with the rate
+    /// it heals at — the nearest one, when that one is in reach.
+    ///
+    /// **The one expression of "this program is in a Bay."** `nearest` picks
+    /// a candidate and `in_reach` accepts or rejects it, and the pair is
+    /// asked twice: once by `run_repair_bays` to decide who to heal, once by
+    /// `Game::occupied_repair_bays` to decide which Bay the map marks as
+    /// busy. Written out at both sites the mark would be free to drift off
+    /// the heal — a Bay lighting up for a program lying a tile too far away,
+    /// or going dark on one it is healing — with nothing failing to compile
+    /// and the fault reading as a rendering bug.
+    pub(crate) fn serving(&self, here: Position) -> Option<(Position, i32)> {
+        let (site, rate, radius) = self.nearest(here)?;
+        in_reach(here, site, radius).then_some((site, rate))
+    }
 }
 
 impl Game {
@@ -107,12 +124,9 @@ impl Game {
         downed.sort();
         for (x, y, program) in downed {
             let here = Position { x, y };
-            let Some((site, rate, radius)) = bays.nearest(here) else {
+            let Some((_, rate)) = bays.serving(here) else {
                 continue;
             };
-            if !in_reach(here, site, radius) {
-                continue;
-            }
             // `restore_hp` caps at `max_hp` itself, so a Bay cannot overheal
             // and a rate of zero — a mod's negative one, floored — simply
             // lands nothing.
@@ -148,6 +162,39 @@ impl Game {
             sites.iter().map(|(kind, pos)| (kind, pos)),
             self.world.resource::<StructureDb>(),
         )
+    }
+
+    /// The tile of every Bay currently serving a downed program.
+    ///
+    /// What `EntityView::recovering` is built from, and it is derived on
+    /// every look rather than stored: a program reaching full Integrity, one
+    /// taking its last step into reach, and a Bay being demolished under one
+    /// all change the answer with nothing to notice they did —
+    /// `build_views`' own reason for rebuilding `attended` per call.
+    ///
+    /// Keyed by tile because that is what the map has in hand. A Bay's
+    /// `Position` is a structure's own tile and no two structures share one,
+    /// so the tile identifies the Bay as well as its `Entity` would.
+    ///
+    /// **The same pass `run_repair_bays` makes**, through `Bays::serving`:
+    /// a Bay wears the mark exactly while it is healing somebody, so a
+    /// player watching the map and a program's Integrity climbing are
+    /// reading one fact.
+    pub(crate) fn occupied_repair_bays(&mut self) -> HashSet<(i32, i32)> {
+        let bays = self.repair_bays();
+        if bays.is_empty() {
+            return HashSet::new();
+        }
+        let downed: Vec<Position> = {
+            let mut query = self
+                .world
+                .query_filtered::<&Position, bevy_ecs::prelude::With<Downed>>();
+            query.iter(&self.world).copied().collect()
+        };
+        downed
+            .into_iter()
+            .filter_map(|here| bays.serving(here).map(|(site, _)| (site.x, site.y)))
+            .collect()
     }
 
     /// One step toward the nearest Repair Bay, or `NoPost` when there is

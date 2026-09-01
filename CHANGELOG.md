@@ -33,6 +33,16 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.73
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+- **A recharge repairs the programs standing with you, and nobody else.**
+  Base staff mend at a Repair Bay and a squad away on a sortie lives on the
+  provisions you paid for at dispatch — where a rest four frames down the
+  Stack used to reach back and repair a base the party had not seen in an
+  hour.
+
 ## 0.13.72
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

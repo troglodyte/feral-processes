@@ -9,8 +9,11 @@
 //!
 //! **`CharacterChoice::stats[i]` is units *bought* on that axis, never
 //! points spent.** `CharacterChoice::cost()` prices them, per axis, at
-//! `tuning::CREATION_COST_*`. Treating the array as a point tally makes
-//! mitigation — the one axis that costs more than one — silently free.
+//! `tuning::CREATION_COST_*`. All four axes cost one point today, so the
+//! two readings happen to agree — which is exactly why the distinction has
+//! to be held here rather than left to the numbers: repricing any axis is
+//! a `tuning.rs` edit, and every reader that treats the array as a point
+//! tally would silently start handing that axis out free.
 //!
 //! **The roll spends exactly the pool**, so it can never beat point-buy and
 //! there is no reason to reroll for size. `[R]` rerolls for *shape* — and
@@ -350,14 +353,9 @@ impl App {
             label: label.to_string(),
             value,
         };
+        // No Name row: the name is asked for on the step *after* this one,
+        // so a row here could only ever read back a dash.
         let mut rows = vec![
-            line(
-                "Name",
-                match choice.name.is_empty() {
-                    true => "—".to_string(),
-                    false => choice.name.clone(),
-                },
-            ),
             line(
                 "Difficulty",
                 match self.creation_difficulty {
@@ -757,9 +755,10 @@ impl App {
     }
 
     /// Text entry, `Mode::FuseName`'s table: printable characters up to
-    /// `MAX_CUSTOM_NAME_LEN`, Backspace, Enter to move on. A blank name is
-    /// allowed and installs no `CustomName`, exactly as today's nameless
-    /// player has none.
+    /// `MAX_CUSTOM_NAME_LEN`, Backspace, Enter to start the run — this is
+    /// the last step, so `advance_creation` commits from here. A blank
+    /// name is allowed and installs no `CustomName`, exactly as today's
+    /// nameless player has none.
     fn handle_creation_name_key(&mut self, key: GameKey) {
         match key {
             GameKey::Backspace => {
@@ -777,10 +776,13 @@ impl App {
         }
     }
 
-    /// Reads back, and commits on Enter.
+    /// Reads back, and accepts on Enter — which asks for a name rather
+    /// than starting the run. `[R]` is live here (`handle_creation_key`
+    /// takes it before this), so this is the screen a reroll is read on
+    /// *and* rerolled from.
     fn handle_creation_summary_key(&mut self, key: GameKey) {
         match key {
-            GameKey::Enter => self.commit_creation(),
+            GameKey::Enter => self.advance_creation(),
             _ => self.scroll(key, self.creation_rows().len()),
         }
     }

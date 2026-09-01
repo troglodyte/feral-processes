@@ -103,11 +103,23 @@ fn creation_points_are_additive_over_the_baseline() {
     assert_eq!(stats.hp, stats.max_hp);
 }
 
+/// **Def is priced like the other three axes now**, and this is what says
+/// the whole pool put on it actually reaches `Stats::mitigation`.
+///
+/// It replaces `mitigation_costs_more_than_a_point`, which held the axis at
+/// `CREATION_COST_DEF = 3` on the argument that pricing it flat would make
+/// it dominant. The instrument said otherwise — a unit is one percentage
+/// point, and `docs/measurements/2026-09-01-creation-stat-pool-exchange-
+/// rates.md` measured the whole pool spent on Def as byte-identical to
+/// spending nothing.
+///
+/// The ceiling is asserted alongside, because that is the bound a pool
+/// retune could actually cross: mitigation is capped at
+/// `MAX_MITIGATION_PERCENT` in the damage path, and creation must not be
+/// able to open a run anywhere near it.
 #[test]
-fn mitigation_costs_more_than_a_point() {
+fn the_whole_pool_on_def_reaches_mitigation() {
     let pool = tuning::CREATION_STAT_POINTS;
-    // "Spending the whole pool" on an axis priced above 1 buys only as many
-    // whole units as the pool covers — the remainder is unspendable.
     let units = pool / tuning::CREATION_COST_DEF;
     let choice = CharacterChoice {
         stats: stats_at(MainStat::Def, units),
@@ -125,10 +137,16 @@ fn mitigation_costs_more_than_a_point() {
     let stats = game.world.get::<Stats>(game.player_entity()).unwrap();
     let gained = stats.mitigation - tuning::PLAYER_BASE_STATS.mitigation;
 
-    assert_eq!(gained, (pool / tuning::CREATION_COST_DEF) as i32);
-    assert_ne!(
-        gained, pool as i32,
-        "Def costs more than a point per point of mitigation"
+    assert_eq!(
+        gained, units as i32,
+        "every unit bought is a point of mitigation"
+    );
+    assert!(
+        stats.mitigation < tuning::MAX_MITIGATION_PERCENT / 2,
+        "a creation spend opens on {} mitigation against a {} cap — the pool \
+         has outgrown what this axis may be allowed to buy",
+        stats.mitigation,
+        tuning::MAX_MITIGATION_PERCENT
     );
 }
 

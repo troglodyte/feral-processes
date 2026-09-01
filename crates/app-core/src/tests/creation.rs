@@ -107,7 +107,11 @@ fn every_step_is_in_the_exhaustive_list() {
         assert!(!step.title().is_empty(), "{step:?} has no heading");
     }
     assert_eq!(all.first().copied(), Some(CreationStep::Difficulty));
-    assert_eq!(all.last().copied(), Some(CreationStep::Summary));
+    // **The name is asked for last, after the summary is accepted** — the
+    // summary is the last screen with a decision on it, and naming what you
+    // have just agreed to is the run's first act rather than one more field
+    // to fill in ahead of seeing it.
+    assert_eq!(all.last().copied(), Some(CreationStep::Name));
 }
 
 /// Every step draws something. A step with no rows is a blank popup the
@@ -146,13 +150,13 @@ fn the_wizard_walks_forward_and_back() {
     press(&mut app, GameKey::Enter);
     assert_eq!(app.creation_step(), CreationStep::Routine);
     press(&mut app, ch('n'));
-    assert_eq!(app.creation_step(), CreationStep::Name);
-    press(&mut app, GameKey::Enter);
     assert_eq!(app.creation_step(), CreationStep::Summary);
+    press(&mut app, GameKey::Enter);
+    assert_eq!(app.creation_step(), CreationStep::Name);
 
     // Esc walks back one step at a time, all the way to the first.
     for expected in [
-        CreationStep::Name,
+        CreationStep::Summary,
         CreationStep::Routine,
         CreationStep::Points,
         CreationStep::Colour,
@@ -185,7 +189,7 @@ fn esc_from_the_first_step_does_not_start_a_run() {
 /// Every choice, by keypress, read back off the saved run. The whole path:
 /// a keystroke, `CharacterChoice`, `Game::new_with`, `PlayerSave`.
 #[test]
-fn the_summary_step_commits_the_choice() {
+fn the_name_step_commits_the_choice() {
     let mut app = opened("commit");
     let classes = app.creation_catalogue.class_rows();
     let wanted_class = classes[1].class;
@@ -216,14 +220,23 @@ fn the_summary_step_commits_the_choice() {
     let wanted_routine = routines[0].id.clone();
     press(&mut app, ch('1'));
 
+    assert_eq!(app.creation_step(), CreationStep::Summary);
+    press(&mut app, GameKey::Enter);
+    assert!(
+        app.game.is_none(),
+        "the summary is read back and accepted, not the last word"
+    );
+    assert_eq!(
+        app.creation_step(),
+        CreationStep::Name,
+        "accepting the summary asks for a name"
+    );
+
     for c in "Zephyr".chars() {
         press(&mut app, ch(c));
     }
     press(&mut app, GameKey::Enter);
-
-    assert_eq!(app.creation_step(), CreationStep::Summary);
-    press(&mut app, GameKey::Enter);
-    assert!(app.game.is_some(), "Enter on the summary starts the run");
+    assert!(app.game.is_some(), "Enter on the name starts the run");
     settle(&mut app);
     assert_eq!(app.mode, Mode::Playing);
 
@@ -308,7 +321,6 @@ fn the_roll_leaves_a_finished_character_alone() {
     press(&mut app, GameKey::Left); // a point taken off the highlighted axis
     press(&mut app, GameKey::Enter);
     press(&mut app, ch('1')); // a starter routine
-    press(&mut app, GameKey::Enter); // no name
     assert_eq!(app.creation_step(), CreationStep::Summary);
 
     let before = app.creation_choice().clone();
@@ -475,14 +487,14 @@ fn the_points_step_sees_a_modifier() {
 #[test]
 fn the_save_list_shows_the_players_name() {
     let mut app = opened("save_name");
-    // `[R]` lands on the summary, so back up one step to type a name.
+    // `[R]` lands on the summary; accepting it is what asks for the name.
     press(&mut app, ch('R'));
-    press(&mut app, GameKey::Esc);
+    assert_eq!(app.creation_step(), CreationStep::Summary);
+    press(&mut app, GameKey::Enter);
     assert_eq!(app.creation_step(), CreationStep::Name);
     for c in "Kestrel".chars() {
         press(&mut app, ch(c));
     }
-    press(&mut app, GameKey::Enter);
     press(&mut app, GameKey::Enter);
     settle(&mut app);
     assert_eq!(app.mode, Mode::Playing);
@@ -507,7 +519,8 @@ fn difficulty_is_chosen_in_the_wizard() {
     press(&mut app, ch('p'));
     assert_eq!(app.creation_difficulty(), Some(DifficultyMode::Permadeath));
     press(&mut app, ch('R'));
-    press(&mut app, GameKey::Enter);
+    press(&mut app, GameKey::Enter); // the summary, accepted
+    press(&mut app, GameKey::Enter); // the name, left blank
     settle(&mut app);
 
     let data = saved_run(&mut app, "difficulty");
@@ -813,8 +826,8 @@ fn reentering_points_keeps_a_hand_made_spread() {
 
     press(&mut app, GameKey::Enter); // -> Routine
     assert_eq!(app.creation_step(), CreationStep::Routine);
-    press(&mut app, ch('n')); // no routine -> Name
-    assert_eq!(app.creation_step(), CreationStep::Name);
+    press(&mut app, ch('n')); // no routine -> Summary
+    assert_eq!(app.creation_step(), CreationStep::Summary);
     press(&mut app, GameKey::Esc); // -> Routine
     press(&mut app, GameKey::Esc); // -> Points, re-entered
 
@@ -1036,7 +1049,8 @@ fn a_picked_kit_reaches_the_started_run() {
     press(&mut app, GameKey::Right);
     press(&mut app, GameKey::Right);
     press(&mut app, ch('R')); // rolls the rest, jumps to the Summary
-    press(&mut app, GameKey::Enter);
+    press(&mut app, GameKey::Enter); // accepted -> the Name step
+    press(&mut app, GameKey::Enter); // no name, which starts the run
 
     // Not `Mode::Playing`: a fresh run may open on a notification screen.
     let game = app.game.as_ref().expect("the run did not start");

@@ -41,18 +41,22 @@ pub const PLAYER_BASE_STATS: Stats = Stats {
 
 /// Points offered on the character-creation stat screen, spent **on top
 /// of** `PLAYER_BASE_STATS` rather than redistributing it — so `balance_sim`'s
-/// modelled floor stays valid no matter how the pool is spent. Not a clean
-/// multiple of `CREATION_COST_DEF`, deliberately: a pool that always divided
-/// evenly into Def would hide that axis's rounding-down, which is exactly
-/// what `mitigation_costs_more_than_a_point` exists to catch.
+/// modelled floor stays valid no matter how the pool is spent.
 ///
-/// **5, not 10.** At `CREATION_COST_ATK = 1`, a pool of 10 let an all-Atk
-/// build open on 16 atk against the baseline 6 — 2.7x the level-1 offense
-/// `balance_sim` treats as its floor, trivialising zone 1. At 5 the widest
-/// swing is +5 atk, or +30 `max_hp` on a 90 HP base. See
-/// `MAX_CREATION_STAT_POINTS` for the ceiling this is checked against —
-/// that constant is the bound, not the value, and stays where it is.
-pub const CREATION_STAT_POINTS: u32 = 5;
+/// **The pool size is the all-Atk offense ceiling**, because Atk is priced
+/// 1-for-1 and always will be (`CREATION_COST_ATK`'s reason). That is the
+/// only thing bounding this number: 9 lets the widest offensive build open
+/// on 15 atk against the baseline 6, or +54 `max_hp` on a 90 HP base.
+///
+/// **9, up from 5.** Five was set against a rejected 10 (16 atk, 2.7x the
+/// level-1 offense `balance_sim` treats as its floor) and read as harsh on
+/// the screen: five points across four axes is one decision and a
+/// remainder, and the one axis then priced at three could not be taken at
+/// all without giving up most of the pool. 9 leaves room to spread and
+/// still sits under that rejected ceiling, at 2.5x. See
+/// `MAX_CREATION_STAT_POINTS` for the bound this is checked against — that
+/// constant is the bound, not the value, and stays where it is.
+pub const CREATION_STAT_POINTS: u32 = 9;
 
 /// Pool points one point of Integrity costs. See `CREATION_GAIN_INTEGRITY`
 /// for what a point buys.
@@ -66,14 +70,22 @@ pub const CREATION_COST_ATK: u32 = 1;
 /// 1-for-1, like Atk.
 pub const CREATION_COST_DECOMPILER: u32 = 1;
 
-/// Pool points one point of Def (`Stats::mitigation`) costs. Three, not
-/// one: mitigation is a percentage point on a base of 2 that levelling
-/// never raises (see `HP_PER_LEVEL`'s doc comment on why there is no
-/// mitigation-per-level constant at all), so pricing it like the other
-/// three axes would make it strictly dominant on a screen where the player
-/// — not a random roll — is choosing. This is the axis
-/// `mitigation_costs_more_than_a_point` exists to hold down.
-pub const CREATION_COST_DEF: u32 = 3;
+/// Pool points one point of Def (`Stats::mitigation`) costs — priced
+/// 1-for-1 like the other three axes.
+///
+/// **Three was the argument, and the instrument refuted it.** The claim
+/// was that mitigation is the one axis levelling never raises (see
+/// `HP_PER_LEVEL`'s doc comment on why there is no mitigation-per-level
+/// constant at all), so pricing it like the rest would make it dominant on
+/// a screen where the player chooses rather than a roll. It was not
+/// dominant at any price: a unit is **one percentage point** on a base of
+/// 2, and `docs/measurements/2026-09-01-creation-stat-pool-exchange-rates.md`
+/// measured the whole 5-point pool spent on Def as **byte-identical to the
+/// control** over 200 fights — same win rate, same round count, same HP
+/// left. Priced at three it was a trap row: the dearest axis and the only
+/// one that moved nothing. At one, a full-Def build reaches 11%
+/// mitigation, which is the first spend on this axis a fight can see.
+pub const CREATION_COST_DEF: u32 = 1;
 
 /// `Stats::max_hp` granted per point of Integrity bought on the creation
 /// stat screen — and `Stats::hp` with it, unconditionally: a run must not

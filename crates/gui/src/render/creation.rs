@@ -248,8 +248,10 @@ fn plain_footer(step: CreationStep) -> &'static str {
             "Up/Down + Enter picks; [n] moves on; [R] rolls; Esc goes back"
         }
         CreationStep::Routine => "Up/Down + Enter; [n] takes none; [R] rolls; Esc goes back",
-        CreationStep::Name => "Type a name; Enter moves on; Esc goes back",
-        CreationStep::Summary => "Enter starts the run; [R] rolls the rest; Esc goes back",
+        // The last two steps, and the only place the wizard says what
+        // *finishes* it — the summary is accepted, the name starts the run.
+        CreationStep::Summary => "Enter accepts; [R] rerolls the rest; Esc goes back",
+        CreationStep::Name => "Type a name; Enter starts the run; Esc goes back",
     }
 }
 

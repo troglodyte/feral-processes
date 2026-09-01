@@ -1287,11 +1287,14 @@ mod tests {
             root.join("dev-arenas"),
             tmp.join("telemetry.jsonl"),
         );
-        // The keys a player presses: [N] new game, [F] Forgiving, then
-        // [R] to roll the rest of the character and Enter to start.
+        // The keys a player presses: [N] new game, [F] Forgiving, [R] to
+        // roll the rest of the character, Enter to accept the summary it
+        // lands on, and Enter again on the name step — left blank — which
+        // is what starts the run.
         app.handle_key(feral_processes_app_core::GameKey::Char('n'));
         app.handle_key(feral_processes_app_core::GameKey::Char('f'));
         app.handle_key(feral_processes_app_core::GameKey::Char('R'));
+        app.handle_key(feral_processes_app_core::GameKey::Enter);
         app.handle_key(feral_processes_app_core::GameKey::Enter);
         app
     }

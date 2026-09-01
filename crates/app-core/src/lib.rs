@@ -902,8 +902,21 @@ pub enum CreationStep {
     Colour,
     Points,
     Routine,
-    Name,
+    /// The character read back whole, and the last screen carrying a
+    /// decision — Enter accepts it and `[R]` rerolls everything the player
+    /// has not made by hand, which is what makes this the step the roll
+    /// lands on.
     Summary,
+    /// **Last, after the summary.** Naming is the one step that decides
+    /// nothing about the character: it takes no catalogue, refuses
+    /// nothing, and a blank answer is a supported run. Asked before the
+    /// summary it was a field to fill in ahead of seeing what had been
+    /// built, and `[R]` — which lands on the summary and does not roll a
+    /// name — left it behind, so the one way to reach it was to walk back
+    /// a step. Asked after, it is the run's first act rather than the
+    /// last of the wizard's questions, and Enter on it is what starts the
+    /// run.
+    Name,
 }
 
 impl CreationStep {
@@ -923,8 +936,8 @@ impl CreationStep {
         CreationStep::Colour,
         CreationStep::Points,
         CreationStep::Routine,
-        CreationStep::Name,
         CreationStep::Summary,
+        CreationStep::Name,
     ];
 
     /// Where this step sits in [`ALL`](CreationStep::ALL), 0-based — the

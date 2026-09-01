@@ -33,6 +33,20 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.68
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+- **The transfer picker's two figures are where the units would land.** `you`
+  and `container` move as the basket is edited — a take fills the pack and
+  empties the shelf in front of you — replacing a `change` column beside two
+  columns that reported a *ceiling* and so never moved at all.
+- **Putting cargo in a Depot no longer reads as spending money.** The pack
+  column was the Depot's shared room seen through one row, so filling any row
+  lowered the figure printed on every other one, Credits included.
+- **Credits are offered on neither side of a transfer.** A currency is what a
+  transfer is priced in, never a thing that moves into a Depot.
+
 ## 0.13.67
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

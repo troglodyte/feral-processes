@@ -81,9 +81,11 @@ The rest of what a base does:
   parts out of the base and works on the spot, and the machine keeps running the whole time. Call one
   off from the build orders screen and you get back whatever has been carried there.
 - A GC Entropy Sweep chews on a random structure now and then, and what it takes off is permanent
-  unless something repairs it. A Shield soaks damage off every sweep against everything you own, a
-  Patch Node recompiles damage across the whole base, and a program posted to the structure that gets
-  hit defends it with its own Mitigation.
+  unless something repairs it. Sweeps start in the second sector: the base you raise in sector 1 is
+  never swept, so the first one you lose ground to is one you had a breach to prepare for. A Shield
+  soaks damage off every sweep against everything you own, a Patch Node recompiles damage across the
+  whole base, and a program posted to the structure that gets hit defends it with its own
+  Mitigation.
 - A Research Node is the only source of Research Data, and Research Data crosses a breach. The tree
   is what unlocks the benches, the recipes and several routines.
 - A Contract Broker posts work the sector is paying for. Read its board from anywhere; sign and

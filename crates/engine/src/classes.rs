@@ -145,6 +145,23 @@ pub fn apply_kit(game: &mut Game, class: Option<AffinityClass>) {
 /// `"+Healing  -Damage"`-style summary of `affinities`, built once here so
 /// the creation screen and any other reader of `views::ClassRow` cannot
 /// word one class's trade differently.
+/// What a class's spread is *worth*, one term per non-neutral axis:
+/// `"Damage x1.25  Heal x0.75"`.
+///
+/// `format_axes` below is the same fold at picking length — a sign per axis
+/// and no magnitude, which is what a catalogue row wants and what a stat
+/// sheet does not. Both read `Affinities::non_neutral`, which is the one
+/// definition of "an axis this class has an opinion about", so the two
+/// lengths cannot disagree about *which* axes they name.
+pub fn format_affinity_bonuses(affinities: &Affinities) -> String {
+    affinities
+        .non_neutral()
+        .into_iter()
+        .map(|(kind, value)| format!("{} x{value:.2}", kind.label()))
+        .collect::<Vec<_>>()
+        .join("  ")
+}
+
 fn format_axes(affinities: &Affinities) -> String {
     affinities
         .non_neutral()
@@ -228,6 +245,23 @@ impl Game {
     /// `AFFINITY_NEUTRAL` for no class or for a class the current
     /// `ClassDb` cannot resolve, the resolver half of the empty-directory
     /// property.
+    /// The player's class as the manifest reads it back: its display name
+    /// and what its spread is worth. `None` for a classless run — every
+    /// save from before character creation, and `CharacterChoice::default`
+    /// — and for a class the current `ClassDb` cannot resolve, which is
+    /// `player_class_affinity`'s empty-directory property one level up.
+    pub fn player_class_view(&self) -> Option<views::PlayerClassView> {
+        let class = self
+            .world
+            .get::<PlayerIdentity>(self.player_entity())
+            .and_then(|identity| identity.class)?;
+        let def = self.world.resource::<ClassDb>().get(class)?;
+        Some(views::PlayerClassView {
+            name: def.name.clone(),
+            bonuses: format_affinity_bonuses(&def.affinities),
+        })
+    }
+
     pub(crate) fn player_class_affinity(&self, kind: AffinityKind) -> f32 {
         let class = self
             .world

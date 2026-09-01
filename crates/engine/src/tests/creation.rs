@@ -592,3 +592,51 @@ fn the_catalogue_and_the_run_offer_the_same_shelf() {
         assert_eq!(a.name, b.name);
     }
 }
+
+/// **The manifest is where the name and the class the player chose are read
+/// back**, and neither had a reader before this: the sheet said "You" and
+/// named no class, so a run's two most identifying facts were visible only
+/// on the wizard screen that asked for them and in the save list.
+///
+/// Both halves are asserted against a *classless, nameless* control in the
+/// same test — the default `CharacterChoice`, which is what every one of
+/// the ~1,600 `Game::new` call sites builds and what every save from
+/// before creation shipped carries. That arm is the one that would break
+/// if the fallback were dropped.
+#[test]
+fn the_manifest_reads_back_the_name_and_class() {
+    let choice = CharacterChoice {
+        name: "Kestrel".to_string(),
+        class: Some(AffinityClass::Leech),
+        ..CharacterChoice::default()
+    };
+    let game = Game::new_with(
+        90_010,
+        DifficultyMode::Forgiving,
+        &test_assets_dir(),
+        &choice,
+    )
+    .unwrap();
+    let view = game.manifest(game.player_entity()).expect("a player sheet");
+    assert_eq!(view.name, "Kestrel");
+    let ManifestSubject::Player(player) = &view.subject else {
+        panic!("the player's own entity produced a program sheet");
+    };
+    let class = player.class.as_ref().expect("the chosen class resolved");
+    assert!(!class.name.is_empty(), "the class had no display name");
+    assert!(
+        !class.bonuses.is_empty(),
+        "a class with a spread must say what it is worth: {class:?}"
+    );
+
+    // The classless, nameless run every `Game::new` produces.
+    let plain = Game::new(90_011, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let view = plain
+        .manifest(plain.player_entity())
+        .expect("a player sheet");
+    assert_eq!(view.name, "You", "a nameless run still reads as You");
+    let ManifestSubject::Player(player) = &view.subject else {
+        panic!("the player's own entity produced a program sheet");
+    };
+    assert!(player.class.is_none(), "a classless run must name no class");
+}

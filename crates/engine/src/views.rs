@@ -1694,8 +1694,13 @@ pub struct ActiveBuffView {
 /// and neither cares which kind of subject is carrying them.
 pub struct ManifestView {
     pub entity: Entity,
-    /// "You" for the player; a program's `CustomName` if it has one, else its
+    /// The player's own name if they gave one at creation, "You" if they
+    /// did not; a program's `CustomName` if it has one, else its
     /// zone-tagged species name (see `Game::zone_tagged_name`).
+    ///
+    /// **"You" is still the log's word for the player** and is deliberately
+    /// not touched — a name belongs on the sheet the player opened to read
+    /// about themselves, not in a line describing a swing.
     pub name: String,
     pub glyph: char,
     pub color: GlyphColor,
@@ -1820,6 +1825,9 @@ pub struct PlayerManifest {
     /// the contracts screen are where a player reads what they say, and a
     /// stat sheet quoting objectives would be a third wording of them.
     pub active_contracts: usize,
+    /// The class picked at creation, resolved live through `ClassDb` — see
+    /// `Game::player_class_view`. `None` for a classless run.
+    pub class: Option<PlayerClassView>,
 }
 
 /// One worn item and the bonus it is *currently* granting.
@@ -2287,6 +2295,17 @@ pub struct TransferRow {
     pub on_shelves: u32,
     pub carried: u32,
     pub can_put: u32,
+}
+
+/// The player's class, as their own manifest reads it back — see
+/// `Game::player_class_view`. Not a `ClassRow`: that carries the starting
+/// kit, which the wizard's Kit step *replaces*, so quoting it on a sheet
+/// read mid-run would name items the player never had.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlayerClassView {
+    pub name: String,
+    /// One term per non-neutral axis, `classes::format_affinity_bonuses`.
+    pub bonuses: String,
 }
 
 /// One class offered on the creation screen — see `Game::class_rows`.

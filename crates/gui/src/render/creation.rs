@@ -1,17 +1,34 @@
-//! The character-creation wizard's screen — one popup per
-//! `CreationStep`, drawn from `App::creation_rows`.
+//! The character-creation wizard's screen — one popup per `CreationStep`,
+//! drawn from `App::creation_rows`.
 //!
-//! **A placeholder.** Every step draws its rows as plain text so the
-//! wizard is walkable and the refusal census has something to land on; the
-//! per-step layout (a swatch strip on the Look step, a two-column table on
-//! Points, the class blurb) is a later task's. What is already correct is
-//! the seam: this file reads `App::creation_rows` and nothing else, so the
-//! row shape it draws cannot drift from the row shape app-core dispatches
-//! keys against.
+//! Every step draws through the same `draw_popup` every other menu uses —
+//! one bordered box, one `Row` list — so the wizard's chrome, refusal
+//! placement and keyboard highlight are the game's existing menu idiom and
+//! not a second one invented for onboarding. What is specific to this
+//! screen is `build_row` (numbering, and the Look step's per-row icon) and
+//! the Look/Summary steps' preview cell, painted separately after the popup
+//! through `draw_look_preview`.
+//!
+//! **The wizard promises no scroll.** Every other list menu in the game is
+//! fine paging a long catalogue with `draw_popup`'s built-in scroll (see
+//! `popup::popup_layout`'s `scrolling` flag) — a trade shelf or a deploy
+//! list is read a page at a time anyway. A seven-step onboarding flow is
+//! not: `the_tallest_creation_step_fits_its_screen` is what holds that
+//! promise, at the smallest window the game supports, against the real
+//! shipped `assets/`. A class or ability catalogue is moddable and could
+//! still grow past what a screen with no scroll can show — see the test's
+//! own doc comment.
 
-use super::popup::{PopupSize, Row, draw_popup, item_row, text_row};
+use super::popup::{PopupSize, Row, draw_popup, item_row, popup_rect, text_row, with_icon};
 use super::*;
 use feral_processes_app_core::{CreationRow, CreationStep};
+use feral_processes_engine::CharacterChoice;
+use feral_processes_engine::tuning::CREATION_STAT_POINTS;
+
+/// The Look/Summary preview cell's side, in `Metrics::line_height` units —
+/// big enough to read the glyph or sprite clearly, small enough to sit in
+/// the popup's top-right corner without crowding the row list under it.
+const PREVIEW_CELL_LINES: f32 = 3.0;
 
 pub(super) fn draw_create_character(
     app: &App,
@@ -20,24 +37,41 @@ pub(super) fn draw_create_character(
     m: &Metrics,
 ) {
     let step = app.creation_step();
+    let drawn = step_rows(app, step);
+    let title = format!(
+        "New Game — {} ({}/{})",
+        step.title(),
+        step.index() + 1,
+        CreationStep::ALL.len()
+    );
+
+    // The preview cell reads the popup's own box back from `popup_rect`
+    // rather than a second guess at where `draw_popup` put it — the two
+    // calls share one derivation of the box's geometry, so a resize can't
+    // put the cell outside its border.
+    let show_preview = matches!(step, CreationStep::Look | CreationStep::Summary);
+    let cell = show_preview
+        .then(|| preview_cell_rect(popup_rect(PopupSize::Large, &drawn, refusal, painter, m), m));
+    draw_popup(&title, PopupSize::Large, &drawn, refusal, painter, m);
+    if let Some(cell) = cell {
+        draw_look_preview(app.creation_choice(), painter, cell, m);
+    }
+}
+
+/// The full `Row` list a step draws: its own rows via `build_row`, a blank
+/// line, then its footer. One function for `draw_create_character` and
+/// `the_tallest_creation_step_fits_its_screen` to share, so a step that
+/// grows a row is a change both the screen and the height census see —
+/// two independent copies of this construction is how a census could pass
+/// against a row list the screen no longer draws.
+fn step_rows(app: &App, step: CreationStep) -> Vec<Row> {
     let selected = app.menu_selected;
     let rows = app.creation_rows();
-    let mut drawn: Vec<Row> = Vec::new();
-    for (i, row) in rows.iter().enumerate() {
-        let line = row_line(row);
-        // The Points step's cursor is a highlight and never a row shortcut
-        // — `Mode::Transfer`'s rule, where a digit is a quantity. Every
-        // other step numbers its rows.
-        match step {
-            CreationStep::Points | CreationStep::Name | CreationStep::Summary => {
-                drawn.push(item_row(line, selected == i))
-            }
-            _ => drawn.push(item_row(
-                format!("[{}] {line}", feral_processes_app_core::menu_shortcut(i)),
-                selected == i,
-            )),
-        }
-    }
+    let mut drawn: Vec<Row> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| build_row(step, row, i, selected == i))
+        .collect();
     if drawn.is_empty() {
         // A step with nothing to offer — an empty `assets/classes/`, say —
         // still draws a row, or the popup would be a blank box the player
@@ -46,13 +80,33 @@ pub(super) fn draw_create_character(
     }
     drawn.push(text_row(""));
     drawn.push(text_row(footer(step)));
-    let title = format!(
-        "New Game — {} ({}/{})",
-        step.title(),
-        step.index() + 1,
-        CreationStep::ALL.len()
-    );
-    draw_popup(&title, PopupSize::Large, &drawn, refusal, painter, m);
+    drawn
+}
+
+/// One `CreationRow` as a drawable menu row: numbered with its shortcut on
+/// every step but the three where the cursor is a highlight rather than a
+/// pick (`Mode::Transfer`'s rule — a digit is a quantity there, never a row
+/// shortcut), and carrying an icon on the Look step's own two row kinds.
+fn build_row(step: CreationStep, row: &CreationRow, i: usize, selected: bool) -> Row {
+    let text = row_line(row);
+    let label = match step {
+        CreationStep::Points | CreationStep::Name | CreationStep::Summary => text,
+        _ => format!("[{}] {text}", feral_processes_app_core::menu_shortcut(i)),
+    };
+    let base = item_row(label, selected);
+    match row {
+        // The icon rows show their own glyph — a preview of the shape on
+        // offer, independent of colour, which the combined preview cell
+        // covers separately.
+        CreationRow::Icon { glyph, .. } => with_icon(base, *glyph, TEXT),
+        // A swatch row wears its own colour on an `@` — the player sees
+        // every option painted in the hue it would actually be, not just
+        // its name.
+        CreationRow::Colour { index } => {
+            with_icon(base, '@', hud::palette::PLAYER_CHOICES[*index as usize])
+        }
+        _ => base,
+    }
 }
 
 /// One row as a line of text. Exhaustive on `CreationRow`, `cell_mark`'s
@@ -69,7 +123,20 @@ fn row_line(row: &CreationRow) -> String {
             spent,
             value,
             cost,
-        } => format!("{:<12} {value:>4}   {spent} bought @ {cost}", stat.label()),
+        } => {
+            // The bar's width is this axis's own ceiling if the *whole*
+            // pool went to it — not what the other axes have already
+            // spent, which changes row to row and would make the bar's
+            // length itself a second, unlabelled figure to read.
+            let width = (CREATION_STAT_POINTS / (*cost).max(1)).max(*spent);
+            let bar: String = (0..width)
+                .map(|u| if u < *spent { '#' } else { '-' })
+                .collect();
+            format!(
+                "{:<12} {value:>4}  [{bar}] {spent} bought @ {cost}",
+                stat.label()
+            )
+        }
         CreationRow::Routine(routine) => {
             format!(
                 "{} - {} ({:.0} Power)",
@@ -93,6 +160,56 @@ fn footer(step: CreationStep) -> &'static str {
         CreationStep::Routine => "Up/Down + Enter; [n] takes none; [R] rolls; Esc goes back",
         CreationStep::Name => "Type a name; Enter moves on; Esc goes back",
         CreationStep::Summary => "Enter starts the run; Esc goes back",
+    }
+}
+
+/// Where the preview cell sits inside `popup`'s box: tucked into the
+/// top-right corner, clear of the row list under it. The row labels this
+/// screen ever draws (`[3] Colour 4`, `Class ...`, a Summary line) are
+/// short enough at `PopupSize::Large`'s width to leave that corner clear;
+/// `every_creation_step_draws_a_refusal_exactly_once` and the row census
+/// draw the real rows and would show a collision if one ever reached it.
+fn preview_cell_rect(popup: Rect, m: &Metrics) -> Rect {
+    let size = m.line_height * PREVIEW_CELL_LINES;
+    Rect::new(
+        popup.x + popup.w - m.pad - size,
+        popup.y + m.line_height * 2.0,
+        size,
+        size,
+    )
+}
+
+/// The chosen look, painted the way `base.rs` paints the player's own tile:
+/// a sprite substituting for the glyph where one is named and loaded, the
+/// glyph otherwise, tinted by the same 0-based `PLAYER_CHOICES` index with
+/// the same `PLAYER` fallback for "no colour chosen yet". Read off
+/// `base.rs`'s resolution rather than re-derived, so the wizard can never
+/// promise a look the map goes on to draw differently.
+fn draw_look_preview(choice: &CharacterChoice, painter: &Painter, cell: Rect, m: &Metrics) {
+    painter.rect(cell.x, cell.y, cell.w, cell.h, PANEL_BG);
+    painter.rect_lines(cell.x, cell.y, cell.w, cell.h, 1.0, BORDER);
+
+    let color = choice
+        .colour
+        .and_then(|i| hud::palette::PLAYER_CHOICES.get(i as usize))
+        .copied()
+        .unwrap_or(hud::palette::PLAYER);
+    let inset = m.pad / 2.0;
+    let art = cell.w - inset * 2.0;
+    let name = (!choice.sprite.is_empty()).then_some(choice.sprite.as_str());
+    let drew = name.is_some_and(|n| painter.sprite(n, cell.x + inset, cell.y + inset, art, color));
+    if !drew {
+        let glyph = choice.glyph.to_string();
+        let size = art as u16;
+        let dims = painter.measure_map(&glyph, size);
+        // A sprite fills its square from a top-left; a glyph is drawn from
+        // a baseline and centred against measured ink — reading the two as
+        // one convention is the half-cell offset `paint::Painter::sprite`'s
+        // doc comment warns about, so the two branches lay out separately
+        // rather than sharing `cell`'s corner.
+        let tx = cell.x + inset + (art - dims.width) / 2.0;
+        let ty = cell.y + inset + (art + dims.height) / 2.0;
+        painter.map(&glyph, tx, ty, size, color);
     }
 }
 
@@ -134,6 +251,17 @@ mod tests {
         app
     }
 
+    /// The keys that walk one step forward from each of the first six —
+    /// shared by every test that needs to visit every step in turn.
+    const FORWARD: [GameKey; 6] = [
+        GameKey::Char('f'),
+        GameKey::Char('1'),
+        GameKey::Char('n'),
+        GameKey::Enter,
+        GameKey::Char('n'),
+        GameKey::Enter,
+    ];
+
     /// **The refusal census, turned ninety degrees.** `ALL_MODES` walks the
     /// wizard as one mode, so it only ever exercises whichever step the
     /// census app happens to have left the cursor on. Walking
@@ -144,15 +272,6 @@ mod tests {
     fn every_creation_step_draws_a_refusal_exactly_once() {
         const REFUSAL: &str = "Requires Zone 3 first.";
         let mut app = wizard_app();
-        // The keys that walk one step forward from each of the first six.
-        let forward = [
-            GameKey::Char('f'),
-            GameKey::Char('1'),
-            GameKey::Char('n'),
-            GameKey::Enter,
-            GameKey::Char('n'),
-            GameKey::Enter,
-        ];
         let mut steps = Vec::new();
         for (i, step) in CreationStep::ALL.iter().enumerate() {
             assert_eq!(
@@ -173,28 +292,22 @@ mod tests {
                 "{step:?} painted the refusal {drawn} times, not once"
             );
             steps.push(*step);
-            if let Some(key) = forward.get(i) {
+            if let Some(key) = FORWARD.get(i) {
                 app.handle_key(*key);
             }
         }
         assert_eq!(steps.len(), CreationStep::ALL.len());
     }
 
-    /// Every step draws at least one row of its own. A blank popup is
-    /// indistinguishable from a broken screen, and against the real
+    /// Every step draws at least one row of its own — exhaustive over
+    /// `CreationStep::ALL`, so an eighth step added without a draw arm
+    /// fails to compile rather than shipping a blank popup. A blank popup
+    /// is indistinguishable from a broken screen, and against the real
     /// `assets/` an empty step would mean the class or routine catalogue
     /// silently failed to load.
     #[test]
     fn every_creation_step_draws_its_rows() {
         let mut app = wizard_app();
-        let forward = [
-            GameKey::Char('f'),
-            GameKey::Char('1'),
-            GameKey::Char('n'),
-            GameKey::Enter,
-            GameKey::Char('n'),
-            GameKey::Enter,
-        ];
         for (i, step) in CreationStep::ALL.iter().enumerate() {
             let m = ui_metrics(900.0);
             let (_, shapes) =
@@ -208,9 +321,144 @@ mod tests {
                 drawn.len() > 2,
                 "{step:?} drew nothing but chrome: {drawn:?}"
             );
-            if let Some(key) = forward.get(i) {
+            if let Some(key) = FORWARD.get(i) {
                 app.handle_key(*key);
             }
         }
+    }
+
+    /// **The wizard has no scroll.** `draw_popup`'s box grows to fit its
+    /// content up to `popup::popup_max_rows` — 28, at 1280x720 (the
+    /// smallest window the game is built for) and `PopupSize::Large`'s
+    /// fractions — and only turns its scroll on past that ceiling. Every
+    /// other list menu in the game is fine reaching it; a trade shelf or a
+    /// deploy list is read a page at a time anyway. The wizard is not: this
+    /// is what holds every step's `Row` list, worst case with a refusal
+    /// also showing (the tallest the popup ever draws), under that ceiling.
+    ///
+    /// **Verified by mutation**, not merely written: padding the Look
+    /// step's rows past 28 turns `popup::popup_scrolls` from `false` to
+    /// `true` and this test red, with the exact row count and the ceiling
+    /// in the failure message. See the task's own report for the
+    /// transcript.
+    ///
+    /// `Class` and `Routine` read a moddable catalogue (`assets/classes/`,
+    /// the `starter: true` abilities in `assets/abilities/`), each five
+    /// rows today — nowhere near the ceiling. This is checked against
+    /// what's actually shipped, `notify.rs`'s
+    /// `the_tallest_shipped_notification_fits_its_screen` precedent, not a
+    /// hypothetical mod's; a mod that grew either catalogue enough to cross
+    /// 28 rows would need to reopen this — flagged rather than solved here.
+    #[test]
+    fn the_tallest_creation_step_fits_its_screen() {
+        const REFUSAL: &str = "Requires Zone 3 first.";
+        let mut app = wizard_app();
+        let m = ui_metrics(720.0);
+        let mut tallest = 0usize;
+        for (i, step) in CreationStep::ALL.iter().enumerate() {
+            let drawn = step_rows(&app, *step);
+            tallest = tallest.max(drawn.len());
+            let scrolls = super::super::popup::popup_scrolls(
+                720.0,
+                PopupSize::Large,
+                &drawn,
+                Some(REFUSAL),
+                &m,
+            );
+            assert!(
+                !scrolls,
+                "{step:?} needs to scroll at 1280x720 with {} rows drawn \
+                 and a refusal showing — this screen has no scroll, so \
+                 trim the step or give it one",
+                drawn.len()
+            );
+            if let Some(key) = FORWARD.get(i) {
+                app.handle_key(*key);
+            }
+        }
+        assert!(
+            tallest > 0,
+            "the census measured no rows at all — the walk above never reached a step"
+        );
+    }
+
+    /// The Look step's preview cell paints the chosen glyph in the chosen
+    /// colour when no sprite is loaded — `with_painter`'s empty sprite
+    /// table, the same fallback path `assets/sprites/` missing entirely
+    /// takes on the map. Chosen away from the default `('@', PLAYER)` pair
+    /// so this cannot pass on a preview that never looked at the choice at
+    /// all.
+    #[test]
+    fn the_look_preview_draws_the_chosen_glyph_and_colour() {
+        let mut app = wizard_app();
+        for key in [GameKey::Char('f'), GameKey::Char('1')] {
+            app.handle_key(key);
+        }
+        assert_eq!(app.creation_step(), CreationStep::Look);
+        // Pick the third icon (`*`, row 2) then the fourth swatch (row 5 +
+        // 3 = 8, five icon rows ahead of the swatches) — both by keyboard,
+        // through the real key table, walking `menu_selected` to each
+        // target rather than hardcoding a step count that would silently
+        // go stale if a row were ever added ahead of it.
+        while app.menu_selected != 2 {
+            app.handle_key(GameKey::Down);
+        }
+        app.handle_key(GameKey::Enter);
+        assert_eq!(
+            app.creation_choice().glyph,
+            '*',
+            "the icon pick didn't take"
+        );
+        while app.menu_selected != 8 {
+            app.handle_key(GameKey::Down);
+        }
+        app.handle_key(GameKey::Enter);
+        assert_eq!(
+            app.creation_choice().colour,
+            Some(3),
+            "the swatch pick didn't take"
+        );
+
+        let m = ui_metrics(900.0);
+        let (_, shapes) = crate::paint::with_painter(|p| draw_create_character(&app, None, p, &m));
+        let glyphs = crate::paint::painted_map_glyphs(&shapes);
+        let expected = hud::palette::PLAYER_CHOICES[3];
+        assert!(
+            glyphs.iter().any(|(g, c)| g == "*"
+                && (c.r - expected.r).abs() < 1e-3
+                && (c.g - expected.g).abs() < 1e-3
+                && (c.b - expected.b).abs() < 1e-3),
+            "the preview cell did not paint '*' in PLAYER_CHOICES[3]: {glyphs:?}"
+        );
+    }
+
+    /// A sprite substitutes for the preview's glyph exactly as it does on
+    /// the map — this is the loaded-texture half of the fallback the test
+    /// above exercises the empty half of.
+    #[test]
+    fn the_look_preview_prefers_a_loaded_sprite_over_the_glyph() {
+        let mut app = wizard_app();
+        for key in [GameKey::Char('f'), GameKey::Char('1')] {
+            app.handle_key(key);
+        }
+        assert_eq!(app.creation_step(), CreationStep::Look);
+        app.handle_key(GameKey::Enter); // the first icon, '@' / "player"
+
+        let mut sprites = crate::paint::SpriteTable::default();
+        sprites.insert("player", bevy_egui::egui::TextureId::User(7));
+        let m = ui_metrics(900.0);
+        let (_, shapes) =
+            crate::paint::with_sprites(sprites, |p| draw_create_character(&app, None, p, &m));
+
+        assert_eq!(
+            crate::paint::painted_images(&shapes).len(),
+            1,
+            "exactly one sprite, the preview's"
+        );
+        let glyphs = crate::paint::painted_map_glyphs(&shapes);
+        assert!(
+            !glyphs.iter().any(|(g, _)| g == "@"),
+            "the '@' must give way to the sprite, not sit under it: {glyphs:?}"
+        );
     }
 }

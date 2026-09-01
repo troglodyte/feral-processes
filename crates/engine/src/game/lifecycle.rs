@@ -131,7 +131,13 @@ fn spawn_player(world: &mut World, start: (i32, i32)) -> Entity {
             CombatBuff::default(),
             FieldBuff::default(),
             Perks::default(),
-            Routines(vec![abilities::DECOMPILE_ABILITY_ID.to_string()]),
+            // Nested because the bundle tuple above is already at bevy's
+            // 15-element ceiling — the query-tuple limit CLAUDE.md already
+            // names, reached here from the bundle side instead.
+            (
+                Routines(vec![abilities::DECOMPILE_ABILITY_ID.to_string()]),
+                PlayerIdentity::default(),
+            ),
         ))
         .id()
 }
@@ -557,7 +563,7 @@ impl Game {
                     y: data.player.position.1,
                 },
                 Glyph {
-                    ch: '@',
+                    ch: data.player.glyph,
                     color: GlyphColor::Cyan,
                 },
                 Stats {
@@ -670,10 +676,24 @@ impl Game {
                     points: data.player.perk_points,
                     unlocked: data.player.unlocked_perks,
                 },
-                Routines(player_routines),
+                // Nested because the bundle tuple above is already at
+                // bevy's 15-element ceiling — the query-tuple limit CLAUDE.md
+                // already names, reached here from the bundle side instead.
+                (
+                    Routines(player_routines),
+                    PlayerIdentity {
+                        class: data.player.class,
+                        sprite: data.player.sprite.clone(),
+                        colour: data.player.colour,
+                    },
+                ),
             ))
             .id();
         world.insert_resource(PlayerEntity(player));
+
+        if let Some(name) = CustomName::sanitize(Some(data.player.name.clone())) {
+            world.entity_mut(player).insert(CustomName(name));
+        }
 
         // The anchor's saved position, or — only for a save written before
         // this field existed, since `Game::save` always writes `Some` from
@@ -1316,6 +1336,17 @@ impl Game {
             .get::<FieldBuff>(player)
             .map(|f| f.active.clone())
             .unwrap_or_default();
+        let glyph = self.world.get::<Glyph>(player).unwrap().ch;
+        let identity = self
+            .world
+            .get::<PlayerIdentity>(player)
+            .cloned()
+            .unwrap_or_default();
+        let name = self
+            .world
+            .get::<CustomName>(player)
+            .map(|n| n.0.clone())
+            .unwrap_or_default();
 
         let party_entities = self.world.resource::<Party>().0.clone();
         let wielded = self.wielded_program();
@@ -1729,6 +1760,11 @@ impl Game {
                 routines,
                 field_buffs,
                 sorties,
+                name,
+                class: identity.class,
+                glyph,
+                sprite: identity.sprite,
+                colour: identity.colour,
             },
             creatures,
             structures,

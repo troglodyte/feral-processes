@@ -8,7 +8,7 @@ use crate::components::{ActiveFieldBuff, Rarity};
 use crate::items::{EquipmentSlot, ItemId};
 use crate::perks::Perk;
 use crate::resources::DifficultyMode;
-use crate::species::SpeciesId;
+use crate::species::{AffinityClass, SpeciesId};
 use crate::world::Tile;
 
 #[derive(Serialize, Deserialize)]
@@ -134,6 +134,40 @@ pub struct PlayerSave {
     /// clear it.
     #[serde(default)]
     pub sorties: Vec<SortieSave>,
+    /// The player's own chosen name — see `components::CustomName`. Empty
+    /// for a save written before character creation existed, or for a
+    /// choice that named nothing: `CustomName::sanitize` treats the two the
+    /// same, so `Game::load` inserts no override for either and the run
+    /// reads exactly as it always did.
+    #[serde(default)]
+    pub name: String,
+    /// The player's chosen class — see `components::PlayerIdentity`.
+    /// `Game::load` writes it straight back onto `PlayerIdentity` rather
+    /// than replaying `Game::apply_character_choice`: the kit and the stat
+    /// spend a class implies are already receipts, folded into `inventory`
+    /// and the stat fields above, and replaying the choice would double
+    /// them.
+    #[serde(default)]
+    pub class: Option<AffinityClass>,
+    /// The player's chosen glyph — `components::Glyph::ch`. Defaulted
+    /// through a named function rather than `char`'s own default (`'\0'`),
+    /// so a save written before character creation existed loads the `@`
+    /// every player before it had.
+    #[serde(default = "default_player_glyph")]
+    pub glyph: char,
+    /// The player's chosen sprite name — see `components::PlayerIdentity`.
+    #[serde(default)]
+    pub sprite: String,
+    /// The player's chosen colour index — see `components::PlayerIdentity`.
+    #[serde(default)]
+    pub colour: u8,
+}
+
+/// `serde`'s default for `PlayerSave::glyph` — a save written before
+/// character creation existed carries no glyph at all, and every player
+/// before it was `@`.
+fn default_player_glyph() -> char {
+    '@'
 }
 
 /// One trip in flight.
@@ -1391,6 +1425,11 @@ mod tests {
                 routines: Vec::new(),
                 field_buffs: Vec::new(),
                 sorties: Vec::new(),
+                name: String::new(),
+                class: None,
+                glyph: '@',
+                sprite: String::new(),
+                colour: 0,
             },
             creatures: Vec::new(),
             structures: Vec::new(),

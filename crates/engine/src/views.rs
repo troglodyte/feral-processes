@@ -696,6 +696,18 @@ pub struct CompanionInfo {
     pub gear: String,
 }
 
+/// The player's chosen icon, off `components::PlayerIdentity` — carried on
+/// `EntityView::look`, `Some` for the player alone. Kept off `EntityView`
+/// itself, rather than two bare fields, so a frontend can match on
+/// `Some`/`None` for "is this the player" the same way it already does for
+/// `is_anchor`'s structure-only fields, instead of reading `sprite`/`colour`
+/// on every other entity and getting an empty string and a 0 back.
+#[derive(Clone)]
+pub struct PlayerLook {
+    pub sprite: String,
+    pub colour: u8,
+}
+
 #[derive(Clone)]
 pub struct EntityView {
     pub entity: Entity,
@@ -704,6 +716,10 @@ pub struct EntityView {
     pub color: GlyphColor,
     pub label: String,
     pub is_player: bool,
+    /// The player's chosen sprite and colour — `Some` exactly when
+    /// `is_player` is true, `None` for every other entity. See
+    /// `PlayerLook`.
+    pub look: Option<PlayerLook>,
     pub is_tamed: bool,
     pub is_companion: bool,
     pub is_hostile: bool,

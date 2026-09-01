@@ -1736,6 +1736,7 @@ mod tests {
             color: GlyphColor::White,
             label: "Repair Bay".into(),
             is_player: false,
+            look: None,
             is_tamed: false,
             is_companion: false,
             is_hostile: false,

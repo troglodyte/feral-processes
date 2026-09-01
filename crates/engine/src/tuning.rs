@@ -44,9 +44,15 @@ pub const PLAYER_BASE_STATS: Stats = Stats {
 /// modelled floor stays valid no matter how the pool is spent. Not a clean
 /// multiple of `CREATION_COST_DEF`, deliberately: a pool that always divided
 /// evenly into Def would hide that axis's rounding-down, which is exactly
-/// what `mitigation_costs_more_than_a_point` exists to catch. See
-/// `MAX_CREATION_STAT_POINTS` for the ceiling this is checked against.
-pub const CREATION_STAT_POINTS: u32 = 10;
+/// what `mitigation_costs_more_than_a_point` exists to catch.
+///
+/// **5, not 10.** At `CREATION_COST_ATK = 1`, a pool of 10 let an all-Atk
+/// build open on 16 atk against the baseline 6 — 2.7x the level-1 offense
+/// `balance_sim` treats as its floor, trivialising zone 1. At 5 the widest
+/// swing is +5 atk, or +30 `max_hp` on a 90 HP base. See
+/// `MAX_CREATION_STAT_POINTS` for the ceiling this is checked against —
+/// that constant is the bound, not the value, and stays where it is.
+pub const CREATION_STAT_POINTS: u32 = 5;
 
 /// Pool points one point of Integrity costs. See `CREATION_GAIN_INTEGRITY`
 /// for what a point buys.

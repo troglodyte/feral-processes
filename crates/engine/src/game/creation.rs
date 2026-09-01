@@ -2,7 +2,7 @@
 //!
 //! `CharacterChoice` is the whole of it, `cost()` is the pricing that turns
 //! a spend into a valid one, and `Game::apply_character_choice` is what
-//! layers a validated choice onto the just-spawned player — stats, look,
+//! layers a validated choice onto the just-spawned player — stats, identity,
 //! kit, routine, in that order.
 //!
 //! Kit and routine are one-line delegations to `classes::apply_kit` and
@@ -26,7 +26,12 @@ pub struct CharacterChoice {
     pub glyph: char,
     pub sprite: String,
     pub colour: u8,
-    /// Points spent per axis, indexed as `MainStat::all()`.
+    /// Units *bought* per axis, indexed as `MainStat::all()` — not points
+    /// spent. `cost()` is what prices a unit, at that axis's own
+    /// `tuning::CREATION_COST_*` rate; pricing at conversion time instead
+    /// (storing the spend and dividing it back out per axis on read) would
+    /// let 4 points on Def buy the same +1 mitigation as 3, silently
+    /// eating a point the player chose to spend.
     pub stats: [u32; 4],
     pub routine: Option<AbilityId>,
 }
@@ -77,11 +82,12 @@ impl CharacterChoice {
 
 impl Game {
     /// Layers `choice` onto the just-spawned player, in this order: stats,
-    /// look, kit, routine. Stats and look are this module's own logic; kit
-    /// and routine are one-line delegations — see the module doc comment.
+    /// identity, kit, routine. Stats and identity are this module's own
+    /// logic; kit and routine are one-line delegations — see the module doc
+    /// comment.
     pub(crate) fn apply_character_choice(&mut self, choice: &CharacterChoice) {
         self.apply_creation_stats(choice);
-        self.apply_creation_look(choice);
+        self.apply_creation_identity(choice);
         crate::classes::apply_kit(self, choice.class);
         crate::abilities::install_starter(self, choice.routine.as_ref());
     }
@@ -116,11 +122,25 @@ impl Game {
         }
     }
 
-    /// The player's chosen glyph. `choice.colour` and `choice.sprite` have
-    /// nowhere to land yet — `components::PlayerIdentity` (Task 2 of this
-    /// feature) is where this step grows to write them.
-    fn apply_creation_look(&mut self, choice: &CharacterChoice) {
+    /// The player's chosen glyph, class, sprite, colour and name.
+    /// `choice.glyph` writes the existing `Glyph.ch`; `class`/`sprite`/
+    /// `colour` overwrite the `PlayerIdentity` `spawn_player` seeded at its
+    /// neutral `Default` — `GlyphColor` is the eleven-hue *content* palette
+    /// and the player's own choices are deliberately outside it, so the
+    /// colour rides `PlayerIdentity` instead of `Glyph.color`. The name
+    /// goes through `CustomName::sanitize` like every other writer, so a
+    /// blank `choice.name` — `CharacterChoice::default()`'s own value —
+    /// inserts no override, exactly as today's nameless player has none.
+    fn apply_creation_identity(&mut self, choice: &CharacterChoice) {
         let player = self.player_entity();
         self.world.get_mut::<Glyph>(player).unwrap().ch = choice.glyph;
+        *self.world.get_mut::<PlayerIdentity>(player).unwrap() = PlayerIdentity {
+            class: choice.class,
+            sprite: choice.sprite.clone(),
+            colour: choice.colour,
+        };
+        if let Some(name) = CustomName::sanitize(Some(choice.name.clone())) {
+            self.world.entity_mut(player).insert(CustomName(name));
+        }
     }
 }

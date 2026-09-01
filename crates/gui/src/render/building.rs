@@ -1009,6 +1009,7 @@ mod tests {
             color: GlyphColor::White,
             label: "Mining Node".into(),
             is_player: false,
+            look: None,
             is_tamed: false,
             is_companion: false,
             is_hostile: false,

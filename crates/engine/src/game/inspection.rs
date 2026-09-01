@@ -1010,6 +1010,13 @@ impl Game {
                     .get::<Durability>(entity)
                     .map(|d| (d.hp, d.max_hp));
                 let label = self.entity_label(entity);
+                let look = is_player.then(|| {
+                    let identity = self.world.get::<PlayerIdentity>(entity);
+                    PlayerLook {
+                        sprite: identity.map(|i| i.sprite.clone()).unwrap_or_default(),
+                        colour: identity.map(|i| i.colour).unwrap_or_default(),
+                    }
+                });
                 EntityView {
                     entity,
                     pos: (pos.x, pos.y),
@@ -1017,6 +1024,7 @@ impl Game {
                     color,
                     label,
                     is_player,
+                    look,
                     is_tamed,
                     is_companion,
                     is_hostile,

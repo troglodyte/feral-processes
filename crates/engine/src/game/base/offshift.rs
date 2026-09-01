@@ -374,7 +374,7 @@ impl Game {
     }
 
     /// **The one edge.** Latches `need` on `worker` and, if that was the
-    /// edge, says so once and writes the grudge.
+    /// edge, says so once — and writes the grudge on one of the two branches.
     ///
     /// Both halves of failing the gate come through here — nothing in the
     /// base services this need, and the amenity is walled off from where this
@@ -382,6 +382,18 @@ impl Game {
     /// concerned and one latch as far as the base is. They say **different
     /// sentences**, because they leave the player different errands: that is
     /// `NoPost::BoxedIn`-versus-`NoRoute`'s rule one level up.
+    ///
+    /// **Only `unreachable` earns the grudge, and that asymmetry is the
+    /// point.** A base with no amenity at all has done nothing to be held
+    /// against it: the player may not have researched one, may not have the
+    /// materials, and has never been told they want one, so a memory formed
+    /// there is a program resenting the base for a building that was never
+    /// an option. Measured against a real save it was worth -27 on its own,
+    /// most of the way to a standdown, with no lever anywhere for the player
+    /// to answer it. The base earns the grudge when it *had* an answer and
+    /// could not deliver it — a Bay walled off, or destroyed — which is a
+    /// complaint with an errand attached. The sentence is still said on both
+    /// branches, so nothing is hidden; only the blame is withheld.
     ///
     /// The grudge is `MemorySubject::BaseTile` at the program's **own**
     /// `Position`, `note_strandings`' subject and for its reason: "worn thin
@@ -411,7 +423,7 @@ impl Game {
                 "{who} is out of {what} and there's nothing in the base that restores it."
             ));
         }
-        if let Some(at) = at {
+        if let (true, Some(at)) = (unreachable, at) {
             self.remember(
                 worker,
                 "frayed_here",

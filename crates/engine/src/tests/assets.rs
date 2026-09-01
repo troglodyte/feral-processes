@@ -2091,8 +2091,10 @@ const MEMORY_TRIGGERS: &[(&str, crate::memories::MemorySubjectKind)] = {
         ("hard_won", K::Nothing),
         // `Game::note_strandings`, off `tick_inner`.
         ("stranded_at", K::BaseTile),
-        // `Game::fray`, off the one edge where a need latches — whether
-        // nothing services it or nothing routes to what does.
+        // `Game::fray`, off the one edge where a need latches — and only
+        // on the branch where the base *had* an answer and nothing routed
+        // to it. A base with no amenity at all says the line and earns no
+        // grudge; see that function.
         ("frayed_here", K::BaseTile),
         // `Game::damage_structure`, on both branches. The one work memory
         // that is an edge rather than a stretch of service, because a sweep

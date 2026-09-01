@@ -872,13 +872,19 @@ impl ManifestOrigin {
     }
 }
 
-/// Which of the character-creation wizard's seven steps is showing. One
+/// Which of the character-creation wizard's eight steps is showing. One
 /// `Mode::CreateCharacter` carries this as a cursor rather than the flow
 /// being seven modes — see that variant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CreationStep {
     Difficulty,
     Class,
+    /// The starting kit, picked off `items_db::creation_shelf` against a
+    /// `tuning::CREATION_CREDITS` allowance. Sits directly after `Class`
+    /// because it **replaces** that class's authored kit — the two are one
+    /// decision read in sequence, and the Class step's rows already show
+    /// the kit being traded away.
+    Kit,
     Look,
     Points,
     Routine,
@@ -895,9 +901,10 @@ impl CreationStep {
     /// undrawable. Adding a variant without adding it here is caught by
     /// `every_step_is_in_the_exhaustive_list`, which is the one place that
     /// can be checked.
-    pub const ALL: [CreationStep; 7] = [
+    pub const ALL: [CreationStep; 8] = [
         CreationStep::Difficulty,
         CreationStep::Class,
+        CreationStep::Kit,
         CreationStep::Look,
         CreationStep::Points,
         CreationStep::Routine,
@@ -906,7 +913,7 @@ impl CreationStep {
     ];
 
     /// Where this step sits in [`ALL`](CreationStep::ALL), 0-based — the
-    /// "step 3 of 7" figure, and what `next`/`prev` walk.
+    /// "step 3 of 8" figure, and what `next`/`prev` walk.
     pub fn index(self) -> usize {
         Self::ALL
             .iter()
@@ -931,6 +938,7 @@ impl CreationStep {
         match self {
             CreationStep::Difficulty => "Difficulty",
             CreationStep::Class => "Class",
+            CreationStep::Kit => "Kit",
             CreationStep::Look => "Look",
             CreationStep::Points => "Points",
             CreationStep::Routine => "Starter routine",
@@ -973,6 +981,13 @@ pub enum CreationRow {
         spent: u32,
         value: i32,
         cost: u32,
+    },
+    /// One shelf item on the Kit step. `taken` is how many units the
+    /// basket holds of it and `price` what one more costs — the Stat row's
+    /// shape, in Credits instead of pool points.
+    Item {
+        row: feral_processes_engine::StartingItemRow,
+        taken: u32,
     },
     Routine(feral_processes_engine::StarterRoutineRow),
     Name {

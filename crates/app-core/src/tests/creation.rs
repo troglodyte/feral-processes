@@ -1,4 +1,4 @@
-//! The character-creation wizard — `Mode::CreateCharacter` and its seven
+//! The character-creation wizard — `Mode::CreateCharacter` and its eight
 //! steps.
 //!
 //! `the_summary_step_commits_the_choice` is the load-bearing one: it walks
@@ -12,7 +12,8 @@ use feral_processes_engine::achievements::{AchievementId, Earned, roll_main_stat
 use feral_processes_engine::save;
 use feral_processes_engine::species::AffinityClass;
 use feral_processes_engine::tuning::{
-    CREATION_COST_DEF, CREATION_GAIN_INTEGRITY, CREATION_STAT_POINTS, PLAYER_BASE_STATS,
+    CREATION_COST_DEF, CREATION_CREDITS, CREATION_GAIN_INTEGRITY, CREATION_STAT_POINTS,
+    PLAYER_BASE_STATS,
 };
 
 /// An `App` sitting on the main menu with no run, its own scratch saves
@@ -123,6 +124,8 @@ fn the_wizard_walks_forward_and_back() {
     press(&mut app, ch('f'));
     assert_eq!(app.creation_step(), CreationStep::Class);
     press(&mut app, ch('1'));
+    assert_eq!(app.creation_step(), CreationStep::Kit);
+    press(&mut app, GameKey::Enter);
     assert_eq!(app.creation_step(), CreationStep::Look);
     press(&mut app, ch('n'));
     assert_eq!(app.creation_step(), CreationStep::Points);
@@ -139,6 +142,7 @@ fn the_wizard_walks_forward_and_back() {
         CreationStep::Routine,
         CreationStep::Points,
         CreationStep::Look,
+        CreationStep::Kit,
         CreationStep::Class,
         CreationStep::Difficulty,
     ] {
@@ -171,6 +175,7 @@ fn the_summary_step_commits_the_choice() {
     let classes = app.creation_catalogue.class_rows();
     let wanted_class = classes[1].class;
     press(&mut app, ch('2')); // the second class
+    press(&mut app, GameKey::Enter); // past the Kit step, basket untouched
 
     // The Look step lists the icons first, then the swatches.
     let icons = CREATION_ICONS.len();
@@ -268,6 +273,11 @@ fn roll_everything_spends_exactly_the_pool() {
 fn the_roll_leaves_a_finished_character_alone() {
     let mut app = opened("roll_finished");
     press(&mut app, ch('2')); // a class
+    // A kit taken by hand: an untouched basket is not a decision, so `[R]`
+    // filling one is the roll doing its job rather than overwriting a
+    // choice — which is the distinction this test exists to hold.
+    press(&mut app, GameKey::Right);
+    press(&mut app, GameKey::Enter);
     press(&mut app, ch(menu_shortcut(1))); // the second icon
     press(&mut app, ch(menu_shortcut(CREATION_ICONS.len() + 2))); // the third swatch
     press(&mut app, ch('n'));
@@ -354,6 +364,7 @@ fn the_roll_never_picks_the_difficulty() {
 fn points_cannot_be_overspent() {
     let mut app = opened("overspend");
     press(&mut app, ch('1'));
+    press(&mut app, GameKey::Enter); // past the Kit step, basket untouched
     press(&mut app, ch('n'));
     assert_eq!(app.creation_step(), CreationStep::Points);
 
@@ -394,6 +405,7 @@ fn points_cannot_be_overspent() {
 fn the_points_step_sees_a_modifier() {
     let mut app = opened("modifier");
     press(&mut app, ch('1'));
+    press(&mut app, GameKey::Enter); // past the Kit step, basket untouched
     press(&mut app, ch('n'));
     let axis = |want: MainStat| MainStat::all().iter().position(|s| *s == want).unwrap();
 
@@ -521,7 +533,7 @@ fn the_class_step_cannot_be_left_without_a_class() {
     // Enter takes the highlighted row, which is a pick like any other —
     // there is no row on this screen that means "none".
     press(&mut app, GameKey::Enter);
-    assert_eq!(app.creation_step(), CreationStep::Look);
+    assert_eq!(app.creation_step(), CreationStep::Kit);
     assert!(app.creation_choice().class.is_some());
 }
 
@@ -705,6 +717,7 @@ fn the_routine_rows_are_priced_through_the_chosen_class() {
 fn the_points_step_opens_on_a_full_spread() {
     let mut app = opened("full_spread");
     press(&mut app, ch('1')); // a class
+    press(&mut app, GameKey::Enter); // past the Kit step, basket untouched
     press(&mut app, ch('n')); // -> Points, no icon or swatch picked
     assert_eq!(app.creation_step(), CreationStep::Points);
     assert_eq!(
@@ -722,6 +735,7 @@ fn the_points_step_opens_on_a_full_spread() {
 fn a_rolled_spread_can_be_redistributed() {
     let mut app = opened("redistribute");
     press(&mut app, ch('1'));
+    press(&mut app, GameKey::Enter); // past the Kit step, basket untouched
     press(&mut app, ch('n'));
     assert_eq!(app.creation_step(), CreationStep::Points);
     assert_eq!(app.creation_choice().cost(), Some(CREATION_STAT_POINTS));
@@ -764,6 +778,7 @@ fn a_rolled_spread_can_be_redistributed() {
 fn reentering_points_keeps_a_hand_made_spread() {
     let mut app = opened("reenter_points");
     press(&mut app, ch('1'));
+    press(&mut app, GameKey::Enter); // past the Kit step, basket untouched
     press(&mut app, ch('n'));
     assert_eq!(app.creation_step(), CreationStep::Points);
 
@@ -806,6 +821,7 @@ fn reentering_points_keeps_a_hand_made_spread() {
 fn the_seed_does_not_mark_the_points_step_decided() {
     let mut app = opened("seed_not_decided");
     press(&mut app, ch('1'));
+    press(&mut app, GameKey::Enter); // past the Kit step, basket untouched
     press(&mut app, ch('n'));
     assert_eq!(app.creation_step(), CreationStep::Points);
     assert!(
@@ -823,5 +839,203 @@ fn the_seed_does_not_mark_the_points_step_decided() {
         app.creation_choice().cost(),
         Some(CREATION_STAT_POINTS),
         "the reroll still spends exactly the pool"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The Kit step.
+// ---------------------------------------------------------------------------
+
+/// A wizard sitting on the Kit step with a class picked.
+fn on_the_kit_step(name: &str) -> App {
+    let mut app = opened(name);
+    press(&mut app, ch('1'));
+    assert_eq!(app.creation_step(), CreationStep::Kit);
+    app
+}
+
+/// What the basket holds of the shelf row at `index`.
+fn taken(app: &App, index: usize) -> u32 {
+    let id = &app.creation_catalogue.shelf_rows()[index].id;
+    app.creation_choice()
+        .items
+        .iter()
+        .find(|(item, _)| item == id)
+        .map_or(0, |(_, qty)| *qty)
+}
+
+/// The step opens on an empty basket with the whole allowance — unlike
+/// Points, which is seeded with a roll on the way in. Nothing to seed here:
+/// an empty basket already means something (keep the class kit), so a seeded
+/// one would be a decision the player never made.
+#[test]
+fn the_kit_step_opens_empty_with_the_whole_allowance() {
+    let app = on_the_kit_step("kit_opens");
+    assert!(app.creation_choice().items.is_empty());
+    assert_eq!(app.creation_credits_left(), CREATION_CREDITS);
+    assert!(
+        !app.creation_rows().is_empty(),
+        "the shipped item set stocked no shelf"
+    );
+}
+
+/// `Mode::Transfer`'s table, in Credits: Right takes, Left puts back,
+/// ShiftRight fills the row to what the allowance permits and ShiftLeft
+/// empties it.
+#[test]
+fn the_kit_step_takes_and_puts_back() {
+    let mut app = on_the_kit_step("kit_arrows");
+    let price = app.creation_catalogue.shelf_rows()[0].price;
+
+    press(&mut app, GameKey::Right);
+    assert_eq!(taken(&app, 0), 1);
+    assert_eq!(app.creation_credits_left(), CREATION_CREDITS - price);
+
+    press(&mut app, GameKey::Left);
+    assert_eq!(taken(&app, 0), 0);
+    assert_eq!(app.creation_credits_left(), CREATION_CREDITS);
+    assert!(
+        app.creation_choice().items.is_empty(),
+        "a row lowered to zero must leave the basket, not sit in it at zero"
+    );
+
+    press(&mut app, GameKey::ShiftRight);
+    assert_eq!(taken(&app, 0), CREATION_CREDITS / price);
+    assert_eq!(app.creation_credits_left(), CREATION_CREDITS % price);
+    press(&mut app, GameKey::ShiftLeft);
+    assert_eq!(app.creation_credits_left(), CREATION_CREDITS);
+}
+
+/// `App::put_available`'s rule: a row's ceiling counts what the **other**
+/// rows have spent, never its own units — otherwise a row filled to the
+/// allowance could never be lowered and raised again.
+#[test]
+fn a_full_row_can_still_be_lowered_and_raised() {
+    let mut app = on_the_kit_step("kit_full_row");
+    press(&mut app, GameKey::ShiftRight);
+    let full = taken(&app, 0);
+    assert!(full > 1);
+    assert_eq!(app.creation_credits_left(), 0, "row 0 is the cheapest row");
+
+    press(&mut app, GameKey::Left);
+    assert_eq!(taken(&app, 0), full - 1);
+    press(&mut app, GameKey::Right);
+    assert_eq!(taken(&app, 0), full, "the row could not be raised again");
+}
+
+/// The allowance is one budget across every row, so filling one row lowers
+/// what the others may hold — and asking past it refuses out loud rather
+/// than going quietly dead. `App::refuse` is the door, so it lands on both
+/// the popup and the log.
+#[test]
+fn the_allowance_is_one_budget_and_refuses_out_loud() {
+    let mut app = on_the_kit_step("kit_budget");
+    press(&mut app, GameKey::ShiftRight);
+    assert_eq!(app.creation_credits_left(), 0);
+
+    app.menu_selected = 1;
+    press(&mut app, GameKey::Right);
+    assert_eq!(
+        taken(&app, 1),
+        0,
+        "a second row must not spend a spent purse"
+    );
+    let refusal = app.status_line.clone().expect("the refusal is said");
+    assert!(
+        refusal.contains("Credits left"),
+        "unexpected refusal: {refusal}"
+    );
+}
+
+/// Esc walks back to the Class step and forward again with the basket
+/// intact — `CharacterChoice::items` is the only store, so there is no
+/// parallel amount list to fall out of step with the shelf.
+#[test]
+fn walking_away_from_the_kit_step_keeps_the_basket() {
+    let mut app = on_the_kit_step("kit_reenter");
+    press(&mut app, GameKey::Right);
+    press(&mut app, GameKey::Right);
+    assert_eq!(taken(&app, 0), 2);
+
+    press(&mut app, GameKey::Esc);
+    assert_eq!(app.creation_step(), CreationStep::Class);
+    press(&mut app, ch('1'));
+    assert_eq!(app.creation_step(), CreationStep::Kit);
+    assert_eq!(
+        taken(&app, 0),
+        2,
+        "the basket did not survive the walk back"
+    );
+}
+
+/// `[R]` spends as much of the allowance as the shelf allows, by
+/// construction rather than by a check — `roll_points_spread`'s guarantee on
+/// the other pool. It can never hand out a basket the commit would refuse.
+#[test]
+fn the_roll_fills_the_basket_within_the_allowance() {
+    let mut app = on_the_kit_step("kit_roll");
+    press(&mut app, ch('R'));
+    assert_eq!(app.creation_step(), CreationStep::Summary);
+
+    let shelf = app.creation_catalogue.shelf_rows();
+    let cheapest = shelf.iter().map(|r| r.price).min().unwrap();
+    let spend: u32 = app
+        .creation_choice()
+        .items
+        .iter()
+        .map(|(id, qty)| {
+            let row = shelf
+                .iter()
+                .find(|r| &r.id == id)
+                .expect("the roll drew a row off the shelf");
+            row.price * qty
+        })
+        .sum();
+    assert!(
+        spend <= CREATION_CREDITS,
+        "the roll overspent: {spend} of {CREATION_CREDITS}"
+    );
+    assert!(
+        CREATION_CREDITS - spend < cheapest,
+        "the roll left {} Credits with a {cheapest}-Credit row still affordable",
+        CREATION_CREDITS - spend
+    );
+}
+
+/// A hand-built basket is not rerolled — `Decided::kit`, the rule every
+/// other step already follows.
+#[test]
+fn the_roll_leaves_a_hand_made_basket_alone() {
+    let mut app = on_the_kit_step("kit_roll_decided");
+    press(&mut app, GameKey::Right);
+    let before = app.creation_choice().items.clone();
+    press(&mut app, ch('R'));
+    assert_eq!(app.creation_choice().items, before);
+}
+
+/// The whole path, by keypress: a basket taken on the Kit step reaches the
+/// run's `Inventory` and the class kit does not arrive beside it.
+#[test]
+fn a_picked_kit_reaches_the_started_run() {
+    let mut app = on_the_kit_step("kit_commits");
+    let row = app.creation_catalogue.shelf_rows()[0].clone();
+    press(&mut app, GameKey::Right);
+    press(&mut app, GameKey::Right);
+    press(&mut app, ch('R')); // rolls the rest, jumps to the Summary
+    press(&mut app, GameKey::Enter);
+
+    // Not `Mode::Playing`: a fresh run may open on a notification screen.
+    let game = app.game.as_ref().expect("the run did not start");
+    let carried = game
+        .player_status()
+        .inventory
+        .iter()
+        .find(|r| r.copy.item == row.id)
+        .map(|r| r.qty)
+        .unwrap_or(0);
+    assert!(
+        carried >= 2,
+        "picked 2x {} and the run holds {carried}",
+        row.name
     );
 }

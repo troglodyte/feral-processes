@@ -456,6 +456,65 @@ impl ItemDb {
         self.items.get(id)
     }
 
+    /// What one unit of `def` is worth in trade currency, before any
+    /// trader's own `TradeDef::sell_rate`.
+    ///
+    /// A free function's worth of logic hoisted out of `Game::item_value`,
+    /// which is now a call to it: the creation wizard prices a shelf before
+    /// any `Game` exists, and a second `unwrap_or(DEFAULT_ITEM_VALUE)`
+    /// written out by hand is the copy that drifts when the fallback moves.
+    pub fn value_of(def: &ItemDef) -> u32 {
+        def.value.unwrap_or(crate::tuning::DEFAULT_ITEM_VALUE)
+    }
+
+    /// The character-creation kit shelf: what a new run may spend its
+    /// `tuning::CREATION_CREDITS` allowance on.
+    ///
+    /// **The one derivation.** `Game::creation_shelf_rows` and
+    /// `CreationCatalogue::shelf_rows` are both calls to this, the same
+    /// arrangement `classes::class_rows` and `abilities::starter_rows`
+    /// already have — a wizard that previewed a different shelf from the
+    /// one the run actually granted would be worse than no preview. It is
+    /// also the *rule*: nothing validates a basket beyond membership here,
+    /// `install_starter`'s precedent, where the pool's shape is held by
+    /// what the wizard offers plus a census rather than by a check inside
+    /// the writer.
+    ///
+    /// Three exclusions, each for its own reason. The **trade currency** is
+    /// the allowance itself, so buying it with itself is a no-op — its own
+    /// filter rather than `ItemDef::banked`, the caravan's rule. The
+    /// **craft currency** is what the Stack exists to pay you, and starting
+    /// with a purse of it short-circuits the loop the Stack is for.
+    /// A **banked** item is not cargo at all. `EconomyRole::Currency`
+    /// deliberately stays: every shipped class kit opens with 4-6 Core
+    /// Fragments, and this shelf replaces that kit.
+    ///
+    /// Sorted `(price, id)` because `ItemDb` keys by `String` in a
+    /// `HashMap`, so the rows — and the digit shortcuts over them — would
+    /// otherwise land in a different order every run.
+    pub fn creation_shelf(&self) -> Vec<crate::views::StartingItemRow> {
+        let barred =
+            |id: &ItemId| Some(id) == self.trade_currency() || Some(id) == self.craft_currency();
+        let mut rows: Vec<crate::views::StartingItemRow> = self
+            .all()
+            .filter(|def| !def.banked && !barred(&def.id))
+            .filter_map(|def| {
+                let price = Self::value_of(def);
+                (price <= crate::tuning::CREATION_SHELF_MAX_VALUE).then(|| {
+                    crate::views::StartingItemRow {
+                        id: def.id.clone(),
+                        name: def.name.clone(),
+                        description: def.description.clone(),
+                        price,
+                    }
+                })
+            })
+            .collect();
+        rows.sort_by(|a, b| (a.price, a.id.as_str()).cmp(&(b.price, b.id.as_str())));
+        rows.truncate(crate::tuning::CREATION_SHELF_ROWS);
+        rows
+    }
+
     pub fn all(&self) -> impl Iterator<Item = &ItemDef> {
         let mut defs: Vec<&ItemDef> = self.items.values().collect();
         defs.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));

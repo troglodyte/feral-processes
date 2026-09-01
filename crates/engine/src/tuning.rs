@@ -88,6 +88,49 @@ pub const MAX_CREATION_STAT_POINTS: u32 = 20;
 
 const _: () = assert!(CREATION_STAT_POINTS <= MAX_CREATION_STAT_POINTS);
 
+/// Credits the character-creation kit step gives the player to spend on
+/// `items_db::creation_shelf`.
+///
+/// **25, because that is the band the shipped class kits already occupy.**
+/// Priced through `items_db::value_of`, the five `assets/classes/` kits are
+/// worth Leech 11, Striker 15, no-class fallback 21, Medic 23, Bastion 29
+/// and Saboteur 35. A picked kit therefore trades *shape* against an
+/// authored one rather than size — `roll_points_spread`'s principle on the
+/// other pool. Set it well above that band and the step is a free upgrade
+/// over every class; well below and picking is a punishment for engaging
+/// with the screen.
+///
+/// Whatever the basket leaves unspent arrives as Credits, so this is also
+/// the most a run can open holding.
+pub const CREATION_CREDITS: u32 = 25;
+
+/// The dearest item `items_db::creation_shelf` will offer, in the same
+/// Credits `CREATION_CREDITS` is denominated in.
+///
+/// **This is a layout constraint as much as a design one.** The creation
+/// wizard promises no scroll — `the_tallest_creation_step_fits_its_screen`
+/// holds every step under `popup::popup_max_rows`, 28 at 1280x720 — and the
+/// shelf is derived from a **moddable** item set, so its length is this
+/// number's consequence. At 8 the shipped assets stock 23 rows; at 12 they
+/// stock 26 and the census has no room left for the step's footer.
+///
+/// What 8 buys the player: every material, all three companion upgrades,
+/// the rest charge, and six pieces of tier-1 gear. What it keeps off: the
+/// zone-gated gear from `arc_lance` (12) up, which is a run's reward.
+pub const CREATION_SHELF_MAX_VALUE: u32 = 8;
+
+/// Hard cap on how many rows `items_db::creation_shelf` returns, after the
+/// `CREATION_SHELF_MAX_VALUE` filter.
+///
+/// The *mod* safety net, not the shipped bound: a modded `assets/items/`
+/// full of cheap items would otherwise push the step past the wizard's
+/// no-scroll ceiling, and this truncates instead — `MAX_NEED_ROWS`
+/// trimming before the WORK box's own cap, for that reason. The shipped
+/// set is held well under it by `the_shipped_shelf_fits_the_wizard`, so
+/// reaching this cap is a signal to retune the ceiling above, never to
+/// raise this.
+pub const CREATION_SHELF_ROWS: usize = 26;
+
 /// Flat stat growth per level-up, before `growth_multiplier` scales it —
 /// see `progression::stats_after_levels`.
 ///

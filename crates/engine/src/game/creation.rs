@@ -14,6 +14,8 @@
 
 use crate::abilities::AbilityId;
 use crate::achievements::MainStat;
+use crate::items::ItemId;
+use crate::items_db::ItemDb;
 use crate::species::AffinityClass;
 use crate::*;
 
@@ -46,6 +48,18 @@ pub struct CharacterChoice {
     /// eating a point the player chose to spend.
     pub stats: [u32; 4],
     pub routine: Option<AbilityId>,
+    /// The starting kit picked off `items_db::creation_shelf`, priced
+    /// against `tuning::CREATION_CREDITS`.
+    ///
+    /// **Non-empty replaces the class kit; empty falls back to it.** That
+    /// is the whole of the rule, and it is what keeps two properties
+    /// alive at once: `CharacterChoice::default()` still produces today's
+    /// player across the ~1,600 `Game::new` call sites, and an empty
+    /// `assets/classes/` is still the pre-class game. A sentinel
+    /// (`Option<Vec<_>>`) was the alternative and is worse — walking the
+    /// step without spending would then be a deliberate `Some(vec![])`
+    /// and start the run naked.
+    pub items: Vec<(ItemId, u32)>,
 }
 
 /// Today's player exactly — no class, the `@` glyph wearing its
@@ -63,6 +77,7 @@ impl Default for CharacterChoice {
             colour: None,
             stats: [0; 4],
             routine: None,
+            items: Vec::new(),
         }
     }
 }
@@ -101,7 +116,7 @@ impl Game {
     pub(crate) fn apply_character_choice(&mut self, choice: &CharacterChoice) {
         self.apply_creation_stats(choice);
         self.apply_creation_identity(choice);
-        crate::classes::apply_kit(self, choice.class);
+        self.apply_creation_kit(choice);
         crate::abilities::install_starter(self, choice.routine.as_ref());
     }
 
@@ -156,6 +171,52 @@ impl Game {
             self.world.entity_mut(player).insert(CustomName(name));
         }
     }
+
+    /// The kit slot: `choice.items` if the player picked one, the class kit
+    /// otherwise. See `CharacterChoice::items` for why an empty basket is
+    /// the fallback rather than a naked run.
+    ///
+    /// Fails closed, `apply_creation_stats`' rule: a basket that overspends
+    /// the allowance, or names anything `items_db::creation_shelf` does not
+    /// offer, applies **no** items at all and takes the class kit instead —
+    /// never a clamped or partial basket, and never a way for a
+    /// hand-built `CharacterChoice` around what the shelf is allowed to
+    /// hold.
+    ///
+    /// What the basket leaves unspent arrives as Credits, and only on this
+    /// branch — crediting the fallback would hand today's kitted player an
+    /// allowance they never chose.
+    fn apply_creation_kit(&mut self, choice: &CharacterChoice) {
+        let Some(spent) = self.creation_basket_cost(&choice.items) else {
+            crate::classes::apply_kit(self, choice.class);
+            return;
+        };
+        let credits = self.world.resource::<ItemDb>().trade_currency().cloned();
+        let player = self.player_entity();
+        let mut inventory = self.world.get_mut::<Inventory>(player).unwrap();
+        for (item, qty) in &choice.items {
+            inventory.add(item.clone(), *qty);
+        }
+        if let Some(credits) = credits {
+            inventory.add(credits, crate::tuning::CREATION_CREDITS - spent);
+        }
+    }
+
+    /// What `items` costs out of `tuning::CREATION_CREDITS`, or `None` if
+    /// it is not a basket the kit step could have produced — an item the
+    /// shelf does not offer, or a total over the allowance. `None` for an
+    /// empty basket too, which is what routes it to the class kit.
+    fn creation_basket_cost(&self, items: &[(ItemId, u32)]) -> Option<u32> {
+        if items.is_empty() {
+            return None;
+        }
+        let shelf = self.creation_shelf_rows();
+        let total = items.iter().try_fold(0u32, |sum, (item, qty)| {
+            let row = shelf.iter().find(|r| &r.id == item)?;
+            sum.checked_add(row.price.checked_mul(*qty)?)
+        })?;
+        (total <= crate::tuning::CREATION_CREDITS).then_some(total)
+    }
 }
 
 /// The three databases the creation wizard reads, loaded on their own.
@@ -207,6 +268,13 @@ impl CreationCatalogue {
     /// One row per loaded class — `Game::class_rows`' own derivation.
     pub fn class_rows(&self) -> Vec<views::ClassRow> {
         crate::classes::class_rows(&self.classes, &self.items)
+    }
+
+    /// The kit shelf — `ItemDb::creation_shelf` called, the same
+    /// derivation `Game::creation_shelf_rows` calls, so the wizard cannot
+    /// offer a row the run would then refuse.
+    pub fn shelf_rows(&self) -> Vec<crate::views::StartingItemRow> {
+        self.items.creation_shelf()
     }
 
     /// The starter pool, priced through `class`'s spread —

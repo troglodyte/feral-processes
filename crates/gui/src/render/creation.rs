@@ -83,7 +83,7 @@ fn step_rows(app: &App, step: CreationStep) -> Vec<Row> {
         drawn.push(text_row("Nothing to choose here."));
     }
     drawn.push(text_row(""));
-    drawn.push(text_row(footer(step)));
+    drawn.push(text_row(footer(app, step)));
     drawn
 }
 
@@ -141,6 +141,13 @@ fn row_line(row: &CreationRow) -> String {
                 stat.label()
             )
         }
+        // No bar, unlike the Stat row above: at 1 Credit an item's own
+        // ceiling is the whole allowance, so a bar would be 25 cells wide on
+        // most of two dozen rows. The remaining allowance rides the footer
+        // instead, where it is read once rather than inferred per row.
+        CreationRow::Item { row, taken } => {
+            format!("{:<24} {:>2}c   x{taken}", row.name, row.price)
+        }
         CreationRow::Routine(routine) => {
             format!(
                 "{} - {} ({:.0} Power)",
@@ -153,10 +160,28 @@ fn row_line(row: &CreationRow) -> String {
 }
 
 /// What each step's keys are, in one line under its rows.
-fn footer(step: CreationStep) -> &'static str {
+///
+/// Takes the `App` for the Kit step alone, which is the one footer carrying
+/// a live figure: with two dozen rows and no per-row bar, the remaining
+/// allowance has nowhere else on the screen to go.
+fn footer(app: &App, step: CreationStep) -> String {
+    match step {
+        CreationStep::Kit => format!(
+            "{}c left - Left/Right takes (Shift/Ctrl); Enter moves on; \
+             taking nothing keeps your class kit",
+            app.creation_credits_left()
+        ),
+        _ => plain_footer(step).to_string(),
+    }
+}
+
+/// The seven steps whose keys never change.
+fn plain_footer(step: CreationStep) -> &'static str {
     match step {
         CreationStep::Difficulty => "Esc backs out to the menu",
         CreationStep::Class => "Up/Down + Enter; [R] rolls the rest; Esc goes back",
+        // Written by `footer` above, which is the only caller.
+        CreationStep::Kit => "",
         CreationStep::Look => "Up/Down + Enter picks; [n] moves on; [R] rolls; Esc goes back",
         CreationStep::Points => {
             "Left/Right spends (Shift: all, Ctrl: half); Enter moves on; [R] rolls"
@@ -339,9 +364,12 @@ mod tests {
 
     /// The keys that walk one step forward from each of the first six —
     /// shared by every test that needs to visit every step in turn.
-    const FORWARD: [GameKey; 6] = [
+    const FORWARD: [GameKey; 7] = [
         GameKey::Char('f'),
         GameKey::Char('1'),
+        // The Kit step: Enter takes the basket as it stands, which on an
+        // untouched step is empty and keeps the class kit.
+        GameKey::Enter,
         GameKey::Char('n'),
         GameKey::Enter,
         GameKey::Char('n'),
@@ -531,7 +559,9 @@ mod tests {
     #[test]
     fn the_look_preview_draws_the_chosen_glyph_and_colour() {
         let mut app = wizard_app();
-        for key in [GameKey::Char('f'), GameKey::Char('1')] {
+        // Difficulty, then the first class, then past the Kit step with an
+        // untouched basket.
+        for key in [GameKey::Char('f'), GameKey::Char('1'), GameKey::Enter] {
             app.handle_key(key);
         }
         assert_eq!(app.creation_step(), CreationStep::Look);
@@ -578,7 +608,9 @@ mod tests {
     #[test]
     fn the_look_preview_prefers_a_loaded_sprite_over_the_glyph() {
         let mut app = wizard_app();
-        for key in [GameKey::Char('f'), GameKey::Char('1')] {
+        // Difficulty, then the first class, then past the Kit step with an
+        // untouched basket.
+        for key in [GameKey::Char('f'), GameKey::Char('1'), GameKey::Enter] {
             app.handle_key(key);
         }
         assert_eq!(app.creation_step(), CreationStep::Look);

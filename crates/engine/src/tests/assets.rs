@@ -2787,3 +2787,88 @@ fn every_starter_reads_differently_through_a_class_that_raises_its_axis() {
         );
     }
 }
+
+/// **`tuning::CREATION_SHELF_ROWS` is a mod safety net, not the shipped
+/// bound.** Reaching it means the shipped item set is being silently
+/// truncated — rows the wizard would draw, dropped with no failure — so
+/// the census is that the shipped shelf sits **under** the cap with room,
+/// and the fix when it stops doing so is `CREATION_SHELF_MAX_VALUE`, never
+/// this cap.
+///
+/// The other half of the promise — that those rows actually fit a 1280x720
+/// popup with no scroll — is `the_tallest_creation_step_fits_its_screen`
+/// in `crates/gui`, which is the only side that can measure a screen.
+#[test]
+fn the_shipped_shelf_fits_the_wizard() {
+    let game = Game::new(3411, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let rows = game.creation_shelf_rows();
+    assert!(
+        !rows.is_empty(),
+        "the shipped item set stocks no creation shelf at all"
+    );
+    assert!(
+        rows.len() < crate::tuning::CREATION_SHELF_ROWS,
+        "the shipped shelf is {} rows against a {} truncation cap — items are being \
+         dropped in silence; lower CREATION_SHELF_MAX_VALUE rather than raising the cap",
+        rows.len(),
+        crate::tuning::CREATION_SHELF_ROWS
+    );
+}
+
+/// **`CREATION_CREDITS` is sized against the shipped class kits, and this
+/// is what says so.** The kit step *replaces* the class kit, so the
+/// allowance has to buy something comparable: far above the band the kits
+/// occupy and picking is a free upgrade over every class, far below and it
+/// is a punishment for engaging with the screen. Nothing in
+/// `assets/classes/` states its own worth, so this census is the whole of
+/// the rule — `ZONE_MATERIALS`' precedent, one directory over.
+///
+/// The claim is that the allowance sits **inside the span the shipped kits
+/// already occupy**, not that every kit is near it: the five are spread
+/// 11..35 by design, and equalising them is the Class step's business, not
+/// this one's. Priced through `ItemDb::value_of`, the same door the shelf
+/// prices a row through, so a retuned item value moves both sides together.
+#[test]
+fn the_creation_allowance_sits_inside_the_class_kit_band() {
+    let (abilities, _) =
+        crate::abilities::AbilityDb::load_dir(&test_assets_dir().join("abilities")).unwrap();
+    let (items, _) =
+        crate::items_db::ItemDb::load_dir(&test_assets_dir().join("items"), &abilities).unwrap();
+    let (classes, _) =
+        crate::classes::ClassDb::load_dir(&test_assets_dir().join("classes")).unwrap();
+
+    let worths: Vec<(String, u32)> = classes
+        .iter()
+        .map(|def| {
+            let worth = def
+                .kit
+                .iter()
+                .map(|(item, qty)| {
+                    let price = items
+                        .get(item.as_str())
+                        .map(crate::items_db::ItemDb::value_of)
+                        .unwrap_or_else(|| {
+                            panic!("{} kits an item that does not exist: {item}", def.name)
+                        });
+                    price * qty
+                })
+                .sum();
+            (def.name.clone(), worth)
+        })
+        .collect();
+    assert!(!worths.is_empty(), "the census walked no classes at all");
+
+    let allowance = crate::tuning::CREATION_CREDITS;
+    let cheapest = worths.iter().min_by_key(|(_, w)| *w).unwrap();
+    let dearest = worths.iter().max_by_key(|(_, w)| *w).unwrap();
+    assert!(
+        (cheapest.1..=dearest.1).contains(&allowance),
+        "CREATION_CREDITS is {allowance}, outside the {}..={} the shipped class kits span \
+         ({} to {}) — the kit step replaces one of these, so an allowance outside the band \
+         is strictly better or strictly worse than picking a class",
+        cheapest.1,
+        dearest.1,
+        cheapest.0,
+        dearest.0
+    );
+}

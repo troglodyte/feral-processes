@@ -235,8 +235,16 @@ impl Game {
         self.world
             .resource::<ItemDb>()
             .get(id.as_str())
-            .and_then(|def| def.value)
+            .map(ItemDb::value_of)
             .unwrap_or(tuning::DEFAULT_ITEM_VALUE)
+    }
+
+    /// The character-creation kit shelf — `ItemDb::creation_shelf` called,
+    /// never a second derivation. `CreationCatalogue::shelf_rows` is the
+    /// other caller; see that function's doc comment for why the two must
+    /// be one.
+    pub fn creation_shelf_rows(&self) -> Vec<crate::views::StartingItemRow> {
+        self.world.resource::<ItemDb>().creation_shelf()
     }
 
     /// The item's authored description, straight out of its `.ron` file.

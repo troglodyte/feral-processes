@@ -1495,6 +1495,21 @@ pub struct KnownRoutineView {
     pub held: u32,
 }
 
+/// One row of the character-creation kit shelf — an item a new run may
+/// spend its `tuning::CREATION_CREDITS` allowance on.
+///
+/// `price` is `ItemDb::value_of`, the same figure a trader prices the item
+/// at, carried on the row rather than re-derived by the wizard: app-core
+/// has no `ItemDb`, and a screen that priced a row itself could quote a
+/// number the commit does not charge.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StartingItemRow {
+    pub id: crate::items::ItemId,
+    pub name: String,
+    pub description: String,
+    pub price: u32,
+}
+
 /// One row of the creation wizard's Routine step — an `AbilityDef::starter`
 /// candidate, priced for the class the player has picked. See
 /// `Game::starter_routine_rows`.

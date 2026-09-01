@@ -1,6 +1,6 @@
 # Your character
 
-A run opens on seven questions. Answer them in order, Esc walks back one, and Esc on the first
+A run opens on eight questions. Answer them in order, Esc walks back one, and Esc on the first
 hands you back to the main menu. Nothing is decided until you confirm the summary at the end.
 
 R rolls every choice you have not made yet and jumps straight to that summary, leaving whatever
@@ -25,8 +25,19 @@ a different one down, so a class is a trade rather than a bonus.
 
 What a class does not touch is your ordinary swing. Attacking is not a routine, so a damped
 category costs you nothing until you invoke something in that category — which is also why picking
-a class you will not build around is a quiet way to pay for nothing. Each class brings its own
-opening kit as well, so the pack you land with is a second thing the choice decides.
+a class you will not build around is a quiet way to pay for nothing. Each class also names an
+opening kit, which the next step lets you trade away.
+
+Your kit is twenty-five Credits and a shelf to spend them on. Left and right take and put back on
+the highlighted row, Shift with them empties or fills it, Ctrl closes half the gap, and Enter moves
+on with whatever the basket holds. The shelf carries materials, the three companion upgrades, a
+rest charge and the plainest gear — nothing a run is meant to go out and earn.
+
+Take nothing and you keep your class kit exactly as it is, which is the safe answer and no worse
+than not having the screen. Take anything at all and the class kit does not arrive: what you picked
+is your whole pack, and whatever the basket left unspent lands as Credits to spend on the first
+trader you reach. The five class kits are worth between eleven and thirty-five Credits, so this is
+a trade of shape rather than size — you are not buying a better start, you are choosing which one.
 
 Your look is a glyph and a colour, and it is only a look. Pick both from the one list — the cursor
 walks icons and swatches together, Enter takes whichever you are standing on, and n moves along

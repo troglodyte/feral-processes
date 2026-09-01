@@ -1,7 +1,7 @@
-//! The character-creation wizard: seven steps, one mode, one back button.
+//! The character-creation wizard: eight steps, one mode, one back button.
 //!
 //! `Mode::CreateCharacter` carries a [`CreationStep`] cursor rather than
-//! being seven modes — `Mode::Transfer`'s reason, written out on that
+//! being eight modes — `Mode::Transfer`'s reason, written out on that
 //! variant. What lives here is the key table for each step, the rows each
 //! draws, and the roll `[R]` performs.
 //!
@@ -15,7 +15,7 @@
 //! **The roll spends exactly the pool**, so it can never beat point-buy and
 //! there is no reason to reroll for size. `[R]` rerolls for *shape* — and
 //! only the shape of what the player has not settled by hand. [`Decided`]
-//! is the record of that, written at the five sites that take a row;
+//! is the record of that, written at the six sites that take a row;
 //! pressing `[R]` again rerolls what `[R]` itself chose and nothing else,
 //! so the key can never destroy a character the player walked the wizard
 //! to build.
@@ -35,10 +35,11 @@
 
 use crate::*;
 use feral_processes_engine::abilities::AbilityId;
+use feral_processes_engine::items::ItemId;
 use feral_processes_engine::species::AffinityClass;
 use feral_processes_engine::tuning::{
     CREATION_COST_ATK, CREATION_COST_DECOMPILER, CREATION_COST_DEF, CREATION_COST_INTEGRITY,
-    CREATION_GAIN_INTEGRITY, CREATION_STAT_POINTS, PLAYER_BASE_STATS,
+    CREATION_CREDITS, CREATION_GAIN_INTEGRITY, CREATION_STAT_POINTS, PLAYER_BASE_STATS,
 };
 
 /// The (glyph, sprite name) pairs the Look step offers.
@@ -75,7 +76,7 @@ pub const CREATION_COLOURS: u8 = 6;
 /// so which `[R]` must leave alone.
 ///
 /// A separate record rather than reading the choice back for a sentinel,
-/// because three of the five have no unset value to read: the default look
+/// because three of the six have no unset value to read: the default look
 /// *is* `CREATION_ICONS[0]` in its default colour, and a declined routine
 /// and an untouched one are both `None`. Sentinels would have to be
 /// reintroduced for the roll's benefit alone, and each would be a second
@@ -87,6 +88,7 @@ pub const CREATION_COLOURS: u8 = 6;
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Decided {
     class: bool,
+    kit: bool,
     icon: bool,
     colour: bool,
     stats: bool,
@@ -98,7 +100,7 @@ impl Decided {
     /// case where a roll would have nothing to do and would, before this
     /// was tracked, silently replace a finished character instead.
     fn all(&self) -> bool {
-        self.class && self.icon && self.colour && self.stats && self.routine
+        self.class && self.kit && self.icon && self.colour && self.stats && self.routine
     }
 
     /// Test-only window onto `stats`, because two random draws are not
@@ -194,6 +196,40 @@ fn roll_points_spread(roll: &mut Roll) -> [u32; 4] {
     stats
 }
 
+/// A random basket that spends **as much of `CREATION_CREDITS` as the
+/// shelf allows**: one unit bought at a time from whichever rows are still
+/// affordable, so the loop can only halt once nothing affordable is left.
+/// `roll_points_spread`'s construction exactly, and for its reason — the
+/// spend is a consequence of the loop rather than something checked after
+/// it, so `[R]` can never hand out a basket the commit would refuse.
+///
+/// It does not always land on zero remaining, unlike the stat pool: the
+/// cheapest shipped row is 1 Credit, so it does, but a modded shelf whose
+/// cheapest item costs 3 would stop with 1 or 2 left over. That is
+/// affordable slack, not an overspend.
+fn roll_kit_basket(
+    roll: &mut Roll,
+    shelf: &[feral_processes_engine::StartingItemRow],
+) -> Vec<(ItemId, u32)> {
+    let mut basket: Vec<(ItemId, u32)> = Vec::new();
+    let mut left = CREATION_CREDITS;
+    loop {
+        let affordable: Vec<usize> = (0..shelf.len())
+            .filter(|i| shelf[*i].price > 0 && shelf[*i].price <= left)
+            .collect();
+        if affordable.is_empty() {
+            break;
+        }
+        let pick = &shelf[affordable[roll.below(affordable.len())]];
+        left -= pick.price;
+        match basket.iter_mut().find(|(id, _)| *id == pick.id) {
+            Some(slot) => slot.1 += 1,
+            None => basket.push((pick.id.clone(), 1)),
+        }
+    }
+    basket
+}
+
 impl App {
     /// Opens the wizard from the main menu, on its first step, with every
     /// choice back at its default — an abandoned wizard must not leak into
@@ -263,6 +299,15 @@ impl App {
                 .class_rows()
                 .into_iter()
                 .map(CreationRow::Class)
+                .collect(),
+            CreationStep::Kit => self
+                .creation_catalogue
+                .shelf_rows()
+                .into_iter()
+                .map(|row| {
+                    let taken = self.kit_taken(&row.id);
+                    CreationRow::Item { row, taken }
+                })
                 .collect(),
             CreationStep::Look => CREATION_ICONS
                 .iter()
@@ -334,6 +379,30 @@ impl App {
             rows.push(line(stat.label(), format!("{}", stat_value(*stat, *units))));
         }
         rows.push(line(
+            "Kit",
+            match choice.items.is_empty() {
+                // The kit step's own fallback, said out loud rather than
+                // shown as a dash — "you kept your class kit" is a
+                // different fact from "you chose nothing".
+                true => "class kit".to_string(),
+                false => choice
+                    .items
+                    .iter()
+                    .map(|(id, qty)| {
+                        let name = self
+                            .creation_catalogue
+                            .shelf_rows()
+                            .into_iter()
+                            .find(|row| &row.id == id)
+                            .map(|row| row.name)
+                            .unwrap_or_else(|| id.as_str().to_string());
+                        format!("{qty}x {name}")
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            },
+        ));
+        rows.push(line(
             "Routine",
             self.creation_catalogue
                 .starter_rows(choice.class)
@@ -371,6 +440,7 @@ impl App {
         match self.creation_step {
             CreationStep::Difficulty => self.handle_creation_difficulty_key(key),
             CreationStep::Class => self.handle_creation_class_key(key),
+            CreationStep::Kit => self.handle_creation_kit_key(key),
             CreationStep::Look => self.handle_creation_look_key(key),
             CreationStep::Points => self.handle_creation_points_key(key),
             CreationStep::Routine => self.handle_creation_routine_key(key),
@@ -449,6 +519,118 @@ impl App {
         self.creation_choice.class = Some(rows[idx].class);
         self.creation_decided.class = true;
         self.advance_creation();
+    }
+
+    /// Credits still unspent on the Kit step. Always the whole allowance
+    /// outside it, which is the only step that spends any.
+    pub fn creation_credits_left(&self) -> u32 {
+        CREATION_CREDITS.saturating_sub(self.kit_spend())
+    }
+
+    /// What the basket costs, priced off the shelf. An item the shelf does
+    /// not offer contributes nothing — the basket can only be built by
+    /// taking rows, so that case is unreachable rather than clamped, and
+    /// `Game::apply_creation_kit` refuses it outright if it ever is not.
+    fn kit_spend(&self) -> u32 {
+        let shelf = self.creation_catalogue.shelf_rows();
+        self.creation_choice
+            .items
+            .iter()
+            .map(|(id, qty)| {
+                shelf
+                    .iter()
+                    .find(|r| &r.id == id)
+                    .map_or(0, |r| r.price.saturating_mul(*qty))
+            })
+            .sum()
+    }
+
+    /// How many units of `id` the basket holds.
+    fn kit_taken(&self, id: &ItemId) -> u32 {
+        self.creation_choice
+            .items
+            .iter()
+            .find(|(item, _)| item == id)
+            .map_or(0, |(_, qty)| *qty)
+    }
+
+    /// Sets `id` to `qty`, dropping the row entirely at zero.
+    ///
+    /// `CharacterChoice::items` is the basket's **only** store — there is no
+    /// parallel amount vector as `Mode::Transfer` keeps, because the shelf
+    /// is re-derived every frame and a second list would have to be kept in
+    /// step with it. Walking back to this step with Esc therefore preserves
+    /// the picks for free.
+    fn set_kit_taken(&mut self, id: &ItemId, qty: u32) {
+        let items = &mut self.creation_choice.items;
+        match items.iter_mut().find(|(item, _)| item == id) {
+            Some(slot) => slot.1 = qty,
+            None if qty > 0 => items.push((id.clone(), qty)),
+            None => {}
+        }
+        items.retain(|(_, qty)| *qty > 0);
+    }
+
+    /// The Points step's key table, in Credits: the cursor moves on
+    /// Up/Down, Left/Right adjusts the highlighted row, `ShiftLeft`/
+    /// `ShiftRight` targets an end of it and `CtrlLeft`/`CtrlRight` halves
+    /// the gap. Enter takes the basket as it stands, whether or not the
+    /// allowance is spent — an empty one keeps the class kit, see
+    /// `CharacterChoice::items`.
+    ///
+    /// **Enter is the only way forward, and there is deliberately no `[n]`
+    /// here.** On the Look and Routine steps `[n]` means "I am not picking
+    /// on this screen", which those steps have no other way to say. This
+    /// one does: an empty basket already *is* that answer. An `[n]` would
+    /// therefore have had to mean "empty the basket and move on", which is
+    /// a destructive key wearing a skip key's name — one press away from a
+    /// basket the player spent a screen building.
+    ///
+    /// A digit is never a row pick here, `Mode::Transfer`'s rule: every row
+    /// is a quantity, and there are more rows than there are digits.
+    fn handle_creation_kit_key(&mut self, key: GameKey) {
+        let len = self.creation_rows().len();
+        match key {
+            GameKey::Enter => self.advance_creation(),
+            GameKey::Up | GameKey::Down => self.scroll(key, len),
+            GameKey::Left => self.spend_on_item(|taken, _| taken.saturating_sub(1)),
+            GameKey::Right => self.spend_on_item(|taken, max| (taken + 1).min(max)),
+            GameKey::ShiftLeft => self.spend_on_item(|_, _| 0),
+            GameKey::ShiftRight => self.spend_on_item(|_, max| max),
+            GameKey::CtrlLeft => self.spend_on_item(|taken, _| super::basket::halve(taken, 0)),
+            GameKey::CtrlRight => self.spend_on_item(super::basket::halve),
+            _ => {}
+        }
+    }
+
+    /// Applies `f` to the highlighted row's unit count, where `max` is the
+    /// most that row could hold given what the **other** rows have already
+    /// spent — `App::put_available`'s rule, and for its reason: counting the
+    /// row's own units against its own ceiling would make it unlowerable
+    /// once the allowance ran out.
+    ///
+    /// The refusal is `spend_on_row`'s: the arrows clamp by construction, so
+    /// reaching it means the allowance is gone and the player pressed Right
+    /// anyway, which is worth saying.
+    fn spend_on_item(&mut self, f: impl FnOnce(u32, u32) -> u32) {
+        let shelf = self.creation_catalogue.shelf_rows();
+        let Some(row) = shelf.get(self.menu_selected).cloned() else {
+            return;
+        };
+        let before = self.kit_taken(&row.id);
+        let others = self.kit_spend() - row.price.saturating_mul(before);
+        let max = CREATION_CREDITS.saturating_sub(others) / row.price.max(1);
+        let after = f(before, max).min(max);
+        if after == before && before == max {
+            self.refuse(format!(
+                "No Credits left — {} costs {} each.",
+                row.name, row.price
+            ));
+            return;
+        }
+        self.set_kit_taken(&row.id, after);
+        self.creation_decided.kit = true;
+        self.status_line = None;
     }
 
     /// The icons and the swatches on one screen, one list: the cursor walks
@@ -639,6 +821,11 @@ impl App {
             if !classes.is_empty() {
                 self.creation_choice.class = Some(classes[roll.below(classes.len())]);
             }
+        }
+
+        if !self.creation_decided.kit {
+            self.creation_choice.items =
+                roll_kit_basket(&mut roll, &self.creation_catalogue.shelf_rows());
         }
 
         if !self.creation_decided.icon {

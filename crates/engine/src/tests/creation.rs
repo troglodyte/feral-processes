@@ -396,3 +396,181 @@ fn the_creation_catalogue_agrees_with_the_game() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// The starting-kit step. `creation_shelf` is the one derivation of what may
+// be picked; `items` non-empty is what replaces the class kit.
+// ---------------------------------------------------------------------------
+
+/// The shelf as the wizard and the run both see it, off the real assets.
+fn shelf() -> Vec<views::StartingItemRow> {
+    let game = Game::new(90_101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.creation_shelf_rows()
+}
+
+fn carried(game: &Game, id: &str) -> u32 {
+    game.world
+        .get::<Inventory>(game.player_entity())
+        .unwrap()
+        .count(&ItemId::from(id))
+}
+
+fn game_with_items(seed: u32, items: Vec<(ItemId, u32)>) -> Game {
+    Game::new_with(
+        seed,
+        DifficultyMode::Forgiving,
+        &test_assets_dir(),
+        &CharacterChoice {
+            items,
+            ..Default::default()
+        },
+    )
+    .unwrap()
+}
+
+/// The three exclusions, each for its own reason: Credits are the allowance
+/// itself, Portal Fragments are what the Stack exists to pay you, and a
+/// banked item is not cargo. `EconomyRole::Currency` — Core Fragments —
+/// deliberately stays, because all five shipped class kits open with 4-6 of
+/// them and this shelf *replaces* that kit.
+#[test]
+fn the_shelf_offers_no_currency_the_run_is_meant_to_earn() {
+    let rows = shelf();
+    assert!(!rows.is_empty(), "the shipped item set stocked no shelf");
+    for banned in [ids::CREDITS, ids::PORTAL_FRAGMENT, ids::RESEARCH_DATA] {
+        assert!(
+            !rows.iter().any(|r| r.id.as_str() == banned),
+            "{banned} is on the creation shelf: {:?}",
+            rows.iter().map(|r| r.id.as_str()).collect::<Vec<_>>()
+        );
+    }
+    assert!(
+        rows.iter().any(|r| r.id.as_str() == ids::CORE_FRAGMENT),
+        "Core Fragments must stay on the shelf — every class kit opens with them"
+    );
+}
+
+/// The ceiling is what keeps the step inside the wizard's no-scroll
+/// promise, so it is a property of the shelf and not of the screen alone.
+#[test]
+fn the_shelf_offers_nothing_above_its_ceiling() {
+    for row in shelf() {
+        assert!(
+            row.price <= tuning::CREATION_SHELF_MAX_VALUE,
+            "{} is priced {} over the {} ceiling",
+            row.id.as_str(),
+            row.price,
+            tuning::CREATION_SHELF_MAX_VALUE
+        );
+        assert!(row.price > 0, "{} is free", row.id.as_str());
+    }
+}
+
+/// Cheapest first, then by id. `ItemDb` keys by `String` in a `HashMap`, so
+/// without this the wizard's rows — and the digit shortcuts over them —
+/// would land in a different order every run.
+#[test]
+fn the_shelf_is_ordered_and_bounded() {
+    let rows = shelf();
+    let keys: Vec<(u32, &str)> = rows.iter().map(|r| (r.price, r.id.as_str())).collect();
+    let mut sorted = keys.clone();
+    sorted.sort();
+    assert_eq!(keys, sorted, "the shelf is not in (price, id) order");
+    assert!(
+        rows.len() <= tuning::CREATION_SHELF_ROWS,
+        "{} rows over the {} cap",
+        rows.len(),
+        tuning::CREATION_SHELF_ROWS
+    );
+}
+
+/// The whole point of the step: what you pick is what you start with, and
+/// the class kit does not arrive alongside it.
+#[test]
+fn a_picked_kit_replaces_the_class_kit() {
+    let game = game_with_items(90_102, vec![(ids::POWER_CELL.into(), 4)]);
+    assert_eq!(carried(&game, ids::POWER_CELL), 4);
+    // The `None`-class fallback kit's own four items, none of which were
+    // picked. Power Cell is in that kit too, which is why it is asserted
+    // as an exact 4 above rather than merely present.
+    assert_eq!(carried(&game, ids::ICE_BREAKER), 0);
+    assert_eq!(carried(&game, ids::CORE_FRAGMENT), 0);
+    assert_eq!(carried(&game, ids::OUTLET), 0);
+}
+
+/// Walking the step without spending anything is not a naked run — it is
+/// the pre-wizard game. This is the half that keeps
+/// `CharacterChoice::default()` producing today's player and an empty
+/// `assets/classes/` a supported install.
+#[test]
+fn an_empty_basket_keeps_the_class_kit() {
+    let game = game_with_items(90_103, vec![]);
+    assert_eq!(carried(&game, ids::ICE_BREAKER), 3);
+    assert_eq!(carried(&game, ids::POWER_CELL), 3);
+    assert_eq!(carried(&game, ids::CORE_FRAGMENT), 5);
+    assert_eq!(carried(&game, ids::OUTLET), 2);
+}
+
+/// What the basket did not spend arrives as Credits — and only when the
+/// basket was used at all, or today's kitted player would silently gain an
+/// allowance they never chose.
+#[test]
+fn the_unspent_allowance_arrives_as_credits() {
+    let picked = game_with_items(90_104, vec![(ids::POWER_CELL.into(), 4)]);
+    assert_eq!(
+        carried(&picked, ids::CREDITS),
+        tuning::CREATION_CREDITS - 4,
+        "Power Cell is 1 Credit, so four of them leave the rest"
+    );
+
+    let untouched = game_with_items(90_105, vec![]);
+    assert_eq!(
+        carried(&untouched, ids::CREDITS),
+        0,
+        "an untouched basket must not hand out the allowance"
+    );
+}
+
+/// `apply_creation_stats`' rule on the other axis: an overspend applies
+/// nothing rather than a clamped basket, and falls back to the class kit so
+/// the run still starts equipped.
+#[test]
+fn an_overspent_basket_falls_back_to_the_kit() {
+    let game = game_with_items(
+        90_106,
+        vec![(ids::POWER_CELL.into(), tuning::CREATION_CREDITS + 1)],
+    );
+    assert_eq!(carried(&game, ids::POWER_CELL), 3, "the kit's own three");
+    assert_eq!(carried(&game, ids::CORE_FRAGMENT), 5);
+    assert_eq!(carried(&game, ids::CREDITS), 0);
+}
+
+/// A pick naming an item the shelf does not offer is refused the same way
+/// an overspend is — the shelf is the rule, and a hand-built
+/// `CharacterChoice` must not be a way around it.
+#[test]
+fn a_basket_off_the_shelf_falls_back_to_the_kit() {
+    let game = game_with_items(90_107, vec![(ids::PORTAL_FRAGMENT.into(), 1)]);
+    assert_eq!(carried(&game, ids::PORTAL_FRAGMENT), 0);
+    assert_eq!(
+        carried(&game, ids::CORE_FRAGMENT),
+        5,
+        "the kit arrived instead"
+    );
+}
+
+/// The wizard prices a shelf before any `Game` exists, so the catalogue and
+/// the run must be the same derivation — a preview that disagreed with what
+/// the run granted would be worse than no preview.
+#[test]
+fn the_catalogue_and_the_run_offer_the_same_shelf() {
+    let catalogue = CreationCatalogue::load(&test_assets_dir()).unwrap();
+    let rows = catalogue.shelf_rows();
+    let expected = shelf();
+    assert_eq!(rows.len(), expected.len());
+    for (a, b) in rows.iter().zip(expected.iter()) {
+        assert_eq!(a.id, b.id);
+        assert_eq!(a.price, b.price);
+        assert_eq!(a.name, b.name);
+    }
+}

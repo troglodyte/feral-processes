@@ -3567,21 +3567,54 @@ multi-input support is untouched and mods may ship two-ingredient
 assemblers — `chains::a_machine_short_one_of_its_two_ingredients_stays_
 starved` walks that path with a modded machine, since no shipped one can.
 
-### Installing a routine is the one place a `KnownRoutines` entry meets an item, and the item is spent last
+### Installing from a disk spends the disk last, and creation is the second door into a slot and spends no item at all
 
-**Installing a routine is the one place a `KnownRoutines` entry meets an
-item, and the item is spent last.** Knowledge (`resources::KnownRoutines`,
-written only by `unlock_research` and `extract_routine`) says *what* the
-player may install; an `ids::ROUTINE_DISK` in cargo is *whether they can*.
-`install_routine` checks battle, ownership, knowledge and a free slot
-before it looks for the disk, and takes the disk only once all of those
-have passed — the same ordering argument `use_symlink` makes about
-`clear_stack`. Uninstalling returns nothing, which is the whole point:
-a slot is a commitment. Two consequences that are easy to undo by
-accident — a new game *knows* `DECOMPILE_ABILITY_ID` (nothing else grants
-it, so popping it out would otherwise end taming for the run), and a
-displaced innate routine is lost rather than banked, because there is
-nowhere for a routine off a slot to wait.
+**Installing from a disk spends the disk last, and creation is the second
+door into a slot and spends no item at all.** Knowledge
+(`resources::KnownRoutines`) says *what* the player may install; an
+`ids::ROUTINE_DISK` in cargo is *whether they can*. `install_routine`
+checks battle, ownership, knowledge and a free slot before it looks for
+the disk, and takes the disk only once all of those have passed — the same
+ordering argument `use_symlink` makes about `clear_stack`. Uninstalling
+returns nothing, which is the whole point: a slot is a commitment. Two
+consequences that are easy to undo by accident — a new game *knows*
+`DECOMPILE_ABILITY_ID` (nothing else grants it, so popping it out would
+otherwise end taming for the run), and a displaced innate routine is lost
+rather than banked, because there is nowhere for a routine off a slot to
+wait.
+
+**What character creation changed, and why the old sentence had to go.** This entry
+used to read "installing a routine is the one place a `KnownRoutines`
+entry meets an item", and character creation falsified it in both halves
+at once. `abilities::install_starter` — the "routine" step of
+`Game::apply_character_choice` — writes a `KnownRoutines` entry *and*
+writes the slot, with no disk, no ownership check and no
+`AbilityDef::exclusive` check. It is the fourth writer of `KnownRoutines`
+after `Game::new`'s `DECOMPILE_ABILITY_ID` seed, `unlock_research` and
+`extract_routine`, and the first that also installs.
+
+The trap this leaves behind is that `install_routine` is no longer the
+place to add a rule about routine slots. Anything added there — a cost, a
+refusal, a log line, a cap — is silently bypassed by every character made
+after it lands, because creation goes through `Game::write_routine`
+directly (the same private door `install_disk` uses once its own checks
+have passed). What holds the exclusive rule instead is a census over the
+*pool*: `every_starter_is_single_target` and
+`every_starter_is_not_exclusive` in `tests/assets.rs`, plus the wizard
+only ever offering what
+`Game::starter_routine_rows` lists. That is deliberate — validating
+`starter` inside `install_starter` would put a second copy of the pool
+rule one call away from the census that already owns it — but it means
+the guarantee lives in a test over `assets/abilities/`, not in the engine,
+and a caller that hands `install_starter` an arbitrary `AbilityId` gets
+it installed.
+
+Knowledge, not just the install, was the deliberate choice: a starter
+routine can be etched onto a blank disk later like anything else the
+player knows, so the choice is not a dead end if the slot is wanted for
+something else. Granting the slot without the knowledge would have made
+creation the one routine in the game you can lose permanently by
+replacing it.
 
 ### `MachineStatus::Stranded` is `Unstaffed` plus the knowledge that waiting will not fix it
 
@@ -5722,6 +5755,69 @@ shape as "`balance_sim` has no Stack term at all" above. The suite's job
 here is to prove the *mechanism* — costs are charged, the right entity pays,
 an empty reserve refuses — and no number in it. The instruments that can see
 the numbers are `dev-arenas/` and a session.
+
+### A player's class grants affinities and nothing else, and `ability_affinity`'s player arm is where it lands
+
+**A player's class grants affinities and nothing else, and
+`Game::ability_affinity`'s player arm is where it lands.** The arm was one
+line — `AFFINITY_NEUTRAL + perks::affinity_bonus(..)`, clamped to
+`AFFINITY_MAX` — and a class is that flat neutral replaced by a lookup:
+`self.affinity_with_perk(self.player_class_affinity(kind), kind)`. Additive
+over the perk term, matching the shape the arm already had, and the clamp
+is untouched, so a class plus a maxed affinity perk cannot exceed the bound
+`tuning.rs` reasons about everywhere else. It only reaches it sooner, which
+is a real cost of the class rather than a bug.
+
+**No stat block, and no talent tree.** `ClassShape` (`species.rs`) exists to
+generate a *species'* stat block; applying it to the player would entangle
+the class choice with the points choice, and keeping them orthogonal is what
+makes them two steps worth having. `assets/talents/` ships a tree per class,
+but `ability_affinity`'s own comment states that seam — talents are the
+companion's axis, in the creature arm only; perks are the player's, and the
+two never stack — and the trees are priced against Kernel Rings, which the
+player has no source of. The player's tree is Perks and stays Perks. So the
+whole of what a class is worth is a spread of multipliers, plus the opening
+kit in `ClassDef::kit`, which is inventory and not power.
+
+**Every shipped class damps an axis, and there is no Unaligned option**, so
+every player is worse at one category of routine than the pre-class player
+was. That is affordable only because of what affinity does *not* reach, and
+this is the part worth verifying before touching either side:
+
+- **`battle::expected_damage` has no affinity term.** It is hit chance, band
+  mean, atk and crit, and nothing else. `balance_sim` *calls* that function
+  rather than keeping a copy (`CLAUDE.md`'s rule about a doc comment that
+  claims a mirror), so the balance gate is blind to affinity by
+  construction. A class spread moves no curve in it, and a curve that
+  **does** move after a class change is therefore not a retune — it is
+  something having reached a stat or a formula it should not have.
+- **The player's ordinary swing never touches `ability_affinity`.** It is
+  `attack_range(entity, PLAYER_UNARMED_DAMAGE)` into `battle::resolve_attack`.
+  The three readers of `ability_affinity` are `combat_round.rs` (using a
+  routine in a fight), `game/field.rs` (a field routine) and
+  `game/routines.rs` (the effect label a screen prints). So a Medic damping
+  Damage at 0.80 loses a fifth of their damage *routines'* authored power,
+  not a fifth of their attack.
+
+Classes therefore join the set this file already names as ungated by the
+sim, alongside the Power economy above. **The instrument is the arena**,
+which runs real abilities where `balance_sim` runs none — but only the
+*played* arena (`FERAL_DEV_ARENA=1 cargo run`, `[R] Arena`). The headless
+`arena` bin plays `PartyPlan::AllAttack`, which is the game's own
+`[A]` plan and invokes nothing, so it cannot see a class either; what it
+can see is the stat pool, since that lands in `Stats`. `dev-arenas/player-class-*.ron`
+are authored for the played half and say so in their own headers.
+
+**Which class you are is stored, and the spread is not.** `PlayerIdentity::class`
+holds the variant and every read re-resolves through `ClassDb`, so retuning
+a class file reaches runs already in progress. `ActiveContract` stores its
+whole resolved def for the opposite reason, and the distinction is
+deliberate: a contract is a signed agreement that must not be rewritten
+under the player, a class is an identity. **An empty `assets/classes/` is a
+supported install** — the resolver returns neutral for a class it cannot
+resolve and the wizard's class step offers no rows and falls through, which
+is the pre-class game, the same property `assets/memories/` and
+`assets/needs/` hold.
 
 ### The ledger is one pure function with two callers, and `runs_a_job()` is its "is this a machine" predicate
 

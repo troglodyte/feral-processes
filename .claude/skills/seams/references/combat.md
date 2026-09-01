@@ -54,6 +54,23 @@
   so the 66 costs, the multiplier and `trickle_charge`'s retune are all
   ungated. The suite proves the mechanism, not the numbers; `dev-arenas/` and
   a session are the instruments.
+- **A player's class grants affinities and nothing else, and
+  `ability_affinity`'s player arm is where it lands.** No stat block
+  (`ClassShape` is a *species'*) and no talent tree (talents are the
+  companion's axis, in the creature arm only) — a spread of multipliers over
+  the perk term, under the same `AFFINITY_MAX` clamp, plus `ClassDef::kit`.
+  Every shipped class damps an axis and there is no Unaligned option, which
+  is affordable only because `battle::expected_damage` has **no affinity
+  term** and the player's ordinary swing never touches `ability_affinity` at
+  all — it is `attack_range` into `resolve_attack`, and the three affinity
+  readers are `combat_round.rs`, `game/field.rs` and `game/routines.rs`. So
+  classes are ungated by `balance_sim` by construction, and a curve that
+  moves after a class change is a bug, not a retune. The instrument is the
+  **played** arena; the headless bin runs `PartyPlan::AllAttack` and invokes
+  nothing, so it sees the stat pool and not the class. The class is stored
+  and the spread re-resolved through `ClassDb` every read, so a retuned class
+  file reaches a run in progress, and an empty `assets/classes/` is a
+  supported install.
 - **Every difficulty curve in the game is linear.** A geometric enemy curve
   racing a linear player curve outruns it wherever you put the coefficients.
   A linear tier step is a *ratio*, so `ZoneLevel::raised_a_tier` applies it

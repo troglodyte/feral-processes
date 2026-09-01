@@ -190,6 +190,18 @@
   colour rule for anything fused.** Two screens deliberately opt out, because
   a second meaning on the same axis makes both unreadable. `fusion_color`
   returns `Option` so a caller with a louder rule wins.
-- **Installing a routine is the one place a `KnownRoutines` entry meets an
-  item, and the item is spent last.** Uninstalling returns nothing. A new game
-  *knows* `DECOMPILE_ABILITY_ID`, and a displaced innate routine is lost.
+- **Installing from a disk spends the disk last, and creation is the second
+  door into a slot and spends no item at all.** `install_routine` checks
+  battle, ownership, knowledge and a free slot before it looks for the disk.
+  Uninstalling returns nothing. A new game *knows* `DECOMPILE_ABILITY_ID`,
+  and a displaced innate routine is lost. **The trap is that `install_routine`
+  is no longer where a rule about routine slots belongs**:
+  `abilities::install_starter` writes `KnownRoutines` *and* the slot through
+  `Game::write_routine` directly, with no disk, no ownership check and no
+  `exclusive` check, so anything added to `install_routine` is bypassed by
+  every character made after it lands. What holds the pool's shape instead is
+  a census — `every_starter_is_single_target` and
+  `every_starter_is_not_exclusive` in `tests/assets.rs` — plus the wizard
+  only offering `Game::starter_routine_rows`. Knowledge as well as the
+  install is deliberate: it is what lets a starter be etched onto a disk
+  later rather than lost when the slot is wanted for something else.

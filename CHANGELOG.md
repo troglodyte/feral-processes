@@ -33,6 +33,34 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.75
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+every new `PlayerSave` field is additive behind `#[serde(default)]`.
+
+- **A run opens on seven questions instead of two keystrokes.** Difficulty,
+  class, look, stat points, a starter routine, a name and a summary, in one
+  screen with one back button; `[R]` rolls whatever is left and jumps to the
+  end.
+- **A player has a class now, and it grants affinities and nothing else.**
+  Five files in `assets/classes/`, each raising one category of routine and
+  holding a different one down — so a class is a trade, and an empty
+  directory is still a supported install that plays as the game did before.
+- **A class brings its own opening kit**, replacing the four items every run
+  used to start with.
+- **Five points to spend on top of the stats you already had**, priced per
+  axis: Integrity, Attack and Decompiler at one, Mitigation at three because
+  levelling never raises it.
+- **The free routine slot is filled at creation**, from an opt-in pool any
+  ability file can join with `starter: true` — and the routine is *known*,
+  not merely installed, so it can be etched onto a disk later.
+- **You pick your own glyph and colour**, from six swatches held separable
+  from every content hue by the palette census.
+- **A run has a name, and the save list shows it** instead of a filename.
+- **The summary says what your achievement record is about to pay** before
+  you commit to the run, read off the same derivation that actually pays it.
+- **`Mode::DifficultyPick` is gone**, folded into the wizard's first step.
+
 ## 0.13.74
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

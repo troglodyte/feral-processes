@@ -208,9 +208,13 @@ fn row_line(row: &CreationRow) -> String {
 
 /// What each step's keys are, in one line under its rows.
 ///
-/// Takes the `App` for the Kit step alone, which is the one footer carrying
-/// a live figure: with two dozen rows and no per-row bar, the remaining
-/// allowance has nowhere else on the screen to go.
+/// Takes the `App` for the two steps that spend an allowance, which are the
+/// footers carrying a live figure: neither screen has anywhere else to put
+/// one. The Kit step has two dozen rows and no per-row bar; the Points step
+/// has a bar per row, but each bar is that axis's own ceiling rather than
+/// the pool, so four of them never add up to how much is left — and the
+/// step opens on a *rolled* spread that has already spent the lot, which
+/// the player has no way to tell from a blank one.
 fn footer(app: &App, step: CreationStep) -> String {
     match step {
         CreationStep::Kit => format!(
@@ -218,25 +222,30 @@ fn footer(app: &App, step: CreationStep) -> String {
              taking nothing keeps your class kit",
             app.creation_credits_left()
         ),
+        CreationStep::Points => {
+            let left = app.creation_points_left();
+            format!(
+                "{}/{CREATION_STAT_POINTS} points spent, {left} left - \
+                 Left/Right spends (Shift: all, Ctrl: half); Enter moves on; [R] rolls",
+                CREATION_STAT_POINTS - left
+            )
+        }
         _ => plain_footer(step).to_string(),
     }
 }
 
-/// The eight steps whose keys never change.
+/// The seven steps whose keys never change.
 fn plain_footer(step: CreationStep) -> &'static str {
     match step {
         CreationStep::Difficulty => "Esc backs out to the menu",
         CreationStep::Class => "Up/Down + Enter; [R] rolls the rest; Esc goes back",
         // Written by `footer` above, which is the only caller.
-        CreationStep::Kit => "",
+        CreationStep::Kit | CreationStep::Points => "",
         // One arm, because the two halves of a look are one key table —
         // an icon row and a swatch row are picked the same way and skipped
         // the same way, and two copies of the sentence could drift.
         CreationStep::Icon | CreationStep::Colour => {
             "Up/Down + Enter picks; [n] moves on; [R] rolls; Esc goes back"
-        }
-        CreationStep::Points => {
-            "Left/Right spends (Shift: all, Ctrl: half); Enter moves on; [R] rolls"
         }
         CreationStep::Routine => "Up/Down + Enter; [n] takes none; [R] rolls; Esc goes back",
         CreationStep::Name => "Type a name; Enter moves on; Esc goes back",
@@ -712,6 +721,71 @@ mod tests {
                     && (c.g - want.g).abs() < 1e-3
                     && (c.b - want.b).abs() < 1e-3),
             "the preview cell did not paint the highlighted '!'"
+        );
+    }
+
+    /// **The Points step's footer is the Kit step's, one screen over.**
+    /// The pool is spent across four rows and every row draws only its own
+    /// bar, so nothing on the screen says how big the pool is or how much
+    /// of it is left — the player was reading the *step number* in the
+    /// title (`Points (6/9)`) as the point count. Both figures live in the
+    /// footer, where `Kit` already puts its allowance.
+    ///
+    /// Asserted against `CREATION_STAT_POINTS` and `App::
+    /// creation_points_left` rather than a copy of the sentence, and
+    /// **after a spend as well as before** — a footer naming the pool but
+    /// not tracking it would pass on the fresh half alone.
+    #[test]
+    fn the_points_step_footer_says_what_is_spent_and_what_is_left() {
+        let mut app = wizard_app();
+        for key in FORWARD.iter().take(5) {
+            app.handle_key(*key);
+        }
+        assert_eq!(app.creation_step(), CreationStep::Points);
+
+        let m = ui_metrics(900.0);
+        // The title says `Points` with a capital P, so the lowercase word
+        // picks the footer out and cannot match the heading.
+        let pool_row = |app: &App| {
+            let (_, shapes) =
+                crate::paint::with_painter(|p| draw_create_character(app, None, p, &m));
+            let drawn = crate::paint::painted_text(&shapes);
+            drawn
+                .iter()
+                .find(|t| t.contains("points"))
+                .unwrap_or_else(|| panic!("no row named the point pool: {drawn:?}"))
+                .clone()
+        };
+
+        // The step opens on a rolled spread that spends the pool exactly,
+        // so the fresh figures are the full ones — which is the state the
+        // player actually lands on and the one the missing footer made
+        // unreadable.
+        let fresh = pool_row(&app);
+        assert!(
+            fresh.contains(&format!(
+                "{CREATION_STAT_POINTS}/{CREATION_STAT_POINTS} points spent"
+            )) && fresh.contains("0 left"),
+            "the rolled spread spends the whole pool and the footer must say so: {fresh:?}"
+        );
+
+        // Clear every axis — which axes the roll landed on is not fixed,
+        // so walking all four is what keeps this off the roll's luck.
+        for _ in 0..4 {
+            app.handle_key(GameKey::ShiftLeft);
+            app.handle_key(GameKey::Down);
+        }
+        let left = app.creation_points_left();
+        let spent = CREATION_STAT_POINTS - left;
+        assert_eq!(
+            left, CREATION_STAT_POINTS,
+            "clearing every axis frees the pool"
+        );
+        let after = pool_row(&app);
+        assert!(
+            after.contains(&format!("{spent}/{CREATION_STAT_POINTS} points spent"))
+                && after.contains(&format!("{left} left")),
+            "the footer must follow the spend: {after:?}"
         );
     }
 

@@ -1,0 +1,55 @@
+// PLAYTEST: does a 15-point boost to every decompile attempt change how you
+// fight, or only how the odds line reads?
+//
+// The seventh of seven class files — see `player-class-striker.ron` for the
+// shared argument: why the pack is this pack, why the pool is unspent, and
+// why the headless bin reports the same numbers for every class.
+//
+//     FERAL_DEV_ARENA=1 cargo run  ->  [R] Arena  ->  [L] player-class-decompiler
+//
+// **The bin is blinder here than for any other class.** It plays
+// `PartyPlan::AllAttack`, which never spends a turn on a decompile at all,
+// so the headless numbers are not merely a floor without the class — they
+// are a floor without the verb. Everything this class is worth happens in
+// the real UI.
+//
+// The pack matters differently for this one. Five sub_processes a group is
+// a lot of bodies to try attempts on, which is what you want, but they are
+// also cheap: if the class only reads on programs you would not have kept
+// anyway, that is the finding.
+//
+// What to watch:
+//   - The odds line, first. `Game::player_decompiler_bonuses` feeds the two
+//     screens that *show* odds and the one that *rolls* them, so a class
+//     term that reached the roll but not the display would show here as a
+//     number that lands better than it reads.
+//   - Whether the boost changes the decision. It multiplies the whole
+//     attempt rather than softening the target's Integrity term, so it is
+//     worth the same on a full-health program as on a beaten one. Does that
+//     make it worth trying *early*, before spending rounds weakening
+//     something? That is the behaviour the class is supposed to buy, and it
+//     is the one to falsify.
+//   - Whether 15 points is felt at all against a species' own resistance.
+//     It is an argued number, not a measured one — `balance_sim` models no
+//     decompiling, so this fight is the only instrument there is.
+//   - The Decompiler raises no affinity, so `bit_rot_v2` runs at neutral
+//     and the damped Damage axis never shows in this kit. The class must
+//     justify itself on attempts alone.
+(
+    player: Fresh(level: 5, zone: 1),
+    character: (
+        class: Some(Decompiler),
+        stats: (0, 0, 0, 0),
+        routine: Some("bit_rot_v2"),
+    ),
+    party: [
+        (species: "glitch", level: 5),
+        (species: "glitch", level: 5),
+    ],
+    opponents: [
+        (species: "sub_process", count: 5),
+        (species: "sub_process", count: 5),
+    ],
+    reps: 1,
+    seed: 2,
+)

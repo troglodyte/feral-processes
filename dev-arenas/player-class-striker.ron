@@ -1,17 +1,17 @@
 // PLAYTEST: is a Striker's damage routine worth the round it costs, and
 // does it read as *this class's* move rather than a bigger swing?
 //
-// One of five files — `player-class-striker`, `-bastion`, `-medic`,
-// `-saboteur`, `-leech` — that are **identical in every field but
-// `character`**. The fight, the party, the level, the zone and the seed are
-// the same in all five, so whatever separates them is the class and nothing
-// else. That is the whole claim the class design makes, and these files are
+// One of seven files — `player-class-striker`, `-bastion`, `-medic`,
+// `-saboteur`, `-leech`, `-invoker`, `-decompiler` — that are **identical
+// in every field but `character`**. The fight, the party, the level, the
+// zone and the seed are the same in all seven, so whatever separates them
+// is the class and nothing else. That is the whole claim the class design makes, and these files are
 // here to fail it.
 //
 //     FERAL_DEV_ARENA=1 cargo run  ->  [R] Arena  ->  [L] player-class-striker
 //
 // **The headless bin cannot see a class, and will report the same numbers
-// for all five.** That is not an ignored input; it is the seam. `run_rep`
+// for all seven.** That is not an ignored input; it is the seam. `run_rep`
 // plays `PartyPlan::AllAttack` — the game's own `[A]` — which invokes no
 // routine, and a class is a spread of multipliers over *authored routine
 // power* alone. The player's ordinary swing never touches
@@ -22,7 +22,7 @@
 //     cargo run --bin arena -- dev-arenas/player-class-striker.ron
 //
 // **The floor, measured 2026-09-01 at 20 reps, seeds 1-20** (identical for
-// all five files, and for a `character: ()` control):
+// all seven files, and for a `character: ()` control):
 //
 //     win rate        60%   (12/20)
 //     rounds          mean 18.6, median 17

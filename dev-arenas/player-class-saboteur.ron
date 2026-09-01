@@ -1,11 +1,11 @@
 // PLAYTEST: a Saboteur's affliction is a stun. Is a round taken off the
 // pack worth a round taken off you?
 //
-// One of five files — `player-class-striker`, `-bastion`, `-medic`,
-// `-saboteur`, `-leech` — identical in every field but `character`. See
+// One of seven files — `player-class-striker`, `-bastion`, `-medic`,
+// `-saboteur`, `-leech`, `-invoker`, `-decompiler` — identical in every field but `character`. See
 // `player-class-striker.ron` for the shared argument: why the pack is this
 // pack, why the pool is unspent, and why **the headless bin reports the same
-// numbers for all five** (it plays All-Attack and invokes nothing, so it is
+// numbers for all seven** (it plays All-Attack and invokes nothing, so it is
 // the floor rather than the measurement).
 //
 //     FERAL_DEV_ARENA=1 cargo run  ->  [R] Arena  ->  [L] player-class-saboteur

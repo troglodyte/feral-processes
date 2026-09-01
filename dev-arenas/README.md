@@ -134,7 +134,7 @@ therefore an **error** on a save or template rather than being ignored —
 
 ```ron
 character: (
-    class: Some(Medic),                 // one of the five AffinityClass variants
+    class: Some(Medic),                 // one of the eight PlayerClass variants
     stats: (0, 0, 9, 0),                // units bought: Atk, Def, Integrity, Decompiler
     routine: Some("checksum_repair"),   // the starter routine
 ),
@@ -352,13 +352,19 @@ demonstrate syntax. Add one whenever you find a fight worth watching twice —
 by hand here, or with `[S]` from the arena screen, which writes the same
 format and overwrites a file of that name deliberately.
 
-- **`player-class-striker.ron`** and its four siblings (`-bastion`,
-  `-medic`, `-saboteur`, `-leech`) — one fight, five player classes,
-  identical in every field but `character`. **The headless bin reports the
-  same numbers for all five**, which is the seam rather than a bug: it plays
-  All-Attack, and a class is a spread over authored routine power. They are
-  for the played arena, and `player-class-striker.ron` carries the shared
-  argument and the bin's floor.
+- **`player-class-striker.ron`** and its six siblings (`-bastion`,
+  `-medic`, `-saboteur`, `-leech`, `-invoker`, `-decompiler`) — one fight,
+  seven player classes, identical in every field but `character`. **The
+  headless bin reports the same numbers for all seven**, which is the seam
+  rather than a bug: it plays All-Attack, and a class is a spread over
+  authored routine power. They are for the played arena, and
+  `player-class-striker.ron` carries the shared argument and the bin's
+  floor.
+
+  **`PlayerClass::Fabricator` deliberately has no file.** What it moves is
+  how long a base work cycle takes; there is no base in an arena and no way
+  a fight could show it. Its instrument is `cargo run -- --template chains`,
+  which opens on a running base — not this directory.
 - **`player-points-atk.ron`** and **`player-points-integrity.ron`** — the
   creation stat pool spent entirely on one axis, the two rows behind
   `docs/measurements/2026-09-01-creation-stat-pool-exchange-rates.md`. These

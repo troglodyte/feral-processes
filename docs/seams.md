@@ -7058,6 +7058,32 @@ pending *take* deliberately does not credit the put budget: a take may come
 off a machine that is not a Depot, so crediting it would offer room that never
 appears. Under-offering is safe precisely because the commit takes first.
 
+**A holding and a permission are two figures, and `TransferRow` carries
+both.** `in_pack` was one field doing both jobs, and it was right for as long
+as the pack column *was* `put_available` — a ceiling drawn as a ceiling. The
+moment the column became what the pack would hold, the two cases where they
+disagree became lies on the screen: beside a machine that does not `stores`,
+and on a banked item, the pack figure read 0 while the player was carrying
+twelve. So `carried` is what the `Inventory` holds, always, and `can_put` is
+what may be moved out of it — 0 in both of those cases — and `put_available`
+clamps against the second. `on_shelves` needs no second figure because it is
+both at once. **Only `can_put` creates a row from the pack side**: filling the
+screen with every carried item beside a Mining Node would bury the one row
+that can actually move, so a pack item with nowhere to go is listed only when
+it is also on a shelf.
+
+**The trade currency gets no row on either side, and it is its own filter.**
+Credits are carried in the same `Inventory` as cargo and are not
+`ItemDef::banked` — they are spendable from the pack and are the one store
+that survives a breach — so nothing already in the offer excluded them. Two
+faults followed from that. A Credits row could be *put into a Depot*, which is
+not a thing the base does with money; and because the pack column was the
+shared put budget, spending it on another row lowered the Credits figure, so
+putting a Power Cell away read as being charged for it. The exclusion matches
+`caravan_shelf` and the stack market's listing, which both already say
+`item != currency && !is_banked(item)`: a currency is what a transfer is
+priced in, never a thing that moves.
+
 **The key table stayed one table and grew a sign.** `half_way_to` generalises
 the Ctrl step over the sign, still `div_ceil` on the *magnitude* of the gap so
 a gap of one closes rather than stranding; digits accumulate in the row's
@@ -7070,7 +7096,7 @@ table bought.** The screen was a list of rows reading `{amount} / -{put} ..
 +{take}`, and the arrows were inverted against every other Left/Right in the
 game — Left put in, Right took out — an inversion that was *specified* and
 still read to everyone who used it as a slip. The screen is now a table whose
-columns run `item | change | you | container`, and the arrows fall out of it:
+columns run `item | you | container`, and the arrows fall out of it:
 **Left pulls off the container toward you (a take, positive) and Right pushes
 from you into the container (a put, negative)**. That is the exact reverse of
 what shipped, and it needed no other change — the **sign convention is
@@ -7105,12 +7131,21 @@ than the heading. `Columns::header` carries `HEADER_LEAD` itself, and
 column boundaries through `paint::with_painter` rather than comparing strings —
 the advance is what the painter places against.
 
-**The `change` column signs a movement and leaves zero bare.** `+3`, `-2`,
-`0`. The sign is what says which way the units go, so it is printed only when
-units go; a column of `+0`s reads as a basket already full of takes. `you` and
-`container` lost their `-`/`+` decoration in the same move — the heading now
-says which end each is, and a `-` in front of a *ceiling* was always a
-statement about the arrow rather than about the figure.
+**The `change` column is gone, and the two figures move instead.** It began as
+a signed delta — `+3`, `-2`, a bare `0` for an untouched row, since a column
+of `+0`s reads as a basket already full of takes — sitting beside two columns
+that were *ceilings* and so never moved at all. The player therefore read the
+basket in one notation and the shelves in another, and the only thing on the
+page that answered "where would this leave me" was a number they had to add
+themselves. `you` and `container` are now the projection: `carried + amount`
+and `on_shelves - amount`, so a take fills the pack and empties the container
+in front of them and the delta is the movement itself. **The screen has no
+other feedback**, which is what `the_columns_move_the_units_the_basket_is_holding`
+pins: a row redrawn from its raw holdings would leave the keys moving a number
+nothing on the page shows. `projected` clamps to `0..=u32::MAX` rather than
+saturating by accident — `edit_row` cannot reach either end, but `i64 as u32`
+**wraps**, and a column reading four billion units is the failure that would
+result from a slip.
 
 ### `Game::copy_power` is the one door to a rating, and every term in it is a call
 

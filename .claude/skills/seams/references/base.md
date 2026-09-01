@@ -238,8 +238,24 @@
   item on a *shelf* is still a real take row), must close entirely without a
   `stores` neighbour, and reads `Inventory` — the plain-copy store — so a
   rare copy is never cargo.
+- **`TransferRow::carried` is a holding and `can_put` is a permission**, and
+  the screen draws the first while `put_available` clamps against the second.
+  They part company in exactly the two cases above — no `stores` neighbour,
+  and a banked item — both of which may still be *taken*, so one field doing
+  both jobs drew a `you` column reading 0 while the pack held twelve. **Only
+  `can_put` creates a row from the pack side**, or a pack full of cargo
+  beside a Mining Node opens a screen of rows that move in neither direction.
+- **The trade currency gets no row on either side, and it is its own filter
+  rather than `ItemDef::banked`.** Credits are carried in the same
+  `Inventory` as cargo, are spendable from the pack and survive a breach, so
+  nothing already in the offer excluded them: a Credits row could be *put into
+  a Depot*, and while the pack column was the shared put budget, spending it
+  on another row lowered the Credits figure — putting a Power Cell away read
+  as the base charging money for it. `caravan_shelf` and the stack market's
+  listing already say `item != currency && !is_banked(item)`; this is the
+  third.
 - **On the picker screen an arrow moves stock toward the column it points
-  at.** The screen is a table reading `item | change | you | container`, so
+  at.** The screen is a table reading `item | you | container`, so
   Left pulls off the container toward you (a take, **positive**) and Right
   pushes from you into it (a put, **negative**). The **sign convention is
   untouched** by that — only which arrow reaches which end — so nothing below
@@ -249,6 +265,15 @@
   cite the old test by name to say it was *not* following it. `[A]` writes the
   take ceiling over **every** row, clearing a pending give: that is what "take
   everything" means on one axis.
+- **The picker's two figures are the projection, not the holdings and not the
+  ceilings**: `carried + amount` and `on_shelves - amount`, so a take fills
+  the pack and empties the container in front of the player. That is the
+  screen's **only** feedback on the basket — the `change` column it replaced
+  said the movement a second time in a notation the two moving numbers do not
+  need, and a row redrawn from its raw figures leaves the keys moving a number
+  nothing on the page shows. `projected` clamps to `0..=u32::MAX` because
+  `i64 as u32` **wraps**: `edit_row` cannot reach either end, and a column
+  reading four billion units is what a slip would draw.
 - **The picker's figures are padded into the row's own label, not ridden in
   the suffix column, and the header is why.** `suffix_x` places a suffix one
   `m.inset` — a *pixel* gap — past the label's advance, and a column header

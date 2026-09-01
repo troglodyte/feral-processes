@@ -868,8 +868,8 @@ impl Game {
         }
     }
 
-    /// Power down: Integrity and Power are restored to full, for the
-    /// player, the party and every tamed program on the roster.
+    /// Power down: Integrity and Power restored to full, for the player and
+    /// for every program that is **not base staff**.
     ///
     /// Priced by where the party is standing and nothing else. **Inside
     /// base space it is free** — the walk home is the cost, and no
@@ -877,6 +877,42 @@ impl Game {
     /// four frames down the Stack alike — it spends one unit of an item
     /// whose def sets `ItemDef::enables_rest`, the Power Outlet among the
     /// shipped items.
+    ///
+    /// **A rest repairs the programs standing with the player and nobody
+    /// else**, and that is a **per-role, exhaustive** decision:
+    /// `InParty` and `Wielded` are repaired, `Sortie` and `Staff` are not.
+    /// The base's labour pool mends at a Repair Bay, which is what that
+    /// building is for — a rest that healed staff made the Bay optional and
+    /// a survived sweep free — and a squad in another sector is provisioned
+    /// out of its own dispatch (`SORTIE_PROVISION_HEAL_FRACTION` between
+    /// battles), not out of a rest taken somewhere it cannot hear.
+    ///
+    /// The split is read off `Game::program_role` and never off `Party`
+    /// membership: `Staff` is what `party::role_of` leaves *over*, so a
+    /// hand-written "is it in the party" test here would also exclude
+    /// `Wielded`, which is carried in the player's own hands.
+    ///
+    /// **Written as an exhaustive match, `cell_mark`'s rule**, and it was
+    /// briefly not. While `Staff` was the only exclusion this read as
+    /// `!= Staff` on the argument that a fifth role should inherit the heal,
+    /// since being left out is what strands a program. `Sortie` joining the
+    /// exclusion is what retired that argument: the roles now split two and
+    /// two on *whether the program is with you*, there is no majority to
+    /// default to, and the one role that was defaulted in — `Sortie` —
+    /// turned out to be the one that wanted defaulting out. A fifth role
+    /// must fail to compile here and be answered deliberately.
+    ///
+    /// **The split is by role and not by locale.** A rest four frames down
+    /// the Stack does not reach back and repair the base, which is what it
+    /// did before — the over-reach was that the walk was over every `Tamed`
+    /// program the player owned, wherever anybody was standing.
+    ///
+    /// **Power is deliberately still refilled for everyone**, excluded roles
+    /// included. A Bay restores Integrity and nothing else, and nothing
+    /// refills a program's reserve passively, so withholding it here would
+    /// leave a staff program that spent Power defending a sweep with no
+    /// route back to full — a second dead end, invented rather than asked
+    /// for. The rule is about the repair.
     ///
     /// **No rest advances the clock**, and that is what makes the free half
     /// safe to give away: a base rest that ticked could be spammed to farm
@@ -943,26 +979,45 @@ impl Game {
         // nothing. The walk is player then `Party` — the same set
         // `tick_field_buffs` ages.
         self.drop_until_rest_buffs_on_party();
-        // Every tamed program you own gets fully healed too, not just your
-        // active party — including any left behind defending a structure
-        // from a raid while you were away.
-        let owned: Vec<Entity> = {
+        // The roles are resolved into the list rather than asked for inside
+        // the loop, since `program_role` borrows the world immutably and the
+        // restores below take it mutably.
+        let owned: Vec<(Entity, Option<ProgramRole>)> = {
             let mut query = self
                 .world
                 .query_filtered::<(Entity, &Tamed), With<Creature>>();
-            query
+            let owned: Vec<Entity> = query
                 .iter(&self.world)
                 .filter(|(_, t)| t.owner == player)
                 .map(|(e, _)| e)
+                .collect();
+            owned
+                .into_iter()
+                .map(|e| (e, self.program_role(e)))
                 .collect()
         };
-        for creature in owned {
-            if let Some(mut stats) = self.world.get_mut::<Stats>(creature) {
+        for (creature, role) in owned {
+            // Exhaustive rather than a `!=`, `cell_mark`'s rule: the question
+            // is whether this program is standing *with* the player, the four
+            // roles answer it two and two, and there is no safe side to
+            // default a fifth one to. `None` is unreachable — `owned` is
+            // already filtered to programs this player owns — and is spelled
+            // out rather than folded into a catch-all so it cannot become the
+            // arm a new role quietly lands in.
+            let repaired = match role {
+                Some(ProgramRole::InParty | ProgramRole::Wielded) => true,
+                Some(ProgramRole::Sortie | ProgramRole::Staff) => false,
+                None => false,
+            };
+            if repaired && let Some(mut stats) = self.world.get_mut::<Stats>(creature) {
                 stats.hp = stats.max_hp;
             }
             // Rest is the *only* refill for a companion's reserve: nothing
             // restores one passively, and there is no way to hand a program a
-            // Power Cell mid-fight.
+            // Power Cell mid-fight. The excluded roles included, deliberately
+            // — a Bay restores Integrity and nothing else, so withholding
+            // this too would strand a program that spent Power defending a
+            // sweep.
             if let Some(mut reserve) = self.world.get_mut::<PowerReserve>(creature) {
                 reserve.fill();
             }

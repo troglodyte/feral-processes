@@ -10,8 +10,10 @@ Moving and living:
 - hjkl or the arrow keys — move
 - . — wait a turn
 - e — drain a Power Cell
-- r — recharge: restores Integrity and Power for you and every program you own. Free inside your
-  base; anywhere else it burns a Power Outlet. It takes no time either way.
+- r — recharge: restores Integrity and Power for you and the programs at your side. A program that
+  is not with you is not repaired by it — base staff mend at a Repair Bay, and a squad away on a
+  sortie lives on the provisions you paid for at dispatch. Free inside your base; anywhere else it
+  burns a Power Outlet. It takes no time either way.
 
 The three menus:
 

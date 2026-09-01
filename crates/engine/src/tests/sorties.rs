@@ -638,6 +638,44 @@ fn a_dispatch_may_not_empty_the_roster() {
     assert!(game.dispatch_sortie(&site, &staff[..2]).is_ok());
 }
 
+/// A rest repairs **neither** a dispatched squad nor the staff it left
+/// behind. Both roles are away from the player: a squad is provisioned out
+/// of its own dispatch (`SORTIE_PROVISION_HEAL_FRACTION`, paid between
+/// battles) and the base's pool mends at a Repair Bay.
+///
+/// The roles are asserted *before* the rest deliberately. `Staff` is what
+/// `party::role_of` leaves over, so a fixture that failed to dispatch would
+/// leave both programs staff and this would pass for the wrong reason —
+/// which is exactly the shape of vacuous test the assertions below cannot
+/// tell apart on their own.
+#[test]
+fn a_rest_repairs_neither_a_dispatched_squad_nor_the_staff_left_behind() {
+    let (mut game, site, staff) = a_base_ready_to_dispatch(4613, 4, 500);
+    assert!(game.dispatch_sortie(&site, &staff[..2]).is_ok());
+    for &e in &staff {
+        game.world
+            .get_mut::<crate::components::Stats>(e)
+            .unwrap()
+            .hp = 1;
+    }
+    assert_eq!(game.program_role(staff[0]), Some(ProgramRole::Sortie));
+    assert_eq!(game.program_role(staff[2]), Some(ProgramRole::Staff));
+
+    game.rest().unwrap();
+
+    let hp = |g: &Game, e: Entity| g.world.get::<crate::components::Stats>(e).unwrap().hp;
+    assert_eq!(
+        hp(&game, staff[0]),
+        1,
+        "a squad in another sector is not repaired by a rest taken at home"
+    );
+    assert_eq!(
+        hp(&game, staff[2]),
+        1,
+        "and neither are the bodies still working the base"
+    );
+}
+
 /// A successful dispatch charges the provisioning and takes the bodies off
 /// the labour pool in the same call.
 #[test]

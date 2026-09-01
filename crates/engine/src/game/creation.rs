@@ -162,6 +162,12 @@ impl Game {
 /// same two functions `Game::class_rows` and `Game::starter_routine_rows`
 /// call — a preview that disagreed with what the run actually granted would
 /// be worse than no preview.
+///
+/// `Default` is the empty catalogue — no classes, no items, no abilities —
+/// which is what a frontend gets if the asset tree will not load at all.
+/// The wizard then offers no class and no starter routine, which is the
+/// pre-creation game, rather than refusing to open.
+#[derive(Default)]
 pub struct CreationCatalogue {
     classes: crate::classes::ClassDb,
     items: crate::items_db::ItemDb,

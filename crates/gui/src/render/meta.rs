@@ -127,27 +127,6 @@ pub(super) fn draw_save_action(app: &App, refusal: Option<&str>, painter: &Paint
     draw_popup("Save", PopupSize::Large, &rows, refusal, painter, m);
 }
 
-pub(super) fn draw_difficulty_pick(
-    selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let rows = vec![
-        item_row(
-            "[P] Permadeath - flatlining is final; the session is archived to a log".to_string(),
-            selected == 0,
-        ),
-        item_row(
-            "[F] Forgiving - flatlining costs you, but you reboot and keep going".to_string(),
-            selected == 1,
-        ),
-        text_row(""),
-        text_row("Esc to go back; Up/Down + Enter also work"),
-    ];
-    draw_popup("New Game", PopupSize::Large, &rows, refusal, painter, m);
-}
-
 pub(super) fn draw_game_over(app: &mut App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
     let summary = app
         .game

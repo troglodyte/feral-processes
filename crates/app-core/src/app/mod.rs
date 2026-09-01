@@ -10,6 +10,7 @@ pub(crate) mod building;
 pub(crate) mod caravan;
 pub(crate) mod contracts;
 mod crafting;
+pub(crate) mod creation;
 pub(crate) mod dev_console;
 mod excavate;
 mod field;

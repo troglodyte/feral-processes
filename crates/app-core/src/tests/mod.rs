@@ -9,6 +9,7 @@ mod building;
 mod caravan;
 mod contracts;
 mod crafting;
+mod creation;
 mod dev_console;
 mod develop;
 mod excavate;

@@ -262,7 +262,7 @@ fn a_refusal_reports_why_and_leaves_the_screen_open() {
 #[test]
 fn a_new_run_opens_on_the_first_missions_briefing() {
     let mut app = test_app(3124);
-    app.start_new_game(DifficultyMode::Forgiving);
+    app.start_new_game(DifficultyMode::Forgiving, &CharacterChoice::default());
     let mission = app
         .game
         .as_ref()

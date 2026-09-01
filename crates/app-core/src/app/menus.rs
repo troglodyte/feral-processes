@@ -1,5 +1,6 @@
-//! The screens outside a run: main menu, save picker, difficulty pick,
-//! help, and the game-over page.
+//! The screens outside a run: main menu, save picker, help, and the
+//! game-over page. The creation wizard the main menu opens is its own
+//! module, `app/creation.rs`.
 
 use crate::*;
 
@@ -21,10 +22,7 @@ impl App {
                 _ => None,
             });
         match idx.map(|i| options[i]) {
-            Some('n') => {
-                self.status_line = None;
-                self.mode = Mode::DifficultyPick;
-            }
+            Some('n') => self.open_creation(),
             Some('l') => {
                 self.status_line = None;
                 self.mode = Mode::LoadGame;
@@ -93,25 +91,6 @@ impl App {
                 }
                 self.mode = Mode::LoadGame;
             }
-            _ => {}
-        }
-    }
-
-    pub(crate) fn handle_difficulty_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.mode = Mode::MainMenu;
-            return;
-        }
-        let options = ['p', 'f'];
-        let idx = self
-            .selected_index(key, options.len())
-            .or_else(|| match key {
-                GameKey::Char(c) => options.iter().position(|&o| o == c.to_ascii_lowercase()),
-                _ => None,
-            });
-        match idx.map(|i| options[i]) {
-            Some('p') => self.start_new_game(DifficultyMode::Permadeath),
-            Some('f') => self.start_new_game(DifficultyMode::Forgiving),
             _ => {}
         }
     }

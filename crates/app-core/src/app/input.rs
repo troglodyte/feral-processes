@@ -167,14 +167,16 @@ impl App {
         // it in the renderer instead would put "what a modifier means" on
         // the far side of the seam from the mode that decides it. The
         // The transfer picker and the caravan basket are those screens — see
-        // `app/basket.rs` and `app/caravan.rs`. **Miss one here and its four
-        // modified arrows are folded to bare `Left`/`Right` before its
-        // handler ever sees them**, so Shift and Ctrl silently become plain
-        // steps and nothing fails anywhere.
+        // `app/basket.rs` and `app/caravan.rs`. The creation wizard's Points
+        // step is the fourth: it borrows the transfer picker's key idiom
+        // whole, so it needs the same four keys to reach it unfolded.
+        // **Miss one here and its four modified arrows are folded to bare
+        // `Left`/`Right` before its handler ever sees them**, so Shift and
+        // Ctrl silently become plain steps and nothing fails anywhere.
         let key = match key {
             _ if matches!(
                 self.mode,
-                Mode::Transfer | Mode::Caravan | Mode::CraftQuantity
+                Mode::Transfer | Mode::Caravan | Mode::CraftQuantity | Mode::CreateCharacter
             ) =>
             {
                 key
@@ -190,7 +192,7 @@ impl App {
             Mode::Achievements => self.handle_achievements_key(key),
             Mode::LoadGame => self.handle_load_game_key(key),
             Mode::SaveAction => self.handle_save_action_key(key),
-            Mode::DifficultyPick => self.handle_difficulty_key(key),
+            Mode::CreateCharacter => self.handle_creation_key(key),
             Mode::Playing => self.handle_playing_key(key),
             Mode::Transfer => self.handle_basket_key(key),
             Mode::BaseMenu => self.handle_base_menu_key(key),

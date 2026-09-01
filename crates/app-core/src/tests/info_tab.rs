@@ -27,7 +27,7 @@ fn bare_app(seed: u32) -> App {
 #[test]
 fn a_new_game_opens_on_crew_since_a_fresh_run_starts_outside_the_base() {
     let mut app = bare_app(1900);
-    app.start_new_game(DifficultyMode::Forgiving);
+    app.start_new_game(DifficultyMode::Forgiving, &CharacterChoice::default());
     assert!(
         !app.game.as_ref().unwrap().in_base(),
         "a fresh run has no base to stand in yet"

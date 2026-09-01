@@ -61,7 +61,7 @@ fn breach_and_tick(app: &mut App) {
 fn earning_an_achievement_writes_the_profile_immediately() {
     let path = scratch_profile("immediate");
     let mut app = app_with_profile(41, path.clone());
-    app.start_new_game(DifficultyMode::Forgiving);
+    app.start_new_game(DifficultyMode::Forgiving, &CharacterChoice::default());
     breach_and_tick(&mut app);
 
     assert!(
@@ -86,7 +86,7 @@ fn earning_an_achievement_writes_the_profile_immediately() {
 fn the_written_profile_reloads_equal() {
     let path = scratch_profile("reload");
     let mut app = app_with_profile(42, path.clone());
-    app.start_new_game(DifficultyMode::Forgiving);
+    app.start_new_game(DifficultyMode::Forgiving, &CharacterChoice::default());
     breach_and_tick(&mut app);
 
     let (reloaded, _) = Profile::load(&path);
@@ -100,7 +100,7 @@ fn a_new_game_starts_from_the_profile_on_disk() {
     seed_profile(&path);
 
     let mut app = app_with_profile(43, path.clone());
-    app.start_new_game(DifficultyMode::Forgiving);
+    app.start_new_game(DifficultyMode::Forgiving, &CharacterChoice::default());
     let _ = std::fs::remove_file(&path);
 
     assert_eq!(player_atk(&app), PLAYER_BASE_STATS.atk + 1);
@@ -115,7 +115,7 @@ fn loading_a_save_does_not_re_apply_rewards() {
     seed_profile(&path);
 
     let mut app = app_with_profile(44, path.clone());
-    app.start_new_game(DifficultyMode::Forgiving);
+    app.start_new_game(DifficultyMode::Forgiving, &CharacterChoice::default());
     let paid = player_atk(&app);
     assert_eq!(
         paid,
@@ -145,7 +145,7 @@ fn an_unwritable_profile_path_does_not_crash_the_tick() {
     std::fs::create_dir_all(&path).unwrap();
 
     let mut app = app_with_profile(45, path.clone());
-    app.start_new_game(DifficultyMode::Forgiving);
+    app.start_new_game(DifficultyMode::Forgiving, &CharacterChoice::default());
     breach_and_tick(&mut app);
     let _ = std::fs::remove_dir_all(&path);
 

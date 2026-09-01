@@ -34,6 +34,7 @@ mod building;
 mod caravan;
 mod contracts;
 mod crafting;
+mod creation;
 mod field;
 mod frame_map;
 mod group_menu;
@@ -87,8 +88,8 @@ use inventory::{
 };
 use manifest::{ManifestNav, draw_manifest, draw_manifest_pick};
 use meta::{
-    draw_achievements, draw_difficulty_pick, draw_game_over, draw_load_game, draw_main_menu,
-    draw_quit_app_confirm, draw_quit_run_confirm, draw_save_action,
+    draw_achievements, draw_game_over, draw_load_game, draw_main_menu, draw_quit_app_confirm,
+    draw_quit_run_confirm, draw_save_action,
 };
 use party::{
     draw_companion_equip, draw_companion_memories, draw_companion_menu, draw_fuse_menu,
@@ -503,7 +504,7 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
         Mode::Achievements => draw_achievements(app, refusal, painter, &m),
         Mode::LoadGame => draw_load_game(app, refusal, painter, &m),
         Mode::SaveAction => draw_save_action(app, refusal, painter, &m),
-        Mode::DifficultyPick => draw_difficulty_pick(app.menu_selected, refusal, painter, &m),
+        Mode::CreateCharacter => creation::draw_create_character(app, refusal, painter, &m),
         Mode::GameOver => draw_game_over(app, refusal, painter, &m),
         // Drawn over the map rather than over black: the run is still there
         // behind the notice, and the scrim lets it show through faintly.
@@ -1161,7 +1162,7 @@ mod tests {
     /// Every `Mode`, as the status-line census below drives them.
     const ALL_MODES: [Mode; 86] = [
         Mode::MainMenu,
-        Mode::DifficultyPick,
+        Mode::CreateCharacter,
         Mode::LoadGame,
         Mode::SaveAction,
         Mode::Playing,
@@ -1263,9 +1264,12 @@ mod tests {
             root.join("dev-arenas"),
             tmp.join("telemetry.jsonl"),
         );
-        // The keys a player presses: [N] new game, then [F] Forgiving.
+        // The keys a player presses: [N] new game, [F] Forgiving, then
+        // [R] to roll the rest of the character and Enter to start.
         app.handle_key(feral_processes_app_core::GameKey::Char('n'));
         app.handle_key(feral_processes_app_core::GameKey::Char('f'));
+        app.handle_key(feral_processes_app_core::GameKey::Char('R'));
+        app.handle_key(feral_processes_app_core::GameKey::Enter);
         app
     }
 

@@ -2279,6 +2279,7 @@ pub struct TransferRow {
 /// `axes` and `kit` are pre-formatted in the engine (`classes::format_axes`,
 /// `classes::format_kit`) so the two renderers cannot word one class's
 /// trade differently — `Game::copy_name`'s reason.
+#[derive(Clone, Debug, PartialEq)]
 pub struct ClassRow {
     pub class: AffinityClass,
     pub name: String,

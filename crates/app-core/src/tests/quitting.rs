@@ -30,7 +30,7 @@ fn app_with_a_save_slot(name: &str) -> App {
         super::support::arenas_dir(),
         std::env::temp_dir().join("feral_processes_quitting_telemetry.jsonl"),
     );
-    app.start_new_game(DifficultyMode::Forgiving);
+    app.start_new_game(DifficultyMode::Forgiving, &CharacterChoice::default());
     // A new run queues the onboarding chain's first briefing, which surfaces
     // on the first tick — so it would take the screen out from under the
     // very keypress these tests are about. Drained rather than dismissed,

@@ -2321,16 +2321,21 @@ pub struct PlayerClassView {
 
 /// One class offered on the creation screen — see `Game::class_rows`.
 ///
-/// `axes` and `kit` are pre-formatted in the engine (`classes::format_axes`,
-/// `classes::format_kit`) so the two renderers cannot word one class's
-/// trade differently — `Game::copy_name`'s reason.
+/// `trade` is pre-formatted in the engine (`classes::format_trade`) so the
+/// two renderers cannot word one class's trade differently —
+/// `Game::copy_name`'s reason.
+///
+/// **There is no kit summary.** The row carried one until the wizard grew
+/// a Kit step, which *replaces* what a class authored — so listing the
+/// class kit on the picker was advertising equipment the player was about
+/// to buy for themselves two screens later. `ClassDef::kit` is untouched
+/// and still the fallback for an empty basket.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClassRow {
     pub class: AffinityClass,
     pub name: String,
     pub description: String,
-    /// `"+Heal  -Damage"`-style summary of the spread.
-    pub axes: String,
-    /// `"3x Core Fragment, 4x Power Cell"`-style summary of the kit.
-    pub kit: String,
+    /// `"Bonus to damage at the expense of healing"` — what this class
+    /// gives up and what it gets for it, as a sentence.
+    pub trade: String,
 }

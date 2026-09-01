@@ -372,7 +372,7 @@ impl App {
                     .class_rows()
                     .into_iter()
                     .find(|row| Some(row.class) == choice.class)
-                    .map(|row| format!("{} ({})", row.name, row.axes))
+                    .map(|row| format!("{} ({})", row.name, row.trade))
                     .unwrap_or_else(|| "—".to_string()),
             ),
         ];

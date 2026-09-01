@@ -402,8 +402,7 @@ fn the_creation_catalogue_agrees_with_the_game() {
     for (a, b) in from_game.iter().zip(from_catalogue.iter()) {
         assert_eq!(a.class, b.class);
         assert_eq!(a.name, b.name);
-        assert_eq!(a.axes, b.axes, "the spread summary drifted");
-        assert_eq!(a.kit, b.kit, "the kit summary drifted");
+        assert_eq!(a.trade, b.trade, "the trade summary drifted");
     }
 
     for class in AffinityClass::ALL.iter().copied().map(Some).chain([None]) {
@@ -711,4 +710,34 @@ fn an_overspent_perk_basket_applies_nothing() {
         .expect("a perks component");
     assert_eq!(perks.level(crate::perks::Perk::Buffer), 0);
     assert_eq!(perks.points, 0, "and no allowance was handed out either");
+}
+
+/// **A class row is a sentence a player can act on**, not a row of sigils.
+/// It read `"+Damage  -Healing"`, which needs the reader to already know
+/// the game has five affinity axes and that a class raises one by trading
+/// another away — on the second screen of a new game, before they have
+/// seen a fight.
+///
+/// Asserted over the *shipped* classes, so a mod's spread is free to
+/// produce a shape this does not describe, and the words are read out of
+/// `AffinityKind::label` rather than restated here.
+#[test]
+fn a_class_row_says_what_it_trades_in_words() {
+    let game = Game::new(90_030, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let rows = game.class_rows();
+    assert!(!rows.is_empty(), "the shipped classes loaded");
+    for row in rows {
+        assert!(
+            row.trade.starts_with("Bonus to ") && row.trade.contains(" at the expense of "),
+            "{} reads {:?}, which is not a sentence",
+            row.name,
+            row.trade
+        );
+        assert!(
+            !row.trade.contains('+') && !row.trade.contains('-'),
+            "{} still carries a sigil: {:?}",
+            row.name,
+            row.trade
+        );
+    }
 }

@@ -331,7 +331,7 @@ impl CreationCatalogue {
 
     /// One row per loaded class — `Game::class_rows`' own derivation.
     pub fn class_rows(&self) -> Vec<views::ClassRow> {
-        crate::classes::class_rows(&self.classes, &self.items)
+        crate::classes::class_rows(&self.classes)
     }
 
     /// The kit shelf — `ItemDb::creation_shelf` called, the same

@@ -162,35 +162,51 @@ pub fn format_affinity_bonuses(affinities: &Affinities) -> String {
         .join("  ")
 }
 
-fn format_axes(affinities: &Affinities) -> String {
-    affinities
+/// What a class *trades*, as a sentence: `"Bonus to damage at the expense
+/// of healing"`.
+///
+/// **Prose, not a sigil row.** This read `"+Damage  -Healing"` — compact,
+/// and meaningless to anyone who had not already worked out that the game
+/// has five affinity axes and that a class raises one by trading another
+/// away. It is the only line a player has to pick a class from, and the
+/// class step is the second screen of a new game.
+///
+/// Magnitudes are deliberately absent: the picker is choosing a *shape*,
+/// and `format_affinity_bonuses` is where the numbers are read back once
+/// the run exists.
+fn format_trade(affinities: &Affinities) -> String {
+    let (up, down): (Vec<_>, Vec<_>) = affinities
         .non_neutral()
         .into_iter()
-        .map(|(kind, value)| {
-            let sign = if value > crate::tuning::AFFINITY_NEUTRAL {
-                '+'
-            } else {
-                '-'
-            };
-            format!("{sign}{}", kind.label())
-        })
-        .collect::<Vec<_>>()
-        .join("  ")
+        .partition(|&(_, value)| value > crate::tuning::AFFINITY_NEUTRAL);
+    let names = |axes: Vec<(AffinityKind, f32)>| {
+        join_words(
+            axes.into_iter()
+                .map(|(kind, _)| kind.label().to_lowercase())
+                .collect(),
+        )
+    };
+    match (names(up), names(down)) {
+        (up, down) if !up.is_empty() && !down.is_empty() => {
+            format!("Bonus to {up} at the expense of {down}")
+        }
+        (up, _) if !up.is_empty() => format!("Bonus to {up}"),
+        (_, down) if !down.is_empty() => format!("Weaker {down}"),
+        // An all-neutral class is a supported mod: no trade to describe.
+        _ => String::new(),
+    }
 }
 
-/// `"3x Core Fragment, 4x Power Cell"`-style summary of a kit, for the same
-/// reason `format_axes` exists.
-fn format_kit(items: &crate::items_db::ItemDb, kit: &[(ItemId, u32)]) -> String {
-    kit.iter()
-        .map(|(item, qty)| {
-            let name = items
-                .get(item.as_str())
-                .map(|d| d.name.as_str())
-                .unwrap_or_else(|| item.as_str());
-            format!("{qty}x {name}")
-        })
-        .collect::<Vec<_>>()
-        .join(", ")
+/// `["damage"]` -> `"damage"`, `["damage", "drain"]` -> `"damage and
+/// drain"`, and three or more with commas before the "and". Every shipped
+/// class trades exactly one axis for one, so the longer forms exist for
+/// mods rather than for anything in `assets/classes/`.
+fn join_words(words: Vec<String>) -> String {
+    match words.split_last() {
+        None => String::new(),
+        Some((last, [])) => last.clone(),
+        Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
+    }
 }
 
 /// `class`'s spread for `kind`, straight off a `ClassDb`. `AFFINITY_NEUTRAL`
@@ -226,15 +242,14 @@ pub fn affinity_with_perk(
 /// One row per loaded class, in `ClassDb::iter`'s order. The creation
 /// screen's rows, derived once — `Game::class_rows` and
 /// `CreationCatalogue::class_rows` are both calls to this.
-pub fn class_rows(classes: &ClassDb, items: &crate::items_db::ItemDb) -> Vec<views::ClassRow> {
+pub fn class_rows(classes: &ClassDb) -> Vec<views::ClassRow> {
     classes
         .iter()
         .map(|def| views::ClassRow {
             class: def.class,
             name: def.name.clone(),
             description: def.description.clone(),
-            axes: format_axes(&def.affinities),
-            kit: format_kit(items, &def.kit),
+            trade: format_trade(&def.affinities),
         })
         .collect()
 }
@@ -306,9 +321,6 @@ impl Game {
     /// One row per loaded class, in `ClassDb::iter`'s order, for the
     /// creation screen.
     pub fn class_rows(&self) -> Vec<views::ClassRow> {
-        class_rows(
-            self.world.resource::<ClassDb>(),
-            self.world.resource::<crate::items_db::ItemDb>(),
-        )
+        class_rows(self.world.resource::<ClassDb>())
     }
 }

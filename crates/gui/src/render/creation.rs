@@ -181,7 +181,7 @@ fn build_row(step: CreationStep, row: &CreationRow, i: usize, selected: bool) ->
 fn row_line(row: &CreationRow) -> String {
     match row {
         CreationRow::Difficulty { label, detail, .. } => format!("{label} - {detail}"),
-        CreationRow::Class(class) => format!("{} - {} [{}]", class.name, class.axes, class.kit),
+        CreationRow::Class(class) => format!("{} - {}", class.name, class.trade),
         CreationRow::Icon { glyph, sprite } => format!("{glyph}  ({sprite})"),
         CreationRow::Colour { index } => format!("Colour {}", index + 1),
         CreationRow::Stat {

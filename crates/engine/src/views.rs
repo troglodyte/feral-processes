@@ -1510,6 +1510,17 @@ pub struct StartingItemRow {
     pub price: u32,
 }
 
+/// One row of the creation wizard's Perks step — a `PerkDef` as the
+/// screen offers it, priced in Perk Points against
+/// `tuning::CREATION_PERK_POINTS`. See `CreationCatalogue::perk_rows`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StartingPerkRow {
+    pub id: crate::perks::Perk,
+    pub name: String,
+    pub description: String,
+    pub cost: u32,
+}
+
 /// One row of the creation wizard's Routine step — an `AbilityDef::starter`
 /// candidate, priced for the class the player has picked. See
 /// `Game::starter_routine_rows`.

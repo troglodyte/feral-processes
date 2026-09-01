@@ -106,6 +106,27 @@ pub const MAX_CREATION_STAT_POINTS: u32 = 20;
 
 const _: () = assert!(CREATION_STAT_POINTS <= MAX_CREATION_STAT_POINTS);
 
+/// Perk Points the character-creation perk step hands out, on top of
+/// whatever the cross-run profile grants.
+///
+/// **Four, which is two of the cheap perks or one of the dearest.** The
+/// screen exists to be a decision on every run including a first one, and
+/// a fresh profile grants nothing — perks are otherwise earned at
+/// `PERK_POINTS_PER_LEVEL` a level, so this is two levels of perk income
+/// as a head start. Shipped costs run 2..=4.
+///
+/// **Ungated by any instrument.** `balance_sim` models no perks at all —
+/// each is a hook into a particular formula (see `perks.rs`) — so nothing
+/// in the suite can tell you what raising this is worth.
+///
+/// **Spent at creation or lost**, exactly like the stat pool and the kit
+/// allowance — so the step refuses to be left while anything on it is
+/// still affordable, the same rule as the other two. The allowance is
+/// never granted as points: `apply_creation_perks` grants only what the
+/// basket costs and immediately spends it, because `Game::new` runs that
+/// same path with an empty basket and must keep producing today's player.
+pub const CREATION_PERK_POINTS: u32 = 4;
+
 /// Credits the character-creation kit step gives the player to spend on
 /// `items_db::creation_shelf`.
 ///

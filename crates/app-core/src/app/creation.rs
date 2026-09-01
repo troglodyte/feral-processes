@@ -46,7 +46,8 @@ use crate::*;
 use feral_processes_engine::items::ItemId;
 use feral_processes_engine::tuning::{
     CREATION_COST_ATK, CREATION_COST_DECOMPILER, CREATION_COST_DEF, CREATION_COST_INTEGRITY,
-    CREATION_CREDITS, CREATION_GAIN_INTEGRITY, CREATION_STAT_POINTS, PLAYER_BASE_STATS,
+    CREATION_CREDITS, CREATION_GAIN_INTEGRITY, CREATION_PERK_POINTS, CREATION_STAT_POINTS,
+    PLAYER_BASE_STATS,
 };
 
 /// The (glyph, sprite name) pairs the Icon step offers.
@@ -324,6 +325,15 @@ impl App {
                     cost: stat_cost(*stat),
                 })
                 .collect(),
+            CreationStep::Perks => self
+                .creation_catalogue
+                .perk_rows()
+                .into_iter()
+                .map(|row| {
+                    let taken = self.perk_taken(row.id);
+                    CreationRow::Perk { row, taken }
+                })
+                .collect(),
             CreationStep::Routine => self
                 .creation_catalogue
                 .starter_rows(self.creation_choice.class)
@@ -456,6 +466,7 @@ impl App {
             CreationStep::Icon => self.handle_creation_icon_key(key),
             CreationStep::Colour => self.handle_creation_colour_key(key),
             CreationStep::Points => self.handle_creation_points_key(key),
+            CreationStep::Perks => self.handle_creation_perks_key(key),
             CreationStep::Routine => self.handle_creation_routine_key(key),
             CreationStep::Name => self.handle_creation_name_key(key),
             CreationStep::Summary => self.handle_creation_summary_key(key),
@@ -495,6 +506,14 @@ impl App {
                 let left = self.creation_points_left();
                 (MainStat::all().iter().any(|s| stat_cost(*s) <= left))
                     .then(|| format!("{left} points still to spend."))
+            }
+            CreationStep::Perks => {
+                let left = self.creation_perk_points_left();
+                self.creation_catalogue
+                    .perk_rows()
+                    .iter()
+                    .any(|row| row.cost <= left)
+                    .then(|| format!("{left} Perk Points still to spend."))
             }
             CreationStep::Kit => {
                 let left = self.creation_credits_left();
@@ -796,6 +815,86 @@ impl App {
         self.creation_choice.stats[self.menu_selected] = after;
         self.creation_decided.stats = true;
         self.status_line = None;
+    }
+
+    /// The Kit step's key table in Perk Points: Up/Down moves the cursor,
+    /// Left/Right buys and refunds a level of the highlighted perk, and
+    /// Enter moves on once nothing is still affordable — `leave_refusal`'s
+    /// rule, the same one the other two budgets answer to.
+    ///
+    /// There is no `[r]` here. The kit's reroll exists because a basket of
+    /// two dozen consumables is tedious to assemble and meaningless to
+    /// compare; four points across nineteen perks is the decision itself.
+    fn handle_creation_perks_key(&mut self, key: GameKey) {
+        let len = self.creation_rows().len();
+        match key {
+            GameKey::Enter => self.try_advance_creation(),
+            GameKey::Up | GameKey::Down => self.scroll(key, len),
+            GameKey::Left => self.buy_perk_level(|taken, _| taken.saturating_sub(1)),
+            GameKey::Right => self.buy_perk_level(|taken, max| (taken + 1).min(max)),
+            GameKey::ShiftLeft => self.buy_perk_level(|_, _| 0),
+            GameKey::ShiftRight => self.buy_perk_level(|_, max| max),
+            GameKey::CtrlLeft => self.buy_perk_level(|taken, _| super::basket::halve(taken, 0)),
+            GameKey::CtrlRight => self.buy_perk_level(super::basket::halve),
+            _ => {}
+        }
+    }
+
+    /// `spend_on_item` for perk levels — `App::put_available`'s rule again:
+    /// `max` is what the highlighted row could hold given what the *other*
+    /// rows have already bought, so a row stays lowerable once the
+    /// allowance runs out.
+    fn buy_perk_level(&mut self, f: impl FnOnce(u32, u32) -> u32) {
+        let rows = self.creation_catalogue.perk_rows();
+        let Some(row) = rows.get(self.menu_selected).cloned() else {
+            return;
+        };
+        let others: u32 = self
+            .creation_choice
+            .perks
+            .iter()
+            .filter(|(perk, _)| *perk != row.id)
+            .filter_map(|(perk, levels)| {
+                rows.iter().find(|r| r.id == *perk).map(|r| r.cost * levels)
+            })
+            .sum();
+        let max = CREATION_PERK_POINTS.saturating_sub(others) / row.cost.max(1);
+        let before = self.perk_taken(row.id);
+        let after = f(before, max).min(max);
+        if after == before && before == max {
+            self.refuse(format!(
+                "Not enough Perk Points — {} costs {}.",
+                row.name, row.cost
+            ));
+            return;
+        }
+        self.creation_choice
+            .perks
+            .retain(|(perk, _)| *perk != row.id);
+        if after > 0 {
+            self.creation_choice.perks.push((row.id, after));
+        }
+        self.status_line = None;
+    }
+
+    /// Levels of `perk` the basket holds.
+    fn perk_taken(&self, perk: feral_processes_engine::perks::Perk) -> u32 {
+        self.creation_choice
+            .perks
+            .iter()
+            .find(|(p, _)| *p == perk)
+            .map(|(_, levels)| *levels)
+            .unwrap_or(0)
+    }
+
+    /// Perk Points still unspent — the Perks step's own figure, for its
+    /// footer. `App::creation_credits_left`'s shape on the third budget.
+    pub fn creation_perk_points_left(&self) -> u32 {
+        CREATION_PERK_POINTS.saturating_sub(
+            self.creation_catalogue
+                .perk_cost(&self.creation_choice)
+                .unwrap_or(CREATION_PERK_POINTS),
+        )
     }
 
     /// The starter pool, priced through the class already picked. Enter on

@@ -2568,8 +2568,13 @@ fn the_shipped_tutorial_chain_is_well_formed() {
         crate::contracts::ContractDb::load_dir(&assets.join("contracts")).unwrap();
     assert!(warnings.is_empty(), "the shipped set parses: {warnings:?}");
     let chain = contracts.tutorial_chain();
+    // A floor, not a count — the chain is content and grows. It went from
+    // eleven to ten when `tutorial_spend_it` was retired: perks are bought
+    // on their own creation step now, before the run starts, so a mission
+    // telling the player to go and spend a point was teaching a screen
+    // they had already used.
     assert!(
-        chain.len() >= 11,
+        chain.len() >= 10,
         "the shipped chain is authored, not empty: {}",
         chain.len()
     );

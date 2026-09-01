@@ -640,3 +640,75 @@ fn the_manifest_reads_back_the_name_and_class() {
     };
     assert!(player.class.is_none(), "a classless run must name no class");
 }
+
+/// **The perk basket is applied by replaying the purchase**, which is the
+/// one thing this feature could get wrong invisibly: three of the nineteen
+/// perks grant a `Stats` gain at purchase (`perks::purchase_stat_gain`),
+/// and a hand-built `Perks` component would ship those three doing nothing
+/// while every other perk looked fine.
+///
+/// So the perk bought here is a `StatGain` one, and the assertion is on
+/// `Stats` rather than on the unlocked list.
+#[test]
+fn a_creation_perk_is_bought_through_the_same_door_the_run_uses() {
+    let plain = Game::new(90_020, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let before = *plain.world.get::<Stats>(plain.player_entity()).unwrap();
+
+    let choice = CharacterChoice {
+        perks: vec![(crate::perks::Perk::Buffer, 1)],
+        ..CharacterChoice::default()
+    };
+    let game = Game::new_with(
+        90_020,
+        DifficultyMode::Forgiving,
+        &test_assets_dir(),
+        &choice,
+    )
+    .unwrap();
+    let player = game.player_entity();
+    let perks = game.world.get::<Perks>(player).expect("a perks component");
+    assert_eq!(perks.level(crate::perks::Perk::Buffer), 1);
+    assert_eq!(
+        perks.points, 0,
+        "the allowance is spent, never carried into the run"
+    );
+
+    let after = *game.world.get::<Stats>(player).unwrap();
+    assert!(
+        after.max_hp > before.max_hp,
+        "a StatGain perk bought at creation must reach Stats: {} vs {}",
+        after.max_hp,
+        before.max_hp
+    );
+    assert_eq!(after.hp, after.max_hp, "a run must not start damaged");
+}
+
+/// **An overspent basket applies nothing**, `apply_creation_stats`' rule on
+/// the third budget — and the allowance is never granted, so the run does
+/// not open holding points it did not earn. Both halves matter: a basket
+/// that failed closed while still handing out its allowance would give
+/// every `Game::new` call site free Perk Points, which
+/// `attention::unspent_perk_points_ask_to_be_spent` reads as a run needing
+/// the player.
+#[test]
+fn an_overspent_perk_basket_applies_nothing() {
+    let choice = CharacterChoice {
+        // Four levels of the cheapest perk is 8 points against an
+        // allowance of 4.
+        perks: vec![(crate::perks::Perk::Buffer, 4)],
+        ..CharacterChoice::default()
+    };
+    let game = Game::new_with(
+        90_021,
+        DifficultyMode::Forgiving,
+        &test_assets_dir(),
+        &choice,
+    )
+    .unwrap();
+    let perks = game
+        .world
+        .get::<Perks>(game.player_entity())
+        .expect("a perks component");
+    assert_eq!(perks.level(crate::perks::Perk::Buffer), 0);
+    assert_eq!(perks.points, 0, "and no allowance was handed out either");
+}

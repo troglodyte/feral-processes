@@ -85,6 +85,16 @@ fn spend_the_kit(app: &mut App) {
     app.menu_selected = 0;
 }
 
+/// `spend_the_kit` for the Perks step, whose allowance is spent here or
+/// lost the same way.
+fn spend_the_perks(app: &mut App) {
+    for i in 0..app.creation_rows().len() {
+        app.menu_selected = i;
+        press(app, GameKey::ShiftRight);
+    }
+    app.menu_selected = 0;
+}
+
 /// `spend_the_kit` for the Points step's four axes.
 fn spend_the_points(app: &mut App) {
     for i in 0..MainStat::all().len() {
@@ -103,6 +113,8 @@ fn walk_to_the_summary(app: &mut App) {
     press(app, GameKey::Enter);
     skip_the_look(app);
     spend_the_points(app);
+    press(app, GameKey::Enter);
+    spend_the_perks(app);
     press(app, GameKey::Enter);
     press(app, ch('n'));
 }
@@ -190,6 +202,9 @@ fn the_wizard_walks_forward_and_back() {
     assert_eq!(app.creation_step(), CreationStep::Points);
     spend_the_points(&mut app);
     press(&mut app, GameKey::Enter);
+    assert_eq!(app.creation_step(), CreationStep::Perks);
+    spend_the_perks(&mut app);
+    press(&mut app, GameKey::Enter);
     assert_eq!(app.creation_step(), CreationStep::Routine);
     press(&mut app, ch('n'));
     assert_eq!(app.creation_step(), CreationStep::Summary);
@@ -200,6 +215,7 @@ fn the_wizard_walks_forward_and_back() {
     for expected in [
         CreationStep::Summary,
         CreationStep::Routine,
+        CreationStep::Perks,
         CreationStep::Points,
         CreationStep::Colour,
         CreationStep::Icon,
@@ -257,6 +273,10 @@ fn the_name_step_commits_the_choice() {
     app.menu_selected = integrity;
     press(&mut app, GameKey::ShiftRight);
     let bought = app.creation_choice().stats[integrity];
+    press(&mut app, GameKey::Enter);
+
+    assert_eq!(app.creation_step(), CreationStep::Perks);
+    spend_the_perks(&mut app);
     press(&mut app, GameKey::Enter);
 
     let routines = app.creation_catalogue.starter_rows(Some(wanted_class));
@@ -767,11 +787,14 @@ fn reentering_points_keeps_a_hand_made_spread() {
     let made = app.creation_choice().stats;
     assert_eq!(app.creation_choice().cost(), Some(CREATION_STAT_POINTS));
 
+    press(&mut app, GameKey::Enter); // -> Perks
+    assert_eq!(app.creation_step(), CreationStep::Perks);
+    spend_the_perks(&mut app);
     press(&mut app, GameKey::Enter); // -> Routine
-    assert_eq!(app.creation_step(), CreationStep::Routine);
     press(&mut app, ch('n')); // no routine -> Summary
     assert_eq!(app.creation_step(), CreationStep::Summary);
     press(&mut app, GameKey::Esc); // -> Routine
+    press(&mut app, GameKey::Esc); // -> Perks
     press(&mut app, GameKey::Esc); // -> Points, re-entered
 
     assert_eq!(app.creation_step(), CreationStep::Points);
@@ -979,6 +1002,60 @@ fn the_roll_fills_the_basket_within_the_allowance() {
     );
 }
 
+/// **The perks picked on the wizard's own screen reach the run**, end to
+/// end by keypress — the step is the third budget and the only one whose
+/// spend is applied by replaying a purchase (`Game::unlock_perk`), so this
+/// is what says the basket the screen built is the basket the run bought.
+#[test]
+fn the_perk_step_reaches_the_started_run() {
+    let mut app = opened("perks_commit");
+    press(&mut app, ch('1'));
+    spend_the_kit(&mut app);
+    press(&mut app, GameKey::Enter);
+    skip_the_look(&mut app);
+    spend_the_points(&mut app);
+    press(&mut app, GameKey::Enter);
+    assert_eq!(app.creation_step(), CreationStep::Perks);
+
+    // The cheapest row, bought to whatever the allowance covers.
+    press(&mut app, GameKey::ShiftRight);
+    let bought = app.creation_choice().perks.clone();
+    assert!(!bought.is_empty(), "the first row bought nothing");
+    press(&mut app, GameKey::Enter);
+    press(&mut app, ch('n')); // no routine
+    press(&mut app, GameKey::Enter); // the summary
+    press(&mut app, GameKey::Enter); // no name, which starts the run
+    settle(&mut app);
+
+    let game = app.game.as_ref().expect("the run did not start");
+    // The manifest is where a player reads their perks back, and it is
+    // built from the same `Perks` component the purchase wrote.
+    let view = game.manifest(game.player_entity()).expect("a player sheet");
+    let feral_processes_engine::ManifestSubject::Player(player) = &view.subject else {
+        panic!("the player's own entity produced a program sheet");
+    };
+    assert_eq!(
+        player.perk_points, 0,
+        "a creation allowance is spent at creation or lost — it must not \
+         arrive as spendable points"
+    );
+    let (perk, levels) = bought[0];
+    let name = game
+        .perk_defs()
+        .into_iter()
+        .find(|def| def.id == perk)
+        .expect("the perk the screen offered is in the run's own catalogue")
+        .name;
+    assert!(
+        player
+            .perks
+            .iter()
+            .any(|(n, lv)| *n == name && *lv == levels),
+        "the perk bought at creation is not on the player: {:?}",
+        player.perks
+    );
+}
+
 /// **An allowance you can still spend is not a decision you have made.**
 /// Both budget steps refuse to be left while anything on them is
 /// affordable, and both say why — walking past the Points screen with the
@@ -1024,6 +1101,9 @@ fn an_unspent_allowance_holds_its_step() {
     );
 
     spend_the_points(&mut app);
+    press(&mut app, GameKey::Enter);
+    assert_eq!(app.creation_step(), CreationStep::Perks);
+    spend_the_perks(&mut app);
     press(&mut app, GameKey::Enter);
     assert_eq!(app.creation_step(), CreationStep::Routine);
 }

@@ -1301,7 +1301,8 @@ mod tests {
                     app.handle_key(feral_processes_app_core::GameKey::Char('1'))
                 }
                 feral_processes_app_core::CreationStep::Kit
-                | feral_processes_app_core::CreationStep::Points => {
+                | feral_processes_app_core::CreationStep::Points
+                | feral_processes_app_core::CreationStep::Perks => {
                     for i in 0..app.creation_rows().len() {
                         app.menu_selected = i;
                         app.handle_key(feral_processes_app_core::GameKey::ShiftRight);
@@ -1314,6 +1315,7 @@ mod tests {
                 | feral_processes_app_core::CreationStep::Routine => {
                     app.handle_key(feral_processes_app_core::GameKey::Char('n'))
                 }
+
                 feral_processes_app_core::CreationStep::Summary
                 | feral_processes_app_core::CreationStep::Name => {
                     app.handle_key(feral_processes_app_core::GameKey::Enter)

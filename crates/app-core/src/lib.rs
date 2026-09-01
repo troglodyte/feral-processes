@@ -901,6 +901,14 @@ pub enum CreationStep {
     /// the renderer's `palette::PLAYER_CHOICES` — see `CREATION_COLOURS`.
     Colour,
     Points,
+    /// The first perks, bought out of `tuning::CREATION_PERK_POINTS`.
+    ///
+    /// **Before Routine, and a budget like the other two**: the allowance
+    /// is spent here or lost, so the step refuses to be left while a perk
+    /// on it is still affordable. It cannot be carried into the run —
+    /// `Game::new` applies the same path with an empty basket, and points
+    /// handed out there would reach every call site in the engine's suite.
+    Perks,
     Routine,
     /// The character read back whole, and the last screen carrying a
     /// decision — Enter accepts it and `[R]` rerolls everything the player
@@ -928,13 +936,14 @@ impl CreationStep {
     /// undrawable. Adding a variant without adding it here is caught by
     /// `every_step_is_in_the_exhaustive_list`, which is the one place that
     /// can be checked.
-    pub const ALL: [CreationStep; 9] = [
+    pub const ALL: [CreationStep; 10] = [
         CreationStep::Difficulty,
         CreationStep::Class,
         CreationStep::Kit,
         CreationStep::Icon,
         CreationStep::Colour,
         CreationStep::Points,
+        CreationStep::Perks,
         CreationStep::Routine,
         CreationStep::Summary,
         CreationStep::Name,
@@ -970,6 +979,7 @@ impl CreationStep {
             CreationStep::Icon => "Icon",
             CreationStep::Colour => "Colour",
             CreationStep::Points => "Points",
+            CreationStep::Perks => "Perks",
             CreationStep::Routine => "Starter routine",
             CreationStep::Name => "Name",
             CreationStep::Summary => "Summary",
@@ -1019,6 +1029,12 @@ pub enum CreationRow {
         taken: u32,
     },
     Routine(feral_processes_engine::StarterRoutineRow),
+    /// One perk on the Perks step. `taken` is how many levels the basket
+    /// holds of it — the `Item` row's shape, in Perk Points.
+    Perk {
+        row: feral_processes_engine::StartingPerkRow,
+        taken: u32,
+    },
     /// The Summary's look line: the glyph read back **in the swatch it
     /// will actually be drawn in**, which is the one Summary row that is a
     /// picture rather than a figure. `colour` is the 0-based

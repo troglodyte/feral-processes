@@ -25,7 +25,7 @@ use super::popup::{
 use super::*;
 use feral_processes_app_core::{CreationRow, CreationStep};
 use feral_processes_engine::CharacterChoice;
-use feral_processes_engine::tuning::CREATION_STAT_POINTS;
+use feral_processes_engine::tuning::{CREATION_PERK_POINTS, CREATION_STAT_POINTS};
 #[cfg(test)]
 use feral_processes_engine::tuning::{
     MAX_PROFILE_PERK_POINTS, MAX_PROFILE_STARTING_PROGRAMS, MAX_PROFILE_STAT_POINTS,
@@ -122,6 +122,17 @@ fn step_rows(app: &App, step: CreationStep) -> Vec<Row> {
         // cannot tell from a broken screen.
         drawn.push(text_row("Nothing to choose here."));
     }
+    // The Perks step alone explains the row under the cursor, because the
+    // nineteen perk *names* are opaque and their descriptions are far too
+    // wide to sit on the rows. One line, so the screen keeps its promise
+    // of no scroll — nineteen rows plus this plus the footer is 22 of the
+    // 28 `popup_max_rows` allows.
+    if step == CreationStep::Perks
+        && let Some(CreationRow::Perk { row, .. }) = rows.get(selected)
+    {
+        drawn.push(text_row(""));
+        drawn.push(text_row(row.description.clone()));
+    }
     drawn.push(text_row(""));
     drawn.push(text_row(footer(app, step)));
     drawn
@@ -135,9 +146,11 @@ fn step_rows(app: &App, step: CreationStep) -> Vec<Row> {
 fn build_row(step: CreationStep, row: &CreationRow, i: usize, selected: bool) -> Row {
     let text = row_line(row);
     let label = match step {
-        CreationStep::Kit | CreationStep::Points | CreationStep::Name | CreationStep::Summary => {
-            text
-        }
+        CreationStep::Kit
+        | CreationStep::Points
+        | CreationStep::Perks
+        | CreationStep::Name
+        | CreationStep::Summary => text,
         _ => format!("[{}] {text}", feral_processes_app_core::menu_shortcut(i)),
     };
     // The one Summary row that is a picture: drawn in the swatch the run
@@ -203,6 +216,19 @@ fn row_line(row: &CreationRow) -> String {
             };
             format!("{:<24} {:>2}c   {held}", row.name, row.price)
         }
+        // The Kit row's shape, in Perk Points. The description is **not**
+        // on the row: the shipped ones run to 117 characters, which drew
+        // 291px past the popup body at 1280x720, and a perk name alone
+        // says nothing where an item's names a thing you recognise. It
+        // goes under the list instead, for whichever row the cursor is on
+        // — see `step_rows`.
+        CreationRow::Perk { row, taken } => {
+            let held = match taken {
+                0 => String::new(),
+                n => format!("x{n}"),
+            };
+            format!("{:<24} {:>2}p   {held}", row.name, row.cost)
+        }
         CreationRow::Routine(routine) => {
             format!(
                 "{} - {} ({:.0} Power)",
@@ -240,6 +266,11 @@ fn footer(app: &App, step: CreationStep) -> String {
                 CREATION_STAT_POINTS - left
             )
         }
+        CreationStep::Perks => format!(
+            "{} of {CREATION_PERK_POINTS} Perk Points left - Left/Right buys \
+             (Shift/Ctrl); Enter moves on once they are spent",
+            app.creation_perk_points_left()
+        ),
         _ => plain_footer(step).to_string(),
     }
 }
@@ -250,7 +281,7 @@ fn plain_footer(step: CreationStep) -> &'static str {
         CreationStep::Difficulty => "[p]/[f] picks; Esc backs out to the menu",
         CreationStep::Class => "Up/Down + Enter picks; Left/Right pages; Esc goes back",
         // Written by `footer` above, which is the only caller.
-        CreationStep::Kit | CreationStep::Points => "",
+        CreationStep::Kit | CreationStep::Points | CreationStep::Perks => "",
         // One arm, because the two halves of a look are one key table —
         // an icon row and a swatch row are picked the same way and skipped
         // the same way, and two copies of the sentence could drift.
@@ -455,7 +486,8 @@ mod tests {
         match step {
             CreationStep::Difficulty => app.handle_key(GameKey::Char('f')),
             CreationStep::Class => app.handle_key(GameKey::Char('1')),
-            CreationStep::Kit | CreationStep::Points => spend_every_row(app),
+            CreationStep::Kit | CreationStep::Points | CreationStep::Perks => spend_every_row(app),
+
             CreationStep::Icon | CreationStep::Colour | CreationStep::Routine => {
                 app.handle_key(GameKey::Char('n'))
             }
@@ -830,6 +862,7 @@ mod tests {
         app.handle_key(GameKey::Enter);
         assert_eq!(app.creation_choice().colour, Some(3));
         walk_past(&mut app, CreationStep::Points);
+        walk_past(&mut app, CreationStep::Perks);
         walk_past(&mut app, CreationStep::Routine);
         assert_eq!(app.creation_step(), CreationStep::Summary);
 

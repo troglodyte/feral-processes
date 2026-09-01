@@ -5,14 +5,14 @@
 //! one bordered box, one `Row` list — so the wizard's chrome, refusal
 //! placement and keyboard highlight are the game's existing menu idiom and
 //! not a second one invented for onboarding. What is specific to this
-//! screen is `build_row` (numbering, and the Look step's per-row icon) and
-//! the Look/Summary steps' preview cell, painted separately after the popup
-//! through `draw_look_preview`.
+//! screen is `build_row` (numbering, and the Icon/Colour steps' per-row
+//! icon) and those two steps' and the Summary's preview cell, painted
+//! separately after the popup through `draw_look_preview`.
 //!
 //! **The wizard promises no scroll.** Every other list menu in the game is
 //! fine paging a long catalogue with `draw_popup`'s built-in scroll (see
 //! `popup::popup_layout`'s `scrolling` flag) — a trade shelf or a deploy
-//! list is read a page at a time anyway. A seven-step onboarding flow is
+//! list is read a page at a time anyway. A nine-step onboarding flow is
 //! not: `the_tallest_creation_step_fits_its_screen` is what holds that
 //! promise, at the smallest window the game supports, against the real
 //! shipped `assets/`. A class or ability catalogue is moddable and could
@@ -29,9 +29,10 @@ use feral_processes_engine::tuning::{
     MAX_PROFILE_PERK_POINTS, MAX_PROFILE_STARTING_PROGRAMS, MAX_PROFILE_STAT_POINTS,
 };
 
-/// The Look/Summary preview cell's side, in `Metrics::line_height` units —
-/// big enough to read the glyph or sprite clearly, small enough to sit in
-/// the popup's top-right corner without crowding the row list under it.
+/// The Icon/Colour/Summary preview cell's side, in `Metrics::line_height`
+/// units — big enough to read the glyph or sprite clearly, small enough to
+/// sit in the popup's top-right corner without crowding the row list under
+/// it.
 const PREVIEW_CELL_LINES: f32 = 3.0;
 
 pub(super) fn draw_create_character(
@@ -49,17 +50,54 @@ pub(super) fn draw_create_character(
         CreationStep::ALL.len()
     );
 
-    // The preview cell reads the popup's own box back from `popup_rect`
-    // rather than a second guess at where `draw_popup` put it — the two
-    // calls share one derivation of the box's geometry, so a resize can't
-    // put the cell outside its border.
-    let show_preview = matches!(step, CreationStep::Look | CreationStep::Summary);
+    // Both halves of the look draw the same cell: splitting the old `Look`
+    // step in two must not cost either half its preview, which is the one
+    // thing on either screen showing the glyph and the swatch together.
+    //
+    // The cell reads the popup's own box back from `popup_rect` rather than
+    // a second guess at where `draw_popup` put it — the two calls share one
+    // derivation of the box's geometry, so a resize can't put the cell
+    // outside its border.
+    let show_preview = matches!(
+        step,
+        CreationStep::Icon | CreationStep::Colour | CreationStep::Summary
+    );
     let cell = show_preview
         .then(|| preview_cell_rect(popup_rect(PopupSize::Large, &drawn, refusal, painter, m), m));
     draw_popup(&title, PopupSize::Large, &drawn, refusal, painter, m);
     if let Some(cell) = cell {
-        draw_look_preview(app.creation_choice(), painter, cell, m);
+        draw_look_preview(&previewed_look(app, step), painter, cell, m);
     }
+}
+
+/// The look the cell paints: the choice as it stands, with **the
+/// highlighted row laid over it** on the two steps that offer one.
+///
+/// The cursor previews, and that is what pays for splitting the old `Look`
+/// step in two. Picking a row now advances off the screen, so a cell that
+/// only ever showed the *committed* choice would show the player their new
+/// colour on the step after the one they chose it on — the swatch list
+/// would be the one screen in the wizard whose own decision it could not
+/// show. Reading the highlight instead means the cell answers "what would
+/// this one look like" while the cursor is still moving, and Enter merely
+/// keeps the answer.
+///
+/// Built from `App::creation_rows` rather than from `CREATION_ICONS` and
+/// `CREATION_COLOURS` directly, so the row the cell reads is the row the
+/// list drew and the two cannot index differently.
+fn previewed_look(app: &App, step: CreationStep) -> CharacterChoice {
+    let mut look = app.creation_choice().clone();
+    if matches!(step, CreationStep::Icon | CreationStep::Colour) {
+        match app.creation_rows().get(app.menu_selected) {
+            Some(CreationRow::Icon { glyph, sprite }) => {
+                look.glyph = *glyph;
+                look.sprite = sprite.clone();
+            }
+            Some(CreationRow::Colour { index }) => look.colour = Some(*index),
+            _ => {}
+        }
+    }
+    look
 }
 
 /// The full `Row` list a step draws: its own rows via `build_row`, a blank
@@ -90,7 +128,8 @@ fn step_rows(app: &App, step: CreationStep) -> Vec<Row> {
 /// One `CreationRow` as a drawable menu row: numbered with its shortcut on
 /// every step but the three where the cursor is a highlight rather than a
 /// pick (`Mode::Transfer`'s rule — a digit is a quantity there, never a row
-/// shortcut), and carrying an icon on the Look step's own two row kinds.
+/// shortcut), and carrying an icon on the Icon and Colour steps' own row
+/// kinds.
 fn build_row(step: CreationStep, row: &CreationRow, i: usize, selected: bool) -> Row {
     let text = row_line(row);
     let label = match step {
@@ -183,14 +222,19 @@ fn footer(app: &App, step: CreationStep) -> String {
     }
 }
 
-/// The seven steps whose keys never change.
+/// The eight steps whose keys never change.
 fn plain_footer(step: CreationStep) -> &'static str {
     match step {
         CreationStep::Difficulty => "Esc backs out to the menu",
         CreationStep::Class => "Up/Down + Enter; [R] rolls the rest; Esc goes back",
         // Written by `footer` above, which is the only caller.
         CreationStep::Kit => "",
-        CreationStep::Look => "Up/Down + Enter picks; [n] moves on; [R] rolls; Esc goes back",
+        // One arm, because the two halves of a look are one key table —
+        // an icon row and a swatch row are picked the same way and skipped
+        // the same way, and two copies of the sentence could drift.
+        CreationStep::Icon | CreationStep::Colour => {
+            "Up/Down + Enter picks; [n] moves on; [R] rolls; Esc goes back"
+        }
         CreationStep::Points => {
             "Left/Right spends (Shift: all, Ctrl: half); Enter moves on; [R] rolls"
         }
@@ -216,7 +260,8 @@ fn preview_cell_rect(popup: Rect, m: &Metrics) -> Rect {
     )
 }
 
-/// The chosen look, painted the way `base.rs` paints the player's own tile:
+/// The look in `choice` — `previewed_look`'s answer, not necessarily the
+/// committed one — painted the way `base.rs` paints the player's own tile:
 /// a sprite substituting for the glyph where one is named and loaded, the
 /// glyph otherwise, tinted by the same 0-based `PLAYER_CHOICES` index with
 /// the same `PLAYER` fallback for "no colour chosen yet".
@@ -370,14 +415,16 @@ mod tests {
         app
     }
 
-    /// The keys that walk one step forward from each of the first six —
+    /// The keys that walk one step forward from each of the first eight —
     /// shared by every test that needs to visit every step in turn.
-    const FORWARD: [GameKey; 7] = [
+    const FORWARD: [GameKey; 8] = [
         GameKey::Char('f'),
         GameKey::Char('1'),
         // The Kit step: Enter takes the basket as it stands, which on an
         // untouched step is empty and keeps the class kit.
         GameKey::Enter,
+        // Icon, then Colour: `[n]` walks past each without deciding it.
+        GameKey::Char('n'),
         GameKey::Char('n'),
         GameKey::Enter,
         GameKey::Char('n'),
@@ -558,12 +605,17 @@ mod tests {
         }
     }
 
-    /// The Look step's preview cell paints the chosen glyph in the chosen
+    /// The Colour step's preview cell paints the chosen glyph in the chosen
     /// colour when no sprite is loaded — `with_painter`'s empty sprite
     /// table, the same fallback path `assets/sprites/` missing entirely
     /// takes on the map. Chosen away from the default `('@', PLAYER)` pair
     /// so this cannot pass on a preview that never looked at the choice at
     /// all.
+    ///
+    /// **Both halves are picked on separate screens and the cell still
+    /// shows them together** — which is the property splitting the old
+    /// `Look` step had to keep. The glyph is chosen on the step before and
+    /// has to survive the advance to be painted here.
     #[test]
     fn the_look_preview_draws_the_chosen_glyph_and_colour() {
         let mut app = wizard_app();
@@ -572,12 +624,11 @@ mod tests {
         for key in [GameKey::Char('f'), GameKey::Char('1'), GameKey::Enter] {
             app.handle_key(key);
         }
-        assert_eq!(app.creation_step(), CreationStep::Look);
-        // Pick the third icon (`*`, row 2) then the fourth swatch (row 5 +
-        // 3 = 8, five icon rows ahead of the swatches) — both by keyboard,
-        // through the real key table, walking `menu_selected` to each
-        // target rather than hardcoding a step count that would silently
-        // go stale if a row were ever added ahead of it.
+        assert_eq!(app.creation_step(), CreationStep::Icon);
+        // The third icon (`*`) and then the fourth swatch — both by
+        // keyboard, through the real key table, walking `menu_selected` to
+        // each target rather than hardcoding a step count that would go
+        // stale if a row were ever added ahead of it.
         while app.menu_selected != 2 {
             app.handle_key(GameKey::Down);
         }
@@ -587,16 +638,18 @@ mod tests {
             '*',
             "the icon pick didn't take"
         );
-        while app.menu_selected != 8 {
+        assert_eq!(
+            app.creation_step(),
+            CreationStep::Colour,
+            "taking an icon moves on to the swatches"
+        );
+        while app.menu_selected != 3 {
             app.handle_key(GameKey::Down);
         }
-        app.handle_key(GameKey::Enter);
-        assert_eq!(
-            app.creation_choice().colour,
-            Some(3),
-            "the swatch pick didn't take"
-        );
 
+        // Drawn with the cursor resting on the fourth swatch and nothing
+        // yet committed — `previewed_look`'s whole point, and the state the
+        // player is actually in while choosing.
         let m = ui_metrics(900.0);
         let (_, shapes) = crate::paint::with_painter(|p| draw_create_character(&app, None, p, &m));
         let glyphs = crate::paint::painted_map_glyphs(&shapes);
@@ -607,6 +660,58 @@ mod tests {
                 && (c.g - expected.g).abs() < 1e-3
                 && (c.b - expected.b).abs() < 1e-3),
             "the preview cell did not paint '*' in PLAYER_CHOICES[3]: {glyphs:?}"
+        );
+
+        // And Enter keeps exactly what was previewed.
+        app.handle_key(GameKey::Enter);
+        assert_eq!(
+            app.creation_choice().colour,
+            Some(3),
+            "the swatch pick didn't take"
+        );
+    }
+
+    /// The **Icon** step's half of `previewed_look`: the cell paints the
+    /// glyph under the cursor before anything is committed.
+    ///
+    /// The colour test above only exercises the `Colour` arm — with the
+    /// `Icon` arm dropped it still passes, since the glyph it asserts on
+    /// has been committed by then. This is what fails if the cursor stops
+    /// previewing a shape.
+    #[test]
+    fn the_icon_step_previews_the_highlighted_glyph() {
+        let mut app = wizard_app();
+        for key in [GameKey::Char('f'), GameKey::Char('1'), GameKey::Enter] {
+            app.handle_key(key);
+        }
+        assert_eq!(app.creation_step(), CreationStep::Icon);
+        // The fourth icon, `!` — chosen away from row 0 so a preview
+        // ignoring the cursor draws the default `@` instead.
+        while app.menu_selected != 3 {
+            app.handle_key(GameKey::Down);
+        }
+        assert_eq!(
+            app.creation_choice().glyph,
+            '@',
+            "nothing is committed yet — the cursor has only moved"
+        );
+
+        let m = ui_metrics(900.0);
+        let (_, shapes) = crate::paint::with_painter(|p| draw_create_character(&app, None, p, &m));
+        // The row list draws every option's glyph too, so the preview is
+        // told apart by its colour: a row icon is flat `TEXT`, while the
+        // cell tints by `player_look_color`, still `PLAYER` here since no
+        // swatch has been chosen. A preview ignoring the cursor paints
+        // '@' in that colour instead, which is the mutation this catches.
+        let want = hud::palette::PLAYER;
+        assert!(
+            crate::paint::painted_map_glyphs(&shapes)
+                .iter()
+                .any(|(g, c)| g == "!"
+                    && (c.r - want.r).abs() < 1e-3
+                    && (c.g - want.g).abs() < 1e-3
+                    && (c.b - want.b).abs() < 1e-3),
+            "the preview cell did not paint the highlighted '!'"
         );
     }
 
@@ -621,8 +726,11 @@ mod tests {
         for key in [GameKey::Char('f'), GameKey::Char('1'), GameKey::Enter] {
             app.handle_key(key);
         }
-        assert_eq!(app.creation_step(), CreationStep::Look);
-        app.handle_key(GameKey::Enter); // the first icon, '@' / "player"
+        assert_eq!(app.creation_step(), CreationStep::Icon);
+        // The first icon, '@' / "player" — the pick advances to the Colour
+        // step, which draws the same preview cell.
+        app.handle_key(GameKey::Enter);
+        assert_eq!(app.creation_step(), CreationStep::Colour);
 
         let mut sprites = crate::paint::SpriteTable::default();
         sprites.insert("player", bevy_egui::egui::TextureId::User(7));

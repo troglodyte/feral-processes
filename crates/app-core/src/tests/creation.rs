@@ -61,6 +61,18 @@ fn settle(app: &mut App) {
     }
 }
 
+/// Walks past both halves of the look without deciding either — `[n]`
+/// twice, since the icons and the swatches are two steps.
+///
+/// Named rather than inlined because six tests only want to *reach* the
+/// Points step: with the walk spelled out at each of them, splitting a step
+/// in two is six edits and the one that gets missed fails somewhere that
+/// has nothing to do with the look.
+fn skip_the_look(app: &mut App) {
+    press(app, ch('n'));
+    press(app, ch('n'));
+}
+
 /// Opens the wizard and picks Forgiving, leaving it on the Class step.
 fn opened(name: &str) -> App {
     let mut app = wizard_app(name);
@@ -126,7 +138,9 @@ fn the_wizard_walks_forward_and_back() {
     press(&mut app, ch('1'));
     assert_eq!(app.creation_step(), CreationStep::Kit);
     press(&mut app, GameKey::Enter);
-    assert_eq!(app.creation_step(), CreationStep::Look);
+    assert_eq!(app.creation_step(), CreationStep::Icon);
+    press(&mut app, ch('n'));
+    assert_eq!(app.creation_step(), CreationStep::Colour);
     press(&mut app, ch('n'));
     assert_eq!(app.creation_step(), CreationStep::Points);
     press(&mut app, GameKey::Enter);
@@ -141,7 +155,8 @@ fn the_wizard_walks_forward_and_back() {
         CreationStep::Name,
         CreationStep::Routine,
         CreationStep::Points,
-        CreationStep::Look,
+        CreationStep::Colour,
+        CreationStep::Icon,
         CreationStep::Kit,
         CreationStep::Class,
         CreationStep::Difficulty,
@@ -177,11 +192,9 @@ fn the_summary_step_commits_the_choice() {
     press(&mut app, ch('2')); // the second class
     press(&mut app, GameKey::Enter); // past the Kit step, basket untouched
 
-    // The Look step lists the icons first, then the swatches.
-    let icons = CREATION_ICONS.len();
+    // Icon and colour are two steps now, and a pick advances off each.
     press(&mut app, ch(menu_shortcut(1))); // the second icon
-    press(&mut app, ch(menu_shortcut(icons + 2))); // the third swatch
-    press(&mut app, ch('n'));
+    press(&mut app, ch(menu_shortcut(2))); // the third swatch
 
     // The step opens on a rolled spread that already spends the pool —
     // clear it so exactly two units of Integrity is this test's own spend,
@@ -279,8 +292,7 @@ fn the_roll_leaves_a_finished_character_alone() {
     press(&mut app, GameKey::Right);
     press(&mut app, GameKey::Enter);
     press(&mut app, ch(menu_shortcut(1))); // the second icon
-    press(&mut app, ch(menu_shortcut(CREATION_ICONS.len() + 2))); // the third swatch
-    press(&mut app, ch('n'));
+    press(&mut app, ch(menu_shortcut(2))); // the third swatch
     // The Points step now opens on a rolled spread that already spends the
     // whole pool, so every axis sits at its own ceiling the instant the
     // step is entered — Right/ShiftRight on any of them refuses. Only a
@@ -365,7 +377,7 @@ fn points_cannot_be_overspent() {
     let mut app = opened("overspend");
     press(&mut app, ch('1'));
     press(&mut app, GameKey::Enter); // past the Kit step, basket untouched
-    press(&mut app, ch('n'));
+    skip_the_look(&mut app);
     assert_eq!(app.creation_step(), CreationStep::Points);
 
     // The step opens on a rolled spread that already spends the pool —
@@ -406,7 +418,8 @@ fn the_points_step_sees_a_modifier() {
     let mut app = opened("modifier");
     press(&mut app, ch('1'));
     press(&mut app, GameKey::Enter); // past the Kit step, basket untouched
-    press(&mut app, ch('n'));
+    skip_the_look(&mut app);
+    assert_eq!(app.creation_step(), CreationStep::Points);
     let axis = |want: MainStat| MainStat::all().iter().position(|s| *s == want).unwrap();
 
     // The step now opens on a rolled spread that already spends the whole
@@ -518,7 +531,8 @@ fn the_class_step_cannot_be_left_without_a_class() {
     let mut app = opened("class");
     assert_eq!(app.creation_step(), CreationStep::Class);
     // No key advances this step without picking a class. `[n]` is what
-    // skips the Look and Routine steps, and it is inert here on purpose —
+    // skips the Icon, Colour and Routine steps, and it is inert here on
+    // purpose —
     // that omission *is* the "no Unaligned option" rule.
     for key in [ch('n'), GameKey::Left, GameKey::Right, GameKey::Backspace] {
         press(&mut app, key);
@@ -718,7 +732,7 @@ fn the_points_step_opens_on_a_full_spread() {
     let mut app = opened("full_spread");
     press(&mut app, ch('1')); // a class
     press(&mut app, GameKey::Enter); // past the Kit step, basket untouched
-    press(&mut app, ch('n')); // -> Points, no icon or swatch picked
+    skip_the_look(&mut app); // -> Points, no icon or swatch picked
     assert_eq!(app.creation_step(), CreationStep::Points);
     assert_eq!(
         app.creation_choice().cost(),
@@ -736,7 +750,7 @@ fn a_rolled_spread_can_be_redistributed() {
     let mut app = opened("redistribute");
     press(&mut app, ch('1'));
     press(&mut app, GameKey::Enter); // past the Kit step, basket untouched
-    press(&mut app, ch('n'));
+    skip_the_look(&mut app);
     assert_eq!(app.creation_step(), CreationStep::Points);
     assert_eq!(app.creation_choice().cost(), Some(CREATION_STAT_POINTS));
 
@@ -779,7 +793,7 @@ fn reentering_points_keeps_a_hand_made_spread() {
     let mut app = opened("reenter_points");
     press(&mut app, ch('1'));
     press(&mut app, GameKey::Enter); // past the Kit step, basket untouched
-    press(&mut app, ch('n'));
+    skip_the_look(&mut app);
     assert_eq!(app.creation_step(), CreationStep::Points);
 
     // A spread deliberately unlike anything the roll would leave alone:
@@ -822,7 +836,7 @@ fn the_seed_does_not_mark_the_points_step_decided() {
     let mut app = opened("seed_not_decided");
     press(&mut app, ch('1'));
     press(&mut app, GameKey::Enter); // past the Kit step, basket untouched
-    press(&mut app, ch('n'));
+    skip_the_look(&mut app);
     assert_eq!(app.creation_step(), CreationStep::Points);
     assert!(
         !app.creation_decided.stats_decided(),

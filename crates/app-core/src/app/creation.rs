@@ -1,7 +1,7 @@
-//! The character-creation wizard: eight steps, one mode, one back button.
+//! The character-creation wizard: nine steps, one mode, one back button.
 //!
 //! `Mode::CreateCharacter` carries a [`CreationStep`] cursor rather than
-//! being eight modes — `Mode::Transfer`'s reason, written out on that
+//! being nine modes — `Mode::Transfer`'s reason, written out on that
 //! variant. What lives here is the key table for each step, the rows each
 //! draws, and the roll `[R]` performs.
 //!
@@ -42,7 +42,7 @@ use feral_processes_engine::tuning::{
     CREATION_CREDITS, CREATION_GAIN_INTEGRITY, CREATION_STAT_POINTS, PLAYER_BASE_STATS,
 };
 
-/// The (glyph, sprite name) pairs the Look step offers.
+/// The (glyph, sprite name) pairs the Icon step offers.
 ///
 /// A Rust table rather than a content directory, `palette::PLAYER_CHOICES`'
 /// reason: these are the *player's* options on one screen, not a catalogue
@@ -66,7 +66,7 @@ pub const CREATION_ICONS: [(char, &str); 5] = [
     ('?', "drifter"),
 ];
 
-/// How many swatches the Look step offers — the length of the renderer's
+/// How many swatches the Colour step offers — the length of the renderer's
 /// `palette::PLAYER_CHOICES`, which app-core cannot see.
 /// `the_wizard_offers_every_shipped_swatch` in `crates/gui` is what holds
 /// the two in step.
@@ -309,13 +309,15 @@ impl App {
                     CreationRow::Item { row, taken }
                 })
                 .collect(),
-            CreationStep::Look => CREATION_ICONS
+            CreationStep::Icon => CREATION_ICONS
                 .iter()
                 .map(|(glyph, sprite)| CreationRow::Icon {
                     glyph: *glyph,
                     sprite: sprite.to_string(),
                 })
-                .chain((0..CREATION_COLOURS).map(|index| CreationRow::Colour { index }))
+                .collect(),
+            CreationStep::Colour => (0..CREATION_COLOURS)
+                .map(|index| CreationRow::Colour { index })
                 .collect(),
             CreationStep::Points => MainStat::all()
                 .iter()
@@ -441,7 +443,8 @@ impl App {
             CreationStep::Difficulty => self.handle_creation_difficulty_key(key),
             CreationStep::Class => self.handle_creation_class_key(key),
             CreationStep::Kit => self.handle_creation_kit_key(key),
-            CreationStep::Look => self.handle_creation_look_key(key),
+            CreationStep::Icon => self.handle_creation_icon_key(key),
+            CreationStep::Colour => self.handle_creation_colour_key(key),
             CreationStep::Points => self.handle_creation_points_key(key),
             CreationStep::Routine => self.handle_creation_routine_key(key),
             CreationStep::Name => self.handle_creation_name_key(key),
@@ -579,8 +582,8 @@ impl App {
     /// `CharacterChoice::items`.
     ///
     /// **Enter is the only way forward, and there is deliberately no `[n]`
-    /// here.** On the Look and Routine steps `[n]` means "I am not picking
-    /// on this screen", which those steps have no other way to say. This
+    /// here.** On the Icon, Colour and Routine steps `[n]` means "I am not
+    /// picking on this screen", which those steps have no other way to say. This
     /// one does: an empty basket already *is* that answer. An `[n]` would
     /// therefore have had to mean "empty the basket and move on", which is
     /// a destructive key wearing a skip key's name — one press away from a
@@ -633,31 +636,44 @@ impl App {
         self.status_line = None;
     }
 
-    /// The icons and the swatches on one screen, one list: the cursor walks
-    /// both, Enter takes whichever kind it is standing on, and `[n]` moves
-    /// to the next step. Two lists rather than two steps because an icon
-    /// and a colour are one decision — what you look like.
-    fn handle_creation_look_key(&mut self, key: GameKey) {
-        let rows = self.creation_rows();
+    /// The glyph list. `Mode::CreateCharacter`'s Class and Routine key
+    /// table: taking a row decides the choice and moves on, `[n]` skips the
+    /// step with the default look left in place.
+    ///
+    /// **Advancing on a pick is what splitting the old `Look` step bought.**
+    /// While the icons and the swatches shared one screen a pick could not
+    /// advance — the other half of the decision was still below the cursor
+    /// — so this was the one list in the wizard where Enter left you where
+    /// you were.
+    fn handle_creation_icon_key(&mut self, key: GameKey) {
         if key == GameKey::Char('n') {
             self.advance_creation();
             return;
         }
-        let Some(idx) = self.selected_index(key, rows.len()) else {
+        let Some(idx) = self.selected_index(key, CREATION_ICONS.len()) else {
             return;
         };
-        match &rows[idx] {
-            CreationRow::Icon { glyph, sprite } => {
-                self.creation_choice.glyph = *glyph;
-                self.creation_choice.sprite = sprite.clone();
-                self.creation_decided.icon = true;
-            }
-            CreationRow::Colour { index } => {
-                self.creation_choice.colour = Some(*index);
-                self.creation_decided.colour = true;
-            }
-            _ => {}
+        let (glyph, sprite) = CREATION_ICONS[idx];
+        self.creation_choice.glyph = glyph;
+        self.creation_choice.sprite = sprite.to_string();
+        self.creation_decided.icon = true;
+        self.advance_creation();
+    }
+
+    /// The swatch list, `handle_creation_icon_key`'s table exactly — the
+    /// second half of one look, on its own screen and against the same
+    /// live preview cell.
+    fn handle_creation_colour_key(&mut self, key: GameKey) {
+        if key == GameKey::Char('n') {
+            self.advance_creation();
+            return;
         }
+        let Some(idx) = self.selected_index(key, CREATION_COLOURS as usize) else {
+            return;
+        };
+        self.creation_choice.colour = Some(idx as u8);
+        self.creation_decided.colour = true;
+        self.advance_creation();
     }
 
     /// `Mode::Transfer`'s key idiom exactly: the cursor moves on Up/Down

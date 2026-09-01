@@ -1,6 +1,6 @@
 # Your character
 
-A run opens on eight questions. Answer them in order, Esc walks back one, and Esc on the first
+A run opens on nine questions. Answer them in order, Esc walks back one, and Esc on the first
 hands you back to the main menu. Nothing is decided until you confirm the summary at the end.
 
 R rolls every choice you have not made yet and jumps straight to that summary, leaving whatever
@@ -39,9 +39,10 @@ is your whole pack, and whatever the basket left unspent lands as Credits to spe
 trader you reach. The five class kits are worth between eleven and thirty-five Credits, so this is
 a trade of shape rather than size — you are not buying a better start, you are choosing which one.
 
-Your look is a glyph and a colour, and it is only a look. Pick both from the one list — the cursor
-walks icons and swatches together, Enter takes whichever you are standing on, and n moves along
-once you are happy. The preview in the corner is drawn the same way the map draws you.
+Your look is a glyph and a colour, and it is only a look. They come as two screens, the shapes
+then the swatches: Enter takes the row you are standing on and moves you along, and n walks past
+without changing anything. The preview in the corner follows the cursor, so you can see an option
+before you take it, and it is drawn the same way the map draws you.
 
 Points are five, spent on top of what every process starts with rather than shuffling it around.
 Left and right adjust the highlighted axis, Shift with them empties or fills it, and Enter takes

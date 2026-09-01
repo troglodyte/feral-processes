@@ -872,9 +872,9 @@ impl ManifestOrigin {
     }
 }
 
-/// Which of the character-creation wizard's eight steps is showing. One
+/// Which of the character-creation wizard's nine steps is showing. One
 /// `Mode::CreateCharacter` carries this as a cursor rather than the flow
-/// being seven modes — see that variant.
+/// being nine modes — see that variant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CreationStep {
     Difficulty,
@@ -885,7 +885,21 @@ pub enum CreationStep {
     /// decision read in sequence, and the Class step's rows already show
     /// the kit being traded away.
     Kit,
-    Look,
+    /// The glyph and sprite the player is drawn as.
+    ///
+    /// **Icon and colour are two steps, not one screen with two lists.**
+    /// They shipped as one `Look` step, whose eleven rows were five icons
+    /// and six swatches under one cursor and one shortcut sequence — the
+    /// only screen in the wizard where a row's *kind* changed partway down
+    /// the list, so what Enter did depended on how far the cursor had
+    /// walked. One list per step is the idiom every other step already
+    /// uses, and it costs nothing but a step number: both steps draw the
+    /// same live preview cell, so the two halves of one look are still
+    /// read together.
+    Icon,
+    /// The swatch the icon is tinted with, by its **0-based** index into
+    /// the renderer's `palette::PLAYER_CHOICES` — see `CREATION_COLOURS`.
+    Colour,
     Points,
     Routine,
     Name,
@@ -901,11 +915,12 @@ impl CreationStep {
     /// undrawable. Adding a variant without adding it here is caught by
     /// `every_step_is_in_the_exhaustive_list`, which is the one place that
     /// can be checked.
-    pub const ALL: [CreationStep; 8] = [
+    pub const ALL: [CreationStep; 9] = [
         CreationStep::Difficulty,
         CreationStep::Class,
         CreationStep::Kit,
-        CreationStep::Look,
+        CreationStep::Icon,
+        CreationStep::Colour,
         CreationStep::Points,
         CreationStep::Routine,
         CreationStep::Name,
@@ -913,7 +928,7 @@ impl CreationStep {
     ];
 
     /// Where this step sits in [`ALL`](CreationStep::ALL), 0-based — the
-    /// "step 3 of 8" figure, and what `next`/`prev` walk.
+    /// "step 3 of 9" figure, and what `next`/`prev` walk.
     pub fn index(self) -> usize {
         Self::ALL
             .iter()
@@ -939,7 +954,8 @@ impl CreationStep {
             CreationStep::Difficulty => "Difficulty",
             CreationStep::Class => "Class",
             CreationStep::Kit => "Kit",
-            CreationStep::Look => "Look",
+            CreationStep::Icon => "Icon",
+            CreationStep::Colour => "Colour",
             CreationStep::Points => "Points",
             CreationStep::Routine => "Starter routine",
             CreationStep::Name => "Name",

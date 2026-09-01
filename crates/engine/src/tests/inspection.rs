@@ -792,6 +792,69 @@ fn manifest_lists_every_equipped_item_with_the_bonus_it_is_actually_granting() {
     );
 }
 
+/// **The manifest names a worn copy through `Game::copy_name` and nowhere
+/// else.** That is the seam — a name built anywhere but there is how a drop
+/// line and the screen a player opens next come to disagree about what they
+/// picked up — and the visible half of it is the affix: `copy_name` puts a
+/// prefix word in front of the item name and a suffix phrase behind it, and
+/// a row that quoted `ItemDef::name` would show neither.
+///
+/// Both words at once, and on both subjects: any program the player owns can
+/// wear gear, and `worn_slots` serving both pages is what makes that one
+/// rule rather than two that agree today.
+#[test]
+fn a_worn_copys_name_on_the_manifest_carries_its_prefix_and_its_suffix() {
+    let mut game = Game::new(3210, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let defs = game.affix_defs();
+    let prefix = defs
+        .iter()
+        .find(|a| a.prefix.is_some())
+        .expect("the shipped set has a prefix affix");
+    let suffix = defs
+        .iter()
+        .find(|a| a.suffix.is_some())
+        .expect("the shipped set has a suffix affix");
+    let (prefix_word, suffix_word) = (
+        prefix.prefix.clone().unwrap(),
+        suffix.suffix.clone().unwrap(),
+    );
+    let item = game
+        .item_defs()
+        .into_iter()
+        .find(|d| d.equipment.is_some())
+        .expect("the shipped item set has equippable gear")
+        .id;
+    let copy = items::GearCopy::with_affixes(
+        item,
+        Rarity::Ordinary,
+        0,
+        vec![prefix.id.clone(), suffix.id.clone()],
+        tuning::QUALITY_DEFAULT,
+    );
+    let expected = game.copy_name(&copy);
+
+    let program = spawn_tamed(&mut game, 20, 5);
+    for wearer in [game.player_entity(), program] {
+        game.add_copies(&copy, 1);
+        game.equip(wearer, &copy)
+            .expect("equipping a held copy works");
+        let view = game.manifest(wearer).unwrap();
+        let slot = view
+            .equipment
+            .first()
+            .expect("the copy just equipped is listed");
+        assert_eq!(
+            slot.item_name, expected,
+            "the row has to be `copy_name`'s output, not a second name"
+        );
+        assert!(
+            slot.item_name.contains(&prefix_word) && slot.item_name.contains(&suffix_word),
+            "both affix words belong in the name: {}",
+            slot.item_name
+        );
+    }
+}
+
 #[test]
 fn manifest_reports_a_tamed_program_with_all_four_potential_rolls() {
     let mut game = Game::new(13, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

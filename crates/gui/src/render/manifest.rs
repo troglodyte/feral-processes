@@ -267,13 +267,13 @@ fn draw_section(section: &Section, rect: Rect, painter: &Painter, m: &Metrics) {
         cy += section_row_h(m);
         match row {
             SectionRow::Stat(label, value) => {
-                painter.ui(label, rect.x + m.inset, cy, m.font_size, TEXT_DIM);
-                let dims = painter.measure_ui(value, m.font_size);
+                let fitted = fitted_stat_row(painter, label, value, rect, m);
+                painter.ui(&fitted.label, rect.x + m.inset, cy, fitted.size, TEXT_DIM);
                 painter.ui(
-                    value,
-                    rect.x + rect.w - m.inset - dims.width,
+                    &fitted.value,
+                    rect.x + rect.w - m.inset - fitted.value_w,
                     cy,
-                    m.font_size,
+                    fitted.size,
                     TEXT,
                 );
             }
@@ -282,6 +282,96 @@ fn draw_section(section: &Section, rect: Rect, painter: &Painter, m: &Metrics) {
             }
         }
     }
+}
+
+/// A stat row as `draw_section` will actually draw it — both halves already
+/// cut to the box they have to share.
+pub(super) struct FittedStatRow {
+    pub(super) label: String,
+    pub(super) value: String,
+    /// One size for the whole row. A value at the body size beside a shrunken
+    /// label reads as two rows, and the width the value gives up is exactly
+    /// what the label is short of.
+    pub(super) size: u16,
+    /// The fitted value's measured width, which is also what it is placed by.
+    pub(super) value_w: f32,
+}
+
+/// Cuts one stat row to `rect`: drawn at the body size when the pair fits, at
+/// `m.small()` when only that does, and with the **label** elided into
+/// whatever the value leaves when even that overruns.
+///
+/// The value is the half that stays whole, because it is the column a player
+/// scans *down* a box. One `m.gap` is held back between the two so they never
+/// touch.
+///
+/// Returned rather than drawn so the width census can measure the row the
+/// renderer draws instead of a restated copy of this arithmetic — the mistake
+/// `no_column_row_overflows_the_column` records for the info column.
+pub(super) fn fitted_stat_row(
+    painter: &Painter,
+    label: &str,
+    value: &str,
+    rect: Rect,
+    m: &Metrics,
+) -> FittedStatRow {
+    let room = rect.w - m.inset * 2.0;
+    let pair = |size| {
+        painter.measure_ui_advance(label, size) + painter.measure_ui_advance(value, size) + m.gap
+    };
+    let size = if pair(m.font_size) <= room {
+        m.font_size
+    } else {
+        m.small()
+    };
+    let value = elided_to_fit(painter, value, size, room);
+    let value_w = painter.measure_ui(&value, size).width;
+    let label = elided_to_fit(painter, label, size, room - value_w - m.gap);
+    FittedStatRow {
+        label,
+        value,
+        size,
+        value_w,
+    }
+}
+
+/// `text` cut to `room` at `size`: unchanged when it already fits, and
+/// otherwise the widest head-and-tail of it joined by a `…`.
+///
+/// **Middle-elided, never cut from the right.** Nothing on this sheet clips
+/// horizontally — `draw_section` draws a row as two plain strings — so an
+/// overlong one used to run over the neighbouring column or straight off the
+/// window, and the half a player lost was always the tail. On the one row
+/// long enough to need this, EQUIPMENT's, the tail is where `Game::copy_name`
+/// puts a gear copy's suffix affix, its `+N` affix count and its quality
+/// figure; the head is where it puts the tier word and the prefix affix. Both
+/// ends carry meaning, so both ends are what survive.
+///
+/// Chars, not bytes: an item name is content, and a mod's can hold multi-byte
+/// glyphs that byte slicing would panic on — `battle::cell`'s reason. Each
+/// candidate is measured rather than divided out of a per-character advance,
+/// so this stays correct if the UI face is ever something other than the
+/// monospace it is today.
+fn elided_to_fit(painter: &Painter, text: &str, size: u16, room: f32) -> String {
+    if painter.measure_ui_advance(text, size) <= room {
+        return text.to_string();
+    }
+    let chars: Vec<char> = text.chars().collect();
+    for keep in (0..chars.len()).rev() {
+        // The odd character goes to the head, which is where the row's own
+        // label ("MOD: ") sits — losing that first reads as a different row
+        // rather than as a shortened one.
+        let head = keep.div_ceil(2);
+        let candidate: String = chars[..head]
+            .iter()
+            .chain(std::iter::once(&'…'))
+            .chain(&chars[chars.len() - (keep - head)..])
+            .collect();
+        if painter.measure_ui_advance(&candidate, size) <= room {
+            return candidate;
+        }
+    }
+    String::new()
 }
 
 fn stat(label: impl Into<String>, value: impl Into<String>) -> SectionRow {
@@ -344,7 +434,17 @@ fn sections_for(game: &Game, view: &ManifestView) -> Vec<Section> {
         sections.push(Section {
             title: "EQUIPMENT",
             rows: section_rows(view.equipment.iter().map(equip_row).collect()),
-            full_width: false,
+            // **A band on the player's page and a columned box on a
+            // program's**, the same split — and the same argument — as the
+            // to-hit pair above: the player page has the clearance for a band
+            // and the program page has none. A gear row is the widest row on
+            // this sheet by a distance, because `Game::copy_name` spends its
+            // width on a tier word, a prefix affix, a suffix phrase and a
+            // quality figure, and the bonus column is beside it. In a
+            // half-width box the affix at the *end* of that name is the first
+            // thing `fitted_stat_row` has to cut; across the whole frame
+            // nothing a drop can roll needs cutting at all.
+            full_width: matches!(&view.subject, ManifestSubject::Player(_)),
         });
     }
     if !view.routines.is_empty() {
@@ -461,14 +561,17 @@ fn difficulty_label(mode: DifficultyMode) -> String {
 
 fn equip_row(slot: &ManifestEquipSlot) -> SectionRow {
     let mut bonus: Vec<String> = Vec::new();
+    // `{:+}` and not a literal `+`: an affix may carry a **negative**
+    // component beside its bonus (see `affixes::AffixDef::stats`), and a
+    // hardcoded sign renders that as `+-30 DEF`.
     if slot.atk != 0 {
-        bonus.push(format!("+{} ATK", slot.atk));
+        bonus.push(format!("{:+} ATK", slot.atk));
     }
     if slot.mitigation != 0 {
-        bonus.push(format!("+{} DEF", slot.mitigation));
+        bonus.push(format!("{:+} DEF", slot.mitigation));
     }
     if slot.decompiler != 0 {
-        bonus.push(format!("+{} DECOMP", slot.decompiler));
+        bonus.push(format!("{:+} DECOMP", slot.decompiler));
     }
     if slot.fusion_tier > 0 {
         bonus.push(format!("T{}", slot.fusion_tier));
@@ -1085,6 +1188,303 @@ mod tests {
         }
     }
 
+    /// Window sizes a width census is measured at.
+    ///
+    /// Whole shapes, and not `manifest_layout`'s cross product of widths and
+    /// heights: `ui_metrics` scales the font off the window's **height**
+    /// alone, so pairing 1280 wide with 1440 tall puts 33px text in a frame
+    /// 1177px across — an aspect ratio no display has, and one that overruns
+    /// rows all over the renderer. The vertical sweep can take the cross
+    /// product because a taller window only ever buys it room. This is the
+    /// 16:9 and 16:10 ladder from the tightest window the game supports up,
+    /// the same geometry `no_manifest_pick_row_overflows_its_popup` measures
+    /// against — it just holds one point of it.
+    const CENSUS_WINDOWS: [(f32, f32); 8] = [
+        (1280.0, 720.0),
+        (1366.0, 768.0),
+        (1440.0, 900.0),
+        (1600.0, 900.0),
+        (1680.0, 1050.0),
+        (1920.0, 1080.0),
+        (1920.0, 1200.0),
+        (2560.0, 1440.0),
+    ];
+
+    /// The widest EQUIPMENT row the shipped assets can build, and the two
+    /// affix words in its name.
+    ///
+    /// The name is the ceiling app-core's
+    /// `no_shipped_copy_name_outgrows_the_swap_name_column` measures, derived
+    /// the same way rather than copied: fusion is the only thing that stacks
+    /// affixes, so a copy can carry `ITEM_FUSION_COST ^ MAX_FUSIONS` of them,
+    /// of which `Game::copy_name` names the first with a prefix and the first
+    /// with a suffix and counts the rest as `+N`. Padding with copies of the
+    /// two longest words rather than with other affixes keeps which pair
+    /// `copy_name` picks out of however the ids happen to sort.
+    ///
+    /// The bonus column is `Game::copy_bonus` at level 10 on the same copy,
+    /// matching what app-core's
+    /// `no_shipped_gear_summary_outgrows_the_swap_stats_column` prices — the
+    /// value is a second axis competing for the same box, so a census that
+    /// left it empty would measure the easy case.
+    fn worst_equipment_row(game: &Game) -> (ManifestEquipSlot, String, String) {
+        use feral_processes_engine::affixes::AffixDef;
+        use feral_processes_engine::components::Rarity;
+        use feral_processes_engine::items::{EquipmentSlot, GearCopy};
+        use feral_processes_engine::tuning::{ITEM_FUSION_COST, MAX_FUSIONS, QUALITY_MAX};
+
+        let defs = game.affix_defs();
+        let longest = |pick: fn(&AffixDef) -> Option<&String>| {
+            defs.iter()
+                .filter(|a| pick(a).is_some())
+                .max_by_key(|a| pick(a).map(|w| w.chars().count()).unwrap_or(0))
+                .map(|a| (a.id.clone(), pick(a).cloned().unwrap_or_default()))
+                .expect("the shipped set has affixes on both sides of a name")
+        };
+        let (prefix_id, prefix_word) = longest(|a| a.prefix.as_ref());
+        let (suffix_id, suffix_word) = longest(|a| a.suffix.as_ref());
+
+        let ceiling = (ITEM_FUSION_COST as usize).pow(MAX_FUSIONS);
+        let mut affixes = vec![prefix_id; ceiling.div_ceil(2)];
+        affixes.resize(ceiling, suffix_id);
+
+        let slot = EquipmentSlot::ALL
+            .into_iter()
+            .max_by_key(|s| s.short_label().chars().count())
+            .expect("EquipmentSlot::ALL is not empty");
+
+        let mut worst: Option<(ManifestEquipSlot, usize)> = None;
+        for def in game
+            .item_defs()
+            .into_iter()
+            .filter(|d| d.equipment.is_some())
+        {
+            let copy = GearCopy::with_affixes(
+                def.id.clone(),
+                Rarity::ALL[Rarity::ALL.len() - 1],
+                MAX_FUSIONS,
+                affixes.clone(),
+                QUALITY_MAX,
+            );
+            let Some(mods) = game.copy_bonus(&copy, 10) else {
+                continue;
+            };
+            let row = ManifestEquipSlot {
+                slot: slot.short_label().to_string(),
+                item_name: game.copy_name(&copy),
+                gear_level: 10,
+                fusion_tier: copy.tier,
+                atk: mods.atk,
+                mitigation: mods.mitigation,
+                decompiler: mods.decompiler,
+            };
+            let cells = row.item_name.chars().count();
+            if worst.as_ref().is_none_or(|(_, w)| cells > *w) {
+                worst = Some((row, cells));
+            }
+        }
+        let (row, _) = worst.expect("the shipped set has equippable gear");
+        (row, prefix_word, suffix_word)
+    }
+
+    /// Every EQUIPMENT row a *drop* can put on this sheet, paired with the
+    /// affix word in its name.
+    ///
+    /// `Game::grant_gear_drop` rolls **one** affix, so a single word — a
+    /// prefix or a suffix — is the shape a player meets before they ever fuse
+    /// anything, and it is the shape the bug was reported against. Every
+    /// equippable item against every shipped affix, at the top rare tier and
+    /// `QUALITY_MAX`, which are the two other axes `copy_name` spends
+    /// characters on.
+    fn dropped_equipment_rows(game: &Game) -> Vec<(ManifestEquipSlot, String)> {
+        use feral_processes_engine::components::Rarity;
+        use feral_processes_engine::items::{EquipmentSlot, GearCopy};
+        use feral_processes_engine::tuning::QUALITY_MAX;
+
+        let slot = EquipmentSlot::ALL
+            .into_iter()
+            .max_by_key(|s| s.short_label().chars().count())
+            .expect("EquipmentSlot::ALL is not empty");
+
+        let mut rows = Vec::new();
+        for def in game
+            .item_defs()
+            .into_iter()
+            .filter(|d| d.equipment.is_some())
+        {
+            for affix in game.affix_defs() {
+                let copy = GearCopy::with_affixes(
+                    def.id.clone(),
+                    Rarity::ALL[Rarity::ALL.len() - 1],
+                    0,
+                    vec![affix.id.clone()],
+                    QUALITY_MAX,
+                );
+                let Some(mods) = game.copy_bonus(&copy, 10) else {
+                    continue;
+                };
+                let word = affix
+                    .prefix
+                    .clone()
+                    .or_else(|| affix.suffix.clone())
+                    .expect("AffixDef::fault refuses an affix with neither");
+                rows.push((
+                    ManifestEquipSlot {
+                        slot: slot.short_label().to_string(),
+                        item_name: game.copy_name(&copy),
+                        gear_level: 10,
+                        fusion_tier: copy.tier,
+                        atk: mods.atk,
+                        mitigation: mods.mitigation,
+                        decompiler: mods.decompiler,
+                    },
+                    word,
+                ));
+            }
+        }
+        assert!(!rows.is_empty(), "the shipped set has affixable gear");
+        rows
+    }
+
+    /// The EQUIPMENT box's rect on both pages that draw one, at `w` x `h` —
+    /// the real one, off `manifest_layout`, rather than a width written down
+    /// here.
+    ///
+    /// Every `EquipmentSlot` is worn, which is the box's own worst case: its
+    /// *width* is settled by whether the box is a band or a column whatever
+    /// the rows say, but a taller box can land in the other column, and which
+    /// column a box lands in is what decides its `x`.
+    fn equipment_rects(game: &Game, w: f32, h: f32) -> Vec<(&'static str, Rect)> {
+        let m = ui_metrics(h);
+        let mut program = plain_program(14, 12);
+        program.base_job = Some(AffinityClass::Striker);
+        program.post = Some((TaskKind::GatherResource, "Mining Node".to_string()));
+        let kit = || vec![worn("WEP"), worn("ARM"), worn("MOD")];
+        let mut player = player_view(plain_player());
+        player.equipment = kit();
+
+        let mut out = Vec::new();
+        for (who, view, meters) in [
+            ("program", program_view(program, kit()), 2),
+            ("player", player, 3),
+        ] {
+            let sections = sections_for(game, &view);
+            let l = manifest_layout(w, h, meters, &sections, &m);
+            for (rect, s) in l.sections.iter().zip(&sections) {
+                if s.title == "EQUIPMENT" {
+                    out.push((who, *rect));
+                }
+            }
+        }
+        assert_eq!(out.len(), 2, "both pages draw an EQUIPMENT box");
+        out
+    }
+
+    fn census_game() -> Game {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        Game::new(
+            11,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            assets,
+        )
+        .expect("shipped assets load")
+    }
+
+    /// **Nothing on this sheet clips horizontally.** `draw_section` draws a
+    /// stat row as two plain strings — the label from the box's left inset,
+    /// the value flushed to its right one — so a row wider than its box used
+    /// to draw over the neighbouring column or off the window entirely, in
+    /// silence.
+    ///
+    /// Measured against the box `manifest_layout` really gives EQUIPMENT, on
+    /// both pages, at every window in `CENSUS_WINDOWS`. It is the widest row
+    /// on the sheet by a distance and the only one that has ever needed
+    /// cutting, which is why the census names it rather than every box.
+    #[test]
+    fn no_equipment_row_overflows_its_box() {
+        let game = census_game();
+        let (slot, _, _) = worst_equipment_row(&game);
+        let SectionRow::Stat(label, value) = equip_row(&slot) else {
+            panic!("an equipment row is a stat row");
+        };
+
+        with_painter(|p| {
+            for (w, h) in CENSUS_WINDOWS {
+                let m = ui_metrics(h);
+                for (who, rect) in equipment_rects(&game, w, h) {
+                    let row = fitted_stat_row(p, &label, &value, rect, &m);
+                    let label_end = rect.x + m.inset + p.measure_ui_advance(&row.label, row.size);
+                    let value_start = rect.x + rect.w - m.inset - row.value_w;
+                    assert!(
+                        label_end <= value_start,
+                        "the widest EQUIPMENT row's halves collide by {:.0}px on the {who} \
+                         page at {w}x{h}:\n{}\n{}",
+                        label_end - value_start,
+                        row.label,
+                        row.value
+                    );
+                    assert!(
+                        value_start >= rect.x + m.inset,
+                        "the widest EQUIPMENT row's value escapes its box on the {who} page \
+                         at {w}x{h}:\n{}",
+                        row.value
+                    );
+                }
+            }
+        });
+    }
+
+    /// **The bug this branch was opened for.** A gear copy's name carries its
+    /// affix at *both* ends — `Game::copy_name` puts a prefix word in front
+    /// of the item name and a suffix phrase behind it — and nothing on this
+    /// sheet clipped, so an overlong row ran off the box and what a player
+    /// lost was always the tail.
+    ///
+    /// Held on **the player's page**, where the EQUIPMENT box is a band with
+    /// the whole frame to draw a name in. A program's is a half-width column
+    /// box and cannot be a band: that page clears its footer by 17.3px
+    /// against a 10px floor, so a second band on it overflows at 1280x720 —
+    /// `the_real_worst_case_pages_fit_the_tightest_window` is what measures
+    /// that. There the widest rows are still cut, and `elided_to_fit` keeping
+    /// both ends is what decides *which* characters go; the containment
+    /// itself is `no_equipment_row_overflows_its_box`.
+    #[test]
+    fn a_dropped_equipment_row_keeps_the_affix_in_its_name() {
+        let game = census_game();
+        let rows = dropped_equipment_rows(&game);
+
+        with_painter(|p| {
+            for (w, h) in CENSUS_WINDOWS {
+                let m = ui_metrics(h);
+                for (who, rect) in equipment_rects(&game, w, h) {
+                    if who != "player" {
+                        continue;
+                    }
+                    for (slot, word) in &rows {
+                        let SectionRow::Stat(label, value) = equip_row(slot) else {
+                            panic!("an equipment row is a stat row");
+                        };
+                        assert!(
+                            label.contains(word),
+                            "the row the engine hands over already has to name it: {label}"
+                        );
+                        let fitted = fitted_stat_row(p, &label, &value, rect, &m);
+                        assert!(
+                            fitted.label.contains(word),
+                            "the affix went missing at {w}x{h}:\n{}\nroom={:.1} label={:.1} \
+                             value={:.1} ({value}) size={}",
+                            fitted.label,
+                            rect.w - m.inset * 2.0,
+                            p.measure_ui_advance(&label, fitted.size),
+                            p.measure_ui_advance(&value, fitted.size),
+                            fitted.size,
+                        );
+                    }
+                }
+            }
+        });
+    }
+
     /// `manifest_layout::tests::worst_case_program` lists ROUTINES before
     /// MOVES, but `sections_for` does not: `program_sections` pushes MOVES
     /// last (it's the full-width band), and EQUIPMENT and ROUTINES are
@@ -1131,7 +1531,7 @@ mod tests {
         program.level_cap = 12;
         program.talents_earned = 6;
         program.talents_spent = 6;
-        let view = program_view(program, vec![worn("Weapon"), worn("Armor")]);
+        let view = program_view(program, vec![worn("WEP"), worn("ARM")]);
 
         let sections = sections_for(&game, &view);
         let shape: Vec<(&str, usize, bool)> = sections
@@ -1423,7 +1823,7 @@ mod tests {
             gear: String::new(),
         }];
         let mut view = player_view(player);
-        view.equipment = vec![worn("Weapon")];
+        view.equipment = vec![worn("WEP")];
         view.routines = vec![feral_processes_engine::RoutineSlotView {
             index: 0,
             ability: None,
@@ -1431,17 +1831,25 @@ mod tests {
             description: String::new(),
         }];
 
-        let titles: Vec<&str> = sections_for(&game, &view).iter().map(|s| s.title).collect();
+        // `full_width` too, and not just the titles: EQUIPMENT is a band on
+        // this page and a columned box on a program's (see `sections_for`),
+        // so the flag is part of what `worst_case_player` has to mirror — a
+        // fixture that models a band as a column packs a page the renderer
+        // never draws.
+        let shape: Vec<(&str, bool)> = sections_for(&game, &view)
+            .iter()
+            .map(|s| (s.title, s.full_width))
+            .collect();
         assert_eq!(
-            titles,
+            shape,
             vec![
-                "COMBAT",
-                "PROGRESSION",
-                "PERKS",
-                "PARTY",
-                "RUN",
-                "EQUIPMENT",
-                "ROUTINES",
+                ("COMBAT", false),
+                ("PROGRESSION", false),
+                ("PERKS", false),
+                ("PARTY", false),
+                ("RUN", false),
+                ("EQUIPMENT", true),
+                ("ROUTINES", false),
             ],
         );
     }

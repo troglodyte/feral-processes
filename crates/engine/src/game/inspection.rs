@@ -1461,7 +1461,7 @@ impl Game {
         // drifts.
         let mods = self.worn_bonus(&worn)?;
         Some(ManifestEquipSlot {
-            slot: slot.label().to_string(),
+            slot: slot.short_label().to_string(),
             item_name: self.copy_name(&worn.copy),
             gear_level: worn.level,
             fusion_tier: worn.copy.tier,

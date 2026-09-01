@@ -33,6 +33,15 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.74
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+- **A notification waits for Esc, and no longer for any key at all.** The
+  full-screen news took whatever you pressed next as a dismissal, so a
+  keystroke aimed at the map blew past it unread — and a burst of three
+  could vanish to three unrelated presses.
+
 ## 0.13.73
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

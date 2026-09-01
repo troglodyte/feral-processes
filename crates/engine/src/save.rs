@@ -158,9 +158,13 @@ pub struct PlayerSave {
     /// The player's chosen sprite name — see `components::PlayerIdentity`.
     #[serde(default)]
     pub sprite: String,
-    /// The player's chosen colour index — see `components::PlayerIdentity`.
+    /// The player's chosen colour index, 0-based — see
+    /// `components::PlayerIdentity`. `#[serde(default)]` on an `Option`
+    /// yields `None`, which is exactly what a save written before character
+    /// creation existed means: no choice was made, so the glyph wears the
+    /// `PLAYER` role colour.
     #[serde(default)]
-    pub colour: u8,
+    pub colour: Option<u8>,
 }
 
 /// `serde`'s default for `PlayerSave::glyph` — a save written before
@@ -1429,7 +1433,7 @@ mod tests {
                 class: None,
                 glyph: '@',
                 sprite: String::new(),
-                colour: 0,
+                colour: None,
             },
             creatures: Vec::new(),
             structures: Vec::new(),

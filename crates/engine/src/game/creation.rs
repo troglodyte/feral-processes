@@ -25,7 +25,11 @@ pub struct CharacterChoice {
     pub class: Option<AffinityClass>,
     pub glyph: char,
     pub sprite: String,
-    pub colour: u8,
+    /// Which player swatch the glyph wears, **0-based**; `None` is the
+    /// renderer's `PLAYER` role colour. See
+    /// `components::PlayerIdentity::colour` for why this is an `Option`
+    /// rather than a reserved zero.
+    pub colour: Option<u8>,
     /// Units *bought* per axis, indexed as `MainStat::all()` — not points
     /// spent. `cost()` is what prices a unit, at that axis's own
     /// `tuning::CREATION_COST_*` rate; pricing at conversion time instead
@@ -47,7 +51,7 @@ impl Default for CharacterChoice {
             class: None,
             glyph: '@',
             sprite: String::new(),
-            colour: 0,
+            colour: None,
             stats: [0; 4],
             routine: None,
         }

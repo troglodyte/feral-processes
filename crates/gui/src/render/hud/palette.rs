@@ -70,12 +70,12 @@ pub(crate) const PANE_TITLE: Color = rgb(0x56d4dd);
 pub(crate) const PLAYER: Color = rgb(0x56d4dd);
 /// The six colours the character-creation wizard offers for the player's
 /// glyph. Kept apart from [`PLAYER`] rather than folded into it:
-/// `PlayerIdentity::colour`'s zero value is what `CharacterChoice::
-/// default()` and every save from before this feature carries, and the map
-/// reads a `colour` **one-indexed** — `PLAYER_CHOICES[colour - 1]`, falling
-/// back to [`PLAYER`] at 0 or out of range — so that value keeps meaning
-/// "no choice was made" rather than doubling as this array's own first
-/// entry.
+/// `PlayerIdentity::colour` is an `Option<u8>` indexing this array
+/// **0-based**, and its `None` — what `CharacterChoice::default()` and
+/// every save from before this feature carries — falls back to [`PLAYER`].
+/// An out-of-range index falls back the same way. The `Option` is what
+/// keeps "no choice was made" from sharing a value with this array's own
+/// first entry, which a reserved zero would have done.
 ///
 /// Warm hues are all spoken for by [`glyph`]'s table or by a reserved role
 /// (red, orange, yellow, brown), so these sit in the green-through-magenta

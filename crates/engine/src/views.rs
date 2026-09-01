@@ -705,7 +705,9 @@ pub struct CompanionInfo {
 #[derive(Clone)]
 pub struct PlayerLook {
     pub sprite: String,
-    pub colour: u8,
+    /// 0-based index into the renderer's player swatches; `None` is the
+    /// `PLAYER` role colour. See `components::PlayerIdentity::colour`.
+    pub colour: Option<u8>,
 }
 
 #[derive(Clone)]

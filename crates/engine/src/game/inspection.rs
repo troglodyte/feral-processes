@@ -1014,7 +1014,7 @@ impl Game {
                     let identity = self.world.get::<PlayerIdentity>(entity);
                     PlayerLook {
                         sprite: identity.map(|i| i.sprite.clone()).unwrap_or_default(),
-                        colour: identity.map(|i| i.colour).unwrap_or_default(),
+                        colour: identity.and_then(|i| i.colour),
                     }
                 });
                 EntityView {

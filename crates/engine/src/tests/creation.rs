@@ -153,7 +153,7 @@ fn a_created_player_round_trips_through_a_real_save() {
         class: Some(AffinityClass::Saboteur),
         glyph: 'Z',
         sprite: "hero".to_string(),
-        colour: 3,
+        colour: Some(3),
         ..CharacterChoice::default()
     };
     let mut game = Game::new_with(
@@ -174,7 +174,7 @@ fn a_created_player_round_trips_through_a_real_save() {
     let identity = loaded.world.get::<PlayerIdentity>(player).unwrap();
     assert_eq!(identity.class, Some(AffinityClass::Saboteur));
     assert_eq!(identity.sprite, "hero");
-    assert_eq!(identity.colour, 3);
+    assert_eq!(identity.colour, Some(3));
     assert_eq!(loaded.world.get::<CustomName>(player).unwrap().0, "Zephyr");
 }
 
@@ -294,7 +294,7 @@ fn an_old_save_without_the_fields_still_loads() {
     let identity = loaded.world.get::<PlayerIdentity>(player).unwrap();
     assert_eq!(identity.class, None);
     assert_eq!(identity.sprite, "");
-    assert_eq!(identity.colour, 0);
+    assert_eq!(identity.colour, None);
     assert!(
         loaded.world.get::<CustomName>(player).is_none(),
         "an absent name field must not install an empty override"
@@ -308,7 +308,7 @@ fn an_old_save_without_the_fields_still_loads() {
 fn the_player_view_carries_its_look_and_nothing_else_does() {
     let choice = CharacterChoice {
         sprite: "hero".to_string(),
-        colour: 3,
+        colour: Some(3),
         ..CharacterChoice::default()
     };
     let mut game = Game::new_with(
@@ -332,7 +332,7 @@ fn the_player_view_carries_its_look_and_nothing_else_does() {
                 .as_ref()
                 .expect("the player's view must carry a look");
             assert_eq!(look.sprite, "hero");
-            assert_eq!(look.colour, 3);
+            assert_eq!(look.colour, Some(3));
         } else {
             assert!(
                 view.look.is_none(),

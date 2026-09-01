@@ -1144,17 +1144,17 @@ fn draw_surface_map(
                 // The `@` is the one glyph whose colour is a role. Every
                 // other entity wears the hue its file authored; the player
                 // wears a colour off the character-creation wizard —
-                // `PlayerLook::colour` indexes `hud::palette::PLAYER_CHOICES`,
-                // **one-based**. Zero is the field's own default, which is
-                // what `CharacterChoice::default()` and every save from
-                // before this feature carries, so it stays `PLAYER` rather
-                // than doubling as the array's own first entry — read off
-                // `is_player` rather than off the authored `GlyphColor::Cyan`,
-                // which a structure is free to author too.
+                // `PlayerLook::colour` is a **0-based** index into
+                // `hud::palette::PLAYER_CHOICES`, and `None` is *no answer*
+                // rather than a bad one: the wizard was never opened, or the
+                // save predates it, so the glyph keeps the `PLAYER` role
+                // colour. Read off `is_player` rather than off the authored
+                // `GlyphColor::Cyan`, which a structure is free to author
+                // too.
                 color = if ev.is_player {
                     ev.look
                         .as_ref()
-                        .and_then(|look| look.colour.checked_sub(1))
+                        .and_then(|look| look.colour)
                         .and_then(|i| hud::palette::PLAYER_CHOICES.get(i as usize))
                         .copied()
                         .unwrap_or(hud::palette::PLAYER)
@@ -2558,15 +2558,15 @@ mod tests {
         );
     }
 
-    /// The chosen colour comes off `PlayerLook`, one-indexed —
-    /// `PLAYER_CHOICES[colour - 1]` — and is what the map actually draws,
-    /// not just state nothing reads: `the_players_glyph_wears_the_player_role`
-    /// already covers colour `0` staying `PLAYER`, so this is the other half
-    /// — an explicit pick has to move the drawn colour off it.
+    /// The chosen colour comes off `PlayerLook`, **0-indexed** —
+    /// `PLAYER_CHOICES[colour]` — and is what the map actually draws, not
+    /// just state nothing reads: `the_players_glyph_wears_the_player_role`
+    /// already covers `None` staying `PLAYER`, so this is the other half —
+    /// an explicit pick has to move the drawn colour off it.
     #[test]
     fn the_players_glyph_wears_the_chosen_colour() {
         let choice = CharacterChoice {
-            colour: 3,
+            colour: Some(2),
             ..CharacterChoice::default()
         };
         let mut game = Game::new_with(7, DifficultyMode::Forgiving, &test_assets(), &choice)
@@ -2596,12 +2596,60 @@ mod tests {
         let want = hud::palette::PLAYER_CHOICES[2];
         assert!(
             dist(*drawn, want) < 0.06,
-            "colour 3 painted {drawn:?}, which is {:.3} from PLAYER_CHOICES[2] {want:?}",
+            "colour Some(2) painted {drawn:?}, which is {:.3} from PLAYER_CHOICES[2] {want:?}",
             dist(*drawn, want)
         );
         assert!(
             dist(*drawn, hud::palette::PLAYER) > 0.06,
             "a chosen colour must not still read as PLAYER"
+        );
+    }
+
+    /// **The whole reason `colour` is an `Option` and not a reserved zero.**
+    /// The first swatch on the wizard's own screen is index `0`, and under a
+    /// one-indexed `u8` picking it stored the same value "no choice was
+    /// made" carries — so the player's first pick painted `PLAYER` and read
+    /// as the key doing nothing. Both halves are asserted: the drawn colour
+    /// is `PLAYER_CHOICES[0]`, *and* it is not `PLAYER`.
+    #[test]
+    fn the_first_swatch_is_not_the_player_role() {
+        let choice = CharacterChoice {
+            colour: Some(0),
+            ..CharacterChoice::default()
+        };
+        let mut game = Game::new_with(7, DifficultyMode::Forgiving, &test_assets(), &choice)
+            .expect("the shipped assets must load");
+        let mut fx = Fx::new();
+        let (tile_px, glyph_px) = crate::text::map_cell(1);
+        let (_, shapes) = with_painter(|p| {
+            let status = game.player_status();
+            draw_surface_map(
+                &mut game,
+                &mut fx,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                tile_px,
+                glyph_px,
+                &status,
+                None,
+                status.position,
+            );
+        });
+        let dist = |a: Color, b: Color| (a.r - b.r).abs() + (a.g - b.g).abs() + (a.b - b.b).abs();
+        let at = crate::paint::painted_map_glyphs(&shapes);
+        let (_, drawn) = at
+            .iter()
+            .find(|(g, _)| g == "@")
+            .expect("the map draws the player");
+        let want = hud::palette::PLAYER_CHOICES[0];
+        assert!(
+            dist(*drawn, want) < 0.06,
+            "the first swatch painted {drawn:?}, which is {:.3} from PLAYER_CHOICES[0] {want:?}",
+            dist(*drawn, want)
+        );
+        assert!(
+            dist(*drawn, hud::palette::PLAYER) > 0.06,
+            "picking the first swatch must not read as no choice at all"
         );
     }
 

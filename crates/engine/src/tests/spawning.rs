@@ -1658,7 +1658,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             class: None,
             glyph: '@',
             sprite: String::new(),
-            colour: 0,
+            colour: None,
         },
         creatures: vec![save::CreatureSave {
             species: "scrapper".to_string(),

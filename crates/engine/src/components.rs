@@ -112,7 +112,7 @@ impl CustomName {
 /// player's own choices are deliberately outside it. They instead ride out
 /// to the renderer on `views::PlayerLook`, carried on `EntityView::look`.
 ///
-/// Spawned at its `Default` (no class, no sprite, colour 0) by every
+/// Spawned at its `Default` (no class, no sprite, no colour) by every
 /// constructor and immediately overwritten by
 /// `Game::apply_character_choice` — the same "neutral bundle, layered on
 /// top" shape `Game::new_with`'s player spawn uses throughout.
@@ -120,7 +120,13 @@ impl CustomName {
 pub struct PlayerIdentity {
     pub class: Option<AffinityClass>,
     pub sprite: String,
-    pub colour: u8,
+    /// Which of the renderer's player swatches the glyph wears, **0-based**
+    /// — `None` is the `PLAYER` role colour, which is what a player who
+    /// never opened the wizard and every save from before it carries.
+    /// `Option` rather than a reserved zero for `PowerCell::Unrated`'s
+    /// reason: *no answer* is not a bad answer, and a sentinel index shares
+    /// one value between "the default" and "the first swatch".
+    pub colour: Option<u8>,
 }
 
 /// Which zone portal's sector a creature was spawned in — set once at

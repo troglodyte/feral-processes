@@ -19,7 +19,9 @@
 //! still grow past what a screen with no scroll can show — see the test's
 //! own doc comment.
 
-use super::popup::{PopupSize, Row, draw_popup, item_row, popup_rect, text_row, with_icon};
+use super::popup::{
+    PopupSize, Row, colored_item_row, draw_popup, item_row, popup_rect, text_row, with_icon,
+};
 use super::*;
 use feral_processes_app_core::{CreationRow, CreationStep};
 use feral_processes_engine::CharacterChoice;
@@ -138,6 +140,12 @@ fn build_row(step: CreationStep, row: &CreationRow, i: usize, selected: bool) ->
         }
         _ => format!("[{}] {text}", feral_processes_app_core::menu_shortcut(i)),
     };
+    // The one Summary row that is a picture: drawn in the swatch the run
+    // will actually wear, so the last screen before the run starts shows
+    // the look rather than spelling it.
+    if let CreationRow::Look { colour, .. } = row {
+        return colored_item_row(label, selected, super::player_look_color(*colour));
+    }
     let base = item_row(label, selected);
     match row {
         // The icon rows show their own glyph — a preview of the shape on
@@ -201,6 +209,7 @@ fn row_line(row: &CreationRow) -> String {
                 routine.name, routine.effect, routine.power_cost
             )
         }
+        CreationRow::Look { label, glyph, .. } => format!("{label:<12} {glyph}"),
         CreationRow::Name { typed } => format!("Name: {typed}_"),
         CreationRow::Summary { label, value } => format!("{label:<12} {value}"),
     }
@@ -218,15 +227,16 @@ fn row_line(row: &CreationRow) -> String {
 fn footer(app: &App, step: CreationStep) -> String {
     match step {
         CreationStep::Kit => format!(
-            "{}c left - Left/Right takes (Shift/Ctrl); Enter moves on; \
-             taking nothing keeps your class kit",
+            "{}c left - Left/Right takes (Shift/Ctrl); [r] rerolls the basket; \
+             Enter moves on once it is spent",
             app.creation_credits_left()
         ),
         CreationStep::Points => {
             let left = app.creation_points_left();
             format!(
                 "{}/{CREATION_STAT_POINTS} points spent, {left} left - \
-                 Left/Right spends (Shift: all, Ctrl: half); Enter moves on; [R] rolls",
+                 Left/Right spends (Shift: all, Ctrl: half); \
+                 Enter moves on once it is spent",
                 CREATION_STAT_POINTS - left
             )
         }
@@ -237,20 +247,20 @@ fn footer(app: &App, step: CreationStep) -> String {
 /// The seven steps whose keys never change.
 fn plain_footer(step: CreationStep) -> &'static str {
     match step {
-        CreationStep::Difficulty => "Esc backs out to the menu",
-        CreationStep::Class => "Up/Down + Enter; [R] rolls the rest; Esc goes back",
+        CreationStep::Difficulty => "[p]/[f] picks; Esc backs out to the menu",
+        CreationStep::Class => "Up/Down + Enter picks; Left/Right pages; Esc goes back",
         // Written by `footer` above, which is the only caller.
         CreationStep::Kit | CreationStep::Points => "",
         // One arm, because the two halves of a look are one key table —
         // an icon row and a swatch row are picked the same way and skipped
         // the same way, and two copies of the sentence could drift.
         CreationStep::Icon | CreationStep::Colour => {
-            "Up/Down + Enter picks; [n] moves on; [R] rolls; Esc goes back"
+            "Up/Down + Enter picks; [n] or Right moves on; Left goes back"
         }
-        CreationStep::Routine => "Up/Down + Enter; [n] takes none; [R] rolls; Esc goes back",
+        CreationStep::Routine => "Up/Down + Enter; [n] or Right takes none; Left goes back",
         // The last two steps, and the only place the wizard says what
         // *finishes* it — the summary is accepted, the name starts the run.
-        CreationStep::Summary => "Enter accepts; [R] rerolls the rest; Esc goes back",
+        CreationStep::Summary => "Enter or Right accepts; Left goes back",
         CreationStep::Name => "Type a name; Enter starts the run; Esc goes back",
     }
 }
@@ -426,21 +436,32 @@ mod tests {
         app
     }
 
-    /// The keys that walk one step forward from each of the first eight —
-    /// shared by every test that needs to visit every step in turn.
-    const FORWARD: [GameKey; 8] = [
-        GameKey::Char('f'),
-        GameKey::Char('1'),
-        // The Kit step: Enter takes the basket as it stands, which on an
-        // untouched step is empty and keeps the class kit.
-        GameKey::Enter,
-        // Icon, then Colour: `[n]` walks past each without deciding it.
-        GameKey::Char('n'),
-        GameKey::Char('n'),
-        GameKey::Enter,
-        GameKey::Char('n'),
-        GameKey::Enter,
-    ];
+    /// Leaves `step` the cheapest legal way — shared by every test that
+    /// needs to visit each step in turn.
+    ///
+    /// A function rather than the key-per-step table it replaces: the two
+    /// steps that hand out an allowance refuse to be left while anything
+    /// on them is still affordable, so walking past them is a pass over
+    /// their rows rather than one keystroke, and a table cannot say that.
+    fn walk_past(app: &mut App, step: CreationStep) {
+        let mut spend_every_row = |app: &mut App| {
+            for i in 0..app.creation_rows().len() {
+                app.menu_selected = i;
+                app.handle_key(GameKey::ShiftRight);
+            }
+            app.menu_selected = 0;
+            app.handle_key(GameKey::Enter);
+        };
+        match step {
+            CreationStep::Difficulty => app.handle_key(GameKey::Char('f')),
+            CreationStep::Class => app.handle_key(GameKey::Char('1')),
+            CreationStep::Kit | CreationStep::Points => spend_every_row(app),
+            CreationStep::Icon | CreationStep::Colour | CreationStep::Routine => {
+                app.handle_key(GameKey::Char('n'))
+            }
+            CreationStep::Summary | CreationStep::Name => app.handle_key(GameKey::Enter),
+        }
+    }
 
     /// **The refusal census, turned ninety degrees.** `ALL_MODES` walks the
     /// wizard as one mode, so it only ever exercises whichever step the
@@ -472,9 +493,7 @@ mod tests {
                 "{step:?} painted the refusal {drawn} times, not once"
             );
             steps.push(*step);
-            if let Some(key) = FORWARD.get(i) {
-                app.handle_key(*key);
-            }
+            walk_past(&mut app, *step);
         }
         assert_eq!(steps.len(), CreationStep::ALL.len());
     }
@@ -501,9 +520,7 @@ mod tests {
                 drawn.len() > 2,
                 "{step:?} drew nothing but chrome: {drawn:?}"
             );
-            if let Some(key) = FORWARD.get(i) {
-                app.handle_key(*key);
-            }
+            walk_past(&mut app, *step);
         }
     }
 
@@ -560,9 +577,7 @@ mod tests {
                  trim the step or give it one",
                 drawn.len()
             );
-            if let Some(key) = FORWARD.get(i) {
-                app.handle_key(*key);
-            }
+            walk_past(&mut app, *step);
         }
         assert!(
             tallest > 0,
@@ -608,9 +623,7 @@ mod tests {
                             "{step:?} draws a {width}px row inside a {body}px body at                              {screen_w}x{screen_h}: {label:?}"
                         );
                     }
-                    if let Some(key) = FORWARD.get(i) {
-                        app.handle_key(*key);
-                    }
+                    walk_past(&mut app, *step);
                 }
             });
         }
@@ -630,10 +643,10 @@ mod tests {
     #[test]
     fn the_look_preview_draws_the_chosen_glyph_and_colour() {
         let mut app = wizard_app();
-        // Difficulty, then the first class, then past the Kit step with an
-        // untouched basket.
-        for key in [GameKey::Char('f'), GameKey::Char('1'), GameKey::Enter] {
-            app.handle_key(key);
+        // Difficulty, then the first class, then the Kit step's whole
+        // allowance spent, which is what that step now costs to leave.
+        for step in CreationStep::ALL.iter().take(3) {
+            walk_past(&mut app, *step);
         }
         assert_eq!(app.creation_step(), CreationStep::Icon);
         // The third icon (`*`) and then the fourth swatch — both by
@@ -692,8 +705,8 @@ mod tests {
     #[test]
     fn the_icon_step_previews_the_highlighted_glyph() {
         let mut app = wizard_app();
-        for key in [GameKey::Char('f'), GameKey::Char('1'), GameKey::Enter] {
-            app.handle_key(key);
+        for step in CreationStep::ALL.iter().take(3) {
+            walk_past(&mut app, *step);
         }
         assert_eq!(app.creation_step(), CreationStep::Icon);
         // The fourth icon, `!` — chosen away from row 0 so a preview
@@ -740,8 +753,8 @@ mod tests {
     #[test]
     fn the_points_step_footer_says_what_is_spent_and_what_is_left() {
         let mut app = wizard_app();
-        for key in FORWARD.iter().take(5) {
-            app.handle_key(*key);
+        for step in CreationStep::ALL.iter().take(5) {
+            walk_past(&mut app, *step);
         }
         assert_eq!(app.creation_step(), CreationStep::Points);
 
@@ -791,16 +804,55 @@ mod tests {
         );
     }
 
+    /// **The Summary reads the icon back in the swatch it will be worn
+    /// in**, not in the row colour every other Summary line uses. The
+    /// preview cell in the corner already showed the pair together; the
+    /// line that names the icon did not, so the one screen that reads the
+    /// character back described the look in two different colours.
+    ///
+    /// Asserted through `painted_runs_in`, which filters on the exact UI
+    /// colour — the row is drawn in `PLAYER_CHOICES[3]`, a swatch chosen
+    /// away from the `PLAYER` fallback so a line that ignored the choice
+    /// would not match.
+    #[test]
+    fn the_summary_reads_the_icon_back_in_its_chosen_colour() {
+        let mut app = wizard_app();
+        for step in CreationStep::ALL.iter().take(3) {
+            walk_past(&mut app, *step);
+        }
+        assert_eq!(app.creation_step(), CreationStep::Icon);
+        walk_past(&mut app, CreationStep::Icon);
+
+        // The fourth swatch, by keyboard through the real key table.
+        while app.menu_selected != 3 {
+            app.handle_key(GameKey::Down);
+        }
+        app.handle_key(GameKey::Enter);
+        assert_eq!(app.creation_choice().colour, Some(3));
+        walk_past(&mut app, CreationStep::Points);
+        walk_past(&mut app, CreationStep::Routine);
+        assert_eq!(app.creation_step(), CreationStep::Summary);
+
+        let m = ui_metrics(900.0);
+        let (_, shapes) = crate::paint::with_painter(|p| draw_create_character(&app, None, p, &m));
+        let want = hud::palette::PLAYER_CHOICES[3];
+        let tinted = crate::paint::painted_runs_in(&shapes, want, false);
+        assert!(
+            tinted.iter().any(|t| t.contains("Icon")),
+            "no Summary row was drawn in the chosen swatch: {tinted:?}"
+        );
+    }
+
     /// A sprite substitutes for the preview's glyph exactly as it does on
     /// the map — this is the loaded-texture half of the fallback the test
     /// above exercises the empty half of.
     #[test]
     fn the_look_preview_prefers_a_loaded_sprite_over_the_glyph() {
         let mut app = wizard_app();
-        // Difficulty, then the first class, then past the Kit step with an
-        // untouched basket.
-        for key in [GameKey::Char('f'), GameKey::Char('1'), GameKey::Enter] {
-            app.handle_key(key);
+        // Difficulty, then the first class, then the Kit step's whole
+        // allowance spent, which is what that step now costs to leave.
+        for step in CreationStep::ALL.iter().take(3) {
+            walk_past(&mut app, *step);
         }
         assert_eq!(app.creation_step(), CreationStep::Icon);
         // The first icon, '@' / "player" — the pick advances to the Colour

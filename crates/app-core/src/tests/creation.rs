@@ -73,6 +73,40 @@ fn skip_the_look(app: &mut App) {
     press(app, ch('n'));
 }
 
+/// Spends the Kit step's whole allowance — which is now what leaving that
+/// step costs. One `ShiftRight` pass over every row leaves each at its own
+/// ceiling given the others, so nothing is affordable afterwards, which is
+/// exactly the question `leave_refusal` asks.
+fn spend_the_kit(app: &mut App) {
+    for i in 0..app.creation_rows().len() {
+        app.menu_selected = i;
+        press(app, GameKey::ShiftRight);
+    }
+    app.menu_selected = 0;
+}
+
+/// `spend_the_kit` for the Points step's four axes.
+fn spend_the_points(app: &mut App) {
+    for i in 0..MainStat::all().len() {
+        app.menu_selected = i;
+        press(app, GameKey::ShiftRight);
+    }
+    app.menu_selected = 0;
+}
+
+/// Walks from the Kit step to the Summary, answering each step the
+/// cheapest legal way: the allowance spent, the look skipped, the pool
+/// spent, no starter routine. Named for the reason `skip_the_look` is —
+/// six tests only want to *arrive* somewhere later.
+fn walk_to_the_summary(app: &mut App) {
+    spend_the_kit(app);
+    press(app, GameKey::Enter);
+    skip_the_look(app);
+    spend_the_points(app);
+    press(app, GameKey::Enter);
+    press(app, ch('n'));
+}
+
 /// Opens the wizard and picks Forgiving, leaving it on the Class step.
 fn opened(name: &str) -> App {
     let mut app = wizard_app(name);
@@ -142,11 +176,19 @@ fn the_wizard_walks_forward_and_back() {
     press(&mut app, ch('1'));
     assert_eq!(app.creation_step(), CreationStep::Kit);
     press(&mut app, GameKey::Enter);
+    assert_eq!(
+        app.creation_step(),
+        CreationStep::Kit,
+        "a spendable allowance holds the step"
+    );
+    spend_the_kit(&mut app);
+    press(&mut app, GameKey::Enter);
     assert_eq!(app.creation_step(), CreationStep::Icon);
     press(&mut app, ch('n'));
     assert_eq!(app.creation_step(), CreationStep::Colour);
     press(&mut app, ch('n'));
     assert_eq!(app.creation_step(), CreationStep::Points);
+    spend_the_points(&mut app);
     press(&mut app, GameKey::Enter);
     assert_eq!(app.creation_step(), CreationStep::Routine);
     press(&mut app, ch('n'));
@@ -194,7 +236,8 @@ fn the_name_step_commits_the_choice() {
     let classes = app.creation_catalogue.class_rows();
     let wanted_class = classes[1].class;
     press(&mut app, ch('2')); // the second class
-    press(&mut app, GameKey::Enter); // past the Kit step, basket untouched
+    spend_the_kit(&mut app); // the step will not be left with Credits in hand
+    press(&mut app, GameKey::Enter);
 
     // Icon and colour are two steps now, and a pick advances off each.
     press(&mut app, ch(menu_shortcut(1))); // the second icon
@@ -212,8 +255,8 @@ fn the_name_step_commits_the_choice() {
         .position(|s| *s == MainStat::Integrity)
         .unwrap();
     app.menu_selected = integrity;
-    press(&mut app, GameKey::Right);
-    press(&mut app, GameKey::Right);
+    press(&mut app, GameKey::ShiftRight);
+    let bought = app.creation_choice().stats[integrity];
     press(&mut app, GameKey::Enter);
 
     let routines = app.creation_catalogue.starter_rows(Some(wanted_class));
@@ -248,7 +291,7 @@ fn the_name_step_commits_the_choice() {
     assert_eq!(data.player.colour, Some(2));
     assert_eq!(
         data.player.max_hp,
-        PLAYER_BASE_STATS.max_hp + 2 * CREATION_GAIN_INTEGRITY as i32
+        PLAYER_BASE_STATS.max_hp + (bought * CREATION_GAIN_INTEGRITY) as i32
     );
     assert_eq!(
         data.player.hp, data.player.max_hp,
@@ -262,125 +305,6 @@ fn the_name_step_commits_the_choice() {
     assert_eq!(data.difficulty, DifficultyMode::Forgiving);
 }
 
-/// `[R]` rolls the rest and jumps to the summary, and **spends exactly the
-/// pool** — that is what makes it a reroll for shape rather than one for
-/// size, and what stops it beating point-buy.
-#[test]
-fn roll_everything_spends_exactly_the_pool() {
-    let mut app = opened("roll");
-    press(&mut app, ch('R'));
-    assert_eq!(app.creation_step(), CreationStep::Summary);
-    assert_eq!(
-        app.creation_points_left(),
-        0,
-        "a roll left points on the table: {:?}",
-        app.creation_choice().stats
-    );
-    assert!(
-        app.creation_choice().class.is_some(),
-        "the roll picked a class"
-    );
-    assert!(
-        app.creation_choice().routine.is_some(),
-        "the roll picked a starter routine"
-    );
-    assert!(
-        app.creation_choice().colour.is_some(),
-        "the roll picked a colour"
-    );
-}
-
-/// `[R]` on the Summary must not destroy the character the player just
-/// walked seven steps to build. Every choice is made here, so there is
-/// nothing left to roll and the key refuses instead — the alternative,
-/// which shipped, replaced class, look, spread and routine with fresh
-/// random values on one undocumented keystroke with no undo.
-#[test]
-fn the_roll_leaves_a_finished_character_alone() {
-    let mut app = opened("roll_finished");
-    press(&mut app, ch('2')); // a class
-    // A kit taken by hand: an untouched basket is not a decision, so `[R]`
-    // filling one is the roll doing its job rather than overwriting a
-    // choice — which is the distinction this test exists to hold.
-    press(&mut app, GameKey::Right);
-    press(&mut app, GameKey::Enter);
-    press(&mut app, ch(menu_shortcut(1))); // the second icon
-    press(&mut app, ch(menu_shortcut(2))); // the third swatch
-    // The Points step now opens on a rolled spread that already spends the
-    // whole pool, so every axis sits at its own ceiling the instant the
-    // step is entered — Right/ShiftRight on any of them refuses. Only a
-    // leftward move has room, and since the roll spent the pool somewhere,
-    // some axis is guaranteed to hold at least one unit to take from.
-    let axis = app
-        .creation_choice()
-        .stats
-        .iter()
-        .position(|&units| units > 0)
-        .expect("a roll that spends the pool must spend it on some axis");
-    app.menu_selected = axis;
-    press(&mut app, GameKey::Left); // a point taken off the highlighted axis
-    press(&mut app, GameKey::Enter);
-    press(&mut app, ch('1')); // a starter routine
-    assert_eq!(app.creation_step(), CreationStep::Summary);
-
-    let before = app.creation_choice().clone();
-    press(&mut app, ch('R'));
-
-    assert_eq!(
-        *app.creation_choice(),
-        before,
-        "the roll overwrote choices the player had already made"
-    );
-    assert!(app.status_line.is_some(), "the refusal said why");
-}
-
-/// The half of the same rule that still has to work: what the player has
-/// not settled is exactly what `[R]` fills in. A class picked by hand
-/// survives; the look, the spread and the routine are rolled around it.
-#[test]
-fn the_roll_fills_only_what_is_undecided() {
-    let mut app = opened("roll_partial");
-    let classes = app.creation_catalogue.class_rows();
-    let wanted = classes[1].class;
-    press(&mut app, ch('2'));
-    assert_eq!(app.creation_choice().class, Some(wanted));
-
-    press(&mut app, ch('R'));
-
-    assert_eq!(app.creation_step(), CreationStep::Summary);
-    assert_eq!(
-        app.creation_choice().class,
-        Some(wanted),
-        "the roll replaced a class the player had already picked"
-    );
-    assert_eq!(app.creation_points_left(), 0, "the spread was still rolled");
-    assert!(
-        app.creation_choice().routine.is_some(),
-        "the routine was still rolled"
-    );
-    assert!(
-        app.creation_choice().colour.is_some(),
-        "the colour was still rolled"
-    );
-}
-
-/// Difficulty is the one thing `[R]` will not roll — a commitment, not a
-/// shape — so pressing it on the first step is refused rather than
-/// silently handing someone permadeath.
-#[test]
-fn the_roll_never_picks_the_difficulty() {
-    let mut app = wizard_app("roll_difficulty");
-    press(&mut app, ch('n'));
-    press(&mut app, ch('R'));
-    assert_eq!(
-        app.creation_step(),
-        CreationStep::Difficulty,
-        "the roll skipped past the difficulty"
-    );
-    assert!(app.creation_difficulty().is_none());
-    assert!(app.status_line.is_some(), "the refusal said why");
-}
-
 /// Right on a row with nothing left is refused, through `App::refuse` —
 /// the one door, which is what puts the same sentence on the banner and in
 /// the log the player scrolls back through.
@@ -388,7 +312,8 @@ fn the_roll_never_picks_the_difficulty() {
 fn points_cannot_be_overspent() {
     let mut app = opened("overspend");
     press(&mut app, ch('1'));
-    press(&mut app, GameKey::Enter); // past the Kit step, basket untouched
+    spend_the_kit(&mut app); // the step will not be left with Credits in hand
+    press(&mut app, GameKey::Enter);
     skip_the_look(&mut app);
     assert_eq!(app.creation_step(), CreationStep::Points);
 
@@ -429,7 +354,8 @@ fn points_cannot_be_overspent() {
 fn the_points_step_sees_a_modifier() {
     let mut app = opened("modifier");
     press(&mut app, ch('1'));
-    press(&mut app, GameKey::Enter); // past the Kit step, basket untouched
+    spend_the_kit(&mut app); // the step will not be left with Credits in hand
+    press(&mut app, GameKey::Enter);
     skip_the_look(&mut app);
     assert_eq!(app.creation_step(), CreationStep::Points);
     let axis = |want: MainStat| MainStat::all().iter().position(|s| *s == want).unwrap();
@@ -487,8 +413,8 @@ fn the_points_step_sees_a_modifier() {
 #[test]
 fn the_save_list_shows_the_players_name() {
     let mut app = opened("save_name");
-    // `[R]` lands on the summary; accepting it is what asks for the name.
-    press(&mut app, ch('R'));
+    press(&mut app, ch('1')); // a class
+    walk_to_the_summary(&mut app);
     assert_eq!(app.creation_step(), CreationStep::Summary);
     press(&mut app, GameKey::Enter);
     assert_eq!(app.creation_step(), CreationStep::Name);
@@ -518,7 +444,8 @@ fn difficulty_is_chosen_in_the_wizard() {
     );
     press(&mut app, ch('p'));
     assert_eq!(app.creation_difficulty(), Some(DifficultyMode::Permadeath));
-    press(&mut app, ch('R'));
+    press(&mut app, ch('1')); // a class
+    walk_to_the_summary(&mut app);
     press(&mut app, GameKey::Enter); // the summary, accepted
     press(&mut app, GameKey::Enter); // the name, left blank
     settle(&mut app);
@@ -545,9 +472,10 @@ fn the_class_step_cannot_be_left_without_a_class() {
     assert_eq!(app.creation_step(), CreationStep::Class);
     // No key advances this step without picking a class. `[n]` is what
     // skips the Icon, Colour and Routine steps, and it is inert here on
-    // purpose —
-    // that omission *is* the "no Unaligned option" rule.
-    for key in [ch('n'), GameKey::Left, GameKey::Right, GameKey::Backspace] {
+    // purpose — that omission *is* the "no Unaligned option" rule. Right
+    // is the page-forward key and is refused for the same reason, out
+    // loud; Left is page-*back* and is tested below, since it is allowed.
+    for key in [ch('n'), GameKey::Right, GameKey::Backspace] {
         press(&mut app, key);
         assert_eq!(
             app.creation_step(),
@@ -556,6 +484,17 @@ fn the_class_step_cannot_be_left_without_a_class() {
         );
         assert_eq!(app.creation_choice().class, None);
     }
+
+    assert!(
+        app.status_line.is_some(),
+        "a refused page-forward must say why"
+    );
+
+    // Left is the way back, and going back is always allowed.
+    press(&mut app, GameKey::Left);
+    assert_eq!(app.creation_step(), CreationStep::Difficulty);
+    press(&mut app, ch('f'));
+    assert_eq!(app.creation_step(), CreationStep::Class);
 
     // Enter takes the highlighted row, which is a pick like any other —
     // there is no row on this screen that means "none".
@@ -569,7 +508,8 @@ fn the_class_step_cannot_be_left_without_a_class() {
 #[test]
 fn reopening_the_wizard_starts_clean() {
     let mut app = opened("reset");
-    press(&mut app, ch('R'));
+    press(&mut app, ch('1'));
+    spend_the_kit(&mut app);
     assert_ne!(app.creation_choice(), &CharacterChoice::default());
 
     press(&mut app, GameKey::Esc);
@@ -744,7 +684,8 @@ fn the_routine_rows_are_priced_through_the_chosen_class() {
 fn the_points_step_opens_on_a_full_spread() {
     let mut app = opened("full_spread");
     press(&mut app, ch('1')); // a class
-    press(&mut app, GameKey::Enter); // past the Kit step, basket untouched
+    spend_the_kit(&mut app); // the step will not be left with Credits in hand
+    press(&mut app, GameKey::Enter);
     skip_the_look(&mut app); // -> Points, no icon or swatch picked
     assert_eq!(app.creation_step(), CreationStep::Points);
     assert_eq!(
@@ -762,7 +703,8 @@ fn the_points_step_opens_on_a_full_spread() {
 fn a_rolled_spread_can_be_redistributed() {
     let mut app = opened("redistribute");
     press(&mut app, ch('1'));
-    press(&mut app, GameKey::Enter); // past the Kit step, basket untouched
+    spend_the_kit(&mut app); // the step will not be left with Credits in hand
+    press(&mut app, GameKey::Enter);
     skip_the_look(&mut app);
     assert_eq!(app.creation_step(), CreationStep::Points);
     assert_eq!(app.creation_choice().cost(), Some(CREATION_STAT_POINTS));
@@ -805,7 +747,8 @@ fn a_rolled_spread_can_be_redistributed() {
 fn reentering_points_keeps_a_hand_made_spread() {
     let mut app = opened("reenter_points");
     press(&mut app, ch('1'));
-    press(&mut app, GameKey::Enter); // past the Kit step, basket untouched
+    spend_the_kit(&mut app); // the step will not be left with Credits in hand
+    press(&mut app, GameKey::Enter);
     skip_the_look(&mut app);
     assert_eq!(app.creation_step(), CreationStep::Points);
 
@@ -848,24 +791,27 @@ fn reentering_points_keeps_a_hand_made_spread() {
 fn the_seed_does_not_mark_the_points_step_decided() {
     let mut app = opened("seed_not_decided");
     press(&mut app, ch('1'));
-    press(&mut app, GameKey::Enter); // past the Kit step, basket untouched
+    spend_the_kit(&mut app); // the step will not be left with Credits in hand
+    press(&mut app, GameKey::Enter);
     skip_the_look(&mut app);
     assert_eq!(app.creation_step(), CreationStep::Points);
     assert!(
         !app.creation_decided.stats_decided(),
         "the rolled spread must not read as a hand-made decision"
     );
-
-    press(&mut app, ch('R'));
-    assert_eq!(
-        app.creation_step(),
-        CreationStep::Summary,
-        "R must still be live for the points once the step's own seed has run"
-    );
     assert_eq!(
         app.creation_choice().cost(),
         Some(CREATION_STAT_POINTS),
-        "the reroll still spends exactly the pool"
+        "the seed spends exactly the pool"
+    );
+
+    // One deliberate move is what marks it, and from then on re-entering
+    // the step must not reseed — `reentering_points_keeps_a_hand_made_
+    // spread` is the other half of that.
+    press(&mut app, GameKey::Left);
+    assert!(
+        app.creation_decided.stats_decided(),
+        "a spend by hand is the decision this flag records"
     );
 }
 
@@ -1001,8 +947,12 @@ fn walking_away_from_the_kit_step_keeps_the_basket() {
 #[test]
 fn the_roll_fills_the_basket_within_the_allowance() {
     let mut app = on_the_kit_step("kit_roll");
-    press(&mut app, ch('R'));
-    assert_eq!(app.creation_step(), CreationStep::Summary);
+    press(&mut app, ch('r'));
+    assert_eq!(
+        app.creation_step(),
+        CreationStep::Kit,
+        "the reroll stays on the screen whose basket it rolled"
+    );
 
     let shelf = app.creation_catalogue.shelf_rows();
     let cheapest = shelf.iter().map(|r| r.price).min().unwrap();
@@ -1029,15 +979,138 @@ fn the_roll_fills_the_basket_within_the_allowance() {
     );
 }
 
-/// A hand-built basket is not rerolled — `Decided::kit`, the rule every
-/// other step already follows.
+/// **An allowance you can still spend is not a decision you have made.**
+/// Both budget steps refuse to be left while anything on them is
+/// affordable, and both say why — walking past the Points screen with the
+/// pool untouched was the whole reason the figure went on the footer, and
+/// a figure is only advice.
+///
+/// Asserted on **both** steps, because the two refusals are written at
+/// different call sites and one of them holding is not evidence about the
+/// other.
 #[test]
-fn the_roll_leaves_a_hand_made_basket_alone() {
-    let mut app = on_the_kit_step("kit_roll_decided");
+fn an_unspent_allowance_holds_its_step() {
+    let mut app = opened("unspent");
+    press(&mut app, ch('1'));
+    assert_eq!(app.creation_step(), CreationStep::Kit);
+
+    press(&mut app, GameKey::Enter);
+    assert_eq!(app.creation_step(), CreationStep::Kit, "Enter was let past");
+    let why = app.status_line.clone().expect("the refusal said nothing");
+    assert!(
+        why.contains("Credits"),
+        "the refusal must name what is unspent: {why:?}"
+    );
+
+    spend_the_kit(&mut app);
+    press(&mut app, GameKey::Enter);
+    skip_the_look(&mut app);
+    assert_eq!(app.creation_step(), CreationStep::Points);
+
+    // The Points step opens on a spread that already spends the pool, so
+    // taking a point back is what makes it leavable-in-error.
+    press(&mut app, GameKey::Left);
+    assert!(app.creation_points_left() > 0, "nothing was freed");
+    press(&mut app, GameKey::Enter);
+    assert_eq!(
+        app.creation_step(),
+        CreationStep::Points,
+        "the pool was left part-spent"
+    );
+    let why = app.status_line.clone().expect("the refusal said nothing");
+    assert!(
+        why.contains("points"),
+        "the refusal must name what is unspent: {why:?}"
+    );
+
+    spend_the_points(&mut app);
+    press(&mut app, GameKey::Enter);
+    assert_eq!(app.creation_step(), CreationStep::Routine);
+}
+
+/// **Left and Right page the wizard**, on every step that does not spend —
+/// the two that do already mean "take one" and "put one back" by them,
+/// `Mode::Transfer`'s rule, and are the two steps a player cannot leave
+/// early anyway.
+///
+/// Right is not a *pick*: it moves on leaving the step's choice as it
+/// stands, which is what `[n]` already did on three of them.
+#[test]
+fn left_and_right_page_the_wizard() {
+    let mut app = opened("paging");
+    press(&mut app, ch('1'));
+    spend_the_kit(&mut app);
+    press(&mut app, GameKey::Enter);
+    assert_eq!(app.creation_step(), CreationStep::Icon);
+
     press(&mut app, GameKey::Right);
-    let before = app.creation_choice().items.clone();
+    assert_eq!(app.creation_step(), CreationStep::Colour);
+    assert_eq!(
+        app.creation_choice().glyph,
+        CharacterChoice::default().glyph,
+        "paging past a step must not decide it"
+    );
+    press(&mut app, GameKey::Left);
+    assert_eq!(app.creation_step(), CreationStep::Icon);
+
+    // Back across the two spending steps, where the arrows are taking and
+    // putting back rather than paging — Esc is what crosses those, and it
+    // always was.
+    press(&mut app, GameKey::Left);
+    assert_eq!(app.creation_step(), CreationStep::Kit);
+    press(&mut app, GameKey::Left);
+    assert_eq!(
+        app.creation_step(),
+        CreationStep::Kit,
+        "Left is a basket key here, not a page key"
+    );
+    press(&mut app, GameKey::Esc);
+    press(&mut app, GameKey::Left);
+    assert_eq!(app.creation_step(), CreationStep::Difficulty);
+
+    // Left on the first step is not a way out of the wizard — Esc is, and
+    // an arrow key that dropped the player back to the main menu mid-walk
+    // would be a lost character.
+    press(&mut app, GameKey::Left);
+    assert_eq!(app.mode, Mode::CreateCharacter, "Left left the wizard");
+    assert_eq!(app.creation_step(), CreationStep::Difficulty);
+}
+
+/// **`[r]` replaces a hand-made basket, and that is the inversion of the
+/// rule it used to follow.** While the key rolled the whole character it
+/// had to leave alone anything the player had settled, or one keystroke
+/// destroyed eight steps of work with no undo. Narrowed to the one screen
+/// whose basket it rolls, asking for a reroll *is* the decision — and
+/// pressing it again costs nothing.
+///
+/// The old key is asserted dead in the same test: a wizard that quietly
+/// kept `[R]` working would pass every other test here.
+#[test]
+fn the_kit_reroll_replaces_a_hand_made_basket() {
+    let mut app = on_the_kit_step("kit_roll_decided");
+    press(&mut app, GameKey::ShiftRight);
+    let by_hand = app.creation_choice().items.clone();
+    assert!(!by_hand.is_empty(), "the hand-made basket took nothing");
+
     press(&mut app, ch('R'));
-    assert_eq!(app.creation_choice().items, before);
+    assert_eq!(
+        app.creation_choice().items,
+        by_hand,
+        "[R] is not a key any more — only [r] rerolls"
+    );
+
+    // A roll that happens to reproduce the hand-made basket would make
+    // this vacuous, so the property asserted is that the basket is a
+    // *rolled* one: spent down to where nothing is affordable, which
+    // ShiftRight on one row is not.
+    press(&mut app, ch('r'));
+    let shelf = app.creation_catalogue.shelf_rows();
+    let cheapest = shelf.iter().map(|r| r.price).min().unwrap();
+    assert!(
+        app.creation_credits_left() < cheapest,
+        "the reroll left {} Credits with a {cheapest}-Credit row affordable",
+        app.creation_credits_left()
+    );
 }
 
 /// The whole path, by keypress: a basket taken on the Kit step reaches the
@@ -1048,7 +1121,7 @@ fn a_picked_kit_reaches_the_started_run() {
     let row = app.creation_catalogue.shelf_rows()[0].clone();
     press(&mut app, GameKey::Right);
     press(&mut app, GameKey::Right);
-    press(&mut app, ch('R')); // rolls the rest, jumps to the Summary
+    walk_to_the_summary(&mut app); // spends the rest of the allowance
     press(&mut app, GameKey::Enter); // accepted -> the Name step
     press(&mut app, GameKey::Enter); // no name, which starts the run
 

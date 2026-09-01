@@ -44,19 +44,24 @@ pub const PLAYER_BASE_STATS: Stats = Stats {
 /// modelled floor stays valid no matter how the pool is spent.
 ///
 /// **The pool size is the all-Atk offense ceiling**, because Atk is priced
-/// 1-for-1 and always will be (`CREATION_COST_ATK`'s reason). That is the
-/// only thing bounding this number: 9 lets the widest offensive build open
-/// on 15 atk against the baseline 6, or +54 `max_hp` on a 90 HP base.
+/// 1-for-1 and always will be (`CREATION_COST_ATK`'s reason). At 20 the
+/// widest offensive build opens on 26 atk against the baseline 6, and the
+/// widest defensive one on 210 `max_hp` against 90.
 ///
-/// **9, up from 5.** Five was set against a rejected 10 (16 atk, 2.7x the
-/// level-1 offense `balance_sim` treats as its floor) and read as harsh on
-/// the screen: five points across four axes is one decision and a
-/// remainder, and the one axis then priced at three could not be taken at
-/// all without giving up most of the pool. 9 leaves room to spread and
-/// still sits under that rejected ceiling, at 2.5x. See
-/// `MAX_CREATION_STAT_POINTS` for the bound this is checked against — that
-/// constant is the bound, not the value, and stays where it is.
-pub const CREATION_STAT_POINTS: u32 = 9;
+/// **20, and this is a design decision that overrides a balance argument.**
+/// The number was 5, set against a rejected 10 on the grounds that 16 atk
+/// was 2.7x the level-1 offense `balance_sim` treats as its floor. 20 is
+/// 4.3x that floor, so the opening zone is meant to be soft for a player
+/// who spends the whole pool on one axis — the screen is a build-defining
+/// choice rather than a garnish, and `Game::level_cap` and the zone curve
+/// are what the run is paced by. `balance_sim` models the *unspent*
+/// baseline, so none of its curves move with this; what it cannot see is
+/// exactly what this constant now buys.
+///
+/// It sits **exactly on** `MAX_CREATION_STAT_POINTS`, so raising it
+/// further is a deliberate re-argument of that bound rather than a nudge —
+/// the `const` assertion below fails otherwise.
+pub const CREATION_STAT_POINTS: u32 = 20;
 
 /// Pool points one point of Integrity costs. See `CREATION_GAIN_INTEGRITY`
 /// for what a point buys.
@@ -94,8 +99,9 @@ pub const CREATION_GAIN_INTEGRITY: u32 = 6;
 
 /// Ceiling on `CREATION_STAT_POINTS`, asserted rather than trusted —
 /// `MAX_PROFILE_STAT_POINTS`'s reason: a permanent buff with no ceiling is a
-/// shape this design has already closed off twice. Left with headroom over
-/// the shipped pool so retuning the pool up doesn't also have to move this.
+/// shape this design has already closed off twice. The shipped pool now
+/// sits exactly on it, so there is no headroom left and the next raise has
+/// to move this constant on purpose — which is the point of it.
 pub const MAX_CREATION_STAT_POINTS: u32 = 20;
 
 const _: () = assert!(CREATION_STAT_POINTS <= MAX_CREATION_STAT_POINTS);

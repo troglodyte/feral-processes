@@ -15,18 +15,24 @@
 //! a `tuning.rs` edit, and every reader that treats the array as a point
 //! tally would silently start handing that axis out free.
 //!
-//! **The roll spends exactly the pool**, so it can never beat point-buy and
-//! there is no reason to reroll for size. `[R]` rerolls for *shape* — and
-//! only the shape of what the player has not settled by hand. [`Decided`]
-//! is the record of that, written at the six sites that take a row;
-//! pressing `[R]` again rerolls what `[R]` itself chose and nothing else,
-//! so the key can never destroy a character the player walked the wizard
-//! to build.
+//! **`[r]` rerolls the kit, and only the kit.** It used to roll every
+//! choice the player had not made by hand and jump to the summary, which
+//! is a way to skip the wizard rather than a way to use a screen of it —
+//! and it cost a [`Decided`] flag per step to keep it from destroying a
+//! character someone had walked eight steps to build. On the one screen
+//! whose choice is a *basket*, the player can see what changes and press
+//! it again for free, so none of that applies.
 //!
-//! **Difficulty is never rolled.** It is the one choice on the board that
-//! is a commitment rather than a shape, and a roll that could hand a player
-//! permadeath they never picked is not a convenience. `[R]` on the first
-//! step is refused instead.
+//! **No step can be left with its allowance unspent.** The two screens
+//! that hand out a budget — Kit and Points — refuse to advance while
+//! anything on them is still affordable, which is the same halt condition
+//! [`roll_kit_basket`] reaches for, read as a question. Nothing is
+//! stranded by it: an axis or a row priced above the remainder is not
+//! affordable, so the screen lets go.
+//!
+//! **Difficulty is never rolled, and neither is anything else now.** The
+//! wizard is walked; the only key that draws a random anything is `[r]` on
+//! the Kit step.
 //!
 //! **The Points step opens on a roll, not a blank form** —
 //! `enter_creation_step` seeds it the moment the cursor lands there, once,
@@ -37,9 +43,7 @@
 //! stomp the player's own spread.
 
 use crate::*;
-use feral_processes_engine::abilities::AbilityId;
 use feral_processes_engine::items::ItemId;
-use feral_processes_engine::species::AffinityClass;
 use feral_processes_engine::tuning::{
     CREATION_COST_ATK, CREATION_COST_DECOMPILER, CREATION_COST_DEF, CREATION_COST_INTEGRITY,
     CREATION_CREDITS, CREATION_GAIN_INTEGRITY, CREATION_STAT_POINTS, PLAYER_BASE_STATS,
@@ -90,22 +94,10 @@ pub const CREATION_COLOURS: u8 = 6;
 /// open to the roll.
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Decided {
-    class: bool,
-    kit: bool,
-    icon: bool,
-    colour: bool,
     stats: bool,
-    routine: bool,
 }
 
 impl Decided {
-    /// Whether every choice `[R]` is allowed to touch has been made — the
-    /// case where a roll would have nothing to do and would, before this
-    /// was tracked, silently replace a finished character instead.
-    fn all(&self) -> bool {
-        self.class && self.kit && self.icon && self.colour && self.stats && self.routine
-    }
-
     /// Test-only window onto `stats`, because two random draws are not
     /// guaranteed to differ and so cannot black-box-prove the entry seed
     /// left this flag alone — the field is private to this module, so a
@@ -373,8 +365,12 @@ impl App {
                     .map(|row| format!("{} ({})", row.name, row.axes))
                     .unwrap_or_else(|| "—".to_string()),
             ),
-            line("Icon", choice.glyph.to_string()),
         ];
+        rows.push(CreationRow::Look {
+            label: "Icon".to_string(),
+            glyph: choice.glyph,
+            colour: choice.colour,
+        });
         for (stat, units) in MainStat::all().iter().zip(choice.stats.iter()) {
             rows.push(line(stat.label(), format!("{}", stat_value(*stat, *units))));
         }
@@ -433,9 +429,25 @@ impl App {
             }
             return;
         }
-        if key == GameKey::Char('R') && self.creation_step != CreationStep::Name {
-            self.roll_the_rest();
-            return;
+        // Left and Right page the wizard — but only on the steps that do
+        // not spend, where the two keys already mean "take one" and "put
+        // one back" (`Mode::Transfer`'s rule, which those two screens
+        // share). Those two are the steps a player cannot leave early
+        // anyway, so what pages them is Enter and Esc.
+        if !matches!(self.creation_step, CreationStep::Kit | CreationStep::Points) {
+            match key {
+                GameKey::Left => {
+                    if let Some(prev) = self.creation_step.prev() {
+                        self.enter_creation_step(prev);
+                    }
+                    return;
+                }
+                GameKey::Right => {
+                    self.try_advance_creation();
+                    return;
+                }
+                _ => {}
+            }
         }
         match self.creation_step {
             CreationStep::Difficulty => self.handle_creation_difficulty_key(key),
@@ -447,6 +459,52 @@ impl App {
             CreationStep::Routine => self.handle_creation_routine_key(key),
             CreationStep::Name => self.handle_creation_name_key(key),
             CreationStep::Summary => self.handle_creation_summary_key(key),
+        }
+    }
+
+    /// Advances only if the step will let go of the player, and says why
+    /// if it will not. The one door for `Right` and for the two spending
+    /// steps' Enter — a step that refuses on one key and not the other is
+    /// a screen the player can leave by accident.
+    fn try_advance_creation(&mut self) {
+        match self.leave_refusal() {
+            Some(why) => self.refuse(why),
+            None => self.advance_creation(),
+        }
+    }
+
+    /// Why the current step will not be left as it stands, or `None`.
+    ///
+    /// **An allowance you can still spend is not a decision you have
+    /// made.** The two spending steps hand out a budget and the player
+    /// walking past it with points in hand is the mistake this closes; the
+    /// test is "nothing on this screen is still affordable" rather than
+    /// "the budget is empty", so an axis or a shelf row priced above the
+    /// remainder cannot strand the wizard on a screen it will not let go
+    /// of. That is `roll_kit_basket`'s halt condition, read as a question.
+    fn leave_refusal(&self) -> Option<String> {
+        match self.creation_step {
+            CreationStep::Difficulty => self
+                .creation_difficulty
+                .is_none()
+                .then(|| "Choose a difficulty first.".to_string()),
+            CreationStep::Class => (self.creation_choice.class.is_none()
+                && !self.creation_catalogue.class_rows().is_empty())
+            .then(|| "Choose a class first.".to_string()),
+            CreationStep::Points => {
+                let left = self.creation_points_left();
+                (MainStat::all().iter().any(|s| stat_cost(*s) <= left))
+                    .then(|| format!("{left} points still to spend."))
+            }
+            CreationStep::Kit => {
+                let left = self.creation_credits_left();
+                self.creation_catalogue
+                    .shelf_rows()
+                    .iter()
+                    .any(|row| row.price <= left)
+                    .then(|| format!("{left} Credits still to spend."))
+            }
+            _ => None,
         }
     }
 
@@ -518,7 +576,6 @@ impl App {
             return;
         };
         self.creation_choice.class = Some(rows[idx].class);
-        self.creation_decided.class = true;
         self.advance_creation();
     }
 
@@ -574,25 +631,35 @@ impl App {
 
     /// The Points step's key table, in Credits: the cursor moves on
     /// Up/Down, Left/Right adjusts the highlighted row, `ShiftLeft`/
-    /// `ShiftRight` targets an end of it and `CtrlLeft`/`CtrlRight` halves
-    /// the gap. Enter takes the basket as it stands, whether or not the
-    /// allowance is spent — an empty one keeps the class kit, see
-    /// `CharacterChoice::items`.
+    /// `ShiftRight` targets an end of it, `CtrlLeft`/`CtrlRight` halves the
+    /// gap and `[r]` rerolls the whole basket. Enter takes it as it stands
+    /// — but only once nothing on the shelf is still affordable, which is
+    /// `leave_refusal`'s rule.
+    ///
+    /// **That gate costs the class-kit fallback.** An empty basket still
+    /// means "keep the kit my class authored" everywhere downstream (see
+    /// `CharacterChoice::items`, and `a_picked_kit_reaches_the_started_run`
+    /// for the other branch), and the engine has no idea the wizard exists
+    /// — but the player can no longer *reach* it, because the shelf's
+    /// cheapest row is affordable at a full allowance. The fallback is kept
+    /// rather than deleted: it is what a `CharacterChoice` built anywhere
+    /// but this screen still gets, and re-opening the gate is a one-line
+    /// change here rather than a feature to rebuild.
     ///
     /// **Enter is the only way forward, and there is deliberately no `[n]`
     /// here.** On the Icon, Colour and Routine steps `[n]` means "I am not
-    /// picking on this screen", which those steps have no other way to say. This
-    /// one does: an empty basket already *is* that answer. An `[n]` would
-    /// therefore have had to mean "empty the basket and move on", which is
-    /// a destructive key wearing a skip key's name — one press away from a
-    /// basket the player spent a screen building.
+    /// picking on this screen", which those steps have no other way to say.
+    /// This one has nothing to say it about any more — the allowance must
+    /// be spent — and an `[n]` would have had to mean "empty the basket and
+    /// move on", a destructive key wearing a skip key's name.
     ///
     /// A digit is never a row pick here, `Mode::Transfer`'s rule: every row
     /// is a quantity, and there are more rows than there are digits.
     fn handle_creation_kit_key(&mut self, key: GameKey) {
         let len = self.creation_rows().len();
         match key {
-            GameKey::Enter => self.advance_creation(),
+            GameKey::Enter => self.try_advance_creation(),
+            GameKey::Char('r') => self.reroll_the_kit(),
             GameKey::Up | GameKey::Down => self.scroll(key, len),
             GameKey::Left => self.spend_on_item(|taken, _| taken.saturating_sub(1)),
             GameKey::Right => self.spend_on_item(|taken, max| (taken + 1).min(max)),
@@ -630,7 +697,6 @@ impl App {
             return;
         }
         self.set_kit_taken(&row.id, after);
-        self.creation_decided.kit = true;
         self.status_line = None;
     }
 
@@ -654,7 +720,6 @@ impl App {
         let (glyph, sprite) = CREATION_ICONS[idx];
         self.creation_choice.glyph = glyph;
         self.creation_choice.sprite = sprite.to_string();
-        self.creation_decided.icon = true;
         self.advance_creation();
     }
 
@@ -670,7 +735,6 @@ impl App {
             return;
         };
         self.creation_choice.colour = Some(idx as u8);
-        self.creation_decided.colour = true;
         self.advance_creation();
     }
 
@@ -684,7 +748,7 @@ impl App {
     fn handle_creation_points_key(&mut self, key: GameKey) {
         let len = MainStat::all().len();
         match key {
-            GameKey::Enter => self.advance_creation(),
+            GameKey::Enter => self.try_advance_creation(),
             GameKey::Up | GameKey::Down => self.scroll(key, len),
             GameKey::Left => self.spend_on_row(|units, _| units.saturating_sub(1)),
             GameKey::Right => self.spend_on_row(|units, max| (units + 1).min(max)),
@@ -750,7 +814,6 @@ impl App {
             return;
         };
         self.creation_choice.routine = Some(rows[idx].id.clone());
-        self.creation_decided.routine = true;
         self.advance_creation();
     }
 
@@ -802,78 +865,22 @@ impl App {
         self.start_new_game(difficulty, &choice);
     }
 
-    /// `[R]`: rolls every choice the player has **not** made by hand and
-    /// jumps to the Summary. What has been made is left exactly as it is —
-    /// `Decided` is the record, and its doc comment is the rule.
+    /// `[r]` on the Kit step: a fresh basket, in place.
     ///
-    /// **The spend is exactly the pool**, by construction rather than by a
-    /// check: units are bought one at a time from whichever axes are still
-    /// affordable, and three of the four cost one point, so the loop can
-    /// only stop at zero remaining. It therefore can never beat point-buy,
-    /// which is what makes rerolling a question of shape and not of size.
-    /// A hand-made spend is not rerolled and not topped up either — the
-    /// player may leave points on the table, which the Points step already
-    /// allows.
+    /// **It rerolls the kit and nothing else.** The key used to roll every
+    /// choice the player had not made by hand and jump to the summary,
+    /// which made it a way to skip the wizard rather than a way to use one
+    /// screen of it — and it needed a `Decided` flag per step to avoid
+    /// destroying a character someone had walked eight steps to build.
+    /// Narrowed to the one screen whose choice is a *basket* rather than a
+    /// row, none of that applies: the player is looking at what changes,
+    /// it changes nothing else, and pressing it again is free.
     ///
-    /// Neither difficulty nor the name is among what it rolls. Difficulty
-    /// is a commitment rather than a shape — see the module doc comment —
-    /// and there is no name bank to draw one from.
-    fn roll_the_rest(&mut self) {
-        let Some(_) = self.creation_difficulty else {
-            self.refuse("Choose a difficulty first.");
-            return;
-        };
-        if self.creation_decided.all() {
-            self.refuse("Nothing left to roll — every choice is made.");
-            return;
-        }
-        let mut roll = Roll::new();
-
-        if !self.creation_decided.class {
-            let classes: Vec<AffinityClass> = self
-                .creation_catalogue
-                .class_rows()
-                .iter()
-                .map(|row| row.class)
-                .collect();
-            if !classes.is_empty() {
-                self.creation_choice.class = Some(classes[roll.below(classes.len())]);
-            }
-        }
-
-        if !self.creation_decided.kit {
-            self.creation_choice.items =
-                roll_kit_basket(&mut roll, &self.creation_catalogue.shelf_rows());
-        }
-
-        if !self.creation_decided.icon {
-            let (glyph, sprite) = CREATION_ICONS[roll.below(CREATION_ICONS.len())];
-            self.creation_choice.glyph = glyph;
-            self.creation_choice.sprite = sprite.to_string();
-        }
-        if !self.creation_decided.colour {
-            self.creation_choice.colour = Some(roll.below(CREATION_COLOURS as usize) as u8);
-        }
-
-        if !self.creation_decided.stats {
-            self.creation_choice.stats = roll_points_spread(&mut roll);
-        }
-
-        if !self.creation_decided.routine {
-            let routines: Vec<AbilityId> = self
-                .creation_catalogue
-                .starter_rows(self.creation_choice.class)
-                .into_iter()
-                .map(|row| row.id)
-                .collect();
-            self.creation_choice.routine = match routines.is_empty() {
-                true => None,
-                false => Some(routines[roll.below(routines.len())].clone()),
-            };
-        }
-
-        self.creation_step = CreationStep::Summary;
-        self.menu_selected = 0;
+    /// A hand-made basket **is** replaced, deliberately. On the one screen
+    /// the key lives on, asking for a reroll is the decision.
+    fn reroll_the_kit(&mut self) {
+        self.creation_choice.items =
+            roll_kit_basket(&mut Roll::new(), &self.creation_catalogue.shelf_rows());
         self.status_line = None;
     }
 

@@ -1019,6 +1019,15 @@ pub enum CreationRow {
         taken: u32,
     },
     Routine(feral_processes_engine::StarterRoutineRow),
+    /// The Summary's look line: the glyph read back **in the swatch it
+    /// will actually be drawn in**, which is the one Summary row that is a
+    /// picture rather than a figure. `colour` is the 0-based
+    /// `PLAYER_CHOICES` index, `None` where the player skipped that step.
+    Look {
+        label: String,
+        glyph: char,
+        colour: Option<u8>,
+    },
     Name {
         typed: String,
     },

@@ -11,10 +11,12 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+use crate::abilities::AbilityId;
 use crate::affixes::AffixId;
 use crate::components::Rarity;
+use crate::game::creation::CharacterChoice;
 use crate::items::{GearCopy, ItemId};
-use crate::species::SpeciesId;
+use crate::species::{AffinityClass, SpeciesId};
 use crate::world::Biome;
 
 /// A fight, authored rather than rolled.
@@ -22,6 +24,9 @@ use crate::world::Biome;
 #[serde(default)]
 pub struct Scenario {
     pub player: PlayerSource,
+    /// `Fresh` only — who the player was made as. A save or a template
+    /// already carries its own answer.
+    pub character: CharacterSpec,
     /// `Fresh` only. Applied after the zone is set, since gear locks in the
     /// zone level it was equipped at.
     pub equip: Vec<EquipSpec>,
@@ -45,6 +50,7 @@ impl Default for Scenario {
     fn default() -> Self {
         Self {
             player: PlayerSource::default(),
+            character: CharacterSpec::default(),
             equip: Vec::new(),
             inventory: Vec::new(),
             party: Vec::new(),
@@ -108,6 +114,49 @@ fn one() -> u32 {
 impl Default for PlayerSource {
     fn default() -> Self {
         Self::Fresh { level: 1, zone: 1 }
+    }
+}
+
+/// Who the player was made as, for a `Fresh` scenario — the class, the
+/// creation stat pool and the starter routine, the three creation answers
+/// that reach a fight.
+///
+/// The look is deliberately absent: a glyph and a swatch are what the map
+/// draws, and nothing in a staged fight reads either.
+///
+/// **The headless bin can only see part of this.** `run_rep` plays
+/// `PartyPlan::AllAttack` — the game's own `[A]` plan — which invokes no
+/// routine, and a class is a spread of multipliers over *authored routine
+/// power* alone (`Game::ability_affinity` is not on the ordinary swing's
+/// path at all). So `class` and `routine` change nothing the bin reports;
+/// they are for the played arena, `FERAL_DEV_ARENA=1 cargo run`. `stats`
+/// lands in `Stats` and is visible to both.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CharacterSpec {
+    pub class: Option<AffinityClass>,
+    /// Units *bought* per axis, in `MainStat::all()` order — Atk, Def,
+    /// Integrity, Decompiler — never points spent.
+    /// `CharacterChoice::cost()` prices them, and `build_player` refuses a
+    /// spend the pool cannot cover rather than applying none of it: fail
+    /// closed is right inside a run and wrong in an instrument, where a
+    /// silently ignored input reads as the axis being worthless.
+    pub stats: [u32; 4],
+    pub routine: Option<AbilityId>,
+}
+
+impl CharacterSpec {
+    /// The choice this spec names. `EquipSpec::copy`'s precedent — one
+    /// place a scenario's authored player becomes the engine's own type,
+    /// so the bin and the in-game arena screen cannot disagree about what
+    /// a file asked for.
+    pub fn choice(&self) -> CharacterChoice {
+        CharacterChoice {
+            class: self.class,
+            stats: self.stats,
+            routine: self.routine.clone(),
+            ..CharacterChoice::default()
+        }
     }
 }
 

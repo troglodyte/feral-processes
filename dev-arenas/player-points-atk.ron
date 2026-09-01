@@ -1,0 +1,58 @@
+// MEASUREMENT: the whole creation stat pool spent on Attack.
+//
+// The Atk half of a two-file pair — `player-points-atk.ron` and
+// `player-points-integrity.ron` — identical in every field but
+// `character.stats`. They exist to answer whether the pool's exchange rates
+// are commensurate: `tuning::CREATION_STAT_POINTS` is 5, and a point buys
+// **+1 Attack** or **+6 Integrity**, which on a level-1 player (6 atk, 90
+// max HP) is +16.7% offense against +6.7% survivability. On that arithmetic
+// alone Attack looks about 2.5x the value of Integrity per point.
+//
+// **It is not.** See
+// `docs/measurements/2026-09-01-creation-stat-pool-exchange-rates.md`:
+// measured at 1000 reps across three fight shapes, Attack is worth roughly
+// 1.2-1.8x Integrity, not 2.5x, because Attack *shortens* the fight and
+// Integrity *lengthens* it. The two effects nearly cancel, and Integrity
+// carries a hidden cost the win rate does not show — the party stands under
+// fire for longer, so more companions go down.
+//
+// **This pair is for the headless bin, unlike the `player-class-*` files.**
+// The pool lands in `Stats`, and All-Attack sees `Stats`:
+//
+//     cargo run --bin arena -- dev-arenas/player-points-atk.ron
+//     cargo run --bin arena -- dev-arenas/player-points-integrity.ron
+//
+// Run both, in the same build, and compare. A control is
+// `character: (stats: (0, 0, 0, 0))` — or just deleting the `character` row,
+// which is the same player. Never compare a number here against one written
+// in an older report: a moved baseline across builds is a reshuffled RNG
+// stream, not a difficulty change.
+//
+// Measured 2026-09-01, at `reps: 1000`, seeds 1-1000:
+//
+//     control (unspent)   57.9% won, 18.3 rounds, 33% HP left, 1.17 down
+//     5 Attack            71.6% won, 16.5 rounds, 45% HP left, 1.04 down
+//     5 Integrity         69.5% won, 20.1 rounds, 42% HP left, 1.28 down
+//
+// `reps: 1000` rather than 20: the difference between the two axes is a few
+// points of win rate, which twenty fights cannot see at all. `reps` is what
+// the bin acts on; the arena screen always fights once.
+//
+// The fight is `player-class-striker.ron`'s, deliberately — one pack for
+// both questions, so a shape effect shows up in both places or in neither.
+(
+    player: Fresh(level: 5, zone: 1),
+    character: (
+        stats: (5, 0, 0, 0),
+    ),
+    party: [
+        (species: "glitch", level: 5),
+        (species: "glitch", level: 5),
+    ],
+    opponents: [
+        (species: "sub_process", count: 5),
+        (species: "sub_process", count: 5),
+    ],
+    reps: 1000,
+    seed: 1,
+)

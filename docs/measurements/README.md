@@ -54,6 +54,16 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-09-01 — Are the creation stat pool's exchange rates commensurate?](2026-09-01-creation-stat-pool-exchange-rates.md)
+  — Attack is worth about **1.2-1.8x** Integrity per point of the five-point
+  creation pool, not the 2.5x the rates imply on paper, because Attack
+  shortens a fight and Integrity lengthens it. Integrity's extra rounds cost
+  the *party*: `companions down` rose to 1.28 against Attack's 1.04 and an
+  unspent control's 1.17. Also records that the `Def` axis, priced at 3x the
+  others, produces outcomes byte-identical to the control at this level, and
+  that `Decompiler` does too — correctly, which makes it a null control for
+  the instrument. Nothing was retuned on the strength of it.
+
 - [2026-08-28 — The Stack's depth curve after the danger-steps sum](2026-08-28-stack-depth-curve-after-danger-steps.md)
   — the ordinary Stack ambush is unwinnable from **depth 3** down, not depth
   5: the 2026-08-24 `danger_steps` sum moved the group-size curve as well as

@@ -104,6 +104,7 @@ run rather than quietly changing the fight.
 | Field | Default | Meaning |
 |---|---|---|
 | `player` | `Fresh(level: 1, zone: 1)` | Who is fighting — see below |
+| `character` | `()` | `Fresh` only. The creation answers — see below |
 | `equip` | `[]` | `Fresh` only. Gear to wear |
 | `inventory` | `[]` | `Fresh` only. Items in cargo |
 | `party` | `[]` | `Fresh` only. Companions to field |
@@ -128,6 +129,42 @@ one from — which is the "what would happen if I hit this pack right now"
 question. `equip`, `inventory` and `party` are
 therefore an **error** on a save or template rather than being ignored —
 `Fresh` is where you pick items.
+
+### `character`
+
+```ron
+character: (
+    class: Some(Medic),                 // one of the five AffinityClass variants
+    stats: (0, 0, 5, 0),                // units bought: Atk, Def, Integrity, Decompiler
+    routine: Some("checksum_repair"),   // the starter routine
+),
+```
+
+The three character-creation answers that reach a fight. `Fresh` only — a
+save or a template already carries its own. Every field defaults, so
+omitting `character` entirely is the unaligned, unspent, no-starter player
+every scenario written before this field described, and still describes.
+
+`stats` is **units bought**, in `MainStat::all()` order, never points spent:
+`tuning::CREATION_COST_DEF` is 3, so `(0, 1, 0, 0)` spends three points of
+the five-point pool for one point of Mitigation. A spend the pool cannot
+cover is an **error** rather than a dropped spend — inside a run an
+overspent choice fails closed and applies nothing, which in an instrument
+would report the baseline and read as the axis being worthless.
+
+**The bin can only see `stats`.** A class is a spread of multipliers over
+*authored routine power*, and All-Attack invokes no routine — the player's
+ordinary swing never touches `Game::ability_affinity` at all. So `class` and
+`routine` change no number the headless bin reports; they are for the played
+arena, and `dev-arenas/class-*.ron` say so in their own headers. `stats`
+lands in `Stats` and both halves see it.
+
+The look — glyph, colour, sprite, name — is deliberately absent. It is what
+the map draws, and nothing in a staged fight reads it.
+
+The arena builder offers no row for `character`; the file is the authoring
+surface for it. `[S]` writes the whole loaded scenario back out, so a file
+that names one keeps it across a save.
 
 ### `equip`, `inventory`, `party`
 
@@ -313,9 +350,23 @@ demonstrate syntax. Add one whenever you find a fight worth watching twice —
 by hand here, or with `[S]` from the arena screen, which writes the same
 format and overwrites a file of that name deliberately.
 
+- **`player-class-striker.ron`** and its four siblings (`-bastion`,
+  `-medic`, `-saboteur`, `-leech`) — one fight, five player classes,
+  identical in every field but `character`. **The headless bin reports the
+  same numbers for all five**, which is the seam rather than a bug: it plays
+  All-Attack, and a class is a spread over authored routine power. They are
+  for the played arena, and `player-class-striker.ron` carries the shared
+  argument and the bin's floor.
+- **`player-points-atk.ron`** and **`player-points-integrity.ron`** — the
+  creation stat pool spent entirely on one axis, the two rows behind
+  `docs/measurements/2026-09-01-creation-stat-pool-exchange-rates.md`. These
+  two *are* for the bin: the pool lands in `Stats` and All-Attack sees it.
+
 The list above is short of the directory: `class-mirror`, `developed-companion`,
 `gear-passives`, `stack-depth-5` and the five `policy-*` files are also
-shipped and are described by their own comments.
+shipped and are described by their own comments. Note that `class-mirror` is
+about a **companion's** class kits and the `player-class-*` files are about
+the **player's** class affinity — two different features that share a word.
 
 ## Nine of the fourteen are walkovers, and only two of those are a problem
 

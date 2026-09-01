@@ -1,0 +1,33 @@
+// MEASUREMENT: the whole creation stat pool spent on Integrity.
+//
+// The Integrity half of a two-file pair — `player-points-atk.ron` and
+// `player-points-integrity.ron` — identical in every field but
+// `character.stats`. `player-points-atk.ron` carries the argument, the
+// commands and the 2026-09-01 numbers; this file is its other row, and the
+// full write-up is
+// `docs/measurements/2026-09-01-creation-stat-pool-exchange-rates.md`.
+//
+//     cargo run --bin arena -- dev-arenas/player-points-integrity.ron
+//
+// The one thing worth reading off this row rather than that one: **the
+// `companions down` column.** At 1000 reps this build put it at 1.28 against
+// Attack's 1.04 and an unspent control's 1.17 — Integrity buys the player
+// rounds, and those are rounds the pack also spends swinging at the party.
+// A win rate alone hides that, and it is the reason "tankier is safer" is
+// not simply true for a party of three.
+(
+    player: Fresh(level: 5, zone: 1),
+    character: (
+        stats: (0, 0, 5, 0),
+    ),
+    party: [
+        (species: "glitch", level: 5),
+        (species: "glitch", level: 5),
+    ],
+    opponents: [
+        (species: "sub_process", count: 5),
+        (species: "sub_process", count: 5),
+    ],
+    reps: 1000,
+    seed: 1,
+)

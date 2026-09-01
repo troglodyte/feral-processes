@@ -1,0 +1,56 @@
+// PLAYTEST: a Saboteur's affliction is a stun. Is a round taken off the
+// pack worth a round taken off you?
+//
+// One of five files — `player-class-striker`, `-bastion`, `-medic`,
+// `-saboteur`, `-leech` — identical in every field but `character`. See
+// `player-class-striker.ron` for the shared argument: why the pack is this
+// pack, why the pool is unspent, and why **the headless bin reports the same
+// numbers for all five** (it plays All-Attack and invokes nothing, so it is
+// the floor rather than the measurement).
+//
+//     FERAL_DEV_ARENA=1 cargo run  ->  [R] Arena  ->  [L] player-class-saboteur
+//
+// The floor, 2026-09-01, 20 reps, seeds 1-20: 60% won, mean 18.6 rounds,
+// 26% player Integrity left, 1.15 companions down. Compare deltas within one
+// build only.
+//
+// **A stun is the one starter whose worth does not scale with affinity the
+// way the other four do.** Hard Lock Single is `Debuff(kind: Stun, power: 0,
+// duration: 2)` — the affinity multiplier acts on `power`, which is zero
+// here, so a Saboteur's 1.3 may be buying nothing at all on this particular
+// routine while the Striker's 1.3 buys 30% more damage. If that is what you
+// see, it is a *content* finding about the shipped starter pool, not a
+// tuning one: the fix is a starter whose debuff carries a magnitude, not a
+// change to the class.
+//
+// The 2-turn stun is also the enemy-policy feature that shipped in 0.5.19
+// and has been played almost not at all — see
+// `docs/measurements/2026-08-10-stun-move-levers.md` for what the tuner
+// found and could not find.
+//
+// What to watch:
+//   - Whether the affinity moves anything at all. Read the row on the
+//     wizard's Routine step as a Saboteur and again as a Medic: if the two
+//     print the same numbers, that is the answer before you fight.
+//   - Two groups, so there are two front members to lock. Does stunning the
+//     front of the *back* group do anything you can see?
+//   - Saboteur damps Heal at 0.8, and this kit has no heal, so the trade is
+//     invisible here by construction.
+(
+    player: Fresh(level: 5, zone: 1),
+    character: (
+        class: Some(Saboteur),
+        stats: (0, 0, 0, 0),
+        routine: Some("hard_lock"),
+    ),
+    party: [
+        (species: "glitch", level: 5),
+        (species: "glitch", level: 5),
+    ],
+    opponents: [
+        (species: "sub_process", count: 5),
+        (species: "sub_process", count: 5),
+    ],
+    reps: 1,
+    seed: 2,
+)

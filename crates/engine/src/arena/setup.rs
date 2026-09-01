@@ -28,7 +28,20 @@ pub(crate) fn build_player(scenario: &Scenario, assets_dir: &Path) -> Result<Gam
         // Forgiving deliberately: a permadeath loss mid-measurement is a
         // `GameOver` every later rep would inherit.
         PlayerSource::Fresh { level, zone } => {
-            let mut game = Game::new(0, DifficultyMode::Forgiving, assets_dir)
+            let choice = scenario.character.choice();
+            // Refused rather than fail-closed. `apply_character_choice`
+            // applies *no* spend for an overspent choice, which is right
+            // inside a run and wrong in an instrument: a sweep whose stat
+            // rows were silently dropped reports identical numbers and
+            // reads as the axis being worthless.
+            if choice.cost().is_none() {
+                return Err(format!(
+                    "character: {:?} spends more than CREATION_STAT_POINTS ({})",
+                    choice.stats,
+                    crate::tuning::CREATION_STAT_POINTS
+                ));
+            }
+            let mut game = Game::new_with(0, DifficultyMode::Forgiving, assets_dir, &choice)
                 .map_err(|e| format!("{}: {e}", assets_dir.display()))?;
             // Before the equips below: `Game::equip` captures
             // `EquippedItem::level` off the current zone and gear grows by
@@ -568,6 +581,123 @@ mod tests {
         let err =
             build_opponents(&mut game, &against(&[("glitch", MAX_GROUP_SIZE + 1)])).unwrap_err();
         assert!(err.contains("MAX_GROUP_SIZE"), "{err}");
+    }
+
+    /// A scenario field in the wrong place fails silently, and the symptom
+    /// is a sweep that reports identical numbers across every row. So the
+    /// stat pool is asserted to actually reach `Stats`, per axis, against a
+    /// scenario that differs in nothing else.
+    #[test]
+    fn a_character_spec_stat_spend_reaches_the_players_stats() {
+        use crate::arena::scenario::CharacterSpec;
+        let atk_pool = |stats: [u32; 4]| {
+            let mut s = fresh(1, 1);
+            s.character = CharacterSpec {
+                stats,
+                ..CharacterSpec::default()
+            };
+            let game = build_player(&s, &test_assets_dir()).unwrap();
+            *game.world.get::<Stats>(game.player_entity()).unwrap()
+        };
+
+        let plain = atk_pool([0; 4]);
+        // `MainStat::all()` order: Atk, Def, Integrity, Decompiler.
+        let all_atk = atk_pool([crate::tuning::CREATION_STAT_POINTS, 0, 0, 0]);
+        let all_int = atk_pool([0, 0, crate::tuning::CREATION_STAT_POINTS, 0]);
+        let one_def = atk_pool([0, 1, 0, 0]);
+
+        assert_eq!(
+            all_atk.atk,
+            plain.atk + crate::tuning::CREATION_STAT_POINTS as i32
+        );
+        assert_eq!(all_atk.max_hp, plain.max_hp);
+        assert_eq!(
+            all_int.max_hp,
+            plain.max_hp
+                + (crate::tuning::CREATION_STAT_POINTS * crate::tuning::CREATION_GAIN_INTEGRITY)
+                    as i32
+        );
+        assert_eq!(all_int.hp, all_int.max_hp, "a fight must not open damaged");
+        assert_eq!(all_int.atk, plain.atk);
+        // Asserted separately because a Def row is what a measurement of the
+        // axes reads as *doing nothing*: one point of mitigation on a base
+        // of two moves a fight's numbers so little that a sweep can report
+        // outcomes identical to the control. That is the axis being weak,
+        // not the field being ignored, and this is what tells the two apart.
+        assert_eq!(one_def.mitigation, plain.mitigation + 1);
+    }
+
+    /// Fail-closed is right inside a run and wrong in an instrument: an
+    /// overspent pool applies *no* spend, so a sweep that authored one
+    /// would report the baseline and read as the axis being worthless.
+    #[test]
+    fn an_overspent_character_spec_is_an_err_rather_than_a_dropped_spend() {
+        use crate::arena::scenario::CharacterSpec;
+        let mut s = fresh(1, 1);
+        s.character = CharacterSpec {
+            stats: [crate::tuning::CREATION_STAT_POINTS + 1, 0, 0, 0],
+            ..CharacterSpec::default()
+        };
+        let err = build_player(&s, &test_assets_dir())
+            .err()
+            .expect("should refuse");
+        assert!(err.contains("CREATION_STAT_POINTS"), "{err}");
+    }
+
+    /// A class reaches the fight as an affinity spread, so the thing to
+    /// assert is that the choice landed on the player at all — the spread
+    /// itself never touches an ordinary swing, which is the whole reason
+    /// the headless bin cannot see a class.
+    #[test]
+    fn a_character_spec_class_lands_on_the_player() {
+        use crate::arena::scenario::CharacterSpec;
+        let mut s = fresh(1, 1);
+        s.character = CharacterSpec {
+            class: Some(crate::species::AffinityClass::Medic),
+            ..CharacterSpec::default()
+        };
+        let game = build_player(&s, &test_assets_dir()).unwrap();
+        assert_eq!(
+            game.world
+                .get::<PlayerIdentity>(game.player_entity())
+                .unwrap()
+                .class,
+            Some(crate::species::AffinityClass::Medic)
+        );
+    }
+
+    /// The starter routine has to survive `set_level`, which runs *after*
+    /// `Game::new_with` and installs whatever the level unlocked. A class
+    /// scenario is staged at a level, and a starter displaced on the way up
+    /// would leave every `dev-arenas/class-*` file measuring nothing while
+    /// still reporting numbers.
+    #[test]
+    fn a_character_spec_routine_survives_being_levelled_to_the_scenarios_level() {
+        use crate::arena::scenario::CharacterSpec;
+        let mut s = fresh(5, 1);
+        s.character = CharacterSpec {
+            routine: Some("checksum_repair".to_string()),
+            ..CharacterSpec::default()
+        };
+        let game = build_player(&s, &test_assets_dir()).unwrap();
+        let player = game.player_entity();
+        assert!(
+            game.world
+                .get::<Routines>(player)
+                .unwrap()
+                .0
+                .iter()
+                .any(|r| r == "checksum_repair"),
+            "the starter routine is not installed: {:?}",
+            game.world.get::<Routines>(player).unwrap().0
+        );
+        assert!(
+            game.world
+                .resource::<crate::KnownRoutines>()
+                .0
+                .contains("checksum_repair"),
+            "the starter routine is installed but not known"
+        );
     }
 
     #[test]

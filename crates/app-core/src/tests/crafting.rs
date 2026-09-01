@@ -107,3 +107,111 @@ fn every_commit_path_charges_the_careful_price() {
         );
     }
 }
+
+/// The arrows are the quantity, the gesture the transfer picker and the
+/// caravan already use for a number: Right increases, Left decreases.
+///
+/// The page opens on an empty buffer that *reads* as one, so the first
+/// Right has to land on two — an arrow that stepped the parsed zero instead
+/// would print the number the screen was already showing and read as a
+/// dropped keypress.
+#[test]
+fn arrows_step_the_compile_quantity() {
+    let mut app = test_app(700);
+    open_quantity_page(&mut app);
+    assert_eq!(app.craft_quantity(), 1, "a page opens on one");
+
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Right);
+    assert_eq!(app.craft_quantity(), 3, "Right increases");
+
+    app.handle_key(GameKey::Left);
+    assert_eq!(app.craft_quantity(), 2, "Left decreases");
+
+    for _ in 0..5 {
+        app.handle_key(GameKey::Left);
+    }
+    assert_eq!(
+        app.craft_quantity(),
+        0,
+        "and stops at zero rather than wrapping"
+    );
+}
+
+/// Shift is a *target* and Ctrl a *step*, `app/basket.rs`' split, and the
+/// end they head for is the max this batch can afford.
+///
+/// Both have to survive `App::handle_key`'s modifier fold, which turns them
+/// into bare arrows on every screen not named in it — miss the name and
+/// this test sees a one-unit step where it asked for a jump.
+#[test]
+fn shift_and_ctrl_reach_the_max_affordable_compile() {
+    let mut app = stocked_app(701);
+    open_compile_of(&mut app, "ice_breaker");
+    let max = app
+        .game
+        .as_ref()
+        .unwrap()
+        .max_craftable(&ItemId::from("ice_breaker"), false);
+    assert!(max >= 4, "the fixture should afford a batch worth halving");
+
+    app.handle_key(GameKey::ShiftRight);
+    assert_eq!(app.craft_quantity(), max, "Shift lands on the end");
+
+    app.handle_key(GameKey::ShiftLeft);
+    assert_eq!(app.craft_quantity(), 0, "and on the other one");
+
+    app.handle_key(GameKey::CtrlRight);
+    assert_eq!(
+        app.craft_quantity(),
+        max.div_ceil(2),
+        "Ctrl closes half the gap to it"
+    );
+    app.handle_key(GameKey::CtrlLeft);
+    assert_eq!(
+        app.craft_quantity(),
+        max.div_ceil(2) / 2,
+        "and half the gap back to zero"
+    );
+}
+
+/// The number the arrows walk is the number Enter spends, and a typed
+/// batch is still typed: one expression answers all three.
+#[test]
+fn an_arrow_and_a_typed_batch_are_the_same_quantity() {
+    let mut app = stocked_app(703);
+    open_compile_of(&mut app, "ice_breaker");
+    app.handle_key(GameKey::Char('1'));
+    app.handle_key(GameKey::Char('2'));
+    assert_eq!(app.craft_quantity(), 12, "digits still type a quantity");
+
+    app.handle_key(GameKey::Right);
+    assert_eq!(
+        app.craft_quantity(),
+        13,
+        "and an arrow steps what was typed"
+    );
+
+    let before = held(&app, "ice_breaker");
+    app.handle_key(GameKey::Enter);
+    assert_eq!(
+        held(&app, "ice_breaker"),
+        before + 13,
+        "Enter compiles the quantity the arrows left"
+    );
+}
+
+/// How many of `item` the player is holding, across both stores — a
+/// compile rolls per unit, so a batch can land in either.
+fn held(app: &App, item: &str) -> u32 {
+    let id = ItemId::from(item);
+    app.game
+        .as_ref()
+        .unwrap()
+        .player_status()
+        .inventory
+        .iter()
+        .filter(|row| row.copy.item == id)
+        .map(|row| row.qty)
+        .sum()
+}

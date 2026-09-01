@@ -110,6 +110,12 @@ fn craft_rows(
 const CRAFT_QUANTITY_KEYS: &str =
     "[C] Careful   [F] Compile 5   [M] Compile max affordable   Esc to go back";
 
+/// The arrow line, named for `CRAFT_QUANTITY_KEYS`' reason — it is the only
+/// other row on this page that can grow by a word, and the width test
+/// measures both.
+const CRAFT_QUANTITY_ARROWS: &str =
+    "Left/Right adjust  ·  Shift jumps to the end  ·  Ctrl halves the gap";
+
 /// The quantity prompt, and the careful-compile toggle that decides what
 /// the batch is worth.
 ///
@@ -120,7 +126,7 @@ const CRAFT_QUANTITY_KEYS: &str =
 pub(super) fn draw_craft_quantity(
     game: &mut Game,
     pending: Option<ItemId>,
-    quantity_input: &str,
+    quantity: u32,
     careful: bool,
     refusal: Option<&str>,
     painter: &Painter,
@@ -138,12 +144,7 @@ pub(super) fn draw_craft_quantity(
         rows.push(text_row(format!("Cost per unit: {}", cost.join(", "))));
         rows.push(text_row(""));
     }
-    let shown = if quantity_input.is_empty() {
-        "1"
-    } else {
-        quantity_input
-    };
-    rows.push(text_row(format!("Quantity: {shown}")));
+    rows.push(text_row(format!("Quantity: {quantity}")));
     rows.push(text_row(""));
     rows.push(text_row(format!(
         "Max affordable right now: {}",
@@ -157,6 +158,7 @@ pub(super) fn draw_craft_quantity(
         QUALITY_CAREFUL_COST_PERCENT
     )));
     rows.push(text_row(""));
+    rows.push(text_row(CRAFT_QUANTITY_ARROWS));
     rows.push(text_row("Type digits, Enter to compile"));
     rows.push(text_row(CRAFT_QUANTITY_KEYS));
     draw_popup("Compile", PopupSize::Large, &rows, refusal, painter, m);
@@ -507,12 +509,15 @@ mod tests {
         with_painter(|p| {
             let m = ui_metrics(900.0);
             let room = 1440.0 * 0.88 - m.pad * 2.0;
-            let drawn = p.measure_ui_advance(CRAFT_QUANTITY_KEYS, m.font_size);
-            assert!(
-                drawn <= room,
-                "the key line overflows by {:.0}px ({drawn:.0} into {room:.0})",
-                drawn - room
-            );
+            for line in [CRAFT_QUANTITY_KEYS, CRAFT_QUANTITY_ARROWS] {
+                let drawn = p.measure_ui_advance(line, m.font_size);
+                assert!(
+                    drawn <= room,
+                    "a key line overflows by {:.0}px ({drawn:.0} into \
+                     {room:.0}):\n{line}",
+                    drawn - room
+                );
+            }
         });
     }
 

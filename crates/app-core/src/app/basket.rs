@@ -33,6 +33,14 @@ pub(crate) fn half_way_to(n: i64, target: i64) -> i64 {
     n + gap.signum() * gap.unsigned_abs().div_ceil(2) as i64
 }
 
+/// `half_way_to` in the currency the unsigned pickers count in — the
+/// caravan basket and the compile quantity page both step a `u32` toward a
+/// ceiling, and a second `div_ceil` written out by hand is the copy that
+/// goes dead at a gap of one.
+pub(crate) fn halve(n: u32, target: u32) -> u32 {
+    half_way_to(n as i64, target as i64).max(0) as u32
+}
+
 impl App {
     /// How much of the highlighted row the player may still **take**: what
     /// that item is sitting on the adjacent shelves, per row and static.

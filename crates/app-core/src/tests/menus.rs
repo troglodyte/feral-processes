@@ -112,7 +112,7 @@ fn the_picker_lists_every_owned_program_after_you() {
     assert_eq!(app.pending_manifest, Some(subjects[1]));
 }
 
-/// A modifier is inert outside the two basket pickers.
+/// A modifier is inert outside the screens `handle_key`'s fold names.
 ///
 /// The frontend always sends the modified form, so without the fold in
 /// `handle_key` a player holding Shift would find the arrow keys dead on
@@ -120,7 +120,7 @@ fn the_picker_lists_every_owned_program_after_you() {
 /// ends in a `_ => {}`. The manifest pager stands in for all of them: it is
 /// the nearest other Left/Right consumer that reports where it landed.
 #[test]
-fn a_modifier_is_stripped_outside_the_two_pickers() {
+fn a_modifier_is_stripped_outside_the_pickers() {
     let mut app = app_owning_distant_programs(74, 2);
     let subjects = app.manifest_subjects();
     open_via_menu(&mut app, 'p', "Read a manifest");

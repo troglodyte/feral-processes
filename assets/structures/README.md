@@ -180,11 +180,16 @@ is skipped with a warning logged in-game rather than crashing startup.
     // state when that program is back to full. No assigned worker and no
     // input item, `power_regen`'s shape again.
     //
-    // A program of yours that dies in a Forgiving run is benched rather
-    // than destroyed: it survives at 1 HP, leaves your battle party, keeps
-    // its roster slot and walks to the nearest structure with this field on
-    // its own. With none standing, it stays down. (Under Permadeath a dead
-    // program is destroyed and nothing here applies.)
+    // Two things put a program in that downed state. A program of yours
+    // that dies in a Forgiving run is benched rather than destroyed: it
+    // survives at 1 HP, leaves your battle party and keeps its roster slot.
+    // (Under Permadeath a dead program is destroyed, so that half never
+    // fires.) And a base staff program that drops below
+    // `tuning::BAY_ADMISSION_HP_FRACTION` of its Integrity admits itself —
+    // in either difficulty mode, and only while a structure with this field
+    // is standing, since going down with nowhere to walk to is a one-way
+    // door. Either way the program walks to the nearest such structure on
+    // its own. With none standing, a benched program stays down.
     //
     // `per_tick` is a whole number, because Integrity is: HP is an integer
     // everywhere in the game. It is clamped rather than trusted — a

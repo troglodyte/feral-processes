@@ -33,6 +33,23 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.69
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+- **The way home is a routine you earn, not a key you always had.** Symlink
+  is `AbilityEffect::Symlink` now — researched at Symbolic Links, etched,
+  installed and run from the routine list — where `u` opened a one-row picker
+  of teleport-capable structures on the first turn of every run.
+- **A GC Entropy Sweep waits for the second sector.** The base you raise in
+  sector 1 is never swept, so the first ground you lose is ground you had a
+  breach to prepare for.
+- **The replace picker rates the pieces it offers.** Every other list that
+  names gear already carried the figure, and the one screen whose job is "is
+  this better than what I have on" answered only in per-axis deltas.
+- **The Coherence amenity is a Log Analyzer Bay.** "Defrag Bay" and "Repair
+  Bay" read as the same building at a glance and are not.
+
 ## 0.13.68
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

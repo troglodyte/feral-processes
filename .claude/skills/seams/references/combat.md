@@ -318,6 +318,30 @@
   log. A key the engine supports everywhere has to be bound in *both*
   dispatches, and only the Stack arms whose behaviour differs are listed in
   the help page's "In the Stack" sublist.
+- **A rest repairs the programs standing with the player and nobody else** —
+  `InParty` and `Wielded` yes, `Sortie` and `Staff` no. The walk used to be
+  over every `Tamed` program the player owned, so a rest four frames down the
+  Stack reached back and healed the base. Read off `Game::program_role` and
+  never off `Party`: `Staff` is what `role_of` leaves *over*, so a
+  hand-written party test also excludes `Wielded`, which is in the player's
+  hands. **Exhaustive, `cell_mark`'s rule** — and briefly not: while `Staff`
+  was the only exclusion this was `!= Staff`, on the argument that a fifth
+  role should inherit the heal because being left out is what strands a
+  program. `Sortie` joining retired it. The roles now split two and two on
+  whether the program is *with you*, so there is no majority to default to,
+  and the role the negative form defaulted *in* was the one that wanted
+  defaulting out — a default that got its only real test wrong is an unasked
+  question, not a safe side. Power is still refilled for every role: a Bay
+  gives Integrity only, so withholding it invents a second dead end.
+  **Two gaps follow and neither is this seam's to close.**
+  `run_repair_bays` queries `With<Downed>`, which only `bench_or_dissolve`
+  inserts and only under Forgiving, so a staff program damaged and still
+  standing — every survived sweep's defender, every fresh capture, every
+  party member stood down — has no route at all, and on Permadeath the Bays
+  serve nobody. And a squad's only restore is now the 15% paid between
+  battles, after which it is `Staff` again, so damage accumulates across
+  trips until `SORTIE_MIN_HP_FRACTION` refuses the next dispatch with
+  nothing at home able to lift the refusal.
 - **`power_regen_system` needs that same guard**, and is the third in the
   family. A Recharger within radius of the entrance tile otherwise refills
   the party four frames down, which is the whole of the Stack's Power

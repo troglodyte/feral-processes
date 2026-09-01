@@ -232,6 +232,111 @@ fn rest_heals_every_party_member() {
     assert_eq!(game.world.get::<Stats>(b).unwrap().hp, 10);
 }
 
+/// A rest repairs the player and the programs *with* the player. It does not
+/// repair the base's labour pool: staff mend at a Repair Bay, which is what
+/// that building is for, and a rest that healed them made the Bay optional.
+///
+/// The role assertion is not decoration. `Staff` is what `program_role`
+/// leaves over, so a fixture that quietly enlisted the third program would
+/// make the interesting half of this test pass for the wrong reason.
+#[test]
+fn resting_repairs_the_party_and_leaves_base_staff_to_the_repair_bay() {
+    let mut game = Game::new(75, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let companion = spawn_tamed(&mut game, 10, 3);
+    let staff = spawn_tamed(&mut game, 10, 3);
+    enlist(&mut game, companion);
+    game.world.get_mut::<Stats>(player).unwrap().hp = 1;
+    for e in [companion, staff] {
+        game.world.get_mut::<Stats>(e).unwrap().hp = 1;
+    }
+    *game.world.get_mut::<PowerReserve>(staff).unwrap() = PowerReserve::new(3.0);
+    stand_in_base_beside_home(&mut game);
+    assert_eq!(
+        game.program_role(staff),
+        Some(ProgramRole::Staff),
+        "the unenlisted program has to actually be staff, or this is vacuous"
+    );
+
+    game.rest().unwrap();
+
+    let stats = *game.world.get::<Stats>(player).unwrap();
+    assert_eq!(stats.hp, stats.max_hp, "the player is repaired as before");
+    assert_eq!(
+        game.world.get::<Stats>(companion).unwrap().hp,
+        10,
+        "and so is a program fighting beside them"
+    );
+    assert_eq!(
+        game.world.get::<Stats>(staff).unwrap().hp,
+        1,
+        "but the base's labour pool is left for a Repair Bay"
+    );
+    // Deliberately still refilled: a Bay restores Integrity and nothing
+    // else, and nothing refills a reserve passively, so withholding this
+    // would strand a staff program that spent Power defending a sweep.
+    assert_eq!(
+        game.world.get::<PowerReserve>(staff).unwrap().get(),
+        100.0,
+        "a staff program's Power is still refilled"
+    );
+}
+
+/// The exclusion is by **role**, not by locale. Before this, the walk was
+/// over every `Tamed` program the player owned wherever anybody stood, so a
+/// rest four frames underground reached back and repaired a base the party
+/// had not seen in an hour.
+#[test]
+fn a_field_rest_does_not_reach_back_and_repair_base_staff() {
+    let mut game = Game::new(76, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let staff = spawn_tamed(&mut game, 10, 3);
+    game.world.get_mut::<Stats>(staff).unwrap().hp = 1;
+    game.world.get_mut::<Stats>(player).unwrap().hp = 1;
+    descend(&mut game);
+
+    game.rest().unwrap();
+
+    let stats = *game.world.get::<Stats>(player).unwrap();
+    assert_eq!(
+        stats.hp,
+        stats.max_hp,
+        "the charge repairs the player underground: {:?}",
+        game.message_log(5)
+    );
+    assert_eq!(
+        game.world.get::<Stats>(staff).unwrap().hp,
+        1,
+        "and reaches no further than the party it was spent by"
+    );
+}
+
+/// A wielded program is repaired. It is outside `Party` but it is carried
+/// wherever the player goes, it is never posted at the base, and no Repair
+/// Bay can reach it — so excluding it would be the one role with no
+/// recovery route at all rather than a role told to use a different one.
+#[test]
+fn a_wielded_program_is_repaired_by_a_rest() {
+    let mut game = Game::new(77, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let weapon = spawn_tamed(&mut game, 10, 3);
+    stand_in_base_beside_home(&mut game);
+    game.wield_program(weapon).expect("wielding a program");
+    game.world.get_mut::<Stats>(weapon).unwrap().hp = 1;
+    assert_eq!(
+        game.program_role(weapon),
+        Some(ProgramRole::Wielded),
+        "the fixture has to leave it wielded, or this reads as the party rule"
+    );
+
+    game.rest().unwrap();
+
+    assert_eq!(
+        game.world.get::<Stats>(weapon).unwrap().hp,
+        10,
+        "the program in your hands comes back with you"
+    );
+}
+
 #[test]
 fn a_new_game_starts_with_two_power_outlets() {
     let game = Game::new(701, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

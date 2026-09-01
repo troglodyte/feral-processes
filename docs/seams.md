@@ -137,6 +137,69 @@ free inside base space, one unit of an item whose def sets
 `nearby_rest_structure`, `rest_cost` and `RestDef` came out with it — nothing
 about a rest asks where a building stands any more.
 
+**What a rest repairs is decided by role: the programs standing with the
+player, and nobody else.** `InParty` and `Wielded` are repaired; `Sortie`
+and `Staff` are not. Staff mend at a Repair Bay, which is what that
+building is for — a rest that healed them made the Bay optional and a
+survived sweep free — and a squad in another sector is provisioned out of
+its own dispatch, `SORTIE_PROVISION_HEAL_FRACTION` paid between battles,
+rather than out of a rest it cannot hear. Until 0.13.69 the walk was over
+**every `Tamed` program the player owned**, which is both more than the
+rule wants and more than the locale suggests: a rest four frames down the
+Stack reached back and repaired a base the party had not seen in an hour.
+
+The split is read off `Game::program_role` and never off `Party`
+membership, because `Staff` is the role `party::role_of` leaves *over* — a
+hand-written "is it in the party" test would also exclude `Wielded`, which
+is carried in the player's own hands.
+
+**It is an exhaustive match, `cell_mark`'s rule, and it was briefly not.**
+While `Staff` was the only exclusion this was written as `!= Staff`, on the
+argument that a fifth `ProgramRole` should inherit the heal rather than the
+exclusion: being left out of a rest is the consequence that strands a
+program, so default to the safe side. `Sortie` joining the exclusion
+retired that argument, and it is worth recording *why* rather than just
+that it changed. The roles now split two and two on a real question —
+whether the program is standing with the player — so there is no majority
+to default to; and the one role the negative form had quietly defaulted
+*in* was `Sortie`, which turned out to be the role that wanted defaulting
+out. A form whose default silently got the only case it was ever tested on
+wrong is not a safe default, it is an unasked question. A fifth role must
+now fail to compile here.
+
+**Power is still refilled for every role, excluded ones included.** A Bay
+restores Integrity and nothing else, and nothing refills a program's
+reserve passively, so withholding Power here would strand a staff program
+that spent it defending a sweep. The rule is about the repair.
+
+**Two recovery gaps follow from this, both real, and neither is closed
+here.**
+
+The first is base staff. `run_repair_bays` queries `With<Downed>`, and
+`Downed` is only ever inserted by `bench_or_dissolve` — that is, on a
+program that has been *killed* under Forgiving. A staff program that is
+damaged and still standing carries no `Downed`, so no Bay will touch it,
+and it is not in the party, so no rest will either. That state is routine
+rather than exotic: `run_raid` lands `RAID_DEFENDER_DAMAGE` on whichever
+body holds a `Task` targeting the swept structure and only benches it if
+the damage kills, so every sweep a base survives leaves its defender in
+exactly this state — as does a fresh capture (a program is easiest to
+decompile near death) and a party member stood down after a fight. Under
+Permadeath `bench_or_dissolve` despawns instead of benching, so no program
+is ever `Downed` and the Bays serve nobody at all.
+
+The second is a squad, and it compounds with the first. A member's only
+restore is now the 15% of `max_hp` paid between battles on the trip
+itself; the moment it returns it is `Staff` again and inherits the gap
+above. So damage accumulates across trips, and `SORTIE_MIN_HP_FRACTION`
+(0.5) means a squad that comes home under half Integrity is refused at
+dispatch by `SortieRefusal::Wounded` with nothing at the base able to lift
+the refusal.
+
+The one workaround for both is the same and is a ritual rather than a
+mechanic: add the program to the party, rest, stand it down. Widening the
+Bay's query is the obvious fix, and it is **not** this change's to make.
+
 **The trap is that `rest` now reads as an unguarded `Position`-adjacent
 action, and it is not one.** A guard added back here does not tighten
 anything; it deletes the field half of the mechanic outright, and it deletes

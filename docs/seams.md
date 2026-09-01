@@ -7188,8 +7188,9 @@ where players actually stand makes every figure in the game wrong in the same
 direction, which is hard to notice and easy to ship.
 
 Absolute is what lets one number mean one thing on the inventory list, a
-trader's shelf, a recipe's result and the inspect page. The **swap picker's
-delta may disagree with it, and that is correct** — gear locks in
+trader's shelf, a recipe's result, the inspect page and — since 0.13.69 —
+the swap picker itself, where the rating and the delta now sit on the same
+row. The **swap picker's delta may disagree with it, and that is correct** — gear locks in
 `EquippedItem::level`, so the worn piece and a candidate are scaled at two
 different levels. The column is a property of the *copy*; the delta is a
 property of the *swap*. `a_copys_rating_does_not_move_with_the_zone` is what

@@ -68,6 +68,28 @@ pub(crate) const PLAN: Color = rgb(0x4a7fd0);
 pub(crate) const PANE_TITLE: Color = rgb(0x56d4dd);
 /// br cyan — the player's `@`, and an upgradeable item.
 pub(crate) const PLAYER: Color = rgb(0x56d4dd);
+/// The six colours the character-creation wizard offers for the player's
+/// glyph. Kept apart from [`PLAYER`] rather than folded into it:
+/// `PlayerIdentity::colour`'s zero value is what `CharacterChoice::
+/// default()` and every save from before this feature carries, and the map
+/// reads a `colour` **one-indexed** — `PLAYER_CHOICES[colour - 1]`, falling
+/// back to [`PLAYER`] at 0 or out of range — so that value keeps meaning
+/// "no choice was made" rather than doubling as this array's own first
+/// entry.
+///
+/// Warm hues are all spoken for by [`glyph`]'s table or by a reserved role
+/// (red, orange, yellow, brown), so these sit in the green-through-magenta
+/// range that leaves open. `every_content_hue_is_separable_from_the_others`
+/// is what holds each 0.25 from every content hue, from `PLAYER`, and from
+/// each other — authored by running that test, not by guessing.
+pub(crate) const PLAYER_CHOICES: [Color; 6] = [
+    rgb(0xbdcc70), // moss
+    rgb(0x6cd936), // lime
+    rgb(0x39e69e), // teal
+    rgb(0x2d38b2), // indigo
+    rgb(0x8a39e6), // violet
+    rgb(0xa62972), // rose
+];
 /// br white — a keycap letter, or a value being emphasised. Only those.
 pub(crate) const EMPHASIS: Color = rgb(0xe8eef4);
 /// white — body text and table rows.
@@ -204,7 +226,10 @@ mod tests {
     /// The separation and not the literals, `the_tier_colours_are_separable
     /// _from_their_neighbours`' rule, so a retune is free to move any of
     /// them. `PLAYER` is in the walk because the map draws it as a glyph
-    /// beside the rest.
+    /// beside the rest, and `PLAYER_CHOICES` for the same reason — the
+    /// wizard's colours are glyphs on the same map and this is the only
+    /// place their separability from content, from `PLAYER`, and from each
+    /// other is enforced.
     #[test]
     fn every_content_hue_is_separable_from_the_others() {
         let mut hues: Vec<(String, Color)> = GlyphColor::ALL
@@ -212,6 +237,9 @@ mod tests {
             .map(|c| (format!("{c:?}"), glyph(c)))
             .collect();
         hues.push(("PLAYER".to_string(), PLAYER));
+        for (i, colour) in PLAYER_CHOICES.into_iter().enumerate() {
+            hues.push((format!("PLAYER_CHOICES[{i}]"), colour));
+        }
         for (i, (name, colour)) in hues.iter().enumerate() {
             for (other_name, other) in hues.iter().skip(i + 1) {
                 assert!(

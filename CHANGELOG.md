@@ -33,6 +33,18 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.70
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+- **A finished contract is summed up in its own words.** The completion
+  screen and the log line name the job, what it asked for and what it paid,
+  where every contract in the game used to close on one identical sentence
+  about the Broker settling up.
+- **The onboarding chain closes on its own screen.** It counts the missions
+  behind you, never credits a Broker who is not standing yet, and the last
+  one is where you are told the board has opened.
+
 ## 0.13.69
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

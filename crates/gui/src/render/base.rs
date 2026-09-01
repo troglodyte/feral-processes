@@ -1143,11 +1143,16 @@ fn draw_surface_map(
                 ch = Some(ev.glyph);
                 // The `@` is the one glyph whose colour is a role. Every
                 // other entity wears the hue its file authored; the player
-                // wears `palette::PLAYER`, which nothing else on the map may
-                // take — read off `is_player` rather than off the authored
-                // `GlyphColor::Cyan`, which a structure is free to author too.
+                // wears a colour off the character-creation wizard —
+                // `PlayerLook::colour` is a **0-based** index into
+                // `hud::palette::PLAYER_CHOICES`, and `None` is *no answer*
+                // rather than a bad one: the wizard was never opened, or the
+                // save predates it, so the glyph keeps the `PLAYER` role
+                // colour. Read off `is_player` rather than off the authored
+                // `GlyphColor::Cyan`, which a structure is free to author
+                // too.
                 color = if ev.is_player {
-                    hud::palette::PLAYER
+                    player_look_color(ev.look.as_ref().and_then(|look| look.colour))
                 } else {
                     glyph_color(ev.color)
                 };
@@ -1233,12 +1238,14 @@ fn draw_surface_map(
                 // had one — and a miss falls back to that glyph, which is
                 // what keeps `assets/sprites/` optional.
                 //
-                // Two fixtures, and both by name on purpose. Neither is
-                // content — the player is a *role* and the anchor is a
-                // permanent feature of every zone — so neither has a `.ron`
-                // file with a `sprite:` field to read one off. When species
-                // and structures get that field the name comes off the view
-                // for them; these two stay written here.
+                // The anchor is the one fixture left named here. It is not
+                // content — a permanent feature of every zone, with no
+                // `.ron` file to carry a `sprite:` field — so its name stays
+                // written in this match rather than read off the view. The
+                // player's name comes off `PlayerLook` instead: the
+                // character-creation wizard's own choice, in place of the
+                // literal `"player"` this used to read regardless of who was
+                // playing.
                 //
                 // The anchor is the case the sprite seam was worth building
                 // for. Its `#` was chosen by elimination rather than by
@@ -1248,7 +1255,9 @@ fn draw_surface_map(
                 // nothing at all about what stands there.
                 let sprite = actor.and_then(|ev| {
                     if ev.is_player {
-                        Some("player")
+                        ev.look
+                            .as_ref()
+                            .and_then(|look| player_sprite_name(&look.sprite))
                     } else if ev.is_anchor {
                         Some("anchor")
                     } else {
@@ -1716,7 +1725,7 @@ mod tests {
     use crate::text::ui_metrics;
     use feral_processes_engine::MessageSource;
     use feral_processes_engine::components::{GlyphColor, MachineStatus};
-    use feral_processes_engine::{DifficultyMode, Game};
+    use feral_processes_engine::{CharacterChoice, DifficultyMode, Game};
 
     fn test_assets() -> std::path::PathBuf {
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets")
@@ -1736,6 +1745,7 @@ mod tests {
             color: GlyphColor::White,
             label: "Repair Bay".into(),
             is_player: false,
+            look: None,
             is_tamed: false,
             is_companion: false,
             is_hostile: false,
@@ -2439,15 +2449,55 @@ mod tests {
         (painted_images(&shapes).len(), painted_text(&shapes))
     }
 
+    /// `drawn_map`, but the game starts from a character-creation `choice`
+    /// rather than `CharacterChoice::default()` — the sprite-name and
+    /// colour tests need a player whose `look` carries something other than
+    /// the empty string and zero every other test's default game has.
+    fn drawn_map_with_choice(
+        sprites: SpriteTable,
+        choice: &CharacterChoice,
+    ) -> (usize, Vec<String>) {
+        let mut game = Game::new_with(7, DifficultyMode::Forgiving, &test_assets(), choice)
+            .expect("the shipped assets must load");
+        let mut fx = Fx::new();
+        let (tile_px, glyph_px) = crate::text::map_cell(1);
+        let (_, shapes) = with_sprites(sprites, |p| {
+            let status = game.player_status();
+            draw_surface_map(
+                &mut game,
+                &mut fx,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                tile_px,
+                glyph_px,
+                &status,
+                None,
+                status.position,
+            );
+        });
+        (painted_images(&shapes).len(), painted_text(&shapes))
+    }
+
     /// The player's sprite stands in for the player's glyph — it does not
     /// draw beside it. Both halves are asserted in one test on purpose: the
     /// sprite half alone passes against a renderer that paints the texture
     /// over an '@' that is still there, which on white placeholder art looks
     /// exactly right and is wrong the moment the sprite has any transparency.
+    ///
+    /// Deliberately runs against a **bare `Game::new`** — no explicit
+    /// choice — because that is what every save written before the wizard
+    /// existed, every `dev-saves/` template, and any run that skips the
+    /// Look step loads as. Handing it a choice that names `"player"` is the
+    /// accommodation that let the default lose the shipped art in silence
+    /// once already; `the_player_sprite_comes_from_the_choice` is what
+    /// covers a wizard-authored name.
     #[test]
     fn the_player_sprite_stands_in_for_the_at_sign() {
         let mut table = SpriteTable::default();
-        table.insert("player", bevy_egui::egui::TextureId::User(1));
+        table.insert(
+            feral_processes_engine::DEFAULT_PLAYER_SPRITE,
+            bevy_egui::egui::TextureId::User(1),
+        );
 
         let (images, glyphs) = drawn_map(table);
 
@@ -2455,6 +2505,146 @@ mod tests {
         assert!(
             !glyphs.iter().any(|g| g == "@"),
             "the '@' must give way to the sprite, not sit under it: {glyphs:?}"
+        );
+    }
+
+    /// The sprite name is not tied to the literal `"player"` — any name the
+    /// wizard wrote into `PlayerIdentity::sprite` must reach the map the
+    /// same way, or the wizard's other icon options would be dead choices.
+    #[test]
+    fn the_player_sprite_comes_from_the_choice() {
+        let choice = CharacterChoice {
+            sprite: "hero".to_string(),
+            ..CharacterChoice::default()
+        };
+        let mut table = SpriteTable::default();
+        table.insert("hero", bevy_egui::egui::TextureId::User(4));
+
+        let (images, glyphs) = drawn_map_with_choice(table, &choice);
+
+        assert_eq!(images, 1, "exactly one sprite, the chosen one");
+        assert!(
+            !glyphs.iter().any(|g| g == "@"),
+            "the '@' must give way to the chosen sprite, not sit under it: {glyphs:?}"
+        );
+    }
+
+    /// A name the sprite table has nothing under returns `false` and the
+    /// caller draws the glyph — the fallback that keeps `assets/sprites/`
+    /// optional, exercised here against a *chosen* name rather than the
+    /// empty one a default game carries, so this cannot pass by accident on
+    /// an empty-string lookup that was never attempted.
+    #[test]
+    fn a_missing_sprite_falls_back_to_the_chosen_glyph() {
+        let choice = CharacterChoice {
+            sprite: "no-such-sprite".to_string(),
+            ..CharacterChoice::default()
+        };
+
+        let (images, glyphs) = drawn_map_with_choice(SpriteTable::default(), &choice);
+
+        assert_eq!(
+            images, 0,
+            "a name the table has nothing under must paint no texture"
+        );
+        assert!(
+            glyphs.iter().any(|g| g == "@"),
+            "the glyph must still draw when the chosen sprite is missing: {glyphs:?}"
+        );
+    }
+
+    /// The chosen colour comes off `PlayerLook`, **0-indexed** —
+    /// `PLAYER_CHOICES[colour]` — and is what the map actually draws, not
+    /// just state nothing reads: `the_players_glyph_wears_the_player_role`
+    /// already covers `None` staying `PLAYER`, so this is the other half —
+    /// an explicit pick has to move the drawn colour off it.
+    #[test]
+    fn the_players_glyph_wears_the_chosen_colour() {
+        let choice = CharacterChoice {
+            colour: Some(2),
+            ..CharacterChoice::default()
+        };
+        let mut game = Game::new_with(7, DifficultyMode::Forgiving, &test_assets(), &choice)
+            .expect("the shipped assets must load");
+        let mut fx = Fx::new();
+        let (tile_px, glyph_px) = crate::text::map_cell(1);
+        let (_, shapes) = with_painter(|p| {
+            let status = game.player_status();
+            draw_surface_map(
+                &mut game,
+                &mut fx,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                tile_px,
+                glyph_px,
+                &status,
+                None,
+                status.position,
+            );
+        });
+        let dist = |a: Color, b: Color| (a.r - b.r).abs() + (a.g - b.g).abs() + (a.b - b.b).abs();
+        let at = crate::paint::painted_map_glyphs(&shapes);
+        let (_, drawn) = at
+            .iter()
+            .find(|(g, _)| g == "@")
+            .expect("the map draws the player");
+        let want = hud::palette::PLAYER_CHOICES[2];
+        assert!(
+            dist(*drawn, want) < 0.06,
+            "colour Some(2) painted {drawn:?}, which is {:.3} from PLAYER_CHOICES[2] {want:?}",
+            dist(*drawn, want)
+        );
+        assert!(
+            dist(*drawn, hud::palette::PLAYER) > 0.06,
+            "a chosen colour must not still read as PLAYER"
+        );
+    }
+
+    /// **The whole reason `colour` is an `Option` and not a reserved zero.**
+    /// The first swatch on the wizard's own screen is index `0`, and under a
+    /// one-indexed `u8` picking it stored the same value "no choice was
+    /// made" carries — so the player's first pick painted `PLAYER` and read
+    /// as the key doing nothing. Both halves are asserted: the drawn colour
+    /// is `PLAYER_CHOICES[0]`, *and* it is not `PLAYER`.
+    #[test]
+    fn the_first_swatch_is_not_the_player_role() {
+        let choice = CharacterChoice {
+            colour: Some(0),
+            ..CharacterChoice::default()
+        };
+        let mut game = Game::new_with(7, DifficultyMode::Forgiving, &test_assets(), &choice)
+            .expect("the shipped assets must load");
+        let mut fx = Fx::new();
+        let (tile_px, glyph_px) = crate::text::map_cell(1);
+        let (_, shapes) = with_painter(|p| {
+            let status = game.player_status();
+            draw_surface_map(
+                &mut game,
+                &mut fx,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                tile_px,
+                glyph_px,
+                &status,
+                None,
+                status.position,
+            );
+        });
+        let dist = |a: Color, b: Color| (a.r - b.r).abs() + (a.g - b.g).abs() + (a.b - b.b).abs();
+        let at = crate::paint::painted_map_glyphs(&shapes);
+        let (_, drawn) = at
+            .iter()
+            .find(|(g, _)| g == "@")
+            .expect("the map draws the player");
+        let want = hud::palette::PLAYER_CHOICES[0];
+        assert!(
+            dist(*drawn, want) < 0.06,
+            "the first swatch painted {drawn:?}, which is {:.3} from PLAYER_CHOICES[0] {want:?}",
+            dist(*drawn, want)
+        );
+        assert!(
+            dist(*drawn, hud::palette::PLAYER) > 0.06,
+            "picking the first swatch must not read as no choice at all"
         );
     }
 

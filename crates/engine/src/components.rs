@@ -7,7 +7,7 @@ use crate::items::{EquipmentSlot, GearCopy, ItemId};
 use crate::items_db::ItemDb;
 use crate::needs::{NEED_MAX, NEED_MIN, NeedId};
 use crate::perks::Perk;
-use crate::species::SpeciesId;
+use crate::species::{AffinityClass, SpeciesId};
 use crate::structures::StructureId;
 use crate::tuning::{
     GOLD_STAT_MULT, MAX_INDIVIDUAL_ROLL, MIN_INDIVIDUAL_ROLL, PLATINUM_STAT_MULT,
@@ -102,6 +102,31 @@ impl CustomName {
             .collect::<String>();
         (!trimmed.is_empty()).then_some(trimmed)
     }
+}
+
+/// The player's chosen class and look, from character-creation's
+/// `game::creation::CharacterChoice` — the player-only counterpart to
+/// `Creature::species`. `class` feeds the player arm of
+/// `Game::ability_affinity`; `sprite` and `colour` do not live on `Glyph`
+/// because `GlyphColor` is the eleven-hue *content* palette and the
+/// player's own choices are deliberately outside it. They instead ride out
+/// to the renderer on `views::PlayerLook`, carried on `EntityView::look`.
+///
+/// Spawned at its `Default` (no class, no sprite, no colour) by every
+/// constructor and immediately overwritten by
+/// `Game::apply_character_choice` — the same "neutral bundle, layered on
+/// top" shape `Game::new_with`'s player spawn uses throughout.
+#[derive(Component, Clone, Debug, Default, PartialEq)]
+pub struct PlayerIdentity {
+    pub class: Option<AffinityClass>,
+    pub sprite: String,
+    /// Which of the renderer's player swatches the glyph wears, **0-based**
+    /// — `None` is the `PLAYER` role colour, which is what a player who
+    /// never opened the wizard and every save from before it carries.
+    /// `Option` rather than a reserved zero for `PowerCell::Unrated`'s
+    /// reason: *no answer* is not a bad answer, and a sentinel index shares
+    /// one value between "the default" and "the first swatch".
+    pub colour: Option<u8>,
 }
 
 /// Which zone portal's sector a creature was spawned in — set once at

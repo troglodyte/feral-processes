@@ -696,6 +696,20 @@ pub struct CompanionInfo {
     pub gear: String,
 }
 
+/// The player's chosen icon, off `components::PlayerIdentity` — carried on
+/// `EntityView::look`, `Some` for the player alone. Kept off `EntityView`
+/// itself, rather than two bare fields, so a frontend can match on
+/// `Some`/`None` for "is this the player" the same way it already does for
+/// `is_anchor`'s structure-only fields, instead of reading `sprite`/`colour`
+/// on every other entity and getting an empty string and a 0 back.
+#[derive(Clone)]
+pub struct PlayerLook {
+    pub sprite: String,
+    /// 0-based index into the renderer's player swatches; `None` is the
+    /// `PLAYER` role colour. See `components::PlayerIdentity::colour`.
+    pub colour: Option<u8>,
+}
+
 #[derive(Clone)]
 pub struct EntityView {
     pub entity: Entity,
@@ -704,6 +718,10 @@ pub struct EntityView {
     pub color: GlyphColor,
     pub label: String,
     pub is_player: bool,
+    /// The player's chosen sprite and colour — `Some` exactly when
+    /// `is_player` is true, `None` for every other entity. See
+    /// `PlayerLook`.
+    pub look: Option<PlayerLook>,
     pub is_tamed: bool,
     pub is_companion: bool,
     pub is_hostile: bool,
@@ -1477,6 +1495,20 @@ pub struct KnownRoutineView {
     pub held: u32,
 }
 
+/// One row of the creation wizard's Routine step — an `AbilityDef::starter`
+/// candidate, priced for the class the player has picked. See
+/// `Game::starter_routine_rows`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StarterRoutineRow {
+    pub id: crate::abilities::AbilityId,
+    pub name: String,
+    pub description: String,
+    /// What it does *for this class* — the magnitude with the class
+    /// affinity already applied. This is the field the step exists for.
+    pub effect: String,
+    pub power_cost: f32,
+}
+
 /// One row of the install picker — an etched Routine Disk in cargo, ready to
 /// be spent on a slot.
 ///
@@ -2240,4 +2272,20 @@ pub struct TransferRow {
     pub on_shelves: u32,
     pub carried: u32,
     pub can_put: u32,
+}
+
+/// One class offered on the creation screen — see `Game::class_rows`.
+///
+/// `axes` and `kit` are pre-formatted in the engine (`classes::format_axes`,
+/// `classes::format_kit`) so the two renderers cannot word one class's
+/// trade differently — `Game::copy_name`'s reason.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClassRow {
+    pub class: AffinityClass,
+    pub name: String,
+    pub description: String,
+    /// `"+Heal  -Damage"`-style summary of the spread.
+    pub axes: String,
+    /// `"3x Core Fragment, 4x Power Cell"`-style summary of the kit.
+    pub kit: String,
 }

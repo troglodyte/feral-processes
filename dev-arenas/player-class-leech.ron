@@ -1,0 +1,52 @@
+// PLAYTEST: does a Leech's drain pay for the round it costs, or is it a
+// worse attack with a garnish?
+//
+// One of five files — `player-class-striker`, `-bastion`, `-medic`,
+// `-saboteur`, `-leech` — identical in every field but `character`. See
+// `player-class-striker.ron` for the shared argument: why the pack is this
+// pack, why the pool is unspent, and why **the headless bin reports the same
+// numbers for all five** (it plays All-Attack and invokes nothing, so it is
+// the floor rather than the measurement).
+//
+//     FERAL_DEV_ARENA=1 cargo run  ->  [R] Arena  ->  [L] player-class-leech
+//
+// The floor, 2026-09-01, 20 reps, seeds 1-20: 60% won, mean 18.6 rounds,
+// 26% player Integrity left, 1.15 companions down. Compare deltas within one
+// build only.
+//
+// Leech Single is `Drain(power: 10, spread: 2, heal_fraction: 0.5)`, so at
+// 1.3 it is a small hit that returns half of what actually lands. It is the
+// one starter that does two jobs in one round, and the one most likely to be
+// strictly worse than both — a drain that heals off damage *dealt* returns
+// less against an armoured target, and this pack's mitigation is what
+// decides whether it pays.
+//
+// What to watch:
+//   - Against a full-Integrity you, the heal half is wasted. Against a
+//     nearly-dead you it may be the round that saves the run. Does the
+//     routine have a moment, or is it always the wrong choice?
+//   - Compare it directly to Fork Bomb Single (`stack_smash`, 9 authored
+//     power against this 10) on a Striker at the same 1.3: the drain costs
+//     one more Power and hits for about the same, so the entire difference
+//     is the half it gives back.
+//   - Leech damps Buff at 0.8, and this kit has no buff, so the trade is
+//     invisible here by construction. Fight `player-class-bastion.ron` and
+//     then this one with `hyperthread` picked on the wizard to see it.
+(
+    player: Fresh(level: 5, zone: 1),
+    character: (
+        class: Some(Leech),
+        stats: (0, 0, 0, 0),
+        routine: Some("siphon_cycles"),
+    ),
+    party: [
+        (species: "glitch", level: 5),
+        (species: "glitch", level: 5),
+    ],
+    opponents: [
+        (species: "sub_process", count: 5),
+        (species: "sub_process", count: 5),
+    ],
+    reps: 1,
+    seed: 2,
+)

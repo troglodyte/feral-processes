@@ -1,8 +1,9 @@
 //! Creating, saving, and restoring a `Game`.
 //!
-//! `new` and `load` are the only two doors into a playable world, and both
-//! go through `load_asset_dbs` so neither can produce a `Game` whose item
-//! set fails the economy-role check.
+//! `new_with` (which `new` is a one-line delegation to) and `load` are the
+//! only two doors into a playable world, and both go through
+//! `load_asset_dbs` so neither can produce a `Game` whose item set fails the
+//! economy-role check.
 
 use crate::abilities::AbilityId;
 use crate::components::Needs;
@@ -101,10 +102,64 @@ fn copy_to_save(copy: &GearCopy) -> save::GearCopySave {
 #[derive(Resource)]
 struct ProfileRewardsPaid;
 
+/// The player's `world.spawn` bundle, shared by every constructor — every
+/// field here is a neutral default. `Game::new_with` layers a
+/// `CharacterChoice` on top afterwards, via `Game::apply_character_choice`,
+/// one field at a time: the glyph, the `Inventory` and the free routine
+/// slot all spawn empty or hardcoded-neutral here and are only ever
+/// overwritten, never read, before that call runs.
+fn spawn_player(world: &mut World, start: (i32, i32)) -> Entity {
+    world
+        .spawn((
+            Player,
+            Position {
+                x: start.0,
+                y: start.1,
+            },
+            Glyph {
+                ch: '@',
+                color: GlyphColor::Cyan,
+            },
+            crate::tuning::PLAYER_BASE_STATS,
+            PowerReserve::default(),
+            Experience::default(),
+            Decompiler::default(),
+            Equipment::default(),
+            Inventory::default(),
+            GearCopies::default(),
+            StatusEffects::default(),
+            CombatBuff::default(),
+            FieldBuff::default(),
+            Perks::default(),
+            // Nested because the bundle tuple above is already at bevy's
+            // 15-element ceiling — the query-tuple limit CLAUDE.md already
+            // names, reached here from the bundle side instead.
+            (
+                Routines(vec![abilities::DECOMPILE_ABILITY_ID.to_string()]),
+                PlayerIdentity::default(),
+            ),
+        ))
+        .id()
+}
+
 impl Game {
     pub fn new(seed: u32, difficulty: DifficultyMode, assets_dir: &Path) -> std::io::Result<Self> {
+        Self::new_with(seed, difficulty, assets_dir, &CharacterChoice::default())
+    }
+
+    /// `Game::new`'s constructor, taking who the player is as an explicit
+    /// argument. There are ~1,600 `Game::new` call sites, almost all tests,
+    /// so `new` stays a one-line delegation here rather than every one of
+    /// them growing a fourth argument.
+    pub fn new_with(
+        seed: u32,
+        difficulty: DifficultyMode,
+        assets_dir: &Path,
+        choice: &CharacterChoice,
+    ) -> std::io::Result<Self> {
         let AssetDbs {
             abilities: ability_db,
+            classes: class_db,
             achievements: achievement_db,
             contracts: contract_db,
             descriptions: description_db,
@@ -134,6 +189,7 @@ impl Game {
 
         let mut world = World::new();
         world.insert_resource(ability_db);
+        world.insert_resource(class_db);
         world.insert_resource(species_db);
         world.insert_resource(structure_db);
         world.insert_resource(research_db);
@@ -234,38 +290,7 @@ impl Game {
             y: start.1,
         });
 
-        let player = world
-            .spawn((
-                Player,
-                Position {
-                    x: start.0,
-                    y: start.1,
-                },
-                Glyph {
-                    ch: '@',
-                    color: GlyphColor::Cyan,
-                },
-                crate::tuning::PLAYER_BASE_STATS,
-                PowerReserve::default(),
-                Experience::default(),
-                Decompiler::default(),
-                Equipment::default(),
-                Inventory {
-                    items: vec![
-                        (ItemId::from(ids::ICE_BREAKER), 3),
-                        (ItemId::from(ids::POWER_CELL), 3),
-                        (ItemId::from(ids::CORE_FRAGMENT), 5),
-                        (ItemId::from(ids::OUTLET), 2),
-                    ],
-                },
-                GearCopies::default(),
-                StatusEffects::default(),
-                CombatBuff::default(),
-                FieldBuff::default(),
-                Perks::default(),
-                Routines(vec![abilities::DECOMPILE_ABILITY_ID.to_string()]),
-            ))
-            .id();
+        let player = spawn_player(&mut world, start);
         world.insert_resource(PlayerEntity(player));
 
         // The anchor's permanent door into base space, standing where the
@@ -301,6 +326,7 @@ impl Game {
         let schedule = Self::build_schedule();
 
         let mut game = Self { world, schedule };
+        game.apply_character_choice(choice);
         for warning in load_warnings {
             game.log(warning);
         }
@@ -313,8 +339,8 @@ impl Game {
         Ok(game)
     }
 
-    /// The system schedule every tick runs, shared by `new` and `load` so
-    /// the two can't drift — the chained pair below is exactly the kind of
+    /// The system schedule every tick runs, shared by `new_with` and `load`
+    /// so the two can't drift — the chained pair below is exactly the kind of
     /// constraint that gets added to one copy and forgotten in the other.
     pub(crate) fn build_schedule() -> Schedule {
         let mut schedule = Schedule::default();
@@ -380,6 +406,7 @@ impl Game {
         }
         let AssetDbs {
             abilities: ability_db,
+            classes: class_db,
             achievements: achievement_db,
             contracts: contract_db,
             descriptions: description_db,
@@ -423,6 +450,7 @@ impl Game {
 
         let mut world = World::new();
         world.insert_resource(ability_db);
+        world.insert_resource(class_db);
         world.insert_resource(species_db);
         world.insert_resource(structure_db);
         world.insert_resource(research_db);
@@ -539,7 +567,7 @@ impl Game {
                     y: data.player.position.1,
                 },
                 Glyph {
-                    ch: '@',
+                    ch: data.player.glyph,
                     color: GlyphColor::Cyan,
                 },
                 Stats {
@@ -652,10 +680,24 @@ impl Game {
                     points: data.player.perk_points,
                     unlocked: data.player.unlocked_perks,
                 },
-                Routines(player_routines),
+                // Nested because the bundle tuple above is already at
+                // bevy's 15-element ceiling — the query-tuple limit CLAUDE.md
+                // already names, reached here from the bundle side instead.
+                (
+                    Routines(player_routines),
+                    PlayerIdentity {
+                        class: data.player.class,
+                        sprite: data.player.sprite.clone(),
+                        colour: data.player.colour,
+                    },
+                ),
             ))
             .id();
         world.insert_resource(PlayerEntity(player));
+
+        if let Some(name) = CustomName::sanitize(Some(data.player.name.clone())) {
+            world.entity_mut(player).insert(CustomName(name));
+        }
 
         // The anchor's saved position, or — only for a save written before
         // this field existed, since `Game::save` always writes `Some` from
@@ -1298,6 +1340,17 @@ impl Game {
             .get::<FieldBuff>(player)
             .map(|f| f.active.clone())
             .unwrap_or_default();
+        let glyph = self.world.get::<Glyph>(player).unwrap().ch;
+        let identity = self
+            .world
+            .get::<PlayerIdentity>(player)
+            .cloned()
+            .unwrap_or_default();
+        let name = self
+            .world
+            .get::<CustomName>(player)
+            .map(|n| n.0.clone())
+            .unwrap_or_default();
 
         let party_entities = self.world.resource::<Party>().0.clone();
         let wielded = self.wielded_program();
@@ -1711,6 +1764,11 @@ impl Game {
                 routines,
                 field_buffs,
                 sorties,
+                name,
+                class: identity.class,
+                glyph,
+                sprite: identity.sprite,
+                colour: identity.colour,
             },
             creatures,
             structures,
@@ -1881,12 +1939,8 @@ impl Game {
 
         let rewards: Vec<(Reward, Option<MainStat>)> = {
             let db = self.world.resource::<AchievementDb>();
-            self.world
-                .resource::<Profile>()
-                .earned
-                .iter()
-                .filter_map(|e| db.get(&e.id).map(|def| (def.reward.clone(), e.rolled_stat)))
-                .collect()
+            let profile = self.world.resource::<Profile>();
+            crate::achievements::profile_rewards(profile, db)
         };
         if rewards.is_empty() {
             return;
@@ -1982,6 +2036,7 @@ impl Game {
 /// accumulated for the caller to push into the message log.
 struct AssetDbs {
     abilities: AbilityDb,
+    classes: crate::classes::ClassDb,
     achievements: crate::achievements::AchievementDb,
     contracts: crate::contracts::ContractDb,
     descriptions: crate::descriptions::DescriptionDb,
@@ -2039,6 +2094,11 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     warnings.extend(items.synthesise_etched_disks(&abilities));
     let (perks, perk_warnings) = PerkDb::load_dir(&assets_dir.join("perks"))?;
     warnings.extend(perk_warnings);
+    // Same absent-is-silent rule again — see `ClassDb`'s own doc. An empty
+    // catalogue leaves the creation screen's class step with nothing to
+    // offer and every axis resolving neutral, which is the pre-class game.
+    let (classes, class_warnings) = crate::classes::ClassDb::load_dir(&assets_dir.join("classes"))?;
+    warnings.extend(class_warnings);
     // Not absent-is-silent, unlike `AffixDb` and `SectorDb`: every level a
     // Kernel Ring buys is spent in one of these trees, so a missing directory
     // is an install fault rather than a supported state. The `?` surfaces it
@@ -2130,6 +2190,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     }
     Ok(AssetDbs {
         abilities,
+        classes,
         talents,
         achievements,
         contracts,

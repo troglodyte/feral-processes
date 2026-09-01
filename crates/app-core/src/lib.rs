@@ -11,6 +11,7 @@ mod app;
 
 pub use app::arena::{ArenaRow, ArenaRowKind, DevTemplates};
 pub use app::building::{BaseStaffRow, StaffAction, StaffRow, Staffing, WorkOrderRow};
+pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
 pub use app::group_menu::GroupMenuRow;
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
@@ -23,7 +24,7 @@ use app::arena::{ArenaPickKind, ArenaSession};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use feral_processes_engine::achievements::{AchievementDb, Profile};
+use feral_processes_engine::achievements::{AchievementDb, MainStat, Profile};
 use feral_processes_engine::battle::DamageRange;
 use feral_processes_engine::battle::SpecialTargeting;
 use feral_processes_engine::battle::{
@@ -36,11 +37,11 @@ use feral_processes_engine::tuning::{
     ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, MAX_ACTIVE_CONTRACTS, MAX_FUSIONS,
 };
 use feral_processes_engine::{
-    AchievementRow, BattleView, BrokerReach, CaravanReach, ContractRefusal, ContractRow,
-    DifficultyMode, Entity, EntityView, FieldRoutinePick, FieldRoutineTarget,
-    FieldRoutineTargetView, Game, LogEntry, LogLine, MESSAGE_LOG_CAP, MessageSource, OrderPriority,
-    ProgramSaleOption, SlotShift, SwingOutcome, TransferRow, WorkOrder, WorkOrderReport,
-    WorkProfile, condense,
+    AchievementRow, BattleView, BrokerReach, CaravanReach, CharacterChoice, ContractRefusal,
+    ContractRow, CreationCatalogue, DifficultyMode, Entity, EntityView, FieldRoutinePick,
+    FieldRoutineTarget, FieldRoutineTargetView, Game, LogEntry, LogLine, MESSAGE_LOG_CAP,
+    MessageSource, OrderPriority, ProgramSaleOption, SlotShift, SwingOutcome, TransferRow,
+    WorkOrder, WorkOrderReport, WorkProfile, condense,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -871,10 +872,136 @@ impl ManifestOrigin {
     }
 }
 
+/// Which of the character-creation wizard's seven steps is showing. One
+/// `Mode::CreateCharacter` carries this as a cursor rather than the flow
+/// being seven modes — see that variant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CreationStep {
+    Difficulty,
+    Class,
+    Look,
+    Points,
+    Routine,
+    Name,
+    Summary,
+}
+
+impl CreationStep {
+    /// Every step, in the order the wizard walks them.
+    ///
+    /// **Exhaustive, for `render/stack.rs`'s `cell_mark` reason**: `next`,
+    /// `prev`, the renderer's per-step draw and the refusal census all walk
+    /// this, so a step added as a `_ =>` arm somewhere would ship
+    /// undrawable. Adding a variant without adding it here is caught by
+    /// `every_step_is_in_the_exhaustive_list`, which is the one place that
+    /// can be checked.
+    pub const ALL: [CreationStep; 7] = [
+        CreationStep::Difficulty,
+        CreationStep::Class,
+        CreationStep::Look,
+        CreationStep::Points,
+        CreationStep::Routine,
+        CreationStep::Name,
+        CreationStep::Summary,
+    ];
+
+    /// Where this step sits in [`ALL`](CreationStep::ALL), 0-based — the
+    /// "step 3 of 7" figure, and what `next`/`prev` walk.
+    pub fn index(self) -> usize {
+        Self::ALL
+            .iter()
+            .position(|s| *s == self)
+            .expect("CreationStep::ALL is exhaustive")
+    }
+
+    /// The step after this one, `None` on the last. Derived from `ALL`
+    /// rather than matched, so the order is stated once.
+    pub fn next(self) -> Option<CreationStep> {
+        Self::ALL.get(self.index() + 1).copied()
+    }
+
+    /// The step before this one, `None` on the first — where Esc leaves the
+    /// wizard for the main menu.
+    pub fn prev(self) -> Option<CreationStep> {
+        self.index().checked_sub(1).map(|i| Self::ALL[i])
+    }
+
+    /// The step's heading, for the renderer's popup title.
+    pub fn title(self) -> &'static str {
+        match self {
+            CreationStep::Difficulty => "Difficulty",
+            CreationStep::Class => "Class",
+            CreationStep::Look => "Look",
+            CreationStep::Points => "Points",
+            CreationStep::Routine => "Starter routine",
+            CreationStep::Name => "Name",
+            CreationStep::Summary => "Summary",
+        }
+    }
+}
+
+/// One row of whichever creation step is showing.
+///
+/// Defined here in app-core rather than in the engine's `views`: a
+/// read-only screen's row *count* is owned by app-core and drawn by gui, so
+/// the per-step shape belongs on this side of the seam. The engine's own
+/// row types (`ClassRow`, `StarterRoutineRow`) are carried whole rather
+/// than flattened — they are already the one derivation of what a class and
+/// a routine look like.
+#[derive(Clone, Debug, PartialEq)]
+pub enum CreationRow {
+    Difficulty {
+        mode: DifficultyMode,
+        label: String,
+        detail: String,
+    },
+    Class(feral_processes_engine::ClassRow),
+    Icon {
+        glyph: char,
+        sprite: String,
+    },
+    /// A swatch, by its **0-based** index into the renderer's
+    /// `palette::PLAYER_CHOICES` — see `CREATION_COLOURS`.
+    Colour {
+        index: u8,
+    },
+    /// One per `MainStat::all()` axis. `spent` is units *bought* on it,
+    /// `value` what the player will actually open on, `cost` what one more
+    /// unit costs.
+    Stat {
+        stat: MainStat,
+        spent: u32,
+        value: i32,
+        cost: u32,
+    },
+    Routine(feral_processes_engine::StarterRoutineRow),
+    Name {
+        typed: String,
+    },
+    /// A finished line on the Summary step.
+    Summary {
+        label: String,
+        value: String,
+    },
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
     MainMenu,
-    DifficultyPick,
+    /// The character-creation wizard, opened with `[n]` from the main menu.
+    ///
+    /// **One mode with a [`CreationStep`] cursor, not seven modes.**
+    /// `Mode::Transfer`'s reason exactly: seven variants would each owe a
+    /// row in the renderer's `ALL_MODES`, in `needs_status_banner` and in
+    /// the refusal census, to describe one linear flow with one back
+    /// button. `App::creation_step` names the step, `App::creation_rows`
+    /// gives that step's rows, and `handle_creation_key` dispatches on it.
+    ///
+    /// This replaces `Mode::DifficultyPick`, which the wizard's first step
+    /// now is — so the mode count is net zero against today, and starting a
+    /// run reads as one decision instead of two screens that do not know
+    /// about each other.
+    CreateCharacter,
     /// Lists saves found in the saves directory (see `App::list_saves`);
     /// picking one moves to `Mode::SaveAction` to choose Load or Delete.
     LoadGame,
@@ -1306,7 +1433,7 @@ impl Mode {
             | Mode::BattleResult => true,
             Mode::MainMenu
             | Mode::Achievements
-            | Mode::DifficultyPick
+            | Mode::CreateCharacter
             | Mode::LoadGame
             | Mode::SaveAction
             | Mode::Playing
@@ -1845,6 +1972,36 @@ pub struct App {
     /// does not install it, which simply does not offer the `Template`
     /// player source.
     dev_templates: Option<DevTemplates>,
+    /// Which step of the creation wizard is showing. Only meaningful under
+    /// `Mode::CreateCharacter`; reset to `Difficulty` every time the wizard
+    /// is opened.
+    creation_step: CreationStep,
+    /// The character being built. Reset to `CharacterChoice::default()` on
+    /// every open, so an abandoned wizard cannot leak into the next one.
+    ///
+    /// **The default is deliberately classless and neutral while the screen
+    /// has no Unaligned option.** The two disagree on purpose: the default
+    /// is what ~1,600 `Game::new` call sites construct and what
+    /// `balance_sim`'s modelled floor corresponds to, and the wizard's Class
+    /// step refusing to advance without a pick is a screen rule, not a data
+    /// one.
+    creation_choice: CharacterChoice,
+    /// Which of `creation_choice`'s fields the player has settled by hand,
+    /// and so which `[R]` must leave alone. Reset alongside the choice on
+    /// every open. See `app::creation::Decided`.
+    creation_decided: crate::app::creation::Decided,
+    /// The difficulty picked on the wizard's first step. `None` until it is
+    /// — the Difficulty step is what advances on a pick, so nothing
+    /// downstream ever reads this unset, and it is never rolled: `[R]` is a
+    /// reroll for *shape*, and handing a player permadeath they did not ask
+    /// for is not that.
+    creation_difficulty: Option<DifficultyMode>,
+    /// The class and starter-routine catalogue the wizard draws from. Its
+    /// own, rather than the `Game`'s, because the wizard picks the
+    /// difficulty `Game::new_with` takes and so runs before any `Game`
+    /// exists — the same reason `achievement_db` and `help_db` are held
+    /// here.
+    creation_catalogue: CreationCatalogue,
 }
 
 /// One entry in the `Mode::LoadGame` list — a save file found in the saves

@@ -1,12 +1,16 @@
 # Routines and field buffs
 
 A routine is an ability sitting in a slot. Levels buy slots in pairs — you and a fresh program both
-start with two, and twelve is the ceiling for anybody. One of your two already holds Decompile, and a
-program arrives with its innate kit in its own, so installing something new eventually means
-displacing something old, and a program's innate routine, once displaced, is gone.
+start with two, and twelve is the ceiling for anybody. One of your two already holds Decompile and
+the other holds whatever you took at creation, and a program arrives with its innate kit in its own,
+so installing something new eventually means displacing something old, and a program's innate
+routine, once displaced, is gone.
 
-Routines reach you four ways.
+Routines reach you five ways.
 
+- At creation. The starter routine you picked when you made your character is both installed in
+  your free slot and known outright, so you can etch it onto a disk later like anything else you
+  know. See [your character](your-character).
 - Innately. A species grants its own kit, unlocking a routine at a level named in its file.
 - Research. A Research Node pays for the tree, and several of its branches teach routines outright.
 - Routine Disks. Etch a blank disk with something you already know from the party menu, then install

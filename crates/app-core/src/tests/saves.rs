@@ -30,7 +30,7 @@ fn starting_a_new_game_creates_a_listed_save_that_can_be_loaded_and_deleted() {
         std::env::temp_dir().join("feral_processes_saves_telemetry.jsonl"),
     );
 
-    app.start_new_game(DifficultyMode::Forgiving);
+    app.start_new_game(DifficultyMode::Forgiving, &CharacterChoice::default());
     assert!(
         app.mode == Mode::Playing,
         "starting a new game should enter Playing"
@@ -106,7 +106,7 @@ fn a_flatlined_permadeath_run_cannot_be_reloaded_from_the_load_list() {
         std::env::temp_dir().join(format!("{tag}_telemetry.jsonl")),
     );
 
-    app.start_new_game(DifficultyMode::Permadeath);
+    app.start_new_game(DifficultyMode::Permadeath, &CharacterChoice::default());
     while app.game.as_mut().unwrap().take_notification().is_some() {}
     let path = app
         .current_save_path

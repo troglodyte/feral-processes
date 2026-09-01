@@ -497,6 +497,19 @@ pub struct AbilityDef {
     /// `Game::extract_routine` are the three places that honour it.
     #[serde(default)]
     pub exclusive: bool,
+    /// Offered in the creation wizard's Routine step as a candidate for the
+    /// free starter slot — see `abilities::install_starter`.
+    ///
+    /// Opt-in, the same idiom `exclusive` and `wild_weight` already use: the
+    /// pool is defined by the files that ask to be in it rather than by this
+    /// module listing them. Not refused at load — held to shape by three
+    /// censuses in `tests/assets.rs` instead, the same way the hunt-only set
+    /// is: a starter must be single-target
+    /// (`OneAlly`/`OneEnemyGroupFront`) and `exclusive: false`, since an
+    /// exclusive routine may never enter `KnownRoutines` and creation must
+    /// not become a fourth way around that gate.
+    #[serde(default)]
+    pub starter: bool,
 
     /// Whether this attack reaches past the front line. Read by **the basic
     /// attack path only** — `Game::basic_attacks_that_reach` — because that
@@ -946,6 +959,185 @@ impl AbilityDb {
     pub fn exclusive_pool(&self) -> Vec<&AbilityDef> {
         self.all().filter(|d| d.exclusive).collect()
     }
+}
+
+/// Grants `routine` as knowledge and installs it into the player's free
+/// starter slot — `Game::apply_character_choice`'s "routine" step.
+///
+/// `None` — `CharacterChoice::default()`'s value — does nothing, which is
+/// what keeps every one of the ~1,600 `Game::new` call sites producing
+/// today's player: nothing installed beyond `DECOMPILE_ABILITY_ID`.
+///
+/// **Knowledge first, then the install.** A `KnownRoutines` entry is what
+/// lets the routine be etched onto a disk later like anything else the
+/// player knows — see `assets/abilities/README.md`'s "The starter set".
+/// The install itself is `Game::write_routine`, the same door
+/// `Game::install_disk` uses: no ownership check, no disk spent, just a
+/// write into the next free slot. `PLAYER_ROUTINE_SLOT_BASE` is 2 and
+/// `decompile` already occupies one slot at this point in
+/// `apply_character_choice`'s order (stats, identity, kit, *then*
+/// routine), so this always has exactly one slot to land in and never
+/// displaces it.
+///
+/// Does not validate `routine` against `AbilityDef::starter` — the wizard
+/// (Track D/E) is the one surface that offers a choice at all, and it can
+/// only ever offer what `Game::starter_routine_rows` lists.
+pub fn install_starter(game: &mut crate::Game, routine: Option<&AbilityId>) {
+    let Some(routine) = routine else {
+        return;
+    };
+    game.world
+        .resource_mut::<crate::KnownRoutines>()
+        .0
+        .insert(routine.clone());
+    let player = game.player_entity();
+    game.write_routine(player, routine);
+}
+
+/// What one use of `def` does, as a sentence, with its magnitudes already
+/// scaled for an invoker at `level` with `affinity`.
+///
+/// **Exhaustive on `AbilityEffect`**, the rule `render/stack.rs`'s
+/// `cell_mark` records: as a `_ =>` arm an eleventh effect would ship with
+/// the page silently saying nothing about it.
+///
+/// A free function rather than a `Game` method because the creation wizard
+/// prices its routine rows before any `Game` exists — `Game::
+/// routine_effect_label` is a call to this, not a second copy.
+pub fn effect_label(def: &AbilityDef, level: u32, affinity: f32) -> String {
+    match &def.effect {
+        AbilityEffect::Damage {
+            power,
+            spread,
+            status,
+        } => {
+            let band = scaled_range(
+                crate::battle::DamageRange::centred(*power, *spread),
+                level,
+                affinity,
+            );
+            let mut line = format!("Damage {}", range_label(band));
+            // The rider's chance is a property of the move and is not
+            // scaled by anything, so it prints as authored.
+            if let Some(status) = status {
+                line.push_str(&format!(
+                    ", {:.0}% to inflict {}",
+                    status.chance * 100.0,
+                    status.kind.label()
+                ));
+            }
+            line
+        }
+        AbilityEffect::Heal { power, spread } => {
+            let band = scaled_range(
+                crate::battle::DamageRange::centred(*power, *spread),
+                level,
+                affinity,
+            );
+            format!("Restores {} Integrity", range_label(band))
+        }
+        AbilityEffect::Buff {
+            kind,
+            power,
+            duration,
+        } => format!(
+            "{} {:+} for {duration} rounds",
+            kind.label(),
+            scaled_stat_power(*power, level, affinity)
+        ),
+        AbilityEffect::Debuff {
+            kind,
+            power,
+            duration,
+        } => format!(
+            "Inflicts {} ({}) for {duration} rounds",
+            kind.label(),
+            scaled_hp_power(*power, level, affinity)
+        ),
+        AbilityEffect::Drain {
+            power,
+            spread,
+            heal_fraction,
+        } => {
+            let band = scaled_range(
+                crate::battle::DamageRange::centred(*power, *spread),
+                level,
+                affinity,
+            );
+            format!(
+                "Damage {}, healing the invoker {:.0}% of it",
+                range_label(band),
+                heal_fraction * 100.0
+            )
+        }
+        AbilityEffect::Cleanse => "Clears the recipient's status condition".to_string(),
+        AbilityEffect::Decompile => "Attempts a capture, spending a catalyst".to_string(),
+        AbilityEffect::FieldBuff {
+            kind,
+            power,
+            duration,
+            interval,
+        } => {
+            let magnitude =
+                kind.magnitude_label(scaled_stat_power(*power, level, affinity), *interval);
+            // A `0` here is an until-rest buff whose count nothing
+            // reads, never a buff that expires the turn it is run —
+            // see `AbilityEffect::FieldBuff::duration`.
+            match kind.runs_until_rest() {
+                true => format!("{magnitude} until the party rests"),
+                false => format!("{magnitude} for {duration} turns"),
+            }
+        }
+        AbilityEffect::Phase => "Steps the party through one solid cell".to_string(),
+        AbilityEffect::Jump => {
+            "Moves the party to a cell you point at, fatally if it is solid".to_string()
+        }
+        AbilityEffect::Symlink => "Returns the party to the base anchor".to_string(),
+    }
+}
+
+/// A damage band as the player reads it — a single number when the band has
+/// no width, `min–max` otherwise. `Game::damage_range_label` is a call to
+/// this; the two must agree, since the same band is printed on a routine's
+/// inspect page and on the creation wizard's routine row.
+pub fn range_label(range: crate::battle::DamageRange) -> String {
+    if range.max <= range.min {
+        format!("{}", range.min)
+    } else {
+        format!("{}\u{2013}{}", range.min, range.max)
+    }
+}
+
+/// Every `AbilityDef::starter` ability, id-sorted so a picker's numbering is
+/// stable, each priced at level 1 through [`effect_label`] and
+/// [`routine_power_cost`] — the two real doors, not a copy of either.
+///
+/// `affinity` is asked per axis rather than resolved here: `Game::
+/// starter_routine_rows` passes the player-arm formula for a class the
+/// player has only *picked*, and the creation wizard's catalogue passes the
+/// same formula with no perks. Neither can drift, because both call
+/// `classes::affinity_with_perk`.
+pub fn starter_rows(
+    db: &AbilityDb,
+    affinity: impl Fn(AffinityKind) -> f32,
+) -> Vec<crate::views::StarterRoutineRow> {
+    db.all()
+        .filter(|def| def.starter)
+        .map(|def| crate::views::StarterRoutineRow {
+            id: def.id.clone(),
+            name: def.name.clone(),
+            description: def.description.clone(),
+            effect: effect_label(
+                def,
+                1,
+                match def.effect.affinity_kind() {
+                    Some(kind) => affinity(kind),
+                    None => crate::tuning::AFFINITY_NEUTRAL,
+                },
+            ),
+            power_cost: routine_power_cost(def),
+        })
+        .collect()
 }
 
 #[cfg(test)]

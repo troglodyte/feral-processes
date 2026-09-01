@@ -1,0 +1,49 @@
+// PLAYTEST: is a Bastion's buff worth a round of not attacking?
+//
+// One of five files — `player-class-striker`, `-bastion`, `-medic`,
+// `-saboteur`, `-leech` — identical in every field but `character`. See
+// `player-class-striker.ron` for the shared argument: why the pack is this
+// pack, why the pool is unspent, and why **the headless bin reports the same
+// numbers for all five** (it plays All-Attack and invokes nothing, so it is
+// the floor rather than the measurement).
+//
+//     FERAL_DEV_ARENA=1 cargo run  ->  [R] Arena  ->  [L] player-class-bastion
+//
+// The floor, 2026-09-01, 20 reps, seeds 1-20: 60% won, mean 18.6 rounds,
+// 26% player Integrity left, 1.15 companions down. Compare deltas within one
+// build only.
+//
+// A buff is the hardest of the five to feel, and this is the file that
+// should say so if it is true. Hyperthread Single grants +6 Attack for four
+// rounds at 1.3, so it pays back only in a fight with rounds left to spend
+// it over — which is why this pack runs long. A 19-round fight is close to
+// the best case a buff will ever get.
+//
+// What to watch:
+//   - The break-even. Four rounds of +6 Attack against one round of not
+//     attacking: does the fight visibly shorten, or is it inside the noise
+//     of the damage band?
+//   - Whom you put it on. It is single-target, so a Bastion is choosing
+//     between themselves and a companion every time — is that a decision or
+//     an obvious answer?
+//   - Bastion damps Damage at 0.8, and this kit has no damage routine to
+//     damp, so the trade is invisible here by construction. That is the
+//     finding if the class reads as a free bonus.
+(
+    player: Fresh(level: 5, zone: 1),
+    character: (
+        class: Some(Bastion),
+        stats: (0, 0, 0, 0),
+        routine: Some("hyperthread"),
+    ),
+    party: [
+        (species: "glitch", level: 5),
+        (species: "glitch", level: 5),
+    ],
+    opponents: [
+        (species: "sub_process", count: 5),
+        (species: "sub_process", count: 5),
+    ],
+    reps: 1,
+    seed: 2,
+)

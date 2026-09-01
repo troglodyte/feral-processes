@@ -376,6 +376,40 @@ pub fn report(db: &AchievementDb, profile: &Profile) -> Vec<crate::views::Achiev
         .collect()
 }
 
+/// What a profile currently pays out, one entry per earned rung it still
+/// recognises, in earned order.
+///
+/// **The one derivation `Game::grant_profile_rewards` pays from and the
+/// creation wizard's preview reads.** A rung whose id is no longer in `db`
+/// (a mod removed) is silently dropped, same as `grant_profile_rewards`
+/// always did — the caller decides what to do with an empty list.
+///
+/// The paired `MainStat` is `Earned::rolled_stat`, the roll as recorded at
+/// earn time, never a fresh `roll_main_stat` call — see that function's own
+/// doc comment for why a re-roll here would be wrong even though it is
+/// deterministic.
+pub fn profile_rewards(profile: &Profile, db: &AchievementDb) -> Vec<(Reward, Option<MainStat>)> {
+    profile
+        .earned
+        .iter()
+        .filter_map(|e| db.get(&e.id).map(|def| (def.reward.clone(), e.rolled_stat)))
+        .collect()
+}
+
+/// How an already-rolled reward reads on the creation wizard's preview.
+///
+/// Unlike `reward_label`, which keeps `RandomMainStat` deliberately vague
+/// for the achievements screen's still-unearned rows, this is only ever
+/// called on a reward `profile_rewards` has already resolved — the roll
+/// happened at earn time, so naming the stat here reveals nothing that
+/// earning it didn't already.
+pub fn preview_line(reward: &Reward, rolled: Option<MainStat>) -> String {
+    match (reward, rolled) {
+        (Reward::RandomMainStat(n), Some(stat)) => format!("+{n} {}", stat.label()),
+        _ => reward_label(reward),
+    }
+}
+
 /// How a reward reads on the screen. A `RandomMainStat` is deliberately
 /// unspecific here — the roll *is* predictable from the id, but which stat it
 /// landed on is the small reveal of earning it, and the earned row shows the

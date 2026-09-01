@@ -1,0 +1,7 @@
+(
+    class: Striker,
+    name: "Striker",
+    description: "Hits hardest, heals worst. Damage routines land harder; repair routines land softer.",
+    affinities: (damage: 1.3, heal: 0.8),
+    kit: [("ice_breaker", 4), ("power_cell", 2), ("core_fragment", 6), ("charge_coil", 1)],
+)

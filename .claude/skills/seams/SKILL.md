@@ -31,7 +31,7 @@ Three tiers, and which one you want depends on what you are doing:
 | subsystem | reference | seams |
 |---|---|---:|
 | the base, base space, labour, work orders, digging, building, needs | `references/base.md` | 76 |
-| combat, damage, XP, levels, talents, perks, balance, spawning | `references/combat.md` | 63 |
+| combat, damage, XP, levels, talents, perks, balance, spawning | `references/combat.md` | 64 |
 | items, gear copies, quality, crafting, the caravan, the economy | `references/items.md` | 25 |
 | the Stack (frames, descents, lairs, descriptions, first-person views) | `references/stack.md` | 22 |
 | saves, the log, refusals, screens, the Broker board, paths | `references/screens.md` | 21 |

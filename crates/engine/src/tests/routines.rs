@@ -2,6 +2,7 @@
 
 use super::support::*;
 use crate::components::Routines;
+use crate::species::AffinityClass;
 use crate::*;
 
 /// The generic test species declares no abilities, so its kit is the
@@ -1048,5 +1049,173 @@ fn a_level_up_unlock_never_evicts_a_carried_routine() {
             .any(|e| e.text.contains(&unlock_name) && e.text.contains("is lost")),
         "the unlock that found no room is lost, and said so: {:?}",
         game.message_log(10)
+    );
+}
+
+/// `abilities::install_starter` grants **knowledge and the install** — a
+/// choice's routine has to survive past the run it was picked in (etched
+/// onto a disk later, exactly like anything else the player knows), so the
+/// install alone would not be enough.
+#[test]
+fn a_starter_routine_is_known_and_installed() {
+    let choice = CharacterChoice {
+        routine: Some("stack_smash".to_string()),
+        ..CharacterChoice::default()
+    };
+    let game =
+        Game::new_with(9001, DifficultyMode::Forgiving, &test_assets_dir(), &choice).unwrap();
+    assert!(
+        game.knows_routine("stack_smash"),
+        "install_starter must grant knowledge, not just occupy the slot"
+    );
+    let player = game.player_entity();
+    assert!(
+        game.world
+            .get::<Routines>(player)
+            .unwrap()
+            .0
+            .contains(&"stack_smash".to_string()),
+        "install_starter must install into the free slot, not just teach it"
+    );
+}
+
+/// `PLAYER_ROUTINE_SLOT_BASE` is 2 specifically so a starter has somewhere
+/// to land without evicting `decompile` — the ability the player always
+/// starts able to capture programs with. Both must be held at once.
+#[test]
+fn a_starter_routine_does_not_displace_decompile() {
+    let choice = CharacterChoice {
+        routine: Some("checksum_repair".to_string()),
+        ..CharacterChoice::default()
+    };
+    let game =
+        Game::new_with(9002, DifficultyMode::Forgiving, &test_assets_dir(), &choice).unwrap();
+    let player = game.player_entity();
+    let installed = &game.world.get::<Routines>(player).unwrap().0;
+    assert_eq!(
+        installed,
+        &vec![
+            crate::abilities::DECOMPILE_ABILITY_ID.to_string(),
+            "checksum_repair".to_string(),
+        ],
+        "decompile keeps its slot and the starter fills the other one"
+    );
+}
+
+/// `CharacterChoice::default()`'s `routine: None` is today's game — no
+/// second routine, the slot `PLAYER_ROUTINE_SLOT_BASE` leaves free stays
+/// free, and nothing is known beyond `decompile`.
+#[test]
+fn no_starter_choice_leaves_the_slot_empty() {
+    let game = Game::new(9003, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    assert_eq!(
+        game.world.get::<Routines>(player).unwrap().0,
+        vec![crate::abilities::DECOMPILE_ABILITY_ID.to_string()]
+    );
+    assert!(!game.knows_routine("stack_smash"));
+    assert!(!game.knows_routine("checksum_repair"));
+}
+
+/// `starter_routine_rows` is genuinely computed through the same doors
+/// `routine_detail` (the etch-picker's inspect page) uses — `Game::
+/// player_affinity_for` (the class half of `ability_affinity`'s player arm,
+/// callable against a class not yet written to `PlayerIdentity`) and
+/// `routine_power_cost` — rather than echoing each file's authored
+/// `description` or `power_cost` back verbatim, or ignoring `class`
+/// entirely. Checked against `checksum_repair`, a Heal routine with no
+/// status rider to complicate the expected string.
+///
+/// The design's own framing for this step is "the same routine reads
+/// differently for a Striker and a Medic"
+/// (`docs/superpowers/specs/2026-09-01-character-creation-design.md`), and
+/// it names a *direction*, not just a difference: Striker damps Heal to 0.8
+/// and Medic raises it to 1.3 (`assets/classes/striker.ron`,
+/// `assets/classes/medic.ron`). Each expected band below is computed with
+/// that exact authored multiplier through the real `scaled_range`, so a
+/// wiring bug that reads the wrong `AffinityKind` (e.g. `Damage` for a Heal
+/// effect) or swaps which class damps and which raises fails this test even
+/// though the two rows would still merely "differ".
+#[test]
+fn starter_rows_are_priced_through_the_class() {
+    let game = Game::new(9004, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let neutral_rows = game.starter_routine_rows(None);
+
+    let ids: Vec<_> = neutral_rows.iter().map(|r| r.id.clone()).collect();
+    assert_eq!(
+        ids,
+        vec![
+            "bit_rot_v2".to_string(),
+            "checksum_repair".to_string(),
+            "hyperthread".to_string(),
+            "siphon_cycles".to_string(),
+            "stack_smash".to_string(),
+        ],
+        "the pool is exactly the five shipped starters, id-sorted, unfiltered by class"
+    );
+
+    let def = game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .get("checksum_repair")
+        .unwrap();
+    let neutral_band = crate::abilities::scaled_range(
+        crate::battle::DamageRange::centred(25, 6),
+        1,
+        crate::tuning::AFFINITY_NEUTRAL,
+    );
+    let neutral_heal = neutral_rows
+        .iter()
+        .find(|r| r.id == "checksum_repair")
+        .unwrap();
+    assert_eq!(
+        neutral_heal.effect,
+        format!(
+            "Restores {} Integrity",
+            game.damage_range_label(neutral_band)
+        ),
+        "with no class the row must still read the level-1, neutral-affinity band through \
+         routine_effect_label — not the file's raw prose"
+    );
+    assert_eq!(
+        neutral_heal.power_cost,
+        crate::abilities::routine_power_cost(def),
+        "power_cost must be the real charge, not the file's raw power_cost"
+    );
+
+    let striker_heal = game
+        .starter_routine_rows(Some(AffinityClass::Striker))
+        .into_iter()
+        .find(|r| r.id == "checksum_repair")
+        .unwrap();
+    let medic_heal = game
+        .starter_routine_rows(Some(AffinityClass::Medic))
+        .into_iter()
+        .find(|r| r.id == "checksum_repair")
+        .unwrap();
+
+    let striker_band =
+        crate::abilities::scaled_range(crate::battle::DamageRange::centred(25, 6), 1, 0.8);
+    let medic_band =
+        crate::abilities::scaled_range(crate::battle::DamageRange::centred(25, 6), 1, 1.3);
+    assert_eq!(
+        striker_heal.effect,
+        format!(
+            "Restores {} Integrity",
+            game.damage_range_label(striker_band)
+        ),
+        "a Striker damps Heal to 0.8 — the row must price through that spread, not the \
+         neutral one"
+    );
+    assert_eq!(
+        medic_heal.effect,
+        format!("Restores {} Integrity", game.damage_range_label(medic_band)),
+        "a Medic raises Heal to 1.3 — the row must price through that spread, not the \
+         neutral one"
+    );
+    assert_ne!(
+        striker_heal.effect, medic_heal.effect,
+        "a Striker and a Medic must read checksum_repair differently — the whole point of \
+         pricing rows through `class`"
     );
 }

@@ -492,11 +492,7 @@ impl Game {
     /// in DejaVu Sans Mono where both are one cell, and the en dash reads as
     /// a range rather than as a minus sign in front of `max`.
     pub fn damage_range_label(&self, range: battle::DamageRange) -> String {
-        if range.max <= range.min {
-            format!("{}", range.min)
-        } else {
-            format!("{}–{}", range.min, range.max)
-        }
+        crate::abilities::range_label(range)
     }
 
     /// What one *worn* item is worth — `copy_bonus` at the level the copy

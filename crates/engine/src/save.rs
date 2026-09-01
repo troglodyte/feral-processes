@@ -8,7 +8,7 @@ use crate::components::{ActiveFieldBuff, Rarity};
 use crate::items::{EquipmentSlot, ItemId};
 use crate::perks::Perk;
 use crate::resources::DifficultyMode;
-use crate::species::SpeciesId;
+use crate::species::{AffinityClass, SpeciesId};
 use crate::world::Tile;
 
 #[derive(Serialize, Deserialize)]
@@ -134,6 +134,55 @@ pub struct PlayerSave {
     /// clear it.
     #[serde(default)]
     pub sorties: Vec<SortieSave>,
+    /// The player's own chosen name — see `components::CustomName`. Empty
+    /// for a save written before character creation existed, or for a
+    /// choice that named nothing: `CustomName::sanitize` treats the two the
+    /// same, so `Game::load` inserts no override for either and the run
+    /// reads exactly as it always did.
+    #[serde(default)]
+    pub name: String,
+    /// The player's chosen class — see `components::PlayerIdentity`.
+    /// `Game::load` writes it straight back onto `PlayerIdentity` rather
+    /// than replaying `Game::apply_character_choice`: the kit and the stat
+    /// spend a class implies are already receipts, folded into `inventory`
+    /// and the stat fields above, and replaying the choice would double
+    /// them.
+    #[serde(default)]
+    pub class: Option<AffinityClass>,
+    /// The player's chosen glyph — `components::Glyph::ch`. Defaulted
+    /// through a named function rather than `char`'s own default (`'\0'`),
+    /// so a save written before character creation existed loads the `@`
+    /// every player before it had.
+    #[serde(default = "default_player_glyph")]
+    pub glyph: char,
+    /// The player's chosen sprite name — see `components::PlayerIdentity`.
+    /// Defaulted through a named function for `glyph`'s reason: the map
+    /// drew `assets/sprites/player.png` for every player before the wizard
+    /// existed, and `String`'s own default is the empty name the renderer
+    /// reads as *no sprite*.
+    #[serde(default = "default_player_sprite")]
+    pub sprite: String,
+    /// The player's chosen colour index, 0-based — see
+    /// `components::PlayerIdentity`. `#[serde(default)]` on an `Option`
+    /// yields `None`, which is exactly what a save written before character
+    /// creation existed means: no choice was made, so the glyph wears the
+    /// `PLAYER` role colour.
+    #[serde(default)]
+    pub colour: Option<u8>,
+}
+
+/// `serde`'s default for `PlayerSave::glyph` — a save written before
+/// character creation existed carries no glyph at all, and every player
+/// before it was `@`.
+fn default_player_glyph() -> char {
+    '@'
+}
+
+/// `serde`'s default for `PlayerSave::sprite` — the name the map painted
+/// for every player before the wizard could choose one, and the same name
+/// `CharacterChoice::default()` carries.
+fn default_player_sprite() -> String {
+    crate::DEFAULT_PLAYER_SPRITE.to_string()
 }
 
 /// One trip in flight.
@@ -1391,6 +1440,11 @@ mod tests {
                 routines: Vec::new(),
                 field_buffs: Vec::new(),
                 sorties: Vec::new(),
+                name: String::new(),
+                class: None,
+                glyph: '@',
+                sprite: String::new(),
+                colour: None,
             },
             creatures: Vec::new(),
             structures: Vec::new(),

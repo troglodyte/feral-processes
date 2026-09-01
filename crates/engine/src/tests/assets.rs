@@ -2609,3 +2609,181 @@ fn the_shipped_tutorial_chain_is_well_formed() {
         }
     }
 }
+
+/// The class censuses, over the **real** `assets/classes/` rather than a
+/// fixture — see `crates/engine/src/classes.rs`'s own doc comment for the
+/// contract these hold to.
+mod classes {
+    use super::*;
+    use crate::classes::ClassDb;
+    use crate::species::AffinityClass;
+
+    fn shipped() -> ClassDb {
+        let (db, warnings) = ClassDb::load_dir(&test_assets_dir().join("classes")).unwrap();
+        assert!(
+            warnings.is_empty(),
+            "shipped classes must load clean: {warnings:?}"
+        );
+        db
+    }
+
+    /// Driven by the enum rather than by naming five files, so a sixth
+    /// class fails this test the day it is added rather than shipping
+    /// unpickable — `cell_mark`'s rule.
+    #[test]
+    fn every_class_has_a_file() {
+        let db = shipped();
+        for class in AffinityClass::ALL {
+            assert!(db.get(class).is_some(), "{class:?} has no class file");
+        }
+    }
+
+    /// A kit naming an item that does not exist must fail the build, not
+    /// silently hand the player an empty pack.
+    #[test]
+    fn every_class_kit_item_exists() {
+        let db = shipped();
+        let (abilities, _) =
+            crate::abilities::AbilityDb::load_dir(&test_assets_dir().join("abilities")).unwrap();
+        let (items, _) =
+            crate::items_db::ItemDb::load_dir(&test_assets_dir().join("items"), &abilities)
+                .unwrap();
+        for def in db.iter() {
+            for (item, _) in &def.kit {
+                assert!(
+                    items.get(item.as_str()).is_some(),
+                    "{:?}'s kit names an item that does not exist: {item}",
+                    def.class
+                );
+            }
+        }
+    }
+}
+
+/// A starter routine is chosen for one person and installed for free — a
+/// `WholeParty`/`WholeEnemyGroup`/`AllEnemies` effect landing on more than
+/// the chooser (or their one target) would be a strange first routine to
+/// hand out, and the creation screen has no picker for "which ally" beyond
+/// the player themselves.
+#[test]
+fn every_starter_is_single_target() {
+    let game = Game::new(3401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
+        if !def.starter {
+            continue;
+        }
+        assert!(
+            matches!(
+                def.target,
+                AbilityTarget::OneAlly | AbilityTarget::OneEnemyGroupFront
+            ),
+            "starter {:?} targets {:?}, which is not single-target",
+            def.id,
+            def.target
+        );
+    }
+}
+
+/// An `exclusive` routine never enters `KnownRoutines` — `AbilityDef::
+/// exclusive`'s whole point is that nothing may teach it. Creation grants
+/// knowledge (`abilities::install_starter`), so a starter that was also
+/// exclusive would be a fourth door around that gate, alongside a research
+/// node, a species file and a blank disk etch (none of which may name one
+/// either).
+#[test]
+fn every_starter_is_not_exclusive() {
+    let game = Game::new(3402, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
+        if !def.starter {
+            continue;
+        }
+        assert!(
+            !def.exclusive,
+            "starter {:?} is exclusive, so creation could never actually learn it",
+            def.id
+        );
+    }
+}
+
+/// **The point of this census.** A `#[serde(default)]` field authored
+/// nowhere ships documented and dead — `AbilityEffect::Damage::spread`
+/// shipped exactly that way, used by 0 of 77 files, and read as a working
+/// feature until someone went looking. `starter` is opt-in the same way, so
+/// nothing short of walking the real shipped assets can tell "nobody has
+/// asked yet" from "the pool is simply thin" — and the design's whole
+/// promise, a starter for every affinity axis, would silently fail to hold
+/// with an empty pool passing every other test in this file.
+#[test]
+fn there_is_a_starter_for_every_affinity_axis() {
+    let game = Game::new(3403, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let starters: Vec<_> = game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .all()
+        .filter(|d| d.starter)
+        .collect();
+    assert!(
+        !starters.is_empty(),
+        "the starter pool is empty — no ability authors `starter: true`"
+    );
+    for axis in [
+        AffinityKind::Damage,
+        AffinityKind::Heal,
+        AffinityKind::Buff,
+        AffinityKind::Debuff,
+        AffinityKind::Drain,
+    ] {
+        assert!(
+            starters
+                .iter()
+                .any(|d| d.effect.affinity_kind() == Some(axis)),
+            "no starter exists for the {axis:?} axis — the creation wizard's Routine step \
+             would offer nothing that teaches it"
+        );
+    }
+}
+
+/// The half of the axis census that cannot pass on a technicality.
+///
+/// Covering an axis is not the same as *teaching* it: `hard_lock` was the
+/// only Debuff starter and its magnitude was `power: 0`, so its row read
+/// `Inflicts Stun (0) for 2 rounds` identically for all five classes and a
+/// Saboteur's 1.3 bought nothing on the one starter aimed at their own
+/// axis. The pool is unfiltered precisely so the rows show each routine's
+/// numbers *through* the chosen class's affinity; a starter whose label
+/// does not move with the affinity teaches nobody anything.
+///
+/// Read against the **real** class files rather than two literals, so a
+/// retuned spread is checked as authored.
+#[test]
+fn every_starter_reads_differently_through_a_class_that_raises_its_axis() {
+    let game = Game::new(3404, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (classes, _) =
+        crate::classes::ClassDb::load_dir(&test_assets_dir().join("classes")).unwrap();
+    for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
+        if !def.starter {
+            continue;
+        }
+        let axis = def
+            .effect
+            .affinity_kind()
+            .unwrap_or_else(|| panic!("starter {:?} scales on no affinity axis at all", def.id));
+        let raised = crate::species::AffinityClass::ALL
+            .iter()
+            .map(|class| crate::classes::class_affinity(&classes, Some(*class), axis))
+            .fold(crate::tuning::AFFINITY_NEUTRAL, f32::max);
+        assert!(
+            raised > crate::tuning::AFFINITY_NEUTRAL,
+            "no shipped class raises the {axis:?} axis, so starter {:?} can never read              differently for anyone",
+            def.id
+        );
+        assert_ne!(
+            crate::abilities::effect_label(def, 1, crate::tuning::AFFINITY_NEUTRAL),
+            crate::abilities::effect_label(def, 1, raised),
+            "starter {:?} prints the same numbers at {} and at {raised} — its magnitude \
+             cannot be scaled, so the Routine step teaches nothing for the {axis:?} axis",
+            def.id,
+            crate::tuning::AFFINITY_NEUTRAL
+        );
+    }
+}

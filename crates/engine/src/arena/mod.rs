@@ -27,7 +27,8 @@ mod watch;
 
 pub use report::{RepRecord, Report, Summary};
 pub use scenario::{
-    CompanionSpec, Encounter, EquipSpec, InventorySpec, OpponentSpec, PlayerSource, Scenario,
+    CharacterSpec, CompanionSpec, Encounter, EquipSpec, InventorySpec, OpponentSpec, PlayerSource,
+    Scenario,
 };
 pub use watch::Watch;
 

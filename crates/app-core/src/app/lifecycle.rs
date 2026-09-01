@@ -31,6 +31,11 @@ impl App {
         // Same contract: a missing directory leaves an empty index rather
         // than a failed start.
         let (help_db, _) = HelpDb::load_dir(&assets_dir.join("help")).unwrap_or_default();
+        // Same warn-and-carry-on contract: an asset tree that will not load
+        // leaves the creation wizard offering no class and no starter
+        // routine — the pre-creation game — rather than refusing to start
+        // the app.
+        let creation_catalogue = CreationCatalogue::load(&assets_dir).unwrap_or_default();
         Self {
             mode: Mode::MainMenu,
             game: None,
@@ -120,6 +125,11 @@ impl App {
             telemetry_path,
             dev_console: crate::app::dev_console::dev_console_enabled(),
             dev_templates: None,
+            creation_step: CreationStep::Difficulty,
+            creation_choice: CharacterChoice::default(),
+            creation_decided: Default::default(),
+            creation_difficulty: None,
+            creation_catalogue,
         }
     }
 
@@ -146,26 +156,34 @@ impl App {
                     .metadata()
                     .and_then(|m| m.modified())
                     .unwrap_or(std::time::UNIX_EPOCH);
-                let name = path
-                    .file_stem()
-                    .map(|s| s.to_string_lossy().into_owned())
-                    .unwrap_or_else(|| path.to_string_lossy().into_owned());
-                let summary = feral_processes_engine::save::load_from_file(&path)
-                    .ok()
-                    .map(|data| {
-                        // A run that ended says so in place of its clock:
-                        // the tick it stopped at is the one figure that
-                        // cannot help anyone here, and the slot is not
-                        // loadable.
-                        let state = match data.game_over {
-                            Some(_) => "FLATLINED".to_string(),
-                            None => format!("tick {}", data.tick),
-                        };
-                        format!(
-                            "Lv{} · Zone {} · {:?} · {state}",
-                            data.player.level, data.zone, data.difficulty
-                        )
+                let data = feral_processes_engine::save::load_from_file(&path).ok();
+                // The player's own name, which is most of why the creation
+                // wizard's Name step is worth having. A save from before it
+                // — or one whose player left the field blank — falls back to
+                // the filename, which is what every save used to show.
+                let name = data
+                    .as_ref()
+                    .map(|d| d.player.name.clone())
+                    .filter(|n| !n.is_empty())
+                    .unwrap_or_else(|| {
+                        path.file_stem()
+                            .map(|s| s.to_string_lossy().into_owned())
+                            .unwrap_or_else(|| path.to_string_lossy().into_owned())
                     });
+                let summary = data.map(|data| {
+                    // A run that ended says so in place of its clock:
+                    // the tick it stopped at is the one figure that
+                    // cannot help anyone here, and the slot is not
+                    // loadable.
+                    let state = match data.game_over {
+                        Some(_) => "FLATLINED".to_string(),
+                        None => format!("tick {}", data.tick),
+                    };
+                    format!(
+                        "Lv{} · Zone {} · {:?} · {state}",
+                        data.player.level, data.zone, data.difficulty
+                    )
+                });
                 (
                     modified,
                     SaveEntry {
@@ -191,12 +209,16 @@ impl App {
         self.saves_dir.join(format!("save_{ts}.bin"))
     }
 
-    pub(crate) fn start_new_game(&mut self, difficulty: DifficultyMode) {
+    /// Starts a run from a finished `CharacterChoice` — the creation
+    /// wizard's commit, and the only caller. `Game::new_with` is what
+    /// applies the choice; `Game::new` keeps its own signature and is what
+    /// the ~1,600 test call sites use.
+    pub(crate) fn start_new_game(&mut self, difficulty: DifficultyMode, choice: &CharacterChoice) {
         let seed = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs() as u32)
             .unwrap_or(1);
-        match Game::new(seed, difficulty, &self.assets_dir) {
+        match Game::new_with(seed, difficulty, &self.assets_dir, choice) {
             Ok(mut game) => {
                 // Re-read rather than trusting the copy loaded at startup:
                 // an earlier run this session will have written to it.

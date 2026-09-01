@@ -1,0 +1,7 @@
+(
+    class: Bastion,
+    name: "Bastion",
+    description: "Holds the line, hits softest. Buff routines land harder; damage routines land softer.",
+    affinities: (buff: 1.3, damage: 0.8),
+    kit: [("core_fragment", 6), ("power_cell", 4), ("outlet", 3), ("bytecode_block", 1)],
+)

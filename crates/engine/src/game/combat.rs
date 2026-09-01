@@ -932,9 +932,13 @@ impl Game {
             return AFFINITY_NEUTRAL;
         };
         if actor == self.player_entity() {
-            let affinity =
-                AFFINITY_NEUTRAL + crate::perks::affinity_bonus(self.player_perks(), kind);
-            return affinity.min(AFFINITY_MAX);
+            // `affinity_with_perk` is the class-plus-perk combination,
+            // clamped — the one place it's computed. `player_affinity_for`
+            // (`classes.rs`) calls the same function for a class not yet
+            // written to `PlayerIdentity`, which is what lets
+            // `starter_routine_rows` price the creation wizard's picker
+            // against a class the player is only considering.
+            return self.affinity_with_perk(self.player_class_affinity(kind), kind);
         }
         let species = self
             .world

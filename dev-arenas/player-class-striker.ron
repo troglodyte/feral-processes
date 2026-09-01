@@ -1,0 +1,81 @@
+// PLAYTEST: is a Striker's damage routine worth the round it costs, and
+// does it read as *this class's* move rather than a bigger swing?
+//
+// One of five files — `player-class-striker`, `-bastion`, `-medic`,
+// `-saboteur`, `-leech` — that are **identical in every field but
+// `character`**. The fight, the party, the level, the zone and the seed are
+// the same in all five, so whatever separates them is the class and nothing
+// else. That is the whole claim the class design makes, and these files are
+// here to fail it.
+//
+//     FERAL_DEV_ARENA=1 cargo run  ->  [R] Arena  ->  [L] player-class-striker
+//
+// **The headless bin cannot see a class, and will report the same numbers
+// for all five.** That is not an ignored input; it is the seam. `run_rep`
+// plays `PartyPlan::AllAttack` — the game's own `[A]` — which invokes no
+// routine, and a class is a spread of multipliers over *authored routine
+// power* alone. The player's ordinary swing never touches
+// `Game::ability_affinity` at all; it is `attack_range` into
+// `resolve_attack`. So the bin is the **floor**: what this party does with
+// no class and no routines. What you play is the class, measured against it.
+//
+//     cargo run --bin arena -- dev-arenas/player-class-striker.ron
+//
+// **The floor, measured 2026-09-01 at 20 reps, seeds 1-20** (identical for
+// all five files, and for a `character: ()` control):
+//
+//     win rate        60%   (12/20)
+//     rounds          mean 18.6, median 17
+//     player HP left  mean 26%
+//     companions down mean 1.15
+//
+// Compare deltas within one build only — a moved baseline across reports is
+// a reshuffled RNG stream, not a difficulty change. Re-run the floor from
+// the same build before reading anything off a played fight.
+//
+// The pack is chosen for **rounds to spend**, `class-mirror.ron`'s argument:
+// a routine cannot prove anything in a fight that ends before it is worth
+// invoking. At zone 1 with a level-5 party, five sub_processes in each of
+// two groups is a 19-round fight won at a fifth Integrity — damage worth
+// undoing, and the time to undo it in. Two groups so the front/back rank
+// rules apply. Power is not the constraint: `POWER_MAX` is a flat 100 at
+// every level and this routine costs 8, so the invocation budget is not what
+// the fight is testing.
+//
+// Seed 2 is a 19-round win at 22% Integrity remaining — the shape described
+// above. `[N]` steps to the next seed; 5, 9 and 12 are 20, 17 and 19 rounds
+// and also wins, 3 and 10 are losses.
+//
+// The stat pool is left unspent (`stats: (0, 0, 0, 0)`) deliberately: the
+// pool *is* visible to the bin, so spending it here would move the floor and
+// mix the two questions. `player-points-atk.ron` and
+// `player-points-integrity.ron` are where the pool is asked about.
+//
+// What to watch:
+//   - Fork Bomb Single at 1.3 against the same routine at 0.8 on a Medic:
+//     is a 60% swing in authored power something you can feel across a
+//     fight, or is it lost in the band spread?
+//   - Striker damps Heal. There is no heal in this kit to damp, so a
+//     Striker's trade is invisible here by construction — which is itself
+//     the finding if the class reads as strictly better than the others.
+//   - Does spending a round on the routine beat spending it attacking? If
+//     it never does, the class arrives as a dead row and the whole spread
+//     is unreachable.
+(
+    player: Fresh(level: 5, zone: 1),
+    character: (
+        class: Some(Striker),
+        stats: (0, 0, 0, 0),
+        routine: Some("stack_smash"),
+    ),
+    party: [
+        (species: "glitch", level: 5),
+        (species: "glitch", level: 5),
+    ],
+    opponents: [
+        (species: "sub_process", count: 5),
+        (species: "sub_process", count: 5),
+    ],
+    reps: 1,
+    seed: 2,
+)

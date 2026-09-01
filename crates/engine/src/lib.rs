@@ -6,6 +6,7 @@ pub mod balance_sim;
 pub mod base_grid;
 pub mod battle;
 pub mod caravans;
+pub mod classes;
 pub mod components;
 pub mod contracts;
 pub(crate) mod derive;
@@ -66,14 +67,15 @@ use components::{
     Creature, CustomName, Decompiler, DigSite, Durability, Equipment, EquippedItem, Experience,
     FieldBuff, FieldBuffKind, FusionCount, GearCopies, Glyph, GlyphColor, Hostile, Inventory,
     KernelRing, MachineStatus, Memories, Memory, Nemesis, Nest, NestGuardian, POWER_MAX, Perks,
-    Player, Position, Potential, PowerReserve, ProgramId, PurchasedTiers, Pursuing, Rarity,
-    Refactors, ResourceNode, Routines, StackSpawn, StandingJob, Stats, StatusEffects, StatusKind,
-    Stock, Stranded, Structure, StructureTier, SurfaceLink, Talents, Tamed, Task, TaskKind,
-    Temporary, WanderAi, ZonePortal,
+    Player, PlayerIdentity, Position, Potential, PowerReserve, ProgramId, PurchasedTiers, Pursuing,
+    Rarity, Refactors, ResourceNode, Routines, StackSpawn, StandingJob, Stats, StatusEffects,
+    StatusKind, Stock, Stranded, Structure, StructureTier, SurfaceLink, Talents, Tamed, Task,
+    TaskKind, Temporary, WanderAi, ZonePortal,
 };
 pub use game::base::work_orders::{OrderPriority, WorkOrder};
 pub use game::caravan::CaravanReach;
 pub use game::contracts::{BrokerReach, ContractRefusal};
+pub use game::creation::{CharacterChoice, CreationCatalogue, DEFAULT_PLAYER_SPRITE};
 pub use game::environment::TerrainRow;
 pub use game::party::ProgramRole;
 pub use game::stack_view::ExamineDir;

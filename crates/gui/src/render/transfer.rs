@@ -1,5 +1,5 @@
 //! The transfer picker: what the adjacent shelves are holding, what the pack
-//! could put back, and how much of each the player has asked to move.
+//! is carrying, and where each unit would sit once the basket is committed.
 
 use super::popup::*;
 use super::*;
@@ -20,13 +20,18 @@ const HEADER_LEAD: &str = "  ";
 /// and the figure under it to land on the same x.
 const COLUMN_GAP: &str = "  ";
 
-/// The four headings, in the order they are drawn. `change` is what will
-/// move, `you` is the pack, `container` is the adjacent shelf — so the
-/// arrows read off the table: Left pulls toward `you`, Right pushes toward
-/// `container`.
-const HEADINGS: [&str; 4] = ["item", "change", "you", "container"];
+/// The three headings, in the order they are drawn. `you` is the pack,
+/// `container` is the adjacent shelves — so the arrows read off the table:
+/// Left pulls toward `you`, Right pushes toward `container`.
+///
+/// **There is no `change` column.** The two figures are what the transfer
+/// would leave behind rather than what each side is holding now, so a unit
+/// asked for is one the player watches leave one column and land in the
+/// other. A signed delta beside them said the same thing a second time, in a
+/// notation the two moving numbers do not need.
+const HEADINGS: [&str; 3] = ["item", "you", "container"];
 
-/// One row per item: the name, then the three figures, laid out as a table
+/// One row per item: the name, then the two figures, laid out as a table
 /// under a header naming each column.
 ///
 /// **No shortcut lead.** Every other list opens its rows with `[1] `, but a
@@ -38,7 +43,7 @@ const HEADINGS: [&str; 4] = ["item", "change", "you", "container"];
 /// a *pixel* gap — past the advance of the row's own label. A header is a
 /// `Row::Text` drawn flat at `x + m.pad` with no suffix of its own, so there
 /// is no way to reproduce that pixel gap in a heading; the column would name
-/// a position it does not sit over. Padding all four columns into the label
+/// a position it does not sit over. Padding all three columns into the label
 /// puts every boundary at a whole number of monospace cells, which the
 /// header can match exactly. The hazard the suffix column exists to close —
 /// a row measured without part of what it draws — does not arise, because
@@ -57,12 +62,11 @@ const HEADINGS: [&str; 4] = ["item", "change", "you", "container"];
 /// puts it in `popup_layout`'s pinned header rather than in the scrolling
 /// body. It does need a width census: `draw_row` clips vertically only.
 ///
-/// `entries` is `(item, amount, put_available, take_available)` per row,
-/// zipped by the caller rather than taken as parallel slices — the two
-/// availables are `App::put_available` and `App::take_available`, which
-/// borrow the whole `App` and so must be called before `&mut app.game` is
-/// taken. Calling them rather than recomputing the budget here keeps the
-/// rule stated once, in `basket.rs`.
+/// `entries` is `(item, amount, carried, on_shelves)` per row, zipped by the
+/// caller. The two figures are the row's **holdings**, not `App`'s two
+/// ceilings: what the player may still move is what the keys clamp against,
+/// and stating it as a column is what made the screen report a Depot's
+/// shared budget as the size of the player's own pack.
 pub(super) fn draw_transfer(
     game: &Game,
     entries: &[(ItemId, i64, u32, u32)],
@@ -105,17 +109,36 @@ fn body_rows(
     ]);
     let cols = Columns::of(game, entries);
     body.push(text_row(cols.header()));
-    for (i, (item, amount, put, take)) in entries.iter().enumerate() {
+    for (i, (item, amount, carried, on_shelves)) in entries.iter().enumerate() {
         body.push(item_row(
-            cols.row(game.item_name(item), *amount, *put, *take),
+            cols.row(game.item_name(item), *carried, *on_shelves, *amount),
             i == selected,
         ));
     }
     body
 }
 
-/// How wide each of this screen's four columns runs: the item name, then the
-/// three figures after it.
+/// Where the row's two figures end up once the basket is committed: the
+/// amount is signed the way `handle_basket_key` signs it, so a take (positive)
+/// moves units out of the container and into the pack and a put (negative)
+/// moves them back.
+///
+/// The clamp is not defensive arithmetic against a state the keys can reach
+/// — `edit_row` clamps every amount inside both holdings — it is because
+/// `i64 as u32` **wraps** at either end, and a pack and a shelf that between
+/// them hold more than `u32::MAX` are what a modded Depot's unbounded
+/// `capacity` allows. The one thing a slip must not do is draw four billion
+/// units.
+fn projected(carried: u32, on_shelves: u32, amount: i64) -> (u32, u32) {
+    let cell = |n: i64| n.clamp(0, u32::MAX as i64) as u32;
+    (
+        cell(carried as i64 + amount),
+        cell(on_shelves as i64 - amount),
+    )
+}
+
+/// How wide each of this screen's three columns runs: the item name, then the
+/// two figures after it.
 ///
 /// **Measured from the rows actually listed rather than fixed**, so a shelf
 /// of short names draws a narrow table instead of a wide one full of empty
@@ -134,7 +157,6 @@ fn body_rows(
 /// room for the widest of them.
 struct Columns {
     name: usize,
-    change: usize,
     you: usize,
     container: usize,
 }
@@ -143,15 +165,14 @@ impl Columns {
     fn of(game: &Game, entries: &[(ItemId, i64, u32, u32)]) -> Self {
         let mut cols = Columns {
             name: HEADINGS[0].len(),
-            change: HEADINGS[1].len(),
-            you: HEADINGS[2].len(),
-            container: HEADINGS[3].len(),
+            you: HEADINGS[1].len(),
+            container: HEADINGS[2].len(),
         };
-        for (item, amount, put, take) in entries {
+        for (item, amount, carried, on_shelves) in entries {
+            let (you, container) = projected(*carried, *on_shelves, *amount);
             cols.name = cols.name.max(game.item_name(item).chars().count());
-            cols.change = cols.change.max(change_cell(*amount).len());
-            cols.you = cols.you.max(put.to_string().len());
-            cols.container = cols.container.max(take.to_string().len());
+            cols.you = cols.you.max(you.to_string().len());
+            cols.container = cols.container.max(container.to_string().len());
         }
         cols
     }
@@ -164,15 +185,14 @@ impl Columns {
     /// against it, and the two alignment censuses measure the drawn strings at
     /// exactly these offsets. Spelling the edges a second time in a test is
     /// how a table drifts from the ruler that is supposed to be checking it.
-    fn boundaries(&self) -> [usize; 4] {
+    fn boundaries(&self) -> [usize; 3] {
         let gap = COLUMN_GAP.len();
         let name = self.name;
-        let change = name + gap + self.change;
-        let you = change + gap + self.you;
-        [name, change, you, you + gap + self.container]
+        let you = name + gap + self.you;
+        [name, you, you + gap + self.container]
     }
 
-    /// Four cells laid against `boundaries`: the name left-aligned, the three
+    /// Three cells laid against `boundaries`: the name left-aligned, the two
     /// figures right-aligned so their digits line up under their heading and
     /// against each other.
     ///
@@ -182,7 +202,7 @@ impl Columns {
     /// one case where a row is wider than the table, and it is the reason
     /// `no_transfer_row_overflows_its_popup` measures the longest shipped name
     /// rather than a fixed width.
-    fn line(&self, cells: [&str; 4]) -> String {
+    fn line(&self, cells: [&str; 3]) -> String {
         let mut out = String::new();
         for (i, (cell, edge)) in cells.into_iter().zip(self.boundaries()).enumerate() {
             if i > 0 {
@@ -204,31 +224,13 @@ impl Columns {
         format!("{HEADER_LEAD}{}", self.line(HEADINGS))
     }
 
-    /// One item's row. The two availables are **live** rather than the row's
-    /// raw holdings: a `you` reading 0 while the pack still holds units is
-    /// the screen saying the other rows have spent the Depot's room.
-    fn row(&self, name: &str, amount: i64, put: u32, take: u32) -> String {
-        self.line([
-            name,
-            &change_cell(amount),
-            &put.to_string(),
-            &take.to_string(),
-        ])
-    }
-}
-
-/// What the `change` column reads: the sign is what says which way the units
-/// go, so it is printed only when units go. A row nobody has touched reads a
-/// bare `0` rather than `+0` — a direction with a quantity of nothing is not
-/// a direction, and a column of `+0`s reads as a basket already full of
-/// takes.
-///
-/// Its own function so the width census measures the string the screen draws
-/// rather than a hand-written stand-in for it.
-fn change_cell(amount: i64) -> String {
-    match amount.cmp(&0) {
-        std::cmp::Ordering::Greater => format!("+{amount}"),
-        _ => amount.to_string(),
+    /// One item's row, drawn as the transfer would leave it: pressing Right
+    /// takes units off `you` and puts them on `container`, and Left the other
+    /// way. That movement is the whole of what the screen says about the
+    /// basket, which is why there is no `change` column beside it.
+    fn row(&self, name: &str, carried: u32, on_shelves: u32, amount: i64) -> String {
+        let (you, container) = projected(carried, on_shelves, amount);
+        self.line([name, &you.to_string(), &container.to_string()])
     }
 }
 
@@ -277,9 +279,12 @@ mod tests {
         let game = shipped_game();
         let item = widest_named_item(&game);
         let name = game.item_name(&item).to_string();
-        let entries = vec![(item, -(u32::MAX as i64), u32::MAX, u32::MAX)];
+        // The widest either figure can print: `projected` clamps at
+        // `u32::MAX`, so both columns are ten digits whatever the basket asks
+        // for.
+        let entries = vec![(item, u32::MAX as i64, u32::MAX, u32::MAX)];
         let cols = Columns::of(&game, &entries);
-        let row = cols.row(&name, -(u32::MAX as i64), u32::MAX, u32::MAX);
+        let row = cols.row(&name, u32::MAX, u32::MAX, u32::MAX as i64);
         let header = cols.header();
 
         with_painter(|p| {
@@ -398,7 +403,7 @@ mod tests {
                 Row::Text(t) => Some(t.clone()),
                 _ => None,
             })
-            .find(|t| t.contains(HEADINGS[3]))
+            .find(|t| t.contains(HEADINGS[2]))
             .expect("the body carries a column header");
         let items: Vec<String> = rows
             .iter()
@@ -431,13 +436,27 @@ mod tests {
         });
     }
 
-    /// The `change` column prints a sign only when units actually move: a
-    /// bare `0` for an untouched row, `+n` for a take and `-n` for a put.
+    /// **The two columns are where the units would end up, and that is the
+    /// whole of what the screen says about the basket.**
+    ///
+    /// The `change` column this replaced stated the same movement a second
+    /// time; with it gone, a row that draws its raw holdings whatever the
+    /// player has asked for is a screen with no feedback at all — the keys
+    /// would move a number nothing on the page shows.
     #[test]
-    fn the_change_column_signs_a_movement_and_leaves_zero_bare() {
-        assert_eq!(change_cell(0), "0");
-        assert_eq!(change_cell(3), "+3");
-        assert_eq!(change_cell(-2), "-2");
+    fn the_columns_move_the_units_the_basket_is_holding() {
+        assert_eq!(projected(7, 9, 0), (7, 9), "an untouched row is holdings");
+        assert_eq!(projected(7, 9, 4), (11, 5), "a take fills the pack");
+        assert_eq!(projected(7, 9, -3), (4, 12), "a put fills the container");
+    }
+
+    /// Neither figure wraps at the ends `u32` runs out at. `edit_row` cannot
+    /// reach either, but `i64 as u32` wraps silently and a column reading
+    /// four billion units is the failure that would result.
+    #[test]
+    fn a_projected_figure_is_clamped_rather_than_wrapped() {
+        assert_eq!(projected(0, 0, -1), (0, 1));
+        assert_eq!(projected(u32::MAX, 0, 1), (u32::MAX, 0));
     }
 
     /// The hint lines are text rows and so are never wrapped or clipped

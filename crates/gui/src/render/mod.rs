@@ -775,11 +775,11 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::BaseStaff => app.base_staff_rows(),
         _ => Vec::new(),
     };
-    // `App::take_available`/`put_available` take `&self`, so they have to
-    // run before `game` below takes `&mut app.game` — a method call borrows
-    // the whole `App`, not just the field. Calling them here rather than
-    // recomputing the budget in `draw_transfer` keeps the rule stated once,
-    // in `basket.rs`.
+    // The row's two holdings and the amount the basket is asking for, taken
+    // here because `game` below borrows `&mut app.game` and these read the
+    // rest of the `App`. The screen projects the holdings against the amount
+    // rather than drawing the two ceilings: `App::put_available` is what the
+    // *keys* clamp against and never something the player reads.
     let transfer_entries: Vec<(ItemId, i64, u32, u32)> = match app.mode {
         Mode::Transfer => app
             .basket_rows
@@ -787,12 +787,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             .enumerate()
             .map(|(row, r)| {
                 let amount = app.basket_amounts.get(row).copied().unwrap_or(0);
-                (
-                    r.item.clone(),
-                    amount,
-                    app.put_available(row),
-                    app.take_available(row),
-                )
+                (r.item.clone(), amount, r.carried, r.on_shelves)
             })
             .collect(),
         _ => Vec::new(),

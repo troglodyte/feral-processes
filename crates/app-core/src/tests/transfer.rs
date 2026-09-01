@@ -38,7 +38,8 @@ fn picker_with_shelf(seed: u32, shelf: u32) -> App {
     app.basket_rows = vec![TransferRow {
         item: item(ITEM),
         on_shelves: shelf,
-        in_pack: 0,
+        carried: 0,
+        can_put: 0,
     }];
     app.basket_amounts = vec![0];
     app.menu_selected = 0;
@@ -373,7 +374,8 @@ fn enter_moves_both_halves_and_spends_one_turn() {
     assert_eq!(shelf_now.on_shelves, 96, "only what was asked for left");
     let put = offer.iter().find(|r| r.item == item("power_cell")).unwrap();
     assert_eq!(put.on_shelves, 5, "and the pack's cargo is in the Depot");
-    assert_eq!(put.in_pack, 0);
+    assert_eq!(put.carried, 0);
+    assert_eq!(put.can_put, 0);
 }
 
 /// Enter on an all-zero basket is the same no-op as Esc: nothing moves, no

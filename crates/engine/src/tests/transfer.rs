@@ -60,7 +60,8 @@ fn an_item_on_both_sides_is_one_row_with_both_figures() {
     let rows = game.transfer_offer();
     assert_eq!(rows.len(), 1, "one item, one row");
     assert_eq!(rows[0].on_shelves, 6);
-    assert_eq!(rows[0].in_pack, 4);
+    assert_eq!(rows[0].carried, 4);
+    assert_eq!(rows[0].can_put, 4);
 }
 
 /// Rows come back in `ItemId` order whichever side each was drawn from.
@@ -105,12 +106,15 @@ fn a_banked_item_offers_a_take_and_never_a_put() {
 
     let r = row(&game, ids::RESEARCH_DATA);
     assert_eq!(r.on_shelves, 5);
-    assert_eq!(r.in_pack, 0, "a bank is not cargo");
+    assert_eq!(r.can_put, 0, "a bank is not cargo");
+    assert_eq!(r.carried, 40, "but the bank is still what the player holds");
 }
 
 /// Beside a machine that does not `stores`, the pack side is closed
 /// entirely — pushing cargo into a Mining Node's output would read as
-/// something that machine produced.
+/// something that machine produced. The row still reports what the pack is
+/// carrying: `can_put` is the permission and `carried` is the holding, and
+/// the screen draws the second.
 #[test]
 fn a_non_storing_neighbour_offers_no_put_at_all() {
     let mut game = Game::new(1743, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -129,7 +133,66 @@ fn a_non_storing_neighbour_offers_no_put_at_all() {
     let rows = game.transfer_offer();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].on_shelves, 6, "the take side is untouched");
-    assert_eq!(rows[0].in_pack, 0);
+    assert_eq!(rows[0].can_put, 0);
+    assert_eq!(rows[0].carried, 4, "and the pack is reported honestly");
+}
+
+/// A pack full of cargo beside a machine that stores nothing gets **no rows
+/// of its own**: those units can move in neither direction, and a screen of
+/// them would bury the one row that can.
+#[test]
+fn a_non_storing_neighbour_lists_only_what_is_on_its_shelf() {
+    let mut game = Game::new(1745, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    stocked(
+        &mut game,
+        "mining_node",
+        p.x + 1,
+        p.y,
+        200,
+        &[(ids::CORE_FRAGMENT, 6)],
+    );
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 4), (ids::POWER_CELL, 9)]);
+
+    let ids: Vec<ItemId> = game.transfer_offer().into_iter().map(|r| r.item).collect();
+    assert_eq!(ids, vec![ItemId::from(ids::CORE_FRAGMENT)]);
+}
+
+/// **The trade currency is never cargo.** Credits are carried in the same
+/// `Inventory` as everything else, so without their own filter they open a
+/// row like any other — and one whose `you` column falls as the *other* rows
+/// spend the Depot's shared budget, which reads as putting a Power Cell away
+/// costing the player money.
+#[test]
+fn the_trade_currency_is_offered_on_neither_side() {
+    let mut game = Game::new(1746, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    let currency = game.trade_currency();
+    stocked(
+        &mut game,
+        "depot",
+        p.x + 1,
+        p.y,
+        200,
+        &[(currency.as_str(), 12), (ids::CORE_FRAGMENT, 1)],
+    );
+    set_inventory(&mut game, &[(currency.as_str(), 30), (ids::POWER_CELL, 2)]);
+
+    let ids: Vec<ItemId> = game.transfer_offer().into_iter().map(|r| r.item).collect();
+    assert!(
+        !ids.contains(&currency),
+        "Credits are not cargo in either direction: {ids:?}"
+    );
+    assert_eq!(
+        ids,
+        vec![
+            ItemId::from(ids::CORE_FRAGMENT),
+            ItemId::from(ids::POWER_CELL)
+        ],
+        "and everything else is still offered"
+    );
 }
 
 /// The three guards, each answering with an empty offer.
@@ -678,7 +741,7 @@ fn a_gear_copy_in_the_pack_is_never_offered() {
     let offered: Vec<ItemId> = game
         .transfer_offer()
         .into_iter()
-        .filter(|r| r.in_pack > 0)
+        .filter(|r| r.can_put > 0)
         .map(|r| r.item)
         .collect();
     assert_eq!(offered, vec![ItemId::from(ids::CORE_FRAGMENT)]);

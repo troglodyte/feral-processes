@@ -44,17 +44,16 @@ pub(crate) fn halve(n: u32, target: u32) -> u32 {
 impl App {
     /// How much of the highlighted row the player may still **take**: what
     /// that item is sitting on the adjacent shelves, per row and static.
-    ///
-    /// `pub`, not `pub(crate)`: the screen draws this same figure in its
-    /// suffix column, and recomputing it in `gui` would be a second copy of
-    /// the rule rather than a call to the one that governs the key handling.
-    pub fn take_available(&self, row: usize) -> u32 {
+    pub(crate) fn take_available(&self, row: usize) -> u32 {
         self.basket_rows.get(row).map_or(0, |r| r.on_shelves)
     }
 
-    /// How much of the highlighted row the player may still **put**: what
-    /// the pack holds of it, capped by the Depot room the other rows have
-    /// not already spent.
+    /// How much of the highlighted row the player may still **put**:
+    /// `TransferRow::can_put` — what the pack holds of it *and is allowed to
+    /// put* — capped by the Depot room the other rows have not already
+    /// spent. `carried` is deliberately not the figure clamped against: it
+    /// is the holding the screen draws, and it stays honest where no Depot
+    /// or a bank makes the put impossible.
     ///
     /// Subtracting only the *other* rows is what lets the highlighted row
     /// keep its own amount while it is being edited. Counting itself would
@@ -67,7 +66,7 @@ impl App {
     /// room that never appears. Under-offering is safe — `transfer_items`
     /// takes before it gives, so the real room at the commit is never
     /// smaller than this.
-    pub fn put_available(&self, row: usize) -> u32 {
+    pub(crate) fn put_available(&self, row: usize) -> u32 {
         // `(-n).max(0)`: a giving row is negative, so this is its magnitude
         // and a taking row contributes nothing. Folded with `saturating_add`
         // because nothing bounds a modded Depot's capacity.
@@ -80,7 +79,7 @@ impl App {
         let budget = self.basket_room.unwrap_or(0).saturating_sub(given);
         self.basket_rows
             .get(row)
-            .map_or(0, |r| r.in_pack)
+            .map_or(0, |r| r.can_put)
             .min(budget)
     }
 
@@ -97,7 +96,7 @@ impl App {
     ///
     /// **Left takes out and Right puts in**, which is the arrow moving stock
     /// in the direction of the column it heads for. The screen is a table
-    /// reading `change | you | container`, so the container is the rightmost
+    /// reading `you | container`, so the container is the rightmost
     /// column and you are the one to its left: Left pulls units off the
     /// container toward you (a take, positive) and Right pushes them from you
     /// into it (a put, negative). `left_takes_out_and_right_puts_in` is the

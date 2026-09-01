@@ -271,3 +271,170 @@ fn a_retuned_class_file_reaches_a_loaded_save() {
         "the resolved spread must come from the db at load time, not a stored value"
     );
 }
+
+/// Builds a run whose player picked `class` and nothing else, so two games
+/// under comparison differ by the class alone.
+fn game_as(seed: u32, class: PlayerClass) -> Game {
+    let choice = CharacterChoice {
+        class: Some(class),
+        ..CharacterChoice::default()
+    };
+    Game::new_with(seed, DifficultyMode::Forgiving, &test_assets_dir(), &choice).unwrap()
+}
+
+/// The Decompiler's whole claim. Asserted through `taming::capture_chance`
+/// rather than off the `capture_boost_pct` field, so a term that reached the
+/// bundle but not the formula would still fail this.
+#[test]
+fn a_decompiler_lands_more_decompiles_than_anyone_else() {
+    let target = crate::taming::TargetResistance {
+        hp_fraction: 0.5,
+        taming_difficulty: 0.3,
+        prior_attempts: 0,
+        power_ratio: 1.0,
+    };
+    let plain = game_as(9101, PlayerClass::Striker);
+    let specialist = game_as(9101, PlayerClass::Decompiler);
+
+    let plain_odds = crate::taming::capture_chance(0.5, target, plain.player_decompiler_bonuses());
+    let specialist_odds =
+        crate::taming::capture_chance(0.5, target, specialist.player_decompiler_bonuses());
+
+    assert!(
+        specialist_odds > plain_odds,
+        "a Decompiler's attempt ({specialist_odds}) must beat a Striker's ({plain_odds}) \
+         on an identical target"
+    );
+}
+
+/// The boost multiplies the *whole* attempt, so unlike the `Decompiler`
+/// stat it is worth the same however practiced the player already is. That
+/// is the reason `capture_boost_pct` was chosen over `skill`, and it is
+/// invisible unless a test compares the gap at two skill levels.
+#[test]
+fn the_decompiler_bonus_does_not_dilute_as_the_stat_grows() {
+    let target = crate::taming::TargetResistance {
+        hp_fraction: 0.5,
+        taming_difficulty: 0.3,
+        prior_attempts: 0,
+        power_ratio: 1.0,
+    };
+    let gap_at = |skill: i32| {
+        let bonuses = |class| crate::taming::DecompilerBonuses {
+            skill,
+            hp_penalty_reduction: 0.0,
+            capture_boost_pct: crate::classes::capture_boost_pct(class),
+        };
+        let plain = crate::taming::capture_chance(0.4, target, bonuses(None));
+        let specialist =
+            crate::taming::capture_chance(0.4, target, bonuses(Some(PlayerClass::Decompiler)));
+        specialist / plain
+    };
+    assert!(
+        (gap_at(0) - gap_at(30)).abs() < 1e-4,
+        "the class must be worth the same ratio at skill 0 ({}) and skill 30 ({})",
+        gap_at(0),
+        gap_at(30)
+    );
+}
+
+/// The Invoker's whole claim, at level 1 and again at the level the curve
+/// caps out — the bonus is added past `PLAYER_ROUTINE_SLOT_CAP` on purpose,
+/// so it must still stand there.
+#[test]
+fn an_invoker_carries_more_routine_slots_at_every_level_including_the_cap() {
+    for level in [1, 5, 25, 40] {
+        let mut plain = game_as(9102, PlayerClass::Striker);
+        let mut specialist = game_as(9102, PlayerClass::Invoker);
+        let (p, s) = (plain.player_entity(), specialist.player_entity());
+        crate::arena::set_level(&mut plain, p, level);
+        crate::arena::set_level(&mut specialist, s, level);
+
+        assert_eq!(
+            specialist.routine_slots(s),
+            plain.routine_slots(p) + crate::tuning::CLASS_ROUTINE_SLOT_BONUS,
+            "an Invoker at level {level} must hold exactly \
+             CLASS_ROUTINE_SLOT_BONUS more slots than anyone else"
+        );
+    }
+}
+
+/// The Fabricator's whole claim, through the real assignment path: the same
+/// program posted to the same machine bakes a shorter `Task::required` for a
+/// Fabricator than for anyone else. Asserted on `Task` rather than on
+/// `work_ticks_at_speed` so a scale that never reached `work_ticks_for`
+/// would fail this.
+#[test]
+fn a_fabricator_bakes_a_shorter_work_cycle_than_anyone_else() {
+    let required_under = |class| {
+        let mut game = game_as(9103, class);
+        let node = spawn_mining_node(&mut game, 2, 2);
+        let worker = spawn_tamed(&mut game, 10, 3);
+        stand_player_at_post(&mut game, node);
+        game.assign_cronjob(worker, node)
+            .expect("a node takes a posted program");
+        game.world
+            .get::<Task>(worker)
+            .expect("a posted program carries its cycle")
+            .required
+    };
+    let plain = required_under(PlayerClass::Striker);
+    let specialist = required_under(PlayerClass::Fabricator);
+    assert!(
+        specialist < plain,
+        "a Fabricator's cycle ({specialist} ticks) must be shorter than a Striker's ({plain})"
+    );
+}
+
+/// Every class must advertise at least one upside on the creation screen.
+///
+/// The three classes whose spike is a hook rather than an affinity have
+/// nothing in `affinities` but their damped axis, so without
+/// `classes::spike_label` the Decompiler's row reads `"Weaker damage"` — a
+/// class with a downside and no upside, which is the one thing a player
+/// choosing blind cannot recover from.
+///
+/// Asserted on the shape of the sentence `classes::format_trade` builds: an
+/// upside opens it with `"Bonus to"`, and a class with nothing to offer
+/// falls through to the `"Weaker ..."` arm.
+#[test]
+fn every_class_row_names_something_it_is_good_at() {
+    let game = Game::new(9104, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let rows = game.class_rows();
+    assert_eq!(
+        rows.len(),
+        PlayerClass::ALL.len(),
+        "every shipped class must reach the creation screen"
+    );
+    for row in rows {
+        assert!(
+            row.trade.starts_with("Bonus to"),
+            "{} offers the player nothing but {:?}",
+            row.name,
+            row.trade
+        );
+    }
+}
+
+/// The three new variants append, so an existing save's class index is
+/// unchanged — but the new ones have to survive the round trip too, and
+/// nothing else in the suite carries one through `save`/`load`.
+#[test]
+fn a_new_class_survives_a_save_and_load() {
+    for class in PlayerClass::ALL {
+        let mut game = game_as(9105, class);
+        let path = save_path(&format!("roundtrip_{class:?}"));
+        game.save(&path).unwrap();
+        let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(
+            loaded
+                .world
+                .get::<PlayerIdentity>(loaded.player_entity())
+                .unwrap()
+                .class,
+            Some(class),
+            "{class:?} must read back as itself"
+        );
+    }
+}

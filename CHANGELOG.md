@@ -33,6 +33,19 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.67
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+- **The arrows set a compile batch.** Right increases and Left decreases on
+  the compile quantity page, Shift jumps to the most this batch can afford
+  and Ctrl halves the gap to it — the gesture the depot picker and the
+  caravan basket already use for a number, on the one quantity screen that
+  was still digits and Enter.
+- **The companion screen heads each role.** The roster is a run per role now
+  — in your party, away on a sortie, base staff — where a dispatched program
+  used to be listed among the staff it is no longer part of.
+
 ## 0.13.66
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

@@ -1,0 +1,7 @@
+(
+    class: Invoker,
+    name: "Invoker",
+    description: "Runs a deeper kit than anyone else in the sector. Two more routine slots at every level; damage routines land softer.",
+    affinities: (buff: 1.15, debuff: 1.15, damage: 0.85),
+    kit: [("power_cell", 8), ("core_fragment", 4)],
+)

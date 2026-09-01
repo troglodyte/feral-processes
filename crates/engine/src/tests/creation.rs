@@ -5,7 +5,7 @@
 
 use super::support::*;
 use crate::achievements::MainStat;
-use crate::species::AffinityClass;
+use crate::classes::PlayerClass;
 use crate::tuning;
 use crate::*;
 
@@ -183,7 +183,7 @@ fn an_overspent_choice_is_refused() {
 fn a_created_player_round_trips_through_a_real_save() {
     let choice = CharacterChoice {
         name: "Zephyr".to_string(),
-        class: Some(AffinityClass::Saboteur),
+        class: Some(PlayerClass::Saboteur),
         glyph: 'Z',
         sprite: "hero".to_string(),
         colour: Some(3),
@@ -205,7 +205,7 @@ fn a_created_player_round_trips_through_a_real_save() {
     let player = loaded.player_entity();
     assert_eq!(loaded.world.get::<Glyph>(player).unwrap().ch, 'Z');
     let identity = loaded.world.get::<PlayerIdentity>(player).unwrap();
-    assert_eq!(identity.class, Some(AffinityClass::Saboteur));
+    assert_eq!(identity.class, Some(PlayerClass::Saboteur));
     assert_eq!(identity.sprite, "hero");
     assert_eq!(identity.colour, Some(3));
     assert_eq!(loaded.world.get::<CustomName>(player).unwrap().0, "Zephyr");
@@ -219,7 +219,7 @@ fn a_created_player_round_trips_through_a_real_save() {
 #[test]
 fn loading_does_not_re_apply_the_choice() {
     let choice = CharacterChoice {
-        class: Some(AffinityClass::Striker),
+        class: Some(PlayerClass::Striker),
         stats: stats_at(MainStat::Atk, tuning::CREATION_STAT_POINTS),
         ..CharacterChoice::default()
     };
@@ -405,7 +405,7 @@ fn the_creation_catalogue_agrees_with_the_game() {
         assert_eq!(a.trade, b.trade, "the trade summary drifted");
     }
 
-    for class in AffinityClass::ALL.iter().copied().map(Some).chain([None]) {
+    for class in PlayerClass::ALL.iter().copied().map(Some).chain([None]) {
         assert_eq!(
             game.starter_routine_rows(class),
             catalogue.starter_rows(class),
@@ -606,7 +606,7 @@ fn the_catalogue_and_the_run_offer_the_same_shelf() {
 fn the_manifest_reads_back_the_name_and_class() {
     let choice = CharacterChoice {
         name: "Kestrel".to_string(),
-        class: Some(AffinityClass::Leech),
+        class: Some(PlayerClass::Leech),
         ..CharacterChoice::default()
     };
     let game = Game::new_with(

@@ -6,7 +6,7 @@ use super::support::*;
 use crate::abilities::AffinityKind;
 use crate::classes::ClassDb;
 use crate::items::ids;
-use crate::species::AffinityClass;
+use crate::classes::PlayerClass;
 use crate::tuning::{AFFINITY_MAX, AFFINITY_NEUTRAL};
 use crate::*;
 
@@ -45,7 +45,7 @@ fn default_kit() -> Vec<(ItemId, u32)> {
 #[test]
 fn a_class_moves_its_own_axis_and_nothing_else() {
     let choice = CharacterChoice {
-        class: Some(AffinityClass::Medic),
+        class: Some(PlayerClass::Medic),
         ..CharacterChoice::default()
     };
     let game = Game::new_with(1, DifficultyMode::Forgiving, &test_assets_dir(), &choice).unwrap();
@@ -73,7 +73,7 @@ fn a_class_moves_its_own_axis_and_nothing_else() {
 #[test]
 fn a_class_and_a_perk_stack_and_stay_clamped() {
     let choice = CharacterChoice {
-        class: Some(AffinityClass::Medic),
+        class: Some(PlayerClass::Medic),
         ..CharacterChoice::default()
     };
     let mut game =
@@ -140,14 +140,14 @@ fn the_class_kit_replaces_the_default_kit() {
         warnings.is_empty(),
         "the shipped classes must load clean: {warnings:?}"
     );
-    let medic_kit = db.get(AffinityClass::Medic).unwrap().kit.clone();
+    let medic_kit = db.get(PlayerClass::Medic).unwrap().kit.clone();
     assert!(
         !medic_kit.is_empty(),
         "the fixture must ship a real kit, or this proves nothing"
     );
 
     let with_class = CharacterChoice {
-        class: Some(AffinityClass::Medic),
+        class: Some(PlayerClass::Medic),
         ..CharacterChoice::default()
     };
     let game = Game::new_with(3, DifficultyMode::Forgiving, &assets, &with_class).unwrap();
@@ -187,7 +187,7 @@ fn an_empty_class_directory_plays_as_todays_game() {
     );
 
     let choice = CharacterChoice {
-        class: Some(AffinityClass::Medic),
+        class: Some(PlayerClass::Medic),
         ..CharacterChoice::default()
     };
     let mut game =
@@ -214,7 +214,7 @@ fn an_empty_class_directory_plays_as_todays_game() {
         .unwrap()
         .items
         .clear();
-    crate::classes::apply_kit(&mut game, Some(AffinityClass::Medic));
+    crate::classes::apply_kit(&mut game, Some(PlayerClass::Medic));
     let inventory = game.world.get::<Inventory>(player).unwrap();
     assert_eq!(
         inventory.items,
@@ -244,7 +244,7 @@ fn a_malformed_class_file_is_skipped_with_a_warning() {
 #[test]
 fn a_retuned_class_file_reaches_a_loaded_save() {
     let choice = CharacterChoice {
-        class: Some(AffinityClass::Medic),
+        class: Some(PlayerClass::Medic),
         ..CharacterChoice::default()
     };
     let mut game =

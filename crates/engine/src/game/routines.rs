@@ -2,7 +2,7 @@
 //! a party member's slots. Extraction lives here too.
 
 use crate::components::Routines;
-use crate::species::AffinityClass;
+use crate::classes::PlayerClass;
 use crate::*;
 
 impl Game {
@@ -90,7 +90,7 @@ impl Game {
     /// `ability_affinity` itself (which resolves the entity's own class)
     /// can't be called here. Every row still reads through the one clamped
     /// class-plus-perk formula either path uses.
-    pub fn starter_routine_rows(&self, class: Option<AffinityClass>) -> Vec<StarterRoutineRow> {
+    pub fn starter_routine_rows(&self, class: Option<PlayerClass>) -> Vec<StarterRoutineRow> {
         crate::abilities::starter_rows(self.world.resource::<AbilityDb>(), |kind| {
             self.player_affinity_for(class, kind)
         })

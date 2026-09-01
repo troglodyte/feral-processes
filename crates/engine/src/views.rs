@@ -12,6 +12,7 @@ use crate::items::{GearCopy, ItemId};
 use crate::perks::Perk;
 use crate::research::ResearchId;
 use crate::resources::DifficultyMode;
+use crate::classes::PlayerClass;
 use crate::species::{AffinityClass, MoveDef};
 use crate::structures::StructureId;
 use crate::world::Biome;
@@ -2337,7 +2338,7 @@ pub struct PlayerClassView {
 /// and still the fallback for an empty basket.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClassRow {
-    pub class: AffinityClass,
+    pub class: PlayerClass,
     pub name: String,
     pub description: String,
     /// `"Bonus to damage at the expense of healing"` — what this class

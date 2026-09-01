@@ -802,7 +802,11 @@ impl Game {
                 (None, None) => 5,
             },
         };
-        crate::systems::work_ticks_at_speed(base, worker_speed)
+        crate::systems::work_ticks_at_speed(
+            base,
+            worker_speed,
+            crate::classes::work_tick_scale(self.player_class()),
+        )
     }
 
     /// Whether a program can be posted to `structure` — an extractor

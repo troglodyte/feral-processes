@@ -2,7 +2,7 @@
 
 use super::support::*;
 use crate::components::Routines;
-use crate::species::AffinityClass;
+use crate::classes::PlayerClass;
 use crate::*;
 
 /// The generic test species declares no abilities, so its kit is the
@@ -1184,12 +1184,12 @@ fn starter_rows_are_priced_through_the_class() {
     );
 
     let striker_heal = game
-        .starter_routine_rows(Some(AffinityClass::Striker))
+        .starter_routine_rows(Some(PlayerClass::Striker))
         .into_iter()
         .find(|r| r.id == "checksum_repair")
         .unwrap();
     let medic_heal = game
-        .starter_routine_rows(Some(AffinityClass::Medic))
+        .starter_routine_rows(Some(PlayerClass::Medic))
         .into_iter()
         .find(|r| r.id == "checksum_repair")
         .unwrap();

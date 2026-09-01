@@ -171,6 +171,7 @@ impl Game {
                 ("objective", &objective),
                 ("description", &def.description),
             ],
+            None,
         );
         self.world.resource_mut::<ActiveContracts>().active.push(
             crate::resources::ActiveContract {
@@ -232,14 +233,31 @@ impl Game {
             contract
         };
 
+        // What was asked, in the words the contracts screen already used —
+        // `objective_line` called rather than a second wording, so a
+        // completion and the row it closes cannot describe the same job
+        // differently.
+        let objective = self.objective_line(&contract.def.objective);
+        let onboarding = contract.def.tutorial.is_some();
+
         // `Outcome` rather than `Info`, for `achievement_system`'s reason: a
         // contract can finish mid-fight, and
         // `MessageLog::retain_outcomes_since_battle` deletes everything but
         // four kinds when the battle ends — so an `Info` line would vanish at
         // exactly the moment the player looked up from the fight.
+        //
+        // Two leads rather than one: `ONBOARDING COMPLETE:` is what tells a
+        // scrolled-back log which of the eleven missions closed and which
+        // Broker job did, and it deliberately shares no prefix with the
+        // `ONBOARDING:` hand-out line above.
+        let lead = if onboarding {
+            "ONBOARDING COMPLETE"
+        } else {
+            "CONTRACT COMPLETE"
+        };
         self.log_kind(
             MessageKind::Outcome,
-            format!("CONTRACT COMPLETE: {}", contract.def.name),
+            format!("{lead}: {} — {objective}.", contract.def.name),
         );
 
         for reward in &contract.def.reward {
@@ -274,10 +292,52 @@ impl Game {
         // `ActiveContracts` at the top of this function, which is the half
         // of "drop before pay" that makes a second settle unexpressible —
         // this notify never touches `ActiveContracts` at all.
-        self.notify_with_detail(
-            crate::notifications::NotificationKind::ContractClosed,
-            Some(paid),
-        );
+        //
+        // Which screen is the same branch the log line took. The chain's own
+        // arm exists because `ContractClosed`'s copy is false during
+        // onboarding twice over: no Broker is standing for the first several
+        // missions, and the board stays empty until the chain ends.
+        if onboarding {
+            let progress = self.onboarding_progress();
+            self.notify_filled(
+                crate::notifications::NotificationKind::OnboardingComplete,
+                &[
+                    ("name", &contract.def.name),
+                    ("objective", &objective),
+                    ("progress", &progress),
+                ],
+                Some(paid),
+            );
+        } else {
+            self.notify_filled(
+                crate::notifications::NotificationKind::ContractClosed,
+                &[("name", &contract.def.name), ("objective", &objective)],
+                Some(paid),
+            );
+        }
+    }
+
+    /// Where the run stands in the onboarding chain, as one sentence for the
+    /// completion screen.
+    ///
+    /// Counted off `ContractDb::tutorial_chain` against
+    /// `ActiveContracts::done`, `current_tutorial`'s rule: there is no cursor
+    /// and no index, so nothing can disagree with `done` about where the
+    /// player is. Called *after* `complete_contract` has filed the mission,
+    /// so the count includes the one just finished.
+    ///
+    /// The wording itself is `contracts::onboarding_progress_line`, so the
+    /// renderer's height census can measure the real sentence at every step
+    /// of the chain rather than keeping a copy of it.
+    fn onboarding_progress(&self) -> String {
+        let done = &self.world.resource::<ActiveContracts>().done;
+        let chain = self
+            .world
+            .resource::<crate::contracts::ContractDb>()
+            .tutorial_chain();
+        let total = chain.len();
+        let finished = chain.iter().filter(|def| done.contains(&def.id)).count();
+        crate::contracts::onboarding_progress_line(finished, total)
     }
 
     /// How a contract's whole payout reads. The completion line and both

@@ -325,6 +325,27 @@ pub struct ContractDef {
     pub tutorial: Option<u32>,
 }
 
+/// Where the run stands in the onboarding chain, as the one sentence the
+/// completion screen's `{progress}` hole is filled with.
+///
+/// A free function of the two counts rather than a `Game` method, so the
+/// renderer's height census can measure **this** sentence at every step of the
+/// real chain instead of restating it — `battle::expected_damage`'s rule, and
+/// the reason `ContractTemplate::widest` exists one file over. `Game::
+/// onboarding_progress` is what knows the counts.
+///
+/// `finished >= total` is the finished arm, which covers a chain the db knows
+/// nothing of (every file deleted mid-run, so `0 >= 0`): `in_tutorial` is
+/// false there too, so the board really has just opened.
+pub fn onboarding_progress_line(finished: usize, total: usize) -> String {
+    if finished >= total {
+        "That was the last of the onboarding missions. The Broker's board is open to you now."
+            .to_string()
+    } else {
+        format!("Onboarding: {finished} of {total} missions behind you.")
+    }
+}
+
 /// Separates a template's id from the parameters a roll filled in —
 /// `hunt#drone-6`. Refused in an authored id at load, so the two id spaces
 /// cannot collide and `ContractDb::repeatable` can read a rolled contract's

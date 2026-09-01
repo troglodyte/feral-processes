@@ -294,6 +294,7 @@ fn every_notification_kind_is_fired_by_a_named_site() {
             NotificationKind::FirstStatic => "Game::move_player, the movement hook",
             NotificationKind::Breach => "Game::enter_next_zone",
             NotificationKind::ContractClosed => "Game::complete_contract",
+            NotificationKind::OnboardingComplete => "Game::complete_contract, the onboarding arm",
             NotificationKind::OnboardingMission => "Game::ensure_tutorial_held",
         }
     }
@@ -323,6 +324,7 @@ fn tutorials_latch_and_milestones_do_not() {
             // runs would leave a second playthrough's missions unexplained.
             NotificationKind::Breach
             | NotificationKind::ContractClosed
+            | NotificationKind::OnboardingComplete
             | NotificationKind::OnboardingMission => Repeat::Always,
         };
         assert_eq!(kind.def().repeat, expected, "{kind}");
@@ -405,7 +407,7 @@ fn a_fresh_run_opens_on_its_briefing_and_no_other_notice() {
 fn filling_replaces_the_holes_the_caller_named() {
     let mut game = fresh();
     drain(&mut game);
-    assert!(game.notify_filled(NotificationKind::Breach, &[("nothing", "x")]));
+    assert!(game.notify_filled(NotificationKind::Breach, &[("nothing", "x")], None));
     assert!(game.take_notification().is_some());
 }
 

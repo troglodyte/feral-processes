@@ -33,6 +33,12 @@ accepted it.
 You may hold `MAX_ACTIVE_CONTRACTS` at once (3 as shipped). Abandoning one
 loses its progress; it is not banked.
 
+Finishing one raises a **completion summary**: the contract's `name`, the
+objective worded exactly as the contracts screen worded it, and what it paid.
+None of that is authored here — it is built from the fields below — so a
+retuned count or a renamed reward reaches the completion screen with no second
+place to edit.
+
 ## Schema
 
 ```ron
@@ -193,6 +199,11 @@ here:
 - While the chain is unfinished the **ordinary board is empty**. When the
   last mission completes the board fills normally, starters first.
 - It draws **green** on the contracts screen.
+- Finishing one closes on **its own** completion summary rather than the
+  Broker's, and says how far through the chain the run is. The Broker's
+  wording would be false twice over here: there is no Broker standing for the
+  first several missions, and the board is empty until the chain ends. The
+  last mission is where the summary says the board has opened.
 
 The number is a *step*, not an index. The shipped missions are spaced 10
 apart so a mission inserted later never renumbers the others. Two files

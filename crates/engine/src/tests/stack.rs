@@ -2,12 +2,18 @@
 //! on without you.
 
 use super::support::*;
+use crate::components::{POWER_MAX, POWER_MIN, PowerReserve};
 use crate::game::stack::StackPos;
 use crate::resources::{CurrentStack, Locale};
 use crate::species::DangerBand;
 use crate::stack::{CellKind, Dir};
 use crate::tuning::{STACK_COLLAPSE_RELINK_TILES, STACK_MIN_LINK_TILES};
 use crate::*;
+
+/// The routine that is the way home. Granted by the `symbolic_links`
+/// research node and by nothing else, which is what makes leaving the Stack
+/// something a run earns rather than something it starts with.
+const SYMLINK: &str = "symlink";
 
 fn game() -> Game {
     Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
@@ -553,13 +559,24 @@ fn home_then_descend(game: &mut Game) -> (Entity, Position) {
     (home, Position { x: ax, y: ay })
 }
 
-fn stock_for_symlink(game: &mut Game, target: Entity) {
-    let cost = game.symlink_cost(target).expect("Home has a symlink");
+/// Teaches, etches and installs the Symlink routine, and fills the reserve
+/// it is paid out of. The routine is the whole of the way home now — a
+/// research node grants it, so nothing before that node can leave the Stack
+/// on purpose.
+fn arm_symlink(game: &mut Game) {
     let player = game.player_entity();
-    let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
-    for (item, qty) in &cost {
-        inv.add(item.clone(), *qty);
-    }
+    install_routine_for_test(game, player, SYMLINK);
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(POWER_MAX);
+}
+
+/// Runs the Symlink routine off the player's own slot.
+fn run_symlink(game: &mut Game) -> Result<(), String> {
+    let index = game
+        .field_routines()
+        .iter()
+        .position(|r| r.ability == SYMLINK)
+        .expect("the player has Symlink installed");
+    game.run_field_routine(index, FieldRoutineTarget::None)
 }
 
 /// The symlink is the one guarded action that gets to *change* locale rather
@@ -569,10 +586,10 @@ fn stock_for_symlink(game: &mut Game, target: Entity) {
 #[test]
 fn a_symlink_used_underground_surfaces_the_party_and_teleports_them() {
     let mut game = game();
-    let (home, at) = home_then_descend(&mut game);
-    stock_for_symlink(&mut game, home);
+    let (_home, at) = home_then_descend(&mut game);
+    arm_symlink(&mut game);
 
-    game.use_symlink(home).expect("a symlink should reach home");
+    run_symlink(&mut game).expect("a symlink should reach home");
 
     assert!(
         !game.is_underground(),
@@ -595,16 +612,15 @@ fn a_symlink_used_underground_surfaces_the_party_and_teleports_them() {
 #[test]
 fn a_symlink_that_cannot_be_paid_for_leaves_the_party_underground() {
     let mut game = game();
-    let (home, _) = home_then_descend(&mut game);
+    home_then_descend(&mut game);
+    arm_symlink(&mut game);
     let player = game.player_entity();
-    game.world
-        .get_mut::<Inventory>(player)
-        .unwrap()
-        .items
-        .clear();
+    // Drained below the routine's own price, which is the only thing that
+    // can refuse a run the picker offered.
+    *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(POWER_MIN);
     let before = locale(&game);
 
-    assert!(game.use_symlink(home).is_err());
+    assert!(run_symlink(&mut game).is_err());
 
     assert!(
         game.is_underground(),
@@ -622,16 +638,16 @@ fn a_symlink_that_cannot_be_paid_for_leaves_the_party_underground() {
 #[test]
 fn a_symlink_out_keeps_the_maps_of_the_frames_already_walked() {
     let mut game = game();
-    let (home, _) = home_then_descend(&mut game);
+    home_then_descend(&mut game);
     let link = match locale(&game) {
         Locale::Stack { entrance, .. } => entrance,
         Locale::Surface | Locale::Base { .. } => unreachable!("just descended"),
     };
     walk_corridors(&mut game, 12);
     let before = map(&game).explored;
-    stock_for_symlink(&mut game, home);
+    arm_symlink(&mut game);
 
-    game.use_symlink(home).unwrap();
+    run_symlink(&mut game).unwrap();
     game.enter_stack(link.0, link.1);
 
     assert!(
@@ -2970,18 +2986,18 @@ fn surfacing_clears_trace() {
     assert_eq!(trace(&game), 0, "the Stack stops caring once you are out");
 }
 
-/// The other way out. CLAUDE.md records `use_symlink` as going *through*
+/// The other way out. CLAUDE.md records `run_symlink` as going *through*
 /// `clear_stack` rather than around it, and this is the assertion that keeps
 /// it true — a second exit that skipped the reset would leave Trace live on
 /// the surface, where nothing can ever clear it again.
 #[test]
 fn a_symlink_out_of_the_stack_clears_trace() {
     let mut game = game();
-    let (home, _) = home_then_descend(&mut game);
-    stock_for_symlink(&mut game, home);
+    home_then_descend(&mut game);
+    arm_symlink(&mut game);
     set_trace(&mut game, 50);
 
-    game.use_symlink(home).expect("a symlink should reach home");
+    run_symlink(&mut game).expect("a symlink should reach home");
 
     assert!(!game.is_underground());
     assert_eq!(trace(&game), 0);

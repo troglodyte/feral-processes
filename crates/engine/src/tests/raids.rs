@@ -5,7 +5,7 @@ use crate::components::{Disgruntled, Downed, Grievance};
 use crate::game::base::upkeep::DEV_HIT_DAMAGE_PERCENT;
 use crate::tuning::{
     FAILOVER_REPAIR_PER_LEVEL, MEDIC_REPAIR_PER_INTERVAL, NEST_DURABILITY, RAID_DAMAGE,
-    RAID_DEFENDER_DAMAGE, RAID_MIN_BASE_STAFF, STRUCTURE_REGEN_INTERVAL,
+    RAID_DEFENDER_DAMAGE, RAID_MIN_BASE_STAFF, RAID_MIN_ZONE, STRUCTURE_REGEN_INTERVAL,
 };
 use crate::*;
 
@@ -261,6 +261,7 @@ fn home_survives_save_and_load_without_gaining_a_durability_pool() {
 fn raid_check_can_damage_an_undefended_structure() {
     for seed in 0..300u32 {
         let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        set_zone(&mut game, RAID_MIN_ZONE);
         spawn_min_raid_staff(&mut game);
         let structure = game
             .world
@@ -292,6 +293,7 @@ fn raid_check_can_damage_an_undefended_structure() {
 fn raid_damage_message_is_tagged_message_kind_raid() {
     for seed in 0..300u32 {
         let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        set_zone(&mut game, RAID_MIN_ZONE);
         spawn_min_raid_staff(&mut game);
         game.world.spawn((
             Structure {
@@ -408,6 +410,7 @@ fn four_undowned_staff_is_still_below_the_raid_floor() {
 fn a_base_at_the_raid_staff_minimum_can_still_be_raided() {
     for seed in 0..300u32 {
         let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        set_zone(&mut game, RAID_MIN_ZONE);
         spawn_min_raid_staff(&mut game);
         let structure = game
             .world
@@ -489,6 +492,7 @@ fn a_staff_program_that_downed_tools_does_not_count_toward_the_raid_minimum() {
 fn a_sulking_staff_program_still_counts_toward_the_raid_minimum() {
     for seed in 0..300u32 {
         let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        set_zone(&mut game, RAID_MIN_ZONE);
         spawn_min_raid_staff(&mut game);
         let staff = game.base_staff();
         game.world.entity_mut(staff[0]).insert(Disgruntled {
@@ -577,6 +581,7 @@ fn shield_structure_loads_with_no_work_and_a_raid_defense_bonus() {
 fn deployed_shields_reduce_raid_damage_to_an_undefended_structure() {
     for seed in 0..300u32 {
         let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        set_zone(&mut game, RAID_MIN_ZONE);
         spawn_min_raid_staff(&mut game);
         let shield_defense = game
             .structure_defs()
@@ -869,6 +874,7 @@ fn damaging_a_structure_with_no_position_queues_nothing() {
 fn a_raid_fully_absorbed_by_the_shield_network_queues_a_deflected_effect() {
     for seed in 0..300u32 {
         let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        set_zone(&mut game, RAID_MIN_ZONE);
         spawn_min_raid_staff(&mut game);
         // Enough shields that RAID_DAMAGE is reduced to zero.
         let shield_defense = game
@@ -929,6 +935,7 @@ fn a_raid_fully_absorbed_by_the_shield_network_queues_a_deflected_effect() {
 fn a_raid_fended_off_by_a_cronjob_worker_queues_a_deflected_effect() {
     for seed in 0..300u32 {
         let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        set_zone(&mut game, RAID_MIN_ZONE);
         spawn_min_raid_staff(&mut game);
         let structure = game
             .world
@@ -1233,6 +1240,7 @@ fn a_bastion_stops_a_sweep_that_gets_past_another_class() {
 fn raid_check_defended_by_a_worker_reduces_structure_damage_and_hurts_the_worker() {
     for seed in 0..300u32 {
         let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        set_zone(&mut game, RAID_MIN_ZONE);
         spawn_min_raid_staff(&mut game);
         let structure = game
             .world
@@ -1807,6 +1815,7 @@ fn structures_survive_save_and_load_with_their_durability() {
 /// only in what they expect a death to *mean*.
 fn a_defender_raided_to_death(mode: DifficultyMode) -> (Game, Entity) {
     let mut game = Game::new(101, mode, &test_assets_dir()).unwrap();
+    set_zone(&mut game, RAID_MIN_ZONE);
     spawn_min_raid_staff(&mut game);
     let existing: Vec<Entity> = {
         let mut query = game.world.query_filtered::<Entity, With<Durability>>();
@@ -1903,5 +1912,92 @@ fn raid_check_never_targets_a_dig_site_even_as_the_only_durability_holder() {
         game.world.get::<Durability>(site).map(|d| d.hp),
         Some(full),
         "a marked cell must never take raid damage, even as the only Durability holder"
+    );
+}
+
+/// `RAID_MIN_ZONE`'s floor, the staff floor's twin on the other axis: the
+/// opening sector is where the player learns what a base is for, and a
+/// sweep that arrives while the first Home is still going up teaches only
+/// that building is punished. Driven across many seeds and many attempts
+/// per seed — `a_base_below_the_raid_staff_minimum_takes_no_raid`'s shape —
+/// because the gate has to hold even on a seed whose roll would otherwise
+/// fire, and the staff floor is deliberately cleared here so a pass cannot
+/// be the *other* gate answering.
+#[test]
+fn a_base_in_the_opening_sector_takes_no_raid() {
+    for seed in 0..300u32 {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        spawn_min_raid_staff(&mut game);
+        let structure = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "mining_node".to_string(),
+                },
+                Position { x: 5, y: 5 },
+                Durability { hp: 30, max_hp: 30 },
+            ))
+            .id();
+
+        for _ in 0..RAID_ATTEMPTS_PER_SEED {
+            game.raid_check();
+        }
+
+        assert_eq!(
+            game.world.get::<Durability>(structure).unwrap().hp,
+            30,
+            "a base in zone 1 must never take a raid, however the roll lands"
+        );
+        assert!(
+            !game
+                .message_log(50)
+                .into_iter()
+                .any(|e| e.kind == MessageKind::Raid),
+            "a raid that never fires must never log a MessageKind::Raid line"
+        );
+    }
+}
+
+/// The design rule itself, pinned against the **literal 2** rather than
+/// against `RAID_MIN_ZONE`, for the reason
+/// `four_undowned_staff_is_still_below_the_raid_floor` gives: every other
+/// test in this file reads the constant and so moves with it, and none of
+/// them can tell one floor from another. The second sector is where the GC
+/// starts sweeping, and zone 1 is the whole of what is exempt.
+#[test]
+fn the_second_sector_is_where_sweeps_begin() {
+    assert_eq!(
+        RAID_MIN_ZONE, 2,
+        "raids are exempt in the opening sector and nowhere else"
+    );
+
+    for seed in 0..300u32 {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        set_zone(&mut game, 2);
+        spawn_min_raid_staff(&mut game);
+        let structure = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "mining_node".to_string(),
+                },
+                Position { x: 5, y: 5 },
+                Durability { hp: 30, max_hp: 30 },
+            ))
+            .id();
+
+        for _ in 0..RAID_ATTEMPTS_PER_SEED {
+            game.raid_check();
+
+            let Some(durability) = game.world.get::<Durability>(structure) else {
+                return;
+            };
+            if durability.hp < 30 {
+                return;
+            }
+        }
+    }
+    panic!(
+        "raid_check never damaged a zone 2 structure across 300 seeds — the zone gate may be over-blocking"
     );
 }

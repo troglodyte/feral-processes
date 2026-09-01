@@ -267,15 +267,26 @@ way deleting the Currency item does.
     //     `Phase`, and carries no fields: the unvalidated landing is the
     //     whole mechanic. This is what `wild_jump.ron` uses.
     //
-    //     Both movement effects require `target: WholeParty`; anything else
-    //     is refused at load with a warning, since they move the party as a
-    //     body and there is no mechanic to phase one companion through a
-    //     wall. Both charge `power_cost` like everything else, both raise
-    //     Trace on success, neither ever appears in
+    //     Both Stack movement effects require `target: WholeParty`;
+    //     anything else is refused at load with a warning, since they move
+    //     the party as a body and there is no mechanic to phase one
+    //     companion through a wall. Both charge `power_cost` like everything
+    //     else, both raise Trace on success, neither ever appears in
     //     the battle Special picker, and neither will be run by a wild
     //     carrier. Both refuse a landing behind an unopened sealed door, and
     //     refuse landing *on* one — a sealed door is walkable, so landing on
     //     it would otherwise bypass the lock entirely.
+    //
+    //   Symlink
+    //     Puts the party down on the base's anchor in this sector, from
+    //     wherever they were standing. Field-only like the two above and
+    //     the one movement effect that is **not** Stack-only: it is the way
+    //     *out* of a frame, so it runs on both sides of the ground and is
+    //     never greyed for locale. Carries no fields — where it lands is a
+    //     rule of the mechanic, not an authored address — takes no target,
+    //     and requires `target: WholeParty` like the other two. Refused,
+    //     spending nothing, when the sector has no anchor to link to. This
+    //     is what `symlink.ron` uses.
     effect: Damage(power: 6),
 
     // Optional; defaults to 0 (usable every round). Battle rounds that must

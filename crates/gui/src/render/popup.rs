@@ -114,7 +114,7 @@ impl PowerCell {
     }
 
     /// Right-aligned, so the digits line up rather than the signs.
-    fn text(self) -> String {
+    pub(super) fn text(self) -> String {
         match self {
             PowerCell::Blank => " ".repeat(POWER_COLUMN_WIDTH),
             PowerCell::Unrated => format!("{:>POWER_COLUMN_WIDTH$}", "\u{2014}"),

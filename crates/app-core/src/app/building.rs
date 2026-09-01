@@ -397,24 +397,6 @@ impl App {
             _ => {}
         }
     }
-
-    /// Lists every deployed symlink-capable structure (e.g. Home) anywhere
-    /// on the map — not scan-radius-limited like the build/cronjob
-    /// menus — and teleports the player to the picked one.
-    pub(crate) fn handle_symlink_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.close_screen();
-            return;
-        }
-        let Some(game) = &mut self.game else { return };
-        let targets = game.symlink_targets();
-        if let Some(idx) = self.selected_index(key, targets.len()) {
-            let Some(game) = &mut self.game else { return };
-            let outcome = game.use_symlink(targets[idx].entity);
-            self.report(outcome);
-            self.mode = Mode::Playing;
-        }
-    }
 }
 
 /// One row on `Mode::WorkOrders` — either a queued order or the trailing

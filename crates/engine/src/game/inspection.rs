@@ -1,5 +1,5 @@
 //! Looking at the world without changing it: the tile and entity views the
-//! renderer draws, plus inspect and symlink targeting.
+//! renderer draws, plus inspect targeting.
 
 use crate::game::base::hauling::at_station;
 use crate::tuning::{
@@ -575,8 +575,8 @@ impl Game {
     /// them: by name, then by position.
     ///
     /// Both scans need it and neither may differ from the other, since the
-    /// cronjob picker and the symlink picker are lists of the same base. The
-    /// position tiebreak is not cosmetic — bevy's query iteration order is
+    /// pickers built from them are lists of the same base. The position
+    /// tiebreak is not cosmetic — bevy's query iteration order is
     /// not stable, so two Mining Nodes with nothing else to separate them
     /// would otherwise swap rows between openings of the same menu, and a
     /// list nobody can learn the shape of is worse than an unsorted one.
@@ -1572,149 +1572,6 @@ impl Game {
             analysis: def.base_int,
             class: def.affinity_class(),
         })
-    }
-
-    /// Every deployed structure that's a symlink target (its def has
-    /// `teleport_cost` set), anywhere on the map — unlike `view_entities`,
-    /// this isn't limited to a scan radius, since the whole point of a
-    /// symlink is reaching it from far away.
-    pub fn symlink_targets(&mut self) -> Vec<EntityView> {
-        let mut query = self
-            .world
-            .query::<(Entity, &Position, &Glyph, &Structure)>();
-        let hits: Vec<(Entity, Position, Glyph, StructureId)> = query
-            .iter(&self.world)
-            .map(|(e, p, g, s)| (e, *p, *g, s.kind.clone()))
-            .collect();
-
-        let db = self.world.resource::<StructureDb>();
-        let mut views: Vec<EntityView> = hits
-            .into_iter()
-            .filter(|(_, _, _, kind)| db.get(kind).is_some_and(|d| d.teleport_cost.is_some()))
-            .map(|(entity, pos, glyph, kind)| {
-                let bounds = self.entity_upgrade_ceiling(entity);
-                EntityView {
-                    entity,
-                    pos: (pos.x, pos.y),
-                    glyph: glyph.ch,
-                    color: glyph.color,
-                    label: self.entity_label(entity),
-                    is_player: false,
-                    is_tamed: false,
-                    is_companion: false,
-                    is_hostile: false,
-                    is_structure: true,
-                    is_anchor: false,
-                    machine_status: None,
-                    linked_edges: Vec::new(),
-                    is_home: kind == HOME_STRUCTURE_ID,
-                    tier: self.world.get::<StructureTier>(entity).map(|t| t.0),
-                    ceiling: bounds.map(|(c, _)| c),
-                    max_tier: bounds.map(|(_, m)| m),
-                    is_boss: false,
-                    // Structures only, so there is no creature here to have
-                    // beaten the party.
-                    nemesis: false,
-                    can_work: false,
-                    can_trade: false,
-                    issues_contracts: false,
-                    structure_worker: None,
-                    wears_job_mark: false,
-                    position_is_honest: true,
-                    structure_attended: false,
-                    build: None,
-                    output_stranded: false,
-                    hp_fraction: None,
-                    level: None,
-                    durability: self
-                        .world
-                        .get::<Durability>(entity)
-                        .map(|d| (d.hp, d.max_hp)),
-                    fusions: 0,
-                    // Structures only, so there is no creature here to have
-                    // rolled a tier.
-                    rarity: Rarity::Ordinary,
-                }
-            })
-            .collect();
-        Self::sort_by_label(&mut views);
-        views
-    }
-
-    /// The item cost to symlink to `target`, if it's a symlink-capable
-    /// structure — used both by `use_symlink` itself and by the renderer to
-    /// show the cost before the player commits to it.
-    pub fn symlink_cost(&self, target: Entity) -> Option<Vec<(ItemId, u32)>> {
-        let kind = self.world.get::<Structure>(target)?.kind.clone();
-        self.world
-            .resource::<StructureDb>()
-            .get(&kind)
-            .and_then(|d| d.teleport_cost.clone())
-    }
-
-    /// "Use symlink" — instantly teleports the player to `target` (a
-    /// symlink-capable structure from `symlink_targets`), paying its
-    /// `teleport_cost` from inventory.
-    pub fn use_symlink(&mut self, target: Entity) -> Result<(), String> {
-        if self.is_game_over().is_some() || self.has_active_battle() {
-            return Err("Can't do that right now.".into());
-        }
-        if self.world.get::<Structure>(target).is_none() {
-            return Err("That's not a structure.".to_string());
-        }
-        let cost = self
-            .symlink_cost(target)
-            .ok_or_else(|| "That structure has no symlink.".to_string())?;
-        // Where a symlink puts you down: the anchor, not the structure's own
-        // tile. Every `Structure` stands in base space, so its `Position` is
-        // in a coordinate space the player's `Position` is not — writing one
-        // across to the other would drop the party on whatever happens to be
-        // at those numbers out on the zone surface. The anchor is the base's
-        // one presence there, and it is where a trip home ends now.
-        //
-        // Read before the cost is taken, with the other refusals: a symlink
-        // that cannot land must not have been paid for.
-        let target_pos = self
-            .anchor_position()
-            .map(|(x, y)| Position { x, y })
-            .ok_or_else(|| "There's no anchor in this sector to link to.".to_string())?;
-        let player = self.player_entity();
-        {
-            let inv = self.world.get::<Inventory>(player).unwrap();
-            for (item, qty) in &cost {
-                if inv.count(item) < *qty {
-                    return Err(format!("Not enough {}.", self.item_name(item)));
-                }
-            }
-        }
-        {
-            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
-            for (item, qty) in &cost {
-                inv.take(item.clone(), *qty);
-            }
-        }
-        let name = self.entity_label(target);
-        // Only once every check above has passed: a symlink that is refused
-        // must not have surfaced the party on its way to refusing. Doing it
-        // here also keeps `Position` from ever being written while
-        // `Locale::Stack` is live, which is what `require_surface` guards
-        // the other actions against — underground it *is* the entrance tile.
-        let surfaced = self.is_underground();
-        if surfaced {
-            self.clear_stack();
-        }
-        {
-            let mut pos = self.world.get_mut::<Position>(player).unwrap();
-            pos.x = target_pos.x;
-            pos.y = target_pos.y;
-        }
-        self.log(if surfaced {
-            format!("The symlink hauls you up out of the stack and drops you at {name}'s anchor.")
-        } else {
-            format!("You use a symlink and teleport to {name}'s anchor.")
-        });
-        self.tick();
-        Ok(())
     }
 
     /// The denominator of every `power_ratio` reading. The `unwrap` is the

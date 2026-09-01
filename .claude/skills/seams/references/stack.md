@@ -16,10 +16,16 @@
   `Creature` nor `Structure`, so the ray looks through them: a known gap, in
   `TODO.md`. It answers honesty only — which *space* a tile belongs to is
   `stands_in_base_space`, under **The base**.
-- **`use_symlink` is the one action that leaves the Stack instead of being
-  refused by it.** It calls `clear_stack` and *then* teleports — the locale
-  drops only after every check passes. Anything else that moves the player
-  out goes through `clear_stack` in that order, not around it.
+- **`run_symlink` is the one action that leaves the Stack instead of being
+  refused by it**, and it is a field routine rather than a key of its own.
+  It calls `clear_stack` and *then* teleports — the locale drops only after
+  every check passes. Anything else that moves the player out goes through
+  `clear_stack` in that order, not around it. `AbilityEffect::Symlink` is
+  the third field-only effect and **the only one that is not Stack-only**:
+  `field_routines`' `stack_only` is a `matches!` on `Phase | Jump`, and a
+  third effect added to it ships a way home that only works once you are
+  already home. It was `u` and a `teleport_cost` picker until 0.13.69,
+  which is to say it worked on turn one of every run.
 - **A Forgiving death is the second thing that leaves the Stack, and the only
   one that isn't an action.** `difficulty::death_handling_system` is a bevy
   system, not a `Game`, so the reset lives in `game::stack::surfaced` and
@@ -91,10 +97,11 @@
   deliberately does **not** call `remember_view` — each caller does that
   first. `a_jump_fires_the_arrival_tail` asserts behaviour, not that a
   function was called.
-- **`Game::run_field_routine` is Stack-only for two of three effects, and
+- **`Game::run_field_routine` is Stack-only for two of four effects, and
   `require_surface` is not what does it** — `Phase` and `Jump` read and write
   `Locale::Stack`'s own coordinates, so the refusal is `Game::stack_pos`
-  returning `None`. `AbilityEffect::field_only` is the one predicate, and
+  returning `None`. `Symlink` deliberately makes no `movement_routine_pos`
+  call at all; it is the way out and runs on both sides of the ground. `AbilityEffect::field_only` is the one predicate, and
   `use_ability`'s `unreachable!` is only unreachable because three callers
   agree with it.
 - **`Trace` is a resource because `descend_to`/`ascend_to` rebuild the

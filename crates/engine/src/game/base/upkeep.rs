@@ -5,7 +5,7 @@ use crate::components::{Downed, MemorySubject};
 use crate::species::AffinityClass;
 use crate::tuning::{
     BASTION_DEF_MULTIPLIER, MEDIC_REPAIR_PER_INTERVAL, RAID_CHANCE_PER_TICK, RAID_DAMAGE,
-    RAID_DEFENDER_DAMAGE, RAID_MIN_BASE_STAFF, STRUCTURE_REGEN_INTERVAL,
+    RAID_DEFENDER_DAMAGE, RAID_MIN_BASE_STAFF, RAID_MIN_ZONE, STRUCTURE_REGEN_INTERVAL,
 };
 use crate::*;
 
@@ -325,9 +325,13 @@ impl Game {
         if !roll {
             return;
         }
-        // After the roll, `maybe_spawn_wild_creature`'s reason: a miss must
-        // leave the RNG stream untouched by this gate, so a base too thin to
-        // survive attrition still costs nothing but the draw already taken.
+        // Both gates sit after the roll, `maybe_spawn_wild_creature`'s
+        // reason: a miss must leave the RNG stream untouched by either, so
+        // an exempt sector and a base too thin to survive attrition each
+        // cost nothing but the draw already taken.
+        if self.world.resource::<ZoneLevel>().0 < RAID_MIN_ZONE {
+            return;
+        }
         if self.defending_base_staff_count() < RAID_MIN_BASE_STAFF {
             return;
         }

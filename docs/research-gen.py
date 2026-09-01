@@ -23,6 +23,7 @@ N = [
  ("fortification",       "Fortification",        0,  18, ["power_grid"],      ("structures", ["shield", "patch_node"])),
  ("self_exec",           "Self-Execution",       0,  14, ["routine_fabrication"], ("abilities", ["priority_boost"])),
  ("field_ops",           "Field Operations",     0,  20, ["self_exec"],       ("abilities", ["repair_loop", "trickle_charge"])),
+ ("symbolic_links",      "Symbolic Links",       0,  22, ["self_exec"],       ("abilities", ["symlink"])),
  ("runtime_patching",    "Runtime Patching",     2,  60, ["self_exec"],       ("abilities", ["hot_patch"])),
  ("adaptive_plating",    "Adaptive Plating",     2,  70, ["field_ops"],       ("abilities", ["hardened_shell", "overclock", "ablative_layer"])),
  ("mesh_plating",        "Mesh Plating",         3, 120, ["adaptive_plating"], ("abilities", ["hardened_shell_party"])),

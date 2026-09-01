@@ -36,7 +36,7 @@ S = [
  ("shield",         "Shield",         "^", "Blue",   [("core_fragment", 16)],                   "utility",  "-2 sweep damage, base-wide",      None, None, None,          None,            0,   0),
  ("patch_node",     "Patch Node",     "/", "Green",  [("core_fragment", 18), ("power_cell", 4)],"utility",  "+1 Durability per tier / 20 ticks",None, None, None,         12,              0,   0),
  ("recharger_node", "Recharger Node", "z", "Orange", [("core_fragment", 10)],                   "utility",  "+1 Power a tick, base-wide",     None, None, None,          None,            0,   4),
- ("defrag_bay",     "Defrag Bay",     "b", "Cyan",   [("core_fragment", 12)],                   "utility",  "restores staff Coherence",       None, None, None,          None,            2,   0),
+ ("defrag_bay",     "Log Analyzer Bay", "b", "Cyan",   [("core_fragment", 12)],                   "utility",  "restores staff Coherence",       None, None, None,          None,            2,   0),
  ("sandbox",        "Sandbox",        "s", "Green",  [("core_fragment", 10)],                   "utility",  "restores staff Slack",           None, None, None,          None,            1,   0),
  ("repair_bay",     "Repair Bay",     "r", "Green",  [("core_fragment", 16)],                   "utility",  "+1 Integrity a tick to a downed program",None, None, None,   None,            2,   0),
  ("portal",         "Zone Portal",    "O", "Magenta",[("portal_fragment", 10)],                 "utility",  "breaches to the next sector",     None, None, None,          None,            0,   0),

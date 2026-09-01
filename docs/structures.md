@@ -50,7 +50,7 @@ base itself.
 | `^` | Shield | 16 `core_fragment` | - | - | - | -2 sweep damage, base-wide |
 | `/` | Patch Node | 18 `core_fragment`, 4 `power_cell` | - | - | - | +1 Durability per tier / 20 ticks |
 | `z` | Recharger Node | 10 `core_fragment` | - | - | 4 | +1 Power a tick, base-wide |
-| `b` | Defrag Bay | 12 `core_fragment` | - | 2 | - | restores staff Coherence |
+| `b` | Log Analyzer Bay | 12 `core_fragment` | - | 2 | - | restores staff Coherence |
 | `s` | Sandbox | 10 `core_fragment` | - | 1 | - | restores staff Slack |
 | `r` | Repair Bay | 16 `core_fragment` | - | 2 | - | +1 Integrity a tick to a downed program |
 | `O` | Zone Portal | 10 `portal_fragment` | - | - | - | breaches to the next sector |

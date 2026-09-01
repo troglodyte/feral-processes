@@ -1,7 +1,7 @@
 # Research tree
 
 Every shipped research node in feral-processes, charted from its own file in
-`assets/research/`. 22 of them.
+`assets/research/`. 23 of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
 `assets/research/*.ron` on 2026-08-17 and will drift the moment one of those
@@ -14,13 +14,13 @@ it is the one progression track you cannot fight your way along.
 
 | | |
 |---|---|
-| nodes | 22 |
+| nodes | 23 |
 | roots (need nothing) | 3 — Automation, Isometric Commerce, Power Grid |
 | deepest chain | 6 nodes |
-| total Research Data | 1378 |
+| total Research Data | 1400 |
 | cheapest / dearest node | 8 / 140 |
-| zone bands | from turn one (9), zone 2 (6), zone 3 (7) |
-| unlocks | 13 structures, 15 routines, 6 gear recipes |
+| zone bands | from turn one (10), zone 2 (6), zone 3 (7) |
+| unlocks | 13 structures, 16 routines, 6 gear recipes |
 
 ## What the zone gates
 
@@ -32,7 +32,7 @@ ever opening a portal.
 
 | Available | Nodes | Research Data | Which |
 |:---|---:|---:|:---|
-| from turn one | 9 | 158 | Automation, Power Grid, Isometric Commerce, Self-Execution, Fortification, Field Operations, Reactive Armor, Weapon Fabrication, Routine Fabrication |
+| from turn one | 10 | 180 | Automation, Power Grid, Isometric Commerce, Self-Execution, Fortification, Field Operations, Symbolic Links, Reactive Armor, Weapon Fabrication, Routine Fabrication |
 | zone 2 | 6 | 350 | Firewall Plating, Overclock Cores, Neural Interfacing, Runtime Patching, Adaptive Plating, Program Refactoring |
 | zone 3 | 7 | 870 | Ablative Lattice, Monofilament Edge, Mesh Plating, Cortex Hacking, Deep Analysis, Kernel Privileges, Address Translation |
 
@@ -72,6 +72,7 @@ Automation (8)
 |       |   |   `-- Mesh Plating (120)
 |       |   `-- Deep Analysis (130)
 |       |       `-- Address Translation (140)
+|       |-- Symbolic Links (22)
 |       `-- Runtime Patching (60)
 |           `-- Kernel Privileges (135)
 `-- Program Refactoring (75)
@@ -118,6 +119,7 @@ there is no node you can reach two ways.
 | Field Operations | - | 20 | `self_exec` | `repair_loop`, `trickle_charge` |
 | Monofilament Edge | 3 | 110 | `overclock` | recipe `monofilament_whip` at the fabricator — 12 `portal_fragment` |
 | Runtime Patching | 2 | 60 | `self_exec` | `hot_patch` |
+| Symbolic Links | - | 22 | `self_exec` | `symlink` |
 | Adaptive Plating | 2 | 70 | `field_ops` | `hardened_shell`, `overclock`, `ablative_layer` |
 | Deep Analysis | 3 | 130 | `field_ops` | `deep_scan`, `trace_analysis`, `stealth_protocol`, `salvage_routine` |
 | Kernel Privileges | 3 | 135 | `runtime_patching` | `null_route` |
@@ -145,6 +147,7 @@ Weapon Fabrication     32  ####....................................
 Routine Fabrication    34  ####....................................
 Self-Execution         48  ######..................................
 Field Operations       68  ########................................
+Symbolic Links         70  ########................................
 Firewall Plating       77  #########...............................
 Overclock Cores        77  #########...............................
 Program Refactoring    83  ##########..............................
@@ -160,9 +163,9 @@ Mesh Plating          258  ###############################.........
 Address Translation   338  ########################################
 ```
 
-The shape to notice is the 6 end-of-branch nodes: Address Translation, Mesh Plating, Kernel Privileges, Cortex Hacking, Ablative Lattice, Monofilament Edge.
-Each carries 77-198 Research Data of prerequisites behind it before
-its own price is counted, and lands at 187-338 from a
+The shape to notice is the 7 end-of-branch nodes: Address Translation, Mesh Plating, Kernel Privileges, Cortex Hacking, Ablative Lattice, Monofilament Edge, Symbolic Links.
+Each carries 48-198 Research Data of prerequisites behind it before
+its own price is counted, and lands at 70-338 from a
 standing start — 2x the dearest single node in the
 tree (140) at the top end. The tree is not steep; it is long, and the
 zone bands are what stop that length being paid off in one sitting.

@@ -88,6 +88,7 @@ A = [
  ("skim_v3",           "Skim Single v3.0",        "OneEnemyGroupFront", "Drain",     "",               14,   4,    0, "",                 4, 0),
  ("stack_smash",       "Fork Bomb Single",        "OneEnemyGroupFront", "Damage",    "",                9,   2,    0, "Bleed 60% 3r",     2, 0),
  ("stealth_protocol",  "Stealth Protocol Party",  "WholeParty",         "FieldBuff", "EncounterDamp",  20,   0,    0, "",                 0, 18.0),
+ ("symlink",           "Symlink Party",           "WholeParty",         "Symlink",   "",                0,   0,    0, "",                 0, 25.0),
  ("throttle",          "Throttle Group",          "WholeEnemyGroup",    "Buff",      "Atk",            -4,   0,    3, "",                 3, 0),
  ("trace_analysis",    "Trace Analysis Party",    "WholeParty",         "FieldBuff", "XpBoost",        20,   0,    0, "",                 0, 18.0),
  ("trickle_charge",    "Trickle Charge Party",    "WholeParty",         "FieldBuff", "Trickle",         1,   0,   60, "",                 0, 25.0),
@@ -121,7 +122,7 @@ for r in R:
 
 TARGETS = ["OneAlly", "WholeParty", "OneEnemyGroupFront", "WholeEnemyGroup", "AllEnemies"]
 EFFECTS = ["Damage", "Debuff", "Buff", "Heal", "Drain", "FieldBuff", "Cleanse", "Decompile",
-           "Phase", "Jump"]
+           "Phase", "Jump", "Symlink"]
 FIELD = [r for r in R if r["effect"] == "FieldBuff"]
 MOVE = [r for r in R if r["effect"] in ("Phase", "Jump")]
 

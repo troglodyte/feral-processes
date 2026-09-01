@@ -304,6 +304,42 @@ fn worn_summary(
     )
 }
 
+/// What one swap row rates, through the same `PowerCell` the inventory
+/// list, the crafting menu and a trader's shelf draw — so the figure the
+/// player compares two pieces of gear by means the same thing on the screen
+/// where they actually choose between them.
+///
+/// `Blank` for the unequip row rather than `Unrated`: an em dash says *no
+/// answer* about an item, and that row is not an item at all. Taking the
+/// rating off `SwapChoice` rather than off a new `SwapRow` field keeps it a
+/// call to `Game::copy_power` at the moment of drawing, which is the rule
+/// that stops a screen quoting its own arithmetic.
+fn swap_power(game: &Game, choice: &SwapChoice) -> PowerCell {
+    match choice {
+        SwapChoice::Equip(copy) => PowerCell::of_copy(game, copy),
+        SwapChoice::Unequip => PowerCell::Blank,
+    }
+}
+
+/// A swap row's head: the shortcut, the rating, then the padded name.
+///
+/// The rating sits **between the shortcut and the name**, where the
+/// inventory list already puts it — in a trailing column the figures would
+/// stagger with the name lengths above them, which is `PowerCell`'s own
+/// argument for where it sits on a `Row::Item`.
+///
+/// Built here rather than in `app-core` because it is a *layout* decision:
+/// the head is the one part of a row `wrapped_row_lines` never breaks, so
+/// what goes in it has to be measured, and only this crate can measure text.
+fn swap_head(game: &Game, index: usize, row: &SwapRow) -> String {
+    format!(
+        "[{}] {}  {}",
+        menu_shortcut(index),
+        swap_power(game, &row.choice).text(),
+        row.label
+    )
+}
+
 /// The replacement picker for one equipment slot.
 ///
 /// Rows come from `equip_swap_rows` — the same call the key handler
@@ -345,7 +381,7 @@ pub(super) fn draw_equip_swap(
         // what will not fit. Both lines carry the row's selection and tier
         // colour, so a wrapped entry still highlights as one thing.
         for line in wrapped_row_lines(
-            format!("[{}] {}", menu_shortcut(i), row.label),
+            swap_head(game, i, row),
             &[row.stats.clone(), format!(" {}", row.delta)],
         ) {
             rows.push(tier_row(line, i == selected, row.fusion_tier, row.rarity));
@@ -353,7 +389,7 @@ pub(super) fn draw_equip_swap(
     }
     rows.push(text_row(""));
     rows.push(text_row(
-        "Middle column is what you'd get; right column is the change",
+        "Rating is the piece outright; middle is what you'd get; right is the change",
     ));
     rows.push(text_row(
         "[I] inspect — full stats, and what a granted routine actually does",
@@ -619,15 +655,19 @@ pub(super) fn draw_inventory_item_action(
 
 #[cfg(test)]
 mod tests {
-    use super::{equipped_row, equipped_summary, gear_inspect_rows, inventory_row_lines};
+    use super::{
+        equipped_row, equipped_summary, gear_inspect_rows, inventory_row_lines, swap_head,
+        swap_power,
+    };
     use crate::paint::{painted_runs_in, with_painter};
+    use crate::render::popup::PowerCell;
     use crate::render::popup::{
         PopupSize, REFUSAL_MAX_LINES, draw_row, item_text, popup_max_rows, tagged_text,
         wrapped_row_lines,
     };
     use crate::render::{Row, quality_tag_style};
     use crate::text::ui_metrics;
-    use feral_processes_app_core::{GearInspect, Mode, menu_shortcut};
+    use feral_processes_app_core::{GearInspect, Mode, SwapChoice, SwapRow, menu_shortcut};
     use feral_processes_engine::components::Rarity;
     use feral_processes_engine::items::{EquipmentSlot, GearCopy};
     use feral_processes_engine::tuning::{ITEM_FUSION_COST, MAX_FUSIONS, QUALITY_MAX};
@@ -1191,8 +1231,11 @@ mod tests {
         // Measured **as wrapped**, because six axes printed twice do not fit
         // one line and `draw_equip_swap` no longer asks them to. Every line
         // the row produces has to fit, which is what this iterates.
+        // The rating column is part of the head — four cells and two of gap,
+        // widest at the four digits `POWER_COLUMN_WIDTH` is cut for.
         let head = format!(
-            "[a] {:<71}",
+            "[a] {:>4}  {:<71}",
+            9999,
             format!(
                 "{} Overdriven Singularity Matrix of Quiet Handshakes +6 (130%)",
                 Rarity::Gold.label().expect("Gold reads as a word")
@@ -1226,5 +1269,69 @@ mod tests {
                 );
             }
         });
+    }
+
+    /// **The picker where two pieces of gear are actually compared shows
+    /// what each is worth.** Every other list that names gear carries the
+    /// rating — the pack, the crafting menu, a trader's shelf — and this one
+    /// did not, so the one screen whose entire job is "is this better than
+    /// what I have on" answered only in per-axis deltas against the worn
+    /// piece. A delta says *better*; it does not say *how good*, and two
+    /// candidates a point apart on six axes are indistinguishable by it.
+    ///
+    /// Through `Game::copy_power` and nowhere else, which is what makes the
+    /// figure here the same figure the pack quoted for the same copy.
+    #[test]
+    fn a_swap_row_rates_the_copy_it_offers() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(45, DifficultyMode::Forgiving, assets).expect("shipped assets");
+        let copy = GearCopy::plain("kinetic_edge".into());
+        let rating = game
+            .copy_power(&copy)
+            .expect("a weapon has a combat axis to rate")
+            .total;
+
+        let cell = swap_power(&game, &SwapChoice::Equip(copy.clone()));
+        assert_eq!(
+            cell,
+            PowerCell::Rated(rating),
+            "the swap row quoted something other than Game::copy_power"
+        );
+
+        let row = SwapRow {
+            choice: SwapChoice::Equip(copy),
+            label: "Kinetic Edge".to_string(),
+            stats: String::new(),
+            delta: String::new(),
+            fusion_tier: 0,
+            rarity: Rarity::Ordinary,
+        };
+        let head = swap_head(&game, 0, &row);
+        assert!(
+            head.contains(&rating.to_string()),
+            "the rating is missing from the row head: {head:?}"
+        );
+        assert!(
+            head.find(&rating.to_string()) < head.find("Kinetic Edge"),
+            "the rating belongs between the shortcut and the name, where the \
+             pack already puts it: {head:?}"
+        );
+    }
+
+    /// The unequip row is not an item, and says so with a blank rather than
+    /// an em dash. `Unrated` means *no answer about this item*; taking the
+    /// slot off has no item to answer about, and a dash there reads as a
+    /// piece of gear that rates nothing.
+    #[test]
+    fn the_unequip_row_rates_nothing_rather_than_rating_dash() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(46, DifficultyMode::Forgiving, assets).expect("shipped assets");
+
+        let cell = swap_power(&game, &SwapChoice::Unequip);
+        assert_eq!(cell, PowerCell::Blank);
+        assert!(
+            cell.text().trim().is_empty(),
+            "the unequip row drew a figure where it has nothing to rate"
+        );
     }
 }

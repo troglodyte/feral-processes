@@ -106,9 +106,11 @@
   is **absolute**, priced against one reference wearer in `tuning.rs` that is
   *derived* from `balance_sim`'s swept curve and `stats_after_levels`, never
   invented — so **the swap picker's delta may legitimately disagree with it**,
-  and the fix is not to make the column contextual. `None` means "no combat
-  axis", never "rated zero", and two censuses over the real assets hold both
-  halves.
+  and the fix is not to make the column contextual. Since 0.13.69 the two sit
+  on the same row: a candidate can rate above the worn piece and still show a
+  negative delta on an axis, which is the two columns answering different
+  questions. `None` means "no combat axis", never "rated zero", and two
+  censuses over the real assets hold both halves.
 - **`PowerCell` has three cells and three meanings.** `Rated(n)` is a rating,
   `Unrated` is an em dash (*no answer*, not a bad answer), `Blank` is a row
   that is not an item. It is a **fifth parameter on `with_tag`**, not a

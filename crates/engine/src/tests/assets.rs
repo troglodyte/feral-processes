@@ -677,7 +677,8 @@ fn every_shipped_integrity_routine_rolls_a_band() {
             | E::Decompile
             | E::FieldBuff { .. }
             | E::Phase
-            | E::Jump => continue,
+            | E::Jump
+            | E::Symlink => continue,
         };
         checked += 1;
         assert!(
@@ -725,7 +726,8 @@ fn every_shipped_routine_that_rolls_to_hit_is_aimed_and_no_other_is() {
             | E::Decompile
             | E::FieldBuff { .. }
             | E::Phase
-            | E::Jump => false,
+            | E::Jump
+            | E::Symlink => false,
         };
         if rolls_to_hit {
             aimed += 1;

@@ -1,0 +1,8 @@
+(
+    id: "symbolic_links",
+    name: "Symbolic Links",
+    description: "A link from wherever you are standing back to the anchor, resolvable on demand. Teaches Symlink Party — write it onto a Routine Disk to run it, and no descent is one-way again.",
+    cost: 22,
+    requires: ["self_exec"],
+    unlocks_abilities: ["symlink"],
+)

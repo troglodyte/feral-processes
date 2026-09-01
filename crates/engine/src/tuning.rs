@@ -2263,6 +2263,26 @@ pub const RAID_CHANCE_PER_TICK: f64 = 0.012;
 /// every other raid test reads this constant and so moves with it.
 pub const RAID_MIN_BASE_STAFF: usize = 5;
 
+/// The first sector a GC Entropy Sweep may reach. The staff floor's twin on
+/// the other axis, and it answers a different failure: `RAID_MIN_BASE_STAFF`
+/// is about a base too thin to absorb attrition, this is about a *player*
+/// who has not yet learned what a base is for. Zone 1 is where the first
+/// Home goes up, and a sweep landing on it teaches that building is
+/// punished rather than that it needs defending.
+///
+/// Checked in `Game::raid_check` **after** the chance roll, for
+/// `RAID_MIN_BASE_STAFF`'s reason: an exempt sector still consumes the same
+/// draw from `GameRng`, so this gate cannot shift any other test's RNG
+/// stream. Pinned against the literal by
+/// `the_second_sector_is_where_sweeps_begin`, because every other raid test
+/// reads the constant and so moves with it.
+///
+/// This is the second thing zone 1 is exempt from, after
+/// `Game::environment_biome_at`'s neutral terrain — deliberately its own
+/// constant rather than a shared "is the opening sector" predicate, since
+/// the two answer to different tuning and only coincide today.
+pub const RAID_MIN_ZONE: u32 = 2;
+
 /// Damage a raid deals to a structure's `Durability` when it has no
 /// assigned cronjob worker defending it. Deliberately small relative to
 /// `DEFAULT_STRUCTURE_DURABILITY`: a raid is meant to be attrition the base

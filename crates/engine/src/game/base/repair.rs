@@ -10,7 +10,6 @@ use crate::base_grid::BaseGrid;
 use crate::components::{Downed, Position, Stats, Structure};
 use crate::game::base::hauling::{NoPost, step_to_post};
 use crate::game::base::offshift::in_reach;
-use crate::game::party::ProgramRole;
 use crate::resources::Locale;
 use crate::structures::{StructureDb, StructureId};
 use crate::tuning::BAY_ADMISSION_HP_FRACTION;
@@ -187,11 +186,17 @@ impl Game {
     /// `Downed` would have been an edit at every one of them and a fifth
     /// state for each to disagree about.
     ///
-    /// **`Staff` alone, off `Game::program_role`.** A party member and a
-    /// wielded program are the player's to mend by resting; a `Sortie`
-    /// program is not in the base to be walked anywhere and is deliberately
-    /// left alone mid-trip — it is admitted, if it is still hurt, on the
-    /// first beat after it comes home and is `Staff` again.
+    /// **`Staff` alone, and the role filter is the `staff` argument rather
+    /// than a test in here.** The one caller passes `Game::base_staff`, which
+    /// *is* the `Game::program_role` derivation — so a party member, a
+    /// wielded program and a squad away on a sortie are all absent by
+    /// construction, and re-asking inside the loop was a second copy of that
+    /// question which no real call could ever answer differently.
+    /// `update_disgruntled` takes the same list on the same terms and makes
+    /// the same omission. What the roles mean here: a party member and a
+    /// wielded program are the player's to mend by resting, and a `Sortie`
+    /// program is not in the base to be walked anywhere — it is admitted, if
+    /// it is still hurt, on the first beat after it comes home as `Staff`.
     ///
     /// **Nothing is admitted while no Bay stands.** `Downed` is a one-way
     /// door without one — `a_downed_program_with_no_bay_standing_stays_down`
@@ -216,9 +221,6 @@ impl Game {
             // `update_disgruntled`'s asymmetry and the reason there is no
             // release line here: nothing in this loop can take the marker
             // off, so the boundary has no back edge to flicker across.
-            if self.program_role(worker) != Some(ProgramRole::Staff) {
-                continue;
-            }
             let Some(stats) = self.world.get::<Stats>(worker) else {
                 continue;
             };

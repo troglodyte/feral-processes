@@ -2583,10 +2583,15 @@ fn nothing_is_admitted_while_no_bay_stands() {
     );
 }
 
-/// The roles the threshold does *not* touch. A party member and a wielded
-/// program are the player's to mend by resting, and neither is base labour;
-/// benching either would take it out of a fight the player is in the middle
-/// of.
+/// The roles the threshold does *not* touch. A party member is the player's
+/// to mend by resting, and benching one would take it out of a fight the
+/// player is in the middle of.
+///
+/// **Driven through `Game::tick` and not through the `admit` helper**, and
+/// that is the whole difference between this test and a vacuous one: the
+/// role filter is `base_staff`, one level above `admit_the_badly_hurt`, so a
+/// test that built the staff list itself would be asserting against its own
+/// fixture. Deleting the filter has to be able to fail this.
 #[test]
 fn only_base_staff_are_admitted_to_a_bay() {
     let mut game = Game::new(3511, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -2594,7 +2599,9 @@ fn only_base_staff_are_admitted_to_a_bay() {
     game.add_companion(program).expect("it joins the party");
     assert_eq!(game.program_role(program), Some(ProgramRole::InParty));
 
-    admit(&mut game);
+    for _ in 0..5 {
+        game.tick();
+    }
 
     assert!(
         game.world.get::<Downed>(program).is_none(),

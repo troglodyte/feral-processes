@@ -497,6 +497,19 @@ pub struct AbilityDef {
     /// `Game::extract_routine` are the three places that honour it.
     #[serde(default)]
     pub exclusive: bool,
+    /// Offered in the creation wizard's Routine step as a candidate for the
+    /// free starter slot — see `abilities::install_starter`.
+    ///
+    /// Opt-in, the same idiom `exclusive` and `wild_weight` already use: the
+    /// pool is defined by the files that ask to be in it rather than by this
+    /// module listing them. Not refused at load — held to shape by three
+    /// censuses in `tests/assets.rs` instead, the same way the hunt-only set
+    /// is: a starter must be single-target
+    /// (`OneAlly`/`OneEnemyGroupFront`) and `exclusive: false`, since an
+    /// exclusive routine may never enter `KnownRoutines` and creation must
+    /// not become a fourth way around that gate.
+    #[serde(default)]
+    pub starter: bool,
 
     /// Whether this attack reaches past the front line. Read by **the basic
     /// attack path only** — `Game::basic_attacks_that_reach` — because that
@@ -951,11 +964,35 @@ impl AbilityDb {
 /// Grants `routine` as knowledge and installs it into the player's free
 /// starter slot — `Game::apply_character_choice`'s "routine" step.
 ///
-/// A no-op today: Phase 2B (the starter pool, `AbilityDef::starter`,
-/// `KnownRoutines`) is what fills this in. Until then it is what keeps
-/// `CharacterChoice::default()`'s `routine: None` producing today's player,
-/// who starts with nothing installed beyond `DECOMPILE_ABILITY_ID`.
-pub fn install_starter(_game: &mut crate::Game, _routine: Option<&AbilityId>) {}
+/// `None` — `CharacterChoice::default()`'s value — does nothing, which is
+/// what keeps every one of the ~1,600 `Game::new` call sites producing
+/// today's player: nothing installed beyond `DECOMPILE_ABILITY_ID`.
+///
+/// **Knowledge first, then the install.** A `KnownRoutines` entry is what
+/// lets the routine be etched onto a disk later like anything else the
+/// player knows — see `assets/abilities/README.md`'s "The starter set".
+/// The install itself is `Game::write_routine`, the same door
+/// `Game::install_disk` uses: no ownership check, no disk spent, just a
+/// write into the next free slot. `PLAYER_ROUTINE_SLOT_BASE` is 2 and
+/// `decompile` already occupies one slot at this point in
+/// `apply_character_choice`'s order (stats, identity, kit, *then*
+/// routine), so this always has exactly one slot to land in and never
+/// displaces it.
+///
+/// Does not validate `routine` against `AbilityDef::starter` — the wizard
+/// (Track D/E) is the one surface that offers a choice at all, and it can
+/// only ever offer what `Game::starter_routine_rows` lists.
+pub fn install_starter(game: &mut crate::Game, routine: Option<&AbilityId>) {
+    let Some(routine) = routine else {
+        return;
+    };
+    game.world
+        .resource_mut::<crate::KnownRoutines>()
+        .0
+        .insert(routine.clone());
+    let player = game.player_entity();
+    game.write_routine(player, routine);
+}
 
 #[cfg(test)]
 mod tests {

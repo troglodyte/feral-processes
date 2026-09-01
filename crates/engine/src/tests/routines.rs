@@ -2,6 +2,7 @@
 
 use super::support::*;
 use crate::components::Routines;
+use crate::species::AffinityClass;
 use crate::*;
 
 /// The generic test species declares no abilities, so its kit is the
@@ -1048,5 +1049,157 @@ fn a_level_up_unlock_never_evicts_a_carried_routine() {
             .any(|e| e.text.contains(&unlock_name) && e.text.contains("is lost")),
         "the unlock that found no room is lost, and said so: {:?}",
         game.message_log(10)
+    );
+}
+
+/// `abilities::install_starter` grants **knowledge and the install** — a
+/// choice's routine has to survive past the run it was picked in (etched
+/// onto a disk later, exactly like anything else the player knows), so the
+/// install alone would not be enough.
+#[test]
+fn a_starter_routine_is_known_and_installed() {
+    let choice = CharacterChoice {
+        routine: Some("stack_smash".to_string()),
+        ..CharacterChoice::default()
+    };
+    let game =
+        Game::new_with(9001, DifficultyMode::Forgiving, &test_assets_dir(), &choice).unwrap();
+    assert!(
+        game.knows_routine("stack_smash"),
+        "install_starter must grant knowledge, not just occupy the slot"
+    );
+    let player = game.player_entity();
+    assert!(
+        game.world
+            .get::<Routines>(player)
+            .unwrap()
+            .0
+            .contains(&"stack_smash".to_string()),
+        "install_starter must install into the free slot, not just teach it"
+    );
+}
+
+/// `PLAYER_ROUTINE_SLOT_BASE` is 2 specifically so a starter has somewhere
+/// to land without evicting `decompile` — the ability the player always
+/// starts able to capture programs with. Both must be held at once.
+#[test]
+fn a_starter_routine_does_not_displace_decompile() {
+    let choice = CharacterChoice {
+        routine: Some("checksum_repair".to_string()),
+        ..CharacterChoice::default()
+    };
+    let game =
+        Game::new_with(9002, DifficultyMode::Forgiving, &test_assets_dir(), &choice).unwrap();
+    let player = game.player_entity();
+    let installed = &game.world.get::<Routines>(player).unwrap().0;
+    assert_eq!(
+        installed,
+        &vec![
+            crate::abilities::DECOMPILE_ABILITY_ID.to_string(),
+            "checksum_repair".to_string(),
+        ],
+        "decompile keeps its slot and the starter fills the other one"
+    );
+}
+
+/// `CharacterChoice::default()`'s `routine: None` is today's game — no
+/// second routine, the slot `PLAYER_ROUTINE_SLOT_BASE` leaves free stays
+/// free, and nothing is known beyond `decompile`.
+#[test]
+fn no_starter_choice_leaves_the_slot_empty() {
+    let game = Game::new(9003, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    assert_eq!(
+        game.world.get::<Routines>(player).unwrap().0,
+        vec![crate::abilities::DECOMPILE_ABILITY_ID.to_string()]
+    );
+    assert!(!game.knows_routine("stack_smash"));
+    assert!(!game.knows_routine("checksum_repair"));
+}
+
+/// `starter_routine_rows` is genuinely computed through the same doors
+/// `routine_detail` (the etch-picker's inspect page) uses — `Game::
+/// ability_affinity` and `routine_power_cost` — rather than echoing each
+/// file's authored `description` or `power_cost` back verbatim. Checked
+/// against `checksum_repair`, which carries no status rider to complicate
+/// the expected string: at level 1 and `AFFINITY_NEUTRAL` its Heal band is
+/// `abilities::scaled_range` of `power: 25, spread: 6`, not the raw 19–31
+/// the file's own `description` quotes.
+///
+/// **What this does not yet prove, and why**: the row's numbers are
+/// supposed to move with the chosen *class* — "the same routine reads
+/// differently for a Striker and a Medic" is the design's own framing for
+/// this step. They do not, today: `Game::ability_affinity`'s player arm
+/// prices off the player's perks only, and the class term
+/// (`Game::player_class_affinity`, off a sibling task's `ClassDb`) had not
+/// merged into this branch as of this test. The second half of this test
+/// pins that down explicitly — every class prices identically — so a
+/// reader finds a failing assertion, not silent surprise, the day that
+/// stops being true; flip it to assert an actual difference once the class
+/// term lands.
+#[test]
+fn starter_rows_are_priced_through_the_class() {
+    let game = Game::new(9004, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let rows = game.starter_routine_rows(Some(AffinityClass::Striker));
+
+    let ids: Vec<_> = rows.iter().map(|r| r.id.clone()).collect();
+    assert_eq!(
+        ids,
+        vec![
+            "checksum_repair".to_string(),
+            "hard_lock".to_string(),
+            "hyperthread".to_string(),
+            "siphon_cycles".to_string(),
+            "stack_smash".to_string(),
+        ],
+        "the pool is exactly the five shipped starters, id-sorted"
+    );
+
+    let heal = rows.iter().find(|r| r.id == "checksum_repair").unwrap();
+    let def = game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .get("checksum_repair")
+        .unwrap();
+    let expected_band = crate::abilities::scaled_range(
+        crate::battle::DamageRange::centred(25, 6),
+        1,
+        crate::tuning::AFFINITY_NEUTRAL,
+    );
+    assert_eq!(
+        heal.effect,
+        format!(
+            "Restores {} Integrity",
+            game.damage_range_label(expected_band)
+        ),
+        "the row's effect text must be the level-1, neutral-affinity band — not the file's raw prose"
+    );
+    assert_eq!(
+        heal.power_cost,
+        crate::abilities::routine_power_cost(def),
+        "power_cost must be the real charge, not the file's raw power_cost"
+    );
+
+    // See the doc comment: this is today's real behaviour, not the design's
+    // eventual one.
+    for class in [
+        AffinityClass::Striker,
+        AffinityClass::Bastion,
+        AffinityClass::Medic,
+        AffinityClass::Saboteur,
+        AffinityClass::Leech,
+    ] {
+        assert_eq!(
+            game.starter_routine_rows(Some(class)),
+            rows,
+            "class {class:?} priced differently from Striker — `starter_routine_rows` now \
+             reads a class term that this test was written before; update the assertion \
+             above to expect the difference"
+        );
+    }
+    assert_eq!(
+        game.starter_routine_rows(None),
+        rows,
+        "no class must not panic and must price the same as any other class today"
     );
 }

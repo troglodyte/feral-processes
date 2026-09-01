@@ -10,8 +10,10 @@ use crate::base_grid::BaseGrid;
 use crate::components::{Downed, Position, Stats, Structure};
 use crate::game::base::hauling::{NoPost, step_to_post};
 use crate::game::base::offshift::in_reach;
+use crate::game::party::ProgramRole;
 use crate::resources::Locale;
 use crate::structures::{StructureDb, StructureId};
+use crate::tuning::BAY_ADMISSION_HP_FRACTION;
 use bevy_ecs::prelude::Entity;
 use std::collections::HashSet;
 
@@ -162,6 +164,74 @@ impl Game {
             sites.iter().map(|(kind, pos)| (kind, pos)),
             self.world.resource::<StructureDb>(),
         )
+    }
+
+    /// Marks every badly hurt staff program `Downed`, so the base's existing
+    /// recovery machinery collects it.
+    ///
+    /// **A second door onto `components::Downed`, and the widening is the
+    /// feature.** `bench_or_dissolve` was the only one, which meant a Bay
+    /// served programs that had been *killed* and benched — and nothing
+    /// else. A staff program that merely came out of a raid at a sliver of
+    /// Integrity had no recovery route at all once resting stopped mending
+    /// the base's own pool, and under Permadeath, where the bench does not
+    /// exist and `Downed` is never inserted, a Bay served literally nobody.
+    ///
+    /// **Insertion is the whole of what this does**, and that is what keeps
+    /// the rest of the feature free. The `on_shift` filter already drops a
+    /// `Downed` body, `schedule_base_labour`'s diff already frees its post
+    /// unconditionally, `drift_idle_staff` already walks it to a Bay, and
+    /// `run_repair_bays` already heals it and lifts the marker at full — so
+    /// the four sites that make a Bay work needed no edit, and the map's `+`
+    /// followed for the same reason. A parallel "hurt" marker beside
+    /// `Downed` would have been an edit at every one of them and a fifth
+    /// state for each to disagree about.
+    ///
+    /// **`Staff` alone, off `Game::program_role`.** A party member and a
+    /// wielded program are the player's to mend by resting; a `Sortie`
+    /// program is not in the base to be walked anywhere and is deliberately
+    /// left alone mid-trip — it is admitted, if it is still hurt, on the
+    /// first beat after it comes home and is `Staff` again.
+    ///
+    /// **Nothing is admitted while no Bay stands.** `Downed` is a one-way
+    /// door without one — `a_downed_program_with_no_bay_standing_stays_down`
+    /// is the shipped rule — which is the right price for a program that
+    /// died and quite the wrong one for a program that is merely hurt:
+    /// benching it would delete a worker from the base for the rest of the
+    /// run and never say so. With no Bay, a hurt program keeps working.
+    ///
+    /// Run beside `update_disgruntled`, before the posting half of
+    /// `schedule_base_labour` reads `on_shift` — that function's rule: a body
+    /// that leaves the line this tick must not also be handed a job this
+    /// tick.
+    pub(crate) fn admit_the_badly_hurt(&mut self, staff: &[Entity], bays: &Bays) {
+        if bays.is_empty() {
+            return;
+        }
+        for &worker in staff {
+            if self.world.get::<Downed>(worker).is_some() {
+                continue;
+            }
+            // The entry test is asked only of a body still working, which is
+            // `update_disgruntled`'s asymmetry and the reason there is no
+            // release line here: nothing in this loop can take the marker
+            // off, so the boundary has no back edge to flicker across.
+            if self.program_role(worker) != Some(ProgramRole::Staff) {
+                continue;
+            }
+            let Some(stats) = self.world.get::<Stats>(worker) else {
+                continue;
+            };
+            if stats.max_hp <= 0 || stats.hp <= 0 {
+                continue;
+            }
+            if stats.hp_fraction() >= BAY_ADMISSION_HP_FRACTION {
+                continue;
+            }
+            self.world.entity_mut(worker).insert(Downed);
+            let name = self.creature_label(worker);
+            self.log_base(format!("{name} breaks off for repairs."));
+        }
     }
 
     /// The tile of every Bay currently serving a downed program.

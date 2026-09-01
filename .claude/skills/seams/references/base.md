@@ -638,6 +638,25 @@
   serves the player, so don't copy its `Locale` early return. Query and `Bays`
   are both **sorted by tile** (`min_by_key` takes the first equal minimum), and
   the marker comes off and the line is logged **only at full Integrity**.
+- **`components::Downed` has two writers and they mean the same thing by it**:
+  `bench_or_dissolve`'s Forgiving arm, and `Game::admit_the_badly_hurt` for a
+  staff program under `BAY_ADMISSION_HP_FRACTION` (0.20). Before the second, a
+  Bay served *corpses* — so a raid's surviving defender had no route back to
+  full, and under Permadeath a Bay was inert. **Insertion is all the second one
+  does**: the `on_shift` filter, the diff's unconditional free,
+  `drift_idle_staff`'s Bay arm and `run_repair_bays` all already key on the
+  marker, and the map's `+` follows through `Bays::serving`. The shape to
+  refuse is a parallel `Mending` component — an edit at all four sites, a fifth
+  state to disagree about, and a save field, for two states that want identical
+  treatment. `Staff` alone off `program_role` (a `Sortie` is away and cannot
+  walk; it is admitted the beat after it comes home), and **refused outright
+  while no Bay stands**, because the marker is a one-way door without one.
+  **One threshold, not two**: release is `hp == max_hp`, the exit
+  `run_repair_bays` already had, so the flicker gap is the whole bar and a
+  hysteretic pair would be a second way out of one state. Low on purpose — it
+  pulls a working body off a machine. **A Bay has no capacity**: everyone in
+  reach mends at full rate on the same tick, which matters now that a stay is
+  the whole 20%-to-full climb rather than a corpse's moment.
 - **A downed program walks itself, and the `Downed` arm of `drift_idle_staff`
   sits above the `OffShift` arm** — recovery outranks an amenity — **gated on
   laid floor**, which is what keeps `entry_tile` the one arrival path for a

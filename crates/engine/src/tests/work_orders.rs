@@ -2837,6 +2837,85 @@ fn a_downed_program_steps_toward_the_bay_rather_than_wandering() {
     );
 }
 
+/// **A hurt program walks the same road, and takes no second arm to do it.**
+/// `Game::admit_the_badly_hurt` marks it `Downed`, which is the one thing
+/// the drift's Bay arm asks about — so the walk, the standdown, the heal and
+/// the map's mark all came free. A hurt program that needed its own arm here
+/// would be the signal the admission had been put in the wrong place.
+///
+/// Driven through the admission rather than by inserting `Downed` by hand,
+/// which is the whole point of the test: the hand-inserted version is
+/// `a_downed_program_steps_toward_the_bay_rather_than_wandering` above and
+/// already passed before any of this existed.
+#[test]
+fn a_badly_hurt_program_walks_itself_to_the_bay_without_being_downed_by_hand() {
+    let mut game = Game::new(101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_base_with_a_bay(&mut game, 1);
+    let site = bay_tile(&mut game);
+    let hurt = staff[0];
+    let max = game.world.get::<Stats>(hurt).unwrap().max_hp;
+    game.world.get_mut::<Stats>(hurt).unwrap().hp = 1;
+    let before = *game.world.get::<Position>(hurt).unwrap();
+    let gap = |p: Position| (p.x - site.x).abs().max((p.y - site.y).abs());
+
+    for _ in 0..40 {
+        let next = game.current_tick() + crate::tuning::IDLE_STAFF_STEP_TICKS;
+        wind_to(&mut game, next);
+        let bays = game.repair_bays();
+        game.admit_the_badly_hurt(&staff, &bays);
+        drift(&mut game, &staff);
+    }
+
+    let after = *game.world.get::<Position>(hurt).unwrap();
+    assert!(
+        gap(after) < gap(before),
+        "it closed on the Bay at {site:?}: {before:?} -> {after:?}"
+    );
+    assert!(
+        crate::game::base::offshift::in_reach(after, site, 0),
+        "and it arrived: {after:?} against {site:?}"
+    );
+    assert!(max > 1, "the fixture must have something to mend");
+}
+
+/// **Repair outranks an amenity, for a hurt program exactly as for a dead
+/// one.** The two arms are ordered in `drift_idle_staff` and not weighed, so
+/// a body that is both under the threshold and off shift on a need walks to
+/// the Bay: an unbuilt program is not going back to work however rested it
+/// is, and the need is still there to be serviced once it is whole.
+///
+/// The `OffShift` marker is left on it throughout — nothing here clears it,
+/// and it is what takes the body to its amenity the moment the Bay is done.
+#[test]
+fn a_hurt_program_goes_to_the_bay_before_its_amenity() {
+    let mut game = Game::new(102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let staff = a_base_with_a_bay(&mut game, 1);
+    let site = bay_tile(&mut game);
+    let hurt = staff[0];
+    game.world.get_mut::<Stats>(hurt).unwrap().hp = 1;
+    game.world.entity_mut(hurt).insert(components::OffShift {
+        need: crate::needs::NeedId::from("coherence"),
+    });
+
+    for _ in 0..40 {
+        let next = game.current_tick() + crate::tuning::IDLE_STAFF_STEP_TICKS;
+        wind_to(&mut game, next);
+        let bays = game.repair_bays();
+        game.admit_the_badly_hurt(&staff, &bays);
+        drift(&mut game, &staff);
+    }
+
+    let after = *game.world.get::<Position>(hurt).unwrap();
+    assert!(
+        crate::game::base::offshift::in_reach(after, site, 0),
+        "the Bay arm sits above the amenity arm: {after:?} against {site:?}"
+    );
+    assert!(
+        game.world.get::<components::OffShift>(hurt).is_some(),
+        "and the need it was off shift on is still waiting for it"
+    );
+}
+
 /// Arrived, it holds. The wander's other shape would walk it straight back
 /// out of reach — `step_off_shift` makes exactly this move.
 #[test]

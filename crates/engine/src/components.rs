@@ -1422,8 +1422,8 @@ pub enum Grievance {
     DownedTools,
 }
 
-/// A program that died and was benched rather than destroyed — the
-/// Forgiving arm of `Game::bench_or_dissolve`.
+/// A program that is a Repair Bay's business rather than the base's: off the
+/// line until it is whole again.
 ///
 /// A marker and nothing else, `OffShift`'s shape and lifetime: what a
 /// downed program *does* is derived from it every beat rather than stored
@@ -1431,10 +1431,20 @@ pub enum Grievance {
 /// the party nor wielded), the scheduler's posting half skips it, and
 /// `drift_idle_staff` walks it to a Repair Bay.
 ///
-/// **`systems::repair_system` is the only thing that clears it**, at full
+/// **Two things insert it, and they mean the same thing by it.**
+/// `Game::bench_or_dissolve` on the Forgiving arm of a death, and
+/// `Game::admit_the_badly_hurt` for a staff program that has fallen below
+/// `tuning::BAY_ADMISSION_HP_FRACTION`. The second is why this is no longer
+/// described as a benched *corpse*: a Bay that served only the killed served
+/// nobody at all under Permadeath, where the bench does not exist, and left
+/// a raid's surviving defender with no route back to full.
+///
+/// **`Game::run_repair_bays` is the only thing that clears it**, at full
 /// HP. Nothing else may: a program that cannot reach a Bay stays downed, and
-/// dropping the marker on an unreachable Bay would silently heal it.
-/// Permadeath never inserts it, so a save from that mode carries none.
+/// dropping the marker on an unreachable Bay would silently heal it. That
+/// one-way door is also why admission is refused outright while no Bay
+/// stands — the right price for a program that died, and quite the wrong one
+/// for one that is merely hurt.
 #[derive(Component, Clone, Debug)]
 pub struct Downed;
 

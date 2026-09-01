@@ -2307,6 +2307,301 @@ fn a_bay_reports_itself_occupied_only_while_a_program_is_recovering_in_it() {
     );
 }
 
+/// A base with a Bay standing and one staff program beside it, at `hp` out
+/// of its maximum.
+///
+/// The Bay is placed through the real deploy path for `a_bay_reports_itself_
+/// occupied`'s reason, and the program is stood in reach by hand: the walk
+/// is `drift_idle_staff`'s half of the feature and is tested there.
+fn a_hurt_staff_program_at_a_bay(game: &mut Game, hp: i32) -> (Entity, (i32, i32)) {
+    stand_in_base(game);
+    place_home(&mut *game);
+    give(game, &ItemId::from(ids::CORE_FRAGMENT), 200);
+    place_now(game, "repair_bay", 2, 0).expect("a Repair Bay is buildable from the start");
+    let site = find_structure_by_kind(game, "repair_bay").unwrap();
+    let at = *game.world.get::<Position>(site).unwrap();
+
+    let program = spawn_tamed(game, 40, 3);
+    game.world.get_mut::<Stats>(program).unwrap().hp = hp;
+    *game.world.get_mut::<Position>(program).unwrap() = Position {
+        x: at.x + 1,
+        y: at.y,
+    };
+    (program, (at.x, at.y))
+}
+
+/// One admission pass, as `schedule_base_labour` makes it.
+fn admit(game: &mut Game) {
+    let staff = game.base_staff();
+    let bays = game.repair_bays();
+    game.admit_the_badly_hurt(&staff, &bays);
+}
+
+fn hp_of(game: &Game, who: Entity) -> i32 {
+    game.world.get::<Stats>(who).unwrap().hp
+}
+
+/// **The threshold, at both sides of the line.** A staff program on its last
+/// legs takes itself off the line and becomes a Bay's business; one that is
+/// merely knocked about keeps working. Asserted either side of
+/// `BAY_ADMISSION_HP_FRACTION` rather than at one hand-picked number, so
+/// retuning the constant moves both cases together instead of turning half
+/// the test vacuous.
+#[test]
+fn a_staff_program_is_admitted_to_a_bay_only_once_it_is_badly_hurt() {
+    let mut game = Game::new(3506, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let max = 40;
+    let line = (max as f32 * crate::tuning::BAY_ADMISSION_HP_FRACTION).ceil() as i32;
+
+    let (hurt, _) = a_hurt_staff_program_at_a_bay(&mut game, line - 1);
+    admit(&mut game);
+    assert!(
+        game.world.get::<Downed>(hurt).is_some(),
+        "a staff program under the line breaks off for repairs"
+    );
+
+    let mut game = Game::new(3506, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (scratched, _) = a_hurt_staff_program_at_a_bay(&mut game, max);
+    game.world.get_mut::<Stats>(scratched).unwrap().hp = line + 1;
+    admit(&mut game);
+    assert!(
+        game.world.get::<Downed>(scratched).is_none(),
+        "a program above the line stays on the line"
+    );
+}
+
+/// **The exit is full Integrity and nothing else, so the gap the marker has
+/// to cross to flicker is the whole bar.** A release line just above the
+/// admission line is the shape this repo uses for needs and morale, and it
+/// is the wrong one here: a Bay already had an exit — `run_repair_bays`
+/// lifting `Downed` at full — and two ways out of one state is how they come
+/// to disagree.
+///
+/// Written as a walk over every intermediate tick rather than a check at the
+/// end: the failure this guards against is an *oscillation*, which a
+/// before-and-after assertion cannot see at all. It counts the transitions
+/// and demands exactly one in each direction.
+#[test]
+fn an_admitted_program_is_not_released_until_it_is_whole() {
+    let mut game = Game::new(3507, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let max = 40;
+    // Just under the line, which is the interesting side of it: started at 1
+    // HP the early ticks are nowhere near the boundary and the oscillation
+    // this test exists for could not happen on them anyway.
+    let line = (max as f32 * crate::tuning::BAY_ADMISSION_HP_FRACTION).ceil() as i32;
+    let (program, bay) = a_hurt_staff_program_at_a_bay(&mut game, line - 1);
+
+    let mut marked = false;
+    let (mut admissions, mut releases) = (0, 0);
+    let mut served_below_full = 0;
+    for _ in 0..200 {
+        admit(&mut game);
+        let stats = *game.world.get::<Stats>(program).unwrap();
+        let whole = stats.hp >= stats.max_hp;
+        let now = game.world.get::<Downed>(program).is_some();
+        if now != marked {
+            if now {
+                admissions += 1
+            } else {
+                releases += 1
+            }
+            marked = now;
+        }
+        // The continuity claim, asked on every tick of the climb rather than
+        // at the two ends: from admission to full it is held, its Bay is lit,
+        // and it is never handed back to the line in between.
+        if !whole && marked {
+            assert!(
+                game.occupied_repair_bays().contains(&bay),
+                "a program mid-climb at {}/{} must still be in its Bay",
+                stats.hp,
+                stats.max_hp
+            );
+            served_below_full += 1;
+        }
+        game.run_repair_bays();
+    }
+
+    let stats = *game.world.get::<Stats>(program).unwrap();
+    assert_eq!(stats.hp, stats.max_hp, "it should have mended");
+    assert_eq!(admissions, 1, "it must be admitted once, not repeatedly");
+    assert_eq!(
+        releases, 1,
+        "and released once — a second means it bounced back in off the line"
+    );
+    assert!(!marked, "and it ends the run back on the staff");
+    assert!(
+        served_below_full > 1,
+        "the climb must actually take several ticks, or this proves nothing"
+    );
+}
+
+/// **The wiring, through the real tick.** Every other test here calls
+/// `admit_the_badly_hurt` the way the scheduler does; none of them would
+/// notice if the call were deleted from `schedule_base_labour` altogether,
+/// and the feature would be dead in play with a green suite behind it.
+/// This one drives `Game::tick` and nothing else.
+#[test]
+fn the_scheduler_admits_a_badly_hurt_program_on_its_own() {
+    let mut game = Game::new(3513, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (program, _) = a_hurt_staff_program_at_a_bay(&mut game, 2);
+    assert!(game.world.get::<Downed>(program).is_none());
+
+    for _ in 0..5 {
+        game.tick();
+    }
+
+    assert!(
+        game.world.get::<Downed>(program).is_some(),
+        "the scheduler must make this call itself, not only the tests"
+    );
+}
+
+/// **What a Bay's capacity turns out to be, pinned rather than assumed.**
+/// `run_repair_bays` walks the downed and asks each one which Bay serves it;
+/// there is no per-Bay slot, no queue and no rate to divide, so every body in
+/// reach is mended at the full authored rate on the same tick. The shipped
+/// Bay's `radius: 0` is `at_station`, its four orthogonal neighbours.
+///
+/// Worth a test now that a program occupies its Bay for the whole 20%-to-full
+/// climb rather than the moment a corpse takes: if this ever became one slot,
+/// the second body would starve in silence.
+#[test]
+fn a_bay_mends_everybody_in_reach_on_the_same_tick() {
+    let mut game = Game::new(3512, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (first, bay) = a_hurt_staff_program_at_a_bay(&mut game, 2);
+    let second = spawn_tamed(&mut game, 40, 3);
+    game.world.get_mut::<Stats>(second).unwrap().hp = 2;
+    *game.world.get_mut::<Position>(second).unwrap() = Position {
+        x: bay.0 - 1,
+        y: bay.1,
+    };
+
+    admit(&mut game);
+    let before = (hp_of(&game, first), hp_of(&game, second));
+    game.run_repair_bays();
+    let after = (hp_of(&game, first), hp_of(&game, second));
+
+    assert!(
+        after.0 > before.0 && after.1 > before.1,
+        "both bodies mend on the same tick: {before:?} -> {after:?}"
+    );
+    assert_eq!(
+        after.0 - before.0,
+        after.1 - before.1,
+        "and at the same rate — a Bay divides nothing between them"
+    );
+}
+
+/// **The mark and the heal are one predicate, and widening admission must
+/// not have split them.** `Bays::serving` answers both, so a Bay putting
+/// Integrity into somebody is a Bay wearing the map's `+` — in every state a
+/// program can be in, not just the one the feature was built for.
+///
+/// An equivalence, so it is walked over states that answer *no* as well as
+/// the one that answers yes: asserted only on the healing case it would pass
+/// against a mark that was simply always lit.
+#[test]
+fn a_bays_mark_is_lit_exactly_when_that_bay_is_healing_somebody() {
+    let mut game = Game::new(3508, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (program, bay) = a_hurt_staff_program_at_a_bay(&mut game, 40);
+    let beside = Position {
+        x: bay.0 + 1,
+        y: bay.1,
+    };
+    let away = Position { x: -4, y: -4 };
+
+    // (what the world looks like, whether the Bay should be working)
+    let states: [(&str, i32, Position, bool); 4] = [
+        ("whole and working", 40, beside, false),
+        ("scratched but above the line", 30, beside, false),
+        ("badly hurt and in reach", 2, beside, true),
+        ("badly hurt but across the base", 2, away, false),
+    ];
+
+    for (what, hp, at, expected) in states {
+        game.world.entity_mut(program).remove::<Downed>();
+        game.world.get_mut::<Stats>(program).unwrap().hp = hp;
+        *game.world.get_mut::<Position>(program).unwrap() = at;
+
+        admit(&mut game);
+        let lit = game.occupied_repair_bays().contains(&bay);
+        let before = hp_of(&game, program);
+        game.run_repair_bays();
+        let healed = hp_of(&game, program) > before;
+
+        assert_eq!(lit, expected, "the mark is wrong for a program {what}");
+        assert_eq!(
+            lit, healed,
+            "the mark and the heal disagree for a program {what}: \
+             lit {lit}, healed {healed}"
+        );
+    }
+}
+
+/// **Permadeath is where this changes the most.** That mode never benches —
+/// `bench_or_dissolve` despawns instead — so `Downed` was unreachable in it
+/// and a Repair Bay was a building that could not do anything at all. The
+/// threshold is the mode-independent door, so a Bay works there now.
+#[test]
+fn a_bay_serves_a_hurt_program_under_permadeath_too() {
+    let mut game = Game::new(3509, DifficultyMode::Permadeath, &test_assets_dir()).unwrap();
+    let (program, bay) = a_hurt_staff_program_at_a_bay(&mut game, 2);
+
+    admit(&mut game);
+    assert!(
+        game.world.get::<Downed>(program).is_some(),
+        "the threshold does not consult the difficulty mode"
+    );
+    assert!(game.occupied_repair_bays().contains(&bay));
+
+    let before = hp_of(&game, program);
+    game.run_repair_bays();
+    assert!(
+        hp_of(&game, program) > before,
+        "and the Bay is no longer an inert building in this mode"
+    );
+}
+
+/// **`Downed` is a one-way door without a Bay to walk to**, which is the
+/// right price for a program that died and quite the wrong one for a program
+/// that is merely hurt — it would delete a worker from the base for the rest
+/// of the run and never say so. So nothing is admitted while no Bay stands.
+#[test]
+fn nothing_is_admitted_while_no_bay_stands() {
+    let mut game = Game::new(3510, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let program = spawn_tamed(&mut game, 40, 3);
+    game.world.get_mut::<Stats>(program).unwrap().hp = 1;
+
+    admit(&mut game);
+
+    assert!(
+        game.world.get::<Downed>(program).is_none(),
+        "with nowhere to send it, a hurt program keeps working"
+    );
+}
+
+/// The roles the threshold does *not* touch. A party member and a wielded
+/// program are the player's to mend by resting, and neither is base labour;
+/// benching either would take it out of a fight the player is in the middle
+/// of.
+#[test]
+fn only_base_staff_are_admitted_to_a_bay() {
+    let mut game = Game::new(3511, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (program, _) = a_hurt_staff_program_at_a_bay(&mut game, 2);
+    game.add_companion(program).expect("it joins the party");
+    assert_eq!(game.program_role(program), Some(ProgramRole::InParty));
+
+    admit(&mut game);
+
+    assert!(
+        game.world.get::<Downed>(program).is_none(),
+        "a party member at a sliver of Integrity is the player's problem, not a Bay's"
+    );
+}
+
 /// The player's decision, pinned: without a Bay a downed program stays down
 /// for as long as the run lasts. Nothing else heals it, and there is no
 /// timer quietly doing the job.

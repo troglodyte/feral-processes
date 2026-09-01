@@ -7734,6 +7734,60 @@ The marker comes off and the line is logged **only at full Integrity**,
 not. That edge is free here rather than latched: a program already whole
 carries no `Downed` and is not in the query.
 
+### A Bay serves the badly hurt, and widening it was one insertion
+
+`components::Downed` was inserted in exactly one place, `bench_or_dissolve`'s
+Forgiving arm, which made a Repair Bay a building that served *corpses*. Two
+consequences followed that nobody had chosen. A staff program that came out of
+a raid at a sliver of Integrity had no route back to full at all once resting
+stopped mending the base's own pool — every sweep the base survived left its
+defender in that state permanently. And under Permadeath, where the bench does
+not exist and `Downed` is never inserted, a Bay was an inert building: buildable,
+priced, and incapable of doing anything.
+
+The fix is `Game::admit_the_badly_hurt`, and **what makes it small is that
+insertion is all it does**. The four things that make a Bay work already key on
+`Downed`: the `on_shift` filter drops the body, `schedule_base_labour`'s diff
+frees its post unconditionally, `drift_idle_staff`'s first arm walks it to a
+Bay, and `run_repair_bays` heals it and lifts the marker at full. So the feature
+is one new writer and no new readers — and the map's occupancy `+` followed for
+free, because that is derived from `Bays::serving` over the same query.
+
+**The shape to refuse is a second marker.** A parallel `Mending` component
+beside `Downed` is the obvious way to keep "died" and "hurt" distinct, and it
+costs an edit at every one of those four sites plus a fifth state for each to
+disagree about — and a save-format field. The two states want identical
+treatment everywhere, which is the definition of one marker.
+
+`Staff` alone, off `Game::program_role`. A party member and a wielded program
+are the player's to mend by resting; a `Sortie` program is away and cannot be
+walked anywhere, so it is left alone mid-trip and admitted on the first beat
+after it comes home as `Staff`.
+
+**Admission is refused while no Bay stands**, and that asymmetry with a death
+is deliberate. `Downed` is a one-way door without somewhere to walk to —
+`a_downed_program_with_no_bay_standing_stays_down` is the shipped rule — which
+is the right price for a program that died and quite the wrong one for one that
+is merely hurt, where it would silently delete a worker from the base for the
+rest of the run.
+
+**One threshold, not two.** `tuning::BAY_ADMISSION_HP_FRACTION` is 0.20 and
+there is deliberately no release constant beside it. The hysteretic pair is the
+shape `OffShift` and `Disgruntled` use, and it is wrong here because a Bay
+already *had* an exit — `run_repair_bays` lifting the marker at full Integrity
+— and two ways out of one state is how they come to disagree. Release is
+`hp == max_hp`, so the gap the marker would have to cross to flicker is the
+whole bar. The number is low on purpose: this pulls a working body off a
+machine, so it has to mean *about to be destroyed* rather than *has been in a
+fight*, or a base that survives a sweep sends its whole staff to queue at the
+Bay and stops producing.
+
+**A Bay has no capacity and divides nothing.** `run_repair_bays` walks the
+downed and asks each which Bay serves it, so every body in reach mends at the
+full authored rate on the same tick — no slot, no queue, no starvation. That
+matters more than it used to: a program now occupies its Bay for the whole
+20%-to-full climb rather than the moment a corpse took.
+
 ### A downed program walks itself, and `Err` holds rather than dropping the marker
 
 `drift_idle_staff` is where a body with an errand of its own walks it, and the

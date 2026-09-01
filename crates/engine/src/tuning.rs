@@ -2072,6 +2072,26 @@ pub const IDLE_STAFF_RING_TILES: i32 = 3;
 /// a seeded test in an unrelated file.
 pub const IDLE_STAFF_STEP_TICKS: u64 = 6;
 
+/// Integrity fraction below which a base-staff program takes itself off the
+/// line and goes to a Repair Bay — see `Game::admit_the_badly_hurt`.
+///
+/// **The admission line, and there is deliberately no matching release
+/// line.** The obvious second constant — leave the Bay at some higher
+/// fraction — is the shape `MORALE_RECOVERED_AT` has, and it is the wrong
+/// shape here: a Bay already had an exit condition before this threshold
+/// existed, `run_repair_bays` dropping `components::Downed` at *full*
+/// Integrity, and two ways out of one state is how they come to disagree.
+/// Full is the release, so the hysteresis gap is this number to 1.0 — far
+/// wider than any flicker could cross, and held by
+/// `an_admitted_program_is_not_released_until_it_is_whole`.
+///
+/// Low on purpose. This pulls a working body off a machine, so it has to
+/// mean *this program is about to be destroyed*, not *this program has been
+/// in a fight*: set anywhere near half, a base that survives a sweep sends
+/// its whole staff to queue at the Bay and stops producing for as long as
+/// they take to mend.
+pub const BAY_ADMISSION_HP_FRACTION: f32 = 0.20;
+
 /// How far a hauling program's cost field reaches, centred on the tile it is
 /// walking to — twice the *live* build radius, because two structures in one
 /// base can sit at opposite corners of the slab and a worker may be standing

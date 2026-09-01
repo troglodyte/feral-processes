@@ -21,10 +21,20 @@ impl Game {
     /// empty offer — game over, an active battle, `require_base`. No
     /// `require_surface`: `require_base` is the stronger statement.
     ///
-    /// `in_pack` is 0 unless there is a Depot beside the party to put the
-    /// item into and the item is not `banked` — a bank is not cargo. A
-    /// banked item may still have `on_shelves`, since a Research Node
-    /// produces one.
+    /// **The trade currency is not cargo and gets no row at all**, on either
+    /// side — the same exclusion `caravan_shelf` and the stack market's
+    /// listing already make, for the same reason: a currency is what a
+    /// transfer is priced in rather than a thing that moves. Its own filter
+    /// and not `ItemDef::banked`, because Credits are carried, are spendable
+    /// from the pack, and survive a breach.
+    ///
+    /// `carried` is what the pack holds, whatever may be done with it.
+    /// `can_put` is 0 unless there is a Depot beside the party to put the
+    /// item into and the item is not `banked` — a bank is not cargo — and
+    /// **only a row with a `can_put` of its own is created from the pack
+    /// side**, so an item that can go nowhere is listed only when it is also
+    /// sitting on a shelf. A banked item may still have `on_shelves`, since a
+    /// Research Node produces one.
     pub fn transfer_offer(&self) -> Vec<TransferRow> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Vec::new();
@@ -32,6 +42,7 @@ impl Game {
         if self.require_base().is_err() {
             return Vec::new();
         }
+        let currency = self.trade_currency();
         // A `BTreeMap` so the `ItemId` order is the map's rather than a
         // second explicit sort that could drift from the log line's.
         let mut rows: std::collections::BTreeMap<ItemId, TransferRow> =
@@ -39,32 +50,52 @@ impl Game {
         for structure in self.adjacent_stock() {
             let stock = self.world.get::<Stock>(structure).unwrap();
             for (item, qty) in stock.output.iter() {
-                if *qty == 0 {
+                if *qty == 0 || *item == currency {
                     continue;
                 }
                 rows.entry(item.clone())
                     .or_insert_with(|| TransferRow {
                         item: item.clone(),
                         on_shelves: 0,
-                        in_pack: 0,
+                        carried: 0,
+                        can_put: 0,
                     })
                     .on_shelves += qty;
             }
         }
-        if !self.adjacent_depots().is_empty() {
-            let player = self.player_entity();
-            if let Some(inv) = self.world.get::<Inventory>(player) {
-                for (item, qty) in inv.items.iter() {
-                    if *qty == 0 || self.is_banked(item) {
-                        continue;
+        let puttable = !self.adjacent_depots().is_empty();
+        let player = self.player_entity();
+        if let Some(inv) = self.world.get::<Inventory>(player) {
+            for (item, qty) in inv.items.iter() {
+                if *qty == 0 || *item == currency {
+                    continue;
+                }
+                let can_put = if puttable && !self.is_banked(item) {
+                    *qty
+                } else {
+                    0
+                };
+                match rows.get_mut(item) {
+                    Some(row) => {
+                        row.carried = *qty;
+                        row.can_put = can_put;
                     }
-                    rows.entry(item.clone())
-                        .or_insert_with(|| TransferRow {
-                            item: item.clone(),
-                            on_shelves: 0,
-                            in_pack: 0,
-                        })
-                        .in_pack += qty;
+                    // A row of its own only for something that can actually
+                    // be put: a pack full of cargo standing beside a Mining
+                    // Node would otherwise open a screen of rows that move in
+                    // neither direction.
+                    None if can_put > 0 => {
+                        rows.insert(
+                            item.clone(),
+                            TransferRow {
+                                item: item.clone(),
+                                on_shelves: 0,
+                                carried: *qty,
+                                can_put,
+                            },
+                        );
+                    }
+                    None => {}
                 }
             }
         }

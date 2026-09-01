@@ -2202,12 +2202,20 @@ pub struct MemoryRow {
 /// `Game::transfer_offer`.
 ///
 /// The union of the two old offers: `on_shelves` is what the adjacent
-/// `Stock` buffers are holding of it, `in_pack` what the player could put
-/// into an adjacent Depot. An item on both sides is **one** row carrying
-/// both figures, which is the whole reason the two screens became one.
+/// `Stock` buffers are holding of it, `carried` what the pack holds. An item
+/// on both sides is **one** row carrying both figures, which is the whole
+/// reason the two screens became one.
+///
+/// **`carried` is a holding and `can_put` is a permission**, and they part
+/// company in exactly two cases: no Depot beside the party, and a banked
+/// item, both of which may still be taken. The screen draws `carried` — a
+/// column headed `you` that reads 0 while the pack holds twelve is a lie the
+/// player cannot check — and `App::put_available` clamps against `can_put`.
+/// `on_shelves` needs no second figure because it is both at once.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TransferRow {
     pub item: ItemId,
     pub on_shelves: u32,
-    pub in_pack: u32,
+    pub carried: u32,
+    pub can_put: u32,
 }

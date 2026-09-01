@@ -33,6 +33,20 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.71
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+- **A worn piece keeps its affix on the manifest.** The name used to run off
+  the end of its box, and the half you lost was always the tail — which is
+  where the affix is printed.
+- **EQUIPMENT is a full-width band on your own page.** A program's page keeps
+  the columned box and elides a name that will not fit, from the middle,
+  since gear carries meaning at both ends.
+- **Each worn row is tagged `WEP`, `ARM` or `MOD`**, the vocabulary every
+  other list that names gear already uses.
+- **A negative affix reads `-30 DEF`**, not `+-30 DEF`.
+
 ## 0.13.70
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

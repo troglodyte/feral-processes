@@ -98,7 +98,7 @@ pub struct CharacterChoice {
     pub glyph: char,
     pub sprite: String,
     pub colour: u8,
-    /// Points spent per axis, indexed as `MainStat::all()`.
+    /// Units bought per axis, indexed as `MainStat::all()`; `cost()` prices them.
     pub stats: [u32; 4],
     pub routine: Option<AbilityId>,
 }
@@ -244,7 +244,7 @@ one `#[serde(default)]`.
 All three depend only on Phase 1 and own disjoint files. Dispatch as three
 agents.
 
-### Track A — Task 3: Classes
+### Task 3: Classes (Track A)
 
 **Files:**
 - Create: `crates/engine/src/classes.rs`, `assets/classes/striker.ron`,
@@ -347,7 +347,7 @@ In `tests/assets.rs`, two censuses over the **real** assets:
 - [ ] **Step 4: `cargo test -p feral-processes-engine`**
 - [ ] **Step 5: fmt, clippy, commit**
 
-### Track B — Task 4: Starter routines
+### Task 4: Starter routines (Track B)
 
 **Files:**
 - Modify: `crates/engine/src/abilities.rs` (`AbilityDef`, and
@@ -428,7 +428,7 @@ In `tests/assets.rs`, three censuses over the **real** assets:
 - [ ] **Step 4: `cargo test -p feral-processes-engine`**
 - [ ] **Step 5: fmt, clippy, commit**
 
-### Track C — Task 5: Player palette and the map draw
+### Task 5: Player palette and the map draw (Track C)
 
 **Files:**
 - Modify: `crates/gui/src/render/hud/palette.rs`,
@@ -574,7 +574,7 @@ there is no reason to reroll for size — `[R]` rerolls for shape.
 Both depend on Phase 3. Track D draws whatever Track E provides, so
 neither blocks the other: if E is unfinished, D draws an empty preview.
 
-### Track D — Task 7: The creation screens
+### Task 7: The creation screens (Track D)
 
 **Files:**
 - Create: `crates/gui/src/render/creation.rs`
@@ -608,7 +608,7 @@ preview cell painted with the chosen glyph or sprite and colour.
 - [ ] **Step 4: `cargo test -p feral-processes-gui`**
 - [ ] **Step 5: fmt, clippy, commit**
 
-### Track E — Task 8: Profile preview
+### Task 8: Profile preview (Track E)
 
 **Files:**
 - Modify: `crates/engine/src/achievements.rs` (extract the shared
@@ -714,7 +714,19 @@ retune.
       build only: a moved baseline across reports is a reshuffled RNG
       stream, not a difficulty change.
 
-- [ ] **Step 7: Commit.**
+- [ ] **Step 7: Measure whether the stat rates are commensurate.** Run
+      two more arena scenarios at an equal pool — everything into Atk
+      against everything into Integrity — and report the gap. **Do not
+      retune anything from the result; report it.** At level 1 the player
+      is 90 HP and 6 atk, so the spec's +6 HP and +1 atk per point are
+      +6.7% survivability against +16.7% damage, and Atk looks roughly
+      2.5x the value of Integrity per point. That arithmetic is a reason
+      to measure, not a licence to change the spec's table blind. Write
+      the numbers to `docs/measurements/` following its README — this is
+      exactly the case that directory exists for, and a number not
+      written down there costs CPU-hours to get back.
+
+- [ ] **Step 8: Commit.**
 
 ---
 

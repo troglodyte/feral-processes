@@ -948,6 +948,15 @@ impl AbilityDb {
     }
 }
 
+/// Grants `routine` as knowledge and installs it into the player's free
+/// starter slot — `Game::apply_character_choice`'s "routine" step.
+///
+/// A no-op today: Phase 2B (the starter pool, `AbilityDef::starter`,
+/// `KnownRoutines`) is what fills this in. Until then it is what keeps
+/// `CharacterChoice::default()`'s `routine: None` producing today's player,
+/// who starts with nothing installed beyond `DECOMPILE_ABILITY_ID`.
+pub fn install_starter(_game: &mut crate::Game, _routine: Option<&AbilityId>) {}
+
 #[cfg(test)]
 mod tests {
     use super::*;

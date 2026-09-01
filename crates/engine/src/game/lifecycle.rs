@@ -1,8 +1,9 @@
 //! Creating, saving, and restoring a `Game`.
 //!
-//! `new` and `load` are the only two doors into a playable world, and both
-//! go through `load_asset_dbs` so neither can produce a `Game` whose item
-//! set fails the economy-role check.
+//! `new_with` (which `new` is a one-line delegation to) and `load` are the
+//! only two doors into a playable world, and both go through
+//! `load_asset_dbs` so neither can produce a `Game` whose item set fails the
+//! economy-role check.
 
 use crate::abilities::AbilityId;
 use crate::components::Needs;
@@ -101,8 +102,55 @@ fn copy_to_save(copy: &GearCopy) -> save::GearCopySave {
 #[derive(Resource)]
 struct ProfileRewardsPaid;
 
+/// The player's `world.spawn` bundle, shared by every constructor — every
+/// field here is a neutral default. `Game::new_with` layers a
+/// `CharacterChoice` on top afterwards, via `Game::apply_character_choice`,
+/// one field at a time: the glyph, the `Inventory` and the free routine
+/// slot all spawn empty or hardcoded-neutral here and are only ever
+/// overwritten, never read, before that call runs.
+fn spawn_player(world: &mut World, start: (i32, i32)) -> Entity {
+    world
+        .spawn((
+            Player,
+            Position {
+                x: start.0,
+                y: start.1,
+            },
+            Glyph {
+                ch: '@',
+                color: GlyphColor::Cyan,
+            },
+            crate::tuning::PLAYER_BASE_STATS,
+            PowerReserve::default(),
+            Experience::default(),
+            Decompiler::default(),
+            Equipment::default(),
+            Inventory::default(),
+            GearCopies::default(),
+            StatusEffects::default(),
+            CombatBuff::default(),
+            FieldBuff::default(),
+            Perks::default(),
+            Routines(vec![abilities::DECOMPILE_ABILITY_ID.to_string()]),
+        ))
+        .id()
+}
+
 impl Game {
     pub fn new(seed: u32, difficulty: DifficultyMode, assets_dir: &Path) -> std::io::Result<Self> {
+        Self::new_with(seed, difficulty, assets_dir, &CharacterChoice::default())
+    }
+
+    /// `Game::new`'s constructor, taking who the player is as an explicit
+    /// argument. There are ~1,600 `Game::new` call sites, almost all tests,
+    /// so `new` stays a one-line delegation here rather than every one of
+    /// them growing a fourth argument.
+    pub fn new_with(
+        seed: u32,
+        difficulty: DifficultyMode,
+        assets_dir: &Path,
+        choice: &CharacterChoice,
+    ) -> std::io::Result<Self> {
         let AssetDbs {
             abilities: ability_db,
             achievements: achievement_db,
@@ -234,38 +282,7 @@ impl Game {
             y: start.1,
         });
 
-        let player = world
-            .spawn((
-                Player,
-                Position {
-                    x: start.0,
-                    y: start.1,
-                },
-                Glyph {
-                    ch: '@',
-                    color: GlyphColor::Cyan,
-                },
-                crate::tuning::PLAYER_BASE_STATS,
-                PowerReserve::default(),
-                Experience::default(),
-                Decompiler::default(),
-                Equipment::default(),
-                Inventory {
-                    items: vec![
-                        (ItemId::from(ids::ICE_BREAKER), 3),
-                        (ItemId::from(ids::POWER_CELL), 3),
-                        (ItemId::from(ids::CORE_FRAGMENT), 5),
-                        (ItemId::from(ids::OUTLET), 2),
-                    ],
-                },
-                GearCopies::default(),
-                StatusEffects::default(),
-                CombatBuff::default(),
-                FieldBuff::default(),
-                Perks::default(),
-                Routines(vec![abilities::DECOMPILE_ABILITY_ID.to_string()]),
-            ))
-            .id();
+        let player = spawn_player(&mut world, start);
         world.insert_resource(PlayerEntity(player));
 
         // The anchor's permanent door into base space, standing where the
@@ -301,6 +318,7 @@ impl Game {
         let schedule = Self::build_schedule();
 
         let mut game = Self { world, schedule };
+        game.apply_character_choice(choice);
         for warning in load_warnings {
             game.log(warning);
         }
@@ -313,8 +331,8 @@ impl Game {
         Ok(game)
     }
 
-    /// The system schedule every tick runs, shared by `new` and `load` so
-    /// the two can't drift — the chained pair below is exactly the kind of
+    /// The system schedule every tick runs, shared by `new_with` and `load`
+    /// so the two can't drift — the chained pair below is exactly the kind of
     /// constraint that gets added to one copy and forgotten in the other.
     pub(crate) fn build_schedule() -> Schedule {
         let mut schedule = Schedule::default();

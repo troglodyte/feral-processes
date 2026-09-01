@@ -26,6 +26,7 @@ mod combat_targeting;
 mod construction;
 mod contracts;
 mod crafting;
+mod creation;
 mod descriptions;
 mod disposition;
 mod easter_eggs;

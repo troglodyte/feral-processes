@@ -39,6 +39,49 @@ pub const PLAYER_BASE_STATS: Stats = Stats {
     mitigation: 2,
 };
 
+/// Points offered on the character-creation stat screen, spent **on top
+/// of** `PLAYER_BASE_STATS` rather than redistributing it — so `balance_sim`'s
+/// modelled floor stays valid no matter how the pool is spent. Not a clean
+/// multiple of `CREATION_COST_DEF`, deliberately: a pool that always divided
+/// evenly into Def would hide that axis's rounding-down, which is exactly
+/// what `mitigation_costs_more_than_a_point` exists to catch. See
+/// `MAX_CREATION_STAT_POINTS` for the ceiling this is checked against.
+pub const CREATION_STAT_POINTS: u32 = 10;
+
+/// Pool points one point of Integrity costs. See `CREATION_GAIN_INTEGRITY`
+/// for what a point buys.
+pub const CREATION_COST_INTEGRITY: u32 = 1;
+
+/// Pool points one point of Atk costs — priced 1-for-1, the same rate
+/// `Reward::RandomMainStat` already grants it at.
+pub const CREATION_COST_ATK: u32 = 1;
+
+/// Pool points one point of Decompiler (`Decompiler::skill`) costs — priced
+/// 1-for-1, like Atk.
+pub const CREATION_COST_DECOMPILER: u32 = 1;
+
+/// Pool points one point of Def (`Stats::mitigation`) costs. Three, not
+/// one: mitigation is a percentage point on a base of 2 that levelling
+/// never raises (see `HP_PER_LEVEL`'s doc comment on why there is no
+/// mitigation-per-level constant at all), so pricing it like the other
+/// three axes would make it strictly dominant on a screen where the player
+/// — not a random roll — is choosing. This is the axis
+/// `mitigation_costs_more_than_a_point` exists to hold down.
+pub const CREATION_COST_DEF: u32 = 3;
+
+/// `Stats::max_hp` granted per point of Integrity bought on the creation
+/// stat screen — and `Stats::hp` with it, unconditionally: a run must not
+/// start damaged, the trap `MainStat::Integrity`'s own doc comment records.
+pub const CREATION_GAIN_INTEGRITY: u32 = 6;
+
+/// Ceiling on `CREATION_STAT_POINTS`, asserted rather than trusted —
+/// `MAX_PROFILE_STAT_POINTS`'s reason: a permanent buff with no ceiling is a
+/// shape this design has already closed off twice. Left with headroom over
+/// the shipped pool so retuning the pool up doesn't also have to move this.
+pub const MAX_CREATION_STAT_POINTS: u32 = 20;
+
+const _: () = assert!(CREATION_STAT_POINTS <= MAX_CREATION_STAT_POINTS);
+
 /// Flat stat growth per level-up, before `growth_multiplier` scales it —
 /// see `progression::stats_after_levels`.
 ///

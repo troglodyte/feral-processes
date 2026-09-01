@@ -296,6 +296,84 @@ fn sour_to(game: &mut Game, who: Entity, target: f32) {
     }
 }
 
+/// The worst a **single** shipped memory can ever be felt as: its valence at
+/// its own strike cap, undecayed, in the hands of the disposition that feels
+/// grudges hardest.
+///
+/// Every term is a call rather than a number, so a mod or a retune moves the
+/// bound instead of drifting from it.
+fn worst_single_grudge(game: &Game) -> f32 {
+    game.world
+        .resource::<crate::memories::MemoryDb>()
+        .all()
+        .map(|def| {
+            crate::disposition::Disposition::Abrasive
+                .felt(def.valence * def.strike_cap as f32)
+                .abs()
+        })
+        .fold(0.0, f32::max)
+}
+
+/// **One bad memory may not down a program's tools.** Downing tools takes a
+/// pattern, not a single thing that went wrong — and in particular not a
+/// single thing the player had no way to prevent, which is what
+/// `frayed_here` is on a base with nothing that services the need.
+///
+/// The threshold was originally set against the shipped *valences* alone
+/// (-8..+5), which is where "roughly two maxed grudges' worth" came from.
+/// A grudge is not its valence: it is valence x `strike_cap` x the
+/// disposition swing, so the worst single memory in the game reaches -44.8
+/// and cleared the old -18 line more than twice over on its own.
+#[test]
+fn no_single_memory_can_down_a_programs_tools() {
+    let game = Game::new(52, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worst = worst_single_grudge(&game);
+    assert!(
+        MORALE_DOWNS_TOOLS_AT < -worst,
+        "one memory reaching {worst} must not clear the downing-tools line at \
+         {MORALE_DOWNS_TOOLS_AT} — downing tools takes a pattern"
+    );
+}
+
+/// The control: the rung must stay *reachable*, or the fix above is a
+/// deletion of the feature. The two worst grudges the game can author,
+/// together, still get there.
+#[test]
+fn two_bad_memories_can_still_down_a_programs_tools() {
+    let game = Game::new(53, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut worst: Vec<f32> = game
+        .world
+        .resource::<crate::memories::MemoryDb>()
+        .all()
+        .map(|def| {
+            crate::disposition::Disposition::Abrasive
+                .felt(def.valence * def.strike_cap as f32)
+                .abs()
+        })
+        .filter(|v| *v > 0.0)
+        .collect();
+    worst.sort_by(|a, b| b.partial_cmp(a).unwrap());
+    let pair = worst[0] + worst[1];
+    assert!(
+        MORALE_DOWNS_TOOLS_AT > -pair,
+        "the two worst grudges together reach {pair}, which must still clear \
+         the line at {MORALE_DOWNS_TOOLS_AT} — a rung nothing can reach is a \
+         deleted feature"
+    );
+}
+
+/// The mild rung stays reachable from one memory, and that is the point of
+/// having two. A single un-answerable grudge makes a program sulk; it takes
+/// more than that to stop it working.
+#[test]
+fn one_memory_can_still_make_a_program_sulk() {
+    let game = Game::new(54, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert!(
+        crate::tuning::MORALE_SULKS_AT > -worst_single_grudge(&game),
+        "one bad memory must still reach the mild rung"
+    );
+}
+
 /// The gap between the two thresholds *is* the feature. Equal, the marker
 /// flickers every tick at the boundary, which is the whole reason
 /// `Disgruntled` is stored rather than derived.
@@ -407,18 +485,27 @@ fn an_abrasive_program_downs_tools_on_less_than_an_amiable_one() {
 
     // The *same* history on both, sized so it takes the amplifying one past
     // the line and leaves the damping one short.
+    //
+    // **Two** maxed grudges, not one: no single memory may reach the
+    // downing-tools line any more (see
+    // `no_single_memory_can_down_a_programs_tools`), so a one-entry fixture
+    // could not straddle it at any disposition. Distinct tiles, because the
+    // subject is what makes them two entries rather than one reinforced
+    // twice.
     let now = game.current_tick();
     for who in [abrasive, amiable] {
-        game.world.get_mut::<Memories>(who).unwrap().0.push(Memory {
-            def: MemoryId::from("frayed_here"),
-            subject: MemorySubject::BaseTile { x: 0, y: 900 },
-            subject_name: None,
-            reinforced: now,
-            strikes: 3,
-        });
+        for tile in 0..2 {
+            game.world.get_mut::<Memories>(who).unwrap().0.push(Memory {
+                def: MemoryId::from("frayed_here"),
+                subject: MemorySubject::BaseTile { x: tile, y: 900 },
+                subject_name: None,
+                reinforced: now,
+                strikes: 3,
+            });
+        }
     }
-    // The window this test lives in, stated rather than assumed: one maxed
-    // grudge has to straddle the line once the two dispositions have scaled
+    // The window this test lives in, stated rather than assumed: the same
+    // history has to straddle the line once the two dispositions have scaled
     // it. A threshold retune that closes the window fails here with the
     // figures rather than silently proving nothing.
     let (sour, sunny) = (game.morale(abrasive), game.morale(amiable));

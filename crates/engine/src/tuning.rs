@@ -3567,9 +3567,26 @@ pub const MORALE_SULKS_AT: f32 = -8.0;
 
 /// Morale at or below which a program stops taking postings altogether.
 ///
-/// Roughly two maxed grudges' worth. Above zero it would fire on a program
-/// that is merely having an ordinary week, which is not acting out.
-pub const MORALE_DOWNS_TOOLS_AT: f32 = -18.0;
+/// **Below what any single memory can reach**, which is the whole of what
+/// this number is for: downing tools takes a *pattern* of things going
+/// wrong, never one of them. Held by
+/// `no_single_memory_can_down_a_programs_tools` against the real
+/// `assets/memories/`, with `two_bad_memories_can_still_down_a_programs_tools`
+/// as the control — a rung nothing can reach is a deleted feature.
+///
+/// This was -18, "roughly two maxed grudges' worth", and that reading
+/// counted a memory's `valence` alone. A grudge is not its valence: it is
+/// valence x `strike_cap` x `DISPOSITION_MEMORY_SWING`, so the worst single
+/// memory the game ships (`mauled_by`, -8 at a cap of 4, felt by an
+/// `Abrasive` program) reaches **-44.8** and cleared the old line more than
+/// twice over on its own. `frayed_here` did it too, on a base that simply
+/// had nothing servicing a need — a standdown the player could neither
+/// prevent nor answer, lasting longer than the run that earned it.
+///
+/// The mild rung is deliberately still reachable from one memory: a single
+/// bad experience makes a program sulk, and that is what the ladder's first
+/// step is for.
+pub const MORALE_DOWNS_TOOLS_AT: f32 = -50.0;
 
 /// Morale at which a disgruntled program goes back to work.
 ///

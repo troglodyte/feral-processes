@@ -244,6 +244,7 @@ impl Game {
         match def.effect {
             AbilityEffect::Phase => return self.run_phase(holder, &def, pick),
             AbilityEffect::Jump => return self.run_jump(holder, &def, pick),
+            AbilityEffect::Symlink => return self.run_symlink(holder, &def, pick),
             _ => {}
         }
 
@@ -256,7 +257,7 @@ impl Game {
         } = def.effect
         else {
             unreachable!(
-                "field_routines lists only field-only effects, and the two above returned"
+                "field_routines lists only field-only effects, and the three above returned"
             );
         };
 
@@ -408,6 +409,56 @@ impl Game {
             self.raise_trace(TRACE_PER_JUMP);
             self.arrive();
         }
+        self.tick();
+        Ok(())
+    }
+
+    /// Spends `def`'s Power off `invoker` and puts the party down on this
+    /// sector's anchor, from wherever they were standing.
+    ///
+    /// **The one action that leaves the Stack instead of being refused by
+    /// it**, and so the one field routine with no `movement_routine_pos`
+    /// call: `Phase` and `Jump` read and write `Locale::Stack`'s own
+    /// coordinates and have nothing to say on open grid, where this is the
+    /// way *out* and has to run on both sides of the ground.
+    ///
+    /// `clear_stack` runs after every refusal and before the `Position`
+    /// write, in that order. A symlink that cannot land must not have
+    /// surfaced the party on its way to refusing, and the write itself must
+    /// never happen while `Locale::Stack` is live — underground the player's
+    /// `Position` *is* the entrance tile, so writing the anchor into it with
+    /// the locale still standing would move the entrance instead of the
+    /// party.
+    fn run_symlink(
+        &mut self,
+        invoker: Entity,
+        def: &AbilityDef,
+        pick: FieldRoutineTarget,
+    ) -> Result<(), String> {
+        if pick != FieldRoutineTarget::None {
+            return Err(format!("{} takes no target.", def.name));
+        }
+        let (x, y) = self
+            .anchor_position()
+            .ok_or_else(|| "There's no anchor in this sector to link to.".to_string())?;
+
+        self.spend_power(invoker, routine_power_cost(def));
+        let surfaced = self.is_underground();
+        if surfaced {
+            self.clear_stack();
+        }
+        let player = self.player_entity();
+        {
+            let mut pos = self.world.get_mut::<Position>(player).unwrap();
+            pos.x = x;
+            pos.y = y;
+        }
+        self.log(if surfaced {
+            "The symlink hauls you up out of the stack and drops you at the base's anchor."
+                .to_string()
+        } else {
+            "You resolve the symlink and come out at the base's anchor.".to_string()
+        });
         self.tick();
         Ok(())
     }

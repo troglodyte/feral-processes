@@ -214,18 +214,41 @@ first as if it were the second is what put the base's whole roster out on
 the open grid. The two are asked together, in that order, at both
 readers.
 
-### `use_symlink` is the one action that leaves the Stack instead of being refused by it
+### `run_symlink` is the one action that leaves the Stack instead of being refused by it
 
-**`use_symlink` is the one action that leaves the Stack instead of being
+**`run_symlink` is the one action that leaves the Stack instead of being
 refused by it.** It used to be `require_surface`'s twelfth caller, and the
 dangerous one, since underground `Position` *is* the entrance you climb
-back out of. It now calls `clear_stack` and then teleports — so it is
+back out of. It calls `clear_stack` and then teleports — so it is
 not an exception to the rule above but an application of it, and the
 ordering is the whole argument: the locale drops only after every check
 has passed, so a refused symlink can neither strand the party on the
 surface nor write `Position` while `Locale::Stack` is live. Anything
 else that ever needs to move the player out of the Stack goes through
 `clear_stack` in that order, not around it.
+
+**It is a field routine, and that is what makes leaving the Stack
+earned.** Until 0.13.69 it was `u`, a key of its own opening a picker of
+structures whose def carried a `teleport_cost`, charged in Power Cells.
+One structure ever had the field — Home — so the picker was a one-row
+list, and the key worked from the first turn of a run, before anything
+had been researched, built or fought. A way home that costs four Power
+Cells and no knowledge is not a reward, and the screen it opened existed
+to state a choice that was never offered.
+
+`AbilityEffect::Symlink` puts it where Phase and Jump already were: the
+`symbolic_links` node teaches it, a manufactured disk carries it, a slot
+holds it, and the `a` list runs it. **The third field-only effect and the
+only one that is not Stack-only** — `field_routines`' `stack_only` is a
+`matches!` on `Phase | Jump` precisely so the way *out* of a frame is not
+greyed out inside one. Priced in Power like every other routine, which
+makes the trip free once the node is bought: that is the point, since
+what is being gated is the knowledge and not the trip.
+
+What was rejected: gating the old `u` key on the routine's knowledge and
+keeping the picker. That leaves two doors at two prices — a key charging
+Power Cells and a routine charging Power — for one action, and the second
+door would only ever have been the cheaper one.
 
 ### A Forgiving death is the second thing that leaves the Stack, and the only one that isn't an action
 

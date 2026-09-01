@@ -24,12 +24,11 @@ The three menus:
 Acting on the world:
 
 - c — move cargo between you and the structures beside you: one window with a row per item, where
-  the columns read change, you, container — so Left takes off a machine's shelf toward you and
+  the columns read you, container — so Left takes off a machine's shelf toward you and
   Right puts your own cargo into an adjacent Depot. [A] takes the lot; Shift goes to the end of a
   row and Ctrl halves the gap
 - t — trade
 - a — call a routine
-- u — symlink home
 - x — examine a direction
 - d — demolish a direction
 - v — lay a VectorStasis Tile on the cell you are standing on

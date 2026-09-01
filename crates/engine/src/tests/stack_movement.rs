@@ -1,5 +1,7 @@
-//! The two Stack movement routines — `AbilityEffect::Phase` (Buffer Overrun)
-//! and `AbilityEffect::Jump` (Wild Jump). See `game/stack_movement.rs`.
+//! The three routines that move the party rather than fight with it —
+//! `AbilityEffect::Phase` (Buffer Overrun), `AbilityEffect::Jump` (Wild
+//! Jump) and `AbilityEffect::Symlink`. See `game/stack_movement.rs`; the
+//! first two are Stack-only and the third is the way out of it.
 
 use super::support::*;
 use crate::components::{PowerReserve, Routines};
@@ -10,6 +12,7 @@ use crate::*;
 
 const PHASE: &str = "buffer_overrun";
 const JUMP: &str = "wild_jump";
+const SYMLINK: &str = "symlink";
 
 /// A game whose player carries both movement routines, standing on depth 1
 /// of the stack under their own tile.
@@ -631,5 +634,111 @@ fn a_lethal_jump_still_charges_its_power_cost() {
         (before - power(&game) - expected).abs() < 1e-4,
         "expected {expected} spent, {} was",
         before - power(&game)
+    );
+}
+
+/// The same fixture with the way home installed as well. Kept separate
+/// because two tests above are about *every* row being Stack-only, and
+/// Symlink in the shared fixture would be widening their claim rather than
+/// testing this one.
+fn surfaced_with_symlink() -> Game {
+    let mut game = surfaced_with_routines();
+    let player = game.player_entity();
+    game.world.entity_mut(player).insert(Routines(vec![
+        PHASE.to_string(),
+        JUMP.to_string(),
+        SYMLINK.to_string(),
+    ]));
+    game
+}
+
+/// The whole of what separates the third movement routine from the other
+/// two: `Phase` and `Jump` read and write `Locale::Stack`'s own coordinates
+/// and are greyed out on open grid, where Symlink is the way *out* of the
+/// Stack and has to be offered on both sides of the ground.
+///
+/// Asserted through the picker rather than through the run, because the
+/// picker is where a Stack-only rule is stated — `field_routines`'
+/// `stack_only` is a `matches!` on the two effects, and a third effect added
+/// to it would ship a way home that only works once you are already home.
+#[test]
+fn symlink_is_the_one_movement_routine_offered_on_open_grid() {
+    let mut game = surfaced_with_symlink();
+    let rows = game.field_routines();
+    let reason = |id: &str| {
+        rows.iter()
+            .find(|r| r.ability == id)
+            .unwrap_or_else(|| panic!("{id} is not in the field-routine list"))
+            .unavailable
+            .clone()
+    };
+
+    assert_eq!(
+        reason(PHASE).as_deref(),
+        Some("only in the Stack"),
+        "Phase has nothing to say on open grid"
+    );
+    assert_eq!(
+        reason(JUMP).as_deref(),
+        Some("only in the Stack"),
+        "Jump has nothing to say on open grid"
+    );
+    assert_eq!(
+        reason(SYMLINK),
+        None,
+        "Symlink is the way home from anywhere, so open grid is not a refusal"
+    );
+}
+
+/// ...and it runs there, not merely lists. The party is walked away from
+/// the anchor first, so landing on it is a move rather than a no-op that
+/// would pass wherever they happened to be standing.
+#[test]
+fn a_symlink_run_on_open_grid_lands_on_the_anchor() {
+    let mut game = surfaced_with_symlink();
+    let player = game.player_entity();
+    let anchor = game.anchor_position().expect("a fresh game has an anchor");
+    {
+        let mut pos = game.world.get_mut::<Position>(player).unwrap();
+        pos.x = anchor.0 + 9;
+        pos.y = anchor.1 + 9;
+    }
+
+    run(&mut game, SYMLINK, FieldRoutineTarget::None).expect("a symlink runs on the surface");
+
+    let pos = *game.world.get::<Position>(player).unwrap();
+    assert_eq!(
+        (pos.x, pos.y),
+        anchor,
+        "a symlink puts the party down on the anchor wherever it was run from"
+    );
+}
+
+/// The invoker pays, and a refused run pays nothing. Both halves in one
+/// test because the second is only meaningful against the first: without
+/// the charge below, "nothing was spent" is true of a routine that does not
+/// cost anything either.
+#[test]
+fn a_symlink_charges_its_invoker_and_a_refused_one_charges_nothing() {
+    let mut game = surfaced_with_symlink();
+    let before = power(&game);
+    run(&mut game, SYMLINK, FieldRoutineTarget::None).expect("a symlink runs on the surface");
+    let spent = before - power(&game);
+    assert!(
+        spent > 0.0,
+        "the invoker paid nothing for a routine priced at 25 PWR"
+    );
+
+    // A target on a routine that takes none: refused before the charge, the
+    // ordering rule every field routine shares.
+    let held = power(&game);
+    assert!(
+        run(&mut game, SYMLINK, FieldRoutineTarget::Cell(1, 1)).is_err(),
+        "Symlink takes no target"
+    );
+    assert_eq!(
+        power(&game),
+        held,
+        "a refused symlink charged the invoker anyway"
     );
 }

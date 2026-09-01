@@ -16,7 +16,7 @@ is skipped with a warning logged in-game rather than crashing startup.
                                     //         Orange
     build_cost: [("core_fragment", 3)],  // list of (item id, quantity) pairs
     // build_cost above, and every other item reference below (work.produces,
-    // teleport_cost, trade.buy), all take
+    // trade.buy), all take
     // any item id from assets/items/*.ron — see assets/items/README.md for
     // the schema, and the top-level README's "Item ids" for the full set.
 
@@ -220,12 +220,6 @@ is skipped with a warning logged in-game rather than crashing startup.
     // isn't stuck at zero capacity before anything is built.
     power_supply: 4,
 
-    // Optional; can be left out entirely (defaults to no symlink). If set,
-    // this structure is a symlink target: the player can "use symlink" (`u`)
-    // to instantly teleport to it from anywhere on the map, paying the
-    // listed item cost.
-    teleport_cost: Some([("power_cell", 4)]),
-
     // Optional; can be left out entirely (defaults to false). If true,
     // walking onto this structure breaches the player into the next zone
     // sector instead of blocking movement — see `Game::enter_next_zone`.
@@ -349,9 +343,9 @@ is skipped with a warning logged in-game rather than crashing startup.
     // durability pool at all, so `Game::raid_check` can never select it,
     // it never takes damage, and no [HP x/y] is shown for it anywhere.
     // `durability` above is inert when this is false. This is how Home
-    // works — losing the structure that gates every other build, anchors
-    // symlinks, and can only exist once would strand the player rather
-    // than cost them something.
+    // works — losing the structure that gates every other build, holds the
+    // anchor a Symlink lands on, and can only exist once would strand the
+    // player rather than cost them something.
     raidable: false,
 
     // Optional; can be left out entirely (defaults to 0). Flat raid-damage

@@ -986,7 +986,6 @@ pub enum Mode {
     /// next tier, which the base's build crew fetches for and works. Anything
     /// un-upgradeable is filtered out rather than offered and then refused.
     Upgrade,
-    Symlink,
     InspectDirection,
     /// The party's own map of the Stack frame they are standing in — see
     /// `Game::frame_map`. Underground only, opened with `g` — a no-op on the
@@ -1331,7 +1330,6 @@ impl Mode {
             | Mode::RemoveConfirm
             | Mode::RemoveDirection
             | Mode::Upgrade
-            | Mode::Symlink
             | Mode::InspectDirection
             | Mode::Manifest
             | Mode::ManifestPick

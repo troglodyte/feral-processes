@@ -1,7 +1,7 @@
 # Ability catalogue
 
 Every shipped ability in feral-processes, charted from its own file in
-`assets/abilities/`. 77 of them.
+`assets/abilities/`. 78 of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
 `assets/abilities/*.ron` on 2026-08-25 and will drift the moment one of those
@@ -13,8 +13,8 @@ species grants nothing. The [research tree](research.md) teaches the rest.
 
 | | |
 |---|---|
-| abilities | 77 |
-| effect shapes | 10 |
+| abilities | 78 |
+| effect shapes | 11 |
 | target shapes | 5 |
 | field routines (run outside battle) | 13 |
 | of those, Stack-only movement | 2 |
@@ -48,7 +48,7 @@ Segfault        Single v1.0 (6), Single v2.0 (11), Single v3.0 (17)
 Flush Cache     Single (0), Party (0)
 Hardened Shell  Single (4), Party (4)
 
-one of a kind: Ablative Layer, Buffer Overrun, Clock Skew, Core Dump, Deadman, Decompile, Deep Scan, Hard Fault, Hot Spare, Interrupt, Kernel Shear, Long Winter, Null Cache, Overclock, Parity, Quarantine, Repair Loop, Salvage Routine, Stealth Protocol, Trace Analysis, Trickle Charge, Watchdog, Wild Jump
+one of a kind: Ablative Layer, Buffer Overrun, Clock Skew, Core Dump, Deadman, Decompile, Deep Scan, Hard Fault, Hot Spare, Interrupt, Kernel Shear, Long Winter, Null Cache, Overclock, Parity, Quarantine, Repair Loop, Salvage Routine, Stealth Protocol, Symlink, Trace Analysis, Trickle Charge, Watchdog, Wild Jump
 ```
 
 The number in brackets is the effect's power, and a `v2.0` at the same scope
@@ -66,15 +66,15 @@ renaming an id never changes what a player reads.
 ```
 TARGET AGAINST EFFECT
 
-                      Damag  Debuf   Buff   Heal  Drain  Field  Clean  Decom  Phase   Jump
+                      Damag  Debuf   Buff   Heal  Drain  Field  Clean  Decom  Phase   Jump  Symli
 
-OneAlly                   .      .      6      7      .      4      2      .      .      .
-WholeParty                .      .      2      2      .      7      2      .      1      1
-OneEnemyGroupFront        8      6      2      .      4      .      .      1      .      .
-WholeEnemyGroup           5      2      2      .      3      .      .      .      .      .
-AllEnemies                4      3      2      .      1      .      .      .      .      .
+OneAlly                   .      .      6      7      .      4      2      .      .      .      .
+WholeParty                .      .      2      2      .      7      2      .      1      1      1
+OneEnemyGroupFront        8      6      2      .      4      .      .      1      .      .      .
+WholeEnemyGroup           5      2      2      .      3      .      .      .      .      .      .
+AllEnemies                4      3      2      .      1      .      .      .      .      .      .
 
-                         17     11     14      9      8     11      4      1      1      1
+                         17     11     14      9      8     11      4      1      1      1      1
 ```
 
 The grid is sparse on purpose. Heals and buffs point at allies, damage and
@@ -167,6 +167,7 @@ with nothing to scale.
 | `decompile` | Decompile Single | OneEnemyGroupFront | Decompile | 0 | - | - | - |
 | `buffer_overrun` | Buffer Overrun Party | WholeParty | Phase | 0 | - | - | - |
 | `wild_jump` | Wild Jump Party | WholeParty | Jump | 0 | - | - | - |
+| `symlink` | Symlink Party | WholeParty | Symlink | 0 | - | - | - |
 
 There is no cost column, because for everything above the CD *is* the cost:
 a battle routine charges no need at all, from the player, a companion or a

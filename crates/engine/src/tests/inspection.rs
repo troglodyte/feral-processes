@@ -1,4 +1,4 @@
-//! The read-only views the renderer draws from, plus symlink targeting.
+//! The read-only views the renderer draws from.
 
 use super::support::*;
 use crate::abilities::AffinityKind;
@@ -77,105 +77,6 @@ fn a_creatures_display_label_is_tagged_with_its_spawn_zone() {
     assert_eq!(
         game.manifest(zone2).unwrap().name,
         format!("{} 2", species.name)
-    );
-}
-
-#[test]
-fn use_symlink_teleports_the_player_to_the_structure_and_charges_the_cost() {
-    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let def = game
-        .structure_defs()
-        .into_iter()
-        .find(|d| d.teleport_cost.is_some())
-        .expect("a symlink-capable structure (Home) should exist");
-    let cost = def.teleport_cost.clone().unwrap();
-
-    let home = game
-        .world
-        .spawn((
-            Structure {
-                kind: def.id.clone(),
-            },
-            Position { x: 50, y: 50 },
-            Glyph {
-                ch: def.glyph,
-                color: def.color,
-            },
-        ))
-        .id();
-
-    let player = game.player_entity();
-    {
-        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
-        for (item, qty) in &cost {
-            inv.add(item.clone(), *qty);
-        }
-    }
-    let before: Vec<u32> = cost
-        .iter()
-        .map(|(item, _)| game.world.get::<Inventory>(player).unwrap().count(item))
-        .collect();
-
-    let targets = game.symlink_targets();
-    assert!(
-        targets.iter().any(|t| t.entity == home),
-        "Home should be a symlink target"
-    );
-
-    game.use_symlink(home).unwrap();
-
-    let pos = *game.world.get::<Position>(player).unwrap();
-    let anchor = game.anchor_position().expect("a fresh game has an anchor");
-    assert_eq!(
-        (pos.x, pos.y),
-        anchor,
-        "a symlink drops you at the base's anchor — Home itself is out of phase,          and its Position is in a coordinate space the player's is not"
-    );
-    for ((item, qty), before) in cost.iter().zip(before) {
-        let after = game.world.get::<Inventory>(player).unwrap().count(item);
-        assert_eq!(
-            after,
-            before - qty,
-            "the teleport cost should be fully consumed"
-        );
-    }
-}
-
-#[test]
-fn use_symlink_fails_without_enough_of_the_cost() {
-    let mut game = Game::new(8, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let def = game
-        .structure_defs()
-        .into_iter()
-        .find(|d| d.teleport_cost.is_some())
-        .expect("a symlink-capable structure (Home) should exist");
-
-    let home = game
-        .world
-        .spawn((
-            Structure {
-                kind: def.id.clone(),
-            },
-            Position { x: 20, y: 20 },
-            Glyph {
-                ch: def.glyph,
-                color: def.color,
-            },
-        ))
-        .id();
-
-    let player = game.player_entity();
-    {
-        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
-        inv.items.clear();
-    }
-
-    let before_pos = *game.world.get::<Position>(player).unwrap();
-    assert!(game.use_symlink(home).is_err());
-    let after_pos = *game.world.get::<Position>(player).unwrap();
-    assert_eq!(
-        before_pos, after_pos,
-        "a failed symlink shouldn't move the player"
     );
 }
 

@@ -328,19 +328,35 @@ fn i_opens_the_pack_and_x_inspects() {
     assert_eq!(app.mode, Mode::InspectDirection);
 }
 
-/// The three party-side actions deliberately left flat, because they are
-/// pressed every few turns while walking. `t` is tested separately below —
-/// every trader is a base-space `Structure` now, so it only opens on a base.
+/// The party-side action deliberately left flat, because it is pressed
+/// every few turns while walking. `t` is tested separately below — every
+/// trader is a base-space `Structure` now, so it only opens on a base.
 #[test]
 fn the_hot_keys_stayed_on_the_map() {
-    for (key, expected) in [
-        (GameKey::Char('a'), Mode::FieldRoutine),
-        (GameKey::Char('u'), Mode::Symlink),
-    ] {
-        let mut app = test_app(4014);
-        app.handle_key(key);
-        assert_eq!(app.mode, expected, "{key:?} should still be a map key");
-    }
+    let mut app = test_app(4014);
+    app.handle_key(GameKey::Char('a'));
+    assert_eq!(
+        app.mode,
+        Mode::FieldRoutine,
+        "'a' should still be a map key"
+    );
+}
+
+/// Symlink is a routine now, and `u` is not a second door to it. It was a
+/// key of its own that opened a picker of teleport-capable structures and
+/// charged Power Cells — reachable on turn one, before the run had earned
+/// anything. The way home is `symbolic_links` researched, etched, installed
+/// and run from the `a` list like every other field routine, so the key it
+/// used to sit on has to do nothing rather than a lesser version of it.
+#[test]
+fn u_is_no_longer_a_map_key() {
+    let mut app = test_app(4015);
+    app.handle_key(GameKey::Char('u'));
+    assert_eq!(
+        app.mode,
+        Mode::Playing,
+        "u opened a screen; symlink lives in the field-routine list now"
+    );
 }
 
 /// `t` closes the same hole `d`'s `in_base()` guard and the group menu's

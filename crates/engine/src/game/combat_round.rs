@@ -1163,9 +1163,12 @@ impl Game {
                 // The two paths that pick an ability for `use_ability` to run
                 // — `battle_special_options` (player) and `wild_routine_ready`
                 // (a carrier's retaliation) — both exclude a field-only
-                // effect, since none of the three has anything to resolve
+                // effect, since none of the four has anything to resolve
                 // against a battle recipient.
-                AbilityEffect::FieldBuff { .. } | AbilityEffect::Phase | AbilityEffect::Jump => {
+                AbilityEffect::FieldBuff { .. }
+                | AbilityEffect::Phase
+                | AbilityEffect::Jump
+                | AbilityEffect::Symlink => {
                     unreachable!(
                         "AbilityEffect::field_only; battle_special_options and wild_routine_ready both exclude it"
                     )

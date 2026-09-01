@@ -331,12 +331,6 @@ pub struct StructureDef {
     /// structure file, including any mod, keeps parsing.
     #[serde(default)]
     pub dispatches_sorties: bool,
-    /// If set, this structure is a symlink target: `Game::use_symlink` can
-    /// teleport the player to it for this item cost, from anywhere on the
-    /// map. `#[serde(default)]` so existing structure files written before
-    /// this field existed still parse (defaulting to no symlink).
-    #[serde(default)]
-    pub teleport_cost: Option<Vec<(ItemId, u32)>>,
     /// If true, walking onto this structure breaches into the next zone
     /// (see `Game::enter_next_zone`) instead of just blocking movement.
     /// `build_cost` is treated as a *per-zone-level* rate for this

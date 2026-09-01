@@ -162,6 +162,7 @@ impl Game {
             AbilityEffect::Jump => {
                 "Moves the party to a cell you point at, fatally if it is solid".to_string()
             }
+            AbilityEffect::Symlink => "Returns the party to the base anchor".to_string(),
         }
     }
 

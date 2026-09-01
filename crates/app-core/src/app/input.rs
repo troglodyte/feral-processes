@@ -215,7 +215,6 @@ impl App {
             Mode::RemoveDirection => self.handle_remove_direction_key(key),
             Mode::TradeProgramConfirm => self.handle_trade_program_confirm_key(key),
             Mode::Upgrade => self.handle_upgrade_key(key),
-            Mode::Symlink => self.handle_symlink_key(key),
             Mode::InspectDirection => self.handle_inspect_direction_key(key),
             Mode::StructureManifest => self.handle_structure_manifest_key(key),
             Mode::CellDescribe => self.handle_cell_describe_key(key),

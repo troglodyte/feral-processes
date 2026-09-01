@@ -1,0 +1,8 @@
+(
+    id: "symlink",
+    name: "Symlink Party",
+    description: "Resolve a link back to the base anchor from anywhere, the Stack included",
+    target: WholeParty,
+    effect: Symlink,
+    power_cost: 25.0,
+)

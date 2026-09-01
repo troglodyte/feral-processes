@@ -71,7 +71,7 @@ use battle::{
 };
 use building::{
     draw_base_staff, draw_build_direction, draw_build_menu, draw_remove_confirm, draw_remove_menu,
-    draw_staffing_menu, draw_structure_menu, draw_structures, draw_symlink_menu, draw_upgrade_menu,
+    draw_staffing_menu, draw_structure_menu, draw_structures, draw_upgrade_menu,
     draw_work_order_pick, draw_work_order_quantity, draw_work_orders,
 };
 use caravan::{CaravanBasket, draw_caravan};
@@ -890,7 +890,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::Remove => draw_remove_menu(&scanned, selected, refusal, painter, m),
         Mode::RemoveConfirm => draw_remove_confirm(selected, refusal, painter, m),
         Mode::Upgrade => draw_upgrade_menu(game, &scanned, selected, refusal, painter, m),
-        Mode::Symlink => draw_symlink_menu(game, selected, refusal, painter, m),
         Mode::InspectDirection => draw_direction_prompt(
             "Inspect Direction",
             "Choose a direction to inspect (arrows/hjkl), Esc to cancel",
@@ -1160,7 +1159,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 87] = [
+    const ALL_MODES: [Mode; 86] = [
         Mode::MainMenu,
         Mode::DifficultyPick,
         Mode::LoadGame,
@@ -1189,7 +1188,6 @@ mod tests {
         Mode::RemoveConfirm,
         Mode::RemoveDirection,
         Mode::Upgrade,
-        Mode::Symlink,
         Mode::InspectDirection,
         Mode::FrameMap,
         Mode::Manifest,

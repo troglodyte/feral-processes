@@ -74,8 +74,6 @@ Mechanics that work and have exactly one piece of content each.
   a biome with no boss makes every Stack under it pay nothing at all. That is
   a census, not a convention: `every_biome_a_stack_link_can_open_in_fields_a_boss`
   fails if a habitat edit uncovers one.
-- **Symlink targets.** `teleport_cost` (`structures.rs:152`) is on `home.ron`
-  alone. A cheap one-way waypoint needs no Rust.
 - **Traders.** `trade` (`structures.rs:168`) is on `black_market.ron` alone. A
   specialist trader with different stock and rates is data. Note
   `StructureDb::strip_reserved_trade_goods` — a trader may not deal in the

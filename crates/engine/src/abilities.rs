@@ -362,6 +362,16 @@ pub enum AbilityEffect {
     /// at, and kills them if that cell is solid — see `Game::wild_jump`.
     /// Carries no fields; the gamble is the whole mechanic.
     Jump,
+    /// Moves the party to the base's anchor in this sector, from anywhere —
+    /// see `Game::run_symlink`.
+    ///
+    /// The third field-only effect and **the only one that is not
+    /// Stack-only**: `Phase` and `Jump` read and write `Locale::Stack`'s own
+    /// coordinates and are refused on open grid, where this one is the way
+    /// *out* of the Stack and has to run on both sides of the ground.
+    /// Carries no fields — where it lands is the anchor, which is a rule of
+    /// the mechanic and not an authored address.
+    Symlink,
 }
 
 impl AbilityEffect {
@@ -376,7 +386,10 @@ impl AbilityEffect {
     pub fn field_only(&self) -> bool {
         matches!(
             self,
-            AbilityEffect::FieldBuff { .. } | AbilityEffect::Phase | AbilityEffect::Jump
+            AbilityEffect::FieldBuff { .. }
+                | AbilityEffect::Phase
+                | AbilityEffect::Jump
+                | AbilityEffect::Symlink
         )
     }
 
@@ -399,7 +412,8 @@ impl AbilityEffect {
             AbilityEffect::Cleanse
             | AbilityEffect::Decompile
             | AbilityEffect::Phase
-            | AbilityEffect::Jump => None,
+            | AbilityEffect::Jump
+            | AbilityEffect::Symlink => None,
             AbilityEffect::FieldBuff { kind, .. } => kind.affinity_kind(),
         }
     }
@@ -731,18 +745,22 @@ impl AbilityDef {
         }
     }
 
-    /// A `Phase` or `Jump` effect paired with a `target` other than
-    /// `WholeParty`. Both move the party as a body — there is no mechanic to
-    /// phase one companion through a wall and leave the rest behind — so any
-    /// other target is a stated aim the invocation never honours. Refused at load
-    /// for the same reason `field_buff_target_mismatch` refuses its own
-    /// mismatches rather than quietly doing something else at invocation time.
+    /// A `Phase`, `Jump` or `Symlink` effect paired with a `target` other
+    /// than `WholeParty`. All three move the party as a body — there is no
+    /// mechanic to phase one companion through a wall and leave the rest
+    /// behind, and none to send one home — so any other target is a stated
+    /// aim the invocation never honours. Refused at load for the same reason
+    /// `field_buff_target_mismatch` refuses its own mismatches rather than
+    /// quietly doing something else at invocation time.
     fn movement_target_mismatch(&self) -> Option<&'static str> {
-        if !matches!(self.effect, AbilityEffect::Phase | AbilityEffect::Jump) {
+        if !matches!(
+            self.effect,
+            AbilityEffect::Phase | AbilityEffect::Jump | AbilityEffect::Symlink
+        ) {
             return None;
         }
         (self.target != AbilityTarget::WholeParty)
-            .then_some("effect: Phase and Jump require target: WholeParty")
+            .then_some("effect: Phase, Jump and Symlink require target: WholeParty")
     }
 
     /// A `triggers` set on a **field-only** effect. A `Phase` cannot fire

@@ -787,48 +787,6 @@ pub(super) fn draw_remove_confirm(
     );
 }
 
-pub(super) fn draw_symlink_menu(
-    game: &mut Game,
-    selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let status = game.player_status();
-    let targets = game.symlink_targets();
-    let mut rows = vec![text_row(
-        "Use symlink to which structure? (Esc to cancel; Up/Down + Enter also work)",
-    )];
-    if targets.is_empty() {
-        rows.push(text_row("(no symlink-capable structures deployed yet)"));
-    }
-    for (i, t) in targets.iter().enumerate() {
-        let raw_cost = game.symlink_cost(t.entity).unwrap_or_default();
-        let cost = cost_display(game, &raw_cost, &status.inventory);
-        let durability = t
-            .durability
-            .map(|(hp, max)| format!(" [HP {hp}/{max}]"))
-            .unwrap_or_default();
-        rows.push(with_icon(
-            item_row(
-                format!(
-                    "[{}] {} at ({}, {}){} - {}",
-                    menu_shortcut(i),
-                    t.label,
-                    t.pos.0,
-                    t.pos.1,
-                    durability,
-                    cost.join(", ")
-                ),
-                i == selected,
-            ),
-            t.glyph,
-            glyph_color(t.color),
-        ));
-    }
-    draw_popup("Symlink", PopupSize::Large, &rows, refusal, painter, m);
-}
-
 /// The structure roster: everything standing in the zone and every program
 /// posted to it.
 ///

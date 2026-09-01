@@ -692,15 +692,27 @@ fn frayed_entries(game: &Game, who: Entity) -> Vec<MemorySubject> {
 }
 
 /// Nothing in the base answers the need: said **once**, however many beats
-/// run, and remembered against the tile it was standing on.
+/// run — and **no grudge**, which is the half of this that is a design
+/// decision rather than a latch.
+///
+/// A base with no Defrag Bay standing has no answer to Coherence, and the
+/// player may not have researched one, may not have the materials, and has
+/// never been told they want one. A program that holds *the base* to account
+/// for that is blaming it for a building that was never an option, and the
+/// grudge it writes is a real one — enough on its own to drag a whole base
+/// toward sulking with nothing the player could have done differently.
+///
+/// The base earns a grudge when it had an answer and failed to deliver it,
+/// which is the `unreachable` branch and is what
+/// `an_unreachable_amenity_says_something_different_from_no_amenity` holds.
+/// The line is still said either way: the player is still told.
 #[test]
-fn a_need_nothing_services_is_announced_once_and_remembered() {
+fn a_need_nothing_services_is_announced_but_earns_no_grudge() {
     let mut game = Game::new(80, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     place_home(&mut game);
     let staff = vec![spawn_tamed(&mut game, 10, 3)];
     let (critical, _) = threshold(&game, &coherence());
-    let at = *game.world.get::<Position>(staff[0]).unwrap();
 
     for _ in 0..5 {
         set_reserve(&mut game, staff[0], &coherence(), critical - 1.0);
@@ -712,10 +724,9 @@ fn a_need_nothing_services_is_announced_once_and_remembered() {
         .filter(|line| line.contains("nothing in the base"))
         .collect();
     assert_eq!(said.len(), 1, "once, not once a beat: {said:?}");
-    assert_eq!(
-        frayed_entries(&game, staff[0]),
-        vec![MemorySubject::BaseTile { x: at.x, y: at.y }],
-        "the grudge names the corner it was standing in"
+    assert!(
+        frayed_entries(&game, staff[0]).is_empty(),
+        "a base with no amenity at all has done nothing to be held against it"
     );
 }
 

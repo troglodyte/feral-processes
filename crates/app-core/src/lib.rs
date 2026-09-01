@@ -1236,7 +1236,7 @@ pub enum Mode {
     /// one with the links at the top would put long prose out of reach.
     /// Links are followed by typing their label's shortcut instead.
     HelpPage,
-    /// A notification, taking the whole window until any key dismisses it.
+    /// A notification, taking the whole window until Esc dismisses it.
     ///
     /// `App::pending_notification` is the subject, and `after_tick` is the
     /// only thing that sets this mode — **only from `Mode::Playing`**, which
@@ -1246,10 +1246,10 @@ pub enum Mode {
     /// player is back on the map. So a notification can never eat a keypress
     /// in the middle of an unrelated flow.
     ///
-    /// A page with nothing to page through, `Mode::CellDescribe`'s idiom:
-    /// every key does the same thing. Dismissing takes the next one straight
-    /// away if the queue is not empty, so a burst arrives one at a time
-    /// rather than being collapsed or dropped.
+    /// Any other key is a no-op: an any-key rule let an incidental keypress
+    /// blow past a notification before it was read. Dismissing with Esc
+    /// takes the next one straight away if the queue is not empty, so a
+    /// burst arrives one at a time rather than being collapsed or dropped.
     Notification,
     GameOver,
     /// Confirming `q` from `Mode::Playing`, which abandons the run. Offers to

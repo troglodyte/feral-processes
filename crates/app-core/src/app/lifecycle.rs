@@ -415,12 +415,17 @@ impl App {
         self.mode = Mode::Notification;
     }
 
-    /// Any key dismisses. The next one takes the screen straight away if
-    /// there is one, so a burst arrives one at a time rather than being
-    /// collapsed into the last of them — which is why this pops here rather
-    /// than falling back to `Mode::Playing` and waiting a tick for
-    /// `after_tick`, a tick that does not come until the player acts.
-    pub(crate) fn handle_notification_key(&mut self, _key: GameKey) {
+    /// Only Esc dismisses — any key used to, and an incidental keypress was
+    /// blowing past a notification before it was read. The next one takes
+    /// the screen straight away if there is one, so a burst arrives one at
+    /// a time rather than being collapsed into the last of them — which is
+    /// why this pops here rather than falling back to `Mode::Playing` and
+    /// waiting a tick for `after_tick`, a tick that does not come until the
+    /// player acts.
+    pub(crate) fn handle_notification_key(&mut self, key: GameKey) {
+        if key != GameKey::Esc {
+            return;
+        }
         self.pending_notification = None;
         self.mode = Mode::Playing;
         let next = self.game.as_mut().and_then(|game| game.take_notification());

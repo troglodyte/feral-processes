@@ -297,6 +297,6 @@ fn a_new_run_opens_on_the_first_missions_briefing() {
         shown.body
     );
 
-    app.handle_key(GameKey::Char(' '));
-    assert_eq!(app.mode, Mode::Playing, "and any key returns to the map");
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing, "and Esc returns to the map");
 }

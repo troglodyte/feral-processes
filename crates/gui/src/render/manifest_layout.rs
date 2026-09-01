@@ -382,9 +382,9 @@ mod tests {
         ]
     }
 
-    /// The fullest page the player can produce — six columned boxes, no
-    /// band. Perks caps at `MAX_SECTION_ROWS` (there are 12 perk types now,
-    /// still well past the cap of 6), party at `MAX_PARTY_SIZE`.
+    /// The fullest page the player can produce — six columned boxes and the
+    /// EQUIPMENT band. Perks caps at `MAX_SECTION_ROWS` (there are 12 perk
+    /// types now, still well past the cap of 6), party at `MAX_PARTY_SIZE`.
     ///
     /// `manifest_layout`'s column packer is an exact 2-partition
     /// (`best_column_split`), so *whether the page fits* no longer depends
@@ -413,7 +413,12 @@ mod tests {
             // Credits, Portal Fragments, difficulty, cycle, contracts —
             // fixed-length like COMBAT, and one row under the cap.
             section("RUN", 5, false),
-            section("EQUIPMENT", 3, false),
+            // The one band on this page, and the program page's EQUIPMENT is
+            // deliberately *not* one — see `manifest::sections_for`. A gear
+            // row is the widest row on either sheet and only the full frame
+            // holds it; the program page has no clearance to spare for a
+            // second band, which is what that split is measured against.
+            section("EQUIPMENT", 3, true),
             section("ROUTINES", 6, false),
         ]
     }

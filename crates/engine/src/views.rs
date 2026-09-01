@@ -1769,7 +1769,16 @@ pub struct PlayerManifest {
 /// then `fused_for_tier` applied with exactly those — not a fresh preview at
 /// today's zone level, which is what the inventory screen shows instead.
 pub struct ManifestEquipSlot {
-    /// `EquipmentSlot::label()` — "Weapon", "Armor", "Module".
+    /// `EquipmentSlot::short_label()` — "WEP", "ARM", "MOD", the vocabulary
+    /// every other list that names gear already tags a row with.
+    ///
+    /// The compact form and not `label()`, because this row shares a
+    /// half-width box with the bonus column and the name beside it is
+    /// `Game::copy_name`'s, which spends its width on a tier word, a prefix
+    /// affix, a suffix phrase and a quality figure. Four characters of
+    /// "Weapon: " is what the affix at the end of that name is short of at
+    /// 1280x720 — see the gui's `a_dropped_equipment_row_keeps_the_affix_in_
+    /// its_name`.
     pub slot: String,
     pub item_name: String,
     pub gear_level: u32,

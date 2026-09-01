@@ -253,6 +253,65 @@ fn roll_everything_spends_exactly_the_pool() {
     );
 }
 
+/// `[R]` on the Summary must not destroy the character the player just
+/// walked seven steps to build. Every choice is made here, so there is
+/// nothing left to roll and the key refuses instead — the alternative,
+/// which shipped, replaced class, look, spread and routine with fresh
+/// random values on one undocumented keystroke with no undo.
+#[test]
+fn the_roll_leaves_a_finished_character_alone() {
+    let mut app = opened("roll_finished");
+    press(&mut app, ch('2')); // a class
+    press(&mut app, ch(menu_shortcut(1))); // the second icon
+    press(&mut app, ch(menu_shortcut(CREATION_ICONS.len() + 2))); // the third swatch
+    press(&mut app, ch('n'));
+    press(&mut app, GameKey::Right); // a point on the highlighted axis
+    press(&mut app, GameKey::Enter);
+    press(&mut app, ch('1')); // a starter routine
+    press(&mut app, GameKey::Enter); // no name
+    assert_eq!(app.creation_step(), CreationStep::Summary);
+
+    let before = app.creation_choice().clone();
+    press(&mut app, ch('R'));
+
+    assert_eq!(
+        *app.creation_choice(),
+        before,
+        "the roll overwrote choices the player had already made"
+    );
+    assert!(app.status_line.is_some(), "the refusal said why");
+}
+
+/// The half of the same rule that still has to work: what the player has
+/// not settled is exactly what `[R]` fills in. A class picked by hand
+/// survives; the look, the spread and the routine are rolled around it.
+#[test]
+fn the_roll_fills_only_what_is_undecided() {
+    let mut app = opened("roll_partial");
+    let classes = app.creation_catalogue.class_rows();
+    let wanted = classes[1].class;
+    press(&mut app, ch('2'));
+    assert_eq!(app.creation_choice().class, Some(wanted));
+
+    press(&mut app, ch('R'));
+
+    assert_eq!(app.creation_step(), CreationStep::Summary);
+    assert_eq!(
+        app.creation_choice().class,
+        Some(wanted),
+        "the roll replaced a class the player had already picked"
+    );
+    assert_eq!(app.creation_points_left(), 0, "the spread was still rolled");
+    assert!(
+        app.creation_choice().routine.is_some(),
+        "the routine was still rolled"
+    );
+    assert!(
+        app.creation_choice().colour.is_some(),
+        "the colour was still rolled"
+    );
+}
+
 /// Difficulty is the one thing `[R]` will not roll — a commitment, not a
 /// shape — so pressing it on the first step is refused rather than
 /// silently handing someone permadeath.

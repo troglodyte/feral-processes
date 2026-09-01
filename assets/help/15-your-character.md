@@ -3,9 +3,10 @@
 A run opens on seven questions. Answer them in order, Esc walks back one, and Esc on the first
 hands you back to the main menu. Nothing is decided until you confirm the summary at the end.
 
-R rolls every choice you have not made yet and jumps straight to that summary — except the first
-one. Difficulty is a commitment rather than a shape, so it is never rolled for you, and R before
-you have picked it is refused.
+R rolls every choice you have not made yet and jumps straight to that summary, leaving whatever
+you have already picked exactly as it is — so it is safe to press on any step, and pressing it
+again rerolls only what it chose for you. Two answers are never rolled. Difficulty is a commitment
+rather than a shape, so R before you have picked it is refused; and your name is yours to type.
 
 Difficulty is the only answer with no way back. On Permadeath, flatlining ends the run and archives
 the session to a log. On Forgiving you reboot and keep going, at a cost. Everything else on the

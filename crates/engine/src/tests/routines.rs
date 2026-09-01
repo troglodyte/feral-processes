@@ -1145,8 +1145,8 @@ fn starter_rows_are_priced_through_the_class() {
     assert_eq!(
         ids,
         vec![
+            "bit_rot_v2".to_string(),
             "checksum_repair".to_string(),
-            "hard_lock".to_string(),
             "hyperthread".to_string(),
             "siphon_cycles".to_string(),
             "stack_smash".to_string(),

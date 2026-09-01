@@ -17,6 +17,14 @@ use crate::achievements::MainStat;
 use crate::species::AffinityClass;
 use crate::*;
 
+/// The sprite name every player carried before the wizard could choose
+/// one, and the name `assets/sprites/player.png` is loaded under. Named
+/// here rather than spelled out at each of its three sites — the default
+/// choice, `PlayerSave::sprite`'s serde default, and the wizard's first
+/// icon — because the three disagreeing is exactly how the player's
+/// shipped art went missing once already.
+pub const DEFAULT_PLAYER_SPRITE: &str = "player";
+
 /// Everything a run starts as, decided once at creation and never
 /// rerolled.
 #[derive(Clone, Debug, PartialEq)]
@@ -40,17 +48,18 @@ pub struct CharacterChoice {
     pub routine: Option<AbilityId>,
 }
 
-/// Today's player exactly — no class, the `@` glyph, no name, no starter
-/// routine, every point unspent. This is what every existing test and
-/// every one of the ~1,600 `Game::new` call sites gets, via `Game::new`'s
-/// delegation to `Game::new_with(.., &CharacterChoice::default())`.
+/// Today's player exactly — no class, the `@` glyph wearing its
+/// `DEFAULT_PLAYER_SPRITE`, no name, no starter routine, every point
+/// unspent. This is what every existing test and every one of the ~1,600
+/// `Game::new` call sites gets, via `Game::new`'s delegation to
+/// `Game::new_with(.., &CharacterChoice::default())`.
 impl Default for CharacterChoice {
     fn default() -> Self {
         Self {
             name: String::new(),
             class: None,
             glyph: '@',
-            sprite: String::new(),
+            sprite: DEFAULT_PLAYER_SPRITE.to_string(),
             colour: None,
             stats: [0; 4],
             routine: None,

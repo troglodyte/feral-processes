@@ -1986,6 +1986,10 @@ pub struct App {
     /// step refusing to advance without a pick is a screen rule, not a data
     /// one.
     creation_choice: CharacterChoice,
+    /// Which of `creation_choice`'s fields the player has settled by hand,
+    /// and so which `[R]` must leave alone. Reset alongside the choice on
+    /// every open. See `app::creation::Decided`.
+    creation_decided: crate::app::creation::Decided,
     /// The difficulty picked on the wizard's first step. `None` until it is
     /// — the Difficulty step is what advances on a pick, so nothing
     /// downstream ever reads this unset, and it is never rolled: `[R]` is a

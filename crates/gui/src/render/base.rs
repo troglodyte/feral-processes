@@ -1152,12 +1152,7 @@ fn draw_surface_map(
                 // `GlyphColor::Cyan`, which a structure is free to author
                 // too.
                 color = if ev.is_player {
-                    ev.look
-                        .as_ref()
-                        .and_then(|look| look.colour)
-                        .and_then(|i| hud::palette::PLAYER_CHOICES.get(i as usize))
-                        .copied()
-                        .unwrap_or(hud::palette::PLAYER)
+                    player_look_color(ev.look.as_ref().and_then(|look| look.colour))
                 } else {
                     glyph_color(ev.color)
                 };
@@ -1262,8 +1257,7 @@ fn draw_surface_map(
                     if ev.is_player {
                         ev.look
                             .as_ref()
-                            .map(|look| look.sprite.as_str())
-                            .filter(|name| !name.is_empty())
+                            .and_then(|look| player_sprite_name(&look.sprite))
                     } else if ev.is_anchor {
                         Some("anchor")
                     } else {
@@ -2490,21 +2484,22 @@ mod tests {
     /// over an '@' that is still there, which on white placeholder art looks
     /// exactly right and is wrong the moment the sprite has any transparency.
     ///
-    /// Goes through a `choice` naming `"player"` rather than the default
-    /// game: the sprite name now comes off `PlayerLook`, not a hardcoded
-    /// literal, so a bare `Game::new` (empty `sprite`) draws no sprite at
-    /// all — `a_missing_sprite_falls_back_to_the_chosen_glyph` covers that
-    /// case, and this one covers a choice that actually names one.
+    /// Deliberately runs against a **bare `Game::new`** — no explicit
+    /// choice — because that is what every save written before the wizard
+    /// existed, every `dev-saves/` template, and any run that skips the
+    /// Look step loads as. Handing it a choice that names `"player"` is the
+    /// accommodation that let the default lose the shipped art in silence
+    /// once already; `the_player_sprite_comes_from_the_choice` is what
+    /// covers a wizard-authored name.
     #[test]
     fn the_player_sprite_stands_in_for_the_at_sign() {
-        let choice = CharacterChoice {
-            sprite: "player".to_string(),
-            ..CharacterChoice::default()
-        };
         let mut table = SpriteTable::default();
-        table.insert("player", bevy_egui::egui::TextureId::User(1));
+        table.insert(
+            feral_processes_engine::DEFAULT_PLAYER_SPRITE,
+            bevy_egui::egui::TextureId::User(1),
+        );
 
-        let (images, glyphs) = drawn_map_with_choice(table, &choice);
+        let (images, glyphs) = drawn_map(table);
 
         assert_eq!(images, 1, "exactly one sprite, the player's");
         assert!(

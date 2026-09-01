@@ -156,7 +156,11 @@ pub struct PlayerSave {
     #[serde(default = "default_player_glyph")]
     pub glyph: char,
     /// The player's chosen sprite name — see `components::PlayerIdentity`.
-    #[serde(default)]
+    /// Defaulted through a named function for `glyph`'s reason: the map
+    /// drew `assets/sprites/player.png` for every player before the wizard
+    /// existed, and `String`'s own default is the empty name the renderer
+    /// reads as *no sprite*.
+    #[serde(default = "default_player_sprite")]
     pub sprite: String,
     /// The player's chosen colour index, 0-based — see
     /// `components::PlayerIdentity`. `#[serde(default)]` on an `Option`
@@ -172,6 +176,13 @@ pub struct PlayerSave {
 /// before it was `@`.
 fn default_player_glyph() -> char {
     '@'
+}
+
+/// `serde`'s default for `PlayerSave::sprite` — the name the map painted
+/// for every player before the wizard could choose one, and the same name
+/// `CharacterChoice::default()` carries.
+fn default_player_sprite() -> String {
+    crate::DEFAULT_PLAYER_SPRITE.to_string()
 }
 
 /// One trip in flight.

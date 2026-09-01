@@ -2742,3 +2742,48 @@ fn there_is_a_starter_for_every_affinity_axis() {
         );
     }
 }
+
+/// The half of the axis census that cannot pass on a technicality.
+///
+/// Covering an axis is not the same as *teaching* it: `hard_lock` was the
+/// only Debuff starter and its magnitude was `power: 0`, so its row read
+/// `Inflicts Stun (0) for 2 rounds` identically for all five classes and a
+/// Saboteur's 1.3 bought nothing on the one starter aimed at their own
+/// axis. The pool is unfiltered precisely so the rows show each routine's
+/// numbers *through* the chosen class's affinity; a starter whose label
+/// does not move with the affinity teaches nobody anything.
+///
+/// Read against the **real** class files rather than two literals, so a
+/// retuned spread is checked as authored.
+#[test]
+fn every_starter_reads_differently_through_a_class_that_raises_its_axis() {
+    let game = Game::new(3404, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (classes, _) =
+        crate::classes::ClassDb::load_dir(&test_assets_dir().join("classes")).unwrap();
+    for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
+        if !def.starter {
+            continue;
+        }
+        let axis = def
+            .effect
+            .affinity_kind()
+            .unwrap_or_else(|| panic!("starter {:?} scales on no affinity axis at all", def.id));
+        let raised = crate::species::AffinityClass::ALL
+            .iter()
+            .map(|class| crate::classes::class_affinity(&classes, Some(*class), axis))
+            .fold(crate::tuning::AFFINITY_NEUTRAL, f32::max);
+        assert!(
+            raised > crate::tuning::AFFINITY_NEUTRAL,
+            "no shipped class raises the {axis:?} axis, so starter {:?} can never read              differently for anyone",
+            def.id
+        );
+        assert_ne!(
+            crate::abilities::effect_label(def, 1, crate::tuning::AFFINITY_NEUTRAL),
+            crate::abilities::effect_label(def, 1, raised),
+            "starter {:?} prints the same numbers at {} and at {raised} — its magnitude \
+             cannot be scaled, so the Routine step teaches nothing for the {axis:?} axis",
+            def.id,
+            crate::tuning::AFFINITY_NEUTRAL
+        );
+    }
+}

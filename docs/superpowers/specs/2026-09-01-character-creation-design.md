@@ -26,8 +26,12 @@ main menu.
 | Name | The player's own name |
 | Summary | Nothing — it confirms, and shows what the profile will pay |
 
-`[R]` on any step rolls every remaining choice and jumps to Summary, for
-players who would rather not walk the wizard.
+`[R]` on any step rolls every choice the player has not made by hand and
+jumps to Summary, for players who would rather not walk the wizard. It
+leaves what has been chosen alone — a roll that could replace a finished
+character would be a destructive key with no undo — and it rolls neither
+the difficulty (a commitment, not a shape) nor the name (there is no name
+bank to draw one from). With nothing left to roll it refuses.
 
 ## One mode, seven steps
 

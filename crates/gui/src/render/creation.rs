@@ -163,7 +163,7 @@ fn footer(step: CreationStep) -> &'static str {
         }
         CreationStep::Routine => "Up/Down + Enter; [n] takes none; [R] rolls; Esc goes back",
         CreationStep::Name => "Type a name; Enter moves on; Esc goes back",
-        CreationStep::Summary => "Enter starts the run; Esc goes back",
+        CreationStep::Summary => "Enter starts the run; [R] rolls the rest; Esc goes back",
     }
 }
 
@@ -186,21 +186,20 @@ fn preview_cell_rect(popup: Rect, m: &Metrics) -> Rect {
 /// The chosen look, painted the way `base.rs` paints the player's own tile:
 /// a sprite substituting for the glyph where one is named and loaded, the
 /// glyph otherwise, tinted by the same 0-based `PLAYER_CHOICES` index with
-/// the same `PLAYER` fallback for "no colour chosen yet". Read off
-/// `base.rs`'s resolution rather than re-derived, so the wizard can never
-/// promise a look the map goes on to draw differently.
+/// the same `PLAYER` fallback for "no colour chosen yet".
+///
+/// Both halves of that resolution are **calls** to `render::
+/// player_look_color` and `render::player_sprite_name`, the same two the
+/// map's own tile goes through — a second copy here would be free to
+/// drift, and the wizard would promise a look the map draws differently.
 fn draw_look_preview(choice: &CharacterChoice, painter: &Painter, cell: Rect, m: &Metrics) {
     painter.rect(cell.x, cell.y, cell.w, cell.h, PANEL_BG);
     painter.rect_lines(cell.x, cell.y, cell.w, cell.h, 1.0, BORDER);
 
-    let color = choice
-        .colour
-        .and_then(|i| hud::palette::PLAYER_CHOICES.get(i as usize))
-        .copied()
-        .unwrap_or(hud::palette::PLAYER);
+    let color = super::player_look_color(choice.colour);
     let inset = m.pad / 2.0;
     let art = cell.w - inset * 2.0;
-    let name = (!choice.sprite.is_empty()).then_some(choice.sprite.as_str());
+    let name = super::player_sprite_name(&choice.sprite);
     let drew = name.is_some_and(|n| painter.sprite(n, cell.x + inset, cell.y + inset, art, color));
     if !drew {
         let glyph = choice.glyph.to_string();
@@ -271,10 +270,16 @@ mod tests {
     /// subdirectory is symlinked in from the real `assets/` untouched, so
     /// Class, Look and Routine keep reading the real shipped catalogue and
     /// this substitution changes nothing but the Summary step's row count.
-    fn wizard_app_with_maximal_profile() -> App {
+    ///
+    /// `name` scopes the scratch tree to one caller. It opens by wiping
+    /// that tree, so two tests sharing a path delete each other's assets
+    /// mid-run — cargo runs them on separate threads of one process, so
+    /// the pid alone does not separate them.
+    fn wizard_app_with_maximal_profile(name: &str) -> App {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let real_assets = root.join("assets");
-        let tmp = std::env::temp_dir().join(format!("fp_gui_wizard_max_{}", std::process::id()));
+        let tmp =
+            std::env::temp_dir().join(format!("fp_gui_wizard_max_{name}_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         let assets = tmp.join("assets");
         std::fs::create_dir_all(&assets).unwrap();
@@ -441,7 +446,7 @@ mod tests {
     #[test]
     fn the_tallest_creation_step_fits_its_screen() {
         const REFUSAL: &str = "Requires Zone 3 first.";
-        let mut app = wizard_app_with_maximal_profile();
+        let mut app = wizard_app_with_maximal_profile("height");
         let m = ui_metrics(720.0);
         let mut tallest = 0usize;
         for (i, step) in CreationStep::ALL.iter().enumerate() {
@@ -469,6 +474,52 @@ mod tests {
             tallest > 0,
             "the census measured no rows at all — the walk above never reached a step"
         );
+    }
+
+    /// **The wizard has no wrap either**, which is the axis the height
+    /// census above cannot see. `draw_row` clamps a row vertically and
+    /// never horizontally, so a row wider than the popup body simply runs
+    /// off the panel in silence — two shipped screens already did that
+    /// because nobody measured, and `row_line`'s `Class` arm concatenates
+    /// three authored strings (`name`, `axes`, `kit`) out of a **moddable**
+    /// directory with no wrap between them.
+    ///
+    /// Measured through `popup::row_label_text`, the string `draw_row`
+    /// itself hands the painter — prefix and icon slot included — against
+    /// `popup::popup_body_width`, one pad in from each edge of a
+    /// `PopupSize::Large` box. Both shipped window shapes are walked
+    /// because the two scale differently: the box is a fraction of the
+    /// window's *width* while the font is a fraction of its *height*, so
+    /// which one is tightest in columns is not a thing to reason about
+    /// from either number alone.
+    ///
+    /// Against what's actually shipped, `the_tallest_creation_step_fits_
+    /// its_screen`'s precedent — a mod whose class name and kit together
+    /// outrun the box would need to reopen this and put the kit on a
+    /// `popup::continuation_lines` continuation, the shape `draw_craft_menu`
+    /// already uses for a recipe and its cost.
+    #[test]
+    fn no_creation_row_runs_past_the_popup_body() {
+        for (screen_w, screen_h) in [(1280.0f32, 720.0f32), (1440.0, 900.0)] {
+            let mut app = wizard_app_with_maximal_profile(&format!("width_{screen_h}"));
+            let m = ui_metrics(screen_h);
+            let body = super::super::popup::popup_body_width(screen_w, PopupSize::Large, &m);
+            crate::paint::with_painter(|p| {
+                for (i, step) in CreationStep::ALL.iter().enumerate() {
+                    for row in step_rows(&app, *step) {
+                        let label = super::super::popup::row_label_text(&row);
+                        let width = p.measure_ui_advance(&label, m.font_size);
+                        assert!(
+                            width <= body,
+                            "{step:?} draws a {width}px row inside a {body}px body at                              {screen_w}x{screen_h}: {label:?}"
+                        );
+                    }
+                    if let Some(key) = FORWARD.get(i) {
+                        app.handle_key(*key);
+                    }
+                }
+            });
+        }
     }
 
     /// The Look step's preview cell paints the chosen glyph in the chosen

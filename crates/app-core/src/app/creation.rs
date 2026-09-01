@@ -13,7 +13,12 @@
 //! mitigation — the one axis that costs more than one — silently free.
 //!
 //! **The roll spends exactly the pool**, so it can never beat point-buy and
-//! there is no reason to reroll for size. `[R]` rerolls for *shape*.
+//! there is no reason to reroll for size. `[R]` rerolls for *shape* — and
+//! only the shape of what the player has not settled by hand. [`Decided`]
+//! is the record of that, written at the five sites that take a row;
+//! pressing `[R]` again rerolls what `[R]` itself chose and nothing else,
+//! so the key can never destroy a character the player walked the wizard
+//! to build.
 //!
 //! **Difficulty is never rolled.** It is the one choice on the board that
 //! is a commitment rather than a shape, and a roll that could hand a player
@@ -39,8 +44,13 @@ use feral_processes_engine::tuning::{
 /// Every glyph here is absent from `assets/species/` and
 /// `assets/structures/`, so the player can never be mistaken for something
 /// standing next to them.
+///
+/// The first pair is `CharacterChoice::default()`'s own look, named through
+/// `DEFAULT_PLAYER_SPRITE` so the two cannot drift: a wizard whose first
+/// icon differed from the default would draw two different players off one
+/// keystroke that decided nothing.
 pub const CREATION_ICONS: [(char, &str); 5] = [
-    ('@', "player"),
+    ('@', feral_processes_engine::DEFAULT_PLAYER_SPRITE),
     ('&', "operator"),
     ('*', "weaver"),
     ('!', "spike"),
@@ -52,6 +62,37 @@ pub const CREATION_ICONS: [(char, &str); 5] = [
 /// `the_wizard_offers_every_shipped_swatch` in `crates/gui` is what holds
 /// the two in step.
 pub const CREATION_COLOURS: u8 = 6;
+
+/// Which of the wizard's choices the player has settled **by hand**, and
+/// so which `[R]` must leave alone.
+///
+/// A separate record rather than reading the choice back for a sentinel,
+/// because three of the five have no unset value to read: the default look
+/// *is* `CREATION_ICONS[0]` in its default colour, and a declined routine
+/// and an untouched one are both `None`. Sentinels would have to be
+/// reintroduced for the roll's benefit alone, and each would be a second
+/// meaning on a field the engine already reads one way.
+///
+/// The rule at every site is the same one: **taking a row decides that
+/// choice, `[n]` skips the step.** A step walked past without a pick stays
+/// open to the roll.
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Decided {
+    class: bool,
+    icon: bool,
+    colour: bool,
+    stats: bool,
+    routine: bool,
+}
+
+impl Decided {
+    /// Whether every choice `[R]` is allowed to touch has been made — the
+    /// case where a roll would have nothing to do and would, before this
+    /// was tracked, silently replace a finished character instead.
+    fn all(&self) -> bool {
+        self.class && self.icon && self.colour && self.stats && self.routine
+    }
+}
 
 /// What one unit of `stat` costs out of the pool.
 fn stat_cost(stat: MainStat) -> u32 {
@@ -120,6 +161,7 @@ impl App {
         self.status_line = None;
         self.creation_step = CreationStep::Difficulty;
         self.creation_choice = CharacterChoice::default();
+        self.creation_decided = Decided::default();
         self.creation_difficulty = None;
         self.menu_selected = 0;
         self.mode = Mode::CreateCharacter;
@@ -266,8 +308,8 @@ impl App {
     }
 
     /// The key table. Esc walks back one step and off the first one leaves
-    /// for the main menu; `[R]` rolls the rest and jumps to the Summary;
-    /// everything else is the showing step's own.
+    /// for the main menu; `[R]` rolls whatever is still undecided and jumps
+    /// to the Summary; everything else is the showing step's own.
     pub(crate) fn handle_creation_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             // The Name step types text, so Esc is the only way out of it —
@@ -355,6 +397,7 @@ impl App {
             return;
         };
         self.creation_choice.class = Some(rows[idx].class);
+        self.creation_decided.class = true;
         self.advance_creation();
     }
 
@@ -375,8 +418,12 @@ impl App {
             CreationRow::Icon { glyph, sprite } => {
                 self.creation_choice.glyph = *glyph;
                 self.creation_choice.sprite = sprite.clone();
+                self.creation_decided.icon = true;
             }
-            CreationRow::Colour { index } => self.creation_choice.colour = Some(*index),
+            CreationRow::Colour { index } => {
+                self.creation_choice.colour = Some(*index);
+                self.creation_decided.colour = true;
+            }
             _ => {}
         }
     }
@@ -437,6 +484,7 @@ impl App {
             return;
         }
         self.creation_choice.stats[self.menu_selected] = after;
+        self.creation_decided.stats = true;
         self.status_line = None;
     }
 
@@ -456,6 +504,7 @@ impl App {
             return;
         };
         self.creation_choice.routine = Some(rows[idx].id.clone());
+        self.creation_decided.routine = true;
         self.advance_creation();
     }
 
@@ -503,61 +552,82 @@ impl App {
         self.start_new_game(difficulty, &choice);
     }
 
-    /// `[R]`: rolls every choice the player has not made and jumps to the
-    /// Summary.
+    /// `[R]`: rolls every choice the player has **not** made by hand and
+    /// jumps to the Summary. What has been made is left exactly as it is —
+    /// `Decided` is the record, and its doc comment is the rule.
     ///
     /// **The spend is exactly the pool**, by construction rather than by a
     /// check: units are bought one at a time from whichever axes are still
     /// affordable, and three of the four cost one point, so the loop can
     /// only stop at zero remaining. It therefore can never beat point-buy,
     /// which is what makes rerolling a question of shape and not of size.
+    /// A hand-made spend is not rerolled and not topped up either — the
+    /// player may leave points on the table, which the Points step already
+    /// allows.
     ///
-    /// Difficulty is not among what it rolls — see the module doc comment.
+    /// Neither difficulty nor the name is among what it rolls. Difficulty
+    /// is a commitment rather than a shape — see the module doc comment —
+    /// and there is no name bank to draw one from.
     fn roll_the_rest(&mut self) {
         let Some(_) = self.creation_difficulty else {
             self.refuse("Choose a difficulty first.");
             return;
         };
+        if self.creation_decided.all() {
+            self.refuse("Nothing left to roll — every choice is made.");
+            return;
+        }
         let mut roll = Roll::new();
 
-        let classes: Vec<AffinityClass> = self
-            .creation_catalogue
-            .class_rows()
-            .iter()
-            .map(|row| row.class)
-            .collect();
-        if !classes.is_empty() {
-            self.creation_choice.class = Some(classes[roll.below(classes.len())]);
-        }
-
-        let (glyph, sprite) = CREATION_ICONS[roll.below(CREATION_ICONS.len())];
-        self.creation_choice.glyph = glyph;
-        self.creation_choice.sprite = sprite.to_string();
-        self.creation_choice.colour = Some(roll.below(CREATION_COLOURS as usize) as u8);
-
-        self.creation_choice.stats = [0; 4];
-        let costs: Vec<u32> = MainStat::all().iter().map(|s| stat_cost(*s)).collect();
-        let mut left = CREATION_STAT_POINTS;
-        loop {
-            let affordable: Vec<usize> = (0..costs.len()).filter(|i| costs[*i] <= left).collect();
-            if affordable.is_empty() {
-                break;
+        if !self.creation_decided.class {
+            let classes: Vec<AffinityClass> = self
+                .creation_catalogue
+                .class_rows()
+                .iter()
+                .map(|row| row.class)
+                .collect();
+            if !classes.is_empty() {
+                self.creation_choice.class = Some(classes[roll.below(classes.len())]);
             }
-            let axis = affordable[roll.below(affordable.len())];
-            self.creation_choice.stats[axis] += 1;
-            left -= costs[axis];
         }
 
-        let routines: Vec<AbilityId> = self
-            .creation_catalogue
-            .starter_rows(self.creation_choice.class)
-            .into_iter()
-            .map(|row| row.id)
-            .collect();
-        self.creation_choice.routine = match routines.is_empty() {
-            true => None,
-            false => Some(routines[roll.below(routines.len())].clone()),
-        };
+        if !self.creation_decided.icon {
+            let (glyph, sprite) = CREATION_ICONS[roll.below(CREATION_ICONS.len())];
+            self.creation_choice.glyph = glyph;
+            self.creation_choice.sprite = sprite.to_string();
+        }
+        if !self.creation_decided.colour {
+            self.creation_choice.colour = Some(roll.below(CREATION_COLOURS as usize) as u8);
+        }
+
+        if !self.creation_decided.stats {
+            self.creation_choice.stats = [0; 4];
+            let costs: Vec<u32> = MainStat::all().iter().map(|s| stat_cost(*s)).collect();
+            let mut left = CREATION_STAT_POINTS;
+            loop {
+                let affordable: Vec<usize> =
+                    (0..costs.len()).filter(|i| costs[*i] <= left).collect();
+                if affordable.is_empty() {
+                    break;
+                }
+                let axis = affordable[roll.below(affordable.len())];
+                self.creation_choice.stats[axis] += 1;
+                left -= costs[axis];
+            }
+        }
+
+        if !self.creation_decided.routine {
+            let routines: Vec<AbilityId> = self
+                .creation_catalogue
+                .starter_rows(self.creation_choice.class)
+                .into_iter()
+                .map(|row| row.id)
+                .collect();
+            self.creation_choice.routine = match routines.is_empty() {
+                true => None,
+                false => Some(routines[roll.below(routines.len())].clone()),
+            };
+        }
 
         self.creation_step = CreationStep::Summary;
         self.menu_selected = 0;

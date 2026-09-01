@@ -322,6 +322,29 @@ pub(super) fn glyph_color(c: GlyphColor) -> Color {
     hud::palette::glyph(c)
 }
 
+/// The colour the player's own glyph wears, off the **0-based** swatch
+/// index the character-creation wizard wrote — `None`, and an index the
+/// palette has nothing at, are both the `PLAYER` role colour, which is
+/// what a save from before the wizard and a run that skipped the Look step
+/// both carry.
+///
+/// The map and the wizard's preview cell both call this rather than each
+/// spelling the fallback out, or the preview would go on promising a
+/// colour the map had stopped drawing.
+pub(super) fn player_look_color(colour: Option<u8>) -> Color {
+    colour
+        .and_then(|i| hud::palette::PLAYER_CHOICES.get(i as usize))
+        .copied()
+        .unwrap_or(hud::palette::PLAYER)
+}
+
+/// The sprite name to try for the player's own tile, or `None` for a look
+/// that names none — the empty name is *no sprite*, not a lookup, and its
+/// caller draws the glyph. Shared with `player_look_color` for its reason.
+pub(super) fn player_sprite_name(sprite: &str) -> Option<&str> {
+    (!sprite.is_empty()).then_some(sprite)
+}
+
 /// Pulls `color` toward its own grey, for drawing something that's present
 /// but not currently in play.
 fn desaturate(color: Color) -> Color {

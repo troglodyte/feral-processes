@@ -593,7 +593,7 @@ honestly weaker on a routine from that axis rather than being hidden from
 choosing it at all.
 
 Not refused at load — no starter shape is invalid RON — but held to shape by
-three censuses in `tests/assets.rs`, the way the hunt-only set above is held
+four censuses in `tests/assets.rs`, the way the hunt-only set above is held
 to its own rule:
 
 - **Single-target.** `target` must be `OneAlly` or `OneEnemyGroupFront`. A
@@ -609,10 +609,19 @@ to its own rule:
   field is used anywhere: `AbilityEffect::Damage::spread` shipped exactly
   this way — documented, read by the engine, authored in 0 of 77 files —
   and stayed invisible until someone went looking.
+- **A magnitude an affinity can actually move.** `every_starter_reads_
+  differently_through_a_class_that_raises_its_axis` prints each starter's
+  row at `AFFINITY_NEUTRAL` and again at the highest spread any shipped
+  class gives its axis, and fails if the two read the same. Covering an axis
+  is not the same as teaching it: `hard_lock` was the Debuff starter and its
+  magnitude was `power: 0`, so its row read `Inflicts Stun (0) for 2 rounds`
+  identically for all five classes and a Saboteur's 1.3 bought nothing on
+  the one starter aimed at their own axis.
 
-Five ship, one per axis, all already members of the hunt-only set above:
-`stack_smash` (Damage), `checksum_repair` (Heal), `hyperthread` (Buff),
-`hard_lock` (Debuff), `siphon_cycles` (Drain). Carrying `wild_weight` too is
-not a conflict — only `exclusive` and a non-zero `wild_weight` disagree
-about a routine's *only* source, and a starter is reachable by knowledge
-from the moment the run begins either way.
+Five ship, one per axis: `stack_smash` (Damage), `checksum_repair` (Heal),
+`hyperthread` (Buff), `bit_rot_v2` (Debuff), `siphon_cycles` (Drain). Four
+are also members of the hunt-only set above, which is not a conflict — only
+`exclusive` and a non-zero `wild_weight` disagree about a routine's *only*
+source, and a starter is reachable by knowledge from the moment the run
+begins either way. `bit_rot_v2` is neither: it is granted by
+`assets/species/trojan.ron`, which a starter is equally free to be.

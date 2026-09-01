@@ -60,6 +60,21 @@ fn new_and_new_with_default_produce_the_same_player() {
     );
 }
 
+/// The default choice is today's player, and the sprite is the half of
+/// that which nothing else asserts: a run created with no wizard at all
+/// must still carry the name `assets/sprites/player.png` is loaded under,
+/// or the map falls back to a bare `@` for every existing save, every
+/// `dev-saves/` template, and anyone who skips the Look step.
+#[test]
+fn the_default_choice_keeps_the_shipped_player_sprite() {
+    let game = Game::new(90_014, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let identity = game
+        .world
+        .get::<PlayerIdentity>(game.player_entity())
+        .unwrap();
+    assert_eq!(identity.sprite, DEFAULT_PLAYER_SPRITE);
+}
+
 #[test]
 fn creation_points_are_additive_over_the_baseline() {
     let points = tuning::CREATION_STAT_POINTS; // Integrity costs 1, so this fits exactly.
@@ -293,7 +308,11 @@ fn an_old_save_without_the_fields_still_loads() {
     assert_eq!(loaded.world.get::<Glyph>(player).unwrap().ch, '@');
     let identity = loaded.world.get::<PlayerIdentity>(player).unwrap();
     assert_eq!(identity.class, None);
-    assert_eq!(identity.sprite, "");
+    assert_eq!(
+        identity.sprite, DEFAULT_PLAYER_SPRITE,
+        "a save with no sprite key must still draw the shipped player art, \
+         not the empty name the renderer reads as no sprite"
+    );
     assert_eq!(identity.colour, None);
     assert!(
         loaded.world.get::<CustomName>(player).is_none(),

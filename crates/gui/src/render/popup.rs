@@ -743,6 +743,39 @@ fn suffix_x(label: &str, row_x: f32, painter: &Painter, m: &Metrics) -> f32 {
 /// keeping `suffix_x` honest on an icon row, and a test can say so where a
 /// comment can only claim it. A row with no icon reserves nothing, so the
 /// screens that never had an icon are drawn exactly where they always were.
+fn row_prefix(selected: bool) -> &'static str {
+    if selected { "> " } else { "  " }
+}
+
+/// The exact string `draw_row` hands the painter for `row` — selection
+/// prefix, reserved icon slot and tag column included.
+///
+/// Exposed so a width census measures the row the *screen* draws rather
+/// than the text a screen built it from: `draw_row` clips a row vertically
+/// and never horizontally, so an overlong row runs off the panel in
+/// silence, and a census measuring the pre-label text is short by the
+/// prefix and the icon slot exactly where a row is tightest.
+pub(super) fn row_label_text(row: &Row) -> String {
+    match row {
+        Row::Text(s) | Row::TextColored(s, _) => s.clone(),
+        Row::Item {
+            text,
+            selected,
+            icon,
+            tag,
+            ..
+        } => row_label(row_prefix(*selected), *icon, &item_text(text, tag.as_ref())),
+    }
+}
+
+/// How much width a row of `size`'s popup has for its own text at
+/// `screen_w`, one pad in from each edge — `popup_max_rows`' counterpart,
+/// and one derivation rather than a fraction restated per width census.
+#[cfg(test)]
+pub(super) fn popup_body_width(screen_w: f32, size: PopupSize, m: &Metrics) -> f32 {
+    screen_w * popup_fractions(size).0 - m.pad * 2.0
+}
+
 fn row_label(prefix: &str, icon: Option<(char, Color)>, text: &str) -> String {
     match icon {
         Some(_) => format!("{prefix}{ICON_SLOT}{text}"),
@@ -812,14 +845,14 @@ pub(super) fn draw_row(
                     SELECT_BG,
                 );
             }
-            let prefix = if *selected { "> " } else { "  " };
+            let prefix = row_prefix(*selected);
             // The icon's slot is spaces inside the label, with the glyph drawn
             // over it afterwards in its own colour. Reserving it this way
             // rather than measuring segments and summing them keeps every
             // row's text starting at the same x — the UI face is monospace, so
             // a space and a glyph take the same advance — and leaves
             // `suffix_x` measuring one string, as it already documents.
-            let label = row_label(prefix, *icon, &item_text(s, tag.as_ref()));
+            let label = row_label_text(row);
             let heavy = *selected && *bold;
             match tag {
                 // Three runs rather than three draw calls: `ui_runs` lays the

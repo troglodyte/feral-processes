@@ -8,4 +8,5 @@
     accuracy: 6,
     power_cost: 9.0,
     wild_weight: 9,
+    starter: true,
 )

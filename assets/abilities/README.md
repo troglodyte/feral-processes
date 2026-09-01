@@ -571,3 +571,48 @@ that program. Killing the carrier destroys the routine. Adding any of these
 to a species or research file would defeat the point, and a test
 (`assets::no_species_or_research_file_grants_a_wild_only_ability`) fails if
 you do — a mod is of course free to.
+
+## The starter set
+
+`starter: true` offers a routine in the character-creation wizard's Routine
+step, as one of the choices for the free slot every new game opens with —
+`tuning::PLAYER_ROUTINE_SLOT_BASE` is 2, `decompile` already occupies one,
+and this fills the other. Optional; defaults to `false`, the same opt-in
+idiom `exclusive` and `wild_weight` use: the pool is whatever files ask to
+be in it, not a list this module keeps.
+
+Picking one grants **knowledge and the install** —
+`abilities::install_starter` puts the id in `KnownRoutines` as well as the
+slot, so it can be etched onto a blank disk later like anything else the
+player knows. Picking none, the default, leaves the slot empty exactly as
+every game did before this existed.
+
+Not filtered by class: the wizard shows every starter's numbers priced
+through the chosen class's affinity, so a class that damps an axis reads
+honestly weaker on a routine from that axis rather than being hidden from
+choosing it at all.
+
+Not refused at load — no starter shape is invalid RON — but held to shape by
+three censuses in `tests/assets.rs`, the way the hunt-only set above is held
+to its own rule:
+
+- **Single-target.** `target` must be `OneAlly` or `OneEnemyGroupFront`. A
+  starter is chosen for one person and installed for free; a routine that
+  lands on a whole party or a whole hostile group would be an odd first gift,
+  and the wizard has no picker for "which ally" beyond the player.
+- **Not `exclusive`.** An exclusive routine can never enter `KnownRoutines`
+  by any door — a research node, a species file, an etch — and creation
+  granting knowledge is a door too, so a starter that was also exclusive
+  would silently defeat that rule.
+- **At least one per affinity axis.** `there_is_a_starter_for_every_
+  affinity_axis` walks the real shipped files rather than trusting the
+  field is used anywhere: `AbilityEffect::Damage::spread` shipped exactly
+  this way — documented, read by the engine, authored in 0 of 77 files —
+  and stayed invisible until someone went looking.
+
+Five ship, one per axis, all already members of the hunt-only set above:
+`stack_smash` (Damage), `checksum_repair` (Heal), `hyperthread` (Buff),
+`hard_lock` (Debuff), `siphon_cycles` (Drain). Carrying `wild_weight` too is
+not a conflict — only `exclusive` and a non-zero `wild_weight` disagree
+about a routine's *only* source, and a starter is reachable by knowledge
+from the moment the run begins either way.

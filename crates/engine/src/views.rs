@@ -1493,6 +1493,20 @@ pub struct KnownRoutineView {
     pub held: u32,
 }
 
+/// One row of the creation wizard's Routine step — an `AbilityDef::starter`
+/// candidate, priced for the class the player has picked. See
+/// `Game::starter_routine_rows`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StarterRoutineRow {
+    pub id: crate::abilities::AbilityId,
+    pub name: String,
+    pub description: String,
+    /// What it does *for this class* — the magnitude with the class
+    /// affinity already applied. This is the field the step exists for.
+    pub effect: String,
+    pub power_cost: f32,
+}
+
 /// One row of the install picker — an etched Routine Disk in cargo, ready to
 /// be spent on a slot.
 ///

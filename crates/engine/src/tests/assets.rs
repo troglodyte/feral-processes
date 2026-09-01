@@ -2609,3 +2609,86 @@ fn the_shipped_tutorial_chain_is_well_formed() {
         }
     }
 }
+
+/// A starter routine is chosen for one person and installed for free — a
+/// `WholeParty`/`WholeEnemyGroup`/`AllEnemies` effect landing on more than
+/// the chooser (or their one target) would be a strange first routine to
+/// hand out, and the creation screen has no picker for "which ally" beyond
+/// the player themselves.
+#[test]
+fn every_starter_is_single_target() {
+    let game = Game::new(3401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
+        if !def.starter {
+            continue;
+        }
+        assert!(
+            matches!(
+                def.target,
+                AbilityTarget::OneAlly | AbilityTarget::OneEnemyGroupFront
+            ),
+            "starter {:?} targets {:?}, which is not single-target",
+            def.id,
+            def.target
+        );
+    }
+}
+
+/// An `exclusive` routine never enters `KnownRoutines` — `AbilityDef::
+/// exclusive`'s whole point is that nothing may teach it. Creation grants
+/// knowledge (`abilities::install_starter`), so a starter that was also
+/// exclusive would be a fourth door around that gate, alongside a research
+/// node, a species file and a blank disk etch (none of which may name one
+/// either).
+#[test]
+fn every_starter_is_not_exclusive() {
+    let game = Game::new(3402, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
+        if !def.starter {
+            continue;
+        }
+        assert!(
+            !def.exclusive,
+            "starter {:?} is exclusive, so creation could never actually learn it",
+            def.id
+        );
+    }
+}
+
+/// **The point of this census.** A `#[serde(default)]` field authored
+/// nowhere ships documented and dead — `AbilityEffect::Damage::spread`
+/// shipped exactly that way, used by 0 of 77 files, and read as a working
+/// feature until someone went looking. `starter` is opt-in the same way, so
+/// nothing short of walking the real shipped assets can tell "nobody has
+/// asked yet" from "the pool is simply thin" — and the design's whole
+/// promise, a starter for every affinity axis, would silently fail to hold
+/// with an empty pool passing every other test in this file.
+#[test]
+fn there_is_a_starter_for_every_affinity_axis() {
+    let game = Game::new(3403, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let starters: Vec<_> = game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .all()
+        .filter(|d| d.starter)
+        .collect();
+    assert!(
+        !starters.is_empty(),
+        "the starter pool is empty — no ability authors `starter: true`"
+    );
+    for axis in [
+        AffinityKind::Damage,
+        AffinityKind::Heal,
+        AffinityKind::Buff,
+        AffinityKind::Debuff,
+        AffinityKind::Drain,
+    ] {
+        assert!(
+            starters
+                .iter()
+                .any(|d| d.effect.affinity_kind() == Some(axis)),
+            "no starter exists for the {axis:?} axis — the creation wizard's Routine step \
+             would offer nothing that teaches it"
+        );
+    }
+}

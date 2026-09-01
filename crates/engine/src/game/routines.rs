@@ -2,6 +2,7 @@
 //! a party member's slots. Extraction lives here too.
 
 use crate::components::Routines;
+use crate::species::AffinityClass;
 use crate::*;
 
 impl Game {
@@ -164,6 +165,48 @@ impl Game {
             }
             AbilityEffect::Symlink => "Returns the party to the base anchor".to_string(),
         }
+    }
+
+    /// The starter pool for the creation wizard's Routine step — every
+    /// `AbilityDef::starter` ability, id-sorted so the picker's numbering is
+    /// stable, each priced at level 1 through `routine_effect_label` (the
+    /// same formatter `routine_detail` uses) and `abilities::
+    /// routine_power_cost` — the two real doors, not a copy of either.
+    ///
+    /// **`class` is accepted but not yet read.** The design calls for each
+    /// row to price through the invoker's *class* affinity — "the same
+    /// routine reads differently for a Striker and a Medic" — but
+    /// `Game::ability_affinity`'s player arm does not read a class today; it
+    /// only ever sees the player's perks (`crate::game::combat::
+    /// ability_affinity`). The class-affinity term (`ClassDb`,
+    /// `Game::player_class_affinity`) is a sibling task's, not merged as of
+    /// this writing. Rather than invent a second formula here — which would
+    /// only have to be deleted once the real one lands — this prices
+    /// through `ability_affinity` on the player entity exactly as it stands
+    /// today, so every row currently reads identically regardless of
+    /// `class`. Once the class term lands, this function needs no change at
+    /// all to start reading it: it already calls the one door.
+    pub fn starter_routine_rows(&self, class: Option<AffinityClass>) -> Vec<StarterRoutineRow> {
+        let _ = class;
+        let player = self.player_entity();
+        let level = 1;
+        let db = self.world.resource::<AbilityDb>();
+        let mut rows: Vec<StarterRoutineRow> = db
+            .all()
+            .filter(|def| def.starter)
+            .map(|def| {
+                let affinity = self.ability_affinity(player, &def.effect);
+                StarterRoutineRow {
+                    id: def.id.clone(),
+                    name: def.name.clone(),
+                    description: def.description.clone(),
+                    effect: self.routine_effect_label(def, level, affinity),
+                    power_cost: crate::abilities::routine_power_cost(def),
+                }
+            })
+            .collect();
+        rows.sort_by(|a, b| a.id.cmp(&b.id));
+        rows
     }
 
     /// `entity`'s slots in menu order, filled and empty alike.

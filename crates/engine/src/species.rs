@@ -113,6 +113,7 @@ pub fn basic_attack_ability(species: &SpeciesId, index: usize, mv: &MoveDef) -> 
         power_cost: 0.0,
         wild_weight: 0,
         exclusive: false,
+        starter: false,
         boss_drop: None,
         triggers: None,
         ranged: mv.ranged,

@@ -24,6 +24,10 @@ use super::*;
 use feral_processes_app_core::{CreationRow, CreationStep};
 use feral_processes_engine::CharacterChoice;
 use feral_processes_engine::tuning::CREATION_STAT_POINTS;
+#[cfg(test)]
+use feral_processes_engine::tuning::{
+    MAX_PROFILE_PERK_POINTS, MAX_PROFILE_STARTING_PROGRAMS, MAX_PROFILE_STAT_POINTS,
+};
 
 /// The Look/Summary preview cell's side, in `Metrics::line_height` units —
 /// big enough to read the glyph or sprite clearly, small enough to sit in
@@ -251,6 +255,83 @@ mod tests {
         app
     }
 
+    /// `wizard_app`, but the profile on disk has already cleared every
+    /// rung the tuning ceilings allow, at the row-maximising distribution.
+    ///
+    /// `profile_preview_rows` draws one Summary line per **earned
+    /// achievement**, not per point — so spreading
+    /// `MAX_PROFILE_STAT_POINTS` and `MAX_PROFILE_PERK_POINTS` across
+    /// one-point rungs maximises the row count the ceilings permit (14),
+    /// where concentrating the same totals into fewer, bigger rungs would
+    /// not. That is one more than the 13 `assets/achievements/` ships
+    /// today (its stat total is 7, one under the ceiling) — the gap this
+    /// test exists to close, since a mod is free to spend the eighth.
+    ///
+    /// The synthetic ladder lives in its own `achievements/`; every other
+    /// subdirectory is symlinked in from the real `assets/` untouched, so
+    /// Class, Look and Routine keep reading the real shipped catalogue and
+    /// this substitution changes nothing but the Summary step's row count.
+    fn wizard_app_with_maximal_profile() -> App {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let real_assets = root.join("assets");
+        let tmp = std::env::temp_dir().join(format!("fp_gui_wizard_max_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let assets = tmp.join("assets");
+        std::fs::create_dir_all(&assets).unwrap();
+        for entry in std::fs::read_dir(&real_assets).unwrap() {
+            let entry = entry.unwrap();
+            if entry.file_name() == "achievements" {
+                continue;
+            }
+            std::os::unix::fs::symlink(entry.path(), assets.join(entry.file_name())).unwrap();
+        }
+
+        let achievements = assets.join("achievements");
+        std::fs::create_dir_all(&achievements).unwrap();
+        let mut profile = feral_processes_engine::achievements::Profile::default();
+        let mut earn = |id: String, reward: &str| {
+            std::fs::write(
+                achievements.join(format!("{id}.ron")),
+                format!(
+                    "(id: \"{id}\", name: \"{id}\", description: \"d\", \
+                     trigger: ZoneReached(2), reward: {reward})"
+                ),
+            )
+            .unwrap();
+            profile.record(feral_processes_engine::achievements::Earned {
+                id: id.as_str().into(),
+                first_tick: 1,
+                permadeath: false,
+                rolled_stat: Some(feral_processes_engine::achievements::MainStat::Atk),
+            });
+        };
+        for i in 0..MAX_PROFILE_STAT_POINTS {
+            earn(format!("max_stat_{i}"), "RandomMainStat(1)");
+        }
+        for i in 0..MAX_PROFILE_PERK_POINTS {
+            earn(format!("max_perk_{i}"), "PerkPoints(1)");
+        }
+        for i in 0..MAX_PROFILE_STARTING_PROGRAMS {
+            earn(format!("max_program_{i}"), "StartingProgram(\"scrapper\")");
+        }
+
+        let saves = tmp.join("saves");
+        std::fs::create_dir_all(&saves).unwrap();
+        let profile_path = tmp.join("profile.ron");
+        profile.save(&profile_path).unwrap();
+
+        let mut app = App::new(
+            assets,
+            saves,
+            tmp.join("history.log"),
+            profile_path,
+            root.join("dev-arenas"),
+            tmp.join("telemetry.jsonl"),
+        );
+        app.handle_key(GameKey::Char('n'));
+        app
+    }
+
     /// The keys that walk one step forward from each of the first six —
     /// shared by every test that needs to visit every step in turn.
     const FORWARD: [GameKey; 6] = [
@@ -336,6 +417,14 @@ mod tests {
     /// is what holds every step's `Row` list, worst case with a refusal
     /// also showing (the tallest the popup ever draws), under that ceiling.
     ///
+    /// **The Summary step's worst case is a fully-cleared profile, not an
+    /// empty one.** `wizard_app_with_maximal_profile` earns every rung
+    /// `MAX_PROFILE_STAT_POINTS`/`MAX_PROFILE_PERK_POINTS`/
+    /// `MAX_PROFILE_STARTING_PROGRAMS` allow — measuring against an empty
+    /// profile (what a fresh wizard actually starts with) would pass this
+    /// census while a player with a full achievement record ran off the
+    /// bottom of the window, exactly the gap this test used to have.
+    ///
     /// **Verified by mutation**, not merely written: padding the Look
     /// step's rows past 28 turns `popup::popup_scrolls` from `false` to
     /// `true` and this test red, with the exact row count and the ceiling
@@ -352,7 +441,7 @@ mod tests {
     #[test]
     fn the_tallest_creation_step_fits_its_screen() {
         const REFUSAL: &str = "Requires Zone 3 first.";
-        let mut app = wizard_app();
+        let mut app = wizard_app_with_maximal_profile();
         let m = ui_metrics(720.0);
         let mut tallest = 0usize;
         for (i, step) in CreationStep::ALL.iter().enumerate() {

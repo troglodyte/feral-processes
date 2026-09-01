@@ -326,6 +326,47 @@ fn owned_pets_sorts_everything_behind_the_party_by_name() {
     );
 }
 
+/// The roster is a run per role, which is what lets the companion screen
+/// head each run — a program away on a sortie must not be listed under the
+/// base staff it is no longer part of.
+///
+/// The order is deliberately **not** `ProgramRole`'s declaration order. That
+/// one is a precedence, and `Wielded` wins it so a wielded program is never
+/// swept up as staff; here the party leads, because slot order is mechanical
+/// and arranging it is what the screen exists for.
+#[test]
+fn owned_pets_groups_the_roster_by_role() {
+    use crate::resources::{Sortie, Sorties};
+
+    let mut game = Game::new(33, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let member = spawn_tamed(&mut game, 9, 2);
+    let weapon = spawn_tamed(&mut game, 9, 2);
+    let away = spawn_tamed(&mut game, 9, 2);
+    let staff = spawn_tamed(&mut game, 9, 2);
+    enlist(&mut game, member);
+    game.wield_program(weapon).expect("nothing else is wielded");
+    game.world
+        .resource_mut::<Sorties>()
+        .0
+        .push(Sortie::test_stub(vec![away]));
+
+    let pets = game.owned_pets();
+    assert_eq!(
+        pets.iter().map(|p| p.role).collect::<Vec<_>>(),
+        vec![
+            ProgramRole::InParty,
+            ProgramRole::Wielded,
+            ProgramRole::Sortie,
+            ProgramRole::Staff,
+        ],
+        "the roster arrives grouped, in the order the screen heads them"
+    );
+    assert_eq!(
+        pets.iter().map(|p| p.entity).collect::<Vec<_>>(),
+        vec![member, weapon, away, staff]
+    );
+}
+
 /// The roster lists programs the player never opens a gear screen for — a
 /// posted worker, a bench-warmer — so "is this one kitted out" has to be
 /// readable from the list itself rather than three keypresses deep.

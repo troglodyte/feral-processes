@@ -3356,8 +3356,8 @@ words that the inversion is the specification, so a later hand "restoring
 consistency" fails a test that explains itself rather than one that merely
 goes red.
 
-**A modifier is four `GameKey` variants, and app-core is what makes them
-inert everywhere else.** `GameKey` names physical gestures rather than
+**A modifier is four `GameKey` variants, and `App::handle_key`'s fold is the
+list of screens allowed to see one.** `GameKey` names physical gestures rather than
 intentions — `Left` is the left arrow, not "west" — so Shift and Ctrl on the
 two horizontal arrows are a fourth pair of variants, `ShiftLeft`/`ShiftRight`
 and `CtrlLeft`/`CtrlRight`. The alternative shape, a payload
@@ -3369,11 +3369,20 @@ The trap that shape carries is that **every other key handler ends in a
 `_ => {}`**, so promoting a modified arrow to a variant nothing else matches
 makes Shift+Left silently dead on every screen in the game rather than
 failing anywhere. `App::handle_key` folds `ShiftLeft`/`CtrlLeft` back to
-`Left` for every mode but `Mode::Collect`, in one condition, above the
-dispatch. It is deliberately *not* done in the renderer: gui always sends the
-modified form, because what a modifier *means* belongs on the same side of
-the seam as the mode that decides it. `a_modifier_is_stripped_outside_the_collect_picker`
-is the pin, and it is proved by deleting the fold rather than by reading it.
+`Left` for every mode that one condition above the dispatch does not name, and
+the list has grown as screens have asked: `Mode::Transfer` (the picker this
+was built for), then `Mode::Caravan`, then `Mode::CraftQuantity`. It is
+deliberately *not* done in the renderer: gui always sends the modified form,
+because what a modifier *means* belongs on the same side of the seam as the
+mode that decides it. `a_modifier_is_stripped_outside_the_pickers` is the pin,
+and it is proved by deleting the fold rather than by reading it.
+
+The cost of that list is that **a screen left out of it fails silently in one
+direction only**: its four modified arrows arrive as bare `Left`/`Right` and
+act as plain one-unit steps, so nothing panics, nothing is dead, and every
+test of that screen's own handler — which is called with the modified key
+directly — passes. A new screen taking a modifier is two edits, and the second
+one is this list.
 
 `with_modifiers` in gui promotes the horizontal pair alone. Up and Down move
 a cursor on every screen that reads them and have no second meaning, so a

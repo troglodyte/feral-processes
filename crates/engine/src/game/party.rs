@@ -35,6 +35,27 @@ pub enum ProgramRole {
     Staff,
 }
 
+impl ProgramRole {
+    /// Where a run of this role sits on the roster screen, and so the order
+    /// `Game::owned_pets` groups the list into.
+    ///
+    /// **Not the declaration order**, which is a precedence: `Wielded` wins
+    /// the role *itself* because a wielded program is outside the party and
+    /// must not be swept up as staff, while the party leads the *screen*
+    /// because slot order is mechanical and arranging it is what the screen
+    /// is for. Exhaustive, `cell_mark`'s rule — a fifth role reaching a
+    /// fallback here would file its programs under whichever heading sorted
+    /// in front of them.
+    pub fn roster_rank(self) -> u8 {
+        match self {
+            ProgramRole::InParty => 0,
+            ProgramRole::Wielded => 1,
+            ProgramRole::Sortie => 2,
+            ProgramRole::Staff => 3,
+        }
+    }
+}
+
 /// The role rule itself, over values rather than a `Game`.
 ///
 /// A free function for `game::stack::surfaced`'s reason: `base_entropy_system`
@@ -417,13 +438,25 @@ impl Game {
                 .collect()
         };
         let slot_of = |entity: &Entity| party.iter().position(|p| p == entity);
-        // The party leads, in slot order, because that order is mechanical:
-        // the front slot draws the most fire (see `battle::slot_aggro_weight`)
-        // and the companion screen exists to arrange it. Behind them the name
-        // decides, since bevy's query order is not stable and the four other
-        // screens reading this list — fuse, extract, routines, manifest — have
-        // no slot to show and were getting no order at all.
-        owned.sort_by_key(|e| (slot_of(e).unwrap_or(usize::MAX), self.creature_label(*e)));
+        // Grouped by role, then the party in slot order, then the name.
+        //
+        // The party leads because that order is mechanical: the front slot
+        // draws the most fire (see `battle::slot_aggro_weight`) and the
+        // companion screen exists to arrange it. Behind them the *role*
+        // decides, so the roster is a run per `ProgramRole` and the screen can
+        // head each run rather than mixing a program away on a sortie in
+        // among the base staff. Inside a run the name settles it, since bevy's
+        // query order is not stable and the four other screens reading this
+        // list — fuse, extract, routines, manifest — have no slot to show and
+        // were getting no order at all.
+        owned.sort_by_key(|e| {
+            (
+                self.program_role(*e)
+                    .map_or(u8::MAX, ProgramRole::roster_rank),
+                slot_of(e).unwrap_or(usize::MAX),
+                self.creature_label(*e),
+            )
+        });
         owned
             .into_iter()
             .filter_map(|entity| {
@@ -446,6 +479,7 @@ impl Game {
                     mitigation: stats.mitigation,
                     power: stats.power(),
                     party_slot: slot_of(&entity).map(|s| s as u32),
+                    role: self.program_role(entity)?,
                     activity: self.program_activity(entity),
                     quality: self.potential_quality_label(entity),
                     fusions: self.fusion_count(entity),

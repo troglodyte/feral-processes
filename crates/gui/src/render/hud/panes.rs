@@ -660,7 +660,7 @@ pub(in crate::render) fn summary(tab: InfoTab, d: &PaneData) -> String {
 mod tests {
 
     use feral_processes_engine::components::{GlyphColor, MachineStatus, Rarity};
-    use feral_processes_engine::{ActiveBuffView, PetInfo, StockRow, StructureReport};
+    use feral_processes_engine::{ActiveBuffView, PetInfo, ProgramRole, StockRow, StructureReport};
 
     fn entity() -> feral_processes_engine::Entity {
         feral_processes_engine::Entity::PLACEHOLDER
@@ -679,6 +679,12 @@ mod tests {
             mitigation: 20,
             power: 99,
             party_slot: slot,
+            // The fixture's two roles, and the pair the CREW pane splits on.
+            role: if slot.is_some() {
+                ProgramRole::InParty
+            } else {
+                ProgramRole::Staff
+            },
             activity: "Research Node".to_string(),
             quality: None,
             fusions: 0,

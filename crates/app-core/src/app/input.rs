@@ -172,7 +172,13 @@ impl App {
         // handler ever sees them**, so Shift and Ctrl silently become plain
         // steps and nothing fails anywhere.
         let key = match key {
-            _ if matches!(self.mode, Mode::Transfer | Mode::Caravan) => key,
+            _ if matches!(
+                self.mode,
+                Mode::Transfer | Mode::Caravan | Mode::CraftQuantity
+            ) =>
+            {
+                key
+            }
             GameKey::ShiftLeft | GameKey::CtrlLeft => GameKey::Left,
             GameKey::ShiftRight | GameKey::CtrlRight => GameKey::Right,
             _ => key,

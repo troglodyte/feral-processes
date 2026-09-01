@@ -7,6 +7,7 @@
 use crate::abilities::AffinityKind;
 use crate::battle::ActionOption;
 use crate::components::{EquippedItem, GlyphColor, MachineStatus, Rarity, TaskKind};
+use crate::game::party::ProgramRole;
 use crate::items::{GearCopy, ItemId};
 use crate::perks::Perk;
 use crate::research::ResearchId;
@@ -585,6 +586,11 @@ pub struct PetInfo {
     /// fire (see `battle::slot_aggro_weight`) — so a frontend showing the
     /// roster shows the number, not just membership.
     pub party_slot: Option<u32>,
+    /// Which of the four roles this program is filling — see
+    /// `Game::program_role`. `owned_pets` is sorted into a run per role, so a
+    /// screen listing it can head each run by comparing this against the row
+    /// above rather than walking the list twice.
+    pub role: ProgramRole,
     /// What this pet is doing right now — see `Game::program_activity`.
     pub activity: String,
     /// This individual's rolled quality tier (see `components::Potential`),

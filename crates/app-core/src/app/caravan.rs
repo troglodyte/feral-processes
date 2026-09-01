@@ -16,6 +16,7 @@
 //! through `Game::commit_caravan_basket`, and the visit costs one turn
 //! however many lines it holds.
 
+use crate::app::basket::halve;
 use crate::*;
 use feral_processes_engine::views::CaravanView;
 
@@ -46,14 +47,6 @@ pub(crate) fn caravan_row(idx: usize, offers: usize, sells: usize) -> Option<Car
         return Some(CaravanRow::Offer(idx));
     }
     (idx - offers < sells).then(|| CaravanRow::Sell(idx - offers))
-}
-
-/// `basket::half_way_to` in this screen's currency. A *call*, not a copy:
-/// its `div_ceil` on the magnitude of the gap is what makes the step
-/// terminate, and rounded down a gap of one gives a step of zero and the key
-/// goes dead with the row neither full nor empty.
-fn halve(n: u32, target: u32) -> u32 {
-    crate::app::basket::half_way_to(n as i64, target as i64).max(0) as u32
 }
 
 impl App {

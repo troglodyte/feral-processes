@@ -264,16 +264,20 @@
   boundaries rather than comparing strings. `no_transfer_row_overflows_its_popup`
   is still the census that stops an over-wide row being drawn off the panel in
   silence, and it measures the header too.
-- **A modifier is four `GameKey` variants, and the picker is the only screen
-  that sees one.** `ShiftLeft`/`ShiftRight` is a **target** (an end of the
-  row, idempotent under key repeat); `CtrlLeft`/`CtrlRight` is a **step**
-  that halves the gap to that end, `div_ceil` so a gap of one closes rather
-  than stranding. gui's `with_modifiers` promotes the **horizontal** arrows
-  alone. **The trap is that every other key handler ends in `_ => {}`**, so a
-  modified arrow reaching them is a dead key nothing catches: `App::handle_key`
-  folds them back to bare `Left`/`Right` for every mode but `Mode::Transfer`,
-  in one condition above the dispatch, and never in the renderer — what a
-  modifier means belongs beside the mode that decides it.
+- **A modifier is four `GameKey` variants, and `App::handle_key`'s fold is
+  the list of screens allowed to see one.** `ShiftLeft`/`ShiftRight` is a
+  **target** (an end of the row, idempotent under key repeat);
+  `CtrlLeft`/`CtrlRight` is a **step** that halves the gap to that end,
+  `div_ceil` so a gap of one closes rather than stranding. gui's
+  `with_modifiers` promotes the **horizontal** arrows alone. **The trap is
+  that every other key handler ends in `_ => {}`**, so a modified arrow
+  reaching them is a dead key nothing catches: `App::handle_key` folds them
+  back to bare `Left`/`Right` for every mode the condition above the dispatch
+  does not name — `Mode::Transfer`, `Mode::Caravan` and `Mode::CraftQuantity`
+  — and never in the renderer, since what a modifier means belongs beside the
+  mode that decides it. **Miss the name and the new screen's four modified
+  arrows are plain steps**, which is a feel bug no test of that screen's own
+  handler can see.
 - **`assembler_system` sorts machines by `(x, y)` before pulling**, because
   bevy's query iteration order is not stable and two machines competing for
   one feeder would resolve differently between runs. The test spawns the

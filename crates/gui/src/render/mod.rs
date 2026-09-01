@@ -821,6 +821,10 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             }),
         _ => None,
     };
+    // Read before `game` takes the whole of `app`, as the rows above are:
+    // the figure is derived from more than one field, so the borrow cannot
+    // be split at the call.
+    let craft_quantity = app.craft_quantity();
     let Some(game) = &mut app.game else { return };
     match app.mode {
         Mode::BaseMenu => draw_group_menu(&group_rows, "Base", selected, refusal, painter, m),
@@ -845,7 +849,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::CraftQuantity => draw_craft_quantity(
             game,
             app.pending_craft.clone(),
-            &app.craft_quantity_input,
+            craft_quantity,
             app.careful_craft,
             refusal,
             painter,
@@ -1143,6 +1147,7 @@ pub(super) fn test_pet(name: &str, gear: &str) -> PetInfo {
         mitigation: 5,
         power: 19,
         party_slot: Some(0),
+        role: feral_processes_app_core::ProgramRole::InParty,
         activity: "in party".to_string(),
         quality: None,
         fusions: 0,

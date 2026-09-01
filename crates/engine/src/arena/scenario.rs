@@ -13,10 +13,10 @@ use std::path::{Path, PathBuf};
 
 use crate::abilities::AbilityId;
 use crate::affixes::AffixId;
+use crate::classes::PlayerClass;
 use crate::components::Rarity;
 use crate::game::creation::CharacterChoice;
 use crate::items::{GearCopy, ItemId};
-use crate::classes::PlayerClass;
 use crate::species::SpeciesId;
 use crate::world::Biome;
 

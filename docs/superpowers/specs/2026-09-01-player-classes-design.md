@@ -1,6 +1,13 @@
 # Player-only classes
 
-**Status:** designed, not implemented.
+**Status:** built, 2026-09-01. Implemented as designed, with one deviation
+made when the branch was rebased onto `0.13.79`: `main` had meanwhile
+replaced the class picker's sigil row (`"+Damage  -Healing"`) with a prose
+sentence (`classes::format_trade`), so the non-affinity spike this spec adds
+is folded into that sentence as a leading noun phrase rather than the
+`"+Decompiling"` tag described below. The seam is unchanged — one function
+still words every class's trade — and `spike_label` is private now, since
+`format_trade` is its only caller.
 
 A player's class is currently one of `species::AffinityClass`'s five
 variants — Striker, Bastion, Medic, Saboteur, Leech — and that enum is

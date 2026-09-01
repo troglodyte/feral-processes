@@ -1,8 +1,8 @@
 //! Routines: the slots abilities occupy, and how they get there.
 
 use super::support::*;
-use crate::components::Routines;
 use crate::classes::PlayerClass;
+use crate::components::Routines;
 use crate::*;
 
 /// The generic test species declares no abilities, so its kit is the

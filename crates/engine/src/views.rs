@@ -6,13 +6,13 @@
 
 use crate::abilities::AffinityKind;
 use crate::battle::ActionOption;
+use crate::classes::PlayerClass;
 use crate::components::{EquippedItem, GlyphColor, MachineStatus, Rarity, TaskKind};
 use crate::game::party::ProgramRole;
 use crate::items::{GearCopy, ItemId};
 use crate::perks::Perk;
 use crate::research::ResearchId;
 use crate::resources::DifficultyMode;
-use crate::classes::PlayerClass;
 use crate::species::{AffinityClass, MoveDef};
 use crate::structures::StructureId;
 use crate::world::Biome;

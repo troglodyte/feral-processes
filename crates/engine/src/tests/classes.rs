@@ -5,8 +5,8 @@
 use super::support::*;
 use crate::abilities::AffinityKind;
 use crate::classes::ClassDb;
-use crate::items::ids;
 use crate::classes::PlayerClass;
+use crate::items::ids;
 use crate::tuning::{AFFINITY_MAX, AFFINITY_NEUTRAL};
 use crate::*;
 
@@ -330,6 +330,10 @@ fn the_decompiler_bonus_does_not_dilute_as_the_stat_grows() {
             crate::taming::capture_chance(0.4, target, bonuses(Some(PlayerClass::Decompiler)));
         specialist / plain
     };
+    assert!(
+        gap_at(0) > 1.0,
+        "the class must be worth something at all before asking whether it dilutes"
+    );
     assert!(
         (gap_at(0) - gap_at(30)).abs() < 1e-4,
         "the class must be worth the same ratio at skill 0 ({}) and skill 30 ({})",

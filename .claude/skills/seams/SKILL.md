@@ -39,7 +39,7 @@ Three tiers, and which one you want depends on what you are doing:
 | the HUD (attention, panes, the palette, glyph colour) | `references/hud.md` | 13 |
 | sorties | `references/sorties.md` | 10 |
 | notifications | `references/notifications.md` | 5 |
-| species and data (classes, stat shapes, censuses) | `references/species.md` | 3 |
+| species and data (classes, stat shapes, censuses) | `references/species.md` | 6 |
 | help pages and documentation | `references/help.md` | 3 |
 | the ground (terrain effects, Static weather) | `references/ground.md` | 3 |
 

@@ -4,11 +4,11 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::affixes::AffixId;
+use crate::classes::PlayerClass;
 use crate::components::{ActiveFieldBuff, Rarity};
 use crate::items::{EquipmentSlot, ItemId};
 use crate::perks::Perk;
 use crate::resources::DifficultyMode;
-use crate::classes::PlayerClass;
 use crate::species::SpeciesId;
 use crate::world::Tile;
 

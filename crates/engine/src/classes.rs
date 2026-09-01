@@ -56,10 +56,10 @@ use crate::components::{Inventory, PlayerIdentity};
 use crate::items::ItemId;
 use crate::items::ids;
 use crate::species::Affinities;
-use serde::Serialize;
 use crate::views;
 use bevy_ecs::prelude::Resource;
 use serde::Deserialize;
+use serde::Serialize;
 use std::collections::HashMap;
 use std::path::Path;
 

@@ -3,11 +3,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::MAX_CUSTOM_NAME_LEN;
 use crate::abilities::AbilityId;
+use crate::classes::PlayerClass;
 use crate::items::{EquipmentSlot, GearCopy, ItemId};
 use crate::items_db::ItemDb;
 use crate::needs::{NEED_MAX, NEED_MIN, NeedId};
 use crate::perks::Perk;
-use crate::classes::PlayerClass;
 use crate::species::SpeciesId;
 use crate::structures::StructureId;
 use crate::tuning::{

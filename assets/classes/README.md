@@ -14,11 +14,14 @@ pre-class game. That is the same supported way to play that deleting
 
 ## What a class is
 
-A class is chosen once, at character creation, and never rerolled. It grants
-an **affinity spread** — a multiplier per ability category that scales the
-authored magnitude of the player's own routines — and a **starting kit**
-that replaces the default four-item inventory. Nothing else: no stat bonus,
-no talent tree. (Talent trees in `assets/talents/` are a *companion's* axis;
+A class is chosen once, at character creation, and never rerolled. This
+file authors an **affinity spread** — a multiplier per ability category that
+scales the authored magnitude of the player's own routines — and a
+**starting kit** that replaces the default four-item inventory. No stat
+bonus, no talent tree.
+
+Three classes also carry an **effect**, which is *not* authored here — see
+"What a class does is code" below. (Talent trees in `assets/talents/` are a *companion's* axis;
 the player's equivalent is Perk Points, spent on the affinity perks in
 `assets/perks/`.)
 
@@ -53,7 +56,7 @@ Each file is one class:
 
 | Field | Meaning |
 |---|---|
-| `class` | Which of the five `AffinityClass` variants this file is for: `Striker`, `Bastion`, `Medic`, `Saboteur`, or `Leech`. The five are fixed in Rust — they are load-bearing across talent trees, base-post behaviour and species stat shapes — so a file cannot invent a sixth. Two files naming the same class is not an error; the alphabetically last filename wins. |
+| `class` | Which of the eight `classes::PlayerClass` variants this file is for: `Striker`, `Bastion`, `Medic`, `Saboteur`, `Leech`, `Decompiler`, `Invoker`, or `Fabricator`. The eight are fixed in Rust — a class's *effect* is a hook into a particular formula (see "What a class does is code" below) — so a file cannot invent a ninth. Two files naming the same class is not an error; the alphabetically last filename wins. |
 | `name` | What the creation screen leads with. |
 | `description` | One or two sentences of flavour under it. |
 | `affinities` | `#[serde(default)]` — every field of `Affinities` (`damage`, `heal`, `buff`, `debuff`, `drain`) defaults to neutral (`1.0`) individually, so a file may name only the categories it cares about, or omit the field entirely for a class with no spread at all. |
@@ -75,6 +78,15 @@ stat block for that class's role):
 | Medic | Heal | Damage |
 | Bastion | Buff | Damage |
 | Leech | Drain | Buff |
+
+The three player-only classes damp an axis without raising one, because
+what they raise is not an affinity at all:
+
+| Class | Raises | Damps |
+|---|---|---|
+| Decompiler | *(decompile odds — a hook)* | Damage |
+| Invoker | Buff, Debuff *(and routine slots — a hook)* | Damage |
+| Fabricator | Buff *(and base cycle speed — a hook)* | Damage |
 
 Nothing in `ClassDb::load_dir` enforces this — a mod is free to author a
 class with no downside — but a class file that doesn't damp anything reads
@@ -104,3 +116,34 @@ that category (see `Game::ability_affinity`), clamped at
 Bastion, Medic, Saboteur, Leech), not file or insertion order — every caller
 of it, including the creation screen, sees classes in the same order no
 matter what order their files loaded in.
+
+## What a class *does* is code, not data
+
+`PlayerClass` has three variants no species can be — `Decompiler`,
+`Invoker`, `Fabricator` — and what each is *worth* is deliberately not a
+field in this schema. **This is `assets/perks/`'s seam, one directory
+over**: a perk's catalogue entry is data and a perk's effect is a named
+query in `perks.rs`, because an effect is a hook into one particular
+formula with no shared shape to express as data.
+
+So a class's effect is a named query in `crates/engine/src/classes.rs`,
+each an exhaustive match on `PlayerClass`:
+
+| Query | What it moves | Where it lands |
+|---|---|---|
+| `capture_boost_pct` | every decompile attempt | `Game::player_decompiler_bonuses` |
+| `routine_slot_bonus` | routine slots, past the level cap | `Game::routine_slots`, player arm |
+| `work_tick_scale` | how long a base work cycle takes | `systems::work_ticks_at_speed` |
+| `spike_label` | how the spike reads on the creation screen | `classes::format_trade` |
+
+Magnitudes are `tuning::CLASS_*` constants, on the "how hard the game is,
+is not moddable" side of the line.
+
+**This is the one thing deleting this directory does not turn off.** The
+empty-catalogue property above still holds for everything authored here —
+every affinity resolves neutral and the hardcoded kit applies — but a save
+already carrying `PlayerClass::Invoker` keeps its two extra routine slots,
+because the queries never consult `ClassDb`. Nobody can *pick* a class in
+that state, since the creation screen has no rows to offer. An effect that
+vanished when a display catalogue went missing would be the surprising
+half.

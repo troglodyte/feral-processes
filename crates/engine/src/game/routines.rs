@@ -1,8 +1,8 @@
 //! Installing, removing and inspecting routines — the abilities that occupy
 //! a party member's slots. Extraction lives here too.
 
-use crate::components::Routines;
 use crate::classes::PlayerClass;
+use crate::components::Routines;
 use crate::*;
 
 impl Game {

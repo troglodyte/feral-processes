@@ -400,10 +400,7 @@ impl CreationCatalogue {
     /// The starter pool, priced through `class`'s spread —
     /// `Game::starter_routine_rows`' own derivation, with no perk term
     /// because a player being created has no unlocked perks yet.
-    pub fn starter_rows(
-        &self,
-        class: Option<PlayerClass>,
-    ) -> Vec<crate::views::StarterRoutineRow> {
+    pub fn starter_rows(&self, class: Option<PlayerClass>) -> Vec<crate::views::StarterRoutineRow> {
         crate::abilities::starter_rows(&self.abilities, |kind| {
             crate::classes::affinity_with_perk(
                 crate::classes::class_affinity(&self.classes, class, kind),

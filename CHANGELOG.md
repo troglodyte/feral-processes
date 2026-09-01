@@ -33,6 +33,29 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.65
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+`SaveData::game_over` is additive behind `#[serde(default)]`.
+
+- **A Permadeath run that flatlines cannot be reloaded.** The slot is sealed
+  with the run's own verdict, the load list shows it as FLATLINED, and
+  `Game::load` refuses it — the mode used to leave the last autosave sitting
+  there, at most fifty cycles before the death and with no record of it.
+- **A machine already kept worked satisfies "Man the Node".** The mission
+  could only be finished by turning the standing job off and on again, which
+  pulls the body off the machine and is the opposite of what it asks for.
+- **A GC Entropy Sweep now waits for a base of five**, up from three, which
+  is past the roster a run opens with.
+- **A program that has downed tools no longer counts as defending the base.**
+  A base whose whole staff had walked off read as fully staffed and was swept
+  until its machines were gone.
+- **One bad memory can no longer stop a program working.** The line was set
+  against a memory's valence alone and the worst single grudge in the game
+  reaches nearly three times it, so a program worn thin on a base with
+  nothing servicing the need downed tools for longer than the run that
+  earned it. Downing tools takes a pattern now; one grudge still sulks.
+
 ## 0.13.64
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

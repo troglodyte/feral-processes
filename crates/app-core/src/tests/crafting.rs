@@ -1,8 +1,36 @@
-//! The Compile flow: picking a recipe, choosing a quantity, and the
-//! careful-compile toggle that decides what the batch is worth.
+//! The Compile flow: picking a recipe, choosing a quantity, the
+//! careful-compile toggle that decides what the batch is worth, and
+//! `Mode::Compiling`, the screen that spends `Game::hand_craft_ticks`.
+
+use feral_processes_engine::save;
 
 use super::support::*;
 use crate::*;
+
+/// Drives `Mode::Compiling` to completion (or an abort) and back to
+/// `Mode::Playing`, the way `advance_compile` is driven every frame by a
+/// real frontend. One call with an oversized `dt` drains the whole batch —
+/// `advance_compile`'s loop keeps spending ticks until it either runs out of
+/// accumulated time or the batch reports `finished`, so a large enough `dt`
+/// always reaches the latter first for anything a test fixture affords.
+///
+/// A batch is hundreds of ticks and `advance_compile` owes `after_tick` for
+/// them, so the compile that ends can be the moment a queued notification
+/// takes the screen — the low-Power notice most of all, since the ticks that
+/// raise it are the ones this just spent. Dismissed here rather than asserted
+/// against: which notice is waiting is not what any caller of this is about.
+pub(crate) fn drain_compile(app: &mut App) {
+    assert_eq!(app.mode, Mode::Compiling, "nothing is compiling to drain");
+    app.advance_compile(3600.0);
+    while app.mode == Mode::Notification {
+        app.handle_key(GameKey::Esc);
+    }
+    assert_eq!(
+        app.mode,
+        Mode::Playing,
+        "a drained compile should have returned to Mode::Playing"
+    );
+}
 
 /// An app with a base founded and enough material to compile a batch.
 fn stocked_app(seed: u32) -> App {
@@ -92,6 +120,8 @@ fn every_commit_path_charges_the_careful_price() {
         let before = ledger(&plain, &edge);
         plain.handle_key(key);
         careful.handle_key(key);
+        drain_compile(&mut plain);
+        drain_compile(&mut careful);
         let (plain_now, careful_now) = (ledger(&plain, &edge), ledger(&careful, &edge));
 
         assert!(
@@ -181,24 +211,100 @@ fn shift_and_ctrl_reach_the_max_affordable_compile() {
 fn an_arrow_and_a_typed_batch_are_the_same_quantity() {
     let mut app = stocked_app(703);
     open_compile_of(&mut app, "ice_breaker");
-    app.handle_key(GameKey::Char('1'));
-    app.handle_key(GameKey::Char('2'));
-    assert_eq!(app.craft_quantity(), 12, "digits still type a quantity");
+    // Two digits, but a small number: a hand-compile burns Power a tick and
+    // `tuning::HAND_CRAFT_POWER_FLOOR` refuses a batch past the reserve, so
+    // the thirteen this used to type is now a refusal rather than a batch.
+    app.handle_key(GameKey::Char('0'));
+    app.handle_key(GameKey::Char('5'));
+    assert_eq!(app.craft_quantity(), 5, "digits still type a quantity");
 
     app.handle_key(GameKey::Right);
-    assert_eq!(
-        app.craft_quantity(),
-        13,
-        "and an arrow steps what was typed"
-    );
+    assert_eq!(app.craft_quantity(), 6, "and an arrow steps what was typed");
 
     let before = held(&app, "ice_breaker");
     app.handle_key(GameKey::Enter);
+    drain_compile(&mut app);
     assert_eq!(
         held(&app, "ice_breaker"),
-        before + 13,
+        before + 6,
         "Enter compiles the quantity the arrows left"
     );
+}
+
+/// Committing a batch arms the loop and opens the screen; it does not drain
+/// it in place the way `Game::craft` used to be called synchronously —
+/// that's the whole of what `Mode::Compiling` changes about this flow.
+#[test]
+fn committing_a_craft_opens_the_compiling_screen_rather_than_finishing_at_once() {
+    let mut app = stocked_app(710);
+    open_compile_of(&mut app, "ice_breaker");
+    let before = held(&app, "ice_breaker");
+
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(
+        app.mode,
+        Mode::Compiling,
+        "a committed batch should open the compiling screen"
+    );
+    assert!(
+        app.game.as_ref().unwrap().hand_craft_in_progress(),
+        "the engine should have a compile armed"
+    );
+    assert_eq!(
+        held(&app, "ice_breaker"),
+        before,
+        "nothing is granted on the frame that opens the screen"
+    );
+}
+
+/// The spec's answer: "bar fills, and any key aborts." No key is special —
+/// there is nothing to page through on this screen, so even Esc just aborts
+/// like every other key would.
+#[test]
+fn a_key_during_compiling_aborts_and_returns_to_playing() {
+    let mut app = stocked_app(711);
+    open_compile_of(&mut app, "ice_breaker");
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::Compiling);
+    // A few ticks in, but nowhere near finished — the fixture's inventory
+    // affords a batch bigger than one unit, per `stocked_app`.
+    app.advance_compile(0.1);
+
+    app.handle_key(GameKey::Char('q'));
+
+    assert_eq!(
+        app.mode,
+        Mode::Playing,
+        "any key should abort back to the map"
+    );
+    assert!(
+        !app.game.as_ref().unwrap().hand_craft_in_progress(),
+        "an abort should clear the engine's in-flight compile"
+    );
+}
+
+/// Advancing to completion is what `drain_compile` already exercises for
+/// every other test in this file; this test is the dedicated one for the
+/// outcome itself — the mode change and the fact that nothing is left
+/// standing over the map as a refusal.
+#[test]
+fn advancing_to_completion_returns_to_playing_and_reports_the_outcome() {
+    let mut app = stocked_app(712);
+    open_compile_of(&mut app, "ice_breaker");
+    let before = held(&app, "ice_breaker");
+    app.handle_key(GameKey::Enter);
+    let quantity = 1;
+
+    drain_compile(&mut app);
+
+    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(
+        held(&app, "ice_breaker"),
+        before + quantity,
+        "the finished batch should have granted its result"
+    );
+    assert_eq!(app.status_line, None, "a finished compile is not a refusal");
 }
 
 /// How many of `item` the player is holding, across both stores — a
@@ -214,4 +320,81 @@ fn held(app: &App, item: &str) -> u32 {
         .filter(|row| row.copy.item == id)
         .map(|row| row.qty)
         .sum()
+}
+
+/// A path that spends ticks owes `after_tick()`.
+///
+/// `handle_key`'s tail and `update_realtime` both end in it; `advance_compile`
+/// spends ticks in a loop and did not, so a twelve-shell batch was 3,600
+/// ticks with the autosave, the profile flush and the notification queue all
+/// suspended for the duration. It self-heals on the next idle tick, so what
+/// this pins is the window, not permanent loss — and the next tick-spending
+/// path added here has something to fail against.
+#[test]
+fn a_compile_that_spends_ticks_autosaves_like_any_other_span_of_them() {
+    let mut app = stocked_app(720);
+    let path = scratch_path("compile_autosave", 720);
+    let _ = std::fs::remove_file(&path);
+    app.current_save_path = Some(path.clone());
+    app.last_autosave_tick = app.game.as_ref().unwrap().current_tick();
+
+    open_compile_of(&mut app, "ice_breaker");
+    let per_unit = app
+        .game
+        .as_ref()
+        .unwrap()
+        .hand_craft_ticks(&ItemId::from("ice_breaker"));
+    assert!(
+        per_unit > crate::AUTOSAVE_INTERVAL_TICKS as u32,
+        "one unit has to outlast the autosave interval or this proves nothing"
+    );
+    app.handle_key(GameKey::Enter);
+    drain_compile(&mut app);
+
+    assert!(
+        path.exists(),
+        "a batch longer than the autosave interval left no autosave behind"
+    );
+    let _ = std::fs::remove_file(&path);
+}
+
+/// A run that ends on a compile tick reaches the game-over screen with the
+/// same cue every other ending has.
+///
+/// `finish_compile` copied `after_world_action`'s two checks and not its
+/// third line, so the defeat sound was silently dropped on exactly one of
+/// the ways a run can end.
+#[test]
+fn a_run_that_ends_mid_compile_still_gets_its_defeat_cue() {
+    let mut app = stocked_app(721);
+
+    // Through the save, which is the only door app-core has onto the
+    // engine's `World`: a run on the difficulty that ends rather than
+    // reboots, with the player already at zero. Nothing has ticked yet, so
+    // `death_handling_system` has not seen it and the compile still arms.
+    let path = scratch_path("compile_gameover", 721);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    data.difficulty = DifficultyMode::Permadeath;
+    data.player.hp = 0;
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
+
+    open_compile_of(&mut app, "ice_breaker");
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::Compiling, "the batch should have armed");
+    let _ = app.take_sounds();
+
+    app.advance_compile(3600.0);
+
+    assert_eq!(
+        app.mode,
+        Mode::GameOver,
+        "the first tick should end the run"
+    );
+    assert!(
+        app.take_sounds().contains(&SoundEvent::Defeat),
+        "a run that ends on a compile tick ends as silently as one that does not"
+    );
+    let _ = std::fs::remove_file(&path);
 }

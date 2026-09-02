@@ -1,7 +1,9 @@
-//! The recipe picker and its quantity prompt.
+//! The recipe picker and its quantity prompt, and `Mode::Compiling`'s bar.
 
+use super::bars::*;
 use super::popup::*;
 use super::*;
+use feral_processes_engine::HandCraftProgress;
 use feral_processes_engine::tuning::{QUALITY_CAREFUL_BONUS, QUALITY_CAREFUL_COST_PERCENT};
 
 pub(super) fn draw_craft_menu(
@@ -162,6 +164,78 @@ pub(super) fn draw_craft_quantity(
     rows.push(text_row("Type digits, Enter to compile"));
     rows.push(text_row(CRAFT_QUANTITY_KEYS));
     draw_popup("Compile", PopupSize::Large, &rows, refusal, painter, m);
+}
+
+/// `Mode::Compiling`'s footer — the only thing this screen has to teach,
+/// since there is nothing to page through. Named so a width test measures
+/// the string the screen actually prints, `CRAFT_QUANTITY_KEYS`' reason.
+const COMPILING_KEYS: &str =
+    "Any key stops — finished units are kept, the one in progress is refunded.";
+
+/// The two text rows `draw_compiling` prints above the bar — what
+/// `Compiling {item}...` and `Unit U of N` cost the layout, and so how far
+/// down the popup the bar's reserved space starts.
+const COMPILING_HEADER_ROWS: f32 = 2.0;
+
+/// How many blank rows `draw_compiling` reserves for the bar drawn after
+/// `draw_popup` returns. Two lines: `draw_bar` paints a label above a
+/// `BAR_TRACK_H` track, which needs more headroom than one row leaves.
+const COMPILING_BAR_ROWS: f32 = 2.0;
+
+/// The hand-compile in flight, opened by `App::commit_craft` and driven a
+/// tick at a time by `App::advance_compile`.
+///
+/// `progress` is `None` before the first tick lands and once the batch is
+/// over — `App::compile_progress`'s own shape — so this draws nothing in
+/// either case, the same as every other screen `NEEDS_PENDING_STATE` in the
+/// gui's own census names for needing state a fresh app hasn't got.
+///
+/// The bar is not a `Row` — `draw_popup` only ever lays out text — so its
+/// geometry is placed by hand in the space `COMPILING_BAR_ROWS` reserves,
+/// the way `draw_manifest`'s meters sit beside its own layout rather than
+/// inside `draw_popup`'s. Placed a fixed distance from the *top* of the
+/// popup — the title's two lines of chrome, then `COMPILING_HEADER_ROWS` of
+/// text — rather than accounting for a possible refusal above it: nothing
+/// calls `App::refuse` while `Mode::Compiling` is open, so that case cannot
+/// arise, the same gap `draw_manifest`'s meter view already leaves.
+pub(super) fn draw_compiling(
+    game: &Game,
+    progress: Option<&HandCraftProgress>,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let Some(progress) = progress else { return };
+
+    let rows = vec![
+        text_row(format!("Compiling {}...", game.item_name(&progress.item))),
+        text_row(format!("Unit {} of {}", progress.unit, progress.units)),
+        text_row(""),
+        text_row(""),
+        text_row(COMPILING_KEYS),
+    ];
+    draw_popup("Compiling", PopupSize::Large, &rows, refusal, painter, m);
+    debug_assert_eq!(
+        COMPILING_HEADER_ROWS + COMPILING_BAR_ROWS + 1.0,
+        rows.len() as f32,
+        "the blank rows reserved for the bar must match what's actually in `rows`"
+    );
+
+    let rect = popup_rect(PopupSize::Large, &rows, refusal, painter, m);
+    let g = BarGeometry {
+        x: rect.x + m.pad,
+        y: rect.y + m.line_height * (2.0 + COMPILING_HEADER_ROWS),
+        w: rect.w - m.pad * 2.0,
+    };
+    draw_bar(
+        g,
+        &format!("{} / {} ticks", progress.ticks_done, progress.ticks_total),
+        progress.ticks_done as f32,
+        progress.ticks_total.max(1) as f32,
+        BarStyle::plain(CYAN),
+        painter,
+        m,
+    );
 }
 
 /// The recipe chains, read-only — every conversion a structure runs, walked
@@ -630,6 +704,106 @@ mod tests {
                 "the widest Compile row overflows its popup by {:.0}px \
                  ({drawn:.0} drawn into {room:.0} of room):\n{widest}",
                 drawn - room
+            );
+        });
+    }
+
+    /// A synthetic progress report rather than a real `begin_hand_craft` —
+    /// a fresh `Game::new` carries no starting cargo (`CharacterChoice::
+    /// default`'s `items: Vec::new()`), so nothing is affordable to arm a
+    /// real batch with, and `HandCraftProgress`'s fields are public for
+    /// exactly this reason: `a_very_wide_recipe`'s precedent, one row over.
+    fn mid_batch_progress() -> HandCraftProgress {
+        HandCraftProgress {
+            item: ItemId::from("hardened_shell"),
+            unit: 2,
+            units: 3,
+            ticks_done: 40,
+            ticks_total: 120,
+            finished: false,
+        }
+    }
+
+    /// Nothing armed, nothing drawn — the same shape every other
+    /// `NEEDS_PENDING_STATE` screen takes (see `render::tests`), and the gui
+    /// census relies on this exact behaviour for `Mode::Compiling`.
+    #[test]
+    fn drawing_compiling_with_nothing_in_flight_draws_nothing() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
+        let (_, shapes) =
+            with_painter(|p| draw_compiling(&game, None, None, p, &ui_metrics(900.0)));
+        assert!(
+            crate::paint::painted_text(&shapes).is_empty(),
+            "nothing should be painted before the first tick lands"
+        );
+    }
+
+    /// The bar fills against the same two numbers the popup's text names —
+    /// `Game::hand_craft_ticks`' own report, never a second copy of it —
+    /// and the screen draws without panicking at a real window size.
+    #[test]
+    fn drawing_compiling_mid_batch_names_the_item_and_the_unit() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
+        let progress = mid_batch_progress();
+
+        let (_, shapes) =
+            with_painter(|p| draw_compiling(&game, Some(&progress), None, p, &ui_metrics(900.0)));
+        let drawn = crate::paint::painted_text(&shapes);
+
+        assert!(
+            drawn
+                .iter()
+                .any(|t| t.contains(game.item_name(&progress.item))),
+            "the screen should name what is compiling: {drawn:?}"
+        );
+        assert!(
+            drawn.iter().any(|t| t.contains("2") && t.contains("3")),
+            "the screen should say which unit of the batch this is: {drawn:?}"
+        );
+        assert!(
+            drawn.iter().any(|t| t.contains("40") && t.contains("120")),
+            "the bar's own label should read the same ticks it fills against: {drawn:?}"
+        );
+    }
+
+    /// `draw_row` clamps a row vertically and never horizontally, so this
+    /// screen's own two rows — the footer key line and the bar's label —
+    /// have to fit the popup like every other row in the game does.
+    #[test]
+    fn the_compiling_screens_own_rows_fit_its_popup() {
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            for line in [COMPILING_KEYS, "999 / 999999 ticks"] {
+                let drawn = p.measure_ui_advance(line, m.font_size);
+                assert!(
+                    drawn <= room,
+                    "a Compiling row overflows by {:.0}px ({drawn:.0} into {room:.0}):\n{line}",
+                    drawn - room
+                );
+            }
+        });
+    }
+
+    /// The same drawing call again with a refusal threaded through, since
+    /// `draw_compiling` still passes one to `draw_popup` — the popup's own
+    /// census (`render::tests::every_screen_draws_a_refusal_exactly_once`)
+    /// covers the empty-progress case; this is the in-flight one, and it
+    /// must not panic laying the bar out underneath a taller box.
+    #[test]
+    fn drawing_compiling_with_a_refusal_showing_does_not_panic() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
+        let progress = mid_batch_progress();
+        with_painter(|p| {
+            draw_compiling(
+                &game,
+                Some(&progress),
+                Some("Can't do that right now."),
+                p,
+                &ui_metrics(900.0),
             );
         });
     }

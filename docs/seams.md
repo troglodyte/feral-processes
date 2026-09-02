@@ -3033,8 +3033,11 @@ however many rolled perfectly, and a fixture reading `Inventory` alone
 after compiling gear is the fixture's bug — the same call the drop side
 made one phase earlier. Anything that is not equipment stacks exactly as it
 did and spends **no** `GameRng` draw; `only_gear_spends_a_quality_roll`
-holds that by compiling one unit against five and comparing the stream,
-which works because `craft` ticks once whatever the batch size.
+holds that by comparing the stream after a compile against the stream after
+the *same span of bare ticks*. It used to compare one unit against five,
+which worked only while `craft` ticked once whatever the batch size — see
+*Hand-compiling is priced at the machine's own cycle* below, which is what
+took that away.
 
 **The toggle is the page's and is cleared when the page opens.** Clearing
 on close would leave the flag alive between two compiles: the next batch
@@ -9176,3 +9179,405 @@ there itself. The gate reads `StructureDef::recovery` rather than
 `"repair_bay"`, `dispatches_sorties`' rule, so a mod's own recovery structure
 answers it too. Its copy has to keep step with `Game::add_to_party`'s
 refusal, which is the other place the game says a downed program needs a Bay.
+
+### Hand-compiling is priced at the machine's own cycle, and `Game::craft` is that loop drained
+
+The base is a factory nobody had to visit. `Game::craft` let the player
+hand-compile every item the eleven-machine production chain makes, at the
+identical recipe cost, in **one tick**, with no worker, no adjacency, no
+power and no proximity to the bench. A Lathe spends twelve ticks and a
+posted program on a Blank Substrate; the player spent a keypress.
+
+**Slow rather than blocked.** A `machine_only` flag on the recipe was the
+obvious alternative and was rejected: it would have made a run whose base
+had not been built yet unable to reach whole branches of the item set, and
+it prices the *recipe* when the thing that is actually free is the
+*convenience*. Every recipe stays reachable. `hand_craft_ticks` is
+`HAND_CRAFT_TICK_MULT` times the cycle of the machine that exists to do the
+job — the `assembles` block naming the item, else the `work` block producing
+it, else `HAND_CRAFT_DEFAULT_CYCLE` for the majority that no machine makes
+at all. Multiplying off the machine's own number rather than authoring a
+per-item duration means a modder who adds a craftable and a bench for it
+gets the hand price for free, and a retuned machine cycle drags its hand
+price with it.
+
+**One door, because the screen quotes it.** Task B's compiling screen draws
+the bar against `hand_craft_ticks`. A second multiplication of the constant
+in the renderer would let the screen promise a number the loop does not
+spend, and nothing would fail to compile.
+
+**`craft` is the loop drained to completion.** Its signature and its refusal
+list are unchanged and every engine test and `app-core`'s `commit_craft`
+still call it — but it is now `begin_hand_craft` followed by
+`advance_hand_craft` until finished, so there is exactly one copy of the
+spend-roll-grant sequence and the headless compile cannot drift from the one
+the player watches. `begin_hand_craft` holds every refusal and arms nothing
+until they have all passed; `advance_hand_craft` is the only code in the game
+that spends a unit's ingredients or grants one.
+
+**Per unit, not per batch.** The ingredients come out of the pack at each
+unit's *start* and the copy is rolled and granted at its end, so an abort
+keeps every finished unit, refunds the one in flight, and costs only the time
+already spent. That is the existing *materials are not spent until the
+structure is raised* shape rather than a second rule about part payment, and
+it closes a real edge that per-batch spending opens: a build crew takes from
+the player's own pack while the party stands in base space
+(`game/base/construction.rs`'s `Source::Pack`), so a compile that checked the
+bill up front and spent at the end could find itself short after three
+hundred ticks. The batch-wide affordability check stays in `begin_hand_craft`
+because that is what makes the refusal name the batch's bill; running dry
+mid-batch simply ends the batch with nothing part-paid.
+
+**The early break is drag terrain's, and only drag terrain's.**
+`Game::move_player` runs `for _ in 0..drag_ticks { … self.tick(); }` and
+breaks on a game over or a battle opening, because a tick can start a fight —
+`nest_aggro_tick` is the precedent. A compile loop inherits the same
+obligation: the remaining ticks must not resolve a world behind a fight the
+player has not seen. An early break is treated as an abort, so the
+interrupted unit's material comes back.
+
+**`resources::HandCraft` is not saved**, `RunFeats`' precedent, and sound for
+a second reason of its own: `Mode::Compiling` is a blocking screen with
+exactly two exits and no save inside it. It is inserted by `begin` and
+removed by `close`, rather than living at both constructors, so a run that
+never compiles by hand carries nothing at all.
+
+**A batch that would run the reserve out is refused whole.** A
+hand-compile's ticks are ordinary game ticks, so `needs_tick_system` charges
+them `HUNGER_DECAY_PER_TICK` like any others. That is the feature — compiling
+by hand is work — but at `HAND_CRAFT_TICK_MULT` one Hardened Shell is 300
+ticks and 45 of a hundred-point reserve, so a third would flatline a player
+who started full, silently, from a screen that says nothing about Power. The
+whole batch is refused rather than compiled as far as it fits, which is
+`MAX_ACTIVE_CONTRACTS`' no-silent-caps rule: a batch of twelve that quietly
+became a batch of six reads as the key having half worked.
+
+The projection is `quantity × hand_craft_ticks × systems::power_drain_per_tick`
+— the very function the system charges through, **called and not restated**,
+so it carries `Perk::LowPowerMode` for free and cannot drift from the charge.
+It is deliberately blind to anything that would add Power on the way, a
+Recharger's trickle most obviously, so the figure is a worst case and the
+refusal never lets through a batch the reserve alone could not carry.
+
+**The floor is `HAND_CRAFT_POWER_FLOOR`, a margin, and not `POWER_MIN`.** At
+exactly zero a batch projected to end at a fraction of a point still passes,
+and the next background tick starves it — the state the refusal exists to
+prevent, reached one tick later. Ten points is about sixty-six ticks at the
+standing drain, a crossing of base space to a rest, which is free in there
+and refills the reserve whole; that is what makes the refusal's advice
+actionable rather than a dead end. `LOW_POWER_ATTACK_THRESHOLD` was the other
+candidate for the floor and is wrong: it would refuse the *second* Hardened
+Shell of a full reserve, and that cost is the point of the change.
+
+**`max_craftable` takes the second ceiling too.** `[M]` answered the pack
+alone, and the pack stopped being the only bound the moment a batch could be
+refused for Power. This is the careful surcharge's own rule in a second
+place — *a quoted maximum the compile refuses is a batch the compile
+refuses*, and on screen it reads as the key doing nothing. Three fixtures
+moved with it, each because it compiled more gear in one span than a
+hundred-point reserve covers; they refill the reserve between batches exactly
+as they restock the pack, or ask for fewer units where the batch size was
+never the subject.
+
+**One test moved, and it moved for the right reason.**
+`only_gear_spends_a_quality_roll` compared the shared `GameRng` stream after
+compiling one unit against five, on the property that a material spends no
+quality draw. That comparison stopped isolating anything the moment the clock
+cost scaled with the batch — the two runs now tick different numbers of times
+and the ticks draw. It is re-grounded against *the same span of bare ticks*:
+a material lands the stream exactly where doing nothing for that long lands
+it, and one piece of gear lands it one draw further on. Re-seeding it to a
+value that passed would have thrown the property away.
+
+### A path that spends ticks owes `after_tick`, and a screen that spends them paces against `dt`
+
+`Mode::Compiling` made app-core's third tick-spending path, and both of the
+rules it had to learn were already true and written down nowhere.
+
+**Every path that advances the world ends in `after_tick`.** There were two —
+`handle_key`'s tail and `update_realtime` — and `App::advance_compile` was
+written as a third that called neither it nor anything that reached it. What
+`after_tick` holds is `sync_info_tab_to_locale`, `flush_battle_telemetry`,
+`flush_profile_writes`, `maybe_autosave` and `show_next_notification`, and its
+own doc says it exists so a third tick site cannot pick up one half and miss
+the other — which is exactly what happened. At `AUTOSAVE_INTERVAL_TICKS = 50`
+a twelve-shell batch is 3,600 ticks and about seventy-two autosaves that never
+fired, with the profile flush and the notification queue suspended alongside
+them. It self-heals on the next idle tick, so the exposure was the window and
+never permanent loss, which is precisely why nothing caught it.
+
+**Once per call, not once per tick.** `maybe_autosave` is keyed to the game
+clock, so an `after_tick` inside the loop would write a save every fifty ticks
+of a batch a single oversized `dt` drained in one go — seventy-two writes in
+one frame, the opposite failure. The call sits after the loop and is gated on
+a tick actually having been spent.
+
+**A notification can now take the screen the instant a batch ends**, and that
+is the timing rule working rather than a new problem: `show_next_notification`
+returns unless `mode == Mode::Playing`, so a notice raised during the compile
+waits out the whole batch and surfaces on the frame the mode goes back to the
+map. The low-Power notice is the one that fires most, because the ticks that
+raise it are the ticks the batch just spent. `tests/crafting.rs`'s
+`drain_compile` dismisses it rather than asserting against it.
+
+**And `finish_compile` is `after_world_action`, not a copy of it.** It was
+written as the two checks that function makes — a battle opened mid-batch, a
+run ended mid-batch — and quietly dropped its third line, the
+`SoundEvent::Defeat` every other ending queues. A run that ended on a compile
+tick reached the game-over screen in silence. The mode is set to `Mode::Playing`
+first because `after_world_action` only ever *overrides* a mode.
+
+**The pace is `dt`-scaled and never one tick per rendered frame.** One tick
+per frame was the first thing considered and it compiles fine: a 300-tick
+Hardened Shell is a five-second stare at 60fps, which reads exactly right. It
+also ties the *cost the engine charges* to the *frame rate the machine happens
+to render at*, so the same batch is cheaper on better hardware —
+`hand_craft_ticks` pricing hand-compiling as a real cost means nothing if the
+ticks spent depend on the GPU. `COMPILE_TICKS_PER_SECOND = 60` reproduces the
+same five-second shell a 60fps player would have got, without depending on
+60fps to get there, and `compile_ticks_carry` is `BattleReveal::accumulated`'s
+carry so a frame worth less than one tick is not rounded away.
+
+### A zone-portal line is ramped from the zone it was introduced in, not from zone 1
+
+The audit that started this whole change named the portal's price as one of
+the two things a breach never asked of the base: 10 Portal Fragments, dropped
+by Stack guardians alone, no research and no base chain touched. The fix is
+`StructureDef::zone_build_cost: Vec<(u32, ItemId, u32)>` —
+`(min_zone, item, base_qty)` — additive lines that only qualify once the
+current zone reaches `min_zone`. `build_cost` keeps its own shape and is
+implicitly `min_zone: 1`, rather than widening `build_cost`'s tuple to carry
+one: that would touch all 30 shipped structure files and every mod's, for a
+field only one shipped structure needs.
+
+**The composition is constrained by research, not by taste.** A zone-1 line
+can name nothing gated past zone 1 — Cache Grain sits behind `cache_coherence`
+(40 RD, zone 2) and the Recompile Kernel behind `program_refactoring` (75 RD,
+zone 2), so demanding either in sector 1 would ask the player to have
+researched something the run cannot yet reach. That constraint is the entire
+reason `zone_build_cost` exists as a second field rather than a longer
+`build_cost`: sector 1's bill is built from what has no research gate at all
+(Patch Routine) plus what a light gate opens (Hardened Shell behind
+`armor_bench`, Routine Disk behind `routine_fabrication`, 24 and 26 RD), and
+Trace Sniffer — legal in sector 1 on the same terms — is deferred to sector 2
+anyway because adding `weapon_bench` would have doubled the opening research
+bill from 50 RD to 100, already about 1,400 ticks on one Mk1 Research Node.
+
+**Ramped from introduction, not from zero.** `Game::structure_build_cost`
+prices every line — `build_cost`'s and `zone_build_cost`'s alike — as
+`zone_portal_cost(base_qty, zone.saturating_sub(min_zone) + 1)`. A naive
+`zone_portal_cost(base_qty, zone)` applied uniformly would charge the sector-2
+lines their *sector-4* rate the first zone they can legally be demanded,
+because `zone_portal_cost` was authored assuming every line starts at zone 1.
+Counting from each line's own `min_zone` is what makes `build_cost` a no-op
+under the new formula — `zone.saturating_sub(1) + 1` reduces to `zone` for
+every structure shipped before this field existed, portal included, so
+nothing that already worked reprices.
+
+**Early-return order is load-bearing.** `structure_build_cost` first resolves
+`first_free` (unrelated to this axis), then builds the concatenated line list
+— `build_cost` plus every qualifying `zone_build_cost` line — *before*
+branching on `zone_portal`. A structure without `zone_portal: true` returns
+that list unramped; only the portal branch grows anything. Reversing the
+order (return `build_cost` unchanged, then append) would leave the append
+unreachable for the common case this field exists to serve, and would also
+silently break a non-portal structure that wants a later-sector line without
+wanting the ramp — the two are independent flags, so a modder can author a
+zone-gated ordinary structure this way with no growth at all.
+
+`assets/structures/portal.ron`'s bill demonstrates the shape:
+`portal_fragment`, `patch_routine`, `hardened_shell` and `routine_disk` at
+`min_zone: 1`; `trace_sniffer` and `cache_grain` at `min_zone: 2`;
+`recompile_kernel` at `min_zone: 3`. The description was rewritten in the
+same commit — the shipped one used to say fragments come from the Stack
+alone, which the new lines make half the truth, and it is what the player
+reads on the build menu before ever filing the request.
+
+### A supplier that declares `power_upkeep` supplies nothing while it is dry, and the Home never declares it
+
+**The Grid stopped being a purchase and became a production rate.** Before
+this, `power_supply` was bought once with the build and stood forever: a base
+that could afford three Recharger Nodes had +12 capacity for the rest of the
+run, whatever else it did or failed to do. `docs/base-economy-audit.html`'s
+finding was that nothing on the breach path made a base *run*, and the grid
+was one of the three places to fix that — the other two being hand-crafting's
+cost and the portal's bill, which shipped alongside as Tasks A and C of the
+same change.
+
+**The rate is picked so the loop closes on one Power Conduit, and the closure
+is the whole design.** A Conduit at Mk1 in zone 1 turns out one Power Cell
+every 6 ticks — 166 per 1,000 — while a burning supplier eats one every
+`POWER_UPKEEP_TICKS = 20`, which is 50 per 1,000. So one Conduit sustains
+three Rechargers (+12 grid) while drawing 1 itself and occupying one posted
+program: the thing that feeds the grid is on the grid it feeds. A shorter
+window and a Conduit cannot carry even one supplier; a much longer one and a
+single stocked Depot outlives any session, which is the same as free.
+
+**The Home does not burn, and that is the bootstrap rather than an
+oversight.** Its free 4 covers a Power Conduit (draw 1) + a Mining Node (1) +
+a Lathe (2), exactly — the opening a cold base needs to make its first Power
+Cell. If the Home burned, a base holding no cells could never make one, which
+is not difficulty but a dead run. `every_burning_supplier_supplies_something_
+and_the_home_burns_nothing` asserts the absence, because an absence is
+precisely what nothing fails on.
+
+**`Starved` rather than a new `MachineStatus` variant.** `Starved` already
+means "the input it needs is not there", which is exactly true of a supplier
+with no Power Cell in reach, and `MachineStatus`' matches are exhaustive by
+design — a new variant costs every reader a case for a state that reads
+identically to one that exists. The announcement goes through
+`systems::set_machine_status`, the one place a stall is announced and one
+that logs only on transition, so a base left dry says so once rather than
+fifty times a minute.
+
+**The component is inserted by both writers of a structure's component list,
+and absence reads as dry.** A Recharger Node runs no job — no `work`, no
+`assembles` — so neither `Game::spawn_structure` nor the load path in
+`game/lifecycle.rs` gave it a `MachineStatus` at all before this; both now
+gate on `def.runs_a_job() || def.power_upkeep`, and both insert
+`components::PowerFuel`. `game::base::power::ledger` counts a burner's
+`power_supply` only through that component, so a supplier standing without
+one supplies nothing. That is deliberately the strict direction: the failure
+it produces is loud (the base goes dark) where the lenient one is silent (a
+supplier running on free power forever), and `stand_ample_grid_supply` in the
+test fixtures is the one place that had to be told, which is itself the
+evidence that the two writers are the only real ones.
+
+**`idle_machine_system` needed a guard it did not need before.** It sets
+`Idle` on every machine with a `MachineStatus` and nobody posted to it — and
+nobody is ever posted to a supplier. Without the guard the supplier would
+flip `Starved`↔`Idle` every tick, and `set_machine_status` logs every
+transition: two lines a tick, forever, which is the exact failure the chain
+order was built to prevent. So a structure whose def runs no job is skipped
+there, and its status stays `power_grid_system`'s alone.
+
+**Spend and refuel run inside `power_grid_system`, ahead of `ledger`.** The
+system is exclusive (`world: &mut World`) and first in a `.chain()` with
+`idle_machine_system` precisely so dark is decided before anything reads or
+writes a `MachineStatus`. A refuel landing after the ledger would darken the
+base for one tick in every twenty; a separate system would have to be wedged
+into that chain and would be a second place the ordering argument had to
+hold. Decrement first, then refuel on reaching zero, so a supplier that can
+pay never leaves the grid at all — the window is a *cost*, not an outage.
+
+**One adjacency-pull rule, extracted rather than copied.**
+`assembler_system` inlined its own `by_tile` + `ORTHOGONAL` walk;
+`Game::take_from_adjacent` is the player's collect and needs `&mut Game`,
+which a bevy system does not have. Rather than leave two silent copies of
+"which tiles a machine can reach", the walk is now
+`game::base::collect::plan_adjacent_take` — plan, because both callers read a
+neighbour's `output` and write their own buffer through the same
+`Query<&mut Stock>` and cannot hold both borrows — and the assembler calls
+it. It keeps `ORTHOGONAL`'s own array order rather than `adjacent_stock`'s
+`(x, y)` sort, so no existing pull moved.
+
+**The walk was extracted and the map was not, which left half the rule at
+each call site.** `plan_adjacent_take` takes `by_tile` as a *parameter*, so
+which cells are candidates at all is decided by whoever builds the map — and
+the two callers built it differently: `assembler_system` from a query
+carrying `&Structure`, `burn_grid_upkeep` from one filtered on `Stock`
+alone. Harmless today, because nothing but a structure carries a `Stock`, and
+precisely the drift the extraction existed to prevent: the doc comment
+claimed to be "the one machine-to-machine reach rule" and was only ever the
+one *walk*. `collect::feeders_by_tile` is the other half, and the membership
+rule is its **parameter type** — `(Entity, &Structure, &Position)`, so a
+caller cannot feed it anything it has not already proved is a structure.
+`With<Stock>` stays a query filter at each site rather than joining the
+tuple, because `&Stock` in `assembler_system`'s first query would conflict
+with its own `Query<&mut Stock>` and bevy would refuse the schedule. Nothing
+in the game constructs a `Stock` off a `Structure`, so there is no test that
+can fail here — the signature is what holds it.
+
+**What it cost the `chains` dev template, which is the measurement.** That
+template's three Rechargers stood with nothing feeding them, so the whole
+base went dark on tick 20 and the chain stopped — the launcher's
+`the_chains_template_starts_with_a_chain_that_actually_runs` is what caught
+it. Two things came out of rebuilding it. A supplier bank has to be a *row*
+against stocked Depots rather than three loose Rechargers, because a Depot
+whose four orthogonal tiles are all occupied is a Depot no hauler can reach:
+the first rebuild boxed one in and stranded the Power Conduit's worker
+instead of the grid. And the arithmetic does not close on production alone at
+this base's size — one Conduit's surplus over the Winding Node's demand is
+83 cells per 1,000 ticks against three suppliers' 150 — so the template
+carries a stockpile, which is what a base that has been running actually
+looks like.
+
+**Task E, added after Task D shipped, from two questions Task D raised and
+declined to settle unilaterally.** Both are amendments to the seam above, not
+new ones — the section title still names the whole of it.
+
+**E1: `power_upkeep` names its fuel, `bool` never did.** Task D's own doc
+comment flagged this: *"`power_upkeep: Option<ItemId>` would be strictly more
+moddable at zero extra cost, and I did not take that decision
+unilaterally."* The field is now `#[serde(default)] pub power_upkeep:
+Option<ItemId>`, `Some("power_cell")` on both shipped suppliers, `None`
+everywhere else including the Home — CLAUDE.md's moddability rule is the
+whole argument, and nothing about *which* suppliers burn or *how fast*
+changed, so this cost nothing behaviorally. No save bump: `power_upkeep`
+lives on `StructureDef`, a `.ron` def, never on `StructureSave`.
+`burn_grid_upkeep` no longer hardcodes `ids::POWER_CELL` — it collects each
+burner's own fuel id alongside its name in the same pass, and asks the
+adjacent buffer for *that* item. A typo'd id is a supplier that can never be
+fed and would fail to compile nowhere, so
+`every_burning_supplier_supplies_something_and_the_home_burns_nothing` grew a
+third assertion: every declared fuel must resolve in `ItemDb`, beside the
+two it already made (supplies something, Home burns nothing).
+
+**E2: a dry supplier does nothing, not just the Grid half.** Before this,
+`power_regen_system` read no `PowerFuel` at all, so a Recharger burned
+through its Power Cells for the *grid* contribution while still trickling
+Power into the player for free — Task D's own description said so
+plainly ("the Grid half burns a Power Cell..."), because it was the honest
+read of what the code did. The argument for closing it is a standing note in
+this repo: *Power is not a limiting resource — the Recharger Node deletes
+hunger as a cost for 10 fragments.* The personal trickle is the half the
+player actually *feels*, so leaving it ungated left the whole point of
+gating the other half moot in play, whatever the grid ledger said.
+
+**One predicate, not a third copy of it.** `ledger` already asked "is this
+supplier paying?" inline; gating `power_regen_system` on the same fact
+without extracting it would have been exactly the copy CLAUDE.md's doc-comment
+rule exists to prevent. `game::base::power::is_fuelled(def, fuel)` is now that
+predicate — `power_upkeep.is_none() || fuel.is_some_and(|f| f.ticks_left >
+0)` — and both `ledger` and `power_regen_system` call it. `power_regen_system`
+needed `Option<&PowerFuel>` added to its structure query to have anything to
+pass it; nothing else about the query changed, and the existing locale guard
+(`Locale::Base` only, never the player's raw `Position`) is untouched — this
+is a second, independent gate on the same loop, not a replacement for the
+first.
+
+**The rate-pinning test passed before the change, and that had to be proven,
+not assumed.** A fuelled supplier's trickle is untouched by this — the same
+`+per_tick, -HUNGER_DECAY_PER_TICK` arithmetic as always — so
+`a_fuelled_recharger_still_trickles_at_its_authored_rate` is green on both
+sides of the diff. Left alone, a passing-both-ways test proves nothing; it
+was checked by temporarily doubling `power_regen_system`'s `restore` call,
+confirming the test failed, then reverting. Both trickle tests also had to
+spend the player's `PowerReserve` down before measuring: `power_regen_system`
+runs ahead of `needs_tick_system` in the schedule, so a reserve left at
+`POWER_MAX` saturates at the same `POWER_MAX - HUNGER_DECAY_PER_TICK` steady
+state whether or not the trickle actually ran, and an early draft of both
+tests read that steady state as "nothing changed" in exactly the case it
+meant nothing.
+
+**Fixtures that bare-spawn a Recharger went quiet too, and for the right
+reason.** `tests::support::spawn_structure_at` spawns only `Structure` and
+`Position`, no `PowerFuel` — its own doc says it exists for what a standing
+structure *enables*, not for the build rules — and absence reading as dry is
+this seam's own strict direction (see `PowerFuel`'s doc, above). Three
+`tests::building` fixtures and one in `tests::power` had never needed to care
+because the trickle never checked fuel before; each now inserts a fuelled
+`PowerFuel` right after the bare spawn, the same charge `Game::spawn_structure`
+would have given a real one. `tests::support::stand_ample_grid_supply` and
+`dev-saves/chains.ron` — the two fixtures flagged as likely fallout — needed
+no change: the grid-supply bank stands its Rechargers a million tiles from
+anywhere `power_regen_system`'s radius could reach, and the template's two
+Depots hold 150 Power Cells apiece against a 400-tick run that burns at most
+60, so neither ever goes dry inside the window a test actually watches.
+
+**The Recharger's description needed rewriting a second time.** Task D's
+text — "the Grid half burns a Power Cell off an adjacent buffer to stay up"
+— was accurate exactly because the trickle was *not* gated; the moment both
+halves are, that sentence describes half the machine. It now says the
+building burns to "keep either half running, and goes quiet on both the
+moment it can't pay" — a property of the structure, not of one output.

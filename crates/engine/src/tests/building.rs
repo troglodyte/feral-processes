@@ -812,6 +812,16 @@ fn a_recharger_node_in_range_nets_power_upward_on_a_real_tick() {
     // from `Position` would be testing the wrong coordinate space.
     stand_in_base(&mut game);
     spawn_structure_at(&mut game, "recharger_node", 0, 0);
+    // `spawn_structure_at` is deliberately bare — see its own doc comment —
+    // so a Recharger it stands carries no charge until given one. Fuelled
+    // here because this test is about the trickle a *paying* supplier gives,
+    // not about the dry gate `tests::power` covers.
+    let recharger = find_structure_by_kind(&mut game, "recharger_node").unwrap();
+    game.world
+        .entity_mut(recharger)
+        .insert(crate::components::PowerFuel {
+            ticks_left: crate::tuning::POWER_UPKEEP_TICKS,
+        });
 
     game.wait();
 
@@ -848,6 +858,15 @@ fn reaching_a_recharger_node_while_drained_costs_no_integrity() {
     let before = *game.world.get::<Stats>(player).unwrap();
     stand_in_base(&mut game);
     spawn_structure_at(&mut game, "recharger_node", 0, 0);
+    // See `a_recharger_node_in_range_nets_power_upward_on_a_real_tick`: a
+    // bare `spawn_structure_at` carries no charge, and this test is about
+    // regen ordering, not the dry gate.
+    let recharger = find_structure_by_kind(&mut game, "recharger_node").unwrap();
+    game.world
+        .entity_mut(recharger)
+        .insert(crate::components::PowerFuel {
+            ticks_left: crate::tuning::POWER_UPKEEP_TICKS,
+        });
 
     game.wait();
 

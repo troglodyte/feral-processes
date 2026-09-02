@@ -864,7 +864,26 @@ pub(super) fn stand_ample_grid_supply(game: &mut Game) {
         .unwrap_or(1);
     let count = 1000u32.div_ceil(per);
     for i in 0..count {
-        spawn_structure_at(game, "recharger_node", -1_000_000, -1_000_000 - i as i32);
+        // `spawn_structure_at`'s shape — a bare `Structure` and `Position`,
+        // no `Durability` — plus an inexhaustible charge. A Recharger burns a
+        // Power Cell every `POWER_UPKEEP_TICKS` and supplies nothing while it
+        // cannot pay (`StructureDef::power_upkeep`), and these stand a million
+        // tiles from anything that could feed them. Absurd for the same reason
+        // the count is: the grid must never be the reason a fixture machine
+        // goes dark, and a bank that quietly starved on tick 20 would read as
+        // the multi-tick tests it props up having broken.
+        game.world.spawn((
+            Structure {
+                kind: "recharger_node".to_string(),
+            },
+            Position {
+                x: -1_000_000,
+                y: -1_000_000 - i as i32,
+            },
+            crate::components::PowerFuel {
+                ticks_left: u32::MAX,
+            },
+        ));
     }
     game.world.insert_resource(GridSupplyStood);
 }
@@ -1244,6 +1263,18 @@ pub(super) fn clear_creatures_along_ray(
 /// Replaces the player's whole inventory with `stock`, so a taming test
 /// states exactly which catalysts are on hand instead of inheriting
 /// whatever `Game::new`'s starting kit holds.
+/// Tops the player's reserve back up to `POWER_MAX`.
+///
+/// A hand-compile's ticks drain Power like any others and
+/// `tuning::HAND_CRAFT_POWER_FLOOR` refuses a batch that would run it out,
+/// so a fixture that compiles two batches in a row has to restock the
+/// reserve exactly as it restocks the pack — the second batch is otherwise
+/// refused for a reason the test is not about.
+pub(super) fn fill_power(game: &mut Game) {
+    let player = game.player_entity();
+    game.world.get_mut::<PowerReserve>(player).unwrap().fill();
+}
+
 pub(super) fn set_inventory(game: &mut Game, stock: &[(&str, u32)]) {
     let player = game.player_entity();
     let mut inv = game.world.get_mut::<Inventory>(player).unwrap();

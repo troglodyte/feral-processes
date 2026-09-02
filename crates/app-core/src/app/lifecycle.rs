@@ -98,6 +98,8 @@ impl App {
             pending_craft: None,
             craft_quantity_input: String::new(),
             careful_craft: false,
+            compile_progress: None,
+            compile_ticks_carry: 0.0,
             pending_order: None,
             order_quantity_input: String::new(),
             standing_order: false,

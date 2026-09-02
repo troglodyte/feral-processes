@@ -310,6 +310,27 @@ pub struct StructureDef {
     /// parse, as a building that supplies nothing.
     #[serde(default)]
     pub power_supply: u32,
+    /// The item this structure burns to keep supplying, `None` meaning it
+    /// burns nothing — see `systems::power_grid_system`. A supplier that
+    /// names one carries `components::PowerFuel`, spends one unit off an
+    /// orthogonally adjacent output buffer every `tuning::POWER_UPKEEP_TICKS`,
+    /// and contributes **zero** `power_supply` — and, per
+    /// `game::base::power::is_fuelled`, restores no `power_regen` trickle
+    /// either — for as long as it cannot pay.
+    ///
+    /// Data decides *which* suppliers burn and *what* they burn; `tuning.rs`
+    /// decides how fast. The Home deliberately leaves this unset: its free
+    /// supply is the bootstrap, and a base with no Power Cells could never
+    /// make the first one if the thing powering the Conduit needed one
+    /// already.
+    ///
+    /// `#[serde(default)]` so every existing structure file, mods included,
+    /// keeps parsing as a supplier that burns nothing. The census
+    /// `tests::assets::every_burning_supplier_supplies_something_and_the_home_burns_nothing`
+    /// asserts every shipped fuel id resolves to a real item — a typo here
+    /// ships a supplier that can never be fed and never says why.
+    #[serde(default)]
+    pub power_upkeep: Option<ItemId>,
     /// Whether this structure issues contracts — see
     /// `Game::contract_board`. A plain `bool` rather than a block of its own,
     /// because a Broker has no per-structure configuration: what it offers is
@@ -341,6 +362,22 @@ pub struct StructureDef {
     /// plain, non-portal structure).
     #[serde(default)]
     pub zone_portal: bool,
+    /// Extra bill lines that only apply once the current zone reaches
+    /// `min_zone`: `(min_zone, item, base_qty)`. Additive on top of
+    /// `build_cost`, which is implicitly `min_zone: 1` — a separate field
+    /// rather than widening `build_cost`'s own tuple, because that would
+    /// touch every one of the 30 shipped structure files and every mod's.
+    ///
+    /// For a `zone_portal` structure, `Game::structure_build_cost` ramps
+    /// **each** line — `build_cost` and `zone_build_cost` alike — from the
+    /// zone it was introduced in rather than from zone 1, so a line authored
+    /// for a later sector charges its authored base the first zone it can
+    /// legally be demanded, not an already-inflated number. For any other
+    /// structure the qualifying lines are appended unramped. `#[serde(default)]`
+    /// so every existing structure file, mods included, keeps parsing as
+    /// authoring no later-sector lines.
+    #[serde(default)]
+    pub zone_build_cost: Vec<(u32, ItemId, u32)>,
     /// Whether the run's *first* one of these costs nothing —
     /// `build_cost` is waived until one has actually been raised, and
     /// charged in full for every one after it.

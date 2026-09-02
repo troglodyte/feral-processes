@@ -195,5 +195,31 @@
   `FERAL_ASSETS_DIR` is the one override and a second per-path override is
   refused; empty reads as unset. `migrate_from_repo` is a **move, not a
   copy**, and does nothing when the data directory already holds a `.bin`.
+- **A path that spends ticks owes `after_tick()`**, and there are three:
+  `handle_key`'s tail, `update_realtime` and `App::advance_compile`. That
+  function is the one place `sync_info_tab_to_locale`,
+  `flush_battle_telemetry`, `flush_profile_writes`, `maybe_autosave` and
+  `show_next_notification` happen, so a fourth site that forgets it compiles
+  clean and simply *suspends* all five — `advance_compile` did, and at
+  `AUTOSAVE_INTERVAL_TICKS = 50` a twelve-shell batch was 3,600 ticks and
+  seventy-two autosaves that never fired. It self-heals on the next idle
+  tick, which is why nothing caught it. **Once per call, never once per
+  tick**: `maybe_autosave` is keyed to the game clock, so inside the loop the
+  same batch writes seventy-two saves in one frame instead. The visible
+  consequence is that a queued notification takes the screen the instant a
+  batch ends — the timing rule working, since `show_next_notification`
+  returns unless `mode == Mode::Playing`. And **`finish_compile` calls
+  `after_world_action` rather than restating its checks**: written as a copy
+  it had already dropped the `SoundEvent::Defeat` line, so a run that ended
+  on a compile tick reached the game-over screen in silence.
+- **A screen that spends the engine's ticks paces them against `dt`, never
+  one per rendered frame.** One-tick-per-frame compiles fine and reads right
+  at 60fps, and it ties the cost the engine *charges* to the frame rate the
+  machine happens to render at — `hand_craft_ticks` pricing hand-compiling
+  as a real cost means nothing if a faster GPU makes the batch cheaper.
+  `COMPILE_TICKS_PER_SECOND` is the rate and `compile_ticks_carry` is
+  `BattleReveal::accumulated`'s carry, so a frame worth less than one tick is
+  not rounded away. The *ticks spent must still be exactly* `hand_craft_ticks`
+  — the pace is presentation, the cost is not.
 - **Engine test fixtures live in `crates/engine/src/tests/support.rs`.** Look
   there before writing a new one.

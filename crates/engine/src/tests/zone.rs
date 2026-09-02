@@ -821,19 +821,19 @@ fn portal_cost_grows_by_half_the_base_rate_per_zone() {
             .expect("a portal is bought with portal fragments")
     };
 
-    assert_eq!(fragments(&game, &portal), 10, "zone 1 pays the base rate");
+    assert_eq!(fragments(&game, &portal), 24, "zone 1 pays the base rate");
 
     game.world.insert_resource(ZoneLevel(2));
     assert_eq!(
         fragments(&game, &portal),
-        15,
+        36,
         "each zone adds half the base rate, not another whole one"
     );
 
     game.world.insert_resource(ZoneLevel(5));
     assert_eq!(
         fragments(&game, &portal),
-        30,
+        72,
         "the ramp stays linear in the base rate all the way down"
     );
 
@@ -849,27 +849,41 @@ fn portal_cost_grows_by_half_the_base_rate_per_zone() {
     );
 }
 
+/// Every line of the bill, not just Portal Fragment — `zone_build_cost` gave
+/// the portal three more lines, two of which only exist from zone 2 on, so a
+/// test that still checked one item alone would stop noticing whether the
+/// filed request's stored price actually agrees with a fresh quote. Priced
+/// through `Game::structure_build_cost` itself rather than a hand-kept copy
+/// of the ramp, so a retuned rate cannot make this test lie about what it
+/// checked.
 #[test]
 fn portal_build_cost_ramps_with_current_zone_level() {
     let mut game = Game::new(42, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     place_home(&mut game);
+    let portal = game
+        .structure_defs()
+        .into_iter()
+        .find(|d| d.id == "portal")
+        .expect("portal.ron should load");
 
-    // Zone 1: base rate from portal.ron, 10 PortalFragment, unramped.
-    game.world
-        .get_mut::<Inventory>(player)
-        .unwrap()
-        .add(ItemId::from(ids::PORTAL_FRAGMENT), 10);
+    // Zone 1: every build_cost line at its authored base, unramped.
+    let zone1_cost = game.structure_build_cost(&portal);
+    {
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        for (item, qty) in &zone1_cost {
+            inv.add(item.clone(), *qty);
+        }
+    }
     stand_in_base(&mut game);
     place_now(&mut game, "portal", 1, 0).unwrap();
-    assert_eq!(
-        game.world
-            .get::<Inventory>(player)
-            .unwrap()
-            .count(&ItemId::from(ids::PORTAL_FRAGMENT)),
-        0,
-        "zone 1 portal should cost the base rate"
-    );
+    for (item, _) in &zone1_cost {
+        assert_eq!(
+            game.world.get::<Inventory>(player).unwrap().count(item),
+            0,
+            "zone 1 portal should cost exactly the base bill"
+        );
+    }
 
     game.move_player(1, 0);
     assert_eq!(game.player_status().zone, 2);
@@ -877,15 +891,23 @@ fn portal_build_cost_ramps_with_current_zone_level() {
     // (see `breaching_carries_every_structure_and_its_offset_from_home`),
     // so the new zone needs no fresh Home before building.
 
-    // Zone 2: base rate plus half of it again (10 + 5 = 15), not double.
-    game.world
-        .get_mut::<Inventory>(player)
-        .unwrap()
-        .add(ItemId::from(ids::PORTAL_FRAGMENT), 14);
-    // The ramp is read off the bill of materials the request is filed
-    // against, not off a refusal: a deploy no longer refuses for want of
-    // materials, so what says "14 is not enough" is the site itself
-    // reporting one fragment still outstanding.
+    // Zone 2: the sector-1 lines ramp, and Trace Sniffer plus Cache Grain
+    // join at their own authored base.
+    let zone2_cost = game.structure_build_cost(&portal);
+    assert_ne!(
+        zone2_cost, zone1_cost,
+        "the fixture is worthless unless zone 2 actually quotes a different bill"
+    );
+    {
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        for (item, qty) in &zone2_cost {
+            // One short of every line, so the ramp is read off the bill of
+            // materials the request is filed against, not off a refusal: a
+            // deploy no longer refuses for want of materials, so what says
+            // "not enough" is the site itself reporting what's outstanding.
+            inv.add(item.clone(), qty.saturating_sub(1));
+        }
+    }
     game.place_structure("portal", 1, 0)
         .expect("a request is filed whatever is in the pack");
     let site = game.build_site_at(1, 0).expect("the request stands there");
@@ -894,24 +916,25 @@ fn portal_build_cost_ramps_with_current_zone_level() {
             .get::<crate::components::BuildSite>(site)
             .expect("it is a build site")
             .cost,
-        vec![(ItemId::from(ids::PORTAL_FRAGMENT), 15)],
-        "zone 2 is the base rate plus half of it again, not double"
+        zone2_cost,
+        "the filed request carries exactly what zone 2 quotes"
     );
     game.cancel_build_request(site).unwrap();
-    game.world
-        .get_mut::<Inventory>(player)
-        .unwrap()
-        .add(ItemId::from(ids::PORTAL_FRAGMENT), 1);
+    {
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        for (item, _) in &zone2_cost {
+            inv.add(item.clone(), 1);
+        }
+    }
     stand_in_base(&mut game);
     place_now(&mut game, "portal", 1, 0).unwrap();
-    assert_eq!(
-        game.world
-            .get::<Inventory>(player)
-            .unwrap()
-            .count(&ItemId::from(ids::PORTAL_FRAGMENT)),
-        0,
-        "zone 2 portal should cost the base rate plus half again"
-    );
+    for (item, _) in &zone2_cost {
+        assert_eq!(
+            game.world.get::<Inventory>(player).unwrap().count(item),
+            0,
+            "zone 2 portal should cost exactly what zone 2 quotes"
+        );
+    }
 }
 
 #[test]

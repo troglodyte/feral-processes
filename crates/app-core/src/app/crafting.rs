@@ -142,19 +142,48 @@ impl App {
         self.craft_quantity_input = n.to_string();
     }
 
-    /// Calls `Game::craft(result, quantity)` and returns to normal play,
-    /// shared by the craft-quantity page's Enter, `[F]` (5), and `[M]` (max)
-    /// paths. A quantity of 0 (e.g. Enter on an explicitly typed "0") is a
-    /// silent no-op rather than a round-trip to the engine for an error.
+    /// Arms `Game::begin_hand_craft` and opens `Mode::Compiling`, shared by
+    /// the craft-quantity page's Enter, `[F]` (5), and `[M]` (max) paths. A
+    /// quantity of 0 (e.g. Enter on an explicitly typed "0") is a silent
+    /// no-op rather than a round-trip to the engine for an error.
+    ///
+    /// **Arms and returns — it does not drain the batch itself.**
+    /// `App::advance_compile` is the only thing that spends a tick, driven
+    /// once a frame while `Mode::Compiling` is open, the same split
+    /// `advance_reveal`/`advance_status` already make between "start this"
+    /// and "spend a frame of it."
     fn commit_craft(&mut self, result: ItemId, quantity: u32) {
         if quantity == 0 {
             self.mode = Mode::Playing;
             return;
         }
-        if let Some(game) = &mut self.game {
-            let outcome = game.craft(&result, quantity, self.careful_craft);
-            self.report(outcome);
+        let Some(game) = &mut self.game else {
+            self.mode = Mode::Playing;
+            return;
+        };
+        let outcome = game.begin_hand_craft(&result, quantity, self.careful_craft);
+        let armed = outcome.is_ok();
+        self.report(outcome);
+        if armed {
+            self.compile_progress = None;
+            self.compile_ticks_carry = 0.0;
+            self.mode = Mode::Compiling;
+        } else {
+            self.mode = Mode::Playing;
         }
+    }
+
+    /// Any key aborts the compile in flight — the spec's whole answer for
+    /// this screen, and `Mode::CellDescribe`'s precedent for taking `_key`
+    /// unused: there is nothing to page through, so unlike most popups
+    /// there is no separate Esc case. `Game::abort_hand_craft` keeps every
+    /// unit already finished and refunds the one in flight.
+    pub(crate) fn handle_compiling_key(&mut self, _key: GameKey) {
+        if let Some(game) = &mut self.game {
+            game.abort_hand_craft();
+        }
+        self.compile_progress = None;
+        self.compile_ticks_carry = 0.0;
         self.mode = Mode::Playing;
     }
 }

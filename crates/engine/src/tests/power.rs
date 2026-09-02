@@ -19,9 +19,10 @@
 use bevy_ecs::prelude::*;
 
 use super::support::{
-    ScratchAssets, copy_shipped_assets, find_structure_by_kind, node_output, park_at_post,
-    scratch_assets_dir, spawn_machine_at, spawn_structure_at, spawn_tamed, stand_in_base,
-    stand_in_base_at, stand_player_at_post,
+    ScratchAssets, assets_dir_with_extra_structure, copy_shipped_assets, find_structure_by_kind,
+    give, node_output, park_at_post, place_now, scratch_assets_dir, spawn_machine_at,
+    spawn_structure_at, spawn_tamed, stand_in_base, stand_in_base_at, stand_player_at_post,
+    test_assets_dir,
 };
 use crate::components::{MachineStatus, Position, PowerReserve, Stock, Structure, Task};
 use crate::game::base::power::ledger;
@@ -585,6 +586,16 @@ fn power_regen_still_refills_the_party_on_a_dark_base() {
     let mut game = game_on_a_short_grid("power_regen_dark", 4005);
     let node = spawn_machine_at(&mut game, "test_greedy_node", 3, 4);
     spawn_structure_at(&mut game, "recharger_node", 3, 6);
+    // `spawn_structure_at` is deliberately bare — see its own doc comment —
+    // so a burning supplier it stands carries no charge until given one.
+    // Fuelled here because this test is about the trickle surviving a dark
+    // *grid*, not about the dry gate `PowerFuel` itself is.
+    let recharger = find_structure_by_kind(&mut game, "recharger_node").unwrap();
+    game.world
+        .entity_mut(recharger)
+        .insert(crate::components::PowerFuel {
+            ticks_left: crate::tuning::POWER_UPKEEP_TICKS,
+        });
     stand_in_base_at(&mut game, 4, 6);
     let player = game.player_entity();
     game.world
@@ -678,5 +689,425 @@ fn base_power_reports_draw_and_supply_before_the_first_tick() {
         supply, 2_000_000,
         "the one deployed source's supply — `Game::new` deploys no Home or \
          any other structure on its own, so this is the total"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Upkeep: a supplier that declares `StructureDef::power_upkeep` burns a Power
+// Cell off an adjacent buffer to stay on the grid, and supplies nothing while
+// it cannot pay — `systems::power_grid_system`.
+//
+// These lean on the *shipped* Recharger Node rather than a scratch fixture,
+// deliberately: `power_upkeep` is a content decision and the whole feature is
+// only real if the structure the player actually builds carries it.
+// ---------------------------------------------------------------------------
+
+/// A base on the shipped assets with a Home standing and the party inside
+/// base space, which is the only place a supplier can be deployed.
+fn base_with_home(seed: u32) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 400);
+    place_now(&mut game, "home", 1, 0).unwrap();
+    game.enter_base().unwrap();
+    game
+}
+
+/// What `ledger` says the base supplies right now — the figure a starving
+/// supplier has to take its own contribution out of.
+fn grid_supply(game: &Game) -> u32 {
+    let db = game.world.resource::<StructureDb>();
+    ledger(&game.world, db).supply
+}
+
+/// A shipped structure's authored `power_supply`, so the assertions below
+/// name the *rule* rather than a number a retune would make vacuous.
+fn authored_supply(game: &Game, kind: &str) -> u32 {
+    game.world
+        .resource::<StructureDb>()
+        .get(kind)
+        .expect("a shipped structure")
+        .power_supply
+}
+
+/// Stands a Recharger Node at base-space `(1, 0)` with a Depot touching it at
+/// `(2, 0)`, and puts `cells` Power Cells on the Depot's shelf. Returns the
+/// two entities.
+fn recharger_beside_a_depot(game: &mut Game, cells: u32) -> (Entity, Entity) {
+    place_now(game, "recharger_node", 1, 0).expect("floor beside the origin");
+    place_now(game, "depot", 2, 0).expect("floor two steps out");
+    let recharger = find_structure_by_kind(game, "recharger_node").unwrap();
+    let depot = find_structure_by_kind(game, "depot").unwrap();
+    // Every deploy above spent a turn, and a supplier that is already
+    // standing burns through those. Topped back up here so the windows the
+    // tests below count start from a whole one rather than from whatever the
+    // fixture happened to cost.
+    game.world
+        .get_mut::<crate::components::PowerFuel>(recharger)
+        .expect("a burning supplier carries its charge")
+        .ticks_left = crate::tuning::POWER_UPKEEP_TICKS;
+    if cells > 0 {
+        game.world
+            .get_mut::<Stock>(depot)
+            .unwrap()
+            .output
+            .insert(ItemId::from(ids::POWER_CELL), cells);
+    }
+    (recharger, depot)
+}
+
+/// What is on a structure's output shelf.
+fn shelved(game: &Game, structure: Entity, item: &str) -> u32 {
+    game.world
+        .get::<Stock>(structure)
+        .unwrap()
+        .output
+        .get(&ItemId::from(item))
+        .copied()
+        .unwrap_or(0)
+}
+
+#[test]
+fn a_supplier_beside_a_stocked_buffer_stays_lit_and_burns_one_cell_a_window() {
+    let mut game = base_with_home(4101);
+    let (recharger, depot) = recharger_beside_a_depot(&mut game, 10);
+    let lit = grid_supply(&game);
+
+    for _ in 0..(crate::tuning::POWER_UPKEEP_TICKS * 2 + 1) {
+        game.tick();
+    }
+
+    assert_eq!(
+        grid_supply(&game),
+        lit,
+        "a supplier that can pay never leaves the grid"
+    );
+    assert_eq!(
+        shelved(&game, depot, ids::POWER_CELL),
+        8,
+        "two upkeep windows closed inside that span, so exactly two cells \
+         left the shelf"
+    );
+    assert!(
+        game.world
+            .get::<crate::components::PowerFuel>(recharger)
+            .expect("a burning supplier carries its charge")
+            .ticks_left
+            > 0,
+        "and it is carrying the charge it just bought"
+    );
+}
+
+#[test]
+fn a_supplier_with_nothing_to_burn_goes_dark_when_its_charge_runs_out() {
+    let mut game = base_with_home(4102);
+    let (_, _) = recharger_beside_a_depot(&mut game, 0);
+    let lit = grid_supply(&game);
+    let recharger_supply = authored_supply(&game, "recharger_node");
+    assert!(recharger_supply > 0, "the fixture has to be worth losing");
+
+    for _ in 0..(crate::tuning::POWER_UPKEEP_TICKS - 1) {
+        game.tick();
+    }
+    assert_eq!(
+        grid_supply(&game),
+        lit,
+        "it is lit right up to the tick its charge runs out"
+    );
+
+    game.tick();
+    assert_eq!(
+        grid_supply(&game),
+        lit - recharger_supply,
+        "with an empty shelf beside it the Recharger's whole supply leaves \
+         the grid"
+    );
+}
+
+#[test]
+fn a_dry_supplier_is_announced_starved_exactly_once() {
+    let mut game = base_with_home(4103);
+    recharger_beside_a_depot(&mut game, 0);
+
+    for _ in 0..(crate::tuning::POWER_UPKEEP_TICKS * 3) {
+        game.tick();
+    }
+
+    // `Game::message_log` is the raw log, uncondensed, so this really is a
+    // count of lines pushed rather than of rows a screen would draw.
+    assert_eq!(
+        log_hits(&game, "Recharger Node is starved"),
+        1,
+        "entering the state is news; staying in it is not"
+    );
+}
+
+#[test]
+fn the_home_never_burns_and_never_goes_dark() {
+    let mut game = base_with_home(4104);
+    // The Depot touches the Home at base-space (0, 0), so a Home that burned
+    // would have a full shelf within reach and the test would see it drain.
+    place_now(&mut game, "depot", 0, 1).expect("floor beside the origin");
+    let depot = find_structure_by_kind(&mut game, "depot").unwrap();
+    game.world
+        .get_mut::<Stock>(depot)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::POWER_CELL), 10);
+    let home = find_structure_by_kind(&mut game, "home").unwrap();
+    assert!(
+        game.world
+            .get::<crate::components::PowerFuel>(home)
+            .is_none(),
+        "the Home declares no upkeep, so it carries no charge to run out"
+    );
+    let lit = grid_supply(&game);
+
+    for _ in 0..(crate::tuning::POWER_UPKEEP_TICKS * 3) {
+        game.tick();
+    }
+
+    assert_eq!(
+        grid_supply(&game),
+        lit,
+        "the Home's supply is the bootstrap and never leaves the grid"
+    );
+    assert_eq!(
+        shelved(&game, depot, ids::POWER_CELL),
+        10,
+        "and it spends nothing to keep it"
+    );
+}
+
+#[test]
+fn a_machine_lit_only_by_a_burning_supplier_goes_dark_with_it() {
+    let mut game = base_with_home(4105);
+    // Home 4 + Recharger 4 against five Mining Nodes drawing 1 each: every
+    // one of them fits while the Recharger pays, and one loses the cut the
+    // moment it stops. Deployed *before* the supplier, so the turns they
+    // each spend do not come off the charge this test is timing.
+    for i in 0..5 {
+        place_now(&mut game, "mining_node", -1, i).expect("floor west of the origin");
+    }
+    recharger_beside_a_depot(&mut game, 0);
+    let db = game.world.resource::<StructureDb>();
+    let before = ledger(&game.world, db);
+    assert!(
+        before.dark.is_empty(),
+        "the fixture has to start with the whole base lit"
+    );
+
+    for _ in 0..crate::tuning::POWER_UPKEEP_TICKS {
+        game.tick();
+    }
+
+    let db = game.world.resource::<StructureDb>();
+    let after = ledger(&game.world, db);
+    assert_eq!(
+        after.dark.len(),
+        1,
+        "the existing cut runs on the reduced supply — one Mining Node loses \
+         it, not the whole base"
+    );
+}
+
+#[test]
+fn a_suppliers_remaining_charge_survives_a_save_and_load() {
+    let mut game = base_with_home(4106);
+    let (recharger, _) = recharger_beside_a_depot(&mut game, 10);
+    let spent = 3;
+    for _ in 0..spent {
+        game.tick();
+    }
+    let before = game
+        .world
+        .get::<crate::components::PowerFuel>(recharger)
+        .expect("a burning supplier carries its charge")
+        .ticks_left;
+    assert_eq!(
+        before,
+        crate::tuning::POWER_UPKEEP_TICKS - spent,
+        "three ticks off a full charge"
+    );
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_power_upkeep_save_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let reloaded = find_structure_by_kind(&mut loaded, "recharger_node")
+        .expect("the supplier comes back off the save");
+    assert_eq!(
+        loaded
+            .world
+            .get::<crate::components::PowerFuel>(reloaded)
+            .expect("and it comes back carrying its charge")
+            .ticks_left,
+        before,
+        "a partly-spent charge is state, not something a tick recomputes — \
+         losing it would refuel the whole base on every reload"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Task E2: a dry supplier's personal trickle (`power_regen_system`) gates on
+// the same `PowerFuel` charge the Grid half already reads — see
+// `game::base::power::is_fuelled`, the one predicate both sides ask.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_dry_recharger_trickles_no_power_into_the_party() {
+    let mut game = base_with_home(4107);
+    let (recharger, _) = recharger_beside_a_depot(&mut game, 0);
+
+    // Run the fixture's charge all the way out before timing anything, so
+    // the window below starts from a Recharger that is genuinely dry.
+    for _ in 0..crate::tuning::POWER_UPKEEP_TICKS {
+        game.tick();
+    }
+    assert_eq!(
+        game.world
+            .get::<crate::components::PowerFuel>(recharger)
+            .unwrap()
+            .ticks_left,
+        0,
+        "the fixture has to actually be dry for this test to mean anything"
+    );
+
+    let player = game.player_entity();
+    // Off the ceiling, or a saturated `PowerReserve` clamped at `POWER_MAX`
+    // would read the same whether the trickle ran or not — `power_regen_system`
+    // runs ahead of decay in the schedule, so a reserve left at the cap
+    // reports the same post-decay number every tick regardless.
+    game.world
+        .get_mut::<PowerReserve>(player)
+        .unwrap()
+        .spend(40.0);
+    let before = game.world.get::<PowerReserve>(player).unwrap().get();
+
+    game.tick();
+
+    let after = game.world.get::<PowerReserve>(player).unwrap().get();
+    assert!(
+        (after - (before - crate::tuning::HUNGER_DECAY_PER_TICK)).abs() < 1e-4,
+        "a Recharger that cannot pay must trickle nothing — the party should \
+         see ordinary decay and nothing else: {before} -> {after}"
+    );
+}
+
+#[test]
+fn a_fuelled_recharger_still_trickles_at_its_authored_rate() {
+    // Pins the rate a fuelled supplier has always paid, so gating the dry
+    // case above cannot silently retune the paying one too.
+    let mut game = base_with_home(4108);
+    recharger_beside_a_depot(&mut game, 10);
+    let regen = game
+        .world
+        .resource::<StructureDb>()
+        .get("recharger_node")
+        .and_then(|d| d.power_regen.as_ref())
+        .expect("the Recharger Node ships with a power_regen block")
+        .per_tick;
+
+    let player = game.player_entity();
+    // Off the ceiling — see the dry test above for why a saturated reserve
+    // would make this assertion pass whether or not the trickle ran.
+    game.world
+        .get_mut::<PowerReserve>(player)
+        .unwrap()
+        .spend(40.0);
+    let before = game.world.get::<PowerReserve>(player).unwrap().get();
+
+    game.tick();
+
+    let after = game.world.get::<PowerReserve>(player).unwrap().get();
+    assert!(
+        (after - (before + regen - crate::tuning::HUNGER_DECAY_PER_TICK)).abs() < 1e-4,
+        "a fuelled Recharger's trickle must be untouched by the dry gate: \
+         {before} -> {after}"
+    );
+}
+
+/// The census in `tests::assets` is what stops a typo'd `power_upkeep`
+/// shipping; this is what a typo like that actually does at runtime — never
+/// pays, never supplies, even parked beside real Power Cells it simply
+/// cannot ask for by the right name.
+#[test]
+fn a_typo_d_fuel_id_never_burns_and_never_supplies_beside_real_power_cells() {
+    let dir = assets_dir_with_extra_structure(
+        "power_typo_fuel",
+        "test_typo_supplier.ron",
+        r#"(
+    id: "test_typo_supplier",
+    name: "test_typo_supplier",
+    glyph: 'x',
+    color: White,
+    build_cost: [],
+    work: None,
+    power_supply: 4,
+    power_upkeep: Some("power_cel"),
+)"#,
+    );
+    let mut game = Game::new(4109, DifficultyMode::Forgiving, &dir).unwrap();
+    let supplier = game
+        .world
+        .spawn((
+            Structure {
+                kind: "test_typo_supplier".to_string(),
+            },
+            Position { x: 1, y: 0 },
+            MachineStatus::default(),
+            crate::components::PowerFuel {
+                ticks_left: crate::tuning::POWER_UPKEEP_TICKS,
+            },
+        ))
+        .id();
+    let depot = game
+        .world
+        .spawn((
+            Structure {
+                kind: "depot".to_string(),
+            },
+            Position { x: 2, y: 0 },
+            Stock::new(999),
+        ))
+        .id();
+    game.world
+        .get_mut::<Stock>(depot)
+        .unwrap()
+        .output
+        .insert(ItemId::from(ids::POWER_CELL), 50);
+
+    for _ in 0..crate::tuning::POWER_UPKEEP_TICKS {
+        game.tick();
+    }
+
+    assert_eq!(
+        game.world
+            .get::<crate::components::PowerFuel>(supplier)
+            .unwrap()
+            .ticks_left,
+        0,
+        "a typo'd fuel id can never be paid, real Power Cells sitting right \
+         beside it or not"
+    );
+    assert_eq!(
+        shelved(&game, depot, ids::POWER_CELL),
+        50,
+        "and it never touches units it cannot ask for by the right name"
+    );
+    assert_eq!(
+        status_of(&game, supplier),
+        Some(MachineStatus::Starved),
+        "it reads exactly as any other dry supplier — the input it needs \
+         just never exists on the buffer beside it"
+    );
+    let db = game.world.resource::<StructureDb>();
+    assert_eq!(
+        ledger(&game.world, db).supply,
+        0,
+        "a supplier that can never pay contributes nothing to the grid"
     );
 }

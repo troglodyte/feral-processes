@@ -599,6 +599,59 @@ pub struct RunFeats {
     pub deeds: Vec<crate::contracts::Deed>,
 }
 
+/// The hand-compile the player is currently standing over — the item, how
+/// much of the batch is left, and how far into the unit in flight they are.
+///
+/// **Not saved**, on `RunFeats`' precedent above, and sound for a different
+/// reason: `Mode::Compiling` is a blocking screen with exactly two exits and
+/// no save inside it, so a resource that only exists between them cannot
+/// outlive a session. It is inserted by `Game::begin_hand_craft` and removed
+/// by `Game::abort_hand_craft`, rather than living at both constructors, so
+/// a run that never compiles by hand carries nothing.
+#[derive(Resource)]
+pub struct HandCraft {
+    pub item: crate::items::ItemId,
+    /// Batch size, for the screen's `unit / units`.
+    pub units: u32,
+    /// Units still owed, the one in flight included.
+    pub remaining: u32,
+    /// Ticks spent inside the unit in flight.
+    pub ticks_done: u32,
+    /// Whether the unit in flight has had its ingredients taken — what an
+    /// abort refunds. Set at the unit's start, cleared when it is granted.
+    pub spent: bool,
+    /// Units already granted, so the batch is announced once with the
+    /// number that actually came out of it.
+    pub completed: u32,
+    pub careful: bool,
+    /// The floor a gear copy off this batch rolls from, or `None` for
+    /// anything that stacks in `Inventory` and so spends no quality draw.
+    ///
+    /// Resolved once, in `Game::begin_hand_craft`, because a `CraftOrder`
+    /// is the batch's and not the unit's — `careful` already is — and
+    /// because that is the one call that has the recipe in hand.
+    pub quality_floor: Option<u8>,
+}
+
+/// What `Game::advance_hand_craft` reports back: enough to draw the bar
+/// without the screen knowing anything about how the loop is driven.
+///
+/// `ticks_total` is `Game::hand_craft_ticks`' own answer rather than a
+/// second multiplication of the constant, so the figure on screen and the
+/// time the loop spends cannot disagree.
+pub struct HandCraftProgress {
+    pub item: crate::items::ItemId,
+    /// 1-based: which unit of the batch is in flight, or the last one once
+    /// `finished`.
+    pub unit: u32,
+    pub units: u32,
+    pub ticks_done: u32,
+    pub ticks_total: u32,
+    /// The batch is over — completed, aborted or interrupted — and the
+    /// resource is gone.
+    pub finished: bool,
+}
+
 /// Which ground conditions this **session** has already described.
 ///
 /// Not saved, on `RunFeats`' precedent above: a reload re-announces a

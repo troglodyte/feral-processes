@@ -1815,6 +1815,51 @@ pub const QUALITY_CAREFUL_BONUS: u8 = 10;
 /// being careful about it costs half again of what they actually pay.
 pub const QUALITY_CAREFUL_COST_PERCENT: u32 = 50;
 
+/// What hand-compiling costs, as a multiple of the cycle the machine that
+/// exists to do the job would spend on one unit — see
+/// `Game::hand_craft_ticks`, which is the one place the two are multiplied.
+///
+/// The base is a factory nobody has to visit while a recipe the Lathe runs
+/// in twelve ticks is also a free instant action at the player's own hands.
+/// Blocking the recipe outright was the alternative and was rejected: every
+/// recipe stays reachable, and what is priced is the *convenience*. Ten is
+/// the smallest multiple that makes the machine the obvious answer at the
+/// scale of a base's other cycles — a Lathe's twelve-tick substrate is two
+/// minutes of game time by hand, and the Armory's thirty-tick shell is five.
+pub const HAND_CRAFT_TICK_MULT: u32 = 10;
+
+/// The cycle `Game::hand_craft_ticks` prices a recipe off when **no**
+/// structure assembles or produces it.
+///
+/// Most craftables — every piece of gear among them — have no machine at
+/// all, so this is the common case rather than the fallback it reads as. It
+/// sits at the shipped assemblers' median cycle so an item nobody automates
+/// costs about what an automated one of middling complexity does.
+pub const HAND_CRAFT_DEFAULT_CYCLE: u32 = 10;
+
+/// The Power a hand-compile has to leave standing in the player's reserve,
+/// or the whole batch is refused in `Game::begin_hand_craft` rather than
+/// silently shortened — `MAX_ACTIVE_CONTRACTS` states the no-silent-caps
+/// rule this follows.
+///
+/// Compiling by hand is work, and its ticks burn `HUNGER_DECAY_PER_TICK`
+/// exactly as a tick spent anywhere else does. At `HAND_CRAFT_TICK_MULT`
+/// one Hardened Shell is 300 ticks and 45 points of a hundred-point
+/// reserve, so a third one would flatline a player who started full. **That
+/// drain is the feature and stays**; what is refused is only the batch that
+/// can be seen in advance to end the run.
+///
+/// **A margin rather than exactly zero**, because a floor at `POWER_MIN`
+/// would still pass a batch projected to finish at a fraction of a point:
+/// the very next background tick starves it, which is the state this
+/// refusal exists to prevent, reached one tick later. Ten points is about
+/// sixty-six ticks at the standing drain — a crossing of base space to a
+/// rest, which is free in there and refills the reserve whole. A floor at
+/// `LOW_POWER_ATTACK_THRESHOLD` was the other candidate and is wrong: it
+/// would refuse the *second* Hardened Shell of a full reserve, and that
+/// cost is the point of the change.
+pub const HAND_CRAFT_POWER_FLOOR: f32 = 10.0;
+
 /// Range of Portal Fragments a defeated boss guarantees **underground**,
 /// multiplied by the frame's depth. The one and only source of the
 /// breaching currency: ordinary kills, surface bosses, nests and Stack
@@ -2208,6 +2253,19 @@ pub const CONTRACT_HABITAT_SAMPLES: i32 = 32;
 /// buffer is full and then clogs until someone collects, so this number is
 /// how long a base runs unattended.
 pub const DEFAULT_OUTPUT_CAPACITY: u32 = 20;
+
+/// How many ticks one Power Cell keeps a `power_upkeep` supplier lit — see
+/// `StructureDef::power_upkeep` and `systems::power_grid_system`.
+///
+/// The number is chosen so the loop closes on one Power Conduit. A Conduit
+/// at Mk1 in zone 1 turns out a cell every 6 ticks — 166 per 1,000 — while a
+/// burning supplier eats one every 20, which is 50 per 1,000. So a single
+/// Conduit sustains three Recharger Nodes (+12 grid) while drawing 1 itself
+/// and occupying one posted program: grid capacity becomes a production rate
+/// the base has to keep up, rather than a purchase made once. Shorter and
+/// the Conduit cannot feed even one supplier; much longer and a stocked
+/// Depot's worth of cells outlives any session, which is the same as free.
+pub const POWER_UPKEEP_TICKS: u32 = 20;
 
 /// How many units a posted program carries to a depot in one trip.
 ///

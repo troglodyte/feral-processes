@@ -3,6 +3,24 @@
 
 use crate::*;
 
+/// Folds a bill's repeated ids into one row each, keeping the order the
+/// first mention of each appeared in.
+///
+/// A free function beside `Game::structure_build_cost` rather than inside
+/// it: it is arithmetic on a list and knows nothing about a `Game`, and the
+/// order guarantee is what every reader of a bill — the build menu, the
+/// deploy prompt, the filed request's stored copy — already relies on.
+fn merge_equal_items(lines: Vec<(ItemId, u32)>) -> Vec<(ItemId, u32)> {
+    let mut merged: Vec<(ItemId, u32)> = Vec::with_capacity(lines.len());
+    for (item, qty) in lines {
+        match merged.iter_mut().find(|(id, _)| *id == item) {
+            Some((_, have)) => *have = have.saturating_add(qty),
+            None => merged.push((item, qty)),
+        }
+    }
+    merged
+}
+
 impl Game {
     pub fn structure_defs(&self) -> Vec<StructureDef> {
         self.world
@@ -780,11 +798,24 @@ impl Game {
         carried + fused
     }
 
-    /// The actual item cost to deploy `def` right now: `def.build_cost`
-    /// unchanged for a normal structure, or each amount grown by
-    /// `ZONE_PORTAL_COST_GROWTH_PERCENT` of its base rate per zone level for
-    /// a zone-portal structure (see `StructureDef::zone_portal`) — breaching
-    /// deeper costs more raw material each time.
+    /// The actual item cost to deploy `def` right now: `def.build_cost` plus
+    /// every `def.zone_build_cost` line whose `min_zone` the current zone has
+    /// reached, each grown by `ZONE_PORTAL_COST_GROWTH_PERCENT` of its base
+    /// rate per zone level **past the zone it was introduced in** for a
+    /// zone-portal structure (see `StructureDef::zone_portal`) — breaching
+    /// deeper costs more raw material each time, and a line authored for a
+    /// later sector charges its authored base the first zone it can legally
+    /// be demanded rather than arriving pre-inflated. `build_cost` is
+    /// implicitly `min_zone: 1`, which is what makes this a no-op for every
+    /// structure shipped before `zone_build_cost` existed. A non-`zone_portal`
+    /// structure gets its qualifying `zone_build_cost` lines appended
+    /// unramped — only the `zone_portal` branch grows anything.
+    ///
+    /// **The two lists may name the same item, and then the quantities
+    /// add.** Merged here because this is the one door: the founding path
+    /// checks affordability *row by row* against the player's pack, so a
+    /// split bill cleared the check on one row's worth and then spent both,
+    /// saturating in `Inventory::take` — a Home raised at half price.
     ///
     /// A `StructureDef::first_free` structure is quoted at nothing until the
     /// run has one, and that waiver is resolved **here** rather than at the
@@ -811,14 +842,30 @@ impl Game {
         {
             return Vec::new();
         }
-        if !def.zone_portal {
-            return def.build_cost.clone();
-        }
         let zone = self.world.resource::<ZoneLevel>().0;
-        def.build_cost
+        let lines = def
+            .build_cost
             .iter()
-            .map(|(item, qty)| (item.clone(), zone_portal_cost(*qty, zone)))
-            .collect()
+            .map(|(item, qty)| (1, item.clone(), *qty))
+            .chain(
+                def.zone_build_cost
+                    .iter()
+                    .filter(|(min_zone, ..)| *min_zone <= zone)
+                    .cloned(),
+            );
+        let priced: Vec<(ItemId, u32)> = if def.zone_portal {
+            lines
+                .map(|(min_zone, item, qty)| {
+                    (
+                        item,
+                        zone_portal_cost(qty, zone.saturating_sub(min_zone) + 1),
+                    )
+                })
+                .collect()
+        } else {
+            lines.map(|(_, item, qty)| (item, qty)).collect()
+        };
+        merge_equal_items(priced)
     }
 
     pub fn species_defs(&self) -> Vec<SpeciesDef> {

@@ -331,6 +331,7 @@ fn frame(
     fe.app.update_realtime();
     fe.app.advance_reveal(input.time.delta_secs());
     fe.app.advance_status(input.time.delta_secs());
+    fe.app.advance_compile(input.time.delta_secs());
 
     let held: Vec<KeyCode> = REPEATING_KEYS
         .iter()

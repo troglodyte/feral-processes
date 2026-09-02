@@ -225,6 +225,26 @@ is skipped with a warning logged in-game rather than crashing startup.
     // isn't stuck at zero capacity before anything is built.
     power_supply: 4,
 
+    // Optional; can be left out entirely (defaults to no upkeep — a
+    // structure that supplies or trickles for free). The item this supplier
+    // burns to keep running. A structure that names one takes one unit of
+    // that item out of an orthogonally adjacent structure's output buffer
+    // every POWER_UPKEEP_TICKS, and while it cannot pay it does NOTHING —
+    // zero `power_supply` on the Grid, and zero `power_regen` trickle to the
+    // player if it sets that too. It reports "starved" on the map exactly
+    // the way a machine with no input does, and the base's machines lose the
+    // power cut as though the supplier had been demolished. So a burning
+    // supplier wants a Depot or a Power Conduit beside it, and the Grid
+    // becomes a production rate the base has to keep up rather than a
+    // capacity bought once.
+    //
+    // Only worth setting on a structure that supplies or regenerates
+    // something: upkeep on one that does neither costs the player a unit to
+    // change no number. Home deliberately does not set it, because a base
+    // holding no Power Cells could otherwise never run the Power Conduit
+    // that makes the first one.
+    power_upkeep: Some("power_cell"),
+
     // Optional; can be left out entirely (defaults to false). If true,
     // walking onto this structure breaches the player into the next zone
     // sector instead of blocking movement — see `Game::enter_next_zone`.
@@ -243,6 +263,34 @@ is skipped with a warning logged in-game rather than crashing startup.
     // exit. ResearchCurrency is banked progress and is kept, as are gear
     // (fused copies included) and supplies.
     zone_portal: true,
+
+    // Optional; can be left out entirely (defaults to an empty list). Extra
+    // bill lines that only apply once the current zone reaches `min_zone`:
+    // a list of (min_zone, item id, base quantity) triples, additive on top
+    // of `build_cost` above. A separate field rather than widening
+    // `build_cost`'s own tuple, because that would touch every structure
+    // file that has one, mods included — `build_cost` is implicitly
+    // `min_zone: 1`.
+    //
+    // For a zone-portal structure, each line — `build_cost`'s and this
+    // one's alike — ramps from the zone it was **introduced** in, not from
+    // zone 1: a line here authored at `min_zone: 2` charges its base
+    // quantity the first zone it can legally be demanded, then grows by 50%
+    // of that base per zone level past *that* one. So with the example
+    // below, a portal at zone 2 charges 10 fragments (unramped — this line
+    // is new there) alongside the `build_cost` fragments at their zone-2
+    // ramp, and at zone 3 the 10-fragment line is itself ramped one step
+    // while the `build_cost` line is ramped two.
+    //
+    // For any other structure, qualifying lines are appended **unramped** —
+    // only a zone-portal structure's bill grows with depth at all.
+    //
+    // The two lists may name the same item, and then the quantities **add**:
+    // a `build_cost` line of 2 and a qualifying `zone_build_cost` line of 3
+    // are one row asking for 5, not two rows. Each is priced on its own
+    // `min_zone` before they are added, so a portal's sector-1 line and a
+    // sector-2 line naming one item are ramped separately and then summed.
+    zone_build_cost: [(2, "cache_grain", 10)],
 
     // Optional; can be left out entirely (defaults to false). If true, the
     // run's *first* one of these costs nothing: `build_cost` above is waived

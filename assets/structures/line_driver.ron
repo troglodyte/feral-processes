@@ -1,11 +1,12 @@
 (
     id: "line_driver",
     name: "Line Driver",
-    description: "Drives the base's grid harder than a mapping alone can. Pure supply and nothing else — no ground claimed, no floor laid, no worker to post — which is what keeps a base's machines running once its Grid is stretched.",
+    description: "Drives the base's grid harder than a mapping alone can. Pure supply and no worker to post, but it burns a Power Cell off an adjacent buffer to do it — which is what keeps a base's machines running once its Grid is stretched.",
     glyph: 'E',
     color: Yellow,
     build_cost: [("core_fragment", 30), ("cache_grain", 6)],
     work: None,
     power_supply: 6,
+    power_upkeep: Some("power_cell"),
     max_deployed: 3,
 )

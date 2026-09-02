@@ -225,23 +225,25 @@ is skipped with a warning logged in-game rather than crashing startup.
     // isn't stuck at zero capacity before anything is built.
     power_supply: 4,
 
-    // Optional; can be left out entirely (defaults to false). Whether this
-    // supplier burns fuel to keep its `power_supply` on the Grid. A structure
-    // that sets it takes one Power Cell out of an orthogonally adjacent
-    // structure's output buffer every POWER_UPKEEP_TICKS, and contributes
-    // ZERO supply for as long as it cannot pay — it reports "starved" on the
-    // map exactly the way a machine with no input does, and the base's
-    // machines lose the power cut as though the supplier had been demolished.
-    // So a burning supplier wants a Depot or a Power Conduit beside it, and
-    // the Grid becomes a production rate the base has to keep up rather than
-    // a capacity bought once.
+    // Optional; can be left out entirely (defaults to no upkeep — a
+    // structure that supplies or trickles for free). The item this supplier
+    // burns to keep running. A structure that names one takes one unit of
+    // that item out of an orthogonally adjacent structure's output buffer
+    // every POWER_UPKEEP_TICKS, and while it cannot pay it does NOTHING —
+    // zero `power_supply` on the Grid, and zero `power_regen` trickle to the
+    // player if it sets that too. It reports "starved" on the map exactly
+    // the way a machine with no input does, and the base's machines lose the
+    // power cut as though the supplier had been demolished. So a burning
+    // supplier wants a Depot or a Power Conduit beside it, and the Grid
+    // becomes a production rate the base has to keep up rather than a
+    // capacity bought once.
     //
-    // Only worth setting on a structure that supplies something: upkeep on a
-    // structure with `power_supply: 0` costs the player a Power Cell to
+    // Only worth setting on a structure that supplies or regenerates
+    // something: upkeep on one that does neither costs the player a unit to
     // change no number. Home deliberately does not set it, because a base
-    // holding no Power Cells could otherwise never run the Power Conduit that
-    // makes the first one.
-    power_upkeep: true,
+    // holding no Power Cells could otherwise never run the Power Conduit
+    // that makes the first one.
+    power_upkeep: Some("power_cell"),
 
     // Optional; can be left out entirely (defaults to false). If true,
     // walking onto this structure breaches the player into the next zone

@@ -1220,10 +1220,10 @@ impl Game {
             // hand-written copy this file has always been: a burning supplier
             // missing its `PowerFuel` reads as a base whose grid collapsed on
             // reload, and nothing here fails to compile when it drifts.
-            if def.runs_a_job() || def.power_upkeep {
+            if def.runs_a_job() || def.power_upkeep.is_some() {
                 entity.insert(MachineStatus::default());
             }
-            if def.power_upkeep {
+            if def.power_upkeep.is_some() {
                 entity.insert(crate::components::PowerFuel {
                     ticks_left: s.power_fuel,
                 });

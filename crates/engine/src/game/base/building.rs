@@ -275,10 +275,10 @@ impl Game {
         // A burning supplier runs no job and would carry no status, so the
         // `Starved` it reports when the base runs out of Power Cells would
         // have nowhere to live — see `structures::StructureDef::power_upkeep`.
-        if def.runs_a_job() || def.power_upkeep {
+        if def.runs_a_job() || def.power_upkeep.is_some() {
             entity.insert(MachineStatus::default());
         }
-        if def.power_upkeep {
+        if def.power_upkeep.is_some() {
             entity.insert(crate::components::PowerFuel {
                 ticks_left: crate::tuning::POWER_UPKEEP_TICKS,
             });

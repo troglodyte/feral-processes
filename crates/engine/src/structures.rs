@@ -310,21 +310,27 @@ pub struct StructureDef {
     /// parse, as a building that supplies nothing.
     #[serde(default)]
     pub power_supply: u32,
-    /// Whether this structure burns a Power Cell to keep supplying — see
-    /// `systems::power_grid_system`. A supplier that declares it carries
-    /// `components::PowerFuel`, spends one cell off an orthogonally adjacent
-    /// output buffer every `tuning::POWER_UPKEEP_TICKS`, and contributes
-    /// **zero** `power_supply` for as long as it cannot pay.
+    /// The item this structure burns to keep supplying, `None` meaning it
+    /// burns nothing — see `systems::power_grid_system`. A supplier that
+    /// names one carries `components::PowerFuel`, spends one unit off an
+    /// orthogonally adjacent output buffer every `tuning::POWER_UPKEEP_TICKS`,
+    /// and contributes **zero** `power_supply` — and, per
+    /// `game::base::power::is_fuelled`, restores no `power_regen` trickle
+    /// either — for as long as it cannot pay.
     ///
-    /// Data decides *which* suppliers burn; `tuning.rs` decides how fast.
-    /// The Home deliberately leaves this unset: its free supply is the
-    /// bootstrap, and a base with no Power Cells could never make the first
-    /// one if the thing powering the Conduit needed one already.
+    /// Data decides *which* suppliers burn and *what* they burn; `tuning.rs`
+    /// decides how fast. The Home deliberately leaves this unset: its free
+    /// supply is the bootstrap, and a base with no Power Cells could never
+    /// make the first one if the thing powering the Conduit needed one
+    /// already.
     ///
     /// `#[serde(default)]` so every existing structure file, mods included,
-    /// keeps parsing as a supplier that burns nothing.
+    /// keeps parsing as a supplier that burns nothing. The census
+    /// `tests::assets::every_burning_supplier_supplies_something_and_the_home_burns_nothing`
+    /// asserts every shipped fuel id resolves to a real item — a typo here
+    /// ships a supplier that can never be fed and never says why.
     #[serde(default)]
-    pub power_upkeep: bool,
+    pub power_upkeep: Option<ItemId>,
     /// Whether this structure issues contracts — see
     /// `Game::contract_board`. A plain `bool` rather than a block of its own,
     /// because a Broker has no per-structure configuration: what it offers is

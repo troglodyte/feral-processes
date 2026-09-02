@@ -584,35 +584,32 @@ pub fn power_grid_system(world: &mut World) {
 /// the existing meaning ("the input it needs is not there") and no variant is
 /// added for this.
 fn burn_grid_upkeep(world: &mut World) {
-    let cell = ItemId::from(crate::items::ids::POWER_CELL);
     let by_tile: std::collections::HashMap<(i32, i32), Entity> = world
         .query_filtered::<(Entity, &Position), With<Stock>>()
         .iter(world)
         .map(|(e, p)| ((p.x, p.y), e))
         .collect();
 
-    // Collected before anything is written, and carrying the def's name so
-    // the announcement below needs no second lookup while `MessageLog` is
-    // borrowed.
-    let mut burners: Vec<(Entity, (i32, i32), String)> = {
+    // Collected before anything is written, and carrying the def's name and
+    // fuel item so the announcement and the pull below need no second lookup
+    // while other borrows are open.
+    let mut burners: Vec<(Entity, (i32, i32), String, ItemId)> = {
         let db = world.resource::<StructureDb>();
         let mut found: Vec<_> = world
             .iter_entities()
             .filter_map(|e| {
                 let def = db.get(&e.get::<Structure>()?.kind)?;
-                if !def.power_upkeep {
-                    return None;
-                }
+                let cell = def.power_upkeep.clone()?;
                 e.get::<PowerFuel>()?;
                 let pos = e.get::<Position>()?;
-                Some((e.id(), (pos.x, pos.y), def.name.clone()))
+                Some((e.id(), (pos.x, pos.y), def.name.clone(), cell))
             })
             .collect();
-        found.sort_by_key(|(e, tile, _)| (*tile, *e));
+        found.sort_by_key(|(e, tile, _, _)| (*tile, *e));
         found
     };
 
-    for (burner, tile, name) in burners.drain(..) {
+    for (burner, tile, name, cell) in burners.drain(..) {
         let spent = {
             let mut fuel = world
                 .get_mut::<PowerFuel>(burner)
@@ -1430,7 +1427,7 @@ pub fn assembler_system(
 /// `tests::base_space::a_recharger_does_not_reach_the_party_genuinely_on_the_surface`.
 pub fn power_regen_system(
     mut player: Query<&mut PowerReserve, With<Player>>,
-    structures: Query<(&Structure, &Position)>,
+    structures: Query<(&Structure, &Position, Option<&PowerFuel>)>,
     structure_db: Res<StructureDb>,
     locale: Res<Locale>,
 ) {
@@ -1439,16 +1436,24 @@ pub fn power_regen_system(
     };
     let scan_pos = Position { x, y };
     for mut needs in &mut player {
-        for (structure, pos) in &structures {
-            let Some(regen) = structure_db
-                .get(&structure.kind)
-                .and_then(|def| def.power_regen.as_ref())
-            else {
+        for (structure, pos, fuel) in &structures {
+            let Some(def) = structure_db.get(&structure.kind) else {
+                continue;
+            };
+            let Some(regen) = def.power_regen.as_ref() else {
                 continue;
             };
             if (pos.x - scan_pos.x).abs() > regen.radius
                 || (pos.y - scan_pos.y).abs() > regen.radius
             {
+                continue;
+            }
+            // A supplier that cannot pay its own upkeep does nothing at
+            // all, not just the Grid half — `game::base::power::is_fuelled`
+            // is the one predicate `ledger` asks too, so a dry Recharger
+            // cannot silently disagree with itself about which half of it
+            // is still running.
+            if !crate::game::base::power::is_fuelled(def, fuel) {
                 continue;
             }
             // `per_tick` is mod-supplied, so it is clamped at both ends

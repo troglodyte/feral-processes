@@ -9356,3 +9356,83 @@ this base's size — one Conduit's surplus over the Winding Node's demand is
 83 cells per 1,000 ticks against three suppliers' 150 — so the template
 carries a stockpile, which is what a base that has been running actually
 looks like.
+
+**Task E, added after Task D shipped, from two questions Task D raised and
+declined to settle unilaterally.** Both are amendments to the seam above, not
+new ones — the section title still names the whole of it.
+
+**E1: `power_upkeep` names its fuel, `bool` never did.** Task D's own doc
+comment flagged this: *"`power_upkeep: Option<ItemId>` would be strictly more
+moddable at zero extra cost, and I did not take that decision
+unilaterally."* The field is now `#[serde(default)] pub power_upkeep:
+Option<ItemId>`, `Some("power_cell")` on both shipped suppliers, `None`
+everywhere else including the Home — CLAUDE.md's moddability rule is the
+whole argument, and nothing about *which* suppliers burn or *how fast*
+changed, so this cost nothing behaviorally. No save bump: `power_upkeep`
+lives on `StructureDef`, a `.ron` def, never on `StructureSave`.
+`burn_grid_upkeep` no longer hardcodes `ids::POWER_CELL` — it collects each
+burner's own fuel id alongside its name in the same pass, and asks the
+adjacent buffer for *that* item. A typo'd id is a supplier that can never be
+fed and would fail to compile nowhere, so
+`every_burning_supplier_supplies_something_and_the_home_burns_nothing` grew a
+third assertion: every declared fuel must resolve in `ItemDb`, beside the
+two it already made (supplies something, Home burns nothing).
+
+**E2: a dry supplier does nothing, not just the Grid half.** Before this,
+`power_regen_system` read no `PowerFuel` at all, so a Recharger burned
+through its Power Cells for the *grid* contribution while still trickling
+Power into the player for free — Task D's own description said so
+plainly ("the Grid half burns a Power Cell..."), because it was the honest
+read of what the code did. The argument for closing it is a standing note in
+this repo: *Power is not a limiting resource — the Recharger Node deletes
+hunger as a cost for 10 fragments.* The personal trickle is the half the
+player actually *feels*, so leaving it ungated left the whole point of
+gating the other half moot in play, whatever the grid ledger said.
+
+**One predicate, not a third copy of it.** `ledger` already asked "is this
+supplier paying?" inline; gating `power_regen_system` on the same fact
+without extracting it would have been exactly the copy CLAUDE.md's doc-comment
+rule exists to prevent. `game::base::power::is_fuelled(def, fuel)` is now that
+predicate — `power_upkeep.is_none() || fuel.is_some_and(|f| f.ticks_left >
+0)` — and both `ledger` and `power_regen_system` call it. `power_regen_system`
+needed `Option<&PowerFuel>` added to its structure query to have anything to
+pass it; nothing else about the query changed, and the existing locale guard
+(`Locale::Base` only, never the player's raw `Position`) is untouched — this
+is a second, independent gate on the same loop, not a replacement for the
+first.
+
+**The rate-pinning test passed before the change, and that had to be proven,
+not assumed.** A fuelled supplier's trickle is untouched by this — the same
+`+per_tick, -HUNGER_DECAY_PER_TICK` arithmetic as always — so
+`a_fuelled_recharger_still_trickles_at_its_authored_rate` is green on both
+sides of the diff. Left alone, a passing-both-ways test proves nothing; it
+was checked by temporarily doubling `power_regen_system`'s `restore` call,
+confirming the test failed, then reverting. Both trickle tests also had to
+spend the player's `PowerReserve` down before measuring: `power_regen_system`
+runs ahead of `needs_tick_system` in the schedule, so a reserve left at
+`POWER_MAX` saturates at the same `POWER_MAX - HUNGER_DECAY_PER_TICK` steady
+state whether or not the trickle actually ran, and an early draft of both
+tests read that steady state as "nothing changed" in exactly the case it
+meant nothing.
+
+**Fixtures that bare-spawn a Recharger went quiet too, and for the right
+reason.** `tests::support::spawn_structure_at` spawns only `Structure` and
+`Position`, no `PowerFuel` — its own doc says it exists for what a standing
+structure *enables*, not for the build rules — and absence reading as dry is
+this seam's own strict direction (see `PowerFuel`'s doc, above). Three
+`tests::building` fixtures and one in `tests::power` had never needed to care
+because the trickle never checked fuel before; each now inserts a fuelled
+`PowerFuel` right after the bare spawn, the same charge `Game::spawn_structure`
+would have given a real one. `tests::support::stand_ample_grid_supply` and
+`dev-saves/chains.ron` — the two fixtures flagged as likely fallout — needed
+no change: the grid-supply bank stands its Rechargers a million tiles from
+anywhere `power_regen_system`'s radius could reach, and the template's two
+Depots hold 150 Power Cells apiece against a 400-tick run that burns at most
+60, so neither ever goes dry inside the window a test actually watches.
+
+**The Recharger's description needed rewriting a second time.** Task D's
+text — "the Grid half burns a Power Cell off an adjacent buffer to stay up"
+— was accurate exactly because the trickle was *not* gated; the moment both
+halves are, that sentence describes half the machine. It now says the
+building burns to "keep either half running, and goes quiet on both the
+moment it can't pay" — a property of the structure, not of one output.

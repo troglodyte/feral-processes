@@ -153,8 +153,8 @@
   the Power Conduit that makes the first one, which is a dead run rather
   than difficulty. Three traps under it. A burner **runs no job**, so
   neither writer of a structure's component list gave it a `MachineStatus`
-  before this: both now gate on `def.runs_a_job() || def.power_upkeep` and
-  both insert `components::PowerFuel` — `spawn_structure`'s rule, and the
+  before this: both now gate on `def.runs_a_job() || def.power_upkeep.is_some()`
+  and both insert `components::PowerFuel` — `spawn_structure`'s rule, and the
   load path is the hand-written copy that drifts with nothing failing to
   compile. `ledger` counts a burner's `power_supply` **only through that
   component**, so absence reads as dry: loud when a writer forgets, where
@@ -165,6 +165,36 @@
   `ledger`** — decrement, then refuel on reaching zero, so a supplier that
   can pay never leaves the grid for a tick — and `Starved` is the existing
   variant rather than a new one, `cell_mark`'s rule.
+- **`power_upkeep` is `Option<ItemId>`, not `bool`, and the *building*
+  gates on it, not just the Grid.** Task D shipped the bool and flagged the
+  wider type as a decision it wouldn't make alone; Task E took it, because
+  content naming its own fuel is the moddability rule with nothing left to
+  weigh. And Task D's original gate only stopped a dry supplier's Grid
+  contribution — its personal `power_regen` trickle kept running regardless,
+  which is exactly backwards for a game that treats Power as not a limiting
+  resource: the trickle is the half a player feels. `game::base::power::
+  is_fuelled(def, fuel)` is the one predicate now, extracted rather than
+  copied a second time — `ledger` and `power_regen_system` both call it,
+  and `power_regen_system` needed `Option<&PowerFuel>` added to its query to
+  have anything to pass. `burn_grid_upkeep` reads each burner's own fuel id
+  out of its def instead of a hardcoded `ids::POWER_CELL`, so the typo trap
+  moved from "impossible to author" to "silently ships" — closed by a third
+  census assertion, every declared fuel must resolve in `ItemDb`.
+- **A trickle test has to spend `PowerReserve` down before timing it, or a
+  saturated reserve hides the very thing being tested.** `power_regen_system`
+  runs *ahead* of `needs_tick_system` in the schedule, so a reserve parked at
+  `POWER_MAX` converges to the fixed steady state `POWER_MAX -
+  HUNGER_DECAY_PER_TICK` whether or not the trickle actually fired — regen
+  pushes it to the ceiling, decay knocks it back down by exactly its own
+  rate, every tick, trickle or no trickle. A test that doesn't `spend()` some
+  Power first before capturing "before" reads that steady state as "nothing
+  changed" in precisely the case where something should have. And
+  `tests::support::spawn_structure_at` bare-spawns a `Structure` with no
+  `PowerFuel` at all — its own doc says it is for what a standing structure
+  *enables*, not for the build rules — so a fixture built on it needs a
+  fuelled `PowerFuel` inserted by hand before a trickle test means anything;
+  three in `tests::building` and one in `tests::power` needed exactly that
+  once the dry gate landed.
 - **The one machine-to-machine reach is `collect::plan_adjacent_take`**, and
   `Game::take_from_adjacent` is not it — that one is the *player's* collect,
   keyed on where the party stands and needing `&mut Game`, which a bevy

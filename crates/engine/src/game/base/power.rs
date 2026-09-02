@@ -20,7 +20,7 @@ use std::collections::HashSet;
 use bevy_ecs::prelude::*;
 
 use crate::components::{Position, PowerFuel, Structure};
-use crate::structures::StructureDb;
+use crate::structures::{StructureDb, StructureDef};
 
 /// The result of one pass over every deployed `Structure`: what the base
 /// supplies, what its machines draw, and which of those machines lost the
@@ -30,6 +30,23 @@ pub(crate) struct PowerLedger {
     pub supply: u32,
     pub draw: u32,
     pub dark: HashSet<Entity>,
+}
+
+/// Whether a supplier is currently paying whatever `StructureDef::power_upkeep`
+/// names, and therefore entitled to do anything at all this tick.
+///
+/// The one predicate two systems ask about two different resources:
+/// `ledger` gates a burner's `power_supply` on it, and `systems::
+/// power_regen_system` gates the personal trickle on it too — a dry
+/// supplier does neither, not just the one the player happens to be
+/// watching. A structure that names no fuel always answers yes; one that
+/// does needs `components::PowerFuel` present *and* charged — absence reads
+/// as dry, the same direction `PowerFuel`'s own doc argues for, since both
+/// writers of a structure's component list insert it and a fixture that
+/// hand-spawns a bare `Structure` should read as never having been wired up
+/// rather than as running on free power.
+pub(crate) fn is_fuelled(def: &StructureDef, fuel: Option<&PowerFuel>) -> bool {
+    def.power_upkeep.is_none() || fuel.is_some_and(|f| f.ticks_left > 0)
 }
 
 /// Sums `power_supply` over every deployed structure and `power_draw` over
@@ -50,10 +67,9 @@ pub(crate) struct PowerLedger {
 /// rather than exactly the machines that don't.
 ///
 /// A structure declaring `StructureDef::power_upkeep` counts toward `supply`
-/// only while its `components::PowerFuel` has charge left — which is the
-/// whole of what a burning supplier's fuel buys. `systems::power_grid_system`
-/// spends and refuels **before** calling this, so the figure is always this
-/// tick's.
+/// only while `is_fuelled` says yes — which is the whole of what a burning
+/// supplier's fuel buys. `systems::power_grid_system` spends and refuels
+/// **before** calling this, so the figure is always this tick's.
 ///
 /// A structure whose def is missing from `db` contributes nothing to either
 /// sum and is never dark — the same "an unknown kind is inert" shape the
@@ -71,16 +87,9 @@ pub(crate) fn ledger(world: &World, db: &StructureDb) -> PowerLedger {
         let Some(def) = db.get(&structure.kind) else {
             continue;
         };
-        // A burner supplies nothing while it is dry, and **absence of the
-        // component reads as dry**: `components::PowerFuel` is inserted by
-        // the two writers of a structure's component list, so a supplier
-        // standing without one was never wired up. See that component's doc
-        // for why this is the strict direction.
-        if !def.power_upkeep
-            || entity_ref
-                .get::<PowerFuel>()
-                .is_some_and(|fuel| fuel.ticks_left > 0)
-        {
+        // A burner supplies nothing while it is dry — see `is_fuelled`, the
+        // one predicate this and `systems::power_regen_system` both ask.
+        if is_fuelled(def, entity_ref.get::<PowerFuel>()) {
             supply += def.power_supply;
         }
         if def.runs_a_job() {

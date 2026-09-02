@@ -1519,6 +1519,11 @@ fn no_shipped_structure_both_draws_and_supplies() {
 /// rather than left to `home.ron`'s absence of a line, because an absence is
 /// exactly what nothing fails on.
 ///
+/// The third check is `power_upkeep`'s own reason for being `Option<ItemId>`
+/// rather than a bare `bool` (Task E): a fuel id no `ItemDb` entry resolves
+/// ships a supplier that can never be fed and never says why — nothing here
+/// fails to compile on a typo, so this is the only thing that catches one.
+///
 /// A `#[serde(default)]` field with no census is a field authored nowhere —
 /// see `every_shipped_machine_declares_a_power_draw` above, whose count this
 /// one deliberately copies.
@@ -1526,16 +1531,24 @@ fn no_shipped_structure_both_draws_and_supplies() {
 fn every_burning_supplier_supplies_something_and_the_home_burns_nothing() {
     let game = Game::new(953, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let db = game.world.resource::<crate::structures::StructureDb>();
+    let items = game.world.resource::<ItemDb>();
     let mut checked = 0;
     for def in db.all() {
-        if !def.power_upkeep {
+        let Some(fuel) = &def.power_upkeep else {
             continue;
-        }
+        };
         assert!(
             def.power_supply > 0,
             "{} burns a Power Cell every POWER_UPKEEP_TICKS but supplies \
              nothing — the upkeep buys the player no number at all",
             def.id
+        );
+        assert!(
+            items.get(fuel.as_str()).is_some(),
+            "{} declares power_upkeep {:?}, which no ItemDb entry resolves — \
+             a supplier that can never be fed",
+            def.id,
+            fuel
         );
         checked += 1;
     }
@@ -1548,7 +1561,7 @@ fn every_burning_supplier_supplies_something_and_the_home_burns_nothing() {
 
     let home = db.get("home").expect("home ships");
     assert!(
-        !home.power_upkeep,
+        home.power_upkeep.is_none(),
         "the Home's supply is the bootstrap — a base holding no Power Cells \
          could never run the Power Conduit that makes the first one"
     );

@@ -7,6 +7,6 @@
     build_cost: [("core_fragment", 30), ("cache_grain", 6)],
     work: None,
     power_supply: 6,
-    power_upkeep: true,
+    power_upkeep: Some("power_cell"),
     max_deployed: 3,
 )

@@ -158,10 +158,39 @@
 - **`Experience::xp_to_next` is derived on load and never read back from the
   save**; both load paths call `xp_for_level`. The field stays *written*,
   because removing one is what earns a `SAVE_FORMAT_VERSION` bump.
-- **Distance from home decides exactly one thing, and it is not difficulty.**
-  `Game::distance_from_danger_origin` feeds `in_opening_ring` alone. A
-  difficulty knob keyed to where the party is standing reintroduces two bugs
-  at once, one of them underground.
+- **Distance from home is a difficulty axis again, capped at one zone step.**
+  `Game::distance_from_danger_origin` feeds `in_opening_ring` and
+  `Game::field_stat_mult`, the field ramp: 1.0 out to `OPENING_RING_TILES`,
+  then linear to exactly the next zone's doorstep `DANGER_RAMP_TILES` beyond
+  it. It fed a 3x stat multiplier and the group curves until 2026-08-05, and
+  **the two bugs that removed it are closed by the shape rather than by a
+  check** — restore either and the shape is what you have broken. *The
+  underground leak*: every Stack spawn is placed at the surface **entrance
+  tile**, so a distance term read inside the spawner scales a whole frame by
+  how far out its link sits. The ramp is therefore computed by the *caller*
+  and handed in through `SpawnEscalation::stat_mult` — the field
+  `stack_depth_multiplier` already fills underground — and `stack_escalation`
+  builds its own struct and never reaches the ramp. There is no `(x, y)`-
+  derived term inside `spawn_wild_creature_scaled`, and that is the invariant
+  `a_spawns_stats_come_from_its_escalation_and_never_from_its_tile` pins. *A
+  zone with no difficulty of its own*: the cap is exactly `ZONE_STAT_STEP`,
+  so a zone spans `[N, N+1]` and its floor is the previous zone's ceiling.
+  Expressing it as a **ratio on the zone curve** rather than a curve of its
+  own is what leaves `balance_sim` gating it for free — the far field of zone
+  N *is* the zone N+1 fixture it already sweeps — which is the answer to the
+  standing objection that the old multiplier was ungated. The ramp's floor is
+  the ring, not zero: `beatable_by_a_fresh_player` is computed against the
+  unscaled species. **`danger_steps` deliberately gained no distance term** —
+  it is the one input both group curves and the species window read, and
+  `TIER_ENTRY_STEPS` is 2, so distance would need two full steps to change
+  what you meet and four to open apex bosses, which is the shape that
+  collapses the zone ladder. Distance moves how hard a spawn is; zone and
+  depth still decide what it is and how many. **Who gets the ramp is a census
+  of `Game::field_escalation`'s callers**, which is why it is a second
+  constructor and `SpawnEscalation::surface()` still means no escalation at
+  all: `arena::encounter` must not move with a map coordinate, and
+  `game::sortie` already prices its own risk through `habitat_pools`'
+  `step_bonus`.
 - **A basic attack is an `AbilityDef`, and combat names `MoveDef` nowhere.**
   `species::basic_attack_ability` is the one conversion; `moves:` stays the
   authored shape so no species file or mod needed editing, and

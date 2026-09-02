@@ -467,11 +467,13 @@ pub const ZONE_STAT_STEP: i32 = 1;
 /// Home exists, `ZoneSpawnPoint` before then. Inside it, only species a
 /// bare level-1 player can beat are *born* (see `Game::in_opening_ring`).
 ///
-/// This is the one thing distance still decides. Distance used to be a
-/// difficulty axis in its own right — scaling stats and group size as you
-/// walked out — and is not any more: a program's strength is a property of
-/// its zone, and underground of its depth. What survives is a pocket, not
-/// a curve.
+/// The ring is the flat *floor* under the field ramp: `DANGER_RAMP_TILES`
+/// measures from its edge, so inside it `Game::field_stat_mult` is exactly
+/// 1.0. That is not politeness — `balance_sim::beatable_by_a_fresh_player`
+/// is computed against the unscaled species, so any ramp in here falsifies
+/// it. What the ring does that the ramp does not is gate the *pool*: it
+/// decides which species are born, where the ramp only decides how hard
+/// one already born is.
 ///
 /// Its own literal, and deliberately *not* `MAX_BUILD_DISTANCE_FROM_HOME`,
 /// which is what it used to be. That spelling made the ring exactly your
@@ -488,6 +490,26 @@ pub const ZONE_STAT_STEP: i32 = 1;
 /// fixed zone scaling that condition is true across the whole of zone 1, so
 /// the old spelling would have silently made the entire zone a nursery.
 pub const OPENING_RING_TILES: i32 = 7;
+
+/// How far past `OPENING_RING_TILES` a surface spawn has to be for the field
+/// ramp to reach its cap — see `Game::field_stat_mult`.
+///
+/// **The cap is one zone step, not a free multiplier.** At the cap a spawn's
+/// stats are arithmetically `ZoneLevel(zone + 1).stat_multiplier()`: the far
+/// field of a zone is the doorstep of the next one. Two things follow, and
+/// both are the reason distance is affordable again after being removed on
+/// 2026-08-05. `balance_sim` needs no new bound, because the far field of
+/// zone N *is* the zone N+1 fixture it already sweeps. And the zone number
+/// still means something — a zone spans `[N, N+1]` and its floor is exactly
+/// the previous zone's ceiling — which is the answer to the first of that
+/// removal's two bugs, a zone having no consistent difficulty of its own.
+///
+/// 128 is four `world::CHUNK_SIZE` chunks: far enough to be a decision the
+/// player makes over a session rather than a step they take by accident,
+/// close enough that the frontier is reachable without a Portal. This is the
+/// knob to move if the field reads too flat or too steep; every other part
+/// of the ramp is derived from the zone curve and is not a number to tune.
+pub const DANGER_RAMP_TILES: i32 = 128;
 
 /// How far `x` looks along the row or column the player is facing
 /// (`Game::find_target_in_direction`).

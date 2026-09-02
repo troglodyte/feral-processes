@@ -2,7 +2,6 @@
 //! spends a turn on.
 
 use crate::game::pursuit::pursuit_field;
-use crate::game::spawning::SpawnEscalation;
 use crate::resources::SeenConditions;
 use crate::tuning::{
     NEST_AGGRO_LEASH_RADIUS, NEST_PATH_SEARCH_MARGIN, NEST_PURSUIT_STEPS_PER_TICK,
@@ -746,7 +745,8 @@ impl Game {
         let Some((species, _)) = self.pick_habitat_species(tx, ty, None, false) else {
             return;
         };
-        let pack = self.spawn_pack(&species, false, tx, ty, SpawnEscalation::surface());
+        let esc = self.field_escalation(tx, ty);
+        let pack = self.spawn_pack(&species, false, tx, ty, esc);
         let Some(&anchor) = pack.first() else {
             return;
         };

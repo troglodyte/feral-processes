@@ -3033,8 +3033,11 @@ however many rolled perfectly, and a fixture reading `Inventory` alone
 after compiling gear is the fixture's bug — the same call the drop side
 made one phase earlier. Anything that is not equipment stacks exactly as it
 did and spends **no** `GameRng` draw; `only_gear_spends_a_quality_roll`
-holds that by compiling one unit against five and comparing the stream,
-which works because `craft` ticks once whatever the batch size.
+holds that by comparing the stream after a compile against the stream after
+the *same span of bare ticks*. It used to compare one unit against five,
+which worked only while `craft` ticked once whatever the batch size — see
+*Hand-compiling is priced at the machine's own cycle* below, which is what
+took that away.
 
 **The toggle is the page's and is cleared when the page opens.** Clearing
 on close would leave the flag alive between two compiles: the next batch
@@ -9134,3 +9137,75 @@ there itself. The gate reads `StructureDef::recovery` rather than
 `"repair_bay"`, `dispatches_sorties`' rule, so a mod's own recovery structure
 answers it too. Its copy has to keep step with `Game::add_to_party`'s
 refusal, which is the other place the game says a downed program needs a Bay.
+
+### Hand-compiling is priced at the machine's own cycle, and `Game::craft` is that loop drained
+
+The base is a factory nobody had to visit. `Game::craft` let the player
+hand-compile every item the eleven-machine production chain makes, at the
+identical recipe cost, in **one tick**, with no worker, no adjacency, no
+power and no proximity to the bench. A Lathe spends twelve ticks and a
+posted program on a Blank Substrate; the player spent a keypress.
+
+**Slow rather than blocked.** A `machine_only` flag on the recipe was the
+obvious alternative and was rejected: it would have made a run whose base
+had not been built yet unable to reach whole branches of the item set, and
+it prices the *recipe* when the thing that is actually free is the
+*convenience*. Every recipe stays reachable. `hand_craft_ticks` is
+`HAND_CRAFT_TICK_MULT` times the cycle of the machine that exists to do the
+job — the `assembles` block naming the item, else the `work` block producing
+it, else `HAND_CRAFT_DEFAULT_CYCLE` for the majority that no machine makes
+at all. Multiplying off the machine's own number rather than authoring a
+per-item duration means a modder who adds a craftable and a bench for it
+gets the hand price for free, and a retuned machine cycle drags its hand
+price with it.
+
+**One door, because the screen quotes it.** Task B's compiling screen draws
+the bar against `hand_craft_ticks`. A second multiplication of the constant
+in the renderer would let the screen promise a number the loop does not
+spend, and nothing would fail to compile.
+
+**`craft` is the loop drained to completion.** Its signature and its refusal
+list are unchanged and every engine test and `app-core`'s `commit_craft`
+still call it — but it is now `begin_hand_craft` followed by
+`advance_hand_craft` until finished, so there is exactly one copy of the
+spend-roll-grant sequence and the headless compile cannot drift from the one
+the player watches. `begin_hand_craft` holds every refusal and arms nothing
+until they have all passed; `advance_hand_craft` is the only code in the game
+that spends a unit's ingredients or grants one.
+
+**Per unit, not per batch.** The ingredients come out of the pack at each
+unit's *start* and the copy is rolled and granted at its end, so an abort
+keeps every finished unit, refunds the one in flight, and costs only the time
+already spent. That is the existing *materials are not spent until the
+structure is raised* shape rather than a second rule about part payment, and
+it closes a real edge that per-batch spending opens: a build crew takes from
+the player's own pack while the party stands in base space
+(`game/base/construction.rs`'s `Source::Pack`), so a compile that checked the
+bill up front and spent at the end could find itself short after three
+hundred ticks. The batch-wide affordability check stays in `begin_hand_craft`
+because that is what makes the refusal name the batch's bill; running dry
+mid-batch simply ends the batch with nothing part-paid.
+
+**The early break is drag terrain's, and only drag terrain's.**
+`Game::move_player` runs `for _ in 0..drag_ticks { … self.tick(); }` and
+breaks on a game over or a battle opening, because a tick can start a fight —
+`nest_aggro_tick` is the precedent. A compile loop inherits the same
+obligation: the remaining ticks must not resolve a world behind a fight the
+player has not seen. An early break is treated as an abort, so the
+interrupted unit's material comes back.
+
+**`resources::HandCraft` is not saved**, `RunFeats`' precedent, and sound for
+a second reason of its own: `Mode::Compiling` is a blocking screen with
+exactly two exits and no save inside it. It is inserted by `begin` and
+removed by `close`, rather than living at both constructors, so a run that
+never compiles by hand carries nothing at all.
+
+**One test moved, and it moved for the right reason.**
+`only_gear_spends_a_quality_roll` compared the shared `GameRng` stream after
+compiling one unit against five, on the property that a material spends no
+quality draw. That comparison stopped isolating anything the moment the clock
+cost scaled with the batch — the two runs now tick different numbers of times
+and the ticks draw. It is re-grounded against *the same span of bare ticks*:
+a material lands the stream exactly where doing nothing for that long lands
+it, and one piece of gear lands it one draw further on. Re-seeding it to a
+value that passed would have thrown the property away.

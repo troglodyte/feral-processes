@@ -1815,6 +1815,28 @@ pub const QUALITY_CAREFUL_BONUS: u8 = 10;
 /// being careful about it costs half again of what they actually pay.
 pub const QUALITY_CAREFUL_COST_PERCENT: u32 = 50;
 
+/// What hand-compiling costs, as a multiple of the cycle the machine that
+/// exists to do the job would spend on one unit — see
+/// `Game::hand_craft_ticks`, which is the one place the two are multiplied.
+///
+/// The base is a factory nobody has to visit while a recipe the Lathe runs
+/// in twelve ticks is also a free instant action at the player's own hands.
+/// Blocking the recipe outright was the alternative and was rejected: every
+/// recipe stays reachable, and what is priced is the *convenience*. Ten is
+/// the smallest multiple that makes the machine the obvious answer at the
+/// scale of a base's other cycles — a Lathe's twelve-tick substrate is two
+/// minutes of game time by hand, and the Armory's thirty-tick shell is five.
+pub const HAND_CRAFT_TICK_MULT: u32 = 10;
+
+/// The cycle `Game::hand_craft_ticks` prices a recipe off when **no**
+/// structure assembles or produces it.
+///
+/// Most craftables — every piece of gear among them — have no machine at
+/// all, so this is the common case rather than the fallback it reads as. It
+/// sits at the shipped assemblers' median cycle so an item nobody automates
+/// costs about what an automated one of middling complexity does.
+pub const HAND_CRAFT_DEFAULT_CYCLE: u32 = 10;
+
 /// Range of Portal Fragments a defeated boss guarantees **underground**,
 /// multiplied by the frame's depth. The one and only source of the
 /// breaching currency: ordinary kills, surface bosses, nests and Stack

@@ -218,18 +218,65 @@ impl Game {
         (QUALITY_BASE as u32 + bench + perk + care).min(u8::MAX as u32) as u8
     }
 
-    /// Compiles `quantity` units of `result` per its `craft_recipes` entry.
+    /// How long compiling one unit of `item` by hand takes, in ticks.
     ///
-    /// `careful` spends `QUALITY_CAREFUL_COST_PERCENT` more material for a
-    /// better floor on every unit in the batch — the toggle is the batch's,
-    /// not the unit's.
+    /// **The one door onto the number**, so the screen that quotes it and
+    /// the loop that spends it cannot disagree: `HAND_CRAFT_TICK_MULT`
+    /// times the cycle of the machine that exists to do the job — the
+    /// `assembles` block naming this item, else the `work` block producing
+    /// it, else `HAND_CRAFT_DEFAULT_CYCLE`. A screen recomputing the
+    /// product from the constant is the second copy this exists to prevent.
     ///
-    /// **A piece of gear is rolled per unit**, so compiling five is five
-    /// copies to compare rather than a stack of five identical ones; that
-    /// spread is the whole of what the quality axis is for. Anything else
-    /// stacks in `Inventory` exactly as it did and spends **no** `GameRng`
-    /// draw, the property `grant_gear_drop` already holds for a material.
-    pub fn craft(&mut self, result: &ItemId, quantity: u32, careful: bool) -> Result<(), String> {
+    /// Both lookups walk `StructureDb::all`, whose order is sorted, so a
+    /// mod shipping two machines for one item resolves the same way every
+    /// session.
+    pub fn hand_craft_ticks(&self, item: &ItemId) -> u32 {
+        let db = self.world.resource::<StructureDb>();
+        let cycle = db
+            .all()
+            .find_map(|d| {
+                d.assembles
+                    .as_ref()
+                    .filter(|a| &a.item == item)
+                    .map(|a| a.ticks_per_unit)
+            })
+            .or_else(|| {
+                db.all().find_map(|d| {
+                    d.work
+                        .as_ref()
+                        .filter(|w| &w.produces == item)
+                        .map(|w| w.ticks_per_unit)
+                })
+            })
+            .unwrap_or(crate::tuning::HAND_CRAFT_DEFAULT_CYCLE);
+        crate::tuning::HAND_CRAFT_TICK_MULT * cycle
+    }
+
+    /// Whether a hand-compile is in flight — see `resources::HandCraft`.
+    pub fn hand_craft_in_progress(&self) -> bool {
+        self.world
+            .contains_resource::<crate::resources::HandCraft>()
+    }
+
+    /// Arms a hand-compile of `quantity` units of `result` and spends
+    /// nothing.
+    ///
+    /// **Every refusal lands here, before a tick or a unit of material is
+    /// spent.** `craft` is this call plus the drain, so the headless
+    /// compile and the screen refuse identically and in the same order.
+    ///
+    /// The affordability check is over the whole batch, which is what makes
+    /// the quoted refusal name the batch's bill; the *spending* is per unit
+    /// (see `advance_hand_craft`), so the two can come apart if something
+    /// takes from the pack while the compile runs. That is a real edge —
+    /// a build crew reaches into the player's pack from base space — and
+    /// the loop ends the batch rather than compiling out of nothing.
+    pub fn begin_hand_craft(
+        &mut self,
+        result: &ItemId,
+        quantity: u32,
+        careful: bool,
+    ) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
@@ -259,37 +306,202 @@ impl Game {
                 }
             }
         }
-        {
-            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
-            for (item, qty) in &cost {
-                inv.take(item.clone(), *qty * quantity);
+        let quality_floor = self
+            .equipment_of(result)
+            .is_some()
+            .then(|| self.craft_quality_floor(&self.player_craft_order(&recipe, careful)));
+        self.world.insert_resource(crate::resources::HandCraft {
+            item: result.clone(),
+            units: quantity,
+            remaining: quantity,
+            ticks_done: 0,
+            spent: false,
+            completed: 0,
+            careful,
+            quality_floor,
+        });
+        Ok(())
+    }
+
+    /// Spends one tick of the compile in flight and reports where it is,
+    /// or `None` when nothing is in flight.
+    ///
+    /// **The only code that spends a unit's material or grants one.** The
+    /// ingredients come out of the pack at the unit's *start* and the copy
+    /// is rolled and granted at its end, so an abort keeps every finished
+    /// unit, refunds the one in flight, and costs only the time already
+    /// spent — the same shape as *materials are not spent until the
+    /// structure is raised*, rather than a second rule about part payment.
+    ///
+    /// A tick can start a fight and a tick can end the run, and either ends
+    /// the batch here exactly as it ends a drag step's extra ticks in
+    /// `Game::move_player`: the rest must not resolve behind a screen the
+    /// player has not seen.
+    pub fn advance_hand_craft(&mut self) -> Option<crate::resources::HandCraftProgress> {
+        let (item, careful, spent) = {
+            let job = self.world.get_resource::<crate::resources::HandCraft>()?;
+            (job.item.clone(), job.careful, job.spent)
+        };
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Some(self.close_hand_craft());
+        }
+        let ticks_total = self.hand_craft_ticks(&item);
+        if !spent {
+            if !self.take_hand_craft_unit(&item, careful) {
+                return Some(self.close_hand_craft());
+            }
+            self.world
+                .resource_mut::<crate::resources::HandCraft>()
+                .spent = true;
+        }
+        self.tick();
+        let unit_done = {
+            let mut job = self.world.resource_mut::<crate::resources::HandCraft>();
+            job.ticks_done += 1;
+            job.ticks_done >= ticks_total
+        };
+        if unit_done {
+            self.grant_hand_craft_unit(&item);
+            let finished = {
+                let mut job = self.world.resource_mut::<crate::resources::HandCraft>();
+                job.remaining = job.remaining.saturating_sub(1);
+                job.completed += 1;
+                job.ticks_done = 0;
+                job.spent = false;
+                job.remaining == 0
+            };
+            if finished {
+                return Some(self.close_hand_craft());
             }
         }
-        if self.equipment_of(result).is_some() {
-            let floor = self.craft_quality_floor(&self.player_craft_order(&recipe, careful));
-            for _ in 0..quantity {
+        let job = self.world.resource::<crate::resources::HandCraft>();
+        Some(crate::resources::HandCraftProgress {
+            item,
+            unit: (job.units - job.remaining + 1).min(job.units),
+            units: job.units,
+            ticks_done: job.ticks_done,
+            ticks_total,
+            finished: false,
+        })
+    }
+
+    /// Walks away from the compile in flight, refunding the unit that was
+    /// part-way through and keeping every one already finished.
+    pub fn abort_hand_craft(&mut self) {
+        if self.hand_craft_in_progress() {
+            self.close_hand_craft();
+        }
+    }
+
+    /// Takes one unit's ingredients out of the pack, or reports that the
+    /// pack can no longer cover them.
+    fn take_hand_craft_unit(&mut self, item: &ItemId, careful: bool) -> bool {
+        let player = self.player_entity();
+        let cost = self.craft_cost(item, careful);
+        {
+            let inv = self.world.get::<Inventory>(player).unwrap();
+            if cost.iter().any(|(id, qty)| inv.count(id) < *qty) {
+                return false;
+            }
+        }
+        let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
+        for (id, qty) in &cost {
+            inv.take(id.clone(), *qty);
+        }
+        true
+    }
+
+    /// Puts one finished unit into cargo, rolling its quality if the batch
+    /// is gear — see `resources::HandCraft::quality_floor`.
+    fn grant_hand_craft_unit(&mut self, item: &ItemId) {
+        let floor = self
+            .world
+            .resource::<crate::resources::HandCraft>()
+            .quality_floor;
+        match floor {
+            Some(floor) => {
                 let quality = self.roll_quality(floor);
                 let copy = GearCopy {
                     quality,
-                    ..GearCopy::plain(result.clone())
+                    ..GearCopy::plain(item.clone())
                 };
                 self.add_copies(&copy, 1);
             }
-        } else {
-            self.world
-                .get_mut::<Inventory>(player)
-                .unwrap()
-                .add(result.clone(), quantity);
+            None => {
+                let player = self.player_entity();
+                self.world
+                    .get_mut::<Inventory>(player)
+                    .unwrap()
+                    .add(item.clone(), 1);
+            }
         }
-        self.log_base_kind(
-            MessageKind::Loot,
-            format!(
-                "You compile {} {} from salvaged components.",
-                quantity,
-                self.item_name(result)
-            ),
-        );
-        self.tick();
+    }
+
+    /// Ends the batch however it ended: refunds the unit in flight,
+    /// announces what actually came out of it, and drops the resource.
+    ///
+    /// The batch is announced **once, on the way out**, with the count that
+    /// was really granted — a line per unit would turn a batch of twelve
+    /// into twelve rows of log, and a line at the start would promise units
+    /// an abort never delivers.
+    fn close_hand_craft(&mut self) -> crate::resources::HandCraftProgress {
+        let job = self
+            .world
+            .remove_resource::<crate::resources::HandCraft>()
+            .expect("close_hand_craft is only reached with a compile in flight");
+        if job.spent {
+            let player = self.player_entity();
+            let cost = self.craft_cost(&job.item, job.careful);
+            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
+            for (id, qty) in &cost {
+                inv.add(id.clone(), *qty);
+            }
+        }
+        if job.completed > 0 {
+            self.log_base_kind(
+                MessageKind::Loot,
+                format!(
+                    "You compile {} {} from salvaged components.",
+                    job.completed,
+                    self.item_name(&job.item)
+                ),
+            );
+        }
+        crate::resources::HandCraftProgress {
+            item: job.item,
+            unit: (job.units - job.remaining + 1).min(job.units),
+            units: job.units,
+            ticks_done: job.ticks_done,
+            ticks_total: 0,
+            finished: true,
+        }
+    }
+
+    /// Compiles `quantity` units of `result` per its `craft_recipes` entry,
+    /// start to finish, spending the whole of `hand_craft_ticks` per unit.
+    ///
+    /// `careful` spends `QUALITY_CAREFUL_COST_PERCENT` more material for a
+    /// better floor on every unit in the batch — the toggle is the batch's,
+    /// not the unit's.
+    ///
+    /// **The loop drained to completion**, and deliberately nothing more:
+    /// `begin_hand_craft` holds every refusal and `advance_hand_craft` is
+    /// the only code that spends or grants a unit, so the headless compile
+    /// every test uses and the screen the player watches are two drivers of
+    /// one sequence rather than two copies of it.
+    ///
+    /// **A piece of gear is rolled per unit**, so compiling five is five
+    /// copies to compare rather than a stack of five identical ones; that
+    /// spread is the whole of what the quality axis is for. Anything else
+    /// stacks in `Inventory` exactly as it did and spends **no** `GameRng`
+    /// draw, the property `grant_gear_drop` already holds for a material.
+    pub fn craft(&mut self, result: &ItemId, quantity: u32, careful: bool) -> Result<(), String> {
+        self.begin_hand_craft(result, quantity, careful)?;
+        while let Some(progress) = self.advance_hand_craft() {
+            if progress.finished {
+                break;
+            }
+        }
         Ok(())
     }
 

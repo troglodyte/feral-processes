@@ -91,8 +91,9 @@ use resources::{
     ZoneLevel, ZoneSpawnPoint,
 };
 pub use resources::{
-    DifficultyMode, EffectKind, LabourDemand, LogEntry, LogLine, MESSAGE_LOG_CAP, MessageKind,
-    MessageSource, SlotShift, SwingOutcome, TransitCue, VisualEffect, condense,
+    DifficultyMode, EffectKind, HandCraftProgress, LabourDemand, LogEntry, LogLine,
+    MESSAGE_LOG_CAP, MessageKind, MessageSource, SlotShift, SwingOutcome, TransitCue, VisualEffect,
+    condense,
 };
 use species::{Affinities, SpeciesDb, SpeciesDef, SpeciesId};
 use structures::{StructureDb, StructureDef, StructureId, TradeDef};

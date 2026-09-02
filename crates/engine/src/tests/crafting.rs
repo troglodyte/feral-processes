@@ -666,28 +666,47 @@ fn a_better_bench_lifts_every_copy_in_the_batch() {
     );
 }
 
-/// Only gear costs a quality roll. `craft` ticks once whatever the batch
-/// size, so compiling one unit and compiling five leave the shared stream in
-/// the same place for a material — and in different places for gear, which
-/// is the per-unit roll being visible from outside.
+/// Only gear costs a quality roll, and the way to see it is against the
+/// ticks the compile spends anyway.
+///
+/// A hand-compile's clock cost scales with the batch now, so comparing one
+/// unit against five no longer isolates anything: the two runs would differ
+/// because they ticked different numbers of times. The honest comparison is
+/// a compile against the *same span of bare ticks* — a material lands the
+/// shared stream in exactly the place doing nothing would, and a piece of
+/// gear does not.
 #[test]
 fn only_gear_spends_a_quality_roll() {
-    fn stream_after(item: &str, quantity: u32) -> u64 {
+    fn fixture() -> Game {
         let mut game = Game::new(52, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 500)]);
+        game
+    }
+    fn stream_after_compiling(item: &str, quantity: u32) -> u64 {
+        let mut game = fixture();
         game.craft(&ItemId::from(item), quantity, false).unwrap();
         game.world.resource_mut::<GameRng>().0.random()
     }
+    fn stream_after_ticks(ticks: u32) -> u64 {
+        let mut game = fixture();
+        for _ in 0..ticks {
+            game.tick();
+        }
+        game.world.resource_mut::<GameRng>().0.random()
+    }
+    fn unit_ticks(item: &str) -> u32 {
+        fixture().hand_craft_ticks(&ItemId::from(item))
+    }
 
     assert_eq!(
-        stream_after(ids::ICE_BREAKER, 1),
-        stream_after(ids::ICE_BREAKER, 5),
-        "a material compiles off the same stream however many are made"
+        stream_after_compiling(ids::ICE_BREAKER, 5),
+        stream_after_ticks(5 * unit_ticks(ids::ICE_BREAKER)),
+        "a material compiles off the ticks alone and spends no draw of its own"
     );
     assert_ne!(
-        stream_after("kinetic_edge", 1),
-        stream_after("kinetic_edge", 5),
-        "gear rolls per unit, so five units are five draws"
+        stream_after_compiling("kinetic_edge", 1),
+        stream_after_ticks(unit_ticks("kinetic_edge")),
+        "gear rolls its quality, so one unit is one draw past the ticks"
     );
 }
 
@@ -742,4 +761,241 @@ fn the_craft_floor_rises_with_the_tighten_tolerances_perk() {
         "every copy should sit in the perked band {floor}..={}, got {rolled:?}",
         floor + QUALITY_SPREAD
     );
+}
+
+// ---- Hand-compiling costs real time ----
+
+/// The cycle a hand-compile is priced off is the machine's own, so the
+/// number moves with the content rather than with a literal in the test.
+fn assembler_cycle(game: &Game, kind: &str) -> u32 {
+    game.world
+        .resource::<StructureDb>()
+        .get(kind)
+        .unwrap()
+        .assembles
+        .as_ref()
+        .unwrap()
+        .ticks_per_unit
+}
+
+fn work_cycle(game: &Game, kind: &str) -> u32 {
+    game.world
+        .resource::<StructureDb>()
+        .get(kind)
+        .unwrap()
+        .work
+        .as_ref()
+        .unwrap()
+        .ticks_per_unit
+}
+
+/// The machine exists to do this, so hand-compiling is priced off the
+/// machine's own cycle — the Lathe's, for a Blank Substrate.
+#[test]
+fn a_hand_compile_is_priced_off_the_assembler_that_makes_it() {
+    let game = Game::new(300, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    assert_eq!(
+        game.hand_craft_ticks(&ItemId::from(ids::BLANK_SUBSTRATE)),
+        crate::tuning::HAND_CRAFT_TICK_MULT * assembler_cycle(&game, "lathe"),
+    );
+}
+
+/// An extractor's `work` block is the second lookup, so an item no
+/// assembler builds but a node produces is still priced off a machine.
+#[test]
+fn a_hand_compile_falls_back_to_the_extractor_that_produces_it() {
+    let game = Game::new(301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    assert_eq!(
+        game.hand_craft_ticks(&ItemId::from(ids::POWER_CELL)),
+        crate::tuning::HAND_CRAFT_TICK_MULT * work_cycle(&game, "power_conduit"),
+    );
+}
+
+/// Most craftables have no machine at all, and they still have to cost
+/// something.
+#[test]
+fn a_hand_compile_with_no_machine_takes_the_default_cycle() {
+    let game = Game::new(302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    assert_eq!(
+        game.hand_craft_ticks(&ItemId::from("kinetic_edge")),
+        crate::tuning::HAND_CRAFT_TICK_MULT * crate::tuning::HAND_CRAFT_DEFAULT_CYCLE,
+    );
+}
+
+/// The screen's figure and the loop's cost are the same number, so the
+/// clock has to move by exactly what `hand_craft_ticks` quotes.
+#[test]
+fn compiling_one_unit_spends_its_whole_cycle() {
+    let mut game = Game::new(303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, ICE_BREAKER_CORE_COST)]);
+    let ice = ItemId::from(ids::ICE_BREAKER);
+    let cost = game.hand_craft_ticks(&ice);
+    let before = game.current_tick();
+
+    game.craft(&ice, 1, false).unwrap();
+
+    assert_eq!(game.current_tick() - before, u64::from(cost));
+}
+
+#[test]
+fn a_batch_spends_a_whole_cycle_per_unit() {
+    let mut game = Game::new(304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_inventory(
+        &mut game,
+        &[(ids::CORE_FRAGMENT, ICE_BREAKER_CORE_COST * 3)],
+    );
+    let ice = ItemId::from(ids::ICE_BREAKER);
+    let cost = game.hand_craft_ticks(&ice);
+    let before = game.current_tick();
+
+    game.craft(&ice, 3, false).unwrap();
+
+    assert_eq!(game.current_tick() - before, u64::from(3 * cost));
+    assert_eq!(count_item(&game, ids::ICE_BREAKER), 3);
+}
+
+/// Every refusal lands before anything is spent — asserted per refusal,
+/// because a single test over one of them passes against the four paths
+/// that never spend anyway.
+fn refused_compile_spends_nothing(
+    game: &mut Game,
+    result: &ItemId,
+    quantity: u32,
+    arrange: impl FnOnce(&mut Game),
+) {
+    set_inventory(game, &[(ids::CORE_FRAGMENT, 50)]);
+    arrange(game);
+    let before = game.current_tick();
+
+    assert!(game.craft(result, quantity, false).is_err());
+
+    assert_eq!(game.current_tick(), before, "a refusal spends no time");
+    assert_eq!(
+        count_item(game, ids::CORE_FRAGMENT),
+        50,
+        "a refusal spends no material"
+    );
+}
+
+#[test]
+fn a_compile_refused_for_a_battle_spends_nothing() {
+    let mut game = Game::new(305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    refused_compile_spends_nothing(&mut game, &ItemId::from(ids::ICE_BREAKER), 1, |g| {
+        start_battle_with_a_wild_program(g);
+    });
+}
+
+#[test]
+fn a_compile_refused_for_game_over_spends_nothing() {
+    let mut game = Game::new(306, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    refused_compile_spends_nothing(&mut game, &ItemId::from(ids::ICE_BREAKER), 1, |g| {
+        g.world.resource_mut::<GameOver>().reason = Some("done".into());
+    });
+}
+
+#[test]
+fn a_compile_of_zero_units_spends_nothing() {
+    let mut game = Game::new(307, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    refused_compile_spends_nothing(&mut game, &ItemId::from(ids::ICE_BREAKER), 0, |_| {});
+}
+
+#[test]
+fn a_compile_with_no_recipe_spends_nothing() {
+    let mut game = Game::new(308, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    refused_compile_spends_nothing(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 1, |_| {});
+}
+
+#[test]
+fn a_compile_short_of_material_spends_nothing() {
+    let mut game = Game::new(309, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let before = game.current_tick();
+    set_inventory(
+        &mut game,
+        &[(ids::CORE_FRAGMENT, ICE_BREAKER_CORE_COST - 1)],
+    );
+
+    assert!(
+        game.craft(&ItemId::from(ids::ICE_BREAKER), 1, false)
+            .is_err()
+    );
+
+    assert_eq!(game.current_tick(), before, "a refusal spends no time");
+    assert_eq!(
+        count_item(&game, ids::CORE_FRAGMENT),
+        ICE_BREAKER_CORE_COST - 1,
+        "a refusal spends no material"
+    );
+}
+
+/// An abort keeps every completed unit and refunds the one in flight, so
+/// the only thing walking away costs is the time already spent.
+#[test]
+fn aborting_keeps_the_finished_units_and_refunds_the_one_in_flight() {
+    let mut game = Game::new(310, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let ice = ItemId::from(ids::ICE_BREAKER);
+    set_inventory(
+        &mut game,
+        &[(ids::CORE_FRAGMENT, ICE_BREAKER_CORE_COST * 3)],
+    );
+    let per_unit = game.hand_craft_ticks(&ice);
+
+    game.begin_hand_craft(&ice, 3, false).unwrap();
+    // Through the first unit, then one tick into the second.
+    for _ in 0..=per_unit {
+        game.advance_hand_craft();
+    }
+    assert_eq!(
+        count_item(&game, ids::CORE_FRAGMENT),
+        ICE_BREAKER_CORE_COST,
+        "the first two units' material is spent, the third's untouched"
+    );
+
+    game.abort_hand_craft();
+
+    assert!(!game.hand_craft_in_progress());
+    assert_eq!(count_item(&game, ids::ICE_BREAKER), 1, "one unit finished");
+    assert_eq!(
+        count_item(&game, ids::CORE_FRAGMENT),
+        ICE_BREAKER_CORE_COST * 2,
+        "the in-flight unit is refunded and the third was never taken"
+    );
+}
+
+/// A tick can start a fight — `nest_aggro_tick` is the precedent, and a
+/// compile loop inherits the obligation drag terrain already carries: the
+/// remaining ticks must not resolve behind a fight the player has not seen.
+#[test]
+fn a_battle_opening_mid_compile_ends_the_loop_with_the_unit_refunded() {
+    let mut game = Game::new(311, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let ice = ItemId::from(ids::ICE_BREAKER);
+    set_inventory(
+        &mut game,
+        &[(ids::CORE_FRAGMENT, ICE_BREAKER_CORE_COST * 2)],
+    );
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let nest = game.spawn_nest("scrapper", pos.x + 1, pos.y);
+    game.provoke_nest(nest);
+    let before = game.current_tick();
+
+    game.craft(&ice, 2, false).unwrap();
+
+    assert!(
+        game.has_active_battle(),
+        "the fixture never started a fight"
+    );
+    assert_eq!(
+        game.current_tick() - before,
+        1,
+        "the rest of the compile must not run behind a fight"
+    );
+    assert_eq!(count_item(&game, ids::ICE_BREAKER), 0, "no unit finished");
+    assert_eq!(
+        count_item(&game, ids::CORE_FRAGMENT),
+        ICE_BREAKER_CORE_COST * 2,
+        "the interrupted unit's material comes back"
+    );
+    assert!(!game.hand_craft_in_progress());
 }

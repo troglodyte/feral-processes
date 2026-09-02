@@ -33,6 +33,42 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.80
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+every new field is additive behind `#[serde(default)]`.
+
+- **Compiling by hand costs the machine's own cycle, ten times over.** Every
+  item the base's eleven assemblers make could be hand-compiled at the
+  identical recipe cost, in a single tick, with no worker, no adjacency and
+  no power — so the machines were a convenience rather than a route to
+  anything. A hand-compile now spends ten times the cycle the machine that
+  makes it would have taken: a Blank Substrate is 120 ticks against a
+  Lathe's 12, a Hardened Shell 300 against an Armory's 30. The recipe is
+  still yours; the shortcut is what got priced. A Compiling screen watches
+  the ticks go by and any key stops it, keeping the units that finished and
+  refunding the one in progress. Those are ordinary game ticks, so they cost
+  Power like any other span of them — and a batch that would run your
+  reserve out is refused whole rather than leaving you empty in the field.
+- **The Zone Portal asks for a terminal product from every base chain, and
+  the bill grows with the sector.** Breaching needed ten Portal Fragments
+  and nothing else, which meant the entire production chain was optional and
+  a run could reach the last sector having never built a machine. Opening
+  the way now takes 24 Fragments and the output of the Power, armour and
+  substrate chains besides; the Trace and Cache chains join at sector two
+  and the refactoring chain at three, as their research comes into reach.
+  Each line is ramped from the sector it was introduced in rather than from
+  the first, so a demand that arrives late arrives at its authored price.
+- **The base's power grid burns Power Cells to stay up.** A Recharger Node
+  cost ten Core Fragments once and supplied the grid forever, which made the
+  whole ledger decoration and the Line Driver pointless. A supplier now
+  takes a Power Cell off an adjacent buffer every twenty ticks, and one that
+  cannot pay goes quiet on both halves — the grid it feeds and the Power it
+  trickles into you. The Home is exempt and stays free, so a cold base can
+  still raise the Power Conduit that fuels everything else. The fuel is
+  named in the structure's own file, so a mod can run its grid on something
+  else.
+
 ## 0.13.79
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

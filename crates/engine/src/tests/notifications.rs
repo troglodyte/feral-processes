@@ -292,6 +292,8 @@ fn every_notification_kind_is_fired_by_a_named_site() {
             NotificationKind::FirstRaid => "Game::run_raid",
             NotificationKind::FirstWorkOrder => "Game::queue_work_order",
             NotificationKind::FirstStatic => "Game::move_player, the movement hook",
+            NotificationKind::LowPower => "Game::note_low_power, once a tick",
+            NotificationKind::DownedProgram => "Game::bench_or_dissolve, the benched arm",
             NotificationKind::Breach => "Game::enter_next_zone",
             NotificationKind::ContractClosed => "Game::complete_contract",
             NotificationKind::OnboardingComplete => "Game::complete_contract, the onboarding arm",
@@ -319,7 +321,9 @@ fn tutorials_latch_and_milestones_do_not() {
             | NotificationKind::FirstDescent
             | NotificationKind::FirstRaid
             | NotificationKind::FirstWorkOrder
-            | NotificationKind::FirstStatic => Repeat::OnceEver,
+            | NotificationKind::FirstStatic
+            | NotificationKind::LowPower
+            | NotificationKind::DownedProgram => Repeat::OnceEver,
             // The chain runs on every new game, so a briefing latched across
             // runs would leave a second playthrough's missions unexplained.
             NotificationKind::Breach
@@ -476,5 +480,93 @@ fn finishing_a_mission_briefs_the_next_one() {
     assert!(
         std::iter::from_fn(|| game.take_notification()).any(|n| n.title.contains(&next.name)),
         "the step that was just handed out is the one briefed"
+    );
+}
+
+/// **The low-Power notice fires at the threshold the penalty starts at**,
+/// `tuning::LOW_POWER_ATTACK_THRESHOLD`, and not at a fraction of its own:
+/// a second number here would let the screen say "your attacks are
+/// weakening" on a tick where they are not.
+///
+/// Driven by ticking rather than by writing the reserve and calling the
+/// hook, because the drain lives in `needs_tick_system` inside the schedule
+/// and the whole question is whether anything reads it back afterwards. The
+/// reserve is set by *inserting* one — `PowerReserve`'s float is private and
+/// its seven operations match the shipped call sites, so a test setter would
+/// be an eighth.
+#[test]
+fn crossing_the_low_power_threshold_notifies_once() {
+    let mut game = fresh();
+    drain(&mut game);
+    let player = game.player_entity();
+    let above = crate::tuning::LOW_POWER_ATTACK_THRESHOLD + 5.0;
+    game.world
+        .entity_mut(player)
+        .insert(PowerReserve::new(above));
+
+    game.tick();
+    assert_eq!(
+        game.notifications_pending(),
+        0,
+        "above the threshold there is nothing to say"
+    );
+
+    // A hair above, so the passive drain alone carries it under on the very
+    // next tick and the crossing is the only thing that changed.
+    game.world.entity_mut(player).insert(PowerReserve::new(
+        crate::tuning::LOW_POWER_ATTACK_THRESHOLD + 0.1,
+    ));
+    game.tick();
+    assert_eq!(
+        game.notifications_pending(),
+        1,
+        "crossing under is what the player is told about"
+    );
+    assert!(latched(&game, NotificationKind::LowPower));
+    drain(&mut game);
+
+    for _ in 0..5 {
+        game.tick();
+    }
+    assert_eq!(
+        game.notifications_pending(),
+        0,
+        "staying low is not news — the latch is what makes it a tutorial"
+    );
+}
+
+/// A benched program is the one state the player cannot fix by playing on:
+/// `Downed` is a one-way door with no Bay standing, and nothing else in the
+/// game says so.
+#[test]
+fn benching_a_program_with_no_bay_asks_for_one() {
+    let mut game = fresh();
+    let program = spawn_tamed(&mut game, 1, 0);
+    drain(&mut game);
+
+    game.bench_or_dissolve(program);
+
+    assert_eq!(game.notifications_pending(), 1, "the bench is the trigger");
+    assert!(latched(&game, NotificationKind::DownedProgram));
+}
+
+/// ...and a base that already has one is not told to build it. The gate is
+/// `StructureDef::recovery` rather than the Bay's id, `dispatches_sorties`'
+/// rule: a mod's own recovery structure answers the player's problem just as
+/// well, and naming `"repair_bay"` in Rust would put content in the engine.
+#[test]
+fn benching_a_program_with_a_bay_standing_says_nothing() {
+    let mut game = fresh();
+    place_home(&mut game);
+    spawn_machine_at(&mut game, "repair_bay", 2, 0);
+    let program = spawn_tamed(&mut game, 1, 0);
+    drain(&mut game);
+
+    game.bench_or_dissolve(program);
+
+    assert_eq!(
+        game.notifications_pending(),
+        0,
+        "the program walks itself to the Bay — there is nothing to ask for"
     );
 }

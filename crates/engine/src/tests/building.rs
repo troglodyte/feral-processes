@@ -2666,3 +2666,67 @@ fn a_negative_recovery_rate_never_damages_the_program_it_names() {
         "a negative rate floors at zero rather than draining the program"
     );
 }
+
+/// **The door lands where the party founded from.**
+///
+/// The Home still stands on `BASE_EXIT_CELL` — base space has one origin
+/// and one way out of it — but the anchor it is reached through is a zone
+/// fixture, and pinning that to the sector's arrival point made every run's
+/// base open at the same tile whatever ground the player had walked to.
+#[test]
+fn founding_stands_the_anchor_where_the_party_is() {
+    let mut game = Game::new(3601, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_player_at(&mut game, 7, -3);
+
+    game.place_structure("home", 0, 0)
+        .expect("founding is the one build made from the open grid");
+
+    assert_eq!(
+        game.anchor_position(),
+        Some((7, -3)),
+        "the anchor follows the deploy rather than staying at the arrival point"
+    );
+    // The claim that matters: the party can step through it from where they
+    // are standing, which is what `enter_base` asks.
+    game.enter_base()
+        .expect("the door is underfoot the moment the Home is up");
+}
+
+/// A link is walked *onto* to descend, so an anchor sharing its tile could
+/// never be stood on — the step that would reach it drops the party into the
+/// Stack instead.
+#[test]
+fn founding_on_a_stack_link_is_refused() {
+    let mut game = Game::new(3602, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let link = {
+        let mut query = game.world.query_filtered::<&Position, With<SurfaceLink>>();
+        *query
+            .iter(&game.world)
+            .next()
+            .expect("a fresh sector is seeded with links")
+    };
+    stand_player_at(&mut game, link.x, link.y);
+
+    let err = game
+        .place_structure("home", 0, 0)
+        .expect_err("the anchor cannot share a tile with a link");
+    assert!(err.contains("link"), "unexpected refusal: {err}");
+    assert!(
+        !game.has_home(),
+        "a refused founding leaves the run without a base"
+    );
+}
+
+/// **The Home is free**, and that is a floor under the run rather than a
+/// discount: the wizard's Kit step can spend the whole allowance on gear, so
+/// a priced Home is a run that can never open a base at all.
+#[test]
+fn founding_costs_nothing() {
+    let mut game = Game::new(3603, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.entity_mut(player).insert(Inventory::default());
+
+    game.place_structure("home", 0, 0)
+        .expect("an empty pack is enough to found a base");
+    assert!(game.has_home(), "the Home is standing");
+}

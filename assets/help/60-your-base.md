@@ -1,15 +1,17 @@
 # Your base
 
-Your base is not on the map. It is its own space, entered through a permanent gray anchor that
-stands wherever your run began: walk onto that tile and press < to phase up into it, and walk back
-to the door cell inside and press > to come back down. The anchor cannot be destroyed or moved,
-and it travels with you across a breach, so the base you built in zone 1 is the base you walk into
-in zone 6, exactly as you left it.
+Your base is not on the map. It is its own space, entered through a permanent gray anchor: walk
+onto that tile and press < to phase up into it, and walk back to the door cell inside and press >
+to come back down. Until you found a base the anchor waits on the tile your run began on; deploying
+your Home settles it on the ground you are standing on instead, and after that it cannot be
+destroyed or moved. It travels with you across a breach, so the base you built in zone 1 is the
+base you walk into in zone 6, exactly as you left it.
 
-Until you deploy a Home the anchor is dark and there is nothing on the other side. Deploying one is
-the single build allowed out on the open grid, and it clears a small pocket of floor around the
-door. From then on every machine, bench and trader you build stands in there rather than out on the
-ground you are standing on. Demolishing the Home cascades through everything on the floor, so it is
+Until you deploy a Home the anchor is dark and there is nothing on the other side. Deploying one
+costs nothing and is the single build allowed out on the open grid — so walk to ground you want to
+come back to before you press it — and it clears a small pocket of floor around the door. From then
+on every machine, bench and trader you build stands in there rather than out on the ground you are
+standing on. Demolishing the Home cascades through everything on the floor, so it is
 not a thing to do idly.
 
 Everything past that first pocket is solid, and you cut it out yourself.

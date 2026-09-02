@@ -9050,3 +9050,87 @@ Every notification draws its glyph today, since `assets/sprites/` holds one
 file — that is the design working, not a gap. `NotificationDef::sprite`
 stayed through the move to Rust for that reason: it is the live hook art
 lands on, not an unused field.
+
+### The Home is free, and the anchor lands where it was founded
+
+Two halves of one deploy, and they move in opposite spaces. **The Home
+itself still stands on `base_space::BASE_EXIT_CELL`** — base space has one
+origin, `lay_starting_pocket` lays the floor around it, and `leave_base`
+refuses to let the party out anywhere else, so a Home standing somewhere
+else in the pocket makes the exit cell a door onto bare floor. **The
+`components::BaseAnchor` lands on the tile the party founded from**, because
+it is a zone-surface fixture and nothing about it is defined against base
+space's origin.
+
+What that fixes is a run that had walked. The anchor spawns at the sector's
+arrival point in `Game::new`, and founding used to leave it there: a player
+who crossed half a zone and deployed their Home on ground they liked opened
+their base back at the tile they materialised on, with no way to say so and
+nothing on screen to explain it. `Game::move_anchor_to` is the one writer,
+shared with `enter_next_zone` — the other thing that decides where the door
+stands, since a base that travels has to take its door with it — and both
+*move* the entity rather than despawning and respawning it, so
+`resources::AnchorEntity` names the same anchor for the whole run.
+
+**The one refusal it needed is a Stack link.** `Game::move_player` treats a
+link tile as a descent rather than a step, so a party can be *standing* on
+one (that is where `ascend` puts them) but can never walk back onto it. An
+anchor sharing that tile could therefore never be entered: the step that
+would reach it drops the party into the Stack instead. The refusal sits with
+`require_surface` in the block that resolves the door tile, above the
+materials check, because it is a question about where the door goes rather
+than about what the build costs.
+
+**And the Home costs nothing.** Its `build_cost` was five Core Fragments
+against a starting kit that carried five or six of them, which made founding
+a formality for a default character and a dead end for a bought one: the
+creation wizard's Kit step *replaces* the class kit with whatever the player
+spends `CREATION_CREDITS` on, so a run that bought gear instead of fragments
+could not open a base at all, and nothing in the game would tell them why.
+The founding path keeps its pack-charging, refuse-on-shortfall shape
+regardless — it is generic over `build_cost`, and a mod that prices the Home
+back up still works — so what changed is one line of data, not the verb.
+
+Three fixtures moved with it, and the third is the interesting one.
+`tests::support::place_home` no longer tops the pack up first, so a test's
+inventory counts do not carry five materials it never asked for. The engine
+test that asserted the charge asserts the pack is *untouched* instead. And
+`app-core`'s `app_owning_a_program_and_a_compiler_with_cargo` had been
+pushing its cargo onto the save's inventory `Vec` as a second row for an
+item the starting kit already carried — invisible while founding zeroed the
+kit's row, and a silent five-fragment pack the moment it did not, because
+`Inventory::count` reads the **first** row keyed to an item and `Game::load`
+restores the `Vec` verbatim. It merges now.
+
+### The low-Power notice is a state read once a tick, not a hook on a spend
+
+Every other tutorial fires from the site of the thing it explains — a
+descent, a raid, a work order. Power cannot, because it leaves the player two
+ways. `Game::spend_power` charges a routine, and `systems::needs_tick_system`
+drains `tuning::HUNGER_DECAY_PER_TICK` every tick whatever the player is
+doing. The second is how most runs cross the line, and it is a bevy system
+with no `Game` to notify from — so a hook on the spend would be silent for
+exactly the player who most needs telling, the one who has been walking.
+
+`Game::note_low_power` therefore reads the reserve once a tick from
+`tick_inner`, beside `note_strandings` and for its reason: the schedule has
+just run and `Game::notify` is a `&mut Game` door. `Repeat::OnceEver` is the
+whole of what keeps a state read from being a per-tick alarm — the reserve
+sits under the threshold for as long as the player leaves it there, and the
+latch is what makes that one sentence instead of a thousand.
+
+**The threshold is `tuning::LOW_POWER_ATTACK_THRESHOLD` and not a fraction of
+its own.** It happens to be half of `components::POWER_MAX` today, which is
+what the request asked for, but the number that matters is the one
+`battle::power_attack_multiplier` starts docking attacks at: a second
+constant here would let the screen say "your attacks start to weaken" on a
+tick where they do not.
+
+**The benched-program notice beside it is gated on the Bay, not on the
+program.** It fires from `Game::bench_or_dissolve`'s Forgiving arm — the one
+door a *death* goes through — and only while `Game::repair_bays` is empty,
+because a base that already has one has nothing to be told: the program walks
+there itself. The gate reads `StructureDef::recovery` rather than
+`"repair_bay"`, `dispatches_sorties`' rule, so a mod's own recovery structure
+answers it too. Its copy has to keep step with `Game::add_to_party`'s
+refusal, which is the other place the game says a downed program needs a Bay.

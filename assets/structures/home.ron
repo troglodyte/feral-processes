@@ -4,7 +4,7 @@
     description: "Anchors your base — everything else must be deployed on laid floor, and demolishing it cascades. GC Entropy Sweeps can't touch it, it is where a Symlink puts you down, and it supplies your base's Grid on its own, before you ever build a Recharger.",
     glyph: 'H',
     color: Green,
-    build_cost: [("core_fragment", 5)],
+    build_cost: [],
     work: None,
     raidable: false,
     power_supply: 4,

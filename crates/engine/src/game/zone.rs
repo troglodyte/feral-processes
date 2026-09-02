@@ -385,12 +385,10 @@ impl Game {
         // old coordinates — but a door back to a base that travels with the
         // party has to travel with it too. Moved rather than despawned and
         // respawned, so `resources::AnchorEntity` still names the same
-        // entity on both sides of a breach.
-        let anchor = self.world.resource::<AnchorEntity>().0;
-        if let Some(mut pos) = self.world.get_mut::<Position>(anchor) {
-            pos.x = start.0;
-            pos.y = start.1;
-        }
+        // entity on both sides of a breach. `move_anchor_to` is shared with
+        // the founding deploy, which is the other thing that decides where
+        // the door stands.
+        self.move_anchor_to(start.0, start.1);
 
         // Build salvage and breach keys are zone-local: the next breach has
         // to be funded in the zone you leave from, so a stockpile can't chain

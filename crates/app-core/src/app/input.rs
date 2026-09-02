@@ -411,13 +411,24 @@ impl App {
     /// resuming after being backgrounded, or a test driving straight to
     /// completion) must still land on the batch's true tick count instead
     /// of stalling one tick a frame behind it.
+    ///
+    /// **It ends in `after_tick`, because it spends ticks** — `handle_key`'s
+    /// tail and `update_realtime` are the other two paths that do and both
+    /// end there. Once per call rather than once per tick: `maybe_autosave`
+    /// is keyed to the game clock and would otherwise write a save every
+    /// `AUTOSAVE_INTERVAL_TICKS` of a batch that a single oversized `dt`
+    /// drained in one go.
     pub fn advance_compile(&mut self, dt: f32) {
         if self.mode != Mode::Compiling {
             return;
         }
-        let Some(game) = &mut self.game else { return };
+        if self.game.is_none() {
+            return;
+        }
         self.compile_ticks_carry += dt * COMPILE_TICKS_PER_SECOND;
+        let mut spent_a_tick = false;
         while self.compile_ticks_carry >= 1.0 {
+            let Some(game) = &mut self.game else { break };
             let Some(progress) = game.advance_hand_craft() else {
                 // Nothing in flight — an abort or an interruption elsewhere
                 // (a battle, a game over) already closed the loop and this
@@ -425,38 +436,39 @@ impl App {
                 // resource that is gone.
                 self.compile_progress = None;
                 self.mode = Mode::Playing;
-                return;
+                break;
             };
             self.compile_ticks_carry -= 1.0;
+            spent_a_tick = true;
             let finished = progress.finished;
             self.compile_progress = Some(progress);
             if finished {
                 self.compile_progress = None;
                 self.compile_ticks_carry = 0.0;
                 self.finish_compile();
-                return;
+                break;
             }
+        }
+        if spent_a_tick {
+            self.after_tick();
         }
     }
 
     /// Where a batch's `finished` transition lands — back on the map for an
     /// ordinary end, `Mode::Battle` for one a tick opened mid-batch, or
-    /// `Mode::GameOver` for one a tick ended. `after_world_action`'s same
-    /// two checks: a hand-compile's ticks are ordinary game ticks and can
-    /// trigger either exactly as a move's can, and `close_hand_craft` has
-    /// already refunded the unit in flight by the time this runs.
+    /// `Mode::GameOver` for one a tick ended.
+    ///
+    /// **`after_world_action` itself, not a copy of it.** A hand-compile's
+    /// ticks are ordinary game ticks and can open a fight or end the run
+    /// exactly as a move's can, so the bookkeeping is the same bookkeeping —
+    /// and the copy this used to be had already lost a line of it, the
+    /// `SoundEvent::Defeat` a run that ends anywhere else gets. The map mode
+    /// is set first because `after_world_action` only ever *overrides* the
+    /// mode; `close_hand_craft` has already refunded the unit in flight by
+    /// the time either runs.
     fn finish_compile(&mut self) {
-        let entered_battle = self
-            .game
-            .as_ref()
-            .map(|g| g.has_active_battle())
-            .unwrap_or(false);
-        self.mode = if entered_battle {
-            Mode::Battle
-        } else {
-            Mode::Playing
-        };
-        self.check_game_over();
+        self.mode = Mode::Playing;
+        self.after_world_action(true, false);
     }
 
     /// How many lines are on screen right now.

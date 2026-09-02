@@ -9289,6 +9289,55 @@ a material lands the stream exactly where doing nothing for that long lands
 it, and one piece of gear lands it one draw further on. Re-seeding it to a
 value that passed would have thrown the property away.
 
+### A path that spends ticks owes `after_tick`, and a screen that spends them paces against `dt`
+
+`Mode::Compiling` made app-core's third tick-spending path, and both of the
+rules it had to learn were already true and written down nowhere.
+
+**Every path that advances the world ends in `after_tick`.** There were two —
+`handle_key`'s tail and `update_realtime` — and `App::advance_compile` was
+written as a third that called neither it nor anything that reached it. What
+`after_tick` holds is `sync_info_tab_to_locale`, `flush_battle_telemetry`,
+`flush_profile_writes`, `maybe_autosave` and `show_next_notification`, and its
+own doc says it exists so a third tick site cannot pick up one half and miss
+the other — which is exactly what happened. At `AUTOSAVE_INTERVAL_TICKS = 50`
+a twelve-shell batch is 3,600 ticks and about seventy-two autosaves that never
+fired, with the profile flush and the notification queue suspended alongside
+them. It self-heals on the next idle tick, so the exposure was the window and
+never permanent loss, which is precisely why nothing caught it.
+
+**Once per call, not once per tick.** `maybe_autosave` is keyed to the game
+clock, so an `after_tick` inside the loop would write a save every fifty ticks
+of a batch a single oversized `dt` drained in one go — seventy-two writes in
+one frame, the opposite failure. The call sits after the loop and is gated on
+a tick actually having been spent.
+
+**A notification can now take the screen the instant a batch ends**, and that
+is the timing rule working rather than a new problem: `show_next_notification`
+returns unless `mode == Mode::Playing`, so a notice raised during the compile
+waits out the whole batch and surfaces on the frame the mode goes back to the
+map. The low-Power notice is the one that fires most, because the ticks that
+raise it are the ticks the batch just spent. `tests/crafting.rs`'s
+`drain_compile` dismisses it rather than asserting against it.
+
+**And `finish_compile` is `after_world_action`, not a copy of it.** It was
+written as the two checks that function makes — a battle opened mid-batch, a
+run ended mid-batch — and quietly dropped its third line, the
+`SoundEvent::Defeat` every other ending queues. A run that ended on a compile
+tick reached the game-over screen in silence. The mode is set to `Mode::Playing`
+first because `after_world_action` only ever *overrides* a mode.
+
+**The pace is `dt`-scaled and never one tick per rendered frame.** One tick
+per frame was the first thing considered and it compiles fine: a 300-tick
+Hardened Shell is a five-second stare at 60fps, which reads exactly right. It
+also ties the *cost the engine charges* to the *frame rate the machine happens
+to render at*, so the same batch is cheaper on better hardware —
+`hand_craft_ticks` pricing hand-compiling as a real cost means nothing if the
+ticks spent depend on the GPU. `COMPILE_TICKS_PER_SECOND = 60` reproduces the
+same five-second shell a 60fps player would have got, without depending on
+60fps to get there, and `compile_ticks_carry` is `BattleReveal::accumulated`'s
+carry so a frame worth less than one tick is not rounded away.
+
 ### A zone-portal line is ramped from the zone it was introduced in, not from zone 1
 
 The audit that started this whole change named the portal's price as one of

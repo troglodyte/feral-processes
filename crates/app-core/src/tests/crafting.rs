@@ -2,6 +2,8 @@
 //! careful-compile toggle that decides what the batch is worth, and
 //! `Mode::Compiling`, the screen that spends `Game::hand_craft_ticks`.
 
+use feral_processes_engine::save;
+
 use super::support::*;
 use crate::*;
 
@@ -11,9 +13,18 @@ use crate::*;
 /// `advance_compile`'s loop keeps spending ticks until it either runs out of
 /// accumulated time or the batch reports `finished`, so a large enough `dt`
 /// always reaches the latter first for anything a test fixture affords.
+///
+/// A batch is hundreds of ticks and `advance_compile` owes `after_tick` for
+/// them, so the compile that ends can be the moment a queued notification
+/// takes the screen — the low-Power notice most of all, since the ticks that
+/// raise it are the ones this just spent. Dismissed here rather than asserted
+/// against: which notice is waiting is not what any caller of this is about.
 pub(crate) fn drain_compile(app: &mut App) {
     assert_eq!(app.mode, Mode::Compiling, "nothing is compiling to drain");
     app.advance_compile(3600.0);
+    while app.mode == Mode::Notification {
+        app.handle_key(GameKey::Esc);
+    }
     assert_eq!(
         app.mode,
         Mode::Playing,
@@ -309,4 +320,81 @@ fn held(app: &App, item: &str) -> u32 {
         .filter(|row| row.copy.item == id)
         .map(|row| row.qty)
         .sum()
+}
+
+/// A path that spends ticks owes `after_tick()`.
+///
+/// `handle_key`'s tail and `update_realtime` both end in it; `advance_compile`
+/// spends ticks in a loop and did not, so a twelve-shell batch was 3,600
+/// ticks with the autosave, the profile flush and the notification queue all
+/// suspended for the duration. It self-heals on the next idle tick, so what
+/// this pins is the window, not permanent loss — and the next tick-spending
+/// path added here has something to fail against.
+#[test]
+fn a_compile_that_spends_ticks_autosaves_like_any_other_span_of_them() {
+    let mut app = stocked_app(720);
+    let path = scratch_path("compile_autosave", 720);
+    let _ = std::fs::remove_file(&path);
+    app.current_save_path = Some(path.clone());
+    app.last_autosave_tick = app.game.as_ref().unwrap().current_tick();
+
+    open_compile_of(&mut app, "ice_breaker");
+    let per_unit = app
+        .game
+        .as_ref()
+        .unwrap()
+        .hand_craft_ticks(&ItemId::from("ice_breaker"));
+    assert!(
+        per_unit > crate::AUTOSAVE_INTERVAL_TICKS as u32,
+        "one unit has to outlast the autosave interval or this proves nothing"
+    );
+    app.handle_key(GameKey::Enter);
+    drain_compile(&mut app);
+
+    assert!(
+        path.exists(),
+        "a batch longer than the autosave interval left no autosave behind"
+    );
+    let _ = std::fs::remove_file(&path);
+}
+
+/// A run that ends on a compile tick reaches the game-over screen with the
+/// same cue every other ending has.
+///
+/// `finish_compile` copied `after_world_action`'s two checks and not its
+/// third line, so the defeat sound was silently dropped on exactly one of
+/// the ways a run can end.
+#[test]
+fn a_run_that_ends_mid_compile_still_gets_its_defeat_cue() {
+    let mut app = stocked_app(721);
+
+    // Through the save, which is the only door app-core has onto the
+    // engine's `World`: a run on the difficulty that ends rather than
+    // reboots, with the player already at zero. Nothing has ticked yet, so
+    // `death_handling_system` has not seen it and the compile still arms.
+    let path = scratch_path("compile_gameover", 721);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    data.difficulty = DifficultyMode::Permadeath;
+    data.player.hp = 0;
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
+
+    open_compile_of(&mut app, "ice_breaker");
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::Compiling, "the batch should have armed");
+    let _ = app.take_sounds();
+
+    app.advance_compile(3600.0);
+
+    assert_eq!(
+        app.mode,
+        Mode::GameOver,
+        "the first tick should end the run"
+    );
+    assert!(
+        app.take_sounds().contains(&SoundEvent::Defeat),
+        "a run that ends on a compile tick ends as silently as one that does not"
+    );
+    let _ = std::fs::remove_file(&path);
 }

@@ -785,9 +785,23 @@ against the unscaled species, and any ramp inside the ring falsifies it.
 The ring still does something the ramp does not — it gates which species
 are *born*, where the ramp only scales one already born.
 
-`DANGER_RAMP_TILES` is 128, four `world::CHUNK_SIZE` chunks past the ring.
-It is the only number in the feature; everything else is derived from the
-zone curve. At the zone-1 cap a scrapper goes 94 to 188, which reads Orange
+`DANGER_RAMP_TILES` is 32, one `world::CHUNK_SIZE` past the ring, and it is
+the only number in the feature — everything else is derived from the zone
+curve. It opened at 128 and that was wrong in play: the field read flat,
+because 128 was picked off the world being unbounded rather than off the
+scale the map actually works at. Everything the player reaches for lives
+inside a couple of dozen tiles (`EXAMINE_RANGE_TILES` and
+`WILD_SPAWN_RADIUS_TILES` are both 12, `STACK_NEAREST_LINK_TILES` is 8) and
+the furthest the game scatters its own content is `STACK_LINK_SCATTER_TILES`
+at 40, so a player never walked out of the first tenth of a 128-tile ramp.
+At 32 the cap lands at 39 tiles, which is where the outermost Stack link
+already sits: walk to the far links and you have seen the whole gradient.
+
+The trade is that past 39 tiles a zone sits uniformly at the next zone's
+doorstep, so the gradient is an *opening* rather than a property of the
+whole zone. That is the right way round — the ramp exists so a strong
+creation build has somewhere to walk early, not so a zone has texture
+forever. At the zone-1 cap a scrapper goes 94 to 188, which reads Orange
 against a 150-power creation build and Red against the bare 98 baseline,
 while glitch goes 44 to 88 and stays green — a spread rather than a wall,
 which is what the far field should be.

@@ -3233,18 +3233,32 @@ fn the_ambient_spawner_ramps_with_distance() {
         .iter(&game.world)
         .collect();
 
-    let mut placed = None;
-    'search: for dy in -6..=6 {
-        for _ in 0..40 {
-            if game.try_spawn_habitat_creature(far, sy + dy) {
-                placed = Some(sy + dy);
+    // The whole perimeter at the cap's Chebyshev radius, not one column of
+    // it: which tiles are walkable is terrain, and a single column can be
+    // solid all the way down.
+    let ring = far - sx;
+    let perimeter: Vec<(i32, i32)> = (-ring..=ring)
+        .flat_map(|o| {
+            [
+                (sx + ring, sy + o),
+                (sx - ring, sy + o),
+                (sx + o, sy + ring),
+                (sx + o, sy - ring),
+            ]
+        })
+        .collect();
+    let mut placed = false;
+    'search: for (x, y) in perimeter {
+        for _ in 0..8 {
+            if game.try_spawn_habitat_creature(x, y) {
+                placed = true;
                 break 'search;
             }
         }
     }
     assert!(
-        placed.is_some(),
-        "no walkable, habitable tile at the ramp's cap to spawn onto"
+        placed,
+        "no walkable, habitable tile anywhere on the ramp's cap to spawn onto"
     );
 
     let fresh: Vec<(String, i32)> = game

@@ -240,7 +240,10 @@ pub struct HandCraftProgress {
 - [ ] **Step 9: Run `cargo test --workspace`.** **Expect fallout**, and it is
       the interesting part of this task: `craft` now advances the clock by
       the full duration instead of one tick, so tests that craft and then
-      assert on something a background system touches will move. Read each
+      assert on something a background system touches will move.
+      *(Outcome, recorded after the fact: exactly one test moved —
+      `only_gear_spends_a_quality_roll`, whose doc had said in as many words
+      that it worked "because `craft` ticks once whatever the batch size".)* Read each
       failure. Per the memory note on RNG-stream shifts, a seeded assertion
       that moves is usually incidental coupling in the fixture — re-ground it
       rather than re-seeding. Report anything you cannot explain instead of
@@ -276,9 +279,51 @@ pub struct HandCraftProgress {
 - Modify: `crates/gui/src/render/crafting.rs`
 - Test: gui render tests in `crates/gui/src/render/`, app-core tests
 
-**Interfaces — Consumes from Task A:** `Game::hand_craft_ticks`,
-`begin_hand_craft`, `advance_hand_craft`, `abort_hand_craft`,
-`hand_craft_in_progress`, `HandCraftProgress`.
+**Interfaces — Consumes from Task A** (verified against `88110d57`, not
+predicted):
+
+```rust
+// crates/engine/src/tuning.rs
+pub const HAND_CRAFT_TICK_MULT: u32 = 10;
+pub const HAND_CRAFT_DEFAULT_CYCLE: u32 = 10;
+
+// impl Game
+pub fn hand_craft_ticks(&self, item: &ItemId) -> u32;
+pub fn hand_craft_in_progress(&self) -> bool;
+pub fn begin_hand_craft(&mut self, result: &ItemId, quantity: u32, careful: bool) -> Result<(), String>;
+pub fn advance_hand_craft(&mut self) -> Option<HandCraftProgress>;
+pub fn abort_hand_craft(&mut self);
+
+// re-exported at the crate root as feral_processes_engine::HandCraftProgress
+pub struct HandCraftProgress {
+    pub item: ItemId,
+    pub unit: u32,        // 1-based
+    pub units: u32,
+    pub ticks_done: u32,
+    pub ticks_total: u32,
+    pub finished: bool,
+}
+```
+
+Three things Task A settled that differ from this plan's original sketch:
+
+1. **`advance_hand_craft` returns `Some(progress)` with `finished: true` on
+   the call that ends the batch, then `None` on every call after** — the
+   resource is gone by then. Stop on `p.finished`, not on the first `None`.
+2. **On that finished report `ticks_total` is currently 0**, because no unit
+   is in flight to size a bar against — so a bar would collapse on its last
+   frame. **Task B is authorised to fix this in the engine**: make
+   `close_hand_craft` carry the real total through. It is a two-line change
+   in `crates/engine/src/game/crafting.rs` and it belongs to the screen that
+   needs it.
+3. `HandCraftProgress` carries no "how many came out" count. The batch is
+   logged once on the way out with the true count, so B's existing
+   `report` path needs no change.
+
+**`resources::HandCraft` is inserted by `begin` and removed by `close`**, so a
+run that never hand-compiles carries no resource at all. Do not "fix" this by
+inserting it at the constructors — that is deliberate, and it is why adding
+this feature shifted no query iteration order.
 
 ### The five non-obvious things
 

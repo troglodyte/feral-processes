@@ -655,7 +655,7 @@ fn a_creation_perk_is_bought_through_the_same_door_the_run_uses() {
 
     let choice = CharacterChoice {
         perks: vec![(crate::perks::Perk::Buffer, 1)],
-        ..CharacterChoice::default()
+        ..CharacterChoice::at_creation()
     };
     let game = Game::new_with(
         90_020,
@@ -667,10 +667,16 @@ fn a_creation_perk_is_bought_through_the_same_door_the_run_uses() {
     let player = game.player_entity();
     let perks = game.world.get::<Perks>(player).expect("a perks component");
     assert_eq!(perks.level(crate::perks::Perk::Buffer), 1);
-    assert_eq!(
-        perks.points, 0,
-        "the allowance is spent, never carried into the run"
-    );
+    // **What the screen did not spend arrives with the run** — the one
+    // creation allowance that survives the door, and the reason this step
+    // is not a gate like the other two.
+    let cost = game
+        .perk_defs()
+        .into_iter()
+        .find(|def| def.id == crate::perks::Perk::Buffer)
+        .expect("a shipped perk")
+        .cost;
+    assert_eq!(perks.points, tuning::CREATION_PERK_POINTS - cost);
 
     let after = *game.world.get::<Stats>(player).unwrap();
     assert!(
@@ -682,20 +688,22 @@ fn a_creation_perk_is_bought_through_the_same_door_the_run_uses() {
     assert_eq!(after.hp, after.max_hp, "a run must not start damaged");
 }
 
-/// **An overspent basket applies nothing**, `apply_creation_stats`' rule on
-/// the third budget — and the allowance is never granted, so the run does
-/// not open holding points it did not earn. Both halves matter: a basket
-/// that failed closed while still handing out its allowance would give
-/// every `Game::new` call site free Perk Points, which
-/// `attention::unspent_perk_points_ask_to_be_spent` reads as a run needing
-/// the player.
+/// **An overspent basket buys nothing**, `apply_creation_stats`' rule on
+/// the third budget — and the allowance is granted all the same, since it
+/// is not what was overspent.
+///
+/// The allowance riding `CharacterChoice::perk_points` is what keeps that
+/// safe: `Game::new` builds `default()`, whose allowance is zero, so none
+/// of its ~1,600 call sites opens holding points —
+/// `attention::unspent_perk_points_ask_to_be_spent` would read that as a
+/// run needing the player, and `a_calm_base_needs_nothing` is what caught
+/// it when the constant was read here directly.
 #[test]
 fn an_overspent_perk_basket_applies_nothing() {
     let choice = CharacterChoice {
-        // Four levels of the cheapest perk is 8 points against an
-        // allowance of 4.
+        // Four levels of a 3-point perk is 12 against an allowance of 4.
         perks: vec![(crate::perks::Perk::Buffer, 4)],
-        ..CharacterChoice::default()
+        ..CharacterChoice::at_creation()
     };
     let game = Game::new_with(
         90_021,
@@ -709,7 +717,11 @@ fn an_overspent_perk_basket_applies_nothing() {
         .get::<Perks>(game.player_entity())
         .expect("a perks component");
     assert_eq!(perks.level(crate::perks::Perk::Buffer), 0);
-    assert_eq!(perks.points, 0, "and no allowance was handed out either");
+    assert_eq!(
+        perks.points,
+        tuning::CREATION_PERK_POINTS,
+        "the allowance is not what was overspent, so it is still granted"
+    );
 }
 
 /// **A class row is a sentence a player can act on**, not a row of sigils.

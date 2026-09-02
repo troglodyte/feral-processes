@@ -268,7 +268,7 @@ fn footer(app: &App, step: CreationStep) -> String {
         }
         CreationStep::Perks => format!(
             "{} of {CREATION_PERK_POINTS} Perk Points left - Left/Right buys \
-             (Shift/Ctrl); Enter moves on once they are spent",
+             (Shift/Ctrl); Enter moves on, and what you keep comes with you",
             app.creation_perk_points_left()
         ),
         _ => plain_footer(step).to_string(),

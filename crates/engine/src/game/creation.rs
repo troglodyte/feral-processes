@@ -69,6 +69,18 @@ pub struct CharacterChoice {
     /// three `StatGain` perks, and a hand-built component would ship those
     /// three silently doing nothing.
     pub perks: Vec<(crate::perks::Perk, u32)>,
+    /// Perk Points this character is created holding, before `perks` is
+    /// bought out of them. Whatever is left over arrives with the run.
+    ///
+    /// **A field rather than a constant read at apply time**, because
+    /// `Game::new` builds `CharacterChoice::default()` and an allowance
+    /// there would hand four unspent points to every one of its ~1,600
+    /// call sites — which `attention::unspent_perk_points_ask_to_be_spent`
+    /// reads as a run that needs the player. `default()` is 0 and
+    /// `at_creation()` is the wizard's allowance; the pool and the Credit
+    /// allowance need no equivalent because neither is granted as a
+    /// spendable thing.
+    pub perk_points: u32,
 }
 
 /// Today's player exactly — no class, the `@` glyph wearing its
@@ -88,11 +100,22 @@ impl Default for CharacterChoice {
             routine: None,
             items: Vec::new(),
             perks: Vec::new(),
+            perk_points: 0,
         }
     }
 }
 
 impl CharacterChoice {
+    /// What the creation wizard opens on: `default()` plus the Perk Point
+    /// allowance creation hands out. See `perk_points` for why the
+    /// allowance is not simply `default()`'s.
+    pub fn at_creation() -> Self {
+        Self {
+            perk_points: crate::tuning::CREATION_PERK_POINTS,
+            ..Self::default()
+        }
+    }
+
     /// Pool points this spend costs, priced per axis through
     /// `crate::tuning::CREATION_COST_*` — `stats[i]` is how many points of axis
     /// `MainStat::all()[i]` are bought, each at that axis's own rate. `None`
@@ -129,7 +152,7 @@ impl CharacterChoice {
             let cost = perks.get(perk)?.cost;
             sum.checked_add(levels.checked_mul(cost)?)
         })?;
-        (total <= crate::tuning::CREATION_PERK_POINTS).then_some(total)
+        (total <= self.perk_points).then_some(total)
     }
 }
 
@@ -156,23 +179,29 @@ impl Game {
     /// three of the nineteen perks doing nothing at all, and nothing would
     /// fail to compile.
     ///
-    /// **The allowance is never granted, only spent** — exactly what
-    /// `apply_creation_stats` does with the stat pool, and for a harder
-    /// reason: `Game::new` delegates here with `CharacterChoice::default()`,
-    /// so points handed out unconditionally would give all ~1,600 of its
-    /// call sites four unspent Perk Points, which
-    /// `attention::unspent_perk_points_ask_to_be_spent` reads as a run that
-    /// needs the player. An empty basket costs nothing and grants nothing,
-    /// which is today's player exactly.
+    /// **What the basket does not spend arrives with the run**, unlike the
+    /// stat pool and unlike a `Credits` allowance that turns into goods —
+    /// a Perk Point is the same point before and after the run starts, and
+    /// buys the same perk at the same price, so consuming the remainder at
+    /// the door would have been taking something away for nothing.
     ///
-    /// Fails closed on the whole basket, `apply_creation_stats`' rule.
+    /// The allowance rides `CharacterChoice::perk_points` rather than being
+    /// read off `tuning` here, which is what keeps `Game::new` — and its
+    /// ~1,600 `CharacterChoice::default()` call sites — on zero.
+    ///
+    /// Fails closed on the whole basket, `apply_creation_stats`' rule: an
+    /// overspent basket buys nothing, and the allowance is still granted,
+    /// since it is not what was overspent.
     fn apply_creation_perks(&mut self, choice: &CharacterChoice) {
-        let Some(cost) = choice.perk_cost(self.world.resource::<crate::perks::PerkDb>()) else {
-            return;
-        };
         let player = self.player_entity();
         if let Some(mut perks) = self.world.get_mut::<Perks>(player) {
-            perks.points += cost;
+            perks.points += choice.perk_points;
+        }
+        if choice
+            .perk_cost(self.world.resource::<crate::perks::PerkDb>())
+            .is_none()
+        {
+            return;
         }
         for &(perk, levels) in &choice.perks.clone() {
             for _ in 0..levels {

@@ -903,11 +903,14 @@ pub enum CreationStep {
     Points,
     /// The first perks, bought out of `tuning::CREATION_PERK_POINTS`.
     ///
-    /// **Before Routine, and a budget like the other two**: the allowance
-    /// is spent here or lost, so the step refuses to be left while a perk
-    /// on it is still affordable. It cannot be carried into the run —
-    /// `Game::new` applies the same path with an empty basket, and points
-    /// handed out there would reach every call site in the engine's suite.
+    /// **Before Routine, and the one budget that is not a gate.** The Kit
+    /// and Points steps refuse to be left with anything affordable
+    /// unspent; this one does not, because a Perk Point is the only one of
+    /// the three allowances that survives the door — it is the same point
+    /// after the run starts and buys the same perk at the same price, so
+    /// what the screen does not spend arrives with the run. The allowance
+    /// rides `CharacterChoice::perk_points` rather than a constant, which
+    /// is what keeps `Game::new`'s default character on zero.
     Perks,
     Routine,
     /// The character read back whole, and the last screen carrying a
@@ -974,13 +977,16 @@ impl CreationStep {
     /// step's Credits, the Points step's pool, the Perks step's Perk
     /// Points.
     ///
-    /// **One list, because three things read it and they must agree.** A
+    /// **One list, because two things read it and they must agree.** A
     /// spending step gives Left/Right to its basket (`Mode::Transfer`'s
-    /// rule) rather than to paging, refuses to be left while anything on
-    /// it is still affordable, and writes its own live footer. The Perks
-    /// step shipped in the first two of those and outside the paging
-    /// carve-out, so its own footer said "Left/Right buys" while Left
-    /// walked back to the stat pool.
+    /// rule) rather than to paging, and writes its own live footer instead
+    /// of a fixed one. The Perks step shipped in the second of those and
+    /// outside the paging carve-out, so its own footer said "Left/Right
+    /// buys" while Left walked back to the stat pool.
+    ///
+    /// **Refusing to be left is a third question and not this one**: it
+    /// asks whether the allowance is *lost*, and the Perks step's is not
+    /// — see `leave_refusal`.
     pub fn spends(self) -> bool {
         matches!(
             self,

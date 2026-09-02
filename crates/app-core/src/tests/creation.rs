@@ -11,6 +11,7 @@ use crate::*;
 use feral_processes_engine::achievements::{AchievementId, Earned, roll_main_stat};
 use feral_processes_engine::save;
 use feral_processes_engine::species::AffinityClass;
+use feral_processes_engine::tuning::CREATION_PERK_POINTS;
 use feral_processes_engine::tuning::{
     CREATION_COST_DEF, CREATION_CREDITS, CREATION_GAIN_INTEGRITY, CREATION_STAT_POINTS,
     PLAYER_BASE_STATS,
@@ -114,8 +115,7 @@ fn walk_to_the_summary(app: &mut App) {
     skip_the_look(app);
     spend_the_points(app);
     press(app, GameKey::Enter);
-    spend_the_perks(app);
-    press(app, GameKey::Enter);
+    press(app, GameKey::Enter); // the perks step, allowance kept
     press(app, ch('n'));
 }
 
@@ -530,7 +530,7 @@ fn reopening_the_wizard_starts_clean() {
     let mut app = opened("reset");
     press(&mut app, ch('1'));
     spend_the_kit(&mut app);
-    assert_ne!(app.creation_choice(), &CharacterChoice::default());
+    assert_ne!(app.creation_choice(), &CharacterChoice::at_creation());
 
     press(&mut app, GameKey::Esc);
     while app.mode != Mode::MainMenu {
@@ -538,7 +538,10 @@ fn reopening_the_wizard_starts_clean() {
     }
     press(&mut app, ch('n'));
     assert_eq!(app.creation_step(), CreationStep::Difficulty);
-    assert_eq!(app.creation_choice(), &CharacterChoice::default());
+    // `at_creation`, not `default`: the wizard opens holding the Perk
+    // Point allowance, which is the one thing about its starting choice
+    // that is not the engine's default player.
+    assert_eq!(app.creation_choice(), &CharacterChoice::at_creation());
     assert_eq!(app.creation_difficulty(), None);
 }
 
@@ -1034,10 +1037,22 @@ fn the_perk_step_reaches_the_started_run() {
     let feral_processes_engine::ManifestSubject::Player(player) = &view.subject else {
         panic!("the player's own entity produced a program sheet");
     };
+    let spent: u32 = bought
+        .iter()
+        .map(|(perk, levels)| {
+            levels
+                * game
+                    .perk_defs()
+                    .into_iter()
+                    .find(|def| def.id == *perk)
+                    .expect("a shipped perk")
+                    .cost
+        })
+        .sum();
     assert_eq!(
-        player.perk_points, 0,
-        "a creation allowance is spent at creation or lost — it must not \
-         arrive as spendable points"
+        player.perk_points,
+        CREATION_PERK_POINTS - spent,
+        "what the screen did not spend must arrive with the run"
     );
     let (perk, levels) = bought[0];
     let name = game
@@ -1129,6 +1144,35 @@ fn a_spending_step_gives_its_arrows_to_the_basket() {
 /// Asserted on **both** steps, because the two refusals are written at
 /// different call sites and one of them holding is not evidence about the
 /// other.
+/// **Walking past the perk screen keeps the points**, which is the whole
+/// of why that step is not a gate like the other two: a Perk Point is the
+/// same point after the run starts and buys the same perk at the same
+/// price, so a player who wants to decide later loses nothing by it.
+///
+/// This is the case that shipped broken — the allowance was consumed at
+/// the door and a new run opened on zero.
+#[test]
+fn an_unspent_perk_allowance_arrives_with_the_run() {
+    let mut app = opened("perks_kept");
+    press(&mut app, ch('1'));
+    walk_to_the_summary(&mut app);
+    press(&mut app, GameKey::Enter); // the summary
+    press(&mut app, GameKey::Enter); // no name, which starts the run
+    settle(&mut app);
+
+    let game = app.game.as_ref().expect("the run did not start");
+    let view = game.manifest(game.player_entity()).expect("a player sheet");
+    let feral_processes_engine::ManifestSubject::Player(player) = &view.subject else {
+        panic!("the player's own entity produced a program sheet");
+    };
+    assert_eq!(player.perk_points, CREATION_PERK_POINTS);
+    assert!(
+        player.perks.is_empty(),
+        "nothing was bought, so nothing is unlocked: {:?}",
+        player.perks
+    );
+}
+
 #[test]
 fn an_unspent_allowance_holds_its_step() {
     let mut app = opened("unspent");

@@ -31,6 +31,22 @@
   row — `Inventory::count` reads the first matching row and `Game::load`
   restores the `Vec` verbatim.
 
+- **A zone-portal line is ramped from the zone it was introduced in, and
+  `build_cost` is `min_zone: 1`.** The trap: a `zone_build_cost` line
+  authored for a later sector but ramped from zone 1 — the naive
+  `zone_portal_cost(base_qty, zone)` applied uniformly — arrives already
+  inflated the first zone it can legally be demanded, and nothing fails to
+  compile; it reads as a normal price until someone checks the number against
+  the `.ron` file. `Game::structure_build_cost` counts each line's ramp from
+  its own `min_zone` — `zone.saturating_sub(min_zone) + 1` — which is also
+  what makes `build_cost`'s implicit `min_zone: 1` a no-op under the new
+  formula rather than a second special case. **Early-return order matters
+  too**: the qualifying `zone_build_cost` lines are appended to `build_cost`
+  *before* the function branches on `zone_portal`, so a non-portal structure
+  that authors one still gets it — unramped, since only the `zone_portal`
+  branch grows anything. Branching on `zone_portal` first and returning
+  `build_cost` unchanged for everything else would make the append
+  unreachable for the common case the field exists to serve.
 - **Upgrading is a build request too, and `BuildSite::goal` is the whole of
   the difference.** `upgrade_structure` keeps every refusal in the same
   order, drops the pack charge and the tier write, and files a site carrying

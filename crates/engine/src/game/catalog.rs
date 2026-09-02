@@ -780,11 +780,18 @@ impl Game {
         carried + fused
     }
 
-    /// The actual item cost to deploy `def` right now: `def.build_cost`
-    /// unchanged for a normal structure, or each amount grown by
-    /// `ZONE_PORTAL_COST_GROWTH_PERCENT` of its base rate per zone level for
-    /// a zone-portal structure (see `StructureDef::zone_portal`) — breaching
-    /// deeper costs more raw material each time.
+    /// The actual item cost to deploy `def` right now: `def.build_cost` plus
+    /// every `def.zone_build_cost` line whose `min_zone` the current zone has
+    /// reached, each grown by `ZONE_PORTAL_COST_GROWTH_PERCENT` of its base
+    /// rate per zone level **past the zone it was introduced in** for a
+    /// zone-portal structure (see `StructureDef::zone_portal`) — breaching
+    /// deeper costs more raw material each time, and a line authored for a
+    /// later sector charges its authored base the first zone it can legally
+    /// be demanded rather than arriving pre-inflated. `build_cost` is
+    /// implicitly `min_zone: 1`, which is what makes this a no-op for every
+    /// structure shipped before `zone_build_cost` existed. A non-`zone_portal`
+    /// structure gets its qualifying `zone_build_cost` lines appended
+    /// unramped — only the `zone_portal` branch grows anything.
     ///
     /// A `StructureDef::first_free` structure is quoted at nothing until the
     /// run has one, and that waiver is resolved **here** rather than at the
@@ -811,13 +818,27 @@ impl Game {
         {
             return Vec::new();
         }
-        if !def.zone_portal {
-            return def.build_cost.clone();
-        }
         let zone = self.world.resource::<ZoneLevel>().0;
-        def.build_cost
+        let lines = def
+            .build_cost
             .iter()
-            .map(|(item, qty)| (item.clone(), zone_portal_cost(*qty, zone)))
+            .map(|(item, qty)| (1, item.clone(), *qty))
+            .chain(
+                def.zone_build_cost
+                    .iter()
+                    .filter(|(min_zone, ..)| *min_zone <= zone)
+                    .cloned(),
+            );
+        if !def.zone_portal {
+            return lines.map(|(_, item, qty)| (item, qty)).collect();
+        }
+        lines
+            .map(|(min_zone, item, qty)| {
+                (
+                    item,
+                    zone_portal_cost(qty, zone.saturating_sub(min_zone) + 1),
+                )
+            })
             .collect()
     }
 

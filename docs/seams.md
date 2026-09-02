@@ -9209,3 +9209,58 @@ and the ticks draw. It is re-grounded against *the same span of bare ticks*:
 a material lands the stream exactly where doing nothing for that long lands
 it, and one piece of gear lands it one draw further on. Re-seeding it to a
 value that passed would have thrown the property away.
+
+### A zone-portal line is ramped from the zone it was introduced in, not from zone 1
+
+The audit that started this whole change named the portal's price as one of
+the two things a breach never asked of the base: 10 Portal Fragments, dropped
+by Stack guardians alone, no research and no base chain touched. The fix is
+`StructureDef::zone_build_cost: Vec<(u32, ItemId, u32)>` —
+`(min_zone, item, base_qty)` — additive lines that only qualify once the
+current zone reaches `min_zone`. `build_cost` keeps its own shape and is
+implicitly `min_zone: 1`, rather than widening `build_cost`'s tuple to carry
+one: that would touch all 30 shipped structure files and every mod's, for a
+field only one shipped structure needs.
+
+**The composition is constrained by research, not by taste.** A zone-1 line
+can name nothing gated past zone 1 — Cache Grain sits behind `cache_coherence`
+(40 RD, zone 2) and the Recompile Kernel behind `program_refactoring` (75 RD,
+zone 2), so demanding either in sector 1 would ask the player to have
+researched something the run cannot yet reach. That constraint is the entire
+reason `zone_build_cost` exists as a second field rather than a longer
+`build_cost`: sector 1's bill is built from what has no research gate at all
+(Patch Routine) plus what a light gate opens (Hardened Shell behind
+`armor_bench`, Routine Disk behind `routine_fabrication`, 24 and 26 RD), and
+Trace Sniffer — legal in sector 1 on the same terms — is deferred to sector 2
+anyway because adding `weapon_bench` would have doubled the opening research
+bill from 50 RD to 100, already about 1,400 ticks on one Mk1 Research Node.
+
+**Ramped from introduction, not from zero.** `Game::structure_build_cost`
+prices every line — `build_cost`'s and `zone_build_cost`'s alike — as
+`zone_portal_cost(base_qty, zone.saturating_sub(min_zone) + 1)`. A naive
+`zone_portal_cost(base_qty, zone)` applied uniformly would charge the sector-2
+lines their *sector-4* rate the first zone they can legally be demanded,
+because `zone_portal_cost` was authored assuming every line starts at zone 1.
+Counting from each line's own `min_zone` is what makes `build_cost` a no-op
+under the new formula — `zone.saturating_sub(1) + 1` reduces to `zone` for
+every structure shipped before this field existed, portal included, so
+nothing that already worked reprices.
+
+**Early-return order is load-bearing.** `structure_build_cost` first resolves
+`first_free` (unrelated to this axis), then builds the concatenated line list
+— `build_cost` plus every qualifying `zone_build_cost` line — *before*
+branching on `zone_portal`. A structure without `zone_portal: true` returns
+that list unramped; only the portal branch grows anything. Reversing the
+order (return `build_cost` unchanged, then append) would leave the append
+unreachable for the common case this field exists to serve, and would also
+silently break a non-portal structure that wants a later-sector line without
+wanting the ramp — the two are independent flags, so a modder can author a
+zone-gated ordinary structure this way with no growth at all.
+
+`assets/structures/portal.ron`'s bill demonstrates the shape:
+`portal_fragment`, `patch_routine`, `hardened_shell` and `routine_disk` at
+`min_zone: 1`; `trace_sniffer` and `cache_grain` at `min_zone: 2`;
+`recompile_kernel` at `min_zone: 3`. The description was rewritten in the
+same commit — the shipped one used to say fragments come from the Stack
+alone, which the new lines make half the truth, and it is what the player
+reads on the build menu before ever filing the request.

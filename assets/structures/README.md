@@ -244,6 +244,28 @@ is skipped with a warning logged in-game rather than crashing startup.
     // (fused copies included) and supplies.
     zone_portal: true,
 
+    // Optional; can be left out entirely (defaults to an empty list). Extra
+    // bill lines that only apply once the current zone reaches `min_zone`:
+    // a list of (min_zone, item id, base quantity) triples, additive on top
+    // of `build_cost` above. A separate field rather than widening
+    // `build_cost`'s own tuple, because that would touch every structure
+    // file that has one, mods included — `build_cost` is implicitly
+    // `min_zone: 1`.
+    //
+    // For a zone-portal structure, each line — `build_cost`'s and this
+    // one's alike — ramps from the zone it was **introduced** in, not from
+    // zone 1: a line here authored at `min_zone: 2` charges its base
+    // quantity the first zone it can legally be demanded, then grows by 50%
+    // of that base per zone level past *that* one. So with the example
+    // below, a portal at zone 2 charges 10 fragments (unramped — this line
+    // is new there) alongside the `build_cost` fragments at their zone-2
+    // ramp, and at zone 3 the 10-fragment line is itself ramped one step
+    // while the `build_cost` line is ramped two.
+    //
+    // For any other structure, qualifying lines are appended **unramped** —
+    // only a zone-portal structure's bill grows with depth at all.
+    zone_build_cost: [(2, "cache_grain", 10)],
+
     // Optional; can be left out entirely (defaults to false). If true, the
     // run's *first* one of these costs nothing: `build_cost` above is waived
     // until one has actually been raised, and charged in full for every one

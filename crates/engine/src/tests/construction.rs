@@ -1460,3 +1460,183 @@ fn the_spent_freebie_survives_a_save_and_load() {
         "a reload does not hand the run its free Broker back"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Zone-ramped build costs
+// ---------------------------------------------------------------------------
+
+/// The Zone Portal's def, straight out of the shipped catalogue.
+fn portal(game: &Game) -> StructureDef {
+    game.world
+        .resource::<StructureDb>()
+        .get("portal")
+        .cloned()
+        .expect("the shipped assets carry a Zone Portal")
+}
+
+/// At zone 1 the portal's bill is exactly its `build_cost` lines, at their
+/// authored quantities — none of the `zone_build_cost` lines qualify yet,
+/// and `min_zone: 1` for `build_cost` reduces the ramp to a no-op.
+#[test]
+fn a_portal_at_zone_one_costs_exactly_its_build_cost_lines() {
+    let game = Game::new(9601, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let def = portal(&game);
+    assert!(
+        !def.zone_build_cost.is_empty(),
+        "the fixture is worthless unless the shipped portal authors later-sector lines"
+    );
+
+    assert_eq!(
+        game.structure_build_cost(&def),
+        def.build_cost,
+        "zone 1 sees only the base build_cost lines, unramped"
+    );
+}
+
+/// At zone 2 the bill gains every `zone_build_cost` line whose `min_zone`
+/// is 2, each at its authored base quantity, while the sector-1
+/// (`build_cost`) lines are ramped exactly one step.
+#[test]
+fn a_portal_at_zone_two_adds_its_sector_two_lines_at_base_and_ramps_sector_one() {
+    let mut game = Game::new(9602, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let def = portal(&game);
+    game.world.insert_resource(ZoneLevel(2));
+
+    let bill = game.structure_build_cost(&def);
+
+    for (item, base_qty) in &def.build_cost {
+        let ramped = zone_portal_cost(*base_qty, 2);
+        assert_eq!(
+            bill.iter().find(|(i, _)| i == item).map(|(_, q)| *q),
+            Some(ramped),
+            "{item} is a sector-1 line and should be ramped one step at zone 2"
+        );
+        assert_ne!(
+            ramped, *base_qty,
+            "the fixture proves nothing unless the ramp actually moves the number"
+        );
+    }
+    for (min_zone, item, base_qty) in &def.zone_build_cost {
+        if *min_zone != 2 {
+            continue;
+        }
+        assert_eq!(
+            bill.iter().find(|(i, _)| i == item).map(|(_, q)| *q),
+            Some(*base_qty),
+            "{item} is introduced at zone 2, so zone 2 is its base rate, not a ramped one"
+        );
+    }
+    assert!(
+        !bill.iter().any(|(i, _)| def
+            .zone_build_cost
+            .iter()
+            .any(|(min_zone, line_item, _)| *min_zone == 3 && line_item == i)),
+        "a sector-3 line must not appear at zone 2"
+    );
+}
+
+/// At zone 3 the sector-3 line lands at base, the sector-2 lines are ramped
+/// one step, and the sector-1 lines are ramped two steps — the ramp counts
+/// from each line's own introduction zone, not from zone 1 for everything.
+#[test]
+fn a_portal_at_zone_three_ramps_each_line_from_its_own_introduction() {
+    let mut game = Game::new(9603, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let def = portal(&game);
+    game.world.insert_resource(ZoneLevel(3));
+
+    let bill = game.structure_build_cost(&def);
+
+    for (item, base_qty) in &def.build_cost {
+        let ramped = zone_portal_cost(*base_qty, 3);
+        assert_eq!(
+            bill.iter().find(|(i, _)| i == item).map(|(_, q)| *q),
+            Some(ramped),
+            "{item} is a sector-1 line and should be ramped two steps at zone 3"
+        );
+    }
+    for (min_zone, item, base_qty) in &def.zone_build_cost {
+        let expected = zone_portal_cost(*base_qty, 3 - min_zone + 1);
+        assert_eq!(
+            bill.iter().find(|(i, _)| i == item).map(|(_, q)| *q),
+            Some(expected),
+            "{item} (introduced at zone {min_zone}) should read as zone {} of its own life",
+            3 - min_zone + 1
+        );
+    }
+}
+
+/// A structure that authors a `zone_build_cost` line but never sets
+/// `zone_portal: true` gets that line appended once the zone qualifies —
+/// **unramped**, because only the `zone_portal` branch ramps anything. Built
+/// with `assets_dir_with_extra_structure` rather than shipped, per the plan:
+/// no shipped non-portal structure should carry this field.
+#[test]
+fn a_non_portal_structure_gets_its_zone_build_cost_line_unramped() {
+    let assets = assets_dir_with_extra_structure(
+        "non_portal_zone_cost",
+        "waystation.ron",
+        r#"(
+            id: "waystation", name: "Waystation", glyph: 'w', color: Blue,
+            build_cost: [("core_fragment", 2)],
+            work: None,
+            zone_build_cost: [(2, "core_fragment", 40)],
+        )"#,
+    );
+    let mut game = Game::new(9604, DifficultyMode::Forgiving, &assets).unwrap();
+    let def = game
+        .structure_defs()
+        .into_iter()
+        .find(|d| d.id == "waystation")
+        .expect("waystation.ron should load");
+
+    assert_eq!(
+        game.structure_build_cost(&def),
+        def.build_cost,
+        "zone 1 sees only the base build_cost line"
+    );
+
+    game.world.insert_resource(ZoneLevel(2));
+    let bill = game.structure_build_cost(&def);
+    assert_eq!(
+        bill,
+        vec![
+            (ItemId::from("core_fragment"), 2),
+            (ItemId::from("core_fragment"), 40),
+        ],
+        "the zone_build_cost line appends at its authored base — unramped, since this \
+         structure never set zone_portal"
+    );
+}
+
+/// A `BuildSite` keeps the price it was filed at: `structure_build_cost` is
+/// read once, at filing, and stored on the site rather than re-derived from
+/// a live zone level — so a request outstanding across a zone change must
+/// not reprice out from under the player. This guarantee predates this
+/// change; re-asserted because this change touches the one door it reads
+/// through.
+#[test]
+fn a_filed_portal_request_keeps_the_price_it_was_filed_at_across_a_zone_change() {
+    let mut game = base(9605);
+    let def = portal(&game);
+
+    game.place_structure("portal", 1, 0).unwrap();
+    let site = site_at(&mut game, 1, 0);
+    let filed_cost = game.world.get::<BuildSite>(site).unwrap().cost.clone();
+    assert_eq!(
+        filed_cost,
+        game.structure_build_cost(&def),
+        "filed at zone 1, so the stored bill should match today's zone-1 quote"
+    );
+
+    game.world.insert_resource(ZoneLevel(2));
+    assert_eq!(
+        game.world.get::<BuildSite>(site).unwrap().cost,
+        filed_cost,
+        "a zone change after filing must not reprice a request already standing"
+    );
+    assert_ne!(
+        filed_cost,
+        game.structure_build_cost(&def),
+        "the fixture is worthless unless zone 2 would actually quote a different price"
+    );
+}

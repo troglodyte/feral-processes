@@ -33,6 +33,33 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.76
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+every new `PlayerSave` field is additive behind `#[serde(default)]`.
+
+- **A run is bought as well as chosen.** A starting kit step sits between
+  the class and the look, spending Credits off a shelf of what the run can
+  afford — the class kit is now a floor rather than the whole of what you
+  open with.
+- **Four Perk Points are spent at creation, and the tutorial contract they
+  replaced is gone.** Anything left unspent arrives with the run rather than
+  being forfeited at the door.
+- **A page before the class step names what earlier runs have already
+  earned you**, so the profile's contribution is visible while you are still
+  deciding what to build.
+- **Twenty stat points, spent on top of the baseline rather than
+  redistributed.** No step lets you leave an allowance unspent by accident,
+  and every screen says how big its pool is.
+- **The class picker says in words what each class trades**, and the
+  manifest is headed by your name and your class.
+- **The far field of a zone is the next zone's doorstep.** Zone 1 had no
+  interior — every tile of it fielded one tier-0 pool at x1, which conned
+  green against the bare baseline before creation spent a point. A surface
+  spawn now ramps with distance from the opening ring's edge, capped at
+  exactly one zone step, so a strong opening build has somewhere to walk
+  without breaching.
+
 ## 0.13.75
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

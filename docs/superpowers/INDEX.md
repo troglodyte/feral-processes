@@ -19,7 +19,7 @@ spec resolves to a release tag.
 
 | Spec | State | Evidence |
 | --- | --- | --- |
-| `2026-09-02-combat-model-slice-2-design` | designed, **unbuilt** | a second swing for Strikers from level 8; engine-only, no save bump |
+| `2026-09-02-combat-model-slice-2-design` | **built**, unplayed | a second swing for Strikers from level 8; `balance_sim` cannot gate it |
 | `2026-08-31-stack-wanderers-design` | approved, **unbuilt** | `FrameWanderers` exists nowhere in `crates/` |
 | `2026-08-24-rest-interruption-design` | never approved, **unbuilt** | `Game::rest_interrupted` does not exist |
 | `2026-08-24-departure-memories-design` | brainstorm parked | no departure memory in `assets/memories/` |

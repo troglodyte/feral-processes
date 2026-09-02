@@ -3335,6 +3335,16 @@ pub const EXPOSED_DURATION_ROUNDS: u32 = 1;
 /// nothing beyond it.
 pub const CRASH_DURATION_ROUNDS: u32 = 1;
 
+/// The level a Striker's second swing arrives at. Above `ZONE_LEVEL_CAP_FLOOR`
+/// on purpose: zone 1 caps at 6, so the second swing is unreachable before the
+/// first breach and lands partway through sector 2. It is a threshold and not
+/// a ramp — a Striker has one swing or two, never a fraction of a third.
+pub const EXTRA_ATTACK_LEVEL: u32 = 8;
+/// The ceiling on swings per actor per round, permanently. Every rung above
+/// two multiplies a throughput curve that `balance_sim` fits by hand, and the
+/// level cap is a correctness bound rather than a difficulty knob.
+pub const MAX_ATTACKS_PER_ROUND: u32 = 2;
+
 /// Ceiling on total mitigation, strictly below 100. Load-bearing twice: it
 /// stops the damage path reaching immunity, and it is what keeps
 /// `Stats::power`'s effective-HP denominator away from zero.

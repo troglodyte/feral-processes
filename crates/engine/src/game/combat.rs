@@ -51,6 +51,31 @@ impl Game {
     /// only as the fallback the player actually falls through to. Naming
     /// the player's fists here instead handed every unarmed crew program the
     /// player's band, so a Scrapper and a Medic dug at the same rate.
+    /// How many times `entity` swings in a round. The one resolution from a
+    /// body to its swing count: the player's class is a `PlayerClass`, a
+    /// companion's and a wild program's is derived from their species, and
+    /// all three meet in `battle::attacks_per_round`.
+    ///
+    /// A wild program carrying no `Experience` reads the zone's level, which
+    /// is what `ability_user_level` already does for every other magnitude
+    /// in combat.
+    pub(crate) fn attacks_for(&self, entity: Entity) -> u32 {
+        // `ability_user_level` is already the one answer to "what level is
+        // this body?", falling back to the zone for a wild program that
+        // carries no `Experience` of its own. A second reading here would be
+        // a copy that drifts.
+        let level = self.ability_user_level(entity);
+        let class = match self.world.get::<PlayerIdentity>(entity) {
+            Some(identity) => identity.class.and_then(|c| c.as_affinity_class()),
+            None => self
+                .world
+                .get::<Creature>(entity)
+                .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+                .and_then(|def| def.affinity_class()),
+        };
+        crate::battle::attacks_per_round(class, level)
+    }
+
     pub(crate) fn swing_damage(&self, attacker: Entity) -> u32 {
         let range = self.natural_range_of(attacker);
         (range.mean().round() as i32 + self.effective_atk(attacker)).max(1) as u32

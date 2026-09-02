@@ -592,6 +592,18 @@ pub fn simulate_roster_fight(
             // crit rate included. It excludes the fumble ladder, whose two
             // damaging rungs land on the attacker rather than the defender —
             // so these projections mildly overstate an attacker's net output.
+            //
+            // **One swing per fighter per turn, and that is a blind spot.**
+            // `battle::attacks_per_round` gives a Striker at
+            // `EXTRA_ATTACK_LEVEL` two, but this sim takes `Stats` blocks and
+            // models no class or level for either side, so it cannot ask.
+            // Multi-attack is therefore ungated here exactly as the Power
+            // economy and every ability magnitude already are. A Striker's
+            // real throughput above that level is roughly twice what these
+            // curves project; nothing below re-derives the level cap against
+            // it. Giving the sim the axis means threading a class through
+            // every caller, and an `attacks: 1` field nothing sets would be
+            // an unused flag rather than a gate.
             let dealt = after_mitigation(
                 expected_damage(
                     fighter.profile.combatant(fighter.atk),

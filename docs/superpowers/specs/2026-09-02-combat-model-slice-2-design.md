@@ -80,15 +80,17 @@ both sides already share; the player's arm maps its `PlayerClass` down through
 the five common variants and yields `None` for the three player-only ones
 (Decompiler, Invoker, Fabricator), which grant no swing.
 
-**Three callers and no fourth**, following `attackers_in_group`'s precedent —
-the offline projection and the real round loop cannot drift because they are
-the same call:
+**Two callers**, following `attackers_in_group`'s precedent so the two sides
+of a fight cannot drift:
 
 | Caller | File |
 | --- | --- |
 | the party's turn | `game/combat_round.rs::party_member_attacks` |
 | the wild side's turn | `game/combat_enemy.rs::wild_retaliate` |
-| the balance projection | `balance_sim.rs::simulate_roster_fight` |
+
+The balance projection was designed as a third caller and **is not one**.
+`simulate_roster_fight` takes `Stats` blocks and models no class or level, so
+it cannot ask this function anything; see Risks 1.
 
 **The naming trap this sits next to.** `battle::attackers_in_group` means *how
 many bodies of a group may swing this round*. `attacks_per_round` means *how

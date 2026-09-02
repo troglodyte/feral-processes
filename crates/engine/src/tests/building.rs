@@ -2234,12 +2234,14 @@ fn the_recovery_is_announced_once_and_not_every_tick() {
     );
 }
 
-/// Which Bays the map would mark as busy, by tile.
-fn occupied_bay_tiles(game: &mut Game) -> Vec<(i32, i32)> {
+/// Everything the map would draw a recovery mark on, as `(is_structure,
+/// tile)` — the structure flag included because the Bay carrying the mark
+/// instead of the body in it is exactly the regression this asserts against.
+fn recovery_marks(game: &mut Game) -> Vec<(bool, (i32, i32))> {
     game.view_entities(20, 20)
         .into_iter()
         .filter(|v| v.recovering)
-        .map(|v| v.pos)
+        .map(|v| (v.is_structure, v.pos))
         .collect()
 }
 
@@ -2249,12 +2251,19 @@ fn occupied_bay_tiles(game: &mut Game) -> Vec<(i32, i32)> {
 /// out of reach, and nobody down at all. A flag that merely said "this is a
 /// Repair Bay" would pass a draw test and light an empty Bay up forever.
 ///
-/// The Bay is *placed* rather than hand-spawned, unlike the fixture the
-/// other Bay tests share: `spawn_machine_at` writes no `Glyph`, and
-/// `view_entities` selects on one — so a hand-spawned machine is on no map
-/// and has no view to carry the flag.
+/// **The mark rides the body, not the building**, which is what the
+/// `is_structure` half of every assertion below holds. The two are different
+/// tiles whenever a Bay reaches past the cell it stands on, and the patient
+/// is the thing being mended — the Bay is only where it happens.
+///
+/// **Both ends have to be on the map, and neither is by default.**
+/// `view_entities` selects on `Glyph`: `spawn_machine_at` writes none, so the
+/// Bay is *placed* through the real deploy path rather than hand-spawned like
+/// the fixture the other Bay tests share, and `spawn_tamed` writes none
+/// either, so the body comes from `spawn_tamed_on_map`. An entity with no
+/// `Glyph` has no view at all, which reads here as the flag having been lost.
 #[test]
-fn a_bay_reports_itself_occupied_only_while_a_program_is_recovering_in_it() {
+fn a_recovering_program_wears_the_mark_and_its_bay_never_does() {
     let mut game = Game::new(3505, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     place_home(&mut game);
@@ -2264,18 +2273,14 @@ fn a_bay_reports_itself_occupied_only_while_a_program_is_recovering_in_it() {
     let at = *game.world.get::<Position>(site).unwrap();
     let bay = (at.x, at.y);
 
-    let program = spawn_tamed(&mut game, 10, 3);
+    let program = spawn_tamed_on_map(&mut game, at.x + 1, at.y);
     game.world.entity_mut(program).insert(Downed);
     game.world.get_mut::<Stats>(program).unwrap().hp = 1;
-    *game.world.get_mut::<Position>(program).unwrap() = Position {
-        x: at.x + 1,
-        y: at.y,
-    };
 
     assert_eq!(
-        occupied_bay_tiles(&mut game),
-        vec![bay],
-        "a downed program lying in the Bay is what marks it"
+        recovery_marks(&mut game),
+        vec![(false, (bay.0 + 1, bay.1))],
+        "the body being mended wears the mark, on its own tile and not the Bay's"
     );
 
     // The same rejection `a_downed_program_out_of_reach_of_the_bay_is_not_
@@ -2283,8 +2288,8 @@ fn a_bay_reports_itself_occupied_only_while_a_program_is_recovering_in_it() {
     // a mark that ignored reach would say it was.
     *game.world.get_mut::<Position>(program).unwrap() = Position { x: -4, y: -4 };
     assert!(
-        occupied_bay_tiles(&mut game).is_empty(),
-        "a program out of reach must not light the Bay up"
+        recovery_marks(&mut game).is_empty(),
+        "a program out of reach of every Bay is not recovering"
     );
 
     // Back in reach, and healed off the bench. The `Downed` marker coming
@@ -2293,7 +2298,7 @@ fn a_bay_reports_itself_occupied_only_while_a_program_is_recovering_in_it() {
         x: bay.0 + 1,
         y: bay.1,
     };
-    assert_eq!(occupied_bay_tiles(&mut game), vec![bay]);
+    assert_eq!(recovery_marks(&mut game), vec![(false, (bay.0 + 1, bay.1))]);
     for _ in 0..20 {
         game.run_repair_bays();
     }
@@ -2302,8 +2307,8 @@ fn a_bay_reports_itself_occupied_only_while_a_program_is_recovering_in_it() {
         "the fixture must actually reach full Integrity"
     );
     assert!(
-        occupied_bay_tiles(&mut game).is_empty(),
-        "a Bay standing empty is quiet; the mark says somebody is in it"
+        recovery_marks(&mut game).is_empty(),
+        "a program back on its feet is not recovering, and nothing takes the mark over"
     );
 }
 
@@ -2389,7 +2394,7 @@ fn an_admitted_program_is_not_released_until_it_is_whole() {
     // HP the early ticks are nowhere near the boundary and the oscillation
     // this test exists for could not happen on them anyway.
     let line = (max as f32 * crate::tuning::BAY_ADMISSION_HP_FRACTION).ceil() as i32;
-    let (program, bay) = a_hurt_staff_program_at_a_bay(&mut game, line - 1);
+    let (program, _bay) = a_hurt_staff_program_at_a_bay(&mut game, line - 1);
 
     let mut marked = false;
     let (mut admissions, mut releases) = (0, 0);
@@ -2412,7 +2417,7 @@ fn an_admitted_program_is_not_released_until_it_is_whole() {
         // and it is never handed back to the line in between.
         if !whole && marked {
             assert!(
-                game.occupied_repair_bays().contains(&bay),
+                game.recovering_programs().contains(&program),
                 "a program mid-climb at {}/{} must still be in its Bay",
                 stats.hp,
                 stats.max_hp
@@ -2494,15 +2499,15 @@ fn a_bay_mends_everybody_in_reach_on_the_same_tick() {
 }
 
 /// **The mark and the heal are one predicate, and widening admission must
-/// not have split them.** `Bays::serving` answers both, so a Bay putting
-/// Integrity into somebody is a Bay wearing the map's `+` — in every state a
-/// program can be in, not just the one the feature was built for.
+/// not have split them.** `Bays::serving` answers both, so a program a Bay
+/// is putting Integrity into is a program wearing the map's `+` — in every
+/// state a program can be in, not just the one the feature was built for.
 ///
 /// An equivalence, so it is walked over states that answer *no* as well as
 /// the one that answers yes: asserted only on the healing case it would pass
 /// against a mark that was simply always lit.
 #[test]
-fn a_bays_mark_is_lit_exactly_when_that_bay_is_healing_somebody() {
+fn the_recovery_mark_is_lit_exactly_when_somebody_is_being_healed() {
     let mut game = Game::new(3508, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let (program, bay) = a_hurt_staff_program_at_a_bay(&mut game, 40);
     let beside = Position {
@@ -2525,7 +2530,7 @@ fn a_bays_mark_is_lit_exactly_when_that_bay_is_healing_somebody() {
         *game.world.get_mut::<Position>(program).unwrap() = at;
 
         admit(&mut game);
-        let lit = game.occupied_repair_bays().contains(&bay);
+        let lit = game.recovering_programs().contains(&program);
         let before = hp_of(&game, program);
         game.run_repair_bays();
         let healed = hp_of(&game, program) > before;
@@ -2546,14 +2551,14 @@ fn a_bays_mark_is_lit_exactly_when_that_bay_is_healing_somebody() {
 #[test]
 fn a_bay_serves_a_hurt_program_under_permadeath_too() {
     let mut game = Game::new(3509, DifficultyMode::Permadeath, &test_assets_dir()).unwrap();
-    let (program, bay) = a_hurt_staff_program_at_a_bay(&mut game, 2);
+    let (program, _bay) = a_hurt_staff_program_at_a_bay(&mut game, 2);
 
     admit(&mut game);
     assert!(
         game.world.get::<Downed>(program).is_some(),
         "the threshold does not consult the difficulty mode"
     );
-    assert!(game.occupied_repair_bays().contains(&bay));
+    assert!(game.recovering_programs().contains(&program));
 
     let before = hp_of(&game, program);
     game.run_repair_bays();

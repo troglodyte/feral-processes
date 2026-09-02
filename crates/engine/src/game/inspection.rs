@@ -941,10 +941,10 @@ impl Game {
                 .any(|(kind, room)| *room > 0 && db.get(kind).is_some_and(|d| d.stores))
         };
 
-        // The Bays with somebody in them, base-wide and rebuilt per call for
+        // The bodies a Bay is mending, base-wide and rebuilt per call for
         // `anywhere_to_unload`'s reason: a program reaching full Integrity
-        // has to stop marking its Bay without anything having to notice.
-        let recovering_bays = self.occupied_repair_bays();
+        // has to stop wearing the mark without anything having to notice.
+        let recovering_bodies = self.recovering_programs();
 
         let player_power = self.player_power();
         let mut linked_edges = self.linked_edges_by_structure();
@@ -983,7 +983,11 @@ impl Game {
                 let wears_job_mark = self.wears_job_mark(entity);
                 let position_is_honest = self.position_is_honest(entity);
                 let structure_attended = is_structure && attended.contains(&entity);
-                let recovering = is_structure && recovering_bays.contains(&(pos.x, pos.y));
+                // No `is_structure` gate, unlike the two above: `Downed` is
+                // only ever inserted on a program, so a structure cannot be
+                // in this set and a test for it would be a claim about the
+                // marker that this file is the wrong place to make.
+                let recovering = recovering_bodies.contains(&entity);
                 let output_stranded = is_structure
                     && !anywhere_to_unload
                     && self

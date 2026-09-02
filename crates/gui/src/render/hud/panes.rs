@@ -14,7 +14,7 @@
 //! draw at a given window size without standing a renderer up — the property
 //! `hud::layout` already relies on one scale up.
 //!
-//! See `docs/superpowers/specs/2026-08-27-paned-command-hud-design.md`.
+//! See `docs/superpowers/archive/specs/2026-08-27-paned-command-hud-design.md`.
 
 use feral_processes_app_core::{InfoTab, item_fusion_note};
 use feral_processes_engine::{

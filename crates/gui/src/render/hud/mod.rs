@@ -10,7 +10,7 @@
 //! takes a measured character width as a *parameter* and stays free of
 //! `Painter`, which is what makes the geometry unit-testable headlessly.
 //!
-//! See `docs/superpowers/specs/2026-08-27-paned-command-hud-design.md`.
+//! See `docs/superpowers/archive/specs/2026-08-27-paned-command-hud-design.md`.
 
 pub(super) mod bar;
 pub(super) mod column;

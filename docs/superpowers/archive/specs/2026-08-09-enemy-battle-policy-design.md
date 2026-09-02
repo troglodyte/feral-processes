@@ -1,7 +1,7 @@
 # Learned enemy battle policy — design
 
 **Date:** 2026-08-09
-**Status:** approved, not implemented
+**Status:** implemented. Audited 2026-09-02 against the source tree, not against this header.
 **Scope:** `crates/engine`, `crates/launcher` — two crates, so this earns the
 full spec-and-plan pipeline per `CLAUDE.md`'s process-weight rule.
 **Save format:** unchanged. Weights are an asset, not run state.

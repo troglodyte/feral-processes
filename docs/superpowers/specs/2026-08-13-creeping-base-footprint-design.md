@@ -1,7 +1,6 @@
 # Creeping base footprint — design
 
-**Status:** approved, not implemented. (Read `CHANGELOG.md` and grep, not
-this line — see `docs/superpowers/INDEX.md`.)
+**Status:** **superseded, never implemented.** `build_radius_bonus` and `Game::clear_platform` survive only in doc comments recording their retirement; the base became a pocket instead — see `../archive/specs/2026-08-19-base-out-of-phase-design.md`. Audited 2026-09-02 against the source tree, not against this header.
 
 ## Problem
 

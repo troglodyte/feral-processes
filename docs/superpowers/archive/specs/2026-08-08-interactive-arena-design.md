@@ -1,7 +1,7 @@
 # The interactive arena — design
 
 **Date:** 2026-08-08
-**Status:** designed, not implemented.
+**Status:** implemented. Audited 2026-09-02 against the source tree, not against this header.
 **Builds on:** `2026-08-07-battle-arena-design.md`, which shipped the
 headless harness this extends.
 

@@ -9,7 +9,7 @@ refusing the other bank.
 
 A program that has beaten the party or driven them off keeps a grudge count
 (`components::Nemesis`) and, past its first, a promoted rarity tier. See
-`docs/superpowers/specs/2026-08-17-nemesis-design.md` for the full feature.
+`docs/superpowers/archive/specs/2026-08-17-nemesis-design.md` for the full feature.
 This directory is its two flavour banks:
 
 - **`names.ron`** — the pool a nemesis's name is drawn from, written once

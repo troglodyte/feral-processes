@@ -1,7 +1,7 @@
 # Companion equipment
 
 **Date:** 2026-08-12
-**Status:** approved, not implemented
+**Status:** implemented. Audited 2026-09-02 against the source tree, not against this header.
 **Save format:** v27 → v28 (breaking; version 0.7.7 → 0.8.0)
 
 ## Problem

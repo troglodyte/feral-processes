@@ -838,7 +838,7 @@ struct GridSupplyStood;
 /// bypassing `Game::build_structure` and the Home a real base always has
 /// standing — so once Task 4 authored a real `power_draw` onto a shipped
 /// machine, every one of them went dark from the moment it existed. See
-/// `docs/superpowers/specs/2026-08-17-base-power-grid-design.md`.
+/// `docs/superpowers/archive/specs/2026-08-17-base-power-grid-design.md`.
 ///
 /// Deliberately absurd — comfortably past 1,000 supply against draws in the
 /// single digits — for the same reason `tests::power::GRID_SOURCE` picks an

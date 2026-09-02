@@ -1,7 +1,7 @@
 # Generated flavour prose for the Stack — design
 
 **Date:** 2026-08-10
-**Status:** approved, not implemented
+**Status:** implemented. Audited 2026-09-02 against the source tree, not against this header.
 **Scope:** `crates/engine`, `crates/app-core`, `crates/gui`, plus a new asset
 schema — so this earns the full spec-and-plan pipeline per `CLAUDE.md`'s
 process-weight rule.

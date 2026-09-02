@@ -1,10 +1,6 @@
 # What a stack costs once zone and depth both count
 
-**Status:** measured, question posed, no shape chosen — NOT approved, no plan written
-**Date:** 2026-08-24
-**Measurement:** `docs/measurements/2026-08-24-stack-danger-steps-and-lair-apex.md`
-**Follows:** `v0.13.21`, which made `danger_steps` sum the zone and depth steps
-underground and ungated the lair's apex draw.
+**Status:** measured, question posed, no shape chosen — **not approved, not implemented**. Audited 2026-09-02 against the source tree, not against this header.
 
 `v0.13.21` fixed two real complaints — a zone-9 stack's first frame fielded a
 lone program, and no lair shallower than depth 5 could field a hand-authored

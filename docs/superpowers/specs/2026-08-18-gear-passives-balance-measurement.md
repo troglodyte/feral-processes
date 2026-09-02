@@ -1,6 +1,6 @@
 # Gear Passives: Balance Measurement
 
-**Status:** not run. Written 2026-08-18, on branch `gear-passives`, before merge.
+**Status:** **not run.** A measurement protocol, never executed. The gear-passives *design* it was written against did ship — see `../archive/specs/2026-08-18-gear-passives-and-overclock-design.md`. Audited 2026-09-02 against the source tree, not against this header.
 
 > A `**Status:**` header in this directory is written once and goes stale —
 > fourteen shipped specs still claim they are unimplemented. Answer from

@@ -119,7 +119,7 @@ carries the rule instead.
 
 **`rest` was the contested row twice over, and has now left the table.** It
 first kept `require_surface`, on the spec's authority
-(`docs/superpowers/specs/2026-08-19-base-out-of-phase-design.md`), while its
+(`docs/superpowers/archive/specs/2026-08-19-base-out-of-phase-design.md`), while its
 own code argued the other way: it demanded a structure whose def set
 `enables_rest` within reach of the player's base cell, Home was the only
 shipped one, and Home stands in base space. Once the base's structures moved
@@ -2834,8 +2834,9 @@ now fails to compile, which is the barrier rather than the convention.
 gained a `quality: u8` — a percentage of the item's authored bonus, 100
 meaning "compiled exactly to spec" — so that how well *this* copy was made
 is a property of the copy rather than of the item. The design argument is
-in `docs/superpowers/specs/2026-08-21-item-quality-design.md`; the phased
-build is `docs/superpowers/plans/2026-08-21-item-quality-plan.md`.
+in `docs/superpowers/archive/specs/2026-08-21-item-quality-design.md`; the phased
+build plan was deleted with its siblings once it shipped and is read back
+from git history.
 
 **Why an integer and not an `f32`.** `GearCopy` is the key of the
 `components::GearCopies` ledger — `add`, `count` and `take` find their rows
@@ -7200,7 +7201,7 @@ macOS runtime is unverified in exactly the same way and for the same reason
 `~/Library/Application Support` resolves as expected.
 Verification is manual by choice — there is no CI — so the ten-step
 checklist in
-`docs/superpowers/specs/2026-08-19-windows-and-macos-distribution-design.md`
+`docs/superpowers/archive/specs/2026-08-19-windows-and-macos-distribution-design.md`
 is the honest statement of what ships untested until someone runs it on a
 Windows machine. A green Linux suite is not evidence that any of it works.
 

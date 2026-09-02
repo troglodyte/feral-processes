@@ -1128,7 +1128,7 @@ fn no_starter_choice_leaves_the_slot_empty() {
 ///
 /// The design's own framing for this step is "the same routine reads
 /// differently for a Striker and a Medic"
-/// (`docs/superpowers/specs/2026-09-01-character-creation-design.md`), and
+/// (`docs/superpowers/archive/specs/2026-09-01-character-creation-design.md`), and
 /// it names a *direction*, not just a difference: Striker damps Heal to 0.8
 /// and Medic raises it to 1.3 (`assets/classes/striker.ron`,
 /// `assets/classes/medic.ron`). Each expected band below is computed with

@@ -33,6 +33,18 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.79
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+- **The recovery mark rides the program being mended, and it is green.** A
+  Repair Bay wore a bouncing red `+` while it was healing somebody, which
+  put the mark on the building rather than on the body it was about to
+  give you back — and painted it in the colour this map otherwise spends
+  only on a raid's flash and a structure taking a hit. It now bounces over
+  the program itself, in the same green a climbing Integrity wears
+  everywhere else.
+
 ## 0.13.78
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

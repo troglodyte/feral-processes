@@ -724,26 +724,88 @@ covered because none of them names the three resources itself.
 `is_underground` guard for all three sources, because `award_loot` fires
 for every kill in the game and almost all of those are on the surface.
 
-### Distance from home decides exactly one thing, and it is not difficulty
+### Distance from home is a difficulty axis again, capped at one zone step
 
-**Distance from home decides exactly one thing, and it is not difficulty.**
-`Game::distance_from_danger_origin` has a single consumer,
-`in_opening_ring`. It used to feed a stat multiplier (up to 3x) and the
-group-size curve, and that was removed on 2026-08-05 for two reasons: a
-zone had no consistent difficulty of its own, and it leaked underground —
-every Stack spawn is placed at the *surface entrance tile*, so descending
-through a far-flung link scaled the whole frame by that link's distance.
-`danger_steps` is still the one input both group curves read, so they
-cannot disagree. It takes the zone step on the surface, and the zone step
-**plus** the depth step in the Stack. Depth used to *replace* the zone
-underground, on the argument that a stack should escalate by how far down
-it goes rather than inheriting whatever its entrance sat at. That was
-wrong in play: a depth-1 frame is step 0 in every zone, so the first frame
-of a zone-9 stack fielded a single program exactly as zone 1 did, and the
-zone the player had spent a Portal reaching bought them nothing until they
-were several frames down. Summing keeps both commitments visible and keeps
-the curve linear. A new difficulty knob keyed to where the party is
-*standing* still reintroduces both of the 2026-08-05 bugs.
+**Distance from home is a difficulty axis again, and the cap is what makes
+it one.** `Game::distance_from_danger_origin` now feeds two things:
+`in_opening_ring` as before, and `Game::field_stat_mult`, the field ramp.
+
+It had exactly one consumer between 2026-08-05 and 2026-09-01. Before that
+removal it fed a stat multiplier (up to 3x) and the group-size curve, and it
+was taken out for two reasons: a zone had no consistent difficulty of its
+own, and it leaked underground — every Stack spawn is placed at the
+*surface entrance tile*, so descending through a far-flung link scaled the
+whole frame by that link's distance. Both bugs are real and neither is
+fixed by being careful.
+
+What brought it back was a measurement, not a preference. Zone 1 is
+`danger_steps == 0` on every tile: one tier-0 species pool, `x1`, one group
+of at most `ZONE_ONE_GROUP_CAP`. The shipped tier-0 roster runs 44-94
+`Stats::power` (glitch 44, sprite 47, sub_process 48, drone 52, construct
+53, scrapper 94). `difficulty_color` paints Green at or under
+`DIFFICULTY_EASY_MAX` of the player's own power, and the player opens on 98
+before character creation spends a point — so zone 1 has *always* conned
+green, with scrapper the single yellow in the pool. `CREATION_STAT_POINTS`
+of 20 is worth up to +120 `max_hp` (power 220) or +20 atk (power 118), plus
+the kit and four perk points, and it turned that last yellow green too.
+`tuning.rs` says as much in prose at `CREATION_STAT_POINTS` — "the opening
+zone is meant to be soft" — but what nobody had noticed is that there was
+nowhere in zone 1 that *wasn't* the opening zone. The zone had no interior.
+
+The ramp is therefore about giving a strong opening build somewhere to
+walk, not about making the doorstep harder. It does not touch the near
+field at all.
+
+**Both of the 2026-08-05 bugs are closed by the shape rather than by a
+check.**
+
+*The underground leak* is closed by there being no `(x, y)`-derived term
+inside the spawner. `field_stat_mult` is called by the caller and handed in
+through `SpawnEscalation::stat_mult`, which is the field
+`stack_depth_multiplier` already fills underground —
+`Game::stack_escalation` builds its own struct and never reaches the ramp.
+So a Stack frame cannot inherit its entrance's distance, and
+`a_spawns_stats_come_from_its_escalation_and_never_from_its_tile` is the
+regression test.
+
+*A zone having no difficulty of its own* is closed by the cap being exactly
+one zone step. The effective multiplier is `stat_multiplier() +
+ZONE_STAT_STEP * t` for `t` in `0.0..=1.0`, so the far field of zone N is
+arithmetically `ZoneLevel(N + 1).stat_multiplier()` — a zone spans
+`[N, N+1]` and its floor is the previous zone's ceiling. The zone number
+still answers "how hard is the softest thing here". Expressing the ramp as
+a *ratio on the zone curve* rather than as a curve of its own has a second
+payoff: `balance_sim` needs no new bound, because the far field of zone N
+*is* the zone N+1 fixture it already sweeps. That is the answer to the
+standing objection that the old multiplier was ungated.
+
+The ramp's floor is `OPENING_RING_TILES`, not zero, so the nursery is
+exactly baseline: `balance_sim::beatable_by_a_fresh_player` is computed
+against the unscaled species, and any ramp inside the ring falsifies it.
+The ring still does something the ramp does not — it gates which species
+are *born*, where the ramp only scales one already born.
+
+`DANGER_RAMP_TILES` is 128, four `world::CHUNK_SIZE` chunks past the ring.
+It is the only number in the feature; everything else is derived from the
+zone curve. At the zone-1 cap a scrapper goes 94 to 188, which reads Orange
+against a 150-power creation build and Red against the bare 98 baseline,
+while glitch goes 44 to 88 and stays green — a spread rather than a wall,
+which is what the far field should be.
+
+Two deliberate non-consumers, and they are a census of
+`Game::field_escalation`'s callers rather than a rule stated anywhere:
+`arena::encounter` and `game::sortie` both keep `SpawnEscalation::surface()`.
+An arena composition is authored and must not move with a map coordinate; a
+sortie already prices its own risk through `habitat_pools`' `step_bonus`.
+That is why the ramp is a second constructor instead of being folded into
+`surface()`, and why `surface()` still means "no escalation at all".
+
+`danger_steps` deliberately did **not** gain a distance term. It is the one
+input both group curves and the species window read, and the window is
+coarse — `TIER_ENTRY_STEPS` is 2, so distance would have to be worth two
+full steps to change what you meet in zone 1, and four to open apex bosses.
+That is the shape that collapses the zone ladder. Distance moves how hard a
+spawn is; the zone and the depth still decide what it is and how many.
 
 ### Every difficulty curve in the game is linear
 

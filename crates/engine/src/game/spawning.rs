@@ -4,10 +4,10 @@
 use crate::components::{Memories, Needs};
 use crate::resources::PopulatedChunks;
 use crate::tuning::{
-    BOSS_SPAWN_CHANCE, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_DURABILITY, NEST_GUARDIAN_MAX,
-    NEST_GUARDIAN_MIN, NEST_SPAWN_CHANCE, NEST_TETHER_RADIUS, OPENING_RING_TILES,
-    PACK_GATHER_RADIUS, POPULATION_CHUNK_MARGIN, WILD_CREATURE_CAP, ZONE_GROUP_STEP,
-    ZONE_ONE_GROUP_CAP, chunk_wild_population,
+    BOSS_SPAWN_CHANCE, DANGER_RAMP_TILES, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_DURABILITY,
+    NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN, NEST_SPAWN_CHANCE, NEST_TETHER_RADIUS,
+    OPENING_RING_TILES, PACK_GATHER_RADIUS, POPULATION_CHUNK_MARGIN, WILD_CREATURE_CAP,
+    ZONE_GROUP_STEP, ZONE_ONE_GROUP_CAP, ZONE_STAT_STEP, chunk_wild_population,
 };
 use crate::tuning::{
     GOLD_SPAWN_CHANCE, GROUP_SIZE_DISTANCE_GROWTH, GROUP_SIZE_STEP_FRAMES, GROUP_SIZE_STEP_ZONES,
@@ -49,7 +49,8 @@ pub(crate) fn trace_group_ceiling(base: u32, group_mult: u32, cap: u32) -> u32 {
 #[derive(Clone, Copy)]
 pub(crate) struct SpawnEscalation {
     /// Multiplier on each member's stats — `Game::stack_depth_multiplier`
-    /// underground, 1.0 on the surface.
+    /// underground, `Game::field_stat_mult` on the surface, and 1.0 for the
+    /// two callers that take neither (see `surface()`).
     pub(crate) stat_mult: f32,
     /// Multiplier on the group-size ceiling — `TRACE_GROUP_MULT`'s band
     /// value, clamped back under the zone cap by `trace_group_ceiling`.
@@ -211,17 +212,15 @@ impl Game {
             .unwrap_or_default()
     }
 
-    /// Spawns a wild creature of `species_id` at `(x, y)`, returning its
-    /// `Entity` — `None` only if `species_id` isn't in `SpeciesDb` (every
-    /// real call site passes an id it already validated against
-    /// `SpeciesDb`, so this is a defensive no-op path, not an expected
-    /// outcome). `spawn_nest_guardian` uses the returned entity to attach
-    /// `NestGuardian`.
+    /// An unscaled spawn: `spawn_wild_creature_scaled` at x1, no boss.
     ///
-    /// This is the surface spawn: depth costs it nothing. A spawn that
-    /// *is* a Stack encounter goes through `spawn_pack` with a
-    /// multiplier — see `depth_mult` there for why that is a parameter
-    /// rather than something read back off the party's locale.
+    /// **A test fixture, and `#[cfg(test)]` because it is one.** It was the
+    /// surface spawn door until the field ramp landed, and every real caller
+    /// now passes a multiplier — the ambient spawner and nest guardians take
+    /// `Game::field_stat_mult`, the Stack takes its depth. Left ungated it is
+    /// dead code that reads like the plain way to spawn something, which is
+    /// how a new call site ends up quietly opting out of the ramp.
+    #[cfg(test)]
     pub(crate) fn spawn_wild_creature(
         &mut self,
         species_id: &str,
@@ -231,7 +230,11 @@ impl Game {
         self.spawn_wild_creature_scaled(species_id, x, y, 1.0, false)
     }
 
-    /// `spawn_wild_creature` with `depth_mult` folded into every stat.
+    /// Spawns a wild creature of `species_id` at `(x, y)` with `depth_mult`
+    /// folded into every stat, returning its `Entity` — `None` only if
+    /// `species_id` isn't in `SpeciesDb` (every real call site passes an id
+    /// it already validated, so that is a defensive no-op path rather than an
+    /// expected outcome).
     ///
     /// `pub(crate)` for `Game::adopt_orphan`, which is a sibling module and
     /// spawns the same way a Stack encounter does — depth-scaled, and with
@@ -477,7 +480,11 @@ impl Game {
         nest_y: i32,
     ) -> Option<Entity> {
         let (gx, gy) = self.scatter_open_tile(nest_x, nest_y, NEST_TETHER_RADIUS);
-        let guardian = self.spawn_wild_creature(species_id, gx, gy)?;
+        // The ramp, not `spawn_wild_creature`'s bare 1.0: a nest out on the
+        // frontier surrounded by ramped programs would otherwise field a
+        // guardian weaker than everything guarding nothing around it.
+        let mult = self.field_stat_mult(gx, gy);
+        let guardian = self.spawn_wild_creature_scaled(species_id, gx, gy, mult, false)?;
         self.world
             .entity_mut(guardian)
             .insert(NestGuardian { nest });
@@ -509,6 +516,55 @@ impl Game {
         let dist = (x - spawn.x).abs().max((y - spawn.y).abs());
         let reach = self.world.resource::<crate::base_grid::BaseGrid>().radius();
         (dist - reach).max(0)
+    }
+
+    /// The multiplier a surface spawn at `(x, y)` takes **on top of** its
+    /// zone's own `ZoneLevel::stat_multiplier`: 1.0 out to the edge of the
+    /// opening ring, ramping linearly to exactly the next zone's doorstep
+    /// `DANGER_RAMP_TILES` beyond it.
+    ///
+    /// Expressed as a *ratio* on the zone curve rather than as a curve of
+    /// its own, and that is the whole of why distance is affordable here
+    /// again. The effective multiplier is
+    /// `stat_multiplier() + ZONE_STAT_STEP * t`, so the ramp is the same
+    /// linear addend the zone ladder already uses, read at a fractional
+    /// zone — every difficulty curve stays linear,
+    /// and `balance_sim` needs no bound of its own because the far field of
+    /// zone N *is* the zone N+1 fixture it already sweeps.
+    ///
+    /// **Nothing underground may call this, and nothing does.** Every Stack
+    /// spawn is placed at the *surface entrance tile* (see
+    /// `Game::stack_encounter_pack`), so a distance term read inside the
+    /// spawn would scale a whole frame by how far out its link happens to
+    /// sit — the second of the two bugs that removed distance scaling on
+    /// 2026-08-05. `Game::stack_escalation` builds its own `SpawnEscalation`
+    /// and never reaches here, so that leak is closed by construction rather
+    /// than by a check inside the spawner.
+    ///
+    /// Spends no `GameRng`, so putting a spawn site onto the ramp shifts no
+    /// seeded stream.
+    pub(crate) fn field_stat_mult(&self, x: i32, y: i32) -> f32 {
+        let out = (self.distance_from_danger_origin(x, y) - OPENING_RING_TILES).max(0);
+        let t = (out as f32 / DANGER_RAMP_TILES as f32).min(1.0);
+        let zone = self.world.resource::<ZoneLevel>().stat_multiplier() as f32;
+        (zone + ZONE_STAT_STEP as f32 * t) / zone
+    }
+
+    /// What an ambient surface spawn at `(x, y)` escalates by:
+    /// `SpawnEscalation::surface()` with the field ramp filled in.
+    ///
+    /// A second constructor rather than folding the ramp into `surface()`,
+    /// because `surface()`'s other callers must **not** take it — an arena
+    /// composition is authored (`arena::encounter`) and a sortie prices its
+    /// own risk through `habitat_pools`' `step_bonus` (`game::sortie`). Who
+    /// gets the ramp is therefore a census of this function's callers, which
+    /// is the readable form of the question; `surface()` staying "no
+    /// escalation at all" is what makes that census mean anything.
+    pub(crate) fn field_escalation(&self, x: i32, y: i32) -> SpawnEscalation {
+        SpawnEscalation {
+            stat_mult: self.field_stat_mult(x, y),
+            ..SpawnEscalation::surface()
+        }
     }
 
     /// Rolls a fresh `Potential` for a newly created creature — see
@@ -1301,7 +1357,8 @@ impl Game {
             }
         }
 
-        self.spawn_pack(&pick, spawn_boss, x, y, SpawnEscalation::surface());
+        let esc = self.field_escalation(x, y);
+        self.spawn_pack(&pick, spawn_boss, x, y, esc);
         true
     }
 }

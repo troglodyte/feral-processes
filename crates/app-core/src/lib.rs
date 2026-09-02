@@ -872,18 +872,72 @@ impl ManifestOrigin {
     }
 }
 
-/// Which of the character-creation wizard's seven steps is showing. One
+/// Which of the character-creation wizard's nine steps is showing. One
 /// `Mode::CreateCharacter` carries this as a cursor rather than the flow
-/// being seven modes — see that variant.
+/// being nine modes — see that variant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CreationStep {
     Difficulty,
+    /// What earlier runs earned, read once before anything is chosen.
+    ///
+    /// **A summary, and the only step with nothing to decide.** The
+    /// achievement ladder pays at `Game::new`, after the character is
+    /// applied, so none of it is spendable in the wizard — but it changes
+    /// what the run opens as, and a player who only meets it as two `+1
+    /// Perk Point` lines buried in the Summary reads the arithmetic on
+    /// their own stat sheet as a defect. First, because it is the one
+    /// thing here they did not just decide.
+    Profile,
     Class,
-    Look,
+    /// The starting kit, picked off `items_db::creation_shelf` against a
+    /// `tuning::CREATION_CREDITS` allowance. Sits directly after `Class`
+    /// because it **replaces** that class's authored kit — the two are one
+    /// decision read in sequence, and the Class step's rows already show
+    /// the kit being traded away.
+    Kit,
+    /// The glyph and sprite the player is drawn as.
+    ///
+    /// **Icon and colour are two steps, not one screen with two lists.**
+    /// They shipped as one `Look` step, whose eleven rows were five icons
+    /// and six swatches under one cursor and one shortcut sequence — the
+    /// only screen in the wizard where a row's *kind* changed partway down
+    /// the list, so what Enter did depended on how far the cursor had
+    /// walked. One list per step is the idiom every other step already
+    /// uses, and it costs nothing but a step number: both steps draw the
+    /// same live preview cell, so the two halves of one look are still
+    /// read together.
+    Icon,
+    /// The swatch the icon is tinted with, by its **0-based** index into
+    /// the renderer's `palette::PLAYER_CHOICES` — see `CREATION_COLOURS`.
+    Colour,
     Points,
+    /// The first perks, bought out of `tuning::CREATION_PERK_POINTS`.
+    ///
+    /// **Before Routine, and the one budget that is not a gate.** The Kit
+    /// and Points steps refuse to be left with anything affordable
+    /// unspent; this one does not, because a Perk Point is the only one of
+    /// the three allowances that survives the door — it is the same point
+    /// after the run starts and buys the same perk at the same price, so
+    /// what the screen does not spend arrives with the run. The allowance
+    /// rides `CharacterChoice::perk_points` rather than a constant, which
+    /// is what keeps `Game::new`'s default character on zero.
+    Perks,
     Routine,
-    Name,
+    /// The character read back whole, and the last screen carrying a
+    /// decision — Enter accepts it and `[R]` rerolls everything the player
+    /// has not made by hand, which is what makes this the step the roll
+    /// lands on.
     Summary,
+    /// **Last, after the summary.** Naming is the one step that decides
+    /// nothing about the character: it takes no catalogue, refuses
+    /// nothing, and a blank answer is a supported run. Asked before the
+    /// summary it was a field to fill in ahead of seeing what had been
+    /// built, and `[R]` — which lands on the summary and does not roll a
+    /// name — left it behind, so the one way to reach it was to walk back
+    /// a step. Asked after, it is the run's first act rather than the
+    /// last of the wizard's questions, and Enter on it is what starts the
+    /// run.
+    Name,
 }
 
 impl CreationStep {
@@ -895,18 +949,22 @@ impl CreationStep {
     /// undrawable. Adding a variant without adding it here is caught by
     /// `every_step_is_in_the_exhaustive_list`, which is the one place that
     /// can be checked.
-    pub const ALL: [CreationStep; 7] = [
+    pub const ALL: [CreationStep; 11] = [
         CreationStep::Difficulty,
+        CreationStep::Profile,
         CreationStep::Class,
-        CreationStep::Look,
+        CreationStep::Kit,
+        CreationStep::Icon,
+        CreationStep::Colour,
         CreationStep::Points,
+        CreationStep::Perks,
         CreationStep::Routine,
-        CreationStep::Name,
         CreationStep::Summary,
+        CreationStep::Name,
     ];
 
     /// Where this step sits in [`ALL`](CreationStep::ALL), 0-based — the
-    /// "step 3 of 7" figure, and what `next`/`prev` walk.
+    /// "step 3 of 9" figure, and what `next`/`prev` walk.
     pub fn index(self) -> usize {
         Self::ALL
             .iter()
@@ -926,13 +984,38 @@ impl CreationStep {
         self.index().checked_sub(1).map(|i| Self::ALL[i])
     }
 
+    /// Whether this step hands out an allowance and spends it — the Kit
+    /// step's Credits, the Points step's pool, the Perks step's Perk
+    /// Points.
+    ///
+    /// **One list, because two things read it and they must agree.** A
+    /// spending step gives Left/Right to its basket (`Mode::Transfer`'s
+    /// rule) rather than to paging, and writes its own live footer instead
+    /// of a fixed one. The Perks step shipped in the second of those and
+    /// outside the paging carve-out, so its own footer said "Left/Right
+    /// buys" while Left walked back to the stat pool.
+    ///
+    /// **Refusing to be left is a third question and not this one**: it
+    /// asks whether the allowance is *lost*, and the Perks step's is not
+    /// — see `leave_refusal`.
+    pub fn spends(self) -> bool {
+        matches!(
+            self,
+            CreationStep::Kit | CreationStep::Points | CreationStep::Perks
+        )
+    }
+
     /// The step's heading, for the renderer's popup title.
     pub fn title(self) -> &'static str {
         match self {
             CreationStep::Difficulty => "Difficulty",
+            CreationStep::Profile => "Carried over",
             CreationStep::Class => "Class",
-            CreationStep::Look => "Look",
+            CreationStep::Kit => "Kit",
+            CreationStep::Icon => "Icon",
+            CreationStep::Colour => "Colour",
             CreationStep::Points => "Points",
+            CreationStep::Perks => "Perks",
             CreationStep::Routine => "Starter routine",
             CreationStep::Name => "Name",
             CreationStep::Summary => "Summary",
@@ -950,6 +1033,9 @@ impl CreationStep {
 /// a routine look like.
 #[derive(Clone, Debug, PartialEq)]
 pub enum CreationRow {
+    /// One line of the profile summary on the `Profile` step — a folded
+    /// reward, or the sentence a first run gets instead.
+    Earned(String),
     Difficulty {
         mode: DifficultyMode,
         label: String,
@@ -974,7 +1060,29 @@ pub enum CreationRow {
         value: i32,
         cost: u32,
     },
+    /// One shelf item on the Kit step. `taken` is how many units the
+    /// basket holds of it and `price` what one more costs — the Stat row's
+    /// shape, in Credits instead of pool points.
+    Item {
+        row: feral_processes_engine::StartingItemRow,
+        taken: u32,
+    },
     Routine(feral_processes_engine::StarterRoutineRow),
+    /// One perk on the Perks step. `taken` is how many levels the basket
+    /// holds of it — the `Item` row's shape, in Perk Points.
+    Perk {
+        row: feral_processes_engine::StartingPerkRow,
+        taken: u32,
+    },
+    /// The Summary's look line: the glyph read back **in the swatch it
+    /// will actually be drawn in**, which is the one Summary row that is a
+    /// picture rather than a figure. `colour` is the 0-based
+    /// `PLAYER_CHOICES` index, `None` where the player skipped that step.
+    Look {
+        label: String,
+        glyph: char,
+        colour: Option<u8>,
+    },
     Name {
         typed: String,
     },

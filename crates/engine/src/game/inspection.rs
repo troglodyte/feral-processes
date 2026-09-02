@@ -1369,7 +1369,14 @@ impl Game {
         let perks = self.world.get::<Perks>(entity);
         Some(ManifestView {
             entity,
-            name: "You".to_string(),
+            // The name the player typed at creation, which is the whole
+            // point of having asked for one — "You" is what a nameless run
+            // still reads, and what the log says either way.
+            name: self
+                .world
+                .get::<CustomName>(entity)
+                .map(|n| n.0.clone())
+                .unwrap_or_else(|| "You".to_string()),
             glyph: glyph.ch,
             color: glyph.color,
             level: Some(exp.level),
@@ -1422,6 +1429,7 @@ impl Game {
                 difficulty: *self.world.resource::<DifficultyMode>(),
                 cycle: self.current_tick(),
                 active_contracts: self.active_contracts().len(),
+                class: self.player_class_view(),
             }),
         })
     }

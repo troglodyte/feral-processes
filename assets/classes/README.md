@@ -22,6 +22,22 @@ no talent tree. (Talent trees in `assets/talents/` are a *companion's* axis;
 the player's equivalent is Perk Points, spent on the affinity perks in
 `assets/perks/`.)
 
+The kit is the **fallback**, and the wizard no longer reaches it. The Kit
+step sits directly after the class step, offers a `tuning::CREATION_CREDITS`
+allowance to spend on `ItemDb::creation_shelf`, and refuses to be left while
+anything on the shelf is still affordable — so a run started through the
+wizard always buys its own kit and this one is replaced outright. It is
+still what a `CharacterChoice` built anywhere else gets with an empty
+basket, which is every `Game::new`, every test fixture and every arena
+scenario. The class picker does not list it either: advertising equipment
+the player is about to buy for themselves two screens later is noise.
+
+Price a kit against that allowance all the same —
+`the_creation_allowance_sits_inside_the_class_kit_band` in
+`crates/engine/src/tests/assets.rs` is what holds the two in a band, and a
+kit far outside it makes the Kit step either a free upgrade over this class
+or a punishment for using it.
+
 Each file is one class:
 
 ```ron
@@ -41,7 +57,7 @@ Each file is one class:
 | `name` | What the creation screen leads with. |
 | `description` | One or two sentences of flavour under it. |
 | `affinities` | `#[serde(default)]` — every field of `Affinities` (`damage`, `heal`, `buff`, `debuff`, `drain`) defaults to neutral (`1.0`) individually, so a file may name only the categories it cares about, or omit the field entirely for a class with no spread at all. |
-| `kit` | `#[serde(default)]` — a list of `(item id, quantity)` pairs stocked into the player's `Inventory` at creation, replacing the four-item default kit. Omitting it (or writing `[]`) starts the class with an empty pack. |
+| `kit` | `#[serde(default)]` — a list of `(item id, quantity)` pairs stocked into the player's `Inventory` at creation, replacing the four-item default kit. Omitting it (or writing `[]`) starts the class with an empty pack. Superseded entirely if the player buys anything on the Kit step; see "What a class is" above. |
 
 ## The damped-axis convention
 

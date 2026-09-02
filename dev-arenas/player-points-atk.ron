@@ -3,13 +3,15 @@
 // The Atk half of a two-file pair — `player-points-atk.ron` and
 // `player-points-integrity.ron` — identical in every field but
 // `character.stats`. They exist to answer whether the pool's exchange rates
-// are commensurate: `tuning::CREATION_STAT_POINTS` is 5, and a point buys
+// are commensurate: `tuning::CREATION_STAT_POINTS` is 9, and a point buys
 // **+1 Attack** or **+6 Integrity**, which on a level-1 player (6 atk, 90
-// max HP) is +16.7% offense against +6.7% survivability. On that arithmetic
-// alone Attack looks about 2.5x the value of Integrity per point.
+// max HP) is +16.7% offense against +6.7% survivability per point. On that
+// arithmetic alone Attack looks about 2.5x the value of Integrity.
 //
 // **It is not.** See
-// `docs/measurements/2026-09-01-creation-stat-pool-exchange-rates.md`:
+// `docs/measurements/2026-09-01-creation-stat-pool-exchange-rates.md`
+// (measured while the pool was 5, before the retune to 9 — the ratio is
+// what that report is good for now, not its absolute rows):
 // measured at 1000 reps across three fight shapes, Attack is worth roughly
 // 1.2-1.8x Integrity, not 2.5x, because Attack *shortens* the fight and
 // Integrity *lengthens* it. The two effects nearly cancel, and Integrity
@@ -43,7 +45,7 @@
 (
     player: Fresh(level: 5, zone: 1),
     character: (
-        stats: (5, 0, 0, 0),
+        stats: (9, 0, 0, 0),
     ),
     party: [
         (species: "glitch", level: 5),

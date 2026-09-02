@@ -135,7 +135,7 @@ therefore an **error** on a save or template rather than being ignored —
 ```ron
 character: (
     class: Some(Medic),                 // one of the five AffinityClass variants
-    stats: (0, 0, 5, 0),                // units bought: Atk, Def, Integrity, Decompiler
+    stats: (0, 0, 9, 0),                // units bought: Atk, Def, Integrity, Decompiler
     routine: Some("checksum_repair"),   // the starter routine
 ),
 ```
@@ -146,8 +146,10 @@ omitting `character` entirely is the unaligned, unspent, no-starter player
 every scenario written before this field described, and still describes.
 
 `stats` is **units bought**, in `MainStat::all()` order, never points spent:
-`tuning::CREATION_COST_DEF` is 3, so `(0, 1, 0, 0)` spends three points of
-the five-point pool for one point of Mitigation. A spend the pool cannot
+every axis costs one point today (`tuning::CREATION_COST_*`), so `(0, 1, 0,
+0)` spends one of the nine-point pool for one point of Mitigation — but the
+costs are a tuning question and the bin reads units, so a repriced axis
+changes what a row here spends without changing the row. A spend the pool cannot
 cover is an **error** rather than a dropped spend — inside a run an
 overspent choice fails closed and applies nothing, which in an instrument
 would report the baseline and read as the axis being worthless.

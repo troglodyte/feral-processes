@@ -1,8 +1,0 @@
-(
-    id: "tutorial_spend_it",
-    name: "Spend It",
-    description: "As you level, you earn Perk Points. Open your perks ([p] party meny) and buy one.",
-    objective: Perform(deed: UnlockedPerk),
-    reward: [Credits(40), Xp(120)],
-    tutorial: Some(110),
-)

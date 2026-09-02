@@ -41,18 +41,27 @@ pub const PLAYER_BASE_STATS: Stats = Stats {
 
 /// Points offered on the character-creation stat screen, spent **on top
 /// of** `PLAYER_BASE_STATS` rather than redistributing it — so `balance_sim`'s
-/// modelled floor stays valid no matter how the pool is spent. Not a clean
-/// multiple of `CREATION_COST_DEF`, deliberately: a pool that always divided
-/// evenly into Def would hide that axis's rounding-down, which is exactly
-/// what `mitigation_costs_more_than_a_point` exists to catch.
+/// modelled floor stays valid no matter how the pool is spent.
 ///
-/// **5, not 10.** At `CREATION_COST_ATK = 1`, a pool of 10 let an all-Atk
-/// build open on 16 atk against the baseline 6 — 2.7x the level-1 offense
-/// `balance_sim` treats as its floor, trivialising zone 1. At 5 the widest
-/// swing is +5 atk, or +30 `max_hp` on a 90 HP base. See
-/// `MAX_CREATION_STAT_POINTS` for the ceiling this is checked against —
-/// that constant is the bound, not the value, and stays where it is.
-pub const CREATION_STAT_POINTS: u32 = 5;
+/// **The pool size is the all-Atk offense ceiling**, because Atk is priced
+/// 1-for-1 and always will be (`CREATION_COST_ATK`'s reason). At 20 the
+/// widest offensive build opens on 26 atk against the baseline 6, and the
+/// widest defensive one on 210 `max_hp` against 90.
+///
+/// **20, and this is a design decision that overrides a balance argument.**
+/// The number was 5, set against a rejected 10 on the grounds that 16 atk
+/// was 2.7x the level-1 offense `balance_sim` treats as its floor. 20 is
+/// 4.3x that floor, so the opening zone is meant to be soft for a player
+/// who spends the whole pool on one axis — the screen is a build-defining
+/// choice rather than a garnish, and `Game::level_cap` and the zone curve
+/// are what the run is paced by. `balance_sim` models the *unspent*
+/// baseline, so none of its curves move with this; what it cannot see is
+/// exactly what this constant now buys.
+///
+/// It sits **exactly on** `MAX_CREATION_STAT_POINTS`, so raising it
+/// further is a deliberate re-argument of that bound rather than a nudge —
+/// the `const` assertion below fails otherwise.
+pub const CREATION_STAT_POINTS: u32 = 20;
 
 /// Pool points one point of Integrity costs. See `CREATION_GAIN_INTEGRITY`
 /// for what a point buys.
@@ -66,14 +75,22 @@ pub const CREATION_COST_ATK: u32 = 1;
 /// 1-for-1, like Atk.
 pub const CREATION_COST_DECOMPILER: u32 = 1;
 
-/// Pool points one point of Def (`Stats::mitigation`) costs. Three, not
-/// one: mitigation is a percentage point on a base of 2 that levelling
-/// never raises (see `HP_PER_LEVEL`'s doc comment on why there is no
-/// mitigation-per-level constant at all), so pricing it like the other
-/// three axes would make it strictly dominant on a screen where the player
-/// — not a random roll — is choosing. This is the axis
-/// `mitigation_costs_more_than_a_point` exists to hold down.
-pub const CREATION_COST_DEF: u32 = 3;
+/// Pool points one point of Def (`Stats::mitigation`) costs — priced
+/// 1-for-1 like the other three axes.
+///
+/// **Three was the argument, and the instrument refuted it.** The claim
+/// was that mitigation is the one axis levelling never raises (see
+/// `HP_PER_LEVEL`'s doc comment on why there is no mitigation-per-level
+/// constant at all), so pricing it like the rest would make it dominant on
+/// a screen where the player chooses rather than a roll. It was not
+/// dominant at any price: a unit is **one percentage point** on a base of
+/// 2, and `docs/measurements/2026-09-01-creation-stat-pool-exchange-rates.md`
+/// measured the whole 5-point pool spent on Def as **byte-identical to the
+/// control** over 200 fights — same win rate, same round count, same HP
+/// left. Priced at three it was a trap row: the dearest axis and the only
+/// one that moved nothing. At one, a full-Def build reaches 11%
+/// mitigation, which is the first spend on this axis a fight can see.
+pub const CREATION_COST_DEF: u32 = 1;
 
 /// `Stats::max_hp` granted per point of Integrity bought on the creation
 /// stat screen — and `Stats::hp` with it, unconditionally: a run must not
@@ -82,11 +99,76 @@ pub const CREATION_GAIN_INTEGRITY: u32 = 6;
 
 /// Ceiling on `CREATION_STAT_POINTS`, asserted rather than trusted —
 /// `MAX_PROFILE_STAT_POINTS`'s reason: a permanent buff with no ceiling is a
-/// shape this design has already closed off twice. Left with headroom over
-/// the shipped pool so retuning the pool up doesn't also have to move this.
+/// shape this design has already closed off twice. The shipped pool now
+/// sits exactly on it, so there is no headroom left and the next raise has
+/// to move this constant on purpose — which is the point of it.
 pub const MAX_CREATION_STAT_POINTS: u32 = 20;
 
 const _: () = assert!(CREATION_STAT_POINTS <= MAX_CREATION_STAT_POINTS);
+
+/// Perk Points the character-creation perk step hands out, on top of
+/// whatever the cross-run profile grants.
+///
+/// **Four, which is two of the cheap perks or one of the dearest.** The
+/// screen exists to be a decision on every run including a first one, and
+/// a fresh profile grants nothing — perks are otherwise earned at
+/// `PERK_POINTS_PER_LEVEL` a level, so this is two levels of perk income
+/// as a head start. Shipped costs run 2..=4.
+///
+/// **Ungated by any instrument.** `balance_sim` models no perks at all —
+/// each is a hook into a particular formula (see `perks.rs`) — so nothing
+/// in the suite can tell you what raising this is worth.
+///
+/// **Spent at creation or lost**, exactly like the stat pool and the kit
+/// allowance — so the step refuses to be left while anything on it is
+/// still affordable, the same rule as the other two. The allowance is
+/// never granted as points: `apply_creation_perks` grants only what the
+/// basket costs and immediately spends it, because `Game::new` runs that
+/// same path with an empty basket and must keep producing today's player.
+pub const CREATION_PERK_POINTS: u32 = 4;
+
+/// Credits the character-creation kit step gives the player to spend on
+/// `items_db::creation_shelf`.
+///
+/// **25, because that is the band the shipped class kits already occupy.**
+/// Priced through `items_db::value_of`, the five `assets/classes/` kits are
+/// worth Leech 11, Striker 15, no-class fallback 21, Medic 23, Bastion 29
+/// and Saboteur 35. A picked kit therefore trades *shape* against an
+/// authored one rather than size — `roll_points_spread`'s principle on the
+/// other pool. Set it well above that band and the step is a free upgrade
+/// over every class; well below and picking is a punishment for engaging
+/// with the screen.
+///
+/// Whatever the basket leaves unspent arrives as Credits, so this is also
+/// the most a run can open holding.
+pub const CREATION_CREDITS: u32 = 25;
+
+/// The dearest item `items_db::creation_shelf` will offer, in the same
+/// Credits `CREATION_CREDITS` is denominated in.
+///
+/// **This is a layout constraint as much as a design one.** The creation
+/// wizard promises no scroll — `the_tallest_creation_step_fits_its_screen`
+/// holds every step under `popup::popup_max_rows`, 28 at 1280x720 — and the
+/// shelf is derived from a **moddable** item set, so its length is this
+/// number's consequence. At 8 the shipped assets stock 23 rows; at 12 they
+/// stock 26 and the census has no room left for the step's footer.
+///
+/// What 8 buys the player: every material, all three companion upgrades,
+/// the rest charge, and six pieces of tier-1 gear. What it keeps off: the
+/// zone-gated gear from `arc_lance` (12) up, which is a run's reward.
+pub const CREATION_SHELF_MAX_VALUE: u32 = 8;
+
+/// Hard cap on how many rows `items_db::creation_shelf` returns, after the
+/// `CREATION_SHELF_MAX_VALUE` filter.
+///
+/// The *mod* safety net, not the shipped bound: a modded `assets/items/`
+/// full of cheap items would otherwise push the step past the wizard's
+/// no-scroll ceiling, and this truncates instead — `MAX_NEED_ROWS`
+/// trimming before the WORK box's own cap, for that reason. The shipped
+/// set is held well under it by `the_shipped_shelf_fits_the_wizard`, so
+/// reaching this cap is a signal to retune the ceiling above, never to
+/// raise this.
+pub const CREATION_SHELF_ROWS: usize = 26;
 
 /// Flat stat growth per level-up, before `growth_multiplier` scales it —
 /// see `progression::stats_after_levels`.
@@ -385,11 +467,13 @@ pub const ZONE_STAT_STEP: i32 = 1;
 /// Home exists, `ZoneSpawnPoint` before then. Inside it, only species a
 /// bare level-1 player can beat are *born* (see `Game::in_opening_ring`).
 ///
-/// This is the one thing distance still decides. Distance used to be a
-/// difficulty axis in its own right — scaling stats and group size as you
-/// walked out — and is not any more: a program's strength is a property of
-/// its zone, and underground of its depth. What survives is a pocket, not
-/// a curve.
+/// The ring is the flat *floor* under the field ramp: `DANGER_RAMP_TILES`
+/// measures from its edge, so inside it `Game::field_stat_mult` is exactly
+/// 1.0. That is not politeness — `balance_sim::beatable_by_a_fresh_player`
+/// is computed against the unscaled species, so any ramp in here falsifies
+/// it. What the ring does that the ramp does not is gate the *pool*: it
+/// decides which species are born, where the ramp only decides how hard
+/// one already born is.
 ///
 /// Its own literal, and deliberately *not* `MAX_BUILD_DISTANCE_FROM_HOME`,
 /// which is what it used to be. That spelling made the ring exactly your
@@ -406,6 +490,26 @@ pub const ZONE_STAT_STEP: i32 = 1;
 /// fixed zone scaling that condition is true across the whole of zone 1, so
 /// the old spelling would have silently made the entire zone a nursery.
 pub const OPENING_RING_TILES: i32 = 7;
+
+/// How far past `OPENING_RING_TILES` a surface spawn has to be for the field
+/// ramp to reach its cap — see `Game::field_stat_mult`.
+///
+/// **The cap is one zone step, not a free multiplier.** At the cap a spawn's
+/// stats are arithmetically `ZoneLevel(zone + 1).stat_multiplier()`: the far
+/// field of a zone is the doorstep of the next one. Two things follow, and
+/// both are the reason distance is affordable again after being removed on
+/// 2026-08-05. `balance_sim` needs no new bound, because the far field of
+/// zone N *is* the zone N+1 fixture it already sweeps. And the zone number
+/// still means something — a zone spans `[N, N+1]` and its floor is exactly
+/// the previous zone's ceiling — which is the answer to the first of that
+/// removal's two bugs, a zone having no consistent difficulty of its own.
+///
+/// 128 is four `world::CHUNK_SIZE` chunks: far enough to be a decision the
+/// player makes over a session rather than a step they take by accident,
+/// close enough that the frontier is reachable without a Portal. This is the
+/// knob to move if the field reads too flat or too steep; every other part
+/// of the ramp is derived from the zone curve and is not a number to tune.
+pub const DANGER_RAMP_TILES: i32 = 128;
 
 /// How far `x` looks along the row or column the player is facing
 /// (`Game::find_target_in_direction`).

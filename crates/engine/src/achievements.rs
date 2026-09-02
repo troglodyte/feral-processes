@@ -396,6 +396,66 @@ pub fn profile_rewards(profile: &Profile, db: &AchievementDb) -> Vec<(Reward, Op
         .collect()
 }
 
+/// What a profile is about to pay, **folded to one line per thing** —
+/// `["+2 Attack", "+2 Perk Points", "start with a scrapper"]`.
+///
+/// A summary rather than a receipt: the ladder pays a rung at a time, so
+/// a player with two Perk Point achievements sees `+1 Perk Point` twice
+/// where what they want to know is that they open holding two. Stats fold
+/// per axis, Perk Points to a total, programs by species.
+///
+/// Built on `profile_rewards`, which stays the one walk of what a profile
+/// owes — this is a second *length* of it, `Game::item_effects`' relation
+/// to `item_grant`.
+pub fn profile_summary(profile: &Profile, db: &AchievementDb) -> Vec<String> {
+    let mut stats: Vec<(MainStat, u32)> = Vec::new();
+    let mut perk_points = 0;
+    let mut programs: Vec<(String, u32)> = Vec::new();
+    for (reward, rolled) in profile_rewards(profile, db) {
+        match reward {
+            Reward::RandomMainStat(n) => {
+                // An unrolled rung names no axis and so cannot be folded
+                // into one; `preview_line` keeps it vague for the same
+                // reason, and it is dropped here rather than guessed at.
+                if let Some(stat) = rolled {
+                    match stats.iter_mut().find(|(s, _)| *s == stat) {
+                        Some((_, total)) => *total += n,
+                        None => stats.push((stat, n)),
+                    }
+                }
+            }
+            Reward::PerkPoints(n) => perk_points += n,
+            Reward::StartingProgram(species) => {
+                match programs.iter_mut().find(|(s, _)| *s == species) {
+                    Some((_, count)) => *count += 1,
+                    None => programs.push((species, 1)),
+                }
+            }
+        }
+    }
+
+    let mut lines: Vec<String> = MainStat::all()
+        .into_iter()
+        .filter_map(|axis| {
+            stats
+                .iter()
+                .find(|(s, _)| *s == axis)
+                .map(|(_, n)| format!("+{n} {}", axis.label()))
+        })
+        .collect();
+    if perk_points > 0 {
+        let plural = if perk_points == 1 { "" } else { "s" };
+        lines.push(format!("+{perk_points} Perk Point{plural}"));
+    }
+    for (species, count) in programs {
+        lines.push(match count {
+            1 => format!("start with a {species}"),
+            n => format!("start with {n}x {species}"),
+        });
+    }
+    lines
+}
+
 /// How an already-rolled reward reads on the creation wizard's preview.
 ///
 /// Unlike `reward_label`, which keeps `RandomMainStat` deliberately vague

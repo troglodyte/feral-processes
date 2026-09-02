@@ -814,12 +814,19 @@ impl Game {
     }
 
     /// What Stack depth multiplies wild program stats by — `1.0` on the
-    /// surface, so `spawn_wild_creature` can fold it in unconditionally.
+    /// surface, so `spawn_wild_creature_scaled` can fold it in
+    /// unconditionally.
     ///
-    /// Compounds with `ZoneLevel::stat_multiplier` and
-    /// `distance_stat_multiplier` rather than replacing them: a link far
-    /// out in a deep zone is a nastier hole than one beside your base, and
-    /// going down makes either worse.
+    /// Compounds with `ZoneLevel::stat_multiplier` rather than replacing it:
+    /// going down makes a deep zone's hole worse still. It deliberately does
+    /// **not** compound with `Game::field_stat_mult`, and that omission is
+    /// the whole of why distance is safe as a difficulty axis again — every
+    /// Stack spawn is placed at the surface *entrance tile*
+    /// (`stack_encounter_pack`), so a frame that inherited the ramp would be
+    /// scaled by how far out its link happens to sit rather than by anything
+    /// about the frame. `stack_escalation` builds its own `SpawnEscalation`
+    /// from this and never calls the ramp.
+    ///
     /// The depth term alone is `stack::depth_stat_multiplier`, which a
     /// market's quote is priced off: a price that moved because the party
     /// had been noisy would change while the player was reading it.

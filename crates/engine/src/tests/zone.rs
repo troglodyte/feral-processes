@@ -44,14 +44,19 @@ fn entering_a_zone_portal_increments_zone_and_doubles_wild_stats() {
         !results.is_empty(),
         "zone 2 should have spawned wild creatures"
     );
-    for (species_id, max_hp, _pos, rarity, boss) in results {
+    for (species_id, max_hp, pos, rarity, boss) in results {
         let species = species_db.iter().find(|s| s.id == species_id).unwrap();
         // Zone 2 doubles base stats (`ZoneLevel::stat_multiplier`) and the
         // spawn's own `Potential::hp_roll` scales it within
-        // `MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL`. That is the whole
-        // range now — where on the map it spawned contributes nothing,
-        // which is what makes this a tight bound rather than the
-        // three-times-wider one distance scaling used to force.
+        // `MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL`.
+        //
+        // Where on the map it spawned contributes the field ramp, and that
+        // is folded in **per creature** rather than widening the bound to
+        // the ramp's cap — for the same reason `rare` and `boss_mult` are.
+        // A bound widened to `x2` would pass a ramp applied at the wrong
+        // tile, or twice; this asserts `Game::field_stat_mult` was applied
+        // exactly once, at this creature's own position.
+        let ramp = game.field_stat_mult(pos.x, pos.y);
         //
         // The rare-spawn tier is the one other factor, and folding it in per
         // creature rather than widening the bound to the gold ceiling is
@@ -72,7 +77,8 @@ fn entering_a_zone_portal_increments_zone_and_doubles_wild_stats() {
         };
         assert!(
             (max_hp as f32)
-                >= (species.base_hp as f32) * 2.0 * rare * boss_mult * MIN_INDIVIDUAL_ROLL,
+                >= ((species.base_hp as f32) * 2.0 * ramp * rare * boss_mult * MIN_INDIVIDUAL_ROLL)
+                    .floor(),
             "zone 2 wild creatures should have at least doubled stats, times the roll floor"
         );
         // Rounded, because `spawn_wild_creature_scaled` rounds: a 112-HP
@@ -83,8 +89,8 @@ fn entering_a_zone_portal_increments_zone_and_doubles_wild_stats() {
         // that the common case.
         assert!(
             (max_hp as f32)
-                <= ((species.base_hp as f32) * 2.0 * rare * boss_mult * MAX_INDIVIDUAL_ROLL)
-                    .round(),
+                <= ((species.base_hp as f32) * 2.0 * ramp * rare * boss_mult * MAX_INDIVIDUAL_ROLL)
+                    .ceil(),
             "zone 2 wild creatures shouldn't exceed the zone doubling times the roll ceiling"
         );
     }

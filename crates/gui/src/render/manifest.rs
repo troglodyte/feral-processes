@@ -170,14 +170,7 @@ fn draw_header(view: &ManifestView, rect: Rect, painter: &Painter, m: &Metrics) 
         ManifestSubject::Program(p) => p.rarity,
         ManifestSubject::Player(_) => Rarity::Ordinary,
     };
-    let species = match &view.subject {
-        ManifestSubject::Program(p) => p.species_name.clone(),
-        ManifestSubject::Player(_) => None,
-    };
-    let title = match species {
-        Some(s) => format!("{}  ({s})", view.name),
-        None => view.name.clone(),
-    };
+    let title = subject_title(view);
     // Both flags, and the tier keeps its own colour claim: a boss reads red
     // and an Overclocked spawn gold, so a program that is both would have to
     // give one up if this were a single string in a single colour. `[BOSS]`
@@ -396,6 +389,29 @@ fn stat(label: impl Into<String>, value: impl Into<String>) -> SectionRow {
 /// — the branch's original regression was a missing box, not a wrong row
 /// count or a wrong order, and a fixture that omits a box passes every
 /// test while the real page still doesn't fit.
+/// What heads the page: who this is, and in parentheses what kind of thing
+/// they are.
+///
+/// **The parenthetical answers one question for both subjects.** A program
+/// fills it with its species; the player fills it with their class, which
+/// is the same question asked of a player — and the reason the player's
+/// half exists at all is that the sheet used to head itself "You" and name
+/// no class, so the two facts a run is most identified by were readable
+/// only on the wizard screen that asked for them.
+///
+/// Neither half is guaranteed: a program whose species failed to resolve
+/// and a classless run both fall back to the name alone.
+fn subject_title(view: &ManifestView) -> String {
+    let kind = match &view.subject {
+        ManifestSubject::Program(p) => p.species_name.clone(),
+        ManifestSubject::Player(p) => p.class.as_ref().map(|c| c.name.clone()),
+    };
+    match kind {
+        Some(kind) => format!("{}  ({kind})", view.name),
+        None => view.name.clone(),
+    }
+}
+
 fn sections_for(game: &Game, view: &ManifestView) -> Vec<Section> {
     let mut combat = vec![
         stat("Damage", view.damage.clone()),
@@ -481,12 +497,22 @@ fn sections_for(game: &Game, view: &ManifestView) -> Vec<Section> {
 fn player_sections(sections: &mut Vec<Section>, p: &PlayerManifest) {
     sections.push(Section {
         title: "PROGRESSION",
-        rows: section_rows(vec![
-            stat("Decompiler", p.decompiler.to_string()),
-            stat("Perk points", p.perk_points.to_string()),
-            stat("Cargo carried", p.cargo_used.to_string()),
-            stat("Position", format!("{}, {}", p.position.0, p.position.1)),
-        ]),
+        rows: section_rows(
+            p.class
+                .iter()
+                // The class *name* rides the page's title, beside the
+                // player's own — this row is what that class is worth,
+                // which the title has no room for and which is the thing
+                // a player opens a stat sheet to check.
+                .map(|c| stat("Class bonus", c.bonuses.clone()))
+                .chain([
+                    stat("Decompiler", p.decompiler.to_string()),
+                    stat("Perk points", p.perk_points.to_string()),
+                    stat("Cargo carried", p.cargo_used.to_string()),
+                    stat("Position", format!("{}, {}", p.position.0, p.position.1)),
+                ])
+                .collect(),
+        ),
         full_width: false,
     });
 
@@ -830,7 +856,7 @@ fn roll_readout(roll: f32) -> String {
 /// and would read as a comparison the row cannot complete.
 fn manifest_pick_label(shortcut: char, view: &ManifestView) -> String {
     let body = match &view.subject {
-        ManifestSubject::Player(_) => format!("You - Lv{}", view.level.unwrap_or(1)),
+        ManifestSubject::Player(_) => format!("{} - Lv{}", view.name, view.level.unwrap_or(1)),
         ManifestSubject::Program(p) => format!(
             "{} Lv{} - HP {}/{}  ATK {}  MIT {}%  PWR {}{}",
             view.name,
@@ -1669,6 +1695,52 @@ mod tests {
         });
     }
 
+    /// **The player's sheet is headed by their own name and their class**,
+    /// and carries what that class is worth as a row of its own.
+    ///
+    /// The title's parenthetical is the same slot a program's *species*
+    /// fills, which is the question it answers for either subject: what
+    /// kind of thing is this. The bonus goes in a row rather than the
+    /// title because the title has no width for it and because it is a
+    /// figure and not a name.
+    #[test]
+    fn the_player_sheet_is_headed_by_their_name_and_class() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(
+            23,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            assets,
+        )
+        .expect("shipped assets load");
+
+        let mut view = player_view(plain_player());
+        view.name = "Kestrel".to_string();
+        assert_eq!(subject_title(&view), "Kestrel  (Decompiler)");
+
+        let progression = sections_for(&game, &view);
+        assert_eq!(
+            stat_value(titled(&progression, "PROGRESSION"), "Class bonus"),
+            Some("Drain x1.25  Damage x0.85"),
+        );
+
+        // A classless run — every save from before character creation, and
+        // every `Game::new` — heads itself with the name alone and grows
+        // no row. Without this arm the fallback could be dropped and only
+        // an old save would find out.
+        let mut plain = plain_player();
+        plain.class = None;
+        let mut view = player_view(plain);
+        view.name = "You".to_string();
+        assert_eq!(subject_title(&view), "You");
+        assert_eq!(
+            stat_value(
+                titled(&sections_for(&game, &view), "PROGRESSION"),
+                "Class bonus"
+            ),
+            None,
+        );
+    }
+
     /// A player with nothing optional set — no perks, no party — so a test
     /// naming a box is naming one this fixture actually produces.
     fn plain_player() -> PlayerManifest {
@@ -1688,6 +1760,13 @@ mod tests {
             difficulty: DifficultyMode::Permadeath,
             cycle: 4310,
             active_contracts: 2,
+            // A class, because every run started through the wizard has
+            // one and the sheet's title and its bonus row both read it —
+            // a `None` fixture would measure a page the player never sees.
+            class: Some(feral_processes_engine::PlayerClassView {
+                name: "Decompiler".to_string(),
+                bonuses: "Drain x1.25  Damage x0.85".to_string(),
+            }),
         }
     }
 

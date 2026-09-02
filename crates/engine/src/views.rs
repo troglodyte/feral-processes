@@ -1495,6 +1495,32 @@ pub struct KnownRoutineView {
     pub held: u32,
 }
 
+/// One row of the character-creation kit shelf — an item a new run may
+/// spend its `tuning::CREATION_CREDITS` allowance on.
+///
+/// `price` is `ItemDb::value_of`, the same figure a trader prices the item
+/// at, carried on the row rather than re-derived by the wizard: app-core
+/// has no `ItemDb`, and a screen that priced a row itself could quote a
+/// number the commit does not charge.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StartingItemRow {
+    pub id: crate::items::ItemId,
+    pub name: String,
+    pub description: String,
+    pub price: u32,
+}
+
+/// One row of the creation wizard's Perks step — a `PerkDef` as the
+/// screen offers it, priced in Perk Points against
+/// `tuning::CREATION_PERK_POINTS`. See `CreationCatalogue::perk_rows`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StartingPerkRow {
+    pub id: crate::perks::Perk,
+    pub name: String,
+    pub description: String,
+    pub cost: u32,
+}
+
 /// One row of the creation wizard's Routine step — an `AbilityDef::starter`
 /// candidate, priced for the class the player has picked. See
 /// `Game::starter_routine_rows`.
@@ -1679,8 +1705,13 @@ pub struct ActiveBuffView {
 /// and neither cares which kind of subject is carrying them.
 pub struct ManifestView {
     pub entity: Entity,
-    /// "You" for the player; a program's `CustomName` if it has one, else its
+    /// The player's own name if they gave one at creation, "You" if they
+    /// did not; a program's `CustomName` if it has one, else its
     /// zone-tagged species name (see `Game::zone_tagged_name`).
+    ///
+    /// **"You" is still the log's word for the player** and is deliberately
+    /// not touched — a name belongs on the sheet the player opened to read
+    /// about themselves, not in a line describing a swing.
     pub name: String,
     pub glyph: char,
     pub color: GlyphColor,
@@ -1805,6 +1836,9 @@ pub struct PlayerManifest {
     /// the contracts screen are where a player reads what they say, and a
     /// stat sheet quoting objectives would be a third wording of them.
     pub active_contracts: usize,
+    /// The class picked at creation, resolved live through `ClassDb` — see
+    /// `Game::player_class_view`. `None` for a classless run.
+    pub class: Option<PlayerClassView>,
 }
 
 /// One worn item and the bonus it is *currently* granting.
@@ -2274,18 +2308,34 @@ pub struct TransferRow {
     pub can_put: u32,
 }
 
+/// The player's class, as their own manifest reads it back — see
+/// `Game::player_class_view`. Not a `ClassRow`: that carries the starting
+/// kit, which the wizard's Kit step *replaces*, so quoting it on a sheet
+/// read mid-run would name items the player never had.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlayerClassView {
+    pub name: String,
+    /// One term per non-neutral axis, `classes::format_affinity_bonuses`.
+    pub bonuses: String,
+}
+
 /// One class offered on the creation screen — see `Game::class_rows`.
 ///
-/// `axes` and `kit` are pre-formatted in the engine (`classes::format_axes`,
-/// `classes::format_kit`) so the two renderers cannot word one class's
-/// trade differently — `Game::copy_name`'s reason.
+/// `trade` is pre-formatted in the engine (`classes::format_trade`) so the
+/// two renderers cannot word one class's trade differently —
+/// `Game::copy_name`'s reason.
+///
+/// **There is no kit summary.** The row carried one until the wizard grew
+/// a Kit step, which *replaces* what a class authored — so listing the
+/// class kit on the picker was advertising equipment the player was about
+/// to buy for themselves two screens later. `ClassDef::kit` is untouched
+/// and still the fallback for an empty basket.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClassRow {
     pub class: AffinityClass,
     pub name: String,
     pub description: String,
-    /// `"+Heal  -Damage"`-style summary of the spread.
-    pub axes: String,
-    /// `"3x Core Fragment, 4x Power Cell"`-style summary of the kit.
-    pub kit: String,
+    /// `"Bonus to damage at the expense of healing"` — what this class
+    /// gives up and what it gets for it, as a sentence.
+    pub trade: String,
 }

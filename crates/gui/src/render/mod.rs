@@ -1287,12 +1287,46 @@ mod tests {
             root.join("dev-arenas"),
             tmp.join("telemetry.jsonl"),
         );
-        // The keys a player presses: [N] new game, [F] Forgiving, then
-        // [R] to roll the rest of the character and Enter to start.
+        // [N] opens the wizard, and then every step is answered the
+        // cheapest legal way — there is no key that skips it, and the two
+        // steps that hand out an allowance will not be left until it is
+        // spent.
         app.handle_key(feral_processes_app_core::GameKey::Char('n'));
-        app.handle_key(feral_processes_app_core::GameKey::Char('f'));
-        app.handle_key(feral_processes_app_core::GameKey::Char('R'));
-        app.handle_key(feral_processes_app_core::GameKey::Enter);
+        for step in feral_processes_app_core::CreationStep::ALL {
+            match step {
+                feral_processes_app_core::CreationStep::Difficulty => {
+                    app.handle_key(feral_processes_app_core::GameKey::Char('f'))
+                }
+                feral_processes_app_core::CreationStep::Profile => {
+                    app.handle_key(feral_processes_app_core::GameKey::Enter)
+                }
+                feral_processes_app_core::CreationStep::Class => {
+                    app.handle_key(feral_processes_app_core::GameKey::Char('1'))
+                }
+                feral_processes_app_core::CreationStep::Kit
+                | feral_processes_app_core::CreationStep::Points => {
+                    for i in 0..app.creation_rows().len() {
+                        app.menu_selected = i;
+                        app.handle_key(feral_processes_app_core::GameKey::ShiftRight);
+                    }
+                    app.menu_selected = 0;
+                    app.handle_key(feral_processes_app_core::GameKey::Enter);
+                }
+                feral_processes_app_core::CreationStep::Icon
+                | feral_processes_app_core::CreationStep::Colour
+                | feral_processes_app_core::CreationStep::Routine => {
+                    app.handle_key(feral_processes_app_core::GameKey::Char('n'))
+                }
+                feral_processes_app_core::CreationStep::Perks => {
+                    app.handle_key(feral_processes_app_core::GameKey::Enter)
+                }
+
+                feral_processes_app_core::CreationStep::Summary
+                | feral_processes_app_core::CreationStep::Name => {
+                    app.handle_key(feral_processes_app_core::GameKey::Enter)
+                }
+            }
+        }
         app
     }
 

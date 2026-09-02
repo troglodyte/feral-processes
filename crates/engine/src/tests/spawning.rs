@@ -3,8 +3,8 @@
 use super::support::*;
 use crate::species::DangerBand;
 use crate::tuning::{
-    BOSS_SPAWN_CHANCE, MAX_GROUP_SIZE_STEPS, MAX_INDIVIDUAL_ROLL, NEST_DURABILITY,
-    NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN, NEST_RESPAWN_TICKS, NEST_TETHER_RADIUS,
+    BOSS_SPAWN_CHANCE, DANGER_RAMP_TILES, MAX_GROUP_SIZE_STEPS, MAX_INDIVIDUAL_ROLL,
+    NEST_DURABILITY, NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN, NEST_RESPAWN_TICKS, NEST_TETHER_RADIUS,
     OPENING_RING_TILES, POPULATION_CHUNK_MARGIN, WANDER_COOLDOWN_MAX_TICKS,
     WANDER_COOLDOWN_MIN_TICKS, WILD_CREATURE_CAP, WILD_LOCAL_DENSITY_TARGET,
     WILD_SPAWN_RADIUS_TILES, chunk_wild_population,
@@ -3091,4 +3091,187 @@ fn a_zone_tier_never_scales_mitigation() {
         .clone();
     assert_eq!(stats.mitigation, species.base_mitigation);
     assert!(stats.max_hp > species.base_hp);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// The field ramp
+// ─────────────────────────────────────────────────────────────────────────
+
+/// The spawn point of `game`'s current zone, which every ramp measurement
+/// below is taken from — `distance_from_danger_origin`'s own origin.
+fn danger_origin(game: &Game) -> (i32, i32) {
+    let spawn = game.world.resource::<ZoneSpawnPoint>();
+    (spawn.x, spawn.y)
+}
+
+/// `spawn_wild_creature_scaled`'s stat block for one `glitch` at `(x, y)`
+/// under `stat_mult`, off a pinned stream so two placements are comparable.
+fn scaled_spawn(game: &mut Game, x: i32, y: i32, stat_mult: f32) -> (i32, i32) {
+    reseed_rng(game, 7717);
+    let e = game
+        .spawn_wild_creature_scaled("glitch", x, y, stat_mult, false)
+        .expect("glitch ships in the test assets");
+    let stats = game.world.get::<Stats>(e).expect("a spawn carries Stats");
+    (stats.max_hp, stats.atk)
+}
+
+/// The nursery is exactly baseline. `beatable_by_a_fresh_player` is computed
+/// against the unscaled species, so any ramp inside the ring falsifies it.
+#[test]
+fn the_field_ramp_is_flat_inside_the_opening_ring() {
+    let game = Game::new(9101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (sx, sy) = danger_origin(&game);
+    for d in 0..=OPENING_RING_TILES {
+        assert_eq!(
+            game.field_stat_mult(sx + d, sy),
+            1.0,
+            "the ring must stay exactly baseline, {d} tiles out"
+        );
+    }
+}
+
+/// The whole of the cap's design: the far field of zone N is arithmetically
+/// the doorstep of zone N+1, which is what leaves `balance_sim`'s existing
+/// per-zone curves gating the ramp rather than needing a curve of their own.
+#[test]
+fn the_field_ramp_tops_out_at_exactly_the_next_zones_doorstep() {
+    let mut game = Game::new(9102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (sx, sy) = danger_origin(&game);
+    let far = OPENING_RING_TILES + DANGER_RAMP_TILES;
+    for zone in 1..=8u32 {
+        game.world.insert_resource(ZoneLevel(zone));
+        let here = ZoneLevel(zone).stat_multiplier() as f32;
+        let next = ZoneLevel(zone + 1).stat_multiplier() as f32;
+        let reached = here * game.field_stat_mult(sx + far, sy);
+        assert!(
+            (reached - next).abs() < 1e-4,
+            "zone {zone}'s far field reached x{reached}, not zone {}'s x{next}",
+            zone + 1
+        );
+        let beyond = here * game.field_stat_mult(sx + far * 4, sy);
+        assert!(
+            (beyond - next).abs() < 1e-4,
+            "the ramp is capped at one zone step; four times out reached x{beyond}"
+        );
+    }
+}
+
+/// The point of the feature: somewhere to walk that is not the doorstep.
+#[test]
+fn a_far_field_spawn_outclasses_the_same_species_at_the_doorstep() {
+    let mut game = Game::new(9103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (sx, sy) = danger_origin(&game);
+    let near = sx + OPENING_RING_TILES + 1;
+    let far = sx + OPENING_RING_TILES + DANGER_RAMP_TILES;
+
+    let mult = game.field_escalation(near, sy).stat_mult;
+    let doorstep = scaled_spawn(&mut game, near, sy, mult);
+    let mult = game.field_escalation(far, sy).stat_mult;
+    let frontier = scaled_spawn(&mut game, far, sy, mult);
+
+    assert!(
+        frontier.0 > doorstep.0 && frontier.1 > doorstep.1,
+        "the frontier fielded {frontier:?} against the doorstep's {doorstep:?}"
+    );
+}
+
+/// The second bug the 2026-08-05 removal was for, pinned. Every Stack spawn
+/// is placed at the **surface entrance tile** (`stack_encounter_pack`), so a
+/// distance term read inside the spawn scales a whole frame by how far out
+/// its link happens to sit. The escalation decides the stats; the tile never
+/// does.
+#[test]
+fn a_spawns_stats_come_from_its_escalation_and_never_from_its_tile() {
+    let mut game = Game::new(9104, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (sx, sy) = danger_origin(&game);
+    let underground = game.stack_escalation(3);
+    // Both tiles sit outside the opening ring, so `roll_rarity` spends a
+    // draw at each and the two streams stay in step.
+    let near = scaled_spawn(
+        &mut game,
+        sx + OPENING_RING_TILES + 1,
+        sy,
+        underground.stat_mult,
+    );
+    let far = scaled_spawn(
+        &mut game,
+        sx + OPENING_RING_TILES + DANGER_RAMP_TILES * 2,
+        sy,
+        underground.stat_mult,
+    );
+    assert_eq!(
+        near, far,
+        "a frame under a far-flung link came out harder than one beside the base"
+    );
+}
+
+/// `SpawnEscalation::surface()` still names the case with no escalation at
+/// all, and its two remaining callers depend on that: an arena composition
+/// is authored (`arena::encounter`) and a sortie prices its own risk through
+/// `habitat_pools`' `step_bonus` (`game::sortie`). Folding the ramp in here
+/// instead of into `Game::field_escalation` changes both in silence.
+#[test]
+fn the_bare_surface_escalation_carries_no_ramp() {
+    assert_eq!(
+        crate::game::spawning::SpawnEscalation::surface().stat_mult,
+        1.0
+    );
+}
+
+/// The ramp has to reach the spawner the world actually uses, not just the
+/// helper. Zone 1 is x1, so an unramped spawn cannot exceed its species'
+/// base by more than `MAX_INDIVIDUAL_ROLL`; at the cap the ceiling is twice
+/// that. Rarity only ever multiplies further, so this is one-directional.
+#[test]
+fn the_ambient_spawner_ramps_with_distance() {
+    let mut game = Game::new(9105, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (sx, sy) = danger_origin(&game);
+    let far = sx + OPENING_RING_TILES + DANGER_RAMP_TILES;
+    let before: Vec<Entity> = game
+        .world
+        .query_filtered::<Entity, With<Hostile>>()
+        .iter(&game.world)
+        .collect();
+
+    let mut placed = None;
+    'search: for dy in -6..=6 {
+        for _ in 0..40 {
+            if game.try_spawn_habitat_creature(far, sy + dy) {
+                placed = Some(sy + dy);
+                break 'search;
+            }
+        }
+    }
+    assert!(
+        placed.is_some(),
+        "no walkable, habitable tile at the ramp's cap to spawn onto"
+    );
+
+    let fresh: Vec<(String, i32)> = game
+        .world
+        .query_filtered::<(Entity, &Creature, &Stats, &Rarity), With<Hostile>>()
+        .iter(&game.world)
+        .filter(|(e, _, _, r)| !before.contains(e) && **r == Rarity::Ordinary)
+        .map(|(_, c, s, _)| (c.species.clone(), s.max_hp))
+        .collect();
+    assert!(
+        !fresh.is_empty(),
+        "no ordinary spawn landed at the cap to measure the ramp against"
+    );
+
+    for (species, max_hp) in fresh {
+        let base = game
+            .species_defs()
+            .into_iter()
+            .find(|s| s.id == species)
+            .expect("a spawned species resolves")
+            .base_hp;
+        let unramped_ceiling = (base as f32 * MAX_INDIVIDUAL_ROLL).round() as i32;
+        assert!(
+            max_hp > unramped_ceiling,
+            "{species} spawned at the ramp's cap with {max_hp} hp, inside the \
+             unramped ceiling of {unramped_ceiling} — the ambient spawner is \
+             not reading the ramp"
+        );
+    }
 }

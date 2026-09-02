@@ -35,6 +35,15 @@ null control for the instrument itself.
 **No change was made to `tuning.rs` on the strength of this.** It is a
 measurement, not a retune.
 
+> **Superseded in part, same day.** The Mitigation finding below *was*
+> acted on: `CREATION_COST_DEF` went 3 → 1 and `CREATION_STAT_POINTS` 5 →
+> 9. Every number in this report was taken at the five-point pool with Def
+> at three, so the rows no longer reproduce — the two `dev-arenas/player-
+> points-*.ron` files have been moved to the nine-point pool and will read
+> differently. What survives the retune is the *ratio* between Attack and
+> Integrity (they were not repriced against each other) and the finding
+> that one percentage point of Mitigation is invisible to the instrument.
+
 ## How to reproduce it
 
 The two shipped rows, and the control, in one build:
@@ -164,7 +173,11 @@ at the bottom of the ladder that scarcity is worth nothing you can measure.
 
 ## Open questions
 
-- **Should Integrity be repriced up, or Mitigation down?** This run says
+- **Should Integrity be repriced up, or Mitigation down?** ~~Open.~~
+  **Answered 2026-09-01: Mitigation down**, to one point like the other
+  three axes, on the strength of the zero below. Unmeasured at the new
+  price — a full-Def build now reaches 11% mitigation, and whether *that*
+  is visible to the instrument has not been run. This run says
   the two cheap axes are close enough that the *player* will not
   distinguish them, which is arguably fine, and that Mitigation at 3 points
   is a trap row — it costs the most and does the least at the level the

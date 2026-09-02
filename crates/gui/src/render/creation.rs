@@ -5,33 +5,36 @@
 //! one bordered box, one `Row` list — so the wizard's chrome, refusal
 //! placement and keyboard highlight are the game's existing menu idiom and
 //! not a second one invented for onboarding. What is specific to this
-//! screen is `build_row` (numbering, and the Look step's per-row icon) and
-//! the Look/Summary steps' preview cell, painted separately after the popup
-//! through `draw_look_preview`.
+//! screen is `build_row` (numbering, and the Icon/Colour steps' per-row
+//! icon) and those two steps' and the Summary's preview cell, painted
+//! separately after the popup through `draw_look_preview`.
 //!
 //! **The wizard promises no scroll.** Every other list menu in the game is
 //! fine paging a long catalogue with `draw_popup`'s built-in scroll (see
 //! `popup::popup_layout`'s `scrolling` flag) — a trade shelf or a deploy
-//! list is read a page at a time anyway. A seven-step onboarding flow is
+//! list is read a page at a time anyway. A nine-step onboarding flow is
 //! not: `the_tallest_creation_step_fits_its_screen` is what holds that
 //! promise, at the smallest window the game supports, against the real
 //! shipped `assets/`. A class or ability catalogue is moddable and could
 //! still grow past what a screen with no scroll can show — see the test's
 //! own doc comment.
 
-use super::popup::{PopupSize, Row, draw_popup, item_row, popup_rect, text_row, with_icon};
+use super::popup::{
+    PopupSize, Row, colored_item_row, draw_popup, item_row, popup_rect, text_row, with_icon,
+};
 use super::*;
 use feral_processes_app_core::{CreationRow, CreationStep};
 use feral_processes_engine::CharacterChoice;
-use feral_processes_engine::tuning::CREATION_STAT_POINTS;
+use feral_processes_engine::tuning::{CREATION_PERK_POINTS, CREATION_STAT_POINTS};
 #[cfg(test)]
 use feral_processes_engine::tuning::{
     MAX_PROFILE_PERK_POINTS, MAX_PROFILE_STARTING_PROGRAMS, MAX_PROFILE_STAT_POINTS,
 };
 
-/// The Look/Summary preview cell's side, in `Metrics::line_height` units —
-/// big enough to read the glyph or sprite clearly, small enough to sit in
-/// the popup's top-right corner without crowding the row list under it.
+/// The Icon/Colour/Summary preview cell's side, in `Metrics::line_height`
+/// units — big enough to read the glyph or sprite clearly, small enough to
+/// sit in the popup's top-right corner without crowding the row list under
+/// it.
 const PREVIEW_CELL_LINES: f32 = 3.0;
 
 pub(super) fn draw_create_character(
@@ -49,17 +52,54 @@ pub(super) fn draw_create_character(
         CreationStep::ALL.len()
     );
 
-    // The preview cell reads the popup's own box back from `popup_rect`
-    // rather than a second guess at where `draw_popup` put it — the two
-    // calls share one derivation of the box's geometry, so a resize can't
-    // put the cell outside its border.
-    let show_preview = matches!(step, CreationStep::Look | CreationStep::Summary);
+    // Both halves of the look draw the same cell: splitting the old `Look`
+    // step in two must not cost either half its preview, which is the one
+    // thing on either screen showing the glyph and the swatch together.
+    //
+    // The cell reads the popup's own box back from `popup_rect` rather than
+    // a second guess at where `draw_popup` put it — the two calls share one
+    // derivation of the box's geometry, so a resize can't put the cell
+    // outside its border.
+    let show_preview = matches!(
+        step,
+        CreationStep::Icon | CreationStep::Colour | CreationStep::Summary
+    );
     let cell = show_preview
         .then(|| preview_cell_rect(popup_rect(PopupSize::Large, &drawn, refusal, painter, m), m));
     draw_popup(&title, PopupSize::Large, &drawn, refusal, painter, m);
     if let Some(cell) = cell {
-        draw_look_preview(app.creation_choice(), painter, cell, m);
+        draw_look_preview(&previewed_look(app, step), painter, cell, m);
     }
+}
+
+/// The look the cell paints: the choice as it stands, with **the
+/// highlighted row laid over it** on the two steps that offer one.
+///
+/// The cursor previews, and that is what pays for splitting the old `Look`
+/// step in two. Picking a row now advances off the screen, so a cell that
+/// only ever showed the *committed* choice would show the player their new
+/// colour on the step after the one they chose it on — the swatch list
+/// would be the one screen in the wizard whose own decision it could not
+/// show. Reading the highlight instead means the cell answers "what would
+/// this one look like" while the cursor is still moving, and Enter merely
+/// keeps the answer.
+///
+/// Built from `App::creation_rows` rather than from `CREATION_ICONS` and
+/// `CREATION_COLOURS` directly, so the row the cell reads is the row the
+/// list drew and the two cannot index differently.
+fn previewed_look(app: &App, step: CreationStep) -> CharacterChoice {
+    let mut look = app.creation_choice().clone();
+    if matches!(step, CreationStep::Icon | CreationStep::Colour) {
+        match app.creation_rows().get(app.menu_selected) {
+            Some(CreationRow::Icon { glyph, sprite }) => {
+                look.glyph = *glyph;
+                look.sprite = sprite.clone();
+            }
+            Some(CreationRow::Colour { index }) => look.colour = Some(*index),
+            _ => {}
+        }
+    }
+    look
 }
 
 /// The full `Row` list a step draws: its own rows via `build_row`, a blank
@@ -82,21 +122,44 @@ fn step_rows(app: &App, step: CreationStep) -> Vec<Row> {
         // cannot tell from a broken screen.
         drawn.push(text_row("Nothing to choose here."));
     }
+    // The Perks step alone explains the row under the cursor, because the
+    // nineteen perk *names* are opaque and their descriptions are far too
+    // wide to sit on the rows. One line, so the screen keeps its promise
+    // of no scroll — nineteen rows plus this plus the footer is 22 of the
+    // 28 `popup_max_rows` allows.
+    if step == CreationStep::Perks
+        && let Some(CreationRow::Perk { row, .. }) = rows.get(selected)
+    {
+        drawn.push(text_row(""));
+        drawn.push(text_row(row.description.clone()));
+    }
     drawn.push(text_row(""));
-    drawn.push(text_row(footer(step)));
+    drawn.push(text_row(footer(app, step)));
     drawn
 }
 
 /// One `CreationRow` as a drawable menu row: numbered with its shortcut on
 /// every step but the three where the cursor is a highlight rather than a
 /// pick (`Mode::Transfer`'s rule — a digit is a quantity there, never a row
-/// shortcut), and carrying an icon on the Look step's own two row kinds.
+/// shortcut), and carrying an icon on the Icon and Colour steps' own row
+/// kinds.
 fn build_row(step: CreationStep, row: &CreationRow, i: usize, selected: bool) -> Row {
     let text = row_line(row);
     let label = match step {
-        CreationStep::Points | CreationStep::Name | CreationStep::Summary => text,
+        CreationStep::Profile
+        | CreationStep::Kit
+        | CreationStep::Points
+        | CreationStep::Perks
+        | CreationStep::Name
+        | CreationStep::Summary => text,
         _ => format!("[{}] {text}", feral_processes_app_core::menu_shortcut(i)),
     };
+    // The one Summary row that is a picture: drawn in the swatch the run
+    // will actually wear, so the last screen before the run starts shows
+    // the look rather than spelling it.
+    if let CreationRow::Look { colour, .. } = row {
+        return colored_item_row(label, selected, super::player_look_color(*colour));
+    }
     let base = item_row(label, selected);
     match row {
         // The icon rows show their own glyph — a preview of the shape on
@@ -118,8 +181,9 @@ fn build_row(step: CreationStep, row: &CreationRow, i: usize, selected: bool) ->
 /// blank line.
 fn row_line(row: &CreationRow) -> String {
     match row {
+        CreationRow::Earned(line) => line.clone(),
         CreationRow::Difficulty { label, detail, .. } => format!("{label} - {detail}"),
-        CreationRow::Class(class) => format!("{} - {} [{}]", class.name, class.axes, class.kit),
+        CreationRow::Class(class) => format!("{} - {}", class.name, class.trade),
         CreationRow::Icon { glyph, sprite } => format!("{glyph}  ({sprite})"),
         CreationRow::Colour { index } => format!("Colour {}", index + 1),
         CreationRow::Stat {
@@ -141,29 +205,111 @@ fn row_line(row: &CreationRow) -> String {
                 stat.label()
             )
         }
+        // No bar, unlike the Stat row above: at 1 Credit an item's own
+        // ceiling is the whole allowance, so a bar would be 25 cells wide on
+        // most of two dozen rows. The remaining allowance rides the footer
+        // instead, where it is read once rather than inferred per row.
+        // An untaken row shows no count at all: at two dozen rows a column
+        // of `x0` is the loudest thing on the screen and says nothing.
+        CreationRow::Item { row, taken } => {
+            let held = match taken {
+                0 => String::new(),
+                n => format!("x{n}"),
+            };
+            format!("{:<24} {:>2}c   {held}", row.name, row.price)
+        }
+        // The Kit row's shape, in Perk Points. The description is **not**
+        // on the row: the shipped ones run to 117 characters, which drew
+        // 291px past the popup body at 1280x720, and a perk name alone
+        // says nothing where an item's names a thing you recognise. It
+        // goes under the list instead, for whichever row the cursor is on
+        // — see `step_rows`.
+        CreationRow::Perk { row, taken } => {
+            let held = match taken {
+                0 => String::new(),
+                n => format!("x{n}"),
+            };
+            format!("{:<24} {:>2}p   {held}", row.name, row.cost)
+        }
         CreationRow::Routine(routine) => {
             format!(
                 "{} - {} ({:.0} Power)",
                 routine.name, routine.effect, routine.power_cost
             )
         }
+        CreationRow::Look { label, glyph, .. } => format!("{label:<12} {glyph}"),
         CreationRow::Name { typed } => format!("Name: {typed}_"),
         CreationRow::Summary { label, value } => format!("{label:<12} {value}"),
     }
 }
 
 /// What each step's keys are, in one line under its rows.
-fn footer(step: CreationStep) -> &'static str {
+///
+/// Takes the `App` for the two steps that spend an allowance, which are the
+/// footers carrying a live figure: neither screen has anywhere else to put
+/// one. The Kit step has two dozen rows and no per-row bar; the Points step
+/// has a bar per row, but each bar is that axis's own ceiling rather than
+/// the pool, so four of them never add up to how much is left — and the
+/// step opens on a *rolled* spread that has already spent the lot, which
+/// the player has no way to tell from a blank one.
+fn footer(app: &App, step: CreationStep) -> String {
     match step {
-        CreationStep::Difficulty => "Esc backs out to the menu",
-        CreationStep::Class => "Up/Down + Enter; [R] rolls the rest; Esc goes back",
-        CreationStep::Look => "Up/Down + Enter picks; [n] moves on; [R] rolls; Esc goes back",
+        CreationStep::Kit => format!(
+            "{}c left - Left/Right takes (Shift/Ctrl); [r] rerolls the basket; \
+             Enter moves on once it is spent",
+            app.creation_credits_left()
+        ),
         CreationStep::Points => {
-            "Left/Right spends (Shift: all, Ctrl: half); Enter moves on; [R] rolls"
+            let left = app.creation_points_left();
+            format!(
+                "{}/{CREATION_STAT_POINTS} points spent, {left} left - \
+                 Left/Right spends (Shift: all, Ctrl: half); \
+                 Enter moves on once it is spent",
+                CREATION_STAT_POINTS - left
+            )
         }
-        CreationStep::Routine => "Up/Down + Enter; [n] takes none; [R] rolls; Esc goes back",
-        CreationStep::Name => "Type a name; Enter moves on; Esc goes back",
-        CreationStep::Summary => "Enter starts the run; [R] rolls the rest; Esc goes back",
+        CreationStep::Perks => {
+            // What the achievement ladder is about to add is named here
+            // rather than left to the Summary's profile rows: those sit on
+            // another screen among every other reward, and a picker that
+            // reads "4 of 4" while the run opens on 6 reads as a defect.
+            let earned = match app.profile_perk_points() {
+                0 => String::new(),
+                n => format!(", +{n} later from your profile"),
+            };
+            format!(
+                "{} of {CREATION_PERK_POINTS} Perk Points{earned} - Left/Right buys; \
+                 Enter moves on, unspent points carry over",
+                app.creation_perk_points_left()
+            )
+        }
+        _ => plain_footer(step).to_string(),
+    }
+}
+
+/// The seven steps whose keys never change.
+fn plain_footer(step: CreationStep) -> &'static str {
+    match step {
+        CreationStep::Difficulty => "[p]/[f] picks; Esc backs out to the menu",
+        CreationStep::Profile => {
+            "What earlier runs earned you, granted when this one starts - \
+             Enter or Right moves on; Left goes back"
+        }
+        CreationStep::Class => "Up/Down + Enter picks; Left/Right pages; Esc goes back",
+        // Written by `footer` above, which is the only caller — every
+        // step `CreationStep::spends` names carries a live figure.
+        CreationStep::Kit | CreationStep::Points | CreationStep::Perks => "",
+        // One arm, because the two halves of a look are one key table —
+        // an icon row and a swatch row are picked the same way and skipped
+        // the same way, and two copies of the sentence could drift.
+        CreationStep::Icon | CreationStep::Colour => {
+            "Up/Down + Enter picks; [n] or Right moves on; Left goes back"
+        }
+        CreationStep::Routine => "Up/Down + Enter; [n] or Right takes none; Left goes back",
+        // The last two steps, and the only place the wizard says what
+        // *finishes* it — the summary is accepted, the name starts the run.
+        CreationStep::Summary => "Enter or Right accepts; Left goes back",
+        CreationStep::Name => "Type a name; Enter starts the run; Esc goes back",
     }
 }
 
@@ -183,7 +329,8 @@ fn preview_cell_rect(popup: Rect, m: &Metrics) -> Rect {
     )
 }
 
-/// The chosen look, painted the way `base.rs` paints the player's own tile:
+/// The look in `choice` — `previewed_look`'s answer, not necessarily the
+/// committed one — painted the way `base.rs` paints the player's own tile:
 /// a sprite substituting for the glyph where one is named and loaded, the
 /// glyph otherwise, tinted by the same 0-based `PLAYER_CHOICES` index with
 /// the same `PLAYER` fallback for "no colour chosen yet".
@@ -337,16 +484,34 @@ mod tests {
         app
     }
 
-    /// The keys that walk one step forward from each of the first six —
-    /// shared by every test that needs to visit every step in turn.
-    const FORWARD: [GameKey; 6] = [
-        GameKey::Char('f'),
-        GameKey::Char('1'),
-        GameKey::Char('n'),
-        GameKey::Enter,
-        GameKey::Char('n'),
-        GameKey::Enter,
-    ];
+    /// Leaves `step` the cheapest legal way — shared by every test that
+    /// needs to visit each step in turn.
+    ///
+    /// A function rather than the key-per-step table it replaces: the two
+    /// steps that hand out an allowance refuse to be left while anything
+    /// on them is still affordable, so walking past them is a pass over
+    /// their rows rather than one keystroke, and a table cannot say that.
+    fn walk_past(app: &mut App, step: CreationStep) {
+        let mut spend_every_row = |app: &mut App| {
+            for i in 0..app.creation_rows().len() {
+                app.menu_selected = i;
+                app.handle_key(GameKey::ShiftRight);
+            }
+            app.menu_selected = 0;
+            app.handle_key(GameKey::Enter);
+        };
+        match step {
+            CreationStep::Difficulty => app.handle_key(GameKey::Char('f')),
+            CreationStep::Profile => app.handle_key(GameKey::Enter),
+            CreationStep::Class => app.handle_key(GameKey::Char('1')),
+            CreationStep::Kit | CreationStep::Points | CreationStep::Perks => spend_every_row(app),
+
+            CreationStep::Icon | CreationStep::Colour | CreationStep::Routine => {
+                app.handle_key(GameKey::Char('n'))
+            }
+            CreationStep::Summary | CreationStep::Name => app.handle_key(GameKey::Enter),
+        }
+    }
 
     /// **The refusal census, turned ninety degrees.** `ALL_MODES` walks the
     /// wizard as one mode, so it only ever exercises whichever step the
@@ -378,9 +543,7 @@ mod tests {
                 "{step:?} painted the refusal {drawn} times, not once"
             );
             steps.push(*step);
-            if let Some(key) = FORWARD.get(i) {
-                app.handle_key(*key);
-            }
+            walk_past(&mut app, *step);
         }
         assert_eq!(steps.len(), CreationStep::ALL.len());
     }
@@ -407,9 +570,7 @@ mod tests {
                 drawn.len() > 2,
                 "{step:?} drew nothing but chrome: {drawn:?}"
             );
-            if let Some(key) = FORWARD.get(i) {
-                app.handle_key(*key);
-            }
+            walk_past(&mut app, *step);
         }
     }
 
@@ -466,9 +627,7 @@ mod tests {
                  trim the step or give it one",
                 drawn.len()
             );
-            if let Some(key) = FORWARD.get(i) {
-                app.handle_key(*key);
-            }
+            walk_past(&mut app, *step);
         }
         assert!(
             tallest > 0,
@@ -514,32 +673,36 @@ mod tests {
                             "{step:?} draws a {width}px row inside a {body}px body at                              {screen_w}x{screen_h}: {label:?}"
                         );
                     }
-                    if let Some(key) = FORWARD.get(i) {
-                        app.handle_key(*key);
-                    }
+                    walk_past(&mut app, *step);
                 }
             });
         }
     }
 
-    /// The Look step's preview cell paints the chosen glyph in the chosen
+    /// The Colour step's preview cell paints the chosen glyph in the chosen
     /// colour when no sprite is loaded — `with_painter`'s empty sprite
     /// table, the same fallback path `assets/sprites/` missing entirely
     /// takes on the map. Chosen away from the default `('@', PLAYER)` pair
     /// so this cannot pass on a preview that never looked at the choice at
     /// all.
+    ///
+    /// **Both halves are picked on separate screens and the cell still
+    /// shows them together** — which is the property splitting the old
+    /// `Look` step had to keep. The glyph is chosen on the step before and
+    /// has to survive the advance to be painted here.
     #[test]
     fn the_look_preview_draws_the_chosen_glyph_and_colour() {
         let mut app = wizard_app();
-        for key in [GameKey::Char('f'), GameKey::Char('1')] {
-            app.handle_key(key);
+        // Difficulty, the profile summary, the first class, then the Kit
+        // step's whole allowance spent — what it costs to leave.
+        for step in CreationStep::ALL.iter().take(4) {
+            walk_past(&mut app, *step);
         }
-        assert_eq!(app.creation_step(), CreationStep::Look);
-        // Pick the third icon (`*`, row 2) then the fourth swatch (row 5 +
-        // 3 = 8, five icon rows ahead of the swatches) — both by keyboard,
-        // through the real key table, walking `menu_selected` to each
-        // target rather than hardcoding a step count that would silently
-        // go stale if a row were ever added ahead of it.
+        assert_eq!(app.creation_step(), CreationStep::Icon);
+        // The third icon (`*`) and then the fourth swatch — both by
+        // keyboard, through the real key table, walking `menu_selected` to
+        // each target rather than hardcoding a step count that would go
+        // stale if a row were ever added ahead of it.
         while app.menu_selected != 2 {
             app.handle_key(GameKey::Down);
         }
@@ -549,16 +712,18 @@ mod tests {
             '*',
             "the icon pick didn't take"
         );
-        while app.menu_selected != 8 {
+        assert_eq!(
+            app.creation_step(),
+            CreationStep::Colour,
+            "taking an icon moves on to the swatches"
+        );
+        while app.menu_selected != 3 {
             app.handle_key(GameKey::Down);
         }
-        app.handle_key(GameKey::Enter);
-        assert_eq!(
-            app.creation_choice().colour,
-            Some(3),
-            "the swatch pick didn't take"
-        );
 
+        // Drawn with the cursor resting on the fourth swatch and nothing
+        // yet committed — `previewed_look`'s whole point, and the state the
+        // player is actually in while choosing.
         let m = ui_metrics(900.0);
         let (_, shapes) = crate::paint::with_painter(|p| draw_create_character(&app, None, p, &m));
         let glyphs = crate::paint::painted_map_glyphs(&shapes);
@@ -570,6 +735,163 @@ mod tests {
                 && (c.b - expected.b).abs() < 1e-3),
             "the preview cell did not paint '*' in PLAYER_CHOICES[3]: {glyphs:?}"
         );
+
+        // And Enter keeps exactly what was previewed.
+        app.handle_key(GameKey::Enter);
+        assert_eq!(
+            app.creation_choice().colour,
+            Some(3),
+            "the swatch pick didn't take"
+        );
+    }
+
+    /// The **Icon** step's half of `previewed_look`: the cell paints the
+    /// glyph under the cursor before anything is committed.
+    ///
+    /// The colour test above only exercises the `Colour` arm — with the
+    /// `Icon` arm dropped it still passes, since the glyph it asserts on
+    /// has been committed by then. This is what fails if the cursor stops
+    /// previewing a shape.
+    #[test]
+    fn the_icon_step_previews_the_highlighted_glyph() {
+        let mut app = wizard_app();
+        for step in CreationStep::ALL.iter().take(4) {
+            walk_past(&mut app, *step);
+        }
+        assert_eq!(app.creation_step(), CreationStep::Icon);
+        // The fourth icon, `!` — chosen away from row 0 so a preview
+        // ignoring the cursor draws the default `@` instead.
+        while app.menu_selected != 3 {
+            app.handle_key(GameKey::Down);
+        }
+        assert_eq!(
+            app.creation_choice().glyph,
+            '@',
+            "nothing is committed yet — the cursor has only moved"
+        );
+
+        let m = ui_metrics(900.0);
+        let (_, shapes) = crate::paint::with_painter(|p| draw_create_character(&app, None, p, &m));
+        // The row list draws every option's glyph too, so the preview is
+        // told apart by its colour: a row icon is flat `TEXT`, while the
+        // cell tints by `player_look_color`, still `PLAYER` here since no
+        // swatch has been chosen. A preview ignoring the cursor paints
+        // '@' in that colour instead, which is the mutation this catches.
+        let want = hud::palette::PLAYER;
+        assert!(
+            crate::paint::painted_map_glyphs(&shapes)
+                .iter()
+                .any(|(g, c)| g == "!"
+                    && (c.r - want.r).abs() < 1e-3
+                    && (c.g - want.g).abs() < 1e-3
+                    && (c.b - want.b).abs() < 1e-3),
+            "the preview cell did not paint the highlighted '!'"
+        );
+    }
+
+    /// **The Points step's footer is the Kit step's, one screen over.**
+    /// The pool is spent across four rows and every row draws only its own
+    /// bar, so nothing on the screen says how big the pool is or how much
+    /// of it is left — the player was reading the *step number* in the
+    /// title (`Points (6/9)`) as the point count. Both figures live in the
+    /// footer, where `Kit` already puts its allowance.
+    ///
+    /// Asserted against `CREATION_STAT_POINTS` and `App::
+    /// creation_points_left` rather than a copy of the sentence, and
+    /// **after a spend as well as before** — a footer naming the pool but
+    /// not tracking it would pass on the fresh half alone.
+    #[test]
+    fn the_points_step_footer_says_what_is_spent_and_what_is_left() {
+        let mut app = wizard_app();
+        for step in CreationStep::ALL.iter().take(6) {
+            walk_past(&mut app, *step);
+        }
+        assert_eq!(app.creation_step(), CreationStep::Points);
+
+        let m = ui_metrics(900.0);
+        // The title says `Points` with a capital P, so the lowercase word
+        // picks the footer out and cannot match the heading.
+        let pool_row = |app: &App| {
+            let (_, shapes) =
+                crate::paint::with_painter(|p| draw_create_character(app, None, p, &m));
+            let drawn = crate::paint::painted_text(&shapes);
+            drawn
+                .iter()
+                .find(|t| t.contains("points"))
+                .unwrap_or_else(|| panic!("no row named the point pool: {drawn:?}"))
+                .clone()
+        };
+
+        // The step opens on a rolled spread that spends the pool exactly,
+        // so the fresh figures are the full ones — which is the state the
+        // player actually lands on and the one the missing footer made
+        // unreadable.
+        let fresh = pool_row(&app);
+        assert!(
+            fresh.contains(&format!(
+                "{CREATION_STAT_POINTS}/{CREATION_STAT_POINTS} points spent"
+            )) && fresh.contains("0 left"),
+            "the rolled spread spends the whole pool and the footer must say so: {fresh:?}"
+        );
+
+        // Clear every axis — which axes the roll landed on is not fixed,
+        // so walking all four is what keeps this off the roll's luck.
+        for _ in 0..4 {
+            app.handle_key(GameKey::ShiftLeft);
+            app.handle_key(GameKey::Down);
+        }
+        let left = app.creation_points_left();
+        let spent = CREATION_STAT_POINTS - left;
+        assert_eq!(
+            left, CREATION_STAT_POINTS,
+            "clearing every axis frees the pool"
+        );
+        let after = pool_row(&app);
+        assert!(
+            after.contains(&format!("{spent}/{CREATION_STAT_POINTS} points spent"))
+                && after.contains(&format!("{left} left")),
+            "the footer must follow the spend: {after:?}"
+        );
+    }
+
+    /// **The Summary reads the icon back in the swatch it will be worn
+    /// in**, not in the row colour every other Summary line uses. The
+    /// preview cell in the corner already showed the pair together; the
+    /// line that names the icon did not, so the one screen that reads the
+    /// character back described the look in two different colours.
+    ///
+    /// Asserted through `painted_runs_in`, which filters on the exact UI
+    /// colour — the row is drawn in `PLAYER_CHOICES[3]`, a swatch chosen
+    /// away from the `PLAYER` fallback so a line that ignored the choice
+    /// would not match.
+    #[test]
+    fn the_summary_reads_the_icon_back_in_its_chosen_colour() {
+        let mut app = wizard_app();
+        for step in CreationStep::ALL.iter().take(4) {
+            walk_past(&mut app, *step);
+        }
+        assert_eq!(app.creation_step(), CreationStep::Icon);
+        walk_past(&mut app, CreationStep::Icon);
+
+        // The fourth swatch, by keyboard through the real key table.
+        while app.menu_selected != 3 {
+            app.handle_key(GameKey::Down);
+        }
+        app.handle_key(GameKey::Enter);
+        assert_eq!(app.creation_choice().colour, Some(3));
+        walk_past(&mut app, CreationStep::Points);
+        walk_past(&mut app, CreationStep::Perks);
+        walk_past(&mut app, CreationStep::Routine);
+        assert_eq!(app.creation_step(), CreationStep::Summary);
+
+        let m = ui_metrics(900.0);
+        let (_, shapes) = crate::paint::with_painter(|p| draw_create_character(&app, None, p, &m));
+        let want = hud::palette::PLAYER_CHOICES[3];
+        let tinted = crate::paint::painted_runs_in(&shapes, want, false);
+        assert!(
+            tinted.iter().any(|t| t.contains("Icon")),
+            "no Summary row was drawn in the chosen swatch: {tinted:?}"
+        );
     }
 
     /// A sprite substitutes for the preview's glyph exactly as it does on
@@ -578,11 +900,16 @@ mod tests {
     #[test]
     fn the_look_preview_prefers_a_loaded_sprite_over_the_glyph() {
         let mut app = wizard_app();
-        for key in [GameKey::Char('f'), GameKey::Char('1')] {
-            app.handle_key(key);
+        // Difficulty, the profile summary, the first class, then the Kit
+        // step's whole allowance spent — what it costs to leave.
+        for step in CreationStep::ALL.iter().take(4) {
+            walk_past(&mut app, *step);
         }
-        assert_eq!(app.creation_step(), CreationStep::Look);
-        app.handle_key(GameKey::Enter); // the first icon, '@' / "player"
+        assert_eq!(app.creation_step(), CreationStep::Icon);
+        // The first icon, '@' / "player" — the pick advances to the Colour
+        // step, which draws the same preview cell.
+        app.handle_key(GameKey::Enter);
+        assert_eq!(app.creation_step(), CreationStep::Colour);
 
         let mut sprites = crate::paint::SpriteTable::default();
         sprites.insert("player", bevy_egui::egui::TextureId::User(7));

@@ -1,8 +1,11 @@
 # Combat model slice 2: a second swing, earned by class and level
 
-**Status:** designed 2026-09-02, **not implemented**. Written against a code
-survey, not against play — see Risks, and the standing note that slice 1 has
-never been in front of a player either.
+**Status:** **built 2026-09-02**, unplayed. Implemented as designed, with one
+correction: `attacks_for` reads `Game::ability_user_level` rather than the
+`Experience` component directly, because that is already the one answer to
+"what level is this body?" and it falls back to the zone for a wild program
+carrying none. Task D landed as a recorded blind spot rather than a
+re-baselining — see Risks 1.
 **Date:** 2026-09-02
 **Slice:** 2 of 4 — see
 `../archive/specs/2026-08-19-combat-model-ac-and-weapon-damage-design.md`

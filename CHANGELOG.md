@@ -33,6 +33,18 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.77
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+- **The field ramp tops out at 39 tiles instead of 135.** 128 tiles was
+  picked off the world being unbounded rather than off the scale the map
+  actually works at — everything the player reaches for sits inside a couple
+  of dozen tiles, and the furthest the game scatters its own content is 40 —
+  so the gradient read flat because nobody walked out of the first tenth of
+  it. The cap now lands where the outermost Stack link already does: walk to
+  the far links and you have seen the whole of it.
+
 ## 0.13.76
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

@@ -147,6 +147,39 @@
   **digger wears it for the whole job**, because a `DigSite` has no glyph at
   the other end. Exhaustive on `TaskKind`, `cell_mark`'s rule. Distinct from
   `position_is_honest`, which is whether the program may be drawn *at all*.
+- **A supplier that declares `StructureDef::power_upkeep` supplies nothing
+  while it is dry, and the Home never declares it.** The Home's free 4 is
+  the bootstrap — a base holding no Power Cells could otherwise never run
+  the Power Conduit that makes the first one, which is a dead run rather
+  than difficulty. Three traps under it. A burner **runs no job**, so
+  neither writer of a structure's component list gave it a `MachineStatus`
+  before this: both now gate on `def.runs_a_job() || def.power_upkeep` and
+  both insert `components::PowerFuel` — `spawn_structure`'s rule, and the
+  load path is the hand-written copy that drifts with nothing failing to
+  compile. `ledger` counts a burner's `power_supply` **only through that
+  component**, so absence reads as dry: loud when a writer forgets, where
+  the lenient direction would be a supplier on free power forever.
+  `idle_machine_system` skips a structure that runs no job, or the supplier
+  flips `Starved`↔`Idle` every tick and `set_machine_status` logs both. The
+  spend and the refuel live **inside `power_grid_system`, before it calls
+  `ledger`** — decrement, then refuel on reaching zero, so a supplier that
+  can pay never leaves the grid for a tick — and `Starved` is the existing
+  variant rather than a new one, `cell_mark`'s rule.
+- **The one machine-to-machine reach is `collect::plan_adjacent_take`**, and
+  `Game::take_from_adjacent` is not it — that one is the *player's* collect,
+  keyed on where the party stands and needing `&mut Game`, which a bevy
+  system cannot have. `assembler_system` inlined its own `by_tile` +
+  `ORTHOGONAL` walk and `power_grid_system` would have been the second copy;
+  both call the helper now. It **plans** rather than moves, because both
+  callers read a neighbour's `output` and write their own buffer through one
+  `Query<&mut Stock>`, and it keeps `ORTHOGONAL`'s array order rather than
+  `adjacent_stock`'s `(x, y)` sort, so no existing pull moved.
+- **A Depot with four occupied orthogonal tiles is a Depot nothing can
+  reach**, and the failure it produces is `Stranded` on some *other*
+  machine's worker rather than anything naming the Depot. Found rebuilding
+  the `chains` dev template's supplier bank around one: a hauler has to
+  stand beside a Depot to deliver, so a supplier bank ringing one boxes it
+  in. Keep a free tile on every Depot.
 - **A raid's flash is base-space too, and `render/base.rs` gates both draw
   sites on `base_pos`.** Every `VisualEffect` names a structure's tile, so
   the queue is base-space by construction — ungated, `tile_flash` and

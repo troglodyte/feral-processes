@@ -813,6 +813,24 @@ pub struct StructureSave {
     pub standing_work: bool,
     #[serde(default)]
     pub standing_guard: bool,
+    /// Ticks of charge left on a supplier that burns Power Cells to stay on
+    /// the grid — see `components::PowerFuel`. Live state rather than
+    /// something the next tick recomputes: losing it would refuel every
+    /// supplier in the base on each reload.
+    ///
+    /// Defaulted to a **full** charge rather than `u32`'s zero, `quality`'s
+    /// reason one field family over: a save written before suppliers burned
+    /// anything would otherwise load with its whole grid dry and the base
+    /// dark on the first tick. Additive behind a default, so no
+    /// `SAVE_FORMAT_VERSION` bump.
+    #[serde(default = "default_power_fuel")]
+    pub power_fuel: u32,
+}
+
+/// `serde`'s default for a supplier's remaining charge — a full one, so a
+/// save written before `StructureSave::power_fuel` existed loads fuelled.
+fn default_power_fuel() -> u32 {
+    crate::tuning::POWER_UPKEEP_TICKS
 }
 
 /// One trading post's buyback shelf on disk: the trader kind and tile that

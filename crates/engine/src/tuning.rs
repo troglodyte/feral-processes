@@ -2231,6 +2231,19 @@ pub const CONTRACT_HABITAT_SAMPLES: i32 = 32;
 /// how long a base runs unattended.
 pub const DEFAULT_OUTPUT_CAPACITY: u32 = 20;
 
+/// How many ticks one Power Cell keeps a `power_upkeep` supplier lit — see
+/// `StructureDef::power_upkeep` and `systems::power_grid_system`.
+///
+/// The number is chosen so the loop closes on one Power Conduit. A Conduit
+/// at Mk1 in zone 1 turns out a cell every 6 ticks — 166 per 1,000 — while a
+/// burning supplier eats one every 20, which is 50 per 1,000. So a single
+/// Conduit sustains three Recharger Nodes (+12 grid) while drawing 1 itself
+/// and occupying one posted program: grid capacity becomes a production rate
+/// the base has to keep up, rather than a purchase made once. Shorter and
+/// the Conduit cannot feed even one supplier; much longer and a stocked
+/// Depot's worth of cells outlives any session, which is the same as free.
+pub const POWER_UPKEEP_TICKS: u32 = 20;
+
 /// How many units a posted program carries to a depot in one trip.
 ///
 /// The cap is what makes `components::Carrying` a single `(item, qty)` pair

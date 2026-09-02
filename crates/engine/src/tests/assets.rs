@@ -1508,6 +1508,52 @@ fn no_shipped_structure_both_draws_and_supplies() {
     }
 }
 
+/// The gate on the other axis: `power_upkeep` is a *supplier's* cost, so a
+/// structure that declares it and supplies nothing pays a Power Cell every
+/// `POWER_UPKEEP_TICKS` to change no number the player could find.
+///
+/// The second half is the bootstrap, and it is the one thing about this
+/// feature that cannot be recovered from any other file: the Home has to
+/// stay free, or a base holding no Power Cells could never run the Power
+/// Conduit that makes the first one. Asserted here beside the upkeep census
+/// rather than left to `home.ron`'s absence of a line, because an absence is
+/// exactly what nothing fails on.
+///
+/// A `#[serde(default)]` field with no census is a field authored nowhere —
+/// see `every_shipped_machine_declares_a_power_draw` above, whose count this
+/// one deliberately copies.
+#[test]
+fn every_burning_supplier_supplies_something_and_the_home_burns_nothing() {
+    let game = Game::new(953, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let db = game.world.resource::<crate::structures::StructureDb>();
+    let mut checked = 0;
+    for def in db.all() {
+        if !def.power_upkeep {
+            continue;
+        }
+        assert!(
+            def.power_supply > 0,
+            "{} burns a Power Cell every POWER_UPKEEP_TICKS but supplies \
+             nothing — the upkeep buys the player no number at all",
+            def.id
+        );
+        checked += 1;
+    }
+    assert_eq!(
+        checked, 2,
+        "the Recharger Node and the Line Driver are the two suppliers that \
+         burn; if that changed, change this deliberately rather than letting \
+         the check go vacuous"
+    );
+
+    let home = db.get("home").expect("home ships");
+    assert!(
+        !home.power_upkeep,
+        "the Home's supply is the bootstrap — a base holding no Power Cells \
+         could never run the Power Conduit that makes the first one"
+    );
+}
+
 /// The materials a breach unlocks, in the order the zones hand them over.
 /// A list here rather than a derivation, because "this item is what zone N
 /// pays you" is a content decision and there is nothing in `ItemDef` that

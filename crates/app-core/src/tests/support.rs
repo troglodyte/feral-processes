@@ -397,6 +397,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         stock_output: Vec::new(),
         standing_work: false,
         standing_guard: false,
+        power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
     });
     if underground {
         data.locale = Locale::Stack {
@@ -499,6 +500,7 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
             stock_output: Vec::new(),
             standing_work: false,
             standing_guard: false,
+            power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
         });
     }
     // A trader is a deployed `Structure`, and every structure stands in base
@@ -1043,6 +1045,7 @@ pub(crate) fn app_inside_a_small_base_with_programs(
         stock_output: Vec::new(),
         standing_work: false,
         standing_guard: false,
+        power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
     });
     for _ in 0..programs {
         data.creatures.push(CreatureSave {
@@ -1164,6 +1167,7 @@ pub(crate) fn app_at_a_contract_broker(seed: u32, underground: bool) -> App {
         stock_output: Vec::new(),
         standing_work: false,
         standing_guard: false,
+        power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
     });
     data.locale = if underground {
         Locale::Stack {
@@ -1292,6 +1296,7 @@ pub(crate) fn app_beside_depots(seed: u32, depots: i32, filled: u32, pack: &[(&s
             stock_output: ballast.clone(),
             standing_work: false,
             standing_guard: false,
+            power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
         });
     }
     data.player.inventory = pack
@@ -1329,6 +1334,7 @@ pub(crate) fn app_beside_stocked_machines(seed: u32, stock: &[(&str, u32)]) -> A
             stock_output: output.clone(),
             standing_work: false,
             standing_guard: false,
+            power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
         });
     }
     data.locale = Locale::Base { x: 0, y: 0 };

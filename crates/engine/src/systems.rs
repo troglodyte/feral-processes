@@ -4,9 +4,9 @@ use rand::RngExt;
 
 use crate::components::{
     Carrying, Creature, Experience, FieldBuff, FieldBuffKind, Inventory, MachineStatus, Memories,
-    Needs, Nest, NestGuardian, POWER_MIN, Perks, Player, Position, Potential, PowerReserve,
-    Pursuing, ResourceNode, Stats, Stock, Stranded, Structure, StructureTier, Tamed, Task,
-    TaskKind, WanderAi, field_buff_power_of,
+    Needs, Nest, NestGuardian, POWER_MIN, Perks, Player, Position, Potential, PowerFuel,
+    PowerReserve, Pursuing, ResourceNode, Stats, Stock, Stranded, Structure, StructureTier, Tamed,
+    Task, TaskKind, WanderAi, field_buff_power_of,
 };
 use crate::game::base::hauling::at_station;
 use crate::items::ItemId;
@@ -550,6 +550,7 @@ pub(crate) fn set_machine_status(
 /// `ResMut` at the same time. The cost is a sync point at the head of a chain
 /// that was already serial, so nothing is lost to it.
 pub fn power_grid_system(world: &mut World) {
+    burn_grid_upkeep(world);
     let grid = {
         let world: &World = world;
         let db = world.resource::<StructureDb>();
@@ -560,6 +561,106 @@ pub fn power_grid_system(world: &mut World) {
         draw: grid.draw,
         dark: grid.dark,
     });
+}
+
+/// Spends one tick of every burning supplier's charge and buys the next Power
+/// Cell for any that just ran out — see `structures::StructureDef::power_upkeep`.
+///
+/// **Runs inside `power_grid_system`, ahead of the ledger**, rather than as a
+/// system of its own. `ledger` counts a burner's `power_supply` only while its
+/// `components::PowerFuel` has charge, so a refuel landing after the ledger
+/// would darken the whole base for one tick out of every
+/// `tuning::POWER_UPKEEP_TICKS` — and a separate system would have to be
+/// wedged into a chain whose whole point is that dark is decided before
+/// anything reads or writes a `MachineStatus`.
+///
+/// The order it visits burners in is `(tile, entity)`, `ledger`'s own and
+/// `assembler_system`'s: two suppliers touching the same buffer with one cell
+/// on it have to resolve the same way every run.
+///
+/// A supplier that cannot pay is announced through `set_machine_status`, the
+/// one place a stall is announced and one that logs only on transition — so a
+/// base left dry says so once rather than every tick. `Starved` is exactly
+/// the existing meaning ("the input it needs is not there") and no variant is
+/// added for this.
+fn burn_grid_upkeep(world: &mut World) {
+    let cell = ItemId::from(crate::items::ids::POWER_CELL);
+    let by_tile: std::collections::HashMap<(i32, i32), Entity> = world
+        .query_filtered::<(Entity, &Position), With<Stock>>()
+        .iter(world)
+        .map(|(e, p)| ((p.x, p.y), e))
+        .collect();
+
+    // Collected before anything is written, and carrying the def's name so
+    // the announcement below needs no second lookup while `MessageLog` is
+    // borrowed.
+    let mut burners: Vec<(Entity, (i32, i32), String)> = {
+        let db = world.resource::<StructureDb>();
+        let mut found: Vec<_> = world
+            .iter_entities()
+            .filter_map(|e| {
+                let def = db.get(&e.get::<Structure>()?.kind)?;
+                if !def.power_upkeep {
+                    return None;
+                }
+                e.get::<PowerFuel>()?;
+                let pos = e.get::<Position>()?;
+                Some((e.id(), (pos.x, pos.y), def.name.clone()))
+            })
+            .collect();
+        found.sort_by_key(|(e, tile, _)| (*tile, *e));
+        found
+    };
+
+    for (burner, tile, name) in burners.drain(..) {
+        let spent = {
+            let mut fuel = world
+                .get_mut::<PowerFuel>(burner)
+                .expect("collected with the component");
+            fuel.ticks_left = fuel.ticks_left.saturating_sub(1);
+            fuel.ticks_left == 0
+        };
+        if !spent {
+            continue;
+        }
+        let plan = crate::game::base::collect::plan_adjacent_take(tile, 1, &by_tile, |feeder| {
+            world
+                .get::<Stock>(feeder)
+                .and_then(|s| s.output.get(&cell).copied())
+                .unwrap_or(0)
+        });
+        let mut bought = 0;
+        for (feeder, want) in plan {
+            let Some(mut stock) = world.get_mut::<Stock>(feeder) else {
+                continue;
+            };
+            bought += crate::game::base::hauling::take_from(&mut stock, &cell, want);
+        }
+        if bought > 0 {
+            world
+                .get_mut::<PowerFuel>(burner)
+                .expect("collected with the component")
+                .ticks_left = crate::tuning::POWER_UPKEEP_TICKS;
+        }
+        let next = if bought > 0 {
+            MachineStatus::Running
+        } else {
+            MachineStatus::Starved
+        };
+        // Copied out, decided, and written back: `set_machine_status` needs
+        // the status and the log at once, and an exclusive system cannot hold
+        // a component borrow across a `resource_mut`.
+        let Some(mut status) = world.get::<MachineStatus>(burner).copied() else {
+            continue;
+        };
+        {
+            let mut log = world.resource_mut::<MessageLog>();
+            set_machine_status(&mut status, next, &name, &mut log);
+        }
+        if let Some(mut current) = world.get_mut::<MachineStatus>(burner) {
+            *current = status;
+        }
+    }
 }
 
 /// Every machine nobody is posted to reports `Idle`.
@@ -604,12 +705,17 @@ pub fn idle_machine_system(
     mut log: ResMut<MessageLog>,
 ) {
     for (machine, structure, mut status) in &mut machines {
-        let name = structure_db
-            .get(&structure.kind)
-            .map(|d| d.name.as_str())
-            .unwrap_or("machine");
+        let def = structure_db.get(&structure.kind);
+        let name = def.map(|d| d.name.as_str()).unwrap_or("machine");
         if grid.is_dark(machine) {
             set_machine_status(&mut status, MachineStatus::Unpowered, name, &mut log);
+            continue;
+        }
+        // A structure that runs no job carries a status only because it can
+        // stall some other way — a burning supplier's `Starved`. Nobody is
+        // ever posted to one, so `Idle` here would be a permanent false
+        // alarm that also stamped over what `power_grid_system` just wrote.
+        if def.is_some_and(|d| !d.runs_a_job()) {
             continue;
         }
         let worked = tasks
@@ -1162,26 +1268,24 @@ pub fn assembler_system(
             let mut plan = Vec::new();
             for (item, per_batch) in recipe {
                 let cap = per_batch * crate::tuning::INPUT_STOCK_BATCHES;
-                let mut want = cap.saturating_sub(mine.input.get(item).copied().unwrap_or(0));
-                for (dx, dy) in crate::game::base::collect::ORTHOGONAL {
-                    if want == 0 {
-                        break;
-                    }
-                    let Some(&feeder) = by_tile.get(&(x + dx, y + dy)) else {
-                        continue;
-                    };
-                    let available = stocks
-                        .get(feeder)
-                        .ok()
-                        .and_then(|s| s.output.get(item).copied())
-                        .unwrap_or(0);
-                    let take = want.min(available);
-                    if take == 0 {
-                        continue;
-                    }
-                    plan.push((feeder, item.clone(), take));
-                    want -= take;
-                }
+                let want = cap.saturating_sub(mine.input.get(item).copied().unwrap_or(0));
+                let takes = crate::game::base::collect::plan_adjacent_take(
+                    (x, y),
+                    want,
+                    &by_tile,
+                    |feeder| {
+                        stocks
+                            .get(feeder)
+                            .ok()
+                            .and_then(|s| s.output.get(item).copied())
+                            .unwrap_or(0)
+                    },
+                );
+                plan.extend(
+                    takes
+                        .into_iter()
+                        .map(|(feeder, take)| (feeder, item.clone(), take)),
+                );
             }
             plan
         };

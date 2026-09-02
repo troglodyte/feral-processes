@@ -9264,3 +9264,95 @@ zone-gated ordinary structure this way with no growth at all.
 same commit — the shipped one used to say fragments come from the Stack
 alone, which the new lines make half the truth, and it is what the player
 reads on the build menu before ever filing the request.
+
+### A supplier that declares `power_upkeep` supplies nothing while it is dry, and the Home never declares it
+
+**The Grid stopped being a purchase and became a production rate.** Before
+this, `power_supply` was bought once with the build and stood forever: a base
+that could afford three Recharger Nodes had +12 capacity for the rest of the
+run, whatever else it did or failed to do. `docs/base-economy-audit.html`'s
+finding was that nothing on the breach path made a base *run*, and the grid
+was one of the three places to fix that — the other two being hand-crafting's
+cost and the portal's bill, which shipped alongside as Tasks A and C of the
+same change.
+
+**The rate is picked so the loop closes on one Power Conduit, and the closure
+is the whole design.** A Conduit at Mk1 in zone 1 turns out one Power Cell
+every 6 ticks — 166 per 1,000 — while a burning supplier eats one every
+`POWER_UPKEEP_TICKS = 20`, which is 50 per 1,000. So one Conduit sustains
+three Rechargers (+12 grid) while drawing 1 itself and occupying one posted
+program: the thing that feeds the grid is on the grid it feeds. A shorter
+window and a Conduit cannot carry even one supplier; a much longer one and a
+single stocked Depot outlives any session, which is the same as free.
+
+**The Home does not burn, and that is the bootstrap rather than an
+oversight.** Its free 4 covers a Power Conduit (draw 1) + a Mining Node (1) +
+a Lathe (2), exactly — the opening a cold base needs to make its first Power
+Cell. If the Home burned, a base holding no cells could never make one, which
+is not difficulty but a dead run. `every_burning_supplier_supplies_something_
+and_the_home_burns_nothing` asserts the absence, because an absence is
+precisely what nothing fails on.
+
+**`Starved` rather than a new `MachineStatus` variant.** `Starved` already
+means "the input it needs is not there", which is exactly true of a supplier
+with no Power Cell in reach, and `MachineStatus`' matches are exhaustive by
+design — a new variant costs every reader a case for a state that reads
+identically to one that exists. The announcement goes through
+`systems::set_machine_status`, the one place a stall is announced and one
+that logs only on transition, so a base left dry says so once rather than
+fifty times a minute.
+
+**The component is inserted by both writers of a structure's component list,
+and absence reads as dry.** A Recharger Node runs no job — no `work`, no
+`assembles` — so neither `Game::spawn_structure` nor the load path in
+`game/lifecycle.rs` gave it a `MachineStatus` at all before this; both now
+gate on `def.runs_a_job() || def.power_upkeep`, and both insert
+`components::PowerFuel`. `game::base::power::ledger` counts a burner's
+`power_supply` only through that component, so a supplier standing without
+one supplies nothing. That is deliberately the strict direction: the failure
+it produces is loud (the base goes dark) where the lenient one is silent (a
+supplier running on free power forever), and `stand_ample_grid_supply` in the
+test fixtures is the one place that had to be told, which is itself the
+evidence that the two writers are the only real ones.
+
+**`idle_machine_system` needed a guard it did not need before.** It sets
+`Idle` on every machine with a `MachineStatus` and nobody posted to it — and
+nobody is ever posted to a supplier. Without the guard the supplier would
+flip `Starved`↔`Idle` every tick, and `set_machine_status` logs every
+transition: two lines a tick, forever, which is the exact failure the chain
+order was built to prevent. So a structure whose def runs no job is skipped
+there, and its status stays `power_grid_system`'s alone.
+
+**Spend and refuel run inside `power_grid_system`, ahead of `ledger`.** The
+system is exclusive (`world: &mut World`) and first in a `.chain()` with
+`idle_machine_system` precisely so dark is decided before anything reads or
+writes a `MachineStatus`. A refuel landing after the ledger would darken the
+base for one tick in every twenty; a separate system would have to be wedged
+into that chain and would be a second place the ordering argument had to
+hold. Decrement first, then refuel on reaching zero, so a supplier that can
+pay never leaves the grid at all — the window is a *cost*, not an outage.
+
+**One adjacency-pull rule, extracted rather than copied.**
+`assembler_system` inlined its own `by_tile` + `ORTHOGONAL` walk;
+`Game::take_from_adjacent` is the player's collect and needs `&mut Game`,
+which a bevy system does not have. Rather than leave two silent copies of
+"which tiles a machine can reach", the walk is now
+`game::base::collect::plan_adjacent_take` — plan, because both callers read a
+neighbour's `output` and write their own buffer through the same
+`Query<&mut Stock>` and cannot hold both borrows — and the assembler calls
+it. It keeps `ORTHOGONAL`'s own array order rather than `adjacent_stock`'s
+`(x, y)` sort, so no existing pull moved.
+
+**What it cost the `chains` dev template, which is the measurement.** That
+template's three Rechargers stood with nothing feeding them, so the whole
+base went dark on tick 20 and the chain stopped — the launcher's
+`the_chains_template_starts_with_a_chain_that_actually_runs` is what caught
+it. Two things came out of rebuilding it. A supplier bank has to be a *row*
+against stocked Depots rather than three loose Rechargers, because a Depot
+whose four orthogonal tiles are all occupied is a Depot no hauler can reach:
+the first rebuild boxed one in and stranded the Power Conduit's worker
+instead of the grid. And the arithmetic does not close on production alone at
+this base's size — one Conduit's surplus over the Winding Node's demand is
+83 cells per 1,000 ticks against three suppliers' 150 — so the template
+carries a stockpile, which is what a base that has been running actually
+looks like.

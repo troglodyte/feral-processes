@@ -310,6 +310,21 @@ pub struct StructureDef {
     /// parse, as a building that supplies nothing.
     #[serde(default)]
     pub power_supply: u32,
+    /// Whether this structure burns a Power Cell to keep supplying — see
+    /// `systems::power_grid_system`. A supplier that declares it carries
+    /// `components::PowerFuel`, spends one cell off an orthogonally adjacent
+    /// output buffer every `tuning::POWER_UPKEEP_TICKS`, and contributes
+    /// **zero** `power_supply` for as long as it cannot pay.
+    ///
+    /// Data decides *which* suppliers burn; `tuning.rs` decides how fast.
+    /// The Home deliberately leaves this unset: its free supply is the
+    /// bootstrap, and a base with no Power Cells could never make the first
+    /// one if the thing powering the Conduit needed one already.
+    ///
+    /// `#[serde(default)]` so every existing structure file, mods included,
+    /// keeps parsing as a supplier that burns nothing.
+    #[serde(default)]
+    pub power_upkeep: bool,
     /// Whether this structure issues contracts — see
     /// `Game::contract_board`. A plain `bool` rather than a block of its own,
     /// because a Broker has no per-structure configuration: what it offers is

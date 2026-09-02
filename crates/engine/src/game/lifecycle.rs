@@ -1216,8 +1216,17 @@ impl Game {
                 output: s.stock_output.iter().cloned().collect(),
                 capacity: def.capacity,
             });
-            if def.runs_a_job() {
+            // Both halves mirror `Game::spawn_structure`'s list, which is the
+            // hand-written copy this file has always been: a burning supplier
+            // missing its `PowerFuel` reads as a base whose grid collapsed on
+            // reload, and nothing here fails to compile when it drifts.
+            if def.runs_a_job() || def.power_upkeep {
                 entity.insert(MachineStatus::default());
+            }
+            if def.power_upkeep {
+                entity.insert(crate::components::PowerFuel {
+                    ticks_left: s.power_fuel,
+                });
             }
             // Absent rather than defaulted when neither flag is set, so
             // "has a standing job" stays readable as the component's
@@ -1591,11 +1600,13 @@ impl Game {
             Option<&StructureTier>,
             Option<&Stock>,
             Option<&StandingJob>,
+            Option<&crate::components::PowerFuel>,
         )>();
         // `Stock` is optional here only because test fixtures hand-spawn
         // bare `Structure`s; `place_structure` and `load` both give every
         // real one a buffer.
-        for (structure, pos, durability, tier, stock, standing) in structure_query.iter(&self.world)
+        for (structure, pos, durability, tier, stock, standing, fuel) in
+            structure_query.iter(&self.world)
         {
             let encode = |map: Option<&std::collections::BTreeMap<ItemId, u32>>| {
                 map.map(|m| m.iter().map(|(i, n)| (i.clone(), *n)).collect())
@@ -1610,6 +1621,9 @@ impl Game {
                 stock_output: encode(stock.map(|s| &s.output)),
                 standing_work: standing.is_some_and(|j| j.work),
                 standing_guard: standing.is_some_and(|j| j.guard),
+                power_fuel: fuel
+                    .map(|f| f.ticks_left)
+                    .unwrap_or(crate::tuning::POWER_UPKEEP_TICKS),
             });
         }
 

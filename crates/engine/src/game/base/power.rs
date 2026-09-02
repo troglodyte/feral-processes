@@ -19,7 +19,7 @@ use std::collections::HashSet;
 
 use bevy_ecs::prelude::*;
 
-use crate::components::{Position, Structure};
+use crate::components::{Position, PowerFuel, Structure};
 use crate::structures::StructureDb;
 
 /// The result of one pass over every deployed `Structure`: what the base
@@ -49,6 +49,12 @@ pub(crate) struct PowerLedger {
 /// an arbitrary tail behind the first machine that happened not to fit,
 /// rather than exactly the machines that don't.
 ///
+/// A structure declaring `StructureDef::power_upkeep` counts toward `supply`
+/// only while its `components::PowerFuel` has charge left — which is the
+/// whole of what a burning supplier's fuel buys. `systems::power_grid_system`
+/// spends and refuels **before** calling this, so the figure is always this
+/// tick's.
+///
 /// A structure whose def is missing from `db` contributes nothing to either
 /// sum and is never dark — the same "an unknown kind is inert" shape the
 /// neighbouring base systems already use, rather than a panic.
@@ -65,7 +71,18 @@ pub(crate) fn ledger(world: &World, db: &StructureDb) -> PowerLedger {
         let Some(def) = db.get(&structure.kind) else {
             continue;
         };
-        supply += def.power_supply;
+        // A burner supplies nothing while it is dry, and **absence of the
+        // component reads as dry**: `components::PowerFuel` is inserted by
+        // the two writers of a structure's component list, so a supplier
+        // standing without one was never wired up. See that component's doc
+        // for why this is the strict direction.
+        if !def.power_upkeep
+            || entity_ref
+                .get::<PowerFuel>()
+                .is_some_and(|fuel| fuel.ticks_left > 0)
+        {
+            supply += def.power_supply;
+        }
         if def.runs_a_job() {
             let pos = entity_ref
                 .get::<Position>()

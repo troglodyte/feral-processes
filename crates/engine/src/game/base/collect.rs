@@ -10,6 +10,50 @@ use crate::*;
 /// machine could not, the base would stop reading as a physical line.
 pub(crate) const ORTHOGONAL: [(i32, i32); 4] = [(0, -1), (0, 1), (-1, 0), (1, 0)];
 
+/// Plans a take of up to `want` units off the output buffers of the four
+/// tiles orthogonally touching `tile`, walked in `ORTHOGONAL`'s own order and
+/// stopping the moment the want is met. `available` answers how many units of
+/// the one item in question a given neighbour is holding.
+///
+/// **The one machine-to-machine reach rule**, and it exists as a function for
+/// the reason `ORTHOGONAL` itself does: `assembler_system` pulls a recipe's
+/// ingredients out of its neighbours and `systems::power_grid_system` pulls a
+/// supplier's Power Cell out of the same four tiles, and the moment those two
+/// walks could differ the base stops reading as a physical line. Neither
+/// caller can use `Game::take_from_adjacent` — that one is the *player's*
+/// collect, keyed on where the party stands and needing `&mut Game`, which a
+/// bevy system does not have.
+///
+/// Planning rather than moving, because both callers read a neighbour's
+/// `output` and write their own buffer through the same `Query<&mut Stock>`
+/// and cannot hold the two borrows at once. Units still leave a buffer
+/// through `hauling::take_from` alone, once the plan is applied.
+pub(crate) fn plan_adjacent_take(
+    tile: (i32, i32),
+    want: u32,
+    by_tile: &std::collections::HashMap<(i32, i32), Entity>,
+    available: impl Fn(Entity) -> u32,
+) -> Vec<(Entity, u32)> {
+    let (x, y) = tile;
+    let mut outstanding = want;
+    let mut plan = Vec::new();
+    for (dx, dy) in ORTHOGONAL {
+        if outstanding == 0 {
+            break;
+        }
+        let Some(&feeder) = by_tile.get(&(x + dx, y + dy)) else {
+            continue;
+        };
+        let take = outstanding.min(available(feeder));
+        if take == 0 {
+            continue;
+        }
+        plan.push((feeder, take));
+        outstanding -= take;
+    }
+    plan
+}
+
 impl Game {
     /// The structures a collect can reach, in `(x, y)` order.
     ///

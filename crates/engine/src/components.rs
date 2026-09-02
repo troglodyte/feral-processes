@@ -698,10 +698,11 @@ pub struct Stranded {
     pub since: u64,
 }
 
-/// Why a machine is or isn't producing. Present only on structures that
-/// actually run a job (`StructureDef::work` or `::assembles`) — absence
-/// means "not a machine", which is why a Home never reports a status it
-/// could not possibly leave.
+/// Why a machine is or isn't producing. Present on a structure that runs a
+/// job (`StructureDef::work` or `::assembles`) and on one that burns to keep
+/// supplying (`StructureDef::power_upkeep`) — absence means "nothing here
+/// can stall", which is why a Home never reports a status it could not
+/// possibly leave.
 ///
 /// Deliberately not saved. It initialises to `Running` and is corrected on
 /// the first tick, so a base that loads starved announces it once — which is
@@ -770,6 +771,25 @@ impl MachineStatus {
         MachineStatus::Idle,
         MachineStatus::Unpowered,
     ];
+}
+
+/// How many ticks of charge a `StructureDef::power_upkeep` supplier has left
+/// before it must buy another Power Cell — see `systems::power_grid_system`,
+/// which is the only writer.
+///
+/// Present only on a supplier that declares the upkeep, and **absence reads
+/// as dry**: `game::base::power::ledger` counts a burner's `power_supply`
+/// only through this component, so a supplier standing without one supplies
+/// nothing. That is deliberately the strict direction — both writers of a
+/// structure's component list have to insert it, and a fixture that
+/// hand-spawns a bare `Structure` should read as a base that never wired the
+/// thing up rather than as one running on free power.
+///
+/// Saved, unlike `MachineStatus`: this one is not recomputed from the world
+/// on the next tick, it *is* the state.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PowerFuel {
+    pub ticks_left: u32,
 }
 
 /// Serde is here for `MemorySubject::Activity`, which saves this enum

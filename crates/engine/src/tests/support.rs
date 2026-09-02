@@ -864,7 +864,26 @@ pub(super) fn stand_ample_grid_supply(game: &mut Game) {
         .unwrap_or(1);
     let count = 1000u32.div_ceil(per);
     for i in 0..count {
-        spawn_structure_at(game, "recharger_node", -1_000_000, -1_000_000 - i as i32);
+        // `spawn_structure_at`'s shape — a bare `Structure` and `Position`,
+        // no `Durability` — plus an inexhaustible charge. A Recharger burns a
+        // Power Cell every `POWER_UPKEEP_TICKS` and supplies nothing while it
+        // cannot pay (`StructureDef::power_upkeep`), and these stand a million
+        // tiles from anything that could feed them. Absurd for the same reason
+        // the count is: the grid must never be the reason a fixture machine
+        // goes dark, and a bank that quietly starved on tick 20 would read as
+        // the multi-tick tests it props up having broken.
+        game.world.spawn((
+            Structure {
+                kind: "recharger_node".to_string(),
+            },
+            Position {
+                x: -1_000_000,
+                y: -1_000_000 - i as i32,
+            },
+            crate::components::PowerFuel {
+                ticks_left: u32::MAX,
+            },
+        ));
     }
     game.world.insert_resource(GridSupplyStood);
 }

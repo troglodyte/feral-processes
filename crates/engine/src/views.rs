@@ -811,18 +811,23 @@ pub struct EntityView {
     /// builder wears it for the whole job. Distinct from `structure_worker`,
     /// which counts any `Task` wherever its holder happens to be.
     pub structure_attended: bool,
-    /// If this is a structure, whether it is a Repair Bay with a downed
-    /// program in reach of it right now — see `Game::occupied_repair_bays`.
+    /// Whether this is a downed program in reach of a Repair Bay right now,
+    /// so its Integrity is climbing this tick — see
+    /// `Game::recovering_programs`.
     ///
-    /// A sibling of `structure_attended` above rather than a `MachineStatus`
-    /// or a second `structure_worker`: a Bay runs no job, so it has no status
-    /// to be in, and the program lying in it holds no `Task`, so nothing in
-    /// the posting vocabulary describes it. It is the same shape those two
-    /// have — a fact about a structure the map draws a mark from — and is
-    /// derived per call for the same reason.
+    /// **A fact about the body, not about the Bay**, which is the opposite
+    /// end from `structure_attended` above. A Bay runs no job, so it has no
+    /// `MachineStatus` to be in, and the program lying in it holds no `Task`,
+    /// so nothing in the posting vocabulary describes either end — but only
+    /// one of the two is the thing being mended, and that is what the map's
+    /// mark is about. Reading it off the Bay also could not survive
+    /// `RecoveryDef::radius` growing past zero, where one Bay mends several
+    /// bodies at once and a single mark on the building says nothing about
+    /// which.
     ///
-    /// **Not "is this structure a Bay."** A Bay standing empty is quiet; the
-    /// mark exists to say somebody is in it.
+    /// **Not "is this program `Downed`."** A body lying out of reach of every
+    /// Bay — or with no Bay standing at all — is benched, not recovering, and
+    /// wears nothing. Derived per call for `structure_attended`'s reason.
     pub recovering: bool,
     /// If this is a structure, whether its output buffer is full while
     /// nothing in the base can take a load — no depot built, or every depot

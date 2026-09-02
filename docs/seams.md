@@ -7988,7 +7988,7 @@ insertion is all it does**. The four things that make a Bay work already key on
 `Downed`: the `on_shift` filter drops the body, `schedule_base_labour`'s diff
 frees its post unconditionally, `drift_idle_staff`'s first arm walks it to a
 Bay, and `run_repair_bays` heals it and lifts the marker at full. So the feature
-is one new writer and no new readers — and the map's occupancy `+` followed for
+is one new writer and no new readers — and the map's recovery `+` followed for
 free, because that is derived from `Bays::serving` over the same query.
 
 **The shape to refuse is a second marker.** A parallel `Mending` component
@@ -8025,6 +8025,48 @@ downed and asks each which Bay serves it, so every body in reach mends at the
 full authored rate on the same tick — no slot, no queue, no starvation. That
 matters more than it used to: a program now occupies its Bay for the whole
 20%-to-full climb rather than the moment a corpse took.
+
+### The recovery mark rides the patient, not the Bay
+
+`EntityView::recovering` shipped as a fact about a *structure* — "this is a
+Repair Bay with somebody in reach of it" — and the map drew a bouncing `+` on
+the building. That is the wrong end of the relationship, in two ways that
+compound.
+
+**The mark answers "what is happening to this program", so it belongs on the
+program.** A player scanning the base wants to know which of their staff is out
+of action and mending; the Bay is only where that happens. Read off the
+building it is also unreadable the moment a mod authors `RecoveryDef::radius`
+past the shipped `0`: one Bay then mends several bodies at once, and a single
+`+` on the building says nothing about which of them, or how many. Keyed to the
+body the answer is one per patient by construction. `Game::recovering_programs`
+is therefore a `HashSet<Entity>` and not the `HashSet<(i32, i32)>` of Bay tiles
+it replaced — a tile identifies a structure (no two share one) but does not
+identify a patient, and at radius `0` the patient's tile *is* the Bay's.
+
+**The colour moved with it, and that is the larger correction.** On the Bay the
+mark was `hud::palette::THREAT`, a role reserved — the palette's module doc
+says so — for hostility and inbound harm, whose only other spenders on this map
+are a raid's flash and a structure taking a hit. A red `+` over a body whose
+Integrity is climbing reads as the harm rather than the cure, and a reservation
+that has lapsed is invisible until the screen stops meaning anything. It is
+`palette::HEALTHY` now: the bar-fill green, which is what a rising Integrity
+already is everywhere else on the HUD.
+
+Nothing about the derivation's shape changed. `Bays::serving` is still the one
+expression of "this program is in a Bay" and still answers both the heal and
+the mark, so the two cannot drift; the set is still rebuilt per view for
+`build_views`' reason. The renderer's call site moved from the tile's
+`structure` to its `actor`, which is also the glyph that tile draws — an actor
+takes the tile's glyph off a structure — so at the shipped radius the `+` lands
+on the same cell it used to, over the body instead of the building.
+
+**The trap is in the fixtures, at both ends.** `view_entities` selects on
+`Glyph`. `spawn_machine_at` writes none, which the Bay test already worked
+around by *placing* the Bay through the real deploy path; `spawn_tamed` writes
+none either, and moving the flag onto the program made that second omission
+load-bearing for the first time. A body with no `Glyph` has no view at all, so
+the flag reads as lost rather than as the fixture being wrong.
 
 ### A downed program walks itself, and `Err` holds rather than dropping the marker
 

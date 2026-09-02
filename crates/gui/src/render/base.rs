@@ -1314,23 +1314,32 @@ fn draw_surface_map(
                     Color::new(ORANGE.r * vig, ORANGE.g * vig, ORANGE.b * vig, ORANGE.a),
                 );
             }
-            // A Bay with somebody in it, drawn on the same layer as the
-            // build caret and for the same reason: it is a mark that needs
-            // the middle of the tile and a vertical offset, and the glyph
-            // path above has neither to give it.
+            // A body a Bay is mending, drawn on the same layer as the build
+            // caret and for the same reason: it is a mark that needs the
+            // middle of the tile and a vertical offset, and the glyph path
+            // above has neither to give it.
             //
-            // **Base space, gated the way the raid flash is.** A Bay stands
-            // in base space and `EntityView::recovering` is derived from
-            // base-space `Position`s, so on the zone map this cell's
-            // coordinates mean something else entirely — the cross-space
-            // aliasing `view_entities` and the spawn-point outline both
-            // refuse. The structure would not be in `entities` out there
+            // **`actor` and not `structure`** — the mark says *this program
+            // is being repaired*, so it rides the patient. Which is also the
+            // glyph the tile is drawing: an actor takes the tile's glyph off
+            // a structure, so on a Bay with somebody standing in it the `+`
+            // and the body it belongs to are the same cell's ink. Passed the
+            // structure instead, a Bay whose reach is more than its own cell
+            // would mark itself while the program it is healing stood
+            // unmarked a tile away.
+            //
+            // **Base space, gated the way the raid flash is.** Both ends of
+            // this stand in base space and `EntityView::recovering` is
+            // derived from base-space `Position`s, so on the zone map this
+            // cell's coordinates mean something else entirely — the
+            // cross-space aliasing `view_entities` and the spawn-point
+            // outline both refuse. Neither would be in `entities` out there
             // anyway; the gate is what keeps that an assertion rather than a
             // coincidence.
             if base_pos.is_some() {
                 draw_recovery_mark(
                     painter,
-                    structure,
+                    actor,
                     fx,
                     Rect::new(px, py, tile_px, tile_px),
                     glyph_px,
@@ -1630,34 +1639,38 @@ fn tile_origin_px(
     )
 }
 
-/// A tile outline with the sides in `open` left off — the sides this
-/// machine shares with one it is joined to.
-///
-/// The bouncing `+` a Repair Bay wears while somebody is recovering in it,
+/// The bouncing green `+` a program wears while a Repair Bay is mending it,
 /// or nothing at all for every other cell on the map.
 ///
 /// **The gate lives in here rather than at the call site**, so a test can
-/// hold both halves: a Bay with a body in it draws the mark and everything
-/// else — an empty Bay included — draws nothing. `EntityView::recovering` is
-/// the engine's own answer, derived from the same `Bays::serving` the heal
-/// runs through, so the mark cannot claim a Bay the heal is not working.
+/// hold both halves: a body being mended draws the mark and everything else
+/// — the Bay doing the mending included — draws nothing.
+/// `EntityView::recovering` is the engine's own answer, derived from the same
+/// `Bays::serving` the heal runs through, so the mark cannot claim a
+/// recovery the heal is not performing.
+///
+/// **`palette::HEALTHY`, and the colour moved with the mark.** On the Bay it
+/// was `THREAT`, which stretched that role's reservation — hostility and
+/// inbound harm — over a building doing the player a favour. On the body it
+/// is Integrity climbing, which is the bar fill's own green and the one
+/// thing this map ever paints in it.
 ///
 /// It rides `Fx::centred_bob`, the build caret's curve: the caret's argument
 /// applies unchanged here — the rest position is the middle of the tile with
 /// room on both sides, where `staffed_bob`'s upward-only form would sit the
 /// mark high in the cell for its whole cycle. Sharing the curve is also what
-/// keeps a base with a build site and a busy Bay in it reading as one map
+/// keeps a base with a build site and a mending body in it reading as one map
 /// rather than two animations, and the phase key being the *entity* spreads
-/// two Bays out of step.
+/// two patients out of step.
 fn draw_recovery_mark(
     painter: &Painter,
-    structure: Option<&EntityView>,
+    actor: Option<&EntityView>,
     fx: &Fx,
     cell: Rect,
     glyph_px: u16,
     vig: f32,
 ) {
-    let Some(ev) = structure.filter(|ev| ev.recovering) else {
+    let Some(ev) = actor.filter(|ev| ev.recovering) else {
         return;
     };
     let glyph = RECOVERY_MARK.to_string();
@@ -1668,7 +1681,7 @@ fn draw_recovery_mark(
         cell.x + (cell.w - dims.width) / 2.0,
         cell.y + (cell.h + dims.height) / 2.0 - lift,
         glyph_px,
-        at_level(hud::palette::THREAT, vig),
+        at_level(hud::palette::HEALTHY, vig),
     );
 }
 
@@ -1736,20 +1749,20 @@ mod tests {
     const CELL: f32 = 20.0;
     const CELL_GLYPH_PX: u16 = 16;
 
-    /// A Repair Bay as the map sees one, with or without a body in it.
-    fn bay_view(recovering: bool) -> EntityView {
+    /// A staff program as the map sees one, mending or not.
+    fn patient_view(recovering: bool) -> EntityView {
         EntityView {
             entity: Entity::PLACEHOLDER,
             pos: (0, 0),
-            glyph: 'r',
-            color: GlyphColor::White,
-            label: "Repair Bay".into(),
+            glyph: 'd',
+            color: GlyphColor::Cyan,
+            label: "Scrapper".into(),
             is_player: false,
             look: None,
-            is_tamed: false,
+            is_tamed: true,
             is_companion: false,
             is_hostile: false,
-            is_structure: true,
+            is_structure: false,
             is_anchor: false,
             is_home: false,
             tier: None,
@@ -1785,7 +1798,10 @@ mod tests {
         })
     }
 
-    fn recovery_mark_at(fx: &Fx, ev: &EntityView) -> Option<f32> {
+    fn recovery_mark_shapes(
+        fx: &Fx,
+        ev: &EntityView,
+    ) -> Vec<bevy_egui::egui::epaint::ClippedShape> {
         let (_, shapes) = with_painter(|p| {
             draw_recovery_mark(
                 p,
@@ -1796,12 +1812,16 @@ mod tests {
                 1.0,
             )
         });
-        mark_y(&shapes)
+        shapes
+    }
+
+    fn recovery_mark_at(fx: &Fx, ev: &EntityView) -> Option<f32> {
+        mark_y(&recovery_mark_shapes(fx, ev))
     }
 
     /// The whole of what this mark ships, in the three states that matter:
-    /// it is drawn on a Bay with somebody recovering in it, it is drawn on
-    /// *nothing* else, and it moves.
+    /// it is drawn on a program a Bay is mending, it is drawn on *nothing*
+    /// else, and it moves.
     ///
     /// The motion is not decoration and is asserted rather than assumed —
     /// `draw_recovery_mark` reads `Fx::centred_bob`, and a mark pinned to the
@@ -1810,20 +1830,20 @@ mod tests {
     /// frame times rather than at one hand-picked half period, so retuning
     /// the bob's rate cannot turn this into a failure that means nothing.
     #[test]
-    fn a_repair_bay_wears_a_bouncing_mark_only_while_somebody_is_recovering() {
+    fn a_recovering_program_wears_a_bouncing_mark_and_nothing_else_does() {
         let mut fx = Fx::new();
         fx.begin_frame(0.0, Vec::new(), Vec::new(), false);
 
         assert!(
-            recovery_mark_at(&fx, &bay_view(true)).is_some(),
-            "a Bay with a program recovering in it must wear the mark"
+            recovery_mark_at(&fx, &patient_view(true)).is_some(),
+            "a program a Bay is mending must wear the mark"
         );
         assert!(
-            recovery_mark_at(&fx, &bay_view(false)).is_none(),
-            "a Bay standing empty must draw nothing at all"
+            recovery_mark_at(&fx, &patient_view(false)).is_none(),
+            "a program that is not recovering must draw nothing at all"
         );
 
-        let busy = bay_view(true);
+        let busy = patient_view(true);
         let ys: Vec<f32> = [0.0, 0.15, 0.3, 0.45, 0.6, 0.75]
             .into_iter()
             .map(|now| {
@@ -1834,6 +1854,45 @@ mod tests {
         assert!(
             ys.iter().any(|y| (y - ys[0]).abs() > 0.5),
             "the mark must bounce, not sit still: {ys:?}"
+        );
+    }
+
+    /// **The mark is green, and the colour is half of what it says.** It was
+    /// `palette::THREAT` while it sat on the Bay, and a red `+` over a body
+    /// whose Integrity is climbing reads as the harm rather than the cure —
+    /// that role is reserved for hostility and inbound harm, and a raid's
+    /// flash and a structure taking a hit are the map's only other spenders
+    /// of it. Asserted against both roles rather than only the one it must
+    /// be, so a revert to the old colour fails here rather than in play.
+    #[test]
+    fn the_recovery_mark_is_painted_in_the_healthy_role_and_not_the_threat_one() {
+        let mut fx = Fx::new();
+        fx.begin_frame(0.0, Vec::new(), Vec::new(), false);
+
+        let shapes = recovery_mark_shapes(&fx, &patient_view(true));
+        let painted: Vec<Color> = crate::paint::painted_map_glyphs(&shapes)
+            .into_iter()
+            .filter(|(text, _)| text == "+")
+            .map(|(_, c)| c)
+            .collect();
+        assert_eq!(painted.len(), 1, "exactly one `+` is painted");
+
+        // A distance rather than an equality: `at_level` multiplies the role
+        // by the vignette and egui rounds the result to eight bits, so what
+        // comes back is the role's colour within a rounding step and never
+        // bit-identical to it.
+        let gap = |a: Color, b: Color| {
+            ((a.r - b.r).powi(2) + (a.g - b.g).powi(2) + (a.b - b.b).powi(2)).sqrt()
+        };
+        let healthy = gap(painted[0], hud::palette::HEALTHY);
+        let threat = gap(painted[0], hud::palette::THREAT);
+        assert!(
+            healthy < 0.01,
+            "the mark must be painted in `palette::HEALTHY`: off by {healthy}"
+        );
+        assert!(
+            threat > healthy,
+            "and must not have drifted back toward `palette::THREAT`"
         );
     }
 

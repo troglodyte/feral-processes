@@ -74,11 +74,11 @@ impl Bays {
     /// **The one expression of "this program is in a Bay."** `nearest` picks
     /// a candidate and `in_reach` accepts or rejects it, and the pair is
     /// asked twice: once by `run_repair_bays` to decide who to heal, once by
-    /// `Game::occupied_repair_bays` to decide which Bay the map marks as
-    /// busy. Written out at both sites the mark would be free to drift off
-    /// the heal — a Bay lighting up for a program lying a tile too far away,
-    /// or going dark on one it is healing — with nothing failing to compile
-    /// and the fault reading as a rendering bug.
+    /// `Game::recovering_programs` to decide who the map marks as mending.
+    /// Written out at both sites the mark would be free to drift off the
+    /// heal — a body lighting up while lying a tile too far away, or going
+    /// dark while it is being healed — with nothing failing to compile and
+    /// the fault reading as a rendering bug.
     pub(crate) fn serving(&self, here: Position) -> Option<(Position, i32)> {
         let (site, rate, radius) = self.nearest(here)?;
         in_reach(here, site, radius).then_some((site, rate))
@@ -236,7 +236,7 @@ impl Game {
         }
     }
 
-    /// The tile of every Bay currently serving a downed program.
+    /// Every downed program a Bay is mending this instant.
     ///
     /// What `EntityView::recovering` is built from, and it is derived on
     /// every look rather than stored: a program reaching full Integrity, one
@@ -244,28 +244,34 @@ impl Game {
     /// all change the answer with nothing to notice they did —
     /// `build_views`' own reason for rebuilding `attended` per call.
     ///
-    /// Keyed by tile because that is what the map has in hand. A Bay's
-    /// `Position` is a structure's own tile and no two structures share one,
-    /// so the tile identifies the Bay as well as its `Entity` would.
+    /// **Keyed by `Entity` and not by tile, which is what makes it the
+    /// program's own answer.** A Bay's `Position` identifies it as well as
+    /// its entity would — no two structures share a tile — but a body does
+    /// not have that: with `RecoveryDef::radius` past zero several downed
+    /// programs mend from one Bay, and at zero they stand on the Bay's own
+    /// cell, so a tile is neither unique to a patient nor distinct from the
+    /// building. The mark belongs on the body being mended, so the set has
+    /// to name bodies.
     ///
-    /// **The same pass `run_repair_bays` makes**, through `Bays::serving`:
-    /// a Bay wears the mark exactly while it is healing somebody, so a
-    /// player watching the map and a program's Integrity climbing are
-    /// reading one fact.
-    pub(crate) fn occupied_repair_bays(&mut self) -> HashSet<(i32, i32)> {
+    /// **The same pass `run_repair_bays` makes**, through `Bays::serving`: a
+    /// program wears the mark exactly while its Integrity is climbing, so a
+    /// player watching the map and a program's Integrity climbing are reading
+    /// one fact.
+    pub(crate) fn recovering_programs(&mut self) -> HashSet<Entity> {
         let bays = self.repair_bays();
         if bays.is_empty() {
             return HashSet::new();
         }
-        let downed: Vec<Position> = {
+        let downed: Vec<(Entity, Position)> = {
             let mut query = self
                 .world
-                .query_filtered::<&Position, bevy_ecs::prelude::With<Downed>>();
-            query.iter(&self.world).copied().collect()
+                .query_filtered::<(Entity, &Position), bevy_ecs::prelude::With<Downed>>();
+            query.iter(&self.world).map(|(e, p)| (e, *p)).collect()
         };
         downed
             .into_iter()
-            .filter_map(|here| bays.serving(here).map(|(site, _)| (site.x, site.y)))
+            .filter(|(_, here)| bays.serving(*here).is_some())
+            .map(|(e, _)| e)
             .collect()
     }
 

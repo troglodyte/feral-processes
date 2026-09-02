@@ -677,6 +677,23 @@
   pulls a working body off a machine. **A Bay has no capacity**: everyone in
   reach mends at full rate on the same tick, which matters now that a stay is
   the whole 20%-to-full climb rather than a corpse's moment.
+- **The recovery `+` rides the patient, not the Bay, and it is green.**
+  `EntityView::recovering` is a fact about a *program* — this body is in reach
+  of a Bay right now, so its Integrity is climbing — and
+  `Game::recovering_programs` keys it by `Entity` rather than by Bay tile. A
+  tile identifies a structure and does not identify a patient: at the shipped
+  `RecoveryDef::radius` of `0` the patient stands *on* the Bay, and past `0`
+  one Bay mends several bodies and a single mark on the building says nothing
+  about which. `render/base.rs` passes the tile's `actor` and not its
+  `structure`, which is also the glyph the tile draws — an actor takes the
+  glyph off a structure — so at radius `0` the mark lands on the same cell it
+  always did, over the body. **The colour moved with it**: `palette::HEALTHY`,
+  because `THREAT` is reserved for hostility and inbound harm and a red `+`
+  over rising Integrity reads as the harm rather than the cure. **The trap is
+  the fixtures**: `view_entities` selects on `Glyph`, `spawn_machine_at` writes
+  none (which is why the Bay is *placed*) and neither does `spawn_tamed` — so
+  the body must come from `spawn_tamed_on_map` or it has no view at all and the
+  flag reads as lost.
 - **A downed program walks itself, and the `Downed` arm of `drift_idle_staff`
   sits above the `OffShift` arm** — recovery outranks an amenity — **gated on
   laid floor**, which is what keeps `entry_tile` the one arrival path for a

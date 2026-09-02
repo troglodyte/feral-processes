@@ -266,11 +266,21 @@ fn footer(app: &App, step: CreationStep) -> String {
                 CREATION_STAT_POINTS - left
             )
         }
-        CreationStep::Perks => format!(
-            "{} of {CREATION_PERK_POINTS} Perk Points left - Left/Right buys \
-             (Shift/Ctrl); Enter moves on, and what you keep comes with you",
-            app.creation_perk_points_left()
-        ),
+        CreationStep::Perks => {
+            // What the achievement ladder is about to add is named here
+            // rather than left to the Summary's profile rows: those sit on
+            // another screen among every other reward, and a picker that
+            // reads "4 of 4" while the run opens on 6 reads as a defect.
+            let earned = match app.profile_perk_points() {
+                0 => String::new(),
+                n => format!(", +{n} later from your profile"),
+            };
+            format!(
+                "{} of {CREATION_PERK_POINTS} Perk Points{earned} - Left/Right buys; \
+                 Enter moves on, unspent points carry over",
+                app.creation_perk_points_left()
+            )
+        }
         _ => plain_footer(step).to_string(),
     }
 }

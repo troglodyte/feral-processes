@@ -1135,7 +1135,48 @@ fn a_spending_step_gives_its_arrows_to_the_basket() {
     }
 }
 
-/// **An allowance you can still spend is not a decision you have made.**/// **An allowance you can still spend is not a decision you have made.**
+/// **The creation allowance and the achievement ladder's Perk Points
+/// stack**, and the wizard says so before the run starts.
+///
+/// This is the arithmetic that reads as a bug: the Perks step hands out
+/// `CREATION_PERK_POINTS` and shows exactly that, while `Game::new` pays
+/// the profile *after* the character is applied — so a player with two
+/// earned Perk Points walks off a screen saying "4 of 4" and lands on 6.
+#[test]
+fn the_profile_adds_its_perk_points_on_top_of_the_allowance() {
+    let profile = profile_with_every_reward_kind();
+    let granted = {
+        let app = wizard_app_with_profile("perk_profile_probe", &profile);
+        app.profile_perk_points()
+    };
+    assert!(
+        granted > 0,
+        "the fixture profile has to grant Perk Points for this to say anything"
+    );
+
+    let mut app = wizard_app_with_profile("perk_profile", &profile);
+    press(&mut app, ch('n'));
+    press(&mut app, ch('f'));
+    press(&mut app, ch('1'));
+    walk_to_the_summary(&mut app);
+    press(&mut app, GameKey::Enter); // the summary
+    press(&mut app, GameKey::Enter); // no name, which starts the run
+    settle(&mut app);
+
+    let game = app.game.as_ref().expect("the run did not start");
+    let view = game.manifest(game.player_entity()).expect("a player sheet");
+    let feral_processes_engine::ManifestSubject::Player(player) = &view.subject else {
+        panic!("the player's own entity produced a program sheet");
+    };
+    assert_eq!(
+        player.perk_points,
+        CREATION_PERK_POINTS + granted,
+        "the wizard's allowance and the ladder's points are added, not \
+         one instead of the other"
+    );
+}
+
+/// **An allowance you can still spend is not a decision you have made.**
 /// Both budget steps refuse to be left while anything on them is
 /// affordable, and both say why — walking past the Points screen with the
 /// pool untouched was the whole reason the figure went on the footer, and

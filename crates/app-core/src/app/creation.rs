@@ -992,6 +992,26 @@ impl App {
     /// that disagreed with what is actually paid would be worse than no
     /// preview, since the player is deciding who to be on the strength of
     /// it.
+    /// Perk Points the cross-run profile will grant **after** creation —
+    /// `Game::new` pays the achievement ladder once the character is
+    /// applied, so these are not spendable on the Perks step and are not
+    /// part of its allowance.
+    ///
+    /// The step says so out loud because the arithmetic is otherwise a
+    /// surprise: a screen reading "4 of 4 Perk Points left" that lands the
+    /// player on 6 looks like a defect, and the Summary's own profile rows
+    /// say `+1 Perk Point` twice, on a different screen, among every other
+    /// reward.
+    pub fn profile_perk_points(&self) -> u32 {
+        feral_processes_engine::achievements::profile_rewards(&self.profile, &self.achievement_db)
+            .into_iter()
+            .map(|(reward, _)| match reward {
+                feral_processes_engine::achievements::Reward::PerkPoints(n) => n,
+                _ => 0,
+            })
+            .sum()
+    }
+
     pub fn profile_preview_rows(&self) -> Vec<String> {
         feral_processes_engine::achievements::profile_rewards(&self.profile, &self.achievement_db)
             .into_iter()

@@ -39,9 +39,9 @@ use feral_processes_engine::tuning::{
 use feral_processes_engine::{
     AchievementRow, BattleView, BrokerReach, CaravanReach, CharacterChoice, ContractRefusal,
     ContractRow, CreationCatalogue, DifficultyMode, Entity, EntityView, FieldRoutinePick,
-    FieldRoutineTarget, FieldRoutineTargetView, Game, LogEntry, LogLine, MESSAGE_LOG_CAP,
-    MessageSource, OrderPriority, ProgramSaleOption, SlotShift, SwingOutcome, TransferRow,
-    WorkOrder, WorkOrderReport, WorkProfile, condense,
+    FieldRoutineTarget, FieldRoutineTargetView, Game, HandCraftProgress, LogEntry, LogLine,
+    MESSAGE_LOG_CAP, MessageSource, OrderPriority, ProgramSaleOption, SlotShift, SwingOutcome,
+    TransferRow, WorkOrder, WorkOrderReport, WorkProfile, condense,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -560,6 +560,22 @@ pub const REVEAL_LINES_PER_SECOND: f32 = 4.0;
 /// otherwise hide the menu the player needs in order to press a different
 /// one.
 pub const STATUS_LINE_SECONDS: f32 = 4.0;
+
+/// How fast `Mode::Compiling`'s bar spends `hand_craft_ticks` against the
+/// wall clock, in ticks per real second.
+///
+/// **dt-scaled rather than one tick per rendered frame.** One-tick-per-frame
+/// was the first thing considered: it makes a 300-tick Hardened Shell a
+/// five-second stare at 60fps, which reads fine — but it also ties the
+/// *cost* the engine charges to the *frame rate* the machine happens to
+/// render at, so the same batch finishes sooner on a faster machine than a
+/// slower one. `hand_craft_ticks` pricing hand-compiling as a real cost only
+/// means something if the ticks spent are the ticks charged regardless of
+/// hardware (see `App::advance_compile`), so this is priced against `dt`
+/// exactly as `REVEAL_LINES_PER_SECOND` above already is. 60 reproduces the
+/// same five-second Hardened Shell the naive approach would have given a
+/// 60fps player, without actually depending on the frame rate to get there.
+pub const COMPILE_TICKS_PER_SECOND: f32 = 60.0;
 
 /// How much of the current battle's narration the player has been shown.
 ///
@@ -1177,6 +1193,13 @@ pub enum Mode {
     DevConsole,
     Craft,
     CraftQuantity,
+    /// A hand-compile in flight — `Game::begin_hand_craft` has armed
+    /// `resources::HandCraft` and `App::advance_compile` is spending it one
+    /// tick at a time. A blocking mode with exactly two exits: the batch
+    /// finishes on its own, or any key aborts it (`Game::abort_hand_craft`)
+    /// — there is nothing to page through, so unlike most popups there is
+    /// no separate Esc case.
+    Compiling,
     /// The work order queue and its status — what the base has been told
     /// to hold, how close it is, and which machine each order is waiting
     /// on. Enter on the trailing row queues another; Backspace drops the
@@ -1556,6 +1579,10 @@ impl Mode {
             | Mode::Transfer
             | Mode::Craft
             | Mode::CraftQuantity
+            // A blocking screen entered from the map, same as `Craft`
+            // above — it never layers over a fight, and a battle starting
+            // mid-batch ends the compile loop itself before this is asked.
+            | Mode::Compiling
             | Mode::WorkOrders
             | Mode::WorkOrderPick
             | Mode::WorkOrderQuantity
@@ -1974,6 +2001,16 @@ pub struct App {
     /// compile would otherwise quietly charge half again for a floor the
     /// player did not ask for, on a page that had stopped mentioning it.
     pub careful_craft: bool,
+    /// The compile `App::advance_compile` is driving while `Mode::Compiling`
+    /// is open — the engine's own report, so the bar can never show a
+    /// number the loop did not actually spend. `None` before the first tick
+    /// lands and once the batch is over, which is also the frame the mode
+    /// leaves `Mode::Compiling`.
+    pub compile_progress: Option<HandCraftProgress>,
+    /// Sub-tick carry against `COMPILE_TICKS_PER_SECOND`, `BattleReveal::
+    /// accumulated`'s reason: a frame covering less than one tick's worth of
+    /// wall-clock time must not be rounded away and lost.
+    compile_ticks_carry: f32,
     /// The item picked in `Mode::WorkOrderPick`, awaiting a quantity from
     /// `Mode::WorkOrderQuantity` before `Game::queue_work_order` is called.
     /// The same two-page shape the compile flow uses.

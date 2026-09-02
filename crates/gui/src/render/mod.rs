@@ -77,7 +77,7 @@ use building::{
 };
 use caravan::{CaravanBasket, draw_caravan};
 use contracts::draw_contracts;
-use crafting::{draw_craft_menu, draw_craft_quantity, draw_recipes};
+use crafting::{draw_compiling, draw_craft_menu, draw_craft_quantity, draw_recipes};
 use field::{draw_field_routine, draw_field_routine_ally};
 use frame_map::{draw_frame_map, draw_frame_map_cursor, draw_map_inset};
 use group_menu::{draw_dev_console, draw_group_menu};
@@ -874,6 +874,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
+        Mode::Compiling => draw_compiling(game, app.compile_progress.as_ref(), refusal, painter, m),
         Mode::EraseQuantity => draw_erase_quantity(
             game,
             app.pending_erase.clone(),
@@ -1183,7 +1184,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 86] = [
+    const ALL_MODES: [Mode; 87] = [
         Mode::MainMenu,
         Mode::CreateCharacter,
         Mode::LoadGame,
@@ -1203,6 +1204,7 @@ mod tests {
         Mode::DevConsole,
         Mode::Craft,
         Mode::CraftQuantity,
+        Mode::Compiling,
         Mode::WorkOrders,
         Mode::WorkOrderPick,
         Mode::WorkOrderQuantity,
@@ -1335,10 +1337,15 @@ mod tests {
     /// Each draws nothing at all here, so the census can say where a refusal
     /// must *not* appear on them but not where it must. Their `draw_popup`
     /// calls are threaded the same way every other one is.
-    const NEEDS_PENDING_STATE: [Mode; 20] = [
+    const NEEDS_PENDING_STATE: [Mode; 21] = [
         Mode::BattleTarget,
         Mode::BattleSpecial,
         Mode::CraftQuantity,
+        // Nothing is armed in the census fixture — `Mode::Compiling` is
+        // only ever entered right after `begin_hand_craft` succeeds, and
+        // this app never commits a compile — so `draw_compiling` draws
+        // nothing, same as every other pending-state screen here.
+        Mode::Compiling,
         Mode::EraseQuantity,
         Mode::FuseSecond,
         Mode::FuseName,

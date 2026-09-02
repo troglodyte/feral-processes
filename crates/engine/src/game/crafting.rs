@@ -467,12 +467,17 @@ impl Game {
                 ),
             );
         }
+        // No unit is in flight to size a bar against on the call that ends
+        // the batch, so this asks `hand_craft_ticks` again rather than
+        // leaving the number the screen's bar most needs a denominator for
+        // — its own last frame.
+        let ticks_total = self.hand_craft_ticks(&job.item);
         crate::resources::HandCraftProgress {
             item: job.item,
             unit: (job.units - job.remaining + 1).min(job.units),
             units: job.units,
             ticks_done: job.ticks_done,
-            ticks_total: 0,
+            ticks_total,
             finished: true,
         }
     }

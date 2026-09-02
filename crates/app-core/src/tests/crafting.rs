@@ -1,8 +1,25 @@
-//! The Compile flow: picking a recipe, choosing a quantity, and the
-//! careful-compile toggle that decides what the batch is worth.
+//! The Compile flow: picking a recipe, choosing a quantity, the
+//! careful-compile toggle that decides what the batch is worth, and
+//! `Mode::Compiling`, the screen that spends `Game::hand_craft_ticks`.
 
 use super::support::*;
 use crate::*;
+
+/// Drives `Mode::Compiling` to completion (or an abort) and back to
+/// `Mode::Playing`, the way `advance_compile` is driven every frame by a
+/// real frontend. One call with an oversized `dt` drains the whole batch —
+/// `advance_compile`'s loop keeps spending ticks until it either runs out of
+/// accumulated time or the batch reports `finished`, so a large enough `dt`
+/// always reaches the latter first for anything a test fixture affords.
+pub(crate) fn drain_compile(app: &mut App) {
+    assert_eq!(app.mode, Mode::Compiling, "nothing is compiling to drain");
+    app.advance_compile(3600.0);
+    assert_eq!(
+        app.mode,
+        Mode::Playing,
+        "a drained compile should have returned to Mode::Playing"
+    );
+}
 
 /// An app with a base founded and enough material to compile a batch.
 fn stocked_app(seed: u32) -> App {
@@ -92,6 +109,8 @@ fn every_commit_path_charges_the_careful_price() {
         let before = ledger(&plain, &edge);
         plain.handle_key(key);
         careful.handle_key(key);
+        drain_compile(&mut plain);
+        drain_compile(&mut careful);
         let (plain_now, careful_now) = (ledger(&plain, &edge), ledger(&careful, &edge));
 
         assert!(
@@ -194,11 +213,88 @@ fn an_arrow_and_a_typed_batch_are_the_same_quantity() {
 
     let before = held(&app, "ice_breaker");
     app.handle_key(GameKey::Enter);
+    drain_compile(&mut app);
     assert_eq!(
         held(&app, "ice_breaker"),
         before + 13,
         "Enter compiles the quantity the arrows left"
     );
+}
+
+/// Committing a batch arms the loop and opens the screen; it does not drain
+/// it in place the way `Game::craft` used to be called synchronously —
+/// that's the whole of what `Mode::Compiling` changes about this flow.
+#[test]
+fn committing_a_craft_opens_the_compiling_screen_rather_than_finishing_at_once() {
+    let mut app = stocked_app(710);
+    open_compile_of(&mut app, "ice_breaker");
+    let before = held(&app, "ice_breaker");
+
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(
+        app.mode,
+        Mode::Compiling,
+        "a committed batch should open the compiling screen"
+    );
+    assert!(
+        app.game.as_ref().unwrap().hand_craft_in_progress(),
+        "the engine should have a compile armed"
+    );
+    assert_eq!(
+        held(&app, "ice_breaker"),
+        before,
+        "nothing is granted on the frame that opens the screen"
+    );
+}
+
+/// The spec's answer: "bar fills, and any key aborts." No key is special —
+/// there is nothing to page through on this screen, so even Esc just aborts
+/// like every other key would.
+#[test]
+fn a_key_during_compiling_aborts_and_returns_to_playing() {
+    let mut app = stocked_app(711);
+    open_compile_of(&mut app, "ice_breaker");
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::Compiling);
+    // A few ticks in, but nowhere near finished — the fixture's inventory
+    // affords a batch bigger than one unit, per `stocked_app`.
+    app.advance_compile(0.1);
+
+    app.handle_key(GameKey::Char('q'));
+
+    assert_eq!(
+        app.mode,
+        Mode::Playing,
+        "any key should abort back to the map"
+    );
+    assert!(
+        !app.game.as_ref().unwrap().hand_craft_in_progress(),
+        "an abort should clear the engine's in-flight compile"
+    );
+}
+
+/// Advancing to completion is what `drain_compile` already exercises for
+/// every other test in this file; this test is the dedicated one for the
+/// outcome itself — the mode change and the fact that nothing is left
+/// standing over the map as a refusal.
+#[test]
+fn advancing_to_completion_returns_to_playing_and_reports_the_outcome() {
+    let mut app = stocked_app(712);
+    open_compile_of(&mut app, "ice_breaker");
+    let before = held(&app, "ice_breaker");
+    app.handle_key(GameKey::Enter);
+    let quantity = 1;
+
+    drain_compile(&mut app);
+
+    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(
+        held(&app, "ice_breaker"),
+        before + quantity,
+        "the finished batch should have granted its result"
+    );
+    assert_eq!(app.status_line, None, "a finished compile is not a refusal");
 }
 
 /// How many of `item` the player is holding, across both stores — a

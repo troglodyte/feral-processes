@@ -964,6 +964,30 @@ fn aborting_keeps_the_finished_units_and_refunds_the_one_in_flight() {
     );
 }
 
+/// The finished report has no unit in flight to size a bar against, so a
+/// naive implementation reports `ticks_total: 0` on exactly the frame a
+/// progress bar most needs a denominator — the batch's last one.
+#[test]
+fn the_finished_report_still_carries_the_full_tick_total() {
+    let mut game = Game::new(313, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let ice = ItemId::from(ids::ICE_BREAKER);
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, ICE_BREAKER_CORE_COST)]);
+    let ticks_total = game.hand_craft_ticks(&ice);
+
+    game.begin_hand_craft(&ice, 1, false).unwrap();
+    let mut last = None;
+    for _ in 0..ticks_total {
+        last = game.advance_hand_craft();
+    }
+
+    let progress = last.expect("the batch's last tick reports a progress");
+    assert!(progress.finished, "the batch should be done by now");
+    assert_eq!(
+        progress.ticks_total, ticks_total,
+        "the bar needs a real denominator on the frame that ends the batch"
+    );
+}
+
 /// A tick can start a fight — `nest_aggro_tick` is the precedent, and a
 /// compile loop inherits the obligation drag terrain already carries: the
 /// remaining ticks must not resolve behind a fight the player has not seen.

@@ -207,6 +207,7 @@ impl App {
             Mode::BuildDirection => self.handle_build_direction_key(key),
             Mode::Craft => self.handle_craft_key(key),
             Mode::CraftQuantity => self.handle_craft_quantity_key(key),
+            Mode::Compiling => self.handle_compiling_key(key),
             Mode::WorkOrders => self.handle_work_orders_key(key),
             Mode::WorkOrderPick => self.handle_work_order_pick_key(key),
             Mode::WorkOrderQuantity => self.handle_work_order_quantity_key(key),
@@ -395,6 +396,67 @@ impl App {
             self.status_line = None;
             self.status_age = 0.0;
         }
+    }
+
+    /// Spends `Mode::Compiling`'s bar at `COMPILE_TICKS_PER_SECOND` against
+    /// wall-clock `dt` — `advance_reveal`'s shape exactly, an accumulator
+    /// rather than one call per frame, so a slow frame does not lose the
+    /// tick it was owed and a fast one does not spend more than `dt` bought.
+    ///
+    /// **Every tick this spends is a real `Game::advance_hand_craft` call**,
+    /// so what it charges the batch can never come apart from what the bar
+    /// shows — the pace is presentation, chosen here, and the cost is the
+    /// engine's, unchanged by how fast the bar is asked to fill. Loops
+    /// rather than ticking once a frame because a large `dt` (an app
+    /// resuming after being backgrounded, or a test driving straight to
+    /// completion) must still land on the batch's true tick count instead
+    /// of stalling one tick a frame behind it.
+    pub fn advance_compile(&mut self, dt: f32) {
+        if self.mode != Mode::Compiling {
+            return;
+        }
+        let Some(game) = &mut self.game else { return };
+        self.compile_ticks_carry += dt * COMPILE_TICKS_PER_SECOND;
+        while self.compile_ticks_carry >= 1.0 {
+            let Some(progress) = game.advance_hand_craft() else {
+                // Nothing in flight — an abort or an interruption elsewhere
+                // (a battle, a game over) already closed the loop and this
+                // mode should not still be open, but never spin here on a
+                // resource that is gone.
+                self.compile_progress = None;
+                self.mode = Mode::Playing;
+                return;
+            };
+            self.compile_ticks_carry -= 1.0;
+            let finished = progress.finished;
+            self.compile_progress = Some(progress);
+            if finished {
+                self.compile_progress = None;
+                self.compile_ticks_carry = 0.0;
+                self.finish_compile();
+                return;
+            }
+        }
+    }
+
+    /// Where a batch's `finished` transition lands — back on the map for an
+    /// ordinary end, `Mode::Battle` for one a tick opened mid-batch, or
+    /// `Mode::GameOver` for one a tick ended. `after_world_action`'s same
+    /// two checks: a hand-compile's ticks are ordinary game ticks and can
+    /// trigger either exactly as a move's can, and `close_hand_craft` has
+    /// already refunded the unit in flight by the time this runs.
+    fn finish_compile(&mut self) {
+        let entered_battle = self
+            .game
+            .as_ref()
+            .map(|g| g.has_active_battle())
+            .unwrap_or(false);
+        self.mode = if entered_battle {
+            Mode::Battle
+        } else {
+            Mode::Playing
+        };
+        self.check_game_over();
     }
 
     /// How many lines are on screen right now.

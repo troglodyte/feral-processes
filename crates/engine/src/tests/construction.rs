@@ -1570,6 +1570,10 @@ fn a_portal_at_zone_three_ramps_each_line_from_its_own_introduction() {
 /// **unramped**, because only the `zone_portal` branch ramps anything. Built
 /// with `assets_dir_with_extra_structure` rather than shipped, per the plan:
 /// no shipped non-portal structure should carry this field.
+///
+/// The two lines name **different** items, so this stays about the append.
+/// What happens when they name the same one is
+/// `a_bill_naming_one_item_twice_is_one_row` below.
 #[test]
 fn a_non_portal_structure_gets_its_zone_build_cost_line_unramped() {
     let assets = assets_dir_with_extra_structure(
@@ -1579,7 +1583,7 @@ fn a_non_portal_structure_gets_its_zone_build_cost_line_unramped() {
             id: "waystation", name: "Waystation", glyph: 'w', color: Blue,
             build_cost: [("core_fragment", 2)],
             work: None,
-            zone_build_cost: [(2, "core_fragment", 40)],
+            zone_build_cost: [(2, "cache_grain", 40)],
         )"#,
     );
     let mut game = Game::new(9604, DifficultyMode::Forgiving, &assets).unwrap();
@@ -1601,10 +1605,85 @@ fn a_non_portal_structure_gets_its_zone_build_cost_line_unramped() {
         bill,
         vec![
             (ItemId::from("core_fragment"), 2),
-            (ItemId::from("core_fragment"), 40),
+            (ItemId::from("cache_grain"), 40),
         ],
         "the zone_build_cost line appends at its authored base — unramped, since this \
          structure never set zone_portal"
+    );
+}
+
+/// The two lists may name the same item, and then the quantities add: one
+/// row out of `structure_build_cost`, never two.
+///
+/// It is the one door, so the merge belongs here rather than at each reader
+/// — and the reader that makes it matter is the founding path, which checks
+/// affordability **per row** and would clear a two-row bill on one row's
+/// worth. See `a_founding_home_cannot_be_half_paid_by_a_split_bill`.
+#[test]
+fn a_bill_naming_one_item_twice_is_one_row() {
+    let assets = assets_dir_with_extra_structure(
+        "split_bill",
+        "waystation.ron",
+        r#"(
+            id: "waystation", name: "Waystation", glyph: 'w', color: Blue,
+            build_cost: [("core_fragment", 2)],
+            work: None,
+            zone_build_cost: [(1, "core_fragment", 3)],
+        )"#,
+    );
+    let game = Game::new(9607, DifficultyMode::Forgiving, &assets).unwrap();
+    let def = game
+        .structure_defs()
+        .into_iter()
+        .find(|d| d.id == "waystation")
+        .expect("waystation.ron should load");
+
+    assert_eq!(
+        game.structure_build_cost(&def),
+        vec![(ItemId::from("core_fragment"), 5)],
+        "two lines naming one item are one row, and the quantities add"
+    );
+}
+
+/// What the merge is for. Founding is the one build the player's own hands
+/// finish, and it checks the bill **row by row** against the pack — so a
+/// split bill passed on one row's worth and then spent both rows, saturating
+/// in `Inventory::take`. A Home raised for four fragments out of a bill of
+/// five.
+#[test]
+fn a_founding_home_cannot_be_half_paid_by_a_split_bill() {
+    let assets = assets_dir_with_extra_structure(
+        "split_home_bill",
+        "home.ron",
+        r#"(
+            id: "home", name: "Home", glyph: 'H', color: Green,
+            build_cost: [("core_fragment", 2)],
+            work: None,
+            raidable: false,
+            power_supply: 4,
+            zone_build_cost: [(1, "core_fragment", 3)],
+        )"#,
+    );
+    let mut short = Game::new(9608, DifficultyMode::Forgiving, &assets).unwrap();
+    set_inventory(&mut short, &[(ids::CORE_FRAGMENT, 4)]);
+    assert!(
+        short.place_structure("home", 0, 0).is_err(),
+        "four fragments does not cover a bill of five, however the bill is written"
+    );
+    assert_eq!(
+        count_item(&short, ids::CORE_FRAGMENT),
+        4,
+        "and a refused founding spends nothing"
+    );
+
+    let mut paid = Game::new(9609, DifficultyMode::Forgiving, &assets).unwrap();
+    set_inventory(&mut paid, &[(ids::CORE_FRAGMENT, 5)]);
+    paid.place_structure("home", 0, 0)
+        .expect("five fragments is the whole bill");
+    assert_eq!(
+        count_item(&paid, ids::CORE_FRAGMENT),
+        0,
+        "and the whole bill is what comes out of the pack"
     );
 }
 

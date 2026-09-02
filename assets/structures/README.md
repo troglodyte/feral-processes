@@ -284,6 +284,12 @@ is skipped with a warning logged in-game rather than crashing startup.
     //
     // For any other structure, qualifying lines are appended **unramped** —
     // only a zone-portal structure's bill grows with depth at all.
+    //
+    // The two lists may name the same item, and then the quantities **add**:
+    // a `build_cost` line of 2 and a qualifying `zone_build_cost` line of 3
+    // are one row asking for 5, not two rows. Each is priced on its own
+    // `min_zone` before they are added, so a portal's sector-1 line and a
+    // sector-2 line naming one item are ramped separately and then summed.
     zone_build_cost: [(2, "cache_grain", 10)],
 
     // Optional; can be left out entirely (defaults to false). If true, the

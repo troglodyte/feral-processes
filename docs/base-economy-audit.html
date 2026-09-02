@@ -1,0 +1,1483 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Every feral-processes structure, recipe and rate traced end to end - where the production chain jams, and the ten specific edits that would make a working base the price of progress.">
+<title>Feral Base Economy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+:root{
+  --ground:#E7EAEC;
+  --surface:#FAFBFB;
+  --surface-2:#F0F2F3;
+  --ink:#13181C;
+  --ink-2:#3A454E;
+  --muted:#616E78;
+  --rule:#C6CFD4;
+  --rule-soft:#DCE2E6;
+
+  --salvage:#9E6222;
+  --trace:#166E75;
+  --power:#8F6E15;
+  --portal:#7E3F79;
+  --research:#2F5F97;
+
+  --crit:#9B2F3B;
+  --warn:#96660F;
+  --ok:#2F6B4A;
+
+  --accent:#245064;
+  --accent-soft:#DDE8EC;
+
+  --shadow:0 1px 2px rgba(19,24,28,.06), 0 6px 18px rgba(19,24,28,.05);
+
+  --measure:70ch;
+  --sans:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --serif:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E1216;
+    --surface:#171C21;
+    --surface-2:#1E242A;
+    --ink:#DFE5E9;
+    --ink-2:#B4C0C8;
+    --muted:#8494A0;
+    --rule:#2C353D;
+    --rule-soft:#242C33;
+
+    --salvage:#D9974C;
+    --trace:#45B4BC;
+    --power:#D6AC3F;
+    --portal:#C57ABD;
+    --research:#7BA5D8;
+
+    --crit:#E5737E;
+    --warn:#DCA84A;
+    --ok:#69B78B;
+
+    --accent:#7FB4C9;
+    --accent-soft:#1C2B33;
+
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 22px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E1216;
+  --surface:#171C21;
+  --surface-2:#1E242A;
+  --ink:#DFE5E9;
+  --ink-2:#B4C0C8;
+  --muted:#8494A0;
+  --rule:#2C353D;
+  --rule-soft:#242C33;
+
+  --salvage:#D9974C;
+  --trace:#45B4BC;
+  --power:#D6AC3F;
+  --portal:#C57ABD;
+  --research:#7BA5D8;
+
+  --crit:#E5737E;
+  --warn:#DCA84A;
+  --ok:#69B78B;
+
+  --accent:#7FB4C9;
+  --accent-soft:#1C2B33;
+
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 22px rgba(0,0,0,.35);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--ink);
+  font-family:var(--serif);
+  font-size:17px;
+  line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── layout ─────────────────────────────────────────────── */
+.wrap{
+  display:grid;
+  grid-template-columns:1fr min(var(--measure),100%) 1fr;
+  row-gap:0;
+}
+.wrap > *{grid-column:2}
+.bleed{
+  grid-column:1 / -1;
+  width:min(1240px,calc(100% - 3rem));
+  margin-inline:auto;
+}
+section{padding-block:2.75rem 0}
+section:last-of-type{padding-bottom:4rem}
+
+/* ── type ───────────────────────────────────────────────── */
+h1,h2,h3,h4{font-family:var(--sans);text-wrap:balance;margin:0}
+h1{
+  font-size:clamp(2.1rem,5.4vw,3.35rem);
+  font-weight:800;
+  letter-spacing:-.024em;
+  line-height:1.02;
+}
+h2{
+  font-size:1.62rem;font-weight:700;letter-spacing:-.014em;
+  margin-bottom:.65rem;line-height:1.15;
+}
+h3{
+  font-size:1.08rem;font-weight:650;letter-spacing:-.005em;
+  margin:2rem 0 .45rem;
+}
+h4{font-size:.95rem;font-weight:650;margin:1.35rem 0 .3rem}
+p{margin:0 0 1rem}
+a{color:var(--accent);text-underline-offset:3px;text-decoration-thickness:1px}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
+strong{font-weight:600}
+code,kbd{
+  font-family:var(--mono);font-size:.83em;
+  background:var(--surface-2);border:1px solid var(--rule-soft);
+  padding:.08em .34em;border-radius:3px;white-space:nowrap;
+}
+.eyebrow{
+  font-family:var(--sans);font-size:.685rem;font-weight:700;
+  letter-spacing:.15em;text-transform:uppercase;color:var(--muted);
+  margin:0 0 .55rem;
+}
+.lede{font-size:1.16rem;color:var(--ink-2);line-height:1.55}
+.note{font-size:.86rem;color:var(--muted);line-height:1.5;font-family:var(--sans)}
+
+/* ── masthead ───────────────────────────────────────────── */
+header.masthead{
+  padding-block:3.5rem 1.5rem;
+  border-bottom:1px solid var(--rule);
+}
+.slug{
+  font-family:var(--mono);font-size:.74rem;letter-spacing:.06em;
+  color:var(--muted);display:flex;flex-wrap:wrap;gap:.4rem 1.1rem;
+  margin-bottom:1.6rem;
+}
+.slug b{color:var(--ink-2);font-weight:500}
+.verdict{
+  margin-top:1.7rem;padding:1.15rem 1.3rem;
+  border-left:3px solid var(--crit);
+  background:var(--surface);border-radius:0 6px 6px 0;
+  box-shadow:var(--shadow);
+}
+.verdict p{margin:0;font-size:1.05rem}
+.verdict .eyebrow{color:var(--crit)}
+
+.chips{
+  display:grid;gap:.75rem;margin-top:1.9rem;
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+}
+.chip{
+  background:var(--surface);border:1px solid var(--rule-soft);
+  border-radius:6px;padding:.8rem .9rem;box-shadow:var(--shadow);
+}
+.chip .n{
+  font-family:var(--sans);font-size:1.75rem;font-weight:750;
+  letter-spacing:-.03em;line-height:1;display:block;
+  font-variant-numeric:tabular-nums;
+}
+.chip .l{
+  font-family:var(--sans);font-size:.7rem;font-weight:600;
+  letter-spacing:.07em;text-transform:uppercase;color:var(--muted);
+  display:block;margin-top:.42rem;line-height:1.3;
+}
+
+/* ── nav ────────────────────────────────────────────────── */
+nav.toc{
+  position:sticky;top:0;z-index:20;
+  background:color-mix(in srgb, var(--ground) 88%, transparent);
+  backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--rule);
+  grid-column:1 / -1;
+}
+nav.toc ul{
+  display:flex;gap:.15rem;overflow-x:auto;list-style:none;
+  margin:0 auto;padding:.5rem 1.5rem;max-width:1240px;
+}
+nav.toc a{
+  font-family:var(--sans);font-size:.775rem;font-weight:550;
+  text-decoration:none;color:var(--muted);white-space:nowrap;
+  padding:.3rem .55rem;border-radius:4px;display:block;
+}
+nav.toc a:hover{color:var(--ink);background:var(--surface-2)}
+
+/* ── figure ─────────────────────────────────────────────── */
+figure{margin:1.6rem 0 0}
+figure svg{display:block;width:100%;height:auto}
+.scroller{overflow-x:auto;border:1px solid var(--rule-soft);border-radius:8px;background:var(--surface);padding:1rem;box-shadow:var(--shadow)}
+figcaption{
+  font-family:var(--sans);font-size:.83rem;color:var(--muted);
+  margin-top:.7rem;line-height:1.5;max-width:82ch;
+}
+.legend{
+  display:flex;flex-wrap:wrap;gap:.35rem 1.15rem;margin-top:.85rem;
+  font-family:var(--sans);font-size:.755rem;color:var(--muted);
+}
+.legend span{display:inline-flex;align-items:center;gap:.4rem}
+.sw{width:11px;height:11px;border-radius:2px;flex:none}
+
+/* ── tables ─────────────────────────────────────────────── */
+table{
+  border-collapse:collapse;width:100%;
+  font-family:var(--sans);font-size:.815rem;
+  font-variant-numeric:tabular-nums;
+}
+th{
+  text-align:left;font-weight:650;font-size:.685rem;letter-spacing:.075em;
+  text-transform:uppercase;color:var(--muted);
+  padding:.5rem .7rem;border-bottom:1.5px solid var(--rule);
+  white-space:nowrap;vertical-align:bottom;
+}
+td{
+  padding:.52rem .7rem;border-bottom:1px solid var(--rule-soft);
+  vertical-align:top;color:var(--ink-2);
+}
+tbody tr:hover td{background:var(--surface-2)}
+td.name{color:var(--ink);font-weight:600;white-space:nowrap}
+td .id{
+  display:block;font-family:var(--mono);font-size:.72rem;
+  color:var(--muted);font-weight:400;margin-top:.1rem;
+}
+.num{text-align:right;white-space:nowrap}
+tr.band td{
+  background:var(--surface-2);color:var(--ink);
+  font-weight:700;font-size:.68rem;letter-spacing:.11em;text-transform:uppercase;
+  padding:.4rem .7rem;
+}
+.tag{
+  display:inline-block;font-size:.66rem;font-weight:700;letter-spacing:.05em;
+  padding:.1rem .38rem;border-radius:3px;border:1px solid currentColor;
+  white-space:nowrap;text-transform:uppercase;
+}
+.t-none{color:var(--ok)}
+.t-gate{color:var(--muted)}
+.t-crit{color:var(--crit)}
+.t-warn{color:var(--warn)}
+
+/* ── finding cards ──────────────────────────────────────── */
+.findings{display:grid;gap:1rem;margin-top:1.4rem}
+.f{
+  background:var(--surface);border:1px solid var(--rule-soft);
+  border-left:3px solid var(--rule);border-radius:0 7px 7px 0;
+  padding:1rem 1.15rem;box-shadow:var(--shadow);
+}
+.f.sev-crit{border-left-color:var(--crit)}
+.f.sev-warn{border-left-color:var(--warn)}
+.f.sev-note{border-left-color:var(--accent)}
+.f-head{display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap;margin-bottom:.35rem}
+.f-id{
+  font-family:var(--mono);font-size:.74rem;font-weight:700;
+  color:var(--muted);letter-spacing:.02em;
+}
+.f h4{margin:0;font-size:1rem;flex:1 1 14rem}
+.f p{margin:0 0 .55rem;font-size:.95rem;line-height:1.55}
+.f p:last-child{margin-bottom:0}
+.cite{
+  font-family:var(--mono);font-size:.715rem;color:var(--muted);
+  line-height:1.6;display:block;margin-top:.5rem;
+  padding-top:.5rem;border-top:1px dashed var(--rule);
+}
+.cite b{color:var(--ink-2);font-weight:500}
+
+/* ── lever list ─────────────────────────────────────────── */
+.lever{
+  background:var(--surface);border:1px solid var(--rule-soft);
+  border-radius:7px;padding:1rem 1.15rem;box-shadow:var(--shadow);
+}
+.levers{display:grid;gap:.9rem;margin-top:1.3rem}
+.lever-head{display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap}
+.lever-head .f-id{color:var(--accent)}
+.lever h4{margin:0;flex:1 1 14rem}
+.pill{
+  font-family:var(--sans);font-size:.64rem;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;padding:.14rem .42rem;border-radius:99px;
+  background:var(--accent-soft);color:var(--accent);white-space:nowrap;
+}
+.pill.data{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok)}
+.pill.code{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+.lever p{margin:.5rem 0 0;font-size:.94rem;line-height:1.55}
+.lever .cite{margin-top:.6rem}
+
+/* ── research tree ──────────────────────────────────────── */
+.tree{font-family:var(--sans);font-size:.85rem;margin-top:1.2rem}
+.tree ul{list-style:none;margin:0;padding-left:1.25rem;border-left:1px solid var(--rule)}
+.tree > ul{padding-left:0;border-left:none}
+.tree li{padding:.2rem 0 .2rem .85rem;position:relative}
+.tree > ul > li{padding-left:0}
+.tree li::before{
+  content:"";position:absolute;left:0;top:1.05em;width:.6rem;height:1px;background:var(--rule);
+}
+.tree > ul > li::before{display:none}
+.rname{font-weight:600;color:var(--ink)}
+.rcost{font-family:var(--mono);font-size:.76rem;color:var(--research);font-weight:500}
+.rzone{font-family:var(--mono);font-size:.7rem;color:var(--muted)}
+.runlock{color:var(--muted);font-size:.79rem}
+
+.kv{
+  display:grid;grid-template-columns:auto 1fr;gap:.3rem 1.1rem;
+  font-family:var(--sans);font-size:.86rem;margin:1rem 0;
+}
+.kv dt{color:var(--muted);font-weight:600;white-space:nowrap}
+.kv dd{margin:0;color:var(--ink-2)}
+
+ul.body{padding-left:1.15rem;margin:0 0 1rem}
+ul.body li{margin-bottom:.42rem}
+
+hr.sep{border:none;border-top:1px solid var(--rule);margin:3rem 0 0}
+
+footer{
+  border-top:1px solid var(--rule);margin-top:3rem;padding:2rem 0 3.5rem;
+  font-family:var(--sans);font-size:.82rem;color:var(--muted);
+}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+}
+html{scroll-behavior:smooth;scroll-padding-top:4rem}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+<style>
+:root{color-scheme:light dark}
+html,body{margin:0;padding:0}
+img{max-width:100%}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="masthead">
+  <p class="slug">
+    <span><b>feral-processes</b></span>
+    <span>main @ 2586067a</span>
+    <span>v0.13.78</span>
+    <span>read from source, 2026-09-02</span>
+  </p>
+  <h1>The base makes things.<br>Nothing makes you build it.</h1>
+  <p class="lede" style="margin-top:1.1rem">
+    Every structure, every recipe, every rate in <code>assets/</code> and <code>crates/engine/</code>,
+    traced end to end — what feeds what, where the chain jams, and the specific numbers to move
+    if a working base is meant to be the price of progress.
+  </p>
+
+  <div class="verdict">
+    <p class="eyebrow">The finding</p>
+    <p>
+      Breaching to the next sector needs a <strong>Home</strong> (<code>build_cost: []</code>) and a
+      <strong>Zone Portal</strong> (10 Portal Fragments, from Stack guardians only). Neither is behind
+      research; neither consumes anything the base produces. The entire eleven-machine production
+      chain is optional, and <code>Game::craft</code> lets you hand-compile every item those machines
+      make, at the same cost, with no worker and no adjacency.
+    </p>
+  </div>
+
+  <div class="chips">
+    <div class="chip"><span class="n">30</span><span class="l">structures</span></div>
+    <div class="chip"><span class="n">11</span><span class="l">assemblers</span></div>
+    <div class="chip"><span class="n" style="color:var(--crit)">6.7</span><span class="l">feeder nodes an assembler needs at Mk1</span></div>
+    <div class="chip"><span class="n" style="color:var(--crit)">4</span><span class="l">feeders adjacency allows</span></div>
+    <div class="chip"><span class="n" style="color:var(--warn)">0</span><span class="l">base inputs on the breach path</span></div>
+  </div>
+</header>
+
+<nav class="toc">
+  <ul>
+    <li><a href="#map">The map</a></li>
+    <li><a href="#chains">Chains</a></li>
+    <li><a href="#structures">Structures</a></li>
+    <li><a href="#items">Items</a></li>
+    <li><a href="#research">Research</a></li>
+    <li><a href="#bottlenecks">Bottlenecks</a></li>
+    <li><a href="#levers">Levers</a></li>
+    <li><a href="#flags">Flags</a></li>
+    <li><a href="#method">Method</a></li>
+  </ul>
+</nav>
+
+<!-- ═══════════════════════ THE MAP ═══════════════════════ -->
+<section id="map">
+  <p class="eyebrow">Figure 1</p>
+  <h2>Everything the base can make</h2>
+  <p>
+    Six independent chains. Only one of them — the bottom row — leads anywhere the game requires
+    you to go, and it starts underground rather than at a machine.
+  </p>
+</section>
+
+<div class="bleed">
+  <figure>
+    <div class="scroller">
+      <svg viewBox="0 0 1200 660" role="img" aria-label="Production flow: five raw materials feed eleven assemblers producing fourteen items; a separate bottom chain runs from a Stack guardian to Portal Fragments to the Zone Portal with no base input at all." style="min-width:1000px">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+          </marker>
+          <marker id="arRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,1 L9,5 L0,9 z" fill="#B5333F"/>
+          </marker>
+        </defs>
+
+        <g font-family="Archivo, sans-serif" fill="currentColor">
+
+          <!-- column headers -->
+          <g font-size="10" font-weight="700" letter-spacing="1.4" opacity=".55" text-anchor="middle">
+            <text x="76"  y="20">SOURCE</text>
+            <text x="226" y="20">EXTRACTOR</text>
+            <text x="386" y="20">MATERIAL</text>
+            <text x="546" y="20">ASSEMBLER</text>
+            <text x="710" y="20">INTERMEDIATE</text>
+            <text x="874" y="20">ASSEMBLER</text>
+            <text x="1060" y="20">PRODUCT / SINK</text>
+          </g>
+
+          <!-- ══ CHAIN A : SALVAGE ══ -->
+          <text x="24" y="48" font-size="10.5" font-weight="800" letter-spacing="1.2" fill="#9E6222">A · SALVAGE</text>
+
+          <rect x="24" y="128" width="104" height="66" rx="4" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity=".65"/>
+          <text x="76" y="152" font-size="11" text-anchor="middle" opacity=".8">rock · kills</text>
+          <text x="76" y="167" font-size="11" text-anchor="middle" opacity=".8">Stack · trader</text>
+          <text x="76" y="183" font-size="9.5" text-anchor="middle" opacity=".5">4 supplies</text>
+
+          <rect x="156" y="141" width="140" height="40" rx="4" fill="none" stroke="#9E6222" stroke-width="1.6"/>
+          <text x="226" y="159" font-size="12" font-weight="600" text-anchor="middle">Mining Node</text>
+          <text x="226" y="173" font-size="9.5" text-anchor="middle" opacity=".62">10t · 50% · Mk1→5</text>
+
+          <rect x="324" y="131" width="124" height="60" rx="4" fill="#9E622218" stroke="#9E6222" stroke-width="1.6"/>
+          <text x="386" y="153" font-size="12" font-weight="700" text-anchor="middle" fill="#9E6222">Core Fragment</text>
+          <text x="386" y="168" font-size="9.5" text-anchor="middle" opacity=".62">value 1 · currency</text>
+          <text x="386" y="181" font-size="9.5" text-anchor="middle" opacity=".62">zone-local</text>
+
+          <line x1="128" y1="161" x2="152" y2="161" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)" opacity=".7"/>
+          <line x1="296" y1="161" x2="320" y2="161" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar)" opacity=".7"/>
+
+          <!-- A1 Lathe -->
+          <rect x="476" y="52" width="140" height="38" rx="4" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".85"/>
+          <text x="546" y="70" font-size="12" font-weight="600" text-anchor="middle">Lathe</text>
+          <text x="546" y="83" font-size="9.5" text-anchor="middle" opacity=".62">4 CF → 1 / 12t</text>
+          <rect x="644" y="52" width="132" height="38" rx="4" fill="#9E622212" stroke="#9E6222" stroke-width="1.2"/>
+          <text x="710" y="70" font-size="11.5" font-weight="600" text-anchor="middle">Blank Substrate</text>
+          <text x="710" y="83" font-size="9.5" text-anchor="middle" opacity=".62">value 3</text>
+          <circle cx="768" cy="59" r="3.4" fill="#B5333F"/>
+          <rect x="804" y="52" width="140" height="38" rx="4" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".85"/>
+          <text x="874" y="70" font-size="12" font-weight="600" text-anchor="middle">Disk Press</text>
+          <text x="874" y="83" font-size="9.5" text-anchor="middle" opacity=".62">2 BS → 1 / 20t</text>
+          <rect x="972" y="52" width="176" height="38" rx="4" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55"/>
+          <text x="1060" y="70" font-size="11.5" font-weight="600" text-anchor="middle">Routine Disk</text>
+          <text x="1060" y="83" font-size="9.5" text-anchor="middle" opacity=".62">writes one routine, burns</text>
+          <circle cx="1140" cy="59" r="3.4" fill="#B5333F"/>
+
+          <!-- A2 Refinery -->
+          <rect x="476" y="106" width="140" height="38" rx="4" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".85"/>
+          <text x="546" y="124" font-size="12" font-weight="600" text-anchor="middle">Refinery</text>
+          <text x="546" y="137" font-size="9.5" text-anchor="middle" opacity=".62">4 CF → 1 / 12t</text>
+          <rect x="644" y="106" width="132" height="38" rx="4" fill="#9E622212" stroke="#9E6222" stroke-width="1.2"/>
+          <text x="710" y="124" font-size="11.5" font-weight="600" text-anchor="middle">Bytecode Block</text>
+          <text x="710" y="137" font-size="9.5" text-anchor="middle" opacity=".62">value 4</text>
+          <circle cx="768" cy="113" r="3.4" fill="#B5333F"/>
+          <rect x="804" y="106" width="140" height="38" rx="4" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".85"/>
+          <text x="874" y="124" font-size="12" font-weight="600" text-anchor="middle">Armory</text>
+          <text x="874" y="137" font-size="9.5" text-anchor="middle" opacity=".62">3 BB → 1 / 30t</text>
+          <rect x="972" y="106" width="176" height="38" rx="4" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55"/>
+          <text x="1060" y="124" font-size="11.5" font-weight="600" text-anchor="middle">Hardened Shell</text>
+          <text x="1060" y="137" font-size="9.5" text-anchor="middle" opacity=".62">armor · mitigation 9</text>
+          <circle cx="1140" cy="113" r="3.4" fill="#B5333F"/>
+
+          <!-- A3 Annealing -->
+          <rect x="476" y="192" width="140" height="38" rx="4" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".85"/>
+          <text x="546" y="210" font-size="12" font-weight="600" text-anchor="middle">Annealing Node</text>
+          <text x="546" y="223" font-size="9.5" text-anchor="middle" opacity=".62">4 CF → 1 / 12t</text>
+          <rect x="644" y="192" width="132" height="38" rx="4" fill="#9E622212" stroke="#9E6222" stroke-width="1.2"/>
+          <text x="710" y="210" font-size="11.5" font-weight="600" text-anchor="middle">Annealed Core</text>
+          <text x="710" y="223" font-size="9.5" text-anchor="middle" opacity=".62">value 3</text>
+          <circle cx="768" cy="199" r="3.4" fill="#B5333F"/>
+          <rect x="804" y="192" width="140" height="38" rx="4" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".85"/>
+          <text x="874" y="210" font-size="12" font-weight="600" text-anchor="middle">Refactor Bench</text>
+          <text x="874" y="223" font-size="9.5" text-anchor="middle" opacity=".62">3 AC → 1 / 20t</text>
+          <rect x="972" y="184" width="176" height="54" rx="4" fill="none" stroke="#2F6B4A" stroke-width="1.5"/>
+          <text x="1060" y="202" font-size="11.5" font-weight="700" text-anchor="middle" fill="#2F6B4A">Recompile Kernel</text>
+          <text x="1060" y="216" font-size="9.5" text-anchor="middle" opacity=".7">+ Bounds / Buffer / Inline</text>
+          <text x="1060" y="229" font-size="9.5" text-anchor="middle" opacity=".55">permanent program upgrades</text>
+          <circle cx="1140" cy="191" r="3.4" fill="#B5333F"/>
+
+          <!-- A4 Compiler -->
+          <rect x="476" y="246" width="140" height="38" rx="4" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".85"/>
+          <text x="546" y="264" font-size="12" font-weight="600" text-anchor="middle">Compiler</text>
+          <text x="546" y="277" font-size="9.5" text-anchor="middle" opacity=".62">3 CF → 1 / 8t</text>
+          <rect x="644" y="246" width="132" height="38" rx="4" fill="#9E622212" stroke="#9E6222" stroke-width="1.2"/>
+          <text x="710" y="264" font-size="11.5" font-weight="600" text-anchor="middle">ICE Breaker</text>
+          <text x="710" y="277" font-size="9.5" text-anchor="middle" opacity=".62">taming catalyst</text>
+          <circle cx="768" cy="253" r="3.4" fill="#B5333F"/>
+          <text x="804" y="262" font-size="10" opacity=".5">also: 3 CF by hand · 5 Cr at the Market ·</text>
+          <text x="804" y="275" font-size="10" opacity=".5">0.30 nest-cache drop — four supplies</text>
+
+          <!-- fan out from Core Fragment -->
+          <g stroke="#9E6222" stroke-width="1.3" fill="none" opacity=".8" color="#9E6222">
+            <path d="M448 161 C 462 161, 462 71,  472 71"  marker-end="url(#ar)"/>
+            <path d="M448 161 C 462 161, 462 125, 472 125" marker-end="url(#ar)"/>
+            <path d="M448 161 C 462 161, 462 211, 472 211" marker-end="url(#ar)"/>
+            <path d="M448 161 C 462 161, 462 265, 472 265" marker-end="url(#ar)"/>
+          </g>
+          <g stroke="currentColor" stroke-width="1.2" opacity=".65" fill="none">
+            <line x1="616" y1="71"  x2="640" y2="71"  marker-end="url(#ar)"/>
+            <line x1="776" y1="71"  x2="800" y2="71"  marker-end="url(#ar)"/>
+            <line x1="944" y1="71"  x2="968" y2="71"  marker-end="url(#ar)"/>
+            <line x1="616" y1="125" x2="640" y2="125" marker-end="url(#ar)"/>
+            <line x1="776" y1="125" x2="800" y2="125" marker-end="url(#ar)"/>
+            <line x1="944" y1="125" x2="968" y2="125" marker-end="url(#ar)"/>
+            <line x1="616" y1="211" x2="640" y2="211" marker-end="url(#ar)"/>
+            <line x1="776" y1="211" x2="800" y2="211" marker-end="url(#ar)"/>
+            <line x1="944" y1="211" x2="968" y2="211" marker-end="url(#ar)"/>
+            <line x1="616" y1="265" x2="640" y2="265" marker-end="url(#ar)"/>
+          </g>
+
+          <!-- the bypass -->
+          <path d="M386 128 L386 36 L1096 36 L1096 48" fill="none" stroke="#B5333F" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arRed)"/>
+          <text x="740" y="32" font-size="10.5" font-weight="700" text-anchor="middle" fill="#B5333F">hand-compile — Game::craft asks only that the bench exists, anywhere</text>
+
+          <!-- ══ CHAIN B : TRACE ══ -->
+          <line x1="24" y1="304" x2="1176" y2="304" stroke="currentColor" opacity=".18"/>
+          <text x="24" y="326" font-size="10.5" font-weight="800" letter-spacing="1.2" fill="#166E75">B · TRACE</text>
+
+          <rect x="156" y="334" width="140" height="38" rx="4" fill="none" stroke="#166E75" stroke-width="1.6"/>
+          <text x="226" y="352" font-size="12" font-weight="600" text-anchor="middle">Log Scraper</text>
+          <text x="226" y="365" font-size="9.5" text-anchor="middle" opacity=".62">10t · 50% · Mk1→5</text>
+          <rect x="324" y="334" width="124" height="38" rx="4" fill="#166E7518" stroke="#166E75" stroke-width="1.4"/>
+          <text x="386" y="356" font-size="11.5" font-weight="700" text-anchor="middle" fill="#166E75">Raw Trace</text>
+          <rect x="476" y="334" width="140" height="38" rx="4" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".85"/>
+          <text x="546" y="352" font-size="12" font-weight="600" text-anchor="middle">Transcriber</text>
+          <text x="546" y="365" font-size="9.5" text-anchor="middle" opacity=".62">4 RT → 1 / 12t</text>
+          <rect x="644" y="334" width="132" height="38" rx="4" fill="#166E7512" stroke="#166E75" stroke-width="1.2"/>
+          <text x="710" y="356" font-size="11.5" font-weight="600" text-anchor="middle">Logic Wafer</text>
+          <circle cx="768" cy="341" r="3.4" fill="#B5333F"/>
+          <rect x="804" y="334" width="140" height="38" rx="4" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".85"/>
+          <text x="874" y="352" font-size="12" font-weight="600" text-anchor="middle">Fabricator</text>
+          <text x="874" y="365" font-size="9.5" text-anchor="middle" opacity=".62">5 LW → 1 / 30t</text>
+          <rect x="972" y="334" width="176" height="38" rx="4" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55"/>
+          <text x="1060" y="352" font-size="11.5" font-weight="600" text-anchor="middle">Trace Sniffer</text>
+          <text x="1060" y="365" font-size="9.5" text-anchor="middle" opacity=".62">module · decompiler 3</text>
+          <circle cx="1140" cy="341" r="3.4" fill="#B5333F"/>
+          <g stroke="currentColor" stroke-width="1.2" opacity=".65" fill="none">
+            <line x1="296" y1="353" x2="320" y2="353" marker-end="url(#ar)"/>
+            <line x1="448" y1="353" x2="472" y2="353" marker-end="url(#ar)"/>
+            <line x1="616" y1="353" x2="640" y2="353" marker-end="url(#ar)"/>
+            <line x1="776" y1="353" x2="800" y2="353" marker-end="url(#ar)"/>
+            <line x1="944" y1="353" x2="968" y2="353" marker-end="url(#ar)"/>
+          </g>
+
+          <!-- ══ CHAIN C : POWER ══ -->
+          <line x1="24" y1="392" x2="1176" y2="392" stroke="currentColor" opacity=".18"/>
+          <text x="24" y="414" font-size="10.5" font-weight="800" letter-spacing="1.2" fill="#8F6E15">C · POWER</text>
+
+          <rect x="156" y="422" width="140" height="38" rx="4" fill="none" stroke="#8F6E15" stroke-width="1.6"/>
+          <text x="226" y="440" font-size="12" font-weight="600" text-anchor="middle">Power Conduit</text>
+          <text x="226" y="453" font-size="9.5" text-anchor="middle" opacity=".62">6t · always yields</text>
+          <rect x="324" y="422" width="124" height="38" rx="4" fill="#8F6E1518" stroke="#8F6E15" stroke-width="1.4"/>
+          <text x="386" y="444" font-size="11.5" font-weight="700" text-anchor="middle" fill="#8F6E15">Power Cell</text>
+          <circle cx="440" cy="429" r="3.4" fill="#B5333F"/>
+          <rect x="476" y="422" width="140" height="38" rx="4" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".85"/>
+          <text x="546" y="440" font-size="12" font-weight="600" text-anchor="middle">Winding Node</text>
+          <text x="546" y="453" font-size="9.5" text-anchor="middle" opacity=".62">3 PC → 1 / 12t</text>
+          <rect x="644" y="422" width="132" height="38" rx="4" fill="#8F6E1512" stroke="#8F6E15" stroke-width="1.2"/>
+          <text x="710" y="444" font-size="11.5" font-weight="600" text-anchor="middle">Charge Coil</text>
+          <circle cx="768" cy="429" r="3.4" fill="#B5333F"/>
+          <rect x="804" y="422" width="140" height="38" rx="4" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".85"/>
+          <text x="874" y="440" font-size="12" font-weight="600" text-anchor="middle">Assembly Bay</text>
+          <text x="874" y="453" font-size="9.5" text-anchor="middle" opacity=".62">3 CC → 1 / 20t</text>
+          <rect x="972" y="422" width="176" height="38" rx="4" fill="none" stroke="#2F6B4A" stroke-width="1.5"/>
+          <text x="1060" y="440" font-size="11.5" font-weight="700" text-anchor="middle" fill="#2F6B4A">Patch Routine</text>
+          <text x="1060" y="453" font-size="9.5" text-anchor="middle" opacity=".7">the only base→field item</text>
+          <circle cx="1140" cy="429" r="3.4" fill="#B5333F"/>
+          <g stroke="currentColor" stroke-width="1.2" opacity=".65" fill="none">
+            <line x1="296" y1="441" x2="320" y2="441" marker-end="url(#ar)"/>
+            <line x1="448" y1="441" x2="472" y2="441" marker-end="url(#ar)"/>
+            <line x1="616" y1="441" x2="640" y2="441" marker-end="url(#ar)"/>
+            <line x1="776" y1="441" x2="800" y2="441" marker-end="url(#ar)"/>
+            <line x1="944" y1="441" x2="968" y2="441" marker-end="url(#ar)"/>
+          </g>
+
+          <!-- ══ CHAIN D+E ══ -->
+          <line x1="24" y1="480" x2="1176" y2="480" stroke="currentColor" opacity=".18"/>
+          <text x="24" y="502" font-size="10.5" font-weight="800" letter-spacing="1.2" fill="#2F5F97">D · CACHE &amp; RESEARCH</text>
+
+          <rect x="156" y="510" width="140" height="38" rx="4" fill="none" stroke="#166E75" stroke-width="1.6"/>
+          <text x="226" y="528" font-size="12" font-weight="600" text-anchor="middle">Cache Tap</text>
+          <text x="226" y="541" font-size="9.5" text-anchor="middle" opacity=".62">14t · 50% · Mk1→5</text>
+          <rect x="324" y="510" width="124" height="38" rx="4" fill="#166E7518" stroke="#166E75" stroke-width="1.4"/>
+          <text x="386" y="532" font-size="11.5" font-weight="700" text-anchor="middle" fill="#166E75">Cache Grain</text>
+          <rect x="476" y="510" width="300" height="38" rx="4" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55"/>
+          <text x="626" y="528" font-size="11.5" font-weight="600" text-anchor="middle">every structure upgrade · 6 gated recipes</text>
+          <text x="626" y="541" font-size="9.5" text-anchor="middle" opacity=".62">only material that survives a breach</text>
+
+          <rect x="156" y="558" width="140" height="38" rx="4" fill="none" stroke="#2F5F97" stroke-width="1.6"/>
+          <text x="226" y="576" font-size="12" font-weight="600" text-anchor="middle">Research Node</text>
+          <text x="226" y="589" font-size="9.5" text-anchor="middle" opacity=".62">14t · 50% · flat 1</text>
+          <rect x="324" y="558" width="124" height="38" rx="4" fill="#2F5F9718" stroke="#2F5F97" stroke-width="1.4"/>
+          <text x="386" y="580" font-size="11.5" font-weight="700" text-anchor="middle" fill="#2F5F97">Research Data</text>
+          <rect x="476" y="558" width="300" height="38" rx="4" fill="none" stroke="#2F6B4A" stroke-width="1.5"/>
+          <text x="626" y="576" font-size="11.5" font-weight="700" text-anchor="middle" fill="#2F6B4A">25 research nodes · 1,485 RD total</text>
+          <text x="626" y="589" font-size="9.5" text-anchor="middle" opacity=".7">gates 16 structures, 10 routines, 6 recipes</text>
+          <g stroke="currentColor" stroke-width="1.2" opacity=".65" fill="none">
+            <line x1="296" y1="529" x2="320" y2="529" marker-end="url(#ar)"/>
+            <line x1="448" y1="529" x2="472" y2="529" marker-end="url(#ar)"/>
+            <line x1="296" y1="577" x2="320" y2="577" marker-end="url(#ar)"/>
+            <line x1="448" y1="577" x2="472" y2="577" marker-end="url(#ar)"/>
+          </g>
+
+          <!-- ══ CHAIN F : PROGRESSION ══ -->
+          <rect x="816" y="500" width="360" height="100" rx="6" fill="#7E3F790F" stroke="#7E3F79" stroke-width="1.8"/>
+          <text x="832" y="521" font-size="10.5" font-weight="800" letter-spacing="1.2" fill="#7E3F79">F · PROGRESSION</text>
+          <rect x="832" y="532" width="106" height="34" rx="4" fill="none" stroke="#7E3F79" stroke-width="1.3"/>
+          <text x="885" y="553" font-size="11" font-weight="600" text-anchor="middle">Stack guardian</text>
+          <rect x="962" y="532" width="94" height="34" rx="4" fill="#7E3F7920" stroke="#7E3F79" stroke-width="1.3"/>
+          <text x="1009" y="548" font-size="10.5" font-weight="700" text-anchor="middle" fill="#7E3F79">Portal</text>
+          <text x="1009" y="560" font-size="10.5" font-weight="700" text-anchor="middle" fill="#7E3F79">Fragment</text>
+          <rect x="1080" y="532" width="82" height="34" rx="4" fill="none" stroke="#7E3F79" stroke-width="1.3"/>
+          <text x="1121" y="548" font-size="10.5" font-weight="600" text-anchor="middle">Zone</text>
+          <text x="1121" y="560" font-size="10.5" font-weight="600" text-anchor="middle">Portal</text>
+          <g stroke="#7E3F79" stroke-width="1.3" fill="none" color="#7E3F79">
+            <line x1="938" y1="549" x2="958" y2="549" marker-end="url(#ar)"/>
+            <line x1="1056" y1="549" x2="1076" y2="549" marker-end="url(#ar)"/>
+          </g>
+          <text x="996" y="586" font-size="10.5" font-weight="700" text-anchor="middle" fill="#B5333F">no base input anywhere on this row</text>
+        </g>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i class="sw" style="background:#9E6222"></i> Core Fragment (zone-local currency)</span>
+      <span><i class="sw" style="background:#166E75"></i> Trace &amp; Cache</span>
+      <span><i class="sw" style="background:#8F6E15"></i> Power</span>
+      <span><i class="sw" style="background:#7E3F79"></i> Portal Fragment</span>
+      <span><i class="sw" style="background:#B5333F;border-radius:50%"></i> hand-compilable — the machine is optional</span>
+    </div>
+    <figcaption>
+      Rates are the machine's authored <code>ticks_per_unit</code> and the item's own
+      <code>craftable.cost</code>; an assembler runs its product's recipe rather than one of its own
+      (<code>systems::assembly_recipe</code>). Extractor percentages are
+      <code>mining_success_chance</code> at Mk1. Every arrow crossing into an assembler is a pull
+      from an <em>orthogonally adjacent</em> output buffer — that adjacency is the constraint
+      Figure 2 is about.
+    </figcaption>
+  </figure>
+</div>
+
+<!-- ═══════════════════════ CHAINS ═══════════════════════ -->
+<section id="chains">
+  <p class="eyebrow">Figure 2</p>
+  <h2>The chain is starved, then it clogs</h2>
+  <p>
+    An extractor's yield is <code>tier + (zone − 1)</code> units per cycle at a
+    <code>0.4 + 0.1 × tier</code> success rate. An assembler's yield is hard-coded to
+    <strong>one unit per cycle, forever</strong> — <code>upgrade_structure</code> never touches
+    <code>ticks_per_unit</code>, and the completion branch writes <code>+= 1</code>. So supply
+    climbs 16× across a run while demand stays flat, and the ratio is only ever correct
+    for about one sector.
+  </p>
+</section>
+
+<div class="bleed">
+  <figure>
+    <div class="scroller">
+      <svg viewBox="0 0 900 330" role="img" aria-label="A Mining Node's output rises from 50 to 810 units per thousand ticks between Mk1 zone 1 and Mk5 zone 5, while a Lathe's demand stays flat at 333; the two lines cross around Mk3 zone 3." style="min-width:640px">
+        <g font-family="Archivo, sans-serif" fill="currentColor">
+          <!-- axes -->
+          <line x1="72" y1="270" x2="836" y2="270" stroke="currentColor" opacity=".35"/>
+          <line x1="72" y1="40" x2="72" y2="270" stroke="currentColor" opacity=".35"/>
+          <g font-size="10" opacity=".5" text-anchor="end">
+            <text x="64" y="274">0</text>
+            <text x="64" y="217">200</text>
+            <text x="64" y="160">400</text>
+            <text x="64" y="103">600</text>
+            <text x="64" y="46">800</text>
+          </g>
+          <g stroke="currentColor" opacity=".1">
+            <line x1="72" y1="213" x2="836" y2="213"/>
+            <line x1="72" y1="156" x2="836" y2="156"/>
+            <line x1="72" y1="99" x2="836" y2="99"/>
+            <line x1="72" y1="42" x2="836" y2="42"/>
+          </g>
+          <g font-size="11" opacity=".65" text-anchor="middle">
+            <text x="110" y="292">Mk1 z1</text>
+            <text x="300" y="292">Mk2 z2</text>
+            <text x="490" y="292">Mk3 z3</text>
+            <text x="680" y="292">Mk4 z4</text>
+            <text x="836" y="292">Mk5 z5</text>
+          </g>
+          <text x="20" y="160" font-size="10" font-weight="700" letter-spacing="1" opacity=".55" transform="rotate(-90 20 160)" text-anchor="middle">UNITS / 1000 TICKS</text>
+
+          <!-- assembler demand: flat 333.3 -> y = 270 - 333.3*0.285 = 175 -->
+          <line x1="110" y1="175" x2="836" y2="175" stroke="#166E75" stroke-width="2.5" stroke-dasharray="7 4"/>
+          <text x="126" y="167" font-size="12" font-weight="700" fill="#166E75">Lathe demand — 333 Core Fragments / 1000t, flat forever</text>
+
+          <!-- extractor supply: 50, 180, 350, 560, 810 units/1000t -->
+          <polyline points="110,256 300,219 490,170 680,110 836,39" fill="none" stroke="#9E6222" stroke-width="2.8"/>
+          <g fill="#9E6222">
+            <circle cx="110" cy="256" r="4"/><circle cx="300" cy="219" r="4"/>
+            <circle cx="490" cy="170" r="4"/><circle cx="680" cy="110" r="4"/><circle cx="836" cy="39" r="4"/>
+          </g>
+          <g font-size="10.5" font-weight="600" fill="#9E6222" text-anchor="middle">
+            <text x="110" y="248">50</text>
+            <text x="300" y="211">180</text>
+            <text x="490" y="162">350</text>
+            <text x="680" y="102">560</text>
+            <text x="820" y="31">810</text>
+          </g>
+          <text x="150" y="70" font-size="12" font-weight="700" fill="#9E6222">Mining Node supply</text>
+
+          <!-- annotations -->
+          <rect x="118" y="180" width="352" height="42" rx="4" fill="#B5333F14" stroke="#B5333F" stroke-width="1" stroke-dasharray="4 3"/>
+          <text x="294" y="197" font-size="11" font-weight="700" text-anchor="middle" fill="#B5333F">STARVED — needs 6.7 nodes, adjacency allows 4</text>
+          <text x="294" y="212" font-size="10" text-anchor="middle" fill="#B5333F" opacity=".85">a Lathe ringed by four Mk1 nodes runs at 60% duty</text>
+
+          <rect x="560" y="122" width="270" height="42" rx="4" fill="#96660F14" stroke="#96660F" stroke-width="1" stroke-dasharray="4 3"/>
+          <text x="695" y="139" font-size="11" font-weight="700" text-anchor="middle" fill="#96660F">CLOGGED — one node overfeeds two Lathes</text>
+          <text x="695" y="154" font-size="10" text-anchor="middle" fill="#96660F" opacity=".85">20-unit buffer fills, machine halts</text>
+
+          <line x1="486" y1="52" x2="486" y2="268" stroke="currentColor" stroke-width="1" stroke-dasharray="3 4" opacity=".4"/>
+          <text x="486" y="46" font-size="10.5" font-weight="700" text-anchor="middle" opacity=".65">the ratio is right here</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption>
+      Supply from <code>systems::node_payout</code> × <code>systems::mining_success_chance</code>;
+      demand from the Lathe's 12-tick cycle against Blank Substrate's 4-Core-Fragment recipe.
+      Tier is capped at the zone (<code>Game::upgrade_ceiling</code>), so the two axes move
+      together and cannot be separated by the player.
+    </figcaption>
+  </figure>
+</div>
+
+<section>
+  <h3>Every feeder ratio in the game</h3>
+</section>
+
+<div class="bleed">
+  <div class="scroller">
+    <table>
+      <thead>
+        <tr>
+          <th>Assembler</th><th>Cycle</th><th>Recipe</th>
+          <th class="num">Demand /1000t</th><th class="num">Feeders @Mk1&nbsp;z1</th>
+          <th class="num">Duty on 4</th><th class="num">Feeders @Mk5&nbsp;z5</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="name">Compiler<span class="id">compiler</span></td><td>8t</td><td>3 Core Fragment</td><td class="num">375</td><td class="num" style="color:var(--crit);font-weight:700">7.50</td><td class="num" style="color:var(--crit)">53%</td><td class="num">0.46</td></tr>
+        <tr><td class="name">Lathe<span class="id">lathe</span></td><td>12t</td><td>4 Core Fragment</td><td class="num">333</td><td class="num" style="color:var(--crit);font-weight:700">6.67</td><td class="num" style="color:var(--crit)">60%</td><td class="num">0.41</td></tr>
+        <tr><td class="name">Refinery<span class="id">refinery</span></td><td>12t</td><td>4 Core Fragment</td><td class="num">333</td><td class="num" style="color:var(--crit);font-weight:700">6.67</td><td class="num" style="color:var(--crit)">60%</td><td class="num">0.41</td></tr>
+        <tr><td class="name">Annealing Node<span class="id">annealing_node</span></td><td>12t</td><td>4 Core Fragment</td><td class="num">333</td><td class="num" style="color:var(--crit);font-weight:700">6.67</td><td class="num" style="color:var(--crit)">60%</td><td class="num">0.41</td></tr>
+        <tr><td class="name">Transcriber<span class="id">transcriber</span></td><td>12t</td><td>4 Raw Trace</td><td class="num">333</td><td class="num" style="color:var(--crit);font-weight:700">6.67</td><td class="num" style="color:var(--crit)">60%</td><td class="num">0.41</td></tr>
+        <tr><td class="name">Winding Node<span class="id">winding_node</span></td><td>12t</td><td>3 Power Cell</td><td class="num">250</td><td class="num" style="color:var(--ok);font-weight:700">1.50</td><td class="num" style="color:var(--ok)">100%</td><td class="num">0.30</td></tr>
+        <tr><td class="name">Disk Press<span class="id">disk_press</span></td><td>20t</td><td>2 Blank Substrate</td><td class="num">100</td><td class="num">1.20 Lathes</td><td class="num" style="color:var(--ok)">100%</td><td class="num">1.20</td></tr>
+        <tr><td class="name">Assembly Bay<span class="id">assembly_bay</span></td><td>20t</td><td>3 Charge Coil</td><td class="num">150</td><td class="num" style="color:var(--warn)">1.80 Windings</td><td class="num" style="color:var(--ok)">100%</td><td class="num">1.80</td></tr>
+        <tr><td class="name">Refactor Bench<span class="id">refactor_bench</span></td><td>20t</td><td>3 Annealed Core</td><td class="num">150</td><td class="num" style="color:var(--warn)">1.80 Annealings</td><td class="num" style="color:var(--ok)">100%</td><td class="num">1.80</td></tr>
+        <tr><td class="name">Armory<span class="id">armory</span></td><td>30t</td><td>3 Bytecode Block</td><td class="num">100</td><td class="num">1.20 Refineries</td><td class="num" style="color:var(--ok)">100%</td><td class="num">1.20</td></tr>
+        <tr><td class="name">Fabricator<span class="id">fabricator</span></td><td>30t</td><td>5 Logic Wafer</td><td class="num">167</td><td class="num" style="color:var(--warn)">2.00 Transcribers</td><td class="num" style="color:var(--ok)">100%</td><td class="num">2.00</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note" style="margin-top:.7rem;max-width:82ch">
+    "Feeders" counts the extractors needed to hold the assembler at 100% duty. Second-stage rows count
+    upstream assemblers instead, and those ratios are stable because both sides are flat. Only the
+    first-stage rows drift — and every one of them except the Winding Node is unbuildable at Mk1,
+    because an assembler pulls from <strong>orthogonal neighbours only</strong>
+    (<code>base::collect::ORTHOGONAL</code>) and one of those four sides is usually the downstream machine.
+  </p>
+</div>
+
+<!-- ═══════════════════════ STRUCTURES ═══════════════════════ -->
+<section id="structures">
+  <p class="eyebrow">Catalogue</p>
+  <h2>All thirty structures</h2>
+  <p>
+    Grouped as <code>StructureDef::category</code> derives them. Costs are literal
+    <code>build_cost</code> entries; <code>CF</code> is Core Fragment, <code>CG</code> is Cache Grain.
+    Power <em>draw</em> is only ever summed for structures where <code>runs_a_job()</code> is true.
+  </p>
+</section>
+
+<div class="bleed">
+  <div class="scroller">
+    <table>
+      <thead>
+        <tr><th>Structure</th><th>Build cost</th><th>What it does</th><th class="num">Buffer</th><th class="num">Grid</th><th>Upgrade</th><th>Research gate</th></tr>
+      </thead>
+      <tbody>
+        <tr class="band"><td colspan="7">Home</td></tr>
+        <tr><td class="name">Home<span class="id">home</span></td><td><b style="color:var(--ok)">free</b></td><td>Anchors the base; raid-immune</td><td class="num">20</td><td class="num" style="color:var(--ok)">+4</td><td>—</td><td><span class="tag t-none">open</span></td></tr>
+
+        <tr class="band"><td colspan="7">Extractors — produce from nothing, one posted program each</td></tr>
+        <tr><td class="name">Mining Node<span class="id">mining_node</span></td><td>12 CF</td><td>Core Fragment · 10t · 50%</td><td class="num">20</td><td class="num">−1</td><td>Mk5 · (10 CF + 1 CG)×N</td><td><span class="tag t-none">open</span></td></tr>
+        <tr><td class="name">Research Node<span class="id">research_node</span></td><td>10 CF</td><td>Research Data · 14t · 50% · <b>flat 1</b></td><td class="num">20</td><td class="num">−1</td><td>Mk5 · (10 CF + 1 CG)×N</td><td><span class="tag t-none">open</span></td></tr>
+        <tr><td class="name">Power Conduit<span class="id">power_conduit</span></td><td>14 CF</td><td>Power Cell · 6t · <b>always yields</b></td><td class="num">20</td><td class="num">−1</td><td><span style="color:var(--warn)">none</span></td><td>power_grid · 10 RD</td></tr>
+        <tr><td class="name">Log Scraper<span class="id">log_scraper</span></td><td>14 CF</td><td>Raw Trace · 10t · 50%</td><td class="num">20</td><td class="num">−1</td><td>Mk5 · (10 CF + 1 CG)×N</td><td>routine_fabrication · 26 RD</td></tr>
+        <tr><td class="name">Cache Tap<span class="id">cache_tap</span></td><td>20 CF + 2 Blank&nbsp;Substrate</td><td>Cache Grain · 14t · 50%</td><td class="num">20</td><td class="num">−2</td><td>Mk5 · (12 CF + 1 CG)×N</td><td>cache_coherence · 40 RD · z2</td></tr>
+
+        <tr class="band"><td colspan="7">Assemblers — consume adjacent output, one posted program each</td></tr>
+        <tr><td class="name">Compiler<span class="id">compiler</span></td><td>16 CF</td><td>ICE Breaker ← 3 CF · 8t · extracts routines</td><td class="num">20</td><td class="num">−3</td><td>Mk5 · quality only</td><td>automation · 8 RD</td></tr>
+        <tr><td class="name">Lathe<span class="id">lathe</span></td><td>18 CF</td><td>Blank Substrate ← 4 CF · 12t</td><td class="num">20</td><td class="num">−2</td><td>—</td><td>routine_fabrication · 26 RD</td></tr>
+        <tr><td class="name">Refinery<span class="id">refinery</span></td><td>18 CF</td><td>Bytecode Block ← 4 CF · 12t</td><td class="num">20</td><td class="num">−2</td><td>—</td><td><span class="tag t-none">open</span></td></tr>
+        <tr><td class="name">Annealing Node<span class="id">annealing_node</span></td><td>16 CF</td><td>Annealed Core ← 4 CF · 12t</td><td class="num">20</td><td class="num">−2</td><td>—</td><td>program_refactoring · 75 RD · z2</td></tr>
+        <tr><td class="name">Transcriber<span class="id">transcriber</span></td><td>18 CF</td><td>Logic Wafer ← 4 Raw Trace · 12t</td><td class="num">20</td><td class="num">−2</td><td>—</td><td>routine_fabrication · 26 RD</td></tr>
+        <tr><td class="name">Winding Node<span class="id">winding_node</span></td><td>18 CF</td><td>Charge Coil ← 3 Power Cell · 12t</td><td class="num">20</td><td class="num">−2</td><td>—</td><td><span class="tag t-none">open</span></td></tr>
+        <tr><td class="name">Disk Press<span class="id">disk_press</span></td><td>20 CF + 4 Blank&nbsp;Substrate</td><td>Routine Disk ← 2 Blank Substrate · 20t</td><td class="num">10</td><td class="num">−2</td><td>—</td><td>routine_fabrication · 26 RD</td></tr>
+        <tr><td class="name">Assembly Bay<span class="id">assembly_bay</span></td><td>20 CF + 4 Charge&nbsp;Coil</td><td>Patch Routine ← 3 Charge Coil · 20t</td><td class="num">10</td><td class="num">−3</td><td>—</td><td><span class="tag t-none">open</span></td></tr>
+        <tr><td class="name">Refactor Bench<span class="id">refactor_bench</span></td><td>22 CF + 4 Annealed&nbsp;Core</td><td>Recompile Kernel ← 3 Annealed Core · 20t</td><td class="num">10</td><td class="num">−3</td><td>—</td><td>program_refactoring · 75 RD · z2</td></tr>
+        <tr><td class="name">Armory<span class="id">armory</span></td><td>18 CF</td><td>Hardened Shell ← 3 Bytecode Block · 30t</td><td class="num">15</td><td class="num">−3</td><td>Mk5 · quality only</td><td>armor_bench · 24 RD</td></tr>
+        <tr><td class="name">Fabricator<span class="id">fabricator</span></td><td>18 CF</td><td>Trace Sniffer ← 5 Logic Wafer · 30t</td><td class="num">15</td><td class="num">−3</td><td>Mk5 · quality only</td><td>weapon_bench · 24 RD</td></tr>
+
+        <tr class="band"><td colspan="7">Utility — no worker, no input</td></tr>
+        <tr><td class="name">Contract Broker<span class="id">contract_broker</span></td><td>5 CF · <b>first free</b></td><td>Issues contracts, three at a time</td><td class="num">20</td><td class="num">—</td><td>—</td><td><span class="tag t-none">open</span></td></tr>
+        <tr><td class="name">Data Cache<span class="id">data_cache</span></td><td>10 CF</td><td><b>+5 roster slots</b> · <span style="color:var(--crit)">uncapped</span></td><td class="num">20</td><td class="num">—</td><td>—</td><td><span class="tag t-none">open</span></td></tr>
+        <tr><td class="name">Depot<span class="id">depot</span></td><td>12 CF</td><td>Stores 200 · unclogs machines</td><td class="num">200</td><td class="num">—</td><td>—</td><td><span class="tag t-none">open</span></td></tr>
+        <tr><td class="name">Recharger Node<span class="id">recharger_node</span></td><td>10 CF</td><td>Player Power 1.0/t r10 · <span style="color:var(--crit)">uncapped</span></td><td class="num">20</td><td class="num" style="color:var(--ok)">+4</td><td>—</td><td><span class="tag t-none">open</span></td></tr>
+        <tr><td class="name">Line Driver<span class="id">line_driver</span></td><td>30 CF + 6 CG</td><td>Grid only · <code>max_deployed: 3</code></td><td class="num">20</td><td class="num" style="color:var(--ok)">+6</td><td>—</td><td>cache_coherence · 40 RD · z2</td></tr>
+        <tr><td class="name">Repair Bay<span class="id">repair_bay</span></td><td>16 CF</td><td>Downed program +1 Integrity/t, r0</td><td class="num">20</td><td class="num" style="color:var(--warn)">(−2 inert)</td><td>—</td><td><span class="tag t-none">open</span></td></tr>
+        <tr><td class="name">Log Analyzer Bay<span class="id">defrag_bay</span></td><td>12 CF</td><td>Services <code>coherence</code> 0.6/t, r0</td><td class="num">20</td><td class="num" style="color:var(--warn)">(−2 inert)</td><td>—</td><td><span class="tag t-none">open</span></td></tr>
+        <tr><td class="name">Sandbox<span class="id">sandbox</span></td><td>10 CF</td><td>Services <code>slack</code> 0.5/t, r1</td><td class="num">20</td><td class="num" style="color:var(--warn)">(−1 inert)</td><td>—</td><td><span class="tag t-none">open</span></td></tr>
+        <tr><td class="name">Dispatch Relay<span class="id">relay</span></td><td>22 CF + 3 Charge&nbsp;Coil</td><td>Sends idle staff on off-screen sorties</td><td class="num">20</td><td class="num">—</td><td>—</td><td>dispatch · 45 RD · z2</td></tr>
+        <tr><td class="name">Zone Portal<span class="id">portal</span></td><td><b style="color:var(--portal)">10 Portal Fragment</b> ×&nbsp;zone&nbsp;ramp</td><td>Breaches to the next sector</td><td class="num">20</td><td class="num">—</td><td>—</td><td><span class="tag t-crit">open</span></td></tr>
+
+        <tr class="band"><td colspan="7">Trade &amp; defence</td></tr>
+        <tr><td class="name">iso Market<span class="id">market</span></td><td>16 CF</td><td>Sells at <code>value × 1</code>; buys ICE Breaker 5&nbsp;Cr, Power Cell 3&nbsp;Cr, programs at power÷10</td><td class="num">20</td><td class="num">—</td><td>—</td><td>commerce · 14 RD</td></tr>
+        <tr><td class="name">Shield<span class="id">shield</span></td><td>16 CF</td><td>−2 raid damage base-wide · stacks</td><td class="num">20</td><td class="num">—</td><td>—</td><td>fortification · 18 RD</td></tr>
+        <tr><td class="name">Patch Node<span class="id">patch_node</span></td><td>18 CF + 4 Power&nbsp;Cell</td><td>+1 Durability per tier / 20t, base-wide</td><td class="num">20</td><td class="num">—</td><td>Mk5 · (12 CF + 1 CG)×N</td><td>fortification · 18 RD</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note" style="margin-top:.7rem;max-width:82ch">
+    <strong>Grid totals.</strong> One of every machine draws <strong>33</strong>. The Home supplies 4
+    free. Reaching 33 costs eight more Recharger Nodes at <strong>80 CF</strong> — cheaper per unit
+    than the Line Driver, uncapped, and available before any research. Three
+    <span style="color:var(--warn)">(inert)</span> entries author a <code>power_draw</code> that
+    <code>base::power::ledger</code> never sums, because it only counts structures where
+    <code>runs_a_job()</code> is true.
+  </p>
+</div>
+
+<!-- ═══════════════════════ ITEMS ═══════════════════════ -->
+<section id="items">
+  <p class="eyebrow">Catalogue</p>
+  <h2>What the chain is worth</h2>
+  <p>
+    <code>ItemDef::value</code> is literally the Credit price — <code>Game::sell_price</code> is
+    <code>item_value × sell_rate</code>, and the Market's rate is 1. So the margin column below is
+    the base's profit and loss in the only currency that crosses a breach.
+  </p>
+</section>
+
+<div class="bleed">
+  <div class="scroller">
+    <table>
+      <thead>
+        <tr><th>Item</th><th>Made at</th><th>Recipe</th><th class="num">In</th><th class="num">Out</th><th class="num">Margin</th><th>Traced to raw</th><th>What consumes it</th></tr>
+      </thead>
+      <tbody>
+        <tr class="band"><td colspan="8">Raw — no recipe</td></tr>
+        <tr><td class="name">Core Fragment<span class="id">core_fragment</span></td><td>Mining Node · rock 25%/swing · 7 of 17 species drop 2–4 · Stack</td><td>—</td><td class="num">—</td><td class="num">1</td><td class="num">—</td><td>—</td><td>every build cost, most recipes</td></tr>
+        <tr><td class="name">Raw Trace<span class="id">raw_trace</span></td><td>Log Scraper <b>only</b></td><td>—</td><td class="num">—</td><td class="num">1</td><td class="num">—</td><td>—</td><td>Logic Wafer, nothing else</td></tr>
+        <tr><td class="name">Cache Grain<span class="id">cache_grain</span></td><td>Cache Tap <b>only</b></td><td>—</td><td class="num">—</td><td class="num">1</td><td class="num">—</td><td>—</td><td>all upgrades · 6 gated recipes · survives a breach</td></tr>
+        <tr><td class="name">Research Data<span class="id">research_data</span></td><td>Research Node <b>only</b> · banked</td><td>—</td><td class="num">—</td><td class="num">1</td><td class="num">—</td><td>—</td><td>the 25-node research tree</td></tr>
+        <tr><td class="name">Portal Fragment<span class="id">portal_fragment</span></td><td>Stack guardian <b>only</b> · 4–8</td><td>—</td><td class="num">—</td><td class="num">5</td><td class="num">—</td><td>—</td><td>Zone Portal · 9 premium recipes · 6 gated recipes</td></tr>
+
+        <tr class="band"><td colspan="8">Intermediates — every one loses value or breaks even</td></tr>
+        <tr><td class="name">Power Cell<span class="id">power_cell</span></td><td>Power Conduit · <b>or no bench</b></td><td>2 Core Fragment</td><td class="num">2</td><td class="num">1</td><td class="num" style="color:var(--crit)">−1</td><td>2 CF</td><td>Charge Coil · restores 25 Power · Patch Node</td></tr>
+        <tr><td class="name">Blank Substrate<span class="id">blank_substrate</span></td><td>Lathe</td><td>4 Core Fragment</td><td class="num">4</td><td class="num">3</td><td class="num" style="color:var(--crit)">−1</td><td>4 CF</td><td>Routine Disk · Cache Tap build</td></tr>
+        <tr><td class="name">Bytecode Block<span class="id">bytecode_block</span></td><td>Refinery</td><td>4 Core Fragment</td><td class="num">4</td><td class="num">4</td><td class="num">0</td><td>4 CF</td><td>Hardened Shell · 4 premium recipes</td></tr>
+        <tr><td class="name">Annealed Core<span class="id">annealed_core</span></td><td>Annealing Node</td><td>4 Core Fragment</td><td class="num">4</td><td class="num">3</td><td class="num" style="color:var(--crit)">−1</td><td>4 CF</td><td>Recompile Kernel · 3 upgrade chips</td></tr>
+        <tr><td class="name">Charge Coil<span class="id">charge_coil</span></td><td>Winding Node</td><td>3 Power Cell</td><td class="num">3</td><td class="num">3</td><td class="num">0</td><td>6 CF</td><td>Patch Routine · Relay · 5 premium recipes</td></tr>
+        <tr><td class="name">Logic Wafer<span class="id">logic_wafer</span></td><td>Transcriber</td><td>4 Raw Trace</td><td class="num">4</td><td class="num">3</td><td class="num" style="color:var(--crit)">−1</td><td>4 Raw Trace</td><td>Trace Sniffer · 4 premium recipes</td></tr>
+        <tr><td class="name">ICE Breaker<span class="id">ice_breaker</span></td><td>Compiler · <b>or no bench</b></td><td>3 Core Fragment</td><td class="num">3</td><td class="num">1</td><td class="num" style="color:var(--crit)">−2</td><td>3 CF</td><td>one decompile attempt</td></tr>
+
+        <tr class="band"><td colspan="8">Terminal products</td></tr>
+        <tr><td class="name">Routine Disk<span class="id">routine_disk</span></td><td>Disk Press</td><td>2 Blank Substrate</td><td class="num">6</td><td class="num">5</td><td class="num" style="color:var(--crit)">−1</td><td>8 CF</td><td>one routine install, burned</td></tr>
+        <tr><td class="name">Patch Routine<span class="id">patch_routine</span></td><td>Assembly Bay</td><td>3 Charge Coil</td><td class="num">9</td><td class="num">7</td><td class="num" style="color:var(--crit)">−2</td><td>18 CF</td><td>pre-battle Mitigation 10 / 120t</td></tr>
+        <tr><td class="name">Recompile Kernel<span class="id">recompile_kernel</span></td><td>Refactor Bench</td><td>3 Annealed Core</td><td class="num">9</td><td class="num">8</td><td class="num" style="color:var(--crit)">−1</td><td>12 CF</td><td>doubles a program's stats, per zone behind</td></tr>
+        <tr><td class="name">Bounds Check / Buffer Extension / Inline Cache</td><td>Refactor Bench</td><td>2 Annealed Core each</td><td class="num">6</td><td class="num">5</td><td class="num" style="color:var(--crit)">−1</td><td>8 CF</td><td>permanent +5% Mit / HP / ATK</td></tr>
+        <tr><td class="name">Hardened Shell<span class="id">hardened_shell</span></td><td>Armory</td><td>3 Bytecode Block</td><td class="num">12</td><td class="num">12</td><td class="num">0</td><td>12 CF</td><td>armor, mitigation 9</td></tr>
+        <tr><td class="name">Trace Sniffer<span class="id">trace_sniffer</span></td><td>Fabricator</td><td>5 Logic Wafer</td><td class="num">15</td><td class="num">13</td><td class="num" style="color:var(--crit)">−2</td><td>20 Raw Trace</td><td>module, decompiler 3</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note" style="margin-top:.7rem;max-width:82ch">
+    The negative margins are deliberate — a craftable worth more than its ingredients is an infinite
+    Credit loop, and <code>tests/assets.rs</code> enforces the ceiling. The consequence is that
+    <strong>the base can never be an income source</strong>. Its only reason to exist is the
+    <em>use</em> of what it makes, so if a base is meant to be mandatory the use has to be, not the margin.
+  </p>
+</div>
+
+<!-- ═══════════════════════ RESEARCH ═══════════════════════ -->
+<section id="research">
+  <p class="eyebrow">Hierarchy</p>
+  <h2>The one thing the base actually gates</h2>
+  <p>
+    Research Data has exactly one source in the game. Every structure below the first six, every
+    field routine, and six gear recipes sit behind it — so the Research Node is the only genuine
+    base dependency in the build. It is also the slowest thing in the game: Research Data is
+    <code>banked: true</code>, which routes it past <code>node_payout</code> to a flat 1 per cycle,
+    so upgrading a Research Node from Mk1 to Mk5 buys 1.8× and nothing more.
+  </p>
+  <dl class="kv">
+    <dt>Whole tree</dt><dd><b>1,485 RD</b> across 25 nodes</dd>
+    <dt>On one Mk1 node</dt><dd>≈ 41,600 ticks (0.036 RD/tick)</dd>
+    <dt>On one Mk5 node in zone 5</dt><dd>≈ 23,100 ticks (0.064 RD/tick)</dd>
+    <dt>Cheapest route home</dt><dd><b>70 RD</b> — automation 8 → routine_fabrication 26 → self_exec 14 → symbolic_links 22</dd>
+  </dl>
+
+  <div class="tree">
+    <ul>
+      <li>
+        <span class="rname">Automation</span> <span class="rcost">8</span>
+        <span class="runlock">→ Compiler</span>
+        <ul>
+          <li><span class="rname">Weapon Fabrication</span> <span class="rcost">24</span> <span class="runlock">→ Fabricator</span>
+            <ul>
+              <li><span class="rname">Overclock Cores</span> <span class="rcost">45</span> <span class="rzone">z2</span>
+                <ul><li><span class="rname">Monofilament Edge</span> <span class="rcost">110</span> <span class="rzone">z3</span></li></ul>
+              </li>
+              <li><span class="rname">Neural Interfacing</span> <span class="rcost">55</span> <span class="rzone">z2</span>
+                <ul><li><span class="rname">Cortex Hacking</span> <span class="rcost">125</span> <span class="rzone">z3</span></li></ul>
+              </li>
+            </ul>
+          </li>
+          <li><span class="rname">Reactive Armor</span> <span class="rcost">24</span> <span class="runlock">→ Armory</span>
+            <ul>
+              <li><span class="rname">Firewall Plating</span> <span class="rcost">45</span> <span class="rzone">z2</span>
+                <ul><li><span class="rname">Ablative Lattice</span> <span class="rcost">110</span> <span class="rzone">z3</span></li></ul>
+              </li>
+            </ul>
+          </li>
+          <li><span class="rname">Routine Fabrication</span> <span class="rcost">26</span> <span class="runlock">→ Log Scraper, Lathe, Transcriber, Disk Press</span>
+            <ul>
+              <li><span class="rname">Self-Execution</span> <span class="rcost">14</span> <span class="runlock">→ Hyperthread</span>
+                <ul>
+                  <li><span class="rname">Symbolic Links</span> <span class="rcost">22</span> <span class="runlock">→ Symlink — the way home</span></li>
+                  <li><span class="rname">Field Operations</span> <span class="rcost">20</span>
+                    <ul>
+                      <li><span class="rname">Adaptive Plating</span> <span class="rcost">70</span> <span class="rzone">z2</span>
+                        <ul><li><span class="rname">Mesh Plating</span> <span class="rcost">120</span> <span class="rzone">z3</span></li></ul>
+                      </li>
+                      <li><span class="rname">Deep Analysis</span> <span class="rcost">130</span> <span class="rzone">z3</span>
+                        <ul><li><span class="rname">Address Translation</span> <span class="rcost">140</span> <span class="rzone">z3</span></li></ul>
+                      </li>
+                    </ul>
+                  </li>
+                  <li><span class="rname">Runtime Patching</span> <span class="rcost">60</span> <span class="rzone">z2</span>
+                    <ul><li><span class="rname">Kernel Privileges</span> <span class="rcost">135</span> <span class="rzone">z3</span></li></ul>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+          <li><span class="rname">Program Refactoring</span> <span class="rcost">75</span> <span class="rzone">z2</span> <span class="runlock">→ Annealing Node, Refactor Bench</span></li>
+        </ul>
+      </li>
+      <li>
+        <span class="rname">Power Grid</span> <span class="rcost">10</span> <span class="runlock">→ Power Conduit</span>
+        <ul>
+          <li><span class="rname">Fortification</span> <span class="rcost">18</span> <span class="runlock">→ Shield, Patch Node</span></li>
+          <li><span class="rname">Cache Coherence</span> <span class="rcost">40</span> <span class="rzone">z2</span> <span class="runlock">→ Cache Tap, Line Driver</span></li>
+          <li><span class="rname">Dispatch Protocol</span> <span class="rcost">45</span> <span class="rzone">z2</span> <span class="runlock">→ Dispatch Relay</span></li>
+        </ul>
+      </li>
+      <li><span class="rname">Isometric Commerce</span> <span class="rcost">14</span> <span class="runlock">→ iso Market</span></li>
+    </ul>
+  </div>
+  <p class="note" style="margin-top:1rem">
+    Fourteen structures need no research at all — including the Refinery, the Winding Node, the
+    Assembly Bay and, decisively, the <strong>Zone Portal</strong>. A structure named by no research
+    file is unlocked by default (<code>Game::structure_unlocked</code>).
+  </p>
+</section>
+
+<hr class="sep">
+
+<!-- ═══════════════════════ BOTTLENECKS ═══════════════════════ -->
+<section id="bottlenecks">
+  <p class="eyebrow">Analysis</p>
+  <h2>Where it jams, and why nobody notices</h2>
+  <p>
+    Ordered by how much each one costs the stated goal — a base that must work for the run to
+    continue. The first four are why the base is skippable; the rest are why it is unsatisfying
+    when it isn't.
+  </p>
+
+  <div class="findings">
+
+    <div class="f sev-crit">
+      <div class="f-head"><span class="f-id">B1</span><h4>The breach path never touches the base</h4></div>
+      <p>
+        A Home costs nothing (<code>build_cost: []</code>) and lands on the tile you founded from. A
+        Zone Portal costs 10 Portal Fragments, ramped 50% per zone below the current one, and Portal
+        Fragments drop from Stack guardians (4–8) and nowhere else. No research gates either
+        structure. That is the whole of progression, and it consumes zero units of anything eleven
+        assemblers and five extractors produce.
+      </p>
+      <span class="cite"><b>assets/structures/home.ron</b> · <b>assets/structures/portal.ron</b> · <code>lib.rs::zone_portal_cost</code> · <code>tuning::STACK_BOSS_PORTAL_FRAGMENT_DROP = 4..=8</code></span>
+    </div>
+
+    <div class="f sev-crit">
+      <div class="f-head"><span class="f-id">B2</span><h4>Hand-compiling makes every assembler optional</h4></div>
+      <p>
+        <code>Game::craft</code> resolves a bench with <code>has_structure(kind)</code> — <em>does one
+        exist anywhere</em>, not <em>are you standing beside it</em>. It pays from the player's own
+        inventory, needs no posted program, no adjacency, no buffer, no power, and costs one tick.
+        The recipe it charges is the same <code>craftable.cost</code> the machine runs. Every single
+        item the eleven assemblers make is obtainable this way at the identical price.
+      </p>
+      <p>
+        Four of those recipes — Power Cell, ICE Breaker, and the low-tier gear — carry no
+        <code>requires_structure</code> at all, so they need no base whatsoever.
+      </p>
+      <span class="cite"><b>crates/engine/src/game/crafting.rs:127</b> <code>has_structure</code> · <b>:232</b> <code>craft</code> · <code>structures.rs::AssembleDef</code> ("the machine runs that item's own <code>ItemDef::craftable.cost</code>")</span>
+    </div>
+
+    <div class="f sev-crit">
+      <div class="f-head"><span class="f-id">B3</span><h4>No first-stage assembler can be fed at Mk1</h4></div>
+      <p>
+        A Lathe eats 333 Core Fragments per 1,000 ticks. A Mk1 Mining Node in zone 1 produces 50.
+        That is 6.7 nodes for one Lathe — and an assembler pulls from <strong>orthogonal neighbours
+        only</strong>, so four is the physical ceiling and three is realistic once something
+        downstream takes a side. Four Mk1 nodes hold a Lathe at 60% duty; the Compiler at 53%.
+      </p>
+      <p>
+        Each of those five machines also needs its own posted program, against an opening roster of
+        three. So the first chain a player tries to build is short by roughly three feeders and two
+        bodies, and the visible result is a machine that says <code>Starved</code> forever.
+      </p>
+      <span class="cite"><code>systems::node_payout</code> · <code>systems::mining_success_chance</code> · <code>base::collect::ORTHOGONAL</code> · <code>tuning::BASE_PET_CAPACITY = 3</code></span>
+    </div>
+
+    <div class="f sev-crit">
+      <div class="f-head"><span class="f-id">B4</span><h4>Extractors scale 16×; assemblers never scale at all</h4></div>
+      <p>
+        <code>node_payout(tier, zone) = tier + (zone − 1)</code> and success runs 0.5 → 0.9, so a
+        Mining Node goes from 50 to 810 units per 1,000 ticks. The assembler completion branch is
+        <code>*stock.output.entry(product) += 1</code> and the comment above it confirms
+        <code>upgrade_structure</code> never touches <code>ticks_per_unit</code>. Output is one unit
+        per cycle in zone 1 and one unit per cycle in zone 5.
+      </p>
+      <p>
+        The Armory, Fabricator and Compiler each carry a five-tier upgrade path costing
+        <code>(12 CF + 1 CG) × N</code> — 180 CF and 15 CG to reach Mk5 — and it buys
+        <strong>five quality points per tier</strong> on hand-compiled gear and no throughput at all.
+      </p>
+      <span class="cite"><b>crates/engine/src/systems.rs:1270</b> (completion branch) · <code>craft_quality_floor</code> · <code>tuning::QUALITY_BENCH_PER_TIER = 5</code></span>
+    </div>
+
+    <div class="f sev-warn">
+      <div class="f-head"><span class="f-id">B5</span><h4>The Mining Node is the worst source of Core Fragments</h4></div>
+      <p>
+        Three supplies compete. A Mk1 node posted with a program yields 0.05/tick. Cutting base rock
+        yields 1 fragment at 25% per 12-tick swing — 0.021/tick, with no build cost, no power, no
+        worker and no research. And seven of seventeen species carry
+        <code>work_resource: Some("core_fragment")</code>, dropping 2–4 per kill: a single fight is
+        worth 40–80 ticks of a Mk1 node.
+      </p>
+      <p>
+        Since fighting is the thing the design already wants, the node loses the comparison it was
+        built to win.
+      </p>
+      <span class="cite"><code>tuning::BASE_MINE_FRAGMENT_CHANCE = 0.25</code> · <code>BASE_DIG_TICKS_PER_SWING = 12</code> · <code>WORK_RESOURCE_DROP = 2..=4</code> · 7 of 17 <b>assets/species/*.ron</b></span>
+    </div>
+
+    <div class="f sev-warn">
+      <div class="f-head"><span class="f-id">B6</span><h4>Power is not a constraint, and the cap is on the wrong building</h4></div>
+      <p>
+        The Recharger Node costs 10 CF for +4 supply — 2.5 CF per unit, ungated, and
+        <code>max_deployed: 0</code> (unlimited). The Line Driver costs 30 CF + 6 Cache Grain for +6
+        — 5 CF and 1 CG per unit, behind 40 RD and zone 2, and capped at three. The cheap uncapped
+        one strictly dominates the expensive capped one.
+      </p>
+      <p>
+        A base running one of every machine draws 33. Nine Rechargers is 90 CF, less than the build
+        cost of three assemblers. The whole ledger is decoration.
+      </p>
+      <span class="cite"><b>assets/structures/recharger_node.ron</b> · <b>line_driver.ron</b> · <code>game/base/power.rs::ledger</code> · <code>StructureDef::max_deployed</code></span>
+    </div>
+
+    <div class="f sev-warn">
+      <div class="f-head"><span class="f-id">B7</span><h4>Roster slots are 10 Core Fragments for five</h4></div>
+      <p>
+        <code>BASE_PET_CAPACITY</code>'s own doc argues that a cap of 3 is what makes posting a
+        program cost something — "every program at a machine is one absent from the party". The Data
+        Cache sells five slots for 10 CF with no <code>max_deployed</code>, so 30 CF buys eighteen
+        slots and the tension the comment describes never materialises. What still binds is taming
+        throughput, which is a combat cost rather than a base one.
+      </p>
+      <span class="cite"><code>tuning.rs::BASE_PET_CAPACITY = 3</code> (and its "Class base jobs" note) · <b>assets/structures/data_cache.ron</b> <code>pet_slot_bonus: 5</code></span>
+    </div>
+
+    <div class="f sev-warn">
+      <div class="f-head"><span class="f-id">B8</span><h4>The player has infinite cargo, so the Depot is invisible</h4></div>
+      <p>
+        <code>Inventory</code> is a bare <code>Vec&lt;(ItemId, u32)&gt;</code> with no capacity field,
+        and <code>Game::grant_loot</code> unconditionally returns the full quantity it was given —
+        the "how much actually landed" return value is threaded through every caller and never once
+        used to refuse anything. The Depot exists solely so a posted hauler can empty a clogged
+        machine. Nothing about carrying, hauling, or storing is a decision the player ever makes.
+      </p>
+      <span class="cite"><code>components.rs:450</code> <code>Inventory</code> · <code>game/turn.rs:1118</code> <code>grant_loot</code> · <b>assets/structures/depot.ron</b></span>
+    </div>
+
+    <div class="f sev-warn">
+      <div class="f-head"><span class="f-id">B9</span><h4>The chain's terminal products have thin sinks</h4></div>
+      <p>
+        ICE Breaker has four supplies and the Compiler is the most expensive of them (3 CF by hand,
+        5 Credits at the Market, a 0.30 nest-cache drop). Routine Disks are one-shot. Hardened Shell
+        and Trace Sniffer are mid-tier gear that drops from ordinary kills at 8–10%. Patch Routine is
+        the only thing the base makes that helps in the field, and it costs 18 Core Fragments traced
+        to raw for a 120-tick Mitigation buff.
+      </p>
+      <p>
+        The genuinely strong sinks — Recompile Kernel and the three permanent upgrade chips — all sit
+        behind <code>program_refactoring</code>: 75 RD, zone 2, plus two machines. They arrive after
+        the player has already decided whether the base matters.
+      </p>
+      <span class="cite"><b>assets/items/ice_breaker.ron</b> (<code>cache_drop: 0.3</code>, no <code>requires_structure</code>) · <b>black_market.ron</b> · <b>assets/research/program_refactoring.ron</b></span>
+    </div>
+
+    <div class="f sev-warn">
+      <div class="f-head"><span class="f-id">B10</span><h4>Contracts pay a 25% premium for processing</h4></div>
+      <p>
+        <code>block_order</code> pays 40 Credits for 8 Bytecode Blocks. Those blocks trace to 32 Core
+        Fragments, which sell raw for 32 Credits. So a Refinery, a posted program and 96 machine-ticks
+        are worth <strong>8 Credits</strong> plus 100 XP. <code>fragment_quota</code> pays 35 Credits
+        for 25 raw fragments worth 25 — a 10-Credit premium for hauling.
+      </p>
+      <p>
+        Contracts are the one place in the game where XP is granted for something other than
+        fighting, and they are the cleanest sink the base has. They are priced as if they were a
+        rounding error.
+      </p>
+      <span class="cite"><b>assets/contracts/block_order.ron</b>, <b>fragment_quota.ron</b>, <b>coil_order.ron</b>, <b>substrate_order.ron</b> · <code>Game::sell_price = item_value × sell_rate</code></span>
+    </div>
+
+    <div class="f sev-note">
+      <div class="f-head"><span class="f-id">B11</span><h4>Three amenities author a <code>power_draw</code> nothing reads</h4></div>
+      <p>
+        <code>base::power::ledger</code> sums <code>power_draw</code> only where
+        <code>def.runs_a_job()</code> — that is, only for structures declaring <code>work</code> or
+        <code>assembles</code>. The Repair Bay (2), Log Analyzer Bay (2) and Sandbox (1) declare draw
+        and run no job, so five units of authored cost are silently dropped. Either the field is
+        meaningless on those three, or the ledger is missing them.
+      </p>
+      <span class="cite"><code>game/base/power.rs::ledger</code> · <code>StructureDef::runs_a_job</code> · <b>repair_bay.ron</b>, <b>defrag_bay.ron</b>, <b>sandbox.ron</b></span>
+    </div>
+
+    <div class="f sev-note">
+      <div class="f-head"><span class="f-id">B12</span><h4><code>flat_payout</code> is documented, supported, and used by nothing</h4></div>
+      <p>
+        The field exists on <code>WorkDef</code>, is documented at length in
+        <code>assets/structures/README.md</code>, has a test named after it, and is authored by
+        <strong>zero of the thirty shipped structure files</strong>. Its own doc comment describes
+        the exact case the Compiler is: "a node producing something consumed <em>one at a time</em> —
+        a taming catalyst, a key — instead outruns its own sink within a zone or two." ICE Breaker is
+        the taming catalyst, and it is on the scaling curve.
+      </p>
+      <span class="cite"><code>structures.rs::WorkDef::flat_payout</code> · <code>rg flat_payout assets/</code> → 3 hits, all in READMEs</span>
+    </div>
+
+    <div class="f sev-note">
+      <div class="f-head"><span class="f-id">B13</span><h4><code>access_shard</code> is dead content</h4></div>
+      <p>
+        No <code>craftable</code>, no <code>droppable</code>, no <code>cache_drop</code>, no node
+        produces it. Its only in-game source is the Saboteur's starting kit (2 units); its only sink
+        is selling it for 12 Credits. Its own description says so: nothing in a frame asks for one
+        any more.
+      </p>
+      <span class="cite"><b>assets/items/access_shard.ron</b> · <b>assets/classes/saboteur.ron</b> — the only two files that name it outside docs</span>
+    </div>
+
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ═══════════════════════ LEVERS ═══════════════════════ -->
+<section id="levers">
+  <p class="eyebrow">Recommendations</p>
+  <h2>Ten levers, cheapest first</h2>
+  <p>
+    Each is scoped to the smallest change that moves the number. <span class="pill data">data</span>
+    means an edit inside <code>assets/</code> and nothing else — no seam, no save bump, no schema
+    change. <span class="pill code">code</span> means engine work.
+  </p>
+
+  <div class="levers">
+
+    <div class="lever">
+      <div class="lever-head"><span class="f-id">L1</span><h4>Put base output in the Zone Portal's build cost</h4><span class="pill data">data</span></div>
+      <p>
+        This is the single highest-leverage edit in the repo, and it is one line.
+        <code>portal.ron</code> already sets <code>zone_portal: true</code>, which makes every entry
+        in <code>build_cost</code> a per-zone rate ramped by
+        <code>ZONE_PORTAL_COST_GROWTH_PERCENT</code>. Add chain products to it:
+      </p>
+      <p style="font-family:var(--mono);font-size:.8rem;background:var(--surface-2);border:1px solid var(--rule-soft);border-radius:5px;padding:.7rem .85rem;line-height:1.55;overflow-x:auto">
+        build_cost: [("portal_fragment", 10), ("cache_grain", 6), ("recompile_kernel", 2)],
+      </p>
+      <p>
+        Cache Grain has one source (the Cache Tap, 40 RD, zone 2) and it is the only material that
+        survives a breach — so it is the natural currency of "you had a base last sector". Recompile
+        Kernel forces the Annealing → Refactor Bench chain to have actually run. At zone 4 the ramp
+        makes that 10 / 15 / 5, which is a real production target rather than a toll.
+      </p>
+      <p><strong>Answers B1 directly.</strong> After this, no breach happens without a working base.</p>
+      <span class="cite">Verify against <code>tests/research.rs:820</code>, which asserts nothing unlocks the portal — it does not constrain the cost.</span>
+    </div>
+
+    <div class="lever">
+      <div class="lever-head"><span class="f-id">L2</span><h4>Cap the Recharger Node and the Data Cache</h4><span class="pill data">data</span></div>
+      <p>
+        One field each. <code>max_deployed: 2</code> on <code>recharger_node.ron</code> restores the
+        Line Driver's reason to exist and makes the 33-unit whole-base draw a genuine constraint —
+        4 (Home) + 8 (two Rechargers) + 18 (three Line Drivers) = 30, which is <em>just short</em>,
+        so the player has to choose which machines run.
+      </p>
+      <p>
+        <code>max_deployed: 1</code> on <code>data_cache.ron</code> puts the roster at 8 and restores
+        exactly the tension <code>BASE_PET_CAPACITY</code>'s comment claims: every program at a
+        machine is one absent from the party.
+      </p>
+      <p><strong>Answers B6 and B7.</strong> The field already exists and the Line Driver already uses it.</p>
+    </div>
+
+    <div class="lever">
+      <div class="lever-head"><span class="f-id">L3</span><h4>Halve first-stage assembler inputs</h4><span class="pill data">data</span></div>
+      <p>
+        An assembler runs its <em>product's</em> <code>craftable.cost</code>, so this is an edit to
+        four item files, not four structure files. Take Blank Substrate, Bytecode Block and Annealed
+        Core from <code>4 core_fragment</code> to <code>2</code>, and Logic Wafer from
+        <code>4 raw_trace</code> to <code>2</code>. Drop each item's <code>value</code> to 2 to keep
+        the recipe ceiling satisfied.
+      </p>
+      <p>
+        Feeder demand falls from 6.67 to 3.33 — buildable with three adjacent Mk1 nodes at 100% duty,
+        which is exactly what fits on a grid. The Compiler's 3 CF → 2 CF does the same for ICE Breakers.
+      </p>
+      <p><strong>Answers B3.</strong> Alternatively raise <code>MINING_SUCCESS_BASE</code> from 0.40 to 0.55, which is one constant but moves every extractor and is <span class="pill code">code</span>.</p>
+      <span class="cite">Re-run <code>cargo test -p feral-processes-engine balance_sim</code> and the value-ceiling census in <b>tests/assets.rs</b>.</span>
+    </div>
+
+    <div class="lever">
+      <div class="lever-head"><span class="f-id">L4</span><h4>Raise contract rewards 2–3× on chain deliveries</h4><span class="pill data">data</span></div>
+      <p>
+        <code>block_order</code> at 40 Credits should be 90–110; <code>coil_order</code> at 55 should
+        be 130; <code>substrate_order</code> at 70 should be 150. These are the only sink in the game
+        whose payout can be tuned freely — the recipe ceiling does not apply to a contract reward,
+        because a contract is not a craft. It is also the only place XP is legally granted for
+        something other than combat, which the seam notes already call a deliberate amendment.
+      </p>
+      <p>
+        Add repeatable chain-delivery contracts at zones 3–5 for Recompile Kernels and Trace Sniffers;
+        there are none today above <code>annealed_stock</code>.
+      </p>
+      <p><strong>Answers B10 and half of B9.</strong> No code, no test to update beyond the assets census.</p>
+    </div>
+
+    <div class="lever">
+      <div class="lever-head"><span class="f-id">L5</span><h4>Set <code>flat_payout: true</code> on the taming and key nodes</h4><span class="pill data">data</span></div>
+      <p>
+        The field was built for this and is used nowhere. It is not the Compiler's problem today —
+        the Compiler is an assembler and already flat — but if any node is ever added that produces
+        ICE Breakers, Routine Disks or Portal Fragments directly, it needs this. Worth authoring now
+        on at least one shipped structure so the field has a census entry and stops being invisible
+        schema.
+      </p>
+      <p><strong>Answers B12.</strong></p>
+    </div>
+
+    <div class="lever">
+      <div class="lever-head"><span class="f-id">L6</span><h4>Price field rest behind the base</h4><span class="pill data">data</span></div>
+      <p>
+        <code>outlet.ron</code> is 5 Core Fragments and carries no <code>requires_structure</code>, so
+        the item that lets you rest anywhere costs less than a Mining Node and needs no base at all.
+        Move it to <code>cost: [("charge_coil", 1)]</code> with
+        <code>requires_structure: Some("assembly_bay")</code> and the Power chain suddenly has a
+        reason to run every trip out.
+      </p>
+      <p>
+        This is the cleanest way to make the base a place you <em>return to</em> rather than a place
+        you passed through, and it changes no code.
+      </p>
+      <p><strong>Answers the "why come back" half of B9.</strong></p>
+    </div>
+
+    <div class="lever">
+      <div class="lever-head"><span class="f-id">L7</span><h4>Scale assembler output by tier</h4><span class="pill code">code</span></div>
+      <p>
+        One line in <code>assembler_system</code>'s completion branch:
+        <code>+= 1</code> becomes <code>+= tier</code>, with <code>StructureTier</code> added to the
+        query. That gives the Armory, Fabricator and Compiler upgrade paths a throughput meaning —
+        today 180 CF and 15 CG buys twenty quality points — and stops the zone-5 clog by letting the
+        consuming side scale with the producing side.
+      </p>
+      <p>
+        Pair it with <code>upgrade</code> blocks on the six assemblers that have none, so the whole
+        chain has one lever instead of a scaling half and a flat half.
+      </p>
+      <p><strong>Answers B4.</strong> Watch: it also multiplies the value the chain destroys, so re-check the recipe ceiling.</p>
+      <span class="cite"><b>crates/engine/src/systems.rs</b>, the <code>*stock.output.entry(product).or_default() += 1</code> line.</span>
+    </div>
+
+    <div class="lever">
+      <div class="lever-head"><span class="f-id">L8</span><h4>Make <code>requires_structure</code> mean proximity, or add <code>machine_only</code></h4><span class="pill code">code</span></div>
+      <p>
+        Two shapes, and they close B2 from opposite ends.
+      </p>
+      <ul class="body" style="font-size:.94rem">
+        <li>
+          <strong>Proximity.</strong> Change <code>Game::craft</code>'s bench resolution from
+          <code>has_structure(kind)</code> to an adjacency check. Small, but it collides with
+          <code>best_structure_tier</code>, whose doc explicitly argues a bench is "a thing the base
+          owns, not a thing the player walks to" — so this is a seam change and belongs in
+          <code>docs/seams.md</code> first.
+        </li>
+        <li>
+          <strong><code>machine_only: bool</code> on <code>CraftableDef</code>.</strong>
+          <code>#[serde(default)]</code>, set on the five intermediates, and the recipe simply stops
+          appearing in the craft menu. Moddable, additive, no save bump, no seam moved. This is the
+          better shape.
+        </li>
+      </ul>
+      <p><strong>Answers B2</strong>, which is the reason the eleven assemblers currently read as convenience.</p>
+    </div>
+
+    <div class="lever">
+      <div class="lever-head"><span class="f-id">L9</span><h4>Give the player a cargo cap</h4><span class="pill code">code</span></div>
+      <p>
+        The plumbing is already there and unused: <code>Game::grant_loot</code> returns "how much
+        landed", every caller handles a partial, and no caller ever gets one. Add a capacity to
+        <code>Inventory</code>, have <code>grant_loot</code> return less than it was asked for when
+        full, and the Depot becomes the answer to a question the player is actually asked.
+      </p>
+      <p>
+        This is the largest single change on the list and the one most likely to make a base feel
+        load-bearing, because it converts the base from a factory into a home. It needs a save field
+        and a HUD row, so it earns the spec-and-plan pipeline.
+      </p>
+      <p><strong>Answers B8.</strong></p>
+    </div>
+
+    <div class="lever">
+      <div class="lever-head"><span class="f-id">L10</span><h4>Decide what the three inert <code>power_draw</code> values mean</h4><span class="pill code">code</span></div>
+      <p>
+        Either delete <code>power_draw</code> from <code>repair_bay.ron</code>,
+        <code>defrag_bay.ron</code> and <code>sandbox.ron</code> — they are honest zero-draw amenities
+        — or widen <code>ledger</code> to sum draw for any structure that declares it, which adds 5
+        to the whole-base total and makes the amenities compete with the machines. The second reads
+        better with L2, since a capped grid makes "do I power the Sandbox or the Lathe" a real choice.
+      </p>
+      <p><strong>Answers B11.</strong> Whichever way, a census test should pin it.</p>
+    </div>
+
+  </div>
+
+  <h3>If only three ship</h3>
+  <p>
+    <strong>L1, L2 and L8.</strong> L1 makes the base structurally required for progression, L2 makes
+    its constraints real, and L8 makes the machines the only route to what it produces. Together they
+    are two data edits and one <code>#[serde(default)]</code> field — under a day's work — and they
+    change the answer to "do I need a base?" from <em>no</em> to <em>yes, every sector</em>.
+  </p>
+</section>
+
+<hr class="sep">
+
+<!-- ═══════════════════════ FLAGS ═══════════════════════ -->
+<section id="flags">
+  <p class="eyebrow">Housekeeping</p>
+  <h2>Mid-migration and stale references</h2>
+  <p>
+    Checked because another session is retiring <code>use_symlink</code> / <code>teleport_cost</code>
+    concurrently. Current <code>main</code> is clean on the code side; the docs are not.
+  </p>
+  <ul class="body">
+    <li>
+      <strong><code>teleport_cost</code> is gone from all four crates.</strong> Zero hits under
+      <code>crates/</code>. It survives only in <code>docs/seams.md:295</code>, which describes
+      "structures whose def carried a <code>teleport_cost</code>, charged in Power Cells" as history.
+      That reads correctly as past tense; no action needed.
+    </li>
+    <li>
+      <strong><code>use_symlink</code> is now <code>run_symlink</code></strong>
+      (<code>crates/engine/src/game/field.rs:432</code>), matching CLAUDE.md's rename rule that the
+      noun is an <em>invocation</em>. But <strong>eleven doc comments across the engine still cite
+      <code>use_symlink</code> by name</strong> as the precedent for the
+      "every refusal lands before anything is spent" ordering rule — including
+      <code>crafting.rs:563</code>, <code>crafting.rs:740</code>, <code>routines.rs:299</code>,
+      <code>stack.rs:360</code>, <code>stack.rs:511</code>, <code>resources.rs:1301</code> and
+      <code>work_orders.rs:2069</code>. Those are the live ones; the rest are in
+      <code>docs/superpowers/</code>, which is archive. Per the rename-sweep note, grepping the
+      removed word is what catches these.
+    </li>
+    <li>
+      <strong>Nothing in this analysis depends on that migration.</strong> Symlink appears here only
+      as the 70-RD research route home, and that route is unchanged either way.
+    </li>
+  </ul>
+</section>
+
+<!-- ═══════════════════════ METHOD ═══════════════════════ -->
+<section id="method">
+  <p class="eyebrow">Provenance</p>
+  <h2>Where every number came from</h2>
+
+  <dl class="kv">
+    <dt>Structures</dt><dd>All 30 files in <code>assets/structures/</code>, read whole. Schema and field semantics from <code>crates/engine/src/structures.rs</code>.</dd>
+    <dt>Items</dt><dd>All 64 files in <code>assets/items/</code>. Recipes are <code>craftable.cost</code>; prices are <code>value</code> resolved through <code>Game::sell_price</code>.</dd>
+    <dt>Research</dt><dd>All 25 files in <code>assets/research/</code>; costs and prerequisites parsed directly, totals summed.</dd>
+    <dt>Extractor yield</dt><dd><code>systems::node_payout</code> (<code>tier + NODE_PAYOUT_ZONE_BONUS × (zone−1)</code>) × <code>systems::mining_success_chance</code> (<code>MINING_SUCCESS_BASE 0.4 + 0.1 × tier</code>), over <code>WorkDef::ticks_per_unit</code>. Species <code>base_int</code>, <code>base_speed</code>, morale, need strain and the Keen Scavenger perk all shift these and are held at baseline throughout.</dd>
+    <dt>Assembler yield</dt><dd>One unit per <code>AssembleDef::ticks_per_unit</code>, from the completion branch of <code>systems::assembler_system</code>. Input demand is the product's own recipe over the same cycle.</dd>
+    <dt>Adjacency</dt><dd><code>game::base::collect::ORTHOGONAL</code>, the neighbour set <code>assembler_system</code> plans its pull against. Input staging is capped at <code>INPUT_STOCK_BATCHES = 2</code> full batches.</dd>
+    <dt>Grid</dt><dd><code>game::base::power::ledger</code> — <code>power_supply</code> summed over all structures, <code>power_draw</code> summed only where <code>runs_a_job()</code>.</dd>
+    <dt>Constants</dt><dd><code>crates/engine/src/tuning.rs</code>, read at the cited line.</dd>
+  </dl>
+
+  <h3>What this is blind to</h3>
+  <ul class="body">
+    <li>
+      <strong>Play.</strong> Nothing here was observed in a session. Every rate is derived from the
+      constants, not measured. <code>docs/measurements/</code> has no entry for base throughput.
+    </li>
+    <li>
+      <strong>Sorties.</strong> The Dispatch Relay returns loot from off-screen fights that this
+      analysis does not price, and that could be a meaningful Core Fragment supply.
+    </li>
+    <li>
+      <strong>The Stack market.</strong> <code>STACK_MARKET_*</code> constants imply a second trade
+      surface underground with its own prices, not traced here.
+    </li>
+    <li>
+      <strong>Work orders.</strong> <code>settle_orders</code> and <code>schedule_base_labour</code>
+      decide which machines get bodies. Every duty-cycle figure above assumes a program is posted and
+      stays posted; needs, <code>OffShift</code> and <code>Downed</code> all pull bodies off jobs and
+      would lower every number.
+    </li>
+    <li>
+      <strong>Player speed.</strong> All cycle lengths use <code>DEFAULT_BASE_SPEED = 10</code>; the
+      shipped roster spans 6 to 14, which moves a cycle ±20% (<code>WORK_TICKS_PER_SPEED = 0.05</code>).
+    </li>
+  </ul>
+</section>
+
+<footer>
+  Read from <code>main</code> at 2586067a on 2026-09-02. Structure, item, research and contract data
+  are literal file contents; all rates are computed from the cited engine functions and
+  <code>tuning.rs</code> constants. Re-derive before acting on a figure — the seams move.
+</footer>
+
+</div>
+
+</body>
+</html>

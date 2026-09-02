@@ -33,6 +33,27 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.81
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+the three new class variants append, so a save already naming one of the
+five keeps the class it had.
+
+- **Three classes no species can ever be.** A player's class was one of the
+  same five roles a program can have, which meant every class had to be
+  expressible as a spread of affinity multipliers — and so nothing that
+  wasn't combat could be one. The player has their own class list now, and
+  three classes on it that no species could hold: a **Decompiler**, whose
+  every decompile attempt lands better and who trades damage for it; an
+  **Invoker**, who carries two more routine slots than anyone else at every
+  level, the level cap included; and a **Fabricator**, whose posted machines
+  finish every work cycle a fifth sooner. The five original roles are
+  untouched and still shared with the programs that have always had them.
+  Each new class's effect is a named query in the engine rather than a field
+  in its file, on the same seam a perk already uses — so the catalogue in
+  `assets/classes/` stays a catalogue, and deleting it turns the affinity
+  spread and the opening kit off without turning the effect off with them.
+
 ## 0.13.80
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

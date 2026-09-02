@@ -1837,6 +1837,29 @@ pub const HAND_CRAFT_TICK_MULT: u32 = 10;
 /// costs about what an automated one of middling complexity does.
 pub const HAND_CRAFT_DEFAULT_CYCLE: u32 = 10;
 
+/// The Power a hand-compile has to leave standing in the player's reserve,
+/// or the whole batch is refused in `Game::begin_hand_craft` rather than
+/// silently shortened — `MAX_ACTIVE_CONTRACTS` states the no-silent-caps
+/// rule this follows.
+///
+/// Compiling by hand is work, and its ticks burn `HUNGER_DECAY_PER_TICK`
+/// exactly as a tick spent anywhere else does. At `HAND_CRAFT_TICK_MULT`
+/// one Hardened Shell is 300 ticks and 45 points of a hundred-point
+/// reserve, so a third one would flatline a player who started full. **That
+/// drain is the feature and stays**; what is refused is only the batch that
+/// can be seen in advance to end the run.
+///
+/// **A margin rather than exactly zero**, because a floor at `POWER_MIN`
+/// would still pass a batch projected to finish at a fraction of a point:
+/// the very next background tick starves it, which is the state this
+/// refusal exists to prevent, reached one tick later. Ten points is about
+/// sixty-six ticks at the standing drain — a crossing of base space to a
+/// rest, which is free in there and refills the reserve whole. A floor at
+/// `LOW_POWER_ATTACK_THRESHOLD` was the other candidate and is wrong: it
+/// would refuse the *second* Hardened Shell of a full reserve, and that
+/// cost is the point of the change.
+pub const HAND_CRAFT_POWER_FLOOR: f32 = 10.0;
+
 /// Range of Portal Fragments a defeated boss guarantees **underground**,
 /// multiplied by the frame's depth. The one and only source of the
 /// breaching currency: ordinary kills, surface bosses, nests and Stack

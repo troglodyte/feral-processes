@@ -200,23 +200,22 @@ fn shift_and_ctrl_reach_the_max_affordable_compile() {
 fn an_arrow_and_a_typed_batch_are_the_same_quantity() {
     let mut app = stocked_app(703);
     open_compile_of(&mut app, "ice_breaker");
-    app.handle_key(GameKey::Char('1'));
-    app.handle_key(GameKey::Char('2'));
-    assert_eq!(app.craft_quantity(), 12, "digits still type a quantity");
+    // Two digits, but a small number: a hand-compile burns Power a tick and
+    // `tuning::HAND_CRAFT_POWER_FLOOR` refuses a batch past the reserve, so
+    // the thirteen this used to type is now a refusal rather than a batch.
+    app.handle_key(GameKey::Char('0'));
+    app.handle_key(GameKey::Char('5'));
+    assert_eq!(app.craft_quantity(), 5, "digits still type a quantity");
 
     app.handle_key(GameKey::Right);
-    assert_eq!(
-        app.craft_quantity(),
-        13,
-        "and an arrow steps what was typed"
-    );
+    assert_eq!(app.craft_quantity(), 6, "and an arrow steps what was typed");
 
     let before = held(&app, "ice_breaker");
     app.handle_key(GameKey::Enter);
     drain_compile(&mut app);
     assert_eq!(
         held(&app, "ice_breaker"),
-        before + 13,
+        before + 6,
         "Enter compiles the quantity the arrows left"
     );
 }

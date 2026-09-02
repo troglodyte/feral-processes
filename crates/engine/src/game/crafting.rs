@@ -164,21 +164,49 @@ impl Game {
             .unwrap_or_default()
     }
 
-    /// The most whole units of `result` the player can afford to compile
-    /// right now, given `craft_cost` (already Lean-Compiler-adjusted, and
-    /// carrying the careful surcharge when `careful`) and their current
-    /// inventory. 0 if `result` has no recipe or they can't afford even one
-    /// unit yet.
+    /// The most whole units of `result` the player can compile right now:
+    /// what the pack affords at `craft_cost` (already
+    /// Lean-Compiler-adjusted, and carrying the careful surcharge when
+    /// `careful`), and what the reserve can carry at
+    /// `hand_craft_power_cost`, whichever runs out first. 0 if `result` has
+    /// no recipe or neither ceiling reaches one unit.
+    ///
+    /// **Both ceilings, because `begin_hand_craft` refuses on both.** This
+    /// is the careful surcharge's own rule in a second place: a quoted
+    /// maximum the compile turns down reads as `[M]` doing nothing, and the
+    /// pack stopped being the only bound the moment a batch's ticks could
+    /// run the reserve out.
     pub fn max_craftable(&self, result: &ItemId, careful: bool) -> u32 {
         let cost = self.craft_cost(result, careful);
         if cost.is_empty() {
             return 0;
         }
-        let inv = self.world.get::<Inventory>(self.player_entity()).unwrap();
-        cost.iter()
-            .map(|(item, qty)| inv.count(item) / (*qty).max(1))
-            .min()
-            .unwrap_or(0)
+        let player = self.player_entity();
+        let by_pack = {
+            let inv = self.world.get::<Inventory>(player).unwrap();
+            cost.iter()
+                .map(|(item, qty)| inv.count(item) / (*qty).max(1))
+                .min()
+                .unwrap_or(0)
+        };
+        let per_unit = self.hand_craft_power_cost(result, 1);
+        if per_unit <= 0.0 {
+            return by_pack;
+        }
+        let reserve = self
+            .world
+            .get::<PowerReserve>(player)
+            .map(|r| r.get())
+            .unwrap_or(0.0);
+        // Floored off the same product the refusal subtracts, so the two
+        // cannot land either side of a rounding step.
+        let room = reserve - crate::tuning::HAND_CRAFT_POWER_FLOOR;
+        let by_reserve = if room <= 0.0 {
+            0
+        } else {
+            (room / per_unit) as u32
+        };
+        by_pack.min(by_reserve)
     }
 
     /// What the player, standing where they are with the base they have,
@@ -252,6 +280,26 @@ impl Game {
         crate::tuning::HAND_CRAFT_TICK_MULT * cycle
     }
 
+    /// What a batch of `quantity` units of `item` will cost the player in
+    /// Power before it is done.
+    ///
+    /// A hand-compile's ticks are ordinary game ticks, so the drain is
+    /// `systems::power_drain_per_tick` — the very function
+    /// `systems::needs_tick_system` charges the player through, called
+    /// rather than restated, and taking the player's own
+    /// `Perk::LowPowerMode` with it. A second copy of the rate here is how
+    /// the projection and the charge come to disagree.
+    ///
+    /// Deliberately blind to anything that would *add* Power on the way —
+    /// a Recharger's trickle most obviously — so the figure is the worst
+    /// case and the refusal it feeds never lets a batch through that the
+    /// reserve could not have carried on its own.
+    pub(crate) fn hand_craft_power_cost(&self, item: &ItemId, quantity: u32) -> f32 {
+        let multiplier = crate::perks::power_drain_multiplier(self.player_perks());
+        (quantity.saturating_mul(self.hand_craft_ticks(item))) as f32
+            * crate::systems::power_drain_per_tick(multiplier)
+    }
+
     /// Whether a hand-compile is in flight — see `resources::HandCraft`.
     pub fn hand_craft_in_progress(&self) -> bool {
         self.world
@@ -264,6 +312,13 @@ impl Game {
     /// **Every refusal lands here, before a tick or a unit of material is
     /// spent.** `craft` is this call plus the drain, so the headless
     /// compile and the screen refuse identically and in the same order.
+    ///
+    /// The last of them is the Power the batch will burn: its ticks are
+    /// ordinary ticks and drain the reserve like any others, so a long
+    /// enough batch flatlines the player without ever asking. It is refused
+    /// **whole** rather than compiled as far as it fits — see
+    /// `tuning::HAND_CRAFT_POWER_FLOOR` for the floor and the argument for
+    /// it being a margin rather than zero.
     ///
     /// The affordability check is over the whole batch, which is what makes
     /// the quoted refusal name the batch's bill; the *spending* is per unit
@@ -305,6 +360,23 @@ impl Game {
                     ));
                 }
             }
+        }
+        // Last of the six, below the material check: being short of
+        // fragments is the more concrete answer to "why not", and a batch
+        // that fails both is better told about the pile than the reserve.
+        let reserve = self
+            .world
+            .get::<PowerReserve>(player)
+            .map(|r| r.get())
+            .unwrap_or(0.0);
+        if reserve - self.hand_craft_power_cost(result, quantity)
+            < crate::tuning::HAND_CRAFT_POWER_FLOOR
+        {
+            return Err(format!(
+                "Compiling {} {} would run your Power down to nothing. Power down first, or compile fewer.",
+                quantity,
+                self.item_name(result)
+            ));
         }
         let quality_floor = self
             .equipment_of(result)

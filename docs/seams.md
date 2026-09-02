@@ -9242,6 +9242,43 @@ exactly two exits and no save inside it. It is inserted by `begin` and
 removed by `close`, rather than living at both constructors, so a run that
 never compiles by hand carries nothing at all.
 
+**A batch that would run the reserve out is refused whole.** A
+hand-compile's ticks are ordinary game ticks, so `needs_tick_system` charges
+them `HUNGER_DECAY_PER_TICK` like any others. That is the feature — compiling
+by hand is work — but at `HAND_CRAFT_TICK_MULT` one Hardened Shell is 300
+ticks and 45 of a hundred-point reserve, so a third would flatline a player
+who started full, silently, from a screen that says nothing about Power. The
+whole batch is refused rather than compiled as far as it fits, which is
+`MAX_ACTIVE_CONTRACTS`' no-silent-caps rule: a batch of twelve that quietly
+became a batch of six reads as the key having half worked.
+
+The projection is `quantity × hand_craft_ticks × systems::power_drain_per_tick`
+— the very function the system charges through, **called and not restated**,
+so it carries `Perk::LowPowerMode` for free and cannot drift from the charge.
+It is deliberately blind to anything that would add Power on the way, a
+Recharger's trickle most obviously, so the figure is a worst case and the
+refusal never lets through a batch the reserve alone could not carry.
+
+**The floor is `HAND_CRAFT_POWER_FLOOR`, a margin, and not `POWER_MIN`.** At
+exactly zero a batch projected to end at a fraction of a point still passes,
+and the next background tick starves it — the state the refusal exists to
+prevent, reached one tick later. Ten points is about sixty-six ticks at the
+standing drain, a crossing of base space to a rest, which is free in there
+and refills the reserve whole; that is what makes the refusal's advice
+actionable rather than a dead end. `LOW_POWER_ATTACK_THRESHOLD` was the other
+candidate for the floor and is wrong: it would refuse the *second* Hardened
+Shell of a full reserve, and that cost is the point of the change.
+
+**`max_craftable` takes the second ceiling too.** `[M]` answered the pack
+alone, and the pack stopped being the only bound the moment a batch could be
+refused for Power. This is the careful surcharge's own rule in a second
+place — *a quoted maximum the compile refuses is a batch the compile
+refuses*, and on screen it reads as the key doing nothing. Three fixtures
+moved with it, each because it compiled more gear in one span than a
+hundred-point reserve covers; they refill the reserve between batches exactly
+as they restock the pack, or ask for fewer units where the batch size was
+never the subject.
+
 **One test moved, and it moved for the right reason.**
 `only_gear_spends_a_quality_roll` compared the shared `GameRng` stream after
 compiling one unit against five, on the property that a material spends no

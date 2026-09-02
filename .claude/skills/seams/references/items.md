@@ -227,7 +227,17 @@
   empties the pack (`Source::Pack`) part-way through a three-hundred-tick
   compile. The loop breaks on a game over or a battle opening, exactly where
   `move_player`'s drag ticks break and for the same reason, and treats the
-  break as an abort. `HandCraft` is **not saved** (`RunFeats`' precedent) and
+  break as an abort. **A sixth refusal guards the reserve**: the
+  ticks a batch spends drain Power at `HUNGER_DECAY_PER_TICK` like any
+  others, so one projected to leave less than
+  `HAND_CRAFT_POWER_FLOOR` standing is refused *whole* — a batch quietly
+  shortened reads as the key half working. The projection **calls**
+  `systems::power_drain_per_tick` rather than restating the rate, and is
+  blind to a Recharger's trickle on purpose so it is a worst case. The floor
+  is a margin and not `POWER_MIN`, or a batch ending at 0.15 starves on the
+  next background tick. `max_craftable` carries the same ceiling, the
+  careful surcharge's rule again: a quoted maximum the compile refuses reads
+  as `[M]` doing nothing. `HandCraft` is **not saved** (`RunFeats`' precedent) and
   is inserted by `begin` rather than at both constructors. The batch is
   announced **once, on the way out**, with the count actually granted — a
   line per unit turns a batch of twelve into twelve rows of log, and a line

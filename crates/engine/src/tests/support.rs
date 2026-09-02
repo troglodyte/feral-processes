@@ -1263,6 +1263,18 @@ pub(super) fn clear_creatures_along_ray(
 /// Replaces the player's whole inventory with `stock`, so a taming test
 /// states exactly which catalysts are on hand instead of inheriting
 /// whatever `Game::new`'s starting kit holds.
+/// Tops the player's reserve back up to `POWER_MAX`.
+///
+/// A hand-compile's ticks drain Power like any others and
+/// `tuning::HAND_CRAFT_POWER_FLOOR` refuses a batch that would run it out,
+/// so a fixture that compiles two batches in a row has to restock the
+/// reserve exactly as it restocks the pack — the second batch is otherwise
+/// refused for a reason the test is not about.
+pub(super) fn fill_power(game: &mut Game) {
+    let player = game.player_entity();
+    game.world.get_mut::<PowerReserve>(player).unwrap().fill();
+}
+
 pub(super) fn set_inventory(game: &mut Game, stock: &[(&str, u32)]) {
     let player = game.player_entity();
     let mut inv = game.world.get_mut::<Inventory>(player).unwrap();

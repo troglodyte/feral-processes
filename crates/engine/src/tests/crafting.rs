@@ -606,19 +606,26 @@ fn a_compiled_piece_of_gear_carries_the_quality_it_rolled() {
 
 /// The loop the axis exists for: compile a batch, keep the best. The roll is
 /// per unit, so a batch is a spread rather than N of one thing.
+///
+/// Five units rather than the twelve this used to ask for: a gear recipe no
+/// machine assembles costs `HAND_CRAFT_DEFAULT_CYCLE` times the multiplier
+/// per unit, which is fifteen points of Power, and
+/// `tuning::HAND_CRAFT_POWER_FLOOR` refuses a batch past the reserve. Five
+/// is as many rolls as the spread needs and the batch size was never the
+/// subject.
 #[test]
 fn a_batch_compiles_copies_that_differ_from_each_other() {
     let mut game = Game::new(50, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let edge = ItemId::from("kinetic_edge");
-    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 7 * 12)]);
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 7 * 5)]);
 
-    game.craft(&edge, 12, false).unwrap();
+    game.craft(&edge, 5, false).unwrap();
 
     let mut seen: Vec<u8> = compiled_copies(&game, "kinetic_edge")
         .iter()
         .map(|c| c.quality)
         .collect();
-    assert_eq!(seen.len(), 12, "twelve units, twelve copies");
+    assert_eq!(seen.len(), 5, "five units, five copies");
     seen.sort_unstable();
     seen.dedup();
     assert!(
@@ -629,6 +636,11 @@ fn a_batch_compiles_copies_that_differ_from_each_other() {
 
 /// What the base buys: a developed bench and a careful compile put the
 /// *whole* batch above what a bare one can reach.
+///
+/// The reserve is refilled between the two batches for the reason the pack
+/// is restocked between them: a hand-compile burns Power a tick and
+/// `tuning::HAND_CRAFT_POWER_FLOOR` refuses the second batch off the back
+/// of the first otherwise.
 #[test]
 fn a_better_bench_lifts_every_copy_in_the_batch() {
     use crate::tuning::{
@@ -637,9 +649,9 @@ fn a_better_bench_lifts_every_copy_in_the_batch() {
     let mut game = Game::new(51, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let lance = ItemId::from("arc_lance");
     spawn_structure_at(&mut game, "fabricator", 4, 4);
-    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 12 * 6)]);
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 12 * 5)]);
 
-    game.craft(&lance, 6, false).unwrap();
+    game.craft(&lance, 5, false).unwrap();
     let bare = compiled_copies(&game, "arc_lance");
     assert!(
         bare.iter()
@@ -650,8 +662,9 @@ fn a_better_bench_lifts_every_copy_in_the_batch() {
 
     let bench = find_structure_by_kind(&mut game, "fabricator").unwrap();
     game.world.entity_mut(bench).insert(StructureTier(5));
-    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 18 * 6)]);
-    game.craft(&lance, 6, true).unwrap();
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 18 * 5)]);
+    fill_power(&mut game);
+    game.craft(&lance, 5, true).unwrap();
 
     let floor = QUALITY_BASE + 4 * QUALITY_BENCH_PER_TIER + QUALITY_CAREFUL_BONUS;
     let developed: Vec<u8> = compiled_copies(&game, "arc_lance")
@@ -661,7 +674,7 @@ fn a_better_bench_lifts_every_copy_in_the_batch() {
         .collect();
     assert_eq!(
         developed.len(),
-        6,
+        5,
         "every copy off the developed bench should clear {floor}"
     );
 }
@@ -1022,4 +1035,129 @@ fn a_battle_opening_mid_compile_ends_the_loop_with_the_unit_refunded() {
         "the interrupted unit's material comes back"
     );
     assert!(!game.hand_craft_in_progress());
+}
+
+/// Compiling by hand burns Power at the standing per-tick rate, so a long
+/// enough batch flatlines the player without ever asking them.
+///
+/// The drain is the feature and stays — what is refused is the batch that
+/// can be seen in advance to end the run, whole rather than shortened, per
+/// the no-silent-caps rule `MAX_ACTIVE_CONTRACTS` states.
+#[test]
+fn a_batch_that_would_run_the_reserve_out_is_refused_whole() {
+    let mut game = Game::new(320, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let ice = ItemId::from(ids::ICE_BREAKER);
+    set_inventory(
+        &mut game,
+        &[(ids::CORE_FRAGMENT, ICE_BREAKER_CORE_COST * 8)],
+    );
+
+    // Eight units is 640 ticks at the Compiler's own cycle times the
+    // shipped multiplier, and 96 Power against a reserve that tops out at
+    // 100 — a batch nothing but the clock could stop.
+    let refusal = game
+        .craft(&ice, 8, false)
+        .expect_err("a batch past the reserve must be refused");
+    assert!(
+        refusal.contains("Power"),
+        "the refusal has to say what stopped it, not just refuse: {refusal}"
+    );
+    assert_eq!(
+        count_item(&game, ids::ICE_BREAKER),
+        0,
+        "a refused batch compiles nothing at all rather than as many as fit"
+    );
+}
+
+/// The other half of the same rule: a batch the reserve can carry is not
+/// refused, or the feature is a ban on hand-compiling rather than a bound
+/// on it.
+#[test]
+fn a_batch_the_reserve_can_carry_still_compiles() {
+    let mut game = Game::new(321, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let ice = ItemId::from(ids::ICE_BREAKER);
+    set_inventory(
+        &mut game,
+        &[(ids::CORE_FRAGMENT, ICE_BREAKER_CORE_COST * 5)],
+    );
+
+    game.craft(&ice, 5, false)
+        .expect("five units is 60 Power out of a full hundred");
+
+    assert_eq!(count_item(&game, ids::ICE_BREAKER), 5);
+}
+
+/// The floor is a margin above `POWER_MIN`, not `POWER_MIN` itself: a batch
+/// projected to land at a few points left starves on the next background
+/// tick, which is the state the refusal exists to prevent reached one tick
+/// later.
+#[test]
+fn the_reserve_floor_is_a_margin_and_not_zero() {
+    let make = |reserve: f32| {
+        let mut game = Game::new(322, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        set_inventory(&mut game, &[(ids::CORE_FRAGMENT, ICE_BREAKER_CORE_COST)]);
+        let player = game.player_entity();
+        *game.world.get_mut::<PowerReserve>(player).unwrap() = PowerReserve::new(reserve);
+        game
+    };
+    let ice = ItemId::from(ids::ICE_BREAKER);
+
+    // One unit is 12 Power. From 20 it ends above zero and below the floor.
+    assert!(
+        make(20.0).craft(&ice, 1, false).is_err(),
+        "landing under the floor is refused even though it never reaches zero"
+    );
+    assert!(
+        make(30.0).craft(&ice, 1, false).is_ok(),
+        "landing clear of the floor is not this refusal's business"
+    );
+}
+
+/// The sixth refusal, asserted on its own like the other five — a batch
+/// stopped for Power must not have spent a tick or a fragment on the way
+/// to being stopped.
+#[test]
+fn a_compile_refused_for_power_spends_nothing() {
+    let mut game = Game::new(323, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    refused_compile_spends_nothing(&mut game, &ItemId::from(ids::ICE_BREAKER), 8, |g| {
+        // 50 fragments is already more than eight units cost, so the
+        // material check cannot be what refuses this.
+        let player = g.player_entity();
+        assert!(
+            g.world
+                .get::<Inventory>(player)
+                .unwrap()
+                .count(&ItemId::from(ids::CORE_FRAGMENT))
+                >= ICE_BREAKER_CORE_COST * 8
+        );
+    });
+}
+
+/// The quoted maximum is a batch the compile takes.
+///
+/// `[M]` used to answer the pack alone, and the pack stopped being the only
+/// ceiling the moment a batch could be refused for the Power its ticks
+/// burn. This is the careful surcharge's own rule in a second place: a
+/// maximum the compile refuses reads as the key doing nothing.
+#[test]
+fn the_quoted_maximum_is_a_batch_the_compile_accepts() {
+    for item in [ids::ICE_BREAKER, "kinetic_edge"] {
+        let mut game = Game::new(324, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 500)]);
+        let id = ItemId::from(item);
+
+        let most = game.max_craftable(&id, false);
+        assert!(
+            most > 0,
+            "{item} should be compilable at all in this fixture"
+        );
+        assert!(
+            most < 500,
+            "{item}'s quote is still bounded by the pack somewhere below the \
+             fragments on hand"
+        );
+
+        game.craft(&id, most, false)
+            .unwrap_or_else(|e| panic!("the quote for {item} was refused: {e}"));
+    }
 }

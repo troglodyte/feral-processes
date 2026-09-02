@@ -309,7 +309,25 @@ gates none of this — run it anyway to confirm the curves have not moved.
 3. **`HAND_CRAFT_TICK_MULT = 10` is unmeasured.** `docs/measurements/` has no
    entry for base throughput and the audit itself is blind to play. Nothing
    here has been observed in a session.
-4. **The three inert `power_draw` values** on the Repair Bay, Log Analyzer Bay
+4. **Hand-compiling burns the player's Power, and long batches are now
+   refused.** *(Found in review, accepted, mitigated.)* A hand-compile's
+   ticks are ordinary game ticks, so `needs_tick_system` charges them
+   `HUNGER_DECAY_PER_TICK` (0.15) like any others. Before this change a
+   whole compile cost 0.15 Power; a single Hardened Shell now costs 45 of a
+   hundred-point reserve, two put the player under
+   `LOW_POWER_ATTACK_THRESHOLD`, and three would flatline them. **The drain
+   stays** — compiling by hand is work, and that is the feature. What was
+   added is a sixth refusal in `Game::begin_hand_craft`: a batch projected
+   to leave less than `tuning::HAND_CRAFT_POWER_FLOOR` standing is refused
+   **whole**, per the no-silent-caps rule, and `Game::max_craftable` carries
+   the same ceiling so `[M]` cannot quote a batch the compile turns down.
+   The projection *calls* `systems::power_drain_per_tick` rather than
+   restating the rate. The consequence worth watching in play: a batch of
+   gear no machine assembles costs 15 Power a unit, so six is the most a
+   full reserve carries, and three engine fixtures had to refill the reserve
+   between batches or ask for fewer units. Resting is free in base space and
+   refills it whole, which is what the refusal's sentence points at.
+5. **The three inert `power_draw` values** on the Repair Bay, Log Analyzer Bay
    and Sandbox stay inert. Making the grid a real constraint sharpens the
    question of what they mean, but answering it is audit lever L10, not this
    change.

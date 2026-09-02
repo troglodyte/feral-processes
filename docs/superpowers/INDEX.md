@@ -30,8 +30,10 @@ spec resolves to a release tag.
 | `2026-08-13-creeping-base-footprint-design` | **superseded** | `build_radius_bonus` / `clear_platform` survive only in doc comments recording their retirement |
 | `2026-08-22-collect-picker-design` | **superseded** | `collect_basket` absent; `Mode::Transfer` shipped instead |
 
-The gameplay backlog is `TODO.md`; built-but-unused engine mechanics are in
-`docs/content-gaps.md`. Neither is this file's job.
+`docs/content-gaps.md` holds built-but-unused engine mechanics, which is a
+different question and not this file's job. **`TODO.md` no longer exists** —
+it was deleted at `v0.12.0`; references to it here and in source comments are
+historical, and git history is where its 62 lines live.
 
 ## Do not move these nine
 
@@ -202,5 +204,6 @@ the earliest tag containing the commit that added the spec.
 
 ## What is actually open
 
-Not here. `TODO.md` holds the gameplay backlog, and `docs/content-gaps.md`
-holds engine mechanics that are built and tested with no asset using them.
+The ten specs above, and `docs/content-gaps.md` for engine mechanics that are
+built and tested with no asset using them. `TODO.md` was deleted at `v0.12.0`
+and is not a backlog any more.

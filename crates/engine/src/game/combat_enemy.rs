@@ -129,6 +129,27 @@ impl Game {
             return;
         }
 
+        for swing in 0..self.attacks_for(wild) {
+            // Same two guards the party side keeps, for the same reasons: a
+            // Crash the wild fumbled costs it the rest of its turn, and the
+            // Recoil rung damages the fumbler, so a body really can kill
+            // itself on its own first swing.
+            if swing > 0 && (self.is_stunned(wild) || !self.creature_alive(wild)) {
+                break;
+            }
+            if !self.wild_swings_once(wild, group, player) {
+                break;
+            }
+        }
+    }
+
+    /// One swing of a wild program's turn. Returns whether it managed to
+    /// strike at all — `false` is "nothing it has reaches from where it
+    /// stands", which ends the turn rather than being retried.
+    ///
+    /// A carrier spending its round on a routine never reaches here: a
+    /// routine is not a basic attack, and slice 2 grants basic attacks only.
+    fn wild_swings_once(&mut self, wild: Entity, group: usize, player: Entity) -> bool {
         // Which move and which target are one decision, made in
         // `Game::choose_wild_action` (`game/combat_policy.rs`) — the trained
         // policy scores the pairs jointly, and with no policy installed that
@@ -138,7 +159,7 @@ impl Game {
         let Some((mv, target)) = self.choose_wild_action(wild, group, player) else {
             let name = self.creature_label(wild);
             self.log(format!("{name} circles beyond reach, unable to strike."));
-            return;
+            return false;
         };
         // A moveset's status effects are what a program *can* bring to bear,
         // not what it does every turn. Reaching for one every time meant a
@@ -243,5 +264,6 @@ impl Game {
                 self.apply_status_effect(target, effect, "You", kind);
             }
         }
+        true
     }
 }

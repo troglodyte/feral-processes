@@ -56,13 +56,15 @@ impl Game {
     /// companion's and a wild program's is derived from their species, and
     /// all three meet in `battle::attacks_per_round`.
     ///
-    /// One swing for anything carrying no `Experience` — a body that cannot
-    /// level cannot have reached the threshold.
+    /// A wild program carrying no `Experience` reads the zone's level, which
+    /// is what `ability_user_level` already does for every other magnitude
+    /// in combat.
     pub(crate) fn attacks_for(&self, entity: Entity) -> u32 {
-        let level = self
-            .world
-            .get::<Experience>(entity)
-            .map_or(1, |xp| xp.level);
+        // `ability_user_level` is already the one answer to "what level is
+        // this body?", falling back to the zone for a wild program that
+        // carries no `Experience` of its own. A second reading here would be
+        // a copy that drifts.
+        let level = self.ability_user_level(entity);
         let class = match self.world.get::<PlayerIdentity>(entity) {
             Some(identity) => identity.class.and_then(|c| c.as_affinity_class()),
             None => self

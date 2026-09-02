@@ -8,6 +8,16 @@ use crate::tuning::{
 };
 use crate::*;
 
+/// What one swing did to the turn it belongs to. Three states rather than a
+/// bool because "the battle ended" and "there is nothing left to aim at" ask
+/// the caller for different things: the first returns out of the round, the
+/// second only stops this actor swinging.
+enum SwingControl {
+    Swung,
+    NoTarget,
+    BattleOver,
+}
+
 impl Game {
     /// Resolves a *planned* group index against the groups as they stand
     /// now, returning where that group is currently indexed — or `None` if
@@ -347,6 +357,13 @@ impl Game {
     /// has ended the battle. And it comes before the return, so its own
     /// kills are reaped inside `proc_wielded_routine` the way
     /// `resolve_one_action`'s `Special` arm reaps its own.
+    /// **The loop is inside the turn, not in `roll_initiative`.** Pushing a
+    /// second `Actor` into the initiative list compiles just as well and is
+    /// wrong three ways: it rolls initiative twice for one body, it treats
+    /// the second swing as a fresh turn for stun purposes, and it
+    /// double-counts against `battle::attackers_in_group`'s reach cap. This
+    /// way `BattleState::planned`, the planning UI and all of app-core never
+    /// learn the feature exists.
     pub(crate) fn party_member_attacks(
         &mut self,
         slot: usize,
@@ -354,16 +371,47 @@ impl Game {
         group: usize,
         player: Entity,
     ) -> bool {
-        // `group` is the index the *plan* named, so it is resolved here and
-        // again for the proc below rather than being resolved once by the
-        // caller: a strike that empties its target re-letters the groups
-        // behind it, and the proc has to be answering the same aim, not the
-        // shifted one.
+        for swing in 0..self.attacks_for(entity) {
+            // A Crash the actor fumbled on an earlier swing costs it "their
+            // next action", and a swing is an action — so it ends the turn
+            // rather than only the next round. That reading is the half of
+            // the fumble clock `EXPOSED_DURATION_ROUNDS`' doc comment does
+            // *not* cover: Exposed is a debuff on the victim, whose own turn
+            // is still a round away, so it keeps the round reading.
+            // The second guard is the Recoil rung: it damages the fumbler,
+            // so an actor really can kill itself on its own first swing.
+            if swing > 0 && (self.is_stunned(entity) || !self.creature_alive(entity)) {
+                break;
+            }
+            match self.party_member_swing(slot, entity, group, player) {
+                SwingControl::BattleOver => return true,
+                SwingControl::NoTarget => break,
+                SwingControl::Swung => {}
+            }
+        }
+        // Once per turn, never once per swing: firing it per swing would
+        // silently multiply what the wielded build is worth.
+        if slot == 0 {
+            return self.proc_wielded_routine(group, player);
+        }
+        false
+    }
+
+    /// One swing of one party member's turn. Re-resolves its own target
+    /// every call, because a swing that empties a group re-letters the ones
+    /// behind it and the next swing has to be aiming at what is there now.
+    fn party_member_swing(
+        &mut self,
+        slot: usize,
+        entity: Entity,
+        group: usize,
+        player: Entity,
+    ) -> SwingControl {
         let Some(live) = self.retarget(group) else {
-            return false;
+            return SwingControl::NoTarget;
         };
         let Some(front) = self.front_of_group(live) else {
-            return false;
+            return SwingControl::NoTarget;
         };
         let (move_name, natural) = if slot == 0 {
             ("data strike".to_string(), PLAYER_UNARMED_DAMAGE)
@@ -408,12 +456,9 @@ impl Game {
         self.log_swing(MessageKind::PartyDamage, outcome, line);
 
         if !self.creature_alive(front) && self.finish_group_member(live, player) {
-            return true;
+            return SwingControl::BattleOver;
         }
-        if slot == 0 {
-            return self.proc_wielded_routine(group, player);
-        }
-        false
+        SwingControl::Swung
     }
 
     /// Rolls the wielded program's chance to fire one of its own routines on

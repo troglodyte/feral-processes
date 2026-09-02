@@ -1090,3 +1090,126 @@ fn attacks_for_resolves_the_player_and_a_wild_program_alike() {
         "a Striker species at the threshold"
     );
 }
+
+/// Counts the swing lines a turn actually produced. `message_log` is the raw
+/// store — `message_history` is the condensed view, and two identical swing
+/// lines fold into one entry there, which would hide exactly what this test
+/// exists to see.
+fn party_swing_lines(game: &Game) -> usize {
+    game.message_log(50)
+        .into_iter()
+        .filter(|l| l.kind == MessageKind::PartyDamage && l.outcome.is_some())
+        .count()
+}
+
+/// The whole of slice 2 from the player's side: one turn, two swings. Asserts
+/// on the log lines because that is what a player actually sees happen.
+#[test]
+fn a_striker_at_the_threshold_swings_twice_in_one_turn() {
+    for (level, expected) in [
+        (crate::tuning::EXTRA_ATTACK_LEVEL - 1, 1),
+        (crate::tuning::EXTRA_ATTACK_LEVEL, 2),
+    ] {
+        let (mut game, player, wild) = battle_for_swing_outcomes(52);
+        game.world.get_mut::<PlayerIdentity>(player).unwrap().class =
+            Some(classes::PlayerClass::Striker);
+        game.world.get_mut::<Experience>(player).unwrap().level = level;
+        // Tanky enough that swing 1 cannot end the turn by emptying the group.
+        let mut stats = game.world.get_mut::<Stats>(wild).unwrap();
+        stats.max_hp = 9_000;
+        stats.hp = 9_000;
+
+        player_swings_at_group(&mut game, 0);
+        assert_eq!(
+            party_swing_lines(&game),
+            expected,
+            "a Striker at level {level} should log {expected} swing line(s)"
+        );
+    }
+}
+
+/// Counts the swing lines the wild side produced. Both enemy kinds count: a
+/// move carrying a condition logs `EnemySpecial` rather than `EnemyAttack`,
+/// and which one it is has nothing to do with how many times it swung.
+fn wild_swing_lines(game: &Game) -> usize {
+    game.message_log(50)
+        .into_iter()
+        .filter(|l| {
+            matches!(l.kind, MessageKind::EnemyAttack | MessageKind::EnemySpecial)
+                && l.outcome.is_some()
+        })
+        .count()
+}
+
+/// The rule is symmetric by construction — one `AffinityClass` expression
+/// serves the player, companions and wild programs alike. A test covering
+/// only the player would pass against a player-only implementation, which is
+/// the whole reason this one exists.
+#[test]
+fn a_wild_striker_at_the_threshold_swings_twice_too() {
+    for (level, expected) in [
+        (crate::tuning::EXTRA_ATTACK_LEVEL - 1, 1),
+        (crate::tuning::EXTRA_ATTACK_LEVEL, 2),
+    ] {
+        let (mut game, player, wild) = battle_for_swing_outcomes(52);
+        let striker = game
+            .species_defs()
+            .into_iter()
+            .find(|d| d.affinity_class() == Some(species::AffinityClass::Striker))
+            .expect("the shipped species include at least one Striker");
+        game.world.get_mut::<Creature>(wild).unwrap().species = striker.id.clone();
+        // Wild bodies carry no `Experience` by default — they read the
+        // zone's level through `ability_user_level`. Pinning one here states
+        // the level this case is about instead of leaning on the zone.
+        game.world.entity_mut(wild).insert(Experience {
+            level,
+            ..Default::default()
+        });
+        // The player has to outlast both swings for the second to be visible.
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.max_hp = 9_000;
+        stats.hp = 9_000;
+
+        game.wild_retaliate(wild, 0, player);
+        assert_eq!(
+            wild_swing_lines(&game),
+            expected,
+            "a wild Striker at level {level} should log {expected} swing line(s)"
+        );
+    }
+}
+
+/// Crash costs the fumbler "their next action", and slice 2 reads that as
+/// *action* rather than *round* — so a stunned Striker takes its remaining
+/// swings off the table instead of swinging twice and being stunned later.
+///
+/// The stun is applied directly rather than fumbled into existence: no
+/// support fixture forces a *particular* fumble rung, and a seed scan for the
+/// Crash band would pin this test to the ladder's current thresholds. What is
+/// being asserted is the guard, which is the part slice 2 added.
+#[test]
+fn a_stunned_striker_does_not_take_its_second_swing() {
+    let (mut game, player, wild) = battle_for_swing_outcomes(52);
+    game.world.get_mut::<PlayerIdentity>(player).unwrap().class =
+        Some(classes::PlayerClass::Striker);
+    game.world.get_mut::<Experience>(player).unwrap().level = crate::tuning::EXTRA_ATTACK_LEVEL;
+    let mut stats = game.world.get_mut::<Stats>(wild).unwrap();
+    stats.max_hp = 9_000;
+    stats.hp = 9_000;
+    game.world.entity_mut(player).insert(StatusEffects {
+        active: Some(ActiveStatus {
+            kind: StatusKind::Stun,
+            remaining: 1,
+            power: 0,
+            landed_this_round: false,
+        }),
+    });
+
+    player_swings_at_group(&mut game, 0);
+
+    assert_eq!(
+        party_swing_lines(&game),
+        1,
+        "the first swing still lands; the stun takes the second"
+    );
+}

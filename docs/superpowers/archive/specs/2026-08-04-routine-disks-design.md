@@ -1,7 +1,7 @@
 # Routine Disks — design
 
 **Date:** 2026-08-04
-**Status:** approved, not implemented
+**Status:** implemented. Audited 2026-09-02 against the source tree, not against this header.
 
 ## The problem
 

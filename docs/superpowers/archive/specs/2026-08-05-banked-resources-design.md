@@ -1,7 +1,7 @@
 # Banked resources: research stops being a thing you carry
 
 **Date:** 2026-08-05
-**Status:** approved, not implemented
+**Status:** implemented. Audited 2026-09-02 against the source tree, not against this header.
 
 ## The problem
 

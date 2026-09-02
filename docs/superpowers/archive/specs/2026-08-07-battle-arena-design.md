@@ -1,7 +1,7 @@
 # The battle arena — design
 
 **Date:** 2026-08-07
-**Status:** designed, not implemented.
+**Status:** implemented. Audited 2026-09-02 against the source tree, not against this header.
 
 ## The problem
 

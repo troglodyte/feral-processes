@@ -2427,7 +2427,7 @@ to demolish your own base.
 - The durability values, the swing floors and the vein block size are
   **unmeasured**, like every other knob in this slice. The design and what is
   open are in
-  `docs/superpowers/specs/2026-08-23-rock-kinds-and-mining-mode-design.md`.
+  `docs/superpowers/archive/specs/2026-08-23-rock-kinds-and-mining-mode-design.md`.
 
 ## 0.13.14
 
@@ -2516,7 +2516,7 @@ Neither runtime has been exercised: window creation, wgpu (DX12 and Metal),
 audio, input, the console suppression, SmartScreen and Gatekeeper, or
 whether `%APPDATA%` and `~/Library/Application Support` resolve as expected. Verification for this is manual by choice, and the
 ten-step checklist lives in the spec
-(`docs/superpowers/specs/2026-08-19-windows-and-macos-distribution-design.md`).
+(`docs/superpowers/archive/specs/2026-08-19-windows-and-macos-distribution-design.md`).
 The Linux suite being green is not evidence about any of it.
 
 ## 0.13.13

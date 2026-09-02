@@ -1,11 +1,6 @@
 # Combat model: attack rolls, AC and weapon damage
 
-**Status:** slice 1 implemented, 2026-08-19. Slices 2-4 (multi-attack, reaching
-past `EnemyGroup::members[0]`, and the base-attribute layer) remain deferred and
-were deliberately not built.
-**Date:** 2026-08-19
-**Slice:** 1 of 4 (see *Decomposition* below)
-**Save format:** breaks — `SAVE_FORMAT_VERSION` bump required
+**Status:** **slice 1 shipped** 2026-08-19; slices 2-4 (multi-attack, reaching past `EnemyGroup::members[0]`, the base-attribute layer) remain deferred and were deliberately not built. Audited 2026-09-02 against the source tree, not against this header.
 
 ## Why
 

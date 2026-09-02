@@ -1,8 +1,6 @@
 # Stack wanderers: something to see coming
 
-**Status:** Approved 2026-08-31. Not implemented. (Status headers in this
-directory are written at approval time and go stale — see `INDEX.md`; answer
-"did this ship" from `CHANGELOG.md`, never from here.)
+**Status:** approved 2026-08-31, **not implemented**. `FrameWanderers` exists nowhere in `crates/`. Audited 2026-09-02 against the source tree, not against this header.
 
 `feral-TODO.md` #27, "add visual indicator of entity in the stack".
 

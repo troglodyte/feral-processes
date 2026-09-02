@@ -1,9 +1,6 @@
 # Taking the thought of zones away — parked brainstorm
 
-**Status: PARKED mid-brainstorm on 2026-08-17. Not a design, not approved,
-nothing implemented.** No approach was chosen. This file exists so the
-findings below — which cost real tool calls and correct two stale seam docs —
-don't have to be rediscovered.
+**Status:** parked. Brainstormed 2026-08-17, no shape chosen, **not implemented**. Audited 2026-09-02 against the source tree, not against this header.
 
 Read `INDEX.md`'s warning about `**Status:**` headers before trusting any
 other spec's; this one is accurate as of the date above and will rot the same

@@ -1,9 +1,6 @@
 # Powering down in the field can be interrupted
 
-**Status:** design written from recovered prior art — NOT approved, no plan written
-**Date:** 2026-08-24
-**Prior art:** commit `84b52f44` on the deleted branch `fix/rest-underground-and-ambush`
-(dangling but reachable; `git show 84b52f44`)
+**Status:** written from recovered prior art, **never approved and not implemented**. `Game::rest_interrupted` does not exist. Audited 2026-09-02 against the source tree, not against this header.
 
 A charged rest rolls for an ambush once the charge has been taken. On a hit a
 pack engages and nothing is restored. A free rest inside base space never

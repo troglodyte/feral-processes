@@ -1428,7 +1428,7 @@ fn no_shipped_assembler_builds_another_benchs_product() {
 // ---------------------------------------------------------------------------
 // The power grid census — Task 4. `game::base::power::ledger` only ever
 // reads what these three tests check the shipped set for: see
-// `docs/superpowers/specs/2026-08-17-base-power-grid-design.md`, "Which
+// `docs/superpowers/archive/specs/2026-08-17-base-power-grid-design.md`, "Which
 // structures draw, and the numbers".
 // ---------------------------------------------------------------------------
 

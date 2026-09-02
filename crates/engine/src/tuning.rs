@@ -2638,7 +2638,7 @@ pub const PLATFORM_CORNER_CUT: i32 = 2;
 //
 // None of these is measured. They are starting values to play and then
 // record under `docs/measurements/` — see the slice 2 section of
-// `docs/superpowers/specs/2026-08-19-base-out-of-phase-design.md`.
+// `docs/superpowers/archive/specs/2026-08-19-base-out-of-phase-design.md`.
 
 /// How much damage one cell of base-space rock absorbs before it opens.
 ///

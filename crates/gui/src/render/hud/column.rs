@@ -15,7 +15,7 @@
 //!
 //! The column does not scroll, the same as the gear inspect and memories
 //! pages, so the body rect's height is a layout constraint rather than a
-//! starting point. See `docs/superpowers/specs/2026-08-27-paned-command-hud-design.md`.
+//! starting point. See `docs/superpowers/archive/specs/2026-08-27-paned-command-hud-design.md`.
 
 use feral_processes_app_core::InfoTab;
 use feral_processes_engine::{AttentionKind, AttentionRow};

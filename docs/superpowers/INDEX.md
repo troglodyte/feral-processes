@@ -1,55 +1,69 @@
 # Design specs: what shipped, and where its argument is
 
-Every spec under `archive/specs/` is **implemented**. Audited 2026-08-13 by
-checking each one against `CHANGELOG.md` and the source, not against its own
-header — see the warning below. This file exists so that audit is one read
-next time instead of a sixty-file sweep.
+**Audited 2026-09-02** against the source tree and the release tags — not
+against the specs' own headers, which had lied for weeks. This file is the
+one-read answer to "did this ship, and where is its argument".
 
-## Two things to know before reading a spec
+## The invariant
 
-**A spec's `**Status:**` line is stale.** It records what was true when the
-design was approved and was almost never revised afterwards. Fourteen specs
-still say "approved, not implemented" or "designed, not implemented" for
-features that shipped and released — including `depots-and-hauling`,
-`battle-arena`, `enemy-battle-policy`, `stack-descriptions` and
-`companion-equipment`. Only two specs ever had the header corrected. The
-`## Status` phase table in `2026-07-31-the-stack-design.md` is stale the same
-way: it lists the derelict trader and the crash log as "sketched only", and
-both shipped. Answer implementation questions from `CHANGELOG.md` and a grep,
-never from the header.
+**`archive/specs/` is implemented. `specs/` is not.** Ninety-five specs are
+archived and every one of them shipped; the ten left in `specs/` are open,
+parked, partial or superseded, and each says which in its own header. Sorting
+the directory *is* the answer, so no sweep is needed next time.
 
-**The plans are gone.** Forty-six implementation plans (1.9M, ~44,000
-lines) were deleted on 2026-08-13; the forty-seventh file in that directory
-was not a plan and moved to `reports/` (see the footnote on
-`2026-07-21-visual-effects`). They were write-once scaffolding fully
-superseded by the code they produced, nothing outside the directory cited
-one, and git history holds them: `git log --diff-filter=D --
-'docs/superpowers/plans/*'` finds the deletion, and `git show <commit>^:<path>`
-reads any of them back. `CLAUDE.md`'s **Process weight** section is the
-lesson that motivated it.
+Two independent checks agree on the ninety-five: a distinctive symbol from
+each spec resolves in `crates/` or `assets/`, and the commit that added each
+spec resolves to a release tag.
 
-## Do not move these five again
+## What is open — the ten in `specs/`
 
-Five specs are cited from source doc comments as the standing rationale for a
-seam, so their paths are load-bearing:
-`2026-07-31-the-stack` (`tuning.rs`, `game/trace.rs`),
-`2026-08-03-nest-aggression` (`game/turn.rs`, `tests/zone.rs`),
-`2026-08-05-stack-movement-routines` (`game/stack_movement.rs`),
-`2026-08-06-easter-eggs` (`game/listen.rs`, `game/throw.rs`, `game/taunt.rs`,
-`crates/engine/EASTER_EGGS.md`) and
-`2026-08-09-battle-telemetry` (`telemetry.rs`, `crates/app-core/Cargo.toml`).
+| Spec | State | Evidence |
+| --- | --- | --- |
+| `2026-08-31-stack-wanderers-design` | approved, **unbuilt** | `FrameWanderers` exists nowhere in `crates/` |
+| `2026-08-24-rest-interruption-design` | never approved, **unbuilt** | `Game::rest_interrupted` does not exist |
+| `2026-08-24-departure-memories-design` | brainstorm parked | no departure memory in `assets/memories/` |
+| `2026-08-24-stack-depth-compounding-design` | question posed, no shape chosen | measurement only |
+| `2026-08-17-zones-as-difficulty-parked` | parked | no shape chosen |
+| `2026-08-17-item-synergy-burnout-parked` | parked | nothing stacks yet |
+| `2026-08-18-gear-passives-balance-measurement` | **not run** | a measurement protocol, never executed; the design it measures shipped in `v0.11.2` |
+| `2026-08-19-combat-model-ac-and-weapon-damage-design` | **partial** | slice 1 shipped; slices 2-4 deliberately deferred |
+| `2026-08-13-creeping-base-footprint-design` | **superseded** | `build_radius_bonus` / `clear_platform` survive only in doc comments recording their retirement |
+| `2026-08-22-collect-picker-design` | **superseded** | `collect_basket` absent; `Mode::Transfer` shipped instead |
+
+The gameplay backlog is `TODO.md`; built-but-unused engine mechanics are in
+`docs/content-gaps.md`. Neither is this file's job.
+
+## Do not move these nine
+
+Cited from source doc comments, so their paths are load-bearing:
+`2026-07-31-the-stack`, `2026-08-03-nest-aggression`,
+`2026-08-05-stack-movement-routines`, `2026-08-06-easter-eggs`,
+`2026-08-09-battle-telemetry`, `2026-08-17-base-power-grid`,
+`2026-08-19-base-out-of-phase`, `2026-08-27-paned-command-hud` and
+`2026-09-01-character-creation`. Four more are cited from `CHANGELOG.md`,
+`docs/seams.md` or `assets/nemesis/README.md`: `2026-08-17-nemesis`,
+`2026-08-19-windows-and-macos-distribution`, `2026-08-21-item-quality` and
+`2026-08-23-rock-kinds-and-mining-mode`.
+
+## The plans have been deleted twice
+
+Forty-six were deleted on 2026-08-13; forty-six more accumulated and
+forty-three of those were deleted on 2026-09-02, leaving only the plans for
+work that has not shipped. They are write-once scaffolding superseded by the
+code they produced, nothing outside the directory cites one, and git history
+holds them: `git log --diff-filter=D -- 'docs/superpowers/plans/*'` finds the
+deletion and `git show <commit>^:<path>` reads any of them back.
+`CLAUDE.md`'s **Process weight** section is the lesson that motivated it.
+
+The forty-seventh file in the first batch was not a plan and moved to
+`reports/` — see the footnote on `2026-07-21-visual-effects`.
 
 ## The specs
 
-This table is not scoped to `archive/specs/` alone, whatever the opening
-line above implies — `2026-08-17-nemesis` is still in `specs/` and is
-entered below because it shipped, not because it was archived. Its
-post-2026-08-13 siblings still in `specs/`
-(`2026-08-13-creeping-base-footprint`, `2026-08-13-research-cost-and-zone-gate`,
-`2026-08-13-sector-traits`, `2026-08-14-contracts`, `2026-08-14-work-orders`)
-are absent below; that is a gap in the table, not a claim that they didn't
-ship — see `CLAUDE.md`'s own load-bearing-seam entries for several of them
-instead.
+The fifty-nine archived on 2026-08-13. The gap this paragraph used to
+record — `nemesis` and five siblings shipped but sitting outside the
+table — was closed by the 2026-09-02 audit; they are in the second table
+below.
 
 "Release" is the earliest tag containing the commit that added the spec,
 which is the release its branch landed in. It is exact from `v0.3.1`
@@ -121,6 +135,50 @@ the policy", not which change shipped it.
 | `2026-08-17-nemesis` | Nemesis: a lost fight gets a name, a rising grudge and a mark on the map | v0.9.3 |
 | `2026-08-19-companion-progression-design` | Companion rings, levels past the cap, and per-class talent trees | v0.11.9 |
 | `2026-08-19-combat-model-ac-and-weapon-damage-design` | Attack rolls, percentage-point Mitigation, weapon damage ranges, crits and a fumble ladder — **slice 1 of four; slices 2-4 deferred** | v0.12.0 |
+
+## The specs archived on 2026-09-02
+
+The thirty-six that shipped between `v0.8.14` and `v0.13.81`. "Release" is
+the earliest tag containing the commit that added the spec.
+
+| Spec | What it designed | Release |
+| --- | --- | --- |
+| `2026-08-13-research-cost-and-zone-gate-design` | Research cost and zone gate | `v0.8.15` |
+| `2026-08-13-sector-traits-design` | Sector Traits | `v0.8.14` |
+| `2026-08-14-contracts-design` | Contracts | `v0.8.29` |
+| `2026-08-14-work-orders-design` | Work Orders | `v0.8.36` |
+| `2026-08-17-base-power-grid-design` | The base power grid | `v0.9.4` |
+| `2026-08-17-nemesis-design` | Nemesis | `v0.9.3` |
+| `2026-08-17-power-replaces-fatigue-design` | Power replaces Fatigue | `v0.9.4` |
+| `2026-08-18-gear-passives-and-overclock-design` | Gear passives, and the Overclock axis they will carry | `v0.11.2` |
+| `2026-08-18-species-danger-window-design` | The species danger window, and boss as a rolled variant | `v0.11.3` |
+| `2026-08-19-base-out-of-phase-design` | The base, out of phase | `v0.13.0` |
+| `2026-08-19-companion-progression-design` | Companion progression: rings, levels past the cap, and talent trees | `v0.11.9` |
+| `2026-08-19-environment-effects-design` | Environment effects, phase 1: ground that does something | `v0.11.8` |
+| `2026-08-19-windows-and-macos-distribution-design` | Windows and macOS distribution | `v0.13.14` |
+| `2026-08-20-in-game-help-design` | In-game help | `v0.13.2` |
+| `2026-08-21-entity-memories-design` | Entity memories | `v0.13.7` |
+| `2026-08-21-item-quality-design` | Item quality | `v0.13.3` |
+| `2026-08-21-work-order-queue-design` | The work order queue | `v0.13.5` |
+| `2026-08-23-depot-deposit-design` | Putting items into a Depot | `v0.13.12` |
+| `2026-08-23-morale-at-work-design` | Morale at work | `v0.13.17` |
+| `2026-08-23-rock-kinds-and-mining-mode-design` | Rock kinds, a swing floor, and a mining toggle | `v0.13.15` |
+| `2026-08-24-gear-affix-stacking-design` | Gear fusion across quality and affixes | `v0.13.20` |
+| `2026-08-24-periodic-caravan-traders-design` | Periodic caravan traders | `v0.13.20` |
+| `2026-08-25-merged-transfer-screen-design` | Merged transfer screen | `v0.13.23` |
+| `2026-08-25-trade-screen-power-and-basket-design` | Item power, wagon grouping, and the caravan basket | `v0.13.27` |
+| `2026-08-27-downed-programs-and-the-repair-bay-design` | Downed programs and the Repair Bay | `v0.13.36` |
+| `2026-08-27-paned-command-hud-design` | The Paned Command HUD | `v0.13.37` |
+| `2026-08-27-program-needs-design` | What a program needs | `v0.13.35` |
+| `2026-08-27-upgrade-build-requests-design` | Upgrading as a build request | `v0.13.34` |
+| `2026-08-27-zone-level-cap-design` | The zone level cap | `v0.13.36` |
+| `2026-08-28-sorties-design` | Sorties | `v0.13.47` |
+| `2026-08-29-notifications-design` | Full-screen notifications | `v0.13.53` |
+| `2026-08-30-tutorial-contract-chain-design` | The tutorial contract chain | `v0.13.57` |
+| `2026-08-31-static-weather-design` | Static: weather, and the environment comes home to Rust | `v0.13.59` |
+| `2026-09-01-character-creation-design` | Character creation | `v0.13.75` |
+| `2026-09-01-player-classes-design` | Player-only classes | `v0.13.81` |
+| `2026-09-02-base-as-the-price-of-progress-design` | A working base is the price of progress | `v0.13.80` |
 
 ## Four rows that need a footnote
 

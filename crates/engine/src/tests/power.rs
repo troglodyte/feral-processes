@@ -5,7 +5,7 @@
 //! neither a `Game` nor any shipped asset, so those tests don't lean on
 //! either: every shipped `power_draw`/`power_supply` is authored `0` until
 //! Task 4 lands the real numbers (see
-//! `docs/superpowers/specs/2026-08-17-base-power-grid-design.md`), so reading
+//! `docs/superpowers/archive/specs/2026-08-17-base-power-grid-design.md`), so reading
 //! them here would make every assertion vacuous. Each test builds its own
 //! tiny `StructureDb` out of throwaway ids instead.
 //!

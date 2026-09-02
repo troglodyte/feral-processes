@@ -1,7 +1,6 @@
 # The collect picker
 
-**Status:** approved, not implemented
-**Date:** 2026-08-22
+**Status:** **superseded, never implemented as designed.** `collect_basket` does not exist; taking and putting merged into one `Mode::Transfer` screen — see `../archive/specs/2026-08-25-merged-transfer-screen-design.md`. Audited 2026-09-02 against the source tree, not against this header.
 
 `c` next to a base structure currently empties every adjacent output
 buffer into the player's pack, wholesale. This replaces that with a

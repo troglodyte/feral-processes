@@ -1,7 +1,7 @@
 # Wild-carried routines, hostile specials, and level-scaled abilities
 
 **Date:** 2026-07-28
-**Status:** approved, not implemented
+**Status:** implemented. Audited 2026-09-02 against the source tree, not against this header.
 
 ## Problem
 

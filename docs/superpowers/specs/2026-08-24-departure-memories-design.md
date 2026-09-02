@@ -1,8 +1,6 @@
 # Departure memories, and the structures that carry them
 
-**Status:** brainstorm parked, three questions open — NOT approved, no plan written
-**Date:** 2026-08-24
-**Follows:** `2026-08-23-morale-at-work-design.md` (the memory system this builds on)
+**Status:** brainstorm parked, three questions open — **not approved, not implemented**. No departure memory exists in `assets/memories/`. Audited 2026-09-02 against the source tree, not against this header.
 
 An owned program remembers when another program is sold, decompiled or
 killed, and holds it against the bench it happened at. One new structure —

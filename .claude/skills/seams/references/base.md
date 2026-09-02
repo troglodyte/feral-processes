@@ -11,6 +11,26 @@
   `build_wants`. A dig site's `announced_dry` clears in `Game::dig_wants`
   for the same reason — a base running dry more than once over a run is the
   common case, not an edge one.
+- **The Home is free and the anchor lands where it was founded, while the
+  Home itself still stands on `BASE_EXIT_CELL`.** The two halves live in
+  different spaces: base space has one origin — the pocket is laid around it
+  and `leave_base` refuses to let the party out anywhere else — while the
+  anchor is a zone-surface fixture, so `place_structure` puts it on the tile
+  the party founded from through `Game::move_anchor_to`, the one writer,
+  shared with `enter_next_zone`. **The one refusal it needed is a Stack
+  link**: a link tile is walked onto to *descend*, so an anchor sharing one
+  could never be stepped on to be entered, and the check sits with
+  `require_surface` where the door tile is resolved rather than beside the
+  materials check. The cost went to nothing because the wizard's Kit step
+  replaces the class kit — a run that bought gear over fragments could not
+  open a base at all — and the founding path stays generic over
+  `build_cost`, so a mod that prices it back up still works. **The fixture
+  trap it exposed**: app-core's compiler fixture pushed its cargo onto the
+  save's inventory `Vec` as a *second* row for an item the kit already
+  carried, which was invisible only while founding happened to zero the kit's
+  row — `Inventory::count` reads the first matching row and `Game::load`
+  restores the `Vec` verbatim.
+
 - **Upgrading is a build request too, and `BuildSite::goal` is the whole of
   the difference.** `upgrade_structure` keeps every refusal in the same
   order, drops the pack charge and the tier write, and files a site carrying

@@ -327,9 +327,20 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
     // silently delete the starting kit `Game::new` grants, and the next test
     // written against this fixture would fail for a reason with nothing to do
     // with what it was testing.
-    data.player
-        .inventory
-        .extend(cargo.iter().map(|(item, qty)| (ItemId::from(*item), *qty)));
+    //
+    // **Merged row by row rather than pushed**, because a save's inventory
+    // is a `Vec` that `Game::load` restores verbatim and
+    // `Inventory::count` reads the *first* row keyed to an item. A second
+    // row for something the starting kit already carries is invisible: the
+    // fixture that stocked 200 Core Fragments beside the kit's 5 compiled
+    // against 5.
+    for (item, qty) in cargo {
+        let id = ItemId::from(*item);
+        match data.player.inventory.iter_mut().find(|(i, _)| *i == id) {
+            Some((_, have)) => *have += qty,
+            None => data.player.inventory.push((id, *qty)),
+        }
+    }
     let (px, py) = data.player.position;
     data.creatures.push(CreatureSave {
         sortie_index: None,

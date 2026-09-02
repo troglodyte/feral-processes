@@ -42,13 +42,42 @@ impl Game {
         // no base to stand in yet — base space is solid everywhere and the
         // anchor refuses entry for want of a Home, so a run that had to be
         // inside to deploy one could never start a base at all. Founding is
-        // therefore an open-grid act, and it lands the Home on base space's
-        // own origin whatever direction was pointed: the pocket it lays is
-        // laid around that origin, and a Home somewhere else in it would
-        // make `BASE_EXIT_CELL` a door onto bare floor.
-        let founding = structure_id == HOME_STRUCTURE_ID;
+        // therefore an open-grid act.
+        //
+        // **The two halves of it move independently, and that is the whole
+        // of the placement rule.** The Home stands on base space's own
+        // origin whatever direction was pointed — the pocket is laid around
+        // that origin, and a Home somewhere else in it would make
+        // `BASE_EXIT_CELL` a door onto bare floor. The *anchor* is a zone
+        // fixture and goes where the party is standing, so the base opens on
+        // ground the player chose rather than at the sector's arrival point.
+        let founding_door = match structure_id == HOME_STRUCTURE_ID {
+            true => {
+                self.require_surface()?;
+                let standing = *self
+                    .world
+                    .get::<Position>(self.player_entity())
+                    .ok_or_else(|| "You aren't anywhere you can deploy from.".to_string())?;
+                // A link is walked *onto* to descend (`Game::move_player`),
+                // so an anchor sharing a link's tile could never be stepped
+                // on to be entered — the step that would reach it drops the
+                // party into the Stack instead. Refused up here with
+                // `require_surface` rather than beside the materials check:
+                // it is a question about where the door goes, and the door
+                // is decided in this block.
+                if self.find_surface_link_at(standing.x, standing.y).is_some() {
+                    return Err(
+                        "You're standing on a Stack link — an anchor can't share its tile. \
+                         Step off it first."
+                            .into(),
+                    );
+                }
+                Some((standing.x, standing.y))
+            }
+            false => None,
+        };
+        let founding = founding_door.is_some();
         let (x, y) = if founding {
-            self.require_surface()?;
             crate::game::base_space::BASE_EXIT_CELL
         } else {
             self.require_base()?;
@@ -153,7 +182,12 @@ impl Game {
             // where it stands: the pocket is laid around the origin the Home
             // was just put on.
             self.lay_starting_pocket();
-            self.log_base(format!("You deploy a {}.", def.name));
+            let (ax, ay) = founding_door.expect("founding, so the door tile was resolved above");
+            self.move_anchor_to(ax, ay);
+            self.log_base(format!(
+                "You deploy a {}. The anchor settles where you stand.",
+                def.name
+            ));
             // Fired unconditionally: `Repeat::OnceEver` is what makes it
             // once-only, and a second `if first_time` here would put the
             // policy in two places.

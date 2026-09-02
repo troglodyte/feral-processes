@@ -1009,7 +1009,7 @@ impl CreationStep {
     pub fn title(self) -> &'static str {
         match self {
             CreationStep::Difficulty => "Difficulty",
-            CreationStep::Profile => "Carried over",
+            CreationStep::Profile => "Achievements",
             CreationStep::Class => "Class",
             CreationStep::Kit => "Kit",
             CreationStep::Icon => "Icon",

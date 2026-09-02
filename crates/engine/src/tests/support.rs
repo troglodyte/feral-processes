@@ -1111,11 +1111,11 @@ pub(super) fn node_output(game: &Game, structure: Entity, item: &str) -> u32 {
 /// points, the first Home stands on `BASE_EXIT_CELL`. It is also the one
 /// build made from the open grid, so this deliberately does *not* route
 /// through `from_inside_the_base` — there is no inside yet.
+///
+/// Nothing is stocked first: the Home is free, so a fixture that topped the
+/// pack up for it would leave every downstream inventory count carrying
+/// materials the test never asked for.
 pub(super) fn place_home(game: &mut Game) {
-    game.world
-        .get_mut::<Inventory>(game.player_entity())
-        .unwrap()
-        .add(ItemId::from(ids::CORE_FRAGMENT), 5);
     let outside = game.locale();
     game.world.insert_resource(Locale::Surface);
     place_now(game, "home", 0, 0).unwrap();

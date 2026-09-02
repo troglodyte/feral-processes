@@ -206,6 +206,25 @@ impl Game {
         }
     }
 
+    /// Moves the anchor — base space's one door — onto zone-surface
+    /// `(x, y)`.
+    ///
+    /// **One writer, two callers with nothing else in common**: founding a
+    /// Home, which stands the door on the tile the player chose to found
+    /// from, and `Game::enter_next_zone`, which carries a base that travels
+    /// to the next sector's arrival point. Both *move* the entity rather
+    /// than despawning and respawning it, so `resources::AnchorEntity` names
+    /// the same anchor for the whole run — and written once because the
+    /// three lines that do it read as trivial right up until one of them
+    /// grows a second thing to keep in step.
+    pub(crate) fn move_anchor_to(&mut self, x: i32, y: i32) {
+        let anchor = self.world.resource::<AnchorEntity>().0;
+        if let Some(mut pos) = self.world.get_mut::<Position>(anchor) {
+            pos.x = x;
+            pos.y = y;
+        }
+    }
+
     /// Every `DigSite` in base space, by the tile it stands on.
     ///
     /// The lookup `toggle_mark_box` walks its box against. Built once per

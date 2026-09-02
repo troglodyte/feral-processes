@@ -9050,3 +9050,54 @@ Every notification draws its glyph today, since `assets/sprites/` holds one
 file — that is the design working, not a gap. `NotificationDef::sprite`
 stayed through the move to Rust for that reason: it is the live hook art
 lands on, not an unused field.
+
+### The Home is free, and the anchor lands where it was founded
+
+Two halves of one deploy, and they move in opposite spaces. **The Home
+itself still stands on `base_space::BASE_EXIT_CELL`** — base space has one
+origin, `lay_starting_pocket` lays the floor around it, and `leave_base`
+refuses to let the party out anywhere else, so a Home standing somewhere
+else in the pocket makes the exit cell a door onto bare floor. **The
+`components::BaseAnchor` lands on the tile the party founded from**, because
+it is a zone-surface fixture and nothing about it is defined against base
+space's origin.
+
+What that fixes is a run that had walked. The anchor spawns at the sector's
+arrival point in `Game::new`, and founding used to leave it there: a player
+who crossed half a zone and deployed their Home on ground they liked opened
+their base back at the tile they materialised on, with no way to say so and
+nothing on screen to explain it. `Game::move_anchor_to` is the one writer,
+shared with `enter_next_zone` — the other thing that decides where the door
+stands, since a base that travels has to take its door with it — and both
+*move* the entity rather than despawning and respawning it, so
+`resources::AnchorEntity` names the same anchor for the whole run.
+
+**The one refusal it needed is a Stack link.** `Game::move_player` treats a
+link tile as a descent rather than a step, so a party can be *standing* on
+one (that is where `ascend` puts them) but can never walk back onto it. An
+anchor sharing that tile could therefore never be entered: the step that
+would reach it drops the party into the Stack instead. The refusal sits with
+`require_surface` in the block that resolves the door tile, above the
+materials check, because it is a question about where the door goes rather
+than about what the build costs.
+
+**And the Home costs nothing.** Its `build_cost` was five Core Fragments
+against a starting kit that carried five or six of them, which made founding
+a formality for a default character and a dead end for a bought one: the
+creation wizard's Kit step *replaces* the class kit with whatever the player
+spends `CREATION_CREDITS` on, so a run that bought gear instead of fragments
+could not open a base at all, and nothing in the game would tell them why.
+The founding path keeps its pack-charging, refuse-on-shortfall shape
+regardless — it is generic over `build_cost`, and a mod that prices the Home
+back up still works — so what changed is one line of data, not the verb.
+
+Three fixtures moved with it, and the third is the interesting one.
+`tests::support::place_home` no longer tops the pack up first, so a test's
+inventory counts do not carry five materials it never asked for. The engine
+test that asserted the charge asserts the pack is *untouched* instead. And
+`app-core`'s `app_owning_a_program_and_a_compiler_with_cargo` had been
+pushing its cargo onto the save's inventory `Vec` as a second row for an
+item the starting kit already carried — invisible while founding zeroed the
+kit's row, and a silent five-fragment pack the moment it did not, because
+`Inventory::count` reads the **first** row keyed to an item and `Game::load`
+restores the `Vec` verbatim. It merges now.

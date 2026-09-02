@@ -292,7 +292,7 @@ fn plain_footer(step: CreationStep) -> &'static str {
     match step {
         CreationStep::Difficulty => "[p]/[f] picks; Esc backs out to the menu",
         CreationStep::Profile => {
-            "What earlier runs earned you, granted when this one starts - \
+            "Bonuses from past achievements, granted when this run starts - \
              Enter or Right moves on; Left goes back"
         }
         CreationStep::Class => "Up/Down + Enter picks; Left/Right pages; Esc goes back",

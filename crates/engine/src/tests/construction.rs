@@ -372,11 +372,12 @@ fn a_part_supplied_request_survives_a_reload() {
 /// The Home is the one structure the player still stands up by hand.
 ///
 /// Founding is the one build with nobody to ask — base space does not exist
-/// yet, so there is no roster standing in it and no shelf to fetch from —
-/// which is why it keeps the pack-charging, refuse-on-shortfall shape the
-/// rest of the verb has shed.
+/// yet, so there is no roster standing in it and no shelf to fetch from — so
+/// it keeps the pack-charging, refuse-on-shortfall shape the rest of the
+/// verb has shed. What it charges is nothing: the Home's `build_cost` is
+/// empty, and the pack is what a modded cost would still be taken from.
 #[test]
-fn a_home_is_still_placed_by_the_player_and_paid_for_on_the_spot() {
+fn a_home_is_still_placed_by_the_player_and_charged_on_the_spot() {
     let mut game = Game::new(1108, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let before = count_item(&game, ids::CORE_FRAGMENT);
 
@@ -388,9 +389,10 @@ fn a_home_is_still_placed_by_the_player_and_paid_for_on_the_spot() {
         find_structure_by_kind(&mut game, "home").is_some(),
         "the Home is standing the moment the call returns — no crew involved"
     );
-    assert!(
-        count_item(&game, ids::CORE_FRAGMENT) <= before,
-        "and it was paid for out of the pack rather than fetched"
+    assert_eq!(
+        count_item(&game, ids::CORE_FRAGMENT),
+        before,
+        "and the shipped Home takes nothing out of the pack for it"
     );
 }
 

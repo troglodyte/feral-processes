@@ -9101,3 +9101,36 @@ item the starting kit already carried — invisible while founding zeroed the
 kit's row, and a silent five-fragment pack the moment it did not, because
 `Inventory::count` reads the **first** row keyed to an item and `Game::load`
 restores the `Vec` verbatim. It merges now.
+
+### The low-Power notice is a state read once a tick, not a hook on a spend
+
+Every other tutorial fires from the site of the thing it explains — a
+descent, a raid, a work order. Power cannot, because it leaves the player two
+ways. `Game::spend_power` charges a routine, and `systems::needs_tick_system`
+drains `tuning::HUNGER_DECAY_PER_TICK` every tick whatever the player is
+doing. The second is how most runs cross the line, and it is a bevy system
+with no `Game` to notify from — so a hook on the spend would be silent for
+exactly the player who most needs telling, the one who has been walking.
+
+`Game::note_low_power` therefore reads the reserve once a tick from
+`tick_inner`, beside `note_strandings` and for its reason: the schedule has
+just run and `Game::notify` is a `&mut Game` door. `Repeat::OnceEver` is the
+whole of what keeps a state read from being a per-tick alarm — the reserve
+sits under the threshold for as long as the player leaves it there, and the
+latch is what makes that one sentence instead of a thousand.
+
+**The threshold is `tuning::LOW_POWER_ATTACK_THRESHOLD` and not a fraction of
+its own.** It happens to be half of `components::POWER_MAX` today, which is
+what the request asked for, but the number that matters is the one
+`battle::power_attack_multiplier` starts docking attacks at: a second
+constant here would let the screen say "your attacks start to weaken" on a
+tick where they do not.
+
+**The benched-program notice beside it is gated on the Bay, not on the
+program.** It fires from `Game::bench_or_dissolve`'s Forgiving arm — the one
+door a *death* goes through — and only while `Game::repair_bays` is empty,
+because a base that already has one has nothing to be told: the program walks
+there itself. The gate reads `StructureDef::recovery` rather than
+`"repair_bay"`, `dispatches_sorties`' rule, so a mod's own recovery structure
+answers it too. Its copy has to keep step with `Game::add_to_party`'s
+refusal, which is the other place the game says a downed program needs a Bay.

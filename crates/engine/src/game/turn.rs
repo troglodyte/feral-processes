@@ -207,6 +207,10 @@ impl Game {
         // — but on a period rather than on an edge: a stranding *has* one and
         // a posting does not. See `MEMORY_POSTING_PERIOD`.
         self.note_postings();
+        // Beside `note_strandings` and for its reason: `needs_tick_system`
+        // has just drained the reserve inside the schedule above, and
+        // `Game::notify` is a `&mut Game` door no bevy system can reach.
+        self.note_low_power();
         // Immediately after the schedule, which is where `contract_system`
         // raised the progress this reads. Paying is `&mut Game` work — an
         // inventory write and an XP grant — so it cannot live in the system
@@ -238,6 +242,29 @@ impl Game {
         self.tick_field_buffs();
         self.world.resource_mut::<GameClock>().tick += 1;
         self.note_static_turnover(epoch_before);
+    }
+
+    /// Tells the player once, ever, that their Power reserve has gone under
+    /// `tuning::LOW_POWER_ATTACK_THRESHOLD`.
+    ///
+    /// **A state read once a tick rather than a hook on a spend**, which is
+    /// the opposite of how every other tutorial fires — and it has to be.
+    /// Power leaves the player two ways: `Game::spend_power` charges a
+    /// routine, and `needs_tick_system` drains a flat rate every tick
+    /// whatever the player is doing. The second is how most runs cross the
+    /// line, and it is a bevy system with no `Game` to notify from. One read
+    /// after the schedule covers both, and `Repeat::OnceEver` is what keeps
+    /// it from being a per-tick alarm — the reserve sits under the threshold
+    /// for as long as the player leaves it there.
+    fn note_low_power(&mut self) {
+        let player = self.player_entity();
+        let low = self
+            .world
+            .get::<PowerReserve>(player)
+            .is_some_and(|r| r.get() < crate::tuning::LOW_POWER_ATTACK_THRESHOLD);
+        if low {
+            self.notify(crate::notifications::NotificationKind::LowPower);
+        }
     }
 
     /// Moves every provoked nest guardian one step closer to the player and

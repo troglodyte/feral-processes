@@ -48,3 +48,21 @@
   `ALL_MODES`. Art is the **sprite seam unchanged** — substitutes for the
   glyph, never beside it, both halves asserted — and `def.sprite` is that
   live hook, not an unused field.
+- **The low-Power notice is a state read once a tick, not a hook on a
+  spend**, and it is the one kind that fires that way. Power leaves the
+  player through `Game::spend_power` *and* through `needs_tick_system`'s flat
+  per-tick drain, and the second — how most runs cross — is a bevy system
+  with no `Game` to notify from, so `Game::note_low_power` reads the reserve
+  from `tick_inner` instead. `Repeat::OnceEver` is what keeps a state read
+  from being a per-tick alarm. **The threshold is
+  `tuning::LOW_POWER_ATTACK_THRESHOLD`**, not a fraction of its own: it is
+  half of `POWER_MAX` today, but the number that matters is where
+  `battle::power_attack_multiplier` starts docking attacks, or the screen
+  says "your attacks start to weaken" on a tick where they do not.
+- **`DownedProgram` is gated on the Bay, not on the program.** It fires from
+  `bench_or_dissolve`'s Forgiving arm — the one door a *death* goes through —
+  and only while `Game::repair_bays` is empty, since a base that has one has
+  nothing to be told. The gate reads `StructureDef::recovery`, not
+  `"repair_bay"` (`dispatches_sorties`' rule), and its copy has to keep step
+  with `Game::add_to_party`'s refusal, the other place the game says a downed
+  program needs a Bay.

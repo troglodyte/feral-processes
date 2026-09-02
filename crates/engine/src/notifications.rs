@@ -68,6 +68,23 @@ pub enum NotificationKind {
     FirstRaid,
     /// A work order is filed and accepted — `Game::queue_work_order`.
     FirstWorkOrder,
+    /// The player's reserve first crosses under
+    /// `tuning::LOW_POWER_ATTACK_THRESHOLD` — `Game::note_low_power`, read
+    /// off the reserve once a tick rather than fired from a spend.
+    ///
+    /// **The threshold is the attack penalty's own, not a fraction of its
+    /// own.** Power drains passively in `needs_tick_system` and is charged in
+    /// `Game::spend_power`, so a notice hung off spending would miss the way
+    /// most runs cross; and a second constant here would let the screen say
+    /// "your attacks are weakening" on a tick where they are not.
+    LowPower,
+    /// A program of the player's is benched by a Forgiving death with no
+    /// Repair Bay standing — `Game::bench_or_dissolve`.
+    ///
+    /// Gated on the Bay because `Downed` is a one-way door without one, and
+    /// the gate reads `StructureDef::recovery` rather than the Bay's id —
+    /// `dispatches_sorties`' rule.
+    DownedProgram,
     /// Static reaches the player for the first time — the movement hook in
     /// `game/turn.rs`, on the step where `Terrain::event` is live on the
     /// destination tile. Fired at the same site the effect is applied, not
@@ -140,12 +157,14 @@ impl NotificationKind {
     /// scroll to forgive. `Perk::all`'s shape and its reason: a walk over
     /// the whole enum is what makes a census non-vacuous, and the array
     /// length fails to compile when a variant is added without being listed.
-    pub fn all() -> [NotificationKind; 9] {
+    pub fn all() -> [NotificationKind; 11] {
         [
             NotificationKind::BaseFounding,
             NotificationKind::FirstDescent,
             NotificationKind::FirstRaid,
             NotificationKind::FirstWorkOrder,
+            NotificationKind::LowPower,
+            NotificationKind::DownedProgram,
             NotificationKind::FirstStatic,
             NotificationKind::Breach,
             NotificationKind::ContractClosed,
@@ -208,6 +227,34 @@ impl NotificationKind {
                 sprite: None,
                 glyph: '&',
                 color: GlyphColor::Yellow,
+                repeat: Repeat::OnceEver,
+            },
+            NotificationKind::LowPower => NotificationDef {
+                title: "Power Low",
+                body: "Your Power reserve is under half. It drains a little every tick whatever \
+                       you are doing, and every routine you run comes out of the same \
+                       pool.\n\nFrom here your own attacks start to weaken, and at zero you \
+                       take Integrity damage every tick until you find some.\n\nPress [e] to \
+                       drain a Power Cell for 25 — two Core Fragments compiles one. [r] powers \
+                       down and fills it outright: free inside your base, one Power Outlet \
+                       anywhere else.",
+                sprite: None,
+                glyph: '%',
+                color: GlyphColor::Yellow,
+                repeat: Repeat::OnceEver,
+            },
+            NotificationKind::DownedProgram => NotificationDef {
+                title: "Program Down",
+                body: "A program of yours went down and is benched. It keeps its levels and \
+                       everything it has learned, but it cannot be put back in your party, take \
+                       a post, or work.\n\nA Repair Bay is what brings one back: a downed \
+                       program walks there itself and is written up to full Integrity a tick at \
+                       a time. Until one stands in your base, benched is where it stays — you \
+                       can still sell it or pull a routine out of it.\n\n[b] for the base \
+                       menu, then Deploy a structure.",
+                sprite: None,
+                glyph: 'r',
+                color: GlyphColor::Red,
                 repeat: Repeat::OnceEver,
             },
             NotificationKind::FirstStatic => NotificationDef {
@@ -278,6 +325,10 @@ impl NotificationKind {
             NotificationKind::FirstRaid => "tutorial_first_raid",
             NotificationKind::FirstWorkOrder => "tutorial_first_work_order",
             NotificationKind::FirstStatic => "tutorial_first_static",
+            // New, so no `profile.ron` holds either yet — but they latch, so
+            // these two strings are a file format from here on.
+            NotificationKind::LowPower => "tutorial_low_power",
+            NotificationKind::DownedProgram => "tutorial_downed_program",
             NotificationKind::Breach => "milestone_breach",
             NotificationKind::ContractClosed => "milestone_contract",
             // New, so no `profile.ron` holds it — and `Always` besides, so

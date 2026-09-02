@@ -499,6 +499,14 @@ impl Game {
             stats.hp = 1;
         }
         self.world.entity_mut(creature).insert(Downed);
+        // Told once, ever, and only while there is nothing standing that
+        // would fix it: `Downed` is a one-way door with no Bay, and the
+        // gate is `StructureDef::recovery` through `Game::repair_bays`
+        // rather than the Bay's own id — `dispatches_sorties`' rule, so a
+        // mod's own recovery structure answers it too.
+        if self.repair_bays().is_empty() {
+            self.notify(crate::notifications::NotificationKind::DownedProgram);
+        }
         name
     }
 

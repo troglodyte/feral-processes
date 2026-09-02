@@ -686,7 +686,100 @@ No other task depends on them.
 
 ---
 
-## After all four
+## Task E: what a dry Recharger owes, and what it burns
+
+**Added after Task D shipped**, from two questions D raised and the user
+answered. Runs after B. Touches no file B touches.
+
+**Files:**
+- Modify: `crates/engine/src/structures.rs` — `StructureDef::power_upkeep`
+- Modify: `crates/engine/src/systems.rs` — `power_regen_system`,
+  `burn_grid_upkeep`
+- Modify: `crates/engine/src/game/base/power.rs` — `ledger`
+- Modify: `assets/structures/recharger_node.ron`, `line_driver.ron`,
+  `assets/structures/README.md`
+- Modify: `docs/seams.md`, `.claude/skills/seams/references/base.md`,
+  `CLAUDE.md` (+ `cp CLAUDE.md AGENTS.md`)
+- Test: `crates/engine/src/tests/power.rs`, `crates/engine/src/tests/assets.rs`
+
+### E1 · The fuel is named in data
+
+`power_upkeep: bool` becomes `#[serde(default)] pub power_upkeep:
+Option<ItemId>`, authored `Some("power_cell")` on both suppliers. Task D
+hardcoded `ids::POWER_CELL` and flagged it: *"`power_upkeep: Option<ItemId>`
+would be strictly more moddable at zero extra cost, and I did not take that
+decision unilaterally."*
+
+`CLAUDE.md`'s moddability rule is the argument — content is never hardcoded in
+Rust when it can be data. Cheapest now, while two shipped files and nothing
+external read the field. **No save change**: `power_upkeep` lives on
+`StructureDef` (a `.ron` def), not on `StructureSave`.
+
+Everywhere that asks "does this burn?" becomes `power_upkeep.is_some()`;
+everywhere that takes a cell takes `power_upkeep.as_ref()`'s item instead of
+`ids::POWER_CELL`. The census in `tests/assets.rs` must additionally assert
+that a declared fuel **resolves to a real item** — a typo'd id would otherwise
+mean a supplier that can never be fed, silently.
+
+### E2 · A dry Recharger stops trickling too
+
+Today `power_regen_system` reads no `PowerFuel`, so a starved Recharger still
+trickles Power into the party — Task D flagged this as an open design
+question and reported the description accordingly. Gate it: **a supplier with
+a fuel it cannot pay does nothing at all**, neither half.
+
+The argument is a standing note in this repo: *Power is not a limiting
+resource — the Recharger Node deletes hunger as a cost for 10 fragments.*
+The personal trickle is the half the player actually feels, so fuelling the
+Grid half alone leaves that untouched. This is what puts the cost back.
+
+**Rewrite the Recharger's `description` a second time.** Task D's current text
+is accurate about the Grid half specifically because the trickle was *not*
+gated; once both halves are, the sentence should say the building stops.
+
+- [ ] **Step 1: Read** `power_regen_system`, `burn_grid_upkeep` and `ledger`
+      as Task D left them, plus `assets/structures/README.md`'s
+      `power_upkeep` entry.
+
+- [ ] **Step 2: Write the failing tests.** Four behaviours:
+  1. A dry Recharger trickles **no** Power into a party standing in range —
+     the player's `PowerReserve` is unchanged across a window.
+  2. A fuelled one still trickles exactly as it did before this task. Pin the
+     existing rate so E2 cannot silently retune it.
+  3. A supplier whose `power_upkeep` names an item **no `ItemDb` entry
+     resolves** never burns and never supplies — and the census below is what
+     stops one shipping.
+  4. The census: every shipped `power_upkeep` names an item that resolves.
+
+- [ ] **Step 3: Run them and watch each fail.** Behaviour 2 will pass before
+      the change; prove it real by mutation (break the regen rate and watch
+      it fail), and say so in the report.
+
+- [ ] **Step 4: Flip the field to `Option<ItemId>`** and update both suppliers
+      and the README.
+
+- [ ] **Step 5: Gate `power_regen_system`** on the same `PowerFuel` the ledger
+      reads. Do not duplicate the "is it paying?" test — if Task D left it
+      inline in two places, extract the predicate so E does not make a third.
+
+- [ ] **Step 6: Rewrite the Recharger's description.**
+
+- [ ] **Step 7: `cargo test --workspace`.** Expect fallout in the fixtures
+      Task D already had to touch — `tests/support.rs`'s
+      `stand_ample_grid_supply` and `dev-saves/chains.ron` — if either relies
+      on a trickle that now stops. Read `dev-saves/README.md` before touching
+      the template; Task D rebuilt its supplier bank and a Depot boxed in on
+      all four sides is unreachable, which reports as `Stranded` on some
+      *other* machine's worker.
+
+- [ ] **Step 8: Seam bookkeeping**, amending rather than adding: Task D's
+      rule in `CLAUDE.md` says the Grid half. Correct it to say the building.
+
+- [ ] **Step 9: `cargo fmt`, `cargo clippy --workspace`, commit.**
+
+---
+
+## After all five
 
 The orchestrator handles this; it is written down so nothing is dropped.
 

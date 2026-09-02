@@ -1639,6 +1639,171 @@ fn every_upgrade_path_asks_for_a_zone_material() {
     );
 }
 
+/// Every line the Zone Portal demands at sector N names something the base
+/// can actually be making by sector N.
+///
+/// `ZONE_MATERIALS`' shape, and its reason: nothing in `StructureDef` says
+/// the portal's bill has to be *reachable*, and the constraint is entirely a
+/// content decision. `zone_build_cost` exists precisely because two of the
+/// lines are not legal in sector 1 — Cache Grain behind `cache_coherence`
+/// and the Recompile Kernel behind `program_refactoring`, both `min_zone:
+/// 2` — and that argument is written down in `docs/seams.md` and asserted
+/// nowhere. Moving `("cache_grain", 10)` up into `build_cost` makes sector 1
+/// unbreachable, and would have failed no test.
+///
+/// A line naming something **no** structure makes and no research unlocks is
+/// not gated by research at all: it is a drop, and `PORTAL_DROPPED_LINES`
+/// names the ones that are so a new uncraftable line cannot slip through as
+/// "nothing gates it".
+const PORTAL_DROPPED_LINES: &[&str] = &["portal_fragment"];
+
+/// The earliest zone each research node can be bought in: its own `min_zone`
+/// and every node it waits on, whichever is deepest. Zone numbering starts
+/// at 1, and `min_zone: 0` — the default, meaning ungated — reads as 1.
+fn research_reachable_zone(
+    db: &crate::research::ResearchDb,
+) -> std::collections::HashMap<String, u32> {
+    let mut zones: std::collections::HashMap<String, u32> = db
+        .all()
+        .map(|d| (d.id.to_string(), d.min_zone.max(1)))
+        .collect();
+    // Fixed point rather than recursion: the tree is two dozen nodes and a
+    // cycle in a mod's `requires` would otherwise be a stack overflow rather
+    // than a census failure.
+    loop {
+        let mut moved = false;
+        for def in db.all() {
+            let deepest = def
+                .requires
+                .iter()
+                .filter_map(|r| zones.get(r.as_str()).copied())
+                .max()
+                .unwrap_or(1)
+                .max(def.min_zone.max(1));
+            let entry = zones.get_mut(def.id.as_str()).expect("seeded above");
+            if *entry < deepest {
+                *entry = deepest;
+                moved = true;
+            }
+        }
+        if !moved {
+            break;
+        }
+    }
+    zones
+}
+
+#[test]
+fn every_zone_portal_line_is_makeable_by_the_sector_that_demands_it() {
+    let game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let research = game.world.resource::<crate::research::ResearchDb>();
+    let structures = game.world.resource::<StructureDb>();
+    let items = game.world.resource::<ItemDb>();
+    let node_zone = research_reachable_zone(research);
+
+    // The gated structures first, each at the shallowest node that unlocks
+    // it. Seeding every structure at 1 up front and then taking a `min`
+    // reads the same and is wrong: the seed wins every comparison, and the
+    // whole census passes on a bill that cannot be paid.
+    let mut structure_zone: std::collections::HashMap<String, u32> =
+        std::collections::HashMap::new();
+    for def in research.all() {
+        let zone = node_zone[def.id.as_str()];
+        for kind in &def.unlocks_structures {
+            let entry = structure_zone.entry(kind.to_string()).or_insert(u32::MAX);
+            *entry = (*entry).min(zone);
+        }
+    }
+    // A structure named by no research file is buildable from turn one —
+    // `assets/research/README.md` states that rule, and it is what keeps the
+    // Assembly Bay in sector 1's bill.
+    for def in structures.all() {
+        structure_zone.entry(def.id.to_string()).or_insert(1);
+    }
+
+    // The earliest zone anything can put a unit of an item on a shelf: the
+    // machine that makes it, the bench its own recipe names, or the research
+    // node that hands the recipe over. `None` means nothing makes it.
+    let item_zone = |id: &ItemId| -> Option<u32> {
+        let mut best: Option<u32> = None;
+        let mut consider = |zone: u32| {
+            best = Some(best.map_or(zone, |b: u32| b.min(zone)));
+        };
+        for def in structures.all() {
+            let makes = def.assembles.as_ref().is_some_and(|a| &a.item == id)
+                || def.work.as_ref().is_some_and(|w| &w.produces == id);
+            if makes {
+                consider(structure_zone[def.id.as_str()]);
+            }
+        }
+        if let Some(craftable) = items.get(id.as_str()).and_then(|d| d.craftable.as_ref()) {
+            let bench = craftable
+                .requires_structure
+                .as_ref()
+                .map_or(1, |k| structure_zone[k.as_str()]);
+            consider(bench);
+        }
+        for def in research.all() {
+            for recipe in &def.unlocks_recipes {
+                if &recipe.result != id {
+                    continue;
+                }
+                let bench = recipe
+                    .requires_structure
+                    .as_ref()
+                    .map_or(1, |k| structure_zone[k.as_str()]);
+                consider(node_zone[def.id.as_str()].max(bench));
+            }
+        }
+        best
+    };
+
+    let portal = structures
+        .all()
+        .find(|d| d.zone_portal)
+        .expect("one shipped structure breaches");
+    let lines: Vec<(u32, &ItemId)> = portal
+        .build_cost
+        .iter()
+        .map(|(item, _)| (1, item))
+        .chain(
+            portal
+                .zone_build_cost
+                .iter()
+                .map(|(min_zone, item, _)| (*min_zone, item)),
+        )
+        .collect();
+    assert!(
+        lines.len() >= 4,
+        "the portal's bill lost its base lines, and this scan would pass on an empty one"
+    );
+
+    let mut dropped = 0;
+    for (demanded_at, item) in lines {
+        let Some(makeable_at) = item_zone(item) else {
+            assert!(
+                PORTAL_DROPPED_LINES.contains(&item.as_str()),
+                "the portal demands {} at sector {demanded_at} and nothing in the game \
+                 makes one — add it to PORTAL_DROPPED_LINES if that is deliberate",
+                item.as_str()
+            );
+            dropped += 1;
+            continue;
+        };
+        assert!(
+            makeable_at <= demanded_at,
+            "the portal demands {} at sector {demanded_at}, but nothing can make one \
+             before sector {makeable_at} — that sector cannot be breached",
+            item.as_str()
+        );
+    }
+    assert_eq!(
+        dropped,
+        PORTAL_DROPPED_LINES.len(),
+        "a line in PORTAL_DROPPED_LINES stopped being demanded, or became craftable"
+    );
+}
+
 /// The talent-tree censuses, over the **real** `assets/talents/` rather than a
 /// fixture. Nothing in `TalentDb::load_dir` enforces any of this beyond the
 /// shape — a mod's tree is never refused for being thin — so these are what

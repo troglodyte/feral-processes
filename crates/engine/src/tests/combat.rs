@@ -995,3 +995,98 @@ fn a_partys_plain_miss_carries_the_swing_outcome() {
     player_swings_at_group(&mut game, 0);
     assert_eq!(partys_swing_outcome(&game), Some(SwingOutcome::Miss));
 }
+
+// --- slice 2: a second swing, earned by class and level ---
+
+/// The grant is Striker's alone, and it is a threshold rather than a ramp.
+/// Every other affinity class swings once at any level, which is what keeps
+/// this a class identity rather than a general levelling reward.
+#[test]
+fn only_a_striker_at_the_threshold_swings_twice() {
+    use crate::battle::attacks_per_round;
+    use crate::species::AffinityClass;
+    use crate::tuning::EXTRA_ATTACK_LEVEL;
+
+    assert_eq!(
+        attacks_per_round(Some(AffinityClass::Striker), EXTRA_ATTACK_LEVEL),
+        2,
+        "a Striker at the threshold gets the second swing"
+    );
+    assert_eq!(
+        attacks_per_round(Some(AffinityClass::Striker), EXTRA_ATTACK_LEVEL - 1),
+        1,
+        "one level below the threshold is still one swing"
+    );
+
+    for class in [
+        AffinityClass::Bastion,
+        AffinityClass::Medic,
+        AffinityClass::Saboteur,
+        AffinityClass::Leech,
+    ] {
+        assert_eq!(
+            attacks_per_round(Some(class), EXTRA_ATTACK_LEVEL + 20),
+            1,
+            "{class:?} never gets a second swing, at any level"
+        );
+    }
+
+    assert_eq!(
+        attacks_per_round(None, EXTRA_ATTACK_LEVEL + 20),
+        1,
+        "a program with no derived class swings once"
+    );
+}
+
+/// `attacks_for` is the one resolution from an entity to its swing count, and
+/// it has to answer for three kinds of body. The player's class is a
+/// `PlayerClass`; a companion's and a wild program's is derived from their
+/// species. All three go through the same rule.
+#[test]
+fn attacks_for_resolves_the_player_and_a_wild_program_alike() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+
+    game.world.get_mut::<Experience>(player).unwrap().level = crate::tuning::EXTRA_ATTACK_LEVEL;
+    game.world.get_mut::<PlayerIdentity>(player).unwrap().class =
+        Some(classes::PlayerClass::Striker);
+    assert_eq!(
+        game.attacks_for(player),
+        2,
+        "a Striker player at the threshold"
+    );
+
+    game.world.get_mut::<PlayerIdentity>(player).unwrap().class =
+        Some(classes::PlayerClass::Fabricator);
+    assert_eq!(
+        game.attacks_for(player),
+        1,
+        "a player-only class no species can hold grants no swing"
+    );
+
+    // The species side: find a Striker species and stand one up at the
+    // threshold. `expect` rather than a skip — if the assets ship no Striker
+    // this must fail loudly, not pass by covering nothing.
+    let striker = game
+        .species_defs()
+        .into_iter()
+        .find(|d| d.affinity_class() == Some(species::AffinityClass::Striker))
+        .expect("the shipped species include at least one Striker");
+    let wild = game
+        .world
+        .spawn((
+            Creature {
+                species: striker.id.clone(),
+            },
+            Experience {
+                level: crate::tuning::EXTRA_ATTACK_LEVEL,
+                ..Default::default()
+            },
+        ))
+        .id();
+    assert_eq!(
+        game.attacks_for(wild),
+        2,
+        "a Striker species at the threshold"
+    );
+}

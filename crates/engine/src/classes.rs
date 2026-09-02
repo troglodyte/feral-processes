@@ -55,7 +55,7 @@ use crate::abilities::AffinityKind;
 use crate::components::{Inventory, PlayerIdentity};
 use crate::items::ItemId;
 use crate::items::ids;
-use crate::species::Affinities;
+use crate::species::{Affinities, AffinityClass};
 use crate::views;
 use bevy_ecs::prelude::Resource;
 use serde::Deserialize;
@@ -111,6 +111,27 @@ impl PlayerClass {
         PlayerClass::Invoker,
         PlayerClass::Fabricator,
     ];
+
+    /// This class as a *species'* role, where one exists. The five shared
+    /// names project straight across; the three no species can ever be
+    /// answer `None`.
+    ///
+    /// This is a read-only projection and not the collapse the type's own
+    /// doc comment refuses — `AffinityClass` gains no variant, so
+    /// `ClassShape`, `TalentDb` and `base_job_label` keep answering for
+    /// exactly the five roles a species can hold. Exhaustive on purpose: a
+    /// ninth `PlayerClass` must decide what it is in combat rather than
+    /// defaulting to nothing through a `_` arm.
+    pub fn as_affinity_class(self) -> Option<AffinityClass> {
+        match self {
+            PlayerClass::Striker => Some(AffinityClass::Striker),
+            PlayerClass::Bastion => Some(AffinityClass::Bastion),
+            PlayerClass::Medic => Some(AffinityClass::Medic),
+            PlayerClass::Saboteur => Some(AffinityClass::Saboteur),
+            PlayerClass::Leech => Some(AffinityClass::Leech),
+            PlayerClass::Decompiler | PlayerClass::Invoker | PlayerClass::Fabricator => None,
+        }
+    }
 }
 
 /// One class's authored identity. `affinities` and `kit` are both

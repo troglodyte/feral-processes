@@ -3,14 +3,14 @@ use rand::RngExt;
 use serde::{Deserialize, Serialize};
 
 use crate::items::ItemId;
-use crate::species::SpeciesId;
+use crate::species::{AffinityClass, SpeciesId};
 use crate::tuning::{
     ACCURACY_PER_LEVEL, ACCURACY_PER_SPEED, ATTACKER_ACCURACY_ADVANTAGE, BACK_SLOT_AGGRO_WEIGHT,
     CRIT_CHANCE, CRIT_ROLL_MULTIPLIER, DEFEND_AGGRO_WEIGHT, EVASION_PER_LEVEL, EVASION_PER_SPEED,
-    FRONT_SLOT_AGGRO_WEIGHT, FRONT_SLOTS, FUMBLE_CHANCE, FUMBLE_RECOIL_FRACTION,
-    FUMBLE_RUNG_THRESHOLDS, HIT_CHANCE_MAX, HIT_CHANCE_MIN, JACK_OUT_BASE_CHANCE,
-    JACK_OUT_CHANCE_MAX, JACK_OUT_CHANCE_MIN, LOW_POWER_ATTACK_THRESHOLD,
-    LOW_POWER_MIN_ATTACK_MULTIPLIER,
+    EXTRA_ATTACK_LEVEL, FRONT_SLOT_AGGRO_WEIGHT, FRONT_SLOTS, FUMBLE_CHANCE,
+    FUMBLE_RECOIL_FRACTION, FUMBLE_RUNG_THRESHOLDS, HIT_CHANCE_MAX, HIT_CHANCE_MIN,
+    JACK_OUT_BASE_CHANCE, JACK_OUT_CHANCE_MAX, JACK_OUT_CHANCE_MIN, LOW_POWER_ATTACK_THRESHOLD,
+    LOW_POWER_MIN_ATTACK_MULTIPLIER, MAX_ATTACKS_PER_ROUND,
 };
 
 /// The band one attack rolls its damage from, inclusive at both ends.
@@ -334,6 +334,26 @@ pub(crate) fn ceil_sqrt(n: u32) -> u32 {
 /// projections and the real round loop cannot drift.
 pub(crate) fn attackers_in_group(n: usize) -> usize {
     ceil_sqrt(n as u32) as usize
+}
+
+/// How many times **one** body swings in a round. Not to be confused with
+/// `attackers_in_group`, immediately above, which is how many *bodies* of a
+/// group swing — the two read identically at a call site (`for _ in 0..n`)
+/// and applying the wrong one, or both, is the way this feature gets built
+/// backwards.
+///
+/// A Striker swings twice from `EXTRA_ATTACK_LEVEL`; everyone else swings
+/// once. `AffinityClass` rather than `PlayerClass` because that is the
+/// vocabulary the player, companions and wild programs already share, so the
+/// rule lands on all three from one expression. Shared with
+/// `crate::balance_sim` so the offline projections and the real round loop
+/// cannot drift.
+pub(crate) fn attacks_per_round(class: Option<AffinityClass>, level: u32) -> u32 {
+    if class == Some(AffinityClass::Striker) && level >= EXTRA_ATTACK_LEVEL {
+        MAX_ATTACKS_PER_ROUND
+    } else {
+        1
+    }
 }
 
 /// Relative weight a roster member at `slot` carries in a wild program's

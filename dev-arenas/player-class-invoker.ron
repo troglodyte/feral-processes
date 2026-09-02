@@ -1,0 +1,50 @@
+// PLAYTEST: is a deeper kit worth a weaker one? An Invoker holds six
+// routine slots at level 5 where everyone else holds four, and every
+// routine it runs is authored 15% up on Buff and Debuff against a
+// specialist's 30%.
+//
+// The sixth of seven class files — see `player-class-striker.ron` for the
+// shared argument: why the pack is this pack, why the pool is unspent, and
+// why the headless bin reports the same numbers for every class.
+//
+//     FERAL_DEV_ARENA=1 cargo run  ->  [R] Arena  ->  [L] player-class-invoker
+//
+// **This is the one class file where the headless floor is not the only
+// thing the bin cannot see.** `PartyPlan::AllAttack` invokes nothing, so it
+// misses the spread like it does for the other seven — but it also never
+// opens the routine menu, which is the entire feature. Six rows against four
+// is a thing you can only look at.
+//
+// What to watch:
+//   - Open the routine list. Are the two extra slots *full*? An Invoker
+//     whose species unlocks and starter do not reach six is carrying two
+//     empty rows, and the class is worth nothing until much later than the
+//     screen implies. That is the first thing to falsify.
+//   - `hyperthread` at 1.15 against a Bastion's 1.3 on the same routine: is
+//     a 15-point gap in authored buff power visible across a fight, or does
+//     breadth cost nothing you can feel?
+//   - Does having more slots change what you *do*, or just what you could
+//     do? If the fight is won by invoking the same one routine every time,
+//     the slots are a menu and not a class.
+//   - The Invoker damps Damage at 0.85 and this kit has no damage routine,
+//     so the trade is invisible here by construction — the same hole every
+//     other class file in this set has, and the same finding if the class
+//     reads as strictly better.
+(
+    player: Fresh(level: 5, zone: 1),
+    character: (
+        class: Some(Invoker),
+        stats: (0, 0, 0, 0),
+        routine: Some("hyperthread"),
+    ),
+    party: [
+        (species: "glitch", level: 5),
+        (species: "glitch", level: 5),
+    ],
+    opponents: [
+        (species: "sub_process", count: 5),
+        (species: "sub_process", count: 5),
+    ],
+    reps: 1,
+    seed: 2,
+)

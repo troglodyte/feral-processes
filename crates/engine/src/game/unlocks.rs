@@ -37,7 +37,12 @@ impl Game {
                 .map(|d| d.skill)
                 .unwrap_or(0),
             hp_penalty_reduction: crate::perks::decompile_hp_penalty_reduction(self.player_perks()),
-            capture_boost_pct: self.field_buff_power(player, FieldBuffKind::CaptureBoost),
+            // The one place the two whole-attempt boosts are summed: a
+            // running `CaptureBoost` field buff, and what the player's class
+            // is worth. Both scale the entire attempt, so they belong in the
+            // same field rather than as a fourth multiplier of the same shape.
+            capture_boost_pct: self.field_buff_power(player, FieldBuffKind::CaptureBoost)
+                + crate::classes::capture_boost_pct(self.player_class()),
         }
     }
 

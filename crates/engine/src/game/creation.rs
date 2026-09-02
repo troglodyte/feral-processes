@@ -14,9 +14,9 @@
 
 use crate::abilities::AbilityId;
 use crate::achievements::MainStat;
+use crate::classes::PlayerClass;
 use crate::items::ItemId;
 use crate::items_db::ItemDb;
-use crate::species::AffinityClass;
 use crate::*;
 
 /// The sprite name every player carried before the wizard could choose
@@ -32,7 +32,7 @@ pub const DEFAULT_PLAYER_SPRITE: &str = "player";
 #[derive(Clone, Debug, PartialEq)]
 pub struct CharacterChoice {
     pub name: String,
-    pub class: Option<AffinityClass>,
+    pub class: Option<PlayerClass>,
     pub glyph: char,
     pub sprite: String,
     /// Which player swatch the glyph wears, **0-based**; `None` is the
@@ -400,10 +400,7 @@ impl CreationCatalogue {
     /// The starter pool, priced through `class`'s spread —
     /// `Game::starter_routine_rows`' own derivation, with no perk term
     /// because a player being created has no unlocked perks yet.
-    pub fn starter_rows(
-        &self,
-        class: Option<AffinityClass>,
-    ) -> Vec<crate::views::StarterRoutineRow> {
+    pub fn starter_rows(&self, class: Option<PlayerClass>) -> Vec<crate::views::StarterRoutineRow> {
         crate::abilities::starter_rows(&self.abilities, |kind| {
             crate::classes::affinity_with_perk(
                 crate::classes::class_affinity(&self.classes, class, kind),

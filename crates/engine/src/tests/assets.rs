@@ -2844,8 +2844,7 @@ fn the_shipped_tutorial_chain_is_well_formed() {
 /// contract these hold to.
 mod classes {
     use super::*;
-    use crate::classes::ClassDb;
-    use crate::species::AffinityClass;
+    use crate::classes::{ClassDb, PlayerClass};
 
     fn shipped() -> ClassDb {
         let (db, warnings) = ClassDb::load_dir(&test_assets_dir().join("classes")).unwrap();
@@ -2856,13 +2855,13 @@ mod classes {
         db
     }
 
-    /// Driven by the enum rather than by naming five files, so a sixth
+    /// Driven by the enum rather than by naming the files, so a ninth
     /// class fails this test the day it is added rather than shipping
     /// unpickable — `cell_mark`'s rule.
     #[test]
     fn every_class_has_a_file() {
         let db = shipped();
-        for class in AffinityClass::ALL {
+        for class in PlayerClass::ALL {
             assert!(db.get(class).is_some(), "{class:?} has no class file");
         }
     }
@@ -2997,7 +2996,7 @@ fn every_starter_reads_differently_through_a_class_that_raises_its_axis() {
             .effect
             .affinity_kind()
             .unwrap_or_else(|| panic!("starter {:?} scales on no affinity axis at all", def.id));
-        let raised = crate::species::AffinityClass::ALL
+        let raised = crate::classes::PlayerClass::ALL
             .iter()
             .map(|class| crate::classes::class_affinity(&classes, Some(*class), axis))
             .fold(crate::tuning::AFFINITY_NEUTRAL, f32::max);

@@ -4,11 +4,12 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::affixes::AffixId;
+use crate::classes::PlayerClass;
 use crate::components::{ActiveFieldBuff, Rarity};
 use crate::items::{EquipmentSlot, ItemId};
 use crate::perks::Perk;
 use crate::resources::DifficultyMode;
-use crate::species::{AffinityClass, SpeciesId};
+use crate::species::SpeciesId;
 use crate::world::Tile;
 
 #[derive(Serialize, Deserialize)]
@@ -148,7 +149,7 @@ pub struct PlayerSave {
     /// and the stat fields above, and replaying the choice would double
     /// them.
     #[serde(default)]
-    pub class: Option<AffinityClass>,
+    pub class: Option<PlayerClass>,
     /// The player's chosen glyph — `components::Glyph::ch`. Defaulted
     /// through a named function rather than `char`'s own default (`'\0'`),
     /// so a save written before character creation existed loads the `@`

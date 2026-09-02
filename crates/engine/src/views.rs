@@ -6,6 +6,7 @@
 
 use crate::abilities::AffinityKind;
 use crate::battle::ActionOption;
+use crate::classes::PlayerClass;
 use crate::components::{EquippedItem, GlyphColor, MachineStatus, Rarity, TaskKind};
 use crate::game::party::ProgramRole;
 use crate::items::{GearCopy, ItemId};
@@ -2337,7 +2338,7 @@ pub struct PlayerClassView {
 /// and still the fallback for an empty basket.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClassRow {
-    pub class: AffinityClass,
+    pub class: PlayerClass,
     pub name: String,
     pub description: String,
     /// `"Bonus to damage at the expense of healing"` — what this class

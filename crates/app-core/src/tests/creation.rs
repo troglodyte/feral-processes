@@ -9,8 +9,8 @@
 use super::support::*;
 use crate::*;
 use feral_processes_engine::achievements::{AchievementId, Earned, roll_main_stat};
+use feral_processes_engine::classes::PlayerClass;
 use feral_processes_engine::save;
-use feral_processes_engine::species::AffinityClass;
 use feral_processes_engine::tuning::CREATION_PERK_POINTS;
 use feral_processes_engine::tuning::{
     CREATION_COST_DEF, CREATION_CREDITS, CREATION_GAIN_INTEGRITY, CREATION_STAT_POINTS,
@@ -755,10 +755,10 @@ fn the_routine_rows_are_priced_through_the_chosen_class() {
     let app = opened("priced");
     let striker = app
         .creation_catalogue
-        .starter_rows(Some(AffinityClass::Striker));
+        .starter_rows(Some(PlayerClass::Striker));
     let medic = app
         .creation_catalogue
-        .starter_rows(Some(AffinityClass::Medic));
+        .starter_rows(Some(PlayerClass::Medic));
     assert!(
         !striker.is_empty(),
         "the shipped assets carry starter routines"

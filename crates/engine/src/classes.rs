@@ -29,18 +29,89 @@
 //! of `ActiveContract`, which stores its whole resolved def because a
 //! contract is a signed agreement that must not be rewritten under the
 //! player.
+//!
+//! **What a class *does* is code, not data — `perks.rs`'s seam, one
+//! directory over.** A class's catalogue entry (name, description, affinity
+//! spread, kit) is authored `.ron`; a class's *effect* is a hook into one
+//! particular formula with no shared shape to express as data, so it is a
+//! named query here: `capture_boost_pct`, `routine_slot_bonus`,
+//! `work_tick_scale`. Each is an **exhaustive match** on `PlayerClass` —
+//! `cell_mark`'s rule, and
+//! `every_perk_has_a_query_that_answers_what_it_is_worth`'s — so a ninth
+//! variant fails to compile rather than shipping with an effect silently
+//! missing. A class with nothing to say about an axis returns that axis's
+//! neutral value, so every call site adds its term unconditionally and no
+//! caller branches on the class itself.
+//!
+//! **The queries do not go through `ClassDb`**, so an effect survives a
+//! deleted `assets/classes/`. Nobody can pick a class in that state — the
+//! wizard has no rows to offer — but a save already carrying one keeps what
+//! it grants, which is the perk seam's behaviour and the honest one: an
+//! effect that vanished when a *display* catalogue went missing would be
+//! the surprising half.
 
 use crate::Game;
 use crate::abilities::AffinityKind;
 use crate::components::{Inventory, PlayerIdentity};
 use crate::items::ItemId;
 use crate::items::ids;
-use crate::species::{Affinities, AffinityClass};
+use crate::species::Affinities;
 use crate::views;
 use bevy_ecs::prelude::Resource;
 use serde::Deserialize;
+use serde::Serialize;
 use std::collections::HashMap;
 use std::path::Path;
+
+/// The class the **player** picked at creation. Eight variants: the five
+/// `species::AffinityClass` names in `AffinityClass::ALL`'s order, then the
+/// three no species can ever be.
+///
+/// **Deliberately not `AffinityClass`.** That enum is a *species'* derived
+/// role and is load-bearing for things the player has nothing to do with —
+/// `ClassShape`'s stat blocks, `talents::TalentDb`'s tree keys,
+/// `render/manifest.rs::base_job_label`'s base job, `AffinityClass::of_axis`.
+/// Adding `Fabricator` there would force every one of those exhaustive
+/// matches to answer for a class no species can hold. The two enums sharing
+/// five names is what makes the split cheap; collapsing them back into one
+/// is what this doc comment exists to refuse.
+///
+/// **The variant order is save format.** `PlayerSave::class` rides the
+/// positional bincode encoding (`save.rs`'s module docs), which stores an
+/// enum by variant *index* — so the first five hold their positions and
+/// every existing save reads back unchanged. Append, never reorder, exactly
+/// as `perks::Perk` requires.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PlayerClass {
+    Striker,
+    Bastion,
+    Medic,
+    Saboteur,
+    Leech,
+    /// Takes programs apart rather than beating them down — see
+    /// [`capture_boost_pct`].
+    Decompiler,
+    /// Runs a deeper kit than anyone — see [`routine_slot_bonus`].
+    Invoker,
+    /// Keeps the base's machines turning — see [`work_tick_scale`].
+    Fabricator,
+}
+
+impl PlayerClass {
+    /// Every variant, in declaration order. `ClassDb::iter` walks it, so
+    /// every screen sees classes in the same order whatever order their
+    /// files loaded in. Append here when a variant is appended above.
+    pub const ALL: [PlayerClass; 8] = [
+        PlayerClass::Striker,
+        PlayerClass::Bastion,
+        PlayerClass::Medic,
+        PlayerClass::Saboteur,
+        PlayerClass::Leech,
+        PlayerClass::Decompiler,
+        PlayerClass::Invoker,
+        PlayerClass::Fabricator,
+    ];
+}
 
 /// One class's authored identity. `affinities` and `kit` are both
 /// `#[serde(default)]` so a file may lean on `Affinities::NEUTRAL` (no
@@ -48,7 +119,7 @@ use std::path::Path;
 /// `assets/classes/README.md`.
 #[derive(Clone, Debug, Deserialize)]
 pub struct ClassDef {
-    pub class: AffinityClass,
+    pub class: PlayerClass,
     pub name: String,
     pub description: String,
     #[serde(default)]
@@ -61,7 +132,7 @@ pub struct ClassDef {
 /// module doc comment for the absent/malformed-file contract.
 #[derive(Resource, Default)]
 pub struct ClassDb {
-    defs: HashMap<AffinityClass, ClassDef>,
+    defs: HashMap<PlayerClass, ClassDef>,
 }
 
 impl ClassDb {
@@ -70,7 +141,7 @@ impl ClassDb {
     /// directory loads empty rather than erroring — `NeedDb::load_dir`'s
     /// rule, and the module doc comment's "supported install" property.
     ///
-    /// Two files naming the same `AffinityClass` is not an error; sorted
+    /// Two files naming the same `PlayerClass` is not an error; sorted
     /// order (below) makes the alphabetically-last one win, same as
     /// `NeedDb`.
     pub fn load_dir(dir: &Path) -> std::io::Result<(Self, Vec<String>)> {
@@ -98,17 +169,17 @@ impl ClassDb {
         Ok((db, warnings))
     }
 
-    pub fn get(&self, class: AffinityClass) -> Option<&ClassDef> {
+    pub fn get(&self, class: PlayerClass) -> Option<&ClassDef> {
         self.defs.get(&class)
     }
 
-    /// Sorted by `AffinityClass::ALL`'s declaration order, because every
+    /// Sorted by `PlayerClass::ALL`'s declaration order, because every
     /// caller walks it — a `HashMap`'s own order is not deterministic
-    /// across runs, and `AffinityClass` carries no `Ord` of its own to sort
-    /// by (see its doc comment: it is load-bearing save-format-adjacent
-    /// data, not something to add a derive to lightly).
+    /// across runs, and `PlayerClass` carries no `Ord` of its own to sort
+    /// by (see its doc comment: its order is save format, not something to
+    /// add a derive to lightly).
     pub fn iter(&self) -> impl Iterator<Item = &ClassDef> {
-        AffinityClass::ALL.iter().filter_map(|c| self.defs.get(c))
+        PlayerClass::ALL.iter().filter_map(|c| self.defs.get(c))
     }
 }
 
@@ -118,7 +189,7 @@ impl ClassDb {
 /// `CORE_FRAGMENT` 5, `OUTLET` 2) for `None` *and* for a class the current
 /// `ClassDb` cannot resolve — the `apply_kit` half of the empty-directory
 /// property the module doc comment describes.
-pub fn apply_kit(game: &mut Game, class: Option<AffinityClass>) {
+pub fn apply_kit(game: &mut Game, class: Option<PlayerClass>) {
     let kit = class.and_then(|c| {
         game.world
             .resource::<ClassDb>()
@@ -142,17 +213,111 @@ pub fn apply_kit(game: &mut Game, class: Option<AffinityClass>) {
     }
 }
 
-/// `"+Healing  -Damage"`-style summary of `affinities`, built once here so
-/// the creation screen and any other reader of `views::ClassRow` cannot
-/// word one class's trade differently.
+/// Percentage points this class adds to **every** decompile attempt, summed
+/// into `taming::DecompilerBonuses::capture_boost_pct` by
+/// `Game::player_decompiler_bonuses`.
+///
+/// That field rather than `skill`: `skill` enters `capture_chance` as
+/// `1.0 + skill * DECOMPILER_SKILL_BONUS` and already grows on level-up and
+/// off equipment, so a flat class addend there is worth steadily less all
+/// run. `capture_boost_pct` multiplies the whole attempt and is worth the
+/// same at level 30 as at level 1.
+pub fn capture_boost_pct(class: Option<PlayerClass>) -> i32 {
+    match class {
+        Some(PlayerClass::Decompiler) => crate::tuning::CLASS_DECOMPILE_BOOST_PCT,
+        Some(
+            PlayerClass::Striker
+            | PlayerClass::Bastion
+            | PlayerClass::Medic
+            | PlayerClass::Saboteur
+            | PlayerClass::Leech
+            | PlayerClass::Invoker
+            | PlayerClass::Fabricator,
+        )
+        | None => 0,
+    }
+}
+
+/// Routine slots this class adds on top of the level curve, added by
+/// `Game::routine_slots` at its player arm.
+///
+/// **Added after `player_routine_slots`' own clamp and not re-clamped**,
+/// which is exactly what the companion arm beside it already does with
+/// `talent_routine_slots`: `PLAYER_ROUTINE_SLOT_CAP` bounds the *level
+/// curve*, not the total. Threading this into `player_routine_slots` before
+/// that clamp instead would converge to nothing at the cap — the one thing
+/// an Invoker is named for, gone in the late run — and would cost that
+/// function the purity `balance_sim` and several tests read it as.
+pub fn routine_slot_bonus(class: Option<PlayerClass>) -> usize {
+    match class {
+        Some(PlayerClass::Invoker) => crate::tuning::CLASS_ROUTINE_SLOT_BONUS,
+        Some(
+            PlayerClass::Striker
+            | PlayerClass::Bastion
+            | PlayerClass::Medic
+            | PlayerClass::Saboteur
+            | PlayerClass::Leech
+            | PlayerClass::Decompiler
+            | PlayerClass::Fabricator,
+        )
+        | None => 0,
+    }
+}
+
+/// What this class scales a work cycle's length by, applied in
+/// `systems::work_ticks_at_speed` and supplied by `Game::work_ticks_for`.
+///
+/// Below 1.0 is faster. **The player's, not the worker's** — the asymmetry
+/// `systems::CycleModifiers` already documents — so it applies at every
+/// machine in this player's base whoever is posted there, and to the player
+/// working a node by hand through the same one door.
+pub fn work_tick_scale(class: Option<PlayerClass>) -> f64 {
+    match class {
+        Some(PlayerClass::Fabricator) => crate::tuning::CLASS_WORK_TICK_SCALE,
+        Some(
+            PlayerClass::Striker
+            | PlayerClass::Bastion
+            | PlayerClass::Medic
+            | PlayerClass::Saboteur
+            | PlayerClass::Leech
+            | PlayerClass::Decompiler
+            | PlayerClass::Invoker,
+        )
+        | None => 1.0,
+    }
+}
+
+/// How a class's non-affinity spike reads in `format_trade`, or `None` for
+/// a class whose whole trade is its affinity spread.
+///
+/// Lower case and phrased like an axis name, because `format_trade` folds it
+/// in beside the raised axes: `"Bonus to decompiling at the expense of
+/// damage"`. Without it the three classes above advertise themselves by their
+/// damped axis alone — `"Weaker damage"`, a class with a downside and no
+/// upside — because `format_trade` can only see `affinities`. Built here
+/// beside `format_trade` so two renderers cannot word one class's trade
+/// differently.
+fn spike_label(class: PlayerClass) -> Option<&'static str> {
+    match class {
+        PlayerClass::Decompiler => Some("decompiling"),
+        PlayerClass::Invoker => Some("routine slots"),
+        PlayerClass::Fabricator => Some("work cycle speed"),
+        PlayerClass::Striker
+        | PlayerClass::Bastion
+        | PlayerClass::Medic
+        | PlayerClass::Saboteur
+        | PlayerClass::Leech => None,
+    }
+}
+
 /// What a class's spread is *worth*, one term per non-neutral axis:
 /// `"Damage x1.25  Heal x0.75"`.
 ///
-/// `format_axes` below is the same fold at picking length — a sign per axis
-/// and no magnitude, which is what a catalogue row wants and what a stat
-/// sheet does not. Both read `Affinities::non_neutral`, which is the one
-/// definition of "an axis this class has an opinion about", so the two
-/// lengths cannot disagree about *which* axes they name.
+/// The stat-sheet length. `format_trade` below is the picking length — the
+/// same axes as prose and with no magnitudes, which is what a catalogue row
+/// wants and what a stat sheet does not. Both read `Affinities::non_neutral`,
+/// which is the one definition of "an axis this class has an opinion about",
+/// so the two lengths cannot disagree about *which* axes they name.
 pub fn format_affinity_bonuses(affinities: &Affinities) -> String {
     affinities
         .non_neutral()
@@ -174,19 +339,23 @@ pub fn format_affinity_bonuses(affinities: &Affinities) -> String {
 /// Magnitudes are deliberately absent: the picker is choosing a *shape*,
 /// and `format_affinity_bonuses` is where the numbers are read back once
 /// the run exists.
-fn format_trade(affinities: &Affinities) -> String {
+fn format_trade(class: PlayerClass, affinities: &Affinities) -> String {
     let (up, down): (Vec<_>, Vec<_>) = affinities
         .non_neutral()
         .into_iter()
         .partition(|&(_, value)| value > crate::tuning::AFFINITY_NEUTRAL);
     let names = |axes: Vec<(AffinityKind, f32)>| {
-        join_words(
-            axes.into_iter()
-                .map(|(kind, _)| kind.label().to_lowercase())
-                .collect(),
-        )
+        axes.into_iter()
+            .map(|(kind, _)| kind.label().to_lowercase())
+            .collect::<Vec<_>>()
     };
-    match (names(up), names(down)) {
+    // The spike leads, because a class whose whole upside is a code hook has
+    // no raised axis to name and would otherwise open on its damped one.
+    let mut up = names(up);
+    if let Some(spike) = spike_label(class) {
+        up.insert(0, spike.to_string());
+    }
+    match (join_words(up), join_words(names(down))) {
         (up, down) if !up.is_empty() && !down.is_empty() => {
             format!("Bonus to {up} at the expense of {down}")
         }
@@ -217,7 +386,7 @@ fn join_words(words: Vec<String>) -> String {
 /// prices a class before any `Game` exists: `CreationCatalogue` and
 /// `Game::class_affinity` are its two callers, so neither can drift from
 /// the other by re-deriving the lookup.
-pub fn class_affinity(db: &ClassDb, class: Option<AffinityClass>, kind: AffinityKind) -> f32 {
+pub fn class_affinity(db: &ClassDb, class: Option<PlayerClass>, kind: AffinityKind) -> f32 {
     let Some(class) = class else {
         return crate::tuning::AFFINITY_NEUTRAL;
     };
@@ -249,7 +418,7 @@ pub fn class_rows(classes: &ClassDb) -> Vec<views::ClassRow> {
             class: def.class,
             name: def.name.clone(),
             description: def.description.clone(),
-            trade: format_trade(&def.affinities),
+            trade: format_trade(def.class, &def.affinities),
         })
         .collect()
 }
@@ -278,11 +447,21 @@ impl Game {
     }
 
     pub(crate) fn player_class_affinity(&self, kind: AffinityKind) -> f32 {
-        let class = self
-            .world
+        self.class_affinity(self.player_class(), kind)
+    }
+
+    /// The class the player picked, straight off `PlayerIdentity`. `None`
+    /// for a run created before the wizard existed and for one that skipped
+    /// the step.
+    ///
+    /// The one read of that field, so the three effect queries above and the
+    /// affinity resolve below cannot disagree about whose class is being
+    /// asked for — the class is the *player's* wherever a formula reads it,
+    /// including at a machine some other body is standing at.
+    pub(crate) fn player_class(&self) -> Option<PlayerClass> {
+        self.world
             .get::<PlayerIdentity>(self.player_entity())
-            .and_then(|identity| identity.class);
-        self.class_affinity(class, kind)
+            .and_then(|identity| identity.class)
     }
 
     /// `class`'s spread for `kind` alone, no perk term — `player_class_affinity`'s
@@ -290,7 +469,7 @@ impl Game {
     /// `PlayerIdentity`. Exists so `player_affinity_for` below can price a
     /// class the player is only considering, not yet committed to the
     /// entity.
-    fn class_affinity(&self, class: Option<AffinityClass>, kind: AffinityKind) -> f32 {
+    fn class_affinity(&self, class: Option<PlayerClass>, kind: AffinityKind) -> f32 {
         class_affinity(self.world.resource::<ClassDb>(), class, kind)
     }
 
@@ -312,7 +491,7 @@ impl Game {
     /// entity.
     pub(crate) fn player_affinity_for(
         &self,
-        class: Option<AffinityClass>,
+        class: Option<PlayerClass>,
         kind: AffinityKind,
     ) -> f32 {
         self.affinity_with_perk(self.class_affinity(class, kind), kind)

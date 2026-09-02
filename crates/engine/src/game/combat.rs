@@ -677,7 +677,12 @@ impl Game {
             .map(|e| e.level)
             .unwrap_or(1);
         if entity == self.player_entity() {
+            // Added past `player_routine_slots`' own clamp and not
+            // re-clamped, exactly as the companion arm below adds
+            // `talent_routine_slots` past `COMPANION_ROUTINE_SLOT_CAP`: the
+            // cap bounds the level curve, not the total.
             abilities::player_routine_slots(level)
+                + crate::classes::routine_slot_bonus(self.player_class())
         } else {
             abilities::companion_routine_slots(level) + self.talent_routine_slots(entity)
         }

@@ -13,10 +13,11 @@ use std::path::{Path, PathBuf};
 
 use crate::abilities::AbilityId;
 use crate::affixes::AffixId;
+use crate::classes::PlayerClass;
 use crate::components::Rarity;
 use crate::game::creation::CharacterChoice;
 use crate::items::{GearCopy, ItemId};
-use crate::species::{AffinityClass, SpeciesId};
+use crate::species::SpeciesId;
 use crate::world::Biome;
 
 /// A fight, authored rather than rolled.
@@ -134,7 +135,7 @@ impl Default for PlayerSource {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CharacterSpec {
-    pub class: Option<AffinityClass>,
+    pub class: Option<PlayerClass>,
     /// Units *bought* per axis, in `MainStat::all()` order — Atk, Def,
     /// Integrity, Decompiler — never points spent.
     /// `CharacterChoice::cost()` prices them, and `build_player` refuses a

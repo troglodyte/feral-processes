@@ -1,0 +1,7 @@
+(
+    class: Decompiler,
+    name: "Decompiler",
+    description: "Takes a program apart rather than beating it down. Every decompile attempt lands more often; damage routines land softer.",
+    affinities: (damage: 0.8),
+    kit: [("ice_breaker", 8), ("core_fragment", 4), ("power_cell", 2)],
+)

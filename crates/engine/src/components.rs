@@ -3,11 +3,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::MAX_CUSTOM_NAME_LEN;
 use crate::abilities::AbilityId;
+use crate::classes::PlayerClass;
 use crate::items::{EquipmentSlot, GearCopy, ItemId};
 use crate::items_db::ItemDb;
 use crate::needs::{NEED_MAX, NEED_MIN, NeedId};
 use crate::perks::Perk;
-use crate::species::{AffinityClass, SpeciesId};
+use crate::species::SpeciesId;
 use crate::structures::StructureId;
 use crate::tuning::{
     GOLD_STAT_MULT, MAX_INDIVIDUAL_ROLL, MIN_INDIVIDUAL_ROLL, PLATINUM_STAT_MULT,
@@ -118,7 +119,7 @@ impl CustomName {
 /// top" shape `Game::new_with`'s player spawn uses throughout.
 #[derive(Component, Clone, Debug, Default, PartialEq)]
 pub struct PlayerIdentity {
-    pub class: Option<AffinityClass>,
+    pub class: Option<PlayerClass>,
     pub sprite: String,
     /// Which of the renderer's player swatches the glyph wears, **0-based**
     /// — `None` is the `PLAYER` role colour, which is what a player who

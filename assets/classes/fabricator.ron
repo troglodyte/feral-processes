@@ -1,0 +1,7 @@
+(
+    class: Fabricator,
+    name: "Fabricator",
+    description: "Keeps the machines turning. Every work cycle in the base finishes sooner; damage routines land softer.",
+    affinities: (buff: 1.2, damage: 0.8),
+    kit: [("core_fragment", 8), ("cache_grain", 3)],
+)

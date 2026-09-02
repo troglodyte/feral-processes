@@ -653,7 +653,7 @@ mod tests {
         use crate::arena::scenario::CharacterSpec;
         let mut s = fresh(1, 1);
         s.character = CharacterSpec {
-            class: Some(crate::species::AffinityClass::Medic),
+            class: Some(crate::classes::PlayerClass::Medic),
             ..CharacterSpec::default()
         };
         let game = build_player(&s, &test_assets_dir()).unwrap();
@@ -662,7 +662,7 @@ mod tests {
                 .get::<PlayerIdentity>(game.player_entity())
                 .unwrap()
                 .class,
-            Some(crate::species::AffinityClass::Medic)
+            Some(crate::classes::PlayerClass::Medic)
         );
     }
 

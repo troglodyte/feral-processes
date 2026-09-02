@@ -286,6 +286,15 @@ pub(crate) fn morale_shift(morale: f32) -> f64 {
 /// How many ticks one work cycle costs a worker of `speed` at a machine
 /// whose def rates it at `base_ticks`.
 ///
+/// `class_scale` is the player's own class term (`classes::work_tick_scale`,
+/// 1.0 for everyone but a Fabricator), applied here rather than at
+/// `Game::work_ticks_for` so there is still one formula — `views` documents
+/// a machine's shipped `ticks_per_unit` against this function, and a scale
+/// applied at the caller would make the displayed figure and the real one
+/// two different numbers. It is a scale rather than a `PlayerClass` because
+/// what this function knows about is speed; resolving a class into a number
+/// is the caller's job.
+///
 /// Read as a **deviation from `DEFAULT_BASE_SPEED`**, exactly like
 /// `base_int`'s term in `mining_success_chance` above. A species at the
 /// baseline — and the player, who has no `Creature` and so takes the
@@ -294,11 +303,11 @@ pub(crate) fn morale_shift(morale: f32) -> f64 {
 /// meaning what it says, and what puts pressure on the posting in both
 /// directions: a quick program beats working the node yourself, and a slow
 /// one is worse than rolling your sleeves up.
-pub(crate) fn work_ticks_at_speed(base_ticks: u32, speed: i32) -> u32 {
+pub(crate) fn work_ticks_at_speed(base_ticks: u32, speed: i32, class_scale: f64) -> u32 {
     let scale = 1.0 + (DEFAULT_BASE_SPEED - speed) as f64 * WORK_TICKS_PER_SPEED;
     // Floored at one cycle per tick however fast the species: a modded
     // `base_speed: 200` scales straight past zero into negative.
-    (base_ticks as f64 * scale).round().max(1.0) as u32
+    (base_ticks as f64 * scale * class_scale).round().max(1.0) as u32
 }
 
 /// What the *worker* brings to a gather cycle, as opposed to what the node
@@ -2080,7 +2089,7 @@ mod tests {
         // number rather than merely land near it.
         for base in [1, 3, 6, 8, 10, 12, 20, 30] {
             assert_eq!(
-                work_ticks_at_speed(base, DEFAULT_BASE_SPEED),
+                work_ticks_at_speed(base, DEFAULT_BASE_SPEED, 1.0),
                 base,
                 "a worker at the roster baseline must cost exactly the def's rate"
             );
@@ -2091,10 +2100,10 @@ mod tests {
     fn a_faster_species_needs_fewer_ticks_and_a_slower_one_more() {
         // The shipped extremes — construct 6, sprite 14 — against a Mining
         // Node's 10 and a Fabricator's 30.
-        assert_eq!(work_ticks_at_speed(10, 14), 8);
-        assert_eq!(work_ticks_at_speed(10, 6), 12);
-        assert_eq!(work_ticks_at_speed(30, 14), 24);
-        assert_eq!(work_ticks_at_speed(30, 6), 36);
+        assert_eq!(work_ticks_at_speed(10, 14, 1.0), 8);
+        assert_eq!(work_ticks_at_speed(10, 6, 1.0), 12);
+        assert_eq!(work_ticks_at_speed(30, 14, 1.0), 24);
+        assert_eq!(work_ticks_at_speed(30, 6, 1.0), 36);
     }
 
     #[test]
@@ -2102,8 +2111,8 @@ mod tests {
         // A `base_speed: 200` mod scales the multiplier straight past zero and
         // negative. Without the floor that is a machine producing on every tick
         // forever, which is also what a `required: 0` would do.
-        assert_eq!(work_ticks_at_speed(10, 200), 1);
-        assert_eq!(work_ticks_at_speed(1, 14), 1);
+        assert_eq!(work_ticks_at_speed(10, 200, 1.0), 1);
+        assert_eq!(work_ticks_at_speed(1, 14, 1.0), 1);
     }
 
     #[test]

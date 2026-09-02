@@ -951,6 +951,32 @@ pub const MAX_INDIVIDUAL_ROLL: f32 = 1.2;
 /// they matter at every skill level.
 pub const DECOMPILER_SKILL_BONUS: f32 = 0.02;
 
+/// Percentage points a `PlayerClass::Decompiler` adds to every decompile
+/// attempt, through `classes::capture_boost_pct`.
+///
+/// A whole-attempt multiplier rather than an addend to the `Decompiler`
+/// stat, so it is worth as much at the level cap as at level 1 — see that
+/// query's own doc comment. Argued from the shipped curve rather than
+/// measured: `balance_sim` models no decompiling at all, so the arena is
+/// the only instrument that can retune this.
+pub const CLASS_DECOMPILE_BOOST_PCT: i32 = 15;
+
+/// Routine slots a `PlayerClass::Invoker` carries on top of the level
+/// curve, through `classes::routine_slot_bonus`.
+///
+/// Doubles a level-1 player's two slots and still stands at the cap, since
+/// it is added past `PLAYER_ROUTINE_SLOT_CAP` the way `talent_routine_slots`
+/// already adds past the companion cap.
+pub const CLASS_ROUTINE_SLOT_BONUS: usize = 2;
+
+/// What a `PlayerClass::Fabricator` scales every work cycle's length by,
+/// through `classes::work_tick_scale`. Below 1.0 is faster.
+///
+/// One fifth off, which at the shipped `ticks_per_unit` rates is a cycle or
+/// two an hour of play rather than a different game. `balance_sim` has no
+/// base term, so this is unmeasured like the two above it.
+pub const CLASS_WORK_TICK_SCALE: f64 = 0.8;
+
 /// Coefficients of `taming::capture_chance`. Ceiling below a full 1.0 means
 /// even a fully-weakened, zero-difficulty target isn't a sure thing on item
 /// potency alone; the two penalties subtract the target's remaining HP

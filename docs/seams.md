@@ -9581,3 +9581,113 @@ text — "the Grid half burns a Power Cell off an adjacent buffer to stay up"
 halves are, that sentence describes half the machine. It now says the
 building burns to "keep either half running, and goes quiet on both the
 moment it can't pay" — a property of the structure, not of one output.
+
+### The player's class is its own enum, and sharing five names with `AffinityClass` is what makes that cheap
+
+`species::AffinityClass` is a *species'* derived role — the one affinity
+axis a species raises — and it is load-bearing well beyond the player:
+`ClassShape` builds a stat block from it, `talents::TalentDb` keys its
+trees by it, `render/manifest.rs::base_job_label` turns it into the base
+job a posted program does, and `AffinityClass::of_axis` is asked it from
+the other end by the kit census. Every one of those is an exhaustive
+match on five variants.
+
+Three player-only classes were asked for on 2026-09-01: a decompile
+specialist, a routine specialist and a base-throughput specialist. None of
+them is a thing a species can be. Adding them to `AffinityClass` would
+have forced every match above to answer for a class no species can hold —
+what stat block does a Fabricator species have, what talent tree, what
+base job — and the honest answer at each is "unreachable", which is a
+`_ => unreachable!()` in five places and a bug the first time one is
+reached.
+
+So `classes::PlayerClass` is a second enum, and the split is worth exactly
+what it costs because **the first five variants keep `AffinityClass`'s
+names and its order**:
+
+- Not one shipped `.ron` file needed editing. `class: Striker` parses as
+  `PlayerClass::Striker` exactly as it parsed as `AffinityClass::Striker`,
+  in `assets/classes/`, in `dev-arenas/class-*.ron`, everywhere.
+- **No `SAVE_FORMAT_VERSION` bump.** The `.bin` save is positional
+  bincode, which stores an enum by variant *index*; indices 0–4 are
+  unmoved and the three new variants append. Which makes the variant order
+  save format, `perks::Perk`'s rule: append, never reorder.
+- The type swap across `PlayerIdentity`, `PlayerSave`, `CharacterChoice`,
+  `ClassRow`, `ClassDb` and the arena's `CharacterSpec` was mechanical, and
+  the compiler found every site.
+
+What convention has to hold is that nothing maps one enum to the other. A
+`PlayerClass::affinity_class()` would look harmless and would immediately
+invite the base-job code to ask the player what job they do, which is the
+coupling this split exists to prevent. There is no such function and there
+should not be one. The test that catches a lapse is
+`every_class_has_a_file`, driven by `PlayerClass::ALL`, and the talent
+census beside it, still driven by `AffinityClass::ALL` — the two lists
+having different lengths is the seam being visible.
+
+### A class's effect is code and its catalogue entry is data
+
+`assets/classes/*.ron` authors a name, a description, an affinity spread
+and a starting kit. It does not author what the three player-only classes
+actually *do*, and the request that produced them said explicitly that
+they did not need to be moddable.
+
+That is `perks.rs`'s seam one directory over, for `perks.rs`'s reason: an
+effect is a hook into one particular formula with no shared shape to
+express as data. A `decompile_bonus: 15` field would need a matching
+`routine_slots: 2` and `work_tick_scale: 0.8`, each meaningful for exactly
+one class and inert on the other seven — a schema that is mostly holes.
+
+So each effect is a named query in `classes.rs`, **exhaustive over
+`PlayerClass`** (`cell_mark`'s rule, and
+`every_perk_has_a_query_that_answers_what_it_is_worth`'s): a ninth variant
+fails to compile rather than shipping with an effect silently missing. A
+class with nothing to say about an axis returns that axis's neutral value,
+so every call site adds its term unconditionally and no call site branches
+on the class.
+
+The alternative considered and rejected was one `ClassEffects` struct
+returned by a single query. It couples three unrelated formulas, and a
+reader taking only the fields it knows about silently drops the rest —
+which is exactly the failure `EnvironmentEffect`'s own entry warns about.
+
+Two consequences worth stating, because both look like bugs:
+
+- **The queries never consult `ClassDb`**, so an effect survives a deleted
+  `assets/classes/`. The catalogue half of the empty-directory property
+  still holds — affinities resolve neutral, the hardcoded kit applies —
+  but a save already carrying `PlayerClass::Invoker` keeps its two extra
+  slots. Nobody can pick a class in that state, since the wizard has no
+  rows. An effect that vanished when a *display* catalogue went missing
+  would be the surprising half.
+- **`format_trade` needs `spike_label`.** The creation row is built from
+  `affinities` alone, and all three new classes damp an axis without
+  raising one — their spike is a hook. Without the label the Decompiler
+  advertises itself as `"Weaker damage"`: a class with a downside and no
+  upside, chosen blind, with no way back. The spike is folded in as the
+  first of the raised axes, so one sentence still words every class's
+  trade; `every_class_row_names_something_it_is_good_at` is the census,
+  and it asserts on the `"Bonus to"` opening that only an upside produces.
+
+### The Invoker's slots are added past the cap, on the companion arm's precedent
+
+`Game::routine_slots` has two arms. The companion arm has always read
+`companion_routine_slots(level) + self.talent_routine_slots(entity)` —
+a bonus added at the caller, *after* the pure function's own
+`.clamp(1, COMPANION_ROUTINE_SLOT_CAP)`, and not re-clamped. So talents
+have always been able to push a companion past that cap: it bounds the
+level curve, not the total.
+
+The Invoker's `+2` follows that exactly, and the first design did not. In
+that one the term went inside `player_routine_slots` before its clamp,
+which reads as more careful and is worse in two ways. It converges: the
+shipped curve is `2 + 2 * (level / 5)` capped at 12, so an ordinary player
+reaches 12 at level 25 and an Invoker would have reached it at 20 — after
+which the one thing the class is named for is worth nothing for the rest
+of the run. And it costs `player_routine_slots` the purity its own doc
+comment says `companion_routine_slots` has to keep, because `balance_sim`
+and several tests read it as a pure function of level.
+
+`an_invoker_carries_more_routine_slots_at_every_level_including_the_cap`
+asserts at levels 1, 5, 25 and 40 for that reason — a test at level 1
+alone passes under both designs.

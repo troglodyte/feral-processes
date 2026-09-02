@@ -7,7 +7,7 @@ one-read answer to "did this ship, and where is its argument".
 ## The invariant
 
 **`archive/specs/` is implemented. `specs/` is not.** Ninety-five specs are
-archived and every one of them shipped; the ten left in `specs/` are open,
+archived and every one of them shipped; the eleven left in `specs/` are open,
 parked, partial or superseded, and each says which in its own header. Sorting
 the directory *is* the answer, so no sweep is needed next time.
 
@@ -15,10 +15,11 @@ Two independent checks agree on the ninety-five: a distinctive symbol from
 each spec resolves in `crates/` or `assets/`, and the commit that added each
 spec resolves to a release tag.
 
-## What is open — the ten in `specs/`
+## What is open — the eleven in `specs/`
 
 | Spec | State | Evidence |
 | --- | --- | --- |
+| `2026-09-02-combat-model-slice-2-design` | designed, **unbuilt** | a second swing for Strikers from level 8; engine-only, no save bump |
 | `2026-08-31-stack-wanderers-design` | approved, **unbuilt** | `FrameWanderers` exists nowhere in `crates/` |
 | `2026-08-24-rest-interruption-design` | never approved, **unbuilt** | `Game::rest_interrupted` does not exist |
 | `2026-08-24-departure-memories-design` | brainstorm parked | no departure memory in `assets/memories/` |
@@ -204,6 +205,6 @@ the earliest tag containing the commit that added the spec.
 
 ## What is actually open
 
-The ten specs above, and `docs/content-gaps.md` for engine mechanics that are
+The eleven specs above, and `docs/content-gaps.md` for engine mechanics that are
 built and tested with no asset using them. `TODO.md` was deleted at `v0.12.0`
 and is not a backlog any more.

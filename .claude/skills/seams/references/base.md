@@ -203,7 +203,17 @@
   both call the helper now. It **plans** rather than moves, because both
   callers read a neighbour's `output` and write their own buffer through one
   `Query<&mut Stock>`, and it keeps `ORTHOGONAL`'s array order rather than
-  `adjacent_stock`'s `(x, y)` sort, so no existing pull moved.
+  `adjacent_stock`'s `(x, y)` sort, so no existing pull moved. **The walk is
+  only half the rule**: `by_tile` is a *parameter*, so which cells are
+  candidates at all is whoever builds the map's decision — and the two
+  callers built it differently, one from a query carrying `&Structure` and
+  one filtered on `Stock` alone. `collect::feeders_by_tile` is the other
+  half and its **parameter type is the membership rule**, so a caller cannot
+  feed it something it has not proved is a structure; `With<Stock>` stays a
+  filter at each site because `&Stock` in the tuple collides with
+  `assembler_system`'s own `Query<&mut Stock>`. Nothing constructs a `Stock`
+  off a `Structure`, so no test can fail here — the signature is what holds
+  it.
 - **A Depot with four occupied orthogonal tiles is a Depot nothing can
   reach**, and the failure it produces is `Stranded` on some *other*
   machine's worker rather than anything naming the Depot. Found rebuilding

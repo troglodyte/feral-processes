@@ -9471,6 +9471,23 @@ neighbour's `output` and write their own buffer through the same
 it. It keeps `ORTHOGONAL`'s own array order rather than `adjacent_stock`'s
 `(x, y)` sort, so no existing pull moved.
 
+**The walk was extracted and the map was not, which left half the rule at
+each call site.** `plan_adjacent_take` takes `by_tile` as a *parameter*, so
+which cells are candidates at all is decided by whoever builds the map — and
+the two callers built it differently: `assembler_system` from a query
+carrying `&Structure`, `burn_grid_upkeep` from one filtered on `Stock`
+alone. Harmless today, because nothing but a structure carries a `Stock`, and
+precisely the drift the extraction existed to prevent: the doc comment
+claimed to be "the one machine-to-machine reach rule" and was only ever the
+one *walk*. `collect::feeders_by_tile` is the other half, and the membership
+rule is its **parameter type** — `(Entity, &Structure, &Position)`, so a
+caller cannot feed it anything it has not already proved is a structure.
+`With<Stock>` stays a query filter at each site rather than joining the
+tuple, because `&Stock` in `assembler_system`'s first query would conflict
+with its own `Query<&mut Stock>` and bevy would refuse the schedule. Nothing
+in the game constructs a `Stock` off a `Structure`, so there is no test that
+can fail here — the signature is what holds it.
+
 **What it cost the `chains` dev template, which is the measurement.** That
 template's three Rechargers stood with nothing feeding them, so the whole
 base went dark on tick 20 and the chain stopped — the launcher's

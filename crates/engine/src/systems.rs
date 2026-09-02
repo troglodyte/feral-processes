@@ -584,11 +584,11 @@ pub fn power_grid_system(world: &mut World) {
 /// the existing meaning ("the input it needs is not there") and no variant is
 /// added for this.
 fn burn_grid_upkeep(world: &mut World) {
-    let by_tile: std::collections::HashMap<(i32, i32), Entity> = world
-        .query_filtered::<(Entity, &Position), With<Stock>>()
-        .iter(world)
-        .map(|(e, p)| ((p.x, p.y), e))
-        .collect();
+    let by_tile = crate::game::base::collect::feeders_by_tile(
+        world
+            .query_filtered::<(Entity, &Structure, &Position), With<Stock>>()
+            .iter(world),
+    );
 
     // Collected before anything is written, and carrying the def's name and
     // fuel item so the announcement and the pull below need no second lookup
@@ -1209,8 +1209,7 @@ pub fn assembler_system(
         items: item_db,
         power: grid,
     } = db;
-    let by_tile: std::collections::HashMap<(i32, i32), Entity> =
-        structures.iter().map(|(e, _, p)| ((p.x, p.y), e)).collect();
+    let by_tile = crate::game::base::collect::feeders_by_tile(structures.iter());
 
     let mut machines: Vec<(Entity, (i32, i32), &crate::structures::StructureDef)> = structures
         .iter()

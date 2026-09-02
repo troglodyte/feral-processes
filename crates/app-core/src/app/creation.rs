@@ -292,6 +292,20 @@ impl App {
                     detail: "flatlining costs you, but you reboot and keep going".to_string(),
                 },
             ],
+            CreationStep::Profile => {
+                let rows = self.profile_preview_rows();
+                match rows.is_empty() {
+                    // A first run earns the sentence rather than a blank
+                    // box — the step is where the ladder is explained, and
+                    // "nothing yet" is the most useful thing it can say to
+                    // the player who has earned nothing yet.
+                    true => vec![CreationRow::Earned(
+                        "Nothing yet — what you achieve carries into every run after it."
+                            .to_string(),
+                    )],
+                    false => rows.into_iter().map(CreationRow::Earned).collect(),
+                }
+            }
             CreationStep::Class => self
                 .creation_catalogue
                 .class_rows()
@@ -463,6 +477,13 @@ impl App {
         }
         match self.creation_step {
             CreationStep::Difficulty => self.handle_creation_difficulty_key(key),
+            // Nothing to decide: Up/Down walks the list, and Enter is the
+            // same "move on" the paging keys already give every step that
+            // does not spend.
+            CreationStep::Profile => match key {
+                GameKey::Enter => self.advance_creation(),
+                _ => self.scroll(key, self.creation_rows().len()),
+            },
             CreationStep::Class => self.handle_creation_class_key(key),
             CreationStep::Kit => self.handle_creation_kit_key(key),
             CreationStep::Icon => self.handle_creation_icon_key(key),
@@ -1012,12 +1033,15 @@ impl App {
             .sum()
     }
 
+    /// What the cross-run profile is about to grant this run, **folded to
+    /// one line per thing** — `achievements::profile_summary`.
+    ///
+    /// One derivation, two screens: the `Profile` step opens on it and the
+    /// Summary reads it back. A receipt (one line per rung) was what this
+    /// returned, and it showed a player with two Perk Point achievements
+    /// `+1 Perk Point` twice, where what they need to know is that they
+    /// open holding two.
     pub fn profile_preview_rows(&self) -> Vec<String> {
-        feral_processes_engine::achievements::profile_rewards(&self.profile, &self.achievement_db)
-            .into_iter()
-            .map(|(reward, rolled)| {
-                feral_processes_engine::achievements::preview_line(&reward, rolled)
-            })
-            .collect()
+        feral_processes_engine::achievements::profile_summary(&self.profile, &self.achievement_db)
     }
 }

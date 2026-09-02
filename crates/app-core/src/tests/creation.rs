@@ -120,10 +120,15 @@ fn walk_to_the_summary(app: &mut App) {
 }
 
 /// Opens the wizard and picks Forgiving, leaving it on the Class step.
+///
+/// The profile summary sits between the two and has nothing to decide, so
+/// Enter walks it — spelled here rather than at each of the twenty-odd
+/// callers that only want to *reach* a later step.
 fn opened(name: &str) -> App {
     let mut app = wizard_app(name);
     press(&mut app, ch('n'));
     press(&mut app, ch('f'));
+    press(&mut app, GameKey::Enter);
     app
 }
 
@@ -184,6 +189,8 @@ fn the_wizard_walks_forward_and_back() {
     assert_eq!(app.creation_step(), CreationStep::Difficulty);
 
     press(&mut app, ch('f'));
+    assert_eq!(app.creation_step(), CreationStep::Profile);
+    press(&mut app, GameKey::Enter);
     assert_eq!(app.creation_step(), CreationStep::Class);
     press(&mut app, ch('1'));
     assert_eq!(app.creation_step(), CreationStep::Kit);
@@ -221,6 +228,7 @@ fn the_wizard_walks_forward_and_back() {
         CreationStep::Icon,
         CreationStep::Kit,
         CreationStep::Class,
+        CreationStep::Profile,
         CreationStep::Difficulty,
     ] {
         press(&mut app, GameKey::Esc);
@@ -464,6 +472,7 @@ fn difficulty_is_chosen_in_the_wizard() {
     );
     press(&mut app, ch('p'));
     assert_eq!(app.creation_difficulty(), Some(DifficultyMode::Permadeath));
+    press(&mut app, GameKey::Enter); // the profile summary
     press(&mut app, ch('1')); // a class
     walk_to_the_summary(&mut app);
     press(&mut app, GameKey::Enter); // the summary, accepted
@@ -512,8 +521,11 @@ fn the_class_step_cannot_be_left_without_a_class() {
 
     // Left is the way back, and going back is always allowed.
     press(&mut app, GameKey::Left);
+    assert_eq!(app.creation_step(), CreationStep::Profile);
+    press(&mut app, GameKey::Left);
     assert_eq!(app.creation_step(), CreationStep::Difficulty);
     press(&mut app, ch('f'));
+    press(&mut app, GameKey::Enter);
     assert_eq!(app.creation_step(), CreationStep::Class);
 
     // Enter takes the highlighted row, which is a pick like any other —
@@ -552,6 +564,64 @@ fn reopening_the_wizard_starts_clean() {
 fn an_empty_profile_previews_nothing() {
     let app = opened("empty_preview");
     assert!(app.profile_preview_rows().is_empty());
+}
+
+/// **The wizard's second page is what earlier runs earned**, and it draws
+/// rows either way — an empty profile gets the sentence rather than a
+/// blank box, which is the state a first-ever run is in and the state the
+/// page is most worth reading in.
+///
+/// It sits before the class step because it is the one thing on the board
+/// the player did not just decide, and because the ladder's payout is
+/// otherwise met as a couple of lines buried in the Summary — which is how
+/// a run that opened on six Perk Points after a screen saying four read as
+/// a defect.
+#[test]
+fn the_profile_page_summarises_what_carried_over() {
+    let mut first_run = wizard_app("profile_page_empty");
+    press(&mut first_run, ch('n'));
+    press(&mut first_run, ch('f'));
+    assert_eq!(first_run.creation_step(), CreationStep::Profile);
+    let rows = first_run.creation_rows();
+    assert_eq!(rows.len(), 1, "a blank page is a broken page: {rows:?}");
+    let CreationRow::Earned(line) = &rows[0] else {
+        panic!("the profile page drew something else: {rows:?}");
+    };
+    assert!(
+        line.contains("Nothing yet"),
+        "an unearned profile has to say so: {line:?}"
+    );
+    press(&mut first_run, GameKey::Enter);
+    assert_eq!(first_run.creation_step(), CreationStep::Class);
+
+    // A returning player's record: the page lists what it will pay, folded
+    // — two Perk Point rungs read as one `+2` line, not as `+1` twice.
+    let mut profile = profile_with_every_reward_kind();
+    profile.record(Earned {
+        id: "boss_wintermute".into(), // PerkPoints(1), a second one
+        first_tick: 9,
+        permadeath: false,
+        rolled_stat: None,
+    });
+    let mut app = wizard_app_with_profile("profile_page", &profile);
+    press(&mut app, ch('n'));
+    press(&mut app, ch('f'));
+    let lines: Vec<String> = app
+        .creation_rows()
+        .into_iter()
+        .map(|row| match row {
+            CreationRow::Earned(line) => line,
+            other => panic!("the profile page drew something else: {other:?}"),
+        })
+        .collect();
+    assert!(
+        lines.iter().any(|l| l == "+2 Perk Points"),
+        "two rungs paying a point each must read as one +2 line: {lines:?}"
+    );
+    assert!(
+        !lines.iter().any(|l| l == "+1 Perk Point"),
+        "the folded line must replace the receipt, not sit beside it: {lines:?}"
+    );
 }
 
 /// One rung of each `Reward` kind, earned before the wizard ever opens —
@@ -1157,6 +1227,7 @@ fn the_profile_adds_its_perk_points_on_top_of_the_allowance() {
     let mut app = wizard_app_with_profile("perk_profile", &profile);
     press(&mut app, ch('n'));
     press(&mut app, ch('f'));
+    press(&mut app, GameKey::Enter); // the profile summary
     press(&mut app, ch('1'));
     walk_to_the_summary(&mut app);
     press(&mut app, GameKey::Enter); // the summary
@@ -1294,6 +1365,8 @@ fn left_and_right_page_the_wizard() {
         "Left is a basket key here, not a page key"
     );
     press(&mut app, GameKey::Esc);
+    press(&mut app, GameKey::Left);
+    assert_eq!(app.creation_step(), CreationStep::Profile);
     press(&mut app, GameKey::Left);
     assert_eq!(app.creation_step(), CreationStep::Difficulty);
 

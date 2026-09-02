@@ -878,6 +878,16 @@ impl ManifestOrigin {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CreationStep {
     Difficulty,
+    /// What earlier runs earned, read once before anything is chosen.
+    ///
+    /// **A summary, and the only step with nothing to decide.** The
+    /// achievement ladder pays at `Game::new`, after the character is
+    /// applied, so none of it is spendable in the wizard — but it changes
+    /// what the run opens as, and a player who only meets it as two `+1
+    /// Perk Point` lines buried in the Summary reads the arithmetic on
+    /// their own stat sheet as a defect. First, because it is the one
+    /// thing here they did not just decide.
+    Profile,
     Class,
     /// The starting kit, picked off `items_db::creation_shelf` against a
     /// `tuning::CREATION_CREDITS` allowance. Sits directly after `Class`
@@ -939,8 +949,9 @@ impl CreationStep {
     /// undrawable. Adding a variant without adding it here is caught by
     /// `every_step_is_in_the_exhaustive_list`, which is the one place that
     /// can be checked.
-    pub const ALL: [CreationStep; 10] = [
+    pub const ALL: [CreationStep; 11] = [
         CreationStep::Difficulty,
+        CreationStep::Profile,
         CreationStep::Class,
         CreationStep::Kit,
         CreationStep::Icon,
@@ -998,6 +1009,7 @@ impl CreationStep {
     pub fn title(self) -> &'static str {
         match self {
             CreationStep::Difficulty => "Difficulty",
+            CreationStep::Profile => "Carried over",
             CreationStep::Class => "Class",
             CreationStep::Kit => "Kit",
             CreationStep::Icon => "Icon",
@@ -1021,6 +1033,9 @@ impl CreationStep {
 /// a routine look like.
 #[derive(Clone, Debug, PartialEq)]
 pub enum CreationRow {
+    /// One line of the profile summary on the `Profile` step — a folded
+    /// reward, or the sentence a first run gets instead.
+    Earned(String),
     Difficulty {
         mode: DifficultyMode,
         label: String,

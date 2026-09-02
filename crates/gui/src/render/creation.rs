@@ -146,7 +146,8 @@ fn step_rows(app: &App, step: CreationStep) -> Vec<Row> {
 fn build_row(step: CreationStep, row: &CreationRow, i: usize, selected: bool) -> Row {
     let text = row_line(row);
     let label = match step {
-        CreationStep::Kit
+        CreationStep::Profile
+        | CreationStep::Kit
         | CreationStep::Points
         | CreationStep::Perks
         | CreationStep::Name
@@ -180,6 +181,7 @@ fn build_row(step: CreationStep, row: &CreationRow, i: usize, selected: bool) ->
 /// blank line.
 fn row_line(row: &CreationRow) -> String {
     match row {
+        CreationRow::Earned(line) => line.clone(),
         CreationRow::Difficulty { label, detail, .. } => format!("{label} - {detail}"),
         CreationRow::Class(class) => format!("{} - {}", class.name, class.trade),
         CreationRow::Icon { glyph, sprite } => format!("{glyph}  ({sprite})"),
@@ -289,6 +291,10 @@ fn footer(app: &App, step: CreationStep) -> String {
 fn plain_footer(step: CreationStep) -> &'static str {
     match step {
         CreationStep::Difficulty => "[p]/[f] picks; Esc backs out to the menu",
+        CreationStep::Profile => {
+            "What earlier runs earned you, granted when this one starts - \
+             Enter or Right moves on; Left goes back"
+        }
         CreationStep::Class => "Up/Down + Enter picks; Left/Right pages; Esc goes back",
         // Written by `footer` above, which is the only caller — every
         // step `CreationStep::spends` names carries a live figure.
@@ -496,6 +502,7 @@ mod tests {
         };
         match step {
             CreationStep::Difficulty => app.handle_key(GameKey::Char('f')),
+            CreationStep::Profile => app.handle_key(GameKey::Enter),
             CreationStep::Class => app.handle_key(GameKey::Char('1')),
             CreationStep::Kit | CreationStep::Points | CreationStep::Perks => spend_every_row(app),
 
@@ -686,9 +693,9 @@ mod tests {
     #[test]
     fn the_look_preview_draws_the_chosen_glyph_and_colour() {
         let mut app = wizard_app();
-        // Difficulty, then the first class, then the Kit step's whole
-        // allowance spent, which is what that step now costs to leave.
-        for step in CreationStep::ALL.iter().take(3) {
+        // Difficulty, the profile summary, the first class, then the Kit
+        // step's whole allowance spent — what it costs to leave.
+        for step in CreationStep::ALL.iter().take(4) {
             walk_past(&mut app, *step);
         }
         assert_eq!(app.creation_step(), CreationStep::Icon);
@@ -748,7 +755,7 @@ mod tests {
     #[test]
     fn the_icon_step_previews_the_highlighted_glyph() {
         let mut app = wizard_app();
-        for step in CreationStep::ALL.iter().take(3) {
+        for step in CreationStep::ALL.iter().take(4) {
             walk_past(&mut app, *step);
         }
         assert_eq!(app.creation_step(), CreationStep::Icon);
@@ -796,7 +803,7 @@ mod tests {
     #[test]
     fn the_points_step_footer_says_what_is_spent_and_what_is_left() {
         let mut app = wizard_app();
-        for step in CreationStep::ALL.iter().take(5) {
+        for step in CreationStep::ALL.iter().take(6) {
             walk_past(&mut app, *step);
         }
         assert_eq!(app.creation_step(), CreationStep::Points);
@@ -860,7 +867,7 @@ mod tests {
     #[test]
     fn the_summary_reads_the_icon_back_in_its_chosen_colour() {
         let mut app = wizard_app();
-        for step in CreationStep::ALL.iter().take(3) {
+        for step in CreationStep::ALL.iter().take(4) {
             walk_past(&mut app, *step);
         }
         assert_eq!(app.creation_step(), CreationStep::Icon);
@@ -893,9 +900,9 @@ mod tests {
     #[test]
     fn the_look_preview_prefers_a_loaded_sprite_over_the_glyph() {
         let mut app = wizard_app();
-        // Difficulty, then the first class, then the Kit step's whole
-        // allowance spent, which is what that step now costs to leave.
-        for step in CreationStep::ALL.iter().take(3) {
+        // Difficulty, the profile summary, the first class, then the Kit
+        // step's whole allowance spent — what it costs to leave.
+        for step in CreationStep::ALL.iter().take(4) {
             walk_past(&mut app, *step);
         }
         assert_eq!(app.creation_step(), CreationStep::Icon);

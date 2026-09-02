@@ -1297,6 +1297,9 @@ mod tests {
                 feral_processes_app_core::CreationStep::Difficulty => {
                     app.handle_key(feral_processes_app_core::GameKey::Char('f'))
                 }
+                feral_processes_app_core::CreationStep::Profile => {
+                    app.handle_key(feral_processes_app_core::GameKey::Enter)
+                }
                 feral_processes_app_core::CreationStep::Class => {
                     app.handle_key(feral_processes_app_core::GameKey::Char('1'))
                 }

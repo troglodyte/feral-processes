@@ -33,6 +33,31 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.78
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+- **Deploying a Home is free, and the anchor lands where you stand.** It
+  cost five Core Fragments against a starting kit that carried five or six,
+  which made founding a formality for a default character and a dead end for
+  a bought one — the creation wizard's Kit step replaces the class kit, so a
+  run that spent its allowance on gear could not open a base at all and
+  nothing said why. And the door now settles on the tile you deployed from
+  rather than back at the sector's arrival point: walk to ground you want to
+  come back to, then press it. The Home itself still stands on base space's
+  own origin, so the way out is where it always was. Founding while standing
+  on a Stack link is refused — an anchor sharing that tile could never be
+  stepped on to be entered.
+- **Two onboarding notices.** The first time your Power reserve goes under
+  half, the game says so and names the two ways out — the same threshold
+  your attacks start weakening at, not a second number beside it. And the
+  first time a program of yours is benched with no Repair Bay standing, it
+  says what a benched program can and cannot do and what brings one back. A
+  base that already has a Bay is told nothing: the program walks there
+  itself.
+- The character creator's second step is titled **Achievements**, and its
+  footer says what it is.
+
 ## 0.13.77
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

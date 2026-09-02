@@ -504,12 +504,29 @@ pub const OPENING_RING_TILES: i32 = 7;
 /// the previous zone's ceiling — which is the answer to the first of that
 /// removal's two bugs, a zone having no consistent difficulty of its own.
 ///
-/// 128 is four `world::CHUNK_SIZE` chunks: far enough to be a decision the
-/// player makes over a session rather than a step they take by accident,
-/// close enough that the frontier is reachable without a Portal. This is the
-/// knob to move if the field reads too flat or too steep; every other part
-/// of the ramp is derived from the zone curve and is not a number to tune.
-pub const DANGER_RAMP_TILES: i32 = 128;
+/// 32 is one `world::CHUNK_SIZE`, and it is scaled against what the rest of
+/// the map already measures in rather than against the world being infinite.
+/// Everything the player reaches for sits inside a couple of dozen tiles —
+/// `EXAMINE_RANGE_TILES` and `WILD_SPAWN_RADIUS_TILES` are both 12, the
+/// nearest Stack link is `STACK_NEAREST_LINK_TILES` at 8 — and the furthest
+/// the game scatters its own content is `STACK_LINK_SCATTER_TILES` at 40.
+/// A ramp topping out at `OPENING_RING_TILES + 32 = 39` therefore finishes
+/// exactly where the outermost link already is: walk to the far links and
+/// you have seen the whole gradient. It opened at 128, four chunks, which
+/// was picked off the world being unbounded and was three times further out
+/// than anything else on the map — the field read flat because the player
+/// never walked far enough to leave the first tenth of the ramp.
+///
+/// The trade is deliberate and worth stating: past 39 tiles a zone sits
+/// uniformly at the next zone's doorstep, so the gradient is an *opening*
+/// rather than a property of the whole zone. That is the right way round —
+/// the ramp exists so a strong creation build has somewhere to walk early,
+/// not so the zone has texture forever.
+///
+/// This is the knob to move if the field reads too flat or too steep; every
+/// other part of the ramp is derived from the zone curve and is not a number
+/// to tune.
+pub const DANGER_RAMP_TILES: i32 = 32;
 
 /// How far `x` looks along the row or column the player is facing
 /// (`Game::find_target_in_direction`).

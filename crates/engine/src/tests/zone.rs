@@ -44,19 +44,37 @@ fn entering_a_zone_portal_increments_zone_and_doubles_wild_stats() {
         !results.is_empty(),
         "zone 2 should have spawned wild creatures"
     );
+    let origin = {
+        let spawn = game.world.resource::<ZoneSpawnPoint>();
+        (spawn.x, spawn.y)
+    };
     for (species_id, max_hp, pos, rarity, boss) in results {
         let species = species_db.iter().find(|s| s.id == species_id).unwrap();
         // Zone 2 doubles base stats (`ZoneLevel::stat_multiplier`) and the
         // spawn's own `Potential::hp_roll` scales it within
         // `MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL`.
         //
-        // Where on the map it spawned contributes the field ramp, and that
-        // is folded in **per creature** rather than widening the bound to
-        // the ramp's cap — for the same reason `rare` and `boss_mult` are.
-        // A bound widened to `x2` would pass a ramp applied at the wrong
-        // tile, or twice; this asserts `Game::field_stat_mult` was applied
-        // exactly once, at this creature's own position.
-        let ramp = game.field_stat_mult(pos.x, pos.y);
+        // Where on the map it spawned contributes the field ramp, folded in
+        // here rather than widening the bound to the ramp's cap — a bound
+        // widened to x2 would pass a ramp applied twice, or not at all.
+        //
+        // Bounded as a *band* rather than read at this creature's own tile,
+        // because a pack takes **one** ramp value, computed at the anchor
+        // tile the spawn roll picked, and then scatters its members up to
+        // `swarm_radius` around it. A member's own tile is therefore not
+        // where its multiplier was read. Reading it per member inside the
+        // spawner instead would mean deriving stats from an `(x, y)` down
+        // there, which is exactly the underground leak the ramp is shaped to
+        // avoid — so the band is the honest bound, not a slack allowance.
+        // The ramp depends only on distance, so both ends are probed by
+        // walking that distance out along one axis.
+        let scatter = crate::game::spawning::swarm_radius(game.max_group_size(None));
+        // The raw Chebyshev offset, not `distance_from_danger_origin` —
+        // that one has already netted off the base's reach, and probing with
+        // it would net the reach off a second time.
+        let d = (pos.x - origin.0).abs().max((pos.y - origin.1).abs());
+        let ramp_at = |dist: i32| game.field_stat_mult(origin.0 + dist.max(0), origin.1);
+        let (ramp_lo, ramp_hi) = (ramp_at(d - scatter), ramp_at(d + scatter));
         //
         // The rare-spawn tier is the one other factor, and folding it in per
         // creature rather than widening the bound to the gold ceiling is
@@ -77,7 +95,12 @@ fn entering_a_zone_portal_increments_zone_and_doubles_wild_stats() {
         };
         assert!(
             (max_hp as f32)
-                >= ((species.base_hp as f32) * 2.0 * ramp * rare * boss_mult * MIN_INDIVIDUAL_ROLL)
+                >= ((species.base_hp as f32)
+                    * 2.0
+                    * ramp_lo
+                    * rare
+                    * boss_mult
+                    * MIN_INDIVIDUAL_ROLL)
                     .floor(),
             "zone 2 wild creatures should have at least doubled stats, times the roll floor"
         );
@@ -89,7 +112,12 @@ fn entering_a_zone_portal_increments_zone_and_doubles_wild_stats() {
         // that the common case.
         assert!(
             (max_hp as f32)
-                <= ((species.base_hp as f32) * 2.0 * ramp * rare * boss_mult * MAX_INDIVIDUAL_ROLL)
+                <= ((species.base_hp as f32)
+                    * 2.0
+                    * ramp_hi
+                    * rare
+                    * boss_mult
+                    * MAX_INDIVIDUAL_ROLL)
                     .ceil(),
             "zone 2 wild creatures shouldn't exceed the zone doubling times the roll ceiling"
         );

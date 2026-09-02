@@ -33,6 +33,24 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.82
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+how many times a body swings is worked out from its class and level when the
+blow lands, so there is nothing new to store.
+
+- **A Striker swings twice.** Your class said what you were good at and then
+  had nothing to do with an ordinary attack: affinities only ever reached
+  the routines you ran, so a Striker and a Medic threw the same punch. From
+  level 8 a Striker takes a second swing every round — a full one, not a
+  lesser follow-up — and so does any companion or wild program whose own
+  affinities make it a Striker. Level 8 is past the first sector's ceiling,
+  so it is something you cross into rather than start with, and the second
+  swing aims at whatever is in front of you after the first one lands.
+- **A Crash now costs a Striker the rest of the round.** Fumbling badly
+  enough to crash cost you "your next action", which meant exactly one blow
+  back when everyone threw one. For anyone with two, it takes both.
+
 ## 0.13.81
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

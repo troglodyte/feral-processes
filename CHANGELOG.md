@@ -33,6 +33,25 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.83
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.
+
+- **Compiling something by hand no longer runs the clock at thirty times
+  speed.** The progress bar spent the world's ticks sixty a second against
+  the two a second the world moves at when you are standing still, so a
+  batch aged your base by minutes while you watched a few seconds of
+  progress — needs draining, machines cycling, raid pressure building and
+  wild programs spawning, all of it sprinting for as long as the screen was
+  up. The bar now spends ticks at the rate everything else does.
+- **Hand-compiling costs a tenth of the ticks it did.** The tick price and
+  the bar's speed are the same number seen twice, so slowing the bar without
+  cutting the price would have made one Hardened Shell two and a half
+  minutes of watching it fill. It is fifteen seconds now, and the median
+  recipe is five. What a bench still buys you is everything except speed: it
+  works while you do something else, it costs you no Power of your own, and
+  a developed one reaches quality your hands cannot.
+
 ## 0.13.82
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

@@ -4,7 +4,7 @@
 **Status:** approved, not implemented
 
 A 16x16 pixel editor the player draws their own map avatar in, opened from
-the character-creation wizard's Icon step. Free-RGB colour, keyboard only,
+the character-creation wizard's Icon step. A fixed palette, keyboard only,
 persisted across runs.
 
 TODO #60 asks for two things — a player-facing icon creator and a developer
@@ -33,15 +33,24 @@ creation state, routed at the top of the Icon step's key handler. A new
 `Mode` would cost every `Mode` census a row for a screen reachable from
 exactly one other screen.
 
+**The palette is fixed at fifteen colours, and that is a ceiling, not a
+placeholder.** Fifteen plus transparent is sixteen values, which is exactly
+one hex digit per pixel — so the palette size and the encoding are the same
+decision. A per-drawing palette the player could edit was rejected: it is a
+second editing mode on a screen that has no scroll, it doubles what the
+encoding has to carry, and at 16x16 a bounded palette is what the medium
+wants anyway.
+
 **The drawn icon is drawn untinted, at the vignette's value.**
 `assets/sprites/README.md` requires authored art to be near-white because
 egui's tint *multiplies* — a red sprite on a species authored green goes
-black. Free RGB is incompatible with that, so the drawn icon opts out of
-the hue and keeps only the map's depth vignette. It is the one sprite in
-the game drawn this way, and it is safe precisely because it is the
-player's own tile: the hues a sprite normally inherits — species colour,
-`biome_tint`, damage dimming — none of them reach the player's `@`, which
-already draws at `player_look_color(colour) * vig` and nothing else.
+black. A palette carrying hues is incompatible with that, so the drawn icon
+opts out of the hue and keeps only the map's depth vignette. It is the one
+sprite in the game drawn this way, and it is safe precisely because it is
+the player's own tile: the hues a sprite normally inherits — species
+colour, `biome_tint`, damage dimming — none of them reach the player's `@`,
+which already draws at `player_look_color(colour) * vig` and nothing else.
+That was verified in `render/base.rs`'s `is_player` arm, not assumed.
 
 **The consequence is stated, not hidden.** A player who draws an icon no
 longer sees their Colour choice on the map tile. It still governs the glyph
@@ -67,8 +76,9 @@ rather than costing the player everything they have earned.
 
 Companions, structures and any entity but the player. A developer tool that
 writes into `assets/sprites/`. PNG import or export. Mouse input — there is
-none anywhere in the gui and `GameKey` is the whole vocabulary. Flood fill,
-mirror or symmetry, layers, animation, canvas sizes other than 16x16
+none anywhere in the gui and `GameKey` is the whole vocabulary. A
+player-editable palette or any free-RGB picker. Flood fill, mirror or
+symmetry, layers, animation, canvas sizes other than 16x16
 (`assets/sprites/README.md`: the format is not negotiable).
 
 ## The type
@@ -76,54 +86,62 @@ mirror or symmetry, layers, animation, canvas sizes other than 16x16
 `crates/engine/src/icon.rs`, new:
 
 ```rust
+/// The colours a drawn icon may use, in palette order. Fifteen, so that a
+/// pixel and its transparent zero fit one hex digit.
+pub const ICON_PALETTE: [Rgba; 15] = [ /* ... */ ];
+
 pub struct PlayerIcon {
-    /// Swatches 1..=8. Index 0 is transparent and is not stored.
-    palette: [Rgba; 8],
     /// Row-major from the top-left, matching the PNG layout. Each value is
-    /// 0..=8: 0 is transparent, 1..=8 index `palette`.
+    /// 0..=15: 0 is transparent, 1..=15 index `ICON_PALETTE`.
     pixels: [u8; 256],
 }
 ```
 
-Nine values fit a nibble exactly, which is what makes the encoding one
-character per pixel. Index 0 being transparent is not decoration: it is the
-erase colour, and it is what lets the ground show through a drawn icon the
-way it shows through a glyph.
+The palette ships as five steps of value from near-black to white and ten
+hues. The value ramp is the half that matters — shading with value is the
+discipline `assets/sprites/README.md` already asks of every sprite, and it
+is what makes a 16x16 figure read at all.
 
-**Encoding, `v1`:** `"v1:"` + eight swatches as `RRGGBBAA` hex + 256 hex
-digits, one per pixel. 3 + 64 + 256 = 323 characters, one line, readable in
-a text editor.
+Index 0 being transparent is not decoration: it is the erase colour, and it
+is what lets the ground show through a drawn icon the way it shows through
+a glyph.
 
-Decoding is strict — wrong prefix, wrong length, a non-hex digit, or a
-pixel index above 8 all yield `None`. There is no partial recovery: a
+**Encoding, `v1`:** `"v1:"` + 256 hex digits, one per pixel. 259
+characters, one line, readable in a text editor.
+
+Decoding is strict — wrong prefix, wrong length, or a non-hex digit all
+yield `None`. There is no partial recovery: a
 half-decoded icon is a corrupted avatar, and the fallback (the glyph) is
 already correct and already tested.
 
 ## The editor
 
 `IconEditor` lives in app-core and owns the editing state: the
-`PlayerIcon`, a cursor, the selected swatch, whether a swatch's channels
-are open for editing, and an undo stack of at most 32 whole `PlayerIcon`
-values (288 bytes each, ~9 KB — simpler than a diff and small enough that
-simple wins).
+`PlayerIcon`, a cursor, the selected colour, which of the two panels has
+focus, and an undo stack of at most 32 whole `PlayerIcon` values (256 bytes
+each, 8 KB — simpler than a diff and small enough that simple wins).
+
+**The screen is two panels and `Tab` moves between them.** The arrows mean
+one thing at a time — move the cursor on the canvas, or move along the
+palette — rather than meaning different things depending on a mode the
+player has to remember they are in. Which panel has focus is drawn, so the
+answer is on screen rather than in the player's head.
 
 | Key | Does |
 |---|---|
-| Arrows | Move the cursor |
-| `Space` | Paint the cursor cell with the selected swatch |
+| `Tab` | Move focus between the canvas and the palette |
+| Arrows | Move the cursor, or move along the palette — whichever has focus |
+| `Space` | Paint the cursor cell with the selected colour |
 | `Backspace` | Erase the cursor cell (index 0) |
-| `1`-`8` | Select a swatch |
-| `e` | Open/close the selected swatch's R/G/B channels |
-| Arrows, while channels are open | Left/Right adjusts the highlighted channel, Up/Down picks one |
-| `Shift`+arrow / `Ctrl`+arrow | Target and step on a channel, the pair `Mode::Transfer` already defines |
 | `u` | Undo |
 | `x` | Clear the canvas |
 | `Enter` | Keep the drawing, return to the Icon step |
 | `Esc` | Discard changes, return to the Icon step |
 
-The default palette ships eight swatches spanning value and a few hues, so
-the editor is usable on the first keystroke rather than opening on eight
-identical blacks.
+**`GameKey::Tab` is new.** `map_special_key` in `crates/gui/src/lib.rs`
+falls through to `None`, so this is one variant and one mapping line, and
+every existing key table ignores it. It is not added to `REPEATING_KEYS`:
+focus is a toggle between two panels, and holding it would flicker.
 
 **The editor screen draws its own canvas as rectangles, not as a texture.**
 A 16x16 grid at 24px needs per-cell rects anyway for the grid lines and the
@@ -191,7 +209,10 @@ exactly what retired save migrations.
 **engine**
 - `v1` round-trips: a drawn icon encodes and decodes to itself.
 - Every malformed form decodes to `None`: bad prefix, short, long,
-  non-hex, a pixel index of 9.
+  non-hex.
+- `ICON_PALETTE` is fifteen long. The encoding is one hex digit per pixel,
+  so a sixteenth colour would be unencodable — and unreachable in a way
+  nothing else would report.
 - A profile carrying an unreadable icon still loads its achievements. This
   is the property the plain-string decision exists for, and it is the one
   that is expensive to get wrong.
@@ -199,7 +220,9 @@ exactly what retired save migrations.
   round-trip, which stays green for a field that never reaches disk.
 
 **app-core**
-- Paint, erase, swatch select, channel edit, clear.
+- Paint, erase, colour select, clear.
+- `Tab` moves focus, and the arrows act on the focused panel alone — the
+  test that would have caught arrows painting while the palette has focus.
 - Undo restores the previous canvas and the stack is bounded at 32.
 - `Esc` discards and `Enter` keeps.
 - Taking a preset icon row clears the drawing.
@@ -223,10 +246,12 @@ exactly what retired save migrations.
 `achievements.rs`.
 
 **app-core** — `app/creation.rs` (the editor, its keys, the sixth row, the
-profile seed), `lib.rs` (the view type the editor screen draws from).
+profile seed), `lib.rs` (`GameKey::Tab`, and the view type the editor
+screen draws from).
 
-**gui** — `render/creation.rs` (the editor screen; the preview cell already
-exists), `render/base.rs` (the three-step fallback and the neutral tint),
+**gui** — `lib.rs` (`map_special_key` gains `KeyCode::Tab`),
+`render/creation.rs` (the editor screen; the preview cell already exists),
+`render/base.rs` (the three-step fallback and the neutral tint),
 `sprites.rs` or `paint.rs` (registering a runtime texture).
 
 **docs** — `assets/sprites/README.md` gains the one exception to its

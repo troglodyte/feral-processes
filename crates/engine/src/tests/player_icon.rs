@@ -19,7 +19,7 @@ fn save_path(name: &str) -> std::path::PathBuf {
 fn painted_icon() -> PlayerIcon {
     let mut icon = PlayerIcon::default();
     icon.set(0, 0, 1);
-    icon.set(15, 15, 15);
+    icon.set(7, 7, 15);
     icon.set(7, 3, 9);
     icon
 }

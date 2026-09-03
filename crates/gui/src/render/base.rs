@@ -102,14 +102,15 @@ const PREVIEW_FILL: Color = wash(0.35);
 /// on, a marked cell included.
 pub(crate) const CUTTING_OUTLINE: Color = hud::palette::PLAN;
 
-/// The nemesis mark's side, as a fraction of the tile, and how far it sits
+/// An identity mark's side, as a fraction of the tile — the shape a
+/// nemesis and a boss both wear, in opposite corners, and how far it sits
 /// off the tile's edges. Smaller than `STAFFED_MARK` and placed in the
 /// opposite corner (top-right rather than bottom-left), so a marked program
 /// standing on a machine-adjacent tile can never collide with either a
 /// staffed mark or the outline `outline_open` drops along a chained pair's
 /// shared edge.
-const NEMESIS_MARK: f32 = 0.22;
-const NEMESIS_MARK_INSET: f32 = 2.0;
+const IDENTITY_MARK: f32 = 0.22;
+const IDENTITY_MARK_INSET: f32 = 2.0;
 
 /// Where the nemesis mark sits on a tile — the top-right corner, dropped
 /// below `RARITY_BAR_PX` so it never overlaps the bar running the width of
@@ -121,10 +122,10 @@ const NEMESIS_MARK_INSET: f32 = 2.0;
 /// unit-testable without a `Painter` — see the `nemesis_mark_clears_the_
 /// rarity_bar` test.
 fn nemesis_mark_rect(px: f32, py: f32, tile_px: f32) -> Rect {
-    let size = (tile_px - 1.0) * NEMESIS_MARK;
+    let size = (tile_px - 1.0) * IDENTITY_MARK;
     Rect::new(
-        px + tile_px - 1.0 - NEMESIS_MARK_INSET - size,
-        py + RARITY_BAR_PX + NEMESIS_MARK_INSET,
+        px + tile_px - 1.0 - IDENTITY_MARK_INSET - size,
+        py + RARITY_BAR_PX + IDENTITY_MARK_INSET,
         size,
         size,
     )
@@ -144,6 +145,35 @@ fn difficulty_bar_rect(px: f32, py: f32, tile_px: f32) -> Rect {
         tile_px - 1.0,
         RARITY_BAR_PX,
     )
+}
+
+/// Where the boss mark sits — the bottom-right corner, raised clear of
+/// `difficulty_bar_rect` the way `nemesis_mark_rect` drops below the rarity
+/// bar, and inset from both remaining edges for that mark's reason.
+///
+/// **The far corner from the nemesis mark deliberately.** A creature can be
+/// both now — `difficulty_color` used to answer with one reserved hue and
+/// the nemesis won it, so being a boss went undrawn — and two facts that
+/// can hold at once must never fight for pixels. The bottom edge is also
+/// the friendlier neighbour by colour: the con rungs under it are all warm,
+/// where the rarity bar's Prismatic sits much nearer this mark's magenta.
+fn boss_mark_rect(px: f32, py: f32, tile_px: f32) -> Rect {
+    let size = (tile_px - 1.0) * IDENTITY_MARK;
+    Rect::new(
+        px + tile_px - 1.0 - IDENTITY_MARK_INSET - size,
+        py + tile_px - 1.0 - RARITY_BAR_PX - IDENTITY_MARK_INSET - size,
+        size,
+        size,
+    )
+}
+
+/// The boss mark's colour — the magenta `difficulty_color` used to paint a
+/// boss's whole glyph, kept so the fact reads the same after it moved off
+/// the glyph and into a corner. A named function rather than a literal at
+/// the draw site so the census that holds it apart from every other mark on
+/// the tile has something to name.
+fn boss_mark_color() -> Color {
+    hud::palette::glyph(GlyphColor::Magenta)
 }
 
 /// Paints the con read along the bottom edge, or nothing at all when there
@@ -1459,6 +1489,21 @@ fn draw_surface_map(
             // corner rather than sharing the bar's, so a nemesis that is
             // also rare (the two are independent) shows both without either
             // being spent to make room.
+            // Its own corner and its own fact. A boss used to be drawn by
+            // `difficulty_color` returning magenta for its whole glyph,
+            // which spent the con read — and lost outright to the nemesis
+            // override when a creature was both. Two marks, two corners,
+            // and the con bar answers the fight question for both.
+            if actor.is_some_and(|ev| ev.is_boss) {
+                let mark = boss_mark_rect(px, py, tile_px);
+                painter.rect(
+                    mark.x,
+                    mark.y,
+                    mark.w,
+                    mark.h,
+                    at_level(boss_mark_color(), vig),
+                );
+            }
             if actor.is_some_and(|ev| ev.nemesis) {
                 let mark = nemesis_mark_rect(px, py, tile_px);
                 painter.rect(
@@ -3654,5 +3699,82 @@ mod tests {
             "the bar must wear the con rung's own hue, drawn from the one \
              palette table `glyph_color` reads"
         );
+    }
+
+    /// The other end of `nemesis_mark_rect`'s clearance: the bottom-right
+    /// corner has a bar under it now too, and a mark flush into a corner
+    /// reads as painting back an edge `outline_open` left off.
+    #[test]
+    fn the_boss_mark_clears_the_difficulty_bar_and_stays_inside_the_tile() {
+        for tile_px in [24.0_f32, 32.0, 48.0, 64.0] {
+            let (px, py) = (100.0_f32, 200.0_f32);
+            let mark = boss_mark_rect(px, py, tile_px);
+            let bar = difficulty_bar_rect(px, py, tile_px);
+
+            assert!(
+                mark.y + mark.h <= bar.y,
+                "at tile_px={tile_px} the boss mark reaches into the con bar"
+            );
+            assert!(
+                mark.x + mark.w < px + tile_px - 1.0 && mark.x > px,
+                "at tile_px={tile_px} the boss mark touches a side edge"
+            );
+            assert!(mark.w > 0.0, "at tile_px={tile_px} the mark has no size");
+        }
+    }
+
+    /// **A creature can now be both.** The old `difficulty_color` returned a
+    /// reserved hue for a nemesis *or* a boss and the nemesis won, so being
+    /// both was one fact drawn and one dropped. They are two marks in two
+    /// corners now, and nothing may make them fight for pixels.
+    #[test]
+    fn a_boss_that_is_also_a_nemesis_wears_both_marks_without_them_colliding() {
+        let tile_px = 40.0_f32;
+        let boss = boss_mark_rect(0.0, 0.0, tile_px);
+        let nemesis = nemesis_mark_rect(0.0, 0.0, tile_px);
+
+        assert!(
+            boss.y > nemesis.y + nemesis.h,
+            "the two identity marks overlap: boss at {boss:?}, nemesis at \
+             {nemesis:?}"
+        );
+    }
+
+    /// **The census.** A tile can wear the con bar, a rarity bar, a staffed
+    /// or stranded mark, a nemesis mark and now a boss mark all at once, and
+    /// every one of them is a different fact. The boss mark is the newest
+    /// and so the one that has to prove it is not any of the others —
+    /// against the same 0.10 channel-distance margin the con ladder's own
+    /// census uses.
+    #[test]
+    fn the_boss_mark_is_distinguishable_from_every_other_mark_a_tile_can_wear() {
+        fn dist(a: Color, b: Color) -> f32 {
+            (a.r - b.r).abs() + (a.g - b.g).abs() + (a.b - b.b).abs()
+        }
+
+        let boss = boss_mark_color();
+        let others: &[(&str, Color)] = &[
+            ("the nemesis mark", hud::palette::glyph(GlyphColor::Cyan)),
+            ("a staffed mark", hud::palette::HEALTHY),
+            ("a stranded mark", hud::palette::ATTENTION),
+            ("the cutting outline", CUTTING_OUTLINE),
+            ("con rung green", hud::palette::glyph(GlyphColor::Green)),
+            ("con rung yellow", hud::palette::glyph(GlyphColor::Yellow)),
+            ("con rung orange", hud::palette::glyph(GlyphColor::Orange)),
+            ("con rung red", hud::palette::glyph(GlyphColor::Red)),
+            ("rarity silver", SILVER),
+            ("rarity gold", GOLD),
+            ("rarity platinum", PLATINUM),
+            ("rarity prismatic", PRISMATIC),
+        ];
+
+        for (what, c) in others {
+            let d = dist(boss, *c);
+            assert!(
+                d >= 0.10,
+                "the boss mark is {d:.3} from {what} — a player reading one \
+                 tile cannot tell them apart"
+            );
+        }
     }
 }

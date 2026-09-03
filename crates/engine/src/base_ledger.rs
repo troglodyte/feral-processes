@@ -16,6 +16,8 @@ use bevy_ecs::prelude::Resource;
 use serde::{Deserialize, Serialize};
 
 use crate::items::ItemId;
+use crate::resources::BattleTelemetry;
+use crate::telemetry::Record;
 
 /// Ticks in one bucket. A Mining Node cycle is 10 ticks and a Fabricator or
 /// Armory cycle 30, so a bucket is ~100 of the former and ~33 of the latter
@@ -184,6 +186,49 @@ impl BaseLedger {
     }
 }
 
+/// The one door a production seam reports through.
+///
+/// **The counter is a reader of the event, not a sibling of it.** The
+/// tempting shortcut is to increment the ledger at the seam and separately
+/// build a record; that is two copies of one rule, and the copy that drifts
+/// would be the player's screen quietly disagreeing with the analysis a
+/// retune was done from.
+///
+/// The fold is unconditional and the record is lazy, which is the split the
+/// two halves actually need: folding costs a `BTreeMap` increment per
+/// production *cycle*, while a record costs several `String` allocations
+/// that the disarmed case must not pay. `Game::record`'s closure discipline,
+/// reachable from a bevy system — those have no `&Game` to hand it.
+pub(crate) fn emit(
+    ledger: &mut BaseLedger,
+    telemetry: &mut BattleTelemetry,
+    tick: u64,
+    zone: u32,
+    event: &Event,
+    record: impl FnOnce(&Event) -> Record,
+) {
+    ledger.fold(tick, zone, event);
+    if !telemetry.on {
+        return;
+    }
+    let record = record(event);
+    telemetry.records.push(record);
+}
+
+/// The same discipline for an event the ledger has nothing to count: a
+/// machine's status transition is news for the log and moves no units.
+///
+/// Deliberately not folded through [`Event`] with an empty arm — an event
+/// variant no consumer reads is ceremony, and the ledger gains a term for
+/// stalls only when it gains busy/idle ticks to put it beside.
+pub(crate) fn record_in_system(telemetry: &mut BattleTelemetry, record: impl FnOnce() -> Record) {
+    if !telemetry.on {
+        return;
+    }
+    let record = record();
+    telemetry.records.push(record);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -341,5 +386,86 @@ mod tests {
         assert_eq!(ledger.produced_in_zone(1, &item("hardened_shell")), 1);
         assert_eq!(ledger.produced_in_zone(2, &item("hardened_shell")), 2);
         assert_eq!(ledger.produced_in_zone(3, &item("hardened_shell")), 0);
+    }
+
+    fn extract() -> Event {
+        Event::Extract {
+            item: item("core_fragment"),
+            rolled: 2,
+            landed: 2,
+            ok: true,
+        }
+    }
+
+    fn a_record(_: &Event) -> Record {
+        Record::Extract {
+            tick: 0,
+            zone: 1,
+            machine: (0, 0),
+            kind: "mining_node".to_string(),
+            tier: 1,
+            worker_species: None,
+            item: "core_fragment".to_string(),
+            rolled: 2,
+            landed: 2,
+            ok: true,
+        }
+    }
+
+    /// The counter half must not be gated on the dev log. A base that only
+    /// counted what it produced while `FERAL_DEV_LOG` was set would show the
+    /// player an empty screen for every ordinary run.
+    #[test]
+    fn the_fold_runs_whether_or_not_the_log_is_armed() {
+        let mut ledger = BaseLedger::default();
+        let mut telemetry = BattleTelemetry::default();
+
+        emit(&mut ledger, &mut telemetry, 0, 1, &extract(), a_record);
+
+        assert_eq!(ledger.lifetime[&item("core_fragment")].mined, 2);
+        assert!(telemetry.records.is_empty());
+    }
+
+    /// The spec's explicit obligation. Nothing in the compiler keeps a bevy
+    /// seam honest about the `on` check the way `Game::record`'s closure
+    /// does, so the guarantee needs a test of its own: the closure must not
+    /// even run when disarmed.
+    #[test]
+    fn no_record_is_built_when_the_log_is_disarmed() {
+        let mut ledger = BaseLedger::default();
+        let mut telemetry = BattleTelemetry::default();
+
+        emit(&mut ledger, &mut telemetry, 0, 1, &extract(), |_| {
+            panic!("the record closure ran while telemetry was off")
+        });
+
+        record_in_system(&mut telemetry, || {
+            panic!("the record closure ran while telemetry was off")
+        });
+    }
+
+    #[test]
+    fn an_armed_log_gets_the_record_and_the_ledger_still_gets_the_fold() {
+        let mut ledger = BaseLedger::default();
+        let mut telemetry = BattleTelemetry {
+            on: true,
+            ..BattleTelemetry::default()
+        };
+
+        emit(&mut ledger, &mut telemetry, 0, 1, &extract(), a_record);
+
+        assert_eq!(ledger.lifetime[&item("core_fragment")].mined, 2);
+        assert_eq!(telemetry.records.len(), 1);
+    }
+
+    /// A base record is keyed to a tick and happens while no fight is open,
+    /// so `arena`'s re-keying must leave it alone rather than stamping it
+    /// with a fight it had nothing to do with.
+    #[test]
+    fn re_keying_a_fight_leaves_a_base_record_alone() {
+        let mut record = a_record(&extract());
+        let before = record.clone();
+        record.set_fight(99);
+        assert_eq!(record, before);
     }
 }

@@ -60,6 +60,53 @@ pub enum Record {
         player_hp_frac: f32,
         companions_downed: u32,
     },
+    /// An extractor finished a cycle. `ok: false` is the fizzle — the only
+    /// empirical route to `systems::mining_success_chance` — and `rolled`
+    /// against `landed` is what a clog cost.
+    Extract {
+        tick: u64,
+        zone: u32,
+        /// The machine's own base-space tile, which is what identifies one
+        /// instance from another; `kind` is its `StructureDef` id.
+        machine: (i32, i32),
+        kind: String,
+        tier: u32,
+        worker_species: Option<String>,
+        item: String,
+        rolled: u32,
+        landed: u32,
+        ok: bool,
+    },
+    /// An assembler completed one unit, draining its inputs in the same
+    /// scope — so consumption and production are one record.
+    Assemble {
+        tick: u64,
+        zone: u32,
+        machine: (i32, i32),
+        kind: String,
+        item: String,
+        inputs: Vec<(String, u32)>,
+    },
+    /// A machine changed status. Transitions only, because
+    /// `set_machine_status` already logs only on transition — hanging this
+    /// there is what makes the edges free and leaves no duplicate
+    /// suppression to write.
+    MachineStall {
+        tick: u64,
+        machine: (i32, i32),
+        kind: String,
+        status: String,
+    },
+    /// The player finished a hand-compile. `ticks_spent` against the
+    /// machine cycle for the same item is the whole of B2.
+    HandCraft {
+        tick: u64,
+        item: String,
+        qty: u32,
+        careful: bool,
+        bench: Option<String>,
+        ticks_spent: u32,
+    },
 }
 
 impl Record {
@@ -68,9 +115,14 @@ impl Record {
     /// from 1, so without this every fight in a 200-rep evaluation would
     /// land in the file as fight 1.
     ///
-    /// Or-patterns rather than five arms: a variant added without a `fight`
-    /// fails to compile here, which is what keeps "every record carries one"
-    /// true rather than merely documented.
+    /// Or-patterns rather than an arm each, and **no wildcard**: a new
+    /// variant fails to compile until it is classified as one that carries
+    /// a fight or one that does not. That is what keeps "every battle
+    /// record carries a fight id" true rather than merely documented.
+    ///
+    /// The base records are the ones that do not. They are keyed to `tick`
+    /// and happen while no fight is open at all, so re-keying one would be
+    /// inventing an association rather than correcting it.
     pub(crate) fn set_fight(&mut self, fight: u64) {
         let slot = match self {
             Record::FightStart { fight, .. }
@@ -78,6 +130,10 @@ impl Record {
             | Record::EnemyChoice { fight, .. }
             | Record::PartyAction { fight, .. }
             | Record::FightEnd { fight, .. } => fight,
+            Record::Extract { .. }
+            | Record::Assemble { .. }
+            | Record::MachineStall { .. }
+            | Record::HandCraft { .. } => return,
         };
         *slot = fight;
     }

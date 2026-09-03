@@ -783,16 +783,25 @@ mod tests {
 
         // Every record, not just the openers: a renumber that touched only
         // `FightStart` would leave the swings pointing at the wrong fight.
-        fn fight_of(record: &Record) -> u64 {
+        // No wildcard, matching `Record::set_fight`: a new variant must be
+        // classified as one that carries a fight or one that does not,
+        // rather than silently joining the set this asserts over. The base
+        // records are keyed to a tick and cannot appear in an arena session
+        // anyway, since nothing there runs a machine.
+        fn fight_of(record: &Record) -> Option<u64> {
             match record {
                 Record::FightStart { fight, .. }
                 | Record::Round { fight, .. }
                 | Record::EnemyChoice { fight, .. }
                 | Record::PartyAction { fight, .. }
-                | Record::FightEnd { fight, .. } => *fight,
+                | Record::FightEnd { fight, .. } => Some(*fight),
+                Record::Extract { .. }
+                | Record::Assemble { .. }
+                | Record::MachineStall { .. }
+                | Record::HandCraft { .. } => None,
             }
         }
-        let ids: std::collections::BTreeSet<u64> = records.iter().map(fight_of).collect();
+        let ids: std::collections::BTreeSet<u64> = records.iter().filter_map(fight_of).collect();
         assert_eq!(
             ids,
             starts.iter().copied().collect(),

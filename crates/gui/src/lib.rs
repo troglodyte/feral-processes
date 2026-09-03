@@ -27,7 +27,9 @@ use bevy::ecs::system::SystemParam;
 use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
 use bevy::window::{PrimaryWindow, WindowMode};
-use bevy_egui::{EguiContexts, EguiPlugin, EguiPreUpdateSet, EguiPrimaryContextPass};
+use bevy_egui::{
+    EguiContexts, EguiPlugin, EguiPreUpdateSet, EguiPrimaryContextPass, EguiUserTextures,
+};
 
 use feral_processes_app_core::{App, GameKey, Mode};
 use fx::Fx;
@@ -238,10 +240,36 @@ pub fn run(app: App) {
         // In `PreUpdate` rather than the egui pass: registration needs
         // `EguiUserTextures` mutably, and the pass already holds the context.
         // It runs every frame but returns immediately once nothing is pending.
-        .add_systems(PreUpdate, sprites::register)
+        .add_systems(PreUpdate, (sprites::register, sync_drawn_icon))
         .add_systems(EguiPrimaryContextPass, frame);
     add_font_install(&mut bevy_app);
     bevy_app.run();
+}
+
+/// Keeps the player's own drawing on the GPU, one upload per change.
+///
+/// `PreUpdate` beside `sprites::register`, for its reason and one more:
+/// registration needs `EguiUserTextures` mutably and the egui pass already
+/// holds the context, and the table has to be complete before `frame`
+/// clones it for the `Painter`.
+///
+/// Which drawing is live is a two-case question and `App::game` answers it.
+/// A run in progress draws the player's own, off the component the save
+/// carries. With no run the wizard's preview cell is the only thing asking,
+/// so the choice it is editing *is* the answer — reading the choice
+/// unconditionally instead would let a stale wizard drawing outlive the
+/// wizard and follow a player who never kept one onto the map.
+fn sync_drawn_icon(
+    frontend: Res<Frontend>,
+    mut sprites: ResMut<sprites::Sprites>,
+    mut images: ResMut<Assets<Image>>,
+    mut textures: ResMut<EguiUserTextures>,
+) {
+    let icon = match &frontend.app.game {
+        Some(game) => game.player_icon(),
+        None => frontend.app.creation_choice().icon.as_ref(),
+    };
+    sprites.sync_drawn_icon(icon, &mut images, &mut textures);
 }
 
 /// Schedules the one-shot font install.

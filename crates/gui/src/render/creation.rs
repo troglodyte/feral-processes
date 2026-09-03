@@ -370,7 +370,22 @@ fn draw_look_preview(choice: &CharacterChoice, painter: &Painter, cell: Rect, m:
     let inset = m.pad / 2.0;
     let art = cell.w - inset * 2.0;
     let name = super::player_sprite_name(&choice.sprite);
-    let drew = name.is_some_and(|n| painter.sprite(n, cell.x + inset, cell.y + inset, art, color));
+    // The same three rungs `render/base.rs` walks for the player's own
+    // tile, in the same order and with the same neutral tint on the top
+    // one — the cell is the only place the player sees their pick before
+    // the run starts, so a cell resolving a look differently from the map
+    // would promise something the map then does not draw. Neutral is plain
+    // white here rather than `base.rs`'s grey: there is no vignette on a
+    // popup to scale it by.
+    let drew = (choice.icon.is_some()
+        && painter.sprite(
+            crate::sprites::DRAWN_ICON_KEY,
+            cell.x + inset,
+            cell.y + inset,
+            art,
+            Color::new(1.0, 1.0, 1.0, color.a),
+        ))
+        || name.is_some_and(|n| painter.sprite(n, cell.x + inset, cell.y + inset, art, color));
     if !drew {
         let glyph = choice.glyph.to_string();
         let size = art as u16;
@@ -985,6 +1000,68 @@ mod tests {
         assert!(
             !glyphs.iter().any(|(g, _)| g == "@"),
             "the '@' must give way to the sprite, not sit under it: {glyphs:?}"
+        );
+    }
+
+    /// The preview cell's own top rung: a kept drawing is what the cell
+    /// shows, over both the named sprite and the glyph.
+    ///
+    /// The wizard and the map must not be able to disagree about what was
+    /// chosen — the cell is the only place the player sees their pick
+    /// before the run starts, and it resolves through the same three rungs
+    /// `render/base.rs` walks.
+    #[test]
+    fn the_look_preview_prefers_the_drawn_icon() {
+        let mut app = wizard_app();
+        for step in CreationStep::ALL.iter().take(4) {
+            walk_past(&mut app, *step);
+        }
+        assert_eq!(app.creation_step(), CreationStep::Icon);
+
+        // The sixth row opens the editor; one painted pixel and `Enter`
+        // keeps it. Keeping advances to Colour, so `Left` walks back to the
+        // Icon step with a real drawing already on the choice.
+        while app.menu_selected != app.creation_rows().len() - 1 {
+            app.handle_key(GameKey::Down);
+        }
+        app.handle_key(GameKey::Enter);
+        assert!(app.icon_editor_view().is_some(), "the editor did not open");
+        app.handle_key(GameKey::Char(' '));
+        app.handle_key(GameKey::Enter);
+        assert_eq!(app.creation_step(), CreationStep::Colour);
+        app.handle_key(GameKey::Left);
+        assert_eq!(app.creation_step(), CreationStep::Icon);
+        assert!(app.creation_choice().icon.is_some());
+
+        // Both keys present, so this cannot pass on a lookup that missed.
+        let mut sprites = crate::paint::SpriteTable::default();
+        sprites.insert("player", bevy_egui::egui::TextureId::User(7));
+        sprites.insert(
+            crate::sprites::DRAWN_ICON_KEY,
+            bevy_egui::egui::TextureId::User(9),
+        );
+        let m = ui_metrics(900.0);
+        let (_, shapes) =
+            crate::paint::with_sprites(sprites, |p| draw_create_character(&app, None, p, &m));
+
+        let images = crate::paint::painted_images(&shapes);
+        assert_eq!(images.len(), 1, "exactly one sprite, the preview's");
+        assert_eq!(
+            images[0].0,
+            bevy_egui::egui::TextureId::User(9),
+            "the drawing must win the cell from the named sprite"
+        );
+        let tint = images[0].2;
+        assert_eq!(
+            (tint.r(), tint.g()),
+            (tint.g(), tint.b()),
+            "the cell draws the drawing untinted too, or it would promise a \
+             look the map does not draw: {tint:?}"
+        );
+        let glyphs = crate::paint::painted_map_glyphs(&shapes);
+        assert!(
+            !glyphs.iter().any(|(g, _)| g == "@"),
+            "the '@' must give way to the drawing, not sit under it: {glyphs:?}"
         );
     }
 

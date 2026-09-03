@@ -1697,6 +1697,48 @@ fn entering_the_icon_step_seeds_from_a_profile_with_an_icon() {
     ));
 }
 
+/// **A profile written before the grid halved still seeds the wizard.**
+/// `v1` carried 256 pixels; `PlayerIcon::decode` folds each 2x2 block onto
+/// the 8x8 grid, so a player who drew an icon on the old editor opens the
+/// new one on the same figure rather than on a blank canvas. Asserted
+/// through the wizard rather than on `decode` alone, because the seed is
+/// the only place a player would ever see the difference.
+#[test]
+fn entering_the_icon_step_seeds_from_a_v1_profile() {
+    // A 2x2 block of colour 4 at the old grid's origin, folding to cell
+    // (0, 0); everything else transparent.
+    let mut v1 = String::from("v1:");
+    for y in 0..16 {
+        for x in 0..16 {
+            v1.push(if x < 2 && y < 2 { '4' } else { '0' });
+        }
+    }
+    let profile = Profile {
+        player_icon: Some(v1),
+        ..Default::default()
+    };
+
+    let mut app = wizard_app_with_profile("icon_seed_v1", &profile);
+    press(&mut app, ch('n'));
+    press(&mut app, ch('f'));
+    press(&mut app, GameKey::Enter); // -> Class
+    press(&mut app, ch('1'));
+    spend_the_kit(&mut app);
+    press(&mut app, GameKey::Enter); // -> Icon
+
+    let mut folded = PlayerIcon::default();
+    folded.set(0, 0, 4);
+    assert_eq!(
+        app.creation_choice().icon,
+        Some(folded),
+        "a v1 profile must fold onto the 8x8 grid rather than being dropped"
+    );
+    assert!(matches!(
+        app.creation_rows().last(),
+        Some(CreationRow::DrawnIcon { drawn: true })
+    ));
+}
+
 /// A profile with nothing drawn opens the editor on a blank canvas rather
 /// than a garbage or stale one.
 #[test]

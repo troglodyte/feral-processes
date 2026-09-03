@@ -33,6 +33,22 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.86
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+nothing here is stored; the con read has always been derived at draw time.
+
+- **A program's glyph tells you what it is again.** Its colour used to be
+  replaced outright by the con read for anything hostile, so a tile could say
+  what a program is or how dangerous it is and never both.
+- **How dangerous something is, is a bar along the bottom of its tile now** —
+  green through red, the mirror of the rare-tier bar along the top.
+- **A boss wears its own corner mark**, so being a boss no longer costs it the
+  con read.
+- **A creature that is both a boss and a nemesis shows both.** The two used to
+  compete for the same colour and the nemesis won outright, which meant one of
+  the two facts about the most dangerous thing on the screen went undrawn.
+
 ## 0.13.85
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

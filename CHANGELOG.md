@@ -33,6 +33,24 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.85
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+nothing here is stored; all three numbers are read at draw time.
+
+- **The clouds move now.** They shipped at a wind slow enough that the
+  leading edge spent three seconds crossing a tile, and since the edge is
+  spread over several tiles by design, no single tile visibly changed inside
+  the time anyone looks at one — so weather that was drawn every frame read
+  as a still image. Doubled, in the direction it already had.
+- **The map is darker, and the shadows are deeper.** A cloud rides the
+  ground's shade and never the vignette, so a glyph under one is still drawn
+  at full brightness; that is what makes a deeper shadow free, and it is why
+  the vignette floors moved last and by the smallest step that reads.
+- **The spawn ring is gone.** The magenta outline marked where you
+  materialized on breaching a zone, which is a fact with nothing to spend it
+  on once you have walked a few tiles away from it.
+
 ## 0.13.84
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

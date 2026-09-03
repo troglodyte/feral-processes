@@ -109,12 +109,19 @@ const LOG_FLASH_SECONDS: f64 = 0.35;
 /// How far into shadow the deepest part of a cloud takes the ground, as a
 /// fraction off its lit brightness.
 ///
-/// Bounded well under the `SHADE_JITTER` band's neighbour-to-neighbour
-/// spread times a few, so a cloud reads as a large soft thing passing over
-/// texture rather than as the texture itself changing. Deeper than about a
-/// third and the ground under it stops answering which biome it is, which
-/// is the one thing the map's brightness is genuinely *for*.
-const CLOUD_DEPTH: f32 = 0.22;
+/// Bounded under the `SHADE_JITTER` band's neighbour-to-neighbour spread
+/// times a few, so a cloud reads as a large soft thing passing over texture
+/// rather than as the texture itself changing. Deeper than about a third
+/// and the ground under it stops answering which biome it is, which is the
+/// one thing the map's brightness is genuinely *for* — so 0.30 is close to
+/// the ceiling and the next request for a darker shadow is a request to
+/// give that up.
+///
+/// It costs nothing in legibility because the shadow rides `shade` and
+/// never `vig`: glyphs are drawn at full vignette brightness under a cloud,
+/// so nothing standing on the ground dims with it. The vignette floors in
+/// `render/base.rs` are the constrained pair, not this.
+const CLOUD_DEPTH: f32 = 0.30;
 
 /// How fast the field travels, in tiles per second, and in which direction.
 ///
@@ -123,10 +130,16 @@ const CLOUD_DEPTH: f32 = 0.22;
 /// diagonal one bands the map along its diagonal — `tile_hash`'s reason for
 /// mixing its two axes with different constants, arrived at again here.
 ///
-/// Slow enough that the motion is caught rather than watched: at 0.32 the
-/// leading edge crosses a tile about every three seconds and a whole patch
-/// takes the better part of a minute to pass over you.
-const CLOUD_WIND: (f32, f32) = (0.32, 0.13);
+/// Slow enough that the motion is caught rather than watched: at 0.64 the
+/// leading edge crosses a tile about every second and a half and a whole
+/// patch takes a little over half a minute to pass over you.
+///
+/// Doubled from the (0.32, 0.13) it shipped at, which read as still — the
+/// `CLOUD_EDGE0`..`CLOUD_EDGE1` band spreads the leading edge over several
+/// tiles by design, so at three seconds a tile no single tile visibly
+/// changed inside the time a player looks at one. The direction is
+/// deliberately untouched; only the rate moved.
+const CLOUD_WIND: (f32, f32) = (0.64, 0.26);
 
 /// How large a patch is, in tiles, as the wavelength of the field's slowest
 /// component. Around half a screen at zoom 1, so a cloud is a thing the map

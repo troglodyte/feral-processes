@@ -3,7 +3,9 @@
 //
 // The seventh of seven class files — see `player-class-striker.ron` for the
 // shared argument: why the pack is this pack, why the pool is unspent, and
-// why the headless bin reports the same numbers for every class.
+// why the headless bin reports the same numbers for every class *at this
+// level*. From level 8 it does not: a Striker's second ordinary swing is
+// something All-Attack throws and the bin sees.
 //
 //     FERAL_DEV_ARENA=1 cargo run  ->  [R] Arena  ->  [L] player-class-decompiler
 //

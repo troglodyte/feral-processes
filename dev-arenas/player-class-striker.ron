@@ -10,8 +10,13 @@
 //
 //     FERAL_DEV_ARENA=1 cargo run  ->  [R] Arena  ->  [L] player-class-striker
 //
-// **The headless bin cannot see a class, and will report the same numbers
-// for all seven.** That is not an ignored input; it is the seam. `run_rep`
+// **At this file's level 5 the headless bin reports the same numbers for all
+// seven.** That is not an ignored input; it is the seam — but it is now a
+// statement about *level*, not about the bin. Since 0.13.82 a Striker takes
+// a second ordinary swing from `EXTRA_ATTACK_LEVEL` (8), which All-Attack
+// does throw: at level 8 in zone 2, 20 reps, a Striker wins 60% where a
+// Medic wins 0%. Raise this file's level past 8 and the floor below stops
+// being a floor. `run_rep`
 // plays `PartyPlan::AllAttack` — the game's own `[A]` — which invokes no
 // routine, and a class is a spread of multipliers over *authored routine
 // power* alone. The player's ordinary swing never touches

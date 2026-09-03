@@ -154,12 +154,23 @@ cover is an **error** rather than a dropped spend — inside a run an
 overspent choice fails closed and applies nothing, which in an instrument
 would report the baseline and read as the axis being worthless.
 
-**The bin can only see `stats`.** A class is a spread of multipliers over
-*authored routine power*, and All-Attack invokes no routine — the player's
-ordinary swing never touches `Game::ability_affinity` at all. So `class` and
-`routine` change no number the headless bin reports; they are for the played
-arena, and `dev-arenas/class-*.ron` say so in their own headers. `stats`
-lands in `Stats` and both halves see it.
+**The bin sees `stats`, and — since 0.13.82 — `class` as well.** It used to
+see only `stats`: a class was a spread of multipliers over *authored routine
+power*, All-Attack invokes no routine, and the player's ordinary swing never
+touched `Game::ability_affinity`. Combat slice 2 ended that. A Striker takes
+a second ordinary swing from `EXTRA_ATTACK_LEVEL`, and an ordinary swing is
+exactly what All-Attack throws, so `class` now moves the headless numbers
+whenever the player is at or above that level.
+
+Measured 2026-09-02, two files identical but for `class`, `Fresh(level: 8,
+zone: 2)`, 20 reps from seed 1: **Striker 60% win (12/20), mean 19.2 rounds;
+Medic 0% win (0/20), mean 15.6 rounds.** That gap is the second swing and
+nothing else. Below `EXTRA_ATTACK_LEVEL` the old claim still holds and every
+class reports the same floor — which is why the seven `player-class-*.ron`
+files, all at level 5, still do.
+
+`routine` remains invisible to the bin. `stats` lands in `Stats` and both
+halves see it.
 
 The look — glyph, colour, sprite, name — is deliberately absent. It is what
 the map draws, and nothing in a staged fight reads it.

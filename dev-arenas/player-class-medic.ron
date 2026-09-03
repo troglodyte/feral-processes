@@ -5,8 +5,10 @@
 // `-saboteur`, `-leech`, `-invoker`, `-decompiler` — identical in every field but `character`. See
 // `player-class-striker.ron` for the shared argument: why the pack is this
 // pack, why the pool is unspent, and why **the headless bin reports the same
-// numbers for all seven** (it plays All-Attack and invokes nothing, so it is
-// the floor rather than the measurement).
+// numbers for all seven at this level** (it plays All-Attack and invokes
+// nothing, so it is the floor rather than the measurement). At level 8 and
+// above that stops being true — a Striker's second ordinary swing is
+// something the bin does see.
 //
 //     FERAL_DEV_ARENA=1 cargo run  ->  [R] Arena  ->  [L] player-class-medic
 //

@@ -1280,6 +1280,83 @@ impl Game {
     /// There is deliberately **no "pack full" row**: `components::Inventory`
     /// is an unbounded `Vec`, so the pack has no capacity to be at. The
     /// container that *can* fill is the roster.
+    /// What the base has made, for `Mode::BaseOutput`.
+    ///
+    /// **The one derivation the page is built from.** Every figure on the
+    /// screen is a field of this, so a renderer cannot invent one or
+    /// disagree with the ledger it came from.
+    ///
+    /// The MINED/COMPILED split follows **how the units were actually
+    /// made**, not what some structure could make them with. A def lookup
+    /// reads the same at a glance and is wrong for the case that matters:
+    /// a Power Cell has a `work` structure that produces it *and* is
+    /// hand-compilable, so keying on the def files it under MINED however
+    /// many the player pressed out by hand.
+    ///
+    /// Dominant provenance rather than membership of both sections, so an
+    /// item is one row. The `machine`/`hand` columns carry the breakdown,
+    /// which is what the reader actually wants — two rows for one item
+    /// would split the totals and make neither answer "how much do I have".
+    ///
+    /// Rows are capped and sorted by run total. The page has no scroll, so
+    /// what does not fit has to be the least interesting thing rather than
+    /// whatever `BTreeMap` order put last.
+    pub fn base_output_report(&mut self) -> crate::views::BaseOutputReport {
+        let zone = self.world.resource::<crate::resources::ZoneLevel>().0;
+        let attention = self.attention();
+
+        let ledger = self.world.resource::<crate::base_ledger::BaseLedger>();
+        let items = self.world.resource::<crate::items_db::ItemDb>();
+        let mut mined = Vec::new();
+        let mut compiled = Vec::new();
+        for (item, totals) in &ledger.lifetime {
+            let run = totals.produced();
+            if run == 0 {
+                continue;
+            }
+            let row = crate::views::BaseOutputRow {
+                item: item.clone(),
+                name: items
+                    .get(item.as_str())
+                    .map(|d| d.name.clone())
+                    .unwrap_or_else(|| item.0.clone()),
+                sector: ledger.produced_in_zone(zone, item),
+                run,
+                machine: totals.mined + totals.compiled,
+                // Kept here rather than recomputed below: the section rule
+                // reads it and so does the column.
+                hand: totals.hand,
+                spark: ledger
+                    .buckets
+                    .iter()
+                    .rev()
+                    .take(crate::tuning::BASE_OUTPUT_SPARK_BUCKETS)
+                    .map(|b| b.produced.get(item).copied().unwrap_or(0))
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect(),
+            };
+            if totals.mined >= totals.compiled + totals.hand {
+                mined.push(row);
+            } else {
+                compiled.push(row);
+            }
+        }
+
+        for section in [&mut mined, &mut compiled] {
+            section.sort_by(|a, b| b.run.cmp(&a.run).then_with(|| a.item.cmp(&b.item)));
+            section.truncate(crate::tuning::BASE_OUTPUT_MAX_ROWS);
+        }
+
+        crate::views::BaseOutputReport {
+            zone,
+            mined,
+            compiled,
+            attention,
+        }
+    }
+
     pub fn attention(&mut self) -> Vec<AttentionRow> {
         // Walked once and read twice — it resolves a def per structure, and
         // this is called every frame.

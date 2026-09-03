@@ -270,3 +270,145 @@ mod seams {
         assert_eq!(hand_total(4104, true), 1);
     }
 }
+
+/// The page's one derivation. Everything the screen shows comes from here,
+/// so a renderer cannot invent a figure or disagree with the ledger.
+mod report {
+    use super::*;
+
+    fn fed(seed: u32) -> Game {
+        let mut game = game(seed);
+        let mut ledger = crate::base_ledger::BaseLedger::default();
+        // A mined item, an assembled one, and one only ever made by hand.
+        ledger.fold(
+            0,
+            1,
+            &Event::Extract {
+                item: item(ids::CORE_FRAGMENT),
+                rolled: 10,
+                landed: 8,
+                ok: true,
+            },
+        );
+        ledger.fold(
+            0,
+            1,
+            &Event::Assemble {
+                product: item(ids::POWER_CELL),
+                inputs: vec![(item(ids::CORE_FRAGMENT), 2)],
+            },
+        );
+        ledger.fold(
+            0,
+            1,
+            &Event::HandCraft {
+                item: item(ids::POWER_CELL),
+                qty: 3,
+            },
+        );
+        *game.world.resource_mut::<crate::base_ledger::BaseLedger>() = ledger;
+        game
+    }
+
+    /// A Power Cell is the case that decides the rule: a structure's `work`
+    /// produces it *and* it is hand-compilable, so sectioning on the def
+    /// files it under MINED however many the player pressed out by hand.
+    #[test]
+    fn sections_follow_how_a_thing_was_actually_made() {
+        let mut game = fed(4201);
+        let report = game.base_output_report();
+
+        assert!(
+            report
+                .mined
+                .iter()
+                .any(|r| r.item == item(ids::CORE_FRAGMENT)),
+            "units that came out of an extractor belong under MINED"
+        );
+        assert!(
+            report
+                .compiled
+                .iter()
+                .any(|r| r.item == item(ids::POWER_CELL)),
+            "an assembled item belongs under COMPILED"
+        );
+        assert!(
+            !report.mined.iter().any(|r| r.item == item(ids::POWER_CELL)),
+            "and must not appear in both"
+        );
+    }
+
+    /// The split the screen exists to show. A combined figure would hide
+    /// what hand-compiling contributes, which is the whole of B2.
+    #[test]
+    fn a_compiled_row_separates_the_machine_from_the_hands() {
+        let mut game = fed(4202);
+        let report = game.base_output_report();
+        let row = report
+            .compiled
+            .iter()
+            .find(|r| r.item == item(ids::POWER_CELL))
+            .expect("the assembled item has a row");
+
+        assert_eq!(row.machine, 1);
+        assert_eq!(row.hand, 3);
+        assert_eq!(row.run, 4, "the run column is everything that landed");
+    }
+
+    #[test]
+    fn the_sector_column_reads_only_this_sector() {
+        let mut game = game(4203);
+        {
+            let mut ledger = game.world.resource_mut::<crate::base_ledger::BaseLedger>();
+            ledger.fold(
+                0,
+                1,
+                &Event::HandCraft {
+                    item: item(ids::POWER_CELL),
+                    qty: 5,
+                },
+            );
+            ledger.fold(
+                crate::base_ledger::BUCKET_TICKS,
+                2,
+                &Event::HandCraft {
+                    item: item(ids::POWER_CELL),
+                    qty: 2,
+                },
+            );
+        }
+        game.world.resource_mut::<crate::resources::ZoneLevel>().0 = 2;
+
+        let report = game.base_output_report();
+        let row = &report.compiled[0];
+        assert_eq!(report.zone, 2);
+        assert_eq!(row.sector, 2, "only the buckets stamped with sector 2");
+        assert_eq!(row.run, 7, "the run column still counts everything");
+    }
+
+    /// A base that has produced nothing shows no rows rather than rows of
+    /// zeroes — the renderer says so in one line, which is the honest
+    /// reading of a base that has genuinely done nothing yet.
+    #[test]
+    fn a_fresh_base_reports_nothing_rather_than_zeroes() {
+        let mut game = game(4204);
+        let report = game.base_output_report();
+        assert!(report.mined.is_empty());
+        assert!(report.compiled.is_empty());
+    }
+
+    /// The spec's rule: the page must **call** `Game::attention`, never
+    /// compute its own answer. A fourth surface deriving it separately is
+    /// exactly the drift that seam exists to prevent.
+    #[test]
+    fn what_needs_attention_is_the_shared_derivation() {
+        let mut game = fed(4205);
+        let direct = game.attention();
+        let report = game.base_output_report();
+        assert_eq!(
+            report.attention.len(),
+            direct.len(),
+            "the page reports exactly what `Game::attention` says"
+        );
+    }
+}

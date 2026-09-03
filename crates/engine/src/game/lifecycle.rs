@@ -691,6 +691,7 @@ impl Game {
                         class: data.player.class,
                         sprite: data.player.sprite.clone(),
                         colour: data.player.colour,
+                        icon: data.player.icon.as_deref().and_then(PlayerIcon::decode),
                     },
                 ),
             ))
@@ -1785,6 +1786,7 @@ impl Game {
                 glyph,
                 sprite: identity.sprite,
                 colour: identity.colour,
+                icon: identity.icon.as_ref().map(PlayerIcon::encode),
             },
             creatures,
             structures,

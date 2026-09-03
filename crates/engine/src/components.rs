@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::MAX_CUSTOM_NAME_LEN;
 use crate::abilities::AbilityId;
 use crate::classes::PlayerClass;
+use crate::icon::PlayerIcon;
 use crate::items::{EquipmentSlot, GearCopy, ItemId};
 use crate::items_db::ItemDb;
 use crate::needs::{NEED_MAX, NEED_MIN, NeedId};
@@ -113,8 +114,8 @@ impl CustomName {
 /// player's own choices are deliberately outside it. They instead ride out
 /// to the renderer on `views::PlayerLook`, carried on `EntityView::look`.
 ///
-/// Spawned at its `Default` (no class, no sprite, no colour) by every
-/// constructor and immediately overwritten by
+/// Spawned at its `Default` (no class, no sprite, no colour, no icon) by
+/// every constructor and immediately overwritten by
 /// `Game::apply_character_choice` — the same "neutral bundle, layered on
 /// top" shape `Game::new_with`'s player spawn uses throughout.
 #[derive(Component, Clone, Debug, Default, PartialEq)]
@@ -128,6 +129,10 @@ pub struct PlayerIdentity {
     /// reason: *no answer* is not a bad answer, and a sentinel index shares
     /// one value between "the default" and "the first swatch".
     pub colour: Option<u8>,
+    /// The player's hand-drawn 16x16 map avatar — `None` for a glyph, the
+    /// same "no answer" reading `colour` already gives, and what every save
+    /// and every character before this feature carries.
+    pub icon: Option<PlayerIcon>,
 }
 
 /// Which zone portal's sector a creature was spawned in — set once at

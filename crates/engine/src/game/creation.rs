@@ -256,6 +256,9 @@ impl Game {
             class: choice.class,
             sprite: choice.sprite.clone(),
             colour: choice.colour,
+            // `CharacterChoice` carries no icon yet — the wizard does not
+            // draw one, so this stays the spawned `Default`'s `None`.
+            icon: None,
         };
         if let Some(name) = CustomName::sanitize(Some(choice.name.clone())) {
             self.world.entity_mut(player).insert(CustomName(name));

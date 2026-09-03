@@ -50,6 +50,7 @@ mod notifications;
 mod party;
 mod perks;
 mod permadeath;
+mod player_icon;
 mod policy;
 mod power;
 mod raids;

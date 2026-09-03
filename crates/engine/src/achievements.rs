@@ -251,6 +251,17 @@ pub struct Profile {
     /// they have earned. Nothing reads these back except `see`.
     #[serde(default)]
     pub seen_notifications: Vec<String>,
+    /// The last map avatar the player drew, cross-run — see
+    /// `components::PlayerIdentity::icon`.
+    ///
+    /// The **encoded string**, `seen_notifications`' reason exactly:
+    /// `load` discards the *whole* profile — achievements included — when
+    /// it cannot parse, so a form this build cannot decode
+    /// (`icon::PlayerIcon::decode` returning `None`) must be inert rather
+    /// than cost the player everything they have earned. Additive and
+    /// `#[serde(default)]`, so an existing `profile.ron` keeps parsing.
+    #[serde(default)]
+    pub player_icon: Option<String>,
 }
 
 impl Profile {

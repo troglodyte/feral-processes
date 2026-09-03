@@ -41,7 +41,7 @@ the reason.
   flat, summed def field matches `pet_slot_bonus` exactly.
 - **Leaving the starting radius at 7.** Then the first Pillar takes the base
   past 15x15, which was judged too big once already
-  (`archive/specs/2026-07-24-battle-flow-and-base-radius-design.md`). Halving
+  (`../archive/specs/2026-07-24-battle-flow-and-base-radius-design.md`). Halving
   the start is what buys the growth room.
 
 ## The footprint becomes dynamic

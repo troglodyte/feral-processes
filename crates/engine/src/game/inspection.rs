@@ -1017,6 +1017,7 @@ impl Game {
                     PlayerLook {
                         sprite: identity.map(|i| i.sprite.clone()).unwrap_or_default(),
                         colour: identity.and_then(|i| i.colour),
+                        icon: identity.and_then(|i| i.icon.clone()),
                     }
                 });
                 EntityView {

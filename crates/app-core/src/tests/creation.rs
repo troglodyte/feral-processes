@@ -1780,8 +1780,8 @@ fn the_colour_step_explains_a_drawn_icon_hides_the_swatch() {
 /// `Enter` on one used to land `Some(blank)` on the choice, and only the
 /// texture upload knew better: the row read "Your drawing", the Colour
 /// step promised a map tile that `Sprites::sync_drawn_icon` then declined
-/// to upload, and 256 zeros persisted to both the save and the profile.
-/// The decision belongs at the one place the drawing is kept.
+/// to upload, and a payload of zeros persisted to both the save and the
+/// profile. The decision belongs at the one place the drawing is kept.
 #[test]
 fn keeping_a_blank_canvas_is_not_a_drawing() {
     let mut app = on_the_icon_step("blank_keep");

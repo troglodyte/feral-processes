@@ -20,7 +20,7 @@ use bevy::image::{ImageLoaderSettings, ImageSampler};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy_egui::{EguiTextureHandle, EguiUserTextures};
-use feral_processes_engine::{ICON_SIZE, PlayerIcon};
+use feral_processes_engine::{ICON_CELL_PIXELS, ICON_SIZE, PlayerIcon};
 
 use crate::paint::SpriteTable;
 
@@ -67,7 +67,7 @@ impl Sprites {
     /// This is the only texture the game builds at runtime; everything else
     /// in the table came off disk through `load`. It is asked every frame,
     /// so the first thing it does is compare the icon **by value** and do
-    /// nothing for an equal one — `PartialEq` over 256 bytes is cheaper
+    /// nothing for an equal one — `PartialEq` over 64 bytes is cheaper
     /// than any dirty flag would be to keep honest, and the alternative is
     /// a texture minted per frame and none ever freed. When it does change,
     /// the previous registration is taken back *before* the new one is
@@ -75,10 +75,16 @@ impl Sprites {
     /// so `EguiUserTextures` is what keeps the old image alive.
     ///
     /// A **blank canvas is not a drawing.** The editor lets a player keep
-    /// one, and 256 transparent pixels drawn in place of the `@` is a
+    /// one, and an all-transparent icon drawn in place of the `@` is a
     /// player with no tile at all — `Painter::sprite` would report that it
     /// drew, so the glyph fallback never runs. Filtered here, in the one
     /// place the key is minted, rather than at each of the two draw sites.
+    ///
+    /// **The player draws 8x8 and the sprite stays 16x16**, so each drawn
+    /// cell fills an `ICON_CELL_PIXELS` square of the buffer below. Under
+    /// nearest sampling that is pixel-identical to a native 8x8 texture,
+    /// and it leaves the sprite format — which `assets/sprites/README.md`
+    /// says is not negotiable — completely alone.
     ///
     /// `ImageSampler::nearest()` is `load`'s reason exactly: bevy_egui
     /// binds the image's *own* sampler and bevy's default is linear, so
@@ -104,13 +110,14 @@ impl Sprites {
             table.remove(DRAWN_ICON_KEY);
             return;
         };
-        // Built through `PlayerIcon::rgba` — the one place an index becomes
-        // a colour, and the one place index 0 becomes a transparent pixel
-        // rather than an opaque black one.
+        // Built through `PlayerIcon::pixel_rgba` — the one place a drawn
+        // cell becomes its pixel block, over `rgba`, the one place an index
+        // becomes a colour and index 0 becomes a transparent pixel rather
+        // than an opaque black one.
         let mut bytes = Vec::with_capacity(ICON_SIZE * ICON_SIZE * 4);
         for y in 0..ICON_SIZE {
             for x in 0..ICON_SIZE {
-                let (r, g, b, a) = icon.rgba(x, y);
+                let (r, g, b, a) = icon.pixel_rgba(x, y);
                 bytes.extend_from_slice(&[r, g, b, a]);
             }
         }
@@ -202,7 +209,7 @@ mod tests {
     use super::*;
     use bevy::image::ImageFilterMode;
 
-    /// A drawing with one lit pixel — enough to be non-blank, and it pins
+    /// A drawing with one lit cell — enough to be non-blank, and it pins
     /// the byte order at a coordinate that is not the origin.
     fn a_drawing() -> PlayerIcon {
         let mut icon = PlayerIcon::default();
@@ -251,6 +258,57 @@ mod tests {
         assert_eq!(d.min_filter, ImageFilterMode::Nearest);
     }
 
+    /// **Each drawn cell fills its own `ICON_CELL_PIXELS` square of the
+    /// texture.** The player edits an 8x8 grid and the sprite stays 16x16,
+    /// so the upload is where the two meet — and under nearest sampling a
+    /// correctly-expanded block is pixel-identical to a native 8x8 texture.
+    /// Asserted on the bytes: a lit cell must be four opaque pixels in a
+    /// 2x2 square at twice its coordinates, and its neighbours must be
+    /// untouched.
+    #[test]
+    fn a_drawn_cell_is_uploaded_as_its_whole_pixel_block() {
+        let (mut sprites, mut images, mut textures) = fixtures();
+        let icon = a_drawing();
+
+        sprites.sync_drawn_icon(Some(&icon), &mut images, &mut textures);
+
+        let (_, handle) = sprites.drawn.as_ref().expect("the icon must be kept");
+        let data = images
+            .get(handle)
+            .expect("the image must be in the assets")
+            .data
+            .as_ref()
+            .expect("the image must carry its pixels")
+            .clone();
+        assert_eq!(data.len(), ICON_SIZE * ICON_SIZE * 4);
+
+        let pixel = |x: usize, y: usize| {
+            let at = (y * ICON_SIZE + x) * 4;
+            (data[at], data[at + 1], data[at + 2], data[at + 3])
+        };
+        // `a_drawing` paints cell (2, 1), so pixels (4..6, 2..4).
+        let want = icon.rgba(2, 1);
+        assert_eq!(want.3, 255, "the fixture's cell must be opaque");
+        for dy in 0..ICON_CELL_PIXELS {
+            for dx in 0..ICON_CELL_PIXELS {
+                let (x, y) = (2 * ICON_CELL_PIXELS + dx, 1 * ICON_CELL_PIXELS + dy);
+                assert_eq!(pixel(x, y), want, "pixel ({x}, {y}) is inside the block");
+            }
+        }
+        for (x, y) in [(3, 2), (6, 2), (4, 1), (4, 4)] {
+            assert_eq!(
+                pixel(x, y),
+                (0, 0, 0, 0),
+                "pixel ({x}, {y}) is outside the block and must stay bare"
+            );
+        }
+        assert_eq!(
+            data.chunks_exact(4).filter(|p| p[3] == 255).count(),
+            ICON_CELL_PIXELS * ICON_CELL_PIXELS,
+            "one lit cell is exactly one block of opaque pixels"
+        );
+    }
+
     /// The bytes are `PlayerIcon::rgba`'s answer, transparency included.
     ///
     /// Index 0 is transparent rather than a colour, and `rgba` is the one
@@ -275,7 +333,7 @@ mod tests {
         for y in 0..ICON_SIZE {
             for x in 0..ICON_SIZE {
                 let at = (y * ICON_SIZE + x) * 4;
-                let (r, g, b, a) = icon.rgba(x, y);
+                let (r, g, b, a) = icon.pixel_rgba(x, y);
                 assert_eq!(
                     (data[at], data[at + 1], data[at + 2], data[at + 3]),
                     (r, g, b, a),
@@ -312,7 +370,7 @@ mod tests {
         sprites.sync_drawn_icon(Some(&a_drawing()), &mut images, &mut textures);
         let old = sprites.drawn.as_ref().expect("kept").1.clone();
         let mut second = a_drawing();
-        second.set(9, 9, 3);
+        second.set(5, 5, 3);
         sprites.sync_drawn_icon(Some(&second), &mut images, &mut textures);
 
         assert!(
@@ -343,7 +401,7 @@ mod tests {
     }
 
     /// **A blank canvas is not a drawing.** The editor lets a player keep
-    /// one, and 256 transparent pixels drawn in place of the `@` is a
+    /// one, and an all-transparent icon drawn in place of the `@` is a
     /// player with no tile at all — `Painter::sprite` would report that it
     /// drew, so the glyph fallback never runs. Filtered here, in the one
     /// place the key is minted, rather than at each of the two draw sites.

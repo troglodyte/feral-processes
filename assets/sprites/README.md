@@ -32,6 +32,20 @@ to survive being multiplied by anything from green through red. It is a bar
 along the bottom edge of the tile now, and a boss and a nemesis wear corner
 marks, so all three reach a tile without touching a sprite's pixels.
 
+### The one exception: a player-drawn icon
+
+The player's own drawn icon (the pixel editor, `"@drawn"` in the sprite
+table) is the sole sprite exempt from this rule, and it is drawn
+untinted. It carries its own colour from a fixed fifteen-colour palette
+the player chose on the wizard's Colour step, so it has no hue to protect
+the way a near-white sprite does — this tile is the only one in the game
+that inherits none of the hues the tint exists to preserve (no species
+colour, no `biome_tint`, no damage dimming), so dropping the tint's hue
+costs nothing but the Colour step's swatch on that one tile. That is what
+makes the exception safe here and nowhere else: any *authored* sprite
+still needs the near-white treatment above, because it does carry a hue
+this tint would otherwise be protecting.
+
 ## Fallback
 
 A missing sprite is not an error. `Painter::sprite` returns `false` when

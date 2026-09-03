@@ -89,6 +89,29 @@
   the map dimming everything by a vignette; the second assertion, that the
   `@` is nearer the role than the authored hue, is what stops the test
   passing against the colour it replaced.
+- **The player's drawn icon is the one sprite drawn untinted, and the
+  player tile's fallback is four rungs.** The pixel editor's icon
+  (`sprites::DRAWN_ICON_KEY`, `"@drawn"`) sits above `PlayerLook::sprite`
+  and above the `@`, and it draws at `Color::new(vig, vig, vig, color.a)` —
+  the vignette's value with the hue dropped — where every other sprite in
+  the game takes the tile's tint. **The trap is that putting the hue back
+  reads as a bug fix.** `assets/sprites/README.md`'s near-white rule exists
+  because egui's tint *multiplies*, so art must not carry a hue of its own;
+  a reviewer holding that rule sees flat grey among coloured tiles and
+  concludes the tint was dropped by omission. It was not: the player's tile
+  is the only one that inherits no hue to protect — no species colour, no
+  `biome_tint`, no damage dimming, verified in `render/base.rs`'s
+  `is_player` arm — and the drawing is the one sprite whose colours the
+  player chose by hand, so multiplying it by an indigo swatch turns most of
+  it black. What that costs is the Colour step's swatch on this one tile,
+  and `App::creation_colour_note` says so on the step where the choice is
+  made. `the_drawn_icon_is_drawn_untinted` passes `colour: Some(3)`
+  (indigo) rather than the default, so a regression handing the tinted
+  `color` through is red on `r != g`. The overdraw rule from the sprite
+  seam applies with no exception here: a drawn icon is transparent
+  somewhere by construction, so the test asserts the mesh **and** the
+  absent `@`. The full argument is `docs/seams.md`, "The player's drawn
+  icon is the one sprite drawn untinted".
 - **A machine's stall asks for attention and never reads as a threat.**
   `Clogged`/`Stranded`/`Unpowered` take `ATTENTION` — waiting fixes none of
   them, and it is the colour `Game::attention` already spends on them —

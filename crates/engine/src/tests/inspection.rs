@@ -396,32 +396,31 @@ fn find_target_in_direction_never_looks_behind_the_player() {
 #[test]
 fn difficulty_color_buckets_relative_power_into_con_colors() {
     assert_eq!(
-        difficulty_color(50, 100, false, false),
+        difficulty_color(50, 100),
         GlyphColor::Green,
         "much weaker than the player"
     );
     assert_eq!(
-        difficulty_color(100, 100, false, false),
+        difficulty_color(100, 100),
         GlyphColor::Yellow,
         "an even match"
     );
     assert_eq!(
-        difficulty_color(140, 100, false, false),
+        difficulty_color(140, 100),
         GlyphColor::Orange,
         "notably tougher"
     );
     assert_eq!(
-        difficulty_color(200, 100, false, false),
+        difficulty_color(200, 100),
         GlyphColor::Red,
         "far stronger than the player"
     );
 }
 
-/// A rare tier is drawn as a bar along the top of the tile, *not* by
-/// recolouring the glyph, because the glyph is already carrying
-/// `difficulty_color` — how badly this thing would beat you, which is the
-/// one reading a player cannot afford to lose. Two channels, and this is
-/// what stops a later tidy-up collapsing them into one recolour.
+/// A rare tier and a con read are two bars on opposite edges of the tile,
+/// and neither may be collapsed into the glyph. This is what stops a later
+/// tidy-up spending the glyph on one of them again — the exact trade that
+/// moving `difficulty_color` off `color` was done to end.
 #[test]
 fn a_shiny_hostile_still_reports_its_difficulty_colour() {
     let mut game = Game::new(9030, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -438,7 +437,7 @@ fn a_shiny_hostile_still_reports_its_difficulty_colour() {
     // going to be anyway, and an even matchup draws Yellow — which is
     // exactly what a first draft of this test collided with.
     let power = game.world.get::<Stats>(wild).unwrap().power();
-    let expected = difficulty_color(power, game.player_status().strength, false, false);
+    let expected = difficulty_color(power, game.player_status().strength);
     let shiny = game
         .view_entities(5, 5)
         .into_iter()
@@ -446,9 +445,9 @@ fn a_shiny_hostile_still_reports_its_difficulty_colour() {
         .expect("the wild program should be in view");
 
     assert_eq!(
-        shiny.color, expected,
-        "the tier must not touch the glyph colour — that channel is the \
-         difficulty read"
+        shiny.difficulty,
+        Some(expected),
+        "the tier must not touch the con read — they are separate bars"
     );
     assert_eq!(
         shiny.rarity,
@@ -458,46 +457,21 @@ fn a_shiny_hostile_still_reports_its_difficulty_colour() {
 }
 
 #[test]
-fn difficulty_color_is_always_magenta_for_a_boss_regardless_of_power() {
-    assert_eq!(difficulty_color(1, 1000, true, false), GlyphColor::Magenta);
-    assert_eq!(difficulty_color(1000, 1, true, false), GlyphColor::Magenta);
-}
-
-#[test]
 fn difficulty_color_never_divides_by_zero_player_power() {
-    assert_eq!(difficulty_color(10, 0, false, false), GlyphColor::Red);
+    assert_eq!(difficulty_color(10, 0), GlyphColor::Red);
 }
 
-/// The reserved nemesis colour, requested regardless of power ratio — the
-/// same override shape `is_boss` already has, applied to a second, more
-/// specific reading.
+/// The pure `difficulty_color` tests above prove the bucketing; this proves
+/// `build_views` threads a real `Nemesis` component through to the field the
+/// map draws its corner mark from.
+///
+/// Being a nemesis no longer touches the con read — it used to return a
+/// reserved hue *instead of* a rung, which spent "can I win this fight" on
+/// the one tile where it matters most. It rides `EntityView::nemesis` and
+/// its own mark now, so this asserts the flag arrives **and** that the con
+/// read is still answered beside it.
 #[test]
-fn difficulty_color_is_always_blue_for_a_nemesis_regardless_of_power() {
-    assert_eq!(difficulty_color(1, 1000, false, true), GlyphColor::Blue);
-    assert_eq!(difficulty_color(1000, 1, false, true), GlyphColor::Blue);
-}
-
-/// **Nemesis wins.** Being a boss is a fact about how a creature spawned;
-/// being a nemesis is a fact about what it did to you, which is both more
-/// specific and the one a player can act on — so a creature that is both
-/// draws as a nemesis, not magenta. Pinned so the two branches inside
-/// `difficulty_color` cannot be reordered without a test failing.
-#[test]
-fn a_boss_that_is_also_a_nemesis_draws_the_nemesis_colour_not_magenta() {
-    assert_eq!(difficulty_color(1, 1000, true, true), GlyphColor::Blue);
-    assert_eq!(difficulty_color(1000, 1, true, true), GlyphColor::Blue);
-}
-
-/// The pure `difficulty_color` tests above prove the bucketing logic; this
-/// proves `build_views` actually threads a real `Nemesis` component through
-/// to it. Compared against the *computed* pre-mark colour (the same trick
-/// `a_shiny_hostile_still_reports_its_difficulty_colour` uses above) rather
-/// than a hard-coded bucket, so the test can't pass by accident if the
-/// fixture's power ratio happens to change: a call site that silently
-/// dropped `is_nemesis` (always passing `false`) would still pass every
-/// pure `difficulty_color` test and only this one would catch it.
-#[test]
-fn a_marked_hostile_draws_the_nemesis_colour_on_the_map_not_just_in_the_pure_bucketing() {
+fn a_marked_hostile_reports_its_mark_without_giving_up_its_con_read() {
     let mut game = Game::new(9031, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
     let wild = game
@@ -505,33 +479,24 @@ fn a_marked_hostile_draws_the_nemesis_colour_on_the_map_not_just_in_the_pure_buc
         .expect("scrapper ships with the game");
 
     let power = game.world.get::<Stats>(wild).unwrap().power();
-    let unmarked_expected = difficulty_color(power, game.player_status().strength, false, false);
-    let before = game
-        .view_entities(5, 5)
-        .into_iter()
-        .find(|v| v.entity == wild)
-        .expect("the wild program should be in view");
-    assert_eq!(
-        before.color, unmarked_expected,
-        "setup: an unmarked hostile should still read by power ratio"
-    );
+    let expected = difficulty_color(power, game.player_status().strength);
 
     game.world.entity_mut(wild).insert(Nemesis(1));
-    let after = game
+    let view = game
         .view_entities(5, 5)
         .into_iter()
         .find(|v| v.entity == wild)
         .expect("it should still be in view after gaining the component");
-    assert_eq!(
-        after.color,
-        GlyphColor::Blue,
-        "a marked nemesis must draw its reserved colour on the real map, \
-         not just inside difficulty_color's own unit tests"
+
+    assert!(
+        view.nemesis,
+        "the component has to reach the field the map's mark is drawn from"
     );
-    assert_ne!(
-        after.color, before.color,
-        "the mark has to actually change what's drawn, not merely agree \
-         with an unmarked colour by coincidence"
+    assert_eq!(
+        view.difficulty,
+        Some(expected),
+        "a nemesis keeps its con read — the mark is a third channel, not a \
+         replacement for the second"
     );
 }
 
@@ -632,7 +597,7 @@ fn boss_creatures_are_flagged_in_entity_and_inspect_views() {
 }
 
 #[test]
-fn view_entities_colors_hostiles_by_difficulty_and_leaves_others_alone() {
+fn view_entities_reports_a_con_read_for_hostiles_and_none_for_anyone_else() {
     let mut game = Game::new(53, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let player_pos = *game.world.get::<Position>(player).unwrap();
@@ -714,19 +679,25 @@ fn view_entities_colors_hostiles_by_difficulty_and_leaves_others_alone() {
         .unwrap();
 
     assert_eq!(
-        easy_view.color,
-        GlyphColor::Green,
+        easy_view.difficulty,
+        Some(GlyphColor::Green),
         "a much weaker hostile should read Green"
     );
     assert_eq!(
-        hard_view.color,
-        GlyphColor::Red,
+        hard_view.difficulty,
+        Some(GlyphColor::Red),
         "a much stronger hostile should read Red"
     );
     assert_eq!(
         tamed_view.color,
         GlyphColor::Cyan,
-        "a non-hostile entity should keep its own glyph color, not be difficulty-colored"
+        "a non-hostile entity should keep its own glyph color"
+    );
+    assert_eq!(
+        tamed_view.difficulty, None,
+        "a companion has no 'can I win this fight' reading, so its tile \
+         must have no bar to draw — `None` rather than a colour the \
+         renderer is trusted to ignore"
     );
 }
 
@@ -2347,5 +2318,44 @@ fn the_anchor_is_the_one_entity_its_flag_names() {
         anchors[0].label, "The Anchor",
         "the flag has to be on the anchor itself, not on whatever happens \
          to share its tile"
+    );
+}
+
+/// **Two readings, two channels.** A hostile's glyph used to be *replaced*
+/// by its con colour, which spent the species' authored hue — the one thing
+/// on the tile that says *what* the program is — to say how dangerous it
+/// is. The con read moves to a bar of its own along the bottom edge, so the
+/// glyph goes back to carrying identity and the tile says both at once.
+///
+/// Compared against the *computed* difficulty rather than a hard-coded
+/// bucket, `a_shiny_hostile_still_reports_its_difficulty_colour`'s trick: a
+/// fixture whose power ratio drifts must not quietly turn this vacuous.
+#[test]
+fn a_hostile_keeps_its_authored_colour_and_reports_difficulty_on_its_own_channel() {
+    let mut game = Game::new(9030, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let wild = game
+        .spawn_wild_creature("scrapper", pos.x + 1, pos.y)
+        .expect("scrapper ships with the game");
+
+    let authored = game.world.get::<Glyph>(wild).unwrap().color;
+    let power = game.world.get::<Stats>(wild).unwrap().power();
+    let expected = difficulty_color(power, game.player_status().strength);
+
+    let view = game
+        .view_entities(5, 5)
+        .into_iter()
+        .find(|v| v.entity == wild)
+        .expect("the wild program should be in view");
+
+    assert_eq!(
+        view.color, authored,
+        "a hostile's glyph must carry its species' authored hue — the con \
+         read has its own channel now"
+    );
+    assert_eq!(
+        view.difficulty,
+        Some(expected),
+        "the con read rides its own field for the map's bottom bar to draw"
     );
 }

@@ -716,7 +716,21 @@ pub struct EntityView {
     pub entity: Entity,
     pub pos: (i32, i32),
     pub glyph: char,
+    /// This entity's **authored** hue — what it is, never how dangerous it
+    /// is. See `difficulty` below for the reading that used to replace it.
     pub color: GlyphColor,
+    /// How badly this (hostile) entity would beat the player, bucketed by
+    /// `game::inspection::difficulty_color` — `None` for everything that is
+    /// not hostile, which is what stops the map drawing a con bar under a
+    /// companion.
+    ///
+    /// **Its own channel, not the glyph's.** This used to *replace* `color`
+    /// for a hostile, so a tile could say either what a program is or how
+    /// dangerous it is, never both — and a boss or a nemesis gave up the
+    /// danger read entirely to a reserved hue. The map draws it as a bar
+    /// along the bottom edge, the mirror of the `rarity` bar along the top,
+    /// and identity rides corner marks. Three readings, three channels.
+    pub difficulty: Option<GlyphColor>,
     pub label: String,
     pub is_player: bool,
     /// The player's chosen sprite and colour — `Some` exactly when

@@ -116,7 +116,7 @@ fn without_field(ron: &str, field: &str) -> String {
 /// every `emit` call deleted.
 mod seams {
     use super::*;
-    use crate::components::{MachineStatus, Position, ResourceNode, Structure, Task, TaskKind};
+    use crate::components::{Position, ResourceNode, Structure, Task, TaskKind};
     use crate::resources::BattleTelemetry;
 
     /// A node with `level: None` skips the reliability roll entirely, so this

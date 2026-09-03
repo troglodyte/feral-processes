@@ -893,11 +893,12 @@ fn crafted_gear_is_never_rare() {
             .add(item.clone(), qty * 20);
     }
     for _ in 0..20 {
-        // Twenty compiles in a row is three hundred points of Power at the
-        // shipped multiplier, and `tuning::HAND_CRAFT_POWER_FLOOR` refuses a
-        // batch past the reserve — so the reserve is restocked between them
-        // exactly as the pack is, and the compile is unwrapped rather than
-        // discarded so a refusal cannot hide as a missing copy.
+        // A hand-compile's ticks burn Power and
+        // `tuning::HAND_CRAFT_POWER_FLOOR` refuses a batch past the reserve,
+        // so the reserve is restocked between them exactly as the pack is —
+        // twenty in a row is enough to reach it at any multiplier — and the
+        // compile is unwrapped rather than discarded so a refusal cannot
+        // hide as a missing copy.
         fill_power(&mut game);
         game.craft(&recipe.result, 1, false).unwrap();
     }

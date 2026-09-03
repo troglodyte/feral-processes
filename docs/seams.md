@@ -9246,12 +9246,18 @@ never compiles by hand carries nothing at all.
 **A batch that would run the reserve out is refused whole.** A
 hand-compile's ticks are ordinary game ticks, so `needs_tick_system` charges
 them `HUNGER_DECAY_PER_TICK` like any others. That is the feature — compiling
-by hand is work — but at `HAND_CRAFT_TICK_MULT` one Hardened Shell is 300
-ticks and 45 of a hundred-point reserve, so a third would flatline a player
-who started full, silently, from a screen that says nothing about Power. The
-whole batch is refused rather than compiled as far as it fits, which is
-`MAX_ACTIVE_CONTRACTS`' no-silent-caps rule: a batch of twelve that quietly
-became a batch of six reads as the key having half worked.
+by hand is work — and a long enough batch flatlines the player from a screen
+that says nothing about Power. The whole batch is refused rather than
+compiled as far as it fits, which is `MAX_ACTIVE_CONTRACTS`' no-silent-caps
+rule: a batch of twelve that quietly became a batch of six reads as the key
+having half worked. **What reaches the floor is the batch and not the
+unit** — at `HAND_CRAFT_TICK_MULT` no single item comes near a hundred
+points, and `CRAFT_QUANTITY_MAX` lets the player ask for four figures of one
+— which is why the projection is `quantity × hand_craft_ticks` and why the
+engine tests derive the offending batch size from the constants rather than
+naming it. A hardcoded eight-unit batch was the refusal's only gate, and the
+2026-09-03 retune below turned it into a batch a full reserve carries
+comfortably, with nothing failing to compile.
 
 The projection is `quantity × hand_craft_ticks × systems::power_drain_per_tick`
 — the very function the system charges through, **called and not restated**,
@@ -9334,10 +9340,39 @@ Hardened Shell is a five-second stare at 60fps, which reads exactly right. It
 also ties the *cost the engine charges* to the *frame rate the machine happens
 to render at*, so the same batch is cheaper on better hardware —
 `hand_craft_ticks` pricing hand-compiling as a real cost means nothing if the
-ticks spent depend on the GPU. `COMPILE_TICKS_PER_SECOND = 60` reproduces the
-same five-second shell a 60fps player would have got, without depending on
-60fps to get there, and `compile_ticks_carry` is `BattleReveal::accumulated`'s
-carry so a frame worth less than one tick is not rounded away.
+ticks spent depend on the GPU. `compile_ticks_carry` is
+`BattleReveal::accumulated`'s carry so a frame worth less than one tick is not
+rounded away.
+
+**And the rate is the world's own, `WORLD_SPEED_MULTIPLIER`.** This shipped
+at 60, chosen to reproduce the five-second Hardened Shell a 60fps player
+would have got from the naive version — which reads well and is the wrong
+axis to have optimised. The ticks a compile spends are ordinary world ticks:
+needs decay, base production, raid pressure and wild spawns all ride them, so
+a rate thirty times the idle one aged the base by minutes while the player
+watched a few seconds of bar. It was reported from play, not from a test —
+every gate in the suite was green, because each measures *how many* ticks a
+batch spends and none measured *how fast*. `COMPILE_TICKS_PER_SECOND` is now
+derived from `WORLD_SPEED_MULTIPLIER` rather than restated, and
+`a_compile_advances_the_world_at_the_idle_tick_rate` in app-core's
+`tests/crafting.rs` drives one real second of bar and asserts the clock moved
+exactly as far as one real second of standing still.
+
+**`HAND_CRAFT_TICK_MULT` is the half that paid for it, 10 → 1.** The tick
+price and the wall-clock wait are one number divided by the other, so
+slowing the bar thirtyfold without touching the price made a Hardened Shell
+two and a half minutes of watching and a Blank Substrate a minute — the
+five-second stare the 60/sec was aiming at, thirty times over. Cutting the
+multiplier to 1 puts the worst shipped recipe back at fifteen real seconds
+and the median at five. **What that costs is the speed argument for the
+machine, and the machine keeps the other three**: a bench runs unattended
+while the player does something else, it burns no Power out of the player's
+own reserve, and `QUALITY_BENCH_PER_TIER` puts every copy off a developed
+bench above what bare hands can reach. What hand-compiling buys is reaching
+a recipe before the base that makes it exists, paid for in real time and in
+Power. The knob is kept at 1 rather than deleted because it is still the one
+place the cycle is multiplied, and a tuner who wants hands slower again has
+one number to move — with the wall clock now attached to it.
 
 ### A zone-portal line is ramped from the zone it was introduced in, not from zone 1
 

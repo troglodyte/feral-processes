@@ -564,18 +564,28 @@ pub const STATUS_LINE_SECONDS: f32 = 4.0;
 /// How fast `Mode::Compiling`'s bar spends `hand_craft_ticks` against the
 /// wall clock, in ticks per real second.
 ///
-/// **dt-scaled rather than one tick per rendered frame.** One-tick-per-frame
-/// was the first thing considered: it makes a 300-tick Hardened Shell a
-/// five-second stare at 60fps, which reads fine — but it also ties the
-/// *cost* the engine charges to the *frame rate* the machine happens to
-/// render at, so the same batch finishes sooner on a faster machine than a
-/// slower one. `hand_craft_ticks` pricing hand-compiling as a real cost only
-/// means something if the ticks spent are the ticks charged regardless of
-/// hardware (see `App::advance_compile`), so this is priced against `dt`
-/// exactly as `REVEAL_LINES_PER_SECOND` above already is. 60 reproduces the
-/// same five-second Hardened Shell the naive approach would have given a
-/// 60fps player, without actually depending on the frame rate to get there.
-pub const COMPILE_TICKS_PER_SECOND: f32 = 60.0;
+/// **`WORLD_SPEED_MULTIPLIER`, because a compile is not a cutscene.** The
+/// ticks this spends are ordinary world ticks — needs decay, base
+/// production, raid pressure and wild spawns all ride them — so any rate
+/// but the idle one makes the world sprint for as long as the bar is up,
+/// and the only tell is that the bar looks good. This shipped at 60, which
+/// is thirty times the world's own pace: a batch aged the base by minutes
+/// while the player watched a few seconds of progress. Derived rather than
+/// restated so the two cannot drift apart again.
+///
+/// **dt-scaled rather than one tick per rendered frame**, which is a
+/// separate rule and still holds: one-tick-per-frame ties the *cost* the
+/// engine charges to the *frame rate* the machine happens to render at, so
+/// the same batch finishes sooner on better hardware.  `hand_craft_ticks`
+/// pricing hand-compiling as a real cost only means something if the ticks
+/// spent are the ticks charged regardless of the GPU (see
+/// `App::advance_compile`), so this is priced against `dt` exactly as
+/// `REVEAL_LINES_PER_SECOND` above already is.
+///
+/// What pays for the slower pace is `tuning::HAND_CRAFT_TICK_MULT`: the
+/// wall-clock wait is the tick price divided by this, so the two are read
+/// together and the price is the half that was cut.
+pub const COMPILE_TICKS_PER_SECOND: f32 = WORLD_SPEED_MULTIPLIER as f32;
 
 /// How much of the current battle's narration the player has been shown.
 ///

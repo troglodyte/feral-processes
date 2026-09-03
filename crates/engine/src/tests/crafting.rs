@@ -608,8 +608,8 @@ fn a_compiled_piece_of_gear_carries_the_quality_it_rolled() {
 /// per unit, so a batch is a spread rather than N of one thing.
 ///
 /// Five units rather than the twelve this used to ask for: a gear recipe no
-/// machine assembles costs `HAND_CRAFT_DEFAULT_CYCLE` times the multiplier
-/// per unit, which is fifteen points of Power, and
+/// machine assembles costs `HAND_CRAFT_DEFAULT_CYCLE` times
+/// `HAND_CRAFT_TICK_MULT` in Power-burning ticks per unit, and
 /// `tuning::HAND_CRAFT_POWER_FLOOR` refuses a batch past the reserve. Five
 /// is as many rolls as the spread needs and the batch size was never the
 /// subject.
@@ -882,13 +882,17 @@ fn refused_compile_spends_nothing(
     set_inventory(game, &[(ids::CORE_FRAGMENT, 50)]);
     arrange(game);
     let before = game.current_tick();
+    // Read back rather than pinned at fifty: the Power refusal needs a batch
+    // big enough to reach the reserve, and that is more material than fifty
+    // fragments buys, so its `arrange` restocks.
+    let stock = count_item(game, ids::CORE_FRAGMENT);
 
     assert!(game.craft(result, quantity, false).is_err());
 
     assert_eq!(game.current_tick(), before, "a refusal spends no time");
     assert_eq!(
         count_item(game, ids::CORE_FRAGMENT),
-        50,
+        stock,
         "a refusal spends no material"
     );
 }
@@ -1037,6 +1041,23 @@ fn a_battle_opening_mid_compile_ends_the_loop_with_the_unit_refunded() {
     assert!(!game.hand_craft_in_progress());
 }
 
+/// What one unit of `item` costs a full reserve in Power, and the smallest
+/// batch of it that reserve cannot carry.
+///
+/// Derived rather than restated: both `HAND_CRAFT_TICK_MULT` and the cycle
+/// of the machine that makes the item move under these tests, and a
+/// hardcoded batch size silently stops reaching the refusal it is about
+/// when either does. That is exactly how the eight-unit batch this used to
+/// name became a batch a full reserve carries comfortably.
+fn power_per_unit(game: &Game, item: &ItemId) -> f32 {
+    game.hand_craft_ticks(item) as f32 * crate::tuning::HUNGER_DECAY_PER_TICK
+}
+
+fn batch_past_the_reserve(game: &Game, item: &ItemId) -> u32 {
+    let room = crate::components::POWER_MAX - crate::tuning::HAND_CRAFT_POWER_FLOOR;
+    (room / power_per_unit(game, item)).floor() as u32 + 1
+}
+
 /// Compiling by hand burns Power at the standing per-tick rate, so a long
 /// enough batch flatlines the player without ever asking them.
 ///
@@ -1047,16 +1068,14 @@ fn a_battle_opening_mid_compile_ends_the_loop_with_the_unit_refunded() {
 fn a_batch_that_would_run_the_reserve_out_is_refused_whole() {
     let mut game = Game::new(320, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let ice = ItemId::from(ids::ICE_BREAKER);
+    let quantity = batch_past_the_reserve(&game, &ice);
     set_inventory(
         &mut game,
-        &[(ids::CORE_FRAGMENT, ICE_BREAKER_CORE_COST * 8)],
+        &[(ids::CORE_FRAGMENT, ICE_BREAKER_CORE_COST * quantity)],
     );
 
-    // Eight units is 640 ticks at the Compiler's own cycle times the
-    // shipped multiplier, and 96 Power against a reserve that tops out at
-    // 100 — a batch nothing but the clock could stop.
     let refusal = game
-        .craft(&ice, 8, false)
+        .craft(&ice, quantity, false)
         .expect_err("a batch past the reserve must be refused");
     assert!(
         refusal.contains("Power"),
@@ -1076,15 +1095,18 @@ fn a_batch_that_would_run_the_reserve_out_is_refused_whole() {
 fn a_batch_the_reserve_can_carry_still_compiles() {
     let mut game = Game::new(321, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let ice = ItemId::from(ids::ICE_BREAKER);
+    // One short of the batch that gets refused, so the two tests bracket
+    // the boundary rather than sitting either side of a gap.
+    let quantity = batch_past_the_reserve(&game, &ice) - 1;
     set_inventory(
         &mut game,
-        &[(ids::CORE_FRAGMENT, ICE_BREAKER_CORE_COST * 5)],
+        &[(ids::CORE_FRAGMENT, ICE_BREAKER_CORE_COST * quantity)],
     );
 
-    game.craft(&ice, 5, false)
-        .expect("five units is 60 Power out of a full hundred");
+    game.craft(&ice, quantity, false)
+        .expect("the largest batch a full reserve carries is not refused");
 
-    assert_eq!(count_item(&game, ids::ICE_BREAKER), 5);
+    assert_eq!(count_item(&game, ids::ICE_BREAKER), quantity);
 }
 
 /// The floor is a margin above `POWER_MIN`, not `POWER_MIN` itself: a batch
@@ -1101,14 +1123,17 @@ fn the_reserve_floor_is_a_margin_and_not_zero() {
         game
     };
     let ice = ItemId::from(ids::ICE_BREAKER);
+    let unit = power_per_unit(&make(0.0), &ice);
+    let floor = crate::tuning::HAND_CRAFT_POWER_FLOOR;
 
-    // One unit is 12 Power. From 20 it ends above zero and below the floor.
+    // Enough for the unit and half the floor over, so the batch ends at
+    // half the floor: clear of zero, short of the margin.
     assert!(
-        make(20.0).craft(&ice, 1, false).is_err(),
+        make(unit + floor / 2.0).craft(&ice, 1, false).is_err(),
         "landing under the floor is refused even though it never reaches zero"
     );
     assert!(
-        make(30.0).craft(&ice, 1, false).is_ok(),
+        make(unit + floor + 1.0).craft(&ice, 1, false).is_ok(),
         "landing clear of the floor is not this refusal's business"
     );
 }
@@ -1119,17 +1144,12 @@ fn the_reserve_floor_is_a_margin_and_not_zero() {
 #[test]
 fn a_compile_refused_for_power_spends_nothing() {
     let mut game = Game::new(323, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    refused_compile_spends_nothing(&mut game, &ItemId::from(ids::ICE_BREAKER), 8, |g| {
-        // 50 fragments is already more than eight units cost, so the
-        // material check cannot be what refuses this.
-        let player = g.player_entity();
-        assert!(
-            g.world
-                .get::<Inventory>(player)
-                .unwrap()
-                .count(&ItemId::from(ids::CORE_FRAGMENT))
-                >= ICE_BREAKER_CORE_COST * 8
-        );
+    let ice = ItemId::from(ids::ICE_BREAKER);
+    let quantity = batch_past_the_reserve(&game, &ice);
+    refused_compile_spends_nothing(&mut game, &ice, quantity, |g| {
+        // Stocked past what the batch costs, so the material check cannot
+        // be what refuses this — it is the reserve or nothing.
+        set_inventory(g, &[(ids::CORE_FRAGMENT, ICE_BREAKER_CORE_COST * quantity)]);
     });
 }
 

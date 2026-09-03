@@ -434,6 +434,7 @@ impl Game {
         };
         if unit_done {
             self.grant_hand_craft_unit(&item);
+            self.note_hand_craft(&item, careful, ticks_total);
             let finished = {
                 let mut job = self.world.resource_mut::<crate::resources::HandCraft>();
                 job.remaining = job.remaining.saturating_sub(1);
@@ -455,6 +456,53 @@ impl Game {
             ticks_total,
             finished: false,
         })
+    }
+
+    /// Reports one finished hand-compiled unit to the instruments.
+    ///
+    /// `Game::craft` is `begin_hand_craft` plus this loop drained to
+    /// completion, so instrumenting the timed path covers the headless one
+    /// too — there is no second seam to keep in step.
+    ///
+    /// `bench` names the machine that exists to do this job, which is the
+    /// same lookup `hand_craft_ticks` prices the wait off. It is what makes
+    /// the record answer B2: `ticks_spent` against that machine's own cycle
+    /// is exactly what the convenience costs.
+    fn note_hand_craft(&mut self, item: &ItemId, careful: bool, ticks_spent: u32) {
+        let tick = self.world.resource::<crate::resources::GameClock>().tick;
+        let zone = self.world.resource::<crate::resources::ZoneLevel>().0;
+        let bench = self
+            .world
+            .resource::<StructureDb>()
+            .all()
+            .find(|d| {
+                d.assembles.as_ref().is_some_and(|a| &a.item == item)
+                    || d.work.as_ref().is_some_and(|w| &w.produces == item)
+            })
+            .map(|d| d.id.clone());
+        let event = crate::base_ledger::Event::HandCraft {
+            item: item.clone(),
+            qty: 1,
+        };
+        let item_id = item.0.clone();
+        // `resource_scope` rather than two `resource_mut` borrows: the one
+        // `emit` door wants both resources at once, and this is how a
+        // `&mut World` hands over one while the other is still reachable.
+        self.world.resource_scope(
+            |world, mut ledger: bevy_ecs::prelude::Mut<crate::base_ledger::BaseLedger>| {
+                let mut telemetry = world.resource_mut::<crate::resources::BattleTelemetry>();
+                crate::base_ledger::emit(&mut ledger, &mut telemetry, tick, zone, &event, |_| {
+                    crate::telemetry::Record::HandCraft {
+                        tick,
+                        item: item_id,
+                        qty: 1,
+                        careful,
+                        bench,
+                        ticks_spent,
+                    }
+                });
+            },
+        );
     }
 
     /// Walks away from the compile in flight, refunding the unit that was

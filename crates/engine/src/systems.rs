@@ -476,6 +476,62 @@ pub(crate) fn deliver_payout(
     landed
 }
 
+/// A machine's identity for a record: its `StructureDef` id, its base-space
+/// tile and its tier. Extracted because three seams want the same three
+/// figures out of the same optional components, and a hand-written copy at
+/// each would drift in the way `spawn_structure`'s rule warns about.
+///
+/// A node with no `Structure` is a hand-spawned test fixture and takes
+/// `"unknown"`, matching how `machine_name` already treats one.
+fn machine_identity(
+    structure: Option<&Structure>,
+    tier: Option<&StructureTier>,
+    pos: &Position,
+) -> (String, (i32, i32), u32) {
+    (
+        structure
+            .map(|s| s.kind.clone())
+            .unwrap_or_else(|| "unknown".to_string()),
+        (pos.x, pos.y),
+        tier.map(|t| t.0).unwrap_or(1),
+    )
+}
+
+/// Builds the log half of an extract. Separate from the fold so the
+/// `String`s it allocates are only paid for when a dev log is armed.
+#[allow(clippy::too_many_arguments)]
+fn extract_record(
+    tick: u64,
+    zone: u32,
+    machine: (i32, i32),
+    kind: String,
+    tier: u32,
+    worker_species: Option<String>,
+    event: &crate::base_ledger::Event,
+) -> crate::telemetry::Record {
+    let crate::base_ledger::Event::Extract {
+        item,
+        rolled,
+        landed,
+        ok,
+    } = event
+    else {
+        unreachable!("an extract seam emits an Extract event")
+    };
+    crate::telemetry::Record::Extract {
+        tick,
+        zone,
+        machine,
+        kind,
+        tier,
+        worker_species,
+        item: item.0.clone(),
+        rolled: *rolled,
+        landed: *landed,
+        ok: *ok,
+    }
+}
+
 /// The ingredient list a machine declaring `assembles` runs, which is the
 /// assembled item's own `CraftableDef::cost` — there is no second recipe
 /// format, so a machine's recipe and the bench recipe for the same item
@@ -827,6 +883,7 @@ pub fn task_progress_system(
     db: CronjobLookups,
     mut log: ResMut<MessageLog>,
     mut rng: ResMut<GameRng>,
+    mut instruments: crate::base_ledger::Instruments,
 ) {
     let CronjobLookups {
         species: species_db,
@@ -838,6 +895,11 @@ pub fn task_progress_system(
         clock,
         needs: need_db,
     } = db;
+    // Copied out rather than captured: the record closures are `move`, and
+    // capturing the `Res` handles themselves would move them out of the
+    // loop that still reads them.
+    let tick_now = clock.tick;
+    let zone_now = zone.0;
     // Both of these are the player's, not the worker's: `XpBoost` is
     // `FieldScope::Run`, so every worker's cronjob XP rides the same running
     // buff, and `KeenScavenger` is a perk only the player can buy. Read once,
@@ -968,6 +1030,29 @@ pub fn task_progress_system(
             &item_db,
             &mut rng,
         ) else {
+            // The fizzle is the only empirical route to
+            // `mining_success_chance`, so it is an event in its own right
+            // rather than an absence of one. It moves no units, so the
+            // ledger folds nothing from it — but the log needs the cycle.
+            let fizzle = crate::base_ledger::Event::Extract {
+                item: node.resource.clone(),
+                rolled: 0,
+                landed: 0,
+                ok: false,
+            };
+            let (kind, tile, tier_level) = machine_identity(structure, tier, node_pos);
+            let species = creature.species.clone();
+            instruments.emit(tick_now, zone_now, &fizzle, move |event| {
+                extract_record(
+                    tick_now,
+                    zone_now,
+                    tile,
+                    kind,
+                    tier_level,
+                    Some(species),
+                    event,
+                )
+            });
             log.push_base("Your subroutine's extraction attempt fails to compile.".to_string());
             continue;
         };
@@ -976,6 +1061,28 @@ pub fn task_progress_system(
             .map(|d| d.name.as_str())
             .unwrap_or(resource.as_str());
         let landed = deliver_payout(&resource, payout, &mut stock, &item_db, bank.as_deref_mut());
+        // `payout` against `landed` is the clog loss: `deliver_payout`
+        // clamps against `output_room()`, and the difference is a number
+        // nothing else in the game records.
+        let produced = crate::base_ledger::Event::Extract {
+            item: resource.clone(),
+            rolled: payout,
+            landed,
+            ok: true,
+        };
+        let (kind, tile, tier_level) = machine_identity(structure, tier, node_pos);
+        let species = creature.species.clone();
+        instruments.emit(tick_now, zone_now, &produced, move |event| {
+            extract_record(
+                tick_now,
+                zone_now,
+                tile,
+                kind,
+                tier_level,
+                Some(species),
+                event,
+            )
+        });
         set_machine_status(&mut status, MachineStatus::Running, machine_name, &mut log);
         let gain = if exp.level < WORK_XP_LEVEL_CAP {
             let species_growth = species_db
@@ -1038,6 +1145,7 @@ pub struct PlayerGatherLookups<'w> {
     structures: Res<'w, StructureDb>,
     zone: Res<'w, ZoneLevel>,
     power: Res<'w, PowerGrid>,
+    clock: Res<'w, GameClock>,
 }
 
 /// The player running a gather job themselves, rather than posting a
@@ -1065,13 +1173,17 @@ pub fn player_gather_system(
     db: PlayerGatherLookups,
     mut log: ResMut<MessageLog>,
     mut rng: ResMut<GameRng>,
+    mut instruments: crate::base_ledger::Instruments,
 ) {
     let PlayerGatherLookups {
+        clock,
         items: item_db,
         structures: structure_db,
         zone,
         power: grid,
     } = db;
+    let tick_now = clock.tick;
+    let zone_now = zone.0;
     for (mut task, perks, mut inventory) in &mut player {
         if !matches!(task.kind, TaskKind::GatherResource) {
             continue;
@@ -1103,7 +1215,8 @@ pub fn player_gather_system(
         // away. Either half alone leaves a player working a node they are
         // nowhere near — which pays into a buffer a transfer cannot
         // reach.
-        let Ok((node, tier, structure, mut stock, mut status, _)) = nodes.get_mut(task.target)
+        let Ok((node, tier, structure, mut stock, mut status, node_pos)) =
+            nodes.get_mut(task.target)
         else {
             continue;
         };
@@ -1153,6 +1266,16 @@ pub fn player_gather_system(
             &item_db,
             &mut rng,
         ) else {
+            let fizzle = crate::base_ledger::Event::Extract {
+                item: node.resource.clone(),
+                rolled: 0,
+                landed: 0,
+                ok: false,
+            };
+            let (kind, tile, tier_level) = machine_identity(structure, tier, node_pos);
+            instruments.emit(tick_now, zone_now, &fizzle, move |event| {
+                extract_record(tick_now, zone_now, tile, kind, tier_level, None, event)
+            });
             log.push_base("Your extraction attempt fails to compile.".to_string());
             continue;
         };
@@ -1167,6 +1290,24 @@ pub fn player_gather_system(
             &item_db,
             Some(&mut inventory),
         );
+        // The player cranking the handle is base production too. The design
+        // spec named only `task_progress_system`, but a run where the player
+        // works nodes themselves would otherwise show an empty screen —
+        // `work_structure` puts them on the same `Task` through the same
+        // `resolve_gather_cycle`, so the two must count the same.
+        //
+        // `worker_species` is `None`: the player has no `Creature`, and this
+        // is the one extract with nobody's aptitude behind it.
+        let produced = crate::base_ledger::Event::Extract {
+            item: resource.clone(),
+            rolled: payout,
+            landed,
+            ok: true,
+        };
+        let (kind, tile, tier_level) = machine_identity(structure, tier, node_pos);
+        instruments.emit(tick_now, zone_now, &produced, move |event| {
+            extract_record(tick_now, zone_now, tile, kind, tier_level, None, event)
+        });
         set_machine_status(&mut status, MachineStatus::Running, machine_name, &mut log);
         log.push_base_kind(
             MessageKind::Loot,
@@ -1186,6 +1327,8 @@ pub struct AssemblerLookups<'w> {
     structures: Res<'w, StructureDb>,
     items: Res<'w, ItemDb>,
     power: Res<'w, PowerGrid>,
+    zone: Res<'w, ZoneLevel>,
+    clock: Res<'w, GameClock>,
 }
 
 /// One tick of every assembler, in two phases: pull ingredients out of the
@@ -1212,12 +1355,17 @@ pub fn assembler_system(
     mut tasks: Query<(Entity, &mut Task)>,
     db: AssemblerLookups,
     mut log: ResMut<MessageLog>,
+    mut instruments: crate::base_ledger::Instruments,
 ) {
     let AssemblerLookups {
         structures: structure_db,
         items: item_db,
         power: grid,
+        zone,
+        clock,
     } = db;
+    let tick_now = clock.tick;
+    let zone_now = zone.0;
     let by_tile = crate::game::base::collect::feeders_by_tile(structures.iter());
 
     let mut machines: Vec<(Entity, (i32, i32), &crate::structures::StructureDef)> = structures
@@ -1381,7 +1529,34 @@ pub fn assembler_system(
             .expect("filtered on `assembles` above")
             .item
             .clone();
-        *stock.output.entry(product).or_default() += 1;
+        *stock.output.entry(product.clone()).or_default() += 1;
+        // Emitted here rather than beside the drain above so consumption and
+        // production are one event: the inputs came out in the same scope,
+        // and splitting them would let the two halves be counted in
+        // different ticks.
+        //
+        // The recipe's `need` is what was drained. The branch above removes
+        // the entry when `have <= need`, which is the same subtraction —
+        // and the `fed` gate two blocks up has already proved every input
+        // was there.
+        let event = crate::base_ledger::Event::Assemble {
+            product: product.clone(),
+            inputs: recipe.to_vec(),
+        };
+        let kind = def.id.clone();
+        instruments.emit(tick_now, zone_now, &event, move |event| {
+            let crate::base_ledger::Event::Assemble { product, inputs } = event else {
+                unreachable!("the assembler seam emits an Assemble event")
+            };
+            crate::telemetry::Record::Assemble {
+                tick: tick_now,
+                zone: zone_now,
+                machine: (x, y),
+                kind,
+                item: product.0.clone(),
+                inputs: inputs.iter().map(|(i, q)| (i.0.clone(), *q)).collect(),
+            }
+        });
     }
 }
 

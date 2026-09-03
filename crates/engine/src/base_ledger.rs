@@ -12,7 +12,8 @@
 
 use std::collections::{BTreeMap, VecDeque};
 
-use bevy_ecs::prelude::Resource;
+use bevy_ecs::prelude::{ResMut, Resource};
+use bevy_ecs::system::SystemParam;
 use serde::{Deserialize, Serialize};
 
 use crate::items::ItemId;
@@ -183,6 +184,43 @@ impl BaseLedger {
             .filter(|b| b.zone == zone)
             .filter_map(|b| b.produced.get(item))
             .sum()
+    }
+}
+
+/// The two instrumentation resources, bundled so a seam takes one system
+/// parameter rather than two.
+///
+/// Bevy injects one parameter per resource and `task_progress_system` was
+/// already at six, which is what makes this a bundle rather than two more
+/// arguments — the same reason `CronjobLookups` beside it is one.
+#[derive(SystemParam)]
+pub struct Instruments<'w> {
+    pub ledger: ResMut<'w, BaseLedger>,
+    pub telemetry: ResMut<'w, BattleTelemetry>,
+}
+
+impl Instruments<'_> {
+    /// [`emit`], with the two resources already in hand.
+    pub fn emit(
+        &mut self,
+        tick: u64,
+        zone: u32,
+        event: &Event,
+        record: impl FnOnce(&Event) -> Record,
+    ) {
+        emit(
+            &mut self.ledger,
+            &mut self.telemetry,
+            tick,
+            zone,
+            event,
+            record,
+        );
+    }
+
+    /// [`record_in_system`], likewise.
+    pub fn record(&mut self, record: impl FnOnce() -> Record) {
+        record_in_system(&mut self.telemetry, record);
     }
 }
 

@@ -130,6 +130,73 @@ fn nemesis_mark_rect(px: f32, py: f32, tile_px: f32) -> Rect {
     )
 }
 
+/// The con read's strip along the **bottom** edge — the rarity bar's mirror,
+/// same thickness and same full width, so the tile is framed by its two
+/// derived readings and the glyph between them is free to carry identity.
+///
+/// A free function for `nemesis_mark_rect`'s reason: the geometry is
+/// unit-testable without a `Painter`, and `staffed_mark_rect` below has to
+/// clear it without keeping a second copy of where it sits.
+fn difficulty_bar_rect(px: f32, py: f32, tile_px: f32) -> Rect {
+    Rect::new(
+        px,
+        py + tile_px - 1.0 - RARITY_BAR_PX,
+        tile_px - 1.0,
+        RARITY_BAR_PX,
+    )
+}
+
+/// Paints the con read along the bottom edge, or nothing at all when there
+/// is no reading to paint.
+///
+/// Extracted the way `draw_recovery_mark` is: the map's tile loop is far too
+/// big to reach with a test, and what has to be pinned here is that `None`
+/// paints *nothing* — a bar under a companion would say the player can beat
+/// their own program.
+///
+/// `vig` multiplies the way the rarity bar's does, so a tile darkened at the
+/// edge of the light doesn't leave its two bars burning at full brightness.
+fn draw_difficulty_bar(
+    painter: &Painter,
+    difficulty: Option<GlyphColor>,
+    px: f32,
+    py: f32,
+    tile_px: f32,
+    vig: f32,
+) {
+    let Some(rung) = difficulty else {
+        return;
+    };
+    let c = glyph_color(rung);
+    let bar = difficulty_bar_rect(px, py, tile_px);
+    painter.rect(
+        bar.x,
+        bar.y,
+        bar.w,
+        bar.h,
+        Color::new(c.r * vig, c.g * vig, c.b * vig, c.a),
+    );
+}
+
+/// Where the "someone is on this job" mark sits, `lift` px up from its
+/// resting place — `Fx::staffed_bob` while a machine is worked, zero at rest
+/// and for a stranded mark, which blinks in place instead.
+///
+/// **Raised clear of `difficulty_bar_rect`**, the mirror of `nemesis_mark_
+/// rect` dropping below `RARITY_BAR_PX`. Extracted rather than left inline
+/// so the clearance is one expression: the test that pins it used to
+/// hand-copy this arithmetic, which is exactly the copy that drifts when the
+/// bottom edge gains a bar.
+fn staffed_mark_rect(px: f32, py: f32, tile_px: f32, lift: f32) -> Rect {
+    let size = (tile_px - 1.0) * STAFFED_MARK;
+    Rect::new(
+        px + STAFFED_MARK_INSET,
+        py + tile_px - 1.0 - RARITY_BAR_PX - STAFFED_MARK_INSET - size - lift,
+        size,
+        size,
+    )
+}
+
 /// A tile's own brightness multiplier, so a field of one biome reads as
 /// ground rather than as a flat colour swatch.
 ///
@@ -1372,6 +1439,20 @@ fn draw_surface_map(
                     Color::new(bar.r * vig, bar.g * vig, bar.b * vig, bar.a),
                 );
             }
+            // The same reading turned upside down. `difficulty_color` used
+            // to *replace* the glyph's hue, so a tile said either what a
+            // program is or how dangerous it is; the bottom edge is what
+            // buys back the glyph. Keyed off `actor` for the rarity bar's
+            // reason — a structure has no con read, and the engine hands
+            // `None` for everything that is not hostile.
+            draw_difficulty_bar(
+                painter,
+                actor.and_then(|ev| ev.difficulty),
+                px,
+                py,
+                tile_px,
+                vig,
+            );
             // A nemesis draws a second mark on top of its reserved glyph
             // colour — belt and braces, since a nemesis is worth noticing
             // even at a glance that only catches shape and not hue. Its own
@@ -1447,7 +1528,6 @@ fn draw_surface_map(
             // leave, so a bob would promise motion that is never coming. It
             // blinks in place instead — see `Fx::stranded_blink`.
             if let Some((marked, stranded)) = mark {
-                let size = (tile_px - 1.0) * STAFFED_MARK;
                 // The attention colour as well as still: colour and motion
                 // say the same thing at once, so a stranded machine is
                 // legible from a paused screenshot and not only from
@@ -1462,13 +1542,8 @@ fn draw_surface_map(
                 } else {
                     (fx.staffed_bob(marked), 1.0, hud::palette::HEALTHY)
                 };
-                painter.rect(
-                    px + STAFFED_MARK_INSET,
-                    py + tile_px - 1.0 - STAFFED_MARK_INSET - size - lift,
-                    size,
-                    size,
-                    Color { a: alpha, ..base },
-                );
+                let m = staffed_mark_rect(px, py, tile_px, lift);
+                painter.rect(m.x, m.y, m.w, m.h, Color { a: alpha, ..base });
             }
             if show_effects && let Some(flash) = fx.tile_flash(world) {
                 painter.rect(px, py, tile_px - 1.0, tile_px - 1.0, flash);
@@ -1750,6 +1825,7 @@ mod tests {
             max_tier: None,
             is_boss: false,
             nemesis: false,
+            difficulty: None,
             can_work: false,
             can_trade: false,
             issues_contracts: false,
@@ -3357,8 +3433,7 @@ mod tests {
         let tile_px = 40.0_f32;
         let (px, py) = (0.0, 0.0);
         let nemesis = nemesis_mark_rect(px, py, tile_px);
-        let staffed_size = (tile_px - 1.0) * STAFFED_MARK;
-        let staffed_y = py + tile_px - 1.0 - STAFFED_MARK_INSET - staffed_size;
+        let staffed_y = staffed_mark_rect(px, py, tile_px, 0.0).y;
 
         assert!(
             nemesis.y + nemesis.h < staffed_y,
@@ -3467,6 +3542,117 @@ mod tests {
         assert!(
             text.contains(&ground) && !text.contains("Esc"),
             "and takes it straight back when the watch ends: {text:?}"
+        );
+    }
+
+    /// The con read's bar is the rarity bar turned upside down: same
+    /// thickness, same full width, opposite edge. Two bars framing the tile
+    /// is what lets the glyph between them go back to saying *what* the
+    /// program is — so they must never meet, at any zoom.
+    #[test]
+    fn the_difficulty_bar_hugs_the_bottom_edge_and_never_meets_the_rarity_bar() {
+        for tile_px in [24.0_f32, 32.0, 48.0, 64.0] {
+            let bar = difficulty_bar_rect(100.0, 200.0, tile_px);
+
+            assert_eq!(bar.h, RARITY_BAR_PX, "at tile_px={tile_px}");
+            assert_eq!(bar.w, tile_px - 1.0, "at tile_px={tile_px}");
+            assert_eq!(
+                bar.y + bar.h,
+                200.0 + tile_px - 1.0,
+                "at tile_px={tile_px} the bar must sit flush on the bottom edge"
+            );
+            assert!(
+                bar.y > 200.0 + RARITY_BAR_PX,
+                "at tile_px={tile_px} the two bars reach each other"
+            );
+        }
+    }
+
+    /// `nemesis_mark_rect` drops below the rarity bar; this is the same
+    /// clearance at the other end. **The bob is what makes it worth a
+    /// test**: `fx.staffed_bob` lifts the mark *away* from the bottom edge,
+    /// so a missing offset is invisible while a machine is worked and shows
+    /// only at rest — and a stranded mark, which never bobs at all, would
+    /// sit under the bar for its whole stall.
+    #[test]
+    fn the_staffed_mark_clears_the_difficulty_bar_at_rest_and_mid_bob() {
+        let tile_px = 40.0_f32;
+        let (px, py) = (10.0_f32, 20.0_f32);
+        let bar = difficulty_bar_rect(px, py, tile_px);
+
+        for lift in [0.0_f32, 1.0, 3.0] {
+            let mark = staffed_mark_rect(px, py, tile_px, lift);
+            assert!(
+                mark.y + mark.h <= bar.y,
+                "at lift={lift} the staffed mark's bottom ({}) reaches into \
+                 the difficulty bar (starts at {})",
+                mark.y + mark.h,
+                bar.y
+            );
+            assert!(mark.y > py, "at lift={lift} the mark left the tile");
+        }
+    }
+
+    /// Where the con bar was painted this frame, or `None` if it was not.
+    fn con_bar(
+        shapes: &[bevy_egui::egui::epaint::ClippedShape],
+    ) -> Option<(bevy_egui::egui::Rect, bevy_egui::egui::Color32)> {
+        shapes.iter().find_map(|cs| match &cs.shape {
+            bevy_egui::egui::Shape::Rect(r)
+                if r.fill.a() > 0 && (r.rect.height() - RARITY_BAR_PX).abs() < 0.01 =>
+            {
+                Some((r.rect, r.fill))
+            }
+            _ => None,
+        })
+    }
+
+    /// `None` is *no reading*, not a reading worth nothing — the engine
+    /// hands a con colour only for a hostile, so anything else must leave
+    /// the bottom edge bare rather than paint a bar the player would read
+    /// as "you can beat your own companion".
+    #[test]
+    fn nothing_draws_a_con_bar_without_a_con_read() {
+        let (_, shapes) = with_painter(|p| {
+            draw_difficulty_bar(p, None, 0.0, 0.0, CELL, 1.0);
+        });
+
+        assert!(
+            con_bar(&shapes).is_none(),
+            "a tile with no con read must paint no bar"
+        );
+    }
+
+    /// The bar lands where `difficulty_bar_rect` says and wears the rung it
+    /// was handed. Both in one test because either alone passes against a
+    /// bar drawn in the wrong place *or* in the wrong colour, and the whole
+    /// point of the channel is that a player reads position and hue
+    /// together.
+    #[test]
+    fn a_con_read_draws_its_rung_along_the_bottom_edge() {
+        let (_, shapes) = with_painter(|p| {
+            draw_difficulty_bar(p, Some(GlyphColor::Red), 0.0, 0.0, CELL, 1.0);
+        });
+
+        let (rect, fill) = con_bar(&shapes).expect("a con read must paint a bar");
+        let want = difficulty_bar_rect(0.0, 0.0, CELL);
+
+        assert!(
+            (rect.min.y - want.y).abs() < 0.01 && (rect.width() - want.w).abs() < 0.01,
+            "the bar was painted at {rect:?}, not at {want:?}"
+        );
+
+        let red = hud::palette::glyph(GlyphColor::Red);
+        let want_fill = bevy_egui::egui::Color32::from_rgb(
+            (red.r * 255.0) as u8,
+            (red.g * 255.0) as u8,
+            (red.b * 255.0) as u8,
+        );
+        assert_eq!(
+            (fill.r(), fill.g(), fill.b()),
+            (want_fill.r(), want_fill.g(), want_fill.b()),
+            "the bar must wear the con rung's own hue, drawn from the one \
+             palette table `glyph_color` reads"
         );
     }
 }

@@ -1168,6 +1168,7 @@ mod tests {
             max_tier: Some(max_tier),
             is_boss: false,
             nemesis: false,
+            difficulty: None,
             can_work: false,
             can_trade: false,
             issues_contracts: false,

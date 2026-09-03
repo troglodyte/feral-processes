@@ -419,6 +419,43 @@ impl Game {
         }
     }
 
+    /// Spends what the site was holding and despawns it — the tick the
+    /// materials actually leave the run.
+    ///
+    /// **The one place a build's materials are consumed**, which is
+    /// `CLAUDE.md`'s "materials are not spent until the structure is raised"
+    /// written as code rather than as a comment. Until this call they stand
+    /// on the cell and a cancel gives them back, which is exactly why the
+    /// early returns above leave a site alone rather than tidying it away —
+    /// folding at the raise's *start* would charge the run for a build that
+    /// a missing def or a lowered tier ceiling then declines to finish.
+    fn consume_site(&mut self, site: Entity) {
+        let delivered = self
+            .world
+            .get::<BuildSite>(site)
+            .map(|b| b.delivered.clone())
+            .unwrap_or_default();
+        for (item, qty) in delivered {
+            let id = item.0.clone();
+            self.report_base(
+                crate::base_ledger::Event::Consume {
+                    item: item.clone(),
+                    qty,
+                },
+                move |tick, zone, _| crate::telemetry::Record::Consume {
+                    tick,
+                    zone,
+                    item: id,
+                    qty,
+                    source: crate::base_ledger::ConsumeSource::Build
+                        .as_str()
+                        .to_string(),
+                },
+            );
+        }
+        self.world.despawn(site);
+    }
+
     /// One tick of construction, and the structure itself once the meter is
     /// full.
     ///
@@ -458,7 +495,7 @@ impl Game {
         // component with its own crew pass.
         match goal {
             BuildGoal::New => {
-                self.world.despawn(site);
+                self.consume_site(site);
                 self.world.entity_mut(worker).remove::<Task>();
                 self.spawn_structure(&def, target.x, target.y);
                 self.log_base(format!("Your crew finishes the {}.", def.name));
@@ -501,7 +538,7 @@ impl Game {
                 {
                     node.level = Some(to_tier);
                 }
-                self.world.despawn(site);
+                self.consume_site(site);
                 self.world.entity_mut(worker).remove::<Task>();
                 self.log_base(format!(
                     "Your crew finishes upgrading the {} to Mk{to_tier}.",

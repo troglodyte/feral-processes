@@ -71,8 +71,8 @@ use battle::{
     draw_battle_target_menu,
 };
 use building::{
-    draw_base_staff, draw_build_direction, draw_build_menu, draw_remove_confirm, draw_remove_menu,
-    draw_staffing_menu, draw_structure_menu, draw_structures, draw_upgrade_menu,
+    draw_base_output, draw_base_staff, draw_build_direction, draw_build_menu, draw_remove_confirm,
+    draw_remove_menu, draw_staffing_menu, draw_structure_menu, draw_structures, draw_upgrade_menu,
     draw_work_order_pick, draw_work_order_quantity, draw_work_orders,
 };
 use caravan::{CaravanBasket, draw_caravan};
@@ -1118,6 +1118,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             }
         }
         Mode::Recipes => draw_recipes(game, selected, refusal, painter, m),
+        Mode::BaseOutput => draw_base_output(game, refusal, painter, m),
         Mode::QuitRunConfirm => draw_quit_run_confirm(selected, refusal, painter, m),
         _ => {}
     }
@@ -1184,7 +1185,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 87] = [
+    const ALL_MODES: [Mode; 88] = [
         Mode::MainMenu,
         Mode::CreateCharacter,
         Mode::LoadGame,
@@ -1260,6 +1261,7 @@ mod tests {
         Mode::Structures,
         Mode::StructureAssign,
         Mode::Recipes,
+        Mode::BaseOutput,
         Mode::Achievements,
         Mode::Help,
         Mode::HelpPage,

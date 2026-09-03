@@ -1506,3 +1506,40 @@ fn a_chain_carries_its_products_authored_description() {
         "every shipped item carries description text, so every chain shows one: {missing:?}"
     );
 }
+
+/// The assembler's instrumentation seam. Consumption and production are one
+/// event because the input drain and the `output` write happen in the same
+/// scope — split across two emissions they could be counted in different
+/// ticks, and the ledger would stop balancing.
+#[test]
+fn a_completed_assembly_reaches_the_ledger_with_its_inputs() {
+    let mut game = game_with_assembler("chain_ledger", 1100);
+    let machine = assembler_at(&mut game, 40, 40, true);
+    feeder_at(&mut game, 41, 40, 100);
+    let cost = per_batch(&game);
+
+    for _ in 0..40 {
+        game.tick();
+        let made = game
+            .world
+            .get::<Stock>(machine)
+            .and_then(|s| s.output.get(&ItemId::from(ids::POWER_CELL)).copied())
+            .unwrap_or(0);
+        if made > 0 {
+            break;
+        }
+    }
+
+    let ledger = game.world.resource::<crate::base_ledger::BaseLedger>();
+    let product = ledger.lifetime[&ItemId::from(ids::POWER_CELL)];
+    assert_eq!(
+        product.compiled, 1,
+        "the completed unit must reach the ledger as machine work"
+    );
+    assert_eq!(product.hand, 0, "and not as the player's own");
+    assert_eq!(
+        ledger.lifetime[&ItemId::from(ids::CORE_FRAGMENT)].consumed,
+        cost,
+        "the drained inputs ride the same event, priced off the item's own recipe"
+    );
+}

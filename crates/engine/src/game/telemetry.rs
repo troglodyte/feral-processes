@@ -48,6 +48,126 @@ impl Game {
             .push(record);
     }
 
+    /// One unit — or `qty` of them — left the run. `report_base`'s common
+    /// case, with the record spelled out once instead of at each sink.
+    pub(crate) fn note_consumed(
+        &mut self,
+        item: &crate::items::ItemId,
+        qty: u32,
+        source: crate::base_ledger::ConsumeSource,
+    ) {
+        if qty == 0 {
+            return;
+        }
+        let id = item.0.clone();
+        self.report_base(
+            crate::base_ledger::Event::Consume {
+                item: item.clone(),
+                qty,
+            },
+            move |tick, zone, _| Record::Consume {
+                tick,
+                zone,
+                item: id,
+                qty,
+                source: source.as_str().to_string(),
+            },
+        );
+    }
+
+    /// One `Record::BaseSnapshot`, at the top of every ledger window.
+    ///
+    /// **Called from `tick_inner` and gated on nothing but the clock.** Once
+    /// per `base_ledger::BUCKET_TICKS`, which is what makes it cheap enough
+    /// to leave armed for a whole session and what lines it up with the
+    /// buckets the ledger is already keeping.
+    ///
+    /// Every count is built **inside** `Game::record`'s closure, which is
+    /// the whole reason this is safe: the walk costs a pass over every
+    /// structure and every owned program, and a disarmed run must not pay
+    /// for it. Written eagerly it would be a full base census every
+    /// thousand ticks of every ordinary player's game.
+    pub(crate) fn note_base_snapshot(&mut self) {
+        let tick = self.world.resource::<crate::resources::GameClock>().tick;
+        if !tick.is_multiple_of(crate::base_ledger::BUCKET_TICKS) {
+            return;
+        }
+        self.record(|g| {
+            // `iter_entities` and not `World::query`, which wants `&mut
+            // World` — the closure holds `&Game`, which is the shape that
+            // makes the whole thing lazy in the first place.
+            let mut machines = 0;
+            let mut depots = 0;
+            let mut posted = 0;
+            let mut staff = 0;
+            let db = g.world.resource::<crate::structures::StructureDb>();
+            for entity in g.world.iter_entities() {
+                if let Some(structure) = entity.get::<crate::components::Structure>()
+                    && let Some(def) = db.get(&structure.kind)
+                {
+                    machines += u32::from(def.runs_a_job());
+                    depots += u32::from(def.stores);
+                }
+                if entity
+                    .get::<crate::components::Task>()
+                    .is_some_and(|t| matches!(t.kind, crate::components::TaskKind::GatherResource))
+                {
+                    posted += 1;
+                }
+                if entity.get::<crate::components::Tamed>().is_some()
+                    && g.program_role(entity.id()) == Some(crate::ProgramRole::Staff)
+                {
+                    staff += 1;
+                }
+            }
+            let (draw, supply) = g.base_power();
+            Record::BaseSnapshot {
+                tick,
+                zone: g.world.resource::<crate::resources::ZoneLevel>().0,
+                staff,
+                posted,
+                machines,
+                depots,
+                supply,
+                draw,
+            }
+        });
+    }
+
+    /// Reports one base event: the ledger fold and the log record, through
+    /// `base_ledger::emit`'s one door.
+    ///
+    /// The `resource_scope` here is the whole of what this exists to hold in
+    /// one place. `emit` wants both resources at once and a `&mut World`
+    /// lends one at a time, so every site that reported from a `Game` was
+    /// otherwise writing the same eight-line dance — five of them by the end
+    /// of Phase 2, each free to get the borrow order subtly different.
+    ///
+    /// The record closure takes `(tick, zone)` because every base record
+    /// carries them and no caller should be reading the two resources for
+    /// itself.
+    pub(crate) fn report_base(
+        &mut self,
+        event: crate::base_ledger::Event,
+        record: impl FnOnce(u64, u32, &crate::base_ledger::Event) -> Record,
+    ) {
+        let tick = self.world.resource::<crate::resources::GameClock>().tick;
+        let zone = self.world.resource::<crate::resources::ZoneLevel>().0;
+        self.world.resource_scope(
+            |world, mut ledger: bevy_ecs::prelude::Mut<crate::base_ledger::BaseLedger>| {
+                let mut telemetry = world.resource_mut::<BattleTelemetry>();
+                crate::base_ledger::emit(
+                    &mut ledger,
+                    &mut telemetry,
+                    tick,
+                    zone,
+                    &event,
+                    |event| record(tick, zone, event),
+                );
+            },
+        );
+    }
+
     /// Mints the next fight id and makes it the one later records carry.
     /// Called by `begin_battle`; every record in the fight reads it back
     /// through `fight_id`.

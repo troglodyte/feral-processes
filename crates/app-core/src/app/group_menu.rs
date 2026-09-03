@@ -206,6 +206,21 @@ const BASE_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
+        // Not base-only, and for the Recipes row's reason one notch further:
+        // the ledger is *history*, so it reads the same wherever the party
+        // is standing — and the base keeps producing while they are in the
+        // Stack, which is exactly when the question is worth asking.
+        //
+        // `has_base_output` rather than the report itself, which is the trap
+        // the Contracts row records: this closure runs every frame the menu
+        // is open and the report resolves a def per item and walks every
+        // structure before it can answer.
+        label: "Base output",
+        target: Mode::BaseOutput,
+        locality: Locality::Anywhere,
+        available: |app| app.game.as_ref().is_some_and(|g| g.has_base_output()),
+    },
+    GroupEntry {
         // Not base-only: the chains come off the loaded assets, not off a
         // scan around the player, so this one row means the same thing four
         // frames down as it does standing in the base.

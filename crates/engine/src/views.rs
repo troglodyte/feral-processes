@@ -2251,6 +2251,54 @@ pub struct StockRow {
     pub qty: u32,
 }
 
+/// One item's line on the base output page — see `Game::base_output_report`.
+///
+/// Every figure is carried as a number rather than pre-rendered text: none
+/// of them needs the world, and formatting them here would invent a second
+/// formatting seam for the one screen that reads this. `name` is the
+/// exception, because resolving it needs `ItemDb`, which never reaches the
+/// page.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BaseOutputRow {
+    pub item: ItemId,
+    pub name: String,
+    /// Landed in the sector the party is standing in, summed over the
+    /// buckets stamped with it.
+    pub sector: u32,
+    /// Landed over the whole run, from the lifetime totals that never roll
+    /// off — which is what lets a fresh save show something.
+    pub run: u32,
+    /// The machine's share of `run`, and the player's own. Split because a
+    /// combined figure hides what hand-compiling is contributing, which is
+    /// the question the whole instrument was built to answer.
+    pub machine: u32,
+    pub hand: u32,
+    /// The most recent buckets' production, oldest first, for a sparkline.
+    /// Empty for a run with no history yet.
+    pub spark: Vec<u32>,
+}
+
+/// What the base has made, as `Mode::BaseOutput` draws it.
+///
+/// **Flows and totals only.** The player has infinite cargo and never
+/// interacts with a Depot, so a quantity sitting in a buffer is invisible
+/// plumbing to them — no depot fill, no machine buffer, no "units in
+/// store".
+#[derive(Clone, Debug)]
+pub struct BaseOutputReport {
+    /// The sector the `sector` columns are counting.
+    pub zone: u32,
+    /// Items some structure's `work` produces.
+    pub mined: Vec<BaseOutputRow>,
+    /// Everything else that was made: an assembler's output, and anything
+    /// the player compiled by hand.
+    pub compiled: Vec<BaseOutputRow>,
+    /// **Called, never recomputed.** `Game::attention` is one derivation
+    /// with three surfaces already reading it; a fourth that worked out its
+    /// own answer is the drift that seam exists to prevent.
+    pub attention: Vec<AttentionRow>,
+}
+
 /// One thing a program remembers, as `Mode::CompanionMemories` lists it —
 /// see `Game::memory_report`.
 ///

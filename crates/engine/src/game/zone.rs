@@ -90,7 +90,7 @@ impl Game {
                 let mut rng = self.world.resource_mut::<GameRng>();
                 rng.0.random_range(WORK_RESOURCE_DROP) * NEST_CACHE_WORK_RESOURCE_MULT
             };
-            let landed = self.grant_loot(resource.clone(), qty);
+            let landed = self.grant_loot(resource.clone(), qty, LootSource::Cache);
             if landed > 0 {
                 self.log_kind(
                     MessageKind::Loot,
@@ -127,7 +127,7 @@ impl Game {
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_range(NEST_CACHE_CREDITS) + zone_bonus
         };
-        let landed = self.grant_loot(self.trade_currency(), qty);
+        let landed = self.grant_loot(self.trade_currency(), qty, LootSource::Cache);
         if landed > 0 {
             self.log_kind(
                 MessageKind::Loot,
@@ -458,6 +458,29 @@ impl Game {
                 })
                 .collect()
         };
+
+        // The only sink in the game that destroys rather than spends, and
+        // the ledger cannot see it any other way: a run's Core Fragments
+        // otherwise read as produced and never accounted for.
+        for (item, qty) in &lost {
+            let id = item.0.clone();
+            let qty = *qty;
+            self.report_base(
+                crate::base_ledger::Event::Consume {
+                    item: item.clone(),
+                    qty,
+                },
+                move |tick, zone, _| crate::telemetry::Record::Consume {
+                    tick,
+                    zone,
+                    item: id,
+                    qty,
+                    source: crate::base_ledger::ConsumeSource::Breach
+                        .as_str()
+                        .to_string(),
+                },
+            );
+        }
 
         self.log(format!(
             "You breach the portal and materialize in a level {new_level} sector. Hostile signal strength has spiked."

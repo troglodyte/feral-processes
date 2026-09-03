@@ -425,7 +425,7 @@ impl Game {
         };
         if paid {
             let item = ItemId::from(crate::items::ids::CORE_FRAGMENT);
-            let landed = self.grant_loot(item.clone(), 1);
+            let landed = self.grant_loot(item.clone(), 1, LootSource::Rock);
             if landed > 0 {
                 let line = format!("A {} shakes loose from the cut.", self.item_name(&item));
                 if by_player {
@@ -717,7 +717,13 @@ impl Game {
     /// Spends the one substrate a tile costs, base stores before the
     /// player's pack, and reports whether it found one.
     fn spend_one_substrate(&mut self, substrate: &ItemId) -> bool {
-        if crate::game::base::stock::spend_from_base(self, substrate, 1) == 1 {
+        if crate::game::base::stock::spend_from_base(
+            self,
+            substrate,
+            1,
+            crate::base_ledger::ConsumeSource::Base,
+        ) == 1
+        {
             return true;
         }
         let player = self.player_entity();

@@ -60,6 +60,136 @@ pub enum Record {
         player_hp_frac: f32,
         companions_downed: u32,
     },
+    /// An extractor finished a cycle. `ok: false` is the fizzle — the only
+    /// empirical route to `systems::mining_success_chance` — and `rolled`
+    /// against `landed` is what a clog cost.
+    Extract {
+        tick: u64,
+        zone: u32,
+        /// The machine's own base-space tile, which is what identifies one
+        /// instance from another; `kind` is its `StructureDef` id.
+        machine: (i32, i32),
+        kind: String,
+        tier: u32,
+        worker_species: Option<String>,
+        item: String,
+        rolled: u32,
+        landed: u32,
+        ok: bool,
+    },
+    /// An assembler completed one unit, draining its inputs in the same
+    /// scope — so consumption and production are one record.
+    Assemble {
+        tick: u64,
+        zone: u32,
+        machine: (i32, i32),
+        kind: String,
+        item: String,
+        inputs: Vec<(String, u32)>,
+    },
+    /// A machine changed status. Transitions only, because
+    /// `set_machine_status` already logs only on transition — hanging this
+    /// there is what makes the edges free and leaves no duplicate
+    /// suppression to write.
+    MachineStall {
+        tick: u64,
+        machine: (i32, i32),
+        kind: String,
+        status: String,
+    },
+    /// One leg of a haul that actually moved goods.
+    ///
+    /// **The corrected B3.** Adjacency is a throughput multiplier and not a
+    /// requirement — a machine too far from its feeders is fed from a Depot
+    /// instead — so what costs the base is the walk, and the penalty falls
+    /// on the *extractor*: `task_progress_system` gates on `at_station`, so
+    /// a producer makes nothing while its worker is away, while a consumer
+    /// keeps working off its hopper.
+    ///
+    /// A `Tend` writes nothing: no goods moved, and what a stalled machine
+    /// costs is `MachineStall`'s to say.
+    Haul {
+        tick: u64,
+        /// The worker's *post*, not where it is standing — one machine's
+        /// legs are what the analysis groups by.
+        machine: (i32, i32),
+        kind: String,
+        /// `deposit` (product to a Depot), `load` (an ingredient into the
+        /// machine's own hopper), `collect` (drawing one off a Depot).
+        errand: String,
+        item: String,
+        /// What actually moved, which is not what was wanted: a Depot that
+        /// filled or emptied while the worker walked moves less.
+        qty: u32,
+        /// Chebyshev tiles from the post to the other end. `0` is an
+        /// errand that never left the tile.
+        distance: u32,
+    },
+    /// What the base *was* at the top of a window: the denominator every
+    /// other base record is missing.
+    ///
+    /// **Nothing else can substitute for it.** Without it every rate in the
+    /// log is an absolute — units per what? — and B7 is a question about
+    /// rate per *posted program*. It is also where ticks-per-sector comes
+    /// from, which is the number that calibrates every tick-denominated
+    /// figure in the audit this all descends from.
+    ///
+    /// Once per `base_ledger::BUCKET_TICKS`, so it is cheap to leave on and
+    /// lines up with the buckets the ledger already keeps.
+    BaseSnapshot {
+        tick: u64,
+        zone: u32,
+        /// Programs the player owns that are base staff — derived, not
+        /// assigned: `ProgramRole::Staff` is what is left over once the
+        /// party, the wielded program and any sortie are taken out.
+        staff: u32,
+        /// Bodies actually standing at a job this tick.
+        posted: u32,
+        /// Structures that run one — `StructureDef::runs_a_job`.
+        machines: u32,
+        /// Structures that store — `StructureDef::stores`, never an id.
+        depots: u32,
+        supply: u32,
+        draw: u32,
+    },
+    /// Units left the run. **Folded and recorded both**, unlike `Acquire`:
+    /// a sink is the other half of the ledger's own arithmetic, while a
+    /// source is not.
+    Consume {
+        tick: u64,
+        zone: u32,
+        item: String,
+        qty: u32,
+        /// `base_ledger::ConsumeSource::as_str`.
+        source: String,
+    },
+    /// Something reached the player's pack that the base did not make:
+    /// a kill's drop, a cache, a contract's reward, a purchase, a refund.
+    ///
+    /// **Log only — this never folds into `base_ledger`.** The ledger and
+    /// the screen it feeds are about what the *base* produced and consumed;
+    /// a kill's Core Fragments counted there would read on the page as
+    /// something a machine made. What this answers is B5, which is a
+    /// question about competing supplies and belongs to the analysis.
+    Acquire {
+        tick: u64,
+        zone: u32,
+        item: String,
+        qty: u32,
+        /// `base_ledger::LootSource::as_str` — the vocabulary, not free
+        /// text.
+        source: String,
+    },
+    /// The player finished a hand-compile. `ticks_spent` against the
+    /// machine cycle for the same item is the whole of B2.
+    HandCraft {
+        tick: u64,
+        item: String,
+        qty: u32,
+        careful: bool,
+        bench: Option<String>,
+        ticks_spent: u32,
+    },
 }
 
 impl Record {
@@ -68,9 +198,14 @@ impl Record {
     /// from 1, so without this every fight in a 200-rep evaluation would
     /// land in the file as fight 1.
     ///
-    /// Or-patterns rather than five arms: a variant added without a `fight`
-    /// fails to compile here, which is what keeps "every record carries one"
-    /// true rather than merely documented.
+    /// Or-patterns rather than an arm each, and **no wildcard**: a new
+    /// variant fails to compile until it is classified as one that carries
+    /// a fight or one that does not. That is what keeps "every battle
+    /// record carries a fight id" true rather than merely documented.
+    ///
+    /// The base records are the ones that do not. They are keyed to `tick`
+    /// and happen while no fight is open at all, so re-keying one would be
+    /// inventing an association rather than correcting it.
     pub(crate) fn set_fight(&mut self, fight: u64) {
         let slot = match self {
             Record::FightStart { fight, .. }
@@ -78,6 +213,14 @@ impl Record {
             | Record::EnemyChoice { fight, .. }
             | Record::PartyAction { fight, .. }
             | Record::FightEnd { fight, .. } => fight,
+            Record::Extract { .. }
+            | Record::Assemble { .. }
+            | Record::MachineStall { .. }
+            | Record::HandCraft { .. }
+            | Record::Acquire { .. }
+            | Record::Consume { .. }
+            | Record::BaseSnapshot { .. }
+            | Record::Haul { .. } => return,
         };
         *slot = fight;
     }

@@ -269,7 +269,12 @@ impl Game {
         }
 
         for (item, qty) in &cost {
-            crate::game::base::stock::spend_from_base(self, item, *qty);
+            crate::game::base::stock::spend_from_base(
+                self,
+                item,
+                *qty,
+                crate::base_ledger::ConsumeSource::Base,
+            );
         }
         let site = self
             .world

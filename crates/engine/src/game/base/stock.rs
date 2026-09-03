@@ -88,7 +88,12 @@ pub(crate) fn producible(game: &Game) -> impl Iterator<Item = &ItemId> {
 /// takes an item and a quantity anyway because that is what the arithmetic
 /// needs to be honest about a partial take; a caller that must have all of
 /// it checks the returned figure.
-pub(crate) fn spend_from_base(game: &mut Game, item: &ItemId, qty: u32) -> u32 {
+pub(crate) fn spend_from_base(
+    game: &mut Game,
+    item: &ItemId,
+    qty: u32,
+    source: crate::base_ledger::ConsumeSource,
+) -> u32 {
     let mut shelves: Vec<(i32, i32, Entity)> = {
         let mut query = game
             .world
@@ -108,6 +113,25 @@ pub(crate) fn spend_from_base(game: &mut Game, item: &ItemId, qty: u32) -> u32 {
             continue;
         };
         taken += crate::game::base::hauling::take_from(&mut stock, item, qty - taken);
+    }
+    // Reported here rather than at the three callers: this is where the
+    // units actually leave the shelves, and a partial take is exactly the
+    // case a caller-side figure would get wrong.
+    if taken > 0 {
+        let id = item.0.clone();
+        game.report_base(
+            crate::base_ledger::Event::Consume {
+                item: item.clone(),
+                qty: taken,
+            },
+            move |tick, zone, _| crate::telemetry::Record::Consume {
+                tick,
+                zone,
+                item: id,
+                qty: taken,
+                source: source.as_str().to_string(),
+            },
+        );
     }
     taken
 }

@@ -4,7 +4,9 @@ use super::manifest::base_job_label;
 use super::popup::*;
 use super::*;
 use feral_processes_app_core::{BaseStaffRow, ProgramRole, WorkOrderRow};
-use feral_processes_engine::{LabourDemand, OrderPriority, OrderState, WorkProfile};
+use feral_processes_engine::{
+    BaseOutputReport, BaseOutputRow, LabourDemand, OrderPriority, OrderState, WorkProfile,
+};
 
 /// One buildable structure as the build menu needs it: everything that
 /// required a `Game` to work out, already worked out.
@@ -996,6 +998,151 @@ fn assignee_vitals(a: &Assignee) -> String {
     format!("{level}{hp}")
 }
 
+/// What the base has made — the base menu's "Base output" row.
+///
+/// **Every figure comes out of `Game::base_output_report`**,
+/// `draw_companion_memories`' rule: the sector/run split, which section an
+/// item belongs in and which rows survive the cap are all decided in the
+/// engine, so this page cannot disagree with the ledger a retune was done
+/// from. `Game::attention` is reached the same way — through the report,
+/// which *calls* it rather than restating what needs the player.
+///
+/// The page does not scroll — `draw_popup` pages a `Row::Item` span and
+/// there are none here — so its height is held by
+/// `the_tallest_base_output_page_fits_its_popup` rather than by a scrollbar.
+pub(super) fn draw_base_output(
+    game: &mut Game,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let report = game.base_output_report();
+    let rows = base_output_rows(&report);
+    draw_popup("Base Output", PopupSize::Large, &rows, refusal, painter, m);
+}
+
+/// How wide the item column is. A name longer than this is cut rather than
+/// allowed to push the four figures out of their columns: the page is read
+/// down a column, and one modded name would otherwise skew every row under
+/// it.
+const OUTPUT_NAME_COLUMN: usize = 22;
+
+/// The page's rows, out of the report rather than out of a `Game` — the
+/// split `memory_page_rows` makes, and for its reason: the height and width
+/// censuses have to measure the page at its **worst** case, which is a
+/// report a fixture can state and a `Game` would have to be played into.
+pub(super) fn base_output_rows(report: &BaseOutputReport) -> Vec<Row> {
+    let mut rows = vec![Row::TextColored(
+        format!("sector {} · this run", report.zone),
+        CYAN,
+    )];
+
+    if report.mined.is_empty() && report.compiled.is_empty() {
+        rows.push(text_row("The base has not made anything yet."));
+    } else {
+        rows.push(Row::TextColored(
+            format!(
+                "  {:<width$}{:>8}{:>9}{:>8}{:>8}",
+                "",
+                "sector",
+                "machine",
+                "hand",
+                "run",
+                width = OUTPUT_NAME_COLUMN,
+            ),
+            TEXT_DIM,
+        ));
+        // Both sections carry the same four figures rather than the sector/run
+        // pair the design sketch gave MINED alone. An item sits in one
+        // section on *dominant* provenance, so a Power Cell a machine makes
+        // more of than the player does lands under MINED — and dropping the
+        // hand column there would hide exactly the units the page exists to
+        // count.
+        for (heading, section) in [("MINED", &report.mined), ("COMPILED", &report.compiled)] {
+            if section.is_empty() {
+                continue;
+            }
+            rows.push(Row::TextColored(heading.to_string(), YELLOW));
+            for row in section.iter() {
+                rows.push(text_row(base_output_line(row)));
+            }
+        }
+    }
+
+    // Every row `Game::attention` holds, never a slice of them: it caps
+    // itself at four by construction, and the page's row budget is set
+    // against that — a page that dropped the fourth would be silent about
+    // exactly the state the player opened it to act on.
+    rows.push(text_row(""));
+    for row in &report.attention {
+        rows.push(Row::TextColored(
+            format!("needs attention: {}", row.text),
+            if row.threat { RED } else { YELLOW },
+        ));
+    }
+
+    // The sentence and the key share a row because rows are what this page
+    // is short of. The sentence itself is the one thing this page is better
+    // placed to teach than any other screen: without it, a sector total that
+    // grew while the party was underground reads as a counting bug.
+    rows.push(text_row(
+        "The base works while you are away — the sector total counts that time. Esc to go back.",
+    ));
+    rows
+}
+
+/// One item's line: the name, the four figures, and the shape of the last
+/// few windows.
+fn base_output_line(row: &BaseOutputRow) -> String {
+    let name = if row.name.chars().count() > OUTPUT_NAME_COLUMN {
+        let mut cut: String = row.name.chars().take(OUTPUT_NAME_COLUMN - 1).collect();
+        cut.push('…');
+        cut
+    } else {
+        row.name.clone()
+    };
+    format!(
+        "  {:<width$}{:>8}{:>9}{:>8}{:>8}  {}",
+        name,
+        row.sector,
+        row.machine,
+        row.hand,
+        row.run,
+        spark_line(&row.spark),
+        width = OUTPUT_NAME_COLUMN,
+    )
+}
+
+/// The eight block glyphs a sparkline is drawn from, shortest first.
+///
+/// U+2581..U+2588, which DejaVu Sans Mono — the UI face, and the one every
+/// popup row is measured in — carries; the map's unscii face is never
+/// reached from a popup.
+const SPARK_BARS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+
+/// A row's recent windows as bars, scaled to **that row's own** peak.
+///
+/// Per row rather than across the page: a sparkline beside a four-figure
+/// total is being read for a shape — is this climbing or falling — and
+/// scaling every row to the busiest item on the page flattens each of the
+/// slower ones into a single flat line that says nothing.
+///
+/// The windows are the ones the ledger *kept*: a bucket with no events is
+/// never stored, so a quiet stretch closes up rather than drawing as a gap.
+fn spark_line(values: &[u32]) -> String {
+    let max = values.iter().copied().max().unwrap_or(0);
+    values
+        .iter()
+        .map(|v| {
+            if max == 0 {
+                SPARK_BARS[0]
+            } else {
+                SPARK_BARS[(*v as usize * (SPARK_BARS.len() - 1)) / max as usize]
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1753,5 +1900,189 @@ mod base_staff_tests {
             })
             .unwrap();
         assert!(head.contains("not loaded"), "{head}");
+    }
+}
+
+#[cfg(test)]
+mod base_output_tests {
+    use super::*;
+    use feral_processes_engine::items::ItemId;
+
+    /// The page at its worst: both sections full to the report's own cap,
+    /// the widest name a shipped item could carry, and every row
+    /// `Game::attention` can produce at once.
+    fn tallest_base_output_page() -> Vec<Row> {
+        use feral_processes_engine::tuning::{BASE_OUTPUT_MAX_ROWS, BASE_OUTPUT_SPARK_BUCKETS};
+        use feral_processes_engine::{AttentionKind, AttentionRow, BaseOutputRow};
+
+        let row = |i: usize| BaseOutputRow {
+            item: ItemId(format!("item_{i}")),
+            // Longer than the column, so the cut is measured rather than
+            // assumed: a modded item set is the case that reaches it.
+            name: "Singularity Matrix Mk4 Prototype".to_string(),
+            sector: 999_999,
+            run: 999_999,
+            machine: 999_999,
+            hand: 999_999,
+            spark: vec![999_999; BASE_OUTPUT_SPARK_BUCKETS],
+        };
+        let attention = |kind, text: &str, threat| AttentionRow {
+            kind,
+            text: text.to_string(),
+            key: 'b',
+            threat,
+        };
+        base_output_rows(&BaseOutputReport {
+            zone: 10,
+            mined: (0..BASE_OUTPUT_MAX_ROWS).map(row).collect(),
+            compiled: (0..BASE_OUTPUT_MAX_ROWS).map(row).collect(),
+            // All four rows `Game::attention` can hold at once, at the
+            // widest wording each of them builds.
+            attention: vec![
+                attention(
+                    AttentionKind::StructureDamaged,
+                    "Recompiler Bay damaged",
+                    true,
+                ),
+                attention(
+                    AttentionKind::IdleStructures,
+                    "12 nodes without a program",
+                    false,
+                ),
+                attention(AttentionKind::PerkPoints, "12 perk points unspent", false),
+                attention(AttentionKind::RosterFull, "roster full (12/12)", false),
+            ],
+        })
+    }
+
+    /// **The page has no scroll.** `draw_popup` pages a `Row::Item` span and
+    /// this page has none, so a row past the bottom is dropped in silence —
+    /// `the_tallest_memory_page_fits_its_popup`'s trap. Raising
+    /// `BASE_OUTPUT_MAX_ROWS` past what fits means giving the page a scroll
+    /// first.
+    ///
+    /// Swept across window heights rather than measured at one: `ui_metrics`
+    /// clamps the font at both ends, so below the clamp the box keeps
+    /// shrinking while the line height stops.
+    #[test]
+    fn the_tallest_base_output_page_fits_its_popup() {
+        let rows = tallest_base_output_page().len();
+        for h in (600..=2160).step_by(60) {
+            let m = crate::text::ui_metrics(h as f32);
+            let cap = popup_max_rows(h as f32, PopupSize::Large, &m);
+            assert!(
+                rows + REFUSAL_MAX_LINES <= cap,
+                "a full base builds a {rows}-row page into a {cap}-row popup at {h}px"
+            );
+        }
+    }
+
+    /// The other axis, and the one nothing clamps at all: `draw_row` clips a
+    /// row vertically and never horizontally, so a line past the right edge
+    /// is simply lost — and on this page the tail of a row is the run total
+    /// and the sparkline.
+    #[test]
+    fn no_base_output_row_overflows_its_popup() {
+        let rows = tallest_base_output_page();
+        crate::paint::with_painter(|p| {
+            let m = crate::text::ui_metrics(900.0);
+            // 0.88 is `PopupSize::Large`'s width fraction, against the
+            // 1440x900 geometry `ui_metrics` is calibrated for.
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            for row in &rows {
+                let line = match row {
+                    Row::Text(t) | Row::TextColored(t, _) => t,
+                    _ => continue,
+                };
+                let drawn = p.measure_ui_advance(line, m.font_size);
+                assert!(
+                    drawn <= room,
+                    "a base output row overflows the page by {:.0}px \
+                     ({drawn:.0} drawn into {room:.0} of room):\n{line}",
+                    drawn - room
+                );
+            }
+        });
+    }
+
+    /// The columns are read down, not across, so a name wider than its
+    /// column is cut rather than allowed to shift the four figures beside
+    /// it — one modded item would otherwise skew every row under it.
+    #[test]
+    fn a_long_name_is_cut_rather_than_moving_the_columns() {
+        use feral_processes_engine::BaseOutputRow;
+        use feral_processes_engine::tuning::BASE_OUTPUT_SPARK_BUCKETS;
+
+        let wide = BaseOutputRow {
+            item: ItemId("wide".to_string()),
+            name: "M".repeat(OUTPUT_NAME_COLUMN * 2),
+            sector: 1,
+            run: 2,
+            machine: 2,
+            hand: 0,
+            spark: vec![1; BASE_OUTPUT_SPARK_BUCKETS],
+        };
+        let narrow = BaseOutputRow {
+            name: "Core Fragment".to_string(),
+            ..wide.clone()
+        };
+        let (wide, narrow) = (base_output_line(&wide), base_output_line(&narrow));
+        assert!(wide.contains('…'), "the name was not cut: {wide}");
+        assert_eq!(
+            wide.chars().count(),
+            narrow.chars().count(),
+            "the cut name moved the columns:\n{wide}\n{narrow}"
+        );
+    }
+
+    /// **Both sections carry the machine/hand split**, not the sector/run
+    /// pair the design sketch gave MINED alone. An item sits in a section on
+    /// dominant provenance, so a Power Cell whose machines outproduce the
+    /// player lands under MINED — and dropping the hand column there would
+    /// hide exactly the units the page was built to count.
+    #[test]
+    fn a_mined_row_still_says_what_the_player_made_by_hand() {
+        use feral_processes_engine::BaseOutputRow;
+
+        let rows = base_output_rows(&BaseOutputReport {
+            zone: 2,
+            mined: vec![BaseOutputRow {
+                item: ItemId("power_cell".to_string()),
+                name: "Power Cell".to_string(),
+                sector: 40,
+                run: 90,
+                machine: 60,
+                hand: 30,
+                spark: Vec::new(),
+            }],
+            compiled: Vec::new(),
+            attention: Vec::new(),
+        });
+        let line = rows
+            .iter()
+            .filter_map(|r| match r {
+                Row::Text(t) | Row::TextColored(t, _) => Some(t),
+                _ => None,
+            })
+            .find(|t| t.contains("Power Cell"))
+            .expect("the mined row is drawn");
+        assert!(line.contains("60") && line.contains("30"), "{line}");
+    }
+
+    /// A base that has made nothing says so. The row is hidden from the
+    /// menu in that state (`Game::has_base_output`), but a run can spend its
+    /// last produced unit and open the page from a menu already on screen.
+    #[test]
+    fn an_empty_ledger_draws_a_sentence_rather_than_a_blank_page() {
+        let rows = base_output_rows(&BaseOutputReport {
+            zone: 1,
+            mined: Vec::new(),
+            compiled: Vec::new(),
+            attention: Vec::new(),
+        });
+        assert!(rows.iter().any(|r| match r {
+            Row::Text(t) | Row::TextColored(t, _) => t.contains("not made anything"),
+            _ => false,
+        }));
     }
 }

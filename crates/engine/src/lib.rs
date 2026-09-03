@@ -4,6 +4,7 @@ pub mod affixes;
 pub mod arena;
 pub mod balance_sim;
 pub mod base_grid;
+pub mod base_ledger;
 pub mod battle;
 pub mod caravans;
 pub mod classes;
@@ -50,6 +51,7 @@ use crate::tuning::{
 use std::collections::HashMap;
 use std::path::Path;
 
+pub use base_ledger::LootSource;
 pub use bevy_ecs::prelude::Entity;
 use bevy_ecs::prelude::*;
 use rand::rngs::StdRng;

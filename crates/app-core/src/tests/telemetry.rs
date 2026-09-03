@@ -113,6 +113,7 @@ fn an_arena_fight_still_writes_telemetry() {
 /// banned there, so `every_record_kind_round_trips` can only prove the
 /// derives are wired. These are against the real written file.
 #[test]
+
 fn each_record_is_one_json_line() {
     let path = scratch_telemetry("format");
     let mut app = app_logging_to(43, path.clone());
@@ -133,6 +134,48 @@ fn each_record_is_one_json_line() {
         lines.iter().any(|l| l.contains("\"t\":\"fight_start\"")),
         "the fight that was played has to be in there"
     );
+}
+
+/// The base records reach the same file, and their JSON is what
+/// `dev-logs/README.md` documents. **A schema nobody serialized is a
+/// schema that is wrong**: every field name here is one an analysis greps
+/// for, and the tag is `#[serde(rename_all)]`'s output rather than the
+/// variant name.
+#[test]
+fn a_base_record_writes_the_shape_the_schema_documents() {
+    let path = scratch_telemetry("base_format");
+    // The writer appends, and the scratch path outlives the process — a
+    // leftover from an earlier run would otherwise make the count wrong
+    // rather than the shape.
+    let _ = std::fs::remove_file(&path);
+    crate::app::telemetry::append_records(
+        &path,
+        &[feral_processes_engine::telemetry::Record::BaseSnapshot {
+            tick: 3000,
+            zone: 2,
+            staff: 4,
+            posted: 3,
+            machines: 5,
+            depots: 1,
+            supply: 8,
+            draw: 6,
+        }],
+    )
+    .expect("the write");
+
+    let lines = lines(&path);
+    assert_eq!(lines.len(), 1, "one record is one line");
+    let value: serde_json::Value = serde_json::from_str(&lines[0]).expect("valid JSON");
+    assert_eq!(value["t"], "base_snapshot", "{}", lines[0]);
+    for field in [
+        "tick", "zone", "staff", "posted", "machines", "depots", "supply", "draw",
+    ] {
+        assert!(
+            value.get(field).is_some(),
+            "the schema documents {field} and the record does not carry it: {}",
+            lines[0]
+        );
+    }
 }
 
 /// A dev log must never take a run down with it — the same contract

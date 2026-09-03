@@ -434,6 +434,7 @@ impl Game {
         };
         if unit_done {
             self.grant_hand_craft_unit(&item);
+            self.note_hand_craft(&item, careful, ticks_total);
             let finished = {
                 let mut job = self.world.resource_mut::<crate::resources::HandCraft>();
                 job.remaining = job.remaining.saturating_sub(1);
@@ -457,6 +458,43 @@ impl Game {
         })
     }
 
+    /// Reports one finished hand-compiled unit to the instruments.
+    ///
+    /// `Game::craft` is `begin_hand_craft` plus this loop drained to
+    /// completion, so instrumenting the timed path covers the headless one
+    /// too — there is no second seam to keep in step.
+    ///
+    /// `bench` names the machine that exists to do this job, which is the
+    /// same lookup `hand_craft_ticks` prices the wait off. It is what makes
+    /// the record answer B2: `ticks_spent` against that machine's own cycle
+    /// is exactly what the convenience costs.
+    fn note_hand_craft(&mut self, item: &ItemId, careful: bool, ticks_spent: u32) {
+        let bench = self
+            .world
+            .resource::<StructureDb>()
+            .all()
+            .find(|d| {
+                d.assembles.as_ref().is_some_and(|a| &a.item == item)
+                    || d.work.as_ref().is_some_and(|w| &w.produces == item)
+            })
+            .map(|d| d.id.clone());
+        let item_id = item.0.clone();
+        self.report_base(
+            crate::base_ledger::Event::HandCraft {
+                item: item.clone(),
+                qty: 1,
+            },
+            |tick, _zone, _| crate::telemetry::Record::HandCraft {
+                tick,
+                item: item_id,
+                qty: 1,
+                careful,
+                bench,
+                ticks_spent,
+            },
+        );
+    }
+
     /// Walks away from the compile in flight, refunding the unit that was
     /// part-way through and keeping every one already finished.
     pub fn abort_hand_craft(&mut self) {
@@ -476,9 +514,17 @@ impl Game {
                 return false;
             }
         }
-        let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
+        {
+            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
+            for (id, qty) in &cost {
+                inv.take(id.clone(), *qty);
+            }
+        }
+        // The sink the ledger was missing on the hand path: `HandCraft`
+        // folds the product and nothing else, so what a player makes
+        // themselves was produced out of units that never left.
         for (id, qty) in &cost {
-            inv.take(id.clone(), *qty);
+            self.note_consumed(id, *qty, crate::base_ledger::ConsumeSource::Craft);
         }
         true
     }

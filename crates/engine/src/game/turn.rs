@@ -3,6 +3,7 @@
 
 use crate::game::pursuit::pursuit_field;
 use crate::resources::SeenConditions;
+use crate::telemetry::Record;
 use crate::tuning::{
     NEST_AGGRO_LEASH_RADIUS, NEST_PATH_SEARCH_MARGIN, NEST_PURSUIT_STEPS_PER_TICK,
     RANDOM_ENCOUNTER_CHANCE,
@@ -240,6 +241,12 @@ impl Game {
         // player rests, but a field buff does — rest is time passing for a
         // buff, not base upkeep the player paused by staying home.
         self.tick_field_buffs();
+        // Before the clock moves, so the window a snapshot is stamped with
+        // is the one whose events follow it: `base_ledger::fold` opens a
+        // bucket at `tick - tick % BUCKET_TICKS`, and a snapshot taken after
+        // the increment would describe the base one tick into the window it
+        // is meant to head.
+        self.note_base_snapshot();
         self.world.resource_mut::<GameClock>().tick += 1;
         self.note_static_turnover(epoch_before);
     }
@@ -1115,7 +1122,24 @@ impl Game {
     /// unbounded and Research Data has no cap of its own, so this always
     /// lands `qty` in full; callers still read the return, since it's the
     /// same value they'd otherwise have to pass through by hand.
-    pub(crate) fn grant_loot(&mut self, item: ItemId, qty: u32) -> u32 {
+    ///
+    /// **`source` is the whole reason this is one door.** Eighteen callers
+    /// pass through here, and B5 — what share of a sector's Core Fragments
+    /// a Mining Node is actually worth — is unanswerable without knowing
+    /// which of them a unit came through.
+    ///
+    /// Recorded, never folded: see `telemetry::Record::Acquire`. The record
+    /// is built **before** the item is spent into the pack, so the disarmed
+    /// path allocates nothing — `Game::record`'s discipline, which a
+    /// `item.clone()` above the call would quietly undo.
+    pub(crate) fn grant_loot(&mut self, item: ItemId, qty: u32, source: LootSource) -> u32 {
+        self.record(|g| Record::Acquire {
+            tick: g.current_tick(),
+            zone: g.world.resource::<crate::resources::ZoneLevel>().0,
+            item: item.0.clone(),
+            qty,
+            source: source.as_str().to_string(),
+        });
         let player = self.player_entity();
         self.world
             .get_mut::<Inventory>(player)

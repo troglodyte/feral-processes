@@ -282,6 +282,15 @@ impl App {
         self.scroll(key, rows);
     }
 
+    /// What the base has made. Esc and nothing else: the page has no scroll
+    /// — `Game::base_output_report` caps its own rows — so there is no
+    /// highlight for the arrows to move.
+    pub(crate) fn handle_base_output_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.close_screen();
+        }
+    }
+
     /// The map closes on any key, like the help screen: it is something you
     /// glance at mid-corridor, and making the player find the right key to
     /// put it away would be friction on the one screen meant to remove some.

@@ -414,13 +414,13 @@ impl Game {
                 let qty = scope.disks();
                 let disk = ItemId::etched(ability);
                 let name = self.item_name(&disk).to_string();
-                self.grant_loot(disk, qty);
+                self.grant_loot(disk, qty, LootSource::Trade);
                 format!("{qty} × {name} goes in the pack")
             }
             MarketOfferKind::ExclusiveDisk { ability } => {
                 let disk = ItemId::etched(ability);
                 let name = self.item_name(&disk).to_string();
-                self.grant_loot(disk, 1);
+                self.grant_loot(disk, 1, LootSource::Trade);
                 format!("{name} is yours — the only one you'll see on this shelf")
             }
             MarketOfferKind::Program { species } => {

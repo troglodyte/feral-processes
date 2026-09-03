@@ -1098,6 +1098,25 @@ pub struct SaveData {
     /// legacy `0` is exactly the case the `.max` above answers.
     #[serde(default)]
     pub next_program_id: u32,
+    /// What the base has produced and consumed — see
+    /// `base_ledger::BaseLedger`. History, not derivable: nothing else in
+    /// the file records a cycle that has already happened, and the whole
+    /// point of the counters is that they outlive the machine that filled
+    /// them.
+    ///
+    /// `#[serde(default)]`, so a file written before this field existed
+    /// loads with an empty ledger and costs no `SAVE_FORMAT_VERSION` bump.
+    /// That is the truthful reading: a run recorded before the ledger
+    /// existed genuinely has no history to show.
+    ///
+    /// **Do not read the "that is why it required bumping
+    /// `SAVE_FORMAT_VERSION`" sentences elsewhere in this file as applying
+    /// here.** Those are historical and describe changes made against the
+    /// positional bincode format that pre-dates 0.8.0; the payload has been
+    /// field-named RON since, and an added field behind a default is
+    /// additive.
+    #[serde(default)]
+    pub base_ledger: crate::base_ledger::BaseLedger,
 }
 
 /// Bumped whenever `SaveData` (or anything it contains, transitively)
@@ -1415,6 +1434,7 @@ mod tests {
     fn sample_data() -> SaveData {
         SaveData {
             seed: 1,
+            base_ledger: Default::default(),
             tick: 0,
             difficulty: DifficultyMode::Forgiving,
             game_over: None,

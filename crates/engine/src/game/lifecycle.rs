@@ -285,6 +285,7 @@ impl Game {
         // and this is not saved (dev output, not run state) so `load` has
         // nothing to restore it from.
         world.insert_resource(crate::resources::BattleTelemetry::default());
+        world.insert_resource(crate::base_ledger::BaseLedger::default());
         world.insert_resource(ZoneSpawnPoint {
             x: start.0,
             y: start.1,
@@ -554,6 +555,7 @@ impl Game {
         world.insert_resource(crate::resources::PendingProfileWrites::default());
         // See `Game::new`'s copy: both doors, and nothing restores it.
         world.insert_resource(crate::resources::BattleTelemetry::default());
+        world.insert_resource(data.base_ledger.clone());
         world.insert_resource(ZoneSpawnPoint {
             x: data.spawn_point.0,
             y: data.spawn_point.1,
@@ -1866,6 +1868,10 @@ impl Game {
                 .clone(),
             work_orders: self.work_orders().to_vec(),
             next_program_id: self.world.resource::<crate::resources::NextProgramId>().0,
+            base_ledger: self
+                .world
+                .resource::<crate::base_ledger::BaseLedger>()
+                .clone(),
         };
         save::save_to_file(path, &data)
     }

@@ -772,6 +772,24 @@ impl MachineStatus {
         MachineStatus::Idle,
         MachineStatus::Unpowered,
     ];
+
+    /// The name a `telemetry::Record::MachineStall` carries.
+    ///
+    /// Its own match rather than `{:?}`, `cell_mark`'s rule turned at the
+    /// wire: the derived form is a debug aid nobody promised to keep, and
+    /// this string is what an analysis script written months after a run
+    /// greps for.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            MachineStatus::Running => "running",
+            MachineStatus::Starved => "starved",
+            MachineStatus::Clogged => "clogged",
+            MachineStatus::Unstaffed => "unstaffed",
+            MachineStatus::Stranded => "stranded",
+            MachineStatus::Idle => "idle",
+            MachineStatus::Unpowered => "unpowered",
+        }
+    }
 }
 
 /// How many ticks of charge a `StructureDef::power_upkeep` supplier has left

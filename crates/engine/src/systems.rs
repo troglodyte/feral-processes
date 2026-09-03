@@ -15,7 +15,9 @@ use crate::memories::MemoryDb;
 use crate::needs::NeedDb;
 use crate::perks::Perk;
 use crate::progression::{self, LevelGain};
-use crate::resources::{GameClock, GameRng, Locale, MessageKind, MessageLog, PowerGrid, ZoneLevel};
+use crate::resources::{
+    BattleTelemetry, GameClock, GameRng, Locale, MessageKind, MessageLog, PowerGrid, ZoneLevel,
+};
 use crate::species::{AffinityClass, SpeciesDb};
 use crate::structures::StructureDb;
 use crate::tuning::{
@@ -573,16 +575,48 @@ pub(crate) fn produced_item(def: &crate::structures::StructureDef) -> Option<&It
 /// stayed stalled, which is the fastest way to make the log useless. Shared
 /// by every producer rather than each wording its own transition check, so
 /// the "log once" property cannot hold in one system and lapse in another.
+/// What an instrument needs to name the machine a stall happened to, which
+/// its `MachineStatus` cannot say on its own.
+///
+/// A bundle rather than four more parameters, and not a bevy `SystemParam`:
+/// `power_grid_system` is **exclusive** — it holds `&mut World` and cannot
+/// take a resource parameter at all — so the shared shape has to be plain
+/// borrows the three query systems and that one can each produce.
+pub(crate) struct StallSite<'a> {
+    pub telemetry: &'a mut BattleTelemetry,
+    pub tick: u64,
+    /// The machine's own base-space tile, which is what tells one instance
+    /// of a kind from another — `Record::Extract` is keyed the same way.
+    pub machine: (i32, i32),
+    /// Its `StructureDef` id, never the display name: the name is prose and
+    /// a mod may change it, while the id is what a recipe and a build cost
+    /// are written against.
+    pub kind: &'a str,
+}
+
 pub(crate) fn set_machine_status(
     status: &mut MachineStatus,
     next: MachineStatus,
     name: &str,
     log: &mut MessageLog,
+    site: StallSite<'_>,
 ) {
     if *status == next {
         return;
     }
     *status = next;
+    // Hung on the one door that already logs **only on transition**, which
+    // is what makes the edges free: there is no duplicate suppression here
+    // to write, and no second site can start reporting a stall the log never
+    // announced.
+    crate::base_ledger::record_in_system(site.telemetry, || {
+        crate::telemetry::Record::MachineStall {
+            tick: site.tick,
+            machine: site.machine,
+            kind: site.kind.to_string(),
+            status: next.as_str().to_string(),
+        }
+    });
     log.push_base(match next {
         MachineStatus::Running => format!("The {name} resumes."),
         MachineStatus::Starved => format!("The {name} is starved — nothing is feeding it."),
@@ -715,10 +749,29 @@ fn burn_grid_upkeep(world: &mut World) {
         let Some(mut status) = world.get::<MachineStatus>(burner).copied() else {
             continue;
         };
-        {
-            let mut log = world.resource_mut::<MessageLog>();
-            set_machine_status(&mut status, next, &name, &mut log);
-        }
+        let kind = world
+            .get::<Structure>(burner)
+            .map(|s| s.kind.clone())
+            .unwrap_or_default();
+        let tick_now = world.resource::<GameClock>().tick;
+        // `resource_scope` rather than two `resource_mut` calls: the log and
+        // the telemetry buffer are both resources and an exclusive system
+        // cannot hold two mutable borrows of the world at once.
+        world.resource_scope::<MessageLog, _>(|world, mut log| {
+            let mut telemetry = world.resource_mut::<BattleTelemetry>();
+            set_machine_status(
+                &mut status,
+                next,
+                &name,
+                &mut log,
+                StallSite {
+                    telemetry: &mut telemetry,
+                    tick: tick_now,
+                    machine: tile,
+                    kind: &kind,
+                },
+            );
+        });
         if let Some(mut current) = world.get_mut::<MachineStatus>(burner) {
             *current = status;
         }
@@ -760,17 +813,33 @@ fn burn_grid_upkeep(world: &mut World) {
 /// early `continue` on `worked` would leave it reporting whatever it held
 /// before the base went short.
 pub fn idle_machine_system(
-    mut machines: Query<(Entity, &Structure, &mut MachineStatus)>,
+    mut machines: Query<(Entity, &Structure, &Position, &mut MachineStatus)>,
     tasks: Query<&Task>,
     structure_db: Res<StructureDb>,
     grid: Res<PowerGrid>,
+    clock: Res<GameClock>,
     mut log: ResMut<MessageLog>,
+    mut telemetry: ResMut<BattleTelemetry>,
 ) {
-    for (machine, structure, mut status) in &mut machines {
+    for (machine, structure, pos, mut status) in &mut machines {
         let def = structure_db.get(&structure.kind);
         let name = def.map(|d| d.name.as_str()).unwrap_or("machine");
+        // Stated at each of the two sites rather than built by a closure:
+        // the site borrows the telemetry buffer mutably, and a closure
+        // handing one out lends a capture past its own body.
         if grid.is_dark(machine) {
-            set_machine_status(&mut status, MachineStatus::Unpowered, name, &mut log);
+            set_machine_status(
+                &mut status,
+                MachineStatus::Unpowered,
+                name,
+                &mut log,
+                StallSite {
+                    telemetry: &mut telemetry,
+                    tick: clock.tick,
+                    machine: (pos.x, pos.y),
+                    kind: &structure.kind,
+                },
+            );
             continue;
         }
         // A structure that runs no job carries a status only because it can
@@ -786,7 +855,18 @@ pub fn idle_machine_system(
         if worked {
             continue;
         }
-        set_machine_status(&mut status, MachineStatus::Idle, name, &mut log);
+        set_machine_status(
+            &mut status,
+            MachineStatus::Idle,
+            name,
+            &mut log,
+            StallSite {
+                telemetry: &mut telemetry,
+                tick: clock.tick,
+                machine: (pos.x, pos.y),
+                kind: &structure.kind,
+            },
+        );
     }
 }
 
@@ -950,6 +1030,9 @@ pub fn task_progress_system(
             .and_then(|s| structure_db.get(&s.kind))
             .map(|d| d.name.as_str())
             .unwrap_or("machine");
+        // The id, not the display name: a record is read months later by a
+        // script, and `machine_name` is prose a mod may rewrite.
+        let machine_kind = structure.map(|s| s.kind.as_str()).unwrap_or("unknown");
         // The walk is only a cost because of this gate: a worker en route to
         // its post, off delivering, or standing at its machine still holding
         // a load produces nothing. `carrying` covers the arrival tick
@@ -965,7 +1048,18 @@ pub fn task_progress_system(
             } else {
                 MachineStatus::Unstaffed
             };
-            set_machine_status(&mut status, away, machine_name, &mut log);
+            set_machine_status(
+                &mut status,
+                away,
+                machine_name,
+                &mut log,
+                StallSite {
+                    telemetry: &mut instruments.telemetry,
+                    tick: tick_now,
+                    machine: (node_pos.x, node_pos.y),
+                    kind: machine_kind,
+                },
+            );
             continue;
         }
         task.progress += 1;
@@ -976,7 +1070,18 @@ pub fn task_progress_system(
             // for a machine until its first payout. `idle_machine_system`
             // now writes that baseline, so a long cycle would otherwise read
             // as idle for every tick but the one it pays out on.
-            set_machine_status(&mut status, MachineStatus::Running, machine_name, &mut log);
+            set_machine_status(
+                &mut status,
+                MachineStatus::Running,
+                machine_name,
+                &mut log,
+                StallSite {
+                    telemetry: &mut instruments.telemetry,
+                    tick: tick_now,
+                    machine: (node_pos.x, node_pos.y),
+                    kind: machine_kind,
+                },
+            );
             continue;
         }
         // Held at `required` rather than reset, so a cleared clog pays out on
@@ -984,7 +1089,18 @@ pub fn task_progress_system(
         // work was done, it just had nowhere to go.
         if stock.output_room() == 0 {
             task.progress = task.required;
-            set_machine_status(&mut status, MachineStatus::Clogged, machine_name, &mut log);
+            set_machine_status(
+                &mut status,
+                MachineStatus::Clogged,
+                machine_name,
+                &mut log,
+                StallSite {
+                    telemetry: &mut instruments.telemetry,
+                    tick: tick_now,
+                    machine: (node_pos.x, node_pos.y),
+                    kind: machine_kind,
+                },
+            );
             continue;
         }
         task.progress = 0;
@@ -1083,7 +1199,18 @@ pub fn task_progress_system(
                 event,
             )
         });
-        set_machine_status(&mut status, MachineStatus::Running, machine_name, &mut log);
+        set_machine_status(
+            &mut status,
+            MachineStatus::Running,
+            machine_name,
+            &mut log,
+            StallSite {
+                telemetry: &mut instruments.telemetry,
+                tick: tick_now,
+                machine: (node_pos.x, node_pos.y),
+                kind: machine_kind,
+            },
+        );
         let gain = if exp.level < WORK_XP_LEVEL_CAP {
             let species_growth = species_db
                 .get(&creature.species)
@@ -1224,13 +1351,27 @@ pub fn player_gather_system(
             .and_then(|s| structure_db.get(&s.kind))
             .map(|d| d.name.as_str())
             .unwrap_or("machine");
+        // The id, not the display name: a record is read months later by a
+        // script, and `machine_name` is prose a mod may rewrite.
+        let machine_kind = structure.map(|s| s.kind.as_str()).unwrap_or("unknown");
         task.progress += 1;
         if task.progress < task.required {
             continue;
         }
         if stock.output_room() == 0 {
             task.progress = task.required;
-            set_machine_status(&mut status, MachineStatus::Clogged, machine_name, &mut log);
+            set_machine_status(
+                &mut status,
+                MachineStatus::Clogged,
+                machine_name,
+                &mut log,
+                StallSite {
+                    telemetry: &mut instruments.telemetry,
+                    tick: tick_now,
+                    machine: (node_pos.x, node_pos.y),
+                    kind: machine_kind,
+                },
+            );
             continue;
         }
         task.progress = 0;
@@ -1308,7 +1449,18 @@ pub fn player_gather_system(
         instruments.emit(tick_now, zone_now, &produced, move |event| {
             extract_record(tick_now, zone_now, tile, kind, tier_level, None, event)
         });
-        set_machine_status(&mut status, MachineStatus::Running, machine_name, &mut log);
+        set_machine_status(
+            &mut status,
+            MachineStatus::Running,
+            machine_name,
+            &mut log,
+            StallSite {
+                telemetry: &mut instruments.telemetry,
+                tick: tick_now,
+                machine: (node_pos.x, node_pos.y),
+                kind: machine_kind,
+            },
+        );
         log.push_base_kind(
             MessageKind::Loot,
             format!("You extract {landed} {resource_name}."),
@@ -1390,11 +1542,27 @@ pub fn assembler_system(
         let Some(recipe) = assembly_recipe(def, &item_db) else {
             continue;
         };
+        // The telemetry buffer is a parameter beside the two the closure
+        // already takes, and for their reason: it is borrowed mutably, and
+        // capturing it would hold that borrow across every later use of
+        // `instruments` in the same loop.
         let announce = |statuses: &mut Query<&mut MachineStatus>,
                         log: &mut MessageLog,
+                        telemetry: &mut BattleTelemetry,
                         next: MachineStatus| {
             if let Ok(mut status) = statuses.get_mut(machine) {
-                set_machine_status(&mut status, next, &def.name, log);
+                set_machine_status(
+                    &mut status,
+                    next,
+                    &def.name,
+                    log,
+                    StallSite {
+                        telemetry,
+                        tick: tick_now,
+                        machine: (x, y),
+                        kind: &def.id,
+                    },
+                );
             }
         };
 
@@ -1483,14 +1651,29 @@ pub fn assembler_system(
             (fed, stock.output_room() > 0)
         };
         if !fed {
-            announce(&mut statuses, &mut log, MachineStatus::Starved);
+            announce(
+                &mut statuses,
+                &mut log,
+                &mut instruments.telemetry,
+                MachineStatus::Starved,
+            );
             continue;
         }
         if !roomy {
-            announce(&mut statuses, &mut log, MachineStatus::Clogged);
+            announce(
+                &mut statuses,
+                &mut log,
+                &mut instruments.telemetry,
+                MachineStatus::Clogged,
+            );
             continue;
         }
-        announce(&mut statuses, &mut log, MachineStatus::Running);
+        announce(
+            &mut statuses,
+            &mut log,
+            &mut instruments.telemetry,
+            MachineStatus::Running,
+        );
 
         let Ok((_, mut task)) = tasks.get_mut(worker) else {
             continue;

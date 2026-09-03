@@ -117,6 +117,7 @@ fn without_field(ron: &str, field: &str) -> String {
 mod seams {
     use super::*;
     use crate::components::{MachineStatus, Position, ResourceNode, Structure, Task, TaskKind};
+    use crate::resources::BattleTelemetry;
 
     /// A node with `level: None` skips the reliability roll entirely, so this
     /// is a payout every time rather than a seeded one — the fizzle arm has
@@ -169,6 +170,86 @@ mod seams {
         assert!(
             mined > 0,
             "a posted worker's cycles must reach the ledger, got {mined}"
+        );
+    }
+
+    /// A machine changing status is news for the log and moves no units, so
+    /// it rides `record_in_system` rather than the ledger's `emit` — and it
+    /// hangs on `set_machine_status`, which already speaks **only on
+    /// transition**. That is what makes this one record rather than one per
+    /// tick for the rest of the run.
+    #[test]
+    fn a_stall_is_recorded_once_per_transition_and_not_once_per_tick() {
+        let mut game = game(4105);
+        light_the_grid(&mut game);
+        game.world.resource_mut::<BattleTelemetry>().on = true;
+        // Nobody posted to it, which is what `idle_machine_system` reports.
+        game.world.spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 3, y: 4 },
+            ResourceNode {
+                resource: ItemId::from(ids::CORE_FRAGMENT),
+                level: None,
+            },
+            work_node_parts(),
+        ));
+
+        for _ in 0..5 {
+            game.tick();
+        }
+
+        let stalls: Vec<_> = game
+            .world
+            .resource::<BattleTelemetry>()
+            .records
+            .iter()
+            .filter_map(|r| match r {
+                crate::telemetry::Record::MachineStall {
+                    machine,
+                    kind,
+                    status,
+                    ..
+                } if *machine == (3, 4) => Some((kind.clone(), status.clone())),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            stalls,
+            vec![("mining_node".to_string(), "idle".to_string())],
+            "five ticks in one status must be one record, and it names the \
+             def id rather than the display name"
+        );
+    }
+
+    /// The other half of the discipline: the record must not be *built* when
+    /// no dev log is armed. Nothing in the compiler holds this at a bevy
+    /// seam — there is no `&Game` to hand a closure to — so it is asserted
+    /// rather than constructed.
+    #[test]
+    fn a_stall_builds_nothing_when_the_log_is_disarmed() {
+        let mut game = game(4106);
+        light_the_grid(&mut game);
+        game.world.spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 3, y: 4 },
+            ResourceNode {
+                resource: ItemId::from(ids::CORE_FRAGMENT),
+                level: None,
+            },
+            work_node_parts(),
+        ));
+
+        for _ in 0..5 {
+            game.tick();
+        }
+
+        assert!(
+            game.world.resource::<BattleTelemetry>().records.is_empty(),
+            "a disarmed log recorded a stall"
         );
     }
 

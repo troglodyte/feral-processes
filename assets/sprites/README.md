@@ -36,7 +36,11 @@ marks, so all three reach a tile without touching a sprite's pixels.
 
 The player's own drawn icon (the pixel editor, `"@drawn"` in the sprite
 table) is the sole sprite exempt from this rule, and it is drawn
-untinted. It carries its own colour from a fixed fifteen-colour palette
+untinted. It is also the one sprite nobody authors as a file: the player
+edits an **8x8 grid** (`icon::ICON_GRID`) and each cell fills a 2x2 block
+of the 16x16 texture the game uploads, which under nearest sampling is
+pixel-identical to a native 8x8 one — so the format above is untouched by
+it, and **an authored sprite is still 16x16**. It carries its own colour from a fixed fifteen-colour palette
 the player chose on the wizard's Colour step, so it has no hue to protect
 the way a near-white sprite does — this tile is the only one in the game
 that inherits none of the hues the tint exists to preserve (no species

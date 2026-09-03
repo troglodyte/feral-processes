@@ -1,4 +1,4 @@
-//! The player's 16x16 icon editor screen.
+//! The player's 8x8 icon editor screen.
 //!
 //! Drawn instead of the wizard's own popup while `App::icon_editor_view` is
 //! `Some` (see `render::draw`'s dispatch) — the wizard's Icon step opens
@@ -6,9 +6,9 @@
 //! the only thing that changes what it draws (`crates/app-core/src/app/
 //! icon_editor.rs`).
 //!
-//! **The canvas is rectangles, not a texture.** A 16x16 grid needs a
-//! per-cell rect anyway for the grid lines and the cursor, and drawing it
-//! that way is what keeps a texture from being minted on every keystroke —
+//! **The canvas is rectangles, not a texture.** The grid needs a per-cell
+//! rect anyway for the grid lines and the cursor, and drawing it that way
+//! is what keeps a texture from being minted on every keystroke —
 //! `paint::Painter::sprite`'s doc comment is the one texture this feature
 //! ever uploads, and it is Task 8's, not this screen's. Index 0 (transparent)
 //! draws `super::SCREEN_BG` — the same colour `draw` clears the window to —
@@ -17,15 +17,17 @@
 
 use super::*;
 use feral_processes_app_core::{IconEditorView, IconFocus};
-use feral_processes_engine::{ICON_PALETTE, ICON_SIZE};
+use feral_processes_engine::{ICON_GRID, ICON_PALETTE};
 
-/// A canvas cell's side, in `Metrics::line_height` units.
-const CANVAS_CELL_LINES: f32 = 1.2;
+/// A canvas cell's side, in `Metrics::line_height` units. Double what it
+/// was at 16x16: the grid halved, so a cell doubles and the canvas keeps
+/// the size both layout censuses below were verified against.
+const CANVAS_CELL_LINES: f32 = 2.4;
 /// A palette swatch's side, in the same units. Smaller than a canvas cell,
 /// because the strip is fifteen swatches and fourteen gaps wide and has to
-/// sit under a canvas that is sixteen cells: the ceiling is
-/// `(16 * CANVAS_CELL_LINES - 14 * SWATCH_GAP_LINES) / 15`, which is 1.0
-/// at the numbers above. `the_palette_strip_fits_under_the_canvas` is what
+/// sit under a canvas that is `ICON_GRID` cells: the ceiling is
+/// `(ICON_GRID * CANVAS_CELL_LINES - 14 * SWATCH_GAP_LINES) / 15`, which is
+/// 1.0 at the numbers above. `the_palette_strip_fits_under_the_canvas` is what
 /// holds it — the constant shipped at 1.4 against a comment claiming this
 /// exact rule, and nothing measured the two together.
 const SWATCH_LINES: f32 = 0.9;
@@ -44,8 +46,8 @@ const UNFOCUSED_BORDER: Color = TEXT_DIM;
 /// focus is never carried by hue alone.
 const FOCUSED_BORDER_THICKNESS: f32 = 3.0;
 
-/// Grid lines between cells — dim enough that 256 of them read as texture,
-/// not as 256 more things to look at.
+/// Grid lines between cells — dim enough that they read as texture, not as
+/// sixty-four more things to look at.
 const GRID_LINE: Color = Color::new(0.18, 0.20, 0.24, 1.0);
 
 /// The canvas cursor's outline.
@@ -94,7 +96,7 @@ fn geometry(painter: &Painter, w: f32, m: &Metrics) -> Geometry {
 
     let canvas_label_y = header_y + gap + m.line_height;
     let cell = m.line_height * CANVAS_CELL_LINES;
-    let canvas_side = cell * ICON_SIZE as f32 + m.inset * 2.0;
+    let canvas_side = cell * ICON_GRID as f32 + m.inset * 2.0;
     let canvas = Rect::new(
         (w - canvas_side) / 2.0,
         canvas_label_y + m.gap,
@@ -162,8 +164,8 @@ fn draw_header(painter: &Painter, g: &Geometry, m: &Metrics) {
     centered_ui(painter, HEADER_TEXT, g.header_y, m.title(), TEXT);
 }
 
-/// A canvas pixel's colour: the screen's own background for index 0
-/// (transparent), or the palette entry a drawn pixel names. `PlayerIcon::
+/// A canvas cell's colour: the screen's own background for index 0
+/// (transparent), or the palette entry a drawn cell names. `PlayerIcon::
 /// set` never stores an index past `ICON_PALETTE`'s length, so the
 /// non-zero arm cannot go out of bounds.
 fn cell_color(index: u8) -> Color {
@@ -197,15 +199,15 @@ fn draw_canvas(view: &IconEditorView, painter: &Painter, g: &Geometry, m: &Metri
 
     let ox = c.x + m.inset;
     let oy = c.y + m.inset;
-    let side = ICON_SIZE as f32 * g.cell;
-    for y in 0..ICON_SIZE {
-        for x in 0..ICON_SIZE {
-            let idx = view.pixels[y * ICON_SIZE + x];
+    let side = ICON_GRID as f32 * g.cell;
+    for y in 0..ICON_GRID {
+        for x in 0..ICON_GRID {
+            let idx = view.cells[y * ICON_GRID + x];
             let (px, py) = (ox + x as f32 * g.cell, oy + y as f32 * g.cell);
             painter.rect(px, py, g.cell, g.cell, cell_color(idx));
         }
     }
-    for i in 0..=ICON_SIZE {
+    for i in 0..=ICON_GRID {
         let x = ox + i as f32 * g.cell;
         painter.line(x, oy, x, oy + side, 1.0, GRID_LINE);
         let y = oy + i as f32 * g.cell;
@@ -266,7 +268,7 @@ mod tests {
 
     fn blank_view() -> IconEditorView {
         IconEditorView {
-            pixels: [0; ICON_SIZE * ICON_SIZE],
+            cells: [0; ICON_GRID * ICON_GRID],
             cursor: (0, 0),
             selected: 1,
             focus: IconFocus::Canvas,
@@ -286,9 +288,9 @@ mod tests {
     /// (possibly wrapped) footer — must fit inside 1280x720 with no
     /// scroll, since this screen has none.
     ///
-    /// **Verified by mutation**: bumping `CANVAS_CELL_LINES` from 1.2 to
-    /// 3.0 turns this red (1252.7px of content against a 720px window),
-    /// then it was reverted.
+    /// **Verified by mutation**: bumping `CANVAS_CELL_LINES` from 2.4 to
+    /// 6.0 turns this red (1174px of content against a 720px window), then
+    /// it was reverted.
     #[test]
     fn the_screen_fits_at_1280x720() {
         let m = crate::text::ui_metrics(CENSUS_H);
@@ -329,7 +331,7 @@ mod tests {
     /// **The palette sits under the canvas without growing past it** —
     /// `SWATCH_LINES`' own stated constraint, which the constant used to
     /// violate by ~120px while nothing measured it. The strip is fifteen
-    /// swatches wide against sixteen canvas cells, so the two sizes are not
+    /// swatches wide against eight canvas cells, so the two sizes are not
     /// free of each other and a comment cannot hold them in step.
     #[test]
     fn the_palette_strip_fits_under_the_canvas() {
@@ -349,13 +351,13 @@ mod tests {
 
     /// Transparent cells (index 0) must draw the screen's own background,
     /// never black — the bug the brief calls the most likely one here. A
-    /// blank canvas is 256 cells, all of them transparent.
+    /// blank canvas is 64 cells, all of them transparent.
     #[test]
     fn a_blank_canvas_draws_the_screen_background_not_black() {
         let m = crate::text::ui_metrics(900.0);
         let (_, shapes) = crate::paint::with_painter(|p| draw_icon_editor(&blank_view(), p, &m));
         assert!(
-            crate::paint::painted_rect_fill_count(&shapes, SCREEN_BG) >= ICON_SIZE * ICON_SIZE,
+            crate::paint::painted_rect_fill_count(&shapes, SCREEN_BG) >= ICON_GRID * ICON_GRID,
             "every transparent cell must be filled with the screen background"
         );
         assert_eq!(
@@ -373,7 +375,7 @@ mod tests {
         let mut view = blank_view();
         // Index 7: away from both ends of the palette and from `selected`'s
         // opening value of 1, so this cannot pass by coincidence.
-        view.pixels[0] = 7;
+        view.cells[0] = 7;
         let want = palette_color(ICON_PALETTE[6]);
 
         let m = crate::text::ui_metrics(900.0);

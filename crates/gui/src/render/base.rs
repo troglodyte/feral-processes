@@ -1398,7 +1398,7 @@ fn draw_surface_map(
                 //
                 // **Putting the hue back reads as a bug fix and is not
                 // one.** If this ever looks wrong, the answer is art
-                // authored near-white — which a hand-drawn 16x16 is not.
+                // authored near-white — which a hand-drawn icon is not.
                 let neutral = Color::new(vig, vig, vig, color.a);
                 let drew = (drawn_icon
                     && painter.sprite(

@@ -1,9 +1,12 @@
 # The player icon editor
 
 **Date:** 2026-09-03
-**Status:** approved, not implemented
+**Status:** implemented (v0.13.87), kept in `specs/` pending the usual
+archive move
+**Amended:** 2026-09-03 — the drawn grid halved to 8x8. See "The two grids"
+below; every statement in this document reflects the amendment.
 
-A 16x16 pixel editor the player draws their own map avatar in, opened from
+An 8x8 pixel editor the player draws their own map avatar in, opened from
 the character-creation wizard's Icon step. A fixed palette, keyboard only,
 persisted across runs.
 
@@ -33,13 +36,29 @@ creation state, routed at the top of the Icon step's key handler. A new
 `Mode` would cost every `Mode` census a row for a screen reachable from
 exactly one other screen.
 
+**The two grids: the player draws 8x8, the sprite stays 16x16.** The
+editor shipped on a 16x16 canvas and was halved the same day. 256 cells is
+more drawing than anyone wants to do with four arrow keys and a paint key,
+and what reads at map zoom is a silhouette rather than a portrait. The
+*sprite* did not move and must not: `assets/sprites/README.md` calls that
+format non-negotiable, `text::map_cell`'s ladder is integer multiples of
+it, and structure and entity art will land on it later. So each of the 64
+drawn cells paints a 2x2 block of the 16x16 sprite — under
+`ImageSampler::nearest()` that is pixel-identical to a native 8x8 texture,
+and it leaves the sprite seam untouched. `ICON_GRID` is what the player
+edits, `ICON_SIZE` is what the texture is, and `ICON_CELL_PIXELS =
+ICON_SIZE / ICON_GRID` is the one place the relationship is stated; every
+site that crosses between the two reads it rather than assuming a `2`.
+
 **The palette is fixed at fifteen colours, and that is a ceiling, not a
 placeholder.** Fifteen plus transparent is sixteen values, which is exactly
-one hex digit per pixel — so the palette size and the encoding are the same
-decision. A per-drawing palette the player could edit was rejected: it is a
-second editing mode on a screen that has no scroll, it doubles what the
-encoding has to carry, and at 16x16 a bounded palette is what the medium
-wants anyway.
+one hex digit per cell — so the palette size and the encoding are the same
+decision, and halving the grid did not touch it: the palette bounds what
+one *digit* can say, the grid bounds how many digits there are. A
+per-drawing palette the player could edit was rejected: it is a second
+editing mode on a screen that has no scroll, it doubles what the encoding
+has to carry, and at this size a bounded palette is what the medium wants
+anyway.
 
 **The drawn icon is drawn untinted, at the vignette's value.**
 `assets/sprites/README.md` requires authored art to be near-white because
@@ -78,8 +97,9 @@ Companions, structures and any entity but the player. A developer tool that
 writes into `assets/sprites/`. PNG import or export. Mouse input — there is
 none anywhere in the gui and `GameKey` is the whole vocabulary. A
 player-editable palette or any free-RGB picker. Flood fill, mirror or
-symmetry, layers, animation, canvas sizes other than 16x16
-(`assets/sprites/README.md`: the format is not negotiable).
+symmetry, layers, animation, and any *sprite* size other than 16x16
+(`assets/sprites/README.md`: the format is not negotiable — the drawn grid
+is a separate number, see "The two grids").
 
 ## The type
 
@@ -87,39 +107,56 @@ symmetry, layers, animation, canvas sizes other than 16x16
 
 ```rust
 /// The colours a drawn icon may use, in palette order. Fifteen, so that a
-/// pixel and its transparent zero fit one hex digit.
+/// cell and its transparent zero fit one hex digit.
 pub const ICON_PALETTE: [Rgba; 15] = [ /* ... */ ];
+
+/// The sprite's edge, in pixels. Not negotiable.
+pub const ICON_SIZE: usize = 16;
+/// The drawn grid's edge, in cells.
+pub const ICON_GRID: usize = 8;
+/// The one expression of the relationship between them.
+pub const ICON_CELL_PIXELS: usize = ICON_SIZE / ICON_GRID;
 
 pub struct PlayerIcon {
     /// Row-major from the top-left, matching the PNG layout. Each value is
     /// 0..=15: 0 is transparent, 1..=15 index `ICON_PALETTE`.
-    pixels: [u8; 256],
+    cells: [u8; ICON_GRID * ICON_GRID],
 }
 ```
 
 The palette ships as five steps of value from near-black to white and ten
 hues. The value ramp is the half that matters — shading with value is the
 discipline `assets/sprites/README.md` already asks of every sprite, and it
-is what makes a 16x16 figure read at all.
+is what makes a figure this small read at all.
 
 Index 0 being transparent is not decoration: it is the erase colour, and it
 is what lets the ground show through a drawn icon the way it shows through
 a glyph.
 
-**Encoding, `v1`:** `"v1:"` + 256 hex digits, one per pixel. 259
-characters, one line, readable in a text editor.
+**Encoding, `v2`:** `"v2:"` + 64 hex digits, one per drawn cell, row-major
+from the top-left. 67 characters, one line, readable in a text editor.
 
-Decoding is strict — wrong prefix, wrong length, or a non-hex digit all
-yield `None`. There is no partial recovery: a
-half-decoded icon is a corrupted avatar, and the fallback (the glyph) is
-already correct and already tested.
+Decoding is strict — an unknown prefix, a wrong length, or a non-hex digit
+all yield `None`. There is no partial recovery: a half-decoded icon is a
+corrupted avatar, and the fallback (the glyph) is already correct and
+already tested.
+
+**`v1` is still read, and folded rather than discarded.** A `"v1:"` payload
+is 256 digits over the old 16x16 grid; each 2x2 block folds to one cell,
+which takes **the most frequent non-transparent index in that block**, ties
+broken in reading order, an all-transparent block staying transparent.
+Sampling one corner of each block would be shorter and would delete every
+one-pixel outline a player drew; the majority rule keeps the silhouette,
+which is what survives the halving. A decoded `v1` is an ordinary
+`PlayerIcon` and re-saves as `v2` — there is no second kind of icon
+anywhere downstream.
 
 ## The editor
 
 `IconEditor` lives in app-core and owns the editing state: the
 `PlayerIcon`, a cursor, the selected colour, which of the two panels has
-focus, and an undo stack of at most 32 whole `PlayerIcon` values (256 bytes
-each, 8 KB — simpler than a diff and small enough that simple wins).
+focus, and an undo stack of at most 32 whole `PlayerIcon` values (64 bytes
+each, 2 KB — simpler than a diff and small enough that simple wins).
 
 **The screen is two panels and `Tab` moves between them.** The arrows mean
 one thing at a time — move the cursor on the canvas, or move along the
@@ -144,9 +181,12 @@ every existing key table ignores it. It is not added to `REPEATING_KEYS`:
 focus is a toggle between two panels, and holding it would flicker.
 
 **The editor screen draws its own canvas as rectangles, not as a texture.**
-A 16x16 grid at 24px needs per-cell rects anyway for the grid lines and the
-cursor, and drawing it that way means no texture is uploaded while the
-player paints. That is what keeps a texture from being minted per keystroke.
+The grid needs per-cell rects anyway for the grid lines and the cursor, and
+drawing it that way means no texture is uploaded while the player paints.
+That is what keeps a texture from being minted per keystroke. The canvas
+cell is `2.4` line-heights — double what it was at 16x16 — so the halved
+grid keeps exactly the canvas size both layout censuses were verified
+against at 1280x720, and the palette strip still fits beneath it.
 
 ## How it reaches the map
 
@@ -154,8 +194,9 @@ player paints. That is what keeps a texture from being minted per keystroke.
 rebuilt per frame like the rest of the view.
 
 The gui keeps the last icon it uploaded. Equal by value means no work.
-Different means build a `bevy::Image` from the 16x16 RGBA buffer with
-`ImageSampler::nearest()`, register it through `EguiUserTextures`, and
+Different means build a `bevy::Image` from the 16x16 RGBA buffer — each
+drawn cell expanded to its `ICON_CELL_PIXELS` block, through
+`PlayerIcon::pixel_rgba` — with `ImageSampler::nearest()`, register it through `EguiUserTextures`, and
 insert it into `SpriteTable` under a reserved key. `nearest()` is not
 optional: `sprites.rs` documents it as the whole reason pixel art stays
 crisp at zoom, because bevy_egui binds the image's own sampler and bevy's
@@ -207,10 +248,16 @@ exactly what retired save migrations.
 ## Testing
 
 **engine**
-- `v1` round-trips: a drawn icon encodes and decodes to itself.
+- `v2` round-trips: a drawn icon encodes and decodes to itself.
 - Every malformed form decodes to `None`: bad prefix, short, long,
-  non-hex.
-- `ICON_PALETTE` is fifteen long. The encoding is one hex digit per pixel,
+  non-hex — for `v2` and for `v1` on its own length.
+- `v1` folds: a block holding three of one colour and one of another takes
+  the majority (which is what fails against a decoder that samples the
+  top-left of each block), a wholly transparent block stays transparent, a
+  tie breaks in reading order, and a decoded `v1` re-encodes as `v2`.
+- The two grids divide exactly, and one drawn cell covers its whole pixel
+  block through `pixel_rgba`.
+- `ICON_PALETTE` is fifteen long. The encoding is one hex digit per cell,
   so a sixteenth colour would be unencodable — and unreachable in a way
   nothing else would report.
 - A profile carrying an unreadable icon still loads its achievements. This
@@ -225,8 +272,24 @@ exactly what retired save migrations.
   test that would have caught arrows painting while the palette has focus.
 - Undo restores the previous canvas and the stack is bounded at 32.
 - `Esc` discards and `Enter` keeps.
-- Taking a preset icon row clears the drawing.
-- The wizard opens seeded from the profile's icon.
+- Taking a preset icon row clears the drawing on the *choice*, and does
+  not erase the profile's stored one.
+- The wizard opens seeded from the profile's icon, `v1` and `v2` alike —
+  a `v1` profile seeds the folded 8x8 figure, which is the only place a
+  player would ever see the fold.
+- Keeping an all-transparent canvas is not a drawing. Decided at the
+  `Keep` arm; the upload's filter stays as defence in depth.
+
+**gui**
+- The upload expands each drawn cell to its `ICON_CELL_PIXELS` block,
+  asserted on the texture's actual bytes: a lit cell is exactly one 2x2
+  square of opaque pixels at twice its coordinates, and its neighbours
+  stay bare.
+- `ImageSampler::nearest()` is on the uploaded image — the one line
+  nothing on screen reports.
+- The whole screen fits 1280x720 with no scroll, **measured at 1280**
+  rather than at the painter's fixed 1440, and the palette strip fits
+  under the canvas. Both verified by mutation, not by inspection.
 
 **gui**
 - A texture is built from raw pixels and drawn, asserting the mesh *and*

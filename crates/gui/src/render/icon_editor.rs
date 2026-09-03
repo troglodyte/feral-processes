@@ -21,10 +21,14 @@ use feral_processes_engine::{ICON_PALETTE, ICON_SIZE};
 
 /// A canvas cell's side, in `Metrics::line_height` units.
 const CANVAS_CELL_LINES: f32 = 1.2;
-/// A palette swatch's side, in the same units. Smaller than a canvas cell —
-/// the strip is fifteen wide and has to sit under the canvas without
-/// growing past it.
-const SWATCH_LINES: f32 = 1.4;
+/// A palette swatch's side, in the same units. Smaller than a canvas cell,
+/// because the strip is fifteen swatches and fourteen gaps wide and has to
+/// sit under a canvas that is sixteen cells: the ceiling is
+/// `(16 * CANVAS_CELL_LINES - 14 * SWATCH_GAP_LINES) / 15`, which is 1.0
+/// at the numbers above. `the_palette_strip_fits_under_the_canvas` is what
+/// holds it — the constant shipped at 1.4 against a comment claiming this
+/// exact rule, and nothing measured the two together.
+const SWATCH_LINES: f32 = 0.9;
 /// Gap between two palette swatches, in `Metrics::line_height` units.
 const SWATCH_GAP_LINES: f32 = 0.3;
 /// Vertical gap between the screen's blocks (header, each panel's caption,
@@ -76,8 +80,14 @@ struct Geometry {
     footer_lines: Vec<String>,
 }
 
-fn geometry(painter: &Painter, m: &Metrics) -> Geometry {
-    let w = painter.screen_w();
+/// `w` is the window width rather than `painter.screen_w()` so the layout
+/// census below can measure the window the game is built for. `paint::
+/// with_painter` hard-codes a 1440x900 screen rect, so a census that read
+/// the width off the painter would measure "metrics for a 720-tall window
+/// laid out 1440 wide" — the footer's column count, and so how many lines
+/// it wraps to, comes off this number. `frame_map::layout` takes its
+/// window the same way, for the same reason.
+fn geometry(painter: &Painter, w: f32, m: &Metrics) -> Geometry {
     let gap = m.line_height * SECTION_GAP_LINES;
 
     let header_y = m.pad + m.line_height;
@@ -136,7 +146,7 @@ fn content_bottom(g: &Geometry, m: &Metrics) -> f32 {
 }
 
 pub(super) fn draw_icon_editor(view: &IconEditorView, painter: &Painter, m: &Metrics) {
-    let g = geometry(painter, m);
+    let g = geometry(painter, painter.screen_w(), m);
     draw_header(painter, &g, m);
     draw_canvas(view, painter, &g, m);
     draw_palette(view, painter, &g, m);
@@ -263,25 +273,33 @@ mod tests {
         }
     }
 
+    /// The smallest window the game is built for, and the one both
+    /// censuses below measure. Passed into `geometry` rather than read off
+    /// the painter, whose `screen_rect` is a fixed 1440x900 — a census that
+    /// took the width from there measured a wider footer than the real
+    /// screen has and could stay green while 1280 grew a line.
+    const CENSUS_W: f32 = 1280.0;
+    const CENSUS_H: f32 = 720.0;
+
     /// **The layout census this task exists for.** Every block — header,
     /// both panel captions, the canvas, the palette and the whole
     /// (possibly wrapped) footer — must fit inside 1280x720 with no
     /// scroll, since this screen has none.
     ///
     /// **Verified by mutation**: bumping `CANVAS_CELL_LINES` from 1.2 to
-    /// 3.0 turns this red (measured 1252.7px against a 720px window; see
-    /// the task's own report for the transcript), then it was reverted.
+    /// 3.0 turns this red (1252.7px of content against a 720px window),
+    /// then it was reverted.
     #[test]
     fn the_screen_fits_at_1280x720() {
-        let m = crate::text::ui_metrics(720.0);
+        let m = crate::text::ui_metrics(CENSUS_H);
         let ((bottom, lines), _shapes) = crate::paint::with_painter(|p| {
-            let g = geometry(p, &m);
+            let g = geometry(p, CENSUS_W, &m);
             (content_bottom(&g, &m), g.footer_lines.len())
         });
         assert!(
-            bottom < 720.0,
+            bottom < CENSUS_H,
             "the icon editor draws {bottom}px of content ({lines} footer lines) \
-             in a 720px window — this screen has no scroll"
+             in a {CENSUS_H}px window — this screen has no scroll"
         );
     }
 
@@ -289,22 +307,43 @@ mod tests {
     /// height census above cannot see.
     #[test]
     fn the_screen_fits_1280_wide() {
-        let m = crate::text::ui_metrics(720.0);
+        let m = crate::text::ui_metrics(CENSUS_H);
         crate::paint::with_painter(|p| {
-            let g = geometry(p, &m);
+            let g = geometry(p, CENSUS_W, &m);
             for (name, rect) in [("canvas", g.canvas), ("palette", g.palette)] {
                 assert!(
-                    rect.x >= 0.0 && rect.x + rect.w <= 1280.0,
-                    "{name} panel runs off a 1280px window: {rect:?}"
+                    rect.x >= 0.0 && rect.x + rect.w <= CENSUS_W,
+                    "{name} panel runs off a {CENSUS_W}px window: {rect:?}"
                 );
             }
             for line in &g.footer_lines {
                 let width = p.measure_ui_advance(line, m.small());
                 assert!(
-                    width <= 1280.0,
-                    "a footer line is {width}px wide in a 1280px window: {line:?}"
+                    width <= CENSUS_W,
+                    "a footer line is {width}px wide in a {CENSUS_W}px window: {line:?}"
                 );
             }
+        });
+    }
+
+    /// **The palette sits under the canvas without growing past it** —
+    /// `SWATCH_LINES`' own stated constraint, which the constant used to
+    /// violate by ~120px while nothing measured it. The strip is fifteen
+    /// swatches wide against sixteen canvas cells, so the two sizes are not
+    /// free of each other and a comment cannot hold them in step.
+    #[test]
+    fn the_palette_strip_fits_under_the_canvas() {
+        let m = crate::text::ui_metrics(CENSUS_H);
+        crate::paint::with_painter(|p| {
+            let g = geometry(p, CENSUS_W, &m);
+            assert!(
+                g.palette.w <= g.canvas.w,
+                "the palette is {}px wide under a {}px canvas — it overhangs \
+                 by {}px on each side",
+                g.palette.w,
+                g.canvas.w,
+                (g.palette.w - g.canvas.w) / 2.0
+            );
         });
     }
 

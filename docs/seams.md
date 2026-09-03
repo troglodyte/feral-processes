@@ -9727,3 +9727,139 @@ and several tests read it as a pure function of level.
 `an_invoker_carries_more_routine_slots_at_every_level_including_the_cap`
 asserts at levels 1, 5, 25 and 40 for that reason — a test at level 1
 alone passes under both designs.
+
+### One emission, two consumers: the counter is a reader of the event, not a sibling of it
+
+Base instrumentation has to serve two readers who must never disagree. The
+player's screen wants "what has my base made for me"; a retune wants the same
+numbers with enough structure to answer *why*. The tempting shape is to
+increment a counter at each production seam and, beside it, build a log
+record. That is two copies of one rule, and `CLAUDE.md`'s doc-comment rule
+applies verbatim: the copy that drifts is the one nobody runs, and here the
+one nobody runs is the player's screen quietly contradicting the analysis a
+balance change was made from.
+
+So there is one door, `base_ledger::emit`. It folds into the ledger
+unconditionally and appends a record only when a dev log is armed. A seam
+calls it once and cannot report one half without the other.
+
+The two halves are deliberately asymmetric in cost. The fold is a `BTreeMap`
+increment per production *cycle* — affordable, and paid by every player. The
+record is several `String` allocations and is built inside a closure that a
+disarmed run never calls. `Game::record`'s discipline reaches the seams that
+have a `Game`; the bevy seams have no `&Game` to hand a closure to, so they
+take the resources directly and **nothing in the compiler keeps them
+honest**. `a_stall_builds_nothing_when_the_log_is_disarmed` is that property
+asserted rather than constructed, and it is the test to keep.
+
+`Game::report_base` exists because `emit` wants both resources at once and a
+`&mut World` lends one at a time. Every `Game`-side site was otherwise
+writing the same eight-line `resource_scope` dance — five of them by the end
+of the work.
+
+### A source is recorded and never folded; a sink is both
+
+`Record::Acquire` names where a unit came from — a kill, base rock, a cache,
+a contract, a purchase, a refund, an etched disk. `Record::Consume` names
+where one went — fuel, a build, the base's own shelves, a hand-compile, an
+install, a breach.
+
+They are treated differently on purpose. A **sink** folds into the ledger,
+because a sink is the other half of the ledger's own arithmetic: without it
+the produced side is a stream with no drain, and an assembler's inputs look
+like the only thing a base ever spends. A **source** does not fold, and must
+not. The ledger feeds `Mode::BaseOutput`, whose whole MINED/COMPILED split is
+a claim about what the *base* made; a kill's Core Fragments counted there
+would read on the page as a machine's work, which is exactly the confusion
+the split exists to prevent. What a source answers — what share of a sector's
+fragments a Mining Node is actually worth against every competing supply — is
+an analysis question and lives in the log alone.
+
+`grant_loot` is what makes the source cheap: eighteen callers, one door, so
+provenance is one parameter rather than eighteen new seams. `LootSource` and
+`ConsumeSource` are enums with one `as_str` each, `MachineStatus::as_str`'s
+reason — a mistyped tag at one of eighteen sites would invent a source no
+analysis would ever notice was wrong.
+
+### A machine's stall hangs on `set_machine_status`, and that is what makes the edges free
+
+`set_machine_status` already speaks only on transition — three callers, the
+rule stated once. Hanging `Record::MachineStall` there means there is no
+duplicate suppression to write and no way for a site to report a stall the
+base log never announced. The alternative, a per-tick status dump, is a row
+per machine per tick for the whole of a run and answers the same question
+worse: what B4 needs is transitions to `Clogged` per 1,000 ticks rising with
+zone, which is an edge count.
+
+`StallSite` is a bundle rather than four more parameters, and deliberately
+not a bevy `SystemParam`: `power_grid_system` is exclusive, holds
+`&mut World`, and can take no resource parameter at all. The shared shape has
+to be plain borrows every caller can produce. It carries the def **id** and
+not the display name — a record is read months later by a script, while a
+name is prose a mod may rewrite.
+
+### The snapshot is the denominator, and it is built inside the closure
+
+Every other base record is a count. `Record::BaseSnapshot` is what to divide
+by: staff, posted, machines, depots, supply and draw, once per
+`base_ledger::BUCKET_TICKS`. Without it every rate in the log is an absolute
+— units per what? — and B7 is a question about rate per *posted program*. It
+is also the only source of ticks-per-sector, which calibrates every
+tick-denominated figure in the audit this work descends from.
+
+It costs a pass over every entity, which is exactly why the counts are built
+inside `Game::record`'s closure rather than above it: a disarmed run must not
+pay for a full base census every thousand ticks. That forces `iter_entities`
+over `World::query`, which wants `&mut World` — the `&Game` the closure holds
+is what makes the laziness possible at all.
+
+Stamped with the tick that *opens* the window and taken before the clock
+advances, so a snapshot heads the window whose events follow it rather than
+describing the base one tick into it. Machines and depots key on
+`runs_a_job` and `stores`, never on an id, so a modded structure counts.
+
+### A haul is keyed to the post, and a `Tend` writes nothing
+
+`Record::Haul` carries the errand, what moved and the Chebyshev distance from
+the post — the corrected B3 made measurable. The published audit claimed a
+machine can only be fed by its four orthogonal neighbours; it cannot,
+`Errand::Collect` walks to a Depot, so adjacency is a throughput *multiplier*
+and any layout works. What it costs falls on the **extractor** rather than
+the assembler: `task_progress_system` gates on `at_station`, so a producer
+makes nothing while its worker walks, while a consumer keeps working off its
+hopper.
+
+Keyed to the machine's tile and not the worker's, because by the time an
+errand acts the two are the same place and what an analysis groups by is the
+machine. A `Tend` — standing at the post with nothing to move — writes
+nothing at all, or a busy base logs a row per tick for re-deciding the same
+errand, and `qty` is what actually moved rather than what was wanted: a Depot
+that filled or emptied while the worker walked moves less.
+
+### The base output page is one derivation, and its row count is a layout constraint
+
+`Game::base_output_report` is the only thing `Mode::BaseOutput` reads, so a
+renderer cannot invent a figure or disagree with the ledger a retune was done
+from — and `Game::attention` is reached *through* it rather than recomputed,
+since a fourth surface working out its own answer is the drift that seam
+exists to prevent.
+
+Two decisions inside it are not obvious. The MINED/COMPILED split follows
+**how a unit was actually made**, never a def lookup: a Power Cell has a
+`work` structure that produces it *and* is hand-compilable, so keying on the
+def files every unit the player pressed out by hand under MINED — which is
+precisely the figure the page exists to expose. And an item gets one row on
+dominant provenance rather than a row in each section, because two rows for
+one item split the totals and leave neither answering "how much have I made".
+
+The page has no scroll, so `BASE_OUTPUT_MAX_ROWS` is a layout constraint
+rather than a preference. A `PopupSize::Large` holds 21 rows at 600px once a
+refusal's two lines are reserved, and the page's own chrome — the sector
+line, the column header, two section headings, a blank, the four rows
+`Game::attention` can hold at once and a footer — spends ten of them. Raising
+it means giving the page a scroll first;
+`the_tallest_base_output_page_fits_its_popup` is the gate. Both sections
+carry all four figures rather than the sector/run pair the design sketch gave
+MINED alone, because dominant provenance puts a machine-dominated Power Cell
+under MINED and dropping the hand column there hides the units that motivate
+the whole instrument.

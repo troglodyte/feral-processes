@@ -33,6 +33,22 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.84
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+the ledger is an additive `#[serde(default)]` field, so a save written before
+it existed loads with an empty one, which is exactly what that run recorded.
+
+- **The base tells you what it has made for you**, on a new "Base output" row
+  in the base menu: one line per item, the sector's total beside the run's,
+  and what a machine made beside what you made by hand.
+- **Every extract, compile, stall, haul and unit that entered or left the run
+  is recorded when `FERAL_DEV_LOG` is set**, through one door that also feeds
+  the player's screen — so the page and the analysis a retune is done from
+  cannot disagree about what happened.
+- **`dev-logs/README.md` documents all eight base records**, with the `jq`
+  recipes for the questions they were added to answer.
+
 ## 0.13.83
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32.

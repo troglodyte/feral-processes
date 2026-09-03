@@ -333,3 +333,29 @@ fn tick_rate_divides_a_real_second_exactly() {
          so the world runs at a rate the constant does not claim"
     );
 }
+
+/// Nothing on the map screen consumes `GameKey::Tab` yet — the icon editor
+/// (Task 5) is its first reader. Pinned here so that landing this key stays
+/// additive: `handle_playing_key`'s top match falls through to `_ => {}` for
+/// it today, and `current_tick` unmoved is this codebase's own definition of
+/// "no action happened" (see `stepped`, above in this file's sibling
+/// `playing.rs` in `app-core/src/app/`).
+#[test]
+fn tab_is_inert_on_the_map_screen() {
+    let mut app = test_app(9105);
+    assert_eq!(app.mode, Mode::Playing);
+    let before_tick = app.game.as_ref().unwrap().current_tick();
+
+    app.handle_key(GameKey::Tab);
+
+    assert_eq!(
+        app.mode,
+        Mode::Playing,
+        "Tab must not open or change a mode"
+    );
+    assert_eq!(
+        app.game.as_ref().unwrap().current_tick(),
+        before_tick,
+        "Tab must spend no tick — nothing reads it yet"
+    );
+}

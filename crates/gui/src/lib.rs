@@ -44,6 +44,7 @@ fn map_special_key(key: KeyCode) -> Option<GameKey> {
         KeyCode::Enter | KeyCode::NumpadEnter => Some(GameKey::Enter),
         KeyCode::Escape => Some(GameKey::Esc),
         KeyCode::Backspace => Some(GameKey::Backspace),
+        KeyCode::Tab => Some(GameKey::Tab),
         _ => None,
     }
 }
@@ -87,15 +88,17 @@ fn with_modifiers(key: GameKey, shift: bool, ctrl: bool) -> GameKey {
     }
 }
 
-/// Edge-triggered: these commit or cancel, and a held Escape unwinding
-/// several modes at once is nobody's intent. `ButtonInput` gives that for
-/// free — see the note in `keys.rs` on why the OS auto-repeat doesn't reach
-/// `just_pressed`.
+/// Edge-triggered: these commit or cancel, or — Tab — toggle, and a held
+/// Escape unwinding several modes at once is nobody's intent any more than
+/// a held Tab flickering focus back and forth is. `ButtonInput` gives that
+/// for free — see the note in `keys.rs` on why the OS auto-repeat doesn't
+/// reach `just_pressed`.
 const SPECIAL_KEYS: &[KeyCode] = &[
     KeyCode::Enter,
     KeyCode::NumpadEnter,
     KeyCode::Escape,
     KeyCode::Backspace,
+    KeyCode::Tab,
 ];
 
 const DEFAULT_VOLUME: f32 = 0.2;
@@ -1075,6 +1078,7 @@ mod tests {
             GameKey::Enter,
             GameKey::Esc,
             GameKey::Backspace,
+            GameKey::Tab,
             GameKey::Char('c'),
         ] {
             assert_eq!(
@@ -1083,6 +1087,24 @@ mod tests {
                 "{untouched:?} must survive a held modifier unchanged"
             );
         }
+    }
+
+    /// The icon editor (Task 5) reads `GameKey::Tab` to move focus between
+    /// its canvas and its palette. Pinned on its own rather than folded into
+    /// `every_polled_key_maps_to_a_game_key` alone, because that census only
+    /// proves *some* `GameKey` comes back — this proves it's the right one.
+    #[test]
+    fn tab_maps_to_game_key_tab() {
+        assert_eq!(map_special_key(KeyCode::Tab), Some(GameKey::Tab));
+    }
+
+    /// `Tab` is a toggle between two panels, not a movement key — holding it
+    /// must not repeat, so it belongs in `SPECIAL_KEYS` (edge-triggered) and
+    /// never in `REPEATING_KEYS`. A `REPEATING_KEYS` entry would flicker
+    /// focus back and forth for as long as the key stayed down.
+    #[test]
+    fn tab_is_not_a_repeating_key() {
+        assert!(!REPEATING_KEYS.contains(&KeyCode::Tab));
     }
 
     /// The four repeating keys must be the four directions and nothing else:

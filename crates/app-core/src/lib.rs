@@ -659,6 +659,12 @@ pub enum GameKey {
     Enter,
     Esc,
     Backspace,
+    /// Moves focus between two panels — first read by the icon editor's
+    /// canvas/palette split. A physical gesture like every other variant
+    /// here, and edge-triggered by every frontend that sends it: a toggle
+    /// between two panels would flicker for as long as the key was held, so
+    /// nothing repeats it the way the four directions repeat.
+    Tab,
 }
 
 /// A cue for a frontend to play a sound effect for — pushed by `App` as it

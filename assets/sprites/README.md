@@ -20,12 +20,17 @@ factor at some zoom and will blur. `the_shipped_sprites_are_one_cell` in
 
 The renderer hands egui the same `Color` the glyph path would have used,
 as a **tint**, and an egui tint *multiplies*. A white sprite therefore
-keeps everything that already colours a glyph — `difficulty_color`, the
-nemesis and boss overrides, `biome_tint`, the damage dimming — working
-untouched, for free.
+keeps everything that already colours a glyph — the species' own authored
+hue, `biome_tint`, the damage dimming — working untouched, for free.
 
-A sprite that carries its own colour fights all of them: a red sprite
-under a green con-colour goes black. Shade with **value**, not hue.
+A sprite that carries its own colour fights all of them: a red sprite for
+a species authored green goes black. Shade with **value**, not hue.
+
+The con read is **not** one of them any more. It used to replace a
+hostile's glyph colour outright, which made this rule far sharper — art had
+to survive being multiplied by anything from green through red. It is a bar
+along the bottom edge of the tile now, and a boss and a nemesis wear corner
+marks, so all three reach a tile without touching a sprite's pixels.
 
 ## Fallback
 

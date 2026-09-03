@@ -5588,23 +5588,52 @@ generation must not draw from `resources::GameRng`" above makes the same
 argument for a Stack frame's own seed; this is the battle-teardown
 instance of the identical trap.
 
-### The glyph's colour is no longer reserved for `difficulty_color` alone
+### A tile says three things on three channels, and the glyph is the one that says *what*
 
-**The glyph's colour is no longer reserved for `difficulty_color` alone.**
-`EntityView::rarity`'s doc used to say the map draws a rare tier as a bar
-rather than a recolour "because `color` is already carrying
-`difficulty_color`... and the glyph can only hold one" reading — true when
-written, and it is why rarity still never touches the glyph. A nemesis is
-the exception, added on purpose: `difficulty_color` takes a fourth
-parameter, `is_nemesis`, checked *before* `is_boss` so a program that is
-both draws as a nemesis. The precedent is `is_boss`'s own always-magenta
-override — this is a second non-power reading winning the same channel,
-not a new kind of exception. What makes spending the con read acceptable
-here and nowhere else: a nemesis is a program you have already fought, so
-"can I win this fight" is the least informative thing left for its tile to
-say. `crates/gui/src/render/base.rs` draws a second, independent corner
-mark for the same fact, so the read survives even for a player who reads
-shape before hue.
+**A tile says three things on three channels, and the glyph is the one that
+says *what*.** `game::inspection::difficulty_color` used to *replace*
+`EntityView::color` for a hostile, so a program's authored hue — the only
+thing on the map that says what it is — was spent saying how dangerous it
+is. `EntityView::rarity`'s doc recorded the consequence honestly: a rare
+tier takes a bar along the top edge "because `color` is already carrying
+`difficulty_color`... and the glyph can only hold one" reading.
+
+Two facts made that worse than a straight trade. A boss returned Magenta
+and a nemesis Blue, *instead of* a rung — so on exactly the two tiles where
+"can I win this fight" matters most, the map stopped answering it. And
+being both drew one fact and dropped the other, since `is_nemesis` was
+checked first and won.
+
+The con read moves to a bar along the **bottom** edge, `RARITY_BAR_PX`
+thick and full width — the rarity bar's mirror, so the two derived readings
+frame the tile and the glyph between them is free again. Identity rides
+corner marks: the nemesis mark that already existed as belt-and-braces, and
+a new boss mark in the opposite corner. A creature that is both now wears
+both **and** keeps its rung. Three readings, three channels, nothing spent.
+
+`difficulty_color` loses its `is_boss`/`is_nemesis` parameters entirely and
+answers one question. `EntityView::difficulty` is `Option<GlyphColor>` and
+is `None` for everything that is not hostile — *no reading*, not a reading
+worth nothing, because a bar under a companion would say the player can
+beat their own program.
+
+Three geometry decisions are load-bearing and none would fail to compile.
+`staffed_mark_rect` was extracted from the tile loop because the bottom
+edge now has a bar to clear, and the test that pinned its clearance
+hand-copied the arithmetic — the copy that drifts. Its lift is
+`Fx::staffed_bob`, so a missing offset is invisible while a machine is
+worked and shows only at rest, and for a stranded mark, which never bobs at
+all. And the boss mark takes the **bottom**-right rather than the free
+top-left corner on a colour argument: under the rarity bar its magenta sits
+0.391 from Prismatic, where the con rungs beneath it are all warm and none
+nearer than 0.718.
+
+The boss mark keeps the magenta a boss already wore, so the fact reads the
+same after moving off the glyph. Blue — the nemesis's vacated hue — is the
+obvious alternative and is exactly `CUTTING_OUTLINE` (`palette::PLAN`,
+`0x4a7fd0`), which the census holding the mark apart from every other mark
+on a tile fails at distance 0. That census is what says the mark is not any
+of the eleven other things a tile can be wearing at once.
 
 ### There are four doors into the roster, and `Game::roster_parts()` is the only barrier
 

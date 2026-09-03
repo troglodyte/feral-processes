@@ -20,7 +20,8 @@
 //! own doc comment.
 
 use super::popup::{
-    PopupSize, Row, colored_item_row, draw_popup, item_row, popup_rect, text_row, with_icon,
+    PopupSize, Row, colored_item_row, description_rows, draw_popup, item_row, popup_rect, text_row,
+    with_icon,
 };
 use super::*;
 use feral_processes_app_core::{CreationRow, CreationStep};
@@ -133,6 +134,18 @@ fn step_rows(app: &App, step: CreationStep) -> Vec<Row> {
         drawn.push(text_row(""));
         drawn.push(text_row(row.description.clone()));
     }
+    // The Colour step explains itself once a drawing exists — the drawn
+    // icon then owns the map tile and the swatch stops meaning what every
+    // row above it still promises. `App::creation_colour_note` is the
+    // engine's sentence (Task 6); wrapped and indented like the Perks
+    // description above it, since it runs well past one row at
+    // `PopupSize::Large`.
+    if step == CreationStep::Colour
+        && let Some(note) = app.creation_colour_note()
+    {
+        drawn.push(text_row(""));
+        drawn.extend(description_rows(&note));
+    }
     drawn.push(text_row(""));
     drawn.push(text_row(footer(app, step)));
     drawn
@@ -172,6 +185,12 @@ fn build_row(step: CreationStep, row: &CreationRow, i: usize, selected: bool) ->
         CreationRow::Colour { index } => {
             with_icon(base, '@', hud::palette::PLAYER_CHOICES[*index as usize])
         }
+        // A solid square for a drawing that exists, an outline for one
+        // that does not — the row's own words already say "Your drawing"
+        // or "Draw your own…", so this is the glyph-slot preview every
+        // other Icon/Colour row carries, not a second place saying it.
+        CreationRow::DrawnIcon { drawn: true } => with_icon(base, '■', TEXT),
+        CreationRow::DrawnIcon { drawn: false } => with_icon(base, '□', TEXT_DIM),
         _ => base,
     }
 }
@@ -371,6 +390,42 @@ fn draw_look_preview(choice: &CharacterChoice, painter: &Painter, cell: Rect, m:
 mod tests {
     use super::*;
     use feral_processes_app_core::{CREATION_COLOURS, GameKey};
+
+    /// **Task 7's decoration for the sixth Icon-step row.** `row_line`
+    /// (Task 6) already gives `CreationRow::DrawnIcon` its words; this is
+    /// the row's icon slot, the one `build_row`'s decoration match used to
+    /// leave at `_ => base` — undrawn. Drawn and undrawn must look
+    /// different from each other, the same promise every other Icon/Colour
+    /// row on this step makes.
+    #[test]
+    fn the_drawn_icon_row_carries_a_preview_that_differs_by_state() {
+        let drawn = build_row(
+            CreationStep::Icon,
+            &CreationRow::DrawnIcon { drawn: true },
+            5,
+            false,
+        );
+        let undrawn = build_row(
+            CreationStep::Icon,
+            &CreationRow::DrawnIcon { drawn: false },
+            5,
+            false,
+        );
+        let icon_of = |row: Row| match row {
+            Row::Item { icon, .. } => icon,
+            _ => None,
+        };
+        let (drawn_icon, undrawn_icon) = (icon_of(drawn), icon_of(undrawn));
+        assert!(
+            drawn_icon.is_some() && undrawn_icon.is_some(),
+            "both states must carry a preview icon, not just words"
+        );
+        assert_ne!(
+            drawn_icon.map(|(g, _)| g),
+            undrawn_icon.map(|(g, _)| g),
+            "a drawn and an undrawn preview must not look identical"
+        );
+    }
 
     /// `CREATION_COLOURS` is app-core's count of a table only this crate
     /// holds, so nothing but this can hold the two in step. A wizard
@@ -930,6 +985,63 @@ mod tests {
         assert!(
             !glyphs.iter().any(|(g, _)| g == "@"),
             "the '@' must give way to the sprite, not sit under it: {glyphs:?}"
+        );
+    }
+
+    /// **Task 7's other carried-forward item.** `App::creation_colour_note`
+    /// (Task 6) was implemented and tested in app-core but wired into no
+    /// gui screen. Once a drawing exists, the Colour step must draw it.
+    #[test]
+    fn the_colour_step_draws_the_drawn_icon_note() {
+        let mut app = wizard_app();
+        for step in CreationStep::ALL.iter().take(4) {
+            walk_past(&mut app, *step);
+        }
+        assert_eq!(app.creation_step(), CreationStep::Icon);
+
+        // The sixth row opens the editor; one painted pixel and `Enter`
+        // keeps it, landing on Colour with a real drawing on the choice.
+        while app.menu_selected != app.creation_rows().len() - 1 {
+            app.handle_key(GameKey::Down);
+        }
+        app.handle_key(GameKey::Enter);
+        assert!(app.icon_editor_view().is_some(), "the editor did not open");
+        app.handle_key(GameKey::Char(' '));
+        app.handle_key(GameKey::Enter);
+        assert_eq!(app.creation_step(), CreationStep::Colour);
+        assert!(
+            app.creation_choice().icon.is_some(),
+            "keeping the drawing must land it on the choice"
+        );
+
+        let m = ui_metrics(900.0);
+        let (_, shapes) = crate::paint::with_painter(|p| draw_create_character(&app, None, p, &m));
+        let drawn: String = crate::paint::painted_text(&shapes).join(" ");
+        assert!(
+            drawn.contains("glyph"),
+            "the Colour step must draw creation_colour_note() once an icon \
+             is drawn: {drawn:?}"
+        );
+    }
+
+    /// ...and the ordinary case — no drawing — must not show it, or the
+    /// note would sit on every fresh wizard's Colour step for no reason.
+    #[test]
+    fn the_colour_step_stays_quiet_with_no_drawn_icon() {
+        let mut app = wizard_app();
+        for step in CreationStep::ALL.iter().take(4) {
+            walk_past(&mut app, *step);
+        }
+        walk_past(&mut app, CreationStep::Icon);
+        assert_eq!(app.creation_step(), CreationStep::Colour);
+        assert!(app.creation_choice().icon.is_none());
+
+        let m = ui_metrics(900.0);
+        let (_, shapes) = crate::paint::with_painter(|p| draw_create_character(&app, None, p, &m));
+        let drawn: String = crate::paint::painted_text(&shapes).join(" ");
+        assert!(
+            !drawn.contains("glyph"),
+            "no drawing means no note: {drawn:?}"
         );
     }
 }

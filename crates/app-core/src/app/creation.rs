@@ -459,6 +459,18 @@ impl App {
     /// `app::icon_editor`), so this is the one door it can intercept
     /// through — Esc included, which would otherwise walk the wizard back a
     /// step instead of reaching `IconEditor::handle_key`'s own Esc.
+    ///
+    /// **An all-transparent canvas is not a drawing**, and that is decided
+    /// here rather than at each surface that asks. `CharacterChoice::icon`
+    /// being `Some` is the whole answer to "does this player have a
+    /// drawing?" — the row's words, the Colour step's note, the save, the
+    /// profile and the texture upload all read it — so a blank kept as
+    /// `Some` makes four of those five lie while the fifth (the upload,
+    /// which filters blanks itself) quietly disagrees.
+    ///
+    /// **Both endings return to the Icon step**, the spec's key table:
+    /// `Enter` keeps and `Esc` discards, and neither advances. The row is
+    /// still selected because opening the editor put the cursor on it.
     pub(crate) fn handle_creation_key(&mut self, key: GameKey) {
         if let Some(editor) = self.creation_icon_editor.as_mut() {
             match editor.handle_key(key) {
@@ -466,8 +478,7 @@ impl App {
                 IconEditorOutcome::Keep => {
                     let drawn = editor.icon().clone();
                     self.creation_icon_editor = None;
-                    self.creation_choice.icon = Some(drawn);
-                    self.advance_creation();
+                    self.creation_choice.icon = (!drawn.is_blank()).then_some(drawn);
                 }
                 IconEditorOutcome::Discard => self.creation_icon_editor = None,
             }
@@ -801,7 +812,11 @@ impl App {
     /// **The sixth row opens the editor instead of advancing.** Taking it
     /// is not itself the decision — `handle_creation_key`'s editor
     /// interception is what turns `Enter`/`Esc` inside it into the actual
-    /// keep-or-discard.
+    /// keep-or-discard, and neither of those advances either: the spec's
+    /// key table has both endings return here. Opening moves the cursor
+    /// onto the row so that "with that row selected" holds even when the
+    /// editor was opened by its number key, which `selected_index` does not
+    /// move the cursor for.
     fn handle_creation_icon_key(&mut self, key: GameKey) {
         if key == GameKey::Char('n') {
             self.advance_creation();
@@ -811,6 +826,7 @@ impl App {
             return;
         };
         if idx == CREATION_ICONS.len() {
+            self.menu_selected = idx;
             self.creation_icon_editor = Some(IconEditor::open(
                 self.creation_choice.icon.clone().unwrap_or_default(),
             ));

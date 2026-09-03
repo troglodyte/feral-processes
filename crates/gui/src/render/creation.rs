@@ -580,11 +580,40 @@ mod tests {
             CreationStep::Class => app.handle_key(GameKey::Char('1')),
             CreationStep::Kit | CreationStep::Points | CreationStep::Perks => spend_every_row(app),
 
-            CreationStep::Icon | CreationStep::Colour | CreationStep::Routine => {
-                app.handle_key(GameKey::Char('n'))
+            // **The Icon step is walked by drawing, not by `[n]`.** Every
+            // census below walks the wizard through here, and the Colour
+            // step grows a wrapped note the moment a drawing exists — so a
+            // walk that took a preset measured the one Colour step the
+            // feature cannot produce and left the tallest, widest form of
+            // that step unmeasured.
+            CreationStep::Icon => {
+                draw_an_icon(app);
+                app.handle_key(GameKey::Right);
             }
+            CreationStep::Colour | CreationStep::Routine => app.handle_key(GameKey::Char('n')),
             CreationStep::Summary | CreationStep::Name => app.handle_key(GameKey::Enter),
         }
+    }
+
+    /// Paints one pixel through the real editor and keeps it, leaving the
+    /// wizard on the Icon step with a drawing on the choice — `Enter` in
+    /// the editor returns there rather than advancing.
+    ///
+    /// Shared by `walk_past` and the two tests that need a kept drawing, so
+    /// the state the censuses measure is the one the real key table
+    /// produces.
+    fn draw_an_icon(app: &mut App) {
+        while app.menu_selected != app.creation_rows().len() - 1 {
+            app.handle_key(GameKey::Down);
+        }
+        app.handle_key(GameKey::Enter);
+        assert!(app.icon_editor_view().is_some(), "the editor did not open");
+        app.handle_key(GameKey::Char(' '));
+        app.handle_key(GameKey::Enter);
+        assert!(
+            app.creation_choice().icon.is_some(),
+            "keeping the drawing must land it on the choice"
+        );
     }
 
     /// **The refusal census, turned ninety degrees.** `ALL_MODES` walks the
@@ -1019,19 +1048,10 @@ mod tests {
         assert_eq!(app.creation_step(), CreationStep::Icon);
 
         // The sixth row opens the editor; one painted pixel and `Enter`
-        // keeps it. Keeping advances to Colour, so `Left` walks back to the
-        // Icon step with a real drawing already on the choice.
-        while app.menu_selected != app.creation_rows().len() - 1 {
-            app.handle_key(GameKey::Down);
-        }
-        app.handle_key(GameKey::Enter);
-        assert!(app.icon_editor_view().is_some(), "the editor did not open");
-        app.handle_key(GameKey::Char(' '));
-        app.handle_key(GameKey::Enter);
-        assert_eq!(app.creation_step(), CreationStep::Colour);
-        app.handle_key(GameKey::Left);
+        // keeps it and returns here, so the cell is drawn on the step the
+        // player is actually standing on with a real drawing on the choice.
+        draw_an_icon(&mut app);
         assert_eq!(app.creation_step(), CreationStep::Icon);
-        assert!(app.creation_choice().icon.is_some());
 
         // Both keys present, so this cannot pass on a lookup that missed.
         let mut sprites = crate::paint::SpriteTable::default();
@@ -1077,19 +1097,11 @@ mod tests {
         assert_eq!(app.creation_step(), CreationStep::Icon);
 
         // The sixth row opens the editor; one painted pixel and `Enter`
-        // keeps it, landing on Colour with a real drawing on the choice.
-        while app.menu_selected != app.creation_rows().len() - 1 {
-            app.handle_key(GameKey::Down);
-        }
-        app.handle_key(GameKey::Enter);
-        assert!(app.icon_editor_view().is_some(), "the editor did not open");
-        app.handle_key(GameKey::Char(' '));
-        app.handle_key(GameKey::Enter);
+        // keeps it and returns to the Icon step, so `Right` is what lands
+        // on Colour with a real drawing on the choice.
+        draw_an_icon(&mut app);
+        app.handle_key(GameKey::Right);
         assert_eq!(app.creation_step(), CreationStep::Colour);
-        assert!(
-            app.creation_choice().icon.is_some(),
-            "keeping the drawing must land it on the choice"
-        );
 
         let m = ui_metrics(900.0);
         let (_, shapes) = crate::paint::with_painter(|p| draw_create_character(&app, None, p, &m));
@@ -1109,7 +1121,9 @@ mod tests {
         for step in CreationStep::ALL.iter().take(4) {
             walk_past(&mut app, *step);
         }
-        walk_past(&mut app, CreationStep::Icon);
+        // A preset rather than `walk_past`, which now draws — the note's
+        // absence is exactly what the preset half of the Icon step buys.
+        app.handle_key(GameKey::Char('1'));
         assert_eq!(app.creation_step(), CreationStep::Colour);
         assert!(app.creation_choice().icon.is_none());
 

@@ -20,7 +20,7 @@ use bevy::image::{ImageLoaderSettings, ImageSampler};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy_egui::{EguiTextureHandle, EguiUserTextures};
-use feral_processes_engine::{ICON_CELL_PIXELS, ICON_SIZE, PlayerIcon};
+use feral_processes_engine::{ICON_SIZE, PlayerIcon};
 
 use crate::paint::SpriteTable;
 
@@ -208,6 +208,7 @@ pub fn register(
 mod tests {
     use super::*;
     use bevy::image::ImageFilterMode;
+    use feral_processes_engine::ICON_CELL_PIXELS;
 
     /// A drawing with one lit cell — enough to be non-blank, and it pins
     /// the byte order at a coordinate that is not the origin.
@@ -287,11 +288,12 @@ mod tests {
             (data[at], data[at + 1], data[at + 2], data[at + 3])
         };
         // `a_drawing` paints cell (2, 1), so pixels (4..6, 2..4).
-        let want = icon.rgba(2, 1);
+        let (cx, cy) = (2, 1);
+        let want = icon.rgba(cx, cy);
         assert_eq!(want.3, 255, "the fixture's cell must be opaque");
         for dy in 0..ICON_CELL_PIXELS {
             for dx in 0..ICON_CELL_PIXELS {
-                let (x, y) = (2 * ICON_CELL_PIXELS + dx, 1 * ICON_CELL_PIXELS + dy);
+                let (x, y) = (cx * ICON_CELL_PIXELS + dx, cy * ICON_CELL_PIXELS + dy);
                 assert_eq!(pixel(x, y), want, "pixel ({x}, {y}) is inside the block");
             }
         }

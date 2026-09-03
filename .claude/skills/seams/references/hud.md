@@ -110,8 +110,15 @@
   `color` through is red on `r != g`. The overdraw rule from the sprite
   seam applies with no exception here: a drawn icon is transparent
   somewhere by construction, so the test asserts the mesh **and** the
-  absent `@`. The full argument is `docs/seams.md`, "The player's drawn
-  icon is the one sprite drawn untinted".
+  absent `@`. **The player edits 8x8 and the sprite is 16x16** —
+  `ICON_GRID` against `ICON_SIZE`, with `ICON_CELL_PIXELS` the one
+  expression of the ratio — so each drawn cell fills a 2x2 block of the
+  uploaded texture, which under nearest sampling is pixel-identical to a
+  native 8x8 one. The trap there is reading the two as one number:
+  changing `ICON_GRID` is a screen decision, changing `ICON_SIZE` breaks
+  the sprite format `assets/sprites/README.md` calls non-negotiable. The
+  full argument is `docs/seams.md`, "The player's drawn icon is the one
+  sprite drawn untinted".
 - **A machine's stall asks for attention and never reads as a threat.**
   `Clogged`/`Stranded`/`Unpowered` take `ATTENTION` — waiting fixes none of
   them, and it is the colour `Game::attention` already spends on them —

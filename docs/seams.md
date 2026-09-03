@@ -6646,8 +6646,32 @@ is the one sprite for which the tint has nothing to protect and something
 to destroy. The fix for that appearance, if the neutral tint ever looks
 wrong on screen, is not to give the drawn icon the tile's hue; it is
 `assets/sprites/README.md`'s existing answer to art that looks wrong at
-this seam — author it near-white — which a hand-drawn 16x16 the player
+this seam — author it near-white — which a hand-drawn icon the player
 picked their own colours for is definitionally not.
+
+**The player draws 8x8; the sprite is still 16x16.** The editor shipped
+on a 16x16 canvas and was halved on 2026-09-03, because 256 cells is more
+drawing than anyone wants to do with four arrow keys and a paint key, and
+a figure that reads at map zoom is a silhouette rather than a portrait.
+The *sprite* did not move: `assets/sprites/README.md` says that format is
+not negotiable, and structure and entity art will land on it. So the two
+are related rather than equal — `icon::ICON_GRID` is what the player
+edits, `icon::ICON_SIZE` is what the texture is, and `ICON_CELL_PIXELS`
+is the ratio, stated once so the upload and the `v1` fold both read it
+instead of assuming a `2`. Each drawn cell fills its own
+`ICON_CELL_PIXELS` square of the buffer, which under
+`ImageSampler::nearest()` is **pixel-identical** to a native 8x8 texture —
+which is exactly why halving the grid touched no part of the sprite seam.
+
+The encoding moved with it: `"v2:"` plus 64 hex digits, 67 characters.
+`decode` still reads a `v1` payload, and folds it rather than discarding
+it — each 2x2 block takes **the most frequent non-transparent index in
+it**, ties broken in reading order, an all-transparent block staying
+transparent. Sampling one corner of each block would have been shorter
+and would have deleted every one-pixel outline in the drawing; the
+majority rule keeps the silhouette, which is the half that reads at this
+size. A decoded `v1` is an ordinary `PlayerIcon` and re-saves as `v2`, so
+there is no second kind of icon anywhere downstream.
 
 The fallback the new rung sits above is unchanged and still three-step:
 the player's own drawing (rung 1, keyed at the runtime-only

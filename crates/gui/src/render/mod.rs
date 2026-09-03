@@ -40,6 +40,7 @@ mod frame_map;
 mod group_menu;
 mod help;
 pub(crate) mod hud;
+mod icon_editor;
 mod inventory;
 mod manifest;
 mod manifest_layout;
@@ -109,6 +110,11 @@ use trade::{
 };
 use transfer::draw_transfer;
 
+/// The colour `draw` clears the window to before dispatching to a screen.
+/// Named so `icon_editor.rs` can paint a transparent canvas pixel in the
+/// window's own background rather than a hardcoded black the player could
+/// mistake for a painted dark pixel.
+const SCREEN_BG: Color = Color::new(0.02, 0.02, 0.03, 1.0);
 const PANEL_BG: Color = Color::new(0.06, 0.07, 0.10, 0.95);
 const BORDER: Color = Color::new(0.25, 0.65, 0.65, 1.0);
 const TEXT: Color = Color::new(0.92, 0.92, 0.92, 1.0);
@@ -508,7 +514,7 @@ fn draw_status_banner(status: &str, painter: &Painter, m: &Metrics) {
 
 pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
     let m = ui_metrics(painter.screen_h());
-    painter.clear(Color::new(0.02, 0.02, 0.03, 1.0));
+    painter.clear(SCREEN_BG);
     // Cloned rather than borrowed because most of the arms below want `app`
     // mutably, and threaded down as a parameter rather than read off `app`
     // where it is wanted: **this match is the one place that knows which
@@ -527,7 +533,14 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
         Mode::Achievements => draw_achievements(app, refusal, painter, &m),
         Mode::LoadGame => draw_load_game(app, refusal, painter, &m),
         Mode::SaveAction => draw_save_action(app, refusal, painter, &m),
-        Mode::CreateCharacter => creation::draw_create_character(app, refusal, painter, &m),
+        // The icon editor hangs off the wizard's Icon step as `App` state
+        // rather than a `Mode` of its own (`app::icon_editor`'s reason), so
+        // it is this arm's job to notice it is open and draw over the
+        // wizard's own popup instead of drawing it.
+        Mode::CreateCharacter => match app.icon_editor_view() {
+            Some(view) => icon_editor::draw_icon_editor(&view, painter, &m),
+            None => creation::draw_create_character(app, refusal, painter, &m),
+        },
         Mode::GameOver => draw_game_over(app, refusal, painter, &m),
         // Drawn over the map rather than over black: the run is still there
         // behind the notice, and the scrim lets it show through faintly.

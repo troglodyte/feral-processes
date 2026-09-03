@@ -173,6 +173,79 @@ mod seams {
         );
     }
 
+    /// The base spending its own shelves — the dig crew's tile, a sortie's
+    /// outfitting. Reported inside `spend_from_base` rather than at its
+    /// callers, because a partial take is the case a caller-side figure
+    /// would get wrong.
+    #[test]
+    fn what_leaves_the_shelves_is_counted_as_consumed() {
+        let mut game = game(4108);
+        let shelf = game
+            .world
+            .spawn((
+                Structure {
+                    kind: "depot".to_string(),
+                },
+                Position { x: 1, y: 1 },
+                crate::components::Stock::default(),
+            ))
+            .id();
+        game.world
+            .get_mut::<crate::components::Stock>(shelf)
+            .unwrap()
+            .output
+            .insert(ItemId::from(ids::CORE_FRAGMENT), 6);
+
+        let taken = crate::game::base::stock::spend_from_base(
+            &mut game,
+            &ItemId::from(ids::CORE_FRAGMENT),
+            4,
+            crate::base_ledger::ConsumeSource::Base,
+        );
+
+        assert_eq!(taken, 4);
+        assert_eq!(
+            game.world.resource::<BaseLedger>().lifetime[&ItemId::from(ids::CORE_FRAGMENT)]
+                .consumed,
+            4,
+            "what left the shelf must reach the ledger's sink side"
+        );
+    }
+
+    /// The breach destroys the two currencies outright, and nothing else in
+    /// the ledger could see it: a run's fragments would otherwise read as
+    /// produced and never accounted for.
+    #[test]
+    fn a_breach_counts_what_it_destroys() {
+        let mut game = game(4109);
+        game.grant_loot(
+            ItemId::from(ids::CORE_FRAGMENT),
+            7,
+            crate::base_ledger::LootSource::Kill,
+        );
+        // Read rather than assumed: a fresh run starts with a few of these
+        // in the pack, and the wipe takes the whole holding.
+        let player = game.player_entity();
+        let held = game
+            .world
+            .get::<crate::components::Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::CORE_FRAGMENT));
+        assert!(
+            held > 7,
+            "the fixture must hold more than it was just given"
+        );
+
+        game.enter_next_zone();
+
+        assert_eq!(
+            game.world.resource::<BaseLedger>().lifetime[&ItemId::from(ids::CORE_FRAGMENT)]
+                .consumed,
+            held,
+            "the wipe is a sink and has to be counted as one"
+        );
+    }
+
     /// **Loot is recorded and never folded.** The ledger and the page it
     /// feeds are about what the *base* made; a kill's Core Fragments
     /// counted there would read on the screen as a machine's work, which is

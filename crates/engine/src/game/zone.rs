@@ -459,6 +459,29 @@ impl Game {
                 .collect()
         };
 
+        // The only sink in the game that destroys rather than spends, and
+        // the ledger cannot see it any other way: a run's Core Fragments
+        // otherwise read as produced and never accounted for.
+        for (item, qty) in &lost {
+            let id = item.0.clone();
+            let qty = *qty;
+            self.report_base(
+                crate::base_ledger::Event::Consume {
+                    item: item.clone(),
+                    qty,
+                },
+                move |tick, zone, _| crate::telemetry::Record::Consume {
+                    tick,
+                    zone,
+                    item: id,
+                    qty,
+                    source: crate::base_ledger::ConsumeSource::Breach
+                        .as_str()
+                        .to_string(),
+                },
+            );
+        }
+
         self.log(format!(
             "You breach the portal and materialize in a level {new_level} sector. Hostile signal strength has spiked."
         ));

@@ -469,8 +469,6 @@ impl Game {
     /// the record answer B2: `ticks_spent` against that machine's own cycle
     /// is exactly what the convenience costs.
     fn note_hand_craft(&mut self, item: &ItemId, careful: bool, ticks_spent: u32) {
-        let tick = self.world.resource::<crate::resources::GameClock>().tick;
-        let zone = self.world.resource::<crate::resources::ZoneLevel>().0;
         let bench = self
             .world
             .resource::<StructureDb>()
@@ -480,27 +478,19 @@ impl Game {
                     || d.work.as_ref().is_some_and(|w| &w.produces == item)
             })
             .map(|d| d.id.clone());
-        let event = crate::base_ledger::Event::HandCraft {
-            item: item.clone(),
-            qty: 1,
-        };
         let item_id = item.0.clone();
-        // `resource_scope` rather than two `resource_mut` borrows: the one
-        // `emit` door wants both resources at once, and this is how a
-        // `&mut World` hands over one while the other is still reachable.
-        self.world.resource_scope(
-            |world, mut ledger: bevy_ecs::prelude::Mut<crate::base_ledger::BaseLedger>| {
-                let mut telemetry = world.resource_mut::<crate::resources::BattleTelemetry>();
-                crate::base_ledger::emit(&mut ledger, &mut telemetry, tick, zone, &event, |_| {
-                    crate::telemetry::Record::HandCraft {
-                        tick,
-                        item: item_id,
-                        qty: 1,
-                        careful,
-                        bench,
-                        ticks_spent,
-                    }
-                });
+        self.report_base(
+            crate::base_ledger::Event::HandCraft {
+                item: item.clone(),
+                qty: 1,
+            },
+            |tick, _zone, _| crate::telemetry::Record::HandCraft {
+                tick,
+                item: item_id,
+                qty: 1,
+                careful,
+                bench,
+                ticks_spent,
             },
         );
     }

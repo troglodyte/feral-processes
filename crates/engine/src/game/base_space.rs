@@ -717,7 +717,13 @@ impl Game {
     /// Spends the one substrate a tile costs, base stores before the
     /// player's pack, and reports whether it found one.
     fn spend_one_substrate(&mut self, substrate: &ItemId) -> bool {
-        if crate::game::base::stock::spend_from_base(self, substrate, 1) == 1 {
+        if crate::game::base::stock::spend_from_base(
+            self,
+            substrate,
+            1,
+            crate::base_ledger::ConsumeSource::Base,
+        ) == 1
+        {
             return true;
         }
         let player = self.player_entity();

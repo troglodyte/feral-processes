@@ -745,7 +745,12 @@ pub(super) fn raise_pending_builds(game: &mut Game) {
                 .map(|mut inv| inv.take(item.clone(), *qty))
                 .unwrap_or(0);
             if paid < *qty {
-                crate::game::base::stock::spend_from_base(game, item, qty - paid);
+                crate::game::base::stock::spend_from_base(
+                    game,
+                    item,
+                    qty - paid,
+                    crate::base_ledger::ConsumeSource::Base,
+                );
             }
         }
         let def = game

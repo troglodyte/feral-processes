@@ -48,6 +48,40 @@ impl Game {
             .push(record);
     }
 
+    /// Reports one base event: the ledger fold and the log record, through
+    /// `base_ledger::emit`'s one door.
+    ///
+    /// The `resource_scope` here is the whole of what this exists to hold in
+    /// one place. `emit` wants both resources at once and a `&mut World`
+    /// lends one at a time, so every site that reported from a `Game` was
+    /// otherwise writing the same eight-line dance — five of them by the end
+    /// of Phase 2, each free to get the borrow order subtly different.
+    ///
+    /// The record closure takes `(tick, zone)` because every base record
+    /// carries them and no caller should be reading the two resources for
+    /// itself.
+    pub(crate) fn report_base(
+        &mut self,
+        event: crate::base_ledger::Event,
+        record: impl FnOnce(u64, u32, &crate::base_ledger::Event) -> Record,
+    ) {
+        let tick = self.world.resource::<crate::resources::GameClock>().tick;
+        let zone = self.world.resource::<crate::resources::ZoneLevel>().0;
+        self.world.resource_scope(
+            |world, mut ledger: bevy_ecs::prelude::Mut<crate::base_ledger::BaseLedger>| {
+                let mut telemetry = world.resource_mut::<BattleTelemetry>();
+                crate::base_ledger::emit(
+                    &mut ledger,
+                    &mut telemetry,
+                    tick,
+                    zone,
+                    &event,
+                    |event| record(tick, zone, event),
+                );
+            },
+        );
+    }
+
     /// Mints the next fight id and makes it the one later records carry.
     /// Called by `begin_battle`; every record in the fight reads it back
     /// through `fight_id`.

@@ -97,6 +97,17 @@ pub enum Record {
         kind: String,
         status: String,
     },
+    /// Units left the run. **Folded and recorded both**, unlike `Acquire`:
+    /// a sink is the other half of the ledger's own arithmetic, while a
+    /// source is not.
+    Consume {
+        tick: u64,
+        zone: u32,
+        item: String,
+        qty: u32,
+        /// `base_ledger::ConsumeSource::as_str`.
+        source: String,
+    },
     /// Something reached the player's pack that the base did not make:
     /// a kill's drop, a cache, a contract's reward, a purchase, a refund.
     ///
@@ -151,7 +162,8 @@ impl Record {
             | Record::Assemble { .. }
             | Record::MachineStall { .. }
             | Record::HandCraft { .. }
-            | Record::Acquire { .. } => return,
+            | Record::Acquire { .. }
+            | Record::Consume { .. } => return,
         };
         *slot = fight;
     }

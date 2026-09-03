@@ -737,6 +737,35 @@ fn burn_grid_upkeep(world: &mut World) {
                 .get_mut::<PowerFuel>(burner)
                 .expect("collected with the component")
                 .ticks_left = crate::tuning::POWER_UPKEEP_TICKS;
+            // A standing consumer of a chain's terminal product, and the
+            // ledger does not balance without it: the Power Cells a base
+            // burns to stay lit are otherwise produced and never spent.
+            let burn = crate::base_ledger::Event::Consume {
+                item: cell.clone(),
+                qty: bought,
+            };
+            let tick_now = world.resource::<GameClock>().tick;
+            let zone_now = world.resource::<ZoneLevel>().0;
+            let cell_id = cell.0.clone();
+            world.resource_scope(
+                |world, mut ledger: bevy_ecs::prelude::Mut<crate::base_ledger::BaseLedger>| {
+                    let mut telemetry = world.resource_mut::<BattleTelemetry>();
+                    crate::base_ledger::emit(
+                        &mut ledger,
+                        &mut telemetry,
+                        tick_now,
+                        zone_now,
+                        &burn,
+                        |_| crate::telemetry::Record::Consume {
+                            tick: tick_now,
+                            zone: zone_now,
+                            item: cell_id,
+                            qty: bought,
+                            source: crate::base_ledger::ConsumeSource::Fuel.as_str().to_string(),
+                        },
+                    );
+                },
+            );
         }
         let next = if bought > 0 {
             MachineStatus::Running

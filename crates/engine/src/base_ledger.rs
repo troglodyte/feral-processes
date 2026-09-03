@@ -96,6 +96,14 @@ pub enum Event {
     },
     /// The player finished one unit by hand.
     HandCraft { item: ItemId, qty: u32 },
+    /// Units left the run for good: burnt as fuel, built into a structure,
+    /// spent on a sortie or destroyed by a breach.
+    ///
+    /// Its own variant rather than a field on the others because a
+    /// consumption has no product — and without it the ledger's `produced`
+    /// side is a stream with no sink, which is what makes an assembler's
+    /// inputs look like the only thing the base ever spends.
+    Consume { item: ItemId, qty: u32 },
 }
 
 /// Where something that reached the player's pack came from.
@@ -137,6 +145,37 @@ impl LootSource {
             LootSource::Trade => "trade",
             LootSource::Refund => "refund",
             LootSource::Etch => "etch",
+        }
+    }
+}
+
+/// Why units left the run.
+///
+/// `LootSource`'s mirror, and its reason: "the ledger's produced side does
+/// not balance" is only actionable if the sinks are told apart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConsumeSource {
+    /// Burnt to keep a supplier on the grid — `StructureDef::power_upkeep`.
+    Fuel,
+    /// Built into a structure, at the tick it was raised. Materials are not
+    /// spent until then: they stand on the cell, refundable, until the site
+    /// is despawned.
+    Build,
+    /// Taken off the base's shelves for a job it set itself — the dig crew's
+    /// tile, a sortie's outfitting.
+    Base,
+    /// Destroyed by a breach. Core Fragments and Portal Fragments do not
+    /// cross, which is a sink nothing else in the ledger could see.
+    Breach,
+}
+
+impl ConsumeSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ConsumeSource::Fuel => "fuel",
+            ConsumeSource::Build => "build",
+            ConsumeSource::Base => "base",
+            ConsumeSource::Breach => "breach",
         }
     }
 }
@@ -194,6 +233,12 @@ impl BaseLedger {
             }
             Event::HandCraft { item, qty } => {
                 self.produce(item, *qty, 0, |t| &mut t.hand);
+            }
+            Event::Consume { item, qty } => {
+                self.lifetime.entry(item.clone()).or_default().consumed += qty;
+                if let Some(bucket) = self.buckets.back_mut() {
+                    *bucket.consumed.entry(item.clone()).or_default() += qty;
+                }
             }
         }
     }

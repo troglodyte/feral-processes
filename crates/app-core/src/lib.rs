@@ -1486,6 +1486,16 @@ pub enum Mode {
     /// row: what the player is looking at is the base, and the assignee the
     /// row just gained is the answer they opened the screen for.
     StructureAssign,
+    /// What the base has made — `Game::base_output_report`, one row per
+    /// item with the sector's total beside the run's.
+    ///
+    /// Read-only and no scroll: the report caps its own rows, so the screen
+    /// shows the most-produced and says nothing about the rest. Reads the
+    /// same underground as on the surface — the ledger is history, not a
+    /// scan around the party, and the base goes on producing while the
+    /// party is in the Stack, which is the thing this page is best placed
+    /// to teach.
+    BaseOutput,
     /// Every conversion a structure runs, expanded back to raw inputs — see
     /// `Game::recipe_chains`. Read-only, and reference data rather than a
     /// view of the base, so it reads the same underground as it does on the
@@ -1647,6 +1657,7 @@ impl Mode {
             | Mode::Structures
             | Mode::StructureAssign
             | Mode::Recipes
+            | Mode::BaseOutput
             | Mode::Help
             | Mode::HelpPage
             | Mode::FrameMap

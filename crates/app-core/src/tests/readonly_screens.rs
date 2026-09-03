@@ -208,3 +208,84 @@ fn the_recipes_screen_does_not_advance_the_game() {
         "reading a list must not pass game time"
     );
 }
+
+/// A run whose base has made something, written through the save the way
+/// every fixture here reaches state the `Game` API does not expose.
+fn app_with_base_output(seed: u32) -> App {
+    use feral_processes_engine::base_ledger::Event;
+    use feral_processes_engine::items::ItemId;
+    use feral_processes_engine::save;
+
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = scratch_path("base_output", seed);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.base_ledger.fold(
+        0,
+        1,
+        &Event::Extract {
+            item: ItemId("core_fragment".to_string()),
+            rolled: 5,
+            landed: 5,
+            ok: true,
+        },
+    );
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    app
+}
+
+#[test]
+fn the_base_menu_opens_the_output_page_and_esc_backs_into_it() {
+    let mut app = app_with_base_output(101);
+    open_via_menu(&mut app, 'b', "Base output");
+    assert_eq!(app.mode, Mode::BaseOutput);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::BaseMenu, "Esc walks back up one level");
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
+}
+
+/// The group menu's contract: a row is offered only when the screen behind
+/// it has something to show. A run that has produced nothing has an empty
+/// ledger, and an empty page reads as a broken one.
+#[test]
+fn a_base_that_has_made_nothing_is_not_offered_the_page() {
+    let mut app = test_app(102);
+    app.handle_key(GameKey::Char('b'));
+    assert!(
+        !app.base_menu_rows()
+            .iter()
+            .any(|r| r.label == "Base output"),
+        "the row is offered before the base has made anything"
+    );
+}
+
+/// Reading is free, and nothing but Esc is bound — the page has no scroll,
+/// so an arrow must not quietly move a highlight that is never drawn.
+#[test]
+fn the_output_page_costs_no_time_and_binds_nothing_but_esc() {
+    let mut app = app_with_base_output(103);
+    let before = app.game.as_ref().unwrap().current_tick();
+    open_via_menu(&mut app, 'b', "Base output");
+    for key in [
+        GameKey::Down,
+        GameKey::Up,
+        GameKey::Enter,
+        GameKey::Char('1'),
+    ] {
+        app.handle_key(key);
+        assert_eq!(app.mode, Mode::BaseOutput, "{key:?} should do nothing here");
+    }
+    app.handle_key(GameKey::Esc);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(
+        app.game.as_ref().unwrap().current_tick(),
+        before,
+        "reading a page must not pass game time"
+    );
+}

@@ -1261,25 +1261,6 @@ impl Game {
         (ledger.draw, ledger.supply)
     }
 
-    /// What needs the player right now, most urgent first.
-    ///
-    /// **One derivation, three readouts.** The HUD's status-bar badge, the
-    /// info column's tab markers and its two collapsed bars are all handed
-    /// this one `Vec` by the renderer's single call. A second derivation
-    /// beside it is what would make "a closed pane cannot hide an
-    /// actionable state" a coincidence rather than a construction.
-    ///
-    /// In the engine and not in app-core or the renderer because every row
-    /// is a claim about game state, and because a renderer-local version
-    /// would be three derivations that can disagree.
-    ///
-    /// **Threat rows lead**, then the rest in the order written here. The
-    /// badge shows the first row, and a raid eating the base reading second
-    /// to an unspent perk point is wrong on a HUD.
-    ///
-    /// There is deliberately **no "pack full" row**: `components::Inventory`
-    /// is an unbounded `Vec`, so the pack has no capacity to be at. The
-    /// container that *can* fill is the roster.
     /// What the base has made, for `Mode::BaseOutput`.
     ///
     /// **The one derivation the page is built from.** Every figure on the
@@ -1357,6 +1338,41 @@ impl Game {
         }
     }
 
+    /// Whether the base has ever made anything, which is what decides
+    /// whether the base menu offers the page at all.
+    ///
+    /// Its own predicate rather than `!base_output_report().mined.is_empty()`
+    /// because a group-menu `available` closure runs **every frame the menu
+    /// is open** — the trap the Contracts and Caravan rows already record —
+    /// and the report resolves a def per item and walks every structure
+    /// through `attention` before it can answer.
+    pub fn has_base_output(&self) -> bool {
+        self.world
+            .resource::<crate::base_ledger::BaseLedger>()
+            .lifetime
+            .values()
+            .any(|t| t.produced() > 0)
+    }
+
+    /// What needs the player right now, most urgent first.
+    ///
+    /// **One derivation, three readouts.** The HUD's status-bar badge, the
+    /// info column's tab markers and its two collapsed bars are all handed
+    /// this one `Vec` by the renderer's single call. A second derivation
+    /// beside it is what would make "a closed pane cannot hide an
+    /// actionable state" a coincidence rather than a construction.
+    ///
+    /// In the engine and not in app-core or the renderer because every row
+    /// is a claim about game state, and because a renderer-local version
+    /// would be three derivations that can disagree.
+    ///
+    /// **Threat rows lead**, then the rest in the order written here. The
+    /// badge shows the first row, and a raid eating the base reading second
+    /// to an unspent perk point is wrong on a HUD.
+    ///
+    /// There is deliberately **no "pack full" row**: `components::Inventory`
+    /// is an unbounded `Vec`, so the pack has no capacity to be at. The
+    /// container that *can* fill is the roster.
     pub fn attention(&mut self) -> Vec<AttentionRow> {
         // Walked once and read twice — it resolves a def per structure, and
         // this is called every frame.

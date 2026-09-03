@@ -1,4 +1,4 @@
-//! The player's 16x16 icon editor: its state, and the whole of its key
+//! The player's 8x8 icon editor: its state, and the whole of its key
 //! table.
 //!
 //! Not a `Mode`, for `creation.rs`'s reason — it hangs off the wizard's
@@ -14,9 +14,9 @@
 //! sits, because picking a swatch and painting with it without tabbing
 //! back is the gesture the split is supposed to buy.
 //!
-//! **Undo is whole `PlayerIcon` snapshots, not a diff.** 256 bytes each and
-//! `ICON_UNDO_DEPTH` of them is 8 KB, which is small enough that simple
-//! wins. Only a keystroke that actually moves a pixel pushes one — a held
+//! **Undo is whole `PlayerIcon` snapshots, not a diff.** 64 bytes each and
+//! `ICON_UNDO_DEPTH` of them is 2 KB, which is small enough that simple
+//! wins. Only a keystroke that actually moves a cell pushes one — a held
 //! `Space` on a cell already the selected colour would otherwise fill the
 //! history with nothing, and undo would stop reaching the edit the player
 //! wants back.
@@ -24,7 +24,7 @@
 use std::collections::VecDeque;
 
 use crate::*;
-use feral_processes_engine::{ICON_PALETTE, ICON_SIZE, PlayerIcon};
+use feral_processes_engine::{ICON_GRID, ICON_PALETTE, PlayerIcon};
 
 /// How far back `u` reaches.
 ///
@@ -48,13 +48,15 @@ pub enum IconFocus {
 /// What the icon editor screen draws — the canvas flattened row-major, and
 /// the three cursors laid over it.
 ///
-/// `pixels` is a flat copy rather than the `PlayerIcon` itself because the
-/// screen draws per-cell rectangles and never a texture: at 16x16 the grid
-/// lines and the cursor need per-cell rects anyway, and drawing it that way
-/// is what keeps a texture from being minted on every keystroke.
+/// `cells` is a flat copy rather than the `PlayerIcon` itself because the
+/// screen draws per-cell rectangles and never a texture: the grid lines and
+/// the cursor need per-cell rects anyway, and drawing it that way is what
+/// keeps a texture from being minted on every keystroke. They are *cells*
+/// and not pixels: each one paints an `ICON_CELL_PIXELS` block of the
+/// 16x16 sprite the upload builds.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IconEditorView {
-    pub pixels: [u8; ICON_SIZE * ICON_SIZE],
+    pub cells: [u8; ICON_GRID * ICON_GRID],
     pub cursor: (u8, u8),
     pub selected: u8,
     pub focus: IconFocus,
@@ -65,7 +67,7 @@ pub struct IconEditorView {
 ///
 /// Neither ending carries the drawing. `IconEditor::icon` is already
 /// correct after both — `Esc` puts back what the editor opened with — so a
-/// payload would be a 256-byte copy of a value the caller is holding
+/// payload would be a 64-byte copy of a value the caller is holding
 /// anyway, on an enum built once per keystroke.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum IconEditorOutcome {
@@ -110,14 +112,14 @@ impl IconEditor {
 
     /// What the screen draws.
     pub(crate) fn view(&self) -> IconEditorView {
-        let mut pixels = [0u8; ICON_SIZE * ICON_SIZE];
-        for y in 0..ICON_SIZE {
-            for x in 0..ICON_SIZE {
-                pixels[y * ICON_SIZE + x] = self.icon.get(x, y);
+        let mut cells = [0u8; ICON_GRID * ICON_GRID];
+        for y in 0..ICON_GRID {
+            for x in 0..ICON_GRID {
+                cells[y * ICON_GRID + x] = self.icon.get(x, y);
             }
         }
         IconEditorView {
-            pixels,
+            cells,
             cursor: self.cursor,
             selected: self.selected,
             focus: self.focus,
@@ -154,7 +156,7 @@ impl IconEditor {
 
     /// One arrow press, on the focused panel alone.
     ///
-    /// Neither cursor wraps. On the canvas that is what makes "fifteen
+    /// Neither cursor wraps. On the canvas that is what makes "seven
     /// Lefts is the left edge" true from anywhere; on the palette it is
     /// what keeps a held arrow from cycling past the swatch the player was
     /// aiming at.
@@ -166,7 +168,7 @@ impl IconEditor {
     fn step(&mut self, dx: i32, dy: i32) {
         match self.focus {
             IconFocus::Canvas => {
-                let last = ICON_SIZE as i32 - 1;
+                let last = ICON_GRID as i32 - 1;
                 self.cursor.0 = (self.cursor.0 as i32 + dx).clamp(0, last) as u8;
                 self.cursor.1 = (self.cursor.1 as i32 + dy).clamp(0, last) as u8;
             }

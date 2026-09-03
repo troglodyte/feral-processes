@@ -1,4 +1,4 @@
-//! The 16x16 icon editor — its whole key table, driven through
+//! The 8x8 icon editor — its whole key table, driven through
 //! `IconEditor::handle_key` and read back through `IconEditor::view`.
 //!
 //! `the_arrows_act_on_the_focused_panel_alone` is the load-bearing one.
@@ -10,7 +10,7 @@
 use super::support::*;
 use crate::app::icon_editor::{ICON_UNDO_DEPTH, IconEditor, IconEditorOutcome};
 use crate::*;
-use feral_processes_engine::{ICON_SIZE, PlayerIcon};
+use feral_processes_engine::{ICON_GRID, PlayerIcon};
 
 /// An editor open on a blank canvas — what the wizard hands it for a
 /// player who has never drawn one.
@@ -19,15 +19,15 @@ fn blank_editor() -> IconEditor {
 }
 
 /// Walks the cursor to `(x, y)` from wherever it is, using the editor's
-/// own keys. The clamp at each edge is what makes the reset legal: fifteen
-/// Lefts and fifteen Ups land on `(0, 0)` from any cell on the grid.
+/// own keys. The clamp at each edge is what makes the reset legal: seven
+/// Lefts and seven Ups land on `(0, 0)` from any cell on the grid.
 fn move_cursor_to(editor: &mut IconEditor, x: u8, y: u8) {
     assert_eq!(
         editor.view().focus,
         IconFocus::Canvas,
         "the cursor only moves while the canvas has focus"
     );
-    for _ in 0..ICON_SIZE - 1 {
+    for _ in 0..ICON_GRID - 1 {
         editor.handle_key(GameKey::Left);
         editor.handle_key(GameKey::Up);
     }
@@ -40,9 +40,9 @@ fn move_cursor_to(editor: &mut IconEditor, x: u8, y: u8) {
     assert_eq!(editor.view().cursor, (x, y));
 }
 
-/// The pixel at `(x, y)` as the view reports it.
-fn pixel(editor: &IconEditor, x: u8, y: u8) -> u8 {
-    editor.view().pixels[y as usize * ICON_SIZE + x as usize]
+/// The drawn cell at `(x, y)` as the view reports it.
+fn cell(editor: &IconEditor, x: u8, y: u8) -> u8 {
+    editor.view().cells[y as usize * ICON_GRID + x as usize]
 }
 
 #[test]
@@ -51,7 +51,7 @@ fn the_editor_opens_on_the_canvas_at_the_origin_with_the_first_colour() {
     assert_eq!(view.focus, IconFocus::Canvas);
     assert_eq!(view.cursor, (0, 0));
     assert_eq!(view.selected, 1, "index 0 is transparent, not a swatch");
-    assert!(view.pixels.iter().all(|&p| p == 0));
+    assert!(view.cells.iter().all(|&p| p == 0));
 }
 
 #[test]
@@ -107,8 +107,8 @@ fn the_cursor_does_not_wrap_at_any_edge() {
     editor.handle_key(GameKey::Up);
     assert_eq!(editor.view().cursor, (0, 0));
 
-    let last = (ICON_SIZE - 1) as u8;
-    for _ in 0..ICON_SIZE + 4 {
+    let last = (ICON_GRID - 1) as u8;
+    for _ in 0..ICON_GRID + 4 {
         editor.handle_key(GameKey::Right);
         editor.handle_key(GameKey::Down);
     }
@@ -139,8 +139,8 @@ fn space_paints_the_cursor_cell_with_the_selected_colour() {
     editor.handle_key(GameKey::Tab);
     move_cursor_to(&mut editor, 4, 6);
     editor.handle_key(GameKey::Char(' '));
-    assert_eq!(pixel(&editor, 4, 6), 3);
-    assert_eq!(pixel(&editor, 0, 0), 0, "no other cell moved");
+    assert_eq!(cell(&editor, 4, 6), 3);
+    assert_eq!(cell(&editor, 0, 0), 0, "no other cell moved");
 }
 
 /// Space is not focus-dependent — only the arrows are. Picking a swatch
@@ -153,7 +153,7 @@ fn space_paints_while_the_palette_has_focus() {
     editor.handle_key(GameKey::Tab);
     editor.handle_key(GameKey::Right);
     editor.handle_key(GameKey::Char(' '));
-    assert_eq!(pixel(&editor, 2, 3), 2);
+    assert_eq!(cell(&editor, 2, 3), 2);
 }
 
 #[test]
@@ -161,9 +161,9 @@ fn backspace_erases_the_cursor_cell() {
     let mut editor = blank_editor();
     move_cursor_to(&mut editor, 5, 5);
     editor.handle_key(GameKey::Char(' '));
-    assert_eq!(pixel(&editor, 5, 5), 1);
+    assert_eq!(cell(&editor, 5, 5), 1);
     editor.handle_key(GameKey::Backspace);
-    assert_eq!(pixel(&editor, 5, 5), 0);
+    assert_eq!(cell(&editor, 5, 5), 0);
 }
 
 #[test]
@@ -174,7 +174,7 @@ fn x_clears_the_whole_canvas() {
         editor.handle_key(GameKey::Char(' '));
     }
     editor.handle_key(GameKey::Char('x'));
-    assert!(editor.view().pixels.iter().all(|&p| p == 0));
+    assert!(editor.view().cells.iter().all(|&p| p == 0));
 }
 
 #[test]
@@ -185,8 +185,8 @@ fn u_undoes_the_last_edit() {
     move_cursor_to(&mut editor, 2, 2);
     editor.handle_key(GameKey::Char(' '));
     editor.handle_key(GameKey::Char('u'));
-    assert_eq!(pixel(&editor, 2, 2), 0, "the second paint is undone");
-    assert_eq!(pixel(&editor, 1, 1), 1, "the first is not");
+    assert_eq!(cell(&editor, 2, 2), 0, "the second paint is undone");
+    assert_eq!(cell(&editor, 1, 1), 1, "the first is not");
 }
 
 #[test]
@@ -196,7 +196,7 @@ fn u_undoes_a_clear() {
     editor.handle_key(GameKey::Char(' '));
     editor.handle_key(GameKey::Char('x'));
     editor.handle_key(GameKey::Char('u'));
-    assert_eq!(pixel(&editor, 7, 7), 1);
+    assert_eq!(cell(&editor, 7, 7), 1);
 }
 
 #[test]
@@ -207,7 +207,7 @@ fn u_on_an_empty_history_changes_nothing() {
     for _ in 0..5 {
         editor.handle_key(GameKey::Char('u'));
     }
-    assert!(editor.view().pixels.iter().all(|&p| p == 0));
+    assert!(editor.view().cells.iter().all(|&p| p == 0));
 }
 
 /// Holding `Space` on a cell already the selected colour must not fill the
@@ -223,10 +223,10 @@ fn repainting_a_cell_the_colour_it_already_holds_pushes_no_undo_entry() {
         editor.handle_key(GameKey::Char(' '));
     }
     editor.handle_key(GameKey::Char('u'));
-    assert_eq!(pixel(&editor, 2, 2), 0);
+    assert_eq!(cell(&editor, 2, 2), 0);
     editor.handle_key(GameKey::Char('u'));
     assert_eq!(
-        pixel(&editor, 1, 1),
+        cell(&editor, 1, 1),
         0,
         "two undos reach two real edits, not twenty repaints"
     );
@@ -237,12 +237,12 @@ fn erasing_an_already_transparent_cell_pushes_no_undo_entry() {
     let mut editor = blank_editor();
     move_cursor_to(&mut editor, 1, 1);
     editor.handle_key(GameKey::Char(' '));
-    move_cursor_to(&mut editor, 9, 9);
+    move_cursor_to(&mut editor, 5, 5);
     for _ in 0..10 {
         editor.handle_key(GameKey::Backspace);
     }
     editor.handle_key(GameKey::Char('u'));
-    assert_eq!(pixel(&editor, 1, 1), 0, "one undo reaches the one edit");
+    assert_eq!(cell(&editor, 1, 1), 0, "one undo reaches the one edit");
 }
 
 #[test]
@@ -256,7 +256,7 @@ fn clearing_an_already_blank_canvas_pushes_no_undo_entry() {
     }
     editor.handle_key(GameKey::Char('u'));
     assert_eq!(
-        pixel(&editor, 1, 1),
+        cell(&editor, 1, 1),
         1,
         "one undo reaches back past the clear"
     );
@@ -271,14 +271,14 @@ fn the_undo_history_is_bounded_at_icon_undo_depth() {
     let edits = ICON_UNDO_DEPTH + 8;
     let mut editor = blank_editor();
     for i in 0..edits {
-        move_cursor_to(&mut editor, (i % ICON_SIZE) as u8, (i / ICON_SIZE) as u8);
+        move_cursor_to(&mut editor, (i % ICON_GRID) as u8, (i / ICON_GRID) as u8);
         editor.handle_key(GameKey::Char(' '));
     }
     for _ in 0..ICON_UNDO_DEPTH + 1 {
         editor.handle_key(GameKey::Char('u'));
     }
     let view = editor.view();
-    let still_painted = view.pixels.iter().filter(|&&p| p != 0).count();
+    let still_painted = view.cells.iter().filter(|&&p| p != 0).count();
     assert_eq!(
         still_painted,
         edits - ICON_UNDO_DEPTH,
@@ -289,11 +289,11 @@ fn the_undo_history_is_bounded_at_icon_undo_depth() {
 #[test]
 fn enter_keeps_what_was_drawn() {
     let mut editor = blank_editor();
-    move_cursor_to(&mut editor, 8, 2);
+    move_cursor_to(&mut editor, 6, 2);
     editor.handle_key(GameKey::Char(' '));
     assert_eq!(editor.handle_key(GameKey::Enter), IconEditorOutcome::Keep);
     let icon = editor.icon();
-    assert_eq!(icon.get(8, 2), 1);
+    assert_eq!(icon.get(6, 2), 1);
     assert!(!icon.is_blank());
 }
 
@@ -311,8 +311,8 @@ fn esc_discards_and_puts_back_the_icon_it_opened_with() {
 
     let outcome = editor.handle_key(GameKey::Esc);
     assert_eq!(outcome, IconEditorOutcome::Discard);
-    assert_eq!(pixel(&editor, 0, 0), 4);
-    assert_eq!(pixel(&editor, 6, 6), 0);
+    assert_eq!(cell(&editor, 0, 0), 4);
+    assert_eq!(cell(&editor, 6, 6), 0);
     assert_eq!(*editor.icon(), opened_with, "the wizard reads this back");
 }
 

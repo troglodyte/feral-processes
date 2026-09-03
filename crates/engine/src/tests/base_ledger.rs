@@ -173,6 +173,60 @@ mod seams {
         );
     }
 
+    /// The denominator. Without it every rate in the log is an absolute,
+    /// and B7 asks for rate per *posted program*.
+    #[test]
+    fn a_snapshot_heads_each_window_and_counts_the_base() {
+        let mut game = game(4110);
+        game.world.resource_mut::<BattleTelemetry>().on = true;
+        light_the_grid(&mut game);
+        game.world.spawn((
+            Structure {
+                kind: "mining_node".to_string(),
+            },
+            Position { x: 3, y: 4 },
+            ResourceNode {
+                resource: ItemId::from(ids::CORE_FRAGMENT),
+                level: None,
+            },
+            work_node_parts(),
+        ));
+
+        // Two windows' worth, so the "once per window" half is measured
+        // rather than assumed — a per-tick snapshot passes any test that
+        // only looks for one.
+        for _ in 0..(crate::base_ledger::BUCKET_TICKS * 2) {
+            game.tick();
+        }
+
+        let snapshots: Vec<(u64, u32, u32)> = game
+            .world
+            .resource::<BattleTelemetry>()
+            .records
+            .iter()
+            .filter_map(|r| match r {
+                crate::telemetry::Record::BaseSnapshot {
+                    tick,
+                    machines,
+                    depots,
+                    ..
+                } => Some((*tick, *machines, *depots)),
+                _ => None,
+            })
+            .collect();
+
+        assert_eq!(
+            snapshots.iter().map(|s| s.0).collect::<Vec<_>>(),
+            vec![0, crate::base_ledger::BUCKET_TICKS],
+            "one snapshot per window, stamped with the tick that opens it"
+        );
+        assert_eq!(
+            snapshots[0].1, 1,
+            "the Mining Node runs a job and the Home does not"
+        );
+        assert_eq!(snapshots[0].2, 0, "and neither of them stores");
+    }
+
     /// The base spending its own shelves — the dig crew's tile, a sortie's
     /// outfitting. Reported inside `spend_from_base` rather than at its
     /// callers, because a partial take is the case a caller-side figure

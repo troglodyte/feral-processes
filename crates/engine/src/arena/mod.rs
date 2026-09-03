@@ -800,7 +800,8 @@ mod tests {
                 | Record::MachineStall { .. }
                 | Record::HandCraft { .. }
                 | Record::Acquire { .. }
-                | Record::Consume { .. } => None,
+                | Record::Consume { .. }
+                | Record::BaseSnapshot { .. } => None,
             }
         }
         let ids: std::collections::BTreeSet<u64> = records.iter().filter_map(fight_of).collect();

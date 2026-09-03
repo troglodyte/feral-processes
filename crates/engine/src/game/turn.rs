@@ -241,6 +241,12 @@ impl Game {
         // player rests, but a field buff does — rest is time passing for a
         // buff, not base upkeep the player paused by staying home.
         self.tick_field_buffs();
+        // Before the clock moves, so the window a snapshot is stamped with
+        // is the one whose events follow it: `base_ledger::fold` opens a
+        // bucket at `tick - tick % BUCKET_TICKS`, and a snapshot taken after
+        // the increment would describe the base one tick into the window it
+        // is meant to head.
+        self.note_base_snapshot();
         self.world.resource_mut::<GameClock>().tick += 1;
         self.note_static_turnover(epoch_before);
     }

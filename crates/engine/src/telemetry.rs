@@ -97,6 +97,33 @@ pub enum Record {
         kind: String,
         status: String,
     },
+    /// What the base *was* at the top of a window: the denominator every
+    /// other base record is missing.
+    ///
+    /// **Nothing else can substitute for it.** Without it every rate in the
+    /// log is an absolute — units per what? — and B7 is a question about
+    /// rate per *posted program*. It is also where ticks-per-sector comes
+    /// from, which is the number that calibrates every tick-denominated
+    /// figure in the audit this all descends from.
+    ///
+    /// Once per `base_ledger::BUCKET_TICKS`, so it is cheap to leave on and
+    /// lines up with the buckets the ledger already keeps.
+    BaseSnapshot {
+        tick: u64,
+        zone: u32,
+        /// Programs the player owns that are base staff — derived, not
+        /// assigned: `ProgramRole::Staff` is what is left over once the
+        /// party, the wielded program and any sortie are taken out.
+        staff: u32,
+        /// Bodies actually standing at a job this tick.
+        posted: u32,
+        /// Structures that run one — `StructureDef::runs_a_job`.
+        machines: u32,
+        /// Structures that store — `StructureDef::stores`, never an id.
+        depots: u32,
+        supply: u32,
+        draw: u32,
+    },
     /// Units left the run. **Folded and recorded both**, unlike `Acquire`:
     /// a sink is the other half of the ledger's own arithmetic, while a
     /// source is not.
@@ -163,7 +190,8 @@ impl Record {
             | Record::MachineStall { .. }
             | Record::HandCraft { .. }
             | Record::Acquire { .. }
-            | Record::Consume { .. } => return,
+            | Record::Consume { .. }
+            | Record::BaseSnapshot { .. } => return,
         };
         *slot = fight;
     }

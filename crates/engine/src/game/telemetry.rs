@@ -48,6 +48,65 @@ impl Game {
             .push(record);
     }
 
+    /// One `Record::BaseSnapshot`, at the top of every ledger window.
+    ///
+    /// **Called from `tick_inner` and gated on nothing but the clock.** Once
+    /// per `base_ledger::BUCKET_TICKS`, which is what makes it cheap enough
+    /// to leave armed for a whole session and what lines it up with the
+    /// buckets the ledger is already keeping.
+    ///
+    /// Every count is built **inside** `Game::record`'s closure, which is
+    /// the whole reason this is safe: the walk costs a pass over every
+    /// structure and every owned program, and a disarmed run must not pay
+    /// for it. Written eagerly it would be a full base census every
+    /// thousand ticks of every ordinary player's game.
+    pub(crate) fn note_base_snapshot(&mut self) {
+        let tick = self.world.resource::<crate::resources::GameClock>().tick;
+        if !tick.is_multiple_of(crate::base_ledger::BUCKET_TICKS) {
+            return;
+        }
+        self.record(|g| {
+            // `iter_entities` and not `World::query`, which wants `&mut
+            // World` — the closure holds `&Game`, which is the shape that
+            // makes the whole thing lazy in the first place.
+            let mut machines = 0;
+            let mut depots = 0;
+            let mut posted = 0;
+            let mut staff = 0;
+            let db = g.world.resource::<crate::structures::StructureDb>();
+            for entity in g.world.iter_entities() {
+                if let Some(structure) = entity.get::<crate::components::Structure>()
+                    && let Some(def) = db.get(&structure.kind)
+                {
+                    machines += u32::from(def.runs_a_job());
+                    depots += u32::from(def.stores);
+                }
+                if entity
+                    .get::<crate::components::Task>()
+                    .is_some_and(|t| matches!(t.kind, crate::components::TaskKind::GatherResource))
+                {
+                    posted += 1;
+                }
+                if entity.get::<crate::components::Tamed>().is_some()
+                    && g.program_role(entity.id()) == Some(crate::ProgramRole::Staff)
+                {
+                    staff += 1;
+                }
+            }
+            let (draw, supply) = g.base_power();
+            Record::BaseSnapshot {
+                tick,
+                zone: g.world.resource::<crate::resources::ZoneLevel>().0,
+                staff,
+                posted,
+                machines,
+                depots,
+                supply,
+                draw,
+            }
+        });
+    }
+
     /// Reports one base event: the ledger fold and the log record, through
     /// `base_ledger::emit`'s one door.
     ///

@@ -1859,7 +1859,7 @@ fn taking_a_preset_leaves_the_profiles_drawing_alone() {
     assert!(app.game.is_some(), "the run did not start");
     settle(&mut app);
 
-    let (on_disk, warning) = Profile::load(&app.profile_path.clone());
+    let (on_disk, warning) = Profile::load(&app.profile_path);
     assert!(warning.is_none(), "{warning:?}");
     assert_eq!(
         on_disk.player_icon.as_deref().and_then(PlayerIcon::decode),

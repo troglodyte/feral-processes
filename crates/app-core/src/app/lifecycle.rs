@@ -1,7 +1,6 @@
 //! Starting, saving, loading and ending a session.
 
 use crate::*;
-use feral_processes_engine::PlayerIcon;
 
 impl App {
     /// Where the game's content tree was resolved to, for a frontend that

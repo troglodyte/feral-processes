@@ -996,18 +996,16 @@ impl Game {
                         .is_some_and(|s| s.output_room() == 0);
                 let stats = self.world.get::<Stats>(entity);
                 let hp_fraction = stats.map(|s| s.hp_fraction());
-                // Hostile wild programs are recolored by difficulty relative
-                // to the player's current power, rather than shown in their
-                // species' authored color — see `difficulty_color`. Everyone
-                // and everything else (the player, tamed/companion programs,
-                // structures) keeps its normal glyph color.
-                let color = if is_hostile {
-                    stats
-                        .map(|s| difficulty_color(s.power(), player_power, is_boss, is_nemesis))
-                        .unwrap_or(glyph.color)
-                } else {
-                    glyph.color
-                };
+                // Every glyph on the map carries its species' authored hue —
+                // what this program *is*. How dangerous it is, is a second
+                // reading on a channel of its own: the map draws it as a bar
+                // along the bottom edge, the mirror of the rarity bar along
+                // the top. `None` for anything that is not hostile, so the
+                // bar cannot draw over a companion.
+                let color = glyph.color;
+                let difficulty = is_hostile
+                    .then(|| stats.map(|s| difficulty_color(s.power(), player_power)))
+                    .flatten();
                 let level = self.world.get::<Experience>(entity).map(|e| e.level);
                 let durability = self
                     .world
@@ -1026,6 +1024,7 @@ impl Game {
                     pos: (pos.x, pos.y),
                     glyph: glyph.ch,
                     color,
+                    difficulty,
                     label,
                     is_player,
                     look,
@@ -1722,30 +1721,21 @@ pub(crate) fn power_ratio(creature_power: i32, player_power: i32) -> f64 {
 }
 
 /// Old-school "con"-style map coloring for a hostile wild program, relative
-/// to the player's current `Stats::power`. A nemesis is always Blue
-/// regardless of the ratio, checked *before* the boss override so a
-/// creature that is both draws as a nemesis — see `views::EntityView::rarity`
-/// for the argument that spending the con read here is deliberate. Blue was
-/// the one `GlyphColor` variant nothing else on the map was painted — Cyan
-/// was tried first and rejected, because it is the player's own glyph colour
-/// (`lifecycle.rs`'s `Game::new`/`load`), and a nemesis tile has no business
-/// reading as the player. A boss that isn't a nemesis is always Magenta
-/// regardless of the ratio; everything else runs Green (easy) → Yellow
-/// (even) → Orange (tough) → Red (hard) as `creature_power` grows past
-/// `player_power`. Pulled out of `view_entities` so the bucketing is
-/// unit-testable without spinning up a `Game`.
-pub(crate) fn difficulty_color(
-    creature_power: i32,
-    player_power: i32,
-    is_boss: bool,
-    is_nemesis: bool,
-) -> GlyphColor {
-    if is_nemesis {
-        return GlyphColor::Blue;
-    }
-    if is_boss {
-        return GlyphColor::Magenta;
-    }
+/// to the player's current `Stats::power`. Green (easy) → Yellow (even) →
+/// Orange (tough) → Red (hard) as `creature_power` grows past
+/// `player_power`.
+///
+/// **Four rungs and nothing else.** A boss and a nemesis used to override
+/// the ratio here, returning Magenta and Blue — which spent the "can I win
+/// this fight" read on saying *which* creature this is, precisely on the
+/// two tiles where the question matters most. Both are facts the map now
+/// draws as their own corner marks, off `EntityView::is_boss` and
+/// `EntityView::nemesis`, so this answers one question only and answers it
+/// for every hostile.
+///
+/// Pulled out of `view_entities` so the bucketing is unit-testable without
+/// spinning up a `Game`.
+pub(crate) fn difficulty_color(creature_power: i32, player_power: i32) -> GlyphColor {
     let ratio = power_ratio(creature_power, player_power);
     if ratio <= DIFFICULTY_EASY_MAX {
         GlyphColor::Green

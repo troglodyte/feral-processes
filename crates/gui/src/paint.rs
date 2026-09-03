@@ -381,8 +381,10 @@ impl Painter {
     /// convention is a half-cell offset that reads as a camera fault.
     ///
     /// `color` is a **tint**, and an egui tint multiplies — so a white
-    /// sprite inherits every existing colour rule (the con read, the boss
-    /// and nemesis overrides, `biome_tint`, the damage dimming) for free.
+    /// sprite inherits every existing colour rule for free: the species'
+    /// own authored hue, `biome_tint`, the damage dimming. The con read and
+    /// the boss and nemesis marks are channels of their own now — a bar and
+    /// two corners — so they reach a tile without going through here.
     ///
     /// Returns `false` for a name the table has nothing under, which is what
     /// makes `assets/sprites/` optional: the caller draws its glyph instead,

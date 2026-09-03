@@ -48,6 +48,33 @@ impl Game {
             .push(record);
     }
 
+    /// One unit — or `qty` of them — left the run. `report_base`'s common
+    /// case, with the record spelled out once instead of at each sink.
+    pub(crate) fn note_consumed(
+        &mut self,
+        item: &crate::items::ItemId,
+        qty: u32,
+        source: crate::base_ledger::ConsumeSource,
+    ) {
+        if qty == 0 {
+            return;
+        }
+        let id = item.0.clone();
+        self.report_base(
+            crate::base_ledger::Event::Consume {
+                item: item.clone(),
+                qty,
+            },
+            move |tick, zone, _| Record::Consume {
+                tick,
+                zone,
+                item: id,
+                qty,
+                source: source.as_str().to_string(),
+            },
+        );
+    }
+
     /// One `Record::BaseSnapshot`, at the top of every ledger window.
     ///
     /// **Called from `tick_inner` and gated on nothing but the clock.** Once

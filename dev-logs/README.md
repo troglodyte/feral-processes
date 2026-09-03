@@ -170,6 +170,9 @@ ticks, which is what its record is read for.
 
 {"t":"consume","tick":3240,"zone":2,"item":"power_cell","qty":1,
  "source":"fuel"}
+
+{"t":"haul","tick":3260,"machine":[3,4],"kind":"mining_node",
+ "errand":"deposit","item":"core_fragment","qty":5,"distance":3}
 ```
 
 ### `base_snapshot`
@@ -241,6 +244,27 @@ Emitted at `advance_hand_craft`'s completion, one record per unit.
 | `bench` | The `StructureDef` id of the machine that exists to make this item, or `null`. Not a claim that a bench was used — this is the *hand* path. |
 | `ticks_spent` | Against the machine cycle for the same item, this is the whole of **B2**. |
 
+### `haul`
+
+Emitted by `haul_step_system` when a leg actually moves goods. A `Tend` —
+standing at the post with nothing to move — writes nothing, or a full base
+would log a row per tick for re-deciding the same errand.
+
+| Field | Meaning |
+|---|---|
+| `machine` | The worker's **post**, not where it is standing: by the time an errand acts the two are the same tile, and the post is what an analysis groups by. |
+| `errand` | `deposit` (product out to a Depot), `load` (an ingredient into the machine's own hopper), `collect` (drawing one off a Depot). |
+| `qty` | What actually moved, which is not what was wanted — a Depot that filled or emptied while the worker walked moves less. |
+| `distance` | Chebyshev tiles from the post to the other end. |
+
+**The corrected B3.** The published audit claimed a machine can only be fed
+by its four orthogonal neighbours; it cannot — `Errand::Collect` walks to a
+Depot, so any layout works and adjacency is a throughput *multiplier*. The
+cost falls on the **extractor**, not the assembler: `task_progress_system`
+gates on `at_station`, so a producer makes nothing while its worker walks,
+while a consumer keeps working off its hopper. Plot `machine_stall` fractions
+against this `distance` to price it.
+
 ### `acquire`
 
 Emitted by `Game::grant_loot`, the one door all eighteen sources pass
@@ -263,8 +287,9 @@ the other half of the ledger's own arithmetic.
 |---|---|
 | `source` | `fuel` (a supplier burning Power Cells), `build` (spent at the tick the structure is raised, not when they left the shelf), `base` (the base spending its own shelves — the dig crew's tile, a sortie), `breach` (destroyed outright). |
 
-**Two sinks are not covered yet**: a hand-compile's ingredients, and a disk
-spent on an install. The consumed side is short by exactly that.
+`craft` covers a hand-compile's ingredients and the blank a routine is burnt
+onto; `install` is a disk written into a slot, which refunds nothing and so
+is a sink rather than a move.
 
 ## Reading it
 
@@ -310,9 +335,6 @@ not knowable until there is data to look at.
 
 ## What it does not cover
 
-- **Hauling.** Which errand a body is on, and how far it walked, is the one
-  base flow with no record — it is Phase 3 of the instrumentation design, and
-  it is what the corrected B3 needs.
 - **Spawns and sweeps.** Still uncovered, and deliberately: the base log pane
   and `balance_sim` cover that ground, and the volume would bury everything
   else here.

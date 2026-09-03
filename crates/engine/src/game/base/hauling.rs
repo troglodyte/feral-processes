@@ -571,12 +571,44 @@ fn nearest_store_holding(
 /// otherwise, so dropping the load is all it takes to turn around, and there
 /// is no arrival event to write. A depot demolished mid-walk, or filled up
 /// by someone else, simply stops being the answer on the next tick.
+/// One `Record::Haul`, when a leg actually moved something.
+///
+/// A zero is dropped rather than recorded: an errand that moved nothing is a
+/// Depot that filled or emptied while the worker walked, and it is already
+/// visible as the stall the machine reports. Recording it would put a row in
+/// the log for every tick a full base spends re-deciding the same errand.
+#[allow(clippy::too_many_arguments)]
+fn note_haul(
+    telemetry: &mut crate::resources::BattleTelemetry,
+    tick: u64,
+    post: (Position, &str),
+    errand: &str,
+    item: &ItemId,
+    qty: u32,
+    distance: u32,
+) {
+    if qty == 0 {
+        return;
+    }
+    let (pos, kind) = post;
+    crate::base_ledger::record_in_system(telemetry, || crate::telemetry::Record::Haul {
+        tick,
+        machine: (pos.x, pos.y),
+        kind: kind.to_string(),
+        errand: errand.to_string(),
+        item: item.0.clone(),
+        qty,
+        distance,
+    });
+}
+
 pub(crate) fn haul_step_system(
     mut workers: Query<Hauler, (With<Tamed>, Without<Structure>)>,
     mut structures: Query<HaulStructure, Without<Tamed>>,
     departure: HaulDeparture,
     defs: HaulLookups,
     grid: Res<BaseGrid>,
+    mut telemetry: ResMut<crate::resources::BattleTelemetry>,
     mut commands: Commands,
 ) {
     let HaulDeparture {
@@ -723,6 +755,15 @@ pub(crate) fn haul_step_system(
             continue;
         };
         let dest_pos = *dest_pos;
+        // Read before the arms, which take `structures` mutably. The post
+        // and not the worker's own tile: by the time an errand acts the two
+        // are the same place, and what the analysis groups by is the
+        // machine.
+        let (post, post_kind) = structures
+            .get(machine)
+            .map(|(_, p, _, s)| (*p, s.kind.clone()))
+            .unwrap_or((worker_pos, String::new()));
+        let legs = chebyshev(post, dest_pos).max(0) as u32;
 
         if at_station(worker_pos, dest_pos) {
             // A worker standing where it meant to stand is not stranded,
@@ -740,6 +781,15 @@ pub(crate) fn haul_step_system(
                         continue;
                     };
                     let moved = deposit(&mut stock, &load);
+                    note_haul(
+                        &mut telemetry,
+                        clock.tick,
+                        (post, &post_kind),
+                        "deposit",
+                        &load.item,
+                        moved,
+                        legs,
+                    );
                     if moved == load.qty {
                         commands.entity(worker).remove::<Carrying>();
                     } else if moved > 0 {
@@ -766,6 +816,15 @@ pub(crate) fn haul_step_system(
                         };
                         *stock.input.entry(load.item.clone()).or_default() += moved;
                     }
+                    note_haul(
+                        &mut telemetry,
+                        clock.tick,
+                        (post, &post_kind),
+                        "load",
+                        &load.item,
+                        moved,
+                        legs,
+                    );
                     // Nothing landed means the hopper filled while the worker
                     // walked. It keeps the load, and next tick's errand is a
                     // `Deposit` — there is no stuck state to write.
@@ -783,6 +842,15 @@ pub(crate) fn haul_step_system(
                         continue;
                     };
                     let taken = take_from(&mut stock, &item, want);
+                    note_haul(
+                        &mut telemetry,
+                        clock.tick,
+                        (post, &post_kind),
+                        "collect",
+                        &item,
+                        taken,
+                        legs,
+                    );
                     if taken > 0 {
                         commands
                             .entity(worker)

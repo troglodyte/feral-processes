@@ -164,6 +164,12 @@ pub enum ConsumeSource {
     /// Taken off the base's shelves for a job it set itself — the dig crew's
     /// tile, a sortie's outfitting.
     Base,
+    /// Spent making something by hand: a hand-compile's ingredients, or
+    /// the blank a routine was burnt onto.
+    Craft,
+    /// A routine disk written into a slot. It buys the routine and refunds
+    /// nothing, which is what makes it a sink rather than a move.
+    Install,
     /// Destroyed by a breach. Core Fragments and Portal Fragments do not
     /// cross, which is a sink nothing else in the ledger could see.
     Breach,
@@ -175,6 +181,8 @@ impl ConsumeSource {
             ConsumeSource::Fuel => "fuel",
             ConsumeSource::Build => "build",
             ConsumeSource::Base => "base",
+            ConsumeSource::Craft => "craft",
+            ConsumeSource::Install => "install",
             ConsumeSource::Breach => "breach",
         }
     }

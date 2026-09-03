@@ -97,6 +97,34 @@ pub enum Record {
         kind: String,
         status: String,
     },
+    /// One leg of a haul that actually moved goods.
+    ///
+    /// **The corrected B3.** Adjacency is a throughput multiplier and not a
+    /// requirement — a machine too far from its feeders is fed from a Depot
+    /// instead — so what costs the base is the walk, and the penalty falls
+    /// on the *extractor*: `task_progress_system` gates on `at_station`, so
+    /// a producer makes nothing while its worker is away, while a consumer
+    /// keeps working off its hopper.
+    ///
+    /// A `Tend` writes nothing: no goods moved, and what a stalled machine
+    /// costs is `MachineStall`'s to say.
+    Haul {
+        tick: u64,
+        /// The worker's *post*, not where it is standing — one machine's
+        /// legs are what the analysis groups by.
+        machine: (i32, i32),
+        kind: String,
+        /// `deposit` (product to a Depot), `load` (an ingredient into the
+        /// machine's own hopper), `collect` (drawing one off a Depot).
+        errand: String,
+        item: String,
+        /// What actually moved, which is not what was wanted: a Depot that
+        /// filled or emptied while the worker walked moves less.
+        qty: u32,
+        /// Chebyshev tiles from the post to the other end. `0` is an
+        /// errand that never left the tile.
+        distance: u32,
+    },
     /// What the base *was* at the top of a window: the denominator every
     /// other base record is missing.
     ///
@@ -191,7 +219,8 @@ impl Record {
             | Record::HandCraft { .. }
             | Record::Acquire { .. }
             | Record::Consume { .. }
-            | Record::BaseSnapshot { .. } => return,
+            | Record::BaseSnapshot { .. }
+            | Record::Haul { .. } => return,
         };
         *slot = fight;
     }

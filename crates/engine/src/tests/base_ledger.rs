@@ -479,6 +479,12 @@ mod seams {
             totals.compiled, 0,
             "a hand-compile must not read as a machine's work — that split is the whole of B2"
         );
+        assert_eq!(
+            ledger.lifetime[&ItemId::from(ids::CORE_FRAGMENT)].consumed,
+            ICE_BREAKER_CORE_COST,
+            "what the compile ate has to reach the sink side, or the hand \
+             path produces out of nothing"
+        );
     }
 
     /// `Game::craft` is `begin_hand_craft` plus the timed loop drained to

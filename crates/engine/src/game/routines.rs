@@ -335,7 +335,8 @@ impl Game {
         self.world
             .get_mut::<Inventory>(player)
             .unwrap()
-            .take(blank, 1);
+            .take(blank.clone(), 1);
+        self.note_consumed(&blank, 1, crate::base_ledger::ConsumeSource::Craft);
         self.grant_loot(etched.clone(), 1, LootSource::Etch);
         let ability_name = self.ability_display_name(ability);
         self.log(format!("You burn {ability_name} onto a blank disk."));
@@ -381,7 +382,8 @@ impl Game {
         self.world
             .get_mut::<Inventory>(player)
             .unwrap()
-            .take(etched, 1);
+            .take(etched.clone(), 1);
+        self.note_consumed(&etched, 1, crate::base_ledger::ConsumeSource::Install);
         let ability_name = self.ability_display_name(ability);
         self.write_routine(entity, ability);
         let name = self.routine_holder_label(entity);

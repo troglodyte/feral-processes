@@ -514,9 +514,17 @@ impl Game {
                 return false;
             }
         }
-        let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
+        {
+            let mut inv = self.world.get_mut::<Inventory>(player).unwrap();
+            for (id, qty) in &cost {
+                inv.take(id.clone(), *qty);
+            }
+        }
+        // The sink the ledger was missing on the hand path: `HandCraft`
+        // folds the product and nothing else, so what a player makes
+        // themselves was produced out of units that never left.
         for (id, qty) in &cost {
-            inv.take(id.clone(), *qty);
+            self.note_consumed(id, *qty, crate::base_ledger::ConsumeSource::Craft);
         }
         true
     }

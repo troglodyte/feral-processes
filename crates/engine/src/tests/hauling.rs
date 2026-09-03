@@ -235,6 +235,59 @@ fn a_worker_delivers_to_the_nearer_of_two_depots() {
     );
 }
 
+/// **The corrected B3, made measurable.** Adjacency is a throughput
+/// multiplier and not a requirement, so what a hub-fed machine actually
+/// costs is the walk — and the record has to carry the distance, or the
+/// analysis has a starve fraction with nothing to plot it against.
+///
+/// The post's tile and not the worker's: by the time an errand acts the two
+/// are the same place, and what the analysis groups by is the machine.
+#[test]
+fn a_delivered_load_records_the_errand_and_how_far_it_went() {
+    let mut game = base(6);
+    game.world
+        .resource_mut::<crate::resources::BattleTelemetry>()
+        .on = true;
+    let node = deploy(&mut game, "mining_node", 0, 1);
+    let depot = deploy(&mut game, "depot", 3, 1);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+
+    tick_until(&mut game, 300, |g| {
+        node_output(g, depot, ids::CORE_FRAGMENT) > 0
+    });
+
+    let hauls: Vec<(String, String, u32, u32)> = game
+        .world
+        .resource::<crate::resources::BattleTelemetry>()
+        .records
+        .iter()
+        .filter_map(|r| match r {
+            crate::telemetry::Record::Haul {
+                errand,
+                kind,
+                qty,
+                distance,
+                ..
+            } => Some((errand.clone(), kind.clone(), *qty, *distance)),
+            _ => None,
+        })
+        .collect();
+
+    assert!(
+        hauls
+            .iter()
+            .any(|(errand, kind, qty, distance)| errand == "deposit"
+                && kind == "mining_node"
+                && *qty > 0
+                && *distance == 3),
+        "the delivery has to record its errand, its post's kind and the \
+         three tiles it walked, got {hauls:?}"
+    );
+}
+
 #[test]
 fn a_depot_is_not_offered_as_a_cronjob() {
     let mut game = base(5);

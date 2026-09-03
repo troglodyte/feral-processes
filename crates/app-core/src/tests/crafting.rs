@@ -267,9 +267,11 @@ fn a_key_during_compiling_aborts_and_returns_to_playing() {
     open_compile_of(&mut app, "ice_breaker");
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::Compiling);
-    // A few ticks in, but nowhere near finished — the fixture's inventory
-    // affords a batch bigger than one unit, per `stocked_app`.
-    app.advance_compile(0.1);
+    // A tick or two in, but nowhere near finished. Sized in whole seconds
+    // because `COMPILE_TICKS_PER_SECOND` is the world's own rate: a tenth
+    // of a second buys no tick at all, so the abort would be tested against
+    // a batch that had not started.
+    app.advance_compile(1.0);
 
     app.handle_key(GameKey::Char('q'));
 
@@ -322,6 +324,35 @@ fn held(app: &App, item: &str) -> u32 {
         .sum()
 }
 
+/// A compile spends the world's ticks at the world's own pace.
+///
+/// `Mode::Compiling` is the only screen that spends ticks against `dt`
+/// rather than against a keypress, so its rate is the one place the world
+/// can be made to sprint while the player just watches. At the 60/sec it
+/// shipped with, a batch ran the clock thirty times faster than standing
+/// still did — needs decay, base production, raid pressure and wild spawns
+/// all with it — and the only tell was that the bar looked good.
+#[test]
+fn a_compile_advances_the_world_at_the_idle_tick_rate() {
+    let mut app = stocked_app(722);
+    open_compile_of(&mut app, "ice_breaker");
+    // A batch long enough that one second of it is nowhere near the end,
+    // so what this measures is the pace and not a batch running out.
+    app.handle_key(GameKey::Char('5'));
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::Compiling, "the batch should have armed");
+    let before = app.game.as_ref().unwrap().current_tick();
+
+    app.advance_compile(1.0);
+
+    assert_eq!(
+        app.game.as_ref().unwrap().current_tick() - before,
+        u64::from(WORLD_SPEED_MULTIPLIER),
+        "one real second of compiling should move the clock exactly as far \
+         as one real second of standing on the map touching nothing"
+    );
+}
+
 /// A path that spends ticks owes `after_tick()`.
 ///
 /// `handle_key`'s tail and `update_realtime` both end in it; `advance_compile`
@@ -339,14 +370,22 @@ fn a_compile_that_spends_ticks_autosaves_like_any_other_span_of_them() {
     app.last_autosave_tick = app.game.as_ref().unwrap().current_tick();
 
     open_compile_of(&mut app, "ice_breaker");
+    // Sized against the interval rather than trusting one unit to clear it:
+    // `hand_craft_ticks` is a machine's cycle and a cheap recipe's is well
+    // under fifty ticks, so a one-unit batch would pass this test without
+    // ever reaching an autosave.
     let per_unit = app
         .game
         .as_ref()
         .unwrap()
         .hand_craft_ticks(&ItemId::from("ice_breaker"));
+    let quantity = crate::AUTOSAVE_INTERVAL_TICKS as u32 / per_unit + 1;
+    for c in quantity.to_string().chars() {
+        app.handle_key(GameKey::Char(c));
+    }
     assert!(
-        per_unit > crate::AUTOSAVE_INTERVAL_TICKS as u32,
-        "one unit has to outlast the autosave interval or this proves nothing"
+        quantity * per_unit > crate::AUTOSAVE_INTERVAL_TICKS as u32,
+        "the batch has to outlast the autosave interval or this proves nothing"
     );
     app.handle_key(GameKey::Enter);
     drain_compile(&mut app);

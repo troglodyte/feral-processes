@@ -1848,11 +1848,25 @@ pub const QUALITY_CAREFUL_COST_PERCENT: u32 = 50;
 /// The base is a factory nobody has to visit while a recipe the Lathe runs
 /// in twelve ticks is also a free instant action at the player's own hands.
 /// Blocking the recipe outright was the alternative and was rejected: every
-/// recipe stays reachable, and what is priced is the *convenience*. Ten is
-/// the smallest multiple that makes the machine the obvious answer at the
-/// scale of a base's other cycles — a Lathe's twelve-tick substrate is two
-/// minutes of game time by hand, and the Armory's thirty-tick shell is five.
-pub const HAND_CRAFT_TICK_MULT: u32 = 10;
+/// recipe stays reachable, and what is priced is the *convenience*.
+///
+/// **One, because the wall clock is the other half of the price.** This was
+/// ten, chosen against a compile bar that ran at thirty times the world's
+/// tick rate — a Hardened Shell was three hundred game ticks and five real
+/// seconds. `app_core::COMPILE_TICKS_PER_SECOND` is the world's own rate
+/// now, so the ten-times price is ten times the *wait* as well: that same
+/// shell is two and a half minutes of watching a bar. The two constants are
+/// read together and this is the one that gave.
+///
+/// **What still makes the machine the obvious answer is not speed.** At
+/// parity a bench beats hands on the three things the multiplier was never
+/// carrying: it runs unattended while the player does something else, it
+/// burns no Power out of the player's own reserve, and `QUALITY_BENCH_PER_
+/// TIER` puts every copy off a developed bench above what bare hands can
+/// reach. What the player buys by compiling by hand is reaching a recipe
+/// before the base that makes it exists, and they pay for it in real time
+/// and Power.
+pub const HAND_CRAFT_TICK_MULT: u32 = 1;
 
 /// The cycle `Game::hand_craft_ticks` prices a recipe off when **no**
 /// structure assembles or produces it.
@@ -1869,21 +1883,24 @@ pub const HAND_CRAFT_DEFAULT_CYCLE: u32 = 10;
 /// rule this follows.
 ///
 /// Compiling by hand is work, and its ticks burn `HUNGER_DECAY_PER_TICK`
-/// exactly as a tick spent anywhere else does. At `HAND_CRAFT_TICK_MULT`
-/// one Hardened Shell is 300 ticks and 45 points of a hundred-point
-/// reserve, so a third one would flatline a player who started full. **That
-/// drain is the feature and stays**; what is refused is only the batch that
-/// can be seen in advance to end the run.
+/// exactly as a tick spent anywhere else does. **That drain is the feature
+/// and stays**; what is refused is only the batch that can be seen in
+/// advance to end the run.
+///
+/// **What reaches it is the batch, not the unit.** At `HAND_CRAFT_TICK_MULT`
+/// a single Hardened Shell is thirty ticks and four and a half points of a
+/// hundred-point reserve, so no one item comes near this — a run of them
+/// does, and `CRAFT_QUANTITY_MAX` lets the player ask for four figures of
+/// one. That is what this guards, and it is why the refusal is priced off
+/// `quantity × hand_craft_ticks` rather than off a per-item ceiling.
 ///
 /// **A margin rather than exactly zero**, because a floor at `POWER_MIN`
 /// would still pass a batch projected to finish at a fraction of a point:
 /// the very next background tick starves it, which is the state this
 /// refusal exists to prevent, reached one tick later. Ten points is about
 /// sixty-six ticks at the standing drain — a crossing of base space to a
-/// rest, which is free in there and refills the reserve whole. A floor at
-/// `LOW_POWER_ATTACK_THRESHOLD` was the other candidate and is wrong: it
-/// would refuse the *second* Hardened Shell of a full reserve, and that
-/// cost is the point of the change.
+/// rest, which is free in there and refills the reserve whole, so the
+/// refusal's advice is actionable rather than a dead end.
 pub const HAND_CRAFT_POWER_FLOOR: f32 = 10.0;
 
 /// Range of Portal Fragments a defeated boss guarantees **underground**,

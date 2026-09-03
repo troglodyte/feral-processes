@@ -224,8 +224,15 @@
   respectively, never per batch, so an abort keeps the finished units and
   refunds the one in flight; that is *materials are not spent until the
   structure is raised* again, and it closes the edge where a build crew
-  empties the pack (`Source::Pack`) part-way through a three-hundred-tick
-  compile. The loop breaks on a game over or a battle opening, exactly where
+  empties the pack (`Source::Pack`) part-way through a compile. **The
+  multiplier is 1 and is paired with `app_core::COMPILE_TICKS_PER_SECOND`**
+  — the tick price divided by the bar's rate *is* the wall-clock wait, so
+  raising this without checking that rate ships a stare nobody measured; it
+  was 10 against a bar running at thirty times the world's tick rate, and
+  fixing the rate alone would have made one Hardened Shell two and a half
+  minutes of watching. At parity what still makes a bench the answer is that
+  it runs unattended, burns no player Power, and reaches quality bare hands
+  cannot (`QUALITY_BENCH_PER_TIER`). The loop breaks on a game over or a battle opening, exactly where
   `move_player`'s drag ticks break and for the same reason, and treats the
   break as an abort. **A sixth refusal guards the reserve**: the
   ticks a batch spends drain Power at `HUNGER_DECAY_PER_TICK` like any

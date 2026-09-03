@@ -221,5 +221,20 @@
   `BattleReveal::accumulated`'s carry, so a frame worth less than one tick is
   not rounded away. The *ticks spent must still be exactly* `hand_craft_ticks`
   — the pace is presentation, the cost is not.
+- **And that rate is the world's own, `WORLD_SPEED_MULTIPLIER`, derived and
+  never restated.** The ticks a compile spends are ordinary world ticks —
+  needs decay, base production, raid pressure and wild spawns all ride them
+  — so any rate but the idle one makes the world sprint for as long as the
+  bar is up. **The trap is that nothing in the suite can see it**: every
+  gate here measures *how many* ticks a batch spends, which is the same
+  number at any pace, so the 60/sec this shipped with aged a base by minutes
+  per batch against a fully green suite and was found only in play.
+  `a_compile_advances_the_world_at_the_idle_tick_rate` is the gate that
+  exists now — one real second of bar against one real second of standing
+  still. The second half of the pair is `tuning::HAND_CRAFT_TICK_MULT`: the
+  wall-clock wait is the tick price divided by the rate, so slowing one
+  without cutting the other turns a five-second stare into two and a half
+  minutes. Read the two together or a retune of either ships a wait nobody
+  measured.
 - **Engine test fixtures live in `crates/engine/src/tests/support.rs`.** Look
   there before writing a new one.

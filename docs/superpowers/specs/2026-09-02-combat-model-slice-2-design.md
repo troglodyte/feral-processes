@@ -8,7 +8,7 @@ carrying none. Task D landed as a recorded blind spot rather than a
 re-baselining — see Risks 1.
 **Date:** 2026-09-02
 **Slice:** 2 of 4 — see
-`../archive/specs/2026-08-19-combat-model-ac-and-weapon-damage-design.md`
+`2026-08-19-combat-model-ac-and-weapon-damage-design.md`
 for slices 1, 3 and 4 and the argument for this ordering.
 **Save format:** **no bump.** Every input is already saved.
 **Crates:** `crates/engine` only.

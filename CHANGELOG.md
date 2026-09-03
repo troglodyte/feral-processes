@@ -33,6 +33,27 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.87
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+the two new fields are additive and `#[serde(default)]`, so a save written
+before this release loads with no drawing and behaves exactly as it did.
+
+- **You can draw your own icon now.** A 16x16 editor on the character-creation
+  wizard's Icon step, from a fixed fifteen-colour palette — five steps of value
+  and ten hues, because shading with value is what makes a figure read at this
+  size.
+- **`Tab` moves between the canvas and the palette**, so the arrows mean one
+  thing at a time rather than changing meaning based on a mode you have to
+  remember you are in.
+- **What you draw follows you into the next run.** It is kept in the profile,
+  which is what outlives a run, and copied into the save so that redrawing it
+  later cannot repaint a character you already made.
+- **A drawn icon is the one sprite in the game drawn untinted.** Every other
+  sprite inherits a multiplying tint and must be authored near-white; the
+  player's own tile inherits none of the hues that rule protects, so a drawing
+  can carry its own colour there and nowhere else.
+
 ## 0.13.86
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

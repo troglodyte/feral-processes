@@ -132,6 +132,7 @@ impl App {
             creation_decided: Default::default(),
             creation_difficulty: None,
             creation_catalogue,
+            creation_icon_editor: None,
         }
     }
 

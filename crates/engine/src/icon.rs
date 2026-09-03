@@ -32,8 +32,11 @@ pub const ICON_PALETTE: [(u8, u8, u8); 15] = [
     (0x8a, 0x5a, 0x3c),
 ];
 
-/// The icon's edge, in pixels, on both axes.
-const ICON_SIZE: usize = 16;
+/// The icon's edge, in pixels, on both axes. Public because app-core's
+/// editor clamps its cursor to this grid and the gui draws that many
+/// cells — a second `16` in either would be a copy of the format, not a
+/// coincidence.
+pub const ICON_SIZE: usize = 16;
 
 /// Total pixel count, and the length of the encoded payload — one hex digit
 /// per pixel.

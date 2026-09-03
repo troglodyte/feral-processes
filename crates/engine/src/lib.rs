@@ -82,7 +82,7 @@ pub use game::creation::{CharacterChoice, CreationCatalogue, DEFAULT_PLAYER_SPRI
 pub use game::environment::TerrainRow;
 pub use game::party::ProgramRole;
 pub use game::stack_view::ExamineDir;
-pub use icon::{ICON_PALETTE, PlayerIcon};
+pub use icon::{ICON_PALETTE, ICON_SIZE, PlayerIcon};
 use items::{EquipmentSlot, EquipmentStats, GearCopy, ItemCategory, ItemId, ids};
 use items_db::{ItemDb, ItemDef};
 pub use perks::{Perk, PerkDb, PerkDef};

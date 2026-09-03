@@ -238,6 +238,7 @@ impl App {
         self.creation_choice = CharacterChoice::at_creation();
         self.creation_decided = Decided::default();
         self.creation_difficulty = None;
+        self.creation_icon_editor = None;
         self.menu_selected = 0;
         self.mode = Mode::CreateCharacter;
     }

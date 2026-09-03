@@ -14,6 +14,7 @@ pub use app::building::{BaseStaffRow, StaffAction, StaffRow, Staffing, WorkOrder
 pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
 pub use app::group_menu::GroupMenuRow;
+pub use app::icon_editor::{IconEditorView, IconFocus};
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
 /// nothing else of app-core's internals.
 pub use app::telemetry::append_records;
@@ -2174,6 +2175,10 @@ pub struct App {
     /// exists — the same reason `achievement_db` and `help_db` are held
     /// here.
     creation_catalogue: CreationCatalogue,
+    /// The icon editor, open only while the player is drawing on the
+    /// wizard's Icon step. `None` at every other moment, including on a
+    /// wizard that has never opened it — see `app::icon_editor`.
+    creation_icon_editor: Option<crate::app::icon_editor::IconEditor>,
 }
 
 /// One entry in the `Mode::LoadGame` list — a save file found in the saves

@@ -4,6 +4,7 @@ pub mod affixes;
 pub mod arena;
 pub mod balance_sim;
 pub mod base_grid;
+pub mod base_ledger;
 pub mod battle;
 pub mod caravans;
 pub mod classes;

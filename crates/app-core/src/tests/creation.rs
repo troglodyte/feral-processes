@@ -1583,6 +1583,49 @@ fn taking_a_preset_row_clears_a_drawn_icon() {
     assert_eq!(app.creation_step(), CreationStep::Colour);
 }
 
+/// **Regression.** `None` is also what taking a preset produces on
+/// purpose, so a seed guarded on the *value* of `creation_choice.icon`
+/// rather than a one-shot latch would fire again the moment the player
+/// walked back to the Icon step, silently un-picking the preset by
+/// re-seeding the profile's saved drawing over it.
+#[test]
+fn walking_back_to_the_icon_step_does_not_undo_a_preset() {
+    let mut icon = PlayerIcon::default();
+    icon.set(0, 0, 5);
+    let profile = Profile {
+        player_icon: Some(icon.encode()),
+        ..Default::default()
+    };
+
+    let mut app = wizard_app_with_profile("preset_survives_reentry", &profile);
+    press(&mut app, ch('n'));
+    press(&mut app, ch('f'));
+    press(&mut app, GameKey::Enter); // -> Class
+    press(&mut app, ch('1'));
+    spend_the_kit(&mut app);
+    press(&mut app, GameKey::Enter); // -> Icon, seeded from the profile
+    assert_eq!(
+        app.creation_choice().icon,
+        Some(icon),
+        "the step must open seeded from the profile"
+    );
+
+    press(&mut app, ch('1')); // take the first preset -> Colour
+    assert!(
+        app.creation_choice().icon.is_none(),
+        "the preset must clear it"
+    );
+    assert_eq!(app.creation_step(), CreationStep::Colour);
+
+    press(&mut app, GameKey::Esc); // back to Icon
+    assert_eq!(app.creation_step(), CreationStep::Icon);
+
+    assert!(
+        app.creation_choice().icon.is_none(),
+        "walking back to the Icon step must not reseed over a preset the player just took"
+    );
+}
+
 /// The step seeds the drawing from `Profile::player_icon` the moment it is
 /// entered — once, the Points step's roll's own rule — so a player who
 /// drew something last run sees it again without having to redraw it.

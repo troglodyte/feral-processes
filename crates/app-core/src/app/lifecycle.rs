@@ -134,6 +134,7 @@ impl App {
             creation_difficulty: None,
             creation_catalogue,
             creation_icon_editor: None,
+            creation_icon_seeded: false,
         }
     }
 

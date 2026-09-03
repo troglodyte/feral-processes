@@ -241,6 +241,7 @@ impl App {
         self.creation_decided = Decided::default();
         self.creation_difficulty = None;
         self.creation_icon_editor = None;
+        self.creation_icon_seeded = false;
         self.menu_selected = 0;
         self.mode = Mode::CreateCharacter;
     }
@@ -588,13 +589,16 @@ impl App {
     /// itself never sets that flag, since it is not the hand-made decision
     /// the flag records.
     ///
-    /// **The Icon step seeds the same way, off `!creation_choice.icon.
-    /// is_some()` rather than a `Decided` flag** — there is nothing to
-    /// protect: `Enter` inside the editor is the one write that lands a
-    /// real drawing (`Some`), and a preset row clears it back to `None`, so
-    /// re-entering after a preset simply offers the profile's drawing again
-    /// rather than stomping a choice the player only just changed their
-    /// mind about.
+    /// **The Icon step seeds the same way, latched on `creation_icon_seeded`
+    /// rather than `creation_choice.icon.is_none()`.** `None` is also what
+    /// taking a preset row produces on purpose — guarding on the value
+    /// instead of a one-shot flag would silently un-pick a preset the
+    /// moment the player walked back to the Icon step and returned, since
+    /// the profile's saved drawing would win the field back every time.
+    /// This is not the `Decided` flag the doc comment above says the wizard
+    /// has none of: that rule is about protecting a hand-made choice from
+    /// `[r]`'s reroll, which nothing here does — the latch only decides
+    /// whether the entry seed still has something to do, exactly once.
     fn enter_creation_step(&mut self, step: CreationStep) {
         self.creation_step = step;
         self.menu_selected = 0;
@@ -602,7 +606,8 @@ impl App {
         if step == CreationStep::Points && !self.creation_decided.stats {
             self.creation_choice.stats = roll_points_spread(&mut Roll::new());
         }
-        if step == CreationStep::Icon && self.creation_choice.icon.is_none() {
+        if step == CreationStep::Icon && !self.creation_icon_seeded {
+            self.creation_icon_seeded = true;
             self.creation_choice.icon = self
                 .profile
                 .player_icon

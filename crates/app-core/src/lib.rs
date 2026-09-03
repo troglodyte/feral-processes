@@ -2187,6 +2187,16 @@ pub struct App {
     /// wizard's Icon step. `None` at every other moment, including on a
     /// wizard that has never opened it — see `app::icon_editor`.
     creation_icon_editor: Option<crate::app::icon_editor::IconEditor>,
+    /// Whether `enter_creation_step` has already seeded
+    /// `creation_choice.icon` from `Profile::player_icon` this wizard
+    /// session. Reset alongside the choice on every open.
+    ///
+    /// **A one-shot latch, not `creation_choice.icon.is_none()`.** `None`
+    /// is also what taking a preset row produces on purpose — seeding off
+    /// the value instead of this flag would silently un-pick a preset the
+    /// moment the player walked back to the Icon step and returned, since
+    /// the profile's saved drawing would win the field back every time.
+    creation_icon_seeded: bool,
 }
 
 /// One entry in the `Mode::LoadGame` list — a save file found in the saves

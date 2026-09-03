@@ -75,7 +75,7 @@ impl Game {
         // as the consequence of cracking the cache rather than as something
         // that happened first. `force_seal` orders these the same way.
         self.raise_trace(TRACE_PER_CACHE);
-        let landed = self.grant_loot(self.trade_currency(), credits);
+        let landed = self.grant_loot(self.trade_currency(), credits, LootSource::Cache);
         if landed > 0 {
             self.log_kind(
                 MessageKind::Loot,

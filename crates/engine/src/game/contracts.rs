@@ -12,6 +12,7 @@
 //! over at the Broker — and polling cargo for it would advance a contract the
 //! player never took anything to.
 
+use crate::base_ledger::LootSource;
 use bevy_ecs::prelude::*;
 
 use rand::prelude::*;
@@ -263,7 +264,7 @@ impl Game {
         for reward in &contract.def.reward {
             match *reward {
                 Reward::Credits(n) => {
-                    self.grant_loot(ItemId::from(ids::CREDITS), n);
+                    self.grant_loot(ItemId::from(ids::CREDITS), n, LootSource::Contract);
                 }
                 // Plain copies, deliberately not through `grant_gear_drop` —
                 // that is the one door a copy above `Ordinary` enters the game
@@ -271,7 +272,7 @@ impl Game {
                 // gear is categorically better than made gear, and a contract
                 // payout is closer to made.
                 Reward::Item(ref item, n) => {
-                    self.grant_loot(item.clone(), n);
+                    self.grant_loot(item.clone(), n, LootSource::Contract);
                 }
                 // Through `award_player_xp` so a level-up full-heals exactly
                 // as it does from a kill.

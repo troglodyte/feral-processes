@@ -51,6 +51,7 @@ use crate::tuning::{
 use std::collections::HashMap;
 use std::path::Path;
 
+pub use base_ledger::LootSource;
 pub use bevy_ecs::prelude::Entity;
 use bevy_ecs::prelude::*;
 use rand::rngs::StdRng;

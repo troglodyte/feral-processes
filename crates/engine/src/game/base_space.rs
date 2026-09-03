@@ -425,7 +425,7 @@ impl Game {
         };
         if paid {
             let item = ItemId::from(crate::items::ids::CORE_FRAGMENT);
-            let landed = self.grant_loot(item.clone(), 1);
+            let landed = self.grant_loot(item.clone(), 1, LootSource::Rock);
             if landed > 0 {
                 let line = format!("A {} shakes loose from the cut.", self.item_name(&item));
                 if by_player {

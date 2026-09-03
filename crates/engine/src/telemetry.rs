@@ -97,6 +97,23 @@ pub enum Record {
         kind: String,
         status: String,
     },
+    /// Something reached the player's pack that the base did not make:
+    /// a kill's drop, a cache, a contract's reward, a purchase, a refund.
+    ///
+    /// **Log only — this never folds into `base_ledger`.** The ledger and
+    /// the screen it feeds are about what the *base* produced and consumed;
+    /// a kill's Core Fragments counted there would read on the page as
+    /// something a machine made. What this answers is B5, which is a
+    /// question about competing supplies and belongs to the analysis.
+    Acquire {
+        tick: u64,
+        zone: u32,
+        item: String,
+        qty: u32,
+        /// `base_ledger::LootSource::as_str` — the vocabulary, not free
+        /// text.
+        source: String,
+    },
     /// The player finished a hand-compile. `ticks_spent` against the
     /// machine cycle for the same item is the whole of B2.
     HandCraft {
@@ -133,7 +150,8 @@ impl Record {
             Record::Extract { .. }
             | Record::Assemble { .. }
             | Record::MachineStall { .. }
-            | Record::HandCraft { .. } => return,
+            | Record::HandCraft { .. }
+            | Record::Acquire { .. } => return,
         };
         *slot = fight;
     }

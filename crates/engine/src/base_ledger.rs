@@ -98,6 +98,49 @@ pub enum Event {
     HandCraft { item: ItemId, qty: u32 },
 }
 
+/// Where something that reached the player's pack came from.
+///
+/// The whole point of `Record::Acquire`: B5 asks what share of a sector's
+/// Core Fragments came from a Mining Node against kills, base rock and
+/// caches, and a record with no source answers none of it.
+///
+/// An enum rather than a `&str` at each of the eighteen call sites, for
+/// `MachineStatus::as_str`'s reason: the wire strings are written once, a
+/// mistyped tag cannot silently create a nineteenth source, and the match
+/// is exhaustive so a new variant has to be given a name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LootSource {
+    /// A fight's spoils: gear, a work resource, a Stack boss's fragments.
+    Kill,
+    /// Cut out of base space by hand.
+    Rock,
+    /// A cache cracked open — a nest's or the Stack's.
+    Cache,
+    /// A contract's reward.
+    Contract,
+    /// Bought: the caravan, or the Stack's market.
+    Trade,
+    /// Given back — a demolished structure's materials.
+    Refund,
+    /// A routine disk the player made, by etching a blank or by extracting
+    /// one from a program.
+    Etch,
+}
+
+impl LootSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LootSource::Kill => "kill",
+            LootSource::Rock => "rock",
+            LootSource::Cache => "cache",
+            LootSource::Contract => "contract",
+            LootSource::Trade => "trade",
+            LootSource::Refund => "refund",
+            LootSource::Etch => "etch",
+        }
+    }
+}
+
 /// The bucketed counters, saved with the run.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Resource, Serialize, Deserialize)]
 pub struct BaseLedger {

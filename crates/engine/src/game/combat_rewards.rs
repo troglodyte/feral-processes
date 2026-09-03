@@ -136,7 +136,7 @@ impl Game {
     /// does not make good gear, your base does.
     pub(crate) fn grant_gear_drop(&mut self, item: ItemId, floor: Rarity) -> GearCopy {
         if self.equipment_of(&item).is_none() {
-            self.grant_loot(item.clone(), 1);
+            self.grant_loot(item.clone(), 1, LootSource::Kill);
             return GearCopy::plain(item);
         }
         let rarity = self.roll_gear_rarity().max(floor);
@@ -546,7 +546,7 @@ impl Game {
         };
 
         if let Some((resource, qty)) = self.roll_work_resource_drop(wild) {
-            let landed = self.grant_loot(resource.clone(), qty);
+            let landed = self.grant_loot(resource.clone(), qty, LootSource::Kill);
             self.record_drop(GearCopy::plain(resource), landed);
         }
 
@@ -614,7 +614,7 @@ impl Game {
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_range(STACK_BOSS_PORTAL_FRAGMENT_DROP) * depth
         };
-        let landed = self.grant_loot(self.craft_currency(), qty);
+        let landed = self.grant_loot(self.craft_currency(), qty, LootSource::Kill);
         self.record_drop(GearCopy::plain(self.craft_currency()), landed);
     }
 
@@ -629,7 +629,11 @@ impl Game {
     /// game — see `STACK_BOSS_PRIVILEGE_RING_DROP` for why the count is flat.
     fn pay_stack_boss_privilege_ring(&mut self) {
         let ring = ItemId::from(crate::items::ids::PRIVILEGE_RING);
-        let landed = self.grant_loot(ring.clone(), crate::tuning::STACK_BOSS_PRIVILEGE_RING_DROP);
+        let landed = self.grant_loot(
+            ring.clone(),
+            crate::tuning::STACK_BOSS_PRIVILEGE_RING_DROP,
+            LootSource::Kill,
+        );
         self.record_drop(GearCopy::plain(ring), landed);
     }
 

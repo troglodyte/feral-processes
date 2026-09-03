@@ -1230,12 +1230,12 @@ impl Game {
             views::CaravanOfferKind::Routine(ability) => {
                 let disk = ItemId::etched(ability);
                 let name = self.item_name(&disk).to_string();
-                self.grant_loot(disk, offer.qty);
+                self.grant_loot(disk, offer.qty, LootSource::Trade);
                 format!("{name} goes in the pack")
             }
             views::CaravanOfferKind::Material(item) => {
                 let name = self.item_name(item).to_string();
-                self.grant_loot(item.clone(), offer.qty);
+                self.grant_loot(item.clone(), offer.qty, LootSource::Trade);
                 format!("{} × {name} goes in the pack", offer.qty)
             }
             views::CaravanOfferKind::Program(species) => {

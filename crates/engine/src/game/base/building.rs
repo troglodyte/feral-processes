@@ -752,7 +752,7 @@ impl Game {
         // cascades every other structure's refund in one shot, easily
         // enough to blow past the buffer with no message.
         for (item, qty) in &refund {
-            self.grant_loot(item.clone(), *qty);
+            self.grant_loot(item.clone(), *qty, LootSource::Refund);
         }
         let refund_note = if refund.is_empty() {
             String::new()

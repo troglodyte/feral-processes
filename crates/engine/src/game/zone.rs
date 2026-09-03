@@ -90,7 +90,7 @@ impl Game {
                 let mut rng = self.world.resource_mut::<GameRng>();
                 rng.0.random_range(WORK_RESOURCE_DROP) * NEST_CACHE_WORK_RESOURCE_MULT
             };
-            let landed = self.grant_loot(resource.clone(), qty);
+            let landed = self.grant_loot(resource.clone(), qty, LootSource::Cache);
             if landed > 0 {
                 self.log_kind(
                     MessageKind::Loot,
@@ -127,7 +127,7 @@ impl Game {
             let mut rng = self.world.resource_mut::<GameRng>();
             rng.0.random_range(NEST_CACHE_CREDITS) + zone_bonus
         };
-        let landed = self.grant_loot(self.trade_currency(), qty);
+        let landed = self.grant_loot(self.trade_currency(), qty, LootSource::Cache);
         if landed > 0 {
             self.log_kind(
                 MessageKind::Loot,

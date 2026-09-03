@@ -173,6 +173,40 @@ mod seams {
         );
     }
 
+    /// **Loot is recorded and never folded.** The ledger and the page it
+    /// feeds are about what the *base* made; a kill's Core Fragments
+    /// counted there would read on the screen as a machine's work, which is
+    /// the one thing the MINED/COMPILED split exists to keep honest. What
+    /// the record answers is B5, and that lives in the analysis.
+    #[test]
+    fn loot_carries_its_source_and_never_reaches_the_ledger() {
+        let mut game = game(4107);
+        game.world.resource_mut::<BattleTelemetry>().on = true;
+        game.grant_loot(
+            ItemId::from(ids::CORE_FRAGMENT),
+            4,
+            crate::base_ledger::LootSource::Kill,
+        );
+
+        assert!(
+            game.world.resource::<BaseLedger>().lifetime.is_empty(),
+            "a kill's drop was counted as something the base produced"
+        );
+        match &game.world.resource::<BattleTelemetry>().records[..] {
+            [
+                crate::telemetry::Record::Acquire {
+                    item, qty, source, ..
+                },
+            ] => {
+                assert_eq!(
+                    (item.as_str(), *qty, source.as_str()),
+                    ("core_fragment", 4, "kill")
+                );
+            }
+            other => panic!("expected one acquire record, got {other:?}"),
+        }
+    }
+
     /// A machine changing status is news for the log and moves no units, so
     /// it rides `record_in_system` rather than the ledger's `emit` — and it
     /// hangs on `set_machine_status`, which already speaks **only on

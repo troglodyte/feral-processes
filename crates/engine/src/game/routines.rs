@@ -336,7 +336,7 @@ impl Game {
             .get_mut::<Inventory>(player)
             .unwrap()
             .take(blank, 1);
-        self.grant_loot(etched.clone(), 1);
+        self.grant_loot(etched.clone(), 1, LootSource::Etch);
         let ability_name = self.ability_display_name(ability);
         self.log(format!("You burn {ability_name} onto a blank disk."));
         Ok(())
@@ -563,7 +563,7 @@ impl Game {
         let ability_name = self.ability_display_name(&ability);
         if exclusive {
             let disk = ItemId::etched(&ability);
-            self.grant_loot(disk.clone(), 1);
+            self.grant_loot(disk.clone(), 1, LootSource::Etch);
             self.log(format!(
                 "You break {name} down and pry its {ability_name} disk back out intact."
             ));

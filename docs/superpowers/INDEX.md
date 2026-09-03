@@ -6,12 +6,17 @@ one-read answer to "did this ship, and where is its argument".
 
 ## The invariant
 
-**`archive/specs/` is implemented. `specs/` is not.** Ninety-five specs are
+**`archive/specs/` is implemented. `specs/` is not.** Ninety-six specs are
 archived and every one of them shipped; the eleven left in `specs/` are open,
 parked, partial or superseded, and each says which in its own header. Sorting
 the directory *is* the answer, so no sweep is needed next time.
 
-Two independent checks agree on the ninety-five: a distinctive symbol from
+Two independent checks agree on the ninety-five audited on 2026-09-02; the
+ninety-sixth, `2026-09-02-base-instrumentation-design`, shipped in `v0.13.84`
+and was archived on landing rather than by a later sweep — which is the
+cheaper habit and the one to keep.
+
+The checks: a distinctive symbol from
 each spec resolves in `crates/` or `assets/`, and the commit that added each
 spec resolves to a release tag.
 

@@ -33,6 +33,22 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.88
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+the icon string gained a `v2` form, and a `v1` string written by 0.13.87
+still decodes, folded onto the new grid.
+
+- **The icon you draw is 8x8 now.** 256 cells was a lot to fill with the
+  arrow keys, and the canvas is the one screen where the work is
+  proportional to the grid.
+- **The sprite is still 16x16**, so each drawn cell paints a 2x2 block — the
+  format art will land on later is untouched, and under nearest sampling the
+  result is identical to a native 8x8 texture either way.
+- **A drawing made under 0.13.87 survives.** Each 2x2 block folds to the most
+  frequent painted colour in it, so a silhouette comes through at half
+  resolution rather than being thrown away.
+
 ## 0.13.87
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

@@ -42,7 +42,9 @@
 //! re-entering the step after it *has* been touched by hand does not
 //! stomp the player's own spread.
 
+use crate::app::icon_editor::{IconEditor, IconEditorOutcome};
 use crate::*;
+use feral_processes_engine::PlayerIcon;
 use feral_processes_engine::items::ItemId;
 use feral_processes_engine::tuning::{
     CREATION_COST_ATK, CREATION_COST_DECOMPILER, CREATION_COST_DEF, CREATION_COST_INTEGRITY,
@@ -322,12 +324,19 @@ impl App {
                     CreationRow::Item { row, taken }
                 })
                 .collect(),
+            // The sixth row is the player's own drawing rather than one of
+            // the five presets — `drawn` is `CharacterChoice::icon` read
+            // back, so the renderer draws "Draw your own…" or "Your
+            // drawing" off app-core's own answer rather than re-deriving it.
             CreationStep::Icon => CREATION_ICONS
                 .iter()
                 .map(|(glyph, sprite)| CreationRow::Icon {
                     glyph: *glyph,
                     sprite: sprite.to_string(),
                 })
+                .chain(std::iter::once(CreationRow::DrawnIcon {
+                    drawn: self.creation_choice.icon.is_some(),
+                }))
                 .collect(),
             CreationStep::Colour => (0..CREATION_COLOURS)
                 .map(|index| CreationRow::Colour { index })
@@ -443,7 +452,26 @@ impl App {
     /// The key table. Esc walks back one step and off the first one leaves
     /// for the main menu; `[R]` rolls whatever is still undecided and jumps
     /// to the Summary; everything else is the showing step's own.
+    ///
+    /// **The icon editor takes every key first, whole, while it is open.**
+    /// It hangs off the wizard rather than owning a `Mode` of its own (see
+    /// `app::icon_editor`), so this is the one door it can intercept
+    /// through — Esc included, which would otherwise walk the wizard back a
+    /// step instead of reaching `IconEditor::handle_key`'s own Esc.
     pub(crate) fn handle_creation_key(&mut self, key: GameKey) {
+        if let Some(editor) = self.creation_icon_editor.as_mut() {
+            match editor.handle_key(key) {
+                IconEditorOutcome::Open => {}
+                IconEditorOutcome::Keep => {
+                    let drawn = editor.icon().clone();
+                    self.creation_icon_editor = None;
+                    self.creation_choice.icon = Some(drawn);
+                    self.advance_creation();
+                }
+                IconEditorOutcome::Discard => self.creation_icon_editor = None,
+            }
+            return;
+        }
         if key == GameKey::Esc {
             // The Name step types text, so Esc is the only way out of it —
             // and a typed `R` there must not be a reroll.
@@ -559,12 +587,27 @@ impl App {
     /// redistributed by hand survives walking away and back — the seed
     /// itself never sets that flag, since it is not the hand-made decision
     /// the flag records.
+    ///
+    /// **The Icon step seeds the same way, off `!creation_choice.icon.
+    /// is_some()` rather than a `Decided` flag** — there is nothing to
+    /// protect: `Enter` inside the editor is the one write that lands a
+    /// real drawing (`Some`), and a preset row clears it back to `None`, so
+    /// re-entering after a preset simply offers the profile's drawing again
+    /// rather than stomping a choice the player only just changed their
+    /// mind about.
     fn enter_creation_step(&mut self, step: CreationStep) {
         self.creation_step = step;
         self.menu_selected = 0;
         self.status_line = None;
         if step == CreationStep::Points && !self.creation_decided.stats {
             self.creation_choice.stats = roll_points_spread(&mut Roll::new());
+        }
+        if step == CreationStep::Icon && self.creation_choice.icon.is_none() {
+            self.creation_choice.icon = self
+                .profile
+                .player_icon
+                .as_deref()
+                .and_then(PlayerIcon::decode);
         }
     }
 
@@ -735,26 +778,43 @@ impl App {
         self.status_line = None;
     }
 
-    /// The glyph list. `Mode::CreateCharacter`'s Class and Routine key
-    /// table: taking a row decides the choice and moves on, `[n]` skips the
-    /// step with the default look left in place.
+    /// The glyph list, plus the sixth row that opens the icon editor.
+    /// `Mode::CreateCharacter`'s Class and Routine key table: taking a
+    /// preset row decides the choice and moves on, `[n]` skips the step
+    /// with the default look left in place.
     ///
     /// **Advancing on a pick is what splitting the old `Look` step bought.**
     /// While the icons and the swatches shared one screen a pick could not
     /// advance — the other half of the decision was still below the cursor
     /// — so this was the one list in the wizard where Enter left you where
     /// you were.
+    ///
+    /// **A preset clears `CharacterChoice::icon`.** The two cannot both be
+    /// live and the drawn icon wins at the draw site, so a preset that left
+    /// a drawing in place would look like the row doing nothing.
+    ///
+    /// **The sixth row opens the editor instead of advancing.** Taking it
+    /// is not itself the decision — `handle_creation_key`'s editor
+    /// interception is what turns `Enter`/`Esc` inside it into the actual
+    /// keep-or-discard.
     fn handle_creation_icon_key(&mut self, key: GameKey) {
         if key == GameKey::Char('n') {
             self.advance_creation();
             return;
         }
-        let Some(idx) = self.selected_index(key, CREATION_ICONS.len()) else {
+        let Some(idx) = self.selected_index(key, CREATION_ICONS.len() + 1) else {
             return;
         };
+        if idx == CREATION_ICONS.len() {
+            self.creation_icon_editor = Some(IconEditor::open(
+                self.creation_choice.icon.clone().unwrap_or_default(),
+            ));
+            return;
+        }
         let (glyph, sprite) = CREATION_ICONS[idx];
         self.creation_choice.glyph = glyph;
         self.creation_choice.sprite = sprite.to_string();
+        self.creation_choice.icon = None;
         self.advance_creation();
     }
 
@@ -918,6 +978,22 @@ impl App {
                 .perk_cost(&self.creation_choice)
                 .unwrap_or(allowance),
         )
+    }
+
+    /// The Colour step's one line of help text once a drawing has been
+    /// kept, `None` otherwise — the swatch chosen here still colours the
+    /// glyph everywhere else, but the map tile draws over it with the
+    /// icon, and the step says so rather than quietly deciding nothing.
+    ///
+    /// A query rather than a `CreationRow`: the note is not a pickable row
+    /// and does not change the step's row count, which the height census in
+    /// `crates/gui` holds to a fixed ceiling.
+    pub fn creation_colour_note(&self) -> Option<String> {
+        self.creation_choice.icon.is_some().then(|| {
+            "You've drawn a map icon — the map tile shows it instead of this swatch, \
+             though the swatch still colours your glyph everywhere else."
+                .to_string()
+        })
     }
 
     /// The starter pool, priced through the class already picked. Enter on

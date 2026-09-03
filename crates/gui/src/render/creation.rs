@@ -185,6 +185,10 @@ fn row_line(row: &CreationRow) -> String {
         CreationRow::Difficulty { label, detail, .. } => format!("{label} - {detail}"),
         CreationRow::Class(class) => format!("{} - {}", class.name, class.trade),
         CreationRow::Icon { glyph, sprite } => format!("{glyph}  ({sprite})"),
+        CreationRow::DrawnIcon { drawn } => match drawn {
+            true => "Your drawing".to_string(),
+            false => "Draw your own…".to_string(),
+        },
         CreationRow::Colour { index } => format!("Colour {}", index + 1),
         CreationRow::Stat {
             stat,

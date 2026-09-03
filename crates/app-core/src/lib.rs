@@ -1079,6 +1079,14 @@ pub enum CreationRow {
         glyph: char,
         sprite: String,
     },
+    /// The Icon step's sixth row — the player's own drawing rather than one
+    /// of the five presets. `drawn` is whether `CharacterChoice::icon`
+    /// already holds something, so a row that reads "Draw your own…" or
+    /// "Your drawing" is app-core's own answer, not a guess the renderer
+    /// makes by re-deriving it.
+    DrawnIcon {
+        drawn: bool,
+    },
     /// A swatch, by its **0-based** index into the renderer's
     /// `palette::PLAYER_CHOICES` — see `CREATION_COLOURS`.
     Colour {

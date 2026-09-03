@@ -8,6 +8,7 @@
 
 use super::support::*;
 use crate::*;
+use feral_processes_engine::PlayerIcon;
 use feral_processes_engine::achievements::{AchievementId, Earned, roll_main_stat};
 use feral_processes_engine::classes::PlayerClass;
 use feral_processes_engine::save;
@@ -1440,5 +1441,253 @@ fn a_picked_kit_reaches_the_started_run() {
         carried >= 2,
         "picked 2x {} and the run holds {carried}",
         row.name
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The Icon step's drawn-icon row and editor.
+// ---------------------------------------------------------------------------
+
+/// A wizard sitting on the Icon step, class picked and the Kit spent —
+/// every test below starts from here.
+fn on_the_icon_step(name: &str) -> App {
+    let mut app = opened(name);
+    press(&mut app, ch('1'));
+    spend_the_kit(&mut app);
+    press(&mut app, GameKey::Enter);
+    assert_eq!(app.creation_step(), CreationStep::Icon);
+    app
+}
+
+/// Opens the editor from the Icon step's sixth row — the one action every
+/// test below needs before it can drive the editor's own key table.
+fn open_the_editor(app: &mut App) {
+    app.menu_selected = CREATION_ICONS.len();
+    press(app, GameKey::Enter);
+}
+
+/// Paints one pixel through the editor's real key table and keeps it —
+/// `Tab` to the palette is not needed, since the editor opens with a
+/// paintable colour already selected.
+fn draw_and_keep(app: &mut App) {
+    press(app, GameKey::Char(' '));
+    press(app, GameKey::Enter);
+}
+
+/// The Icon step offers the five presets plus the drawn row, and the drawn
+/// row reads app-core's own `drawn` flag rather than something the
+/// renderer has to re-derive.
+#[test]
+fn the_icon_step_offers_six_rows() {
+    let app = on_the_icon_step("six_rows");
+    let rows = app.creation_rows();
+    assert_eq!(rows.len(), CREATION_ICONS.len() + 1);
+    assert!(
+        matches!(rows.last(), Some(CreationRow::DrawnIcon { drawn: false })),
+        "a fresh wizard with nothing drawn must offer the sixth row undrawn: {rows:?}"
+    );
+}
+
+/// Taking the drawn row opens the editor rather than deciding anything —
+/// the wizard stays on the Icon step until the editor itself is left.
+#[test]
+fn taking_the_drawn_row_opens_the_editor() {
+    let mut app = on_the_icon_step("opens_editor");
+    assert!(app.icon_editor_view().is_none());
+
+    open_the_editor(&mut app);
+
+    assert!(
+        app.icon_editor_view().is_some(),
+        "taking the sixth row must open the editor"
+    );
+    assert_eq!(
+        app.creation_step(),
+        CreationStep::Icon,
+        "opening the editor does not advance the wizard"
+    );
+}
+
+/// `Enter` inside the editor lands the drawing on the choice and advances,
+/// exactly as taking any other Icon row does.
+#[test]
+fn enter_in_the_editor_lands_the_drawing_on_the_choice_and_moves_on() {
+    let mut app = on_the_icon_step("editor_keep");
+    open_the_editor(&mut app);
+    assert!(app.icon_editor_view().is_some());
+
+    draw_and_keep(&mut app);
+
+    assert!(
+        app.icon_editor_view().is_none(),
+        "keeping the drawing must close the editor"
+    );
+    assert!(
+        app.creation_choice().icon.is_some(),
+        "Enter in the editor must land the drawing on the choice"
+    );
+    assert_eq!(
+        app.creation_step(),
+        CreationStep::Colour,
+        "keeping a drawing advances like taking any other Icon row"
+    );
+}
+
+/// `Esc` inside the editor discards what was drawn and leaves the choice
+/// exactly as it was — the editor itself restores what it opened with, so
+/// the wizard only has to close it and change nothing.
+#[test]
+fn esc_in_the_editor_leaves_the_choice_as_it_was() {
+    let mut app = on_the_icon_step("editor_discard");
+    assert!(app.creation_choice().icon.is_none());
+    open_the_editor(&mut app);
+    assert!(app.icon_editor_view().is_some());
+
+    press(&mut app, GameKey::Char(' ')); // paint something
+    press(&mut app, GameKey::Esc); // then throw it away
+
+    assert!(
+        app.icon_editor_view().is_none(),
+        "discarding must close the editor"
+    );
+    assert!(
+        app.creation_choice().icon.is_none(),
+        "Esc must not land the drawing on the choice"
+    );
+    assert_eq!(
+        app.creation_step(),
+        CreationStep::Icon,
+        "discarding does not advance the wizard"
+    );
+}
+
+/// **Taking a preset clears a drawn icon.** The two choices cannot both be
+/// live and the drawn icon wins at the draw site, so a preset that left it
+/// in place would look like the preset row doing nothing.
+#[test]
+fn taking_a_preset_row_clears_a_drawn_icon() {
+    let mut app = on_the_icon_step("preset_clears");
+    open_the_editor(&mut app);
+    draw_and_keep(&mut app);
+    assert!(app.creation_choice().icon.is_some());
+
+    press(&mut app, GameKey::Esc); // back to Icon
+    assert_eq!(app.creation_step(), CreationStep::Icon);
+    press(&mut app, ch('1')); // the first preset
+
+    assert!(
+        app.creation_choice().icon.is_none(),
+        "taking a preset must clear a drawn icon"
+    );
+    assert_eq!(app.creation_choice().glyph, CREATION_ICONS[0].0);
+    assert_eq!(app.creation_step(), CreationStep::Colour);
+}
+
+/// The step seeds the drawing from `Profile::player_icon` the moment it is
+/// entered — once, the Points step's roll's own rule — so a player who
+/// drew something last run sees it again without having to redraw it.
+#[test]
+fn entering_the_icon_step_seeds_from_a_profile_with_an_icon() {
+    let mut icon = PlayerIcon::default();
+    icon.set(0, 0, 3);
+    let profile = Profile {
+        player_icon: Some(icon.encode()),
+        ..Default::default()
+    };
+
+    let mut app = wizard_app_with_profile("icon_seed", &profile);
+    press(&mut app, ch('n'));
+    press(&mut app, ch('f'));
+    press(&mut app, GameKey::Enter); // -> Class
+    press(&mut app, ch('1'));
+    spend_the_kit(&mut app);
+    press(&mut app, GameKey::Enter); // -> Icon
+
+    assert_eq!(app.creation_step(), CreationStep::Icon);
+    assert_eq!(
+        app.creation_choice().icon,
+        Some(icon),
+        "the step must seed the drawing from the profile on arrival"
+    );
+    assert!(matches!(
+        app.creation_rows().last(),
+        Some(CreationRow::DrawnIcon { drawn: true })
+    ));
+}
+
+/// A profile with nothing drawn opens the editor on a blank canvas rather
+/// than a garbage or stale one.
+#[test]
+fn a_profile_with_no_icon_opens_the_editor_on_a_blank_canvas() {
+    let mut app = on_the_icon_step("blank_canvas");
+    assert!(app.creation_choice().icon.is_none());
+
+    open_the_editor(&mut app);
+
+    let view = app.icon_editor_view().expect("the editor must be open");
+    assert!(
+        view.pixels.iter().all(|&p| p == 0),
+        "a profile with nothing drawn must open the editor on a blank canvas"
+    );
+}
+
+/// The whole path: a drawing kept on the Icon step reaches `profile.ron`
+/// when creation finishes, through the same write path every other profile
+/// change uses — never a hand-written file.
+#[test]
+fn a_drawn_icon_reaches_the_profile_when_creation_finishes() {
+    let mut app = on_the_icon_step("icon_to_profile");
+    open_the_editor(&mut app);
+    draw_and_keep(&mut app);
+    let drawn = app
+        .creation_choice()
+        .icon
+        .clone()
+        .expect("the drawing must have landed on the choice");
+    assert_eq!(app.creation_step(), CreationStep::Colour);
+
+    press(&mut app, ch('n')); // skip the swatch
+    spend_the_points(&mut app);
+    press(&mut app, GameKey::Enter); // -> Perks
+    spend_the_perks(&mut app);
+    press(&mut app, GameKey::Enter); // -> Routine
+    press(&mut app, ch('n')); // -> Summary
+    press(&mut app, GameKey::Enter); // -> Name
+    press(&mut app, GameKey::Enter); // starts the run
+    assert!(app.game.is_some(), "the run did not start");
+    settle(&mut app);
+
+    let path = app.profile_path.clone();
+    let (on_disk, warning) = Profile::load(&path);
+    assert!(warning.is_none(), "{warning:?}");
+    assert_eq!(
+        on_disk.player_icon.as_deref().and_then(PlayerIcon::decode),
+        Some(drawn),
+        "the drawn icon must reach the profile on disk when creation finishes"
+    );
+}
+
+/// The Colour step's own line of help text: a drawn icon takes over the map
+/// tile, and the step says so rather than quietly deciding nothing — the
+/// swatch still colours the glyph everywhere else, which is what the note
+/// must name.
+#[test]
+fn the_colour_step_explains_a_drawn_icon_hides_the_swatch() {
+    let mut app = on_the_icon_step("colour_note");
+    assert!(
+        app.creation_colour_note().is_none(),
+        "nothing has been drawn yet"
+    );
+
+    open_the_editor(&mut app);
+    draw_and_keep(&mut app);
+    assert_eq!(app.creation_step(), CreationStep::Colour);
+
+    let note = app
+        .creation_colour_note()
+        .expect("a drawn icon must earn a note on the Colour step");
+    assert!(
+        note.to_lowercase().contains("glyph"),
+        "the note must say what the swatch still governs: {note:?}"
     );
 }

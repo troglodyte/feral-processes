@@ -1,6 +1,7 @@
 //! Starting, saving, loading and ending a session.
 
 use crate::*;
+use feral_processes_engine::PlayerIcon;
 
 impl App {
     /// Where the game's content tree was resolved to, for a frontend that
@@ -227,6 +228,14 @@ impl App {
                 // an earlier run this session will have written to it.
                 let (profile, warning) = Profile::load(&self.profile_path);
                 self.profile = profile;
+                // The wizard's own write to the cross-run profile: whatever
+                // `choice.icon` holds — a fresh drawing, or `None` for a
+                // preset — becomes what the next wizard seeds from. Through
+                // `Profile::save`, never a hand-written `profile.ron`, and
+                // before `install_profile` so a failed write still reports
+                // through the same `status_line` `flush_profile_writes` uses.
+                self.profile.player_icon = choice.icon.as_ref().map(PlayerIcon::encode);
+                let icon_write_error = self.profile.save(&self.profile_path).err();
                 game.install_profile(self.profile.clone());
                 // The one place a profile is ever paid out. `load_game`
                 // deliberately does not do this — see the comment there.
@@ -235,7 +244,9 @@ impl App {
                 self.install_game(game);
                 self.current_save_path = Some(self.new_save_path());
                 self.history_written = false;
-                self.status_line = warning;
+                self.status_line = icon_write_error
+                    .map(|e| format!("Could not write profile: {e}"))
+                    .or(warning);
                 self.mode = Mode::Playing;
                 // Save immediately so the new slot shows up in the load
                 // list (and survives a crash) even before the first

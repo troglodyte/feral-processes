@@ -115,6 +115,19 @@ impl Roles<'_> {
 }
 
 impl Game {
+    /// The player's drawn 16x16 avatar, or `None` for a player who never
+    /// opened the editor.
+    ///
+    /// The same read `views::PlayerLook::icon` makes, hoisted because the
+    /// frontend needs it *before* it draws: the drawing has to be on the
+    /// GPU by the time the map asks for it, and the map's own view is built
+    /// inside the draw call that would already be too late to upload from.
+    pub fn player_icon(&self) -> Option<&icon::PlayerIcon> {
+        self.world
+            .get::<PlayerIdentity>(self.player_entity())
+            .and_then(|i| i.icon.as_ref())
+    }
+
     pub fn player_status(&self) -> PlayerStatus {
         let pet_count = self.pet_count();
         let pet_capacity = self.pet_capacity();

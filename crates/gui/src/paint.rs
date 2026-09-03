@@ -177,7 +177,14 @@ impl SpriteTable {
         self.by_name.insert(name.into(), texture);
     }
 
-    fn get(&self, name: &str) -> Option<egui::TextureId> {
+    /// Drops the entry `name` holds, if any. The runtime-built player icon
+    /// is the one sprite whose texture is replaced while the game is
+    /// running; a disk sprite is registered once and never taken back.
+    pub(crate) fn remove(&mut self, name: &str) {
+        self.by_name.remove(name);
+    }
+
+    pub(crate) fn get(&self, name: &str) -> Option<egui::TextureId> {
         self.by_name.get(name).copied()
     }
 }

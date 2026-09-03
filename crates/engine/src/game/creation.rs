@@ -40,6 +40,10 @@ pub struct CharacterChoice {
     /// `components::PlayerIdentity::colour` for why this is an `Option`
     /// rather than a reserved zero.
     pub colour: Option<u8>,
+    /// The player's drawn 16x16 avatar, from the wizard's icon step;
+    /// `None` is `CharacterChoice::default()`'s own value, same as
+    /// `components::PlayerIdentity::icon`.
+    pub icon: Option<crate::icon::PlayerIcon>,
     /// Units *bought* per axis, indexed as `MainStat::all()` — not points
     /// spent. `cost()` is what prices a unit, at that axis's own
     /// `tuning::CREATION_COST_*` rate; pricing at conversion time instead
@@ -96,6 +100,7 @@ impl Default for CharacterChoice {
             glyph: '@',
             sprite: DEFAULT_PLAYER_SPRITE.to_string(),
             colour: None,
+            icon: None,
             stats: [0; 4],
             routine: None,
             items: Vec::new(),
@@ -240,12 +245,12 @@ impl Game {
         }
     }
 
-    /// The player's chosen glyph, class, sprite, colour and name.
+    /// The player's chosen glyph, class, sprite, colour, icon and name.
     /// `choice.glyph` writes the existing `Glyph.ch`; `class`/`sprite`/
-    /// `colour` overwrite the `PlayerIdentity` `spawn_player` seeded at its
-    /// neutral `Default` — `GlyphColor` is the eleven-hue *content* palette
-    /// and the player's own choices are deliberately outside it, so the
-    /// colour rides `PlayerIdentity` instead of `Glyph.color`. The name
+    /// `colour`/`icon` overwrite the `PlayerIdentity` `spawn_player` seeded
+    /// at its neutral `Default` — `GlyphColor` is the eleven-hue *content*
+    /// palette and the player's own choices are deliberately outside it, so
+    /// the colour rides `PlayerIdentity` instead of `Glyph.color`. The name
     /// goes through `CustomName::sanitize` like every other writer, so a
     /// blank `choice.name` — `CharacterChoice::default()`'s own value —
     /// inserts no override, exactly as today's nameless player has none.
@@ -256,6 +261,7 @@ impl Game {
             class: choice.class,
             sprite: choice.sprite.clone(),
             colour: choice.colour,
+            icon: choice.icon.clone(),
         };
         if let Some(name) = CustomName::sanitize(Some(choice.name.clone())) {
             self.world.entity_mut(player).insert(CustomName(name));

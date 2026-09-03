@@ -170,6 +170,15 @@ pub struct PlayerSave {
     /// `PLAYER` role colour.
     #[serde(default)]
     pub colour: Option<u8>,
+    /// The player's hand-drawn map avatar — see
+    /// `components::PlayerIdentity::icon`. Carried as the **encoded
+    /// string**, not the struct: `icon::PlayerIcon::decode` yields `None`
+    /// on anything it cannot read, so a form this build cannot parse is
+    /// inert rather than a version refusal. `#[serde(default)]` on the
+    /// `Option` yields `None` for a save written before this feature
+    /// existed, which is exactly the glyph-only player it had.
+    #[serde(default)]
+    pub icon: Option<String>,
 }
 
 /// `serde`'s default for `PlayerSave::glyph` — a save written before
@@ -1484,6 +1493,7 @@ mod tests {
                 glyph: '@',
                 sprite: String::new(),
                 colour: None,
+                icon: None,
             },
             creatures: Vec::new(),
             structures: Vec::new(),

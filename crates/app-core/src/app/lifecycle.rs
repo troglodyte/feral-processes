@@ -132,6 +132,8 @@ impl App {
             creation_decided: Default::default(),
             creation_difficulty: None,
             creation_catalogue,
+            creation_icon_editor: None,
+            creation_icon_seeded: false,
         }
     }
 
@@ -226,6 +228,27 @@ impl App {
                 // an earlier run this session will have written to it.
                 let (profile, warning) = Profile::load(&self.profile_path);
                 self.profile = profile;
+                // The wizard's own write to the cross-run profile.
+                //
+                // **Only a drawing writes it.** `player_icon` is the last
+                // thing *drawn*, which is what makes it survive into the
+                // next run; a character who wears one of the five presets
+                // simply has no icon in their save, and the art the player
+                // made stays where it is. Writing `choice.icon` through
+                // unconditionally erased it, permanently and with no undo,
+                // the first time anyone picked a glyph.
+                //
+                // Through `Profile::save` rather than the pending-write
+                // queue `flush_profile_writes` drains: that queue is fed by
+                // `Game::take_pending_profile_writes`, and an icon chosen
+                // before the run exists has no `Game` to queue it. The
+                // write sits before `install_profile` so a failure still
+                // reports through the same `status_line`.
+                let mut icon_write_error = None;
+                if let Some(icon) = choice.icon.as_ref() {
+                    self.profile.player_icon = Some(icon.encode());
+                    icon_write_error = self.profile.save(&self.profile_path).err();
+                }
                 game.install_profile(self.profile.clone());
                 // The one place a profile is ever paid out. `load_game`
                 // deliberately does not do this — see the comment there.
@@ -234,7 +257,9 @@ impl App {
                 self.install_game(game);
                 self.current_save_path = Some(self.new_save_path());
                 self.history_written = false;
-                self.status_line = warning;
+                self.status_line = icon_write_error
+                    .map(|e| format!("Could not write profile: {e}"))
+                    .or(warning);
                 self.mode = Mode::Playing;
                 // Save immediately so the new slot shows up in the load
                 // list (and survives a crash) even before the first

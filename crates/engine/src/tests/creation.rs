@@ -380,6 +380,62 @@ fn the_player_view_carries_its_look_and_nothing_else_does() {
     assert!(saw_player, "the player must appear in its own view");
 }
 
+/// A choice carrying a drawn icon lands it on `PlayerIdentity` and rides
+/// out to `EntityView::look` — the wizard's icon step, once built, has this
+/// as its whole payoff.
+#[test]
+fn a_chosen_icon_reaches_the_player_view() {
+    let mut icon = PlayerIcon::default();
+    icon.set(0, 0, 5);
+    let choice = CharacterChoice {
+        icon: Some(icon.clone()),
+        ..CharacterChoice::default()
+    };
+    let mut game = Game::new_with(
+        90_018,
+        DifficultyMode::Forgiving,
+        &test_assets_dir(),
+        &choice,
+    )
+    .unwrap();
+
+    let identity = game
+        .world
+        .get::<PlayerIdentity>(game.player_entity())
+        .unwrap();
+    assert_eq!(identity.icon, Some(icon.clone()));
+
+    let views = game.view_entities(20, 20);
+    let look = views
+        .iter()
+        .find(|v| v.is_player)
+        .and_then(|v| v.look.as_ref())
+        .expect("the player's view must carry a look");
+    assert_eq!(look.icon, Some(icon));
+}
+
+/// The default choice — what ~1,600 `Game::new` call sites construct — must
+/// keep landing `None`, paired with `a_chosen_icon_reaches_the_player_view`
+/// so a test asserting only this half would still pass with the feature
+/// deleted outright.
+#[test]
+fn the_default_choice_carries_no_icon() {
+    let mut game = Game::new(90_019, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let identity = game
+        .world
+        .get::<PlayerIdentity>(game.player_entity())
+        .unwrap();
+    assert_eq!(identity.icon, None);
+
+    let views = game.view_entities(20, 20);
+    let look = views
+        .iter()
+        .find(|v| v.is_player)
+        .and_then(|v| v.look.as_ref())
+        .expect("the player's view must carry a look");
+    assert_eq!(look.icon, None);
+}
+
 /// **The anti-drift gate for the wizard's catalogue.** `CreationCatalogue`
 /// exists because the wizard runs before any `Game` does, and the failure
 /// it opens is a preview that disagrees with the run it is previewing. Both

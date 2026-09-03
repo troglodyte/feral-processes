@@ -9,6 +9,7 @@ use crate::battle::ActionOption;
 use crate::classes::PlayerClass;
 use crate::components::{EquippedItem, GlyphColor, MachineStatus, Rarity, TaskKind};
 use crate::game::party::ProgramRole;
+use crate::icon::PlayerIcon;
 use crate::items::{GearCopy, ItemId};
 use crate::perks::Perk;
 use crate::research::ResearchId;
@@ -709,6 +710,9 @@ pub struct PlayerLook {
     /// 0-based index into the renderer's player swatches; `None` is the
     /// `PLAYER` role colour. See `components::PlayerIdentity::colour`.
     pub colour: Option<u8>,
+    /// The player's drawn 16x16 avatar; `None` for a player who never
+    /// opened the editor. See `components::PlayerIdentity::icon`.
+    pub icon: Option<PlayerIcon>,
 }
 
 #[derive(Clone)]

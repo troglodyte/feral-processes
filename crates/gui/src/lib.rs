@@ -27,7 +27,9 @@ use bevy::ecs::system::SystemParam;
 use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
 use bevy::window::{PrimaryWindow, WindowMode};
-use bevy_egui::{EguiContexts, EguiPlugin, EguiPreUpdateSet, EguiPrimaryContextPass};
+use bevy_egui::{
+    EguiContexts, EguiPlugin, EguiPreUpdateSet, EguiPrimaryContextPass, EguiUserTextures,
+};
 
 use feral_processes_app_core::{App, GameKey, Mode};
 use fx::Fx;
@@ -44,6 +46,7 @@ fn map_special_key(key: KeyCode) -> Option<GameKey> {
         KeyCode::Enter | KeyCode::NumpadEnter => Some(GameKey::Enter),
         KeyCode::Escape => Some(GameKey::Esc),
         KeyCode::Backspace => Some(GameKey::Backspace),
+        KeyCode::Tab => Some(GameKey::Tab),
         _ => None,
     }
 }
@@ -87,15 +90,17 @@ fn with_modifiers(key: GameKey, shift: bool, ctrl: bool) -> GameKey {
     }
 }
 
-/// Edge-triggered: these commit or cancel, and a held Escape unwinding
-/// several modes at once is nobody's intent. `ButtonInput` gives that for
-/// free — see the note in `keys.rs` on why the OS auto-repeat doesn't reach
-/// `just_pressed`.
+/// Edge-triggered: these commit or cancel, or — Tab — toggle, and a held
+/// Escape unwinding several modes at once is nobody's intent any more than
+/// a held Tab flickering focus back and forth is. `ButtonInput` gives that
+/// for free — see the note in `keys.rs` on why the OS auto-repeat doesn't
+/// reach `just_pressed`.
 const SPECIAL_KEYS: &[KeyCode] = &[
     KeyCode::Enter,
     KeyCode::NumpadEnter,
     KeyCode::Escape,
     KeyCode::Backspace,
+    KeyCode::Tab,
 ];
 
 const DEFAULT_VOLUME: f32 = 0.2;
@@ -235,10 +240,36 @@ pub fn run(app: App) {
         // In `PreUpdate` rather than the egui pass: registration needs
         // `EguiUserTextures` mutably, and the pass already holds the context.
         // It runs every frame but returns immediately once nothing is pending.
-        .add_systems(PreUpdate, sprites::register)
+        .add_systems(PreUpdate, (sprites::register, sync_drawn_icon))
         .add_systems(EguiPrimaryContextPass, frame);
     add_font_install(&mut bevy_app);
     bevy_app.run();
+}
+
+/// Keeps the player's own drawing on the GPU, one upload per change.
+///
+/// `PreUpdate` beside `sprites::register`, for its reason and one more:
+/// registration needs `EguiUserTextures` mutably and the egui pass already
+/// holds the context, and the table has to be complete before `frame`
+/// clones it for the `Painter`.
+///
+/// Which drawing is live is a two-case question and `App::game` answers it.
+/// A run in progress draws the player's own, off the component the save
+/// carries. With no run the wizard's preview cell is the only thing asking,
+/// so the choice it is editing *is* the answer — reading the choice
+/// unconditionally instead would let a stale wizard drawing outlive the
+/// wizard and follow a player who never kept one onto the map.
+fn sync_drawn_icon(
+    frontend: Res<Frontend>,
+    mut sprites: ResMut<sprites::Sprites>,
+    mut images: ResMut<Assets<Image>>,
+    mut textures: ResMut<EguiUserTextures>,
+) {
+    let icon = match &frontend.app.game {
+        Some(game) => game.player_icon(),
+        None => frontend.app.creation_choice().icon.as_ref(),
+    };
+    sprites.sync_drawn_icon(icon, &mut images, &mut textures);
 }
 
 /// Schedules the one-shot font install.
@@ -1075,6 +1106,7 @@ mod tests {
             GameKey::Enter,
             GameKey::Esc,
             GameKey::Backspace,
+            GameKey::Tab,
             GameKey::Char('c'),
         ] {
             assert_eq!(
@@ -1083,6 +1115,24 @@ mod tests {
                 "{untouched:?} must survive a held modifier unchanged"
             );
         }
+    }
+
+    /// The icon editor (Task 5) reads `GameKey::Tab` to move focus between
+    /// its canvas and its palette. Pinned on its own rather than folded into
+    /// `every_polled_key_maps_to_a_game_key` alone, because that census only
+    /// proves *some* `GameKey` comes back — this proves it's the right one.
+    #[test]
+    fn tab_maps_to_game_key_tab() {
+        assert_eq!(map_special_key(KeyCode::Tab), Some(GameKey::Tab));
+    }
+
+    /// `Tab` is a toggle between two panels, not a movement key — holding it
+    /// must not repeat, so it belongs in `SPECIAL_KEYS` (edge-triggered) and
+    /// never in `REPEATING_KEYS`. A `REPEATING_KEYS` entry would flicker
+    /// focus back and forth for as long as the key stayed down.
+    #[test]
+    fn tab_is_not_a_repeating_key() {
+        assert!(!REPEATING_KEYS.contains(&KeyCode::Tab));
     }
 
     /// The four repeating keys must be the four directions and nothing else:

@@ -6610,6 +6610,56 @@ the asset root, the file's shape, the loader's paths, the operation's
 geometry and tint, and the substitution at the call site. Whether the art
 *reads* at zoom 1 is a judgement about the art and was always going to be.
 
+#### The player's drawn icon is the one sprite drawn untinted
+
+The pixel editor (2026-09-03) adds a fourth rung above the three this
+section already describes, and it is the one place the near-white rule
+above does not apply. Checked in source rather than assumed:
+`render/base.rs`'s `is_player` arm assigns `color =
+player_look_color(...)` unconditionally, and the only write to `color`
+after that is `let color = Color::new(color.r * vig, …)` — the vignette.
+So the player's tile is the *only* one in the game that inherits none of
+the hues the near-white rule exists to protect: not a species colour (the
+player has none), not `biome_tint`, not damage dimming. Every other sprite
+in the game is authored near-white for exactly the reason above — it has
+a hue riding on it that the tint must not fight. A player-drawn icon has
+no such passenger. It is the one sprite the player painted with their own
+fifteen colours, chosen on the Colour step of the wizard, and multiplying
+that palette by an indigo or rose swatch would turn most of it black —
+the failure mode "Shade with value, never hue" exists to prevent, arriving
+from the opposite direction.
+
+So the tint at the draw site is neutral **at the vignette's own value**:
+`Color::new(vig, vig, vig, color.a)`. The hue is dropped, the depth
+shading is kept, exactly as every other tile gets. What that costs is
+narrow and specific — the Colour step's swatch on this one tile, and
+nothing else, since nothing downstream of `color` in that arm reads
+anything but `vig` — and `App::creation_colour_note` tells the player so
+on the step where they make the choice.
+
+**The trap is that putting the hue back reads as a bug fix.** A reader
+who has just internalised "art is authored near-white and inherits its
+tile's colour through a multiplying tint" will see the drawn icon
+rendering in flat grey, against every other tile on the map showing a
+hue, and conclude the tint is being dropped by omission. It is not — it
+is the one sprite for which the tint has nothing to protect and something
+to destroy. The fix for that appearance, if the neutral tint ever looks
+wrong on screen, is not to give the drawn icon the tile's hue; it is
+`assets/sprites/README.md`'s existing answer to art that looks wrong at
+this seam — author it near-white — which a hand-drawn 16x16 the player
+picked their own colours for is definitionally not.
+
+The fallback the new rung sits above is unchanged and still three-step:
+the player's own drawing (rung 1, keyed at the runtime-only
+`crates/gui/src/sprites.rs::DRAWN_ICON_KEY`, `"@drawn"` — an `@`-prefixed
+key no file-loaded sprite can ever claim), the named sprite `player.png`
+loads under `"player"` (rung 2, still authored near-white, still tinted
+by the species/biome/damage chain like every other sprite), and the `@`
+glyph (rung 3). `sprites::sync_drawn_icon` is what keeps rung 1 optional
+in the same sense the whole table is: a blank canvas, an unset drawing,
+or a texture still uploading all miss the table lookup and fall straight
+through to rung 2, the same way a missing file falls through to rung 3.
+
 ### A base stock tag is derived, unique, and two letters
 
 **A base stock tag is derived, unique, and two letters.** `ItemDef::tag`

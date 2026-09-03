@@ -14,6 +14,7 @@ pub use app::building::{BaseStaffRow, StaffAction, StaffRow, Staffing, WorkOrder
 pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
 pub use app::group_menu::GroupMenuRow;
+pub use app::icon_editor::{IconEditorView, IconFocus};
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
 /// nothing else of app-core's internals.
 pub use app::telemetry::append_records;
@@ -659,6 +660,12 @@ pub enum GameKey {
     Enter,
     Esc,
     Backspace,
+    /// Moves focus between two panels — first read by the icon editor's
+    /// canvas/palette split. A physical gesture like every other variant
+    /// here, and edge-triggered by every frontend that sends it: a toggle
+    /// between two panels would flicker for as long as the key was held, so
+    /// nothing repeats it the way the four directions repeat.
+    Tab,
 }
 
 /// A cue for a frontend to play a sound effect for — pushed by `App` as it
@@ -1071,6 +1078,14 @@ pub enum CreationRow {
     Icon {
         glyph: char,
         sprite: String,
+    },
+    /// The Icon step's sixth row — the player's own drawing rather than one
+    /// of the five presets. `drawn` is whether `CharacterChoice::icon`
+    /// already holds something, so a row that reads "Draw your own…" or
+    /// "Your drawing" is app-core's own answer, not a guess the renderer
+    /// makes by re-deriving it.
+    DrawnIcon {
+        drawn: bool,
     },
     /// A swatch, by its **0-based** index into the renderer's
     /// `palette::PLAYER_CHOICES` — see `CREATION_COLOURS`.
@@ -2168,6 +2183,20 @@ pub struct App {
     /// exists — the same reason `achievement_db` and `help_db` are held
     /// here.
     creation_catalogue: CreationCatalogue,
+    /// The icon editor, open only while the player is drawing on the
+    /// wizard's Icon step. `None` at every other moment, including on a
+    /// wizard that has never opened it — see `app::icon_editor`.
+    creation_icon_editor: Option<crate::app::icon_editor::IconEditor>,
+    /// Whether `enter_creation_step` has already seeded
+    /// `creation_choice.icon` from `Profile::player_icon` this wizard
+    /// session. Reset alongside the choice on every open.
+    ///
+    /// **A one-shot latch, not `creation_choice.icon.is_none()`.** `None`
+    /// is also what taking a preset row produces on purpose — seeding off
+    /// the value instead of this flag would silently un-pick a preset the
+    /// moment the player walked back to the Icon step and returned, since
+    /// the profile's saved drawing would win the field back every time.
+    creation_icon_seeded: bool,
 }
 
 /// One entry in the `Mode::LoadGame` list — a save file found in the saves

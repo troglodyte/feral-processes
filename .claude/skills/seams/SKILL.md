@@ -36,7 +36,7 @@ Three tiers, and which one you want depends on what you are doing:
 | the Stack (frames, descents, lairs, descriptions, first-person views) | `references/stack.md` | 22 |
 | saves, the log, refusals, screens, the Broker board, paths | `references/screens.md` | 21 |
 | what a program remembers (memories, morale, opinion) | `references/memories.md` | 11 |
-| the HUD (attention, panes, the palette, glyph colour) | `references/hud.md` | 13 |
+| the HUD (attention, panes, the palette, glyph colour) | `references/hud.md` | 14 |
 | sorties | `references/sorties.md` | 10 |
 | notifications | `references/notifications.md` | 5 |
 | species and data (classes, stat shapes, censuses) | `references/species.md` | 6 |

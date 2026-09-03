@@ -17,6 +17,7 @@ mod field;
 mod fusion;
 mod gear_inspect;
 mod group_menus;
+mod icon_editor;
 mod info_tab;
 mod inventory;
 mod log_filter;

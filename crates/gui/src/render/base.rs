@@ -1352,6 +1352,16 @@ fn draw_surface_map(
                 // Blue and Cyan were reserved, see `Game::new`'s anchor
                 // spawn — so it is the one glyph on this map that says
                 // nothing at all about what stands there.
+                // Whether the player has a drawing at all is read off
+                // their own look and not off the table, so this says which
+                // rung the tile is on rather than which keys happen to be
+                // loaded. A drawing the table has nothing under — one that
+                // is still uploading, or a blank canvas `sync_drawn_icon`
+                // declined — misses and falls to the rung below, like any
+                // other sprite.
+                let drawn_icon = actor.is_some_and(|ev| {
+                    ev.is_player && ev.look.as_ref().is_some_and(|look| look.icon.is_some())
+                });
                 let sprite = actor.and_then(|ev| {
                     if ev.is_player {
                         ev.look
@@ -1368,9 +1378,39 @@ fn draw_surface_map(
                 // `tile_px`, so the sprite keeps the glyph's margin inside
                 // its tile and stays on the integer ladder — 16, 32, 48, 64.
                 let inset = (tile_px - glyph_px as f32) / 2.0;
-                let drew = sprite.is_some_and(|name| {
-                    painter.sprite(name, px + inset, py + inset, glyph_px as f32, color)
-                });
+                // **The player's own drawing is the top rung, and it is the
+                // one sprite in the game drawn untinted.** Every other
+                // sprite is authored near-white and inherits its tile's
+                // colour through egui's multiplying tint — that is what
+                // `assets/sprites/README.md` asks art for. A drawing is the
+                // exception on purpose: the player picked its fifteen
+                // colours themselves, and multiplying those by an indigo or
+                // rose swatch turns most of them black.
+                //
+                // So the tint here is neutral **at the vignette's value** —
+                // the hue is dropped, the depth shading is kept, exactly as
+                // for every other tile. What that costs is the Colour
+                // step's swatch on this one tile and nothing else: the
+                // `is_player` arm above sets `color` to
+                // `player_look_color(...)` and nothing but `vig` touches it
+                // after. `App::creation_colour_note` tells the player so on
+                // the step where they choose it.
+                //
+                // **Putting the hue back reads as a bug fix and is not
+                // one.** If this ever looks wrong, the answer is art
+                // authored near-white — which a hand-drawn 16x16 is not.
+                let neutral = Color::new(vig, vig, vig, color.a);
+                let drew = (drawn_icon
+                    && painter.sprite(
+                        crate::sprites::DRAWN_ICON_KEY,
+                        px + inset,
+                        py + inset,
+                        glyph_px as f32,
+                        neutral,
+                    ))
+                    || sprite.is_some_and(|name| {
+                        painter.sprite(name, px + inset, py + inset, glyph_px as f32, color)
+                    });
                 if !drew {
                     let glyph = ch.to_string();
                     let dims = painter.measure_map(&glyph, glyph_px);
@@ -2617,6 +2657,25 @@ mod tests {
         sprites: SpriteTable,
         choice: &CharacterChoice,
     ) -> (usize, Vec<String>) {
+        let (images, glyphs) = drawn_map_images(sprites, choice);
+        (images.len(), glyphs)
+    }
+
+    /// `drawn_map_with_choice`, keeping the textured meshes themselves
+    /// rather than counting them — which texture was drawn, and in what
+    /// tint, is the whole question for the drawn icon's two rules.
+    #[allow(clippy::type_complexity)]
+    fn drawn_map_images(
+        sprites: SpriteTable,
+        choice: &CharacterChoice,
+    ) -> (
+        Vec<(
+            bevy_egui::egui::TextureId,
+            bevy_egui::egui::Rect,
+            bevy_egui::egui::Color32,
+        )>,
+        Vec<String>,
+    ) {
         let mut game = Game::new_with(7, DifficultyMode::Forgiving, &test_assets(), choice)
             .expect("the shipped assets must load");
         let mut fx = Fx::new();
@@ -2635,7 +2694,164 @@ mod tests {
                 status.position,
             );
         });
-        (painted_images(&shapes).len(), painted_text(&shapes))
+        (painted_images(&shapes), painted_text(&shapes))
+    }
+
+    /// A drawing with one lit pixel — non-blank, which is all the map cares
+    /// about, since the pixels themselves live in the texture the upload
+    /// built and never reach this code.
+    fn a_drawing() -> feral_processes_engine::PlayerIcon {
+        let mut icon = feral_processes_engine::PlayerIcon::default();
+        icon.set(3, 4, 7);
+        icon
+    }
+
+    /// **The overdraw rule, for the rung most exposed to it.** A drawn icon
+    /// is transparent wherever the player left the canvas bare — every icon
+    /// is — so a renderer that painted the texture over an `@` that was
+    /// still there would show the glyph through its own avatar. Against the
+    /// opaque placeholder art that failure is invisible, which is why both
+    /// halves are asserted in one test: the mesh landed, **and** the `@`
+    /// did not.
+    #[test]
+    fn the_drawn_icon_stands_in_for_the_at_sign() {
+        let choice = CharacterChoice {
+            icon: Some(a_drawing()),
+            ..CharacterChoice::default()
+        };
+        let mut table = SpriteTable::default();
+        table.insert(
+            crate::sprites::DRAWN_ICON_KEY,
+            bevy_egui::egui::TextureId::User(9),
+        );
+
+        let (images, glyphs) = drawn_map_with_choice(table, &choice);
+
+        assert_eq!(images, 1, "exactly one sprite, the player's drawing");
+        assert!(
+            !glyphs.iter().any(|g| g == "@"),
+            "the '@' must give way to the drawing, not sit under it: {glyphs:?}"
+        );
+    }
+
+    /// The drawing is the **top** rung: a player who drew one and also
+    /// carries a named sprite sees the drawing. Both keys are in the table,
+    /// so nothing here can pass by a lookup that merely missed.
+    #[test]
+    fn the_drawn_icon_outranks_the_named_sprite() {
+        let choice = CharacterChoice {
+            sprite: "hero".to_string(),
+            icon: Some(a_drawing()),
+            ..CharacterChoice::default()
+        };
+        let mut table = SpriteTable::default();
+        table.insert(
+            crate::sprites::DRAWN_ICON_KEY,
+            bevy_egui::egui::TextureId::User(9),
+        );
+        table.insert("hero", bevy_egui::egui::TextureId::User(4));
+
+        let (images, _) = drawn_map_images(table, &choice);
+
+        assert_eq!(images.len(), 1, "one tile draws one sprite");
+        assert_eq!(
+            images[0].0,
+            bevy_egui::egui::TextureId::User(9),
+            "the drawing must win the tile from the named sprite"
+        );
+    }
+
+    /// **The drawn icon is the one sprite in the game drawn untinted.**
+    /// Every other sprite is authored near-white and multiplied by the hue
+    /// its tile would have worn; a drawing carries its own fifteen colours,
+    /// and multiplying those by an indigo swatch turns most of them black.
+    /// The tint is therefore neutral — grey at the vignette's own value, so
+    /// depth shading is kept and the hue is dropped.
+    #[test]
+    fn the_drawn_icon_is_drawn_untinted() {
+        let choice = CharacterChoice {
+            colour: Some(3),
+            icon: Some(a_drawing()),
+            ..CharacterChoice::default()
+        };
+        let mut table = SpriteTable::default();
+        table.insert(
+            crate::sprites::DRAWN_ICON_KEY,
+            bevy_egui::egui::TextureId::User(9),
+        );
+
+        let (images, _) = drawn_map_images(table, &choice);
+
+        let tint = images
+            .iter()
+            .find(|(id, _, _)| *id == bevy_egui::egui::TextureId::User(9))
+            .expect("the drawing must be painted")
+            .2;
+        assert_eq!(
+            tint.r(),
+            tint.g(),
+            "a neutral tint has equal channels, not a hue: {tint:?}"
+        );
+        assert_eq!(
+            tint.g(),
+            tint.b(),
+            "a neutral tint has equal channels, not a hue: {tint:?}"
+        );
+        assert!(
+            tint.r() > 0,
+            "the vignette must scale the tint, not erase it: {tint:?}"
+        );
+    }
+
+    /// The rung under the drawing must not regress: a player who drew
+    /// nothing keeps their named sprite, **even when the table still holds
+    /// a drawing**. Which rung runs is read off the player's own look, not
+    /// off whatever the sprite table happens to be carrying.
+    #[test]
+    fn a_player_with_no_drawing_still_draws_the_named_sprite() {
+        let choice = CharacterChoice {
+            sprite: "hero".to_string(),
+            icon: None,
+            ..CharacterChoice::default()
+        };
+        let mut table = SpriteTable::default();
+        table.insert(
+            crate::sprites::DRAWN_ICON_KEY,
+            bevy_egui::egui::TextureId::User(9),
+        );
+        table.insert("hero", bevy_egui::egui::TextureId::User(4));
+
+        let (images, glyphs) = drawn_map_images(table, &choice);
+
+        assert_eq!(images.len(), 1, "one tile draws one sprite");
+        assert_eq!(
+            images[0].0,
+            bevy_egui::egui::TextureId::User(4),
+            "no drawing means the named sprite still owns the tile"
+        );
+        assert!(
+            !glyphs.iter().any(|g| g == "@"),
+            "the named sprite still stands in for the glyph: {glyphs:?}"
+        );
+    }
+
+    /// The bottom rung: neither a drawing nor a sprite the table knows
+    /// leaves the `@`. `assets/sprites/` deleted is still the glyph map.
+    #[test]
+    fn a_player_with_neither_still_draws_the_glyph() {
+        let choice = CharacterChoice {
+            sprite: "no-such-sprite".to_string(),
+            icon: None,
+            ..CharacterChoice::default()
+        };
+
+        let (images, glyphs) = drawn_map_with_choice(SpriteTable::default(), &choice);
+
+        assert_eq!(images, 0, "nothing in the table must paint no texture");
+        assert!(
+            glyphs.iter().any(|g| g == "@"),
+            "the glyph is what is left when neither rung above it draws: {glyphs:?}"
+        );
     }
 
     /// The player's sprite stands in for the player's glyph — it does not

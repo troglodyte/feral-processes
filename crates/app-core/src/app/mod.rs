@@ -15,6 +15,7 @@ pub(crate) mod dev_console;
 mod excavate;
 mod field;
 pub(crate) mod group_menu;
+pub(crate) mod icon_editor;
 pub(crate) mod input;
 mod inspection;
 mod inventory;

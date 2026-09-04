@@ -3949,3 +3949,64 @@ pub const BASE_OUTPUT_MAX_ROWS: usize = 5;
 /// How many buckets a row's sparkline draws. Cells are cheap on this page;
 /// rows are what is scarce, so the spark rides the row it belongs to.
 pub const BASE_OUTPUT_SPARK_BUCKETS: usize = 8;
+
+// ---------------------------------------------------------------------------
+// Program extraction
+// ---------------------------------------------------------------------------
+
+/// How many downed programs `components::DownedPrograms` may hold — a flat
+/// row count for phase 1 (see the spec's "Open, deliberately" section for
+/// the later move to a carried-weight metric). `Mode::DownedPrograms` (a
+/// later phase) is a read-only row list with no scroll, so this doubles as
+/// a layout constraint the way `BASE_OUTPUT_MAX_ROWS` is: it must fit at
+/// 1280x720 alongside that screen's own chrome, which a later phase's test
+/// asserts by mutation. Ten rather than matching `PLAYER_ROUTINE_SLOT_CAP`
+/// (12): a downed-program row carries a species name, level, rarity and
+/// boss tag — wider than a routine slot's single name — against the same
+/// vertical budget, so it is set a step under that established fit rather
+/// than assumed to match it.
+pub const MAX_DOWNED_PROGRAMS: usize = 10;
+
+/// The floor every downed program's condition roll starts from, before
+/// rarity, boss and fight terms are added — see `items::DownedProgram` and
+/// the spec's section 1 for the full formula. Left well below 100 so those
+/// terms have room to move the result rather than being clamped away on
+/// every ordinary kill, and well above 0 so a plain wild kill is still
+/// worth carrying on its own.
+pub const CONDITION_BASE: u8 = 60;
+
+/// Condition added per rung of `Rarity::rank` — deliberately modest next to
+/// `CONDITION_BASE`. A rare kill already pays through its own loot table
+/// entry; this is a secondary nudge, not a second place rarity is priced.
+pub const CONDITION_PER_RARITY_STEP: u8 = 8;
+
+/// Flat condition bonus when `DownedProgram::boss` is set. A boss fight
+/// ends standing over a single, stationary target rather than whichever
+/// member of a pack took the killing blow, so the program it leaves behind
+/// is taken apart more cleanly on average.
+pub const CONDITION_BOSS_BONUS: u8 = 10;
+
+/// Weight on the "how clean was the kill" term of the condition roll —
+/// `overkill_term` in the spec's formula, how far the killing blow went
+/// past zero as a fraction of `max_hp`, negated. **Ships at `0.0`,
+/// deliberately** (spec, "Open, deliberately"): the field and the roll
+/// exist so the axis is tunable, but no non-zero value has a play session
+/// behind it yet. Do not delete this constant for reading as unused, and
+/// do not fit a non-zero value without one.
+pub const FIGHT_CONDITION_WEIGHT: f32 = 0.0;
+
+/// How much each rung of `Rarity::rank` adds to `DownedProgram::grade`'s
+/// multiplier, on top of the `1.0` an `Ordinary` program contributes.
+/// Modest for the reason `CONDITION_PER_RARITY_STEP` is: rarity already
+/// pays out through the drop table, so grade's job is to reward condition
+/// and level, with rarity as a secondary lift rather than the dominant
+/// term.
+pub const GRADE_PER_RARITY_RUNG: f32 = 0.15;
+
+/// How much each level adds to `DownedProgram::grade`'s multiplier, on top
+/// of the `1.0` a level-0 program would contribute. Small on purpose: a
+/// level runs from 1 into the hundreds over a playthrough (see
+/// `ZONE_LEVEL_CAP_STEP`), and this axis is meant to reward a kill higher
+/// up the curve without letting level alone dwarf condition and rarity the
+/// way a coarser step would.
+pub const GRADE_PER_LEVEL: f32 = 0.01;

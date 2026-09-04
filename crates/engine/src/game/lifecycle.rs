@@ -137,6 +137,7 @@ fn spawn_player(world: &mut World, start: (i32, i32)) -> Entity {
             (
                 Routines(vec![abilities::DECOMPILE_ABILITY_ID.to_string()]),
                 PlayerIdentity::default(),
+                DownedPrograms::default(),
             ),
         ))
         .id()
@@ -706,6 +707,7 @@ impl Game {
                         colour: data.player.colour,
                         icon: data.player.icon.as_deref().and_then(PlayerIcon::decode),
                     },
+                    DownedPrograms(data.player.downed_programs),
                 ),
             ))
             .id();
@@ -1360,6 +1362,11 @@ impl Game {
                     .collect()
             })
             .unwrap_or_default();
+        let downed_programs = self
+            .world
+            .get::<DownedPrograms>(player)
+            .map(|d| d.0.clone())
+            .unwrap_or_default();
         let perks = self.world.get::<Perks>(player).cloned().unwrap_or_default();
         let bought_stats = self
             .world
@@ -1801,6 +1808,7 @@ impl Game {
                 // from here on carries only `gear_copies`.
                 fused_gear: Vec::new(),
                 gear_copies,
+                downed_programs,
                 perk_points: perks.points,
                 unlocked_perks: perks.unlocked,
                 bought_stats,

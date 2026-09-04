@@ -1653,6 +1653,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             tutorial_seeded: true,
             fused_gear: Vec::new(),
             gear_copies: Vec::new(),
+            downed_programs: Vec::new(),
             routines: Vec::new(),
             field_buffs: Vec::new(),
             sorties: Vec::new(),

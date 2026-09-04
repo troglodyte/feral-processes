@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::affixes::AffixId;
 use crate::classes::PlayerClass;
 use crate::components::{ActiveFieldBuff, Rarity};
-use crate::items::{EquipmentSlot, ItemId};
+use crate::items::{DownedProgram, EquipmentSlot, ItemId};
 use crate::perks::Perk;
 use crate::resources::DifficultyMode;
 use crate::species::SpeciesId;
@@ -129,6 +129,15 @@ pub struct PlayerSave {
     /// are in `inventory`, which is the plain-copy store.
     #[serde(default)]
     pub gear_copies: Vec<(GearCopySave, u32)>,
+    /// Every wild program taken apart at the kill rather than paid out
+    /// directly, still carried — see `components::DownedPrograms`.
+    /// `DownedProgram` has no legacy shape to reconcile (unlike
+    /// `GearCopySave`'s affix migration), so the save stores it directly
+    /// rather than through a parallel `*Save` type. Additive behind a
+    /// default, so **no `SAVE_FORMAT_VERSION` bump**: a save written before
+    /// this field existed loads with an empty store, which is what it had.
+    #[serde(default)]
+    pub downed_programs: Vec<DownedProgram>,
     /// The abilities installed in the player's routine slots, in menu order
     /// — see `components::Routines`.
     pub routines: Vec<crate::abilities::AbilityId>,
@@ -1497,6 +1506,7 @@ mod tests {
                 module_quality: crate::tuning::QUALITY_DEFAULT,
                 fused_gear: Vec::new(),
                 gear_copies: Vec::new(),
+                downed_programs: Vec::new(),
                 perk_points: 0,
                 unlocked_perks: Vec::new(),
                 bought_stats: crate::components::BoughtStats::default(),

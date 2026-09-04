@@ -33,7 +33,12 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
-## 0.13.92
+<!-- Re-check this number against `origin/main:Cargo.toml` immediately
+     before merging: main has been cutting releases while this branch
+     worked (it was 0.13.91 at branch time, 0.13.94 as of this writing),
+     and a stale heading here either collides with a version already
+     published or skips one. -->
+## 0.13.95
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
 every new field (`DownedPrograms`, `Tools`, `KnownTools`) is additive behind

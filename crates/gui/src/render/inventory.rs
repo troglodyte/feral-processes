@@ -144,13 +144,23 @@ pub(super) fn draw_inventory(
         }
     }
     rows.push(text_row(""));
-    rows.push(text_row(
-        "[S] sell one to a trader in range; [U] fuse all pairs; Esc to close; Up/Down + Enter also work",
-    ));
-    rows.push(text_row(
-        "[I] inspect — full stats, and what a granted routine actually does",
-    ));
+    for line in inventory_help_rows() {
+        rows.push(text_row(line));
+    }
     draw_popup("Inventory", PopupSize::Large, &rows, refusal, painter, m);
+}
+
+/// The screen's own key footer, as its own array — `party.rs`'s
+/// `companion_help`'s reason: a width or content census can walk these
+/// lines directly rather than re-deriving them from `draw_inventory`'s row
+/// list, and a key added here cannot land undocumented on screen without
+/// widening what the census measures too.
+fn inventory_help_rows() -> [&'static str; 3] {
+    [
+        "[S] sell one to a trader in range; [U] fuse all pairs; Esc to close; Up/Down + Enter also work",
+        "[I] inspect — full stats, and what a granted routine actually does",
+        "[D] downed programs — what your kills left behind",
+    ]
 }
 
 /// The indented lines an item's extra effects contribute under its row,
@@ -655,9 +665,10 @@ pub(super) fn draw_inventory_item_action(
 
 #[cfg(test)]
 mod tests {
+    use super::super::popup::popup_body_width;
     use super::{
-        equipped_row, equipped_summary, gear_inspect_rows, inventory_row_lines, swap_head,
-        swap_power,
+        equipped_row, equipped_summary, gear_inspect_rows, inventory_help_rows,
+        inventory_row_lines, swap_head, swap_power,
     };
     use crate::paint::{painted_runs_in, with_painter};
     use crate::render::popup::PowerCell;
@@ -1092,6 +1103,29 @@ mod tests {
                         drawn - room
                     );
                 }
+            }
+        });
+    }
+
+    /// The screen's own key footer — `no_shipped_inventory_row_overflows_
+    /// its_popup` measures gear-copy rows only, so this is the one census
+    /// over the static text `draw_inventory` appends after them, added
+    /// alongside the `[D]` line so it never draws unmeasured.
+    #[test]
+    fn no_inventory_help_row_overflows_the_popup_body_at_1280x720() {
+        let m = ui_metrics(720.0);
+        let body = popup_body_width(1280.0, PopupSize::Large, &m);
+        with_painter(|p| {
+            for line in inventory_help_rows() {
+                // The two-space prefix `draw_row` puts in front of every
+                // `Row::Text` label — `no_shipped_inventory_row_overflows_
+                // its_popup`'s own reason for measuring `"  {line}"`.
+                let width = p.measure_ui_advance(format!("  {line}"), m.font_size);
+                assert!(
+                    width <= body,
+                    "the inventory help line draws {width}px into a {body}px body at \
+                     1280x720: {line:?}"
+                );
             }
         });
     }

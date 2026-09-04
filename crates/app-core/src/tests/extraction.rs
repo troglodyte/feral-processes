@@ -38,18 +38,36 @@ fn pressing_uppercase_d_opens_the_downed_programs_screen_from_the_pack() {
 /// ones for rows — the trap this repo's own `S`/`U`/`I` bindings on this
 /// same screen already guard against. A lowercase `d` binding here would
 /// both open the screen and pick a row on the very keypress that opened it.
+///
+/// Asserting only that the mode isn't `DownedPrograms` would pass against
+/// several wrong implementations on a short inventory, where `selected_
+/// index` falls out on an out-of-range index regardless of case and does
+/// nothing at all — `app_on_inventory_with_many_items` gives lowercase `d`
+/// (`DIGIT_ROWS` + 3, the fourth letter row) a real row to land on, so
+/// pressing it does what any other row-selecting letter on this screen
+/// does: open `Mode::InventoryItemAction` for that item. That is the
+/// evidence lowercase `d` is an ordinary row key here and nothing more.
 #[test]
-fn lowercase_d_does_not_open_the_downed_programs_screen() {
-    let mut app = test_app(9001);
+fn lowercase_d_selects_a_row_instead_of_opening_the_downed_programs_screen() {
+    let mut app = app_on_inventory_with_many_items(9001);
     app.handle_key(GameKey::Char('i'));
     assert_eq!(app.mode, Mode::Inventory);
+    let tenth_item = app.game.as_ref().unwrap().player_status().inventory[9]
+        .copy
+        .clone();
 
     app.handle_key(GameKey::Char('d'));
 
-    assert_ne!(
+    assert_eq!(
         app.mode,
-        Mode::DownedPrograms,
-        "lowercase d must not open the screen"
+        Mode::InventoryItemAction,
+        "lowercase d must pick the fourth letter row like any other row key, not open the \
+         downed programs screen and not do nothing"
+    );
+    assert_eq!(
+        app.pending_inventory_item,
+        Some(tenth_item),
+        "the row it picked must be the fourth-letter row (DIGIT_ROWS + 3), the tenth item"
     );
 }
 

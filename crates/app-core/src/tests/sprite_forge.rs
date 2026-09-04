@@ -114,6 +114,36 @@ fn sprite_subjects_is_every_species_and_structure_plus_player_and_anchor() {
     );
 }
 
+/// Fix round 1: a subject's colour must be the def's own `GlyphColor`, not a
+/// placeholder — checked against two real shipped defs (`assets/species/
+/// cipher.ron`, `assets/structures/annealing_node.ron`, both `color: Cyan`)
+/// rather than trusting the loader wired the field through — and the two
+/// hardcoded subjects must land on exactly the values `render/base.rs`
+/// actually draws them in: `None` for the player (a role colour, not a
+/// `GlyphColor`) and `Some(Gray)` for the anchor (its literal spawned
+/// colour, `game/lifecycle.rs`).
+#[test]
+fn sprite_subjects_carry_the_defs_own_colour_and_the_player_has_none() {
+    use feral_processes_engine::components::GlyphColor;
+
+    let mut app = app_with_sprite_forge(7);
+    let subjects = app.sprite_subjects();
+    let by_name = |name: &str| subjects.iter().find(|s| s.name == name).unwrap();
+
+    assert_eq!(
+        by_name("player").color,
+        None,
+        "the player wears the PLAYER role colour, not an authored GlyphColor"
+    );
+    assert_eq!(
+        by_name("anchor").color,
+        Some(GlyphColor::Gray),
+        "the anchor has no role override, so its colour is an ordinary lookup"
+    );
+    assert_eq!(by_name("cipher").color, Some(GlyphColor::Cyan));
+    assert_eq!(by_name("annealing_node").color, Some(GlyphColor::Cyan));
+}
+
 #[test]
 fn sprite_subjects_reads_art_state_off_the_installed_library() {
     let mut app = app_with_sprite_forge(6);

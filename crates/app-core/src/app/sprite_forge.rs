@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 
 use feral_processes_engine::DEFAULT_PLAYER_SPRITE;
 use feral_processes_engine::abilities::AbilityDb;
+use feral_processes_engine::components::GlyphColor;
 use feral_processes_engine::icon::{Canvas, SPRITE_PALETTE};
 use feral_processes_engine::species::SpeciesDb;
 use feral_processes_engine::structures::StructureDb;
@@ -41,6 +42,14 @@ const ANCHOR_SPRITE_NAME: &str = "anchor";
 /// in `Game::new_with`/`Game::load` (`crates/engine/src/game/lifecycle.rs`)
 /// and not exported as a constant there, since nothing else needs it back.
 const ANCHOR_GLYPH: char = '#';
+
+/// The anchor's own colour — the same `GlyphColor::Gray` written once at the
+/// same spawn site as `ANCHOR_GLYPH`. Unlike the player, the anchor's tile is
+/// never re-coloured by a role: `render/base.rs` reads its glyph colour off
+/// `EntityView::color` exactly as it would for a species or a structure, so
+/// this is genuinely "what render/base.rs draws it with," not a second
+/// guess at it.
+const ANCHOR_GLYPH_COLOR: GlyphColor = GlyphColor::Gray;
 
 /// The player's own glyph off the map. Named here for `ANCHOR_GLYPH`'s
 /// reason — see the HUD seam: "The player's `@` is a role and is read off
@@ -70,6 +79,11 @@ pub enum SpriteArt {
     Off,
 }
 
+/// `App::sprite_subjects`' cached static half, before `art` is attached —
+/// named so `App::sprite_static_subjects`'s field type in `lib.rs` isn't a
+/// bare four-tuple clippy's `type_complexity` lint flags on sight.
+pub(crate) type StaticSpriteSubject = (String, String, char, Option<GlyphColor>);
+
 /// One row of `Mode::SpritePicker`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SpriteSubject {
@@ -84,6 +98,19 @@ pub struct SpriteSubject {
     /// The glyph this subject draws in place of today, in its own palette
     /// hue — what the picker shows for a subject with no art yet.
     pub glyph: char,
+    /// The def's own `GlyphColor` — `SpeciesDef::color` / `StructureDef::
+    /// color` — or `None` for the one subject that doesn't have one.
+    ///
+    /// `player` is `None` rather than the `GlyphColor::Cyan` the player
+    /// entity happens to spawn with: the HUD seam's rule is that the
+    /// player's `@` wears the **`PLAYER` role colour**, not an authored
+    /// hue, and `render/base.rs` never reads `glyph_color(GlyphColor::Cyan)`
+    /// for it — reading `Cyan` here and drawing it through the same table
+    /// every other subject uses would show the picker a colour the map
+    /// never actually paints. `anchor` **is** `Some(GlyphColor::Gray)`: it
+    /// has no role-based override, so its true drawn colour is an ordinary
+    /// glyph-table lookup like any species or structure's.
+    pub color: Option<GlyphColor>,
     pub art: SpriteArt,
 }
 
@@ -257,7 +284,7 @@ impl App {
 
         static_subjects
             .iter()
-            .map(|(name, label, glyph)| {
+            .map(|(name, label, glyph, color)| {
                 let art = if self.sprite_library.contains_key(name) {
                     SpriteArt::On
                 } else if self.sprite_disabled.contains(name) {
@@ -269,6 +296,7 @@ impl App {
                     name: name.clone(),
                     label: label.clone(),
                     glyph: *glyph,
+                    color: *color,
                     art,
                 }
             })
@@ -284,32 +312,40 @@ impl App {
     /// (each sorts its own defs), so which def wins a shared name is stable
     /// run to run: structures after species, and the two hardcoded names
     /// last of all.
-    fn load_static_sprite_subjects(assets_dir: &Path) -> Vec<(String, String, char)> {
+    fn load_static_sprite_subjects(assets_dir: &Path) -> Vec<StaticSpriteSubject> {
         let (abilities, _) = AbilityDb::load_dir(&assets_dir.join("abilities")).unwrap_or_default();
         let (species, _) =
             SpeciesDb::load_dir(&assets_dir.join("species"), &abilities).unwrap_or_default();
         let (structures, _) =
             StructureDb::load_dir(&assets_dir.join("structures")).unwrap_or_default();
 
-        let mut by_name: BTreeMap<String, (String, char)> = BTreeMap::new();
+        let mut by_name: BTreeMap<String, (String, char, Option<GlyphColor>)> = BTreeMap::new();
         for def in species.all() {
-            by_name.insert(def.sprite_name().to_string(), (def.name.clone(), def.glyph));
+            by_name.insert(
+                def.sprite_name().to_string(),
+                (def.name.clone(), def.glyph, Some(def.color)),
+            );
         }
         for def in structures.all() {
-            by_name.insert(def.sprite_name().to_string(), (def.name.clone(), def.glyph));
+            by_name.insert(
+                def.sprite_name().to_string(),
+                (def.name.clone(), def.glyph, Some(def.color)),
+            );
         }
+        // `None`, not `Some(GlyphColor::Cyan)` — see `SpriteSubject::color`'s
+        // own doc comment for why the player has no authored hue at all.
         by_name.insert(
             DEFAULT_PLAYER_SPRITE.to_string(),
-            ("Player".to_string(), PLAYER_GLYPH),
+            ("Player".to_string(), PLAYER_GLYPH, None),
         );
         by_name.insert(
             ANCHOR_SPRITE_NAME.to_string(),
-            ("Anchor".to_string(), ANCHOR_GLYPH),
+            ("Anchor".to_string(), ANCHOR_GLYPH, Some(ANCHOR_GLYPH_COLOR)),
         );
 
         by_name
             .into_iter()
-            .map(|(name, (label, glyph))| (name, label, glyph))
+            .map(|(name, (label, glyph, color))| (name, label, glyph, color))
             .collect()
     }
 

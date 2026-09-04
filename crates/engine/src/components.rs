@@ -2298,7 +2298,6 @@ pub struct BoughtStats {
     pub ever_bought: u32,
 }
 
-
 #[cfg(test)]
 mod rarity_tests {
     use super::Rarity;

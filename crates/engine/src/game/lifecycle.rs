@@ -696,11 +696,7 @@ impl Game {
                     // the count away and re-open the overflow-XP exploit
                     // across a save/load.
                     BoughtStats {
-                        ever_bought: data
-                            .player
-                            .bought_stats
-                            .ever_bought
-                            .max(player_perk_levels),
+                        ever_bought: data.player.bought_stats.ever_bought.max(player_perk_levels),
                         ..data.player.bought_stats
                     },
                     Routines(player_routines),
@@ -1503,15 +1499,7 @@ impl Game {
                 reserve,
                 boss,
                 program_id,
-                (
-                    memories,
-                    needs,
-                    off_shift,
-                    downed,
-                    disposition,
-                    disgruntled,
-                    bought_stats,
-                ),
+                (memories, needs, off_shift, downed, disposition, disgruntled, bought_stats),
             ),
         ) in creature_query.iter(&self.world)
         {

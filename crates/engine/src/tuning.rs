@@ -360,7 +360,6 @@ pub const OVERFLOW_XP_STEP: u32 = 120;
 /// than with the Stack.
 pub const RESPEC_CREDIT_COST: u32 = 250;
 
-
 /// The level cap in `zone` — the one expression of the formula.
 ///
 /// A free function rather than `Game::level_cap`'s body, because

@@ -99,7 +99,11 @@ impl Game {
                 {
                     return Some("You don't control that program.".into());
                 }
-                if self.world.get::<Talents>(entity).is_none_or(|t| t.0.is_empty()) {
+                if self
+                    .world
+                    .get::<Talents>(entity)
+                    .is_none_or(|t| t.0.is_empty())
+                {
                     return Some(format!(
                         "{} has taken no talents to refund.",
                         self.entity_label(entity)

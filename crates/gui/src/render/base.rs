@@ -3083,10 +3083,20 @@ mod tests {
     /// `Game::ensure_local_population` — and handing back its own `pos`
     /// lets the caller centre the draw there directly rather than walking
     /// the player to it one step at a time.
+    ///
+    /// **Filtered on `is_hostile`, not on "not player/anchor/structure".**
+    /// The wider exclusion also admits a Stack-entrance link (`glyph: '>'`)
+    /// and a nest, neither a `Creature` nor a `Structure`, so both carry
+    /// `sprite: None` — and `Game::view_entities` is raw, unsorted bevy
+    /// query iteration (`Game::view_entities_at`'s own doc), so which
+    /// candidate `find` lands on is not stable across a query reorder. A
+    /// wild creature is always `Hostile` on the surface, which neither of
+    /// those two is, and being hostile implies a `Creature` component,
+    /// which is what guarantees the `sprite` below is never `None`.
     fn a_wild_creature(game: &mut Game) -> EntityView {
         game.view_entities(64, 64)
             .into_iter()
-            .find(|ev| !ev.is_player && !ev.is_anchor && !ev.is_structure)
+            .find(|ev| ev.is_hostile)
             .expect("seed 7's opening population must hold at least one wild creature")
     }
 
@@ -3339,10 +3349,12 @@ mod tests {
         );
     }
 
-    /// The drawn icon stays the top rung with a real, completed structure
-    /// standing under it and a table that could satisfy either name — the
-    /// three-rung player fallback outranking a two-rung structure the same
-    /// way it already outranks the player's own named sprite.
+    /// One tile draws one sprite — the actor-over-structure precedence test
+    /// exercises the case where the actor's own lookup misses; this one is
+    /// the case where it hits, with a table that could satisfy either name.
+    /// A renderer that painted both a drawn icon *and* the structure under
+    /// it would still show the drawing (nothing draws over it), so the
+    /// discriminating assertion is that only one mesh landed at all.
     #[test]
     fn the_drawn_icon_outranks_a_structures_sprite() {
         let choice = CharacterChoice {
@@ -3386,6 +3398,65 @@ mod tests {
             images[0].0,
             bevy_egui::egui::TextureId::User(9),
             "the drawing must win the tile from the structure's own sprite"
+        );
+    }
+
+    /// **The actor-over-structure precedence itself**, not just "one of the
+    /// two wins" — this is the case `the_drawn_icon_outranks_a_structures_sprite`
+    /// cannot reach, because a drawn icon always resolves to `Some` when
+    /// present and so never needs to ask what stands under it.
+    ///
+    /// An actor whose own lookup resolves to nothing — no drawn icon, no
+    /// named sprite — must draw its **glyph**, never fall through to a
+    /// structure's sprite standing on the same tile. The two are
+    /// independent rungs, not one ladder: `structure` is read only when
+    /// `actor` is entirely absent (see the `match` in `draw_surface_map`),
+    /// and this is the test a `.or_else(|| structure...)` rewrite of that
+    /// match would still pass every *other* test in this module while
+    /// failing.
+    #[test]
+    fn an_actor_with_no_sprite_of_its_own_draws_its_glyph_over_a_structures_sprite() {
+        let choice = CharacterChoice {
+            sprite: String::new(),
+            icon: None,
+            ..CharacterChoice::default()
+        };
+        let mut game = Game::new_with(9, DifficultyMode::Forgiving, &test_assets(), &choice)
+            .expect("the shipped assets must load");
+        game.place_structure("home", 0, 0)
+            .expect("a Home founds it");
+        game.enter_base()
+            .expect("the party steps inside, standing on the Home");
+
+        let mut table = SpriteTable::default();
+        table.insert("home", bevy_egui::egui::TextureId::User(7));
+
+        let mut fx = Fx::new();
+        let (tile_px, glyph_px) = crate::text::map_cell(1);
+        let (_, shapes) = with_sprites(table, |p| {
+            let status = game.player_status();
+            draw_surface_map(
+                &mut game,
+                &mut fx,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                tile_px,
+                glyph_px,
+                &status,
+                None,
+                status.position,
+            );
+        });
+
+        assert_eq!(
+            painted_images(&shapes).len(),
+            0,
+            "the actor's own miss must not fall through to the structure's sprite"
+        );
+        assert!(
+            painted_text(&shapes).iter().any(|g| g == "@"),
+            "the player must not vanish under their own base: {:?}",
+            painted_text(&shapes)
         );
     }
 

@@ -2146,6 +2146,31 @@ fn a_breach_leaves_the_map_and_its_seed_alone() {
     );
 }
 
+/// A tile the player changed stays changed. `tile_overrides` is the sparse
+/// overlay of exactly those changes, and it used to be discarded with the
+/// map it described — which is the sharpest single statement of why no
+/// place was worth returning to.
+#[test]
+fn a_breach_keeps_the_tiles_the_player_changed() {
+    let mut game = Game::new(4242, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let cut = Tile {
+        biome: Biome::Excavated,
+        walkable: true,
+        rock_shade: None,
+    };
+    game.world
+        .resource_mut::<WorldMap>()
+        .set_override(12, -7, cut);
+
+    game.enter_next_zone();
+
+    assert_eq!(
+        game.world.resource_mut::<WorldMap>().tile(12, -7).biome,
+        cut.biome,
+        "a breach reverted a tile the player had changed"
+    );
+}
+
 /// The party stands where it stood. The old breach teleported them onto a
 /// fresh `ZoneSpawnPoint`, which is what made a place impossible to return
 /// to.

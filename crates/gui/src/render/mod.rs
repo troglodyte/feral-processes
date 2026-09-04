@@ -1245,7 +1245,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 90] = [
+    const ALL_MODES: [Mode; 92] = [
         Mode::MainMenu,
         Mode::CreateCharacter,
         Mode::LoadGame,

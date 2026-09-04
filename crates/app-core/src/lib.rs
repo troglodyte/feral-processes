@@ -16,6 +16,7 @@ pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
 pub use app::group_menu::GroupMenuRow;
 pub use app::icon_editor::IconEditorView;
+pub use app::sprite_forge::{SpriteArt, SpriteSubject};
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
 /// nothing else of app-core's internals.
 pub use app::telemetry::append_records;
@@ -23,6 +24,7 @@ pub use feral_processes_engine::ProgramRole;
 
 use app::arena::{ArenaPickKind, ArenaSession};
 
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -34,6 +36,7 @@ use feral_processes_engine::battle::{
 };
 use feral_processes_engine::components::Rarity;
 use feral_processes_engine::help::{self, HelpDb, HelpPage};
+use feral_processes_engine::icon::Canvas;
 use feral_processes_engine::items::{EquipmentSlot, EquipmentStats, GearCopy, ItemId};
 use feral_processes_engine::tuning::{
     ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, MAX_ACTIVE_CONTRACTS, MAX_FUSIONS,
@@ -1572,6 +1575,12 @@ pub enum Mode {
     /// What the fight cost — see `arena::Watch`. `[R]` refights the same
     /// seed, `[N]` the next one, Esc returns to the builder.
     ArenaResult,
+    /// Every name the map can draw a sprite for — see
+    /// `App::sprite_subjects`. Reached from the main menu when
+    /// `App::sprite_forge_enabled` is true (`FERAL_DEV_SPRITES` *and* a
+    /// checkout behind this build); never reachable in a player's build.
+    /// Esc returns to the main menu.
+    SpritePicker,
 }
 
 impl Mode {
@@ -1687,6 +1696,8 @@ impl Mode {
             | Mode::ArenaSave
             | Mode::ArenaPick
             | Mode::ArenaResult
+            // Opened from the main menu, so it never layers over a fight.
+            | Mode::SpritePicker
             // Only ever entered from `Mode::Playing`, so it never layers
             // over a fight.
             | Mode::Notification => false,
@@ -2198,6 +2209,23 @@ pub struct App {
     /// moment the player walked back to the Icon step and returned, since
     /// the profile's saved drawing would win the field back every time.
     creation_icon_seeded: bool,
+    /// Whether `FERAL_DEV_SPRITES` was set when this `App` was built. Read
+    /// once, in `App::new`, for `arena_enabled`'s reason: a field lets the
+    /// parallel test suite open the gate without writing to a
+    /// process-global environment every other case in flight can see.
+    sprite_forge_flag: bool,
+    /// Where the dev sprite editor reads and writes PNGs — `None` unless
+    /// the launcher installed one (`App::install_sprite_dir`), which it
+    /// only does inside a checkout. The other half of
+    /// `sprite_forge_enabled`'s gate.
+    sprite_dir: Option<PathBuf>,
+    /// The frontend's decoded, quantised sprite library, keyed by sprite
+    /// name — `App::install_sprite_library`'s `enabled` half. Empty until
+    /// installed, which is every non-dev session's whole life.
+    sprite_library: HashMap<String, Canvas>,
+    /// Sprite names switched off (`<name>.png.off` on disk) but not
+    /// deleted — `App::install_sprite_library`'s `disabled` half.
+    sprite_disabled: HashSet<String>,
 }
 
 /// One entry in the `Mode::LoadGame` list — a save file found in the saves

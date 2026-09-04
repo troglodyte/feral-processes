@@ -5,7 +5,11 @@ use super::popup::*;
 use super::*;
 
 pub(super) fn draw_main_menu(app: &App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
-    let options = main_menu_options(!app.list_saves().is_empty(), app.arena_enabled());
+    let options = main_menu_options(
+        !app.list_saves().is_empty(),
+        app.arena_enabled(),
+        app.sprite_forge_enabled(),
+    );
     let mut rows = vec![
         Row::TextColored("feral-processes".to_string(), TEXT),
         Row::TextColored("// jack into the Grid".to_string(), CYAN),
@@ -21,9 +25,10 @@ pub(super) fn draw_main_menu(app: &App, refusal: Option<&str>, painter: &Painter
 /// its key list. Both clauses are conditional there and both are here — a
 /// row drawn that the handler does not offer opens the screen below it.
 ///
-/// The Arena row is a dev switch (`FERAL_DEV_ARENA`), so an ordinary player
-/// never sees it and a release build costs nothing for it.
-fn main_menu_options(has_saves: bool, arena: bool) -> Vec<String> {
+/// The Arena and Sprite Forge rows are both dev switches (`FERAL_DEV_ARENA`,
+/// `FERAL_DEV_SPRITES`), so an ordinary player never sees either and a
+/// release build costs nothing for them.
+fn main_menu_options(has_saves: bool, arena: bool, sprite_forge: bool) -> Vec<String> {
     let mut options = vec!["[N] New Game".to_string()];
     if has_saves {
         options.push("[L] Load Game".to_string());
@@ -31,6 +36,9 @@ fn main_menu_options(has_saves: bool, arena: bool) -> Vec<String> {
     options.push("[A] Achievements".to_string());
     if arena {
         options.push("[R] Arena".to_string());
+    }
+    if sprite_forge {
+        options.push("[D] Sprite Forge".to_string());
     }
     options.push("[Q] Quit".to_string());
     options
@@ -198,14 +206,28 @@ mod tests {
     #[test]
     fn the_main_menu_shows_arena_only_when_enabled() {
         let named = |opts: &[String]| opts.iter().any(|o| o.contains("Arena"));
-        assert!(!named(&main_menu_options(true, false)));
-        assert!(!named(&main_menu_options(false, false)));
-        assert!(named(&main_menu_options(false, true)));
+        assert!(!named(&main_menu_options(true, false, false)));
+        assert!(!named(&main_menu_options(false, false, false)));
+        assert!(named(&main_menu_options(false, true, false)));
         // And it sits between Achievements and Quit, which is where
         // `handle_main_menu_key` puts the `r` in its own list.
-        let opts = main_menu_options(true, true);
+        let opts = main_menu_options(true, true, false);
         let at = |s: &str| opts.iter().position(|o| o.contains(s)).unwrap();
         assert!(at("Achievements") < at("Arena"));
         assert!(at("Arena") < at("Quit"));
+    }
+
+    #[test]
+    fn the_main_menu_shows_sprite_forge_only_when_enabled() {
+        let named = |opts: &[String]| opts.iter().any(|o| o.contains("Sprite Forge"));
+        assert!(!named(&main_menu_options(true, false, false)));
+        assert!(!named(&main_menu_options(false, false, false)));
+        assert!(named(&main_menu_options(false, false, true)));
+        // Beside Arena, both above Quit — `handle_main_menu_key` pushes `d`
+        // right after `r` and before `q`.
+        let opts = main_menu_options(true, true, true);
+        let at = |s: &str| opts.iter().position(|o| o.contains(s)).unwrap();
+        assert!(at("Arena") < at("Sprite Forge"));
+        assert!(at("Sprite Forge") < at("Quit"));
     }
 }

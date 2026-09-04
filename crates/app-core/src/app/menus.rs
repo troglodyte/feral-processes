@@ -14,6 +14,9 @@ impl App {
         if self.arena_enabled {
             options.push('r');
         }
+        if self.sprite_forge_enabled() {
+            options.push('d');
+        }
         options.push('q');
         let idx = self
             .selected_index(key, options.len())
@@ -32,6 +35,10 @@ impl App {
                 self.mode = Mode::Achievements;
             }
             Some('r') => self.open_arena(),
+            Some('d') => {
+                self.status_line = None;
+                self.mode = Mode::SpritePicker;
+            }
             Some('q') => self.mode = Mode::QuitAppConfirm,
             _ => {}
         }

@@ -32,6 +32,7 @@ mod refactor;
 mod research;
 mod routines;
 mod saves;
+mod sprite_forge;
 mod stack;
 mod stack_market;
 mod telemetry;

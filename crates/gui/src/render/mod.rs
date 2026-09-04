@@ -1198,7 +1198,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 88] = [
+    const ALL_MODES: [Mode; 89] = [
         Mode::MainMenu,
         Mode::CreateCharacter,
         Mode::LoadGame,
@@ -1287,6 +1287,11 @@ mod tests {
         Mode::ArenaSave,
         Mode::ArenaPick,
         Mode::ArenaResult,
+        // Undrawn as of this mode's introduction — Task 7 of the dev sprite
+        // editor plan closes `every_screen_draws_a_refusal_exactly_once`
+        // below by giving it a `draw_sprite_picker`. Expected red until
+        // then.
+        Mode::SpritePicker,
     ];
 
     const CENSUS_REFUSAL: &str = "Requires Zone 3 first.";

@@ -2359,3 +2359,120 @@ fn a_hostile_keeps_its_authored_colour_and_reports_difficulty_on_its_own_channel
         "the con read rides its own field for the map's bottom bar to draw"
     );
 }
+
+/// Task 4 (in `crates/gui`) substitutes a sprite for an entity's glyph by
+/// this name — a wild creature's view has to carry its species' resolved
+/// name (`SpeciesDef::sprite_name`), not the def's raw id, so an authored
+/// override reaches the renderer through the same field a fallback does.
+#[test]
+fn view_entities_carries_a_wild_creatures_resolved_sprite_name() {
+    let mut game = Game::new(9040, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let wild = game
+        .spawn_wild_creature("scrapper", pos.x + 1, pos.y)
+        .expect("scrapper ships with the game");
+
+    let view = game
+        .view_entities(5, 5)
+        .into_iter()
+        .find(|v| v.entity == wild)
+        .expect("the wild program should be in view");
+
+    assert_eq!(
+        view.sprite,
+        Some("scrapper".to_string()),
+        "no shipped species authors a sprite override, so its resolved name \
+         is its id"
+    );
+}
+
+/// The structure half of the same wiring — a machine's view carries its
+/// def's resolved sprite name too, not just a creature's.
+#[test]
+fn view_entities_carries_a_structures_resolved_sprite_name() {
+    let mut game = Game::new(9041, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let origin = stand_in_base_and_get_origin(&mut game);
+    let refinery = game
+        .world
+        .resource::<StructureDb>()
+        .get("refinery")
+        .cloned()
+        .expect("refinery ships with the game");
+    let entity = game.spawn_structure(&refinery, origin.x, origin.y);
+
+    let view = game
+        .view_entities(5, 5)
+        .into_iter()
+        .find(|v| v.entity == entity)
+        .expect("the structure should be in view");
+
+    assert_eq!(
+        view.sprite,
+        Some("refinery".to_string()),
+        "no shipped structure authors a sprite override, so its resolved \
+         name is its id"
+    );
+}
+
+/// A map fixture that is neither a creature nor a structure — the base
+/// anchor — invents no name: `EntityView::sprite` is `None` rather than a
+/// guess, exactly as the brief requires for "an entity that is neither".
+#[test]
+fn view_entities_gives_no_sprite_to_an_entity_that_is_neither_creature_nor_structure() {
+    let mut game = Game::new(9042, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let anchor = game
+        .world
+        .spawn((
+            BaseAnchor,
+            Position {
+                x: pos.x + 1,
+                y: pos.y,
+            },
+            Glyph {
+                ch: '#',
+                color: GlyphColor::White,
+            },
+        ))
+        .id();
+
+    let view = game
+        .view_entities(5, 5)
+        .into_iter()
+        .find(|v| v.entity == anchor)
+        .expect("the anchor should be in view");
+
+    assert_eq!(view.sprite, None);
+}
+
+/// The wiring must call `sprite_name()` rather than reaching for the def's
+/// raw `id` — an authored override has to survive the trip out to
+/// `EntityView`, not just the fallback tested above.
+#[test]
+fn view_entities_honours_a_species_sprite_override() {
+    let mut game = Game::new(9043, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let template = game
+        .species_defs()
+        .into_iter()
+        .next()
+        .expect("at least one species");
+    let overridden = SpeciesDef {
+        id: "sprite_override_species".to_string(),
+        sprite: Some("custom_sprite_key".to_string()),
+        ..template
+    };
+    game.world.resource_mut::<SpeciesDb>().insert(overridden);
+
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let wild = game
+        .spawn_wild_creature("sprite_override_species", pos.x + 1, pos.y)
+        .expect("just installed above");
+
+    let view = game
+        .view_entities(5, 5)
+        .into_iter()
+        .find(|v| v.entity == wild)
+        .expect("the wild program should be in view");
+
+    assert_eq!(view.sprite, Some("custom_sprite_key".to_string()));
+}

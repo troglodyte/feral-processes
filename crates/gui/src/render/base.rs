@@ -1895,6 +1895,7 @@ mod tests {
             entity: Entity::PLACEHOLDER,
             pos: (0, 0),
             glyph: 'd',
+            sprite: None,
             color: GlyphColor::Cyan,
             label: "Scrapper".into(),
             is_player: false,

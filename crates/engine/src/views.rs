@@ -720,6 +720,13 @@ pub struct EntityView {
     pub entity: Entity,
     pub pos: (i32, i32),
     pub glyph: char,
+    /// The resolved name a sprite loader looks this entity up by —
+    /// `SpeciesDef::sprite_name` for a creature, `StructureDef::sprite_name`
+    /// for a structure, `None` for anything that is neither. Always the
+    /// *resolved* name (the override when authored, the def's own id
+    /// otherwise), never `def.sprite` directly — see `sprite_name`'s doc
+    /// comment on both defs for the one place that fallback is written.
+    pub sprite: Option<String>,
     /// This entity's **authored** hue — what it is, never how dangerous it
     /// is. See `difficulty` below for the reading that used to replace it.
     pub color: GlyphColor,

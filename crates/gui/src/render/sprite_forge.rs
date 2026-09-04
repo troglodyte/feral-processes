@@ -37,7 +37,9 @@
 
 use super::canvas;
 use super::*;
-use feral_processes_app_core::{CanvasFocus, SpriteArt, SpriteEditorView, SpriteSubject};
+use feral_processes_app_core::{
+    CanvasFocus, PointerHit, SpriteArt, SpriteEditorView, SpriteSubject,
+};
 use feral_processes_engine::components::GlyphColor;
 
 // ---------------------------------------------------------------------
@@ -454,6 +456,107 @@ fn draw_preview_cell(painter: &Painter, rect: Rect, view: &SpriteEditorView, hue
     }
 }
 
+// ---------------------------------------------------------------------
+// The mouse
+// ---------------------------------------------------------------------
+//
+// `crates/gui` has no mouse handling anywhere else — this is the first, and
+// it stays confined to this screen. Everything below is pure geometry: no
+// egui, no bevy, nothing that needs a window. `lib.rs::handle_sprite_pointer`
+// is the one caller, and it owns the only bevy/egui-dependent half (reading
+// the pointer, and the frame-to-frame Down/Drag/Up bookkeeping) — kept out
+// of this file so `cell_at`/`swatch_at`/`HitRects::resolve` stay testable
+// with nothing but a `Rect`.
+
+/// Resolves a pointer position to a canvas cell — pure in `(pos, rect,
+/// edge)`, so this needs no window to test. `rect` is the exact grid rect
+/// `draw_canvas_grid` fills (the canvas panel inset by `m.inset`, not the
+/// panel itself). Both bounds are inclusive, so the rect's own four corners
+/// resolve to their own four corner cells — `min(edge - 1)` is what makes
+/// the far corner (exactly `rect.x + rect.w`) land on the last column
+/// instead of reading one cell short of "inside."
+pub(crate) fn cell_at(pos: (f32, f32), rect: Rect, edge: u8) -> Option<(u8, u8)> {
+    if pos.0 < rect.x || pos.0 > rect.x + rect.w || pos.1 < rect.y || pos.1 > rect.y + rect.h {
+        return None;
+    }
+    let cell_w = rect.w / edge as f32;
+    let cell_h = rect.h / edge as f32;
+    let x = (((pos.0 - rect.x) / cell_w) as u8).min(edge - 1);
+    let y = (((pos.1 - rect.y) / cell_h) as u8).min(edge - 1);
+    Some((x, y))
+}
+
+/// Resolves a pointer position to a swatch index — `draw_swatch_row`'s own
+/// 0-based loop index (`PointerHit::Swatch`'s convention, not
+/// `CanvasView::selected`'s 1-based one). `rect` is the exact strip
+/// `draw_swatch_row` fills, and `canvas::SWATCH_GAP_RATIO` is the same gap
+/// it draws with — a pointer landing in that gap between two swatches
+/// resolves to no hit rather than snapping to whichever is nearer, so an
+/// accidental miss between two swatches stays a miss.
+pub(crate) fn swatch_at(pos: (f32, f32), rect: Rect, count: u8) -> Option<u8> {
+    if count == 0 || pos.0 < rect.x || pos.1 < rect.y || pos.1 > rect.y + rect.h {
+        return None;
+    }
+    let swatch = rect.h;
+    let stride = swatch * (1.0 + canvas::SWATCH_GAP_RATIO);
+    let offset = pos.0 - rect.x;
+    let i = (offset / stride) as u8;
+    if i >= count {
+        return None;
+    }
+    if offset - i as f32 * stride > swatch {
+        return None;
+    }
+    Some(i)
+}
+
+/// The sprite editor's own two hit-test rects, recomputed from the exact
+/// `editor_geometry` `draw_sprite_editor_session` draws from — a pointer
+/// resolved through `resolve` can never disagree with what's on screen.
+/// Fields stay private: `lib.rs` never reads one directly, only calls
+/// `resolve`.
+pub(crate) struct HitRects {
+    canvas: Rect,
+    edge: u8,
+    palette: Rect,
+    palette_len: u8,
+}
+
+impl HitRects {
+    /// The canvas rect first, the palette rect second — the two panels
+    /// never overlap on screen, so trying both in this order and returning
+    /// the first hit is exactly "which panel was the pointer over."
+    pub(crate) fn resolve(&self, pos: (f32, f32)) -> Option<PointerHit> {
+        if let Some((x, y)) = cell_at(pos, self.canvas, self.edge) {
+            return Some(PointerHit::Cell(x, y));
+        }
+        swatch_at(pos, self.palette, self.palette_len).map(PointerHit::Swatch)
+    }
+}
+
+/// `render::sprite_editor_hit_rects` is the one caller — `app`'s zoom and
+/// `view`'s own edge/palette length feed the same `editor_geometry` the draw
+/// call built its rects from, then re-derives `inner`/`palette_inner`
+/// exactly as `draw_sprite_editor_session` does.
+pub(crate) fn hit_rects(painter: &Painter, w: f32, m: &Metrics, view: &SpriteEditorView, zoom: u16) -> HitRects {
+    let edge = view.canvas.edge as usize;
+    let g = editor_geometry(painter, w, m, edge, view.palette.len(), zoom);
+    let side = edge as f32 * g.cell;
+    let canvas = Rect::new(g.canvas.x + m.inset, g.canvas.y + m.inset, side, side);
+    let palette = Rect::new(
+        g.palette.x + m.inset,
+        g.palette.y + m.inset,
+        g.palette.w - m.inset * 2.0,
+        g.swatch,
+    );
+    HitRects {
+        canvas,
+        edge: view.canvas.edge,
+        palette,
+        palette_len: view.palette.len() as u8,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -847,5 +950,119 @@ mod tests {
                 .any(|t| t.contains(&subject.label) || t.contains(&subject.name)),
             "the header must name the subject: {drawn:?}"
         );
+    }
+
+    // -------------------------------------------------------------
+    // The mouse: `cell_at` and `swatch_at`, pure functions of a position, a
+    // rect and an edge/count — no window, no egui, no `App`.
+    // -------------------------------------------------------------
+
+    /// **The failing test this task starts from.** A 16x16 grid in a
+    /// 160x160 rect (10px cells): each of the rect's own four corners must
+    /// resolve to its own corner cell, and a point in the middle of an
+    /// interior cell must resolve to that cell.
+    #[test]
+    fn cell_at_resolves_the_four_corners_and_one_interior_point() {
+        let rect = Rect::new(100.0, 50.0, 160.0, 160.0);
+        let edge = 16;
+        assert_eq!(
+            cell_at((100.0, 50.0), rect, edge),
+            Some((0, 0)),
+            "top-left corner"
+        );
+        assert_eq!(
+            cell_at((260.0, 50.0), rect, edge),
+            Some((15, 0)),
+            "top-right corner"
+        );
+        assert_eq!(
+            cell_at((100.0, 210.0), rect, edge),
+            Some((0, 15)),
+            "bottom-left corner"
+        );
+        assert_eq!(
+            cell_at((260.0, 210.0), rect, edge),
+            Some((15, 15)),
+            "bottom-right corner"
+        );
+        // The middle of cell (8, 8): rect.x + 8.5 cells, rect.y + 8.5 cells.
+        assert_eq!(
+            cell_at((185.0, 135.0), rect, edge),
+            Some((8, 8)),
+            "an interior point"
+        );
+    }
+
+    /// A position outside the rect on any of the four sides resolves to no
+    /// hit at all.
+    #[test]
+    fn cell_at_returns_none_outside_the_rect() {
+        let rect = Rect::new(100.0, 50.0, 160.0, 160.0);
+        let edge = 16;
+        assert_eq!(cell_at((99.9, 50.0), rect, edge), None, "left of the rect");
+        assert_eq!(
+            cell_at((260.1, 50.0), rect, edge),
+            None,
+            "right of the rect"
+        );
+        assert_eq!(cell_at((100.0, 49.9), rect, edge), None, "above the rect");
+        assert_eq!(
+            cell_at((100.0, 210.1), rect, edge),
+            None,
+            "below the rect"
+        );
+    }
+
+    /// A swatch hit lands on the swatch it is over, and misses the gap
+    /// between two swatches rather than snapping to the nearer one.
+    #[test]
+    fn swatch_at_resolves_a_hit_and_a_gap_and_outside() {
+        // Two swatches, 30px side, 10px gap (`SWATCH_GAP_RATIO` = 1/3).
+        let rect = Rect::new(0.0, 0.0, 70.0, 30.0);
+        assert_eq!(
+            swatch_at((15.0, 15.0), rect, 2),
+            Some(0),
+            "inside the first swatch"
+        );
+        assert_eq!(
+            swatch_at((35.0, 15.0), rect, 2),
+            None,
+            "in the gap between the two swatches"
+        );
+        assert_eq!(
+            swatch_at((55.0, 15.0), rect, 2),
+            Some(1),
+            "inside the second swatch"
+        );
+        assert_eq!(
+            swatch_at((-1.0, 15.0), rect, 2),
+            None,
+            "left of the strip"
+        );
+        assert_eq!(
+            swatch_at((15.0, 31.0), rect, 2),
+            None,
+            "below the strip"
+        );
+    }
+
+    /// `HitRects::resolve` tries the canvas rect first and the palette rect
+    /// second, and misses entirely outside both — the composition
+    /// `render::sprite_editor_hit_rects` hands `lib.rs` each frame.
+    #[test]
+    fn hit_rects_resolve_tries_canvas_then_palette_then_neither() {
+        let mut app = sprite_forge_app();
+        open_editor(&mut app, 0);
+        let view = app.sprite_editor_view().expect("just opened");
+        let m = crate::text::ui_metrics(900.0);
+        let rects = crate::paint::with_painter(|p| hit_rects(p, 1280.0, &m, &view, app.zoom)).0;
+
+        let canvas_hit = rects.resolve((rects.canvas.x, rects.canvas.y));
+        assert_eq!(canvas_hit, Some(PointerHit::Cell(0, 0)));
+
+        let swatch_hit = rects.resolve((rects.palette.x, rects.palette.y));
+        assert_eq!(swatch_hit, Some(PointerHit::Swatch(0)));
+
+        assert_eq!(rects.resolve((-1.0, -1.0)), None, "outside both panels");
     }
 }

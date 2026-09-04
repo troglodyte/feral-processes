@@ -35,8 +35,10 @@ const SELECTED_SWATCH_THICKNESS: f32 = 2.0;
 
 /// A swatch's gap to its neighbour, as a fraction of the swatch's own
 /// side — the icon editor's shipped `SWATCH_GAP_LINES / SWATCH_LINES`
-/// (0.3 / 0.9).
-const SWATCH_GAP_RATIO: f32 = 1.0 / 3.0;
+/// (0.3 / 0.9). `pub(crate)` so the sprite editor's pointer resolver
+/// (`sprite_forge::swatch_at`) can test a hit against the same spacing this
+/// draws, rather than a second hand-copied `/3.0` literal.
+pub(crate) const SWATCH_GAP_RATIO: f32 = 1.0 / 3.0;
 
 /// Draws the cell grid, the grid lines and the brush-sized cursor, and
 /// nothing else — no background, no border, no label.

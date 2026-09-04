@@ -51,7 +51,11 @@ mod party;
 mod popup;
 mod progression;
 mod routines;
-mod sprite_forge;
+// `pub(crate)` rather than private: `lib.rs::handle_sprite_pointer` needs
+// `sprite_forge::HitRects` to name the type `sprite_editor_hit_rects` below
+// hands back — every other module here stays private because nothing
+// outside `render/` ever needed one of its types before the mouse did.
+pub(crate) mod sprite_forge;
 mod stack;
 mod stack_market;
 mod stock;
@@ -175,6 +179,23 @@ const CRITICAL_HP_DIVISOR: i32 = 3;
 /// screens.
 pub(super) fn hp_critical(hp: i32, max_hp: i32) -> bool {
     max_hp > 0 && hp * CRITICAL_HP_DIVISOR <= max_hp
+}
+
+/// The sprite editor's own two hit-test rects for this frame, recomputed
+/// from the exact geometry `draw_sprite_editor` draws from — a pointer
+/// resolved against these can never disagree with what's on screen. `None`
+/// when no editor session is open, which is also when `lib.rs` has nothing
+/// to read a pointer for.
+pub(crate) fn sprite_editor_hit_rects(app: &App, painter: &Painter) -> Option<sprite_forge::HitRects> {
+    let view = app.sprite_editor_view()?;
+    let m = ui_metrics(painter.screen_h());
+    Some(sprite_forge::hit_rects(
+        painter,
+        painter.screen_w(),
+        &m,
+        &view,
+        app.zoom,
+    ))
 }
 
 /// What colour a menu row draws in for something that has been fused —

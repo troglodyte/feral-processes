@@ -20,6 +20,7 @@ mod group_menus;
 mod icon_editor;
 mod info_tab;
 mod inventory;
+mod keys;
 mod log_filter;
 mod menus;
 mod notifications;

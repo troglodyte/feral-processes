@@ -772,16 +772,34 @@ fn a_sortie_kill_leaves_a_downed_program_on_the_player() {
         let (mut game, _) = a_dispatched_sortie(seed, DifficultyMode::Forgiving);
         let player = game.player_entity();
         let before = game.world.get::<DownedPrograms>(player).unwrap().0.len();
+
+        // The same candidate pool `resolve_sortie_battle` itself draws
+        // from, computed the same way it does (anchor position, `risk` as
+        // the step bonus) — so a program landing outside this set would be
+        // a defect the count-only version of this test could not see: a
+        // `.any()` over many seeds proves *something* grew the store, not
+        // that what grew it came from the fight.
+        let risk = game.world.resource::<Sorties>().0[0].risk;
+        let (ax, ay) = game.anchor_position().unwrap_or((0, 0));
+        let candidates = game
+            .habitat_pools(ax, ay, None, risk)
+            .map(|(c, _)| c)
+            .unwrap_or_default();
+
         let total = game.world.resource::<Sorties>().0[0].ticks_total;
         for _ in 0..(total - 1) {
             game.wait();
         }
-        let after = game.world.get::<DownedPrograms>(player).unwrap().0.len();
-        after > before
+        let after = &game.world.get::<DownedPrograms>(player).unwrap().0;
+        after.len() > before
+            && after[before..]
+                .iter()
+                .all(|program| candidates.contains(&program.species))
     });
     assert!(
         found,
-        "no seed in the sweep left a downed program on the player after a sortie kill"
+        "no seed in the sweep left a downed program on the player, carrying a species the \
+         sortie's own habitat pool could actually have fought"
     );
 }
 

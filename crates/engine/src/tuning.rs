@@ -2075,11 +2075,12 @@ pub const NEST_PATH_SEARCH_MARGIN: i32 = 5;
 /// How many downed programs of its own species a destroyed nest leaves
 /// (`Game::grant_nest_cache`), replacing the flat `work_resource` roll that
 /// used to pay here (`NEST_CACHE_WORK_RESOURCE_MULT`, retired with
-/// `roll_work_resource_drop`). More than one kill's worth
-/// (`Game::leave_downed_program` leaves exactly one), the same way the old
-/// multiplier read the cache as several kills at once — but well under
-/// `MAX_DOWNED_PROGRAMS`, so a single nest cannot fill the store on its own.
-pub const NEST_CACHE_PROGRAM_COUNT: usize = 2;
+/// `roll_work_resource_drop`). Set to match that multiplier's own reading —
+/// 4x an ordinary kill's payout — rather than an unargued fraction of it:
+/// `Game::leave_downed_program` leaves exactly one program per kill, so 4
+/// preserves "the cache reads as several kills' worth at once" instead of
+/// silently halving what a nest was worth.
+pub const NEST_CACHE_PROGRAM_COUNT: usize = 4;
 
 /// Trade currency a destroyed nest pays (see `Game::grant_nest_cache`),
 /// before `NEST_CACHE_CREDIT_ZONE_BONUS`.
@@ -2151,7 +2152,14 @@ pub const FORGIVING_RESPAWN_NEED_FLOOR: f32 = 40.0;
 // ─────────────────────────────────────────────────────────────────────────
 
 /// Inclusive quantity range of its species' `work_resource` a defeated wild
-/// program drops.
+/// program used to drop directly.
+///
+/// **Zero readers now** — program extraction (2026-09-04) retired the
+/// direct grant this priced (`Game::leave_downed_program` replaced it; see
+/// `docs/superpowers/specs/2026-09-04-program-extraction-design.md` section
+/// 5). Kept only as the expected-value target decision 8's drop-neutrality
+/// fits the starter tool's yield against — Task 6's to spend, not to
+/// delete for reading as unused.
 ///
 /// Doubled from `1..=2` on 2026-08-02, when deleting the scan action left
 /// kills as the only source of Core Fragments outside a built base. At 1..=2
@@ -2892,8 +2900,13 @@ pub const OBFUSCATION_REDUCTION_PER_LEVEL: f32 = 0.10;
 /// with.
 pub const PROCESS_POOL_SLOTS_PER_LEVEL: usize = 1;
 
-/// Work resource `Perk::Teardown` adds to a kill's drop, per level, on top of
-/// the `WORK_RESOURCE_DROP` roll (2..=4).
+/// What `Perk::Teardown` adds per level. Used to sit on top of the kill's
+/// own `WORK_RESOURCE_DROP` roll (2..=4); that roll is gone
+/// (`Game::leave_downed_program` replaced the direct grant it priced), so
+/// this term now belongs in `Game::extraction_yield` — see the `Perk::
+/// Teardown` variant's own doc in `perks.rs`. Unread until that call site
+/// exists; not deleted for the same reason the census in `perks.rs` still
+/// exercises `salvage_bonus` directly.
 ///
 /// This is a permanent income *rate*, not a loop — nothing here mints value
 /// out of nothing, and it is bounded by how many fights the player takes,
@@ -4006,11 +4019,11 @@ pub const BOSS_CONDITION_FLOOR: u8 = 80;
 
 /// The floor a boss's own downed program's `rarity` cannot fall below —
 /// `Rarity::max` against the ordinary roll, the same way
-/// `BOSS_CONDITION_FLOOR` floors condition. A boss is already a wall by
-/// `pay_surface_boss_gear`'s own `SURFACE_BOSS_LOOT_RARITY_FLOOR`; this is
-/// that same guarantee applied to what it leaves behind rather than what it
-/// pays directly.
-pub const BOSS_RARITY_FLOOR: Rarity = Rarity::Gold;
+/// `BOSS_CONDITION_FLOOR` floors condition. Matches
+/// `SURFACE_BOSS_LOOT_RARITY_FLOOR` (`Silver`) rather than outbidding it:
+/// the intent is parity with what a boss already guarantees on the gear it
+/// pays directly, not a richer guarantee on what it leaves behind.
+pub const BOSS_RARITY_FLOOR: Rarity = Rarity::Silver;
 
 /// How much each rung of `Rarity::rank` adds to `DownedProgram::grade`'s
 /// multiplier, on top of the `1.0` an `Ordinary` program contributes.

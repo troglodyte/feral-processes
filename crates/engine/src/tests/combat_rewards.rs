@@ -1014,7 +1014,11 @@ fn a_fight_reports_its_salvage_once() {
         game.finish_member(0, 0, player);
     }
     let gained = held(&game, &resource) - before;
-    assert!(gained >= 3, "three kills should each have paid a drop");
+    assert_eq!(
+        gained,
+        3 * 2,
+        "three manual drop_a_resource calls, one per kill, should sum to exactly this"
+    );
 
     let lines = log_texts(&game);
     assert_eq!(
@@ -1172,23 +1176,38 @@ fn jacking_out_still_reports_what_was_killed() {
 /// program extraction retired the ordinary species' direct resource grant
 /// (`pay_surface_boss_gear` rolls with replacement from a pool that falls
 /// back to "the best gear there is" rather than ever landing empty).
+///
+/// The row text is read back from what was actually granted
+/// (`GearCopies`, guaranteed rather than `Inventory` since
+/// `SURFACE_BOSS_LOOT_RARITY_FLOOR` forces every boss copy non-plain) and
+/// reconstructed through `game.drop_label`, the same call the formatter
+/// itself makes — asserting only "a row exists" can't tell a same-formatter
+/// wording from a differently-worded one; asserting the exact row can.
 #[test]
 fn a_drop_outside_a_battle_is_announced_at_once() {
     let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
     let boss = a_boss(&game);
     let corpse = corpse_of(&mut game, &boss.id);
 
     game.award_loot(corpse);
 
+    let granted = game.world.get::<GearCopies>(player).unwrap().copies.clone();
+    assert!(
+        !granted.is_empty(),
+        "test premise: a surface boss should have spilled gear into GearCopies"
+    );
+
     let lines = log_texts(&game);
     assert!(lines.iter().any(|t| *t == "Salvage:"), "{lines:#?}");
-    assert!(
-        lines
-            .iter()
-            .any(|t| t.starts_with("  ") && *t != "Salvage:"),
-        "expected at least one drop row under the header, announced immediately \
-         rather than deferred: {lines:#?}"
-    );
+    for (copy, qty) in &granted {
+        let row = format!("  {qty} {}", game.drop_label(copy));
+        assert!(
+            lines.contains(&row),
+            "expected the immediate announcement to word {copy:?} exactly as the battle \
+             formatter would, {row:?}: {lines:#?}"
+        );
+    }
 }
 
 /// Two copies that differ get a row each, and two of the same get one row
@@ -1861,6 +1880,10 @@ fn a_kill_leaves_exactly_one_downed_program_carrying_species_level_and_rarity() 
 
     let wild = corpse_of(&mut game, &species.id);
     game.world.entity_mut(wild).insert(Rarity::Gold);
+    // A `ZoneLevel` the fresh player's own level (1) cannot coincide with,
+    // so a level read off the player rather than off `ability_user_level`
+    // would fail this rather than passing by numeric accident.
+    game.world.resource_mut::<ZoneLevel>().0 = 5;
 
     game.award_loot(wild);
 
@@ -1873,8 +1896,9 @@ fn a_kill_leaves_exactly_one_downed_program_carrying_species_level_and_rarity() 
     let program = &held[0];
     assert_eq!(program.species, species.id, "the species must carry over");
     assert_eq!(
-        program.level, 1,
-        "a fresh player is level 1, and level has no other source on a wild Creature"
+        program.level, 5,
+        "a wild Creature has no Experience, so level comes from ability_user_level's \
+         ZoneLevel answer, not the player's own"
     );
     assert_eq!(program.rarity, Rarity::Gold, "the rarity must carry over");
     assert!(
@@ -1912,6 +1936,48 @@ fn a_boss_kills_program_is_at_or_above_both_floors() {
         program.rarity >= crate::tuning::BOSS_RARITY_FLOOR,
         "a boss's rarity must be at or above BOSS_RARITY_FLOOR: {:?}",
         program.rarity
+    );
+}
+
+/// Pins the boss-Ordinary case to the exact value the *correctly ordered*
+/// floors produce: rarity raised to `BOSS_RARITY_FLOOR` first, so
+/// `roll_condition` prices condition against `Silver` (rank 1) rather than
+/// the pre-floor `Ordinary` (rank 0) — `60 + 8*1 + 10 = 78`, then floored up
+/// to `BOSS_CONDITION_FLOOR` (80).
+///
+/// With the shipped constants this happens to land on the same number the
+/// wrong order would too (`60 + 8*0 + 10 = 70`, also floored up to 80) —
+/// `BOSS_CONDITION_FLOOR` dominates either way here, so this test cannot by
+/// itself catch the two orders disagreeing; see the fix-round report for
+/// the honest mutation-check result. It still pins the *correct* semantics
+/// as a regression value: whichever axis is retuned first (a lower
+/// `BOSS_CONDITION_FLOOR`, a higher `CONDITION_PER_RARITY_STEP`, or a floor
+/// higher than `Silver`) makes the order matter for real, and this is what
+/// the answer should be then too.
+#[test]
+fn a_boss_with_ordinary_rarity_pins_the_order_corrected_value() {
+    let mut game = Game::new(913, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|s| !s.is_boss)
+        .expect("the shipped roster is not all bosses");
+    let wild = corpse_of(&mut game, &species.id);
+    game.world.entity_mut(wild).insert(Boss);
+
+    game.award_loot(wild);
+
+    let held = &game.world.get::<DownedPrograms>(player).unwrap().0;
+    let program = &held[0];
+    assert_eq!(
+        program.rarity,
+        Rarity::Silver,
+        "the floor value, since the pre-floor roll was Ordinary"
+    );
+    assert_eq!(
+        program.condition, 80,
+        "roll_condition(Silver, true, 0.0) = 78, floored up to BOSS_CONDITION_FLOOR"
     );
 }
 

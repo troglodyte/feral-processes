@@ -91,12 +91,15 @@ impl Game {
         // guardian already left its own downed program on the way down
         // (`Game::leave_downed_program`, from the ordinary kill path); this
         // is the wreckage itself, on top of that.
+        //
+        // `ability_user_level(nest)` rather than a second hand-rolled
+        // derivation: a `Nest` carries no `Experience` either, so this is
+        // the same "no `Experience`, read `ZoneLevel`" answer
+        // `leave_downed_program` gives a wild `Creature` — one function
+        // both sites call, hoisted out of the loop since it doesn't change
+        // between programs.
+        let level = self.ability_user_level(nest);
         for _ in 0..NEST_CACHE_PROGRAM_COUNT {
-            let level = self
-                .world
-                .get::<Experience>(self.player_entity())
-                .map(|e| e.level)
-                .unwrap_or(1);
             let condition = DownedProgram::roll_condition(Rarity::Ordinary, false, 0.0);
             let landed = self.push_downed_program(DownedProgram {
                 species: species_id.clone(),

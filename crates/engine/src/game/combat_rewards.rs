@@ -516,25 +516,34 @@ impl Game {
     /// (`is_boss_creature`/`rarity_of`), so this must run before `wild`
     /// despawns — `award_loot`'s call site does, and so does the sortie's.
     /// Level has no source on a wild `Creature` (unlike a companion, it
-    /// never carries `Experience`), so it is locked to the player's own
-    /// level at the kill, the same "lock in at the event" rule
-    /// `EquippedItem::level` follows for gear.
+    /// never carries `Experience`), so it comes from `ability_user_level`
+    /// (`game/combat.rs`) — the same "no `Experience`, read `ZoneLevel`
+    /// instead" answer `manifest_accuracy`/`manifest_evasion` already give a
+    /// wild program, rather than a second one invented here. Known gap: a
+    /// Stack kill still reads the *surface* `ZoneLevel`, since depth carries
+    /// no level of its own — `ability_user_level`'s existing limitation, not
+    /// a new one.
+    ///
+    /// **Rarity is floored before the condition roll, not after.** A boss's
+    /// rarity is raised to `BOSS_RARITY_FLOOR` first, so `roll_condition`
+    /// prices condition against the rarity the program actually ships with.
+    /// Rolling condition off the pre-floor rarity and raising rarity only
+    /// afterward would leave `grade()` — which folds both — understated for
+    /// exactly the bosses this floor exists to protect.
     pub(crate) fn leave_downed_program(&mut self, wild: Entity) -> bool {
         let Some(species) = self.world.get::<Creature>(wild).map(|c| c.species.clone()) else {
             return false;
         };
         let boss = self.is_boss_creature(wild);
         let mut rarity = self.rarity_of(wild);
-        let level = self
-            .world
-            .get::<Experience>(self.player_entity())
-            .map(|e| e.level)
-            .unwrap_or(1);
+        if boss {
+            rarity = rarity.max(crate::tuning::BOSS_RARITY_FLOOR);
+        }
+        let level = self.ability_user_level(wild);
         let overkill_term = self.overkill_term(wild);
         let mut condition = DownedProgram::roll_condition(rarity, boss, overkill_term);
         if boss {
             condition = condition.max(crate::tuning::BOSS_CONDITION_FLOOR);
-            rarity = rarity.max(crate::tuning::BOSS_RARITY_FLOOR);
         }
         self.push_downed_program(DownedProgram {
             species,

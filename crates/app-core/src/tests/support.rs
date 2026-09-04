@@ -137,6 +137,29 @@ pub(crate) fn app_owning_a_developed_program(seed: u32, level: u32, ring: u32) -
     app
 }
 
+/// An app whose player already holds `programs` in
+/// `components::DownedPrograms`, without playing to a kill for one — the
+/// engine exposes no way to hand-place one from outside the crate,
+/// `distant_programs`' reason for the same save round trip.
+pub(crate) fn app_holding_downed_programs(
+    seed: u32,
+    programs: Vec<feral_processes_engine::items::DownedProgram>,
+) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = scratch_path("downed_programs", seed);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.player.downed_programs = programs;
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    app
+}
+
 /// The shared body: one program per name `pick` returns. It takes the
 /// `Game` because the count-based caller wants whichever species the roster
 /// happens to list first, and that is not knowable until one is loaded.

@@ -13,6 +13,7 @@ mod crafting;
 pub(crate) mod creation;
 pub(crate) mod dev_console;
 mod excavate;
+mod extraction;
 mod field;
 pub(crate) mod group_menu;
 pub(crate) mod icon_editor;

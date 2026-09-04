@@ -13,6 +13,7 @@ mod creation;
 mod dev_console;
 mod develop;
 mod excavate;
+mod extraction;
 mod field;
 mod fusion;
 mod gear_inspect;

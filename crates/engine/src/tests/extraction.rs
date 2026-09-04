@@ -773,3 +773,142 @@ fn extraction_refuses_an_uninstalled_tool_and_spends_nothing() {
         "nothing must be spent or granted on a refusal"
     );
 }
+
+// Task 7: the screen's two engine interfaces, `Game::downed_program_rows`
+// and `Game::extraction_options`.
+
+#[test]
+fn downed_program_rows_reflect_the_store_in_order_with_species_names_resolved() {
+    let mut game = Game::new(4490, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let held = vec![
+        program(15, Rarity::Ordinary, 3),
+        DownedProgram {
+            species: "sentinel".to_string(),
+            level: 12,
+            rarity: Rarity::Silver,
+            boss: true,
+            condition: 60,
+        },
+    ];
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = held.clone();
+
+    let rows = game.downed_program_rows();
+    assert_eq!(
+        rows.len(),
+        held.len(),
+        "one row per held program, in store order"
+    );
+    for (row, prog) in rows.iter().zip(held.iter()) {
+        assert_eq!(row.level, prog.level);
+        assert_eq!(row.rarity, prog.rarity);
+        assert_eq!(row.condition, prog.condition);
+        assert_eq!(row.boss, prog.boss);
+        assert_eq!(
+            row.grade,
+            prog.grade(),
+            "the row must carry DownedProgram::grade's own fold, not re-derive one"
+        );
+    }
+    let sentinel_name = game
+        .world
+        .resource::<SpeciesDb>()
+        .get("sentinel")
+        .expect("sentinel is a shipped species")
+        .name
+        .clone();
+    assert_eq!(
+        rows[1].name, sentinel_name,
+        "the row's name must resolve through SpeciesDb, not carry the raw id"
+    );
+    assert_ne!(
+        rows[0].name, "",
+        "scrapper must also resolve to a real display name"
+    );
+}
+
+#[test]
+fn downed_program_rows_is_empty_with_nothing_held() {
+    let game = Game::new(4491, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert!(
+        game.downed_program_rows().is_empty(),
+        "a fresh run holds no downed programs"
+    );
+}
+
+#[test]
+fn extraction_options_lists_every_installed_tool_with_its_own_preview_yield() {
+    let mut game = Game::new(4492, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let prog = program(70, Rarity::Gold, 20);
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![prog.clone()];
+
+    let installed = game.installed_tools();
+    assert!(
+        !installed.is_empty(),
+        "test premise: the starter tool must be installed"
+    );
+    let options = game.extraction_options(0);
+
+    assert_eq!(
+        options.len(),
+        installed.len(),
+        "one row per installed tool, in the same slot order"
+    );
+    for (tool, (id, yield_rows)) in installed.iter().zip(options.iter()) {
+        assert_eq!(
+            &tool.id, id,
+            "extraction_options must walk installed_tools' own order"
+        );
+        assert_eq!(
+            yield_rows,
+            &game.extraction_yield(&prog, tool),
+            "the preview must be extraction_yield's own answer, not a second copy of it"
+        );
+    }
+}
+
+#[test]
+fn extraction_options_is_empty_for_an_index_the_store_does_not_hold() {
+    let game = Game::new(4493, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert!(
+        game.extraction_options(0).is_empty(),
+        "an empty store names no program at index 0"
+    );
+}
+
+#[test]
+fn extraction_options_preview_matches_what_extract_program_actually_grants() {
+    // The screen's whole safety property: a quoted figure and a granted one
+    // cannot differ. `extraction_yield`'s own doc argues this follows from
+    // determinism alone, but this test is what actually drives the preview
+    // path (`extraction_options`) rather than the direct call every other
+    // test in this file uses.
+    let mut game = Game::new(4494, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let prog = program(70, Rarity::Gold, 20);
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![prog.clone()];
+    let tool_id = ToolId(tuning::STARTER_TOOL_ID.to_string());
+
+    let options = game.extraction_options(0);
+    let (_, preview) = options
+        .iter()
+        .find(|(id, _)| id == &tool_id)
+        .expect("the starter tool must be among the offered options");
+    let preview = totals(preview);
+
+    let before = totals(&game.world.get::<Inventory>(player).unwrap().items);
+    game.extract_program(0, &tool_id)
+        .expect("nothing here refuses the extraction");
+    let after = totals(&game.world.get::<Inventory>(player).unwrap().items);
+
+    for (item, qty) in &preview {
+        let prior = before.get(item).copied().unwrap_or(0);
+        let now = after.get(item).copied().unwrap_or(0);
+        assert_eq!(
+            now - prior,
+            *qty,
+            "the previewed yield for {item:?} must equal what was actually granted"
+        );
+    }
+}

@@ -1317,6 +1317,16 @@ pub enum Mode {
     /// hard inventory cap makes partial erasure the common case — dumping a
     /// whole stack to free two units of room is not a real option.
     EraseQuantity,
+    /// The downed-program store, opened with `D` from `Mode::Inventory` —
+    /// see `docs/superpowers/specs/2026-09-04-program-extraction-design.md`,
+    /// section 6. One row per program held (`Game::downed_program_rows`)
+    /// until `App::pending_downed_program_index` names one; then the page
+    /// swaps to that program's installed tools and what each would give
+    /// (`Game::extraction_options`), and picking one calls
+    /// `Game::extract_program`. One `Mode` rather than `Mode::Develop`'s
+    /// two-mode shape: there is no per-tier structure here to keep apart
+    /// from the list the way a Kernel Ring's ladder is.
+    DownedPrograms,
     Companion,
     /// One program's three equipment slots, reached with `E` from
     /// `Mode::Companion`. The same three rows the inventory screen leads
@@ -1646,6 +1656,7 @@ impl Mode {
             | Mode::InventoryItemAction
             | Mode::ItemDescribe
             | Mode::EraseQuantity
+            | Mode::DownedPrograms
             | Mode::Companion
             | Mode::CompanionEquip
             | Mode::CompanionMemories
@@ -1993,6 +2004,13 @@ pub struct App {
     pub pending_erase: Option<GearCopy>,
     /// Digits typed so far on the erase-quantity page.
     pub erase_quantity_input: String,
+    /// Which held program's tool page `Mode::DownedPrograms` is showing —
+    /// an index into `Game::downed_program_rows`, not an `Entity`, since a
+    /// `DownedProgram` is a plain value in a `Vec` rather than a spawned
+    /// body. `None` is the list page; `Some` is the tool-and-yield page for
+    /// that row. Session state, not save state — cleared on Esc or on an
+    /// extraction attempt of either outcome, never carried past the mode.
+    pub pending_downed_program_index: Option<usize>,
     /// What is on offer, snapshotted when the transfer picker opens — one
     /// row per item, carrying what the adjacent shelves hold of it and what
     /// the pack could put back.

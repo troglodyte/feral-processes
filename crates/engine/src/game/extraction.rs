@@ -124,6 +124,57 @@ impl Game {
         granted
     }
 
+    /// One row per held program, in store order — `Mode::DownedPrograms`'s
+    /// whole list. The species' display name falls back to the raw id for a
+    /// mod species since removed, `downed_program_label`'s own tolerance,
+    /// and `grade` is `DownedProgram::grade()`'s own answer rather than a
+    /// second fold of condition/rarity/level built here.
+    pub fn downed_program_rows(&self) -> Vec<crate::views::DownedProgramRow> {
+        let player = self.player_entity();
+        let db = self.world.resource::<SpeciesDb>();
+        self.world
+            .get::<DownedPrograms>(player)
+            .map(|held| {
+                held.0
+                    .iter()
+                    .map(|program| crate::views::DownedProgramRow {
+                        name: db
+                            .get(&program.species)
+                            .map(|def| def.name.clone())
+                            .unwrap_or_else(|| program.species.clone()),
+                        level: program.level,
+                        rarity: program.rarity,
+                        condition: program.condition,
+                        boss: program.boss,
+                        grade: program.grade(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Every installed tool and what it would give for the program at
+    /// `index` — `extraction_yield` called once per tool, in
+    /// `installed_tools`' own slot order, so the screen's preview and
+    /// `extract_program`'s grant read off the identical call. Empty for an
+    /// index the store doesn't hold, rather than a panic — the same
+    /// tolerance `extraction_yield`'s own callers already take on a stale
+    /// index.
+    pub fn extraction_options(&self, index: usize) -> Vec<(ToolId, Vec<(ItemId, u32)>)> {
+        let player = self.player_entity();
+        let Some(program) = self
+            .world
+            .get::<DownedPrograms>(player)
+            .and_then(|held| held.0.get(index))
+        else {
+            return Vec::new();
+        };
+        self.installed_tools()
+            .iter()
+            .map(|tool| (tool.id.clone(), self.extraction_yield(program, tool)))
+            .collect()
+    }
+
     /// What to call `program` in a log line — its species' display name
     /// (falling back to the raw id for a mod species since removed) and
     /// its level.

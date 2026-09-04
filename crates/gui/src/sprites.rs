@@ -33,6 +33,12 @@ use crate::paint::SpriteTable;
 /// so this returns empty rather than panicking. A non-PNG file sitting
 /// beside the sprites (a `README.md`, say) is filtered by extension, not
 /// asked of the asset server.
+///
+/// **A stem starting with `@` is filtered out here**, not left to be a
+/// filename nobody happens to ship: `@` is a legal filename character on
+/// every platform this game ships to, so `@drawn.png` would otherwise scan
+/// straight into `DRAWN_ICON_KEY`'s slot. See that constant's doc comment
+/// for what a file claiming it would do.
 fn scan_sprite_dir(dir: &std::path::Path) -> Vec<String> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
@@ -45,6 +51,7 @@ fn scan_sprite_dir(dir: &std::path::Path) -> Vec<String> {
             path.file_stem()
                 .map(|stem| stem.to_string_lossy().into_owned())
         })
+        .filter(|stem| !stem.starts_with('@'))
         .collect();
     names.sort();
     names
@@ -52,10 +59,11 @@ fn scan_sprite_dir(dir: &std::path::Path) -> Vec<String> {
 
 /// The `SpriteTable` key the player's own drawing is registered under.
 ///
-/// The `@` is what keeps it unreachable from anywhere else: `load` builds
-/// every other key from a filename, and a future `sprite:` field on a
-/// species would too, so no file and no mod can claim the slot the player
-/// drew for themselves.
+/// The `@` is what keeps it unreachable from anywhere else: every other key
+/// comes from `scan_sprite_dir`, which throws out any stem starting with
+/// `@` for exactly this reason, and a future `sprite:` field on a species
+/// would draw from the same scan — so no file and no mod can claim the slot
+/// the player drew for themselves.
 pub const DRAWN_ICON_KEY: &str = "@drawn";
 
 /// Where the loaded sprites live between the asset server and the renderer.
@@ -511,6 +519,40 @@ mod tests {
 
         std::fs::remove_dir_all(&dir).ok();
         assert_eq!(names, vec!["player".to_string()]);
+    }
+
+    /// `@` is a legal filename character on every platform this ships to,
+    /// so an `@`-prefixed file must be filtered by the scan itself rather
+    /// than trusted never to exist. `@drawn.png` specifically would
+    /// otherwise land in exactly `DRAWN_ICON_KEY`'s slot and — since
+    /// `register` writes it after `sync_drawn_icon` already has, in an
+    /// unordered `PreUpdate` pair — permanently shadow the player's own
+    /// drawing, or draw as it on a blank canvas that never even reaches
+    /// `register`'s overwrite.
+    #[test]
+    fn an_at_prefixed_stem_is_never_scanned() {
+        let dir = std::env::temp_dir().join(format!(
+            "feral_processes_gui_scan_sprite_dir_at_test_{}_{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("@drawn.png"), b"not real png bytes, irrelevant").unwrap();
+        std::fs::write(dir.join("@other.png"), b"not real png bytes, irrelevant").unwrap();
+        std::fs::write(dir.join("player.png"), b"not real png bytes, irrelevant").unwrap();
+
+        let names = scan_sprite_dir(&dir);
+
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(
+            !names.contains(&DRAWN_ICON_KEY.to_string()),
+            "the scan must never be able to claim the runtime-only drawn-icon key"
+        );
+        assert_eq!(
+            names,
+            vec!["player".to_string()],
+            "every @-prefixed stem must be filtered, not just @drawn"
+        );
     }
 
     // No test here for "a malformed image is skipped with a warning and the

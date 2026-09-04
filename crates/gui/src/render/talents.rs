@@ -8,7 +8,7 @@
 
 use super::popup::*;
 use super::*;
-use feral_processes_engine::TalentOption;
+use feral_processes_engine::{RespecSubject, TalentOption};
 
 /// Page one: which program.
 pub(super) fn draw_develop(
@@ -102,6 +102,19 @@ pub(super) fn draw_develop_program(
     if points.earned == 0 {
         rows.push(text_row(
             "Levels earned past the ceiling pay for talents — go and earn one.",
+        ));
+    }
+    // Only once there is something to refund. This page has no scroll and the
+    // ladder below it is six tiers of two, so a row spent saying "you have
+    // nothing to unwind" is a row the capstone loses.
+    if points.spent > 0 {
+        let quote = game.respec_quote(RespecSubject::Talents(target));
+        rows.push(item_row(
+            format!(
+                "[X] Refund every talent for {} Credits (stats included)",
+                quote.cost
+            ),
+            false,
         ));
     }
     // The ladder, tier by tier, so what has been bought and what is still out

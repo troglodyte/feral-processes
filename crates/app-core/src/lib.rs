@@ -1462,6 +1462,15 @@ pub enum Mode {
     /// which this screen is the only place to say out loud.
     TradeProgramConfirm,
     Perks,
+    /// Confirming a perk respec — the whole ledger, for a flat Credit price.
+    ///
+    /// A confirmation where buying a perk takes none, `Mode::TradeProgramConfirm`'s
+    /// reason: every other key on the perk screen buys one more of something,
+    /// and this one takes all of it back at once.
+    RespecPerksConfirm,
+    /// Confirming a talent respec on the program held in
+    /// `App::pending_develop_target`.
+    RespecTalentsConfirm,
     /// The research tree (see `Game::research_nodes`). Stays open after each
     /// unlock so several nodes can be taken in one visit.
     Research,
@@ -1663,6 +1672,8 @@ impl Mode {
             | Mode::TradeAction
             | Mode::TradeQuantity
             | Mode::TradeProgramConfirm
+            | Mode::RespecPerksConfirm
+            | Mode::RespecTalentsConfirm
             | Mode::StackMarket
             | Mode::Caravan
             | Mode::Perks

@@ -257,6 +257,8 @@ impl App {
             Mode::StackMarket => self.handle_stack_market_key(key),
             Mode::Caravan => self.handle_caravan_key(key),
             Mode::Perks => self.handle_perks_key(key),
+            Mode::RespecPerksConfirm => self.handle_respec_perks_confirm_key(key),
+            Mode::RespecTalentsConfirm => self.handle_respec_talents_confirm_key(key),
             Mode::Research => self.handle_research_key(key),
             Mode::Contracts => self.handle_contracts_key(key),
             Mode::History => self.handle_history_key(key),

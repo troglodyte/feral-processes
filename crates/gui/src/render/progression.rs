@@ -2,8 +2,8 @@
 
 use super::popup::*;
 use super::*;
-use feral_processes_engine::ResearchStatus;
 use feral_processes_engine::perks::{Perk, PerkDef};
+use feral_processes_engine::{ResearchStatus, RespecQuote, RespecSubject};
 
 /// The perk picker's rows. A perk's description is a *dim item row* rather
 /// than a `Row::Text`, and the help line sits in the header rather than under
@@ -18,10 +18,17 @@ pub(super) fn perks_menu_rows(
     groups: &[(String, Vec<PerkDef>)],
     held: &[Perk],
     selected: usize,
+    respec_cost: u32,
 ) -> Vec<Row> {
+    // The respec is named on the existing instruction line rather than in a
+    // footer of its own: this popup has no scroll, so a row here is a row the
+    // eighteenth perk loses. `PopupSize::Large` carries about 114 monospace
+    // cells, which this sits well inside.
     let mut rows = vec![
         Row::TextColored(format!("Perk Points: {points}"), CYAN),
-        text_row("Pick a row's key to buy another level. Esc to close"),
+        text_row(format!(
+            "A row's key buys a level.  [X] refunds every perk for {respec_cost} Credits.  Esc to close"
+        )),
         text_row(""),
     ];
     // The shortcut a player types is an index into the *flattened* list,
@@ -88,11 +95,13 @@ pub(super) fn draw_perks_menu(
     m: &Metrics,
 ) {
     let status = game.player_status();
+    let quote = game.respec_quote(RespecSubject::Perks);
     let rows = perks_menu_rows(
         status.perk_points,
         &game.perk_groups(),
         &status.unlocked_perks,
         selected,
+        quote.cost,
     );
     draw_popup("Perks", PopupSize::Large, &rows, refusal, painter, m);
 }
@@ -365,7 +374,13 @@ mod tests {
             "the shipped layout ships several sections"
         );
 
-        let rows = perks_menu_rows(3, &groups, &[], 0);
+        let rows = perks_menu_rows(
+            3,
+            &groups,
+            &[],
+            0,
+            feral_processes_engine::tuning::RESPEC_CREDIT_COST,
+        );
         // Headings and perks only: the blank spacer and the wrapped
         // description lines are the rows this test says nothing about.
         let drawn: Vec<String> = rows
@@ -425,7 +440,13 @@ mod tests {
             ("Research", research_menu_rows(40, &nodes, 0)),
             (
                 "Perks",
-                perks_menu_rows(3, &perk_groups, &status.unlocked_perks, 0),
+                perks_menu_rows(
+                    3,
+                    &perk_groups,
+                    &status.unlocked_perks,
+                    0,
+                    feral_processes_engine::tuning::RESPEC_CREDIT_COST,
+                ),
             ),
         ];
 
@@ -456,4 +477,49 @@ mod tests {
             }
         });
     }
+}
+
+/// The one confirm page both respecs draw, so the perk wipe and the talent
+/// wipe cannot describe themselves differently.
+///
+/// Every figure comes off `Game::respec_quote` — the same derivation the
+/// commit itself checks — so the page cannot promise a refund the engine
+/// then refuses.
+pub(super) fn draw_respec_confirm(
+    quote: &RespecQuote,
+    subject: &str,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let mut rows = vec![
+        text_row(format!("Refund every {subject}?")),
+        text_row(""),
+        text_row(format!("Giving up: {} bought.", quote.purchases)),
+        text_row(format!("Coming back: {} points.", quote.points_returned)),
+        text_row(format!(
+            "Cost: {} Credits, of {} held.",
+            quote.cost, quote.credits
+        )),
+    ];
+    // What was baked into stats comes back out with the points — the one
+    // consequence a player cannot see on the ladder they came from.
+    rows.push(Row::TextColored(
+        "Any stats these bought come back out too.".to_string(),
+        ORANGE,
+    ));
+    if let Some(why) = &quote.refusal {
+        rows.push(text_row(""));
+        rows.push(Row::TextColored(why.clone(), RED));
+    }
+    rows.push(text_row(""));
+    rows.push(text_row("[y] refund    [n] keep them    Esc to cancel"));
+    draw_popup(
+        "Confirm refund",
+        PopupSize::Small,
+        &rows,
+        refusal,
+        painter,
+        m,
+    );
 }

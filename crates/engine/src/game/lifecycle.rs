@@ -446,6 +446,8 @@ impl Game {
         // refuse "no free slot" for a slot the panel just told the player
         // was free. Dropped here instead, once, at the only point both the
         // save data and the loaded `AbilityDb` are in hand.
+        // Taken before the bundle moves `unlocked_perks` out of `data`.
+        let player_perk_levels = data.player.unlocked_perks.len() as u32;
         let (player_routines, dropped_player_routines) =
             recognized_routines(&data.player.routines, &ability_db);
 
@@ -686,6 +688,17 @@ impl Game {
                 // bevy's 15-element ceiling — the query-tuple limit CLAUDE.md
                 // already names, reached here from the bundle side instead.
                 (
+                    // `max`, never a plain assignment from
+                    // `unlocked_perks.len()`. That length is exact for a save
+                    // written before respec shipped and *wrong* for every save
+                    // written after one: a respec empties the list and leaves
+                    // the count standing, so assigning the length would throw
+                    // the count away and re-open the overflow-XP exploit
+                    // across a save/load.
+                    BoughtStats {
+                        ever_bought: data.player.bought_stats.ever_bought.max(player_perk_levels),
+                        ..data.player.bought_stats
+                    },
                     Routines(player_routines),
                     PlayerIdentity {
                         class: data.player.class,
@@ -979,6 +992,12 @@ impl Game {
                         .map(|id| crate::talents::TalentId::from(id.as_str()))
                         .collect(),
                 ));
+            }
+            // A receipt, like `Talents` above: what those nodes already added
+            // to the recorded `Stats`, kept so `Game::respec_talents` can take
+            // exactly that much back out.
+            if c.bought_stats != crate::components::BoughtStats::default() {
+                entity.insert(c.bought_stats);
             }
             if let Some(name) = c.custom_name.clone() {
                 entity.insert(CustomName(name));
@@ -1342,6 +1361,11 @@ impl Game {
             })
             .unwrap_or_default();
         let perks = self.world.get::<Perks>(player).cloned().unwrap_or_default();
+        let bought_stats = self
+            .world
+            .get::<BoughtStats>(player)
+            .copied()
+            .unwrap_or_default();
         let routines = self
             .world
             .get::<Routines>(player)
@@ -1443,6 +1467,7 @@ impl Game {
                     Option<&crate::components::Downed>,
                     Option<&crate::disposition::Disposition>,
                     Option<&crate::components::Disgruntled>,
+                    Option<&BoughtStats>,
                 ),
             ),
         )>();
@@ -1474,7 +1499,7 @@ impl Game {
                 reserve,
                 boss,
                 program_id,
-                (memories, needs, off_shift, downed, disposition, disgruntled),
+                (memories, needs, off_shift, downed, disposition, disgruntled, bought_stats),
             ),
         ) in creature_query.iter(&self.world)
         {
@@ -1554,6 +1579,7 @@ impl Game {
                 talents: talents
                     .map(|t| t.0.iter().map(|id| id.to_string()).collect())
                     .unwrap_or_default(),
+                bought_stats: bought_stats.copied().unwrap_or_default(),
                 routines: routines.map(|r| r.0.clone()).unwrap_or_default(),
                 field_buffs: field_buff.map(|f| f.active.clone()).unwrap_or_default(),
                 nest_position,
@@ -1777,6 +1803,7 @@ impl Game {
                 gear_copies,
                 perk_points: perks.points,
                 unlocked_perks: perks.unlocked,
+                bought_stats,
                 tutorial_seeded: true,
                 routines,
                 field_buffs,

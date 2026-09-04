@@ -684,10 +684,14 @@ fn overflow_xp_converts_into_perk_points() {
     );
 }
 
-/// **The price rises with the perks already held**, which is what makes the
-/// exchange sublinear rather than an unbounded flat-rate power source.
+/// **The price rises with the perks already bought**, which is what makes
+/// the exchange sublinear rather than an unbounded flat-rate power source.
+///
+/// The count is `BoughtStats::ever_bought` rather than the length of
+/// `Perks::unlocked`, because `Game::respec_perks` empties that list and a
+/// price read off it would reset to the opening rate on every wipe.
 #[test]
-fn the_overflow_price_rises_with_perks_held() {
+fn the_overflow_price_rises_with_perks_bought() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     game.world.insert_resource(ZoneLevel(2));
     let player = game.player_entity();
@@ -700,8 +704,14 @@ fn the_overflow_price_rises_with_perks_held() {
         game.convert_overflow_xp()
     };
 
-    // Same bank, but with a stack of perks already bought.
+    // Same bank, but with a stack of perks already bought. Both halves are
+    // written: the list is what the player is holding, the receipt is what
+    // they have ever bought, and only the second prices this exchange.
     game.world.get_mut::<Perks>(player).unwrap().unlocked = vec![Perk::Attacker; 8];
+    game.world.entity_mut(player).insert(BoughtStats {
+        ever_bought: 8,
+        ..Default::default()
+    });
     let paid_when_rich = {
         game.world.get_mut::<Perks>(player).unwrap().points = 0;
         game.world.get_mut::<Experience>(player).unwrap().xp = OVERFLOW_XP_BASE * 20;

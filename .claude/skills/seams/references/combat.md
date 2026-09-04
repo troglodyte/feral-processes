@@ -150,6 +150,24 @@
   companion arm, `Affinity` in `ability_affinity`'s creature arm (clamped), and
   `Ability` folded into the `declared`/`reached` lists both install paths
   already build — never a second install path.
+- **A stat a purchase baked in needs a receipt, and `components::BoughtStats`
+  is it** — `Perk::Buffer` and `TalentNode::Stat` both read the value at
+  purchase and both floor at a whole point, so the mapping is many-to-one and
+  a respec cannot invert it; inverting would also read *today's* constants, so
+  a retune would change what an old save's respec hands back. The grant is
+  recorded in the same branch that writes `Stats`, from the same value —
+  `purchase_stat_gain` computed twice is `balance_sim.rs`'s drift again.
+  `unbake_bought_stats` is the one subtractor and lifts gear around the write.
+  **The trap is a fifth writer**: a new stat-granting perk or `TalentNode`
+  kind that forgets the receipt compiles clean, works, and makes refunds
+  quietly under-pay, surfacing as "respec is buggy" nowhere near the cause.
+- **`ever_bought` is the half a respec must not reset** — `convert_overflow_xp`
+  prices a minted Perk Point off it, and that escalator is the only bound on
+  banked cap XP (`OVERFLOW_XP_STEP`: zero is not safe). Read off
+  `Perks::unlocked`, a wipe empties the list and resets the price to the
+  opening rate. Counted for **every** perk, not just the three that move a
+  stat; the load seed is `max(saved, unlocked_perks.len())`, because the bare
+  length is wrong for any save written *after* a respec.
 - **Fusion keeps the dominant parent's ring and talents**, and
   `fuse_companions` is the door that silently drops a new component: it
   hand-writes its own list, so nothing fails to compile and the symptom reads

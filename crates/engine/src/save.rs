@@ -86,6 +86,16 @@ pub struct PlayerSave {
     /// Which perks have been bought, and at what level (see
     /// `components::Perks::level`) — one entry per level bought.
     pub unlocked_perks: Vec<Perk>,
+    /// What those perks granted, so `Game::respec_perks` can hand it back —
+    /// see `components::BoughtStats`.
+    ///
+    /// Additive behind a default, so **no `SAVE_FORMAT_VERSION` bump**. A save
+    /// written before respec shipped loads with an empty receipt, which means
+    /// a respec on it refunds the points and leaves the stats — see
+    /// `Game::load` for the `ever_bought` seed that keeps the overflow-XP
+    /// price honest across that boundary.
+    #[serde(default)]
+    pub bought_stats: crate::components::BoughtStats,
     /// Whether this run was started under the onboarding chain.
     ///
     /// `#[serde(default)]` to false, which is what a save written before the
@@ -352,6 +362,11 @@ pub struct CreatureSave {
     /// carries no key and loads as a program that has bought nothing.
     #[serde(default)]
     pub talents: Vec<String>,
+    /// What those talents baked into `Stats`, so `Game::respec_talents` can
+    /// hand it back — see `components::BoughtStats`. Additive behind a
+    /// default, like `talents` above, so no version bump.
+    #[serde(default)]
+    pub bought_stats: crate::components::BoughtStats,
     /// The abilities installed in this program's routine slots, in menu
     /// order — see `components::Routines`. Persisted rather than re-derived
     /// from its species, because an innate routine can be popped out and a
@@ -1484,6 +1499,7 @@ mod tests {
                 gear_copies: Vec::new(),
                 perk_points: 0,
                 unlocked_perks: Vec::new(),
+                bought_stats: crate::components::BoughtStats::default(),
                 tutorial_seeded: true,
                 routines: Vec::new(),
                 field_buffs: Vec::new(),
@@ -1555,6 +1571,7 @@ mod tests {
             purchased_tiers: 0,
             ring: 0,
             talents: Vec::new(),
+            bought_stats: crate::components::BoughtStats::default(),
             routines: Vec::new(),
             field_buffs: Vec::new(),
             nest_position: None,

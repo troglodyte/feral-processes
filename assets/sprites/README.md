@@ -3,6 +3,31 @@
 One-cell sprites for the surface map. A sprite is drawn in place of an
 entity's `glyph`, in the same cell, at the same size.
 
+## Naming
+
+A file's name — everything before `.png` — is the key it is looked up
+under. `crates/gui/src/sprites.rs::scan_sprite_dir` scans this directory at
+load and keys the table by file stem, so dropping a correctly-named file in
+is the whole of shipping it; nothing outside this directory has to name the
+file, and there is no list to edit anywhere else.
+
+For a species or a structure, that key is the def's own `id` by
+convention. `SpeciesDef::sprite_name()` and `StructureDef::sprite_name()`
+both fall back to `id` unless the def's own optional `sprite:` field
+overrides it (see the schema in `assets/species/README.md` and
+`assets/structures/README.md`) — an escape hatch for when the filename you
+want isn't the id, not the normal way a species or structure gets art. No
+shipped def uses the override: name the file after the id and it is found
+with no `.ron` change at all.
+
+A file whose stem starts with `@` is never scanned, at any name — `@` is a
+legal filename character on every platform this ships to, and `"@drawn"`
+is the runtime-only key the player's own drawn icon registers under
+(`sprites::DRAWN_ICON_KEY`). Without the filter, an `@drawn.png` dropped in
+here would silently hijack the player's own drawing. A `sprite:` override
+starting with `@` is filtered the same way and so can never resolve to a
+file — don't author one.
+
 ## The format is not negotiable
 
 **16x16 pixels, RGBA, PNG.** `text::map_cell` sizes a map glyph at

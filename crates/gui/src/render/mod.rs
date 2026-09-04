@@ -1198,7 +1198,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 89] = [
+    const ALL_MODES: [Mode; 90] = [
         Mode::MainMenu,
         Mode::CreateCharacter,
         Mode::LoadGame,
@@ -1292,6 +1292,8 @@ mod tests {
         // below by giving it a `draw_sprite_picker`. Expected red until
         // then.
         Mode::SpritePicker,
+        // Same story, same task: `draw_sprite_editor` doesn't exist yet.
+        Mode::SpriteEditor,
     ];
 
     const CENSUS_REFUSAL: &str = "Requires Zone 3 first.";

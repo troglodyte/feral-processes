@@ -144,12 +144,8 @@ impl CanvasEditor {
     /// from brush 1 would otherwise anchor a brush-2 block half off the
     /// cell the player is looking at.
     ///
-    /// `IconEditor` never calls this — it opens at brush 1 and stays there
-    /// — so this and the three verbs after it are unreachable from
-    /// production code until the dev-only sprite editor (a later task)
-    /// composes a second `CanvasEditor` and drives them. Exercised directly
-    /// by `tests/canvas_editor.rs` in the meantime.
-    #[allow(dead_code)]
+    /// `IconEditor` never calls this — it opens at brush 1 and stays there.
+    /// `app::sprite_forge::SpriteEditor`'s `[g]` key is the real caller.
     pub(crate) fn set_brush(&mut self, brush: u8) {
         if brush == 1 || brush == 2 {
             self.brush = brush;
@@ -159,21 +155,21 @@ impl CanvasEditor {
 
     /// Opens a stroke: one snapshot, taken now, before anything is known to
     /// change. Every `paint_at` before the matching `end_stroke` records
-    /// nothing further.
-    #[allow(dead_code)]
+    /// nothing further. `App::handle_pointer`'s `PointerPhase::Down` arm is
+    /// the real caller.
     pub(crate) fn begin_stroke(&mut self) {
         self.push_snapshot();
         self.stroke = true;
     }
 
-    #[allow(dead_code)]
+    /// `App::handle_pointer`'s `PointerPhase::Up` arm is the real caller.
     pub(crate) fn end_stroke(&mut self) {
         self.stroke = false;
     }
 
     /// Selects a swatch directly, clamped to the palette this editor opened
     /// with — the click-driven twin of the palette panel's arrow keys.
-    #[allow(dead_code)]
+    /// `App::handle_pointer`'s `PointerHit::Swatch` arm is the real caller.
     pub(crate) fn pick_swatch(&mut self, index: u8) {
         self.selected = (index as i32).clamp(FIRST_COLOUR as i32, self.palette_len as i32) as u8;
     }
@@ -257,9 +253,7 @@ impl CanvasEditor {
         (clamped - clamped.rem_euclid(brush.max(1))) as u8
     }
 
-    /// `set_brush`'s only caller; unreachable in production until that is,
-    /// for the same reason.
-    #[allow(dead_code)]
+    /// `set_brush`'s only caller.
     fn clamp_cursor(&mut self) {
         let brush = self.brush as i32;
         let last = self.last_anchor();

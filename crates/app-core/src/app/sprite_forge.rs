@@ -1,21 +1,35 @@
-//! `Mode::SpritePicker` — every name the map can draw a sprite for, and both
-//! gates that keep the whole dev sprite editor out of a player's build. See
+//! `Mode::SpritePicker` and `Mode::SpriteEditor` — every name the map can
+//! draw a sprite for, both gates that keep the whole dev sprite editor out
+//! of a player's build, and the editing screen itself. See
 //! `docs/superpowers/specs/2026-09-04-dev-sprite-editor-design.md`.
 //!
-//! This module owns the list and the gate only. Drawing on a canvas is
-//! `Mode::SpriteEditor`'s job — a later mode, not built yet — so
-//! `handle_sprite_picker_key` below only scrolls and backs out.
+//! `SpriteEditor` composes a `CanvasEditor` exactly as `IconEditor` does —
+//! see that module's doc comment for why the mechanics are shared and the
+//! sink is not. What is this sink's own: which subject it opened for, the
+//! `[g]`/`[s]` keys on top of the shared table, the write cue, and the
+//! mouse entry point. Drawing is `Mode::SpriteEditor`'s Task 7, not this
+//! module's.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use feral_processes_engine::DEFAULT_PLAYER_SPRITE;
 use feral_processes_engine::abilities::AbilityDb;
-use feral_processes_engine::icon::Canvas;
+use feral_processes_engine::icon::{Canvas, SPRITE_PALETTE};
 use feral_processes_engine::species::SpeciesDb;
 use feral_processes_engine::structures::StructureDb;
 
+use crate::app::canvas_editor::{CanvasEditor, CanvasKey, CanvasView};
 use crate::{App, GameKey, Mode};
+
+/// The sprite canvas's edge — always 16, never a brush-dependent size (the
+/// brush is a footprint over this fixed grid, not a second canvas format;
+/// see the design doc's "The canvas is 16x16 always"). `ICON_SIZE` is the
+/// same 16, named for the *pixel* geometry the icon editor draws at; reused
+/// here rather than a second `pub const SPRITE_EDGE = 16` because the two
+/// really are one number, documented as such in `engine::icon`'s own doc
+/// comment ("The *sprite* is 16x16 (`ICON_SIZE`)").
+const SPRITE_EDGE: usize = feral_processes_engine::ICON_SIZE;
 
 /// The name `assets/sprites/anchor.png` is looked up under — the one place
 /// this string is authored beside `crates/gui/src/render/base.rs`'s
@@ -71,6 +85,105 @@ pub struct SpriteSubject {
     /// hue — what the picker shows for a subject with no art yet.
     pub glyph: char,
     pub art: SpriteArt,
+}
+
+/// One `Mode::SpriteEditor` session — `CanvasEditor`'s shared mechanics
+/// plus which subject this is. The subject is a name rather than an index
+/// into `App::sprite_subjects()`: that list is rebuilt (and re-sorted, once
+/// a save changes an `art` state) on every read, so an index into it would
+/// go stale the moment this editor's own save landed.
+pub(crate) struct SpriteEditor {
+    editor: CanvasEditor,
+    subject: String,
+}
+
+impl SpriteEditor {
+    /// Opens on `canvas` — the installed art for `subject` if
+    /// `App::sprite_library` had any, or a blank 16x16 canvas otherwise.
+    /// Blank is a legitimate opening state here, unlike the player's own
+    /// `@`: nothing filters it away before it can be saved.
+    fn open(subject: String, canvas: Canvas) -> SpriteEditor {
+        SpriteEditor {
+            editor: CanvasEditor::open(canvas, SPRITE_PALETTE.len() as u8),
+            subject,
+        }
+    }
+
+    /// What the screen draws — `CanvasEditor`'s own view, the subject name
+    /// for a header, and the palette a `CanvasView`'s bare indices need to
+    /// become colour.
+    fn view(&self) -> SpriteEditorView {
+        SpriteEditorView {
+            canvas: self.editor.view(),
+            subject: self.subject.clone(),
+            palette: &SPRITE_PALETTE,
+        }
+    }
+}
+
+/// What `Mode::SpriteEditor` draws.
+pub struct SpriteEditorView {
+    pub canvas: CanvasView,
+    pub subject: String,
+    pub palette: &'static [(u8, u8, u8)],
+}
+
+/// One cue for the frontend to act on. app-core queues it and forgets —
+/// `App::take_sounds`'s pattern, in the direction of a file instead of a
+/// speaker. **app-core never opens a file and never learns what a PNG
+/// is**: `Save` carries exactly the `Canvas` the loader already knows how
+/// to encode from, and `Enable`/`Disable` carry nothing because the toggle
+/// is a rename on the name alone.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SpriteWrite {
+    pub name: String,
+    pub op: SpriteOp,
+}
+
+/// What a queued `SpriteWrite` asks the frontend to do.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SpriteOp {
+    /// Write `assets/sprites/<name>.png` from this canvas, replacing
+    /// whatever was there.
+    Save(Canvas),
+    /// Rename `<name>.png.off` back to `<name>.png`.
+    Enable,
+    /// Rename `<name>.png` to `<name>.png.off`.
+    Disable,
+}
+
+/// Where a pointer landed on `Mode::SpriteEditor`, already resolved to a
+/// cell or a swatch by the gui — never a pixel. The gui owns the canvas and
+/// swatch rects (it draws them), so it tests the pointer against those
+/// itself; app-core never receives a pixel and never learns the rects
+/// exist.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PointerHit {
+    Cell(u8, u8),
+    Swatch(u8),
+}
+
+/// Which mouse button a `PointerHit` was reported for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PointerButton {
+    Primary,
+    /// Paints index 0 — erase, the same thing `Backspace` already means on
+    /// this editor.
+    Secondary,
+}
+
+/// Where in a click-or-drag gesture a `PointerHit` was reported.
+///
+/// **A whole drag is one undo entry, not one per cell.** `Down` opens a
+/// stroke (`CanvasEditor::begin_stroke`, one snapshot taken before anything
+/// is known to change), `Up` closes it (`end_stroke`), and `Drag` neither
+/// opens nor closes one — every cell the gui reports while the button is
+/// held lands inside the same stroke `Down` opened.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PointerPhase {
+    Down,
+    Drag,
+    Up,
 }
 
 impl App {
@@ -200,16 +313,128 @@ impl App {
             .collect()
     }
 
-    /// `Esc` is the whole of this screen for now — `[t]`'s toggle and
-    /// `Enter`'s dive into `Mode::SpriteEditor` arrive with that mode.
+    /// `Esc` backs all the way out to the main menu. `[t]` toggles a
+    /// subject with art between `On` and `Off` (queuing the rename cue) and
+    /// does nothing on one with none to toggle. `Enter` opens
+    /// `Mode::SpriteEditor` on the highlighted subject — loading its
+    /// installed canvas if `sprite_library` has one, or a blank one if not.
     /// Up/Down still scroll the list, the same read-only-screen idiom
-    /// `handle_recipes_key` uses.
+    /// `handle_recipes_key` uses — `selected_index` is what both Enter and
+    /// the arrows go through, so there is one place that owns the
+    /// highlight.
     pub(crate) fn handle_sprite_picker_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.mode = Mode::MainMenu;
             return;
         }
-        let rows = self.sprite_subjects().len();
-        self.scroll(key, rows);
+        let subjects = self.sprite_subjects();
+        if key == GameKey::Char('t') {
+            if let Some(subject) = subjects.get(self.menu_selected) {
+                let op = match subject.art {
+                    SpriteArt::On => Some(SpriteOp::Disable),
+                    SpriteArt::Off => Some(SpriteOp::Enable),
+                    SpriteArt::None => None,
+                };
+                if let Some(op) = op {
+                    self.pending_sprite_writes.push(SpriteWrite {
+                        name: subject.name.clone(),
+                        op,
+                    });
+                }
+            }
+            return;
+        }
+        if let Some(idx) = self.selected_index(key, subjects.len()) {
+            let subject = &subjects[idx];
+            let canvas = self
+                .sprite_library
+                .get(&subject.name)
+                .cloned()
+                .unwrap_or_else(|| Canvas::new(SPRITE_EDGE));
+            self.sprite_editor = Some(SpriteEditor::open(subject.name.clone(), canvas));
+            self.mode = Mode::SpriteEditor;
+        }
+    }
+
+    /// What `Mode::SpriteEditor` draws, or `None` while it is not open.
+    pub fn sprite_editor_view(&self) -> Option<SpriteEditorView> {
+        self.sprite_editor.as_ref().map(SpriteEditor::view)
+    }
+
+    /// Drains every `SpriteWrite` queued since the last call —
+    /// `App::take_sounds`'s seam: app-core queues and forgets, the frontend
+    /// (Task 8) drains, performs the write or rename, and re-installs the
+    /// library so the map updates without a restart.
+    pub fn take_sprite_writes(&mut self) -> Vec<SpriteWrite> {
+        std::mem::take(&mut self.pending_sprite_writes)
+    }
+
+    /// `Mode::SpriteEditor`'s own keys, on top of `CanvasEditor`'s shared
+    /// table (arrows, `Space`/`Backspace`, `u`, `x`, `Tab`), taken back
+    /// unhandled: `[g]` toggles the brush 1<->2, `[s]` queues a `Save`
+    /// carrying the canvas as it stands, and `Esc` leaves for
+    /// `Mode::SpritePicker` without queueing anything — a blank canvas is a
+    /// legitimate save here (see the module doc comment), so `Esc` and
+    /// `[s]` differ only in whether a cue is raised at all, never in what
+    /// the cue would have carried.
+    pub(crate) fn handle_sprite_editor_key(&mut self, key: GameKey) {
+        let Some(sprite_editor) = &mut self.sprite_editor else {
+            return;
+        };
+        match key {
+            GameKey::Esc => {
+                self.sprite_editor = None;
+                self.mode = Mode::SpritePicker;
+            }
+            GameKey::Char('g') => {
+                let next = if sprite_editor.editor.view().brush == 1 {
+                    2
+                } else {
+                    1
+                };
+                sprite_editor.editor.set_brush(next);
+            }
+            GameKey::Char('s') => {
+                let write = SpriteWrite {
+                    name: sprite_editor.subject.clone(),
+                    op: SpriteOp::Save(sprite_editor.editor.canvas().clone()),
+                };
+                self.pending_sprite_writes.push(write);
+            }
+            _ => {
+                let _: CanvasKey = sprite_editor.editor.handle_key(key);
+            }
+        }
+    }
+
+    /// The mouse's one entry point — routed only while `Mode::SpriteEditor`
+    /// is open, every other mode drops it silently, since nothing else in
+    /// the game reads a pointer at all. `phase` governs the stroke
+    /// (`PointerPhase`'s own doc comment); `hit` decides what happens at
+    /// it — a `Cell` paints (the selected swatch on `Primary`, index 0 —
+    /// erase — on `Secondary`), a `Swatch` selects.
+    pub fn handle_pointer(&mut self, hit: PointerHit, button: PointerButton, phase: PointerPhase) {
+        if self.mode != Mode::SpriteEditor {
+            return;
+        }
+        let Some(sprite_editor) = &mut self.sprite_editor else {
+            return;
+        };
+        if phase == PointerPhase::Down {
+            sprite_editor.editor.begin_stroke();
+        }
+        match hit {
+            PointerHit::Cell(x, y) => {
+                let index = match button {
+                    PointerButton::Primary => sprite_editor.editor.view().selected,
+                    PointerButton::Secondary => 0,
+                };
+                sprite_editor.editor.paint_at(x, y, index);
+            }
+            PointerHit::Swatch(index) => sprite_editor.editor.pick_swatch(index),
+        }
+        if phase == PointerPhase::Up {
+            sprite_editor.editor.end_stroke();
+        }
     }
 }

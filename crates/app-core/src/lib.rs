@@ -16,7 +16,10 @@ pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
 pub use app::group_menu::GroupMenuRow;
 pub use app::icon_editor::IconEditorView;
-pub use app::sprite_forge::{SpriteArt, SpriteSubject};
+pub use app::sprite_forge::{
+    PointerButton, PointerHit, PointerPhase, SpriteArt, SpriteEditorView, SpriteOp, SpriteSubject,
+    SpriteWrite,
+};
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
 /// nothing else of app-core's internals.
 pub use app::telemetry::append_records;
@@ -1581,6 +1584,12 @@ pub enum Mode {
     /// checkout behind this build); never reachable in a player's build.
     /// Esc returns to the main menu.
     SpritePicker,
+    /// Drawing a sprite for one subject picked off `Mode::SpritePicker` —
+    /// see `App::sprite_editor_view`. `[g]` toggles the brush, `[s]` queues
+    /// a save (`App::take_sprite_writes`), `Esc` returns to the picker
+    /// without queueing anything. Never reachable except through
+    /// `Mode::SpritePicker`, so it inherits that mode's whole gate.
+    SpriteEditor,
 }
 
 impl Mode {
@@ -1696,8 +1705,10 @@ impl Mode {
             | Mode::ArenaSave
             | Mode::ArenaPick
             | Mode::ArenaResult
-            // Opened from the main menu, so it never layers over a fight.
+            // Opened from the main menu, so it never layers over a fight —
+            // and so is the picker's `SpriteEditor`, reachable only from it.
             | Mode::SpritePicker
+            | Mode::SpriteEditor
             // Only ever entered from `Mode::Playing`, so it never layers
             // over a fight.
             | Mode::Notification => false,
@@ -2233,6 +2244,13 @@ pub struct App {
     /// directory — see `sprite_subjects`' own doc comment for why the
     /// method takes `&mut self` to write this rather than a `RefCell`.
     sprite_static_subjects: Option<Vec<(String, String, char)>>,
+    /// The open `Mode::SpriteEditor` session, or `None` while it is not
+    /// open — `App::sprite_editor_view`'s source and `Enter` on
+    /// `Mode::SpritePicker`'s target.
+    sprite_editor: Option<crate::app::sprite_forge::SpriteEditor>,
+    /// Cues for the frontend to write, since app-core does no file I/O of
+    /// its own — `take_sounds`'s seam, drained by `App::take_sprite_writes`.
+    pending_sprite_writes: Vec<SpriteWrite>,
 }
 
 /// One entry in the `Mode::LoadGame` list — a save file found in the saves

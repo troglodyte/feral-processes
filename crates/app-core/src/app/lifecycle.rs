@@ -139,6 +139,8 @@ impl App {
             sprite_library: HashMap::new(),
             sprite_disabled: HashSet::new(),
             sprite_static_subjects: None,
+            sprite_editor: None,
+            pending_sprite_writes: Vec::new(),
         }
     }
 

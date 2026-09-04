@@ -6,6 +6,7 @@ mod achievements;
 mod arena;
 mod battle;
 mod building;
+mod canvas_editor;
 mod caravan;
 mod contracts;
 mod crafting;

@@ -22,10 +22,18 @@
 //! keeps the icon editor — permanently at brush 1 — behaving exactly as it
 //! did before the brush existed.
 //!
-//! **A stroke is one undo entry.** `begin_stroke` snapshots once, up front,
-//! before anything is known to change; every `paint_at` until `end_stroke`
-//! records nothing further. Without this a mouse drag — the reason the
-//! brush and the stroke both exist — would cost one undo per cell crossed.
+//! **A stroke is one undo entry, and its snapshot is lazy.** `begin_stroke`
+//! pushes nothing; the first `record()` inside the stroke that follows a
+//! real change takes the one snapshot the whole stroke gets, and every
+//! `record()` after that inside the same stroke is a no-op. A stroke that
+//! never changes the canvas — a swatch pick, a paint over cells already the
+//! selected colour — therefore pushes nothing at all, unifying the stroke
+//! path with `paint_at`'s own "nothing happened, so nothing is recorded"
+//! rule rather than duplicating it with a second, unconditional one. An
+//! earlier version of this pushed unconditionally on `begin_stroke`, which
+//! meant every pointer-down burned an undo slot on a duplicate of the
+//! current canvas — 32 no-op clicks (`ICON_UNDO_DEPTH`) silently flushed
+//! the entire real history.
 
 use std::collections::VecDeque;
 
@@ -86,9 +94,14 @@ pub(crate) struct CanvasEditor {
     palette_len: u8,
     history: VecDeque<Canvas>,
     /// Whether a stroke is open — set by `begin_stroke`, cleared by
-    /// `end_stroke`. While set, `record` is a no-op: the one snapshot
-    /// `begin_stroke` already pushed stands for the whole stroke.
+    /// `end_stroke`. While set, `record` pushes at most once — see
+    /// `stroke_recorded`.
     stroke: bool,
+    /// Whether the open stroke's one snapshot has already been taken.
+    /// `begin_stroke` clears this; `record`'s first call inside the stroke
+    /// that follows a real change sets it and pushes, so a stroke that
+    /// never changes anything pushes nothing at all.
+    stroke_recorded: bool,
 }
 
 impl CanvasEditor {
@@ -105,6 +118,7 @@ impl CanvasEditor {
             palette_len,
             history: VecDeque::new(),
             stroke: false,
+            stroke_recorded: false,
         }
     }
 
@@ -153,18 +167,21 @@ impl CanvasEditor {
         }
     }
 
-    /// Opens a stroke: one snapshot, taken now, before anything is known to
-    /// change. Every `paint_at` before the matching `end_stroke` records
-    /// nothing further. `App::handle_pointer`'s `PointerPhase::Down` arm is
-    /// the real caller.
+    /// Opens a stroke. Pushes no snapshot yet — `record`'s first call
+    /// inside the stroke that follows a real change takes the one snapshot
+    /// the whole stroke gets, so a stroke that changes nothing (a swatch
+    /// pick, a paint over cells already the selected colour) burns no undo
+    /// slot. `App::handle_pointer`'s `PointerPhase::Down` arm is the real
+    /// caller.
     pub(crate) fn begin_stroke(&mut self) {
-        self.push_snapshot();
         self.stroke = true;
+        self.stroke_recorded = false;
     }
 
     /// `App::handle_pointer`'s `PointerPhase::Up` arm is the real caller.
     pub(crate) fn end_stroke(&mut self) {
         self.stroke = false;
+        self.stroke_recorded = false;
     }
 
     /// Selects a swatch directly, clamped to the palette this editor opened
@@ -277,19 +294,25 @@ impl CanvasEditor {
         }
     }
 
-    /// Snapshots the canvas as it stands — unless a stroke is open, in
-    /// which case `begin_stroke` already took the one snapshot the whole
-    /// stroke gets.
+    /// Snapshots the canvas as it stood just before the change a caller has
+    /// already confirmed is coming (`paint_at`'s `already` guard, `clear`'s
+    /// `is_blank` guard — `record` is only ever called once a real change
+    /// is imminent). Outside a stroke this pushes every time; inside one,
+    /// only the first call does — every `record` after that in the same
+    /// stroke is a no-op, which is the lazy half of "a stroke is one undo
+    /// entry".
     fn record(&mut self) {
         if self.stroke {
-            return;
+            if self.stroke_recorded {
+                return;
+            }
+            self.stroke_recorded = true;
         }
         self.push_snapshot();
     }
 
     /// The unconditional half of `record`: drops the oldest entry once the
-    /// history is full, then pushes. `begin_stroke` calls this directly,
-    /// bypassing the stroke guard `record` itself is gated by.
+    /// history is full, then pushes.
     fn push_snapshot(&mut self) {
         if self.history.len() == ICON_UNDO_DEPTH {
             self.history.pop_front();

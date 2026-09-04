@@ -149,6 +149,51 @@ fn a_stroke_is_one_undo_entry() {
     );
 }
 
+/// **The stroke's own snapshot must be lazy.** `begin_stroke` must not push
+/// unconditionally: a stroke that never changes the canvas (a click on a
+/// cell already holding the selected index — the same thing a swatch pick
+/// does, since it never touches the canvas at all) must burn no undo slot.
+/// Pre-fix, `begin_stroke` pushed a snapshot of the *already-painted*
+/// canvas up front, so this undo landed on that duplicate — identical to
+/// the current state — and never reached the real edit underneath it.
+#[test]
+fn a_stroke_that_changes_nothing_records_no_undo_entry() {
+    let mut editor = editor();
+    editor.paint_at(0, 0, 3); // the one real edit undo must reach
+
+    editor.begin_stroke();
+    editor.paint_at(0, 0, 3); // already index 3: no change
+    editor.end_stroke();
+
+    editor.handle_key(GameKey::Char('u'));
+    assert_eq!(
+        cell(&editor, 0, 0),
+        0,
+        "one undo must reach the real edit, not a duplicate no-op snapshot \
+         the empty stroke pushed on top of it"
+    );
+}
+
+/// The same proof from the pointer seam's other hit kind: a stroke that
+/// only ever picks a swatch never touches the canvas at all, so it must
+/// leave the undo history exactly as an empty stroke does above.
+#[test]
+fn a_stroke_over_a_swatch_pick_alone_records_no_undo_entry() {
+    let mut editor = editor();
+    editor.paint_at(0, 0, 3); // the one real edit undo must reach
+
+    editor.begin_stroke();
+    editor.pick_swatch(5);
+    editor.end_stroke();
+
+    editor.handle_key(GameKey::Char('u'));
+    assert_eq!(
+        cell(&editor, 0, 0),
+        0,
+        "a swatch-only stroke must push no undo entry to skip past"
+    );
+}
+
 /// Outside a stroke, `paint_at` still records one entry per real edit — the
 /// stroke collapsing three edits into one is the exception, not the new
 /// default.

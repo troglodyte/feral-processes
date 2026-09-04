@@ -7,7 +7,7 @@
 //! `handle_sprite_picker_key` below only scrolls and backs out.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use feral_processes_engine::DEFAULT_PLAYER_SPRITE;
 use feral_processes_engine::abilities::AbilityDb;
@@ -111,25 +111,73 @@ impl App {
     /// Every name the map can draw a sprite for: each species def, each
     /// structure def, and the two names hardcoded in Rust (`player` via
     /// `DEFAULT_PLAYER_SPRITE`, `anchor`). Sorted by `name` and
-    /// de-duplicated on it, through a `BTreeMap` that is both at once.
+    /// de-duplicated on it.
     ///
-    /// Loads `assets/species`/`assets/structures` fresh on every call
-    /// rather than caching a `SpeciesDb`/`StructureDb` on `App`: this is
-    /// only ever read while `Mode::SpritePicker` is open, which a player's
-    /// build never reaches, so caching would buy nothing but two more
-    /// loaded asset trees carried for the life of every session.
-    pub fn sprite_subjects(&self) -> Vec<SpriteSubject> {
-        let (abilities, _) =
-            AbilityDb::load_dir(&self.assets_dir.join("abilities")).unwrap_or_default();
-        let (species, _) =
-            SpeciesDb::load_dir(&self.assets_dir.join("species"), &abilities).unwrap_or_default();
-        let (structures, _) =
-            StructureDb::load_dir(&self.assets_dir.join("structures")).unwrap_or_default();
+    /// **Two halves with two different lifetimes.** The name/label/glyph
+    /// triple is *static* — nothing in `assets/species`/`assets/structures`
+    /// changes while a session runs — so it is parsed once, on first call,
+    /// and cached in `sprite_static_subjects`; a `Mode::SpritePicker` draw
+    /// call reads this every frame the screen is open, and re-parsing three
+    /// asset directories that often would be dozens of `.ron` files loaded
+    /// per second for as long as the picker stays up. `art`, in contrast,
+    /// must stay live: it is what `SpriteEditor`'s save and toggle change,
+    /// and Task 8's whole point is the map updating without a restart, so
+    /// it is looked up in `sprite_library`/`sprite_disabled` fresh on every
+    /// call. The cache still starts empty and is filled only on first use,
+    /// so a session that never opens the picker parses nothing at all —
+    /// the property a per-call parse was protecting, kept without the
+    /// per-frame cost.
+    ///
+    /// `&mut self` rather than a `RefCell`-backed `&self`: `App` is wrapped
+    /// in a bevy `Resource` (`crates/gui/src/lib.rs`'s `Frontend`), which
+    /// requires `Sync`, and `RefCell` does not implement it — the frontend's
+    /// own `frame` system already holds `App` through `ResMut<Frontend>`,
+    /// so there is a genuine mutable borrow available at every call site.
+    pub fn sprite_subjects(&mut self) -> Vec<SpriteSubject> {
+        if self.sprite_static_subjects.is_none() {
+            self.sprite_static_subjects = Some(Self::load_static_sprite_subjects(&self.assets_dir));
+        }
+        let static_subjects = self
+            .sprite_static_subjects
+            .as_ref()
+            .expect("populated immediately above if it wasn't already");
 
-        // `SpeciesDb::all`/`StructureDb::all` are both already deterministic
-        // (each sorts its own defs), so which def wins a shared name is
-        // stable run to run: structures after species, and the two
-        // hardcoded names last of all.
+        static_subjects
+            .iter()
+            .map(|(name, label, glyph)| {
+                let art = if self.sprite_library.contains_key(name) {
+                    SpriteArt::On
+                } else if self.sprite_disabled.contains(name) {
+                    SpriteArt::Off
+                } else {
+                    SpriteArt::None
+                };
+                SpriteSubject {
+                    name: name.clone(),
+                    label: label.clone(),
+                    glyph: *glyph,
+                    art,
+                }
+            })
+            .collect()
+    }
+
+    /// The static half of `sprite_subjects`, parsed once. Every species def,
+    /// every structure def, and the two hardcoded names, keyed on
+    /// `sprite_name()` through a `BTreeMap` — which is the de-duplication
+    /// *and* the "sort by name" rule in one structure.
+    ///
+    /// `SpeciesDb::all`/`StructureDb::all` are both already deterministic
+    /// (each sorts its own defs), so which def wins a shared name is stable
+    /// run to run: structures after species, and the two hardcoded names
+    /// last of all.
+    fn load_static_sprite_subjects(assets_dir: &Path) -> Vec<(String, String, char)> {
+        let (abilities, _) = AbilityDb::load_dir(&assets_dir.join("abilities")).unwrap_or_default();
+        let (species, _) =
+            SpeciesDb::load_dir(&assets_dir.join("species"), &abilities).unwrap_or_default();
+        let (structures, _) =
+            StructureDb::load_dir(&assets_dir.join("structures")).unwrap_or_default();
+
         let mut by_name: BTreeMap<String, (String, char)> = BTreeMap::new();
         for def in species.all() {
             by_name.insert(def.sprite_name().to_string(), (def.name.clone(), def.glyph));
@@ -148,21 +196,7 @@ impl App {
 
         by_name
             .into_iter()
-            .map(|(name, (label, glyph))| {
-                let art = if self.sprite_library.contains_key(&name) {
-                    SpriteArt::On
-                } else if self.sprite_disabled.contains(&name) {
-                    SpriteArt::Off
-                } else {
-                    SpriteArt::None
-                };
-                SpriteSubject {
-                    name,
-                    label,
-                    glyph,
-                    art,
-                }
-            })
+            .map(|(name, (label, glyph))| (name, label, glyph))
             .collect()
     }
 

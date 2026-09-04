@@ -84,7 +84,7 @@ fn both_gates_open_d_opens_the_picker_and_esc_returns() {
 
 #[test]
 fn sprite_subjects_is_every_species_and_structure_plus_player_and_anchor() {
-    let app = app_with_sprite_forge(5);
+    let mut app = app_with_sprite_forge(5);
 
     let subjects = app.sprite_subjects();
 
@@ -132,4 +132,40 @@ fn sprite_subjects_reads_art_state_off_the_installed_library() {
         .find(|s| s.name != "anchor" && s.name != "player")
         .expect("at least one subject with no installed or disabled art");
     assert_eq!(neither.art, SpriteArt::None);
+}
+
+/// The regression a naive whole-row cache would introduce: the
+/// name/label/glyph triples are parsed once and reused, but `art` must stay
+/// live, or a sprite saved mid-session (Task 8's whole point — the map
+/// updating without a restart) would never show up on this screen either.
+#[test]
+fn the_static_list_is_cached_but_art_state_stays_live() {
+    let mut app = app_with_sprite_forge(7);
+
+    let first = app.sprite_subjects();
+    let second = app.sprite_subjects();
+    assert_eq!(
+        first, second,
+        "two reads before anything changes must agree, cache or no cache"
+    );
+
+    // Installed *between* the two reads above and the one below — this is
+    // what a cache that captured `art` alongside the static fields would
+    // get wrong.
+    let mut enabled = HashMap::new();
+    enabled.insert("anchor".to_string(), Canvas::new(16));
+    app.install_sprite_library(enabled, HashSet::new());
+
+    let third = app.sprite_subjects();
+    assert_eq!(
+        third.len(),
+        second.len(),
+        "the cached static list must not silently change shape"
+    );
+    let anchor = third.iter().find(|s| s.name == "anchor").unwrap();
+    assert_eq!(
+        anchor.art,
+        SpriteArt::On,
+        "art must be read live even though the name/label/glyph list is cached"
+    );
 }

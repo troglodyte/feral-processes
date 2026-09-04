@@ -2226,6 +2226,13 @@ pub struct App {
     /// Sprite names switched off (`<name>.png.off` on disk) but not
     /// deleted — `App::install_sprite_library`'s `disabled` half.
     sprite_disabled: HashSet<String>,
+    /// `App::sprite_subjects`' cached static half — `(name, label, glyph)`
+    /// triples, parsed from `assets/species`/`assets/structures` once and
+    /// kept for the rest of the session. `None` until the first call, so a
+    /// session that never opens `Mode::SpritePicker` never parses either
+    /// directory — see `sprite_subjects`' own doc comment for why the
+    /// method takes `&mut self` to write this rather than a `RefCell`.
+    sprite_static_subjects: Option<Vec<(String, String, char)>>,
 }
 
 /// One entry in the `Mode::LoadGame` list — a save file found in the saves

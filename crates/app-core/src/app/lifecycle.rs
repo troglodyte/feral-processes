@@ -138,6 +138,7 @@ impl App {
             sprite_dir: None,
             sprite_library: HashMap::new(),
             sprite_disabled: HashSet::new(),
+            sprite_static_subjects: None,
         }
     }
 

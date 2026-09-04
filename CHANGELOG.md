@@ -33,6 +33,29 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.93
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` is untouched —
+nothing here reaches the save at all.
+
+- **A tile's con read is the glyph's own hue again, and the corner earmark is
+  what the tiles that cannot spend that hue pay instead.** No mark small
+  enough to share a cell with four other channels carries a scan as well as
+  the ink in the middle of the cell does.
+- **`ConRead` is the one place that is decided** — `Glyph(rung)`,
+  `Earmark(rung)` or `None`, one value rather than two conditions agreeing at
+  two draw sites, so "never both and never neither" is a property of the type
+  rather than of a convention.
+- **Two tiles cannot spend the hue: one drawn as a sprite, and a boss.** Art
+  is authored near-white precisely so egui's tint multiplies through it, and a
+  boss's magenta is the ink rather than a fifth rung.
+- **The boss's corner mark goes with it**, its census retargeted from "not any
+  other mark" to "not any con rung" — the reading a magenta glyph could
+  actually be mistaken for.
+- **`ConRead::of` takes the sprite call's own answer and never
+  `sprite.is_some()`**, so a name the table has nothing under falls back to a
+  glyph that can still carry the rung.
+
 ## 0.13.92
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` is untouched —

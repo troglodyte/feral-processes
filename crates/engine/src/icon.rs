@@ -141,7 +141,7 @@ impl Canvas {
 /// index `ICON_PALETTE` at value `index - 1`.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct PlayerIcon {
-    cells: [u8; ICON_CELLS],
+    cells: Canvas,
 }
 
 impl Default for PlayerIcon {
@@ -149,7 +149,7 @@ impl Default for PlayerIcon {
     /// has to say the same thing.
     fn default() -> Self {
         PlayerIcon {
-            cells: [0; ICON_CELLS],
+            cells: Canvas::new(ICON_GRID),
         }
     }
 }
@@ -158,34 +158,31 @@ impl PlayerIcon {
     /// The cell at `(x, y)`, or 0 (transparent) if either coordinate is
     /// off the 8x8 grid.
     pub fn get(&self, x: usize, y: usize) -> u8 {
-        match Self::index_of(x, y) {
-            Some(i) => self.cells[i],
-            None => 0,
-        }
+        self.cells.get(x, y)
     }
 
     /// Paints `(x, y)` with `index`. An out-of-range coordinate or an
     /// `index` past the palette is dropped rather than panicking — the
     /// editor is the only caller and cannot produce either, and a loaded
     /// save cannot reach this path at all, since `decode` refuses first.
+    /// The palette-range guard lives here, not on `Canvas`, which does not
+    /// know which palette it is drawn from.
     pub fn set(&mut self, x: usize, y: usize, index: u8) {
         if index as usize > ICON_PALETTE.len() {
             return;
         }
-        if let Some(i) = Self::index_of(x, y) {
-            self.cells[i] = index;
-        }
+        self.cells.set(x, y, index);
     }
 
     /// Resets every cell to transparent.
     pub fn clear(&mut self) {
-        self.cells = [0; ICON_CELLS];
+        self.cells.clear();
     }
 
     /// Whether every cell is transparent — a player who never opened the
     /// editor, or who cleared it.
     pub fn is_blank(&self) -> bool {
-        self.cells.iter().all(|&p| p == 0)
+        self.cells.is_blank()
     }
 
     /// The cell at `(x, y)` as RGBA. The one place index 0 becomes a
@@ -213,8 +210,13 @@ impl PlayerIcon {
     pub fn encode(&self) -> String {
         let mut s = String::with_capacity(ENCODING_PREFIX.len() + ICON_CELLS);
         s.push_str(ENCODING_PREFIX);
-        for &p in &self.cells {
-            s.push(std::char::from_digit(p as u32, 16).expect("palette index fits one hex digit"));
+        for y in 0..ICON_GRID {
+            for x in 0..ICON_GRID {
+                s.push(
+                    std::char::from_digit(self.cells.get(x, y) as u32, 16)
+                        .expect("palette index fits one hex digit"),
+                );
+            }
         }
         s
     }
@@ -240,9 +242,9 @@ impl PlayerIcon {
         if digits.len() != ICON_CELLS {
             return None;
         }
-        let mut cells = [0u8; ICON_CELLS];
+        let mut cells = Canvas::new(ICON_GRID);
         for (i, c) in digits.chars().enumerate() {
-            cells[i] = c.to_digit(16)? as u8;
+            cells.set(i % ICON_GRID, i / ICON_GRID, c.to_digit(16)? as u8);
         }
         Some(PlayerIcon { cells })
     }
@@ -263,7 +265,7 @@ impl PlayerIcon {
         for (i, c) in digits.chars().enumerate() {
             pixels[i] = c.to_digit(16)? as u8;
         }
-        let mut cells = [0u8; ICON_CELLS];
+        let mut cells = Canvas::new(ICON_GRID);
         for cy in 0..ICON_GRID {
             for cx in 0..ICON_GRID {
                 let mut block = Vec::with_capacity(ICON_CELL_PIXELS * ICON_CELL_PIXELS);
@@ -288,18 +290,10 @@ impl PlayerIcon {
                         best_count = count;
                     }
                 }
-                cells[cy * ICON_GRID + cx] = best;
+                cells.set(cx, cy, best);
             }
         }
         Some(PlayerIcon { cells })
-    }
-
-    fn index_of(x: usize, y: usize) -> Option<usize> {
-        if x < ICON_GRID && y < ICON_GRID {
-            Some(y * ICON_GRID + x)
-        } else {
-            None
-        }
     }
 }
 

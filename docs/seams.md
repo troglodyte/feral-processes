@@ -5604,29 +5604,69 @@ and a nemesis Blue, *instead of* a rung — so on exactly the two tiles where
 being both drew one fact and dropped the other, since `is_nemesis` was
 checked first and won.
 
-The con read moves to a bar along the **bottom** edge, `RARITY_BAR_PX`
-thick and full width — the rarity bar's mirror, so the two derived readings
-frame the tile and the glyph between them is free again. Identity rides
-corner marks: the nemesis mark that already existed as belt-and-braces, and
-a new boss mark in the opposite corner. A creature that is both now wears
-both **and** keeps its rung. Three readings, three channels, nothing spent.
+The con read moves off the glyph entirely. Identity rides corner marks: the
+nemesis mark that already existed as belt-and-braces, and a new boss mark
+in the opposite corner. A creature that is both now wears both **and**
+keeps its rung. Three readings, three channels, nothing spent.
 
 `difficulty_color` loses its `is_boss`/`is_nemesis` parameters entirely and
 answers one question. `EntityView::difficulty` is `Option<GlyphColor>` and
 is `None` for everything that is not hostile — *no reading*, not a reading
-worth nothing, because a bar under a companion would say the player can
+worth nothing, because a con mark on a companion would say the player can
 beat their own program.
 
-Three geometry decisions are load-bearing and none would fail to compile.
-`staffed_mark_rect` was extracted from the tile loop because the bottom
-edge now has a bar to clear, and the test that pinned its clearance
-hand-copied the arithmetic — the copy that drifts. Its lift is
-`Fx::staffed_bob`, so a missing offset is invisible while a machine is
-worked and shows only at rest, and for a stranded mark, which never bobs at
-all. And the boss mark takes the **bottom**-right rather than the free
-top-left corner on a colour argument: under the rarity bar its magenta sits
-0.391 from Prismatic, where the con rungs beneath it are all warm and none
-nearer than 0.718.
+#### Where the con read went, and why it is a shape
+
+It first landed as a bar along the **bottom** edge — `RARITY_BAR_PX` thick
+and full width, the rarity bar's mirror, so the two derived readings framed
+the tile. That form was rejected in play: two identical strips on opposite
+edges read as one decorative frame rather than as two different questions,
+and the one the player scans a screenful of tiles for was the one hardest
+to pick out at the bottom of a cell.
+
+It is a right-angled **earmark folded into the top-left corner** now —
+`difficulty_mark_points`, a `poly` with its right angle at the corner and
+its hypotenuse running into the tile, leg `CON_MARK` (0.34 of the tile).
+The leg is chosen so the wedge's area lands within a few percent of the
+full-width bar it replaced: the channel keeps its weight, it just stops
+being a strip. `CON_MARK` is larger than `IDENTITY_MARK` (0.22) for the
+same reason the read moved at all — the con answer is the scan, a nemesis
+or boss mark is a detail confirmed on the tile the player has already
+stopped at.
+
+**A shape and not a fifth coloured strip** is the load-bearing half. The
+top edge already belongs to the rarity bar, and the alternative — a second
+bar along the top, or the left — asks the player to tell two readings apart
+by hue alone on adjacent pixels, which is exactly what putting the con read
+on the glyph did wrong in the first place. Form separates them for free.
+
+**The trap is that the rarity bar is painted first and owns the full width
+of that edge.** The earmark drops below `RARITY_BAR_PX` and insets from the
+left by `IDENTITY_MARK_INSET`, exactly as `nemesis_mark_rect` does; flush
+into the corner it silently covers one end of the rarity channel, and
+nothing fails to compile. The nemesis mark is the other neighbour on that
+edge, and it is precisely the creature whose con read the player most wants
+beside it — `CON_MARK` is a fraction of the tile where the mark's inset is
+absolute, so the gap between them is narrowest at the deepest zoom and
+`the_con_earmark_never_meets_the_nemesis_mark` sweeps 24→64px rather than
+asserting at one.
+
+The boss mark takes the **bottom**-right rather than the free top-left
+corner on a colour argument made when the con read was still a bottom bar:
+under the rarity bar its magenta sits 0.391 from Prismatic, where the con
+rungs are all warm and none nearer than 0.718. The earmark's move to the
+top-left only strengthens it — the bottom edge is the emptiest one now, and
+the corner the boss mark declined is the one the con read took.
+
+`staffed_mark_rect` was extracted from the tile loop when the bottom edge
+had a bar to clear, and the test that pinned that clearance hand-copied the
+arithmetic — the copy that drifts. The bar is gone and the extraction is
+still worth keeping, because the reason underneath it never depended on the
+bar: its lift is `Fx::staffed_bob`, so a resting place that has drifted off
+the tile is invisible while a machine is worked and shows only at rest, and
+for a stranded mark, which never bobs at all. Both it and `boss_mark_rect`
+dropped their `- RARITY_BAR_PX` term when the bar left; leaving it would
+have been a 2px lie that read as deliberate geometry.
 
 The boss mark keeps the magenta a boss already wore, so the fact reads the
 same after moving off the glyph. Blue — the nemesis's vacated hue — is the

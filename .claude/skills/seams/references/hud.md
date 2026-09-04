@@ -66,23 +66,34 @@
   vignette eats. The ladder census catches it only because it asserts a
   **margin** (0.10, against a shipped step of 0.12).
 - **A tile says three things on three channels, and the glyph is the one
-  that says *what*.** The con read is a bar along the **bottom** edge —
-  `RARITY_BAR_PX` thick, full width, the rarity bar's mirror — and identity
-  rides corner marks, so `EntityView::color` is the species' authored hue
-  for everyone. It used to be *replaced* by `difficulty_color` for a
-  hostile, and a boss or a nemesis replaced it with a reserved hue instead
-  of a rung, which stopped the map answering "can I win this fight" on the
-  two tiles where it matters most. **The trap is that every mark down there
-  now has a bar to clear**: `staffed_mark_rect` was extracted for it, and
-  its lift is `Fx::staffed_bob`, so a missing offset is invisible while a
-  machine is worked and shows only at rest — and for a stranded mark, which
-  never bobs at all. `EntityView::difficulty` is `None` for anything
-  non-hostile, *no reading* rather than one worth nothing, because a bar
-  under a companion says the player can beat their own program. The boss
-  mark takes the bottom-right on a colour argument (its magenta sits 0.391
-  from the rarity bar's Prismatic and no nearer than 0.718 to any con rung),
-  and Blue — the nemesis's vacated hue — is exactly `CUTTING_OUTLINE` and
-  fails the mark census at distance 0.
+  that says *what*.** The con read is a right-angled earmark folded into the
+  **top-left** corner — `difficulty_mark_points`, leg `CON_MARK` — and
+  identity rides corner marks, so `EntityView::color` is the species'
+  authored hue for everyone. It used to be *replaced* by `difficulty_color`
+  for a hostile, and a boss or a nemesis replaced it with a reserved hue
+  instead of a rung, which stopped the map answering "can I win this fight"
+  on the two tiles where it matters most. **The trap is the top edge, which
+  now carries three things**: the rarity bar owns its full width and is
+  painted *first*, so the earmark drops below `RARITY_BAR_PX` exactly as
+  `nemesis_mark_rect` does — flush into the corner it covers one end of a
+  channel that means something else, and nothing fails to compile. The
+  nemesis mark is the other neighbour, and it is the creature whose con read
+  the player most wants beside it: `CON_MARK`'s leg is a fraction of the
+  tile where the mark's inset is absolute, so the gap is narrowest at the
+  deepest zoom and the census sweeps 24→64px. It is a **`poly` and not a
+  `rect`** on purpose — form, not a fifth coloured strip, is what tells two
+  top-edge readings apart. `EntityView::difficulty` is `None` for anything
+  non-hostile, *no reading* rather than one worth nothing, because an
+  earmark on a companion says the player can beat their own program. The
+  boss mark takes the bottom-right, which is now the emptiest edge, on a
+  colour argument (its magenta sits 0.391 from the rarity bar's Prismatic
+  and no nearer than 0.718 to any con rung), and Blue — the nemesis's
+  vacated hue — is exactly `CUTTING_OUTLINE` and fails the mark census at
+  distance 0. **`staffed_mark_rect` outlived the bar it was extracted to
+  clear** and is still worth its own test, because its lift is
+  `Fx::staffed_bob`: a resting place that has drifted off the tile is
+  invisible while a machine is worked and shows only at rest, and for a
+  stranded mark, which never bobs at all.
 - **The player's `@` is a role and is read off `is_player`** — `PLAYER`, br
   cyan, which nothing else may take, and never off the `GlyphColor::Cyan` the
   player happens to spawn with. Asserted by **distance** through a real draw,

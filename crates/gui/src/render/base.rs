@@ -112,6 +112,17 @@ pub(crate) const CUTTING_OUTLINE: Color = hud::palette::PLAN;
 const IDENTITY_MARK: f32 = 0.22;
 const IDENTITY_MARK_INSET: f32 = 2.0;
 
+/// The con earmark's leg, as a fraction of the tile — the right-angled
+/// wedge folded into the **top-left** corner that answers "can I win this
+/// fight".
+///
+/// Larger than `IDENTITY_MARK` on purpose: the con read is the one a player
+/// scans a screenful of tiles for, where a nemesis or a boss mark is a
+/// detail confirmed on the tile they have already stopped at. At this leg
+/// the wedge's area is within a few percent of the full-width bar it
+/// replaced, so the channel keeps the weight it had.
+const CON_MARK: f32 = 0.34;
+
 /// Where the nemesis mark sits on a tile — the top-right corner, dropped
 /// below `RARITY_BAR_PX` so it never overlaps the bar running the width of
 /// the top edge, and inset from both remaining edges for the same reason
@@ -131,37 +142,42 @@ fn nemesis_mark_rect(px: f32, py: f32, tile_px: f32) -> Rect {
     )
 }
 
-/// The con read's strip along the **bottom** edge — the rarity bar's mirror,
-/// same thickness and same full width, so the tile is framed by its two
-/// derived readings and the glyph between them is free to carry identity.
+/// The con read's earmark — a right triangle folded into the **top-left**
+/// corner, its right angle at the corner and its hypotenuse running down
+/// into the tile, so the reading is a shape and not a fifth coloured strip
+/// competing with the glyph for the tile's interior.
 ///
-/// A free function for `nemesis_mark_rect`'s reason: the geometry is
-/// unit-testable without a `Painter`, and `staffed_mark_rect` below has to
-/// clear it without keeping a second copy of where it sits.
-fn difficulty_bar_rect(px: f32, py: f32, tile_px: f32) -> Rect {
-    Rect::new(
-        px,
-        py + tile_px - 1.0 - RARITY_BAR_PX,
-        tile_px - 1.0,
-        RARITY_BAR_PX,
-    )
+/// **Dropped below `RARITY_BAR_PX` and inset from the left**, exactly as
+/// `nemesis_mark_rect` is: the rarity bar owns the full width of the top
+/// edge and is painted first, so a wedge flush into the corner would cover
+/// one end of a channel that means something else. The left inset is
+/// `nemesis_mark_rect`'s reason again — flush against the edge it reads as
+/// painting back in a line `outline_open` deliberately left off.
+///
+/// A free function for that mark's other reason: the geometry is
+/// unit-testable without a `Painter`.
+fn difficulty_mark_points(px: f32, py: f32, tile_px: f32) -> [(f32, f32); 3] {
+    let leg = (tile_px - 1.0) * CON_MARK;
+    let x = px + IDENTITY_MARK_INSET;
+    let y = py + RARITY_BAR_PX + IDENTITY_MARK_INSET;
+    [(x, y), (x + leg, y), (x, y + leg)]
 }
 
-/// Where the boss mark sits — the bottom-right corner, raised clear of
-/// `difficulty_bar_rect` the way `nemesis_mark_rect` drops below the rarity
-/// bar, and inset from both remaining edges for that mark's reason.
+/// Where the boss mark sits — the bottom-right corner, inset from both
+/// edges for `nemesis_mark_rect`'s reason.
 ///
 /// **The far corner from the nemesis mark deliberately.** A creature can be
 /// both now — `difficulty_color` used to answer with one reserved hue and
 /// the nemesis won it, so being a boss went undrawn — and two facts that
 /// can hold at once must never fight for pixels. The bottom edge is also
-/// the friendlier neighbour by colour: the con rungs under it are all warm,
-/// where the rarity bar's Prismatic sits much nearer this mark's magenta.
+/// the emptiest one: the con earmark and the nemesis mark both hang off the
+/// top, under a rarity bar whose Prismatic sits much nearer this mark's
+/// magenta than anything down here.
 fn boss_mark_rect(px: f32, py: f32, tile_px: f32) -> Rect {
     let size = (tile_px - 1.0) * IDENTITY_MARK;
     Rect::new(
         px + tile_px - 1.0 - IDENTITY_MARK_INSET - size,
-        py + tile_px - 1.0 - RARITY_BAR_PX - IDENTITY_MARK_INSET - size,
+        py + tile_px - 1.0 - IDENTITY_MARK_INSET - size,
         size,
         size,
     )
@@ -176,17 +192,17 @@ fn boss_mark_color() -> Color {
     hud::palette::glyph(GlyphColor::Magenta)
 }
 
-/// Paints the con read along the bottom edge, or nothing at all when there
-/// is no reading to paint.
+/// Paints the con read into the top-left corner, or nothing at all when
+/// there is no reading to paint.
 ///
 /// Extracted the way `draw_recovery_mark` is: the map's tile loop is far too
 /// big to reach with a test, and what has to be pinned here is that `None`
-/// paints *nothing* — a bar under a companion would say the player can beat
-/// their own program.
+/// paints *nothing* — an earmark on a companion would say the player can
+/// beat their own program.
 ///
 /// `vig` multiplies the way the rarity bar's does, so a tile darkened at the
-/// edge of the light doesn't leave its two bars burning at full brightness.
-fn draw_difficulty_bar(
+/// edge of the light doesn't leave its marks burning at full brightness.
+fn draw_difficulty_mark(
     painter: &Painter,
     difficulty: Option<GlyphColor>,
     px: f32,
@@ -198,12 +214,8 @@ fn draw_difficulty_bar(
         return;
     };
     let c = glyph_color(rung);
-    let bar = difficulty_bar_rect(px, py, tile_px);
-    painter.rect(
-        bar.x,
-        bar.y,
-        bar.w,
-        bar.h,
+    painter.poly(
+        &difficulty_mark_points(px, py, tile_px),
         Color::new(c.r * vig, c.g * vig, c.b * vig, c.a),
     );
 }
@@ -212,16 +224,14 @@ fn draw_difficulty_bar(
 /// resting place — `Fx::staffed_bob` while a machine is worked, zero at rest
 /// and for a stranded mark, which blinks in place instead.
 ///
-/// **Raised clear of `difficulty_bar_rect`**, the mirror of `nemesis_mark_
-/// rect` dropping below `RARITY_BAR_PX`. Extracted rather than left inline
-/// so the clearance is one expression: the test that pins it used to
-/// hand-copy this arithmetic, which is exactly the copy that drifts when the
-/// bottom edge gains a bar.
+/// Extracted rather than left inline so the resting place is one
+/// expression: the test that pins it used to hand-copy this arithmetic,
+/// which is exactly the copy that drifts when the bottom edge changes.
 fn staffed_mark_rect(px: f32, py: f32, tile_px: f32, lift: f32) -> Rect {
     let size = (tile_px - 1.0) * STAFFED_MARK;
     Rect::new(
         px + STAFFED_MARK_INSET,
-        py + tile_px - 1.0 - RARITY_BAR_PX - STAFFED_MARK_INSET - size - lift,
+        py + tile_px - 1.0 - STAFFED_MARK_INSET - size - lift,
         size,
         size,
     )
@@ -1516,13 +1526,17 @@ fn draw_surface_map(
                     Color::new(bar.r * vig, bar.g * vig, bar.b * vig, bar.a),
                 );
             }
-            // The same reading turned upside down. `difficulty_color` used
-            // to *replace* the glyph's hue, so a tile said either what a
-            // program is or how dangerous it is; the bottom edge is what
-            // buys back the glyph. Keyed off `actor` for the rarity bar's
-            // reason — a structure has no con read, and the engine hands
-            // `None` for everything that is not hostile.
-            draw_difficulty_bar(
+            // The con read, folded into the top-left corner as a wedge.
+            // `difficulty_color` used to *replace* the glyph's hue, so a
+            // tile said either what a program is or how dangerous it is;
+            // the earmark is what buys back the glyph. A shape rather than
+            // a second strip, so the two things riding the top edge are
+            // told apart by form and not only by hue. Painted after the
+            // rarity bar and dropped clear of it — see
+            // `difficulty_mark_points`. Keyed off `actor` for the rarity
+            // bar's reason: a structure has no con read, and the engine
+            // hands `None` for everything that is not hostile.
+            draw_difficulty_mark(
                 painter,
                 actor.and_then(|ev| ev.difficulty),
                 px,
@@ -4099,63 +4113,100 @@ mod tests {
         );
     }
 
-    /// The con read's bar is the rarity bar turned upside down: same
-    /// thickness, same full width, opposite edge. Two bars framing the tile
-    /// is what lets the glyph between them go back to saying *what* the
-    /// program is — so they must never meet, at any zoom.
+    /// The con earmark is a right angle folded into the top-left corner,
+    /// and the rarity bar owns the full width of the edge above it. The
+    /// wedge is painted *after* that bar, so an earmark that reached the
+    /// top of the tile would silently cover one end of a channel that means
+    /// something else — at every zoom, since the inset is absolute and the
+    /// leg is not.
     #[test]
-    fn the_difficulty_bar_hugs_the_bottom_edge_and_never_meets_the_rarity_bar() {
+    fn the_con_earmark_folds_into_the_top_left_and_clears_the_rarity_bar() {
         for tile_px in [24.0_f32, 32.0, 48.0, 64.0] {
-            let bar = difficulty_bar_rect(100.0, 200.0, tile_px);
+            let (px, py) = (100.0_f32, 200.0_f32);
+            let [(cx, cy), (ax, ay), (dx, dy)] = difficulty_mark_points(px, py, tile_px);
+            let leg = (tile_px - 1.0) * CON_MARK;
 
-            assert_eq!(bar.h, RARITY_BAR_PX, "at tile_px={tile_px}");
-            assert_eq!(bar.w, tile_px - 1.0, "at tile_px={tile_px}");
-            assert_eq!(
-                bar.y + bar.h,
-                200.0 + tile_px - 1.0,
-                "at tile_px={tile_px} the bar must sit flush on the bottom edge"
+            assert!(
+                cy > py + RARITY_BAR_PX,
+                "at tile_px={tile_px} the earmark reaches into the rarity bar"
             );
             assert!(
-                bar.y > 200.0 + RARITY_BAR_PX,
-                "at tile_px={tile_px} the two bars reach each other"
+                cx > px,
+                "at tile_px={tile_px} the earmark is flush against the left edge"
+            );
+            assert!(
+                (ax - cx - leg).abs() < 0.01 && ay == cy,
+                "at tile_px={tile_px} the top leg must run along the edge"
+            );
+            assert!(
+                (dy - cy - leg).abs() < 0.01 && dx == cx,
+                "at tile_px={tile_px} the left leg must run down the edge"
+            );
+            assert!(
+                cy + leg < py + tile_px - 1.0,
+                "at tile_px={tile_px} the earmark hangs off the bottom of the tile"
             );
         }
     }
 
-    /// `nemesis_mark_rect` drops below the rarity bar; this is the same
-    /// clearance at the other end. **The bob is what makes it worth a
-    /// test**: `fx.staffed_bob` lifts the mark *away* from the bottom edge,
-    /// so a missing offset is invisible while a machine is worked and shows
-    /// only at rest — and a stranded mark, which never bobs at all, would
-    /// sit under the bar for its whole stall.
+    /// The top edge carries two things now — the con earmark on the left and
+    /// the nemesis mark on the right — and a nemesis is exactly the creature
+    /// whose con read the player most wants beside it. They must never meet,
+    /// at any zoom: the earmark's leg is a fraction of the tile and the
+    /// mark's inset is not, so the narrowest gap is at the deepest zoom.
     #[test]
-    fn the_staffed_mark_clears_the_difficulty_bar_at_rest_and_mid_bob() {
+    fn the_con_earmark_never_meets_the_nemesis_mark() {
+        for tile_px in [24.0_f32, 32.0, 48.0, 64.0] {
+            let (px, py) = (100.0_f32, 200.0_f32);
+            let [(_, cy), (ax, _), _] = difficulty_mark_points(px, py, tile_px);
+            let nemesis = nemesis_mark_rect(px, py, tile_px);
+
+            assert!(
+                ax < nemesis.x,
+                "at tile_px={tile_px} the earmark reaches {ax} and the nemesis \
+                 mark starts at {}",
+                nemesis.x
+            );
+            assert!(
+                (cy - nemesis.y).abs() < 0.01,
+                "at tile_px={tile_px} the two top-edge marks hang at different \
+                 depths, which reads as one of them being misplaced"
+            );
+        }
+    }
+
+    /// **The bob is what makes this worth a test**: `fx.staffed_bob` lifts
+    /// the mark away from the bottom edge, so a resting place that has
+    /// drifted off the tile is invisible while a machine is worked and shows
+    /// only at rest — and for a stranded mark, which never bobs at all.
+    #[test]
+    fn the_staffed_mark_stays_inside_the_tile_at_rest_and_mid_bob() {
         let tile_px = 40.0_f32;
         let (px, py) = (10.0_f32, 20.0_f32);
-        let bar = difficulty_bar_rect(px, py, tile_px);
 
         for lift in [0.0_f32, 1.0, 3.0] {
             let mark = staffed_mark_rect(px, py, tile_px, lift);
             assert!(
-                mark.y + mark.h <= bar.y,
-                "at lift={lift} the staffed mark's bottom ({}) reaches into \
-                 the difficulty bar (starts at {})",
+                mark.y + mark.h < py + tile_px - 1.0,
+                "at lift={lift} the staffed mark's bottom ({}) hangs off the \
+                 tile (ends at {})",
                 mark.y + mark.h,
-                bar.y
+                py + tile_px - 1.0
             );
             assert!(mark.y > py, "at lift={lift} the mark left the tile");
         }
     }
 
-    /// Where the con bar was painted this frame, or `None` if it was not.
-    fn con_bar(
+    /// The triangle the con read was painted as this frame, or `None` if it
+    /// was not. A `poly` rather than a `rect`, which is the whole reason the
+    /// earmark can share the top edge with the rarity bar without either
+    /// being mistaken for the other.
+    fn con_mark(
         shapes: &[bevy_egui::egui::epaint::ClippedShape],
-    ) -> Option<(bevy_egui::egui::Rect, bevy_egui::egui::Color32)> {
+    ) -> Option<(Vec<bevy_egui::egui::Pos2>, bevy_egui::egui::Color32)> {
         shapes.iter().find_map(|cs| match &cs.shape {
-            bevy_egui::egui::Shape::Rect(r)
-                if r.fill.a() > 0 && (r.rect.height() - RARITY_BAR_PX).abs() < 0.01 =>
-            {
-                Some((r.rect, r.fill))
+            bevy_egui::egui::Shape::Path(p) if p.fill.a() > 0 && p.points.len() == 3 => {
+                Some((p.points.clone(), p.fill))
             }
             _ => None,
         })
@@ -4163,38 +4214,40 @@ mod tests {
 
     /// `None` is *no reading*, not a reading worth nothing — the engine
     /// hands a con colour only for a hostile, so anything else must leave
-    /// the bottom edge bare rather than paint a bar the player would read
-    /// as "you can beat your own companion".
+    /// the corner bare rather than paint an earmark the player would read as
+    /// "you can beat your own companion".
     #[test]
-    fn nothing_draws_a_con_bar_without_a_con_read() {
+    fn nothing_draws_a_con_mark_without_a_con_read() {
         let (_, shapes) = with_painter(|p| {
-            draw_difficulty_bar(p, None, 0.0, 0.0, CELL, 1.0);
+            draw_difficulty_mark(p, None, 0.0, 0.0, CELL, 1.0);
         });
 
         assert!(
-            con_bar(&shapes).is_none(),
-            "a tile with no con read must paint no bar"
+            con_mark(&shapes).is_none(),
+            "a tile with no con read must paint no earmark"
         );
     }
 
-    /// The bar lands where `difficulty_bar_rect` says and wears the rung it
-    /// was handed. Both in one test because either alone passes against a
-    /// bar drawn in the wrong place *or* in the wrong colour, and the whole
-    /// point of the channel is that a player reads position and hue
-    /// together.
+    /// The earmark lands where `difficulty_mark_points` says and wears the
+    /// rung it was handed. Both in one test because either alone passes
+    /// against a wedge drawn in the wrong place *or* in the wrong colour,
+    /// and the whole point of the channel is that a player reads position
+    /// and hue together.
     #[test]
-    fn a_con_read_draws_its_rung_along_the_bottom_edge() {
+    fn a_con_read_draws_its_rung_in_the_top_left_corner() {
         let (_, shapes) = with_painter(|p| {
-            draw_difficulty_bar(p, Some(GlyphColor::Red), 0.0, 0.0, CELL, 1.0);
+            draw_difficulty_mark(p, Some(GlyphColor::Red), 0.0, 0.0, CELL, 1.0);
         });
 
-        let (rect, fill) = con_bar(&shapes).expect("a con read must paint a bar");
-        let want = difficulty_bar_rect(0.0, 0.0, CELL);
+        let (points, fill) = con_mark(&shapes).expect("a con read must paint an earmark");
+        let want = difficulty_mark_points(0.0, 0.0, CELL);
 
-        assert!(
-            (rect.min.y - want.y).abs() < 0.01 && (rect.width() - want.w).abs() < 0.01,
-            "the bar was painted at {rect:?}, not at {want:?}"
-        );
+        for (got, (wx, wy)) in points.iter().zip(want) {
+            assert!(
+                (got.x - wx).abs() < 0.01 && (got.y - wy).abs() < 0.01,
+                "the earmark was painted at {points:?}, not at {want:?}"
+            );
+        }
 
         let red = hud::palette::glyph(GlyphColor::Red);
         let want_fill = bevy_egui::egui::Color32::from_rgb(
@@ -4205,24 +4258,22 @@ mod tests {
         assert_eq!(
             (fill.r(), fill.g(), fill.b()),
             (want_fill.r(), want_fill.g(), want_fill.b()),
-            "the bar must wear the con rung's own hue, drawn from the one \
+            "the earmark must wear the con rung's own hue, drawn from the one \
              palette table `glyph_color` reads"
         );
     }
 
-    /// The other end of `nemesis_mark_rect`'s clearance: the bottom-right
-    /// corner has a bar under it now too, and a mark flush into a corner
-    /// reads as painting back an edge `outline_open` left off.
+    /// `nemesis_mark_rect`'s inset at the other end: a mark flush into a
+    /// corner reads as painting back an edge `outline_open` left off.
     #[test]
-    fn the_boss_mark_clears_the_difficulty_bar_and_stays_inside_the_tile() {
+    fn the_boss_mark_stays_inside_the_tile() {
         for tile_px in [24.0_f32, 32.0, 48.0, 64.0] {
             let (px, py) = (100.0_f32, 200.0_f32);
             let mark = boss_mark_rect(px, py, tile_px);
-            let bar = difficulty_bar_rect(px, py, tile_px);
 
             assert!(
-                mark.y + mark.h <= bar.y,
-                "at tile_px={tile_px} the boss mark reaches into the con bar"
+                mark.y + mark.h < py + tile_px - 1.0 && mark.y > py,
+                "at tile_px={tile_px} the boss mark touches the bottom edge"
             );
             assert!(
                 mark.x + mark.w < px + tile_px - 1.0 && mark.x > px,

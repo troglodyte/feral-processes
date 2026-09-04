@@ -16,6 +16,7 @@
 //! rhythm belongs to the base and travels with it.
 
 use crate::base_grid::BaseGrid;
+use crate::game::commerce;
 use crate::game::contracts::fold;
 use crate::*;
 
@@ -1367,24 +1368,15 @@ impl Game {
     /// positions — the screen sorts its rows for the eye and the shelf's
     /// identity must not move with them.
     ///
-    /// **Two ordering rules, and they are the whole of why this function
-    /// exists.**
-    ///
-    /// *Every refusal lands before anything is spent.* `buy_caravan_offer`
-    /// already holds this and says why: a purchase that took the Credits and
-    /// then failed is the one bug the player cannot undo, and a caravan has
-    /// no buyback to put it right with. A basket makes that stricter rather
-    /// than looser — a half-committed basket is the same bug wearing a
-    /// bigger coat.
-    ///
-    /// *Sells land before buys.* `transfer_items`' take-before-give rule, and
-    /// here it is what lets a basket be funded by its own sales — the entire
-    /// reason the two sections are one basket. The other way round the buy is
-    /// refused for want of money the player is in the middle of making.
-    ///
-    /// **One tick for the whole commit**, not one per line: the basket is the
-    /// visit. The tick spent may be the one the trader leaves on, and
-    /// `close_if_gone` still runs after it.
+    /// Every question is asked here, with no side effect, before anything
+    /// moves: `refuse_caravan_sale` and `refuse_caravan_delivery` price and
+    /// validate every line, and the roster's remaining room is counted down
+    /// across the basket rather than re-read per row, or two programs asked
+    /// one at a time would both pass against a roster with one slot left.
+    /// What happens once every line has passed — the funding comparison,
+    /// applying sells before buys, the one `tick()` — is
+    /// `Game::settle_basket`, shared with every other vendor a basket can be
+    /// built for; this function's own job ends at handing it a plan.
     pub fn commit_caravan_basket(
         &mut self,
         sells: Vec<(GearCopy, u32)>,
@@ -1435,33 +1427,26 @@ impl Game {
 
         let currency = self.trade_currency();
         let money = self.item_name(&currency).to_string();
-        let held = self
-            .world
-            .get::<Inventory>(self.player_entity())
-            .map(|inv| inv.count(&currency))
-            .unwrap_or(0);
-        // The sales are counted **in**, which is the funding rule stated as
-        // arithmetic: a basket may spend money it is about to make.
-        if held + proceeds < cost {
-            return Err(format!("Not enough {money} (need {cost})."));
-        }
-
-        // ---- nothing below may refuse ----
         let sold = planned_sells.len();
-        for (copy, taken) in planned_sells {
-            self.apply_caravan_sale(&copy, taken);
-        }
         let bought = planned_buys.len();
-        for offer in planned_buys {
-            let price = offer.unit_cost * offer.qty;
-            let delivered = self.deliver_caravan_offer(&offer);
-            self.charge_for_caravan_offer(&offer, price, &money, delivered);
-        }
-        self.tick();
-        Ok(match (sold, bought) {
-            (0, b) => format!("Bought {b}."),
-            (s, 0) => format!("Sold {s}."),
-            (s, b) => format!("Sold {s}, bought {b}."),
+
+        self.settle_basket(commerce::BasketPlan {
+            proceeds,
+            cost,
+            sold,
+            bought,
+            apply_sells: move |game: &mut Game| {
+                for (copy, taken) in planned_sells {
+                    game.apply_caravan_sale(&copy, taken);
+                }
+            },
+            apply_buys: move |game: &mut Game| {
+                for offer in planned_buys {
+                    let price = offer.unit_cost * offer.qty;
+                    let delivered = game.deliver_caravan_offer(&offer);
+                    game.charge_for_caravan_offer(&offer, price, &money, delivered);
+                }
+            },
         })
     }
 }

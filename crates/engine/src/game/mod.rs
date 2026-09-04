@@ -18,6 +18,7 @@ pub(crate) mod combat_rewards;
 pub(crate) mod combat_round;
 pub(crate) mod combat_status;
 pub(crate) mod combat_teardown;
+pub(crate) mod commerce;
 pub(crate) mod contracts;
 pub(crate) mod crafting;
 pub(crate) mod creation;

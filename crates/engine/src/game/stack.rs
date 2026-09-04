@@ -446,6 +446,13 @@ impl Game {
             entrance,
             depth,
             frames,
+            // The world map is persistent, so the seed above is fixed for
+            // the whole run and the tier is the only thing left that moves
+            // a surviving entrance's frame. Read live rather than stored on
+            // the link, which is a bare marker: `components::SurfaceLink`
+            // has no fields and every other Stack difficulty term reads
+            // `ZoneLevel` the same way.
+            tier: self.world.resource::<ZoneLevel>().0,
         }
     }
 

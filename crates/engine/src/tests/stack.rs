@@ -1515,29 +1515,35 @@ fn stand_before_the_lair(game: &mut Game) -> (i32, i32) {
         .as_ref()
         .unwrap()
         .clone();
-    let lair = (0..level.height)
-        .flat_map(|y| (0..level.width).map(move |x| (x, y)))
-        .find(|&(x, y)| level.cell(x, y) == CellKind::Lair)
-        .expect("the bottom frame should hold a lair");
-
-    let seal = [Dir::North, Dir::East, Dir::South, Dir::West]
-        .into_iter()
-        .map(|dir| {
-            let (dx, dy) = dir.delta();
-            (lair.0 + dx, lair.1 + dy)
-        })
-        .find(|&(x, y)| level.cell(x, y) == CellKind::SealedDoor)
-        .expect("the lair must be sealed and reachable");
-
-    let (facing, mouth) = [Dir::North, Dir::East, Dir::South, Dir::West]
-        .into_iter()
-        .find_map(|dir| {
-            let (dx, dy) = dir.delta();
-            let outside = (seal.0 + dx, seal.1 + dy);
-            (outside != lair && level.walkable(outside.0, outside.1))
-                .then_some((dir.turn_left().turn_left(), outside))
-        })
-        .expect("the seal must have a way up to it");
+    // Every (lair, seal, approach) combination rather than the first of
+    // each: a frame may carve more than one lair, and a lair more than one
+    // sealed face, so committing to the first of either can pick a seal
+    // that happens to be walled in and read as the generator failing to
+    // connect one that isn't.
+    let (lair, facing, mouth) =
+        (0..level.height)
+            .flat_map(|y| (0..level.width).map(move |x| (x, y)))
+            .filter(|&(x, y)| level.cell(x, y) == CellKind::Lair)
+            .find_map(|lair| {
+                [Dir::North, Dir::East, Dir::South, Dir::West]
+                    .into_iter()
+                    .map(|dir| {
+                        let (dx, dy) = dir.delta();
+                        (lair.0 + dx, lair.1 + dy)
+                    })
+                    .filter(|&(x, y)| level.cell(x, y) == CellKind::SealedDoor)
+                    .find_map(|seal| {
+                        [Dir::North, Dir::East, Dir::South, Dir::West]
+                            .into_iter()
+                            .find_map(|dir| {
+                                let (dx, dy) = dir.delta();
+                                let outside = (seal.0 + dx, seal.1 + dy);
+                                (outside != lair && level.walkable(outside.0, outside.1))
+                                    .then_some((lair, dir.turn_left().turn_left(), outside))
+                            })
+                    })
+            })
+            .expect("the bottom frame should hold a sealed lair with a way up to it");
 
     let Locale::Stack {
         depth,
@@ -3190,6 +3196,7 @@ fn a_frames_shape_still_matches_what_trace_was_tuned_against() {
             entrance: (30, 30),
             depth,
             frames: 4,
+            tier: 1,
         };
         let frame = crate::stack::generate(spec);
         let cells = || (0..frame.height).flat_map(|y| (0..frame.width).map(move |x| (x, y)));

@@ -10,6 +10,7 @@ use crate::items::{DownedProgram, EquipmentSlot, ItemId};
 use crate::perks::Perk;
 use crate::resources::DifficultyMode;
 use crate::species::SpeciesId;
+use crate::tools::ToolId;
 use crate::world::Tile;
 
 #[derive(Serialize, Deserialize)]
@@ -138,6 +139,14 @@ pub struct PlayerSave {
     /// this field existed loads with an empty store, which is what it had.
     #[serde(default)]
     pub downed_programs: Vec<DownedProgram>,
+    /// Tool ids installed in the player's tool slots, in slot order — see
+    /// `components::Tools`. Additive behind a default, so **no
+    /// `SAVE_FORMAT_VERSION` bump**: a save written before tools existed
+    /// loads with an empty loadout rather than the starter tool being
+    /// re-granted — `Game::load` never calls the creation-only grant, the
+    /// profile rule `tuning::STARTER_TOOL_ID`'s own doc comment states.
+    #[serde(default)]
+    pub tools: Vec<ToolId>,
     /// The abilities installed in the player's routine slots, in menu order
     /// — see `components::Routines`.
     pub routines: Vec<crate::abilities::AbilityId>,
@@ -1507,6 +1516,7 @@ mod tests {
                 fused_gear: Vec::new(),
                 gear_copies: Vec::new(),
                 downed_programs: Vec::new(),
+                tools: Vec::new(),
                 perk_points: 0,
                 unlocked_perks: Vec::new(),
                 bought_stats: crate::components::BoughtStats::default(),

@@ -4018,3 +4018,24 @@ pub const GRADE_PER_LEVEL: f32 = 0.01;
 /// `abilities::DECOMPILE_ABILITY_ID` because the spec names it
 /// `tuning::STARTER_TOOL_ID` directly (section 2).
 pub const STARTER_TOOL_ID: &str = "salvage_clamp";
+
+/// Tool slots the player has at level 1 — one, filled by `STARTER_TOOL_ID`
+/// at `Game::new`. Unlike `PLAYER_ROUTINE_SLOT_BASE` (2, with
+/// `DECOMPILE_ABILITY_ID` occupying one and a free slot left over for a
+/// choice), a tool slot starts **full** on purpose: the spec's decision 3
+/// is that choosing the tool *is* the decision, and a level-1 player with a
+/// spare slot beside the starter has nothing yet to choose between.
+pub const TOOL_SLOT_BASE: u32 = 1;
+
+/// Levels the player needs per additional tool slot. `tools::
+/// player_tool_slots` grants **one** slot a step here, not
+/// `ROUTINE_SLOTS_PER_STEP`'s two — a second tool is a second decision to
+/// make, not a doubled kit, so the shape stays the gentler of the two on
+/// purpose rather than inheriting the routine curve's.
+pub const TOOL_SLOT_PER_LEVEL: u32 = 8;
+
+/// Most tools the player can hold installed at once. Modest next to
+/// `PLAYER_ROUTINE_SLOT_CAP` (12): every tool slot is a standing choice
+/// about what a downed program gets reduced to, and a kit wide enough to
+/// carry one of every category stops being a choice at all.
+pub const TOOL_SLOT_CAP: u32 = 4;

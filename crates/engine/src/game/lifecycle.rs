@@ -6,10 +6,11 @@
 //! economy-role check.
 
 use crate::abilities::AbilityId;
-use crate::components::Needs;
+use crate::components::{Needs, Tools};
 use crate::game::spawning;
 use crate::game::zone::find_walkable_start;
-use crate::tuning::{NEST_DURABILITY, STACK_LINKS_PER_ZONE};
+use crate::tools::ToolId;
+use crate::tuning::{NEST_DURABILITY, STACK_LINKS_PER_ZONE, STARTER_TOOL_ID};
 use crate::*;
 
 /// Splits a persisted routine list into what `db` still recognizes and what
@@ -108,6 +109,14 @@ struct ProfileRewardsPaid;
 /// one field at a time: the glyph, the `Inventory` and the free routine
 /// slot all spawn empty or hardcoded-neutral here and are only ever
 /// overwritten, never read, before that call runs.
+///
+/// `Routines`' `DECOMPILE_ABILITY_ID` and `Tools`' `STARTER_TOOL_ID` are the
+/// two exceptions: both are permanent grants that outlive
+/// `apply_character_choice` untouched, so both are written here rather than
+/// there — `tuning::STARTER_TOOL_ID`'s own doc comment states the same
+/// creation-only rule `DECOMPILE_ABILITY_ID` already follows. This function
+/// is the whole of `Game::new`'s side of it: `spawn_player` has exactly one
+/// caller, `new_with`, so nothing here runs on a `Game::load`.
 fn spawn_player(world: &mut World, start: (i32, i32)) -> Entity {
     world
         .spawn((
@@ -138,6 +147,7 @@ fn spawn_player(world: &mut World, start: (i32, i32)) -> Entity {
                 Routines(vec![abilities::DECOMPILE_ABILITY_ID.to_string()]),
                 PlayerIdentity::default(),
                 DownedPrograms::default(),
+                Tools(vec![ToolId(STARTER_TOOL_ID.to_string())]),
             ),
         ))
         .id()
@@ -712,6 +722,11 @@ impl Game {
                         icon: data.player.icon.as_deref().and_then(PlayerIcon::decode),
                     },
                     DownedPrograms(data.player.downed_programs),
+                    // Never `STARTER_TOOL_ID` here — the profile rule.
+                    // `spawn_player` is `new_with`'s only caller and is
+                    // where that grant lives; a load restores exactly what
+                    // the save carried, empty for a save predating tools.
+                    Tools(data.player.tools),
                 ),
             ))
             .id();
@@ -1371,6 +1386,11 @@ impl Game {
             .get::<DownedPrograms>(player)
             .map(|d| d.0.clone())
             .unwrap_or_default();
+        let tools = self
+            .world
+            .get::<Tools>(player)
+            .map(|t| t.0.clone())
+            .unwrap_or_default();
         let perks = self.world.get::<Perks>(player).cloned().unwrap_or_default();
         let bought_stats = self
             .world
@@ -1813,6 +1833,7 @@ impl Game {
                 fused_gear: Vec::new(),
                 gear_copies,
                 downed_programs,
+                tools,
                 perk_points: perks.points,
                 unlocked_perks: perks.unlocked,
                 bought_stats,

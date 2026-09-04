@@ -11,6 +11,7 @@ use crate::needs::{NEED_MAX, NEED_MIN, NeedId};
 use crate::perks::Perk;
 use crate::species::SpeciesId;
 use crate::structures::StructureId;
+use crate::tools::ToolId;
 use crate::tuning::{
     GOLD_STAT_MULT, MAX_INDIVIDUAL_ROLL, MIN_INDIVIDUAL_ROLL, PLATINUM_STAT_MULT,
     PRISMATIC_STAT_MULT, SILVER_STAT_MULT,
@@ -557,6 +558,17 @@ impl GearCopies {
 /// worst held program, so nothing here truncates on its own.
 #[derive(Component, Default, Clone)]
 pub struct DownedPrograms(pub Vec<DownedProgram>);
+
+/// Player-only: tool ids installed in the player's tool slots, in slot
+/// order — position is what a later phase's extraction screen selects by,
+/// `Routines`' own reason for keeping its list ordered rather than keyed.
+///
+/// Bounded by `tools::player_tool_slots(level)`, but nothing here enforces
+/// that cap yet: the only writer this phase has is the starter grant at
+/// `Game::new`, which fills exactly the base slot. `install_tool` (a later
+/// phase) is what has to respect the bound on every other write.
+#[derive(Component, Default, Clone)]
+pub struct Tools(pub Vec<ToolId>);
 
 impl Inventory {
     pub fn add(&mut self, item: ItemId, qty: u32) {

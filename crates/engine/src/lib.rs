@@ -74,7 +74,7 @@ use components::{
     POWER_MAX, Perks, Player, PlayerIdentity, Position, Potential, PowerReserve, ProgramId,
     PurchasedTiers, Pursuing, Rarity, Refactors, ResourceNode, Routines, StackSpawn, StandingJob,
     Stats, StatusEffects, StatusKind, Stock, Stranded, Structure, StructureTier, SurfaceLink,
-    Talents, Tamed, Task, TaskKind, Temporary, WanderAi, ZonePortal,
+    Talents, Tamed, Task, TaskKind, Temporary, Tools, WanderAi, ZonePortal,
 };
 pub use game::base::work_orders::{OrderPriority, WorkOrder};
 pub use game::caravan::CaravanReach;

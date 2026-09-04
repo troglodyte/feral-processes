@@ -33,37 +33,6 @@ const CREATURE_ON_TILE: u8 = 2;
 const CARAVAN_ON_TILE: u8 = 3;
 
 impl Game {
-    /// Which sector the party is standing in, or `None` for a neutral one.
-    ///
-    /// Both inputs come off live state the save already carries, which is
-    /// why a sector needs no field of its own — see `sectors::for_zone`,
-    /// which is the only place the choice is made.
-    pub fn sector(&self) -> Option<&crate::sectors::SectorDef> {
-        crate::sectors::for_zone(
-            self.world.resource::<WorldMap>().seed(),
-            self.world.resource::<ZoneLevel>().0,
-            self.world.resource::<crate::sectors::SectorDb>(),
-        )
-    }
-
-    /// This sector's ground and hazard hues, in degrees, falling back to the
-    /// neutral pair.
-    ///
-    /// Two floats and no `Color`: what a hue *looks like* is
-    /// `crates/gui/src/render/base.rs`'s business, and the engine shipping a
-    /// palette would put the colour table on the wrong side of the drawing
-    /// seam. The renderer reads these as the anchors its two bands rotate
-    /// about, not as finished colours.
-    pub fn sector_hues(&self) -> (f32, f32) {
-        self.sector().map_or(
-            (
-                crate::sectors::NEUTRAL_GROUND_HUE,
-                crate::sectors::NEUTRAL_HAZARD_HUE,
-            ),
-            |def| (def.palette.ground_hue, def.palette.hazard_hue),
-        )
-    }
-
     /// The tile grid the map renders — the zone surface, or base space when
     /// the party is out of phase, both through the one renderer.
     ///

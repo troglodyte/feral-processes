@@ -8,7 +8,7 @@
     base_mitigation: 3,
     taming_difficulty: 0.75,
     growth_multiplier: 1.5,
-    habitats: [Mainframe, NullSector],
+    habitats: [Backplane, NullSector],
     base_speed: 9,
     base_int: 13,
     moves: [

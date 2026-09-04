@@ -200,7 +200,7 @@ fn biome_ord(biome: Biome) -> u64 {
         Biome::DataVoid => 0,
         Biome::Deadlock => 1,
         Biome::NullSector => 2,
-        Biome::Mainframe => 3,
+        Biome::Backplane => 3,
         Biome::OpenGrid => 4,
         Biome::BlackIce => 5,
         Biome::Platform => 6,

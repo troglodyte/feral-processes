@@ -3,7 +3,7 @@
 
 use crate::tuning::{
     NEST_CACHE_CREDIT_ZONE_BONUS, NEST_CACHE_CREDITS, NEST_CACHE_EQUIPMENT_ROLLS,
-    NEST_CACHE_WORK_RESOURCE_MULT, NEST_ORPHAN_CHANCE, STACK_LINKS_PER_ZONE, WORK_RESOURCE_DROP,
+    NEST_CACHE_WORK_RESOURCE_MULT, NEST_ORPHAN_CHANCE, WORK_RESOURCE_DROP,
 };
 use crate::*;
 
@@ -327,186 +327,53 @@ impl Game {
     /// Spendable currency doesn't make the trip either — see the wipe at the
     /// end of this function. Gear, supplies, fusion tiers and banked Research
     /// Data all do.
+    /// Raises the world's tier.
+    ///
+    /// A breach used to be a migration: every hostile, nest and Stack
+    /// entrance despawned, a fresh `WorldMap` carved from a fresh seed,
+    /// the party and the base anchor teleported onto it, and a zone's
+    /// worth of economy — the buyback shelves, the caravan, the spendable
+    /// currencies — destroyed on the way through. Nothing of the sector
+    /// you left survived, which is why nothing in it was ever worth
+    /// knowing.
+    ///
+    /// The world is persistent now. There is one map for the run, minted
+    /// at `Game::new`, and a breach raises the tier that everything
+    /// spawned into it is scaled against. The party does not move; the
+    /// ground under them does not change; what changes is what walks on
+    /// it. That is the infrastructure settlements need — a place can only
+    /// be worth returning to if it is still there.
+    ///
+    /// Two lines below look like the wipe code that was deleted around
+    /// them and are the opposite — they are the mechanism:
+    ///
+    /// - Clearing `PopulatedChunks` is what makes the world visibly harden.
+    ///   It marks which chunks have been stocked, so emptying it sends
+    ///   `Game::ensure_local_population` back over ground it has already
+    ///   covered to re-stock it at the new tier.
+    /// - Clearing `StackMemory` is what makes an entrance re-tier. A
+    ///   surviving link keys a `FrameSpec` that now folds in the tier, so
+    ///   the frame behind it is re-carved and the memory of the old one —
+    ///   which cells were seen, which caches were emptied, which lair was
+    ///   cleared — describes a frame that no longer exists.
     pub(crate) fn enter_next_zone(&mut self) {
         self.notify(crate::notifications::NotificationKind::Breach);
-        // The base is out of phase, not on the zone surface, so a breach
-        // does not touch it — no despawn, no reposition, nothing. What
-        // still has to be swept is what actually is zone-local: a
-        // `SurfaceLink` opens onto a frame generated for the sector it
-        // stands in, and left alive it would ride the breach into a sector
-        // it was never generated for.
-        let stale: Vec<Entity> = {
-            let mut query = self
-                .world
-                .query_filtered::<Entity, Or<(With<Hostile>, With<Nest>, With<SurfaceLink>)>>();
-            query.iter(&self.world).collect()
-        };
-        for e in stale {
-            self.world.despawn(e);
-        }
 
         let new_level = {
             let mut zone = self.world.resource_mut::<ZoneLevel>();
             zone.0 += 1;
             zone.0
         };
-        let new_seed = self
-            .world
-            .resource::<WorldMap>()
-            .seed()
-            .wrapping_add(0x9E37_79B9);
-        let mut new_map = crate::sectors::map_for_zone(
-            new_seed,
-            new_level,
-            self.world.resource::<crate::sectors::SectorDb>(),
-        );
-        let start = find_walkable_start(&mut new_map);
-        self.world.insert_resource(new_map);
-        self.world.insert_resource(ZoneSpawnPoint {
-            x: start.0,
-            y: start.1,
-        });
 
-        let travelers: Vec<Entity> = {
-            let mut query = self
-                .world
-                .query_filtered::<Entity, Or<(With<Player>, With<Tamed>)>>();
-            query.iter(&self.world).collect()
-        };
-        for e in travelers {
-            if let Some(mut pos) = self.world.get_mut::<Position>(e) {
-                pos.x = start.0;
-                pos.y = start.1;
-            }
-        }
-
-        // The anchor is not zone-local the way a `SurfaceLink` is — it is
-        // not in the stale sweep above and so survives the breach at its
-        // old coordinates — but a door back to a base that travels with the
-        // party has to travel with it too. Moved rather than despawned and
-        // respawned, so `resources::AnchorEntity` still names the same
-        // entity on both sides of a breach. `move_anchor_to` is shared with
-        // the founding deploy, which is the other thing that decides where
-        // the door stands.
-        self.move_anchor_to(start.0, start.1);
-
-        // Build salvage and breach keys are zone-local: the next breach has
-        // to be funded in the zone you leave from, so a stockpile can't chain
-        // breaches past content it never engaged with. Keyed on economy role,
-        // so a mod's own items reset without an engine change.
-        //
-        // Research Data is banked progress rather than spending money and
-        // survives. So do Credits, by omission and on purpose — converting a
-        // doomed stockpile into money before you breach is what a trader is
-        // *for*.
-        //
-        // Credits used to be able to buy a Portal Fragment on the far side,
-        // so a stockpile could in principle fund a breach out of a zone it
-        // never worked. That was priced rather than forbidden, because the
-        // Market's fragment listing was then the only route from base
-        // production to progression. It has since been pulled — breaching is
-        // earned by fighting — so the hole is closed at the source and
-        // Credits surviving a breach no longer buys a way past content.
-        // Every trader's shelf goes with it, for the same reason: a shelf
-        // holding a zone's worth of salvage is precisely the stockpile that
-        // wipe exists to strand. Cleared explicitly rather than left to rot
-        // — a trader is base-space and permanent, so without this its
-        // ledger would otherwise just keep accumulating sale history across
-        // every zone the run ever passes through, rather than resetting
-        // with the rest of that zone's economy.
-        self.world.insert_resource(BuybackLedger::default());
-
-        // And the caravan, both halves of it, **by name** — nothing else
-        // sweeps it. A caravan is neither a `Structure` nor a `Creature`, so
-        // the wild cull walks straight past one, and its journey is defined
-        // against the anchor tile of the sector it walked into: left
-        // standing, it would be halfway to a counter in a sector it never
-        // entered, on coordinates that mean nothing here. Its shelf's sale
-        // history goes with it for the reason the buyback ledger above does.
-        let travellers: Vec<Entity> = {
-            let mut query = self.world.query_filtered::<Entity, With<Caravan>>();
-            query.iter(&self.world).collect()
-        };
-        for traveller in travellers {
-            self.world.despawn(traveller);
-        }
-        self.world
-            .insert_resource(crate::resources::CaravanMemory::default());
-
-        // Same reason, and the same trap: a zone's links are gone, but their
-        // maps are keyed by tile and would otherwise draw the last sector's
-        // walked corridors onto a fresh link that happens to land on a
-        // matching coordinate.
         self.world.insert_resource(StackMemory::default());
-
-        // And the same reason a third time, with a sharper edge: a mark left
-        // behind tells the new sector that ground it has never stocked is
-        // already full, so every chunk the old zone had populated would be
-        // born empty here and stay that way.
         self.world
             .insert_resource(crate::resources::PopulatedChunks::default());
-
-        let spendable = [self.currency(), self.craft_currency()];
-        let player = self.player_entity();
-        let lost: Vec<(ItemId, u32)> = {
-            let mut inventory = self.world.get_mut::<Inventory>(player).unwrap();
-            spendable
-                .into_iter()
-                .filter_map(|item| {
-                    let qty = inventory.take(item.clone(), u32::MAX);
-                    (qty > 0).then_some((item, qty))
-                })
-                .collect()
-        };
-
-        // The only sink in the game that destroys rather than spends, and
-        // the ledger cannot see it any other way: a run's Core Fragments
-        // otherwise read as produced and never accounted for.
-        for (item, qty) in &lost {
-            let id = item.0.clone();
-            let qty = *qty;
-            self.report_base(
-                crate::base_ledger::Event::Consume {
-                    item: item.clone(),
-                    qty,
-                },
-                move |tick, zone, _| crate::telemetry::Record::Consume {
-                    tick,
-                    zone,
-                    item: id,
-                    qty,
-                    source: crate::base_ledger::ConsumeSource::Breach
-                        .as_str()
-                        .to_string(),
-                },
-            );
-        }
 
         self.log(format!(
             "You breach the portal and materialize in a level {new_level} sector. Hostile signal strength has spiked."
         ));
-        // A second line rather than a longer first one: a neutral sector has
-        // nothing to say and must read exactly as it did before sectors
-        // existed. Read before logging because `Game::log` wants `&mut self`
-        // while `sector` is borrowing it.
-        if let Some((name, description)) = self
-            .sector()
-            .map(|def| (def.name.clone(), def.description.clone()))
-        {
-            self.log(format!("{name}. {description}"));
-        }
-        if !lost.is_empty() {
-            let manifest = lost
-                .iter()
-                .map(|(item, qty)| format!("{qty} {}", self.item_name(item)))
-                .collect::<Vec<_>>()
-                .join(" and ");
-            self.log(format!(
-                "Your caches decohere in transit — {manifest} lost to the breach."
-            ));
-        }
+
         self.ensure_local_population();
-        self.spawn_surface_links(STACK_LINKS_PER_ZONE);
     }
 
     /// Breaches forward until the party is standing in `zone`, for the

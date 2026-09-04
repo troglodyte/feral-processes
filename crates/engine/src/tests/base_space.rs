@@ -3473,9 +3473,11 @@ fn an_unroutable_mark_does_not_starve_a_reachable_one() {
 /// every breach, and a wall left half-cut would come back a different kind
 /// under its already-saved `Durability`.
 ///
-/// Asserts both halves in one function on purpose: that the world seed
-/// *moved* is what makes the second assertion mean anything. Without it the
-/// test passes against a game in which neither seed ever changes.
+/// Neither seed moves any more — the world is persistent, so the world seed
+/// is minted once at `Game::new` and the base's own seed never tracked it.
+/// The tier is what a breach moves, and asserting it moved is what keeps
+/// the seam assertions below from passing against a breach that never
+/// happened.
 #[test]
 fn base_spaces_seed_and_its_seams_survive_a_breach() {
     let mut game = game(4471);
@@ -3496,10 +3498,12 @@ fn base_spaces_seed_and_its_seams_survive_a_breach() {
 
     let after_world = game.world.resource::<crate::world::WorldMap>().seed();
     let after_base = game.world.resource::<crate::base_grid::BaseGrid>().seed();
-    assert_ne!(
-        before_world, after_world,
-        "the fixture must actually breach, or the seam assertion below is vacuous"
+    assert_eq!(
+        game.player_status().zone,
+        2,
+        "the fixture must actually breach, or the seam assertions below are vacuous"
     );
+    assert_eq!(before_world, after_world, "a breach reseeded the world map");
     assert_eq!(
         before_base, after_base,
         "base space's seed tracked the world seed across a breach — every seam \

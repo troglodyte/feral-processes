@@ -1684,11 +1684,11 @@ fn bouncing_off_an_unwalkable_tile_names_no_biome() {
 fn the_ground_is_named_at_zone_one() {
     let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     assert_eq!(game.world.resource::<ZoneLevel>().0, 1);
-    ground_step(&mut game, Biome::OpenGrid, Biome::Mainframe, true);
+    ground_step(&mut game, Biome::OpenGrid, Biome::Backplane, true);
 
     game.move_player(1, 0);
 
-    assert_eq!(log_names(&game, Biome::Mainframe), 1);
+    assert_eq!(log_names(&game, Biome::Backplane), 1);
 }
 
 // ---------------------------------------------------------------------

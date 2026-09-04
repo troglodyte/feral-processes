@@ -30,7 +30,13 @@ pub enum Biome {
     #[serde(alias = "StaticField")]
     Deadlock,
     NullSector,
-    Mainframe,
+    /// Renamed from `Mainframe`, which the settlements work needs back as
+    /// the word for a city. Same alias trick as `Deadlock` above, for the
+    /// same reason and at the same price: no `SAVE_FORMAT_VERSION` bump,
+    /// and every save and species mod written before the rename keeps
+    /// loading.
+    #[serde(alias = "Mainframe")]
+    Backplane,
     OpenGrid,
     BlackIce,
     /// Laid base floor — `base_grid::BaseCell::Floor`. **Never produced by
@@ -77,7 +83,7 @@ impl Biome {
             Biome::DataVoid => "Data Void",
             Biome::Deadlock => "Deadlock",
             Biome::NullSector => "Null Sector",
-            Biome::Mainframe => "Mainframe",
+            Biome::Backplane => "Backplane",
             Biome::OpenGrid => "Open Grid",
             Biome::BlackIce => "Black Ice",
             Biome::Platform => "Platform",
@@ -152,42 +158,25 @@ struct Chunk {
 /// trait turns: a sector shifts where the biome boundaries fall, and its
 /// look, its roster and where it can be built all fall out of that one
 /// change — `Game::habitat_pools` filters species by the tile's biome and
-/// `Biome::walkable` gates every placement in the game. A second knob
-/// pointing at the same outcome could disagree with this one.
+/// Where one biome gives way to the next.
 ///
-/// `NEUTRAL` is what the thresholds were before they were a value, and zone
-/// 1 is always neutral. See `sectors::SectorDef` for how a sector states its
-/// deltas, and `assets/sectors/README.md` for the authoring schema.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct SectorShape {
-    /// Elevation below which terrain is a hole: `e < this`.
-    pub void_elevation: f64,
-    /// Elevation above which terrain is impassable ice: `e > this`.
-    pub black_ice_elevation: f64,
-    /// Temperature below which ground is Deadlock: `t < this`.
-    pub deadlock_temperature: f64,
-    /// Temperature above which dry ground is Null Sector, paired with
-    /// `null_moisture`: `t > this && m < null_moisture`.
-    pub null_temperature: f64,
-    /// The dryness half of the Null Sector pair.
-    pub null_moisture: f64,
-    /// Moisture above which ground is Mainframe: `m > this`.
-    pub mainframe_moisture: f64,
-}
-
-impl SectorShape {
-    /// The thresholds as they were hardcoded in `classify`. Zone 1 uses
-    /// these verbatim, and an install with no `assets/sectors/` uses them
-    /// everywhere — which is what makes the whole feature deletable.
-    pub const NEUTRAL: SectorShape = SectorShape {
-        void_elevation: -0.3,
-        black_ice_elevation: 0.55,
-        deadlock_temperature: -0.3,
-        null_temperature: 0.3,
-        null_moisture: -0.1,
-        mainframe_moisture: 0.15,
-    };
-}
+/// These were a `SectorShape` value for as long as a breach rebuilt the
+/// map: `assets/sectors/` shipped per-zone deltas over them, so the
+/// ground you arrived on read differently from the ground you left. The
+/// world is persistent now — there is one map for the run, and a breach
+/// raises a tier rather than carving new terrain — so a per-zone shape
+/// has nothing left to vary. Back to constants, which is what they were
+/// before sectors existed.
+///
+/// Geographic variety comes back as content standing *on* the map rather
+/// than as a reshuffle of the noise under it; that is what settlements
+/// are for.
+const VOID_ELEVATION: f64 = -0.3;
+const BLACK_ICE_ELEVATION: f64 = 0.55;
+const DEADLOCK_TEMPERATURE: f64 = -0.3;
+const NULL_TEMPERATURE: f64 = 0.3;
+const NULL_MOISTURE: f64 = -0.1;
+const BACKPLANE_MOISTURE: f64 = 0.15;
 
 /// Two-tier world map: a coarse noise field classified into biomes, sampled
 /// lazily per chunk, plus a sparse overlay of player-caused tile changes.
@@ -196,7 +185,6 @@ impl SectorShape {
 #[derive(Resource)]
 pub struct WorldMap {
     seed: u32,
-    shape: SectorShape,
     elevation: Perlin,
     moisture: Perlin,
     temperature: Perlin,
@@ -205,16 +193,9 @@ pub struct WorldMap {
 }
 
 impl WorldMap {
-    /// A map generated with today's thresholds. Kept for the call sites that
-    /// have no sector to hand — almost all of them tests.
     pub fn new(seed: u32) -> Self {
-        Self::with_shape(seed, SectorShape::NEUTRAL)
-    }
-
-    pub fn with_shape(seed: u32, shape: SectorShape) -> Self {
         Self {
             seed,
-            shape,
             elevation: Perlin::new(seed),
             moisture: Perlin::new(seed.wrapping_add(1)),
             temperature: Perlin::new(seed.wrapping_add(2)),
@@ -225,10 +206,6 @@ impl WorldMap {
 
     pub fn seed(&self) -> u32 {
         self.seed
-    }
-
-    pub fn shape(&self) -> SectorShape {
-        self.shape
     }
 
     pub fn overrides(&self) -> &HashMap<(i32, i32), Tile> {
@@ -247,17 +224,16 @@ impl WorldMap {
             + (1.0 - lat_falloff))
             .clamp(-1.0, 1.0);
 
-        let shape = self.shape;
-        let biome = if e < shape.void_elevation {
+        let biome = if e < VOID_ELEVATION {
             Biome::DataVoid
-        } else if e > shape.black_ice_elevation {
+        } else if e > BLACK_ICE_ELEVATION {
             Biome::BlackIce
-        } else if t < shape.deadlock_temperature {
+        } else if t < DEADLOCK_TEMPERATURE {
             Biome::Deadlock
-        } else if t > shape.null_temperature && m < shape.null_moisture {
+        } else if t > NULL_TEMPERATURE && m < NULL_MOISTURE {
             Biome::NullSector
-        } else if m > shape.mainframe_moisture {
-            Biome::Mainframe
+        } else if m > BACKPLANE_MOISTURE {
+            Biome::Backplane
         } else {
             Biome::OpenGrid
         };
@@ -349,7 +325,7 @@ nnooovvvmmmmmmmmooonnnnnnnnnnnvvooooooonnnnnnnnn
                     Biome::BlackIce => 'i',
                     Biome::Deadlock => 's',
                     Biome::NullSector => 'n',
-                    Biome::Mainframe => 'm',
+                    Biome::Backplane => 'm',
                     Biome::OpenGrid => 'o',
                     Biome::Platform => 'p',
                     // Base-space rendering vocabulary only — `classify`
@@ -365,49 +341,40 @@ nnooovvvmmmmmmmmooonnnnnnnnnnnvvooooooonnnnnnnnn
         out
     }
 
-    /// The gate on making thresholds a value: the neutral shape must be
-    /// today's generation, tile for tile. Everything else in the sector
-    /// feature is built on top of this being true, because zone 1 is always
-    /// neutral and the opening ring's roster is decided by its biome mix.
+    /// The gate on retiring sectors: `classify`'s constants must generate
+    /// what the neutral `SectorShape` generated, tile for tile, against
+    /// terrain captured before the thresholds were ever a value. Zone 1 was
+    /// always neutral and the opening ring's roster is decided by its biome
+    /// mix, so this is also the assurance that a new run opens on exactly
+    /// the ground it used to.
     #[test]
-    fn the_neutral_shape_generates_exactly_what_the_hardcoded_thresholds_did() {
-        let mut map = WorldMap::with_shape(4242, SectorShape::NEUTRAL);
+    fn the_constants_generate_exactly_what_the_neutral_shape_did() {
+        let mut map = WorldMap::new(4242);
         assert_eq!(render(&mut map), NEUTRAL_TERRAIN_4242);
     }
 
-    /// `WorldMap::new` is `with_shape` at neutral, so the 13 call sites that
-    /// do not care about sectors keep working unchanged.
+    /// The rename is free exactly as long as the alias carries it: a save
+    /// or a species mod written before `Mainframe` became `Backplane` must
+    /// still load, which is why `SAVE_FORMAT_VERSION` did not move for it.
+    ///
+    /// `Deadlock` is asserted alongside because it is the same trick one
+    /// rename earlier, and a test naming only the new one would not notice
+    /// the older alias being dropped.
     #[test]
-    fn new_is_the_neutral_shape() {
-        let mut plain = WorldMap::new(4242);
-        let mut neutral = WorldMap::with_shape(4242, SectorShape::NEUTRAL);
-        assert_eq!(render(&mut plain), render(&mut neutral));
-        assert_eq!(plain.shape(), SectorShape::NEUTRAL);
-    }
-
-    /// The one that proves the knob is connected rather than merely stored.
-    /// Deadlock is the biome a cold sector is made of, and it is
-    /// vanishingly rare near the origin — `classify`'s latitude falloff puts
-    /// `t` near 1.0 there, so the neutral floor of -0.3 is never met. Raising
-    /// that floor is what a cold sector does.
-    #[test]
-    fn raising_the_deadlock_floor_yields_more_deadlock() {
-        let count = |shape| {
-            let mut map = WorldMap::with_shape(4242, shape);
-            (0..24)
-                .flat_map(|y| (0..48).map(move |x| (x, y)))
-                .filter(|&(x, y)| map.tile(x, y).biome == Biome::Deadlock)
-                .count()
-        };
-        let neutral = count(SectorShape::NEUTRAL);
-        let cold = count(SectorShape {
-            deadlock_temperature: 0.9,
-            ..SectorShape::NEUTRAL
-        });
-        assert!(
-            cold > neutral,
-            "a raised Deadlock floor produced {cold} tiles against neutral's {neutral} — \
-             the shape is not reaching `classify`"
+    fn a_biome_written_under_its_old_name_still_loads() {
+        assert_eq!(
+            ron::from_str::<Biome>("Mainframe").unwrap(),
+            Biome::Backplane
+        );
+        assert_eq!(
+            ron::from_str::<Biome>("StaticField").unwrap(),
+            Biome::Deadlock
+        );
+        // And the current spelling round-trips, or the alias would be the
+        // only way to name it.
+        assert_eq!(
+            ron::from_str::<Biome>(&ron::to_string(&Biome::Backplane).unwrap()).unwrap(),
+            Biome::Backplane
         );
     }
 

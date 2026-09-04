@@ -176,15 +176,12 @@ impl Game {
             perks: perk_db,
             talents: talent_db,
             affixes: affix_db,
-            sectors: sector_db,
             policy: enemy_policy,
             warnings: load_warnings,
         } = load_asset_dbs(assets_dir)?;
 
         // Zone 1 is always neutral, but this still routes through the one
-        // door rather than assuming so — `for_zone` owns that rule, and a
-        // second copy of it here is where the two would drift.
-        let mut world_map = crate::sectors::map_for_zone(seed, ZoneLevel::default().0, &sector_db);
+        let mut world_map = WorldMap::new(seed);
         let start = find_walkable_start(&mut world_map);
 
         let mut world = World::new();
@@ -197,7 +194,6 @@ impl Game {
         world.insert_resource(perk_db);
         world.insert_resource(talent_db);
         world.insert_resource(affix_db);
-        world.insert_resource(sector_db);
         world.insert_resource(enemy_policy);
         world.insert_resource(description_db);
         world.insert_resource(memory_db);
@@ -424,7 +420,6 @@ impl Game {
             perks: perk_db,
             talents: talent_db,
             affixes: affix_db,
-            sectors: sector_db,
             policy: enemy_policy,
             warnings: load_warnings,
         } = load_asset_dbs(assets_dir)?;
@@ -433,7 +428,7 @@ impl Game {
         // needs no field of its own. Rebuilding at a different shape would
         // regenerate every unwalked chunk differently and could strand the
         // party inside rock.
-        let mut world_map = crate::sectors::map_for_zone(data.seed, data.zone, &sector_db);
+        let mut world_map = WorldMap::new(data.seed);
         let overrides: HashMap<(i32, i32), Tile> = data.tile_overrides.into_iter().collect();
         world_map.restore_overrides(overrides);
 
@@ -461,7 +456,6 @@ impl Game {
         world.insert_resource(perk_db);
         world.insert_resource(talent_db);
         world.insert_resource(affix_db);
-        world.insert_resource(sector_db);
         world.insert_resource(enemy_policy);
         world.insert_resource(description_db);
         world.insert_resource(memory_db);
@@ -2102,7 +2096,6 @@ struct AssetDbs {
     perks: PerkDb,
     talents: crate::talents::TalentDb,
     affixes: AffixDb,
-    sectors: crate::sectors::SectorDb,
     policy: crate::resources::EnemyPolicy,
     warnings: Vec<String>,
 }
@@ -2159,12 +2152,6 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // pre-affix game — see `AffixDb`.
     let (affixes, affix_warnings) = AffixDb::load_dir(&assets_dir.join("affixes"))?;
     warnings.extend(affix_warnings);
-    // Same story, and the same absent-is-silent rule — see `SectorDb`. A
-    // sector that would strand a run is skipped here with a warning rather
-    // than reaching `enter_next_zone`, which has no way to refuse.
-    let (sectors, sector_warnings) =
-        crate::sectors::SectorDb::load_dir(&assets_dir.join("sectors"))?;
-    warnings.extend(sector_warnings);
     // A file, not a directory, and an absent one is silent — see
     // `policy::load_file`. Nothing downstream branches on whether it loaded;
     // `Game::choose_wild_action` reads the resource and falls back.
@@ -2256,7 +2243,6 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         items,
         perks,
         affixes,
-        sectors,
         policy: crate::resources::EnemyPolicy(policy),
         warnings,
     })

@@ -2633,25 +2633,31 @@ fn a_bearing_only_goes_diagonal_when_neither_axis_dominates() {
     assert_eq!(bearing(0, 0), "here");
 }
 
-/// Breaching does not touch a `Structure` at all — the base is out of
-/// phase, not on the zone surface — but anything that actually is
-/// zone-local still has to be wiped or swept in `enter_next_zone`.
-/// Entrances are zone-local: each opens onto a frame generated for its own
-/// sector.
+/// An entrance is a place, and places survive a breach now. The tile stays
+/// put; what changes is the frame behind it, because `FrameSpec::tier`
+/// moved — which is also why `StackMemory` is cleared, since every record
+/// in it describes a frame that no longer exists.
 #[test]
-fn a_breach_leaves_the_previous_sectors_entrances_behind() {
+fn a_breach_leaves_every_entrance_standing_and_re_tiers_it() {
     let mut game = game();
     let before = entrance_tiles(&mut game);
+    assert!(!before.is_empty(), "test premise: the run opens with links");
+
     breach_through_a_portal(&mut game);
     assert_eq!(game.player_status().zone, 2);
 
-    let after = entrance_tiles(&mut game);
     assert_eq!(
-        after.len(),
-        crate::tuning::STACK_LINKS_PER_ZONE,
-        "the new sector should hold its own links and no more — old ones rode the breach along"
+        entrance_tiles(&mut game),
+        before,
+        "a breach moved or replaced the zone's entrances"
     );
-    assert_ne!(before, after, "the new sector needs its own links");
+    assert!(
+        game.world
+            .resource::<crate::resources::StackMemory>()
+            .0
+            .is_empty(),
+        "a re-tiered entrance keeps memory of a frame that no longer exists"
+    );
 }
 
 /// A link on the arrival tile means starting the run standing on one; a

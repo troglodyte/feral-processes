@@ -146,7 +146,7 @@ impl GroundCondition {
     pub fn for_biome(biome: Biome) -> Option<GroundCondition> {
         match biome {
             Biome::NullSector => Some(GroundCondition::DanglingReads),
-            Biome::Mainframe => Some(GroundCondition::ThermalLoad),
+            Biome::Backplane => Some(GroundCondition::ThermalLoad),
             Biome::Deadlock => Some(GroundCondition::LockContention),
             _ => None,
         }
@@ -260,7 +260,7 @@ impl StaticEvent {
             StaticEvent::ThreadStorm => StaticDef {
                 name: "Thread Storm",
                 description: "Threads spawn faster than anything here can schedule them.",
-                biomes: &[Biome::Mainframe],
+                biomes: &[Biome::Backplane],
                 weight: THREAD_STORM_WEIGHT,
                 effect: EnvironmentEffect {
                     attrition_percent: 0.0,

@@ -7,7 +7,7 @@
     base_atk: 4,
     base_mitigation: 1,
     taming_difficulty: 0.15,
-    habitats: [OpenGrid, Mainframe],
+    habitats: [OpenGrid, Backplane],
     base_speed: 8,
     base_int: 7,
     moves: [

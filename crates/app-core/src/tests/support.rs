@@ -846,6 +846,7 @@ pub(crate) fn app_underground(seed: u32) -> App {
         entrance: data.player.position,
         depth: 1,
         frames: 2,
+        tier: 1,
     };
     let entry = generate(spec).entry;
     data.locale = Locale::Stack {
@@ -883,6 +884,7 @@ pub(crate) fn app_underground_with_no_rest_charge(seed: u32) -> App {
         entrance: data.player.position,
         depth: 1,
         frames: 2,
+        tier: 1,
     };
     let entry = generate(spec).entry;
     data.locale = Locale::Stack {

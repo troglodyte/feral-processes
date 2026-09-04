@@ -700,6 +700,7 @@ mod tests {
             entrance: data.player.position,
             depth: 1,
             frames: 2,
+            tier: 1,
         };
         data.locale = Locale::Stack {
             depth: spec.depth,

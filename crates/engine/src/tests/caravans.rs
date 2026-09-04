@@ -1519,26 +1519,34 @@ fn every_refusal_leaves_credits_and_cargo_exactly_as_they_were() {
     assert_eq!(holdings(&mut game), before);
 }
 
+/// The wagon used to be despawned at a breach because its journey was
+/// defined against the anchor tile of the sector it walked into, and that
+/// sector was about to stop existing. It does not stop existing now, so the
+/// trader keeps walking and remembers what it sold you.
 #[test]
-fn a_breach_takes_the_caravan_and_its_memory_with_it() {
+fn a_breach_leaves_the_caravan_and_its_memory_alone() {
     let mut game = fresh();
     based(&mut game);
     docked(&mut game);
     give_credits(&mut game, 1_000_000);
     let row = game.caravan_view().unwrap().offers[0].index;
     game.buy_caravan_offer(row).unwrap();
-    assert!(!game.world.resource::<CaravanMemory>().bought.is_empty());
+    let bought = game.world.resource::<CaravanMemory>().clone();
+    assert!(
+        !bought.bought.is_empty(),
+        "test premise: something was bought"
+    );
 
     game.enter_next_zone();
 
     assert_eq!(
         *game.world.resource::<CaravanMemory>(),
-        CaravanMemory::default(),
-        "a shelf's sale history is a fact about the last sector"
+        bought,
+        "a breach forgot a sale that really happened"
     );
     assert!(
-        caravan_of(&mut game).is_none(),
-        "and the trader does not come along"
+        caravan_of(&mut game).is_some(),
+        "a breach despawned a trader standing on ground that still exists"
     );
 }
 

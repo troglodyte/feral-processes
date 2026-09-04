@@ -8,7 +8,7 @@
     base_mitigation: 5,
     taming_difficulty: 0.8,
     growth_multiplier: 1.5,
-    habitats: [Mainframe, Deadlock],
+    habitats: [Backplane, Deadlock],
     base_speed: 13,
     base_int: 14,
     moves: [

@@ -439,14 +439,8 @@ pub(super) fn copy_shipped_assets(dir: &std::path::Path, omit_items: &[&str]) {
         // would quietly fight under the uniform baseline while the shipped
         // one fought under the weights — a difference no test would name.
         "policies",
-        // Same argument: without these every zone past the first would
-        // generate at the neutral shape, so a modded install would be a
-        // different world from the shipped one for a reason nothing said
-        // out loud. `assets_dir_with_sectors` is how a test asks for a
-        // *different* pool, including an empty one.
-        "sectors",
-        // And these, for the third time the same argument: an install with
-        // no affix pool rolls every drop plain, so anything about what gear
+        // Same argument again: an install with no affix pool rolls every
+        // drop plain, so anything about what gear
         // is worth would be measured against gear that cannot be affixed —
         // silently, since an empty pool is a supported state and not a
         // warning.
@@ -585,32 +579,6 @@ pub(super) fn assets_dir_with_talents(tag: &str, files: &[(&str, &str)]) -> Scra
     copy_shipped_assets(&dir, &[]);
     for (name, body) in files {
         std::fs::write(dir.join("talents").join(name), body).unwrap();
-    }
-    dir
-}
-
-/// Like `modded_assets_dir`, but for the one existing test that needs a
-/// modded *structure* — none of `modded_assets_dir`'s five callers-so-far
-/// have needed one, and widening its signature for a single caller isn't
-/// worth the churn across its other ~20 call sites. Cleanup is the
-/// `ScratchAssets` guard's, not the caller's.
-/// A scratch install whose `sectors/` directory holds exactly `files` and
-/// nothing else.
-///
-/// Two things need this, and they are opposite ends of the same question.
-/// `&[]` gives an install with **no** sectors, which is the pre-sector game
-/// and the only way to assert that absence is still supported. A single file
-/// gives an install where every zone past the first is *that* sector, which
-/// takes the derivation out of the picture when what is under test is the
-/// wiring — `tests::sectors` already covers which sector a zone gets.
-pub(super) fn assets_dir_with_sectors(tag: &str, files: &[(&str, &str)]) -> ScratchAssets {
-    let dir = scratch_assets_dir(tag);
-    copy_shipped_assets(&dir, &[]);
-    let sectors = dir.join("sectors");
-    std::fs::remove_dir_all(&sectors).unwrap();
-    std::fs::create_dir_all(&sectors).unwrap();
-    for (name, body) in files {
-        std::fs::write(sectors.join(name), body).unwrap();
     }
     dir
 }

@@ -58,7 +58,6 @@ mod refactor;
 mod research;
 mod respec;
 mod routines;
-mod sectors;
 mod sorties;
 mod spawning;
 mod sprite_palette;

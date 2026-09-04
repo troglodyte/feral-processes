@@ -1238,7 +1238,7 @@ mod tests {
     fn every_biome_fields_something_at_every_danger_step() {
         let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
         for biome in [
-            Biome::Mainframe,
+            Biome::Backplane,
             Biome::OpenGrid,
             Biome::NullSector,
             Biome::Deadlock,
@@ -1282,7 +1282,7 @@ mod tests {
     fn the_fallback_never_reaches_for_an_apex_species() {
         let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
         for biome in [
-            Biome::Mainframe,
+            Biome::Backplane,
             Biome::OpenGrid,
             Biome::NullSector,
             Biome::Deadlock,
@@ -1303,12 +1303,12 @@ mod tests {
         let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
         for step in 0..crate::tuning::APEX_ENTRY_STEP {
             assert!(
-                db.windowed_boss_matches(Biome::Mainframe, step).is_empty(),
+                db.windowed_boss_matches(Biome::Backplane, step).is_empty(),
                 "an apex species is eligible at step {step}, below APEX_ENTRY_STEP"
             );
         }
         assert!(
-            !db.windowed_boss_matches(Biome::Mainframe, crate::tuning::APEX_ENTRY_STEP)
+            !db.windowed_boss_matches(Biome::Backplane, crate::tuning::APEX_ENTRY_STEP)
                 .is_empty(),
             "no apex species is eligible at APEX_ENTRY_STEP, so bosses never arrive"
         );
@@ -1322,7 +1322,7 @@ mod tests {
         let (db, _) = SpeciesDb::load_dir(&species_assets_dir(), &shipped_abilities()).unwrap();
         for step in 0..=crate::tuning::MAX_GROUP_SIZE_STEPS {
             let ids: Vec<&String> = db
-                .windowed_matches(Biome::Mainframe, step)
+                .windowed_matches(Biome::Backplane, step)
                 .iter()
                 .map(|s| &s.id)
                 .collect();
@@ -1440,7 +1440,7 @@ mod tests {
 
         for biome in [
             Biome::OpenGrid,
-            Biome::Mainframe,
+            Biome::Backplane,
             Biome::NullSector,
             Biome::Deadlock,
         ] {
@@ -1670,7 +1670,7 @@ mod tests {
             Biome::DataVoid,
             Biome::Deadlock,
             Biome::NullSector,
-            Biome::Mainframe,
+            Biome::Backplane,
             Biome::OpenGrid,
             Biome::BlackIce,
         ] {

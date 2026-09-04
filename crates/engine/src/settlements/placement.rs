@@ -16,6 +16,8 @@
 //! dependency bump would silently move every town in every world), and
 //! **never `%`** — see `derive::index`.
 
+use serde::{Deserialize, Serialize};
+
 use crate::derive;
 use crate::tuning::{SETTLEMENT_REGION_CHUNKS, SETTLEMENT_REGION_PERCENT};
 use crate::world::CHUNK_SIZE;
@@ -28,7 +30,7 @@ use super::SettlementDb;
 /// `Entity` — `CreatureSave::sortie_index`'s reason, one level out: entity
 /// ids are not stable across a save, and a region's coordinates are the one
 /// name for this place that cannot drift.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct SettlementKey {
     pub rx: i32,
     pub ry: i32,
@@ -267,6 +269,108 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert_ne!(layout(4242), layout(99));
+    }
+
+    fn game(seed: u32) -> crate::Game {
+        crate::Game::new(
+            seed,
+            crate::DifficultyMode::Forgiving,
+            &crate::tests::support::test_assets_dir(),
+        )
+        .unwrap()
+    }
+
+    fn known(
+        game: &crate::Game,
+    ) -> &std::collections::BTreeMap<SettlementKey, crate::resources::KnownSettlement> {
+        &game.world.resource::<crate::resources::Settlements>().0
+    }
+
+    /// The feature produces something, which is the assertion a derivation
+    /// this indirect most needs: every part of it can be correct while
+    /// nothing ever reaches the map.
+    #[test]
+    fn a_new_run_materializes_the_settlements_around_it() {
+        let game = game(4242);
+        assert!(
+            !known(&game).is_empty(),
+            "no settlement materialized anywhere near the party"
+        );
+    }
+
+    /// A town on unwalkable ground is a town nobody can reach.
+    #[test]
+    fn every_materialized_settlement_stands_on_ground_you_can_walk_to() {
+        for seed in [4242u32, 40, 16, 945, 7] {
+            let mut game = game(seed);
+            let sites: Vec<(i32, i32)> = known(&game).values().map(|s| s.tile).collect();
+            for tile in sites {
+                assert!(
+                    game.world
+                        .resource_mut::<crate::world::WorldMap>()
+                        .tile(tile.0, tile.1)
+                        .walkable,
+                    "seed {seed}: a settlement stands on ground at {tile:?} nobody can reach"
+                );
+            }
+        }
+    }
+
+    /// Each settlement is drawn exactly once. The pass runs every tick, so
+    /// a missing "already known" check stacks a fresh entity on the tile
+    /// each time and reads as the glyph getting brighter.
+    #[test]
+    fn walking_does_not_materialize_a_settlement_twice() {
+        let mut game = game(4242);
+        let before = known(&game).len();
+        for _ in 0..40 {
+            game.tick();
+        }
+        assert_eq!(known(&game).len(), before, "the record grew on its own");
+
+        let mut query = game
+            .world
+            .query::<(&crate::components::Settlement, &crate::components::Position)>();
+        let drawn: Vec<_> = query
+            .iter(&game.world)
+            .map(|(s, p)| (s.key, p.x, p.y))
+            .collect();
+        let distinct: std::collections::BTreeSet<_> = drawn.iter().map(|(k, _, _)| *k).collect();
+        assert_eq!(
+            drawn.len(),
+            distinct.len(),
+            "a settlement is drawn more than once: {drawn:?}"
+        );
+        assert_eq!(distinct.len(), before, "a known settlement is not drawn");
+    }
+
+    /// A place the party has walked to has to still be there, at the same
+    /// tile, under the same name.
+    #[test]
+    fn a_settlement_survives_a_save_and_load() {
+        let dir = crate::tests::support::scratch_assets_dir("settlement_save");
+        std::fs::create_dir_all(&*dir).unwrap();
+        let path = dir.join("save.bin");
+
+        let mut game = game(4242);
+        let before = known(&game).clone();
+        assert!(!before.is_empty(), "test premise: something materialized");
+        game.save(&path).unwrap();
+
+        let mut loaded =
+            crate::Game::load(&path, &crate::tests::support::test_assets_dir()).unwrap();
+        assert_eq!(
+            known(&loaded),
+            &before,
+            "a settlement moved or was forgotten"
+        );
+
+        let mut query = loaded.world.query::<&crate::components::Settlement>();
+        assert_eq!(
+            query.iter(&loaded.world).count(),
+            before.len(),
+            "a loaded settlement has no entity to draw"
+        );
     }
 
     /// The catalogue is the whole of what a settlement is, so a shipped file

@@ -1546,6 +1546,40 @@ pub struct StackMemory(pub BTreeMap<FrameKey, FrameMemory>);
 #[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct PopulatedChunks(pub BTreeSet<(i32, i32)>);
 
+/// Every settlement the party has reached, keyed by its region.
+///
+/// **Keyed by `SettlementKey`, not by `Entity`** — `party_slot`'s reason,
+/// one level out: entity ids are not stable across a save, and a region's
+/// coordinates are the one name for this place that cannot drift.
+///
+/// **Stores the whole resolved `SettlementDef`**, following `ActiveContract`
+/// and `SortieSave`. A catalogue file edited or deleted mid-run must not
+/// strand or rewrite a town the party has already walked to and, from Phase
+/// 4, earned standing with — the derivation says which entry *would* stand
+/// in a region, and this says which one does.
+///
+/// A `BTreeMap` rather than a `HashMap` for the reason `Stock` keys by one:
+/// this is serialized, and a hash map would make the save encoding differ
+/// between runs holding identical state.
+#[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct Settlements(pub BTreeMap<crate::settlements::SettlementKey, KnownSettlement>);
+
+/// A settlement that has been materialized onto the map.
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct KnownSettlement {
+    /// The tile it actually stands on.
+    ///
+    /// Recorded rather than re-derived. `settlement_at` answers with a
+    /// *candidate* cell — the derivation cannot see the ground — and
+    /// materialization walks out from it for somewhere standable. That walk
+    /// is deterministic, since the map is permanent and itself a pure
+    /// function of the seed, but recording the answer means a later change
+    /// to how the walk breaks ties cannot move a town the party already
+    /// knows.
+    pub tile: (i32, i32),
+    pub def: crate::settlements::SettlementDef,
+}
+
 /// The frame the player is currently standing in, or `None` on the surface.
 ///
 /// Deliberately not serialized: it regenerates from `(WorldMap::seed,

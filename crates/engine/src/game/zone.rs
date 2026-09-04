@@ -359,6 +359,7 @@ impl Game {
         ));
 
         self.ensure_local_population();
+        self.ensure_local_settlements();
     }
 
     /// Breaches forward until the party is standing in `zone`, for the

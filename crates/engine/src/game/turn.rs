@@ -169,6 +169,7 @@ impl Game {
         // stocked yet would answer "empty" and spend a spawn filling in what
         // is about to arrive properly.
         self.ensure_local_population();
+        self.ensure_local_settlements();
         self.maybe_spawn_wild_creature();
         // Before the schedule, not after, so a body posted this tick makes
         // progress this tick rather than standing at its machine for one.

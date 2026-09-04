@@ -10,7 +10,8 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use serde::Deserialize;
+use bevy_ecs::prelude::Resource;
+use serde::{Deserialize, Serialize};
 
 use super::{SettlementKind, Specialty, Temperament};
 
@@ -21,7 +22,7 @@ use super::{SettlementKind, Specialty, Temperament};
 /// neutral settlement, it is one whose behaviour hooks have nothing to read
 /// — and a file that silently loads half-authored is worse than one that is
 /// skipped loudly.
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct SettlementDef {
     pub id: String,
     pub name: String,
@@ -33,7 +34,7 @@ pub struct SettlementDef {
 }
 
 /// Every settlement the install can place, in id order.
-#[derive(Default, Debug)]
+#[derive(Resource, Default, Debug)]
 pub struct SettlementDb {
     /// `BTreeMap` rather than `HashMap` because `placement` indexes into
     /// this pool by a derived number: a `HashMap`'s iteration order would

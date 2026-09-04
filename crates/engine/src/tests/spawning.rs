@@ -1727,6 +1727,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         locale: crate::resources::Locale::Surface,
         stack_memory: crate::resources::StackMemory::default(),
         populated_chunks: crate::resources::PopulatedChunks::default(),
+        settlements: Default::default(),
         trace: 0,
         contracts: Vec::new(),
         contracts_done: Vec::new(),

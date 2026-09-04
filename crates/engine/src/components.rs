@@ -2179,6 +2179,16 @@ pub struct SurfaceLink;
 #[derive(Component, Clone, Copy, Debug)]
 pub struct BaseAnchor;
 
+/// A settlement standing on the zone surface.
+///
+/// Carries only its key: everything about *who* it is lives in
+/// `resources::Settlements`, which is what survives a save. The entity is
+/// the drawable half and is rebuilt on load like any other map fixture.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Settlement {
+    pub key: crate::settlements::SettlementKey,
+}
+
 /// Tags a wild program that was conjured for a Stack encounter rather
 /// than found on the zone map.
 ///

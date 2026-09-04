@@ -3288,6 +3288,15 @@ pub const SETTLEMENT_REGION_CHUNKS: i32 = 8;
 /// mean anything.
 pub const SETTLEMENT_REGION_PERCENT: usize = 45;
 
+/// How far from its derived cell a settlement will look for ground it can
+/// stand on.
+///
+/// Bounded rather than unbounded: a region that is mostly Data Void should
+/// leave its settlement unplaced rather than shove it hundreds of tiles to
+/// the first standable tile anywhere, which would put it somewhere the
+/// derivation never chose and, at the extreme, outside its own region.
+pub const SETTLEMENT_SITE_SEARCH_TILES: i32 = 24;
+
 pub const ACCURACY_PER_SPEED: f64 = 1.0;
 /// See `ACCURACY_PER_SPEED`. Levelling buys accuracy; it never buys mitigation.
 pub const ACCURACY_PER_LEVEL: f64 = 0.5;

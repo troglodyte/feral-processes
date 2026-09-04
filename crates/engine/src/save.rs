@@ -1065,6 +1065,14 @@ pub struct SaveData {
     /// stocked once on load and the rest arrives as they travel.
     #[serde(default)]
     pub populated_chunks: crate::resources::PopulatedChunks,
+    /// Every settlement the party has reached, keyed by region.
+    ///
+    /// Additive behind `#[serde(default)]`, so a save written before
+    /// settlements existed loads with none known and materializes them as
+    /// the party walks — which is what it would have done anyway. No
+    /// `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub settlements: crate::resources::Settlements,
     /// How loud the party has been in the stack they are currently in — see
     /// `resources::Trace`. Zero whenever `locale` is `Surface`, since
     /// `Game::clear_stack` is the one place it resets.
@@ -1533,6 +1541,7 @@ mod tests {
             locale: crate::resources::Locale::Surface,
             stack_memory: crate::resources::StackMemory::default(),
             populated_chunks: crate::resources::PopulatedChunks::default(),
+            settlements: crate::resources::Settlements::default(),
             trace: 0,
             contracts: Vec::new(),
             contracts_done: Vec::new(),

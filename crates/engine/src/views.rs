@@ -2167,7 +2167,6 @@ pub struct SortieReport {
     pub casualties: Vec<String>,
     pub kills: u32,
     pub xp: u32,
-    pub loot: Vec<(crate::items::ItemId, u32)>,
     pub battles_done: u32,
     pub battles_total: u32,
     /// Ticks still to run. A trip that has aborted still runs this out —

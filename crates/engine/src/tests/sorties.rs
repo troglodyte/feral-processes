@@ -1189,63 +1189,6 @@ fn a_pre_sortie_save_loads_with_no_sorties() {
     assert_eq!(loaded.base_staff().len(), 5, "and everyone is staff again");
 }
 
-/// Loot lands in depots; what does not fit is logged rather than dropped in
-/// silence — `return_to_depots`' existing rule.
-#[test]
-fn overflow_loot_is_logged_rather_than_lost() {
-    let (mut game, _) = a_dispatched_sortie(4803, DifficultyMode::Forgiving);
-    let scrap = crate::items::ItemId::from(crate::items::ids::CORE_FRAGMENT);
-    {
-        let record = &mut game.world.resource_mut::<Sorties>().0[0];
-        record.loot = vec![(scrap.clone(), 100_000)];
-        record.battles_done = record.battles_total;
-        record.ticks_elapsed = record.ticks_total - 1;
-    }
-
-    let before = game.message_history(400).len();
-    game.run_sorties();
-
-    assert!(game.world.resource::<Sorties>().0.is_empty());
-    let said: Vec<String> = game.message_history(400)[before..]
-        .iter()
-        .map(|l| l.text.clone())
-        .collect();
-    assert!(
-        said.iter().any(|l| l.contains("no shelf to stand on")),
-        "what did not fit must be said out loud: {said:?}"
-    );
-}
-
-/// Loot that does fit lands on a Depot shelf, so the base is actually paid.
-#[test]
-fn returned_loot_lands_on_a_shelf() {
-    let (mut game, _) = a_dispatched_sortie(4804, DifficultyMode::Forgiving);
-    let scrap = crate::items::ItemId::from(crate::items::ids::CORE_FRAGMENT);
-    let before = game
-        .base_stock()
-        .iter()
-        .find(|r| r.item == scrap)
-        .map(|r| r.qty)
-        .unwrap_or(0);
-    {
-        let record = &mut game.world.resource_mut::<Sorties>().0[0];
-        record.loot = vec![(scrap.clone(), 7)];
-        // Every battle already fought, or the last tick fires all of them at
-        // once and the haul under test is buried in what they dropped.
-        record.battles_done = record.battles_total;
-        record.ticks_elapsed = record.ticks_total - 1;
-    }
-    game.run_sorties();
-
-    let after = game
-        .base_stock()
-        .iter()
-        .find(|r| r.item == scrap)
-        .map(|r| r.qty)
-        .unwrap_or(0);
-    assert_eq!(after, before + 7);
-}
-
 /// The report is derived off the record and evicts nothing — a screen that
 /// rewrote what it draws would make the trip depend on whether anyone
 /// looked.

@@ -725,7 +725,11 @@ impl Game {
                     // Never `STARTER_TOOL_ID` here — the profile rule.
                     // `spawn_player` is `new_with`'s only caller and is
                     // where that grant lives; a load restores exactly what
-                    // the save carried, empty for a save predating tools.
+                    // the save carried. A save predating tools carries no
+                    // `tools` key at all, so `PlayerSave::tools`'s own
+                    // `starter_tools()` default lands the starter tool
+                    // there instead of an empty loadout — see that field's
+                    // doc comment.
                     Tools(data.player.tools),
                 ),
             ))

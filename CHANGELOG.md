@@ -40,10 +40,14 @@ first, separated by a rule.
      published or skips one. -->
 ## 0.13.95
 
-**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
-every new field (`DownedPrograms`, `Tools`, `KnownTools`) is additive behind
-`#[serde(default)]`, so a save written before this release loads with none
-carried, exactly the pre-extraction game.
+**Existing saves load, with one deliberate exception.**
+`save::SAVE_FORMAT_VERSION` stays at 32 — both `DownedPrograms` and `Tools`
+are additive behind `#[serde(default)]`. `downed_programs` defaults to
+empty, exactly the pre-extraction game. `tools` does not: a save written
+before this release paid its material income through the kill drop this
+release retires, so an absent `tools` key defaults to the starter tool
+rather than an empty loadout — a migration for a save that predates the
+concept entirely, not a re-grant into one that already made a choice.
 
 - **A defeated wild program is left behind as a downed program you carry,
   not a pile of raw materials.** Species, level, rarity, boss flag and a

@@ -10146,6 +10146,12 @@ opening mid-spend, the same shape a `Drag` step's multi-tick loop takes,
 and safe for the same reason: nothing left to spend has landed before the
 first tick, so there is nothing to unwind if the loop stops short.
 
+`tools::player_tool_slots` (no production caller — only its own unit tests
+call it) and the shipped `core_tap.ron` (unreachable — nothing but the
+creation-only starter grant writes `Tools` in phase 1) are both phase-2
+machinery landed early rather than an oversight: a second tool needs
+`install_tool` to reach a second slot, and neither exists yet.
+
 ### `Game::extraction_yield` is the one derivation the preview and the grant share
 
 `extraction_yield(&self, program, tool) -> Vec<(ItemId, u32)>` takes

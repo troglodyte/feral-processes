@@ -576,7 +576,6 @@ impl Game {
                 casualties: s.casualties.clone(),
                 kills: s.kills,
                 xp: s.xp,
-                loot: s.loot.clone(),
                 battles_done: s.battles_done,
                 battles_total: s.battles_total,
                 ticks_left: s.ticks_total.saturating_sub(s.ticks_elapsed),
@@ -585,32 +584,25 @@ impl Game {
             .collect()
     }
 
-    /// A trip reaching its last tick: the record is dropped, the loot is put
-    /// away and one line says what came back.
+    /// A trip reaching its last tick: the record is dropped and one line
+    /// says what came back.
     ///
     /// Members become `Staff` again **by omission** — nothing writes a role
     /// anywhere, which is the whole of why the fourth variant was worth
     /// having. A Forgiving casualty comes home still carrying `Downed` and
     /// walks itself to a Repair Bay through the existing `Downed` arm of
     /// `drift_idle_staff`; there is no new recovery path.
+    ///
+    /// No loot delivery here: extraction retired the direct kill drop that
+    /// used to fill `Sortie::loot`, so the field is always empty and a
+    /// delivery loop over it would never run. Phase 3's travel-and-deliver
+    /// record for downed programs is what re-earns this a body.
     fn return_sortie(&mut self, index: usize) {
         let sortie = self
             .world
             .resource_mut::<crate::resources::Sorties>()
             .0
             .remove(index);
-        // Loot lands through the existing put-back, so what does not fit is
-        // **logged rather than dropped in silence** — that function's rule.
-        for (item, qty) in &sortie.loot {
-            let landed = crate::game::base::stock::return_to_depots(self, item, *qty);
-            if landed < *qty {
-                let name = self.item_name(item);
-                self.log_base(format!(
-                    "{} {name} came back with no shelf to stand on.",
-                    qty - landed
-                ));
-            }
-        }
         self.queue_squad_walk(&sortie.members, false);
         let names: Vec<String> = sortie
             .members

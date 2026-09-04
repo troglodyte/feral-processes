@@ -10301,3 +10301,135 @@ carry all four figures rather than the sector/run pair the design sketch gave
 MINED alone, because dominant provenance puts a machine-dominated Power Cell
 under MINED and dropping the hand column there hides the units that motivate
 the whole instrument.
+
+### The commit door is shared, and the charge stays with the vendor
+
+Settlements Phase 3 needed a second buyer/seller — a town's shelf — without
+a second copy of the funding rule or the apply order that `Game::
+commit_caravan_basket` already owned. Splitting it was two commits rather
+than one: `d6cd9d51` extracted the generic half first, as a pure refactor
+with the existing five caravan tests as the gate and no behaviour change
+allowed to leak in; `9b3497b6` then wrote the settlement's own validation
+and closures against the extracted door. Doing the extraction and the new
+caller in the same commit would have left no way to tell "did the refactor
+change anything" from "does the new vendor work" if either broke.
+
+`Game::settle_basket` (`game/commerce.rs`) owns exactly what is true of
+*any* basket once every question has already been asked and passed: the
+funding comparison as one expression (`held + proceeds < cost`), that sells
+apply before buys (so a basket can be funded by its own sales), and the
+single `tick()`. It takes a `BasketPlan<Sells, Buys>` — two totals, two
+counts for the outcome sentence, and two `FnOnce(&mut Game)` closures, one
+per half — rather than resolved line data. Two generic parameters rather
+than `Box<dyn Fn>`, because there are exactly two call sites today and
+nothing here needs dynamic dispatch.
+
+**What deliberately stayed out: the currency charge itself.** The plan's
+own survey called `Inventory::add`/`take` generic, and moving them into the
+core looked like the obvious next line to pull. It isn't, because the core
+would then have to walk *per-line* data — item, amount — to know what to
+debit and credit, and the only shape that data comes in is
+`CaravanOfferKind`: gear copies, routine disks, programs and material
+stacks, each delivered differently (`deliver_caravan_offer` is a four-way
+match). Pulling the charge in would drag that whole shape into
+`commerce.rs`, which is precisely what the plan's Task 1 says must not
+happen — a settlement has no `CaravanOfferKind` and was never going to get
+one. So each vendor's own apply closure debits and credits its own
+currency, in its own shape, and calls `settle_basket` only for the parts
+that don't care what a "buy" or a "sell" *is*.
+
+**That leaves a drift surface `commerce.rs` cannot see**: a vendor's
+closure could quote one `cost` into the `BasketPlan` and charge a different
+number when it actually runs, and nothing in either function's signature
+stops it. `settle_basket` checks the *sum* against the player's funds; it
+has no way to check that what gets charged per line is what was quoted to
+build that sum. Nothing here is a type the compiler can hold apart, so the
+invariant is a test instead — the settlement basket's own commit comment
+says so explicitly, and its regression is written against a `Material` row
+on purpose: a Gear, Routine or Program row's `qty` is always 1, so a buy
+closure that forgot to multiply by `qty` would still pass by coincidence on
+every row but that one. The test was verified to fail with that
+multiplication removed, then reverted.
+
+### A settlement's buyback keys through a minted string, not a widened `ShelfKey`
+
+A structure's buyback shelf is keyed by `(StructureId, (i32, i32))` —
+kind and tile, `Game::shelf_key` walking `Entity -> Structure -> Position`
+to build it. A settlement needed the same ledger, but a settlement carries
+no `Structure` and no `Entity` a caller already has in hand — it is a
+`SettlementKey` resolved through `resources::Settlements`. The question was
+whether `ShelfKey` needed a second variant to fit both, and the answer
+worked out to no: `StructureId` is a bare `type StructureId = String`
+newtype, so any string is a legal first half of the key. `Game::
+settlement_shelf_key` mints `"settlement/<def id>"` paired with the tile
+`resources::Settlements` already records, and that is a full `ShelfKey`
+with no type change and no `SAVE_FORMAT_VERSION` bump — `BuybackLedger`
+already persists through `SaveData::buyback_shelves` and does not know or
+care that one of its keys is now a mint rather than a real structure kind.
+
+**The prefix is load-bearing, not decorative.** A structure's footprint and
+a settlement's tile are drawn from the same coordinate space, so the tile
+half of the key cannot tell two shelves standing on the same cell apart —
+only the id half can. `"settlement/"` can never collide with an id out of
+`assets/structures/*.ron`, because nothing in that schema is allowed to
+contain a `/`. A test plants a structure and a settlement on the same tile
+and sells to both, which is the only way this would have been caught if the
+prefix had been dropped.
+
+**Widening `ShelfKey` to an enum was the alternative seriously
+considered, and rejected for what it would have bought.** An enum key is
+the "correct" modeling instinct — a settlement genuinely isn't a structure
+— but every variant of a saved enum key needs bincode to keep encoding it
+positionally forever, which is a save-format change for a distinction the
+string half already draws for free. The one place a widened type *would*
+have paid for itself is `Game::shelf_key`, which cannot be reused for a
+settlement at all: it dereferences an `Entity` a settlement was never
+spawned as. That is why `settlement_shelf_key` is a second constructor
+beside it rather than a branch inside it — reusing the function would mean
+every caller, structure and settlement alike, paying for an `Entity`
+lookup the settlement side never has.
+
+`Game::stock_shelf`, `buyback_options` (split into `buyback_options_at`)
+and `buy_back` (split into `buy_back_at`) all took the same follow-on shape
+once the key existed: reworked to take an already-resolved `ShelfKey`
+rather than resolve one from an `Entity` internally, so a settlement's
+buyback list and purchase share the ledger walk and the sort with a
+structure's instead of duplicating either.
+
+### Temperament moves prices both ways off a neutral middle, and Mercantile is not their average
+
+A settlement's `Temperament` (`Open`, `Guarded`, `Mercantile`) was authored
+in the schema before this phase and read by nothing — `settlements/mod.rs`
+says so directly, because the field wanted to ship once rather than force
+a re-author of every town when pricing landed. This phase is what gives it
+a formula: `Game::marked_unit_cost` (the caravan's markup-and-floor compute,
+`mult`-parameterized) takes `Temperament::buy_mult`, and `Game::
+settlement_sell_price` takes `Temperament::sell_mult`. Six constants in
+`tuning.rs`, not a formula over one "friendliness" scalar — Open is -10%
+to buy / +10% to sell, Guarded is the mirror (+10% / -10%), and Mercantile
+is ~0% / -15%.
+
+**Mercantile is deliberately not the average of Open and Guarded.** A
+single friendliness axis would put it at the midpoint of both — a
+±0%-ish trader who is simply less extreme. That reads as "boring" rather
+than as a third *kind* of vendor, and it also doesn't say anything a
+number line between the other two doesn't already say. The chosen shape
+instead splits the two axes apart: Mercantile competes on the *buy* side,
+pricing at roughly what an ordinary shopper already expects (buy_mult
+~1.0, cheaper than Guarded's markup and not far from Open's discount), and
+takes its margin on the *sell* side instead, paying you the least of the
+three temperaments. That asymmetry — "everything is business, including
+what it pays you" — is the entire reason a third variant is worth having
+rather than one slider with three notches; a symmetric third point on the
+same line would be redundant with interpolating between the other two.
+
+**The craft-ingredient floor has to survive every temperament, not just
+the neutral one**, because a temperament is a *discount*, and a
+craftable priced below the sum of its own ingredients is an infinite
+Credit loop regardless of who is selling it that cheap. `marked_unit_cost`
+applies `mult` to the markup and takes the floor *after*, never before —
+so a discount can shrink the markup toward the floor but never punch
+through it. The shipped test asserts this at Open, the cheapest
+temperament to buy at, with a modded underpriced item, since the floor has
+slack against the real shipped catalogue and would not have caught a
+before/after ordering bug on real assets alone.

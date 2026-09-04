@@ -37,9 +37,9 @@ half-authored is worse than one skipped loudly.
 | `id` | Unique. The pool is indexed in id order, so this also decides tie-breaks between files. Must not be empty. |
 | `name` | What the map and the settlement's own screen call it. Must not be blank. |
 | `blurb` | One or two sentences, shown on the settlement screen. |
-| `kind` | `Mainframe` (a city, drawn `M`) or `Server` (a town, drawn `s`), both drawn in `GlyphColor::Orange`. A mainframe carries more shelf rows and higher tiers. |
-| `specialty` | `Gear`, `Materials`, `Routines` or `Programs`. Weights what its shelf offers. |
-| `temperament` | `Open`, `Guarded` or `Mercantile`. How it prices and how quickly it warms to you. |
+| `kind` | `Mainframe` (a city, drawn `M`) or `Server` (a town, drawn `s`), both drawn in `GlyphColor::Orange`. A Mainframe draws more shelf rows than a Server (14 vs. 6) and a higher share of standout stock among them (35% vs. 15%). |
+| `specialty` | `Gear`, `Materials`, `Routines` or `Programs`. Biases the shelf's weighted draw toward that one of its four buckets — the favoured bucket outweighs the other three roughly 3.5:1, not exclusively. |
+| `temperament` | `Open`, `Guarded` or `Mercantile`. Scales every price on the shelf: `Open` charges you 10% less and pays you 10% more, `Guarded` is the mirror, and `Mercantile` charges roughly the going rate but pays the least of the three when it buys from you. A discount never sells a craftable below what its own ingredients are worth — that floor holds at every temperament. |
 
 `kind`, `specialty` and `temperament` are closed sets. Each variant is a
 hook into a particular formula, so a new one is a Rust change — a value no

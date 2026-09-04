@@ -190,6 +190,36 @@
   decoration** — keyed on the item alone it hands back an ordinary copy for a
   rare one. The unit price is the same at every tier, which is why the key has
   to be exact.
+- **`Game::settle_basket` is the shared commit core, and the currency charge
+  deliberately stayed out of it.** Pulling `Inventory::add`/`take` into the
+  core needs it to walk per-line item data, which drags `CaravanOfferKind`'s
+  shape in — exactly what the split was meant to avoid, since a settlement
+  has no such shape. So each vendor's own closure debits and credits its own
+  currency, and nothing stops a closure from quoting one `cost` into the
+  `BasketPlan` and charging a different number — that invariant is a test,
+  not a type, and the settlement's is written against a `Material` row on
+  purpose: a Gear/Routine/Program row's `qty` is always 1, so a buy closure
+  that forgot to multiply by `qty` would still pass on every other row.
+- **A settlement's buyback keys through a minted `"settlement/<id>"` string,
+  not a widened `ShelfKey`.** `ShelfKey` is `(StructureId, (i32,i32))` and
+  `StructureId` is a bare `String`, so the mint plus the settlement's tile
+  fits with no type change and no save bump — widening to an enum would buy
+  a `SAVE_FORMAT_VERSION` bump for a distinction the string already draws.
+  The prefix is load-bearing: a structure's footprint and a settlement's
+  tile share one coordinate space, so only the id half keeps two shelves on
+  the same cell apart. What genuinely didn't fit is `Game::shelf_key`
+  itself, which walks `Entity -> Structure -> Position` — a settlement has
+  no `Entity` to start from, hence a second constructor rather than a branch.
+- **Temperament prices both directions off a neutral middle, and Mercantile
+  is not their average.** Six `tuning.rs` constants, not one friendliness
+  scalar: Open discounts buys and pays out more, Guarded is the mirror, and
+  Mercantile competes on the *buy* side (~0%) while taking its margin on the
+  *sell* side (its worst payout of the three) — an axis a single slider
+  can't express, and the whole reason a third variant exists rather than a
+  point between the other two. The craft-ingredient floor has to survive
+  every temperament: `Game::marked_unit_cost` applies the temperament's
+  multiplier to the markup and takes the floor *after*, never before, or a
+  deep discount would punch straight through it.
 - **`render/mod.rs::fusion_color` and `popup.rs::fusion_row` are the one
   colour rule for anything fused.** Two screens deliberately opt out, because
   a second meaning on the same axis makes both unreadable. `fusion_color`

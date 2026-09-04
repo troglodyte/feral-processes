@@ -16,7 +16,7 @@ use crate::tests::support::{ScratchAssets, scratch_assets_dir, test_assets_dir};
 use bevy_ecs::prelude::Entity;
 
 /// A scratch affix directory holding `files` as `(filename, body)`. Built
-/// on the `ScratchAssets` guard for the reason `sectors::sector_dir`
+/// on the `ScratchAssets` guard for the reason `ScratchAssets`
 /// records: `Drop` runs on an unwind, a manual cleanup call does not.
 fn affix_dir(tag: &str, files: &[(&str, &str)]) -> ScratchAssets {
     let dir = scratch_assets_dir(tag);

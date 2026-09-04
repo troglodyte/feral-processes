@@ -2,7 +2,8 @@
 //!
 //! Several things in the game are a property of *the place* rather than of
 //! the moment you looked at it: what a Stack cell says for itself
-//! (`descriptions.rs`), which sector a zone is (`sectors.rs`). None of them
+//! (`descriptions.rs`), what a base-space coordinate is made of
+//! (`rock.rs`). None of them
 //! may draw from `resources::GameRng` — a draw does not survive a save/load
 //! and shifts every later roll in the run — and none may lean on an `StdRng`
 //! sequence, whose output is not guaranteed stable across a `rand` upgrade.
@@ -25,8 +26,8 @@
 /// the prime's own width (~41 bits) upward, so a value folded in as the
 /// *last* word, differing only in its low bits, never reaches bit 63 — which
 /// is the bit this function actually reads. `descriptions::Slot::tags`
-/// carries the measurement, and `sectors::sector_seed` is why the zone
-/// number is folded a byte at a time rather than as one word.
+/// carries the measurement, and `rock::block_seed` is why a block
+/// coordinate is folded a byte at a time rather than as one word.
 ///
 /// Shared rather than copied because the `%` version passes every casual
 /// test: it anti-correlates two small pools perfectly while looking

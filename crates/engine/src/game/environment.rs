@@ -210,7 +210,7 @@ fn biome_ord(biome: Biome) -> u64 {
 }
 
 /// Folds the world seed, the zone, the biome and the epoch into the value
-/// `derive::index` reduces — `sectors::sector_seed`'s pattern with one more
+/// `derive::index` reduces — `descriptions::Slot::tags`'s pattern with one more
 /// word. Every word goes in a byte at a time: one XOR-then-multiply round
 /// only carries a difference about the prime's own width (~41 bits) upward,
 /// so a word folded in whole would leave a following word's low output bits

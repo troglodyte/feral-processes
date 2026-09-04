@@ -3111,6 +3111,62 @@ mod tests {
         );
     }
 
+    /// A settlement carries none of `stands_in_base_space`'s tags —
+    /// `Caravan`/`Structure`/`BuildSite`/`Tamed` — so it falls through
+    /// `Game::view_entities_at` to the surface map and lands in
+    /// `draw_surface_map`'s `actor` slot exactly like a nest. Nothing states
+    /// that anywhere; this is the assertion.
+    ///
+    /// Reached through the save round trip rather than a fixture that spawns
+    /// a component directly — `Game`'s `world` is private from out here and
+    /// deliberately stays that way, `attention_drives_all_three_markers`'s
+    /// reason. The tile east of spawn is cleared of anything else the fresh
+    /// seed put there, or the actor slot could resolve to whichever entity
+    /// iteration happens to visit last rather than to the settlement this
+    /// test is about.
+    #[test]
+    fn a_settlement_draws_its_glyph_on_the_surface_map() {
+        let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets())
+            .expect("the shipped assets must load");
+        let path = std::env::temp_dir().join(format!(
+            "fp_gui_settlement_glyph_{}.sav",
+            std::process::id()
+        ));
+        game.save(&path).unwrap();
+        let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
+        let (px, py) = data.player.position;
+        let target = (px + 1, py);
+        data.creatures.retain(|c| c.position != target);
+        data.nests.retain(|n| n.position != target);
+        data.link_sites.retain(|&site| site != target);
+        let key = feral_processes_engine::settlements::SettlementKey { rx: 0, ry: 0 };
+        data.settlements.0.insert(
+            key,
+            feral_processes_engine::resources::KnownSettlement {
+                tile: target,
+                def: feral_processes_engine::settlements::SettlementDef {
+                    id: "test_settlement".to_string(),
+                    name: "Test Settlement".to_string(),
+                    blurb: "A settlement placed for a test.".to_string(),
+                    kind: feral_processes_engine::settlements::SettlementKind::Server,
+                    specialty: feral_processes_engine::settlements::Specialty::Materials,
+                    temperament: feral_processes_engine::settlements::Temperament::Open,
+                },
+            },
+        );
+        feral_processes_engine::save::save_to_file(&path, &data).unwrap();
+        let mut game = Game::load(&path, &test_assets()).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        let (images, glyphs) = drawn_map_centered_on(&mut game, SpriteTable::default(), target);
+
+        assert_eq!(images, 0, "the fixture def names no sprite");
+        assert!(
+            glyphs.iter().any(|g| *g == "s"),
+            "a Server settlement's lowercase glyph never reached the surface map: {glyphs:?}"
+        );
+    }
+
     /// The zone map drawn at `at` seconds, with effects live. The party is
     /// left standing where a new run puts it, on the surface — which is the
     /// half of the cloud gate this fixture exists to see.

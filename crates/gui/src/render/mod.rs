@@ -16,6 +16,7 @@ use feral_processes_app_core::{
 use feral_processes_engine::RespecSubject;
 use feral_processes_engine::components::{GlyphColor, MachineStatus, Rarity, TaskKind};
 use feral_processes_engine::items::{EquipmentSlot, GearCopy, ItemId, QualityBand, quality_band};
+use feral_processes_engine::settlements::SettlementKey;
 use feral_processes_engine::structures::StructureCategory;
 use feral_processes_engine::tuning::{
     KERNEL_RING_MAX, MAX_COMPANION_REFACTORS, MAX_FUSIONS, MAX_PARTY_SIZE,
@@ -24,7 +25,7 @@ use feral_processes_engine::world::{Biome, Tile};
 use feral_processes_engine::{
     Assignee, BrokerReach, ContractRow, CraftRecipe, Entity, EntityView, Game, InventoryRow,
     LogEntry, MESSAGE_LOG_CAP, MemoryRow, MessageKind, PetInfo, ProgramSaleOption, RecipeChain,
-    RecipeStep, ResearchState, StockRow, StructureReport,
+    RecipeStep, ResearchState, SettlementView, StockRow, StructureReport,
 };
 
 mod arena;
@@ -52,6 +53,7 @@ mod party;
 mod popup;
 mod progression;
 mod routines;
+mod settlement;
 // `pub(crate)` rather than private: `lib.rs::handle_sprite_pointer` needs
 // `sprite_forge::HitRects` to name the type `sprite_editor_hit_rects` below
 // hands back — every other module here stays private because nothing
@@ -110,6 +112,7 @@ use routines::{
     draw_extract, draw_extract_confirm, draw_extract_pick, draw_routine_etch, draw_routine_install,
     draw_routine_target, draw_routines,
 };
+use settlement::draw_settlement;
 use sprite_forge::{draw_sprite_editor, draw_sprite_picker};
 use stack_market::draw_stack_market;
 use talents::{draw_develop, draw_develop_program};
@@ -1013,6 +1016,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::CellDescribe => {
             stack::draw_cell_describe(app.pending_description.as_deref(), refusal, painter, m)
         }
+        Mode::Settlement => draw_settlement(game, app.pending_settlement, refusal, painter, m),
         Mode::Inventory => draw_inventory(game, selected, refusal, painter, m),
         Mode::CompanionEquip => draw_companion_equip(
             game,
@@ -1245,7 +1249,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 92] = [
+    const ALL_MODES: [Mode; 93] = [
         Mode::MainMenu,
         Mode::CreateCharacter,
         Mode::LoadGame,
@@ -1281,6 +1285,7 @@ mod tests {
         Mode::ManifestPick,
         Mode::StructureManifest,
         Mode::CellDescribe,
+        Mode::Settlement,
         Mode::Inventory,
         Mode::EquipSwap,
         Mode::InventoryItemAction,

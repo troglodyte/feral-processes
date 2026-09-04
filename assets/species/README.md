@@ -193,15 +193,22 @@ is skipped with a warning logged in-game rather than crashing startup.
     // Despite the name, work_resource does not decide what a tamed member of
     // this species gathers, and does not gate whether it can be posted to a
     // cronjob — any program can work any structure, and a cronjob's output
-    // comes from the structure's own `produces`. What it actually sets is
-    // what *killing* a wild one drops. It has two other readers: destroying
-    // a Nest of this species pays out from the same field
-    // (`Game::grant_nest_cache`), and the inspection view names it as the
-    // species' yield.
+    // comes from the structure's own `produces`. Killing a wild one no
+    // longer drops this directly either: a kill leaves a downed program
+    // instead (`items::DownedProgram`), and this field is what `rich_in`
+    // (below) falls back to when a species doesn't author its own. It has
+    // one other reader: the inspection view names it as the species' yield.
     //
-    // work_resource (above) and equipment_drop (below) both take any item
-    // id from assets/items/*.ron — see assets/items/README.md for the
-    // schema, and the top-level README's "Item ids" for the full set.
+    // Optional; falls back to work_resource (above) when absent, so no
+    // species file needs this to keep its extraction yield exactly where it
+    // was. Set it only to make a species pay a *different* bonus part on
+    // extraction than the one its work_resource already names — see
+    // `Game::rich_in` and `Game::extraction_yield`.
+    rich_in: None,  // or `Some("item_id")` to override the work_resource fallback
+    //
+    // work_resource and rich_in (above) and equipment_drop (below) all take
+    // any item id from assets/items/*.ron — see assets/items/README.md for
+    // the schema, and the top-level README's "Item ids" for the full set.
 
     // Optional; omit entirely for no chance of a gear drop. If set, defeating
     // or decompiling this species has a chance (0.0-1.0) to additionally

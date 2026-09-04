@@ -278,6 +278,15 @@ pub struct SpeciesDef {
     /// comes from the structure's own `produces`, not from the worker's
     /// species.
     pub work_resource: Option<ItemId>,
+    /// The bonus salvage part `Game::extraction_yield` adds on top of a
+    /// tool's own draw when this species is extracted — spec decision 5.
+    /// `#[serde(default)]` and, when absent, `Game::rich_in` falls back to
+    /// `work_resource`, so none of the 17 shipped species files needed
+    /// editing: every one keeps paying exactly what it already priced
+    /// through that field. A species with neither set contributes no bonus
+    /// part at all, same as `work_resource` today.
+    #[serde(default)]
+    pub rich_in: Option<ItemId>,
     /// If set, defeating/decompiling this species has a chance (0.0-1.0) to
     /// additionally drop one piece of equipment, independent of
     /// `work_resource`. `#[serde(default)]` so existing species files

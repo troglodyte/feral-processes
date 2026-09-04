@@ -1,16 +1,14 @@
 //! Program extraction, phase 1: `items::DownedProgram`, its
-//! `components::DownedPrograms` store, the `tools::ToolDb` catalogue, and
-//! the player's `components::Tools` slots with the starter grant.
-//!
-//! Nothing extracts a downed program yet — no `Game::extract_program`, no
-//! site leaves one at a kill. This file is the object, the store and the
-//! tool kit in isolation; later phases append to it rather than starting a
-//! sibling file. See
+//! `components::DownedPrograms` store, the `tools::ToolDb` catalogue, the
+//! player's `components::Tools` slots with the starter grant, and the
+//! extraction door itself — `Game::extraction_yield` and
+//! `Game::extract_program`. This file is every phase-1 piece in isolation;
+//! later phases append to it rather than starting a sibling file. See
 //! `docs/superpowers/specs/2026-09-04-program-extraction-design.md`.
 
 use super::support::*;
 use crate::items::DownedProgram;
-use crate::tools::ToolId;
+use crate::tools::{ToolDb, ToolDef, ToolId};
 use crate::*;
 
 fn program(condition: u8, rarity: Rarity, level: u32) -> DownedProgram {
@@ -293,5 +291,312 @@ fn condition_still_rises_with_rarity_and_a_boss_bonus() {
     assert!(
         boss > plain,
         "a boss kill should roll a higher condition: {plain} vs {boss}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The extraction door — `Game::extraction_yield` and `Game::extract_program`,
+// spec sections 3 and 4.
+// ---------------------------------------------------------------------------
+
+/// Sums a `Vec<(ItemId, u32)>` into a merged, orderless total per item — so
+/// two rows naming the same item (a tool's own pool and its `rich_in`
+/// bonus happening to coincide, `scrapper`'s own case below) compare equal
+/// to one row carrying their sum.
+fn totals(rows: &[(ItemId, u32)]) -> std::collections::BTreeMap<ItemId, u32> {
+    let mut out = std::collections::BTreeMap::new();
+    for (item, qty) in rows {
+        *out.entry(item.clone()).or_insert(0) += qty;
+    }
+    out
+}
+
+fn starter_tool_def(game: &Game) -> ToolDef {
+    game.world
+        .resource::<ToolDb>()
+        .get(tuning::STARTER_TOOL_ID)
+        .unwrap()
+        .clone()
+}
+
+#[test]
+fn rich_in_falls_back_to_work_resource_for_every_shipped_species() {
+    // No shipped species authors `rich_in` yet (spec decision 5: none had
+    // to), so `Game::rich_in` must answer exactly what `work_resource`
+    // already does, for every one of the 17 files.
+    let game = Game::new(4475, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = game.world.resource::<SpeciesDb>();
+    let mut checked = 0;
+    for def in species.all() {
+        assert_eq!(
+            game.rich_in(&def.id),
+            def.work_resource.clone(),
+            "species {:?} rich_in must fall back to its own work_resource",
+            def.id
+        );
+        checked += 1;
+    }
+    assert!(checked > 0, "the walk covered no species at all");
+}
+
+#[test]
+fn extraction_removes_the_program_and_grants_exactly_the_previewed_yield() {
+    let mut game = Game::new(4476, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let prog = program(70, Rarity::Gold, 20);
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![prog.clone()];
+    let tool_id = ToolId(tuning::STARTER_TOOL_ID.to_string());
+    let tool_def = starter_tool_def(&game);
+
+    let preview = game.extraction_yield(&prog, &tool_def);
+    assert!(
+        !preview.is_empty(),
+        "test premise: a Gold, level-20 program run through the starter tool must yield \
+         something, or this test proves nothing"
+    );
+
+    let before = totals(&game.world.get::<Inventory>(player).unwrap().items);
+    game.extract_program(0, &tool_id)
+        .expect("extraction must be allowed here — nothing refuses it");
+    let after = totals(&game.world.get::<Inventory>(player).unwrap().items);
+
+    assert!(
+        game.world
+            .get::<DownedPrograms>(player)
+            .unwrap()
+            .0
+            .is_empty(),
+        "the extracted program must be removed from the store"
+    );
+
+    let mut delta = std::collections::BTreeMap::new();
+    for (item, qty) in &after {
+        let prior = before.get(item).copied().unwrap_or(0);
+        if *qty > prior {
+            delta.insert(item.clone(), qty - prior);
+        }
+    }
+    assert_eq!(
+        delta,
+        totals(&preview),
+        "the inventory delta a real extraction grants must equal the previewed yield exactly"
+    );
+}
+
+#[test]
+fn a_higher_grade_program_yields_more_than_a_lower_one_all_else_equal() {
+    let game = Game::new(4477, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let tool = starter_tool_def(&game);
+
+    let worst = program(10, Rarity::Ordinary, 1);
+    let best = program(100, Rarity::Prismatic, 100);
+    assert!(
+        best.grade() > worst.grade(),
+        "test premise: the two fixtures must actually differ in grade"
+    );
+
+    let low: u32 = totals(&game.extraction_yield(&worst, &tool)).values().sum();
+    let high: u32 = totals(&game.extraction_yield(&best, &tool)).values().sum();
+    assert!(
+        high > low,
+        "a higher-grade program must yield more total units through the same tool: {low} vs \
+         {high}"
+    );
+}
+
+#[test]
+fn a_higher_tier_tool_yields_more_than_a_lower_one_on_the_same_program() {
+    let game = Game::new(4478, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let prog = program(70, Rarity::Gold, 20);
+    let low_tier = starter_tool_def(&game);
+    let high_tier = game
+        .world
+        .resource::<ToolDb>()
+        .get("core_tap")
+        .unwrap()
+        .clone();
+    assert!(
+        high_tier.tier > low_tier.tier,
+        "test premise: core_tap must actually be a higher tier than the starter tool"
+    );
+
+    let low: u32 = totals(&game.extraction_yield(&prog, &low_tier))
+        .values()
+        .sum();
+    let high: u32 = totals(&game.extraction_yield(&prog, &high_tier))
+        .values()
+        .sum();
+    assert!(
+        high > low,
+        "a higher-tier tool must yield more total units on the same program: {low} vs {high}"
+    );
+}
+
+#[test]
+fn teardown_perk_adds_its_flat_bonus_to_the_unit_count() {
+    let mut game = Game::new(4479, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let tool = starter_tool_def(&game);
+    let prog = program(70, Rarity::Gold, 20);
+
+    let without: u32 = totals(&game.extraction_yield(&prog, &tool)).values().sum();
+    game.world
+        .get_mut::<Perks>(player)
+        .unwrap()
+        .unlocked
+        .push(Perk::Teardown);
+    let with: u32 = totals(&game.extraction_yield(&prog, &tool)).values().sum();
+
+    assert_eq!(
+        with,
+        without + tuning::TEARDOWN_SALVAGE_PER_LEVEL,
+        "one level of Teardown must add exactly its flat bonus to the unit count"
+    );
+}
+
+#[test]
+fn extraction_yield_spends_no_gamerng_draw_even_with_teardown_bought() {
+    // `Perk::Teardown` used to sit on top of `roll_work_resource_drop`'s own
+    // draw as a flat addend, never a second roll — the property
+    // `teardown_adds_flat_salvage_to_a_kill_without_rerolling` held before
+    // Task 4 deleted that function. `extraction_yield` is where the perk's
+    // term lives now, so this reasserts the same property there: calling it
+    // — with the perk bought — must not move the shared `GameRng` stream at
+    // all, `&self`'s own reason (the screen's preview calls this once per
+    // installed tool with nothing spent).
+    assert!(
+        rng_unadvanced_by(4480, |game| {
+            let player = game.player_entity();
+            game.world
+                .get_mut::<Perks>(player)
+                .unwrap()
+                .unlocked
+                .push(Perk::Teardown);
+            let tool = starter_tool_def(game);
+            let prog = program(70, Rarity::Gold, 20);
+            let _ = game.extraction_yield(&prog, &tool);
+        }),
+        "extraction_yield must not draw from the shared GameRng stream, salvage_bonus included"
+    );
+}
+
+fn minimal_active_battle(game: &Game) -> BattleState {
+    BattleState {
+        player: game.player_entity(),
+        round_targets: Vec::new(),
+        groups: Vec::new(),
+        round: 1,
+        planned: vec![None],
+        finished: false,
+        player_won: false,
+        decompile_attempts: std::collections::HashMap::new(),
+        rewards: BattleRewards::default(),
+        lair: None,
+        outmatched: false,
+    }
+}
+
+#[test]
+fn extraction_refuses_after_game_over_and_spends_nothing() {
+    let mut game = Game::new(4481, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![program(70, Rarity::Gold, 20)];
+    game.world.resource_mut::<GameOver>().reason = Some("done".to_string());
+    let before = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    let result = game.extract_program(0, &ToolId(tuning::STARTER_TOOL_ID.to_string()));
+
+    assert!(result.is_err(), "a game-over run must refuse extraction");
+    assert_eq!(
+        game.world.get::<DownedPrograms>(player).unwrap().0.len(),
+        1,
+        "the program must still be held"
+    );
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before,
+        "nothing must be spent or granted on a refusal"
+    );
+}
+
+#[test]
+fn extraction_refuses_during_an_active_battle_and_spends_nothing() {
+    let mut game = Game::new(4482, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![program(70, Rarity::Gold, 20)];
+    let battle = minimal_active_battle(&game);
+    game.world.insert_resource(battle);
+    let before = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    let result = game.extract_program(0, &ToolId(tuning::STARTER_TOOL_ID.to_string()));
+
+    assert!(result.is_err(), "an active battle must refuse extraction");
+    assert_eq!(
+        game.world.get::<DownedPrograms>(player).unwrap().0.len(),
+        1,
+        "the program must still be held"
+    );
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before,
+        "nothing must be spent or granted on a refusal"
+    );
+}
+
+#[test]
+fn extraction_refuses_an_out_of_range_index_and_spends_nothing() {
+    let mut game = Game::new(4483, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![program(70, Rarity::Gold, 20)];
+    let before = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    let result = game.extract_program(5, &ToolId(tuning::STARTER_TOOL_ID.to_string()));
+
+    assert!(
+        result.is_err(),
+        "an out-of-range index must refuse extraction"
+    );
+    assert_eq!(
+        game.world.get::<DownedPrograms>(player).unwrap().0.len(),
+        1,
+        "the program must still be held"
+    );
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before,
+        "nothing must be spent or granted on a refusal"
+    );
+}
+
+#[test]
+fn extraction_refuses_an_uninstalled_tool_and_spends_nothing() {
+    let mut game = Game::new(4484, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 = vec![program(70, Rarity::Gold, 20)];
+    // The new game's only installed tool is the starter (`salvage_clamp`);
+    // `core_tap` exists in the catalogue but was never installed.
+    assert!(
+        game.installed_tools()
+            .iter()
+            .all(|t| t.id != ToolId("core_tap".to_string())),
+        "test premise: core_tap must not be installed"
+    );
+    let before = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    let result = game.extract_program(0, &ToolId("core_tap".to_string()));
+
+    assert!(
+        result.is_err(),
+        "an uninstalled tool must refuse extraction"
+    );
+    assert_eq!(
+        game.world.get::<DownedPrograms>(player).unwrap().0.len(),
+        1,
+        "the program must still be held"
+    );
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before,
+        "nothing must be spent or granted on a refusal"
     );
 }

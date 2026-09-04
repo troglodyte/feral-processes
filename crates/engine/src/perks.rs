@@ -100,10 +100,9 @@ pub enum Perk {
     /// Adds `TEARDOWN_SALVAGE_PER_LEVEL` per level, once a bonus a kill's
     /// own `work_resource` drop took directly. That drop is gone —
     /// `Game::leave_downed_program` replaced it — so this perk's term now
-    /// belongs in `Game::extraction_yield`'s formula (the tool that
-    /// consumes a downed program), a later phase's to wire in.
-    /// `salvage_bonus` below still answers what the perk is worth; it is
-    /// only unread until that call site exists.
+    /// lives in `Game::extraction_yield`'s formula (the tool that consumes
+    /// a downed program): a flat addend to the unit count, never a second
+    /// `GameRng` draw, the same discipline the retired roll followed.
     Teardown,
     /// Adds `FAILOVER_REPAIR_PER_LEVEL` per level to the base-wide repair
     /// rate (`Game::total_repair_rate`), which is what a Patch Node
@@ -278,10 +277,9 @@ pub fn roster_slot_bonus(perks: Option<&crate::components::Perks>) -> usize {
     level(perks, Perk::ProcessPool) as usize * crate::tuning::PROCESS_POOL_SLOTS_PER_LEVEL
 }
 
-/// What `Perk::Teardown` is worth — see the variant's doc for where this
-/// term belongs now (`Game::extraction_yield`, not yet built) and why it is
-/// still a plain addend rather than a second `GameRng` draw once it is
-/// wired in there.
+/// What `Perk::Teardown` is worth — added to `Game::extraction_yield`'s
+/// unit count as a plain addend, never a second `GameRng` draw (see the
+/// variant's own doc).
 pub fn salvage_bonus(perks: Option<&crate::components::Perks>) -> u32 {
     crate::tuning::TEARDOWN_SALVAGE_PER_LEVEL * level(perks, Perk::Teardown)
 }

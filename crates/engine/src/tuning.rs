@@ -2902,11 +2902,11 @@ pub const PROCESS_POOL_SLOTS_PER_LEVEL: usize = 1;
 
 /// What `Perk::Teardown` adds per level. Used to sit on top of the kill's
 /// own `WORK_RESOURCE_DROP` roll (2..=4); that roll is gone
-/// (`Game::leave_downed_program` replaced the direct grant it priced), so
-/// this term now belongs in `Game::extraction_yield` — see the `Perk::
-/// Teardown` variant's own doc in `perks.rs`. Unread until that call site
-/// exists; not deleted for the same reason the census in `perks.rs` still
-/// exercises `salvage_bonus` directly.
+/// (`Game::leave_downed_program` replaced the direct grant it priced), and
+/// `Game::extraction_yield` is now where `perks::salvage_bonus` reads this —
+/// see the `Perk::Teardown` variant's own doc in `perks.rs`. Added to the
+/// unit count as a flat addend, never a second `GameRng` draw, the same
+/// discipline the retired roll followed.
 ///
 /// This is a permanent income *rate*, not a loop — nothing here mints value
 /// out of nothing, and it is bounded by how many fights the player takes,
@@ -4068,3 +4068,30 @@ pub const TOOL_SLOT_PER_LEVEL: u32 = 8;
 /// about what a downed program gets reduced to, and a kit wide enough to
 /// carry one of every category stops being a choice at all.
 pub const TOOL_SLOT_CAP: u32 = 4;
+
+/// `Game::extraction_yield`'s base unit count — the multiplier scaled by
+/// `game::extraction::tier_scale(tool.tier)` and `DownedProgram::grade()`
+/// (identity `1.0` at `Ordinary`, full condition, level 0). **Provisional**:
+/// spec decision 8 is that the starter tool must be drop-neutral against
+/// the retired `WORK_RESOURCE_DROP` roll, and Task 6's test fits this value
+/// (and `assets/tools/salvage_clamp.ron`'s weights) against that gate. Do
+/// not retune it here — the number below is only what makes the formula
+/// compile, not a considered pick.
+pub const TOOL_BASE_UNITS: f32 = 3.0;
+
+/// How much each tier past 1 scales `extraction_yield`'s unit count, in
+/// `game::extraction::tier_scale`. A tool's own `tier` and a later phase's
+/// structure `structure_tier` (spec section 3) are meant to share this one
+/// curve, so a step here would move both once that parameter exists.
+///
+/// **Not** part of Task 6's fit: the starter tool ships at tier 1, where
+/// `tier_scale(1) == 1.0` regardless of this constant's value, so the
+/// drop-neutrality test cannot see it move and it is free to set here.
+pub const TOOL_TIER_SCALE_STEP: f32 = 0.5;
+
+/// Extra units of a program's `rich_in` item (or its `work_resource`
+/// fallback, `Game::rich_in`) that `extraction_yield` adds on top of the
+/// tool's own draw — from any tool, regardless of category (spec section
+/// 3). A flat floor tied to *what was killed* rather than a second roll of
+/// the tool's own pool, so it stays modest next to `TOOL_BASE_UNITS`.
+pub const RICH_IN_UNITS: u32 = 1;

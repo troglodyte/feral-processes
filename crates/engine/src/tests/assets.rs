@@ -3420,3 +3420,35 @@ fn every_shipped_tool_id_is_unique() {
          dropped one"
     );
 }
+
+/// Every shipped species' `Game::rich_in` — authored, or `work_resource`
+/// fallen back to — names a real, loaded item. Spec section 7's own census:
+/// no shipped species authors `rich_in` yet (decision 5 is that none had
+/// to), so this walks the fallback path today and starts checking an
+/// authored value for real the day one ships, `every_non_routines_tool_
+/// has_a_non_empty_yield_pool`'s own precedent for a census that currently
+/// only exercises one of its branches.
+#[test]
+fn every_species_rich_in_resolves_to_a_real_item() {
+    let game = Game::new(4107, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = game.world.resource::<SpeciesDb>();
+    let items = game.world.resource::<ItemDb>();
+
+    let mut checked = 0;
+    for def in species.all() {
+        let Some(item) = game.rich_in(&def.id) else {
+            continue;
+        };
+        assert!(
+            items.get(item.as_str()).is_some(),
+            "species {:?} rich_in (or its work_resource fallback) names unknown item {:?}",
+            def.id,
+            item
+        );
+        checked += 1;
+    }
+    assert!(
+        checked > 0,
+        "the census walked no species with a rich_in at all"
+    );
+}

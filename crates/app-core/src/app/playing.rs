@@ -569,6 +569,16 @@ impl App {
         if entered_battle {
             self.mode = Mode::Battle;
         }
+        // Beside the battle check above and not folded into it: the engine
+        // hands over a cue rather than a mode because it cannot see
+        // app-core's `Mode` at all, and a bump can only ever raise one of
+        // the two — `find_settlement_at` is the bump ladder's fourth arm,
+        // reached only once the first three (wild creature, nest, surface
+        // link) have already returned.
+        if let Some(key) = self.game.as_mut().and_then(|g| g.take_settlement_visit()) {
+            self.pending_settlement = Some(key);
+            self.mode = Mode::Settlement;
+        }
         if is_move_key {
             self.pending_sounds.push(if entered_battle {
                 SoundEvent::BattleStart

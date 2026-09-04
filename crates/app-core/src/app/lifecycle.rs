@@ -89,6 +89,7 @@ impl App {
             pending_swap_target: None,
             pending_equip_program: None,
             pending_memory_program: None,
+            pending_settlement: None,
             pending_erase: None,
             erase_quantity_input: String::new(),
             basket_rows: Vec::new(),

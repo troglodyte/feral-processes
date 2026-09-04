@@ -72,6 +72,17 @@ impl App {
                 self.status_line = None;
                 self.mode = Mode::CellDescribe;
             }
+            // A settlement gets the shape `Caravan` and `BuildSite` above
+            // don't: it has a page of its own, `Mode::Settlement`, the same
+            // one a bump opens — `Game::settlement_key` is the one bridge
+            // from the `Entity` `InspectTarget` carries to the key both
+            // doors render through, so the bump and `x` cannot drift into
+            // two derivations of the same town.
+            Some(InspectTarget::Settlement(entity)) => {
+                self.pending_settlement = game.settlement_key(entity);
+                self.status_line = None;
+                self.mode = Mode::Settlement;
+            }
             // Nothing standing there — but in base space the ray may still
             // have run into a wall, and a wall is now something with a name.
             // Asked only after the creature and structure arms, because a
@@ -112,6 +123,20 @@ impl App {
     pub(crate) fn handle_cell_describe_key(&mut self, _key: GameKey) {
         self.pending_description = None;
         self.close_screen();
+    }
+
+    /// The settlement page: `Mode::CompanionMemories`'s shape, Esc only,
+    /// rather than `Mode::CellDescribe`'s "any key leaves" just above. A
+    /// settlement page is reached by walking into the tile as often as by
+    /// examining it, and a bump opens it on the same keypress that moved the
+    /// player — a direction key still held down must not double as the
+    /// dismissal the way it would if any key closed the screen.
+    pub(crate) fn handle_settlement_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.pending_settlement = None;
+            self.status_line = None;
+            self.mode = Mode::Playing;
+        }
     }
 
     /// You, then every program you own — everyone the manifest can page

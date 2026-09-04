@@ -226,6 +226,7 @@ impl App {
             Mode::InspectDirection => self.handle_inspect_direction_key(key),
             Mode::StructureManifest => self.handle_structure_manifest_key(key),
             Mode::CellDescribe => self.handle_cell_describe_key(key),
+            Mode::Settlement => self.handle_settlement_key(key),
             Mode::Notification => self.handle_notification_key(key),
             Mode::Manifest => self.handle_manifest_key(key),
             Mode::ManifestPick => self.handle_manifest_pick_key(key),

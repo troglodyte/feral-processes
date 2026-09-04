@@ -51,6 +51,7 @@ mod party;
 mod popup;
 mod progression;
 mod routines;
+mod sprite_forge;
 mod stack;
 mod stack_market;
 mod stock;
@@ -104,6 +105,7 @@ use routines::{
     draw_extract, draw_extract_confirm, draw_extract_pick, draw_routine_etch, draw_routine_install,
     draw_routine_target, draw_routines,
 };
+use sprite_forge::{draw_sprite_editor, draw_sprite_picker};
 use stack_market::draw_stack_market;
 use talents::{draw_develop, draw_develop_program};
 use trade::{
@@ -479,9 +481,10 @@ fn draw_message_text(
 ///
 /// **This is now the exception rather than the rule.** Every mode that
 /// draws a popup shows a refusal inside it, under the title, where the
-/// player is already looking — see `draw_popup`. What is left is the three
+/// player is already looking — see `draw_popup`. What is left is the
 /// surfaces that are not popups: the map, which draws it over its log pane,
-/// and the two full-pane frame maps, which draw nothing else at all.
+/// the two full-pane frame maps, and the two dev-only Sprite Forge screens
+/// (`sprite_forge.rs`), none of which draw anything else at all.
 ///
 /// `Battle` and `BattleResult` are not here: a refusal raised in a fight is
 /// the only one the log never keeps (`Game::note_refusal`), so the strip is
@@ -494,6 +497,8 @@ fn needs_status_banner(mode: Mode) -> bool {
             | Mode::FrameMap
             | Mode::FieldRoutineCell
             | Mode::Notification
+            | Mode::SpritePicker
+            | Mode::SpriteEditor
     )
 }
 
@@ -671,6 +676,12 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
             &m,
         ),
         Mode::BattleResult => draw_battle(app, fx, painter, &m),
+        // Full-pane, like `Mode::FrameMap`: both hang off the main menu
+        // (`app.game` is `None` the whole time either is open) and neither
+        // draws a popup box to put a refusal in, so both take `needs_status_
+        // banner`'s door instead of a `refusal` argument here.
+        Mode::SpritePicker => draw_sprite_picker(app, painter, &m),
+        Mode::SpriteEditor => draw_sprite_editor(app, painter, &m),
         _ => {
             // The map is the one surface that is not a popup and still has
             // somewhere to put a refusal: its own log pane. So it takes the
@@ -1288,12 +1299,10 @@ mod tests {
         Mode::ArenaSave,
         Mode::ArenaPick,
         Mode::ArenaResult,
-        // Undrawn as of this mode's introduction — Task 7 of the dev sprite
-        // editor plan closes `every_screen_draws_a_refusal_exactly_once`
-        // below by giving it a `draw_sprite_picker`. Expected red until
-        // then.
+        // Both dev-only, both full-pane draws with their refusal on
+        // `needs_status_banner`'s strip rather than in a popup — see
+        // `sprite_forge.rs`.
         Mode::SpritePicker,
-        // Same story, same task: `draw_sprite_editor` doesn't exist yet.
         Mode::SpriteEditor,
     ];
 
@@ -1662,6 +1671,8 @@ mod tests {
             Mode::BattleResult,
             Mode::FrameMap,
             Mode::FieldRoutineCell,
+            Mode::SpritePicker,
+            Mode::SpriteEditor,
         ] {
             assert!(
                 needs_status_banner(mode),

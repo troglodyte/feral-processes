@@ -35,7 +35,7 @@ fn app_with_profile(seed: u32, profile_path: PathBuf) -> App {
 
 /// A profile holding one stat rung with a known roll, written to `path` — the
 /// state a previous run would have left behind.
-fn seed_profile(path: &Path) {
+fn seed_profile(path: &PathBuf) {
     let mut profile = Profile::default();
     profile.record(Earned {
         id: "breach_zone_2".into(),

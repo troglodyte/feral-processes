@@ -33,6 +33,28 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.91
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+both new fields are additive behind `#[serde(default)]`, so a save written
+before this release loads with an empty receipt.
+
+- **A perk screen and a companion's talent ladder can each be refunded whole
+  for a flat Credit price.** `X` opens a confirmation; `y` clears that
+  ledger, hands back every point spent, and takes the stats those purchases
+  baked in back out.
+- **A stat a purchase baked in now leaves a receipt, because neither grant is
+  invertible.** `Perk::Buffer` and `TalentNode::Stat` read the value at
+  purchase and floor at a whole point, so refunding without a record would let
+  buy-wipe-rebuy compound maximum Integrity without limit.
+- **A refund no longer makes the next banked-XP Perk Point cheap.**
+  `convert_overflow_xp` prices each point off perks *ever* bought rather than
+  off the list a respec empties, which is what keeps banked cap XP bounded.
+- **Refunding Process Pool is refused while the roster is full**, rather than
+  leaving more programs owned than there are slots to hold them.
+- **A talent refund takes back the tree's routines and leaves the player's
+  alone**, so a routine installed from a disk survives the wipe.
+
 ## 0.13.90
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

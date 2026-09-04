@@ -1671,10 +1671,14 @@ impl Mode {
             | Mode::ManifestPick
             | Mode::StructureManifest
             | Mode::CellDescribe
-            // Opened from the map by a bump or by `x`, so it never layers
-            // over a fight — the settlement arm of the bump ladder is a
-            // fourth arm beside the wild-creature one that does, and it
-            // returns before a battle could ever start.
+            // Opened from the map by a bump or by `x`. `x` never layers over
+            // a fight. A bump can: the settlement arm of the bump ladder
+            // queues the visit and calls `self.tick()` itself, and
+            // `nest_aggro_tick` inside that tick can start a battle for a
+            // `Pursuing` guardian already adjacent to the player — but
+            // `App::after_world_action` gives the battle the mode in that
+            // case (see its own comment), so this screen is never actually
+            // layered under one.
             | Mode::Settlement
             | Mode::Inventory
             | Mode::EquipSwap

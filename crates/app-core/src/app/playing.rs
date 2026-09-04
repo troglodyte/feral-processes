@@ -571,11 +571,19 @@ impl App {
         }
         // Beside the battle check above and not folded into it: the engine
         // hands over a cue rather than a mode because it cannot see
-        // app-core's `Mode` at all, and a bump can only ever raise one of
-        // the two — `find_settlement_at` is the bump ladder's fourth arm,
-        // reached only once the first three (wild creature, nest, surface
-        // link) have already returned.
-        if let Some(key) = self.game.as_mut().and_then(|g| g.take_settlement_visit()) {
+        // app-core's `Mode` at all. The bump ladder's settlement arm
+        // (`find_settlement_at`, the fourth arm) queues the visit and then
+        // calls `self.tick()` itself, and `tick_inner` calls
+        // `nest_aggro_tick` right after `nest_respawn_tick` — so a
+        // `Pursuing` guardian already adjacent to the player can start a
+        // battle *inside that same tick*. The battle wins the mode, but the
+        // cue must still be drained: left in `PendingVisit` it would reopen
+        // `Mode::Settlement` on some later, unrelated action once the fight
+        // is over, so this always calls `take_settlement_visit` and only
+        // assigns the mode when no battle started.
+        if let Some(key) = self.game.as_mut().and_then(|g| g.take_settlement_visit())
+            && !entered_battle
+        {
             self.pending_settlement = Some(key);
             self.mode = Mode::Settlement;
         }

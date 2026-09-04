@@ -116,7 +116,10 @@ restate them.
 **Steps:**
 
 - [ ] **Test first.** Slot count matches `abilities::player_routine_slots`'
-  shape — grows on the per-level step, clamped at the cap. A new game has
+  shape — grows on the per-level step, clamped at the cap. Note routine
+  slots come **two per step** with a cap of 12, so level 1 has a free slot;
+  decide deliberately whether tools do the same, and assert whichever you
+  choose rather than inheriting it by accident. A new game has
   the starter tool in slot 1. A `Game::load` of a save that already has tools
   does **not** re-grant it (the profile rule: pay at `new`, never at `load`).
   A save→load preserves the loadout.
@@ -166,7 +169,7 @@ restate them.
 
 **Files:**
 - Create: `crates/engine/src/game/extraction.rs`, registered in `game/mod.rs`
-- Modify: `crates/engine/src/game/turn.rs` — `LootSource::Extract`
+- Modify: `crates/engine/src/base_ledger.rs` — `LootSource::Extract` (the enum lives here, not in `turn.rs`; its match is exhaustive so a new variant must be named)
 - Modify: `crates/engine/src/species.rs` — `SpeciesDef::rich_in: Option<ItemId>`, `#[serde(default)]`, falling back to `work_resource`
 - Modify: `assets/species/README.md` — document `rich_in` in the same change
 - Modify: `crates/engine/src/tuning.rs` — `TOOL_BASE_UNITS`, `RICH_IN_UNITS`, the tier scale
@@ -174,7 +177,7 @@ restate them.
 
 **Interfaces consumed:** Tasks 1–4.
 **Interfaces produced:**
-- `Game::extraction_yield(&self, program: &DownedProgram, tool: &ToolDef) -> Vec<(ItemId, u32)>` — the one derivation, called by the act **and** by the screen's preview
+- `Game::extraction_yield(&self, program: &DownedProgram, tool: &ToolDef) -> Vec<(ItemId, u32)>` — the one derivation, called by the act **and** by the screen's preview. The spec's signature carries a third `structure_tier: u32`; that parameter arrives in phase 3 with the structure that supplies it. Do not add it now with a hardcoded zero.
 - `Game::extract_program(&mut self, index: usize, tool: &ToolId) -> Result<(), String>` — the one door
 - `Game::rich_in(&self, species: &SpeciesId) -> Option<ItemId>`
 
@@ -243,7 +246,13 @@ restate them.
   Row count comes from the engine, not the renderer — assert app-core and the
   view agree. The row's quoted yield equals what extracting grants.
 - [ ] Run; fail.
-- [ ] Implement. The engine owns the row count and gui draws it; any per-row
+- [ ] Implement. **`ALL_MODES` does not fail to compile** — the list is
+  hand-written and the draw match ends in `_ => {}`, so a new `Mode` variant
+  ships as a silently blank screen. Add the variant to both by hand and
+  assert the screen draws something. **The opening key must be UPPERCASE** —
+  lowercase letters are row selectors, so a lowercase binding would both
+  pick a row and fire the action on one keypress.
+- [ ] Implement the rest. The engine owns the row count and gui draws it; any per-row
   transform lives in the engine (`message_history`'s rule). Draw through
   `Painter` only — `render/` names no graphics library.
 - [ ] Run; green. `cargo test --workspace`.
@@ -269,6 +278,9 @@ restate them.
 
 **Steps:**
 
+- [ ] `CLAUDE.md` is gitignored, so it cannot ride a branch into a worktree.
+  If you are working in one, land the seam sentences in the primary checkout
+  or hand them back — the third write lands before the code does.
 - [ ] Add the three seam sentences: the third store and why it is not
   `Inventory`; `extract_program` as the one door; `extraction_yield` as the
   one derivation the preview and the grant share.

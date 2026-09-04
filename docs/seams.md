@@ -1232,6 +1232,69 @@ rather than a second install path beside them — which is what guarantees a
 granted routine competes for slots exactly as a species-kit unlock does and
 leaves a *carried* routine, the prize the program was decompiled for, in place.
 
+### A stat a purchase baked in needs a receipt, because neither grant is invertible
+
+**A stat a purchase baked in needs a receipt, and `components::BoughtStats`
+is it.** Four purchases write into `Stats` — `Perk::Attacker`,
+`Perk::Defender`, `Perk::Buffer` and `TalentNode::Stat` — and
+`Game::respec_perks` / `Game::respec_talents` have to take exactly those
+numbers back out. None of them can be recovered from `Stats` afterwards.
+
+The reason is arithmetic, not bookkeeping. `Perk::Buffer` grants
+`max(round(max_hp * BUFFER_BONUS_PERCENT_PER_LEVEL), BUFFER_MIN_BONUS_PER_LEVEL)`
+and `TalentNode::Stat` goes through `refactor::raised`, which carries the same
+never-less-than-a-whole-point floor the entry above explains. Both read the
+value *at the moment of purchase*, and both floor — so the mapping from
+before-value to after-value is many-to-one, and by the time a respec runs the
+maximum has moved anyway. Inverting it is off by a point per level in the
+common case. Worse, the inversion would read today's constants: retuning
+`BUFFER_BONUS_PERCENT_PER_LEVEL` would silently change what an *old* save's
+respec hands back, which is a save-format break wearing a tuning constant's
+clothes.
+
+So the grant is recorded as it is made, in the same branch that writes
+`Stats`, from the same value. Two computations of `purchase_stat_gain` — one
+to grant, one to refund — is the drift this repo has been bitten by four
+times in `balance_sim.rs`. `Game::unbake_bought_stats` is the one subtractor,
+shared by both doors, and it lifts gear around the write for the reason the
+entry above gives.
+
+**The trap is a fifth writer.** Nothing fails to compile if a new
+stat-granting perk or a new `TalentNode` kind writes `Stats` and forgets the
+receipt. The perk works. Refunds just quietly under-pay, and the symptom
+surfaces as "respec is buggy" nowhere near the perk that caused it.
+`purchase_stat_gain`'s `_ => None` arm is where a new perk's grant is
+declared, and it is the place to look.
+
+**Rejected: per-purchase records.** `unlocked: Vec<(Perk, StatGain)>` would
+support refunding one level at a time, which the design does not want —
+`PlayerSave::unlocked_perks` is bincode-positional save format, so changing
+its element type is a genuine save break for a granularity nobody asked for.
+
+**`ever_bought` is the half a respec must not reset**, and it is on this
+component rather than beside it because it is the same fact one step
+further. `Game::convert_overflow_xp` prices each minted Perk Point at
+`OVERFLOW_XP_BASE + OVERFLOW_XP_STEP * held`, and that escalator is the only
+thing keeping banked cap XP from being an unbounded linear power source —
+`OVERFLOW_XP_STEP`'s own doc says zero is not a safe value there. Read off
+`Perks::unlocked`, as it originally was, a respec empties the list and resets
+the price to the opening rate: buy perks, wipe them, mint the rest cheap. The
+count is monotonic instead, incremented for **every** perk and not just the
+three that move a stat, and untouched by the wipe. For a run that never
+respecs the two figures are equal, so the curve did not move.
+
+The load seed is `max(saved.ever_bought, unlocked_perks.len())` and the `max`
+is load-bearing. The bare length is exact for a save written before the
+receipt existed and **wrong for every save written after a respec** — that
+one has an empty `unlocked` and a non-zero count, so assigning the length
+throws the count away and re-opens the exploit across a save/load.
+
+A save from before this shipped loads with a zero receipt, so a respec on it
+refunds the points and leaves the stats. That is a real one-time seam and the
+tests state it rather than pretend otherwise; the alternative — refusing to
+respec whenever the receipt is zero but purchases exist — tells a returning
+player the feature is broken, which is worse than a one-off gift.
+
 ### Fusion keeps the dominant parent's ring and talents
 
 **Fusion keeps the dominant parent's ring and talents.** `fuse_companions` is

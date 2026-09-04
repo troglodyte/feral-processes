@@ -76,6 +76,25 @@ makes the exception safe here and nowhere else: any *authored* sprite
 still needs the near-white treatment above, because it does carry a hue
 this tint would otherwise be protecting.
 
+## Disabling a sprite
+
+A file whose name ends `.png.off` — `<name>.png.off` — is a **disabled**
+sprite: the same PNG, renamed rather than deleted, so the art survives
+turning it off. `scan_sprite_dir` filters entries on the extension being
+exactly `png`, so an `.off` file is already invisible to the loader with no
+change to that scan at all — it never reaches the asset server, and the
+entity it was drawn for falls back to its glyph exactly as if the file were
+absent.
+
+The dev-only sprite editor (`FERAL_DEV_SPRITES`, a checkout-only screen —
+see `crates/gui/src/render/sprite_forge.rs`) is what writes `.png` files
+into this directory and what renames them to and from `.png.off`; nothing
+else in the game does either. It is invisible in an installed build and to
+a player, so this directory's population is still meant to change only by
+someone dropping in a file — a stray `.png.off` sitting next to an enabled
+sprite is normal, not a leftover to clean up, and is exactly how a piece of
+art gets shelved without losing it.
+
 ## Fallback
 
 A missing sprite is not an error. `Painter::sprite` returns `false` when

@@ -3561,28 +3561,50 @@ mod tests {
     /// it spent its whole cycle at or above centre and read as sitting high
     /// in the tile.
     ///
-    /// Two frames **half a period** apart, whose mean is the resting
-    /// position for any phase, against a frame with animation off — which is
-    /// what puts the caret at rest. Asserting only that the two frames
-    /// straddle *each other* would pass against the old upward-only bob.
+    /// **Eight frames spanning one full second-long cycle** (the bob runs at
+    /// 1 Hz), rather than the two frames half a period apart this test used
+    /// to take.
+    ///
+    /// Two fixed samples tied the result to *this entity's* incidental
+    /// phase: `Fx::centred_bob` keys its phase off `Entity::to_bits()`,
+    /// which `place_structure` hands out from bevy's own allocator — this
+    /// test has no way to see or choose it, and never should (the engine's
+    /// `World` is private outside its own crate). For six of the sixty-four
+    /// phase buckets a raised cosine sampled exactly half a period apart
+    /// lands on the identical pixel both times: that offset is a genuine
+    /// zero of the curve, not a flaw in it, and any two-sample, fixed-gap
+    /// probe has some phase that defeats it.
+    ///
+    /// Eight samples 45° apart covering a full turn do not have that
+    /// problem. Two identities hold for *any* rotation of eight equally
+    /// spaced points around a circle: the offsets always average to zero
+    /// (the real parts of the eighth roots of unity sum to zero), and no
+    /// point on the circle — the true peak or trough included — is ever
+    /// more than 22.5° from its nearest sample. `cos(22.5°) ≈ 0.92`, so
+    /// against the swing's 2px half-amplitude the worst-placed sample still
+    /// clears 1.8px on each side; asserting past 1.0px leaves real margin
+    /// while asserting nothing a rendering rounding error could trip.
     #[test]
     fn the_caret_bounces_around_the_middle_of_its_slab() {
         let rest = caret_y(&drawn_base_at(0.0, true, false));
-        // Half a period apart at the bob's 1 Hz, which is what makes the
-        // mean below the rest position for *any* entity phase.
-        let (a, b) = (
-            caret_y(&drawn_base_at(0.0, true, true)),
-            caret_y(&drawn_base_at(0.5, true, true)),
+        let offsets: Vec<f32> = (0..8)
+            .map(|i| caret_y(&drawn_base_at(i as f64 / 8.0, true, true)) - rest)
+            .collect();
+
+        let mean = offsets.iter().sum::<f32>() / offsets.len() as f32;
+        assert!(
+            mean.abs() < 0.01,
+            "eight frames spanning a full cycle must average out to the caret's rest position: \
+             {offsets:?} (mean {mean}) about {rest}"
         );
 
+        let min = offsets.iter().cloned().fold(f32::INFINITY, f32::min);
+        let max = offsets.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
         assert!(
-            ((a + b) / 2.0 - rest).abs() < 0.01,
-            "the swing must be centred on the caret's rest position: {a} and {b} about {rest}"
-        );
-        assert!(
-            (a - rest) * (b - rest) < 0.0,
-            "and it must genuinely cross that position rather than sit to one side of it: \
-             {a} and {b} about {rest}"
+            min < -1.0 && max > 1.0,
+            "the swing must clear the rest position by a real margin on both sides across a \
+             full cycle, whatever phase the caret's own entity happens to carry: {offsets:?} \
+             about {rest}"
         );
     }
 

@@ -410,6 +410,30 @@ impl App {
     /// rings in a row should not be sent back to pick the program again, and
     /// the page is where the ceiling it bought is shown. A refusal lands in
     /// the status line and the page holds.
+    /// Confirms or backs out of a full talent refund on the program held in
+    /// `pending_develop_target`.
+    ///
+    /// Backing out returns to `Mode::DevelopProgram` rather than
+    /// `Mode::Develop`: the player was looking at one program's ladder and a
+    /// declined confirmation should leave them there.
+    pub(crate) fn handle_respec_talents_confirm_key(&mut self, key: GameKey) {
+        match key {
+            GameKey::Char('y') | GameKey::Char('Y') => {
+                if let Some(target) = self.pending_develop_target
+                    && let Some(game) = &mut self.game
+                {
+                    let outcome = game.respec_talents(target);
+                    self.report(outcome);
+                }
+                self.mode = Mode::DevelopProgram;
+            }
+            GameKey::Esc | GameKey::Char('n') | GameKey::Char('N') => {
+                self.mode = Mode::DevelopProgram
+            }
+            _ => {}
+        }
+    }
+
     pub(crate) fn handle_develop_program_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.pending_develop_target = None;
@@ -424,6 +448,12 @@ impl App {
             let Some(game) = &mut self.game else { return };
             let outcome = game.open_kernel_ring(target);
             self.report(outcome);
+            return;
+        }
+        // Uppercase for `handle_perks_key`'s reason — lowercase letters label
+        // rows — and not `R`, which the kernel ring above already holds.
+        if key == GameKey::Char('X') {
+            self.mode = Mode::RespecTalentsConfirm;
             return;
         }
         // The ladder's numbered rows are the next untaken tier's choices —

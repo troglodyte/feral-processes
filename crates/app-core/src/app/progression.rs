@@ -13,6 +13,14 @@ impl App {
         // Through `perk_defs` rather than `Perk::all()` so the numbering the
         // player types against is the one the picker drew — a perk whose
         // `.ron` file is missing isn't listed and can't be bought by index.
+        // Uppercase, and checked before `selected_index`: lowercase letters
+        // are row labels past the digits (`DIGIT_ROWS + (c - 'a')`) and this
+        // picker has eighteen rows, so a lowercase key would pick a perk
+        // *and* open the wipe on one keypress.
+        if key == GameKey::Char('X') {
+            self.mode = Mode::RespecPerksConfirm;
+            return;
+        }
         let Some(perks) = self
             .game
             .as_ref()
@@ -24,6 +32,21 @@ impl App {
             let Some(game) = &mut self.game else { return };
             let outcome = game.unlock_perk(perks[idx]);
             self.report(outcome);
+        }
+    }
+
+    /// Confirms or backs out of a full perk refund.
+    pub(crate) fn handle_respec_perks_confirm_key(&mut self, key: GameKey) {
+        match key {
+            GameKey::Char('y') | GameKey::Char('Y') => {
+                if let Some(game) = &mut self.game {
+                    let outcome = game.respec_perks();
+                    self.report(outcome);
+                }
+                self.mode = Mode::Perks;
+            }
+            GameKey::Esc | GameKey::Char('n') | GameKey::Char('N') => self.mode = Mode::Perks,
+            _ => {}
         }
     }
 

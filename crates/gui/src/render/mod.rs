@@ -31,6 +31,7 @@ mod bars;
 mod base;
 mod battle;
 mod building;
+mod canvas;
 mod caravan;
 mod contracts;
 mod crafting;

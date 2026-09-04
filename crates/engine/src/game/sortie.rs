@@ -500,10 +500,9 @@ impl Game {
         }
 
         // Priced while the fallen are still standing there: `kill_xp` and
-        // `roll_work_resource_drop` both read the victim's own components,
-        // so neither can move below the despawn.
+        // `leave_downed_program` both read the victim's own components, so
+        // neither can move below the despawn.
         let mut earned = 0;
-        let mut haul: Vec<(ItemId, u32)> = Vec::new();
         for &hostile in &hostiles {
             if self.creature_alive(hostile) {
                 continue;
@@ -515,16 +514,13 @@ impl Game {
                     self.award_companion_xp(member, paid);
                 }
             }
-            // The same drop a kill in front of the player pays, through the
-            // same roll — accumulated into the record rather than granted,
-            // because the party is not there to pick it up. It goes to a
-            // Depot when the squad walks back in.
-            if let Some((item, qty)) = self.roll_work_resource_drop(hostile) {
-                match haul.iter_mut().find(|(held, _)| *held == item) {
-                    Some((_, held)) => *held += qty,
-                    None => haul.push((item, qty)),
-                }
-            }
+            // The same door a kill in front of the player leaves a program
+            // through, called rather than copied for `leave_downed_program`'s
+            // own reason. Unlike loot, this writes straight to the player's
+            // `DownedPrograms` rather than banking into `sortie.loot` for a
+            // Depot to receive later — a travel-and-deliver record for
+            // programs is `Sortie::programs`, phase 3's to build.
+            self.leave_downed_program(hostile);
         }
 
         // **Unconditional, and every hostile, living or not.** Whatever the
@@ -551,12 +547,6 @@ impl Game {
         sortie.battles_done += 1;
         sortie.kills += kills as u32;
         sortie.xp += earned;
-        for (item, qty) in haul {
-            match sortie.loot.iter_mut().find(|(held, _)| *held == item) {
-                Some((_, held)) => *held += qty,
-                None => sortie.loot.push((item, qty)),
-            }
-        }
         if let Some((entity, name)) = downed {
             sortie.aborted = true;
             sortie.casualties.push(name);
@@ -586,7 +576,6 @@ impl Game {
                 casualties: s.casualties.clone(),
                 kills: s.kills,
                 xp: s.xp,
-                loot: s.loot.clone(),
                 battles_done: s.battles_done,
                 battles_total: s.battles_total,
                 ticks_left: s.ticks_total.saturating_sub(s.ticks_elapsed),
@@ -595,32 +584,25 @@ impl Game {
             .collect()
     }
 
-    /// A trip reaching its last tick: the record is dropped, the loot is put
-    /// away and one line says what came back.
+    /// A trip reaching its last tick: the record is dropped and one line
+    /// says what came back.
     ///
     /// Members become `Staff` again **by omission** — nothing writes a role
     /// anywhere, which is the whole of why the fourth variant was worth
     /// having. A Forgiving casualty comes home still carrying `Downed` and
     /// walks itself to a Repair Bay through the existing `Downed` arm of
     /// `drift_idle_staff`; there is no new recovery path.
+    ///
+    /// No loot delivery here: extraction retired the direct kill drop that
+    /// used to fill `Sortie::loot`, so the field is always empty and a
+    /// delivery loop over it would never run. Phase 3's travel-and-deliver
+    /// record for downed programs is what re-earns this a body.
     fn return_sortie(&mut self, index: usize) {
         let sortie = self
             .world
             .resource_mut::<crate::resources::Sorties>()
             .0
             .remove(index);
-        // Loot lands through the existing put-back, so what does not fit is
-        // **logged rather than dropped in silence** — that function's rule.
-        for (item, qty) in &sortie.loot {
-            let landed = crate::game::base::stock::return_to_depots(self, item, *qty);
-            if landed < *qty {
-                let name = self.item_name(item);
-                self.log_base(format!(
-                    "{} {name} came back with no shelf to stand on.",
-                    qty - landed
-                ));
-            }
-        }
         self.queue_squad_walk(&sortie.members, false);
         let names: Vec<String> = sortie
             .members

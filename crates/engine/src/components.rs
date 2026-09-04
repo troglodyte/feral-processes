@@ -5,12 +5,13 @@ use crate::MAX_CUSTOM_NAME_LEN;
 use crate::abilities::AbilityId;
 use crate::classes::PlayerClass;
 use crate::icon::PlayerIcon;
-use crate::items::{EquipmentSlot, GearCopy, ItemId};
+use crate::items::{DownedProgram, EquipmentSlot, GearCopy, ItemId};
 use crate::items_db::ItemDb;
 use crate::needs::{NEED_MAX, NEED_MIN, NeedId};
 use crate::perks::Perk;
 use crate::species::SpeciesId;
 use crate::structures::StructureId;
+use crate::tools::ToolId;
 use crate::tuning::{
     GOLD_STAT_MULT, MAX_INDIVIDUAL_ROLL, MIN_INDIVIDUAL_ROLL, PLATINUM_STAT_MULT,
     PRISMATIC_STAT_MULT, SILVER_STAT_MULT,
@@ -535,6 +536,39 @@ impl GearCopies {
         self.copies.iter().map(|(_, qty)| *qty).sum()
     }
 }
+
+/// Player-only: every wild program taken apart at the kill rather than paid
+/// out directly, one row per `DownedProgram` — see that type's doc and
+/// `docs/superpowers/specs/2026-09-04-program-extraction-design.md`.
+///
+/// **The third store**, after `Inventory` and `GearCopies`, for the same
+/// reason `GearCopies` exists at all: `Inventory` is by definition the
+/// plain-copy store, and a downed program is never plain — a level-30
+/// Prismatic kill and a level-2 Ordinary one are not interchangeable, so
+/// folding this in would give every reader of `Inventory` (recipes,
+/// `Stock`, `assembler_system`, hauling, banking) an instance rule none of
+/// them needs. Unlike `GearCopies`, this is **not** keyed by value: two
+/// `DownedProgram`s that happen to compare equal are still two separate
+/// kills, and a screen listing them by index (`Mode::DownedPrograms`, a
+/// later phase) needs a position to select — `Vec<DownedProgram>` rather
+/// than `Vec<(DownedProgram, u32)>`.
+///
+/// Capped at `tuning::MAX_DOWNED_PROGRAMS` — decision 9 of the spec is that
+/// a full store refuses the drop with a log line rather than discarding the
+/// worst held program, so nothing here truncates on its own.
+#[derive(Component, Default, Clone)]
+pub struct DownedPrograms(pub Vec<DownedProgram>);
+
+/// Player-only: tool ids installed in the player's tool slots, in slot
+/// order — position is what a later phase's extraction screen selects by,
+/// `Routines`' own reason for keeping its list ordered rather than keyed.
+///
+/// Bounded by `tools::player_tool_slots(level)`, but nothing here enforces
+/// that cap yet: the only writer this phase has is the starter grant at
+/// `Game::new`, which fills exactly the base slot. `install_tool` (a later
+/// phase) is what has to respect the bound on every other write.
+#[derive(Component, Default, Clone)]
+pub struct Tools(pub Vec<ToolId>);
 
 impl Inventory {
     pub fn add(&mut self, item: ItemId, qty: u32) {

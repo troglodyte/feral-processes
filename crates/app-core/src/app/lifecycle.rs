@@ -91,6 +91,7 @@ impl App {
             pending_memory_program: None,
             pending_erase: None,
             erase_quantity_input: String::new(),
+            pending_downed_program_index: None,
             basket_rows: Vec::new(),
             basket_amounts: Vec::new(),
             caravan_amounts: Vec::new(),

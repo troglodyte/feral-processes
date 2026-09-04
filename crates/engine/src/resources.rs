@@ -1599,6 +1599,10 @@ pub struct Sortie {
     /// return travel still runs, because the countdown was always going to
     /// take that long and there is no teleport home.
     pub aborted: bool,
+    /// Always empty on this branch — see `save::SortieSave::loot`, which
+    /// this field round-trips through unchanged. Nothing writes it and
+    /// `return_sortie` no longer reads it; kept only so the field exists
+    /// for phase 3 to refill.
     pub loot: Vec<(crate::items::ItemId, u32)>,
     pub xp: u32,
     pub kills: u32,

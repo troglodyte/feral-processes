@@ -2167,7 +2167,6 @@ pub struct SortieReport {
     pub casualties: Vec<String>,
     pub kills: u32,
     pub xp: u32,
-    pub loot: Vec<(crate::items::ItemId, u32)>,
     pub battles_done: u32,
     pub battles_total: u32,
     /// Ticks still to run. A trip that has aborted still runs this out —
@@ -2449,4 +2448,22 @@ pub struct RespecQuote {
     /// Why this is refused, or `None` if it would go through. The screens
     /// grey the row on this and `App::report` speaks the same sentence.
     pub refusal: Option<String>,
+}
+
+/// One row of `Mode::DownedPrograms`'s list — see `Game::downed_program_rows`.
+///
+/// `grade` is `items::DownedProgram::grade()`'s own answer, carried rather
+/// than left for the renderer to re-fold from `condition`/`rarity`/`level` —
+/// `message_history`'s rule, that a per-row transform belongs in the engine.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DownedProgramRow {
+    /// The species' display name, falling back to the raw id for a mod
+    /// species since removed — `Game::downed_program_label`'s tolerance.
+    pub name: String,
+    pub level: u32,
+    pub rarity: Rarity,
+    /// 0..=100 — `items::DownedProgram::condition`, unrolled.
+    pub condition: u8,
+    pub boss: bool,
+    pub grade: f32,
 }

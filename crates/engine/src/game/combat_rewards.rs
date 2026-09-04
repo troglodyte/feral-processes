@@ -1,8 +1,9 @@
 //! What a won fight pays out: equipment drops, loot, experience, and
 //! decompiling a defeated program into a companion.
 
+use crate::items::DownedProgram;
 use crate::progression::StatRow;
-use crate::tuning::{DECOMPILE_ATTEMPT_BONUS_CAP, GEAR_AFFIX_CHANCE, WORK_RESOURCE_DROP};
+use crate::tuning::{DECOMPILE_ATTEMPT_BONUS_CAP, GEAR_AFFIX_CHANCE};
 use crate::tuning::{
     DECOMPILER_SKILL_PER_LEVEL, NEST_RESPAWN_TICKS, PARTY_XP_DIVISOR, PERK_POINTS_PER_LEVEL,
     STACK_BOSS_PORTAL_FRAGMENT_DROP, SURFACE_BOSS_LOOT_BAND_FLOOR_PERCENT, SURFACE_BOSS_LOOT_DROPS,
@@ -497,44 +498,108 @@ impl Game {
         }
     }
 
-    /// Defeated (not tamed) rogue programs drop whatever resource their
-    /// species is associated with, if any.
+    /// Defeated (not tamed) rogue programs no longer pay their species'
+    /// `work_resource` directly — see
+    /// `docs/superpowers/specs/2026-09-04-program-extraction-design.md`
+    /// section 5. This is what replaces the old `roll_work_resource_drop`:
+    /// the one writer of `components::DownedPrograms` from a defeat, so a
+    /// sortie's kills leave a program through this same call rather than a
+    /// copy of it (`game/sortie.rs`) — `Perk::Teardown`'s old trap, still
+    /// worth guarding against here.
     ///
-    /// `SpeciesDef::work_resource` does *not* decide what a tamed member of
-    /// that species gathers, despite the name — a cronjob's output comes
-    /// from the structure's `produces`, and any species can work any
-    /// structure. Its only other reader is the inspection view. So changing
-    /// a species' `work_resource` changes what killing it drops and nothing
-    /// else.
-    /// What `wild`'s species pays in raw material, rolled.
+    /// `false` when the store is full (`tuning::MAX_DOWNED_PROGRAMS`):
+    /// spec decision 9 is that the drop is refused and nothing already held
+    /// is destroyed, never that the worst program on hand is dropped to
+    /// make room.
     ///
-    /// Split out of `award_loot` rather than copied, because a sortie's
-    /// kills pay the same drop and the perk term is easy to leave out of a
-    /// second copy — which would make `Perk::Teardown` silently worth
-    /// nothing off-screen. **Reports rather than grants**: `award_loot`
-    /// hands it to the player, a sortie accumulates it into the record and
-    /// carries it home to a Depot.
+    /// Boss and rarity are read off `wild` itself
+    /// (`is_boss_creature`/`rarity_of`), so this must run before `wild`
+    /// despawns — `award_loot`'s call site does, and so does the sortie's.
+    /// Level has no source on a wild `Creature` (unlike a companion, it
+    /// never carries `Experience`), so it comes from `ability_user_level`
+    /// (`game/combat.rs`) — the same "no `Experience`, read `ZoneLevel`
+    /// instead" answer `manifest_accuracy`/`manifest_evasion` already give a
+    /// wild program, rather than a second one invented here. Known gap: a
+    /// Stack kill still reads the *surface* `ZoneLevel`, since depth carries
+    /// no level of its own — `ability_user_level`'s existing limitation, not
+    /// a new one.
     ///
-    /// The perk is added to the roll rather than drawn for: a second draw
-    /// here would shift the shared `GameRng` stream on essentially every
-    /// fight in the game, `grant_gear_drop`'s early-return trap.
-    pub(crate) fn roll_work_resource_drop(&mut self, wild: Entity) -> Option<(ItemId, u32)> {
-        let species_id = self
-            .world
-            .get::<Creature>(wild)
-            .map(|c| c.species.clone())?;
-        let resource = self
-            .world
-            .resource::<SpeciesDb>()
-            .get(&species_id)?
-            .work_resource
-            .clone()?;
-        let bonus = crate::perks::salvage_bonus(self.player_perks());
-        let qty = {
-            let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_range(WORK_RESOURCE_DROP) + bonus
+    /// **Rarity is floored before the condition roll, not after.** A boss's
+    /// rarity is raised to `BOSS_RARITY_FLOOR` first, so `roll_condition`
+    /// prices condition against the rarity the program actually ships with.
+    /// Rolling condition off the pre-floor rarity and raising rarity only
+    /// afterward would leave `grade()` — which folds both — understated for
+    /// exactly the bosses this floor exists to protect.
+    pub(crate) fn leave_downed_program(&mut self, wild: Entity) -> bool {
+        let Some(species) = self.world.get::<Creature>(wild).map(|c| c.species.clone()) else {
+            return false;
         };
-        Some((resource, qty))
+        let boss = self.is_boss_creature(wild);
+        let mut rarity = self.rarity_of(wild);
+        if boss {
+            rarity = rarity.max(crate::tuning::BOSS_RARITY_FLOOR);
+        }
+        let level = self.ability_user_level(wild);
+        let overkill_term = self.overkill_term(wild);
+        let mut condition = DownedProgram::roll_condition(rarity, boss, overkill_term);
+        if boss {
+            condition = condition.max(crate::tuning::BOSS_CONDITION_FLOOR);
+        }
+        self.push_downed_program(DownedProgram {
+            species,
+            level,
+            rarity,
+            boss,
+            condition,
+        })
+    }
+
+    /// The one writer of `DownedPrograms`'s `Vec` itself — `leave_downed_program`
+    /// for an ordinary kill, `grant_nest_cache` for a nest's own bonus
+    /// programs. A full store logs the refusal (spec decision 9) rather than
+    /// silently dropping the program on the floor, the same courtesy every
+    /// other refusal in the game gets.
+    pub(crate) fn push_downed_program(&mut self, program: DownedProgram) -> bool {
+        let player = self.player_entity();
+        let full = self
+            .world
+            .get::<DownedPrograms>(player)
+            .is_some_and(|held| held.0.len() >= crate::tuning::MAX_DOWNED_PROGRAMS);
+        if full {
+            self.log_kind(
+                MessageKind::Outcome,
+                "No room to carry another downed program — the store is full.",
+            );
+            return false;
+        }
+        self.world
+            .get_mut::<DownedPrograms>(player)
+            .unwrap()
+            .0
+            .push(program);
+        true
+    }
+
+    /// The spec's `overkill_term`: how far the killing blow went past zero,
+    /// as a negative fraction of `max_hp`. Read directly off `wild`'s
+    /// current `Stats` rather than threaded through from the swing that
+    /// killed it — `lower_hp` (`combat_damage.rs`) clamps `hp` to zero
+    /// before `award_loot` ever runs, so on the ordinary kill path this is
+    /// always `0.0`, the formula's identity value. `FIGHT_CONDITION_WEIGHT`
+    /// being `0.0` too is what makes that harmless rather than a bug: the
+    /// term genuinely varies for a caller that sets `Stats::hp` negative
+    /// directly (a test, not a live kill), which is what lets
+    /// `DownedProgram::roll_condition`'s independence from it be asserted
+    /// against real variation instead of a term that can never move.
+    fn overkill_term(&self, wild: Entity) -> f32 {
+        let Some(stats) = self.world.get::<Stats>(wild) else {
+            return 0.0;
+        };
+        if stats.max_hp <= 0 {
+            return 0.0;
+        }
+        let past_zero = (-stats.hp).max(0) as f32;
+        -(past_zero / stats.max_hp as f32)
     }
 
     pub(crate) fn award_loot(&mut self, wild: Entity) {
@@ -545,10 +610,7 @@ impl Game {
             return;
         };
 
-        if let Some((resource, qty)) = self.roll_work_resource_drop(wild) {
-            let landed = self.grant_loot(resource.clone(), qty, LootSource::Kill);
-            self.record_drop(GearCopy::plain(resource), landed);
-        }
+        self.leave_downed_program(wild);
 
         for (item, chance) in self.equipment_drops_for(&species) {
             let roll = {

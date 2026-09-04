@@ -90,6 +90,17 @@ impl App {
             return;
         }
 
+        // The store, not the pack: `D`, not `d`, for `S`'s reason —
+        // `selected_index` reserves shifted letters for screen actions, so
+        // a lowercase binding here would both open this screen and pick a
+        // row on the very keypress that opened it.
+        if key == GameKey::Char('D') {
+            self.pending_downed_program_index = None;
+            self.menu_selected = 0;
+            self.mode = Mode::DownedPrograms;
+            return;
+        }
+
         let Some(idx) = self.selected_index(key, total) else {
             return;
         };

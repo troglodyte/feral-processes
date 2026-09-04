@@ -2086,11 +2086,15 @@ pub const NEST_AGGRO_LEASH_RADIUS: i32 = 15;
 /// Added to the leash radius to size the search box.
 pub const NEST_PATH_SEARCH_MARGIN: i32 = 5;
 
-/// Multiplier on an ordinary `WORK_RESOURCE_DROP` roll (see `Game::award_loot`)
-/// applied to the resource a destroyed nest's species pays out (see
-/// `Game::grant_nest_cache`) — the cache reads as several kills' worth of
-/// `work_resource` at once, not a single kill's drop.
-pub const NEST_CACHE_WORK_RESOURCE_MULT: u32 = 4;
+/// How many downed programs of its own species a destroyed nest leaves
+/// (`Game::grant_nest_cache`), replacing the flat `work_resource` roll that
+/// used to pay here (`NEST_CACHE_WORK_RESOURCE_MULT`, retired with
+/// `roll_work_resource_drop`). Set to match that multiplier's own reading —
+/// 4x an ordinary kill's payout — rather than an unargued fraction of it:
+/// `Game::leave_downed_program` leaves exactly one program per kill, so 4
+/// preserves "the cache reads as several kills' worth at once" instead of
+/// silently halving what a nest was worth.
+pub const NEST_CACHE_PROGRAM_COUNT: usize = 4;
 
 /// Trade currency a destroyed nest pays (see `Game::grant_nest_cache`),
 /// before `NEST_CACHE_CREDIT_ZONE_BONUS`.
@@ -2162,7 +2166,14 @@ pub const FORGIVING_RESPAWN_NEED_FLOOR: f32 = 40.0;
 // ─────────────────────────────────────────────────────────────────────────
 
 /// Inclusive quantity range of its species' `work_resource` a defeated wild
-/// program drops.
+/// program used to drop directly.
+///
+/// **Zero readers now** — program extraction (2026-09-04) retired the
+/// direct grant this priced (`Game::leave_downed_program` replaced it; see
+/// `docs/superpowers/specs/2026-09-04-program-extraction-design.md` section
+/// 5). Kept only as the expected-value target decision 8's drop-neutrality
+/// fits the starter tool's yield against — Task 6's to spend, not to
+/// delete for reading as unused.
 ///
 /// Doubled from `1..=2` on 2026-08-02, when deleting the scan action left
 /// kills as the only source of Core Fragments outside a built base. At 1..=2
@@ -2903,8 +2914,13 @@ pub const OBFUSCATION_REDUCTION_PER_LEVEL: f32 = 0.10;
 /// with.
 pub const PROCESS_POOL_SLOTS_PER_LEVEL: usize = 1;
 
-/// Work resource `Perk::Teardown` adds to a kill's drop, per level, on top of
-/// the `WORK_RESOURCE_DROP` roll (2..=4).
+/// What `Perk::Teardown` adds per level. Used to sit on top of the kill's
+/// own `WORK_RESOURCE_DROP` roll (2..=4); that roll is gone
+/// (`Game::leave_downed_program` replaced the direct grant it priced), and
+/// `Game::extraction_yield` is now where `perks::salvage_bonus` reads this —
+/// see the `Perk::Teardown` variant's own doc in `perks.rs`. Added to the
+/// unit count as a flat addend, never a second `GameRng` draw, the same
+/// discipline the retired roll followed.
 ///
 /// This is a permanent income *rate*, not a loop — nothing here mints value
 /// out of nothing, and it is bounded by how many fights the player takes,
@@ -3963,3 +3979,149 @@ pub const BASE_OUTPUT_MAX_ROWS: usize = 5;
 /// How many buckets a row's sparkline draws. Cells are cheap on this page;
 /// rows are what is scarce, so the spark rides the row it belongs to.
 pub const BASE_OUTPUT_SPARK_BUCKETS: usize = 8;
+
+// ---------------------------------------------------------------------------
+// Program extraction
+// ---------------------------------------------------------------------------
+
+/// How many downed programs `components::DownedPrograms` may hold — a flat
+/// row count for phase 1 (see the spec's "Open, deliberately" section for
+/// the later move to a carried-weight metric). `Mode::DownedPrograms` (a
+/// later phase) is a read-only row list with no scroll, so this doubles as
+/// a layout constraint the way `BASE_OUTPUT_MAX_ROWS` is: it must fit at
+/// 1280x720 alongside that screen's own chrome, which a later phase's test
+/// asserts by mutation. Ten rather than matching `PLAYER_ROUTINE_SLOT_CAP`
+/// (12): a downed-program row carries a species name, level, rarity and
+/// boss tag — wider than a routine slot's single name — against the same
+/// vertical budget, so it is set a step under that established fit rather
+/// than assumed to match it.
+pub const MAX_DOWNED_PROGRAMS: usize = 10;
+
+/// The floor every downed program's condition roll starts from, before
+/// rarity, boss and fight terms are added — see `items::DownedProgram` and
+/// the spec's section 1 for the full formula. Left well below 100 so those
+/// terms have room to move the result rather than being clamped away on
+/// every ordinary kill, and well above 0 so a plain wild kill is still
+/// worth carrying on its own.
+pub const CONDITION_BASE: u8 = 60;
+
+/// Condition added per rung of `Rarity::rank` — deliberately modest next to
+/// `CONDITION_BASE`. A rare kill already pays through its own loot table
+/// entry; this is a secondary nudge, not a second place rarity is priced.
+pub const CONDITION_PER_RARITY_STEP: u8 = 8;
+
+/// Flat condition bonus when `DownedProgram::boss` is set. A boss fight
+/// ends standing over a single, stationary target rather than whichever
+/// member of a pack took the killing blow, so the program it leaves behind
+/// is taken apart more cleanly on average.
+pub const CONDITION_BOSS_BONUS: u8 = 10;
+
+/// Weight on the "how clean was the kill" term of the condition roll —
+/// `overkill_term` in the spec's formula, how far the killing blow went
+/// past zero as a fraction of `max_hp`, negated. **Ships at `0.0`,
+/// deliberately** (spec, "Open, deliberately"): the field and the roll
+/// exist so the axis is tunable, but no non-zero value has a play session
+/// behind it yet. Do not delete this constant for reading as unused, and
+/// do not fit a non-zero value without one.
+pub const FIGHT_CONDITION_WEIGHT: f32 = 0.0;
+
+/// The floor a boss's own downed program's `condition` cannot fall below —
+/// applied on top of the ordinary roll, in `Game::leave_downed_program`. A
+/// boss fight ends standing over a single, stationary target, so what it
+/// leaves behind is never the ragged result an unlucky pack kill can be.
+pub const BOSS_CONDITION_FLOOR: u8 = 80;
+
+/// The floor a boss's own downed program's `rarity` cannot fall below —
+/// `Rarity::max` against the ordinary roll, the same way
+/// `BOSS_CONDITION_FLOOR` floors condition. Matches
+/// `SURFACE_BOSS_LOOT_RARITY_FLOOR` (`Silver`) rather than outbidding it:
+/// the intent is parity with what a boss already guarantees on the gear it
+/// pays directly, not a richer guarantee on what it leaves behind.
+pub const BOSS_RARITY_FLOOR: Rarity = Rarity::Silver;
+
+/// How much each rung of `Rarity::rank` adds to `DownedProgram::grade`'s
+/// multiplier, on top of the `1.0` an `Ordinary` program contributes.
+/// Modest for the reason `CONDITION_PER_RARITY_STEP` is: rarity already
+/// pays out through the drop table, so grade's job is to reward condition
+/// and level, with rarity as a secondary lift rather than the dominant
+/// term.
+pub const GRADE_PER_RARITY_RUNG: f32 = 0.15;
+
+/// How much each level adds to `DownedProgram::grade`'s multiplier, on top
+/// of the `1.0` a level-0 program would contribute. Small on purpose: a
+/// level runs from 1 into the hundreds over a playthrough (see
+/// `ZONE_LEVEL_CAP_STEP`), and this axis is meant to reward a kill higher
+/// up the curve without letting level alone dwarf condition and rarity the
+/// way a coarser step would.
+pub const GRADE_PER_LEVEL: f32 = 0.01;
+
+/// The tool forged into the player's first tool slot, written by
+/// `spawn_player` into `components::Tools` on `DECOMPILE_ABILITY_ID`'s
+/// terms: granted at creation only, never at `Game::load`, the profile
+/// rule. Lives here rather than beside `abilities::DECOMPILE_ABILITY_ID`
+/// because the spec names it `tuning::STARTER_TOOL_ID` directly (section 2).
+pub const STARTER_TOOL_ID: &str = "salvage_clamp";
+
+/// Tool slots the player has at level 1 — one, filled by `STARTER_TOOL_ID`
+/// at `Game::new`. Unlike `PLAYER_ROUTINE_SLOT_BASE` (2, with
+/// `DECOMPILE_ABILITY_ID` occupying one and a free slot left over for a
+/// choice), a tool slot starts **full** on purpose: the spec's decision 3
+/// is that choosing the tool *is* the decision, and a level-1 player with a
+/// spare slot beside the starter has nothing yet to choose between.
+pub const TOOL_SLOT_BASE: u32 = 1;
+
+/// Levels the player needs per additional tool slot. `tools::
+/// player_tool_slots` grants **one** slot a step here, not
+/// `ROUTINE_SLOTS_PER_STEP`'s two — a second tool is a second decision to
+/// make, not a doubled kit, so the shape stays the gentler of the two on
+/// purpose rather than inheriting the routine curve's.
+pub const TOOL_SLOT_PER_LEVEL: u32 = 8;
+
+/// Most tools the player can hold installed at once. Modest next to
+/// `PLAYER_ROUTINE_SLOT_CAP` (12): every tool slot is a standing choice
+/// about what a downed program gets reduced to, and a kit wide enough to
+/// carry one of every category stops being a choice at all.
+pub const TOOL_SLOT_CAP: u32 = 4;
+
+/// `Game::extraction_yield`'s base unit count — the multiplier scaled by
+/// `game::extraction::tier_scale(tool.tier)` and `DownedProgram::grade()`
+/// (identity `1.0` at `Ordinary`, full condition, level 0). **Checked**
+/// against spec decision 8, not fitted — the provisional value already
+/// satisfied the gate, so it never moved: `tests::extraction::
+/// the_starter_tool_is_drop_neutral_for_a_median_kill` asserts a median kill
+/// (`Ordinary`, `CONDITION_BASE` condition, level 1 — grade `0.606`) through
+/// the starter tool (`salvage_clamp`, tier 1, `tier_scale == 1.0`) pays
+/// exactly `WORK_RESOURCE_DROP`'s own mean, `3` units: `round(3.0 * 0.606) =
+/// 2` pool units plus `RICH_IN_UNITS`'s flat `1`.
+///
+/// That test only pins this constant to a *band*, not the digit `3.0`:
+/// `round(x * 0.606)` stays `2` for any `x` in `[1.5 / 0.606, 2.5 / 0.606)`,
+/// currently ≈ `[2.475, 4.125)` (verified empirically, not just algebraically
+/// — the test passes unmoved at `2.5` and `4.1`, fails at `2.4` and `4.2`).
+/// Every value in that band pays a median kill the identical `3` units and
+/// so reads as equally drop-neutral to this gate — a starter tool at either
+/// end feels roughly half or a third stronger than one at the other, and
+/// nothing here would catch that; only a play session or a wider-coverage
+/// test could. Say the band plainly rather than let one passing value read
+/// as pinned to the digit. `salvage_clamp.ron`'s weights don't enter the
+/// gate at all — `apportion` conserves the unit *total* under any
+/// weighting, and `rich_in`'s addend is unconditional — so they're
+/// untouched, and no combination of them could narrow this band either.
+pub const TOOL_BASE_UNITS: f32 = 3.0;
+
+/// How much each tier past 1 scales `extraction_yield`'s unit count, in
+/// `game::extraction::tier_scale`. A tool's own `tier` and a later phase's
+/// structure `structure_tier` (spec section 3) are meant to share this one
+/// curve, so a step here would move both once that parameter exists.
+///
+/// **Not** part of Task 6's fit: the starter tool ships at tier 1, where
+/// `tier_scale(1) == 1.0` regardless of this constant's value, so the
+/// drop-neutrality test cannot see it move and it is free to set here.
+pub const TOOL_TIER_SCALE_STEP: f32 = 0.5;
+
+/// Extra units of a program's `rich_in` item (or its `work_resource`
+/// fallback, `Game::rich_in`) that `extraction_yield` adds on top of the
+/// tool's own draw — from any tool, regardless of category (spec section
+/// 3). A flat floor tied to *what was killed* rather than a second roll of
+/// the tool's own pool, so it stays modest next to `TOOL_BASE_UNITS`.
+pub const RICH_IN_UNITS: u32 = 1;

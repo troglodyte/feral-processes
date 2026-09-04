@@ -1,9 +1,11 @@
 use crate::affixes::AffixId;
 use crate::components::Rarity;
+use crate::species::SpeciesId;
 use crate::tuning::{
-    GEAR_LEVEL_STEP, GEAR_RARITY_MIN_BONUS_PER_RUNG, ITEM_FUSION_BONUS_PER_TIER,
-    ITEM_FUSION_MIN_BONUS_PER_TIER, QUALITY_ABOVE_MAX, QUALITY_DEFAULT, QUALITY_SPEC_MAX,
-    QUALITY_UNDER_MAX,
+    CONDITION_BASE, CONDITION_BOSS_BONUS, CONDITION_PER_RARITY_STEP, FIGHT_CONDITION_WEIGHT,
+    GEAR_LEVEL_STEP, GEAR_RARITY_MIN_BONUS_PER_RUNG, GRADE_PER_LEVEL, GRADE_PER_RARITY_RUNG,
+    ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_MIN_BONUS_PER_TIER, QUALITY_ABOVE_MAX, QUALITY_DEFAULT,
+    QUALITY_SPEC_MAX, QUALITY_UNDER_MAX,
 };
 use serde::{Deserialize, Serialize};
 
@@ -319,6 +321,77 @@ impl GearCopy {
     /// one won.
     pub fn fusable_with(&self, other: &Self) -> bool {
         self.item == other.item && self.rarity == other.rarity && self.tier == other.tier
+    }
+}
+
+/// A wild program taken apart at the kill rather than paid out directly —
+/// see `docs/superpowers/specs/2026-09-04-program-extraction-design.md`.
+/// Carried until a tool consumes it (`Game::extract_program`, a later
+/// phase), in `components::DownedPrograms`.
+///
+/// **Instanced, not a stackable `ItemId`** (decision 1 of the spec). A
+/// level-30 Prismatic kill and a level-2 Ordinary one are not
+/// interchangeable, so the species, level, rarity, boss flag and condition
+/// all travel with the one row rather than collapsing into a count against
+/// a per-species id.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DownedProgram {
+    pub species: SpeciesId,
+    pub level: u32,
+    pub rarity: Rarity,
+    pub boss: bool,
+    /// 0..=100, rolled once at the kill and never touched again — see
+    /// `tuning::CONDITION_BASE` and its neighbours for the roll, which is a
+    /// later phase's to call; this field only carries the result.
+    pub condition: u8,
+}
+
+impl DownedProgram {
+    /// "How good is this program", the one fold of its three graded axes —
+    /// every extraction yield formula calls this rather than re-reading
+    /// `condition`/`rarity`/`level` and re-deriving its own opinion of them,
+    /// the way `Game::copy_bonus` calls `scaled_for_level`/`for_rarity`
+    /// rather than each caller repeating the scaling.
+    ///
+    /// Multiplicative, not additive: an additive fold would let a rolled-to-
+    /// zero `condition` be masked by a high rarity or level instead of
+    /// gating the whole result, and a destroyed program should not yield as
+    /// if it were merely ordinary. `1.0` is the fold's identity — full
+    /// condition, `Ordinary` rarity, level 0 — which is what
+    /// `GRADE_PER_RARITY_RUNG` and `GRADE_PER_LEVEL` are scaled against.
+    ///
+    /// Rarity contributes by **rank**, `Rarity::ALL`'s own ladder
+    /// (`Rarity::rank`) rather than a second one authored here — the same
+    /// rule the condition roll's `CONDITION_PER_RARITY_STEP` follows.
+    pub fn grade(&self) -> f32 {
+        let condition = self.condition as f32 / 100.0;
+        let rarity = 1.0 + self.rarity.rank() as f32 * GRADE_PER_RARITY_RUNG;
+        let level = 1.0 + self.level as f32 * GRADE_PER_LEVEL;
+        condition * rarity * level
+    }
+
+    /// The condition roll a kill takes once, at the moment it leaves a
+    /// program behind — spec section 1's formula, verbatim.
+    /// `Game::leave_downed_program` is the one caller, so a boss's own
+    /// floors (`tuning::BOSS_CONDITION_FLOOR`) apply there rather than here:
+    /// this function knows only what a kill's own terms are worth, not that
+    /// a boss's result gets raised afterward.
+    ///
+    /// `overkill_term` is a plain `f32`, not read off a live entity here, so
+    /// this stays pure and directly testable against
+    /// `FIGHT_CONDITION_WEIGHT = 0.0`'s independence claim without a `Game`
+    /// in the room. Multiplying by `0.0` rather than an `if` on the weight:
+    /// the axis is meant to fall out of the formula for free the day a
+    /// non-zero value earns a play session, not be wired in as a second
+    /// branch then.
+    pub(crate) fn roll_condition(rarity: Rarity, boss: bool, overkill_term: f32) -> u8 {
+        let boss_bonus = if boss { CONDITION_BOSS_BONUS as i32 } else { 0 };
+        let fight_term = (FIGHT_CONDITION_WEIGHT * overkill_term).round() as i32;
+        let raw = CONDITION_BASE as i32
+            + CONDITION_PER_RARITY_STEP as i32 * rarity.rank() as i32
+            + boss_bonus
+            + fight_term;
+        raw.clamp(0, 100) as u8
     }
 }
 

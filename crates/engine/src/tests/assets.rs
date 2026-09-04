@@ -2,6 +2,7 @@
 
 use super::support::*;
 use crate::abilities::AffinityKind;
+use crate::tools::ToolCategory;
 use crate::tuning::{AFFINITY_MAX, AFFINITY_MIN, AFFINITY_NEUTRAL};
 use crate::*;
 
@@ -3279,4 +3280,175 @@ fn every_shipped_sprite_override_resolves_to_a_real_file() {
             path.display()
         );
     }
+}
+
+/// Every shipped tool's `yields` names a real, loaded item — the same
+/// "every reference resolves" rule `the_shipped_species_kits_reference_only_real_abilities`
+/// holds abilities to, over `tools::ToolDef::yields` instead.
+#[test]
+fn every_shipped_tools_yields_resolve_to_real_items() {
+    let game = Game::new(4102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let items = game.world.resource::<ItemDb>();
+    let tools = game.world.resource::<ToolDb>();
+
+    let mut checked = 0;
+    for def in tools.all() {
+        for (item, _) in &def.yields {
+            assert!(
+                items.get(item.as_str()).is_some(),
+                "tool {:?} yields unknown item {:?}",
+                def.id,
+                item
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked > 0, "the census walked no yield entries at all");
+}
+
+/// Every non-`Routines` tool declares at least one thing to draw from —
+/// an empty pool on any other category is a tool that does nothing when
+/// used. See `tools::ToolCategory`'s own doc and `assets/tools/README.md`.
+///
+/// **This passes vacuously today.** No `Routines`-category tool ships in
+/// phase 1 (the routine branch it needs is a later phase), so every shipped
+/// tool takes the asserted branch and the excluded one below checks
+/// nothing. That is correct — see the task report for how the failure
+/// branch was confirmed by hand, since a census nobody can make fail is not
+/// a census. The day a `Routines` tool ships, this starts exercising the
+/// exclusion for real.
+#[test]
+fn every_non_routines_tool_has_a_non_empty_yield_pool() {
+    let game = Game::new(4103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let tools = game.world.resource::<ToolDb>();
+
+    let mut checked = 0;
+    for def in tools.all() {
+        // Exhaustive, `render/stack.rs`'s `cell_mark` rule: a fifth
+        // category shipping tomorrow must pick a side of this match rather
+        // than falling through a `_` arm unnoticed.
+        match def.category {
+            ToolCategory::Materials | ToolCategory::Parts | ToolCategory::Cores => {
+                assert!(
+                    !def.yields.is_empty(),
+                    "tool {:?} is category {:?} and must declare a non-empty yields pool",
+                    def.id,
+                    def.category
+                );
+                checked += 1;
+            }
+            ToolCategory::Routines => {
+                assert!(
+                    def.yields.is_empty(),
+                    "tool {:?} is category Routines and must not declare a yields pool — it \
+                     takes the routine branch instead",
+                    def.id
+                );
+            }
+        }
+    }
+    assert!(
+        checked > 0,
+        "the census walked no non-Routines tools at all"
+    );
+}
+
+/// Every shipped tool's `yields` weight is a finite, positive number — the
+/// same shape `weighted_pick` (and the extraction draw a later phase builds
+/// on it) needs to make sense of a pool at all. `ToolDb::load_dir` already
+/// refuses this at load, so this census is a second, independent check over
+/// the files actually shipped, the way `every_shipped_power_cost_is_finite_
+/// and_non_negative` doubles `AbilityDef::non_finite_field`.
+#[test]
+fn every_shipped_tools_yield_weight_is_finite_and_positive() {
+    let game = Game::new(4104, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let tools = game.world.resource::<ToolDb>();
+
+    let mut checked = 0;
+    for def in tools.all() {
+        for (item, weight) in &def.yields {
+            assert!(
+                weight.is_finite() && *weight > 0.0,
+                "tool {:?} yield {:?} has weight {weight}, which must be finite and positive",
+                def.id,
+                item
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked > 0, "the census walked no yield weights at all");
+}
+
+/// `tuning::STARTER_TOOL_ID` must name a tool that actually shipped — the
+/// same floor `game_new_aborts_startup_when_the_item_set_is_missing_the_currency_role`
+/// holds an economy role to, except a missing starter tool does not abort
+/// startup today (nothing forges it into a slot yet — that door is a later
+/// phase), so this census is what would have caught a typo before that door
+/// opens.
+#[test]
+fn starter_tool_id_resolves_to_a_shipped_tool() {
+    let game = Game::new(4105, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let tools = game.world.resource::<ToolDb>();
+    assert!(
+        tools.get(crate::tuning::STARTER_TOOL_ID).is_some(),
+        "tuning::STARTER_TOOL_ID {:?} does not name a shipped tool",
+        crate::tuning::STARTER_TOOL_ID
+    );
+}
+
+/// No two shipped tool files collide on `id` — `ToolDb::load_dir` keys a
+/// `HashMap` by id, so a duplicate silently loses one file rather than
+/// warning, and this is the only thing that would notice. Counts `.ron`
+/// files on disk against loaded tools rather than asserting a literal
+/// number, so it doesn't need editing every time a tool ships.
+#[test]
+fn every_shipped_tool_id_is_unique() {
+    let game = Game::new(4106, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let tools = game.world.resource::<ToolDb>();
+    let loaded = tools.all().count();
+
+    let on_disk = std::fs::read_dir(test_assets_dir().join("tools"))
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().and_then(|e| e.to_str()) == Some("ron"))
+        .count();
+
+    assert!(on_disk > 0, "the census found no shipped tool files at all");
+    assert_eq!(
+        loaded, on_disk,
+        "loaded {loaded} tools against {on_disk} .ron files — a duplicated id silently \
+         dropped one"
+    );
+}
+
+/// Every shipped species' `Game::rich_in` — authored, or `work_resource`
+/// fallen back to — names a real, loaded item. Spec section 7's own census:
+/// no shipped species authors `rich_in` yet (decision 5 is that none had
+/// to), so this walks the fallback path today and starts checking an
+/// authored value for real the day one ships, `every_non_routines_tool_
+/// has_a_non_empty_yield_pool`'s own precedent for a census that currently
+/// only exercises one of its branches.
+#[test]
+fn every_species_rich_in_resolves_to_a_real_item() {
+    let game = Game::new(4107, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = game.world.resource::<SpeciesDb>();
+    let items = game.world.resource::<ItemDb>();
+
+    let mut checked = 0;
+    for def in species.all() {
+        let Some(item) = game.rich_in(&def.id) else {
+            continue;
+        };
+        assert!(
+            items.get(item.as_str()).is_some(),
+            "species {:?} rich_in (or its work_resource fallback) names unknown item {:?}",
+            def.id,
+            item
+        );
+        checked += 1;
+    }
+    assert!(
+        checked > 0,
+        "the census walked no species with a rich_in at all"
+    );
 }

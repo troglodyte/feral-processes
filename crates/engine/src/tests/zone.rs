@@ -4,9 +4,8 @@ use super::support::*;
 use crate::tuning::BOSS_STAT_MULT;
 use crate::tuning::{
     MAX_BUILD_DISTANCE_FROM_HOME, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_AGGRO_LEASH_RADIUS,
-    NEST_CACHE_CREDIT_ZONE_BONUS, NEST_CACHE_CREDITS, NEST_CACHE_WORK_RESOURCE_MULT,
-    NEST_DURABILITY, NEST_PATH_SEARCH_MARGIN, NEST_PURSUIT_STEPS_PER_TICK, NEST_RESPAWN_TICKS,
-    NEST_TETHER_RADIUS, WORK_RESOURCE_DROP,
+    NEST_CACHE_CREDIT_ZONE_BONUS, NEST_CACHE_CREDITS, NEST_CACHE_PROGRAM_COUNT, NEST_DURABILITY,
+    NEST_PATH_SEARCH_MARGIN, NEST_PURSUIT_STEPS_PER_TICK, NEST_RESPAWN_TICKS, NEST_TETHER_RADIUS,
 };
 use crate::world::SectorShape;
 use crate::*;
@@ -1823,32 +1822,33 @@ fn one_shot_nest(game: &mut Game, nest: Entity) {
 }
 
 #[test]
-fn destroying_a_nest_grants_its_species_work_resource() {
+fn destroying_a_nest_leaves_downed_programs_of_its_species() {
+    // A nest no longer pays its species' `work_resource` directly — see
+    // `Game::grant_nest_cache` and
+    // `docs/superpowers/specs/2026-09-04-program-extraction-design.md`
+    // section 5. This replaces the old
+    // `destroying_a_nest_grants_its_species_work_resource`, which asserted
+    // the retired behaviour.
     let mut game = Game::new(720, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    // Scrapper is the `can_nest` species carrying a `work_resource` at all —
-    // crawler and trojan have none, and using one of those would make this
-    // test vacuous. *Which* resource is read off the species file rather
-    // than named here: this test asserted `power_cell` until 2026-08-04 moved
-    // the Scrapper to Core Fragments, and the claim it exists to make is
-    // "the nest pays its species' resource", not which one that is.
-    let resource = game
-        .world
-        .resource::<SpeciesDb>()
-        .get("scrapper")
-        .and_then(|s| s.work_resource.clone())
-        .expect("the nesting species used here must carry a work_resource");
+    let player = game.player_entity();
     let nest = game.spawn_nest("scrapper", 400, 400);
-    let before = held(&game, &resource);
+    let before = game.world.get::<DownedPrograms>(player).unwrap().0.len();
 
     one_shot_nest(&mut game, nest);
 
-    let after = held(&game, &resource);
-    let minimum = NEST_CACHE_WORK_RESOURCE_MULT * WORK_RESOURCE_DROP.start();
+    let held = game.world.get::<DownedPrograms>(player).unwrap();
+    assert_eq!(
+        held.0.len(),
+        before + NEST_CACHE_PROGRAM_COUNT,
+        "the wreckage should leave NEST_CACHE_PROGRAM_COUNT programs on top of whatever \
+         the guardian kills already left"
+    );
     assert!(
-        after >= before + minimum,
-        "destroying the nest should have granted at least {minimum} {}, went from \
-         {before} to {after}",
-        resource.as_str()
+        held.0[before..]
+            .iter()
+            .all(|program| program.species == "scrapper"),
+        "every program the wreckage leaves should carry the nest's own species: {:?}",
+        &held.0[before..]
     );
 }
 
@@ -2087,10 +2087,9 @@ fn destroying_a_nest_rolls_its_species_gear_table_repeatedly() {
 #[test]
 fn the_cache_lines_are_loot_kind() {
     let mut game = Game::new(725, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    // scrapper's work_resource guarantees the resource-drop cache line lands
-    // even on an unseeded roll (WORK_RESOURCE_DROP's minimum is > 0 and the
-    // Buffer is uncapped), so this doesn't need to force any range roll —
-    // unlike the gear-table test above, which does.
+    // `NEST_CACHE_PROGRAM_COUNT` programs leave unconditionally — no roll
+    // involved, unlike the gear-table test above — so this doesn't need to
+    // force anything to make the cache line land.
     let nest = game.spawn_nest("scrapper", 450, 450);
 
     one_shot_nest(&mut game, nest);

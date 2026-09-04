@@ -37,6 +37,7 @@ mod caravan;
 mod contracts;
 mod crafting;
 mod creation;
+mod extraction;
 mod field;
 mod frame_map;
 mod group_menu;
@@ -86,6 +87,7 @@ use building::{
 use caravan::{CaravanBasket, draw_caravan};
 use contracts::draw_contracts;
 use crafting::{draw_compiling, draw_craft_menu, draw_craft_quantity, draw_recipes};
+use extraction::draw_downed_programs;
 use field::{draw_field_routine, draw_field_routine_ally};
 use frame_map::{draw_frame_map, draw_frame_map_cursor, draw_map_inset};
 use group_menu::{draw_dev_console, draw_group_menu};
@@ -799,6 +801,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     let pending_manifest = app.pending_manifest;
     let manifest_origin = app.manifest_origin;
     let pending_field_routine = app.pending_field_routine;
+    let pending_downed_program = app.pending_downed_program_index;
     let pending_structure = app.pending_structure.clone();
     let pending_item = app.pending_inventory_item.clone();
     let pending_inspect = app.pending_inspect.clone();
@@ -1047,6 +1050,9 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             )
         }
         Mode::ItemDescribe => draw_gear_inspect(game, pending_inspect.clone(), refusal, painter, m),
+        Mode::DownedPrograms => {
+            draw_downed_programs(game, pending_downed_program, selected, refusal, painter, m)
+        }
         Mode::Companion => draw_companion_menu(game, selected, refusal, painter, m),
         Mode::Fuse => draw_fuse_menu(game, selected, refusal, painter, m),
         Mode::FuseSecond => {
@@ -1245,7 +1251,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 92] = [
+    const ALL_MODES: [Mode; 93] = [
         Mode::MainMenu,
         Mode::CreateCharacter,
         Mode::LoadGame,
@@ -1286,6 +1292,7 @@ mod tests {
         Mode::InventoryItemAction,
         Mode::ItemDescribe,
         Mode::EraseQuantity,
+        Mode::DownedPrograms,
         Mode::Companion,
         Mode::CompanionEquip,
         Mode::CompanionMemories,

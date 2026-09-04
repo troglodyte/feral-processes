@@ -1,0 +1,13 @@
+(
+    id: "core_tap",
+    name: "Core Tap",
+    description: "Draws the compiled core out from under a downed process's shell.",
+    category: Cores,
+    // A plausible pool, not a tuned one: unlike `salvage_clamp` this tool
+    // is not the starter and is not read by the drop-neutrality test, so
+    // its weights carry no economy commitment yet — reweigh freely once it
+    // is actually reachable (a later phase's `unlocks_tools`).
+    yields: [("annealed_core", 1.0), ("cache_grain", 0.3)],
+    tier: 2,
+    ticks: 32,
+)

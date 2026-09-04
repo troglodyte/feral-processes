@@ -6,10 +6,11 @@
 //! economy-role check.
 
 use crate::abilities::AbilityId;
-use crate::components::Needs;
+use crate::components::{Needs, Tools};
 use crate::game::spawning;
 use crate::game::zone::find_walkable_start;
-use crate::tuning::{NEST_DURABILITY, STACK_LINKS_PER_ZONE};
+use crate::tools::ToolId;
+use crate::tuning::{NEST_DURABILITY, STACK_LINKS_PER_ZONE, STARTER_TOOL_ID};
 use crate::*;
 
 /// Splits a persisted routine list into what `db` still recognizes and what
@@ -108,6 +109,14 @@ struct ProfileRewardsPaid;
 /// one field at a time: the glyph, the `Inventory` and the free routine
 /// slot all spawn empty or hardcoded-neutral here and are only ever
 /// overwritten, never read, before that call runs.
+///
+/// `Routines`' `DECOMPILE_ABILITY_ID` and `Tools`' `STARTER_TOOL_ID` are the
+/// two exceptions: both are permanent grants that outlive
+/// `apply_character_choice` untouched, so both are written here rather than
+/// there — `tuning::STARTER_TOOL_ID`'s own doc comment states the same
+/// creation-only rule `DECOMPILE_ABILITY_ID` already follows. This function
+/// is the whole of `Game::new`'s side of it: `spawn_player` has exactly one
+/// caller, `new_with`, so nothing here runs on a `Game::load`.
 fn spawn_player(world: &mut World, start: (i32, i32)) -> Entity {
     world
         .spawn((
@@ -137,6 +146,8 @@ fn spawn_player(world: &mut World, start: (i32, i32)) -> Entity {
             (
                 Routines(vec![abilities::DECOMPILE_ABILITY_ID.to_string()]),
                 PlayerIdentity::default(),
+                DownedPrograms::default(),
+                Tools(vec![ToolId(STARTER_TOOL_ID.to_string())]),
             ),
         ))
         .id()
@@ -159,6 +170,7 @@ impl Game {
     ) -> std::io::Result<Self> {
         let AssetDbs {
             abilities: ability_db,
+            tools: tool_db,
             classes: class_db,
             achievements: achievement_db,
             contracts: contract_db,
@@ -189,6 +201,7 @@ impl Game {
 
         let mut world = World::new();
         world.insert_resource(ability_db);
+        world.insert_resource(tool_db);
         world.insert_resource(class_db);
         world.insert_resource(species_db);
         world.insert_resource(structure_db);
@@ -407,6 +420,7 @@ impl Game {
         }
         let AssetDbs {
             abilities: ability_db,
+            tools: tool_db,
             classes: class_db,
             achievements: achievement_db,
             contracts: contract_db,
@@ -453,6 +467,7 @@ impl Game {
 
         let mut world = World::new();
         world.insert_resource(ability_db);
+        world.insert_resource(tool_db);
         world.insert_resource(class_db);
         world.insert_resource(species_db);
         world.insert_resource(structure_db);
@@ -706,6 +721,16 @@ impl Game {
                         colour: data.player.colour,
                         icon: data.player.icon.as_deref().and_then(PlayerIcon::decode),
                     },
+                    DownedPrograms(data.player.downed_programs),
+                    // Never `STARTER_TOOL_ID` here — the profile rule.
+                    // `spawn_player` is `new_with`'s only caller and is
+                    // where that grant lives; a load restores exactly what
+                    // the save carried. A save predating tools carries no
+                    // `tools` key at all, so `PlayerSave::tools`'s own
+                    // `starter_tools()` default lands the starter tool
+                    // there instead of an empty loadout — see that field's
+                    // doc comment.
+                    Tools(data.player.tools),
                 ),
             ))
             .id();
@@ -1360,6 +1385,16 @@ impl Game {
                     .collect()
             })
             .unwrap_or_default();
+        let downed_programs = self
+            .world
+            .get::<DownedPrograms>(player)
+            .map(|d| d.0.clone())
+            .unwrap_or_default();
+        let tools = self
+            .world
+            .get::<Tools>(player)
+            .map(|t| t.0.clone())
+            .unwrap_or_default();
         let perks = self.world.get::<Perks>(player).cloned().unwrap_or_default();
         let bought_stats = self
             .world
@@ -1801,6 +1836,8 @@ impl Game {
                 // from here on carries only `gear_copies`.
                 fused_gear: Vec::new(),
                 gear_copies,
+                downed_programs,
+                tools,
                 perk_points: perks.points,
                 unlocked_perks: perks.unlocked,
                 bought_stats,
@@ -2085,6 +2122,7 @@ impl Game {
 /// accumulated for the caller to push into the message log.
 struct AssetDbs {
     abilities: AbilityDb,
+    tools: ToolDb,
     classes: crate::classes::ClassDb,
     achievements: crate::achievements::AchievementDb,
     contracts: crate::contracts::ContractDb,
@@ -2115,6 +2153,11 @@ struct AssetDbs {
 /// instead of a startup error.
 fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (abilities, mut warnings) = AbilityDb::load_dir(&assets_dir.join("abilities"))?;
+    // Same absent-is-silent rule as `AffixDb` — see `ToolDb::load_dir`. An
+    // empty catalogue leaves nothing to forge or install, which is the
+    // pre-extraction game.
+    let (tools, tools_warnings) = ToolDb::load_dir(&assets_dir.join("tools"))?;
+    warnings.extend(tools_warnings);
     // `mut` is only used by the `#[cfg(test)]` fixture insertion below.
     #[cfg_attr(not(test), allow(unused_mut))]
     let (mut species, species_warnings) =
@@ -2239,6 +2282,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     }
     Ok(AssetDbs {
         abilities,
+        tools,
         classes,
         talents,
         achievements,

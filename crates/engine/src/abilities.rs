@@ -19,15 +19,21 @@ pub const FALLBACK_ABILITY_ID: &str = "priority_boost";
 /// else. Validated at startup the same way `FALLBACK_ABILITY_ID` is.
 pub const DECOMPILE_ABILITY_ID: &str = "decompile";
 
-/// Routine slots at `level`, from one constant set. Both public wrappers
+/// Slots at `level`, from one constant set: `base` plus `step` for every
+/// `per_level` levels reached, clamped to `cap`. Both routine wrappers below
 /// call this so the companion and player curves cannot drift into two
-/// different shapes — only their constants differ.
+/// different shapes — only their constants differ — and `tools::
+/// player_tool_slots` calls it too rather than restating the clamp, per
+/// CLAUDE.md's rule that a doc comment claiming to mirror another module's
+/// formula must be a call. `step` is a parameter rather than read off
+/// `tuning::ROUTINE_SLOTS_PER_STEP` internally for exactly that reason: a
+/// tool slot grows by one a step, not two.
 ///
 /// The floor of 1 is load-bearing: `COMPANION_ROUTINE_SLOT_BASE` is 0, so a
 /// level-1 companion would otherwise have nowhere to put the kit its species
 /// grants it at level 1.
-fn routine_slots(level: u32, base: u32, per_level: u32, cap: u32) -> usize {
-    (base + crate::tuning::ROUTINE_SLOTS_PER_STEP * (level / per_level)).clamp(1, cap) as usize
+pub(crate) fn routine_slots(level: u32, base: u32, step: u32, per_level: u32, cap: u32) -> usize {
+    (base + step * (level / per_level)).clamp(1, cap) as usize
 }
 
 /// How many routines a companion at `level` can hold — see
@@ -36,6 +42,7 @@ pub fn companion_routine_slots(level: u32) -> usize {
     routine_slots(
         level,
         crate::tuning::COMPANION_ROUTINE_SLOT_BASE,
+        crate::tuning::ROUTINE_SLOTS_PER_STEP,
         crate::tuning::COMPANION_ROUTINE_SLOT_PER_LEVEL,
         crate::tuning::COMPANION_ROUTINE_SLOT_CAP,
     )
@@ -47,6 +54,7 @@ pub fn player_routine_slots(level: u32) -> usize {
     routine_slots(
         level,
         crate::tuning::PLAYER_ROUTINE_SLOT_BASE,
+        crate::tuning::ROUTINE_SLOTS_PER_STEP,
         crate::tuning::PLAYER_ROUTINE_SLOT_PER_LEVEL,
         crate::tuning::PLAYER_ROUTINE_SLOT_CAP,
     )

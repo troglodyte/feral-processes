@@ -6,10 +6,11 @@ use serde::{Deserialize, Serialize};
 use crate::affixes::AffixId;
 use crate::classes::PlayerClass;
 use crate::components::{ActiveFieldBuff, Rarity};
-use crate::items::{EquipmentSlot, ItemId};
+use crate::items::{DownedProgram, EquipmentSlot, ItemId};
 use crate::perks::Perk;
 use crate::resources::DifficultyMode;
 use crate::species::SpeciesId;
+use crate::tools::ToolId;
 use crate::world::Tile;
 
 #[derive(Serialize, Deserialize)]
@@ -129,6 +130,29 @@ pub struct PlayerSave {
     /// are in `inventory`, which is the plain-copy store.
     #[serde(default)]
     pub gear_copies: Vec<(GearCopySave, u32)>,
+    /// Every wild program taken apart at the kill rather than paid out
+    /// directly, still carried — see `components::DownedPrograms`.
+    /// `DownedProgram` has no legacy shape to reconcile (unlike
+    /// `GearCopySave`'s affix migration), so the save stores it directly
+    /// rather than through a parallel `*Save` type. Additive behind a
+    /// default, so **no `SAVE_FORMAT_VERSION` bump**: a save written before
+    /// this field existed loads with an empty store, which is what it had.
+    #[serde(default)]
+    pub downed_programs: Vec<DownedProgram>,
+    /// Tool ids installed in the player's tool slots, in slot order — see
+    /// `components::Tools`. Additive behind a default, so **no
+    /// `SAVE_FORMAT_VERSION` bump**, but the default is `starter_tools()`
+    /// rather than empty: a save written before this branch paid its
+    /// material income through the direct kill drop this branch retired
+    /// (`combat_rewards.rs`), so an absent key must land the starter tool or
+    /// that save loads into a permanently dry economy — no tool installed,
+    /// nothing to extract with, forever. `Game::save` always writes this
+    /// key, so the default only ever fires on a save that predates the
+    /// field; it never re-grants into a loadout this branch's own play
+    /// emptied; `#[serde(default)]` alone (an empty `Vec`) was the
+    /// profile-rule reading and is wrong for that reason.
+    #[serde(default = "starter_tools")]
+    pub tools: Vec<ToolId>,
     /// The abilities installed in the player's routine slots, in menu order
     /// — see `components::Routines`.
     pub routines: Vec<crate::abilities::AbilityId>,
@@ -198,6 +222,15 @@ fn default_player_glyph() -> char {
     '@'
 }
 
+/// `serde`'s default for `PlayerSave::tools` — a save with no `tools` key
+/// predates the concept entirely, and every player before it carried the
+/// starter tool `spawn_player` grants at `Game::new`. Firing only on an
+/// absent key (never on a stored empty list) is what keeps this a
+/// migration rather than a second door onto the creation-only grant.
+fn starter_tools() -> Vec<ToolId> {
+    vec![ToolId(crate::tuning::STARTER_TOOL_ID.to_string())]
+}
+
 /// `serde`'s default for `PlayerSave::sprite` — the name the map painted
 /// for every player before the wizard could choose one, and the same name
 /// `CharacterChoice::default()` carries.
@@ -230,6 +263,10 @@ pub struct SortieSave {
     pub battles_total: u32,
     pub battles_done: u32,
     pub aborted: bool,
+    /// Always empty on this branch — extraction retired the direct kill
+    /// drop that used to fill it, and phase 3 (a travel-and-deliver record
+    /// for downed programs) is what refills it. Kept, not deleted, so a
+    /// save written mid-branch still parses.
     pub loot: Vec<(ItemId, u32)>,
     pub xp: u32,
     pub kills: u32,
@@ -1497,6 +1534,8 @@ mod tests {
                 module_quality: crate::tuning::QUALITY_DEFAULT,
                 fused_gear: Vec::new(),
                 gear_copies: Vec::new(),
+                downed_programs: Vec::new(),
+                tools: Vec::new(),
                 perk_points: 0,
                 unlocked_perks: Vec::new(),
                 bought_stats: crate::components::BoughtStats::default(),
@@ -1799,6 +1838,69 @@ mod tests {
         };
         let _ = std::fs::remove_file(&path);
         assert!(loaded.caravans.is_empty(), "and nobody is standing there");
+    }
+
+    /// The field `tools` differs from every other `#[serde(default)]` above
+    /// it: a save written before program extraction shipped paid its
+    /// material income through the direct kill drop this branch retired
+    /// (`combat_rewards.rs`), so loading with an *empty* loadout — the
+    /// plain `Vec::default()` reading — would leave that save with no tool
+    /// to extract with and no way to ever get one, forever. The absent key
+    /// must land the starter tool instead, as a migration.
+    #[test]
+    fn a_save_written_before_tools_existed_loads_with_the_starter_tool() {
+        let path = std::env::temp_dir().join(format!(
+            "feral_processes_save_no_tools_{}.bin",
+            std::process::id()
+        ));
+        save_to_file(&path, &sample_data()).unwrap();
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        let older: String = text
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("tools: ["))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            !older.contains("tools:"),
+            "the key has to actually be gone for this to prove anything"
+        );
+        std::fs::write(&path, &older).unwrap();
+
+        let loaded = match load_from_file(&path) {
+            Ok(loaded) => loaded,
+            Err(e) => panic!("a file written before tools existed must still load: {e}"),
+        };
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(
+            loaded.player.tools,
+            vec![ToolId(crate::tuning::STARTER_TOOL_ID.to_string())],
+            "an absent tools key must land the starter tool, or this save's \
+             material income is gone for good"
+        );
+    }
+
+    /// The other half of the same default, proven in the same file rather
+    /// than assumed from the doc comment: `starter_tools` must fire on an
+    /// *absent* key only. `Game::save` always writes `tools`, so a save
+    /// this branch itself wrote with an explicitly empty loadout (standing
+    /// in for a future `uninstall_tool`) must load empty, not get the
+    /// starter tool pushed back in.
+    #[test]
+    fn a_save_with_an_explicitly_empty_tools_list_loads_empty() {
+        let mut data = sample_data();
+        data.player.tools = Vec::new();
+        let text = to_ron(&data).unwrap();
+        assert!(
+            text.contains("tools: []"),
+            "the fixture must actually write the empty list to be a real test"
+        );
+
+        let loaded = from_ron(&text).expect("an explicit empty list must still parse");
+        assert!(
+            loaded.player.tools.is_empty(),
+            "a stored empty loadout must not be overwritten by the starter-tool default"
+        );
     }
 
     /// The biome rename is not a save-format break, and this is what says

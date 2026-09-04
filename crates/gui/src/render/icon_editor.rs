@@ -16,19 +16,17 @@
 //! pixel the player painted on purpose.
 //!
 //! **The grid, its cursor and the palette's swatches are `canvas::
-//! draw_canvas`'s**, shared with the dev-only sprite editor (a later task).
-//! This screen keeps its own chrome — the header, the two panels'
-//! background/border/label, and the footer — and calls `draw_canvas` twice:
-//! once for the canvas panel's grid (`view.canvas.edge > 0`), once for the
-//! palette panel's swatch row (a synthetic `edge: 0` view). Two calls
-//! rather than one is `canvas.rs`'s own trap to read before touching this:
-//! a single call drawing both would either duplicate the swatch row (this
-//! screen's own palette panel already draws it) or force `draw_canvas` to
-//! reproduce a *second* independently-bordered panel, which belongs here.
+//! draw_canvas_grid` and `canvas::draw_swatch_row`'s**, shared with the
+//! dev-only sprite editor (a later task). This screen keeps its own chrome
+//! — the header, the two panels' background/border/label, and the footer —
+//! and calls one of the two per panel: `draw_canvas_grid` for the canvas
+//! panel, `draw_swatch_row` for the palette panel. Two panels, two
+//! functions, each given its own `Rect` — the panes' own convention, "the
+//! caller takes the origin".
 
 use super::canvas;
 use super::*;
-use feral_processes_app_core::{CanvasFocus, CanvasView, IconEditorView};
+use feral_processes_app_core::{CanvasFocus, IconEditorView};
 use feral_processes_engine::{ICON_GRID, ICON_PALETTE};
 
 /// A canvas cell's side, in `Metrics::line_height` units. Double what it
@@ -175,8 +173,8 @@ fn panel_border(focused: bool) -> (f32, Color) {
 
 /// The canvas panel's chrome (label, background, focus border) — content
 /// (the grid, its lines and the brush-sized cursor) is `canvas::
-/// draw_canvas`'s, called with the interior box this panel insets out of
-/// its own `g.canvas`.
+/// draw_canvas_grid`'s, called with the interior box this panel insets out
+/// of its own `g.canvas`.
 fn draw_canvas_panel(view: &IconEditorView, painter: &Painter, g: &Geometry, m: &Metrics) {
     centered_ui(painter, "Canvas", g.canvas_label_y, m.small(), TEXT_DIM);
 
@@ -187,16 +185,14 @@ fn draw_canvas_panel(view: &IconEditorView, painter: &Painter, g: &Geometry, m: 
 
     let side = ICON_GRID as f32 * g.cell;
     let inner = Rect::new(c.x + m.inset, c.y + m.inset, side, side);
-    canvas::draw_canvas(painter, inner, &view.canvas, &ICON_PALETTE);
+    canvas::draw_canvas_grid(painter, inner, &view.canvas, &ICON_PALETTE);
 }
 
 /// The palette panel's chrome — content (the swatch row and its selection
-/// outline) is the same `canvas::draw_canvas`, switched to swatch-row mode
-/// by a synthetic view with no grid (`edge: 0`). `rect.h` is what tells
-/// `draw_canvas` the swatch's own side, so passing `g.swatch` here is what
-/// keeps this panel's own, narrower-than-the-canvas strip width (see
-/// `SWATCH_LINES`'s doc comment) rather than a size `draw_canvas` would
-/// have to invent.
+/// outline) is `canvas::draw_swatch_row`. `rect.h` is what tells it the
+/// swatch's own side, so passing `g.swatch` here is what keeps this
+/// panel's own, narrower-than-the-canvas strip width (see `SWATCH_LINES`'s
+/// doc comment) rather than a size `draw_swatch_row` would have to invent.
 fn draw_palette_panel(view: &IconEditorView, painter: &Painter, g: &Geometry, m: &Metrics) {
     centered_ui(painter, "Palette", g.palette_label_y, m.small(), TEXT_DIM);
 
@@ -211,15 +207,7 @@ fn draw_palette_panel(view: &IconEditorView, painter: &Painter, g: &Geometry, m:
         g.palette.w - m.inset * 2.0,
         g.swatch,
     );
-    let swatch_view = CanvasView {
-        cells: Vec::new(),
-        edge: 0,
-        cursor: (0, 0),
-        selected: view.canvas.selected,
-        focus: view.canvas.focus,
-        brush: view.canvas.brush,
-    };
-    canvas::draw_canvas(painter, inner, &swatch_view, &ICON_PALETTE);
+    canvas::draw_swatch_row(painter, inner, view.canvas.selected, &ICON_PALETTE);
 }
 
 fn draw_footer(painter: &Painter, g: &Geometry, m: &Metrics) {

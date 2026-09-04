@@ -1,27 +1,23 @@
-//! `draw_canvas`: the pixel grid, its cursor, and a row of palette swatches
-//! — the mechanics `render/icon_editor.rs` used to own outright, extracted
-//! so the dev-only sprite editor (a later task) can draw the same thing
-//! against a wider grid and a different palette. Consumes app-core's
-//! `CanvasEditor`/`CanvasView` the same way `icon_editor.rs` already did.
+//! `draw_canvas_grid` and `draw_swatch_row`: the pixel grid with its
+//! brush-sized cursor, and a row of palette swatches — the mechanics
+//! `render/icon_editor.rs` used to own outright, extracted so the dev-only
+//! sprite editor (a later task) can draw the same thing against a wider
+//! grid and a different palette. `draw_canvas_grid` consumes app-core's
+//! `CanvasView` the same way `icon_editor.rs` already did; `draw_swatch_row`
+//! takes only a selected index and a palette — it was never really an
+//! operation on a canvas, just one this file used to perform alongside one.
 //!
-//! **Two mutually exclusive modes, chosen by `view.edge`.** A grid to draw
-//! (`edge > 0`) means "draw the cells, the grid lines and the brush-sized
-//! cursor"; no grid (`edge == 0`, `cells` empty) means "draw the swatch
-//! row instead". This is what lets one call reproduce the icon editor's
-//! two independently-bordered panels pixel-for-pixel: it calls this twice,
-//! once per panel, rather than once for a combined region neither panel's
-//! chrome matches. A single call that always drew both would either
-//! duplicate the swatch row (task 6's brief names the trap: a painted
-//! cell's colour would show up on the grid, on the icon editor's palette
-//! panel, *and* on this function's own swatch row — a count of 3 where the
-//! screen's own test wants exactly 2) or force this function to reproduce
-//! the *other* panel's independent border/background/label, which belongs
-//! to the caller.
+//! **Two functions, not one, because the icon editor draws them into two
+//! independently-bordered panels.** Each takes its own `Rect` — the panes'
+//! own convention, "the caller takes the origin" — and the caller decides
+//! whether, and where, to call either. Neither function draws a background,
+//! a border or a label; that chrome is `icon_editor.rs`'s (and will be
+//! whatever the sprite editor's screen wants).
 //!
 //! **The swatch size comes from `rect.h`, not from the grid's cell.** The
 //! two panels are independently sized in the icon editor (the palette
 //! strip is narrower than the canvas — see `icon_editor.rs`'s own
-//! `SWATCH_LINES` comment) and a swatch derived from the grid's own cell
+//! `SWATCH_LINES` comment), so a swatch derived from the grid's own cell
 //! size could not reproduce that. The caller passes the exact box the
 //! swatch row must fill; `SWATCH_GAP_RATIO` is the one thing this function
 //! decides — the gap between swatches as a fraction of a swatch's own
@@ -42,20 +38,14 @@ const SELECTED_SWATCH_THICKNESS: f32 = 2.0;
 /// (0.3 / 0.9).
 const SWATCH_GAP_RATIO: f32 = 1.0 / 3.0;
 
-/// Draws the cell grid, the grid lines and the brush-sized cursor (when
-/// `view.edge > 0`), or the swatch row (when it is 0), and nothing else —
-/// no background, no border, no label. The caller owns every other pixel
-/// on the screen; see this module's doc comment for why one call cannot
-/// draw both onto the icon editor's two separately-bordered panels.
-pub(crate) fn draw_canvas(p: &Painter, rect: Rect, view: &CanvasView, palette: &[(u8, u8, u8)]) {
-    if view.edge == 0 {
-        draw_swatch_row(p, rect, view.selected, palette);
-        return;
-    }
-    draw_grid(p, rect, view, palette);
-}
-
-fn draw_grid(p: &Painter, rect: Rect, view: &CanvasView, palette: &[(u8, u8, u8)]) {
+/// Draws the cell grid, the grid lines and the brush-sized cursor, and
+/// nothing else — no background, no border, no label.
+pub(crate) fn draw_canvas_grid(
+    p: &Painter,
+    rect: Rect,
+    view: &CanvasView,
+    palette: &[(u8, u8, u8)],
+) {
     let edge = view.edge as usize;
     let cell = rect.w / edge as f32;
     let side = edge as f32 * cell;
@@ -102,11 +92,15 @@ pub(crate) fn palette_color((r, g, b): (u8, u8, u8)) -> Color {
     Color::new(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0)
 }
 
-/// `rect` is the exact box the row fills — `rect.h` is the swatch side,
-/// `rect.w` its total width — so a caller that already computed a narrower
-/// strip than its canvas (the icon editor's palette panel) hands over
-/// something this function reproduces exactly rather than re-deriving.
-fn draw_swatch_row(p: &Painter, rect: Rect, selected: u8, palette: &[(u8, u8, u8)]) {
+/// Draws a row of palette swatches and the selected one's outline, and
+/// nothing else — no background, no border, no label. `rect` is the exact
+/// box the row fills — `rect.h` is the swatch side, `rect.w` its total
+/// width — so a caller that already computed a narrower strip than its
+/// canvas (the icon editor's palette panel) hands over something this
+/// function reproduces exactly rather than re-deriving. Takes no
+/// `CanvasView`: a swatch row is not a property of a canvas, only of a
+/// palette and which entry is selected.
+pub(crate) fn draw_swatch_row(p: &Painter, rect: Rect, selected: u8, palette: &[(u8, u8, u8)]) {
     let swatch = rect.h;
     let gap = swatch * SWATCH_GAP_RATIO;
     for (i, &rgb) in palette.iter().enumerate() {
@@ -149,8 +143,10 @@ mod tests {
     #[test]
     fn the_cursor_scales_with_the_brush() {
         let rect = Rect::new(0.0, 0.0, 40.0, 40.0);
-        let (_, shapes1) = crate::paint::with_painter(|p| draw_canvas(p, rect, &view(4, 1), &[]));
-        let (_, shapes2) = crate::paint::with_painter(|p| draw_canvas(p, rect, &view(4, 2), &[]));
+        let (_, shapes1) =
+            crate::paint::with_painter(|p| draw_canvas_grid(p, rect, &view(4, 1), &[]));
+        let (_, shapes2) =
+            crate::paint::with_painter(|p| draw_canvas_grid(p, rect, &view(4, 2), &[]));
 
         let widest = |shapes: &[bevy_egui::egui::epaint::ClippedShape]| {
             crate::paint::painted_rect_widths(shapes)
@@ -172,7 +168,8 @@ mod tests {
     #[test]
     fn brush_one_cursor_is_exactly_one_cell() {
         let rect = Rect::new(0.0, 0.0, 40.0, 40.0);
-        let (_, shapes) = crate::paint::with_painter(|p| draw_canvas(p, rect, &view(4, 1), &[]));
+        let (_, shapes) =
+            crate::paint::with_painter(|p| draw_canvas_grid(p, rect, &view(4, 1), &[]));
         let cell = rect.w / 4.0;
         assert!(
             crate::paint::painted_rect_stroke_count(&shapes, CURSOR_COLOR) >= 1,
@@ -184,30 +181,23 @@ mod tests {
         assert_eq!(widest, cell, "brush 1's cursor is exactly one cell wide");
     }
 
-    /// `view.edge == 0` switches this function to swatch-row mode: no grid
-    /// cell and no cursor are drawn, only the row.
+    /// `draw_swatch_row` draws only the row: no grid cell and no cursor,
+    /// since it never receives a `CanvasView` to draw either from.
     #[test]
-    fn edge_zero_draws_only_the_swatch_row() {
+    fn the_swatch_row_draws_only_the_row() {
         let palette: [(u8, u8, u8); 3] = [(255, 0, 0), (0, 255, 0), (0, 0, 255)];
-        let mut v = view(0, 1);
-        v.cells = vec![];
-        v.selected = 2;
         let rect = Rect::new(0.0, 0.0, 30.0, 10.0);
-        let (_, shapes) = crate::paint::with_painter(|p| draw_canvas(p, rect, &v, &palette));
+        let (_, shapes) = crate::paint::with_painter(|p| draw_swatch_row(p, rect, 2, &palette));
 
         assert_eq!(
             crate::paint::painted_rect_fill_count(&shapes, palette_color(palette[1])),
             1,
             "the selected swatch must still be filled once"
         );
-        // `CURSOR_COLOR` and `SELECTED_SWATCH_COLOR` are both `WHITE` (as
-        // in the pre-extraction code), so a stroke count in either name is
-        // the same count — one outline total is only possible if no
-        // cursor was drawn alongside the selected swatch.
         assert_eq!(
             crate::paint::painted_rect_stroke_count(&shapes, SELECTED_SWATCH_COLOR),
             1,
-            "exactly the selected swatch is outlined, and no cursor besides it"
+            "exactly the selected swatch is outlined"
         );
     }
 }

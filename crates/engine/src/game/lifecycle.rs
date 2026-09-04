@@ -160,6 +160,7 @@ impl Game {
     ) -> std::io::Result<Self> {
         let AssetDbs {
             abilities: ability_db,
+            tools: tool_db,
             classes: class_db,
             achievements: achievement_db,
             contracts: contract_db,
@@ -190,6 +191,7 @@ impl Game {
 
         let mut world = World::new();
         world.insert_resource(ability_db);
+        world.insert_resource(tool_db);
         world.insert_resource(class_db);
         world.insert_resource(species_db);
         world.insert_resource(structure_db);
@@ -408,6 +410,7 @@ impl Game {
         }
         let AssetDbs {
             abilities: ability_db,
+            tools: tool_db,
             classes: class_db,
             achievements: achievement_db,
             contracts: contract_db,
@@ -454,6 +457,7 @@ impl Game {
 
         let mut world = World::new();
         world.insert_resource(ability_db);
+        world.insert_resource(tool_db);
         world.insert_resource(class_db);
         world.insert_resource(species_db);
         world.insert_resource(structure_db);
@@ -2093,6 +2097,7 @@ impl Game {
 /// accumulated for the caller to push into the message log.
 struct AssetDbs {
     abilities: AbilityDb,
+    tools: ToolDb,
     classes: crate::classes::ClassDb,
     achievements: crate::achievements::AchievementDb,
     contracts: crate::contracts::ContractDb,
@@ -2123,6 +2128,11 @@ struct AssetDbs {
 /// instead of a startup error.
 fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     let (abilities, mut warnings) = AbilityDb::load_dir(&assets_dir.join("abilities"))?;
+    // Same absent-is-silent rule as `AffixDb` — see `ToolDb::load_dir`. An
+    // empty catalogue leaves nothing to forge or install, which is the
+    // pre-extraction game.
+    let (tools, tools_warnings) = ToolDb::load_dir(&assets_dir.join("tools"))?;
+    warnings.extend(tools_warnings);
     // `mut` is only used by the `#[cfg(test)]` fixture insertion below.
     #[cfg_attr(not(test), allow(unused_mut))]
     let (mut species, species_warnings) =
@@ -2247,6 +2257,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     }
     Ok(AssetDbs {
         abilities,
+        tools,
         classes,
         talents,
         achievements,

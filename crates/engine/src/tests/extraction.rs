@@ -93,3 +93,72 @@ fn downed_programs_survive_a_save_load_round_trip() {
         "three distinct downed programs must come back exactly as saved"
     );
 }
+
+/// Writes `files` as `.ron` into a fresh temp dir and loads a `ToolDb` from
+/// it. Duplicated rather than shared with `abilities`'s own version of this
+/// helper: that one is private to its module's `#[cfg(test)]` block.
+fn load_tools(tag: &str, files: &[(&str, &str)]) -> (ToolDb, Vec<String>) {
+    let dir = std::env::temp_dir().join(format!("feral_tools_{}_{tag}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for (name, body) in files {
+        std::fs::write(dir.join(format!("{name}.ron")), body).unwrap();
+    }
+    let result = ToolDb::load_dir(&dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    result
+}
+
+const VALID_TOOL: &str = r#"(
+    id: "test_good_tool",
+    name: "Test Good Tool",
+    description: "d",
+    category: Materials,
+    yields: [("core_fragment", 1.0)],
+    tier: 1,
+    ticks: 5,
+)"#;
+
+/// `ToolDb::load_dir` is the second `load_dir` this phase writes, alongside
+/// `items::DownedProgram`'s own store — see `AffixDb::load_dir`'s rule,
+/// which `ToolDb` follows rather than `AbilityDb::load_dir`'s: abilities are
+/// mandatory content and refuse a missing directory outright, but a tool
+/// catalogue has no floor to enforce yet.
+#[test]
+fn an_absent_tools_directory_loads_silently_empty() {
+    let dir = std::env::temp_dir().join(format!("feral_tools_absent_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(!dir.exists(), "the directory must genuinely not exist");
+
+    let (db, warnings) = ToolDb::load_dir(&dir).unwrap();
+    assert!(
+        db.all().next().is_none(),
+        "an absent directory must load no tools"
+    );
+    assert!(
+        warnings.is_empty(),
+        "an absent directory must warn about nothing: {warnings:?}"
+    );
+}
+
+/// Mirrors `abilities`'s own malformed-file coverage: a file that fails to
+/// parse is skipped with a warning naming it, and its well-formed neighbour
+/// still loads — never a panic that would take the whole game down over one
+/// bad mod file.
+#[test]
+fn a_malformed_tool_file_is_skipped_while_its_neighbour_still_loads() {
+    let (db, warnings) = load_tools(
+        "malformed",
+        &[("good", VALID_TOOL), ("bad", "not valid ron at all {{{")],
+    );
+    assert!(
+        db.get("test_good_tool").is_some(),
+        "the well-formed neighbour must still load"
+    );
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(
+        warnings[0].contains("bad"),
+        "the warning should name the bad file: {}",
+        warnings[0]
+    );
+}

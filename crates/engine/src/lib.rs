@@ -41,6 +41,7 @@ pub mod talents;
 pub mod taming;
 pub mod telemetry;
 pub mod text;
+pub mod tools;
 pub mod tuning;
 pub mod views;
 pub mod world;
@@ -101,6 +102,7 @@ pub use resources::{
 };
 use species::{Affinities, SpeciesDb, SpeciesDef, SpeciesId};
 use structures::{StructureDb, StructureDef, StructureId, TradeDef};
+use tools::ToolDb;
 pub use views::*;
 use world::{Biome, Tile, WorldMap};
 

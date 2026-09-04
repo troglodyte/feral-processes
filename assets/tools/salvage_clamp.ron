@@ -1,0 +1,13 @@
+(
+    id: "salvage_clamp",
+    name: "Salvage Clamp",
+    description: "Prises the loose material off a downed process.",
+    category: Materials,
+    // The pool ships now; the weights are fitted in Task 6 against the
+    // decision-8 drop-neutrality test, which compares this tool's expected
+    // yield to the retired `roll_work_resource_drop`'s mean. Do not tune
+    // these by feel before that test exists.
+    yields: [("core_fragment", 1.0), ("bytecode_block", 0.4)],
+    tier: 1,
+    ticks: 20,
+)

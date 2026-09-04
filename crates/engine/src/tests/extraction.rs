@@ -7,6 +7,7 @@
 //! `docs/superpowers/specs/2026-09-04-program-extraction-design.md`.
 
 use super::support::*;
+use crate::components::Tools;
 use crate::items::DownedProgram;
 use crate::tools::{ToolDb, ToolDef, ToolId};
 use crate::*;
@@ -340,6 +341,80 @@ fn rich_in_falls_back_to_work_resource_for_every_shipped_species() {
 }
 
 #[test]
+fn rich_in_overrides_work_resource_and_reaches_extraction_yields_output() {
+    // Every shipped species leaves `rich_in` unset, so the fallback test
+    // above can't tell an override branch that never ran from one that
+    // isn't there at all — this fixture is the one place in the suite that
+    // sets `rich_in` to something other than `work_resource`, so `def.
+    // rich_in.clone().or_else(...)` in `Game::rich_in` has a test that
+    // fails if it's collapsed to `work_resource` alone.
+    let mut game = Game::new(4479, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let template = game
+        .species_defs()
+        .into_iter()
+        .next()
+        .expect("at least one shipped species");
+    let overridden = SpeciesDef {
+        id: "rich_in_override_species".to_string(),
+        work_resource: Some(ItemId::from(crate::items::ids::CORE_FRAGMENT)),
+        rich_in: Some(ItemId::from(crate::items::ids::RESEARCH_DATA)),
+        ..template
+    };
+    game.world.resource_mut::<SpeciesDb>().insert(overridden);
+
+    assert_eq!(
+        game.rich_in(&"rich_in_override_species".to_string()),
+        Some(ItemId::from(crate::items::ids::RESEARCH_DATA)),
+        "Game::rich_in must answer the override, not the species' own work_resource"
+    );
+
+    let prog = DownedProgram {
+        species: "rich_in_override_species".to_string(),
+        level: 20,
+        rarity: Rarity::Gold,
+        condition: 70,
+        boss: false,
+    };
+    let tool = starter_tool_def(&game);
+    let granted = totals(&game.extraction_yield(&prog, &tool));
+
+    assert_eq!(
+        granted
+            .get(&ItemId::from(crate::items::ids::RESEARCH_DATA))
+            .copied(),
+        Some(tuning::RICH_IN_UNITS),
+        "the override's bonus must reach extraction_yield's output: {granted:?}"
+    );
+
+    // Baseline: the same fixture with no override at all — `research_data`
+    // is not in the starter tool's own pool (`salvage_clamp` names only
+    // `core_fragment` and `bytecode_block`), so its presence above can only
+    // have come from `rich_in`, never from `apportion`'s weight split.
+    let plain = SpeciesDef {
+        id: "rich_in_plain_species".to_string(),
+        work_resource: Some(ItemId::from(crate::items::ids::CORE_FRAGMENT)),
+        rich_in: None,
+        ..game
+            .species_defs()
+            .into_iter()
+            .next()
+            .expect("at least one shipped species")
+    };
+    game.world.resource_mut::<SpeciesDb>().insert(plain);
+    let plain_prog = DownedProgram {
+        species: "rich_in_plain_species".to_string(),
+        ..prog
+    };
+    let plain_granted = totals(&game.extraction_yield(&plain_prog, &tool));
+    assert!(
+        !plain_granted.contains_key(&ItemId::from(crate::items::ids::RESEARCH_DATA)),
+        "with rich_in unset, falling back to work_resource (core_fragment) must not somehow \
+         still grant research_data — the override above must be what put it there: \
+         {plain_granted:?}"
+    );
+}
+
+#[test]
 fn extraction_removes_the_program_and_grants_exactly_the_previewed_yield() {
     let mut game = Game::new(4476, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
@@ -369,17 +444,28 @@ fn extraction_removes_the_program_and_grants_exactly_the_previewed_yield() {
         "the extracted program must be removed from the store"
     );
 
-    let mut delta = std::collections::BTreeMap::new();
-    for (item, qty) in &after {
-        let prior = before.get(item).copied().unwrap_or(0);
-        if *qty > prior {
-            delta.insert(item.clone(), qty - prior);
+    // Signed, and over the union of both keysets: a plain `qty > prior`
+    // filter (the shape this test shipped with) is blind to a decrease —
+    // an extraction that *removed* an item as a side effect would pass it
+    // silently, since only the increases it also grants would show up.
+    let mut items: std::collections::BTreeSet<ItemId> = before.keys().cloned().collect();
+    items.extend(after.keys().cloned());
+    let mut delta: std::collections::BTreeMap<ItemId, i64> = std::collections::BTreeMap::new();
+    for item in items {
+        let prior = before.get(&item).copied().unwrap_or(0) as i64;
+        let now = after.get(&item).copied().unwrap_or(0) as i64;
+        if now != prior {
+            delta.insert(item, now - prior);
         }
     }
+    let expected: std::collections::BTreeMap<ItemId, i64> = totals(&preview)
+        .into_iter()
+        .map(|(item, qty)| (item, qty as i64))
+        .collect();
     assert_eq!(
-        delta,
-        totals(&preview),
-        "the inventory delta a real extraction grants must equal the previewed yield exactly"
+        delta, expected,
+        "the inventory delta a real extraction grants must equal the previewed yield exactly, \
+         with no unaccounted decrease anywhere"
     );
 }
 

@@ -31,6 +31,12 @@ fn tier_scale(tier: u32) -> f32 {
 /// `ToolDef::invalid_yield_weight` refuses a tool file that isn't, at load
 /// — so this doesn't re-guard against a bad pool, only an empty or
 /// zero-`units` one.
+///
+/// Hamilton's method carries the Alabama paradox: with a pool of three or
+/// more items, one extra unit (`Perk::Teardown`'s bonus, say) can shrink
+/// another item's share rather than only ever adding to the total. Both
+/// shipped pools have two items, where the paradox cannot occur — a
+/// three-item modded pool exhibiting it is this, not a bug.
 fn apportion(pool: &[(ItemId, f32)], units: u32) -> Vec<(ItemId, u32)> {
     if units == 0 || pool.is_empty() {
         return Vec::new();

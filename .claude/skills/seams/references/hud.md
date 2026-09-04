@@ -65,35 +65,46 @@
   still wrong, being the same hue at a different lightness, which the
   vignette eats. The ladder census catches it only because it asserts a
   **margin** (0.10, against a shipped step of 0.12).
-- **A tile says three things on three channels, and the glyph is the one
-  that says *what*.** The con read is a right-angled earmark folded into the
-  **top-left** corner — `difficulty_mark_points`, leg `CON_MARK` — and
-  identity rides corner marks, so `EntityView::color` is the species'
-  authored hue for everyone. It used to be *replaced* by `difficulty_color`
-  for a hostile, and a boss or a nemesis replaced it with a reserved hue
-  instead of a rung, which stopped the map answering "can I win this fight"
-  on the two tiles where it matters most. **The trap is the top edge, which
-  now carries three things**: the rarity bar owns its full width and is
+- **A tile's con read takes the glyph's own hue whenever it can, and
+  `ConRead` is the one place that is decided.** The glyph is the better home
+  by a distance — it is the ink the eye lands on scanning a screenful, and
+  it costs only the species' authored hue, which answers *what is this*, a
+  question asked on a tile the player has already stopped at. Exactly two
+  tiles cannot spend it: one drawn as a **sprite**, because art is authored
+  near-white and egui *multiplies* the tile colour through it, so a con rung
+  repaints the drawing rather than tinting it; and a **boss**, whose magenta
+  is the ink. Those pay with a right-angled earmark folded into the
+  **top-left** corner — `difficulty_mark_points`, leg `CON_MARK`. **The
+  property the type exists for is "never both and never neither"**: a rung
+  on the glyph *and* in the corner reads as two different creatures, a rung
+  in neither reads as harmless, and two conditions agreeing at two draw
+  sites is how either arrives — so `ConRead` returns one value and the
+  matrix is swept rather than its interesting corner. **The second trap is
+  the gate**: `drew_sprite` is the sprite call's own answer, never
+  `sprite.is_some()`. A name the table has nothing under falls back to the
+  glyph — the whole of what keeps `assets/sprites/` optional — and that
+  glyph is free to carry the rung; read off the name instead, every tile
+  whose art failed to load pays a corner for nothing, which is why the
+  sprite attempt is **hoisted out of the glyph draw** and `drew_sprite` is a
+  `let` and not a `mut` seeded with a default. **The third is the top edge,
+  which carries three things**: the rarity bar owns its full width and is
   painted *first*, so the earmark drops below `RARITY_BAR_PX` exactly as
-  `nemesis_mark_rect` does — flush into the corner it covers one end of a
-  channel that means something else, and nothing fails to compile. The
-  nemesis mark is the other neighbour, and it is the creature whose con read
-  the player most wants beside it: `CON_MARK`'s leg is a fraction of the
-  tile where the mark's inset is absolute, so the gap is narrowest at the
-  deepest zoom and the census sweeps 24→64px. It is a **`poly` and not a
-  `rect`** on purpose — form, not a fifth coloured strip, is what tells two
-  top-edge readings apart. `EntityView::difficulty` is `None` for anything
-  non-hostile, *no reading* rather than one worth nothing, because an
-  earmark on a companion says the player can beat their own program. The
-  boss mark takes the bottom-right, which is now the emptiest edge, on a
-  colour argument (its magenta sits 0.391 from the rarity bar's Prismatic
-  and no nearer than 0.718 to any con rung), and Blue — the nemesis's
-  vacated hue — is exactly `CUTTING_OUTLINE` and fails the mark census at
-  distance 0. **`staffed_mark_rect` outlived the bar it was extracted to
-  clear** and is still worth its own test, because its lift is
-  `Fx::staffed_bob`: a resting place that has drifted off the tile is
-  invisible while a machine is worked and shows only at rest, and for a
-  stranded mark, which never bobs at all.
+  `nemesis_mark_rect` does, and the nemesis mark is the other neighbour —
+  `CON_MARK`'s leg is a fraction of the tile where that mark's inset is
+  absolute, so the gap is narrowest at the deepest zoom and the census
+  sweeps 24→64px. It is a **`poly` and not a `rect`** on purpose: form, not
+  a fifth coloured strip, is what tells two top-edge readings apart. A boss
+  wears no corner mark of its own any more — its magenta *is* the fact —
+  and the census that used to hold that mark apart from every other mark now
+  holds the **hue** apart from every con rung, which is the reading it could
+  actually be mistaken for. `EntityView::difficulty` is `None` for anything
+  non-hostile, *no reading* rather than one worth nothing, because either
+  home on a companion says the player can beat their own program.
+  **`staffed_mark_rect` outlived the bottom bar it was extracted to clear**
+  and is still worth its own test, because its lift is `Fx::staffed_bob`: a
+  resting place that has drifted off the tile is invisible while a machine
+  is worked and shows only at rest, and for a stranded mark, which never
+  bobs at all.
 - **The player's `@` is a role and is read off `is_player`** — `PLAYER`, br
   cyan, which nothing else may take, and never off the `GlyphColor::Cyan` the
   player happens to spawn with. Asserted by **distance** through a real draw,

@@ -163,33 +163,83 @@ fn difficulty_mark_points(px: f32, py: f32, tile_px: f32) -> [(f32, f32); 3] {
     [(x, y), (x + leg, y), (x, y + leg)]
 }
 
-/// Where the boss mark sits — the bottom-right corner, inset from both
-/// edges for `nemesis_mark_rect`'s reason.
+/// The hue a boss's glyph wears — the magenta `difficulty_color` used to
+/// return for one, and wears again.
 ///
-/// **The far corner from the nemesis mark deliberately.** A creature can be
-/// both now — `difficulty_color` used to answer with one reserved hue and
-/// the nemesis won it, so being a boss went undrawn — and two facts that
-/// can hold at once must never fight for pixels. The bottom edge is also
-/// the emptiest one: the con earmark and the nemesis mark both hang off the
-/// top, under a rarity bar whose Prismatic sits much nearer this mark's
-/// magenta than anything down here.
-fn boss_mark_rect(px: f32, py: f32, tile_px: f32) -> Rect {
-    let size = (tile_px - 1.0) * IDENTITY_MARK;
-    Rect::new(
-        px + tile_px - 1.0 - IDENTITY_MARK_INSET - size,
-        py + tile_px - 1.0 - IDENTITY_MARK_INSET - size,
-        size,
-        size,
-    )
+/// A named function rather than a literal at the draw site, so the census
+/// that holds it apart from every con rung and every mark a tile can wear
+/// has something to name. It is also the whole reason a boss cannot say its
+/// own con read with its ink: this hue *is* that ink.
+fn boss_color() -> Color {
+    hud::palette::glyph(GlyphColor::Magenta)
 }
 
-/// The boss mark's colour — the magenta `difficulty_color` used to paint a
-/// boss's whole glyph, kept so the fact reads the same after it moved off
-/// the glyph and into a corner. A named function rather than a literal at
-/// the draw site so the census that holds it apart from every other mark on
-/// the tile has something to name.
-fn boss_mark_color() -> Color {
-    hud::palette::glyph(GlyphColor::Magenta)
+/// Where a tile's con read lands — on the glyph's own hue, or in a corner
+/// earmark, **never both and never neither**.
+///
+/// The glyph is the better home by a distance: it is the ink the eye lands
+/// on when scanning a screenful, and it costs only the species' authored
+/// hue, which answers *what is this* — a question asked on a tile the
+/// player has already stopped at. Two tiles cannot spend it, and the
+/// earmark is what they pay instead. One whose ink is a **sprite**, because
+/// art is authored near-white and egui *multiplies* this colour through it,
+/// so a con rung would repaint the drawing rather than tint it. And a
+/// **boss**, whose magenta is the ink.
+///
+/// One value rather than two conditions agreeing at two draw sites. A tile
+/// wearing a rung on its glyph *and* in its corner reads as two different
+/// creatures; a tile wearing it in neither reads as harmless. Both are
+/// silent, and neither would fail to compile.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ConRead {
+    /// The glyph carries it and the corner stays bare.
+    Glyph(GlyphColor),
+    /// The glyph's hue is spoken for, so the corner carries it.
+    Earmark(GlyphColor),
+    /// Not a hostile — *no reading*, which is not the same as a reading
+    /// worth nothing.
+    None,
+}
+
+impl ConRead {
+    /// `drew_sprite` is the sprite call's **own answer** and never
+    /// `sprite.is_some()`. A name the table has nothing under falls back to
+    /// the glyph — that is what keeps `assets/sprites/` optional — and that
+    /// glyph is free to carry the rung. Gated on the name instead, an
+    /// unloaded sprite costs a tile the better of the two homes for a
+    /// reason the player cannot see.
+    fn of(difficulty: Option<GlyphColor>, is_boss: bool, drew_sprite: bool) -> Self {
+        match difficulty {
+            Some(rung) if is_boss || drew_sprite => Self::Earmark(rung),
+            Some(rung) => Self::Glyph(rung),
+            None => Self::None,
+        }
+    }
+
+    /// The ink the glyph takes: the rung when the glyph is carrying the
+    /// read, and the tile's authored colour otherwise.
+    ///
+    /// Takes `vig` because it is applied *after* the tile has already been
+    /// vignetted — a rung mixed in here would otherwise burn at full
+    /// brightness at the edge of the light, which is the one place the
+    /// player is squinting anyway.
+    fn glyph_ink(self, authored: Color, vig: f32) -> Color {
+        match self {
+            Self::Glyph(rung) => {
+                let c = glyph_color(rung);
+                Color::new(c.r * vig, c.g * vig, c.b * vig, authored.a)
+            }
+            _ => authored,
+        }
+    }
+
+    /// The rung the corner draws, if the corner is the one carrying it.
+    fn earmark(self) -> Option<GlyphColor> {
+        match self {
+            Self::Earmark(rung) => Some(rung),
+            _ => None,
+        }
+    }
 }
 
 /// Paints the con read into the top-left corner, or nothing at all when
@@ -1260,8 +1310,15 @@ fn draw_surface_map(
                 // colour. Read off `is_player` rather than off the authored
                 // `GlyphColor::Cyan`, which a structure is free to author
                 // too.
+                //
+                // **A boss is the other exception, and it spends the hue on
+                // purpose.** Magenta is what a boss reads as, which is why
+                // it is the one hostile whose con rung has to go somewhere
+                // else — see `ConRead`.
                 color = if ev.is_player {
                     player_look_color(ev.look.as_ref().and_then(|look| look.colour))
+                } else if ev.is_boss {
+                    boss_color()
                 } else {
                     glyph_color(ev.color)
                 };
@@ -1341,7 +1398,13 @@ fn draw_surface_map(
             // apply to everything on the map evenly, while per-tile jitter is
             // a property of the ground, not of what stands on it.
             let color = Color::new(color.r * vig, color.g * vig, color.b * vig, color.a);
-            if let Some(ch) = ch {
+            // The sprite attempt is hoisted out of the glyph draw below
+            // because **its answer is what decides where the con read
+            // goes** — see `ConRead::of`. `is_some_and` and not an `if let`
+            // so `drew_sprite` stays a `let` rather than a `mut` seeded with
+            // a default, which is the shape that silently ships wrong the
+            // day a branch is added.
+            let drew_sprite = ch.is_some_and(|_| {
                 // A sprite *substitutes* for the glyph rather than drawing
                 // beside it, so it can only appear on a tile that would have
                 // had one — and a miss falls back to that glyph, which is
@@ -1417,7 +1480,7 @@ fn draw_surface_map(
                 // one.** If this ever looks wrong, the answer is art
                 // authored near-white — which a hand-drawn icon is not.
                 let neutral = Color::new(vig, vig, vig, color.a);
-                let drew = (drawn_icon
+                (drawn_icon
                     && painter.sprite(
                         crate::sprites::DRAWN_ICON_KEY,
                         px + inset,
@@ -1427,14 +1490,25 @@ fn draw_surface_map(
                     ))
                     || sprite.is_some_and(|name| {
                         painter.sprite(name, px + inset, py + inset, glyph_px as f32, color)
-                    });
-                if !drew {
-                    let glyph = ch.to_string();
-                    let dims = painter.measure_map(&glyph, glyph_px);
-                    let tx = px + (tile_px - dims.width) / 2.0;
-                    let ty = py + (tile_px + dims.height) / 2.0;
-                    painter.map(&glyph, tx, ty, glyph_px, color);
-                }
+                    })
+            });
+            // Decided once, read twice — here for the glyph's ink and below
+            // for the corner. `actor` and nothing else: a structure has no
+            // con read, and the engine hands `None` for everything that is
+            // not hostile.
+            let con = ConRead::of(
+                actor.and_then(|ev| ev.difficulty),
+                actor.is_some_and(|ev| ev.is_boss),
+                drew_sprite,
+            );
+            if let Some(ch) = ch
+                && !drew_sprite
+            {
+                let glyph = ch.to_string();
+                let dims = painter.measure_map(&glyph, glyph_px);
+                let tx = px + (tile_px - dims.width) / 2.0;
+                let ty = py + (tile_px + dims.height) / 2.0;
+                painter.map(&glyph, tx, ty, glyph_px, con.glyph_ink(color, vig));
             }
             // The caret, bouncing in the middle of the slab.
             //
@@ -1526,45 +1600,19 @@ fn draw_surface_map(
                     Color::new(bar.r * vig, bar.g * vig, bar.b * vig, bar.a),
                 );
             }
-            // The con read, folded into the top-left corner as a wedge.
-            // `difficulty_color` used to *replace* the glyph's hue, so a
-            // tile said either what a program is or how dangerous it is;
-            // the earmark is what buys back the glyph. A shape rather than
-            // a second strip, so the two things riding the top edge are
-            // told apart by form and not only by hue. Painted after the
-            // rarity bar and dropped clear of it — see
-            // `difficulty_mark_points`. Keyed off `actor` for the rarity
-            // bar's reason: a structure has no con read, and the engine
-            // hands `None` for everything that is not hostile.
-            draw_difficulty_mark(
-                painter,
-                actor.and_then(|ev| ev.difficulty),
-                px,
-                py,
-                tile_px,
-                vig,
-            );
-            // A nemesis draws a second mark on top of its reserved glyph
-            // colour — belt and braces, since a nemesis is worth noticing
-            // even at a glance that only catches shape and not hue. Its own
-            // corner rather than sharing the bar's, so a nemesis that is
-            // also rare (the two are independent) shows both without either
-            // being spent to make room.
-            // Its own corner and its own fact. A boss used to be drawn by
-            // `difficulty_color` returning magenta for its whole glyph,
-            // which spent the con read — and lost outright to the nemesis
-            // override when a creature was both. Two marks, two corners,
-            // and the con bar answers the fight question for both.
-            if actor.is_some_and(|ev| ev.is_boss) {
-                let mark = boss_mark_rect(px, py, tile_px);
-                painter.rect(
-                    mark.x,
-                    mark.y,
-                    mark.w,
-                    mark.h,
-                    at_level(boss_mark_color(), vig),
-                );
-            }
+            // The con read's **fallback** home, a wedge folded into the
+            // top-left corner — `ConRead::Earmark` and nothing else, so a
+            // tile that already said it with its ink cannot say it twice.
+            // A shape rather than a second strip: the top edge belongs to
+            // the rarity bar, and form is what tells two readings there
+            // apart when hue cannot. Painted after that bar and dropped
+            // clear of it — see `difficulty_mark_points`.
+            draw_difficulty_mark(painter, con.earmark(), px, py, tile_px, vig);
+            // A nemesis draws a mark on top of its glyph — belt and braces,
+            // since a nemesis is worth noticing even at a glance that only
+            // catches shape and not hue. Its own corner, so a nemesis that
+            // is also rare, or also a boss (all three are independent),
+            // shows every one of them without any being spent to make room.
             if actor.is_some_and(|ev| ev.nemesis) {
                 let mark = nemesis_mark_rect(px, py, tile_px);
                 painter.rect(
@@ -4263,56 +4311,124 @@ mod tests {
         );
     }
 
-    /// `nemesis_mark_rect`'s inset at the other end: a mark flush into a
-    /// corner reads as painting back an edge `outline_open` left off.
-    #[test]
-    fn the_boss_mark_stays_inside_the_tile() {
-        for tile_px in [24.0_f32, 32.0, 48.0, 64.0] {
-            let (px, py) = (100.0_f32, 200.0_f32);
-            let mark = boss_mark_rect(px, py, tile_px);
+    /// The four rungs `difficulty_color` can answer with.
+    const RUNGS: [GlyphColor; 4] = [
+        GlyphColor::Green,
+        GlyphColor::Yellow,
+        GlyphColor::Orange,
+        GlyphColor::Red,
+    ];
 
-            assert!(
-                mark.y + mark.h < py + tile_px - 1.0 && mark.y > py,
-                "at tile_px={tile_px} the boss mark touches the bottom edge"
-            );
-            assert!(
-                mark.x + mark.w < px + tile_px - 1.0 && mark.x > px,
-                "at tile_px={tile_px} the boss mark touches a side edge"
-            );
-            assert!(mark.w > 0.0, "at tile_px={tile_px} the mark has no size");
+    /// **The property the type exists for.** A rung shown on the glyph
+    /// *and* in the corner reads as two different creatures; a rung shown
+    /// in neither reads as harmless. Both are silent faults, and two
+    /// conditions agreeing at two draw sites is how either arrives — so the
+    /// whole matrix is swept rather than the interesting corner of it.
+    #[test]
+    fn a_con_read_lands_in_exactly_one_place_and_no_reading_lands_in_none() {
+        for is_boss in [false, true] {
+            for drew_sprite in [false, true] {
+                for rung in RUNGS {
+                    let con = ConRead::of(Some(rung), is_boss, drew_sprite);
+                    let on_glyph = con.glyph_ink(WHITE, 1.0) != WHITE;
+                    let in_corner = con.earmark().is_some();
+                    assert!(
+                        on_glyph != in_corner,
+                        "{con:?} (is_boss={is_boss}, drew_sprite={drew_sprite}) \
+                         puts the {rung:?} rung in {} places",
+                        on_glyph as u8 + in_corner as u8
+                    );
+                }
+
+                let none = ConRead::of(None, is_boss, drew_sprite);
+                assert_eq!(none, ConRead::None);
+                assert_eq!(none.earmark(), None, "a non-hostile drew an earmark");
+                assert_eq!(
+                    none.glyph_ink(WHITE, 1.0),
+                    WHITE,
+                    "a non-hostile had its authored hue taken"
+                );
+            }
         }
     }
 
-    /// **A creature can now be both.** The old `difficulty_color` returned a
-    /// reserved hue for a nemesis *or* a boss and the nemesis won, so being
-    /// both was one fact drawn and one dropped. They are two marks in two
-    /// corners now, and nothing may make them fight for pixels.
+    /// The glyph is the home a tile takes whenever it can, and the ink it
+    /// takes is the rung's own — from the one palette table `glyph_color`
+    /// reads, so the map and every popup that draws a program agree.
     #[test]
-    fn a_boss_that_is_also_a_nemesis_wears_both_marks_without_them_colliding() {
-        let tile_px = 40.0_f32;
-        let boss = boss_mark_rect(0.0, 0.0, tile_px);
-        let nemesis = nemesis_mark_rect(0.0, 0.0, tile_px);
+    fn an_ordinary_hostile_says_its_con_read_with_its_own_ink() {
+        for rung in RUNGS {
+            let con = ConRead::of(Some(rung), false, false);
+            assert_eq!(con, ConRead::Glyph(rung));
 
-        assert!(
-            boss.y > nemesis.y + nemesis.h,
-            "the two identity marks overlap: boss at {boss:?}, nemesis at \
-             {nemesis:?}"
+            let want = hud::palette::glyph(rung);
+            let got = con.glyph_ink(WHITE, 1.0);
+            assert!(
+                (got.r - want.r).abs() < 0.001
+                    && (got.g - want.g).abs() < 0.001
+                    && (got.b - want.b).abs() < 0.001,
+                "the {rung:?} rung painted {got:?}, not the palette's {want:?}"
+            );
+        }
+    }
+
+    /// **Gated on the sprite call's answer, never on the sprite's name.** A
+    /// name the table has nothing under falls back to the glyph — the whole
+    /// of what keeps `assets/sprites/` optional — and that glyph is free to
+    /// carry the rung. Reading `sprite.is_some()` instead compiles, ships,
+    /// and costs every tile whose art failed to load the better of the two
+    /// homes, which reads as the con read having moved for no reason.
+    #[test]
+    fn a_named_sprite_that_did_not_draw_leaves_the_read_on_the_glyph() {
+        assert_eq!(
+            ConRead::of(Some(GlyphColor::Red), false, false),
+            ConRead::Glyph(GlyphColor::Red)
+        );
+        assert_eq!(
+            ConRead::of(Some(GlyphColor::Red), false, true),
+            ConRead::Earmark(GlyphColor::Red)
         );
     }
 
-    /// **The census.** A tile can wear the con bar, a rarity bar, a staffed
-    /// or stranded mark, a nemesis mark and now a boss mark all at once, and
-    /// every one of them is a different fact. The boss mark is the newest
-    /// and so the one that has to prove it is not any of the others —
-    /// against the same 0.10 channel-distance margin the con ladder's own
-    /// census uses.
+    /// The two tiles that cannot pay with their ink, each for its own
+    /// reason: a sprite is authored near-white and this colour is
+    /// *multiplied* through it, and a boss's ink is already its magenta.
+    /// Asserted separately because they are independent — a boss with art
+    /// is one tile, and either alone must be enough.
     #[test]
-    fn the_boss_mark_is_distinguishable_from_every_other_mark_a_tile_can_wear() {
+    fn a_sprite_and_a_boss_each_push_the_read_into_the_corner() {
+        for (what, is_boss, drew_sprite) in [
+            ("a hostile drawn as a sprite", false, true),
+            ("a boss drawn as a glyph", true, false),
+            ("a boss drawn as a sprite", true, true),
+        ] {
+            let con = ConRead::of(Some(GlyphColor::Orange), is_boss, drew_sprite);
+            assert_eq!(
+                con,
+                ConRead::Earmark(GlyphColor::Orange),
+                "{what} must pay for its con read with a corner"
+            );
+            assert_eq!(
+                con.glyph_ink(WHITE, 1.0),
+                WHITE,
+                "{what} had the ink taken it was supposed to keep"
+            );
+        }
+    }
+
+    /// **The census.** A boss's magenta is a *hue* now, sharing the one
+    /// channel the con rungs use, so it has to prove it is not any of them
+    /// — a magenta glyph misread as a rung is the map answering "can I win
+    /// this fight" with a lie. It shares the tile with the marks and bars
+    /// too. Same 0.10 channel-distance margin the con ladder's own census
+    /// uses.
+    #[test]
+    fn a_boss_glyph_is_distinguishable_from_every_hue_a_tile_can_wear() {
         fn dist(a: Color, b: Color) -> f32 {
             (a.r - b.r).abs() + (a.g - b.g).abs() + (a.b - b.b).abs()
         }
 
-        let boss = boss_mark_color();
+        let boss = boss_color();
         let others: &[(&str, Color)] = &[
             ("the nemesis mark", hud::palette::glyph(GlyphColor::Cyan)),
             ("a staffed mark", hud::palette::HEALTHY),
@@ -4332,7 +4448,7 @@ mod tests {
             let d = dist(boss, *c);
             assert!(
                 d >= 0.10,
-                "the boss mark is {d:.3} from {what} — a player reading one \
+                "a boss's glyph is {d:.3} from {what} — a player reading one \
                  tile cannot tell them apart"
             );
         }

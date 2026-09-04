@@ -5588,7 +5588,7 @@ generation must not draw from `resources::GameRng`" above makes the same
 argument for a Stack frame's own seed; this is the battle-teardown
 instance of the identical trap.
 
-### A tile says three things on three channels, and the glyph is the one that says *what*
+### A tile's con read takes the glyph's own hue whenever it can, and `ConRead` is the one place that is decided
 
 **A tile says three things on three channels, and the glyph is the one that
 says *what*.** `game::inspection::difficulty_color` used to *replace*
@@ -5604,41 +5604,78 @@ and a nemesis Blue, *instead of* a rung — so on exactly the two tiles where
 being both drew one fact and dropped the other, since `is_nemesis` was
 checked first and won.
 
-The con read moves off the glyph entirely. Identity rides corner marks: the
-nemesis mark that already existed as belt-and-braces, and a new boss mark
-in the opposite corner. A creature that is both now wears both **and**
-keeps its rung. Three readings, three channels, nothing spent.
-
 `difficulty_color` loses its `is_boss`/`is_nemesis` parameters entirely and
 answers one question. `EntityView::difficulty` is `Option<GlyphColor>` and
 is `None` for everything that is not hostile — *no reading*, not a reading
-worth nothing, because a con mark on a companion would say the player can
-beat their own program.
+worth nothing, because a con read on a companion would say the player can
+beat their own program. That much of the change stands.
 
-#### Where the con read went, and why it is a shape
+#### Two rejected homes, and the one the read has now
 
-It first landed as a bar along the **bottom** edge — `RARITY_BAR_PX` thick
-and full width, the rarity bar's mirror, so the two derived readings framed
-the tile. That form was rejected in play: two identical strips on opposite
-edges read as one decorative frame rather than as two different questions,
-and the one the player scans a screenful of tiles for was the one hardest
-to pick out at the bottom of a cell.
+The read first moved **off the glyph entirely**, onto a bar along the
+bottom edge — `RARITY_BAR_PX` thick and full width, the rarity bar's
+mirror, so the two derived readings framed the tile. Rejected on sight in
+play: two identical strips on opposite edges read as one decorative frame
+rather than as two different questions, and the one a player scans a
+screenful of tiles for was the harder of the two to pick out.
 
-It is a right-angled **earmark folded into the top-left corner** now —
-`difficulty_mark_points`, a `poly` with its right angle at the corner and
-its hypotenuse running into the tile, leg `CON_MARK` (0.34 of the tile).
-The leg is chosen so the wedge's area lands within a few percent of the
-full-width bar it replaced: the channel keeps its weight, it just stops
-being a strip. `CON_MARK` is larger than `IDENTITY_MARK` (0.22) for the
-same reason the read moved at all — the con answer is the scan, a nemesis
-or boss mark is a detail confirmed on the tile the player has already
-stopped at.
+It then became a right-angled **earmark folded into the top-left corner**.
+Also rejected, and for the reason that settles the seam: a corner wedge is
+a *second* thing to look at. The con read is not a detail confirmed on a
+tile the player has already stopped at — it is the scan itself, and no mark
+small enough to share a tile with four other channels can carry a scan as
+well as the ink in the middle of the cell can.
 
-**A shape and not a fifth coloured strip** is the load-bearing half. The
-top edge already belongs to the rarity bar, and the alternative — a second
-bar along the top, or the left — asks the player to tell two readings apart
-by hue alone on adjacent pixels, which is exactly what putting the con read
-on the glyph did wrong in the first place. Form separates them for free.
+So **the glyph's hue carries it again, and the earmark is what the tiles
+that cannot spend that hue pay instead.** `ConRead` is the whole decision,
+and it is one value rather than two conditions agreeing at two draw sites:
+`Glyph(rung)`, `Earmark(rung)`, `None`. The property is "never both and
+never neither" — a rung on the glyph *and* in the corner reads as two
+different creatures, a rung in neither reads as harmless, and both are
+silent faults that compile. The test sweeps the whole matrix rather than
+its interesting corner.
+
+Exactly two tiles cannot spend the hue, and neither is arbitrary. One drawn
+as a **sprite**: `assets/sprites/README.md` asks art to be authored
+near-white precisely because egui *multiplies* the tile colour through it,
+so a con rung would repaint the drawing rather than tint it — the same
+argument that makes the player's drawn icon the one sprite drawn untinted,
+one seam along. And a **boss**, whose magenta is the ink; that is the
+`is_boss` parameter `difficulty_color` shed, reappearing where it belongs,
+in the renderer, as a hue rather than as a fifth rung.
+
+The boss's corner mark is deleted with the move. Its whole job was to keep
+the fact readable while the hue was spent on the con rung, and the hue is
+not spent any more. What survives it is the **census**, retargeted: it used
+to hold the mark apart from every other mark a tile could wear, and now
+holds the *hue* apart from every con rung, which is the reading a magenta
+glyph could actually be mistaken for. Nemesis keeps its cyan mark — it
+never had a hue to lose.
+
+**The gate is the trap.** `ConRead::of` takes `drew_sprite`, the sprite
+call's **own answer**, and never `sprite.is_some()`. A name the table has
+nothing under falls back to the glyph — the whole of what keeps
+`assets/sprites/` optional — and that glyph is free to carry the rung. Read
+off the name instead and every tile whose art failed to load pays a corner
+for nothing, which reads as the con read having moved for no reason. That
+is what forced the sprite attempt **out of** the glyph draw and into its own
+`let`: the answer has to exist before the ink is chosen, and `drew_sprite`
+is deliberately not a `mut` seeded with a default, which is the shape that
+ships wrong the day a third branch is added.
+
+Shipped today, `assets/sprites/` holds `anchor.png` and `player.png` and
+nothing hostile, so the earmark's only live case is a boss. That is the
+feature working, not a dead branch — the sprite arm is what makes an entity
+tileset droppable without taking the map's danger read with it.
+
+**The earmark's own geometry** stayed as it was drawn for the rejected
+design, because none of it depended on being the primary read.
+`difficulty_mark_points` is a `poly` with its right angle at the corner and
+its hypotenuse running into the tile, leg `CON_MARK` (0.34 of the tile),
+chosen so the wedge's area lands within a few percent of the full-width bar
+that preceded it. A **shape and not a fifth coloured strip**: the top edge
+already belongs to the rarity bar, and a second bar there asks the player
+to tell two readings apart by hue alone on adjacent pixels.
 
 **The trap is that the rarity bar is painted first and owns the full width
 of that edge.** The earmark drops below `RARITY_BAR_PX` and insets from the
@@ -5651,29 +5688,25 @@ absolute, so the gap between them is narrowest at the deepest zoom and
 `the_con_earmark_never_meets_the_nemesis_mark` sweeps 24→64px rather than
 asserting at one.
 
-The boss mark takes the **bottom**-right rather than the free top-left
-corner on a colour argument made when the con read was still a bottom bar:
-under the rarity bar its magenta sits 0.391 from Prismatic, where the con
-rungs are all warm and none nearer than 0.718. The earmark's move to the
-top-left only strengthens it — the bottom edge is the emptiest one now, and
-the corner the boss mark declined is the one the con read took.
-
 `staffed_mark_rect` was extracted from the tile loop when the bottom edge
 had a bar to clear, and the test that pinned that clearance hand-copied the
 arithmetic — the copy that drifts. The bar is gone and the extraction is
 still worth keeping, because the reason underneath it never depended on the
 bar: its lift is `Fx::staffed_bob`, so a resting place that has drifted off
 the tile is invisible while a machine is worked and shows only at rest, and
-for a stranded mark, which never bobs at all. Both it and `boss_mark_rect`
-dropped their `- RARITY_BAR_PX` term when the bar left; leaving it would
-have been a 2px lie that read as deliberate geometry.
+for a stranded mark, which never bobs at all. It dropped its
+`- RARITY_BAR_PX` term when the bar left; leaving it would have been a 2px
+lie that read as deliberate geometry.
 
-The boss mark keeps the magenta a boss already wore, so the fact reads the
-same after moving off the glyph. Blue — the nemesis's vacated hue — is the
-obvious alternative and is exactly `CUTTING_OUTLINE` (`palette::PLAN`,
-`0x4a7fd0`), which the census holding the mark apart from every other mark
-on a tile fails at distance 0. That census is what says the mark is not any
-of the eleven other things a tile can be wearing at once.
+`boss_color` keeps the magenta a boss always wore, so the fact reads the
+same however many homes the con read has had in between. Blue — the
+nemesis's vacated hue — is the obvious alternative and is exactly
+`CUTTING_OUTLINE` (`palette::PLAN`, `0x4a7fd0`), which the census fails at
+distance 0. That census is what says a boss's glyph is not any of the
+twelve other things a tile can be wearing at once, and the con rungs are
+the entries in it that now matter most: magenta and a rung share one
+channel, so a boss misread as a rung is the map answering "can I win this
+fight" with a lie.
 
 ### There are four doors into the roster, and `Game::roster_parts()` is the only barrier
 

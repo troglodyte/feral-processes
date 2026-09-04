@@ -2510,6 +2510,74 @@ makes the party reach their zone's ceiling faster, never raises it, and
 that clamp is the only reason the lever is inert in zone 1 rather than
 turning a cap of 1 into a pack of 3.
 
+### A charged rest rolls for an interrupt, and the roll rides the branch that takes the charge
+
+`Game::rest` pays for a field rest by taking one `ItemDef::enables_rest` unit
+out of the pack, then restores. `REST_AMBUSH_CHANCE` is rolled **between**
+those two things, inside the branch that took the charge.
+
+**Why the placement is the design.** Three properties fall out of it, and
+none of them is a check anyone has to remember to write:
+
+1. **Base space is safe without a locale test.** A free rest never enters the
+   branch, so it never reaches the roll. Written the other way round — the
+   roll above the payment, guarded by `in_base()` — the same behaviour needs
+   a condition that a later reader can invert, delete or get wrong.
+2. **A jumped rest clears nothing.** The heal, the Power refill, the roster
+   walk and `drop_until_rest_buffs_on_party` all sit below the roll, which is
+   the rule a *refused* rest already followed. The two failure modes agree
+   because they leave by the same door, not because two branches were kept in
+   step.
+3. **There is no refund.** The outlet is gone and nothing is restored.
+   Powering down in the open is what left the party exposed; a refund makes
+   the risk free and makes the constant describe nothing.
+
+**What was rejected.** A first-strike penalty on top of the lost charge — the
+charge is the whole cost until a play session says otherwise, and a second
+penalty stacked before anyone had felt the first is how a modest number turns
+punitive without a measurement. And a Trace raise for an underground
+interrupt: Trace already carries a group-size lever, so raising it here would
+mean one roll costs the charge, the fight *and* bigger packs afterwards —
+three penalties deep for an event the player did not choose. `raise_trace`
+stays at three sources.
+
+**A roll that hits but fields no pack lapses into an ordinary rest.** Both
+pack builders return empty rather than refusing — boxed in by unwalkable
+tiles, or a biome with no ordinary species — and the caller reads empty as
+"the roll lapsed". A charge burnt for no fight at all is the one outcome a
+player cannot read as anything but a bug.
+
+**This is the first roll site that cannot know its locale by construction.**
+`maybe_ambush` is reached only from `move_player` and `maybe_stack_encounter`
+only from a Stack step, so each knew where it was and stated its placement
+rules once, in place. A rest happens anywhere, so the pack has to be chosen —
+`stack_encounter_pack` underground, `surface_ambush_pack` above. That second
+one is an **extraction** out of `maybe_ambush` rather than a copy of it, for
+the reason CLAUDE.md's code principles give: two hand-written copies of a
+placement rule drift, and the copy that drifts is the one nobody runs.
+
+**Why the constant is not comparable to the ones above it.**
+`RANDOM_ENCOUNTER_CHANCE` (0.02) and `STACK_ENCOUNTER_CHANCE` (0.08) are
+*rates* — they accumulate over a walk, and the number that matters is the
+one compounded over 40-300 steps. `REST_AMBUSH_CHANCE` (0.15) is the whole
+risk of one discrete event. It looks like an order of magnitude more and is
+not. It is deliberately modest: an outlet that buys a fight too often stops
+reading as a way to recover at all.
+
+**Unmeasured.** `balance_sim` models no rest and no Stack term, so 0.15 is
+ungated by every instrument in the repo. The arena cannot reach it either —
+it authors a fight, not a field turn. Whether the number is right is a play
+question and nothing here can answer it.
+
+**A note on this feature's history, which is the reason the ordering rule
+exists.** It was built once on a branch cut from `0.13.11`, never merged, and
+`CLAUDE.md` described it as shipped anyway — naming `Game::rest_interrupted`
+and `REST_AMBUSH_CHANCE`, both of which existed nowhere. That is the second
+recorded instance of a seam doc describing unmerged code in this repo. The
+rule it produced: **the seam entry lands with the merge, never with the
+plan.**
+
+
 ### A Stack cell that can be used up needs both halves
 
 **A Stack cell that can be used up needs both halves.** A cache, a seal,

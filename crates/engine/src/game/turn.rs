@@ -6,7 +6,7 @@ use crate::resources::SeenConditions;
 use crate::telemetry::Record;
 use crate::tuning::{
     NEST_AGGRO_LEASH_RADIUS, NEST_PATH_SEARCH_MARGIN, NEST_PURSUIT_STEPS_PER_TICK,
-    RANDOM_ENCOUNTER_CHANCE,
+    RANDOM_ENCOUNTER_CHANCE, REST_AMBUSH_CHANCE,
 };
 use crate::world::NEIGHBOURS;
 use crate::*;
@@ -764,32 +764,54 @@ impl Game {
         if !ambushed {
             return;
         }
+        let pack = self.surface_ambush_pack();
+        if pack.is_empty() {
+            return;
+        }
+        self.log("Something drops out of the noise floor — you've been made!");
+        self.start_battle(pack);
+    }
+
+    /// The pack a *surface* ambush fields: one biome-appropriate group placed
+    /// on a walkable neighbour of the player's tile, then widened by
+    /// `gather_pack` so programs already standing there are pulled in too —
+    /// exactly as walking into them would.
+    ///
+    /// `stack_encounter_pack`'s counterpart, and the two are named as a pair
+    /// on purpose. **A rest is the first roll site that cannot know its
+    /// locale by construction**: every other spawn path is reached from one
+    /// kind of movement, so the placement rules only ever had one home. A
+    /// rest happens anywhere, so the pack has to be *chosen*, and the choice
+    /// is only safe while each half states its own placement once.
+    ///
+    /// Returns empty rather than refusing when the player is boxed in by
+    /// unwalkable tiles or the biome offers no ordinary species. Both
+    /// callers read that as "the roll lapses" — hunting further afield for
+    /// somewhere to put a fight nobody asked for would be worse.
+    pub(crate) fn surface_ambush_pack(&mut self) -> Vec<Entity> {
+        let player = self.player_entity();
+        let pos = *self.world.get::<Position>(player).unwrap();
         let open: Vec<(i32, i32)> = NEIGHBOURS
             .iter()
             .map(|(dx, dy)| (pos.x + dx, pos.y + dy))
             .filter(|&(x, y)| self.world.resource_mut::<WorldMap>().tile(x, y).walkable)
             .collect();
         if open.is_empty() {
-            return;
+            return Vec::new();
         }
         let (tx, ty) = {
             let mut rng = self.world.resource_mut::<GameRng>();
             open[rng.0.random_range(0..open.len())]
         };
         let Some((species, _)) = self.pick_habitat_species(tx, ty, None, false) else {
-            return;
+            return Vec::new();
         };
         let esc = self.field_escalation(tx, ty);
         let pack = self.spawn_pack(&species, false, tx, ty, esc);
         let Some(&anchor) = pack.first() else {
-            return;
+            return Vec::new();
         };
-        self.log("Something drops out of the noise floor — you've been made!");
-        // Through `gather_pack` rather than engaging the spawned pack
-        // directly, so an ambush sprung beside programs already standing
-        // there pulls them in too, exactly as walking into one would.
-        let pack = self.gather_pack(anchor);
-        self.start_battle(pack);
+        self.gather_pack(anchor)
     }
 
     /// Consume one unit of `id` out of battle, applying its `ConsumeDef`:
@@ -954,9 +976,27 @@ impl Game {
     /// the game fast-forwards any more — `Game::wait` is the only way time
     /// passes without an action, one tick at a time.
     ///
-    /// Nothing can fail after the charge is taken, so there is no refund
-    /// path: the two gates and the payment run in that order and the
-    /// restore is unconditional from there.
+    /// **One thing can happen after the charge is taken, and there is still
+    /// no refund path.** A charged rest rolls `REST_AMBUSH_CHANCE` for an
+    /// interrupt below the payment and above the restore. On a hit the
+    /// outlet is gone and nothing is restored — that is the mechanic rather
+    /// than an oversight, since powering down in the open is what left the
+    /// party exposed, and a refund makes the risk free and the number
+    /// meaningless.
+    ///
+    /// Three properties fall out of that placement. It **rides the branch
+    /// that takes the charge**, so a free base rest never reaches the roll
+    /// and the slab stays safe without a locale check of its own. A jumped
+    /// rest **clears nothing** — the heal, the roster walk and
+    /// `drop_until_rest_buffs_on_party` all sit below it, which is the rule
+    /// a *refused* rest already follows, so the two failure modes agree. And
+    /// a roll that hits but **fields no pack lapses into an ordinary rest**,
+    /// because a charge burnt for no fight at all is the one outcome a
+    /// player cannot read as anything but a bug.
+    ///
+    /// The interrupt is an `Ok`, not an `Err`: the charge really was spent
+    /// and a fight really did start, so there is nothing for `App::refuse`
+    /// to put on the status banner. It is news, and it goes to the log.
     ///
     /// **Every exit that does not rest says why**, which is what the
     /// `Result` is for rather than the bare `return`s this used to take.
@@ -999,7 +1039,29 @@ impl Game {
                 let name = self.item_name(&charge).to_string();
                 return Err(format!("You have no {name} to power down with out here."));
             }
-            spent = Some(self.item_name(&charge).to_string());
+            let name = self.item_name(&charge).to_string();
+            // Below the payment and above every restore below, which is the
+            // whole of the design: see this function's doc comment.
+            if self.roll_rest_interrupt() {
+                // The first roll site that cannot know its locale by
+                // construction, so the pack is chosen rather than implied.
+                let pack = if self.stack_pos().is_some() {
+                    self.stack_encounter_pack()
+                } else {
+                    self.surface_ambush_pack()
+                };
+                if !pack.is_empty() {
+                    // Pins the cell on the frame map, exactly as a Stack
+                    // encounter walked into does. A no-op on the surface.
+                    self.remember_fight();
+                    self.log(format!(
+                        "Your {name} burns out — something was already in here with you."
+                    ));
+                    self.start_battle(pack);
+                    return Ok(());
+                }
+            }
+            spent = Some(name);
         }
         {
             let mut needs = self.world.get_mut::<PowerReserve>(player).unwrap();
@@ -1104,6 +1166,19 @@ impl Game {
             .collect();
         names.sort_unstable();
         names.first().map(|n| n.to_string())
+    }
+
+    /// One draw against `REST_AMBUSH_CHANCE`, spelled out rather than
+    /// inlined so the borrow of `GameRng` ends before the pack is conjured
+    /// — `stack_encounter_pack` and `surface_ambush_pack` both take the
+    /// resource again themselves.
+    ///
+    /// Unconditional at its one call site, which is what makes "a free base
+    /// rest never touches the stream" a property of *where this is called*
+    /// rather than of a locale test inside it.
+    fn roll_rest_interrupt(&mut self) -> bool {
+        let mut rng = self.world.resource_mut::<GameRng>();
+        rng.0.random_bool(REST_AMBUSH_CHANCE)
     }
 
     /// Stand in place for a single tick — lets the world (wander AI,

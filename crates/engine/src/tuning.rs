@@ -1100,6 +1100,20 @@ pub const WILD_SPAWN_RADIUS_TILES: i32 = 12;
 /// on base platform tiles, and never produces a boss or a nest.
 pub const RANDOM_ENCOUNTER_CHANCE: f64 = 0.02;
 
+/// Chance that powering down in the field is interrupted — the pack engages
+/// and nothing is restored, though the charge is spent all the same.
+///
+/// **Not comparable to the per-step rates above it.** Those are rates that
+/// accumulate over a walk; this is the whole risk of one discrete event, so
+/// a number that looks an order of magnitude larger is not an order of
+/// magnitude more dangerous. Modest on purpose: an outlet that buys a fight
+/// too often stops reading as a way to recover at all.
+///
+/// Only charged rests roll. A free rest inside base space never reaches this
+/// — it rides the branch that takes the charge, so the slab stays the one
+/// safe ground without a locale check of its own.
+pub const REST_AMBUSH_CHANCE: f64 = 0.15;
+
 /// The wild population one screenful of map should hold: `Hostile`s within
 /// `WILD_SPAWN_RADIUS_TILES` of a tile, which is a 25x25 box and so almost
 /// exactly the ~33x19 the map pane shows at default zoom. The target is

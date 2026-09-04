@@ -3,10 +3,12 @@
     name: "Salvage Clamp",
     description: "Prises the loose material off a downed process.",
     category: Materials,
-    // The pool ships now; the weights are fitted in Task 6 against the
-    // decision-8 drop-neutrality test, which compares this tool's expected
-    // yield to the retired `roll_work_resource_drop`'s mean. Do not tune
-    // these by feel before that test exists.
+    // Task 6 checked these weights against the decision-8 drop-neutrality
+    // test (`tests::extraction::the_starter_tool_is_drop_neutral_for_a_
+    // median_kill`) and left them as shipped: `apportion` conserves the
+    // *total* unit count under any weighting (it's a split, not a second
+    // roll), so the gate is entirely `tuning::TOOL_BASE_UNITS`'s to pass or
+    // fail. These weights decide only which item a unit lands in.
     yields: [("core_fragment", 1.0), ("bytecode_block", 0.4)],
     tier: 1,
     ticks: 20,

@@ -4071,12 +4071,19 @@ pub const TOOL_SLOT_CAP: u32 = 4;
 
 /// `Game::extraction_yield`'s base unit count — the multiplier scaled by
 /// `game::extraction::tier_scale(tool.tier)` and `DownedProgram::grade()`
-/// (identity `1.0` at `Ordinary`, full condition, level 0). **Provisional**:
-/// spec decision 8 is that the starter tool must be drop-neutral against
-/// the retired `WORK_RESOURCE_DROP` roll, and Task 6's test fits this value
-/// (and `assets/tools/salvage_clamp.ron`'s weights) against that gate. Do
-/// not retune it here — the number below is only what makes the formula
-/// compile, not a considered pick.
+/// (identity `1.0` at `Ordinary`, full condition, level 0). **Fitted** to
+/// spec decision 8: `tests::extraction::
+/// the_starter_tool_is_drop_neutral_for_a_median_kill` asserts a median kill
+/// (`Ordinary`, `CONDITION_BASE` condition, level 1 — grade `0.606`) through
+/// the starter tool (`salvage_clamp`, tier 1, `tier_scale == 1.0`) pays
+/// within one unit of `WORK_RESOURCE_DROP`'s own mean (`3.0`). At `3.0` that
+/// works out to `round(3.0 * 0.606) = 2` pool units plus `RICH_IN_UNITS`'s
+/// flat `1` — `3` units, an exact match rather than a within-one-unit
+/// squeak, and one the provisional value already landed on; nothing here
+/// needed moving, only proving. `salvage_clamp.ron`'s weights don't enter
+/// this gate at all — `apportion` conserves the unit *total* under any
+/// weighting, and `rich_in`'s addend is unconditional — so they're
+/// unchanged too.
 pub const TOOL_BASE_UNITS: f32 = 3.0;
 
 /// How much each tier past 1 scales `extraction_yield`'s unit count, in

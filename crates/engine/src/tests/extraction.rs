@@ -655,6 +655,39 @@ fn extraction_refuses_an_out_of_range_index_and_spends_nothing() {
 }
 
 #[test]
+fn the_starter_tool_is_drop_neutral_for_a_median_kill() {
+    // Spec decision 8, the phase's only economy gate: replacing the retired
+    // `roll_work_resource_drop` roll (`WORK_RESOURCE_DROP`) with extraction
+    // must not change what an ordinary kill actually pays a player holding
+    // the starter tool. `extraction_yield` is deterministic — `apportion`'s
+    // largest-remainder split spends no `GameRng` draw — so the figure here
+    // is computed once from the real formula, never sampled.
+    let game = Game::new(4485, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let tool = starter_tool_def(&game);
+    let median = program(tuning::CONDITION_BASE, Rarity::Ordinary, 1);
+
+    let total: u32 = totals(&game.extraction_yield(&median, &tool))
+        .values()
+        .sum();
+
+    // The retired roll's own mean, from its own constant — never restated
+    // as a literal, so a future change to `WORK_RESOURCE_DROP`'s range (it
+    // has zero readers left, but survives as this fit's reference point)
+    // moves this test's target with it rather than silently drifting.
+    let retired_mean = (*tuning::WORK_RESOURCE_DROP.start() as f32
+        + *tuning::WORK_RESOURCE_DROP.end() as f32)
+        / 2.0;
+    let delta = (total as f32 - retired_mean).abs();
+    assert!(
+        delta <= 1.0,
+        "a median kill (ordinary, CONDITION_BASE condition, level 1) through the starter tool \
+         must pay within one unit of the retired WORK_RESOURCE_DROP roll's mean \
+         ({retired_mean}): got {total} units (grade {})",
+        median.grade()
+    );
+}
+
+#[test]
 fn extraction_refuses_an_uninstalled_tool_and_spends_nothing() {
     let mut game = Game::new(4484, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();

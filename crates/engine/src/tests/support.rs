@@ -77,6 +77,69 @@ pub(crate) fn generic_species() -> SpeciesDef {
     }
 }
 
+pub(super) const GENERIC_SETTLEMENT_ID: &str = "test_settlement";
+
+/// A settlement definition for tests that need one materialized without
+/// depending on the shipped catalogue — `generic_species`'s reason, one
+/// level out: a fixture town must not shift meaning if a content file is
+/// edited or a new one is added.
+pub(super) fn generic_settlement_def() -> crate::settlements::SettlementDef {
+    crate::settlements::SettlementDef {
+        id: GENERIC_SETTLEMENT_ID.to_string(),
+        name: "Test Town".to_string(),
+        blurb: "A place raised for a test.".to_string(),
+        kind: crate::settlements::SettlementKind::Server,
+        specialty: crate::settlements::Specialty::Gear,
+        temperament: crate::settlements::Temperament::Open,
+    }
+}
+
+/// Materializes a settlement at `(x, y)` directly — the same two writes
+/// `Game::ensure_local_settlements` makes (the `resources::Settlements`
+/// record and the map entity) without walking the region derivation, which
+/// has its own coverage from Phase 1. Despawns anything already standing on
+/// the tile first, `ground_step`'s reason: a bump test that landed on a
+/// wild program the seed happened to place there would find the wrong
+/// thing.
+pub(super) fn place_settlement(
+    game: &mut Game,
+    key: crate::settlements::SettlementKey,
+    x: i32,
+    y: i32,
+) -> Entity {
+    let squatters: Vec<Entity> = {
+        let mut q = game.world.query::<(Entity, &Position)>();
+        q.iter(&game.world)
+            .filter(|(_, p)| p.x == x && p.y == y)
+            .map(|(e, _)| e)
+            .collect()
+    };
+    for e in squatters {
+        game.world.despawn(e);
+    }
+    let def = generic_settlement_def();
+    game.world
+        .resource_mut::<crate::resources::Settlements>()
+        .0
+        .insert(
+            key,
+            crate::resources::KnownSettlement {
+                tile: (x, y),
+                def: def.clone(),
+            },
+        );
+    game.world
+        .spawn((
+            crate::components::Settlement { key },
+            Position { x, y },
+            Glyph {
+                ch: def.kind.glyph(),
+                color: GlyphColor::Orange,
+            },
+        ))
+        .id()
+}
+
 /// A tile far enough from the danger origin that a fight there may hold a
 /// full `MAX_ENEMY_GROUPS` groups — `Game::max_enemy_groups` allows one in
 /// zone 1 and gains another every zone after.

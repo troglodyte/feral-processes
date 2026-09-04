@@ -531,6 +531,19 @@ impl Game {
             self.tick();
             return;
         }
+        if let Some(key) = self.find_settlement_at(nx, ny) {
+            // The fourth arm of the same ladder, and the one that admits
+            // nobody: a settlement is a landmark to read from the outside,
+            // not a door with a hallway behind it, so the bump queues the
+            // visit for app-core to open and leaves the player standing
+            // exactly where they were — this returns before the step below
+            // ever runs.
+            self.world
+                .resource_mut::<crate::resources::PendingVisit>()
+                .0 = Some(key);
+            self.tick();
+            return;
+        }
         // **No structure is consulted here.** Every `Structure` stands in
         // base space — `Structure` is the space tag, and there is exactly
         // one spawn site — so its `Position` is in a different coordinate

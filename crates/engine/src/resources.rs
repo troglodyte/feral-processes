@@ -1580,6 +1580,19 @@ pub struct KnownSettlement {
     pub def: crate::settlements::SettlementDef,
 }
 
+/// The settlement the player's last step bumped into, waiting for a
+/// frontend to open its screen.
+///
+/// Deliberately not serialized, `CurrentStack`'s reason: this is a cue about
+/// *this instant*, not a fact about the world, and a save that restored one
+/// would reopen a screen the moment the file loaded rather than on the step
+/// that actually asked for it. `Game::take_settlement_visit` is the one
+/// door that reads it, and reading it clears it — `EffectQueue`/
+/// `TransitQueue`'s shape — so a keypress the player spends walking away
+/// from the tile does not find the screen reopening under it.
+#[derive(Resource, Default)]
+pub struct PendingVisit(pub Option<crate::settlements::SettlementKey>);
+
 /// The frame the player is currently standing in, or `None` on the surface.
 ///
 /// Deliberately not serialized: it regenerates from `(WorldMap::seed,

@@ -250,6 +250,7 @@ impl Game {
         world.insert_resource(StackMemory::default());
         world.insert_resource(crate::resources::PopulatedChunks::default());
         world.insert_resource(crate::resources::Settlements::default());
+        world.insert_resource(crate::resources::PendingVisit::default());
         // Empty at both doors. `Game::load` refills it from the save below,
         // once every creature has an entity to name — see `SortieSave`.
         world.insert_resource(crate::resources::Sorties::default());
@@ -526,6 +527,7 @@ impl Game {
         world.insert_resource(StackMemory::default());
         world.insert_resource(crate::resources::PopulatedChunks::default());
         world.insert_resource(crate::resources::Settlements::default());
+        world.insert_resource(crate::resources::PendingVisit::default());
         // Empty at both doors. `Game::load` refills it from the save below,
         // once every creature has an entity to name — see `SortieSave`.
         world.insert_resource(crate::resources::Sorties::default());

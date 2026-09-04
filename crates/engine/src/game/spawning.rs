@@ -898,6 +898,47 @@ impl Game {
         }
     }
 
+    /// Finds a settlement at `(x, y)`, if any — checked in `move_player`
+    /// after the surface-link arm, so walking onto a town's tile queues a
+    /// visit instead of just bumping into a blocking glyph.
+    ///
+    /// `Game::find_surface_link_at`'s shape exactly, one field over: the
+    /// settlement's own `Position` and `Settlement` components, no `Entity`
+    /// in the query and no filter type. An `Entity` is not what a caller
+    /// wants here — the key is the thing every other door onto a settlement
+    /// (`entity_label`, `settlement_report`) already indexes by, and it is
+    /// what survives a save where the entity would not.
+    pub(crate) fn find_settlement_at(
+        &mut self,
+        x: i32,
+        y: i32,
+    ) -> Option<crate::settlements::SettlementKey> {
+        let mut query = self
+            .world
+            .query_filtered::<(&Position, &crate::components::Settlement), ()>();
+        query
+            .iter(&self.world)
+            .find(|(p, _)| p.x == x && p.y == y)
+            .map(|(_, s)| s.key)
+    }
+
+    /// Drains the settlement visit `move_player`'s door arm queued, if any
+    /// — `Game::take_effects`/`take_transits`' shape: answers `Some` once
+    /// and `None` on every call after.
+    ///
+    /// The drain is load-bearing and not incidental. A plain getter would
+    /// pass every other test this feature has, but leaves app-core with no
+    /// way to tell "the player just bumped this tile" from "the player is
+    /// still standing here" — so the screen it opens would reopen on the
+    /// very next keypress spent walking away, and the tile would read as a
+    /// wall the player can never leave.
+    pub fn take_settlement_visit(&mut self) -> Option<crate::settlements::SettlementKey> {
+        self.world
+            .resource_mut::<crate::resources::PendingVisit>()
+            .0
+            .take()
+    }
+
     /// Rebuilds the map entity for every settlement a save already knew.
     ///
     /// `restore_surface_links`'s counterpart, and the same division: the

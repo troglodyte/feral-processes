@@ -1344,7 +1344,9 @@ fn draw_surface_map(
                 // player's name comes off `PlayerLook` instead: the
                 // character-creation wizard's own choice, in place of the
                 // literal `"player"` this used to read regardless of who was
-                // playing.
+                // playing. Every other entity — a creature or a structure —
+                // already carries its own resolved name on `EntityView::
+                // sprite`, so there is nothing left to special-case for it.
                 //
                 // The anchor is the case the sprite seam was worth building
                 // for. Its `#` was chosen by elimination rather than by
@@ -1362,17 +1364,22 @@ fn draw_surface_map(
                 let drawn_icon = actor.is_some_and(|ev| {
                     ev.is_player && ev.look.as_ref().is_some_and(|look| look.icon.is_some())
                 });
-                let sprite = actor.and_then(|ev| {
-                    if ev.is_player {
-                        ev.look
-                            .as_ref()
-                            .and_then(|look| player_sprite_name(&look.sprite))
-                    } else if ev.is_anchor {
-                        Some("anchor")
-                    } else {
-                        None
-                    }
-                });
+                // **An actor's sprite outranks a structure's, exactly as its
+                // glyph already does above** — `structure` is only reached
+                // when no actor stands on the tile. A creature's own
+                // `EntityView::sprite` is already the resolved name (Task
+                // 2's `sprite_name` fallback), so the two non-player,
+                // non-anchor arms below are the same read for a creature and
+                // a structure alike.
+                let sprite = match actor {
+                    Some(ev) if ev.is_player => ev
+                        .look
+                        .as_ref()
+                        .and_then(|look| player_sprite_name(&look.sprite)),
+                    Some(ev) if ev.is_anchor => Some("anchor"),
+                    Some(ev) => ev.sprite.as_deref(),
+                    None => structure.and_then(|ev| ev.sprite.as_deref()),
+                };
                 // Centred on the cell, not on measured ink: a square sprite
                 // has neither side bearing nor descender. `glyph_px` and not
                 // `tile_px`, so the sprite keeps the glyph's margin inside
@@ -1895,6 +1902,7 @@ mod tests {
             entity: Entity::PLACEHOLDER,
             pos: (0, 0),
             glyph: 'd',
+            sprite: None,
             color: GlyphColor::Cyan,
             label: "Scrapper".into(),
             is_player: false,
@@ -3067,6 +3075,104 @@ mod tests {
         );
     }
 
+    /// A wild creature the map can see, found through the public
+    /// `Game::view_entities` rather than any of the spawn helpers a gui test
+    /// cannot reach (`spawn_wild_creature_scaled`, `adopt_program` and
+    /// friends are all `pub(crate)`). Seed 7's opening population always
+    /// lands at least one hostile within its stocked chunks — see
+    /// `Game::ensure_local_population` — and handing back its own `pos`
+    /// lets the caller centre the draw there directly rather than walking
+    /// the player to it one step at a time.
+    ///
+    /// **Filtered on `is_hostile`, not on "not player/anchor/structure".**
+    /// The wider exclusion also admits a Stack-entrance link (`glyph: '>'`)
+    /// and a nest, neither a `Creature` nor a `Structure`, so both carry
+    /// `sprite: None` — and `Game::view_entities` is raw, unsorted bevy
+    /// query iteration (`Game::view_entities_at`'s own doc), so which
+    /// candidate `find` lands on is not stable across a query reorder. A
+    /// wild creature is always `Hostile` on the surface, which neither of
+    /// those two is, and being hostile implies a `Creature` component,
+    /// which is what guarantees the `sprite` below is never `None`.
+    fn a_wild_creature(game: &mut Game) -> EntityView {
+        game.view_entities(64, 64)
+            .into_iter()
+            .find(|ev| ev.is_hostile)
+            .expect("seed 7's opening population must hold at least one wild creature")
+    }
+
+    /// `drawn_map`, centred on an arbitrary point instead of the player's
+    /// own position. The creature-sprite tests need this: a fresh seed's
+    /// population lands nowhere near spawn, and `draw_surface_map` already
+    /// takes its centre as an explicit argument rather than always reading
+    /// `status.position`, so there is no need to walk the player there.
+    fn drawn_map_centered_on(
+        game: &mut Game,
+        sprites: SpriteTable,
+        center: (i32, i32),
+    ) -> (usize, Vec<String>) {
+        let mut fx = Fx::new();
+        let (tile_px, glyph_px) = crate::text::map_cell(1);
+        let (_, shapes) = with_sprites(sprites, |p| {
+            let status = game.player_status();
+            draw_surface_map(
+                game,
+                &mut fx,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                tile_px,
+                glyph_px,
+                &status,
+                None,
+                center,
+            );
+        });
+        (painted_images(&shapes).len(), painted_text(&shapes))
+    }
+
+    /// A creature whose species has art draws the sprite and gives up its
+    /// glyph — the same overdraw rule the player and the anchor already
+    /// hold, now exercised against a real wild program so the name drawn
+    /// from is `EntityView::sprite`, the one the engine actually resolved,
+    /// rather than a hand-built fixture.
+    #[test]
+    fn a_creature_with_art_draws_its_sprite_and_not_its_glyph() {
+        let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets())
+            .expect("the shipped assets must load");
+        let creature = a_wild_creature(&mut game);
+        let name = creature
+            .sprite
+            .clone()
+            .expect("a creature always resolves a sprite name");
+        let mut table = SpriteTable::default();
+        table.insert(name, bevy_egui::egui::TextureId::User(6));
+
+        let (images, glyphs) = drawn_map_centered_on(&mut game, table, creature.pos);
+
+        assert!(images >= 1, "the species' art must paint a sprite");
+        assert!(
+            !glyphs.iter().any(|g| *g == creature.glyph.to_string()),
+            "the glyph must give way to the sprite, not sit under it: {glyphs:?}"
+        );
+    }
+
+    /// The rung under it: a species with nothing in the table still draws
+    /// its glyph, exactly as before this task.
+    #[test]
+    fn a_creature_with_no_art_draws_its_glyph() {
+        let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets())
+            .expect("the shipped assets must load");
+        let creature = a_wild_creature(&mut game);
+
+        let (images, glyphs) =
+            drawn_map_centered_on(&mut game, SpriteTable::default(), creature.pos);
+
+        assert_eq!(images, 0, "an empty table must paint no texture");
+        assert!(
+            glyphs.iter().any(|g| *g == creature.glyph.to_string()),
+            "the glyph is what is left when no sprite is loaded: {glyphs:?}"
+        );
+    }
+
     /// The zone map drawn at `at` seconds, with effects live. The party is
     /// left standing where a new run puts it, on the surface — which is the
     /// half of the cloud gate this fixture exists to see.
@@ -3165,6 +3271,193 @@ mod tests {
             );
         });
         shapes
+    }
+
+    /// A base with a founded Home and nothing else, the party stepped
+    /// `steps` tiles east off it first. `Game::place_structure` raises a
+    /// Home immediately — no request, no labour — so this is the one
+    /// non-Home structure test could ever use without a labour crew to
+    /// finish a build with, and it needs the step off the same way
+    /// `STEPS_OFF_THE_ANCHOR` does: the party lands on the Home's own tile
+    /// at `enter_base`, and an actor there would take the sprite lookup
+    /// over the structure standing under it.
+    fn drawn_base_with_sprites(sprites: SpriteTable, steps: usize) -> (usize, Vec<String>) {
+        let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets())
+            .expect("the shipped assets must load");
+        game.place_structure("home", 0, 0)
+            .expect("a Home founds it");
+        game.enter_base().expect("the party steps inside");
+        for _ in 0..steps {
+            game.move_player(1, 0);
+        }
+
+        let mut fx = Fx::new();
+        let (tile_px, glyph_px) = crate::text::map_cell(1);
+        let (_, shapes) = with_sprites(sprites, |p| {
+            let status = game.player_status();
+            draw_surface_map(
+                &mut game,
+                &mut fx,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                tile_px,
+                glyph_px,
+                &status,
+                None,
+                status.position,
+            );
+        });
+        (painted_images(&shapes).len(), painted_text(&shapes))
+    }
+
+    /// A structure whose def has art draws the sprite and gives up its
+    /// glyph. This is the case `draw_surface_map` never exercised before
+    /// this task: the sprite lookup used to read only the tile's `actor`,
+    /// so a bare structure with nobody standing on it could not draw a
+    /// sprite at all.
+    #[test]
+    fn a_structure_with_art_draws_its_sprite_and_not_its_glyph() {
+        let mut table = SpriteTable::default();
+        table.insert("home", bevy_egui::egui::TextureId::User(7));
+
+        let (under, _) = drawn_base_with_sprites(table.clone(), 0);
+        assert_eq!(
+            under, 0,
+            "the party stands on the Home at founding and hides it, so this \
+             fixture proves nothing until it steps off"
+        );
+
+        let (images, glyphs) = drawn_base_with_sprites(table, 1);
+
+        assert!(images >= 1, "the Home's art must paint a sprite");
+        assert!(
+            !glyphs.iter().any(|g| g == "H"),
+            "the 'H' must give way to the sprite, not sit under it: {glyphs:?}"
+        );
+    }
+
+    /// The rung under it: a structure with nothing in the table still draws
+    /// its glyph, exactly as before this task.
+    #[test]
+    fn a_structure_with_no_art_draws_its_glyph() {
+        let (images, glyphs) = drawn_base_with_sprites(SpriteTable::default(), 1);
+
+        assert_eq!(images, 0, "an empty table must paint no texture");
+        assert!(
+            glyphs.iter().any(|g| g == "H"),
+            "the glyph is what is left when no sprite is loaded: {glyphs:?}"
+        );
+    }
+
+    /// One tile draws one sprite — the actor-over-structure precedence test
+    /// exercises the case where the actor's own lookup misses; this one is
+    /// the case where it hits, with a table that could satisfy either name.
+    /// A renderer that painted both a drawn icon *and* the structure under
+    /// it would still show the drawing (nothing draws over it), so the
+    /// discriminating assertion is that only one mesh landed at all.
+    #[test]
+    fn the_drawn_icon_outranks_a_structures_sprite() {
+        let choice = CharacterChoice {
+            icon: Some(a_drawing()),
+            ..CharacterChoice::default()
+        };
+        let mut game = Game::new_with(9, DifficultyMode::Forgiving, &test_assets(), &choice)
+            .expect("the shipped assets must load");
+        game.place_structure("home", 0, 0)
+            .expect("a Home founds it");
+        game.enter_base()
+            .expect("the party steps inside, standing on the Home");
+
+        let mut table = SpriteTable::default();
+        table.insert(
+            crate::sprites::DRAWN_ICON_KEY,
+            bevy_egui::egui::TextureId::User(9),
+        );
+        table.insert("home", bevy_egui::egui::TextureId::User(7));
+
+        let mut fx = Fx::new();
+        let (tile_px, glyph_px) = crate::text::map_cell(1);
+        let (_, shapes) = with_sprites(table, |p| {
+            let status = game.player_status();
+            draw_surface_map(
+                &mut game,
+                &mut fx,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                tile_px,
+                glyph_px,
+                &status,
+                None,
+                status.position,
+            );
+        });
+        let images = painted_images(&shapes);
+
+        assert_eq!(images.len(), 1, "one tile draws one sprite");
+        assert_eq!(
+            images[0].0,
+            bevy_egui::egui::TextureId::User(9),
+            "the drawing must win the tile from the structure's own sprite"
+        );
+    }
+
+    /// **The actor-over-structure precedence itself**, not just "one of the
+    /// two wins" — this is the case `the_drawn_icon_outranks_a_structures_sprite`
+    /// cannot reach, because a drawn icon always resolves to `Some` when
+    /// present and so never needs to ask what stands under it.
+    ///
+    /// An actor whose own lookup resolves to nothing — no drawn icon, no
+    /// named sprite — must draw its **glyph**, never fall through to a
+    /// structure's sprite standing on the same tile. The two are
+    /// independent rungs, not one ladder: `structure` is read only when
+    /// `actor` is entirely absent (see the `match` in `draw_surface_map`),
+    /// and this is the test a `.or_else(|| structure...)` rewrite of that
+    /// match would still pass every *other* test in this module while
+    /// failing.
+    #[test]
+    fn an_actor_with_no_sprite_of_its_own_draws_its_glyph_over_a_structures_sprite() {
+        let choice = CharacterChoice {
+            sprite: String::new(),
+            icon: None,
+            ..CharacterChoice::default()
+        };
+        let mut game = Game::new_with(9, DifficultyMode::Forgiving, &test_assets(), &choice)
+            .expect("the shipped assets must load");
+        game.place_structure("home", 0, 0)
+            .expect("a Home founds it");
+        game.enter_base()
+            .expect("the party steps inside, standing on the Home");
+
+        let mut table = SpriteTable::default();
+        table.insert("home", bevy_egui::egui::TextureId::User(7));
+
+        let mut fx = Fx::new();
+        let (tile_px, glyph_px) = crate::text::map_cell(1);
+        let (_, shapes) = with_sprites(table, |p| {
+            let status = game.player_status();
+            draw_surface_map(
+                &mut game,
+                &mut fx,
+                p,
+                Rect::new(0.0, 0.0, 800.0, 600.0),
+                tile_px,
+                glyph_px,
+                &status,
+                None,
+                status.position,
+            );
+        });
+
+        assert_eq!(
+            painted_images(&shapes).len(),
+            0,
+            "the actor's own miss must not fall through to the structure's sprite"
+        );
+        assert!(
+            painted_text(&shapes).iter().any(|g| g == "@"),
+            "the player must not vanish under their own base: {:?}",
+            painted_text(&shapes)
+        );
     }
 
     /// Every rect fill and every rect stroke a frame painted.

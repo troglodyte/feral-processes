@@ -233,6 +233,14 @@ pub struct StructureDef {
     #[serde(default)]
     pub description: String,
     pub glyph: char,
+    /// Names a one-cell sprite under `assets/sprites/` in place of the
+    /// convention (see `sprite_name`) — an escape hatch for when the id
+    /// isn't the filename wanted, not the normal way a structure gets art.
+    /// `#[serde(default)]` so existing structure files (including mods)
+    /// without this field keep parsing, and keep drawing under the id as
+    /// they always have. No shipped structure authors one.
+    #[serde(default)]
+    pub sprite: Option<String>,
     pub color: GlyphColor,
     pub build_cost: Vec<(ItemId, u32)>,
     /// If set, a tamed creature can be assigned to work this structure,
@@ -535,6 +543,23 @@ impl StructureDef {
             return StructureCategory::Defence;
         }
         StructureCategory::Utility
+    }
+
+    /// The name a sprite loader looks this structure up by: the `sprite`
+    /// override when authored, the id otherwise. The one place this
+    /// fallback is written — see `sprite`'s doc comment.
+    ///
+    /// An override starting with `@` is treated as absent and falls back to
+    /// the id instead. `@` keys the runtime-only drawn-icon slot
+    /// (`sprites::DRAWN_ICON_KEY` in the renderer) that the player's own
+    /// pixel editor registers under — no file ever lands there — so a
+    /// structure allowed to name it would draw the player's own hand-drawn
+    /// icon on its tile.
+    pub fn sprite_name(&self) -> &str {
+        self.sprite
+            .as_deref()
+            .filter(|s| !s.starts_with('@'))
+            .unwrap_or(&self.id)
     }
 }
 

@@ -1153,6 +1153,7 @@ mod tests {
             entity: Entity::PLACEHOLDER,
             pos: (0, 0),
             glyph: 'n',
+            sprite: None,
             color: GlyphColor::White,
             label: "Mining Node".into(),
             is_player: false,

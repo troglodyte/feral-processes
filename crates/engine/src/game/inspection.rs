@@ -1020,10 +1020,28 @@ impl Game {
                         icon: identity.and_then(|i| i.icon.clone()),
                     }
                 });
+                // `sprite_name()` is the one expression of the
+                // override-or-id fallback (see its doc comment on both
+                // defs) — an entity with neither component resolves to
+                // `None` rather than inventing a name.
+                let sprite = self
+                    .world
+                    .get::<Creature>(entity)
+                    .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+                    .map(|def| def.sprite_name().to_string())
+                    .or_else(|| {
+                        self.world.get::<Structure>(entity).and_then(|s| {
+                            self.world
+                                .resource::<StructureDb>()
+                                .get(&s.kind)
+                                .map(|def| def.sprite_name().to_string())
+                        })
+                    });
                 EntityView {
                     entity,
                     pos: (pos.x, pos.y),
                     glyph: glyph.ch,
+                    sprite,
                     color,
                     difficulty,
                     label,

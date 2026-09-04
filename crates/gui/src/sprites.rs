@@ -24,29 +24,56 @@ use feral_processes_engine::{ICON_SIZE, PlayerIcon};
 
 use crate::paint::SpriteTable;
 
-/// The sprites the map looks for, by the name the renderer asks for.
+/// Every PNG's file stem under `dir`, sorted for a deterministic load order.
 ///
-/// A list rather than a directory walk: the renderer asks for a *name*, so
-/// something has to say which names exist, and a constant here is one line
-/// per sprite against a filesystem scan that would have to run before the
-/// asset server is available anyway. This is the minimum proof — when
-/// sprites become a `sprite:` field on species and structures, the names
-/// come from the asset files and this list goes away.
-const SPRITES: &[&str] = &["player", "anchor"];
+/// A missing directory is the supported "no sprites shipped" state rather
+/// than an error — the same warn-and-carry-on contract every asset database
+/// in the engine keeps, and the property this whole module's doc comment
+/// promises: deleting `assets/sprites/` must restore the glyph map exactly,
+/// so this returns empty rather than panicking. A non-PNG file sitting
+/// beside the sprites (a `README.md`, say) is filtered by extension, not
+/// asked of the asset server.
+///
+/// **A stem starting with `@` is filtered out here**, not left to be a
+/// filename nobody happens to ship: `@` is a legal filename character on
+/// every platform this game ships to, so `@drawn.png` would otherwise scan
+/// straight into `DRAWN_ICON_KEY`'s slot. See that constant's doc comment
+/// for what a file claiming it would do.
+fn scan_sprite_dir(dir: &std::path::Path) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut names: Vec<String> = entries
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "png"))
+        .filter_map(|path| {
+            path.file_stem()
+                .map(|stem| stem.to_string_lossy().into_owned())
+        })
+        .filter(|stem| !stem.starts_with('@'))
+        .collect();
+    names.sort();
+    names
+}
 
 /// The `SpriteTable` key the player's own drawing is registered under.
 ///
-/// The `@` is what keeps it unreachable from anywhere else: `load` builds
-/// every other key from a filename, and a future `sprite:` field on a
-/// species would too, so no file and no mod can claim the slot the player
+/// The `@` is what keeps it unreachable from anywhere else: every other key
+/// comes from `scan_sprite_dir`, which throws out any stem starting with
+/// `@` for exactly this reason, and a species or structure's own `sprite:`
+/// field draws from the same scan through `sprite_name()`, which falls back
+/// to the def's id for an `@`-prefixed override rather than honouring it —
+/// so no file and no def, shipped or modded, can claim the slot the player
 /// drew for themselves.
 pub const DRAWN_ICON_KEY: &str = "@drawn";
 
 /// Where the loaded sprites live between the asset server and the renderer.
 #[derive(Resource, Default)]
 pub struct Sprites {
-    /// Still loading, or waiting to be handed to egui.
-    pending: Vec<(&'static str, Handle<Image>)>,
+    /// Still loading, or waiting to be handed to egui. Owned names because
+    /// they come off a directory scan rather than a `&'static str` list.
+    pending: Vec<(String, Handle<Image>)>,
     /// What the renderer draws from. Refcounted so the per-frame `Painter`
     /// costs one atomic bump rather than a copy.
     table: Arc<SpriteTable>,
@@ -140,14 +167,26 @@ impl Sprites {
     }
 }
 
-/// Asks the asset server for every sprite, filtered nearest-neighbour.
+/// Asks the asset server for every sprite on disk, filtered
+/// nearest-neighbour.
 ///
 /// `nearest` is the whole point: the map draws a 16px sprite at 16, 32, 48
 /// or 64px, and bevy_egui binds the image's *own* sampler when it renders a
 /// user texture — so this one setting is what decides whether pixel art
 /// stays crisp or resamples into mush. Bevy's default is linear.
-pub fn load(asset_server: Res<AssetServer>, mut sprites: ResMut<Sprites>) {
-    for &name in SPRITES {
+///
+/// The directory comes from `Frontend.app.assets_dir()` rather than being
+/// re-resolved here — it is the same path `asset_plugin` already fed to
+/// `AssetPlugin::file_path`, and `crates/launcher/src/paths.rs` is the one
+/// place a runtime path gets decided. Reading it a second way here would be
+/// a second site free to disagree with it.
+pub fn load(
+    asset_server: Res<AssetServer>,
+    frontend: Res<crate::Frontend>,
+    mut sprites: ResMut<Sprites>,
+) {
+    let dir = frontend.app.assets_dir().join("sprites");
+    for name in scan_sprite_dir(&dir) {
         let handle = asset_server
             .load_builder()
             .with_settings(|settings: &mut ImageLoaderSettings| {
@@ -181,7 +220,7 @@ pub fn register(
     sprites.pending.retain(|(name, handle)| {
         match asset_server.get_load_state(handle) {
             Some(LoadState::Loaded) => {
-                ready.push((*name, handle.clone()));
+                ready.push((name.clone(), handle.clone()));
                 false
             }
             Some(LoadState::Failed(e)) => {
@@ -418,30 +457,118 @@ mod tests {
         assert!(sprites.table().get(DRAWN_ICON_KEY).is_none());
     }
 
-    /// Every name the loader asks for must have a file where it asks for it.
+    /// Where the real shipped sprites live, for the tests that scan it
+    /// directly rather than through a `Frontend`/`App` the scan function
+    /// itself does not depend on.
+    fn shipped_sprites_dir() -> std::path::PathBuf {
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/sprites")
+    }
+
+    /// The table holds every PNG shipped, keyed by its file stem.
     ///
-    /// The asset server resolves a missing path asynchronously and reports
-    /// it as a load failure several frames later, by which time the only
-    /// symptom is a glyph where a sprite was expected — which is also
-    /// exactly what a correctly-working fallback looks like. Nothing else
-    /// distinguishes "no art yet" from "the path is wrong", so it is
-    /// asserted here against the real directory.
+    /// This is the inversion the whole task turns on: a name with no file
+    /// behind it is now unreachable, because the scan is the one and only
+    /// source of what may be asked for. Names rather than a hardcoded count,
+    /// so a third sprite lands in the assertion just by dropping a file in.
     #[test]
-    fn every_sprite_the_loader_asks_for_is_on_disk() {
-        // The prefix the loader joins onto the asset root, kept beside the
-        // `load` call it mirrors rather than spelled twice.
-        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+    fn the_scan_finds_every_shipped_sprite_by_stem() {
+        let names = scan_sprite_dir(&shipped_sprites_dir());
         assert!(
-            !SPRITES.is_empty(),
-            "no sprites asked for, so this proved nothing"
+            !names.is_empty(),
+            "no sprites shipped, so this proved nothing"
         );
-        for name in SPRITES {
-            let path = root.join(format!("sprites/{name}.png"));
-            assert!(
-                path.is_file(),
-                "the loader asks for `sprites/{name}.png`, which is not at {}",
-                path.display()
-            );
+        for entry in std::fs::read_dir(shipped_sprites_dir()).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_some_and(|e| e == "png") {
+                let stem = path.file_stem().unwrap().to_string_lossy().into_owned();
+                assert!(
+                    names.contains(&stem),
+                    "`{stem}` is a shipped PNG the scan did not find"
+                );
+            }
         }
     }
+
+    /// Deleting `assets/sprites/` must restore the glyph map exactly — the
+    /// property the whole sprite seam rests on. A missing directory is not
+    /// an error the scan may propagate.
+    #[test]
+    fn a_missing_sprite_directory_scans_empty_without_panicking() {
+        let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("this/directory/does/not/exist");
+        assert_eq!(scan_sprite_dir(&dir), Vec::<String>::new());
+    }
+
+    /// A non-PNG file sitting in the directory (a `README.md`, an editor
+    /// swap file) is never handed to the asset server — the scan filters on
+    /// extension, so the loader never even asks for it.
+    #[test]
+    fn a_non_png_file_in_the_directory_is_ignored() {
+        let dir = std::env::temp_dir().join(format!(
+            "feral_processes_gui_scan_sprite_dir_test_{}_{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("player.png"),
+            b"not real png bytes, irrelevant to the scan",
+        )
+        .unwrap();
+        std::fs::write(dir.join("README.md"), b"not a sprite").unwrap();
+
+        let names = scan_sprite_dir(&dir);
+
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(names, vec!["player".to_string()]);
+    }
+
+    /// `@` is a legal filename character on every platform this ships to,
+    /// so an `@`-prefixed file must be filtered by the scan itself rather
+    /// than trusted never to exist. `@drawn.png` specifically would
+    /// otherwise land in exactly `DRAWN_ICON_KEY`'s slot and — since
+    /// `register` writes it after `sync_drawn_icon` already has, in an
+    /// unordered `PreUpdate` pair — permanently shadow the player's own
+    /// drawing, or draw as it on a blank canvas that never even reaches
+    /// `register`'s overwrite.
+    #[test]
+    fn an_at_prefixed_stem_is_never_scanned() {
+        let dir = std::env::temp_dir().join(format!(
+            "feral_processes_gui_scan_sprite_dir_at_test_{}_{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("@drawn.png"), b"not real png bytes, irrelevant").unwrap();
+        std::fs::write(dir.join("@other.png"), b"not real png bytes, irrelevant").unwrap();
+        std::fs::write(dir.join("player.png"), b"not real png bytes, irrelevant").unwrap();
+
+        let names = scan_sprite_dir(&dir);
+
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(
+            !names.contains(&DRAWN_ICON_KEY.to_string()),
+            "the scan must never be able to claim the runtime-only drawn-icon key"
+        );
+        assert_eq!(
+            names,
+            vec!["player".to_string()],
+            "every @-prefixed stem must be filtered, not just @drawn"
+        );
+    }
+
+    // No test here for "a malformed image is skipped with a warning and the
+    // rest still load". That behaviour lives entirely in `register`'s
+    // `LoadState::Failed` arm above — the scan never opens a file, only
+    // lists names by extension, so a malformed PNG passes the scan exactly
+    // like a valid one and the two are indistinguishable at this layer.
+    // `register`'s arm predates this task and is untouched by it.
+    //
+    // Exercising it for real needs a live `AssetServer` actually decoding a
+    // file asynchronously, which only resolves once bevy's IO task pool has
+    // run and requires polling `app.update()` against wall-clock time until
+    // it does — exactly the `sleep()`-driven, wall-clock-dependent shape
+    // CLAUDE.md's Testing section rules out ("No flaky tests. No sleep(),
+    // no wall-clock dependence"). No amount of getting the harness right
+    // changes that shape, so this task adds no test for it.
 }

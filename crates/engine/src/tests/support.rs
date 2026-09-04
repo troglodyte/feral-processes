@@ -50,6 +50,7 @@ pub(crate) fn generic_species() -> SpeciesDef {
         id: GENERIC_SPECIES_ID.to_string(),
         name: "Test Generic".to_string(),
         glyph: '?',
+        sprite: None,
         color: GlyphColor::White,
         base_hp: 40,
         base_atk: 4,

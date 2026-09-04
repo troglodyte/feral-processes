@@ -3124,6 +3124,15 @@ mod tests {
     /// seed put there, or the actor slot could resolve to whichever entity
     /// iteration happens to visit last rather than to the settlement this
     /// test is about.
+    ///
+    /// `SettlementKind::Mainframe` (glyph `'M'`), not `Server` (glyph
+    /// `'s'`) — `'s'` is also the Sprite species' glyph
+    /// (`assets/species/sprite.ron`), and this seed's draw box already
+    /// carries wild Sprites before the fixture adds anything, so a `Server`
+    /// settlement made this assertion pass with the settlement entity
+    /// absent entirely. No shipped species uses `'M'` (verified against
+    /// every file under `assets/species/`), so this glyph can only have
+    /// come from the settlement.
     #[test]
     fn a_settlement_draws_its_glyph_on_the_surface_map() {
         let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets())
@@ -3148,7 +3157,7 @@ mod tests {
                     id: "test_settlement".to_string(),
                     name: "Test Settlement".to_string(),
                     blurb: "A settlement placed for a test.".to_string(),
-                    kind: feral_processes_engine::settlements::SettlementKind::Server,
+                    kind: feral_processes_engine::settlements::SettlementKind::Mainframe,
                     specialty: feral_processes_engine::settlements::Specialty::Materials,
                     temperament: feral_processes_engine::settlements::Temperament::Open,
                 },
@@ -3158,12 +3167,16 @@ mod tests {
         let mut game = Game::load(&path, &test_assets()).unwrap();
         let _ = std::fs::remove_file(&path);
 
-        let (images, glyphs) = drawn_map_centered_on(&mut game, SpriteTable::default(), target);
+        // Not asserted against `SpriteTable::default()`: an empty table
+        // paints no texture no matter what the fixture spawns, which is
+        // what made this line read as coverage while proving nothing —
+        // `a_creature_with_no_art_draws_its_glyph` above already owns that
+        // fact.
+        let (_images, glyphs) = drawn_map_centered_on(&mut game, SpriteTable::default(), target);
 
-        assert_eq!(images, 0, "the fixture def names no sprite");
         assert!(
-            glyphs.iter().any(|g| *g == "s"),
-            "a Server settlement's lowercase glyph never reached the surface map: {glyphs:?}"
+            glyphs.iter().any(|g| *g == "M"),
+            "a Mainframe settlement's glyph never reached the surface map: {glyphs:?}"
         );
     }
 

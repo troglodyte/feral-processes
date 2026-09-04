@@ -698,22 +698,46 @@ fn the_starter_tool_is_drop_neutral_for_a_median_kill() {
         median.grade()
     );
 
-    // Pin the `rich_in` half of that total on its own rather than only
-    // through the sum above: `scrapper`'s `rich_in` fallback
-    // (`work_resource`) happens to be an item the starter tool's own pool
-    // already names, so a `total == 3` that came entirely from `apportion`
-    // (no `rich_in` addend at all, paired with a pool reweighted to
-    // compensate) would satisfy the assertion above without `rich_in`
-    // having contributed anything. It must actually be in the rows.
-    let rich_item = game
-        .rich_in(&median.species)
-        .expect("scrapper must resolve a rich_in item (falls back to work_resource)");
-    assert!(
-        rows.get(&rich_item)
-            .is_some_and(|&qty| qty >= tuning::RICH_IN_UNITS),
-        "the rich_in bonus ({} units of {rich_item:?}) must land in the granted rows, not just \
-         be assumed from the total: {rows:?}",
-        tuning::RICH_IN_UNITS
+    // Pin the complete row map, not just the total and a `>=` on one row:
+    // `rows.get(&rich_item).is_some_and(|&qty| qty >= RICH_IN_UNITS)` (the
+    // shape this test shipped with) passes with zero contribution from
+    // `rich_in` at all, because `scrapper`'s `rich_in` fallback
+    // (`work_resource`) resolves to `core_fragment`, which `apportion`
+    // already seats in the pool rows on its own — so it can't tell "the
+    // bonus fired" from "the pool alone happened to clear the bar", and
+    // it's blind to the bonus landing on the *wrong* row entirely. An exact
+    // map pins both halves of the total and the apportionment split in one
+    // assertion, and fails on a dropped addend, a misdirected addend, and a
+    // total-preserving compensating error alike.
+    //
+    // Derivation (`salvage_clamp.ron`'s pool: `core_fragment` weight `1.0`,
+    // `bytecode_block` weight `0.4`; `apportion` given `base_units = 2`):
+    //   exact_core = 2 * 1.0 / 1.4 = 1.4286 -> floor 1, remainder 0.4286
+    //   exact_byte = 2 * 0.4 / 1.4 = 0.5714 -> floor 0, remainder 0.5714
+    //   spent = 1, left = 2 - 1 = 1; larger remainder (byte, 0.5714) claims
+    //   the leftover unit -> core_fragment = 1, bytecode_block = 1
+    // Then `rich_in` adds `RICH_IN_UNITS` (1) to `core_fragment` (the
+    // merge case, since it's already a pool row): core_fragment = 1 + 1 =
+    // 2, bytecode_block stays 1. Total 2 + 1 = 3, matching the sum above.
+    //
+    // Deliberately brittle against a future change to `salvage_clamp.ron`'s
+    // pool: this is the phase's only economy gate, and a pool edit that
+    // silently moves it — rather than forcing a look at this test — is
+    // exactly what pinning the exact map is for.
+    assert_eq!(
+        game.rich_in(&median.species),
+        Some(ItemId::from(crate::items::ids::CORE_FRAGMENT)),
+        "test premise: scrapper's rich_in fallback must still resolve to core_fragment for the \
+         derivation above to hold"
+    );
+    let expected_rows = std::collections::BTreeMap::from([
+        (ItemId::from(crate::items::ids::CORE_FRAGMENT), 2u32),
+        (ItemId::from(crate::items::ids::BYTECODE_BLOCK), 1u32),
+    ]);
+    assert_eq!(
+        rows, expected_rows,
+        "the median kill's granted rows must match the derived apportionment plus the rich_in \
+         addend exactly, not just their sum: got {granted:?}"
     );
 }
 

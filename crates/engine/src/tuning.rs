@@ -4011,12 +4011,11 @@ pub const GRADE_PER_RARITY_RUNG: f32 = 0.15;
 /// way a coarser step would.
 pub const GRADE_PER_LEVEL: f32 = 0.01;
 
-/// The tool forged into the player's first tool slot at `Game::new` — a
-/// later phase's write, once `components::Tools` exists — on
-/// `DECOMPILE_ABILITY_ID`'s terms: granted at creation only, never at
-/// `Game::load`, the profile rule. Lives here rather than beside
-/// `abilities::DECOMPILE_ABILITY_ID` because the spec names it
-/// `tuning::STARTER_TOOL_ID` directly (section 2).
+/// The tool forged into the player's first tool slot, written by
+/// `spawn_player` into `components::Tools` on `DECOMPILE_ABILITY_ID`'s
+/// terms: granted at creation only, never at `Game::load`, the profile
+/// rule. Lives here rather than beside `abilities::DECOMPILE_ABILITY_ID`
+/// because the spec names it `tuning::STARTER_TOOL_ID` directly (section 2).
 pub const STARTER_TOOL_ID: &str = "salvage_clamp";
 
 /// Tool slots the player has at level 1 — one, filled by `STARTER_TOOL_ID`

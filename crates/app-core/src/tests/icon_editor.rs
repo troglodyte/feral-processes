@@ -23,7 +23,7 @@ fn blank_editor() -> IconEditor {
 /// Lefts and seven Ups land on `(0, 0)` from any cell on the grid.
 fn move_cursor_to(editor: &mut IconEditor, x: u8, y: u8) {
     assert_eq!(
-        editor.view().focus,
+        editor.view().canvas.focus,
         CanvasFocus::Canvas,
         "the cursor only moves while the canvas has focus"
     );
@@ -37,30 +37,33 @@ fn move_cursor_to(editor: &mut IconEditor, x: u8, y: u8) {
     for _ in 0..y {
         editor.handle_key(GameKey::Down);
     }
-    assert_eq!(editor.view().cursor, (x, y));
+    assert_eq!(editor.view().canvas.cursor, (x, y));
 }
 
 /// The drawn cell at `(x, y)` as the view reports it.
 fn cell(editor: &IconEditor, x: u8, y: u8) -> u8 {
-    editor.view().cells[y as usize * ICON_GRID + x as usize]
+    editor.view().canvas.cells[y as usize * ICON_GRID + x as usize]
 }
 
 #[test]
 fn the_editor_opens_on_the_canvas_at_the_origin_with_the_first_colour() {
     let view = blank_editor().view();
-    assert_eq!(view.focus, CanvasFocus::Canvas);
-    assert_eq!(view.cursor, (0, 0));
-    assert_eq!(view.selected, 1, "index 0 is transparent, not a swatch");
-    assert!(view.cells.iter().all(|&p| p == 0));
+    assert_eq!(view.canvas.focus, CanvasFocus::Canvas);
+    assert_eq!(view.canvas.cursor, (0, 0));
+    assert_eq!(
+        view.canvas.selected, 1,
+        "index 0 is transparent, not a swatch"
+    );
+    assert!(view.canvas.cells.iter().all(|&p| p == 0));
 }
 
 #[test]
 fn tab_moves_focus_between_the_canvas_and_the_palette() {
     let mut editor = blank_editor();
     editor.handle_key(GameKey::Tab);
-    assert_eq!(editor.view().focus, CanvasFocus::Palette);
+    assert_eq!(editor.view().canvas.focus, CanvasFocus::Palette);
     editor.handle_key(GameKey::Tab);
-    assert_eq!(editor.view().focus, CanvasFocus::Canvas);
+    assert_eq!(editor.view().canvas.focus, CanvasFocus::Canvas);
 }
 
 #[test]
@@ -69,10 +72,10 @@ fn arrows_move_the_cursor_while_the_canvas_has_focus() {
     editor.handle_key(GameKey::Right);
     editor.handle_key(GameKey::Right);
     editor.handle_key(GameKey::Down);
-    assert_eq!(editor.view().cursor, (2, 1));
+    assert_eq!(editor.view().canvas.cursor, (2, 1));
     editor.handle_key(GameKey::Left);
     editor.handle_key(GameKey::Up);
-    assert_eq!(editor.view().cursor, (1, 0));
+    assert_eq!(editor.view().canvas.cursor, (1, 0));
 }
 
 /// The whole reason `Tab` exists: with the palette focused the arrows must
@@ -82,7 +85,7 @@ fn the_arrows_act_on_the_focused_panel_alone() {
     let mut editor = blank_editor();
     editor.handle_key(GameKey::Right);
     editor.handle_key(GameKey::Down);
-    let parked = editor.view().cursor;
+    let parked = editor.view().canvas.cursor;
 
     editor.handle_key(GameKey::Tab);
     for _ in 0..3 {
@@ -90,14 +93,23 @@ fn the_arrows_act_on_the_focused_panel_alone() {
     }
     editor.handle_key(GameKey::Down);
     let view = editor.view();
-    assert_eq!(view.cursor, parked, "the cursor is not the focused panel");
-    assert_eq!(view.selected, 5, "four forward steps from the first swatch");
+    assert_eq!(
+        view.canvas.cursor, parked,
+        "the cursor is not the focused panel"
+    );
+    assert_eq!(
+        view.canvas.selected, 5,
+        "four forward steps from the first swatch"
+    );
 
     editor.handle_key(GameKey::Tab);
     editor.handle_key(GameKey::Right);
     let view = editor.view();
-    assert_eq!(view.cursor, (parked.0 + 1, parked.1));
-    assert_eq!(view.selected, 5, "the palette is not the focused panel now");
+    assert_eq!(view.canvas.cursor, (parked.0 + 1, parked.1));
+    assert_eq!(
+        view.canvas.selected, 5,
+        "the palette is not the focused panel now"
+    );
 }
 
 #[test]
@@ -105,14 +117,14 @@ fn the_cursor_does_not_wrap_at_any_edge() {
     let mut editor = blank_editor();
     editor.handle_key(GameKey::Left);
     editor.handle_key(GameKey::Up);
-    assert_eq!(editor.view().cursor, (0, 0));
+    assert_eq!(editor.view().canvas.cursor, (0, 0));
 
     let last = (ICON_GRID - 1) as u8;
     for _ in 0..ICON_GRID + 4 {
         editor.handle_key(GameKey::Right);
         editor.handle_key(GameKey::Down);
     }
-    assert_eq!(editor.view().cursor, (last, last));
+    assert_eq!(editor.view().canvas.cursor, (last, last));
 }
 
 #[test]
@@ -120,12 +132,12 @@ fn the_palette_selection_does_not_wrap_at_either_end() {
     let mut editor = blank_editor();
     editor.handle_key(GameKey::Tab);
     editor.handle_key(GameKey::Left);
-    assert_eq!(editor.view().selected, 1, "index 0 is not a swatch");
+    assert_eq!(editor.view().canvas.selected, 1, "index 0 is not a swatch");
     for _ in 0..40 {
         editor.handle_key(GameKey::Right);
     }
     assert_eq!(
-        editor.view().selected,
+        editor.view().canvas.selected,
         feral_processes_engine::ICON_PALETTE.len() as u8
     );
 }
@@ -174,7 +186,7 @@ fn x_clears_the_whole_canvas() {
         editor.handle_key(GameKey::Char(' '));
     }
     editor.handle_key(GameKey::Char('x'));
-    assert!(editor.view().cells.iter().all(|&p| p == 0));
+    assert!(editor.view().canvas.cells.iter().all(|&p| p == 0));
 }
 
 #[test]
@@ -207,7 +219,7 @@ fn u_on_an_empty_history_changes_nothing() {
     for _ in 0..5 {
         editor.handle_key(GameKey::Char('u'));
     }
-    assert!(editor.view().cells.iter().all(|&p| p == 0));
+    assert!(editor.view().canvas.cells.iter().all(|&p| p == 0));
 }
 
 /// Holding `Space` on a cell already the selected colour must not fill the
@@ -278,7 +290,7 @@ fn the_undo_history_is_bounded_at_icon_undo_depth() {
         editor.handle_key(GameKey::Char('u'));
     }
     let view = editor.view();
-    let still_painted = view.cells.iter().filter(|&&p| p != 0).count();
+    let still_painted = view.canvas.cells.iter().filter(|&&p| p != 0).count();
     assert_eq!(
         still_painted,
         edits - ICON_UNDO_DEPTH,

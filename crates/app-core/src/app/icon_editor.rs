@@ -38,21 +38,6 @@ pub struct IconEditorView {
     pub canvas: CanvasView,
 }
 
-/// Field access through to `canvas` — `view.cursor` reads
-/// `view.canvas.cursor`, and likewise for `cells`, `selected` and `focus`.
-///
-/// `render/icon_editor.rs` names `view.canvas.<field>` explicitly, since it
-/// is being rewritten in the same change that introduced this nesting. This
-/// impl exists for `tests/icon_editor.rs`, which is not: that file's own
-/// gate is passing unedited, and it was written against the flat shape
-/// `IconEditorView` had before `CanvasView` existed.
-impl std::ops::Deref for IconEditorView {
-    type Target = CanvasView;
-    fn deref(&self) -> &CanvasView {
-        &self.canvas
-    }
-}
-
 /// How one keypress left the editor: still open, or one of the two endings
 /// the wizard has to tell apart.
 ///

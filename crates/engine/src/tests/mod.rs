@@ -60,6 +60,7 @@ mod routines;
 mod sectors;
 mod sorties;
 mod spawning;
+mod sprite_palette;
 mod stack;
 mod stack_movement;
 mod stock;

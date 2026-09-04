@@ -42,6 +42,86 @@ pub const ICON_PALETTE: [(u8, u8, u8); 15] = [
     (0x8a, 0x5a, 0x3c),
 ];
 
+/// A **separate** palette for the dev-only sprite editor — deliberately not
+/// an extension of `ICON_PALETTE`. `ICON_PALETTE` is fixed at 15 entries by
+/// the player icon's one-hex-digit save format; a sixteenth entry there
+/// would silently decode back as transparent on load. This palette answers
+/// to no save format, so it is free to be wider.
+///
+/// Ordered ramp first, hues after: a nine-step **value** ramp, biased
+/// bright, then `ICON_PALETTE`'s ten hues in their existing order (indices
+/// 5..15 — its own five-step grey ramp is not repeated here). The bias
+/// matters because the renderer hands egui a sprite's colour as a
+/// **multiplying** tint (`assets/sprites/README.md`) — art authored near
+/// white inherits the species hue, `biome_tint` and the damage dimming for
+/// free, while a mid-grey ramp step multiplied by a dim species hue lands
+/// near black. So the nine steps bunch toward the bright end rather than
+/// spacing evenly — each gap smaller than the last, ending at pure white.
+pub const SPRITE_PALETTE: [(u8, u8, u8); 19] = [
+    (0x1c, 0x1c, 0x1c),
+    (0x48, 0x48, 0x48),
+    (0x70, 0x70, 0x70),
+    (0x94, 0x94, 0x94),
+    (0xb4, 0xb4, 0xb4),
+    (0xd0, 0xd0, 0xd0),
+    (0xe6, 0xe6, 0xe6),
+    (0xf7, 0xf7, 0xf7),
+    (0xff, 0xff, 0xff),
+    ICON_PALETTE[5],
+    ICON_PALETTE[6],
+    ICON_PALETTE[7],
+    ICON_PALETTE[8],
+    ICON_PALETTE[9],
+    ICON_PALETTE[10],
+    ICON_PALETTE[11],
+    ICON_PALETTE[12],
+    ICON_PALETTE[13],
+    ICON_PALETTE[14],
+];
+
+/// Below this, a quantised sprite pixel is transparent regardless of its
+/// colour — an editor pixel at under half opacity reads as "the artist
+/// didn't mean to paint here," not as a washed-out swatch.
+pub const SPRITE_ALPHA_THRESHOLD: u8 = 128;
+
+/// Maps an arbitrary RGBA pixel — a pixel read back from an existing sprite
+/// PNG — onto `SPRITE_PALETTE`, nearest colour by squared euclidean
+/// distance in RGB. A perceptual colour space is overkill at 19 swatches.
+///
+/// Returns 0 (transparent) below `SPRITE_ALPHA_THRESHOLD`, otherwise the
+/// matched palette index **plus one** — the same convention `PlayerIcon`'s
+/// codec uses: index 0 is transparent, index *n* is palette entry *n - 1*.
+pub fn quantise(pixel: (u8, u8, u8, u8)) -> u8 {
+    let (r, g, b, a) = pixel;
+    if a < SPRITE_ALPHA_THRESHOLD {
+        return 0;
+    }
+    let (mut best, mut best_dist) = (0usize, u32::MAX);
+    for (i, &(pr, pg, pb)) in SPRITE_PALETTE.iter().enumerate() {
+        let dr = r as i32 - pr as i32;
+        let dg = g as i32 - pg as i32;
+        let db = b as i32 - pb as i32;
+        let dist = (dr * dr + dg * dg + db * db) as u32;
+        if dist < best_dist {
+            best = i;
+            best_dist = dist;
+        }
+    }
+    best as u8 + 1
+}
+
+/// `quantise`'s inverse for a valid index: 0 is transparent, `1..=19`
+/// indexes `SPRITE_PALETTE` at `index - 1`.
+pub fn sprite_rgba(index: u8) -> (u8, u8, u8, u8) {
+    match index {
+        0 => (0, 0, 0, 0),
+        index => {
+            let (r, g, b) = SPRITE_PALETTE[index as usize - 1];
+            (r, g, b, 255)
+        }
+    }
+}
+
 /// The *sprite's* edge, in pixels, on both axes. Not negotiable — see
 /// `assets/sprites/README.md`. Public because the gui's texture upload
 /// sizes the image with it.

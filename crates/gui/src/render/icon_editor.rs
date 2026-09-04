@@ -14,9 +14,19 @@
 //! draws `super::SCREEN_BG` — the same colour `draw` clears the window to —
 //! rather than black, so a hole in the drawing reads as a hole and not as a
 //! pixel the player painted on purpose.
+//!
+//! **The grid, its cursor and the palette's swatches are `canvas::
+//! draw_canvas_grid` and `canvas::draw_swatch_row`'s**, shared with the
+//! dev-only sprite editor (a later task). This screen keeps its own chrome
+//! — the header, the two panels' background/border/label, and the footer —
+//! and calls one of the two per panel: `draw_canvas_grid` for the canvas
+//! panel, `draw_swatch_row` for the palette panel. Two panels, two
+//! functions, each given its own `Rect` — the panes' own convention, "the
+//! caller takes the origin".
 
+use super::canvas;
 use super::*;
-use feral_processes_app_core::{IconEditorView, IconFocus};
+use feral_processes_app_core::{CanvasFocus, IconEditorView};
 use feral_processes_engine::{ICON_GRID, ICON_PALETTE};
 
 /// A canvas cell's side, in `Metrics::line_height` units. Double what it
@@ -46,17 +56,6 @@ const UNFOCUSED_BORDER: Color = TEXT_DIM;
 /// focus is never carried by hue alone.
 const FOCUSED_BORDER_THICKNESS: f32 = 3.0;
 
-/// Grid lines between cells — dim enough that they read as texture, not as
-/// sixty-four more things to look at.
-const GRID_LINE: Color = Color::new(0.18, 0.20, 0.24, 1.0);
-
-/// The canvas cursor's outline.
-const CURSOR_COLOR: Color = WHITE;
-const CURSOR_THICKNESS: f32 = 2.0;
-/// The selected swatch's outline.
-const SELECTED_SWATCH_COLOR: Color = WHITE;
-const SELECTED_SWATCH_THICKNESS: f32 = 2.0;
-
 const HEADER_TEXT: &str = "Draw Your Icon";
 
 /// Names all eight bound keys — `handle_key`'s whole table but `u`/`x`,
@@ -77,7 +76,6 @@ struct Geometry {
     palette_label_y: f32,
     palette: Rect,
     swatch: f32,
-    swatch_gap: f32,
     footer_y: f32,
     footer_lines: Vec<String>,
 }
@@ -133,7 +131,6 @@ fn geometry(painter: &Painter, w: f32, m: &Metrics) -> Geometry {
         palette_label_y,
         palette,
         swatch,
-        swatch_gap,
         footer_y: footer_top + m.line_height,
         footer_lines,
     }
@@ -150,8 +147,8 @@ fn content_bottom(g: &Geometry, m: &Metrics) -> f32 {
 pub(super) fn draw_icon_editor(view: &IconEditorView, painter: &Painter, m: &Metrics) {
     let g = geometry(painter, painter.screen_w(), m);
     draw_header(painter, &g, m);
-    draw_canvas(view, painter, &g, m);
-    draw_palette(view, painter, &g, m);
+    draw_canvas_panel(view, painter, &g, m);
+    draw_palette_panel(view, painter, &g, m);
     draw_footer(painter, &g, m);
 }
 
@@ -164,21 +161,6 @@ fn draw_header(painter: &Painter, g: &Geometry, m: &Metrics) {
     centered_ui(painter, HEADER_TEXT, g.header_y, m.title(), TEXT);
 }
 
-/// A canvas cell's colour: the screen's own background for index 0
-/// (transparent), or the palette entry a drawn cell names. `PlayerIcon::
-/// set` never stores an index past `ICON_PALETTE`'s length, so the
-/// non-zero arm cannot go out of bounds.
-fn cell_color(index: u8) -> Color {
-    match index {
-        0 => SCREEN_BG,
-        n => palette_color(ICON_PALETTE[n as usize - 1]),
-    }
-}
-
-fn palette_color((r, g, b): (u8, u8, u8)) -> Color {
-    Color::new(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0)
-}
-
 /// A panel's border thickness and colour for whether it currently has
 /// focus — the one channel `view.focus` is drawn on.
 fn panel_border(focused: bool) -> (f32, Color) {
@@ -189,68 +171,43 @@ fn panel_border(focused: bool) -> (f32, Color) {
     }
 }
 
-fn draw_canvas(view: &IconEditorView, painter: &Painter, g: &Geometry, m: &Metrics) {
+/// The canvas panel's chrome (label, background, focus border) — content
+/// (the grid, its lines and the brush-sized cursor) is `canvas::
+/// draw_canvas_grid`'s, called with the interior box this panel insets out
+/// of its own `g.canvas`.
+fn draw_canvas_panel(view: &IconEditorView, painter: &Painter, g: &Geometry, m: &Metrics) {
     centered_ui(painter, "Canvas", g.canvas_label_y, m.small(), TEXT_DIM);
 
     let c = g.canvas;
     painter.rect(c.x, c.y, c.w, c.h, PANEL_BG);
-    let (thickness, color) = panel_border(view.focus == IconFocus::Canvas);
+    let (thickness, color) = panel_border(view.canvas.focus == CanvasFocus::Canvas);
     painter.rect_lines(c.x, c.y, c.w, c.h, thickness, color);
 
-    let ox = c.x + m.inset;
-    let oy = c.y + m.inset;
     let side = ICON_GRID as f32 * g.cell;
-    for y in 0..ICON_GRID {
-        for x in 0..ICON_GRID {
-            let idx = view.cells[y * ICON_GRID + x];
-            let (px, py) = (ox + x as f32 * g.cell, oy + y as f32 * g.cell);
-            painter.rect(px, py, g.cell, g.cell, cell_color(idx));
-        }
-    }
-    for i in 0..=ICON_GRID {
-        let x = ox + i as f32 * g.cell;
-        painter.line(x, oy, x, oy + side, 1.0, GRID_LINE);
-        let y = oy + i as f32 * g.cell;
-        painter.line(ox, y, ox + side, y, 1.0, GRID_LINE);
-    }
-
-    let (cx, cy) = (view.cursor.0 as f32, view.cursor.1 as f32);
-    painter.rect_lines(
-        ox + cx * g.cell,
-        oy + cy * g.cell,
-        g.cell,
-        g.cell,
-        CURSOR_THICKNESS,
-        CURSOR_COLOR,
-    );
+    let inner = Rect::new(c.x + m.inset, c.y + m.inset, side, side);
+    canvas::draw_canvas_grid(painter, inner, &view.canvas, &ICON_PALETTE);
 }
 
-fn draw_palette(view: &IconEditorView, painter: &Painter, g: &Geometry, m: &Metrics) {
+/// The palette panel's chrome — content (the swatch row and its selection
+/// outline) is `canvas::draw_swatch_row`. `rect.h` is what tells it the
+/// swatch's own side, so passing `g.swatch` here is what keeps this
+/// panel's own, narrower-than-the-canvas strip width (see `SWATCH_LINES`'s
+/// doc comment) rather than a size `draw_swatch_row` would have to invent.
+fn draw_palette_panel(view: &IconEditorView, painter: &Painter, g: &Geometry, m: &Metrics) {
     centered_ui(painter, "Palette", g.palette_label_y, m.small(), TEXT_DIM);
 
     let p = g.palette;
     painter.rect(p.x, p.y, p.w, p.h, PANEL_BG);
-    let (thickness, color) = panel_border(view.focus == IconFocus::Palette);
+    let (thickness, color) = panel_border(view.canvas.focus == CanvasFocus::Palette);
     painter.rect_lines(p.x, p.y, p.w, p.h, thickness, color);
 
-    let ox = p.x + m.inset;
-    let oy = p.y + m.inset;
-    for (i, &rgb) in ICON_PALETTE.iter().enumerate() {
-        let x = ox + i as f32 * (g.swatch + g.swatch_gap);
-        painter.rect(x, oy, g.swatch, g.swatch, palette_color(rgb));
-        // `selected` is 1-based — index 0 means transparent and is not a
-        // swatch, see `app::icon_editor::FIRST_COLOUR`.
-        if view.selected as usize == i + 1 {
-            painter.rect_lines(
-                x,
-                oy,
-                g.swatch,
-                g.swatch,
-                SELECTED_SWATCH_THICKNESS,
-                SELECTED_SWATCH_COLOR,
-            );
-        }
-    }
+    let inner = Rect::new(
+        p.x + m.inset,
+        p.y + m.inset,
+        g.palette.w - m.inset * 2.0,
+        g.swatch,
+    );
+    canvas::draw_swatch_row(painter, inner, view.canvas.selected, &ICON_PALETTE);
 }
 
 fn draw_footer(painter: &Painter, g: &Geometry, m: &Metrics) {
@@ -264,14 +221,19 @@ fn draw_footer(painter: &Painter, g: &Geometry, m: &Metrics) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use canvas::{CURSOR_COLOR, SELECTED_SWATCH_COLOR};
     use feral_processes_app_core::GameKey;
 
     fn blank_view() -> IconEditorView {
         IconEditorView {
-            cells: [0; ICON_GRID * ICON_GRID],
-            cursor: (0, 0),
-            selected: 1,
-            focus: IconFocus::Canvas,
+            canvas: feral_processes_app_core::CanvasView {
+                cells: vec![0; ICON_GRID * ICON_GRID],
+                edge: ICON_GRID as u8,
+                cursor: (0, 0),
+                selected: 1,
+                focus: CanvasFocus::Canvas,
+                brush: 1,
+            },
         }
     }
 
@@ -375,8 +337,8 @@ mod tests {
         let mut view = blank_view();
         // Index 7: away from both ends of the palette and from `selected`'s
         // opening value of 1, so this cannot pass by coincidence.
-        view.cells[0] = 7;
-        let want = palette_color(ICON_PALETTE[6]);
+        view.canvas.cells[0] = 7;
+        let want = canvas::palette_color(ICON_PALETTE[6]);
 
         let m = crate::text::ui_metrics(900.0);
         let (_, shapes) = crate::paint::with_painter(|p| draw_icon_editor(&view, p, &m));
@@ -419,7 +381,7 @@ mod tests {
         let m = crate::text::ui_metrics(900.0);
 
         let mut on_canvas = blank_view();
-        on_canvas.focus = IconFocus::Canvas;
+        on_canvas.canvas.focus = CanvasFocus::Canvas;
         let (_, shapes) = crate::paint::with_painter(|p| draw_icon_editor(&on_canvas, p, &m));
         assert_eq!(
             crate::paint::painted_rect_stroke_count(&shapes, UNFOCUSED_BORDER),
@@ -428,7 +390,7 @@ mod tests {
         );
 
         let mut on_palette = blank_view();
-        on_palette.focus = IconFocus::Palette;
+        on_palette.canvas.focus = CanvasFocus::Palette;
         let (_, shapes) = crate::paint::with_painter(|p| draw_icon_editor(&on_palette, p, &m));
         assert_eq!(
             crate::paint::painted_rect_stroke_count(&shapes, UNFOCUSED_BORDER),

@@ -1750,7 +1750,7 @@ fn a_profile_with_no_icon_opens_the_editor_on_a_blank_canvas() {
 
     let view = app.icon_editor_view().expect("the editor must be open");
     assert!(
-        view.cells.iter().all(|&p| p == 0),
+        view.canvas.cells.iter().all(|&p| p == 0),
         "a profile with nothing drawn must open the editor on a blank canvas"
     );
 }

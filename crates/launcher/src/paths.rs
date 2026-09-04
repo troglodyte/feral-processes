@@ -75,6 +75,13 @@ pub struct Paths {
 pub struct DevPaths {
     pub arenas: PathBuf,
     pub battle_log: PathBuf,
+    /// `assets/sprites/` in this checkout — where the dev sprite editor
+    /// reads and writes PNGs. `None` in an installed build (there is no
+    /// `DevPaths` at all there), which is the checkout half of
+    /// `App::sprite_forge_enabled`'s gate: `FERAL_DEV_SPRITES` alone is not
+    /// enough to offer a screen whose whole purpose is writing into a
+    /// source tree that build does not have.
+    pub sprites: PathBuf,
 }
 
 /// Where this build finds everything.
@@ -145,6 +152,10 @@ fn layout(exe_dir: Option<&Path>, assets_override: Option<PathBuf>) -> Paths {
                     // and gitignored: written only when `FERAL_DEV_LOG` is
                     // set. See `dev-logs/README.md`.
                     battle_log: repo.join("dev-logs").join("battles.jsonl"),
+                    // Where the loader already looks —
+                    // `assets/sprites/README.md` — so a sprite saved here
+                    // needs no install step to reach the map.
+                    sprites: repo.join("assets").join("sprites"),
                 }),
             }
         }
@@ -322,6 +333,7 @@ mod tests {
             dev.battle_log,
             repo_root().join("dev-logs").join("battles.jsonl")
         );
+        assert_eq!(dev.sprites, repo_root().join("assets").join("sprites"));
     }
 
     /// The entire macOS `.app` provision: inside a bundle the executable

@@ -134,6 +134,13 @@ impl App {
             creation_catalogue,
             creation_icon_editor: None,
             creation_icon_seeded: false,
+            sprite_forge_flag: crate::app::sprite_forge::dev_sprite_forge_flag(),
+            sprite_dir_installed: false,
+            sprite_library: HashMap::new(),
+            sprite_disabled: HashMap::new(),
+            sprite_static_subjects: None,
+            sprite_editor: None,
+            pending_sprite_writes: Vec::new(),
         }
     }
 

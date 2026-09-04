@@ -11,10 +11,15 @@ mod app;
 
 pub use app::arena::{ArenaRow, ArenaRowKind, DevTemplates};
 pub use app::building::{BaseStaffRow, StaffAction, StaffRow, Staffing, WorkOrderRow};
+pub use app::canvas_editor::{CanvasFocus, CanvasView};
 pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
 pub use app::group_menu::GroupMenuRow;
-pub use app::icon_editor::{IconEditorView, IconFocus};
+pub use app::icon_editor::IconEditorView;
+pub use app::sprite_forge::{
+    PointerButton, PointerHit, PointerPhase, SpriteArt, SpriteEditorView, SpriteOp, SpriteSubject,
+    SpriteWrite,
+};
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
 /// nothing else of app-core's internals.
 pub use app::telemetry::append_records;
@@ -22,6 +27,7 @@ pub use feral_processes_engine::ProgramRole;
 
 use app::arena::{ArenaPickKind, ArenaSession};
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -33,6 +39,7 @@ use feral_processes_engine::battle::{
 };
 use feral_processes_engine::components::Rarity;
 use feral_processes_engine::help::{self, HelpDb, HelpPage};
+use feral_processes_engine::icon::Canvas;
 use feral_processes_engine::items::{EquipmentSlot, EquipmentStats, GearCopy, ItemId};
 use feral_processes_engine::tuning::{
     ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, MAX_ACTIVE_CONTRACTS, MAX_FUSIONS,
@@ -1580,6 +1587,18 @@ pub enum Mode {
     /// What the fight cost — see `arena::Watch`. `[R]` refights the same
     /// seed, `[N]` the next one, Esc returns to the builder.
     ArenaResult,
+    /// Every name the map can draw a sprite for — see
+    /// `App::sprite_subjects`. Reached from the main menu when
+    /// `App::sprite_forge_enabled` is true (`FERAL_DEV_SPRITES` *and* a
+    /// checkout behind this build); never reachable in a player's build.
+    /// Esc returns to the main menu.
+    SpritePicker,
+    /// Drawing a sprite for one subject picked off `Mode::SpritePicker` —
+    /// see `App::sprite_editor_view`. `[g]` toggles the brush, `[s]` queues
+    /// a save (`App::take_sprite_writes`), `Esc` returns to the picker
+    /// without queueing anything. Never reachable except through
+    /// `Mode::SpritePicker`, so it inherits that mode's whole gate.
+    SpriteEditor,
 }
 
 impl Mode {
@@ -1697,6 +1716,10 @@ impl Mode {
             | Mode::ArenaSave
             | Mode::ArenaPick
             | Mode::ArenaResult
+            // Opened from the main menu, so it never layers over a fight —
+            // and so is the picker's `SpriteEditor`, reachable only from it.
+            | Mode::SpritePicker
+            | Mode::SpriteEditor
             // Only ever entered from `Mode::Playing`, so it never layers
             // over a fight.
             | Mode::Notification => false,
@@ -2208,6 +2231,49 @@ pub struct App {
     /// moment the player walked back to the Icon step and returned, since
     /// the profile's saved drawing would win the field back every time.
     creation_icon_seeded: bool,
+    /// Whether `FERAL_DEV_SPRITES` was set when this `App` was built. Read
+    /// once, in `App::new`, for `arena_enabled`'s reason: a field lets the
+    /// parallel test suite open the gate without writing to a
+    /// process-global environment every other case in flight can see.
+    sprite_forge_flag: bool,
+    /// Whether the launcher installed a sprite dir (`App::
+    /// install_sprite_dir`), which it only does inside a checkout — the
+    /// other half of `sprite_forge_enabled`'s gate. A bare flag rather than
+    /// the path itself: nothing ever read the path back (M1, final review)
+    /// — every real read/write derives `assets_dir().join("sprites")`
+    /// afresh (`crates/gui/src/sprites.rs`'s `load`/`install_library`/
+    /// `drain_writes`), so a stored path could disagree with the directory
+    /// actually used with no test able to see it, e.g. under `--assets
+    /// <override>`.
+    sprite_dir_installed: bool,
+    /// The frontend's decoded, quantised sprite library, keyed by sprite
+    /// name — `App::install_sprite_library`'s `enabled` half. Empty until
+    /// installed, which is every non-dev session's whole life.
+    sprite_library: HashMap<String, Canvas>,
+    /// Sprite names switched off (`<name>.png.off` on disk) but not
+    /// deleted — `App::install_sprite_library`'s `disabled` half. Decoded,
+    /// same as `sprite_library`'s art, so `Enter` on an `Off` subject can
+    /// open the disabled art itself rather than a blank canvas — I2's fix:
+    /// the picker already tells the player the art survives the toggle, and
+    /// the only tool that can read it back was the one place that didn't.
+    sprite_disabled: HashMap<String, Canvas>,
+    /// `App::sprite_subjects`' cached static half — `(name, label, glyph,
+    /// color)` tuples (`StaticSpriteSubject`), parsed from `assets/species`/
+    /// `assets/structures` once and kept for the rest of the session. `None`
+    /// until the first call, so a session that never opens `Mode::
+    /// SpritePicker` never parses either directory — see `sprite_subjects`'
+    /// own doc comment for why the method takes `&mut self` to write this
+    /// rather than a `RefCell`. The colour is `Option<GlyphColor>` because
+    /// one of the two hardcoded subjects (`player`) doesn't have one — see
+    /// `SpriteSubject::color`'s own doc comment.
+    sprite_static_subjects: Option<Vec<crate::app::sprite_forge::StaticSpriteSubject>>,
+    /// The open `Mode::SpriteEditor` session, or `None` while it is not
+    /// open — `App::sprite_editor_view`'s source and `Enter` on
+    /// `Mode::SpritePicker`'s target.
+    sprite_editor: Option<crate::app::sprite_forge::SpriteEditor>,
+    /// Cues for the frontend to write, since app-core does no file I/O of
+    /// its own — `take_sounds`'s seam, drained by `App::take_sprite_writes`.
+    pending_sprite_writes: Vec<SpriteWrite>,
 }
 
 /// One entry in the `Mode::LoadGame` list — a save file found in the saves

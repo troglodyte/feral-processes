@@ -6747,6 +6747,65 @@ in the same sense the whole table is: a blank canvas, an unset drawing,
 or a texture still uploading all miss the table lookup and fall straight
 through to rung 2, the same way a missing file falls through to rung 3.
 
+### `ICON_PALETTE` is fixed at fifteen entries by the save format, and `SPRITE_PALETTE` is why it stays that way
+
+**`ICON_PALETTE` is exactly fifteen entries because it is the player icon's
+save format, and `SPRITE_PALETTE` is a separate constant for that reason.**
+`PlayerIcon::encode` (`crates/engine/src/icon.rs`) writes `"v2:"` plus one
+lowercase hex digit per drawn cell via `char::from_digit(index, 16)`, and
+`PlayerIcon::rgba` reads index `0` as transparent, `1..=15` as
+`ICON_PALETTE[index - 1]`. A hex digit has exactly sixteen values, one of
+which the format already spends on transparent, so fifteen is not a
+stylistic choice — it is the entire remaining budget. The 2026-09-04 dev
+sprite editor (`docs/superpowers/specs/2026-09-04-dev-sprite-editor-design.md`)
+is what put a second, wider palette requirement next to this one for the
+first time, which is what makes the seam worth writing down now rather than
+leaving it as an implicit property of a fifteen-tuple array nobody had
+reason to touch.
+
+**Nothing in the compiler enforces the fifteen.** `PlayerIcon::set`'s bound
+check is `index as usize > ICON_PALETTE.len()`, which happily accepts an
+index equal to a longer array's last position, and `Canvas` — the grid type
+both `PlayerIcon` and the dev sprite editor's canvas are built on — carries
+no palette at all and no range guard; that check is deliberately left to
+whichever caller knows which palette it means. Grow the array to sixteen
+tuples and every one of those call sites still compiles clean. The one
+thing that notices is a pinned test,
+`the_palette_has_room_for_exactly_fifteen_colours_because_one_hex_digit_encodes_them`
+(`crates/engine/src/icon.rs`), asserting `ICON_PALETTE.len() == 15` — and a
+test that reads as "the number changed, update the assertion" rather than
+"this number is load-bearing" is exactly the kind a careless green-the-suite
+pass edits instead of heeding.
+
+**What a violation costs, traced through the actual code rather than
+assumed.** If the pin is edited away and a sixteenth tuple ships, the array
+itself is silently fine — nothing reads back wrong until a player paints
+with the new colour and saves. At that point `encode`'s
+`char::from_digit(16, 16)` returns `None`, and the `.expect("palette index
+fits one hex digit")` right after it panics: a loud crash on save, not
+silent corruption, *as the code is written today*. The silent failure is
+one edit further away, and it is the one worth naming because it is the
+"obvious" fix for that panic: replacing the `.expect` with a wrap or a mask
+(`index & 0xf`, say) to make the crash go away without revisiting the
+palette length turns index `16` into the hex digit `'0'` — which `decode`
+reads back as transparent on every future load. Nothing about that second
+edit fails to compile or fails a test, the player's paint job is already
+overwritten on disk by the time anyone would notice, and there is no
+`SAVE_FORMAT_VERSION` bump to roll back to, because nothing about the save
+format's own shape (still `"v2:"` plus 64 hex digits) changed.
+
+**This is why the dev sprite editor's wider palette is `SPRITE_PALETTE`, a
+second constant, rather than a longer `ICON_PALETTE`.** `SPRITE_PALETTE`
+(19 entries: a nine-step value ramp biased bright, then `ICON_PALETTE`'s own
+ten hues carried over by index) answers to no save format at all — a sprite
+is a PNG on disk, decoded through `icon::quantise`'s nearest-colour search
+in `crates/gui/src/sprites.rs::png_to_canvas`, and nothing about a sprite's
+palette width is ever stored as an index into anything. Widening
+`SPRITE_PALETTE` costs nothing but re-authoring existing sprites against
+the new nearest-colour mapping. Merging the two palettes back into one —
+the natural DRY move once both exist and look alike — is exactly the edit
+this entry exists to head off.
+
 ### A base stock tag is derived, unique, and two letters
 
 **A base stock tag is derived, unique, and two letters.** `ItemDef::tag`

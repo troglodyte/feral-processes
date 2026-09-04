@@ -2455,6 +2455,7 @@ dependencies = [
  "feral-processes-app-core",
  "feral-processes-engine",
  "fontdue",
+ "image",
 ]
 
 [[package]]

@@ -42,6 +42,86 @@ pub const ICON_PALETTE: [(u8, u8, u8); 15] = [
     (0x8a, 0x5a, 0x3c),
 ];
 
+/// A **separate** palette for the dev-only sprite editor — deliberately not
+/// an extension of `ICON_PALETTE`. `ICON_PALETTE` is fixed at 15 entries by
+/// the player icon's one-hex-digit save format; a sixteenth entry there
+/// would silently decode back as transparent on load. This palette answers
+/// to no save format, so it is free to be wider.
+///
+/// Ordered ramp first, hues after: a nine-step **value** ramp, biased
+/// bright, then `ICON_PALETTE`'s ten hues in their existing order (indices
+/// 5..15 — its own five-step grey ramp is not repeated here). The bias
+/// matters because the renderer hands egui a sprite's colour as a
+/// **multiplying** tint (`assets/sprites/README.md`) — art authored near
+/// white inherits the species hue, `biome_tint` and the damage dimming for
+/// free, while a mid-grey ramp step multiplied by a dim species hue lands
+/// near black. So the nine steps bunch toward the bright end rather than
+/// spacing evenly — each gap smaller than the last, ending at pure white.
+pub const SPRITE_PALETTE: [(u8, u8, u8); 19] = [
+    (0x1c, 0x1c, 0x1c),
+    (0x48, 0x48, 0x48),
+    (0x70, 0x70, 0x70),
+    (0x94, 0x94, 0x94),
+    (0xb4, 0xb4, 0xb4),
+    (0xd0, 0xd0, 0xd0),
+    (0xe6, 0xe6, 0xe6),
+    (0xf7, 0xf7, 0xf7),
+    (0xff, 0xff, 0xff),
+    ICON_PALETTE[5],
+    ICON_PALETTE[6],
+    ICON_PALETTE[7],
+    ICON_PALETTE[8],
+    ICON_PALETTE[9],
+    ICON_PALETTE[10],
+    ICON_PALETTE[11],
+    ICON_PALETTE[12],
+    ICON_PALETTE[13],
+    ICON_PALETTE[14],
+];
+
+/// Below this, a quantised sprite pixel is transparent regardless of its
+/// colour — an editor pixel at under half opacity reads as "the artist
+/// didn't mean to paint here," not as a washed-out swatch.
+pub const SPRITE_ALPHA_THRESHOLD: u8 = 128;
+
+/// Maps an arbitrary RGBA pixel — a pixel read back from an existing sprite
+/// PNG — onto `SPRITE_PALETTE`, nearest colour by squared euclidean
+/// distance in RGB. A perceptual colour space is overkill at 19 swatches.
+///
+/// Returns 0 (transparent) below `SPRITE_ALPHA_THRESHOLD`, otherwise the
+/// matched palette index **plus one** — the same convention `PlayerIcon`'s
+/// codec uses: index 0 is transparent, index *n* is palette entry *n - 1*.
+pub fn quantise(pixel: (u8, u8, u8, u8)) -> u8 {
+    let (r, g, b, a) = pixel;
+    if a < SPRITE_ALPHA_THRESHOLD {
+        return 0;
+    }
+    let (mut best, mut best_dist) = (0usize, u32::MAX);
+    for (i, &(pr, pg, pb)) in SPRITE_PALETTE.iter().enumerate() {
+        let dr = r as i32 - pr as i32;
+        let dg = g as i32 - pg as i32;
+        let db = b as i32 - pb as i32;
+        let dist = (dr * dr + dg * dg + db * db) as u32;
+        if dist < best_dist {
+            best = i;
+            best_dist = dist;
+        }
+    }
+    best as u8 + 1
+}
+
+/// `quantise`'s inverse for a valid index: 0 is transparent, `1..=19`
+/// indexes `SPRITE_PALETTE` at `index - 1`.
+pub fn sprite_rgba(index: u8) -> (u8, u8, u8, u8) {
+    match index {
+        0 => (0, 0, 0, 0),
+        index => {
+            let (r, g, b) = SPRITE_PALETTE[index as usize - 1];
+            (r, g, b, 255)
+        }
+    }
+}
+
 /// The *sprite's* edge, in pixels, on both axes. Not negotiable — see
 /// `assets/sprites/README.md`. Public because the gui's texture upload
 /// sizes the image with it.
@@ -74,6 +154,66 @@ const V1_PREFIX: &str = "v1:";
 /// `v1` carried one hex digit per *sprite pixel*.
 const V1_DIGITS: usize = ICON_SIZE * ICON_SIZE;
 
+/// A square grid of palette indices, with no opinion about which palette —
+/// that belongs to whoever draws on it. `PlayerIcon` is one `Canvas` at
+/// `ICON_GRID`; a second editor at a different edge is another.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Canvas {
+    edge: usize,
+    cells: Vec<u8>,
+}
+
+impl Canvas {
+    /// A blank (all-zero) canvas, `edge` cells on each side.
+    pub fn new(edge: usize) -> Canvas {
+        Canvas {
+            edge,
+            cells: vec![0; edge * edge],
+        }
+    }
+
+    /// The grid's edge length, in cells.
+    pub fn edge(&self) -> usize {
+        self.edge
+    }
+
+    /// The cell at `(x, y)`, or 0 if either coordinate is off the grid.
+    pub fn get(&self, x: usize, y: usize) -> u8 {
+        match self.index_of(x, y) {
+            Some(i) => self.cells[i],
+            None => 0,
+        }
+    }
+
+    /// Paints `(x, y)` with `index`. An out-of-range coordinate is dropped
+    /// rather than panicking. Carries no palette-range guard — `Canvas`
+    /// does not know which palette it is drawn from, so that check belongs
+    /// to the caller.
+    pub fn set(&mut self, x: usize, y: usize, index: u8) {
+        if let Some(i) = self.index_of(x, y) {
+            self.cells[i] = index;
+        }
+    }
+
+    /// Resets every cell to 0.
+    pub fn clear(&mut self) {
+        self.cells.fill(0);
+    }
+
+    /// Whether every cell is 0.
+    pub fn is_blank(&self) -> bool {
+        self.cells.iter().all(|&p| p == 0)
+    }
+
+    fn index_of(&self, x: usize, y: usize) -> Option<usize> {
+        if x < self.edge && y < self.edge {
+            Some(y * self.edge + x)
+        } else {
+            None
+        }
+    }
+}
+
 /// The player's drawn map avatar.
 ///
 /// One palette index per drawn cell, row-major from the top-left. There is
@@ -81,7 +221,7 @@ const V1_DIGITS: usize = ICON_SIZE * ICON_SIZE;
 /// index `ICON_PALETTE` at value `index - 1`.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct PlayerIcon {
-    cells: [u8; ICON_CELLS],
+    cells: Canvas,
 }
 
 impl Default for PlayerIcon {
@@ -89,7 +229,7 @@ impl Default for PlayerIcon {
     /// has to say the same thing.
     fn default() -> Self {
         PlayerIcon {
-            cells: [0; ICON_CELLS],
+            cells: Canvas::new(ICON_GRID),
         }
     }
 }
@@ -98,34 +238,31 @@ impl PlayerIcon {
     /// The cell at `(x, y)`, or 0 (transparent) if either coordinate is
     /// off the 8x8 grid.
     pub fn get(&self, x: usize, y: usize) -> u8 {
-        match Self::index_of(x, y) {
-            Some(i) => self.cells[i],
-            None => 0,
-        }
+        self.cells.get(x, y)
     }
 
     /// Paints `(x, y)` with `index`. An out-of-range coordinate or an
     /// `index` past the palette is dropped rather than panicking — the
     /// editor is the only caller and cannot produce either, and a loaded
     /// save cannot reach this path at all, since `decode` refuses first.
+    /// The palette-range guard lives here, not on `Canvas`, which does not
+    /// know which palette it is drawn from.
     pub fn set(&mut self, x: usize, y: usize, index: u8) {
         if index as usize > ICON_PALETTE.len() {
             return;
         }
-        if let Some(i) = Self::index_of(x, y) {
-            self.cells[i] = index;
-        }
+        self.cells.set(x, y, index);
     }
 
     /// Resets every cell to transparent.
     pub fn clear(&mut self) {
-        self.cells = [0; ICON_CELLS];
+        self.cells.clear();
     }
 
     /// Whether every cell is transparent — a player who never opened the
     /// editor, or who cleared it.
     pub fn is_blank(&self) -> bool {
-        self.cells.iter().all(|&p| p == 0)
+        self.cells.is_blank()
     }
 
     /// The cell at `(x, y)` as RGBA. The one place index 0 becomes a
@@ -153,8 +290,13 @@ impl PlayerIcon {
     pub fn encode(&self) -> String {
         let mut s = String::with_capacity(ENCODING_PREFIX.len() + ICON_CELLS);
         s.push_str(ENCODING_PREFIX);
-        for &p in &self.cells {
-            s.push(std::char::from_digit(p as u32, 16).expect("palette index fits one hex digit"));
+        for y in 0..ICON_GRID {
+            for x in 0..ICON_GRID {
+                s.push(
+                    std::char::from_digit(self.cells.get(x, y) as u32, 16)
+                        .expect("palette index fits one hex digit"),
+                );
+            }
         }
         s
     }
@@ -180,9 +322,9 @@ impl PlayerIcon {
         if digits.len() != ICON_CELLS {
             return None;
         }
-        let mut cells = [0u8; ICON_CELLS];
+        let mut cells = Canvas::new(ICON_GRID);
         for (i, c) in digits.chars().enumerate() {
-            cells[i] = c.to_digit(16)? as u8;
+            cells.set(i % ICON_GRID, i / ICON_GRID, c.to_digit(16)? as u8);
         }
         Some(PlayerIcon { cells })
     }
@@ -203,7 +345,7 @@ impl PlayerIcon {
         for (i, c) in digits.chars().enumerate() {
             pixels[i] = c.to_digit(16)? as u8;
         }
-        let mut cells = [0u8; ICON_CELLS];
+        let mut cells = Canvas::new(ICON_GRID);
         for cy in 0..ICON_GRID {
             for cx in 0..ICON_GRID {
                 let mut block = Vec::with_capacity(ICON_CELL_PIXELS * ICON_CELL_PIXELS);
@@ -228,18 +370,74 @@ impl PlayerIcon {
                         best_count = count;
                     }
                 }
-                cells[cy * ICON_GRID + cx] = best;
+                cells.set(cx, cy, best);
             }
         }
         Some(PlayerIcon { cells })
     }
+}
 
-    fn index_of(x: usize, y: usize) -> Option<usize> {
-        if x < ICON_GRID && y < ICON_GRID {
-            Some(y * ICON_GRID + x)
-        } else {
-            None
+#[cfg(test)]
+mod canvas_tests {
+    use super::*;
+
+    #[test]
+    fn a_fresh_canvas_is_blank_and_reads_zero_everywhere() {
+        let canvas = Canvas::new(16);
+        assert!(canvas.is_blank());
+        for y in 0..16 {
+            for x in 0..16 {
+                assert_eq!(canvas.get(x, y), 0, "({x}, {y})");
+            }
         }
+    }
+
+    #[test]
+    fn set_then_get_round_trips() {
+        let mut canvas = Canvas::new(16);
+        canvas.set(3, 5, 9);
+        assert_eq!(canvas.get(3, 5), 9);
+    }
+
+    #[test]
+    fn an_off_grid_set_is_dropped_and_an_off_grid_get_is_zero() {
+        let mut canvas = Canvas::new(16);
+        canvas.set(16, 0, 9);
+        canvas.set(0, 16, 9);
+        assert_eq!(canvas.get(16, 0), 0);
+        assert_eq!(canvas.get(0, 16), 0);
+        assert!(
+            canvas.is_blank(),
+            "the dropped writes must not have landed anywhere"
+        );
+    }
+
+    #[test]
+    fn clear_blanks_a_painted_canvas() {
+        let mut canvas = Canvas::new(16);
+        canvas.set(0, 0, 1);
+        canvas.set(15, 15, 7);
+        canvas.clear();
+        assert!(canvas.is_blank());
+        assert_eq!(canvas.get(0, 0), 0);
+        assert_eq!(canvas.get(15, 15), 0);
+    }
+
+    #[test]
+    fn two_canvases_of_the_same_edge_and_cells_are_equal() {
+        let mut a = Canvas::new(16);
+        let mut b = Canvas::new(16);
+        a.set(2, 2, 4);
+        b.set(2, 2, 4);
+        assert_eq!(a, b);
+        b.set(2, 2, 5);
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn edge_reports_the_grid_it_was_built_with() {
+        let canvas = Canvas::new(16);
+        assert_eq!(canvas.edge(), 16);
     }
 }
 

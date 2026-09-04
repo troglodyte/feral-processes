@@ -32,6 +32,7 @@ mod bars;
 mod base;
 mod battle;
 mod building;
+mod canvas;
 mod caravan;
 mod contracts;
 mod crafting;
@@ -51,6 +52,11 @@ mod party;
 mod popup;
 mod progression;
 mod routines;
+// `pub(crate)` rather than private: `lib.rs::handle_sprite_pointer` needs
+// `sprite_forge::HitRects` to name the type `sprite_editor_hit_rects` below
+// hands back — every other module here stays private because nothing
+// outside `render/` ever needed one of its types before the mouse did.
+pub(crate) mod sprite_forge;
 mod stack;
 mod stack_market;
 mod stock;
@@ -104,6 +110,7 @@ use routines::{
     draw_extract, draw_extract_confirm, draw_extract_pick, draw_routine_etch, draw_routine_install,
     draw_routine_target, draw_routines,
 };
+use sprite_forge::{draw_sprite_editor, draw_sprite_picker};
 use stack_market::draw_stack_market;
 use talents::{draw_develop, draw_develop_program};
 use trade::{
@@ -173,6 +180,26 @@ const CRITICAL_HP_DIVISOR: i32 = 3;
 /// screens.
 pub(super) fn hp_critical(hp: i32, max_hp: i32) -> bool {
     max_hp > 0 && hp * CRITICAL_HP_DIVISOR <= max_hp
+}
+
+/// The sprite editor's own two hit-test rects for this frame, recomputed
+/// from the exact geometry `draw_sprite_editor` draws from — a pointer
+/// resolved against these can never disagree with what's on screen. `None`
+/// when no editor session is open, which is also when `lib.rs` has nothing
+/// to read a pointer for.
+pub(crate) fn sprite_editor_hit_rects(
+    app: &App,
+    painter: &Painter,
+) -> Option<sprite_forge::HitRects> {
+    let view = app.sprite_editor_view()?;
+    let m = ui_metrics(painter.screen_h());
+    Some(sprite_forge::hit_rects(
+        painter,
+        painter.screen_w(),
+        &m,
+        &view,
+        app.zoom,
+    ))
 }
 
 /// What colour a menu row draws in for something that has been fused —
@@ -479,9 +506,10 @@ fn draw_message_text(
 ///
 /// **This is now the exception rather than the rule.** Every mode that
 /// draws a popup shows a refusal inside it, under the title, where the
-/// player is already looking — see `draw_popup`. What is left is the three
+/// player is already looking — see `draw_popup`. What is left is the
 /// surfaces that are not popups: the map, which draws it over its log pane,
-/// and the two full-pane frame maps, which draw nothing else at all.
+/// the two full-pane frame maps, and the two dev-only Sprite Forge screens
+/// (`sprite_forge.rs`), none of which draw anything else at all.
 ///
 /// `Battle` and `BattleResult` are not here: a refusal raised in a fight is
 /// the only one the log never keeps (`Game::note_refusal`), so the strip is
@@ -494,6 +522,8 @@ fn needs_status_banner(mode: Mode) -> bool {
             | Mode::FrameMap
             | Mode::FieldRoutineCell
             | Mode::Notification
+            | Mode::SpritePicker
+            | Mode::SpriteEditor
     )
 }
 
@@ -671,6 +701,12 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
             &m,
         ),
         Mode::BattleResult => draw_battle(app, fx, painter, &m),
+        // Full-pane, like `Mode::FrameMap`: both hang off the main menu
+        // (`app.game` is `None` the whole time either is open) and neither
+        // draws a popup box to put a refusal in, so both take `needs_status_
+        // banner`'s door instead of a `refusal` argument here.
+        Mode::SpritePicker => draw_sprite_picker(app, painter, &m),
+        Mode::SpriteEditor => draw_sprite_editor(app, painter, &m),
         _ => {
             // The map is the one surface that is not a popup and still has
             // somewhere to put a refusal: its own log pane. So it takes the
@@ -1300,6 +1336,11 @@ mod tests {
         Mode::ArenaSave,
         Mode::ArenaPick,
         Mode::ArenaResult,
+        // Both dev-only, both full-pane draws with their refusal on
+        // `needs_status_banner`'s strip rather than in a popup — see
+        // `sprite_forge.rs`.
+        Mode::SpritePicker,
+        Mode::SpriteEditor,
     ];
 
     const CENSUS_REFUSAL: &str = "Requires Zone 3 first.";
@@ -1670,6 +1711,8 @@ mod tests {
             Mode::BattleResult,
             Mode::FrameMap,
             Mode::FieldRoutineCell,
+            Mode::SpritePicker,
+            Mode::SpriteEditor,
         ] {
             assert!(
                 needs_status_banner(mode),

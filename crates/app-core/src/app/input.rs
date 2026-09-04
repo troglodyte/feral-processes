@@ -71,6 +71,11 @@ fn keeps_highlight(before: Mode, after: Mode) -> bool {
             // the player was reading down the roster is what Esc returns to.
             | (Mode::Companion, Mode::CompanionMemories)
             | (Mode::CompanionMemories, Mode::Companion)
+            // M2, final review: the picker has 49 rows and no scroll, so
+            // losing the highlight on Esc from the editor means you cannot
+            // edit row 30, back out, and press `t` on the same row.
+            | (Mode::SpritePicker, Mode::SpriteEditor)
+            | (Mode::SpriteEditor, Mode::SpritePicker)
     )
 }
 
@@ -278,6 +283,8 @@ impl App {
             Mode::ArenaPick => self.handle_arena_pick_key(key),
             Mode::ArenaResult => self.handle_arena_result_key(key),
             Mode::BattleResult => self.handle_battle_result_key(key),
+            Mode::SpritePicker => self.handle_sprite_picker_key(key),
+            Mode::SpriteEditor => self.handle_sprite_editor_key(key),
         }
         // Every menu's arrow-key highlight (see `selected_index`) starts
         // fresh at the top of its list, rather than carrying over whatever

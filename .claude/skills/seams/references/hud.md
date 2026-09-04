@@ -119,6 +119,33 @@
   the sprite format `assets/sprites/README.md` calls non-negotiable. The
   full argument is `docs/seams.md`, "The player's drawn icon is the one
   sprite drawn untinted".
+- **`ICON_PALETTE` is exactly fifteen entries because it is the player
+  icon's save format, and `SPRITE_PALETTE` is a separate constant for that
+  reason.** `PlayerIcon::encode` writes one lowercase hex digit per cell
+  (`char::from_digit(index, 16)`); a hex digit has sixteen values and index
+  `0` is already spent on transparent, so fifteen is the whole remaining
+  budget, not a stylistic count. **Nothing in the compiler holds this** —
+  `PlayerIcon::set`'s bound check (`index as usize > ICON_PALETTE.len()`)
+  accepts a sixteenth entry just as happily as a fifteenth, and `Canvas`
+  (shared with the dev sprite editor's own canvas) carries no palette or
+  range guard at all. The one thing that notices is a pinned test,
+  `the_palette_has_room_for_exactly_fifteen_colours_because_one_hex_digit_encodes_them`,
+  and a test phrased as an assertion of a specific number reads as "update
+  it" rather than "this is load-bearing" to a careless green-the-suite
+  pass. **The trap is the "fix" for what happens next, not the growth
+  itself.** A sixteenth colour compiles clean and only panics at
+  `encode`'s `.expect("palette index fits one hex digit")` the first time a
+  player paints with it and saves — loud, not silent, as the code stands.
+  Silence is one edit further: replace that `.expect` with a wrap or a mask
+  to make the panic go away, and index `16` becomes the hex digit `'0'`,
+  which `decode` reads back as transparent forever after — no compile
+  error, no failing test, the player's paint job already gone by the time
+  anyone would look. This is why the dev sprite editor's wider palette is
+  `SPRITE_PALETTE`, a second constant that never enters `PlayerIcon`'s
+  codec at all, rather than a longer `ICON_PALETTE` — merging the two back
+  into one is the DRY move this seam exists to refuse. Full argument in
+  `docs/seams.md`, "`ICON_PALETTE` is fixed at fifteen entries by the save
+  format, and `SPRITE_PALETTE` is why it stays that way".
 - **A machine's stall asks for attention and never reads as a threat.**
   `Clogged`/`Stranded`/`Unpowered` take `ATTENTION` — waiting fixes none of
   them, and it is the colour `Game::attention` already spends on them —

@@ -11,10 +11,11 @@ Unlike `../abilities/`, an absent `tools/` directory is not an error — it
 loads silently empty, the pre-extraction game.
 
 A tool is what a downed program (`items::DownedProgram`, carried in
-`components::DownedPrograms` after a kill) is extracted with. Nothing in
-this phase of the game consumes one yet: there is no player-facing slot, no
-acquisition path, and no `Game::extract_program`. This file documents the
-schema those later phases build on.
+`components::DownedPrograms` after a kill) is extracted with, through the
+one door, `Game::extract_program`. It sits in a player tool slot
+(`components::Tools`, sized by `tools::player_tool_slots`); the starter
+tool is forged into the first slot at creation, and a later phase adds
+research, forging and installing more.
 
 ## Schema
 
@@ -53,9 +54,9 @@ schema those later phases build on.
     // the same pool.
     tier: 1,
 
-    // Game ticks one use spends — `Game::extract_program`'s (a later
-    // phase) time cost, the same currency `power_cost` is to a routine but
-    // paid in ticks rather than Power.
+    // Game ticks `Game::extract_program` spends on one use — the same
+    // currency `power_cost` is to a routine but paid in ticks rather than
+    // Power.
     ticks: 20,
 )
 ```
@@ -79,9 +80,8 @@ checking it for real.
 ## The starter tool
 
 `tuning::STARTER_TOOL_ID` (`crates/engine/src/tuning.rs`) names the tool a
-new game forges into the player's first tool slot — once
-`components::Tools` exists, a later phase. `salvage_clamp` ships as the
-value today. Renaming a shipped tool's `id` without also moving this
+new game forges into the player's first tool slot. `salvage_clamp` ships as
+the value today. Renaming a shipped tool's `id` without also moving this
 constant breaks that grant; the census
 `assets.rs::starter_tool_id_resolves_to_a_shipped_tool` catches it.
 

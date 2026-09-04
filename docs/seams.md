@@ -10029,3 +10029,218 @@ carry all four figures rather than the sector/run pair the design sketch gave
 MINED alone, because dominant provenance puts a machine-dominated Power Cell
 under MINED and dropping the hand column there hides the units that motivate
 the whole instrument.
+
+### `DownedPrograms` is a third player store, and it is not `Inventory`
+
+A defeated wild program is left behind as `items::DownedProgram` — species,
+level, rarity, boss flag and condition — carried in
+`components::DownedPrograms`, a player-only `Vec` capped at
+`tuning::MAX_DOWNED_PROGRAMS`. It does not go into `Inventory`, and that is
+a decision rather than an omission.
+
+`Inventory` is `Vec<(ItemId, u32)>`, and its `count`/`take`
+(`components.rs`) both read the **first** matching row — the seam
+`components.rs` already states in `Inventory`'s own doc comment: it is by
+definition the *plain-copy* store, which is what lets recipes, `Stock`,
+`assembler_system`, hauling and banking read it with no instance rule. A
+species id repeated across two rows would be indistinguishable to any of
+those readers, which is fine for a stack of Core Fragments and wrong for two
+kills of different levels and rarities — a level-30 Prismatic kill and a
+level-2 Ordinary one are not interchangeable, and collapsing them into a
+count against a per-species id would either need `Inventory` to grow an
+instance rule none of its other readers want, or would silently merge two
+programs that should not merge.
+
+`GearCopies` already solved this exact problem for gear — a carried copy
+that is not a plain stack — and `DownedPrograms` is its second instance of
+the same shape: a plain-copy store and one or more instanced stores beside
+it, never one store trying to be both. `Game::rich_in`,
+`Game::extraction_yield` and `Game::extract_program` all read
+`DownedPrograms` directly and grant *into* `Inventory` (via `grant_loot`)
+rather than ever reading a `DownedProgram` back out of it — the store is a
+one-way source for the plain-copy economy, not a member of it.
+
+### `FIGHT_CONDITION_WEIGHT` ships at `0.0`, and the fight axis is structurally inert, not merely zero-weighted
+
+The spec's condition formula has a fourth term, `FIGHT_CONDITION_WEIGHT *
+overkill_term`, where `overkill_term` is how far the killing blow went past
+zero as a fraction of `max_hp`. The constant ships at `0.0` "until played" —
+worded as a tuning decision, which invites a future session to read it as
+"raise this and the fight axis comes alive." It will not.
+
+`Game::apply_damage` (`combat_damage.rs`) is the only code path that lowers
+a creature's HP, and its `lower_hp` step clamps `hp` to zero **before**
+`award_loot` ever runs. `Game::overkill_term` (`combat_rewards.rs`) reads
+`Stats::hp` off the entity *after* the kill, by which point it is always
+exactly `0`, making `overkill_term` always `0.0` on the real kill path
+regardless of how brutal the actual blow was. Raising
+`FIGHT_CONDITION_WEIGHT` off zero today would multiply a term that is
+always zero by a nonzero weight and still get zero — the axis is inert by
+construction, not by tuning. Making it responsive needs the raw blow (the
+`dmg` that would have taken `hp` negative) threaded through from
+`resolve_attack`'s caller into `award_loot`, which nothing in phase 1 does.
+
+`overkill_term`'s own doc comment says as much, and `DownedProgram::
+roll_condition` is deliberately pure and takes `overkill_term` as a plain
+`f32` rather than reading a live entity, specifically so
+`FIGHT_CONDITION_WEIGHT = 0.0`'s independence claim is testable against
+real variation in that parameter (a test passing a nonzero value directly)
+rather than a term that can never move on the call path a real kill takes.
+That test proves the *formula* is independent of the term when the weight
+is zero; it does not and cannot prove the term ever varies in play, because
+under today's `apply_damage` it never does.
+
+### A downed program's `level` comes from `Game::ability_user_level`, not the player's own level
+
+`Game::leave_downed_program` (`combat_rewards.rs`) stamps `DownedProgram::
+level` from `self.ability_user_level(wild)` — the wild program's own level,
+which for an entity with no `Experience` component resolves to the current
+`ZoneLevel`. It is not the player's level, and using the player's would have
+been the easy wrong choice: a player-level stamp measures *when in the run*
+the kill happened rather than *what was killed*, and since
+`extraction_yield`'s unit count multiplies `DownedProgram::grade()` (which
+folds `level` in) against the flat `tuning::TOOL_BASE_UNITS`, a player-level
+stamp would make a zone-1 kill on a heavily-levelled player pay as if it
+were a much tougher program — breaking decision 8's drop-neutrality by
+construction rather than by drift.
+
+The accepted gap this leaves: `ZoneLevel` does not move while the party is
+underground (`docs/seams.md`'s Stack section — world generation and
+zone-derived scaling are surface concepts), so a Stack kill's depth never
+raises the `DownedProgram` it leaves behind. A level-1-zone program killed
+four frames down the Stack grades identically to one killed at the
+entrance. Nothing in phase 1 measures whether that matters; it is a known
+limitation of reusing `ability_user_level` rather than a new Stack-depth
+term, and the fix (if wanted) is a depth input to `ability_user_level` or a
+second call at the leave site, not to `extraction.rs`.
+
+### `Game::extract_program` is the one door a downed program is spent through
+
+Every other route to a `DownedProgram` — `Game::rich_in`,
+`Game::extraction_yield`, `Game::downed_program_rows`,
+`Game::extraction_options` — only *reads* the store or a species def.
+`Game::extract_program` (`game/extraction.rs`) is the only place a
+`DownedProgram` is removed from `DownedPrograms` and the only place
+anything is granted or spent on its behalf, following
+`commit_caravan_basket`'s ordering: every refusal lands before anything is
+spent.
+
+The refusals, in the order the function checks them: the run is over or a
+battle is active; `index` names no held program; `tool` is not among
+`installed_tools()`. Each is asserted **per refusal**, not by one test over
+one path — a single test exercising, say, the game-over check would pass
+even if the out-of-range-index check spent something on its way to
+returning an error, because nothing about testing one refusal exercises the
+others. `crates/engine/src/tests/extraction.rs` has one test per refusal
+(`extraction_refuses_...`), each asserting the exact same two things: the
+call returns `Err`, and both `DownedPrograms` and `Inventory` are byte-for-
+byte unchanged from before the call. That pairing — index still present,
+inventory untouched — is what rules out a refusal that removed the program
+before discovering the tool wasn't installed.
+
+Once past every refusal, the order is: remove the program from the `Vec`,
+call `extraction_yield` exactly once, grant its `Vec` verbatim through
+`grant_loot` under `LootSource::Extract`, log one line, then spend
+`tool.ticks` — the tick loop breaking early on a game over or a battle
+opening mid-spend, the same shape a `Drag` step's multi-tick loop takes,
+and safe for the same reason: nothing left to spend has landed before the
+first tick, so there is nothing to unwind if the loop stops short.
+
+### `Game::extraction_yield` is the one derivation the preview and the grant share
+
+`extraction_yield(&self, program, tool) -> Vec<(ItemId, u32)>` takes
+`&self`, not `&mut self`, and reads no `GameRng` — both facts are the same
+decision seen from two sides. `Game::extraction_options` (the screen's
+preview, called once per installed tool with nothing spent) and
+`Game::extract_program` (the act) both call it, and because the function is
+pure and deterministic, calling it twice on identical inputs returns
+identical output with no coincidence required — the same guarantee
+`BuildOrderRow` gives a build request's quoted cost against what raising it
+actually spends. A version that drew from `GameRng` would force the preview
+to either spend a draw it has no business spending (corrupting the seeded
+stream from a screen that grants nothing) or quote a distribution instead
+of a figure, and either way a screen showing "3 Core Fragments" that then
+grants 2 or 4 would read as a bug even though nothing was wrong — the
+seam this closes.
+
+The formula: `units = round(TOOL_BASE_UNITS * tier_scale(tool.tier) *
+program.grade())`, plus `Perk::Teardown`'s `salvage_bonus` added as a flat
+addend to the unit count (never a second draw — the discipline the retired
+`roll_work_resource_drop` followed and this reasserts). `units` is split
+across `tool.yields` by weight through `apportion` (below), and then
+`rich_in`'s bonus part is added on top from `tuning::RICH_IN_UNITS`,
+merged into an existing row if the tool's own pool already names the same
+item rather than creating a duplicate one.
+
+### The drop-neutrality gate is a single-point median check, and the tool's `yields` weights have no lever on it
+
+Decision 8 requires phase 1 to be drop-neutral: replacing
+`roll_work_resource_drop` with extraction must not change what an ordinary
+kill actually pays. The gate that stands for that requirement,
+`tests::extraction::the_starter_tool_is_drop_neutral_for_a_median_kill`,
+asserts one point — a median kill (`Ordinary`, `CONDITION_BASE` condition,
+level 1, grade `0.606`) through the starter tool must total exactly `3`
+units, the retired roll's own mean.
+
+`tuning::TOOL_BASE_UNITS`'s own doc comment works out what that test
+actually pins: `round(TOOL_BASE_UNITS * 0.606)` stays `2` (before
+`rich_in`'s flat `+1`) for any `TOOL_BASE_UNITS` in `[2.475, 4.125)` —
+verified empirically against the real rounding boundary, not just
+algebraically. Every value in that roughly-70%-wide band reads as equally
+drop-neutral to this gate, though a starter tool at one end feels rougly
+half again as strong as one at the other in play; only a play session or a
+wider-coverage test (more than one point on the grade curve) could tell
+them apart, and nothing in phase 1 does.
+
+Separately, `apportion` (below) conserves the unit **total** under any
+weighting of `tool.yields` — it only decides which items the fixed unit
+count becomes, never how large that count is — so `salvage_clamp.ron`'s
+particular weights do not enter this gate at all, and no combination of
+authored weights could narrow the band above either. The gate is real
+protection against the *starter tool's overall strength* drifting; it says
+nothing about the *mix* of items a kill pays out, which is a second,
+unmeasured axis a later phase should add coverage for if the mix itself
+ever needs to be load-bearing (a recipe that specifically wants Core
+Fragments over Bytecode Blocks, say).
+
+The gate also only ever measures **per extraction**, while decision 8's own
+wording is "per kill" — a kill and an extraction are the same event only
+because phase 1 has no queue, no store overflow policy beyond a flat
+refusal, and no tick cost distinguishable from an ordinary action. The
+`MAX_DOWNED_PROGRAMS` cap and `tool.ticks`' time cost are both real
+leakage against a strict per-kill reading (a full store forgoes a drop
+entirely; the tick cost is time the retired roll never spent) that this
+gate does not and cannot see, because it calls `extraction_yield` directly
+rather than playing a run. A later phase should measure both once the
+economy is played rather than simulated at one point.
+
+### The yield is a deterministic weighted apportionment, not an RNG draw
+
+`apportion(pool, units)` (`game/extraction.rs`) splits a whole unit count
+across a weighted pool by Hamilton's method — largest-remainder
+apportionment — rather than by drawing `units` times from the pool. Each
+pool entry's exact share is `units * weight / total`; the integer floor of
+that is granted outright, and the pool's fractional remainders are ranked
+largest-first (ties broken by the pool's own order, so two equal
+remainders resolve identically on every call rather than by float-
+comparison happenstance) to hand out whatever units the floors left
+unclaimed.
+
+This is what makes `extraction_yield`'s determinism possible at all — a
+per-unit weighted draw would need `GameRng` and would make two calls with
+identical inputs disagree, which is exactly the gap between a quoted
+preview and a granted result the seam above exists to close. It is also
+why extraction spends no `GameRng` draw: `extraction_yield_spends_no_
+gamerng_draw_even_with_teardown_bought` (`tests/extraction.rs`) asserts
+the seeded stream is bit-identical before and after a call, with
+`Perk::Teardown`'s bonus bought — the one case that might plausibly have
+needed a second roll and doesn't, because the bonus is a flat addend to
+`units` before `apportion` runs, not a second weighted pick.
+
+Hamilton's method carries a known defect, the Alabama paradox: with three
+or more pool entries, one additional unit (`Perk::Teardown`'s bonus, say)
+can *shrink* another entry's allocated share rather than only ever adding
+to the total, because the remainder ranking can reorder as `units` changes.
+Both shipped pools (`salvage_clamp`, `core_tap`) have exactly two entries,
+where the paradox cannot occur — a three-item modded pool that exhibits it
+is the method behaving as documented, not a bug to fix by swapping methods.

@@ -33,6 +33,36 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.92
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+every new field (`DownedPrograms`, `Tools`, `KnownTools`) is additive behind
+`#[serde(default)]`, so a save written before this release loads with none
+carried, exactly the pre-extraction game.
+
+- **A defeated wild program is left behind as a downed program you carry,
+  not a pile of raw materials.** Species, level, rarity, boss flag and a
+  rolled condition all travel with it in a new player store,
+  `components::DownedPrograms`, capped at 10; a kill, a nest cache and a
+  boss kill all leave one.
+- **A carried tool strips a downed program down into what it drops.** The
+  new `assets/tools/*.ron` catalogue ships two — `salvage_clamp` (the
+  starter tool, forged into slot 1 at creation) and `core_tap` — each
+  reaching a different category of the program for a different pool of
+  items, at a ticked time cost.
+- **`Mode::DownedPrograms`, opened from the pack, lists what you're
+  carrying and previews exactly what each installed tool would give before
+  you commit to one.** The previewed figure and the granted one can never
+  differ — both read `Game::extraction_yield`, the one derivation.
+- **The starter tool pays a median kill the same as the material drop it
+  replaces.** `SpeciesDef::work_resource`'s old kill-time drop is retired;
+  every shipped species keeps paying what it always did through the new
+  `rich_in` field, which defaults to `work_resource` and needed no
+  authoring pass.
+- **Extraction is deterministic, not a dice roll.** The yield is a
+  weighted apportionment of a fixed unit count, so it spends no RNG and a
+  quoted preview always matches what you actually get.
+
 ## 0.13.91
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

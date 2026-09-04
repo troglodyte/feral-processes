@@ -249,3 +249,55 @@
   announced **once, on the way out**, with the count actually granted — a
   line per unit turns a batch of twelve into twelve rows of log, and a line
   at the start promises units an abort never delivers.
+
+- **`DownedPrograms` is a third player store, and it is not `Inventory`.**
+  `Inventory::count`/`::take` read the *first* matching row, which is fine
+  for a plain stack and wrong for two kills of different level and rarity —
+  merging them into a per-species row would either force an instance rule
+  onto every other `Inventory` reader (recipes, `Stock`, hauling, banking)
+  or silently collapse two programs that shouldn't collapse. `GearCopies`
+  is the precedent for exactly this shape; `DownedPrograms` reads it and
+  grants *into* `Inventory` via `grant_loot`, never the reverse.
+- **`FIGHT_CONDITION_WEIGHT` ships at `0.0`, and the fight axis is
+  structurally inert, not merely zero-weighted.** `apply_damage` clamps HP
+  to zero before `award_loot` ever runs, so `Game::overkill_term` reads a
+  dead entity's `hp` and is always `0.0` on the real kill path — raising the
+  weight off zero today multiplies a term that can never move. Making the
+  axis live needs the raw blow threaded from `resolve_attack`'s caller into
+  `award_loot`, which nothing in phase 1 does; don't "fix" the weight
+  without first checking whether the term does.
+- **A downed program's `level` is `Game::ability_user_level`, not the
+  player's own level.** Stamping the player's level would measure *when in
+  the run* rather than *what was killed*, and since `extraction_yield`
+  multiplies `DownedProgram::grade()` (which folds `level` in) against a
+  flat base, it would break drop-neutrality by construction. Known gap:
+  `ZoneLevel` doesn't move underground, so a Stack kill's depth never
+  registers on the program it leaves.
+- **`Game::extract_program` is the one door, and its refusals are asserted
+  per refusal, not by one path standing for all three.** A single test over
+  one refusal (say, game-over) proves nothing about whether the
+  out-of-range-index check spends anything before returning its own error —
+  `tests/extraction.rs` has one test per refusal, each checking both the
+  store and `Inventory` are byte-identical to before the call.
+- **`Game::extraction_yield` takes `&self` and draws no `GameRng`, which is
+  what lets the screen's preview and the grant agree without coincidence.**
+  A version drawing per unit would either spend a draw from a screen that
+  grants nothing (corrupting the seeded stream) or quote a distribution
+  instead of a figure — either way "3 Core Fragments" previewed and 2 or 4
+  granted reads as a bug that was never wrong, just nondeterministic.
+- **The drop-neutrality gate is a single point, and `apportion` conserves
+  the unit *total* under any weighting** — so a tool's `yields` weights
+  have no lever on the gate at all, only which items a fixed count becomes.
+  `TOOL_BASE_UNITS`'s own comment names the real band the gate admits
+  (`[2.475, 4.125)`, verified empirically): every value in it reads equally
+  drop-neutral to the test though the tool feels roughly twice as strong at
+  one end as the other in play. The gate also measures per *extraction*,
+  not per *kill* as decision 8 words it — `MAX_DOWNED_PROGRAMS`'s cap and
+  `tool.ticks`' time cost are both real leakage a play session would catch
+  and this test cannot.
+- **`apportion` is Hamilton's method (largest-remainder), not a per-unit
+  draw**, and it carries the Alabama paradox: with three or more pool
+  entries, one extra unit can *shrink* another entry's share rather than
+  only ever adding to the total. Both shipped pools have two entries, where
+  the paradox cannot occur — a three-item modded pool exhibiting it is the
+  method working as documented, not a regression to chase.

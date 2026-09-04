@@ -1,10 +1,10 @@
 //! What a fight pays out — loot, experience, and how it spreads across the party.
 
 use super::support::*;
+use crate::items::DownedProgram;
 use crate::tuning::{
     PARTY_XP_DIVISOR, QUALITY_DROP_BASE, QUALITY_MAX, QUALITY_MIN, QUALITY_SPREAD, QUALITY_STEP,
     STACK_BOSS_PORTAL_FRAGMENT_DROP, SURFACE_BOSS_LOOT_DROPS, SURFACE_BOSS_LOOT_RARITY_FLOOR,
-    TEARDOWN_SALVAGE_PER_LEVEL,
 };
 use crate::*;
 
@@ -50,173 +50,22 @@ fn a_boss(game: &Game) -> SpeciesDef {
         .expect("at least one boss species should exist in assets/species for this test")
 }
 
-/// Teardown adds to the quantity a kill drops rather than rolling again, so
-/// the perk cannot shift the shared RNG stream — every seeded spawn and
-/// combat test downstream of a kill would move with it if it did. Asserts an
-/// exact delta between two kills of the same species for that reason: a
-/// second draw would show up here as a difference the perk's flat term can't
-/// explain.
-#[test]
-fn teardown_adds_flat_salvage_to_a_kill_without_rerolling() {
-    let mut game = Game::new(1, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let player = game.player_entity();
-    let species = game
-        .species_defs()
-        .into_iter()
-        .find(|s| s.work_resource.is_some())
-        .expect("at least one species should have a work_resource for this test");
-    let resource = species.work_resource.clone().unwrap();
-    let carried = |g: &Game| g.world.get::<Inventory>(player).unwrap().count(&resource);
+// `teardown_adds_flat_salvage_to_a_kill_without_rerolling` lived here until
+// program extraction retired the `work_resource` drop it measured —
+// `Perk::Teardown`'s term now belongs in `Game::extraction_yield` (a later
+// phase), and `perks.rs`'s own census
+// (`every_perk_has_a_query_that_answers_what_it_is_worth`) is what still
+// holds `salvage_bonus` to being worth something in the meantime.
 
-    let unperked = {
-        let wild = corpse_of(&mut game, &species.id);
-        let before = carried(&game);
-        game.award_loot(wild);
-        carried(&game) - before
-    };
-
-    // Same seed, same species, same call — so a second game replays the
-    // identical roll and the only difference is the perk.
-    let mut perked_game = Game::new(1, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let perked_player = perked_game.player_entity();
-    perked_game
-        .world
-        .get_mut::<Perks>(perked_player)
-        .unwrap()
-        .points = 20;
-    perked_game.unlock_perk(Perk::Teardown).unwrap();
-    let wild = corpse_of(&mut perked_game, &species.id);
-    let before = perked_game
-        .world
-        .get::<Inventory>(perked_player)
-        .unwrap()
-        .count(&resource);
-    perked_game.award_loot(wild);
-    let perked = perked_game
-        .world
-        .get::<Inventory>(perked_player)
-        .unwrap()
-        .count(&resource)
-        - before;
-
-    assert_eq!(
-        perked,
-        unperked + TEARDOWN_SALVAGE_PER_LEVEL,
-        "one level should add exactly its flat term to the same roll"
-    );
-}
-
-#[test]
-fn award_loot_grants_the_species_work_resource() {
-    let mut game = Game::new(1, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let player = game.player_entity();
-    let species = game
-        .species_defs()
-        .into_iter()
-        .find(|s| s.work_resource.is_some())
-        .expect("at least one species should have a work_resource for this test");
-    let resource = species.work_resource.unwrap();
-
-    let wild = game
-        .world
-        .spawn((
-            Creature {
-                species: species.id.clone(),
-            },
-            Position { x: 0, y: 0 },
-            Stats {
-                hp: 1,
-                max_hp: 1,
-                atk: 1,
-                mitigation: 1,
-            },
-        ))
-        .id();
-
-    let before = game
-        .world
-        .get::<Inventory>(player)
-        .unwrap()
-        .count(&resource);
-    game.award_loot(wild);
-    let after = game
-        .world
-        .get::<Inventory>(player)
-        .unwrap()
-        .count(&resource);
-
-    assert!(
-        after > before,
-        "defeating the program should have granted {resource:?}"
-    );
-    let tagged = game
-        .message_log(10)
-        .into_iter()
-        .any(|e| e.kind == MessageKind::Loot);
-    assert!(
-        tagged,
-        "a resource drop should log a MessageKind::Loot line, got: {:?}",
-        game.message_log(10)
-    );
-}
-
-#[test]
-fn award_loot_grants_nothing_for_species_without_a_work_resource() {
-    let mut game = Game::new(2, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let player = game.player_entity();
-    let species = game
-        .species_defs()
-        .into_iter()
-        .find(|s| s.work_resource.is_none())
-        .expect("at least one species should have no work_resource for this test");
-
-    let wild = game
-        .world
-        .spawn((
-            Creature {
-                species: species.id.clone(),
-            },
-            Position { x: 0, y: 0 },
-            Stats {
-                hp: 1,
-                max_hp: 1,
-                atk: 1,
-                mitigation: 1,
-            },
-        ))
-        .id();
-
-    // Portal Fragments are a universal drop, and gear arrives on its own
-    // `droppable` channel — count neither, so this only measures whether
-    // the absent `work_resource` stayed silent.
-    let count_resources = |game: &Game| -> u32 {
-        let gear_ids: Vec<ItemId> = game
-            .world
-            .resource::<ItemDb>()
-            .all()
-            .filter(|d| d.equipment.is_some())
-            .map(|d| d.id.clone())
-            .collect();
-        game.world
-            .get::<Inventory>(player)
-            .unwrap()
-            .items
-            .iter()
-            .filter(|(item, _)| {
-                *item != ItemId::from(ids::PORTAL_FRAGMENT) && !gear_ids.contains(item)
-            })
-            .map(|(_, q)| *q)
-            .sum()
-    };
-    let before = count_resources(&game);
-    game.award_loot(wild);
-    let after = count_resources(&game);
-
-    assert_eq!(
-        before, after,
-        "no-resource species shouldn't add anything besides a possible portal fragment"
-    );
-}
+// `award_loot_grants_the_species_work_resource` and
+// `award_loot_grants_nothing_for_species_without_a_work_resource` lived here
+// until program extraction retired the direct `work_resource` drop both
+// measured.
+// `a_kill_leaves_exactly_one_downed_program_carrying_species_level_and_rarity`
+// (below) is what replaces the first; the second's premise — a species with
+// a `work_resource` versus one without — no longer distinguishes any
+// observable behaviour, since a kill grants neither species one directly
+// any more.
 
 /// The battle log is where a player meets a dropped item for the first
 /// time, and every screen that lists one — inventory, trade — puts its
@@ -1069,6 +918,21 @@ fn an_affix_is_worth_more_than_its_name() {
 // waits.
 // ---------------------------------------------------------------------------
 
+/// The direct resource grant `award_loot` made per kill before program
+/// extraction retired it (`Game::leave_downed_program` replaced it — see
+/// `docs/superpowers/specs/2026-09-04-program-extraction-design.md` section
+/// 5). Kept here as a manual stand-in so the salvage-tally tests below can
+/// still drive `record_drop`'s own merging, formatting and timing on a
+/// real, guaranteed multi-kill drop — the same way
+/// `a_rare_copy_is_tallied_apart_from_a_plain_one` already drives it
+/// directly rather than through a fight, and for the same reason: no seed
+/// reliably reproduces a specific quantity through the kill path any more,
+/// and these tests were never about that quantity.
+fn drop_a_resource(game: &mut Game, resource: &ItemId, qty: u32) {
+    let landed = game.grant_loot(resource.clone(), qty, LootSource::Kill);
+    game.record_drop(GearCopy::plain(resource.clone()), landed);
+}
+
 /// A pack that actually drops something, in one group, with stats that make
 /// `finish_member` the whole of the fight.
 ///
@@ -1078,6 +942,11 @@ fn an_affix_is_worth_more_than_its_name() {
 /// distance are that fixture's and are load-bearing for the same reason: a
 /// group's size ceiling at a zone-1 spawn point is one member, so a pack
 /// asked for here would silently arrive as a single program.
+///
+/// The species still carries a `work_resource` even though the kill path no
+/// longer pays it automatically: callers that care about the drop use
+/// `drop_a_resource` alongside their own `finish_member` calls, and this
+/// keeps the returned `ItemId` meaningful for them to grant.
 fn battle_with_a_dropping_pack(game: &mut Game, count: usize, hp: i32) -> (ItemId, Vec<Entity>) {
     let player = game.player_entity();
     let species = game
@@ -1137,6 +1006,11 @@ fn a_fight_reports_its_salvage_once() {
 
     let before = held(&game, &resource);
     for _ in 0..members.len() {
+        // Before `finish_member`, matching where `award_loot` used to grant
+        // it — `finish_member`'s own last kill ends the battle, and a drop
+        // granted after that point is "outside a battle" and gets its own,
+        // separate immediate tally instead of joining this one.
+        drop_a_resource(&mut game, &resource, 2);
         game.finish_member(0, 0, player);
     }
     let gained = held(&game, &resource) - before;
@@ -1272,6 +1146,7 @@ fn jacking_out_still_reports_what_was_killed() {
     let (resource, _) = battle_with_a_dropping_pack(&mut game, 3, 1);
 
     let before = held(&game, &resource);
+    drop_a_resource(&mut game, &resource, 2);
     game.finish_member(0, 0, player);
     let gained = held(&game, &resource) - before;
     flee_until_clear(&mut game);
@@ -1292,26 +1167,27 @@ fn jacking_out_still_reports_what_was_killed() {
 /// through the same formatter, so the two paths cannot come to word it
 /// differently. Nothing in the game reaches `award_loot` outside a fight
 /// today; this is what stops the next thing that does from paying silently.
+///
+/// A boss's gear drop is the guaranteed-drop premise this test needs since
+/// program extraction retired the ordinary species' direct resource grant
+/// (`pay_surface_boss_gear` rolls with replacement from a pool that falls
+/// back to "the best gear there is" rather than ever landing empty).
 #[test]
 fn a_drop_outside_a_battle_is_announced_at_once() {
     let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species = game
-        .species_defs()
-        .into_iter()
-        .find(|s| s.work_resource.is_some() && !s.is_boss)
-        .expect("at least one non-boss species should carry a work_resource");
-    let resource = species.work_resource.clone().unwrap();
-    let corpse = corpse_of(&mut game, &species.id);
+    let boss = a_boss(&game);
+    let corpse = corpse_of(&mut game, &boss.id);
 
-    let before = held(&game, &resource);
     game.award_loot(corpse);
-    let gained = held(&game, &resource) - before;
 
     let lines = log_texts(&game);
     assert!(lines.iter().any(|t| *t == "Salvage:"), "{lines:#?}");
     assert!(
-        lines.contains(&format!("  {gained} {}", game.item_name_tagged(&resource))),
-        "{lines:#?}"
+        lines
+            .iter()
+            .any(|t| t.starts_with("  ") && *t != "Salvage:"),
+        "expected at least one drop row under the header, announced immediately \
+         rather than deferred: {lines:#?}"
     );
 }
 
@@ -1627,8 +1503,18 @@ fn a_name_carries_the_quality_only_when_it_is_off_spec() {
 /// A one-round fight against a single 1-HP program, resolved through the
 /// real round loop so the narration actually exists. `finish_member` on its
 /// own writes the payout without ever opening a round.
+///
+/// Killed through the real `award_loot` rather than `finish_member` called
+/// directly, so there is no seam to slip a manual `drop_a_resource` call
+/// into the way the `battle_with_a_dropping_pack` tests do — the `Boss`
+/// insert is what guarantees this kill still has something to salvage now
+/// that an ordinary kill's direct resource grant is gone:
+/// `pay_surface_boss_gear` rolls with replacement from a pool that falls
+/// back to "the best gear there is" rather than ever landing empty, and
+/// bosshood affects no stat this hand-built 1-HP body reads.
 fn win_a_fight_in_one_round(game: &mut Game) {
-    battle_with_a_dropping_pack(game, 1, 1);
+    let (_, members) = battle_with_a_dropping_pack(game, 1, 1);
+    game.world.entity_mut(members[0]).insert(Boss);
     // `insert_battle` stands a `BattleState` up without going through
     // `begin_battle`, so the log has no battle mark and the prune would find
     // nothing to slice against — it would pass by doing nothing at all.
@@ -1951,5 +1837,122 @@ fn a_downed_program_loads_back_downed() {
         query.iter(&loaded.world).count(),
         1,
         "the benched program should load back benched"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Program extraction, phase 1: a kill leaves a downed program instead of
+// paying its species' `work_resource` directly — see
+// `docs/superpowers/specs/2026-09-04-program-extraction-design.md` section
+// 5 and `Game::leave_downed_program`. `tests/extraction.rs` covers the
+// condition roll's own formula in isolation; these exercise it wired up to
+// a real kill.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_kill_leaves_exactly_one_downed_program_carrying_species_level_and_rarity() {
+    let mut game = Game::new(910, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|s| !s.is_boss)
+        .expect("the shipped roster is not all bosses");
+
+    let wild = corpse_of(&mut game, &species.id);
+    game.world.entity_mut(wild).insert(Rarity::Gold);
+
+    game.award_loot(wild);
+
+    let held = &game.world.get::<DownedPrograms>(player).unwrap().0;
+    assert_eq!(
+        held.len(),
+        1,
+        "a kill should leave exactly one downed program: {held:?}"
+    );
+    let program = &held[0];
+    assert_eq!(program.species, species.id, "the species must carry over");
+    assert_eq!(
+        program.level, 1,
+        "a fresh player is level 1, and level has no other source on a wild Creature"
+    );
+    assert_eq!(program.rarity, Rarity::Gold, "the rarity must carry over");
+    assert!(
+        !program.boss,
+        "an ordinary kill must not carry the boss flag"
+    );
+}
+
+#[test]
+fn a_boss_kills_program_is_at_or_above_both_floors() {
+    let mut game = Game::new(911, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|s| !s.is_boss)
+        .expect("the shipped roster is not all bosses");
+
+    let wild = corpse_of(&mut game, &species.id);
+    game.world.entity_mut(wild).insert(Boss);
+    // No `Rarity` component: `Ordinary` is the default, so a floor above
+    // it — not a lucky roll — is what has to lift this program's rarity.
+
+    game.award_loot(wild);
+
+    let held = &game.world.get::<DownedPrograms>(player).unwrap().0;
+    let program = &held[0];
+    assert!(program.boss, "test premise: the kill must be a boss");
+    assert!(
+        program.condition >= crate::tuning::BOSS_CONDITION_FLOOR,
+        "a boss's condition must be at or above BOSS_CONDITION_FLOOR: {}",
+        program.condition
+    );
+    assert!(
+        program.rarity >= crate::tuning::BOSS_RARITY_FLOOR,
+        "a boss's rarity must be at or above BOSS_RARITY_FLOOR: {:?}",
+        program.rarity
+    );
+}
+
+#[test]
+fn a_full_store_refuses_the_drop_logs_and_destroys_nothing() {
+    let mut game = Game::new(912, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|s| !s.is_boss)
+        .expect("the shipped roster is not all bosses");
+
+    let filler = DownedProgram {
+        species: species.id.clone(),
+        level: 1,
+        rarity: Rarity::Ordinary,
+        boss: false,
+        condition: 50,
+    };
+    game.world.get_mut::<DownedPrograms>(player).unwrap().0 =
+        vec![filler.clone(); tuning::MAX_DOWNED_PROGRAMS];
+
+    let wild = corpse_of(&mut game, &species.id);
+    let granted = game.leave_downed_program(wild);
+
+    assert!(!granted, "a full store must refuse the drop");
+    let held = &game.world.get::<DownedPrograms>(player).unwrap().0;
+    assert_eq!(
+        held.len(),
+        tuning::MAX_DOWNED_PROGRAMS,
+        "a refusal must not grow the store"
+    );
+    assert!(
+        held.iter().all(|p| *p == filler),
+        "a refusal must destroy nothing already held: {held:?}"
+    );
+
+    let log = game.message_log(20);
+    assert!(
+        log.iter().any(|l| l.text.contains("No room")),
+        "the refusal must be logged: {log:?}"
     );
 }

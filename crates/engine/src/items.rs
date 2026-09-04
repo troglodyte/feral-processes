@@ -2,6 +2,7 @@ use crate::affixes::AffixId;
 use crate::components::Rarity;
 use crate::species::SpeciesId;
 use crate::tuning::{
+    CONDITION_BASE, CONDITION_BOSS_BONUS, CONDITION_PER_RARITY_STEP, FIGHT_CONDITION_WEIGHT,
     GEAR_LEVEL_STEP, GEAR_RARITY_MIN_BONUS_PER_RUNG, GRADE_PER_LEVEL, GRADE_PER_RARITY_RUNG,
     ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_MIN_BONUS_PER_TIER, QUALITY_ABOVE_MAX, QUALITY_DEFAULT,
     QUALITY_SPEC_MAX, QUALITY_UNDER_MAX,
@@ -367,6 +368,30 @@ impl DownedProgram {
         let rarity = 1.0 + self.rarity.rank() as f32 * GRADE_PER_RARITY_RUNG;
         let level = 1.0 + self.level as f32 * GRADE_PER_LEVEL;
         condition * rarity * level
+    }
+
+    /// The condition roll a kill takes once, at the moment it leaves a
+    /// program behind — spec section 1's formula, verbatim.
+    /// `Game::leave_downed_program` is the one caller, so a boss's own
+    /// floors (`tuning::BOSS_CONDITION_FLOOR`) apply there rather than here:
+    /// this function knows only what a kill's own terms are worth, not that
+    /// a boss's result gets raised afterward.
+    ///
+    /// `overkill_term` is a plain `f32`, not read off a live entity here, so
+    /// this stays pure and directly testable against
+    /// `FIGHT_CONDITION_WEIGHT = 0.0`'s independence claim without a `Game`
+    /// in the room. Multiplying by `0.0` rather than an `if` on the weight:
+    /// the axis is meant to fall out of the formula for free the day a
+    /// non-zero value earns a play session, not be wired in as a second
+    /// branch then.
+    pub(crate) fn roll_condition(rarity: Rarity, boss: bool, overkill_term: f32) -> u8 {
+        let boss_bonus = if boss { CONDITION_BOSS_BONUS as i32 } else { 0 };
+        let fight_term = (FIGHT_CONDITION_WEIGHT * overkill_term).round() as i32;
+        let raw = CONDITION_BASE as i32
+            + CONDITION_PER_RARITY_STEP as i32 * rarity.rank() as i32
+            + boss_bonus
+            + fight_term;
+        raw.clamp(0, 100) as u8
     }
 }
 

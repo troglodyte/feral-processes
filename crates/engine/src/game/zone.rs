@@ -1,9 +1,10 @@
 //! The zone the player currently stands in: locating things on the map,
 //! and stepping through a portal to the next zone.
 
+use crate::items::DownedProgram;
 use crate::tuning::{
     NEST_CACHE_CREDIT_ZONE_BONUS, NEST_CACHE_CREDITS, NEST_CACHE_EQUIPMENT_ROLLS,
-    NEST_CACHE_WORK_RESOURCE_MULT, NEST_ORPHAN_CHANCE, STACK_LINKS_PER_ZONE, WORK_RESOURCE_DROP,
+    NEST_CACHE_PROGRAM_COUNT, NEST_ORPHAN_CHANCE, STACK_LINKS_PER_ZONE,
 };
 use crate::*;
 
@@ -85,20 +86,29 @@ impl Game {
             return;
         };
 
-        if let Some(resource) = &species.work_resource {
-            let qty = {
-                let mut rng = self.world.resource_mut::<GameRng>();
-                rng.0.random_range(WORK_RESOURCE_DROP) * NEST_CACHE_WORK_RESOURCE_MULT
-            };
-            let landed = self.grant_loot(resource.clone(), qty, LootSource::Cache);
-            if landed > 0 {
+        // `NEST_CACHE_PROGRAM_COUNT` programs of the nest's own species
+        // rather than the guardians' own kills paying twice — each
+        // guardian already left its own downed program on the way down
+        // (`Game::leave_downed_program`, from the ordinary kill path); this
+        // is the wreckage itself, on top of that.
+        for _ in 0..NEST_CACHE_PROGRAM_COUNT {
+            let level = self
+                .world
+                .get::<Experience>(self.player_entity())
+                .map(|e| e.level)
+                .unwrap_or(1);
+            let condition = DownedProgram::roll_condition(Rarity::Ordinary, false, 0.0);
+            let landed = self.push_downed_program(DownedProgram {
+                species: species_id.clone(),
+                level,
+                rarity: Rarity::Ordinary,
+                boss: false,
+                condition,
+            });
+            if landed {
                 self.log_kind(
                     MessageKind::Loot,
-                    format!(
-                        "The wreckage yields {} {}.",
-                        landed,
-                        self.item_name(resource)
-                    ),
+                    format!("The wreckage yields a downed {}.", species.name),
                 );
             }
         }

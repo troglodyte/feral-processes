@@ -5,7 +5,7 @@ use bevy_ecs::prelude::{Entity, With};
 
 use super::support::{scratch_assets_dir, stand_in_base, test_assets_dir};
 use crate::Game;
-use crate::components::{Glyph, GlyphColor, Position, Structure};
+use crate::components::{DownedPrograms, Glyph, GlyphColor, Position, Structure};
 use crate::game::party::ProgramRole;
 use crate::game::sortie::{SortieReach, SortieRefusal};
 use crate::resources::DifficultyMode;
@@ -755,6 +755,34 @@ fn a_dispatched_sortie(seed: u32, mode: DifficultyMode) -> (Game, Vec<Entity>) {
     game.dispatch_sortie(&site, &squad)
         .expect("a legal dispatch");
     (game, squad)
+}
+
+/// A sortie's kill leaves a downed program on the player through
+/// `Game::leave_downed_program` — the same call an ordinary kill makes, not
+/// a copy of it (`game/combat_rewards.rs`'s own reason for splitting that
+/// function out in the first place: a sortie paying through a drifted
+/// second copy is exactly the trap `Perk::Teardown` used to fall into).
+///
+/// Swept across seeds, `nest_orphans_across`'s reason nearby: whether a
+/// battle this tick lands any kill at all depends on the habitat draw and
+/// the fight's own rolls, so a single seed proves only its own outcome.
+#[test]
+fn a_sortie_kill_leaves_a_downed_program_on_the_player() {
+    let found = (5000..5020).any(|seed| {
+        let (mut game, _) = a_dispatched_sortie(seed, DifficultyMode::Forgiving);
+        let player = game.player_entity();
+        let before = game.world.get::<DownedPrograms>(player).unwrap().0.len();
+        let total = game.world.resource::<Sorties>().0[0].ticks_total;
+        for _ in 0..(total - 1) {
+            game.wait();
+        }
+        let after = game.world.get::<DownedPrograms>(player).unwrap().0.len();
+        after > before
+    });
+    assert!(
+        found,
+        "no seed in the sweep left a downed program on the player after a sortie kill"
+    );
 }
 
 /// **The load-bearing test of the feature.** A battle spawns its

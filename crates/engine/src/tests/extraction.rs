@@ -252,3 +252,46 @@ fn a_malformed_tool_file_is_skipped_while_its_neighbour_still_loads() {
         warnings[0]
     );
 }
+
+// ---------------------------------------------------------------------------
+// The condition roll — `DownedProgram::roll_condition`, section 1's formula.
+// A kill leaving a program at all is `tests/combat_rewards.rs`'s territory;
+// this is the pure formula in isolation, so the `FIGHT_CONDITION_WEIGHT`
+// independence claim doesn't need a `Game` or a live kill to assert.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn condition_is_independent_of_overkill_while_the_fight_weight_is_zero() {
+    assert_eq!(
+        tuning::FIGHT_CONDITION_WEIGHT,
+        0.0,
+        "test premise: the fight axis ships at 0.0 — see tuning.rs's own doc for why"
+    );
+    let clean_kill = DownedProgram::roll_condition(Rarity::Gold, false, 0.0);
+    let messy_kill = DownedProgram::roll_condition(Rarity::Gold, false, -0.97);
+    assert_eq!(
+        clean_kill, messy_kill,
+        "two kills differing only in overkill must roll the same condition while the fight \
+         axis is off"
+    );
+}
+
+#[test]
+fn condition_still_rises_with_rarity_and_a_boss_bonus() {
+    // The positive control for the test above: the other two terms of the
+    // same formula must still move, or "independent of overkill" would be
+    // vacuously true because nothing in the formula does anything.
+    let ordinary = DownedProgram::roll_condition(Rarity::Ordinary, false, 0.0);
+    let gold = DownedProgram::roll_condition(Rarity::Gold, false, 0.0);
+    assert!(
+        gold > ordinary,
+        "a rarer kill should roll a higher condition: {ordinary} vs {gold}"
+    );
+
+    let plain = DownedProgram::roll_condition(Rarity::Ordinary, false, 0.0);
+    let boss = DownedProgram::roll_condition(Rarity::Ordinary, true, 0.0);
+    assert!(
+        boss > plain,
+        "a boss kill should roll a higher condition: {plain} vs {boss}"
+    );
+}

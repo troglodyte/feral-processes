@@ -2072,11 +2072,14 @@ pub const NEST_AGGRO_LEASH_RADIUS: i32 = 15;
 /// Added to the leash radius to size the search box.
 pub const NEST_PATH_SEARCH_MARGIN: i32 = 5;
 
-/// Multiplier on an ordinary `WORK_RESOURCE_DROP` roll (see `Game::award_loot`)
-/// applied to the resource a destroyed nest's species pays out (see
-/// `Game::grant_nest_cache`) — the cache reads as several kills' worth of
-/// `work_resource` at once, not a single kill's drop.
-pub const NEST_CACHE_WORK_RESOURCE_MULT: u32 = 4;
+/// How many downed programs of its own species a destroyed nest leaves
+/// (`Game::grant_nest_cache`), replacing the flat `work_resource` roll that
+/// used to pay here (`NEST_CACHE_WORK_RESOURCE_MULT`, retired with
+/// `roll_work_resource_drop`). More than one kill's worth
+/// (`Game::leave_downed_program` leaves exactly one), the same way the old
+/// multiplier read the cache as several kills at once — but well under
+/// `MAX_DOWNED_PROGRAMS`, so a single nest cannot fill the store on its own.
+pub const NEST_CACHE_PROGRAM_COUNT: usize = 2;
 
 /// Trade currency a destroyed nest pays (see `Game::grant_nest_cache`),
 /// before `NEST_CACHE_CREDIT_ZONE_BONUS`.
@@ -3994,6 +3997,20 @@ pub const CONDITION_BOSS_BONUS: u8 = 10;
 /// behind it yet. Do not delete this constant for reading as unused, and
 /// do not fit a non-zero value without one.
 pub const FIGHT_CONDITION_WEIGHT: f32 = 0.0;
+
+/// The floor a boss's own downed program's `condition` cannot fall below —
+/// applied on top of the ordinary roll, in `Game::leave_downed_program`. A
+/// boss fight ends standing over a single, stationary target, so what it
+/// leaves behind is never the ragged result an unlucky pack kill can be.
+pub const BOSS_CONDITION_FLOOR: u8 = 80;
+
+/// The floor a boss's own downed program's `rarity` cannot fall below —
+/// `Rarity::max` against the ordinary roll, the same way
+/// `BOSS_CONDITION_FLOOR` floors condition. A boss is already a wall by
+/// `pay_surface_boss_gear`'s own `SURFACE_BOSS_LOOT_RARITY_FLOOR`; this is
+/// that same guarantee applied to what it leaves behind rather than what it
+/// pays directly.
+pub const BOSS_RARITY_FLOOR: Rarity = Rarity::Gold;
 
 /// How much each rung of `Rarity::rank` adds to `DownedProgram::grade`'s
 /// multiplier, on top of the `1.0` an `Ordinary` program contributes.

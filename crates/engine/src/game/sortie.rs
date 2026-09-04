@@ -500,10 +500,9 @@ impl Game {
         }
 
         // Priced while the fallen are still standing there: `kill_xp` and
-        // `roll_work_resource_drop` both read the victim's own components,
-        // so neither can move below the despawn.
+        // `leave_downed_program` both read the victim's own components, so
+        // neither can move below the despawn.
         let mut earned = 0;
-        let mut haul: Vec<(ItemId, u32)> = Vec::new();
         for &hostile in &hostiles {
             if self.creature_alive(hostile) {
                 continue;
@@ -515,16 +514,13 @@ impl Game {
                     self.award_companion_xp(member, paid);
                 }
             }
-            // The same drop a kill in front of the player pays, through the
-            // same roll — accumulated into the record rather than granted,
-            // because the party is not there to pick it up. It goes to a
-            // Depot when the squad walks back in.
-            if let Some((item, qty)) = self.roll_work_resource_drop(hostile) {
-                match haul.iter_mut().find(|(held, _)| *held == item) {
-                    Some((_, held)) => *held += qty,
-                    None => haul.push((item, qty)),
-                }
-            }
+            // The same door a kill in front of the player leaves a program
+            // through, called rather than copied for `leave_downed_program`'s
+            // own reason. Unlike loot, this writes straight to the player's
+            // `DownedPrograms` rather than banking into `sortie.loot` for a
+            // Depot to receive later — a travel-and-deliver record for
+            // programs is `Sortie::programs`, phase 3's to build.
+            self.leave_downed_program(hostile);
         }
 
         // **Unconditional, and every hostile, living or not.** Whatever the
@@ -551,12 +547,6 @@ impl Game {
         sortie.battles_done += 1;
         sortie.kills += kills as u32;
         sortie.xp += earned;
-        for (item, qty) in haul {
-            match sortie.loot.iter_mut().find(|(held, _)| *held == item) {
-                Some((_, held)) => *held += qty,
-                None => sortie.loot.push((item, qty)),
-            }
-        }
         if let Some((entity, name)) = downed {
             sortie.aborted = true;
             sortie.casualties.push(name);

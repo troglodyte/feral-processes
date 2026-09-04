@@ -97,10 +97,13 @@ pub enum Perk {
     /// same `Game::pet_capacity` a Data Cache's `pet_slot_bonus` feeds — so
     /// what the perk buys survives losing the structures.
     ProcessPool,
-    /// Adds `TEARDOWN_SALVAGE_PER_LEVEL` per level to the work resource a
-    /// kill drops, on top of the `WORK_RESOURCE_DROP` roll rather than as a
-    /// second draw: the shared `GameRng` stream must not move, or every
-    /// seeded spawn and combat test downstream of a kill moves with it.
+    /// Adds `TEARDOWN_SALVAGE_PER_LEVEL` per level, once a bonus a kill's
+    /// own `work_resource` drop took directly. That drop is gone —
+    /// `Game::leave_downed_program` replaced it — so this perk's term now
+    /// belongs in `Game::extraction_yield`'s formula (the tool that
+    /// consumes a downed program), a later phase's to wire in.
+    /// `salvage_bonus` below still answers what the perk is worth; it is
+    /// only unread until that call site exists.
     Teardown,
     /// Adds `FAILOVER_REPAIR_PER_LEVEL` per level to the base-wide repair
     /// rate (`Game::total_repair_rate`), which is what a Patch Node
@@ -275,10 +278,10 @@ pub fn roster_slot_bonus(perks: Option<&crate::components::Perks>) -> usize {
     level(perks, Perk::ProcessPool) as usize * crate::tuning::PROCESS_POOL_SLOTS_PER_LEVEL
 }
 
-/// What `Perk::Teardown` adds to a kill's work-resource drop.
-///
-/// Added to the roll rather than drawn for — see the variant's doc: a second
-/// draw would shift the shared `GameRng` stream on essentially every fight.
+/// What `Perk::Teardown` is worth — see the variant's doc for where this
+/// term belongs now (`Game::extraction_yield`, not yet built) and why it is
+/// still a plain addend rather than a second `GameRng` draw once it is
+/// wired in there.
 pub fn salvage_bonus(perks: Option<&crate::components::Perks>) -> u32 {
     crate::tuning::TEARDOWN_SALVAGE_PER_LEVEL * level(perks, Perk::Teardown)
 }

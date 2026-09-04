@@ -33,6 +33,33 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.94
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` is untouched —
+nothing here reaches the save at all.
+
+- **Powering down out in the field can be interrupted.** A charged rest rolls
+  `REST_AMBUSH_CHANCE` once the charge has been taken; on a hit a pack engages,
+  the outlet is spent and nothing is restored.
+- **A free rest inside your base never rolls**, and it is safe by placement
+  rather than by a locale check — the roll rides the branch that takes the
+  charge, so base space cannot lapse into being rollable.
+- **A jumped rest clears nothing**, which is the rule a refused rest already
+  followed: the heal, the Power refill and the field buffs all sit below the
+  roll.
+- **A roll that hits but fields no pack lapses into an ordinary rest**, so a
+  charge is never burnt for no fight at all.
+- **`surface_ambush_pack` is an extraction out of `maybe_ambush`, not a copy.**
+  A rest is the first roll site that cannot know its locale by construction, so
+  the two pack builders are named as a pair and each states its placement rules
+  once.
+- **Three app-core fixtures no longer use a field rest as a one-line map
+  action**, since `r` can now open a battle.
+- **Sprite Forge's test scratch directory no longer races itself.** Keyed on
+  the pid alone it was shared by all 21 sprite-forge tests at once, so a full
+  workspace run failed intermittently on `AlreadyExists` — never when the file
+  was run alone, which is the shape that reads as unrelated.
+
 ## 0.13.93
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` is untouched —

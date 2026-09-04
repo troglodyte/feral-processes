@@ -870,9 +870,12 @@ fn a_key_pressed_while_map_news_scrolls_in_still_acts() {
     app.advance_reveal(1_000.0);
     assert!(!app.is_revealing(), "the fixture did not settle");
 
-    // Any map action that logs will do; a refused rest is the one that
-    // neither ticks the world nor depends on where the player is standing.
-    app.handle_key(GameKey::Char('r'));
+    // Any map action that logs will do. Draining a Power Cell is the one
+    // that neither ticks the world nor depends on where the player is
+    // standing — and, unlike a rest, cannot open a battle: a charged field
+    // rest rolls `REST_AMBUSH_CHANCE`, so `r` stopped being a one-line
+    // action the moment that shipped.
+    app.handle_key(GameKey::Char('e'));
     assert_eq!(app.mode, Mode::Playing, "the fixture left the map");
     app.advance_reveal(0.0);
 
@@ -894,13 +897,16 @@ fn map_news_reaches_the_pane_without_waiting_for_a_reveal() {
     app.advance_reveal(1_000.0);
     let before = app.visible_log(40).len();
 
-    app.handle_key(GameKey::Char('r'));
+    // `e` rather than `r` for the reason given in
+    // `a_key_pressed_while_map_news_scrolls_in_still_acts`: a field rest can
+    // now be interrupted, and an interrupted one opens a battle.
+    app.handle_key(GameKey::Char('e'));
     app.advance_reveal(0.0);
 
     assert_eq!(app.hidden_log_lines(), 0, "the map pane held a line back");
     assert!(
         app.visible_log(40).len() > before,
-        "the refusal never reached the pane"
+        "the line never reached the pane"
     );
 }
 

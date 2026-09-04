@@ -76,14 +76,17 @@ fn up_and_down_scroll_the_history_without_leaving_it() {
 #[test]
 fn repeated_lines_are_one_scrollable_row() {
     let mut app = test_app(96);
-    app.handle_key(GameKey::Char('r'));
-    app.handle_key(GameKey::Char('r'));
+    // Two drains rather than two rests: a charged field rest rolls
+    // `REST_AMBUSH_CHANCE`, so the second `r` could be answered by the
+    // battle gate instead of repeating the first line.
+    app.handle_key(GameKey::Char('e'));
+    app.handle_key(GameKey::Char('e'));
     let game = app.game.as_ref().unwrap();
     let raw = game.message_log(MESSAGE_LOG_CAP).len();
     let rows = game.message_history(MESSAGE_LOG_CAP).len();
     assert!(
         rows < raw,
-        "two identical refusals should fold into one row ({raw} lines, {rows} rows)"
+        "two identical lines should fold into one row ({raw} lines, {rows} rows)"
     );
 
     app.handle_key(GameKey::Char('L'));

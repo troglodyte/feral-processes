@@ -16,9 +16,11 @@
   rides the **research** file, where `min_zone` and `unlocks_recipes` are
   already one edit; on `ItemDef` instead it would split the gate from the
   recipe and collide with `scavenged_gear_stays_benchless_and_fragment_only`.
-  Cache Grain **crosses a breach** (no `role`, and `enter_next_zone` wipes
-  only the two currencies); a new tier must never retire the one below it.
-  Fixtures stock through `stock_upgrade_materials`.
+  Cache Grain **crosses a breach**, but so does everything else in
+  `Inventory` now — `enter_next_zone` no longer wipes anything item-side,
+  Core and Portal Fragments included, so having no `role` no longer sets
+  Cache Grain apart the way it once did. A new tier must never retire the
+  one below it regardless. Fixtures stock through `stock_upgrade_materials`.
 
 - **A carried copy of gear is one value, `items::GearCopy`**, and `Inventory`
   is by definition the *plain-copy* store. `GearCopy::is_plain` decides which

@@ -1,6 +1,6 @@
 (
     id: "cache_grain",
     name: "Cache Grain",
-    description: "Coherent memory lifted a line at a time out of a sector's cache fabric. What everything past the first breach is built from — advanced structures, deeper upgrades, and the gear a zone-gated blueprint compiles. Unlike Core Fragments it is a material rather than currency, so it survives a breach.",
+    description: "Coherent memory lifted a line at a time out of a sector's cache fabric. What everything past the first breach is built from — advanced structures, deeper upgrades, and the gear a zone-gated blueprint compiles.",
     value: Some(1),
 )

@@ -16,8 +16,9 @@
   different spaces: base space has one origin — the pocket is laid around it
   and `leave_base` refuses to let the party out anywhere else — while the
   anchor is a zone-surface fixture, so `place_structure` puts it on the tile
-  the party founded from through `Game::move_anchor_to`, the one writer,
-  shared with `enter_next_zone`. **The one refusal it needed is a Stack
+  the party founded from through `Game::move_anchor_to` — its only caller
+  now that the world is persistent and a breach no longer moves the
+  anchor along with a reseeded zone. **The one refusal it needed is a Stack
   link**: a link tile is walked onto to *descend*, so an anchor sharing one
   could never be stepped on to be entered, and the check sits with
   `require_surface` where the door tile is resolved rather than beside the
@@ -248,13 +249,19 @@
   **measured**, `stock::fits`, for the status column's reason: an over-wide
   row is drawn off the panel in silence, so what does not fit is counted.
 - **Base space carries its own seed, and it is not `WorldMap::seed()`.**
-  `BaseGrid::seed` is minted at `Game::new` and saved with the grid, because
-  `enter_next_zone` mints each zone's map from
-  `seed().wrapping_add(0x9E37_79B9)` while the base *travels*. Salted off the
-  world seed, every rock seam in the base reshuffles on a breach and a
-  half-cut wall reloads as a different kind under an already-spent
-  `Durability`. `base_spaces_seed_and_its_seams_survive_a_breach` asserts
-  **both** halves — that the world seed moved and the base's did not.
+  `BaseGrid::seed` is minted at `Game::new` and saved with the grid. The
+  world is persistent now — one `WorldMap`, never reseeded — so the two
+  seeds can no longer diverge in practice, but the field stays separate on
+  purpose: `BaseGrid` is out of phase from the zone surface and has no
+  business reading a resource that belongs to a different subsystem.
+  Before the world went persistent this mattered for a sharper reason —
+  `enter_next_zone` re-minted every zone's map, so a base salted off the
+  world seed would have every rock seam reshuffle on a breach, a half-cut
+  wall reloading as a different kind under an already-spent `Durability`.
+  `base_spaces_seed_and_its_seams_survive_a_breach` still asserts both
+  halves — the world seed and the base's — but neither moves any more, so
+  it also asserts the zone level advanced first, or it would pass against
+  a call that never actually breached.
 - **A base-space cell's kind is derived, never stored**, `rock::RockDb::
   kind_at` — an FNV-1a fold of that seed and the **block** the coordinate
   falls in, reduced through `derive::index`. Blocked, or kinds are pepper and
@@ -269,10 +276,14 @@
   forbids. Player and crew meet it identically because `strike_rock` is the
   one door.
 - **A rock kind authors a brightness, never a hue or a colour.** Hue answers
-  passability for the whole map, and `biome_tint` rotates it per sector — an
-  authored hue would fight that rotation and a seam would change appearance
-  on a breach. `SHADE_BAND`'s floor of 1.0 is load-bearing: a face darker
-  than the wall around it is harder to see than anonymous rock.
+  passability for the whole map, and a rock kind may not spend that signal.
+  Sectors are retired and `biome_tint` no longer rotates anything — one
+  fixed reference table for the whole run — so the sharper danger this rule
+  used to close (an authored hue fighting that rotation, a seam changing
+  appearance on a breach) is gone with them; the passability rule alone is
+  still sufficient reason on its own. `SHADE_BAND`'s floor of 1.0 is
+  load-bearing: a face darker than the wall around it is harder to see than
+  anonymous rock.
 - **Only an *exposed* face shows its kind, and that is a display rule
   only.** `BaseGrid::is_exposed` — solid, with an **orthogonal** walkable
   neighbour — derived per lookup because cutting, and entropy re-knitting,
@@ -526,8 +537,8 @@
   `wander_step` offers one of the eight neighbours of the tile the body is
   *standing on*, or a hold, every `IDLE_STAFF_STEP_TICKS` — relative, where
   the ring it replaced was absolute. Pure, RNG-free and folded **a byte at
-  a time**, `sectors::sector_seed`'s idiom: `derive::index` reads bit 63 and
-  a step counter folded whole never reaches it. **`is_floor`, never
+  a time**, `descriptions::Slot::tags`'s idiom: `derive::index` reads bit 63
+  and a step counter folded whole never reaches it. **`is_floor`, never
   `walkable`** — entropy reverts a mined `Open` cell nobody stands on, and a
   wanderer sealed into a fresh corridor is unpostable for the rest of the
   run, so the paving is the roam limit and there is no radius to tune. A test
@@ -580,8 +591,11 @@
   `remove_structure`. Anything that must happen as a structure comes down
   needs wiring into both.
 - **A trader's buyback shelf is keyed by `(kind, tile)`, not by `Entity`**, so
-  it outlives the building. **Breaching does not despawn structures** —
-  anything zone-local has to be wiped by name in `enter_next_zone`.
+  it outlives the building — and now outlives a breach too. **Breaching
+  does not despawn structures**, and the world is persistent now, so the
+  ledger is not wiped at breach either any more: `StackMemory` and
+  `PopulatedChunks` are the two base-adjacent resources still wiped by
+  name in `enter_next_zone`, not `BuybackLedger`.
 - **Three of the five classes do something at a post, each in a different
   system.** The Leech bonus rides the **scaled** branch only, which is why
   `CycleModifiers` carries the *class* rather than a finished bonus. The

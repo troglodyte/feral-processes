@@ -51,8 +51,12 @@
   salting scheme — don't invent a second that could collide.
 - **A Stack frame is regenerated; what the party *saw* of it is saved.**
   `stack::generate` is pure in `FrameSpec`; `resources::StackMemory` holds the
-  run's history. Keyed by `(link tile, depth)` and zone-local, so like
-  `BuybackLedger` it must be wiped **by name** in `enter_next_zone`.
+  run's history. Keyed by `(entrance, depth)`, cleared **by name** in
+  `enter_next_zone` — not because it is "zone-local" (the world is
+  persistent and most zone-local wipes are gone), but because `FrameSpec`
+  now folds `ZoneLevel`'s tier into `rng_seed`: a link that survives a
+  breach in place hands back a re-carved frame, and the old memory
+  describes one that no longer exists.
 - **`view_cone` is the one walk both Stack views are built from**, and
   `visible_rows` is where sight stops. **Never at `ahead == 0`** — a cell
   cannot hide the party from their own surroundings. Both are `fn`, not

@@ -312,21 +312,6 @@ impl Game {
             .then_some(entity)
     }
 
-    /// Breaches the player (and any tamed programs they own) forward into
-    /// the next zone sector: wild programs and nests are left behind
-    /// (despawned — there's no portal back down), a fresh sector is
-    /// generated from a new seed, and wild programs there spawn with stats
-    /// scaled by the new zone's `ZoneLevel::stat_multiplier`.
-    ///
-    /// The player's base is out of phase, not on the zone surface, so a
-    /// breach does not touch it at all: every `Structure` keeps its own
-    /// `base_grid::BaseGrid` coordinate, untouched, and so does the grid
-    /// itself. The Portal itself is consumed by `move_player` before this
-    /// runs, so it never makes the trip.
-    ///
-    /// Spendable currency doesn't make the trip either — see the wipe at the
-    /// end of this function. Gear, supplies, fusion tiers and banked Research
-    /// Data all do.
     /// Raises the world's tier.
     ///
     /// A breach used to be a migration: every hostile, nest and Stack

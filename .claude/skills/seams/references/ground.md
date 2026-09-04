@@ -13,9 +13,16 @@
   that swallowed the name too. Terrain never costs Power and never raises
   Trace, the player alone takes the damage, and the bite goes through
   `Game::apply_damage` — which is the whole of why mitigation applies to
-  ground for free. Deleting `assets/sectors/` restores undifferentiated
-  zones, the same supported way `assets/environment/` used to be deletable —
-  except that directory no longer exists at all: the catalogue is now
+  ground for free. `assets/sectors/` is gone outright, not merely
+  deletable — `sectors.rs` went with it, and every zone is undifferentiated
+  now, permanently: `WorldMap::classify` reads flat module constants
+  (`VOID_ELEVATION`, `BLACK_ICE_ELEVATION`, `DEADLOCK_TEMPERATURE`,
+  `NULL_TEMPERATURE`, `NULL_MOISTURE`, `BACKPLANE_MOISTURE`) with nothing
+  left to name a zone or rotate its palette. Don't go looking for a
+  directory to drop a sector file into; there is no loader left to read
+  one. Content deletability's other precedent still stands on its own:
+  `assets/environment/` used to be deletable the same supported way, and
+  that directory no longer exists either — the catalogue is now
   `crates/engine/src/environment.rs`, an exhaustive Rust `def()` on
   `notifications.rs`'s shape, not a loader.
 - **`EnvironmentEffect`'s fold is additive on every term except the ambush

@@ -661,14 +661,18 @@ fn the_starter_tool_is_drop_neutral_for_a_median_kill() {
     // must not change what an ordinary kill actually pays a player holding
     // the starter tool. `extraction_yield` is deterministic — `apportion`'s
     // largest-remainder split spends no `GameRng` draw — so the figure here
-    // is computed once from the real formula, never sampled.
+    // is computed once from the real formula, never sampled. `Game::new`
+    // grants the player no perks, so `extraction_yield`'s `salvage_bonus`
+    // term (`Perk::Teardown`) is silently zero below — a profile that ever
+    // starts a run with Teardown already bought would move this gate
+    // without touching this file.
     let game = Game::new(4485, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let tool = starter_tool_def(&game);
     let median = program(tuning::CONDITION_BASE, Rarity::Ordinary, 1);
 
-    let total: u32 = totals(&game.extraction_yield(&median, &tool))
-        .values()
-        .sum();
+    let granted = game.extraction_yield(&median, &tool);
+    let rows = totals(&granted);
+    let total: u32 = rows.values().sum();
 
     // The retired roll's own mean, from its own constant — never restated
     // as a literal, so a future change to `WORK_RESOURCE_DROP`'s range (it
@@ -677,13 +681,39 @@ fn the_starter_tool_is_drop_neutral_for_a_median_kill() {
     let retired_mean = (*tuning::WORK_RESOURCE_DROP.start() as f32
         + *tuning::WORK_RESOURCE_DROP.end() as f32)
         / 2.0;
-    let delta = (total as f32 - retired_mean).abs();
-    assert!(
-        delta <= 1.0,
+
+    // Exact equality, not `(total - retired_mean).abs() <= 1.0`: the loose
+    // form is satisfied even with `rich_in`'s bonus dropped entirely (total
+    // would be 2, delta 1.0, still "within one unit") — implemented but
+    // undefended, one refactor from silently reverting to the lenient
+    // reading. Exact equality is strictly *stronger* than "within one
+    // unit", so it still satisfies the brief's own bound; it just can no
+    // longer be satisfied by accident.
+    assert_eq!(
+        total,
+        3,
         "a median kill (ordinary, CONDITION_BASE condition, level 1) through the starter tool \
-         must pay within one unit of the retired WORK_RESOURCE_DROP roll's mean \
-         ({retired_mean}): got {total} units (grade {})",
+         must pay exactly 3 units — within one unit of the retired WORK_RESOURCE_DROP roll's \
+         mean ({retired_mean}) — got {total} (grade {}, rows {granted:?})",
         median.grade()
+    );
+
+    // Pin the `rich_in` half of that total on its own rather than only
+    // through the sum above: `scrapper`'s `rich_in` fallback
+    // (`work_resource`) happens to be an item the starter tool's own pool
+    // already names, so a `total == 3` that came entirely from `apportion`
+    // (no `rich_in` addend at all, paired with a pool reweighted to
+    // compensate) would satisfy the assertion above without `rich_in`
+    // having contributed anything. It must actually be in the rows.
+    let rich_item = game
+        .rich_in(&median.species)
+        .expect("scrapper must resolve a rich_in item (falls back to work_resource)");
+    assert!(
+        rows.get(&rich_item)
+            .is_some_and(|&qty| qty >= tuning::RICH_IN_UNITS),
+        "the rich_in bonus ({} units of {rich_item:?}) must land in the granted rows, not just \
+         be assumed from the total: {rows:?}",
+        tuning::RICH_IN_UNITS
     );
 }
 

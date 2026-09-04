@@ -4071,19 +4071,28 @@ pub const TOOL_SLOT_CAP: u32 = 4;
 
 /// `Game::extraction_yield`'s base unit count — the multiplier scaled by
 /// `game::extraction::tier_scale(tool.tier)` and `DownedProgram::grade()`
-/// (identity `1.0` at `Ordinary`, full condition, level 0). **Fitted** to
-/// spec decision 8: `tests::extraction::
+/// (identity `1.0` at `Ordinary`, full condition, level 0). **Checked**
+/// against spec decision 8, not fitted — the provisional value already
+/// satisfied the gate, so it never moved: `tests::extraction::
 /// the_starter_tool_is_drop_neutral_for_a_median_kill` asserts a median kill
 /// (`Ordinary`, `CONDITION_BASE` condition, level 1 — grade `0.606`) through
 /// the starter tool (`salvage_clamp`, tier 1, `tier_scale == 1.0`) pays
-/// within one unit of `WORK_RESOURCE_DROP`'s own mean (`3.0`). At `3.0` that
-/// works out to `round(3.0 * 0.606) = 2` pool units plus `RICH_IN_UNITS`'s
-/// flat `1` — `3` units, an exact match rather than a within-one-unit
-/// squeak, and one the provisional value already landed on; nothing here
-/// needed moving, only proving. `salvage_clamp.ron`'s weights don't enter
-/// this gate at all — `apportion` conserves the unit *total* under any
+/// exactly `WORK_RESOURCE_DROP`'s own mean, `3` units: `round(3.0 * 0.606) =
+/// 2` pool units plus `RICH_IN_UNITS`'s flat `1`.
+///
+/// That test only pins this constant to a *band*, not the digit `3.0`:
+/// `round(x * 0.606)` stays `2` for any `x` in `[1.5 / 0.606, 2.5 / 0.606)`,
+/// currently ≈ `[2.475, 4.125)` (verified empirically, not just algebraically
+/// — the test passes unmoved at `2.5` and `4.1`, fails at `2.4` and `4.2`).
+/// Every value in that band pays a median kill the identical `3` units and
+/// so reads as equally drop-neutral to this gate — a starter tool at either
+/// end feels roughly half or a third stronger than one at the other, and
+/// nothing here would catch that; only a play session or a wider-coverage
+/// test could. Say the band plainly rather than let one passing value read
+/// as pinned to the digit. `salvage_clamp.ron`'s weights don't enter the
+/// gate at all — `apportion` conserves the unit *total* under any
 /// weighting, and `rich_in`'s addend is unconditional — so they're
-/// unchanged too.
+/// untouched, and no combination of them could narrow this band either.
 pub const TOOL_BASE_UNITS: f32 = 3.0;
 
 /// How much each tier past 1 scales `extraction_yield`'s unit count, in

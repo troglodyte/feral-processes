@@ -1939,23 +1939,29 @@ fn a_boss_kills_program_is_at_or_above_both_floors() {
     );
 }
 
-/// Pins the boss-Ordinary case to the exact value the *correctly ordered*
-/// floors produce: rarity raised to `BOSS_RARITY_FLOOR` first, so
-/// `roll_condition` prices condition against `Silver` (rank 1) rather than
-/// the pre-floor `Ordinary` (rank 0) — `60 + 8*1 + 10 = 78`, then floored up
-/// to `BOSS_CONDITION_FLOOR` (80).
+/// The defect class the ordering fix closes: under the broken order,
+/// `roll_condition` priced condition against the *pre-floor* rarity while
+/// `rarity` itself was stamped *post-floor* — two fields on the same
+/// finished program computed from two different rarities. This asserts
+/// they cannot be: whatever rarity ends up stamped on a boss's program,
+/// `condition` must equal what `roll_condition` computes from *that same*
+/// rarity, floored up to `BOSS_CONDITION_FLOOR`. It calls the real formula
+/// rather than re-deriving it, so the test can't drift the way a
+/// hand-copied one would.
 ///
-/// With the shipped constants this happens to land on the same number the
-/// wrong order would too (`60 + 8*0 + 10 = 70`, also floored up to 80) —
-/// `BOSS_CONDITION_FLOOR` dominates either way here, so this test cannot by
-/// itself catch the two orders disagreeing; see the fix-round report for
-/// the honest mutation-check result. It still pins the *correct* semantics
-/// as a regression value: whichever axis is retuned first (a lower
-/// `BOSS_CONDITION_FLOOR`, a higher `CONDITION_PER_RARITY_STEP`, or a floor
-/// higher than `Silver`) makes the order matter for real, and this is what
-/// the answer should be then too.
+/// **Not discriminating with the shipped constants.** `BOSS_CONDITION_FLOOR`
+/// (80) sits above `roll_condition(BOSS_RARITY_FLOOR, true, 0.0)` (78, at
+/// the shipped `Silver` floor) regardless of which rarity the pre-floor
+/// roll used, so this invariant holds under the broken order too, today —
+/// see the fix-round report for the arithmetic at both the shipped `Silver`
+/// floor and the original `Gold` floor, where it *was* visible. This guard
+/// is armed for the next person who raises `BOSS_RARITY_FLOOR` or lowers
+/// `BOSS_CONDITION_FLOOR` far enough that `roll_condition`'s floored-rarity
+/// value clears the condition floor on its own — that is exactly when the
+/// ordering bug returns, and exactly when this test starts failing under
+/// the broken order.
 #[test]
-fn a_boss_with_ordinary_rarity_pins_the_order_corrected_value() {
+fn a_boss_programs_condition_is_consistent_with_its_stamped_rarity() {
     let mut game = Game::new(913, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let species = game
@@ -1970,14 +1976,15 @@ fn a_boss_with_ordinary_rarity_pins_the_order_corrected_value() {
 
     let held = &game.world.get::<DownedPrograms>(player).unwrap().0;
     let program = &held[0];
+    // `0.0`: `corpse_of` fixes `hp == max_hp`, so `overkill_term` is always
+    // its identity value here — see `Game::overkill_term`.
+    let expected = DownedProgram::roll_condition(program.rarity, program.boss, 0.0)
+        .max(crate::tuning::BOSS_CONDITION_FLOOR);
     assert_eq!(
-        program.rarity,
-        Rarity::Silver,
-        "the floor value, since the pre-floor roll was Ordinary"
-    );
-    assert_eq!(
-        program.condition, 80,
-        "roll_condition(Silver, true, 0.0) = 78, floored up to BOSS_CONDITION_FLOOR"
+        program.condition, expected,
+        "condition must be priced off the SAME rarity that ended up stamped on the program \
+         ({:?}), not a pre-floor one",
+        program.rarity
     );
 }
 

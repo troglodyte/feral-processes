@@ -1,6 +1,6 @@
 # Perk and talent respec
 
-**Status:** approved, not implemented
+**Status:** implemented
 
 Buying a perk or a talent is permanent. This adds one way to take it all
 back: a flat Credit price wipes every purchase on one ledger, refunds every
@@ -110,7 +110,7 @@ impl Game {
 }
 ```
 
-`views::RespecQuote` carries `cost`, `credits_held`, `points_returned`,
+`views::RespecQuote` carries `cost`, `credits`, `points_returned`,
 `purchases`, and `refusal: Option<String>` — every figure a call, none
 stored, `views::BuildOrderRow`'s rule.
 
@@ -191,10 +191,20 @@ reach outside `Stats`:
   `install_unlocked_routines`, which may have evicted
   `FALLBACK_ABILITY_ID` to make room.
 
-So: clear `Routines`, re-run `install_innate_routines` across `1..=level`,
-then truncate to `routine_slots(entity)`. The result is the kit a companion
-of that species and level would have with no talents — which is exactly
-what "every talent refunded" has to mean.
+**Corrected during implementation.** This section first said "clear
+`Routines` and re-run `install_innate_routines`". That is wrong:
+`install_innate_routines` treats whatever is already in `Routines` as
+`carried` — what the program was found holding in the field — and the
+player also installs routines by hand from disks. Clearing the component
+destroys both, and the tree has no claim on either.
+
+What ships instead, `rebuild_routines_after_talent_loss`: ask
+`talent_abilities` what the tree granted **before** the list is cleared,
+`retain` everything else, `truncate` to the now-narrower
+`routine_slots(entity)`, then call `install_innate_routines` to refill from
+the species kit if the truncate left room and to put the placeholder back
+if the program is left holding nothing. `a_talent_respec_leaves_a_hand_
+installed_routine_alone` is the test that pins it.
 
 ## App-core
 
@@ -217,12 +227,19 @@ cannot be undone by pressing it again.
 
 ## GUI
 
-- `render/progression.rs::perks_menu_rows` gains a footer row naming the
-  price and the key; `render/talents.rs` gains the same footer.
-- One new confirm page, drawn from `RespecQuote` alone: what is being
-  wiped, what comes back, what it costs, what the player holds.
-- The confirm page has no scroll, so its height is a layout constraint and
-  it belongs in the mode censuses the other pages sit in.
+- **Neither picker gains a row.** The spec first said "a footer row on
+  each"; both popups have no scroll, and the perk screen already lists
+  eighteen perks. So the perk screen's price rides the instruction line it
+  already had (`PopupSize::Large` carries ~114 monospace cells, well clear
+  of it), and the talent ladder's row is drawn only when `points.spent > 0`
+  — otherwise the capstone tier pays for a line saying there is nothing to
+  unwind.
+- One `draw_respec_confirm` for both wipes, drawn from `RespecQuote` alone.
+- `ALL_MODES` is a hand-written list, so a new `Mode` variant does **not**
+  fail to compile against it — the `cell_mark` trap one screen over. Both
+  variants are added (88 → 90), with `RespecTalentsConfirm` in
+  `NEEDS_PENDING_STATE` because the census app sets no
+  `pending_develop_target`.
 
 ## Tuning
 
@@ -278,12 +295,15 @@ Engine:
   minted point costs what it would have without the respec.
 - Roster over capacity refuses.
 - A save round trip carries both receipts, and a load seeds `ever_bought`.
+- The pre-existing `the_overflow_price_rises_with_perks_held` wrote
+  `Perks::unlocked` directly, so the knob it turned is no longer the one the
+  price reads. Renamed to `..._with_perks_bought` and given the receipt; its
+  assertion is untouched, because the behaviour it states has not changed.
 
 App-core:
 
 - `X` opens each confirm; `y` commits; `Esc` returns to the right screen.
-- `X` on the perk screen does not select perk row 24, and lowercase `x`
-  still does.
+- Lowercase `x` is still a row label and never the wipe.
 - A refusal never backs out of the confirm.
 
 GUI:

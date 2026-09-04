@@ -11,6 +11,15 @@ is skipped with a warning logged in-game rather than crashing startup.
     id: "unique_snake_case_id",   // must be unique across all structure files
     name: "Display Name",
     glyph: '#',                   // single character shown on the map
+
+    // Optional; can be left out entirely (defaults to none). Overrides the
+    // name a one-cell sprite is looked up by under `assets/sprites/` — see
+    // that directory's README. Without this field the lookup name is this
+    // structure's own `id`, so most sprite art needs no `.ron` change at
+    // all; this field exists only for the case where the filename you
+    // want isn't the id. No shipped structure uses it.
+    sprite: None,
+
     color: Magenta,                // one of: White, Gray, Green, DarkGreen, Red,
                                     //         Yellow, Blue, Magenta, Cyan, Brown,
                                     //         Orange

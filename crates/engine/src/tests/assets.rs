@@ -3100,3 +3100,149 @@ fn the_creation_allowance_sits_inside_the_class_kit_band() {
         dearest.0
     );
 }
+
+/// `SpeciesDef::sprite_name` and `StructureDef::sprite_name` are the one
+/// place the "override or fall back to the id" convention is written — see
+/// their doc comments. A reader that re-derives the fallback itself is a
+/// second copy of the rule.
+#[test]
+fn species_sprite_name_falls_back_to_the_id_and_honours_an_override() {
+    let game = Game::new(3401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut species = game
+        .species_defs()
+        .into_iter()
+        .next()
+        .expect("the shipped roster is not empty");
+    assert!(
+        species.sprite.is_none(),
+        "no shipped species authors a sprite override yet"
+    );
+    assert_eq!(species.sprite_name(), species.id.as_str());
+
+    species.sprite = Some("custom_species_sprite".to_string());
+    assert_eq!(species.sprite_name(), "custom_species_sprite");
+}
+
+#[test]
+fn structure_sprite_name_falls_back_to_the_id_and_honours_an_override() {
+    let game = Game::new(3402, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut structure = game
+        .structure_defs()
+        .into_iter()
+        .next()
+        .expect("the shipped structure catalogue is not empty");
+    assert!(
+        structure.sprite.is_none(),
+        "no shipped structure authors a sprite override yet"
+    );
+    assert_eq!(structure.sprite_name(), structure.id.as_str());
+
+    structure.sprite = Some("custom_structure_sprite".to_string());
+    assert_eq!(structure.sprite_name(), "custom_structure_sprite");
+}
+
+/// A species or structure file authored before this field existed — every
+/// shipped one, today — has no `sprite:` key at all, and `#[serde(default)]`
+/// is what keeps that parsing rather than refusing the file.
+#[test]
+fn a_def_file_without_a_sprite_key_still_parses() {
+    const NO_SPRITE_SPECIES: &str = r#"(
+    id: "no_sprite_key_species",
+    name: "No Sprite Key Species",
+    glyph: 'x',
+    color: White,
+    base_hp: 10,
+    base_atk: 1,
+    base_mitigation: 0,
+    taming_difficulty: 0.1,
+    habitats: [OpenGrid],
+    moves: [(name: "Poke", power: 1)],
+    work_resource: None,
+)"#;
+    let species_dir = modded_assets_dir(
+        "no_sprite_key_species",
+        &[],
+        &[],
+        &[("no_sprite_key_species.ron", NO_SPRITE_SPECIES)],
+        &[],
+        &[],
+    );
+    let game = Game::new(3403, DifficultyMode::Forgiving, &species_dir).unwrap();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|s| s.id == "no_sprite_key_species")
+        .expect("the fixture species loaded");
+    assert_eq!(species.sprite, None);
+    assert_eq!(species.sprite_name(), "no_sprite_key_species");
+
+    const NO_SPRITE_STRUCTURE: &str = r#"(
+        id: "no_sprite_key_structure",
+        name: "No Sprite Key Structure",
+        glyph: '?',
+        color: White,
+        build_cost: [],
+        work: None,
+    )"#;
+    let structure_dir = assets_dir_with_extra_structure(
+        "no_sprite_key_structure",
+        "no_sprite_key_structure.ron",
+        NO_SPRITE_STRUCTURE,
+    );
+    let game = Game::new(3404, DifficultyMode::Forgiving, &structure_dir).unwrap();
+    let structure = game
+        .structure_defs()
+        .into_iter()
+        .find(|s| s.id == "no_sprite_key_structure")
+        .expect("the fixture structure loaded");
+    assert_eq!(structure.sprite, None);
+    assert_eq!(structure.sprite_name(), "no_sprite_key_structure");
+}
+
+/// The census the spec is built around: every shipped species or structure
+/// that authors a `sprite:` override must resolve to a real file under
+/// `assets/sprites/`. A def with no override is skipped entirely — a
+/// convention-named sprite (`sprite_name()` falling back to the id) that has
+/// no file on disk is the ordinary, silent case (`Painter::sprite` draws the
+/// glyph instead), and this census must not flag it.
+///
+/// This passes vacuously today: zero shipped defs author an override (see
+/// `a_def_file_without_a_sprite_key_still_parses`'s sibling assertions
+/// above), so the loops below check nothing. That is correct — see the task
+/// report for how the failure branch was confirmed by hand, since a census
+/// nobody can make fail is not a census.
+#[test]
+fn every_shipped_sprite_override_resolves_to_a_real_file() {
+    let game = Game::new(3405, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let sprites_dir = test_assets_dir().join("sprites");
+
+    let species = game.species_defs();
+    let structures = game.structure_defs();
+    assert!(
+        !species.is_empty() && !structures.is_empty(),
+        "the census walked no defs at all"
+    );
+
+    for def in &species {
+        let Some(name) = &def.sprite else { continue };
+        let path = sprites_dir.join(format!("{name}.png"));
+        assert!(
+            path.exists(),
+            "species {:?} overrides sprite to {:?}, missing at {}",
+            def.id,
+            name,
+            path.display()
+        );
+    }
+    for def in &structures {
+        let Some(name) = &def.sprite else { continue };
+        let path = sprites_dir.join(format!("{name}.png"));
+        assert!(
+            path.exists(),
+            "structure {:?} overrides sprite to {:?}, missing at {}",
+            def.id,
+            name,
+            path.display()
+        );
+    }
+}

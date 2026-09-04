@@ -226,6 +226,14 @@ pub struct SpeciesDef {
     pub id: SpeciesId,
     pub name: String,
     pub glyph: char,
+    /// Names a one-cell sprite under `assets/sprites/` in place of the
+    /// convention (see `sprite_name`) — an escape hatch for when the id
+    /// isn't the filename wanted, not the normal way a species gets art.
+    /// `#[serde(default)]` so existing species files (including mods)
+    /// without this field keep parsing, and keep drawing under the id as
+    /// they always have. No shipped species authors one.
+    #[serde(default)]
+    pub sprite: Option<String>,
     pub color: GlyphColor,
     pub base_hp: i32,
     pub base_atk: i32,
@@ -389,6 +397,13 @@ impl SpeciesDef {
             return None;
         }
         Some(AffinityClass::of_axis(axis))
+    }
+
+    /// The name a sprite loader looks this species up by: the `sprite`
+    /// override when authored, the id otherwise. The one place this
+    /// fallback is written — see `sprite`'s doc comment.
+    pub fn sprite_name(&self) -> &str {
+        self.sprite.as_deref().unwrap_or(&self.id)
     }
 }
 

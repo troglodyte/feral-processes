@@ -33,6 +33,38 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.92
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` is untouched —
+nothing here reaches the save at all, and the whole feature is inert without
+both `FERAL_DEV_SPRITES` and a checkout behind the build.
+
+- **A developer can draw a sprite in-game for any species, structure or map
+  fixture, and the map shows it without a restart.** A main-menu row behind
+  `FERAL_DEV_SPRITES` opens a picker of every subject the map can draw art
+  for; the editor saves a 16x16 PNG into `assets/sprites/` under the name the
+  loader already looks for, so no `.ron` file and no Rust changes.
+- **Art is turned off by renaming it to `<name>.png.off`, never by deleting
+  it.** `scan_sprite_dir` filters on the extension being exactly `png`, so a
+  disabled sprite is already invisible to the loader and the glyph comes back
+  untouched.
+- **The editor's canvas mechanics are shared with the player's icon editor
+  rather than copied.** `icon::Canvas` and app-core's `CanvasEditor` hold the
+  cursor, the brush, the undo ring and the paint guard; both editors own one
+  and keep their own sink.
+- **`SPRITE_PALETTE` is a separate constant from `ICON_PALETTE`, and must
+  stay that way.** The player icon's `v2` codec is 64 hex digits, so a
+  sixteenth colour in `ICON_PALETTE` would encode as a digit meaning
+  transparent and silently blank a drawing the player cannot get back.
+- **The dev palette leads with a bright-biased value ramp** because the
+  renderer applies a tile's colour as a multiplying tint, so near-white art
+  inherits the species hue, `biome_tint` and the damage dimming for free.
+- **A sprite can be painted with the mouse**, the first pointer input
+  anywhere in the renderer, resolved to a cell before it reaches app-core and
+  confined to this one screen.
+- **A drag is one undo entry, and a click that changes nothing records
+  none.**
+
 ## 0.13.91
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

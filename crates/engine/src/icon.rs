@@ -74,6 +74,66 @@ const V1_PREFIX: &str = "v1:";
 /// `v1` carried one hex digit per *sprite pixel*.
 const V1_DIGITS: usize = ICON_SIZE * ICON_SIZE;
 
+/// A square grid of palette indices, with no opinion about which palette —
+/// that belongs to whoever draws on it. `PlayerIcon` is one `Canvas` at
+/// `ICON_GRID`; a second editor at a different edge is another.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Canvas {
+    edge: usize,
+    cells: Vec<u8>,
+}
+
+impl Canvas {
+    /// A blank (all-zero) canvas, `edge` cells on each side.
+    pub fn new(edge: usize) -> Canvas {
+        Canvas {
+            edge,
+            cells: vec![0; edge * edge],
+        }
+    }
+
+    /// The grid's edge length, in cells.
+    pub fn edge(&self) -> usize {
+        self.edge
+    }
+
+    /// The cell at `(x, y)`, or 0 if either coordinate is off the grid.
+    pub fn get(&self, x: usize, y: usize) -> u8 {
+        match self.index_of(x, y) {
+            Some(i) => self.cells[i],
+            None => 0,
+        }
+    }
+
+    /// Paints `(x, y)` with `index`. An out-of-range coordinate is dropped
+    /// rather than panicking. Carries no palette-range guard — `Canvas`
+    /// does not know which palette it is drawn from, so that check belongs
+    /// to the caller.
+    pub fn set(&mut self, x: usize, y: usize, index: u8) {
+        if let Some(i) = self.index_of(x, y) {
+            self.cells[i] = index;
+        }
+    }
+
+    /// Resets every cell to 0.
+    pub fn clear(&mut self) {
+        self.cells.fill(0);
+    }
+
+    /// Whether every cell is 0.
+    pub fn is_blank(&self) -> bool {
+        self.cells.iter().all(|&p| p == 0)
+    }
+
+    fn index_of(&self, x: usize, y: usize) -> Option<usize> {
+        if x < self.edge && y < self.edge {
+            Some(y * self.edge + x)
+        } else {
+            None
+        }
+    }
+}
+
 /// The player's drawn map avatar.
 ///
 /// One palette index per drawn cell, row-major from the top-left. There is
@@ -240,6 +300,70 @@ impl PlayerIcon {
         } else {
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod canvas_tests {
+    use super::*;
+
+    #[test]
+    fn a_fresh_canvas_is_blank_and_reads_zero_everywhere() {
+        let canvas = Canvas::new(16);
+        assert!(canvas.is_blank());
+        for y in 0..16 {
+            for x in 0..16 {
+                assert_eq!(canvas.get(x, y), 0, "({x}, {y})");
+            }
+        }
+    }
+
+    #[test]
+    fn set_then_get_round_trips() {
+        let mut canvas = Canvas::new(16);
+        canvas.set(3, 5, 9);
+        assert_eq!(canvas.get(3, 5), 9);
+    }
+
+    #[test]
+    fn an_off_grid_set_is_dropped_and_an_off_grid_get_is_zero() {
+        let mut canvas = Canvas::new(16);
+        canvas.set(16, 0, 9);
+        canvas.set(0, 16, 9);
+        assert_eq!(canvas.get(16, 0), 0);
+        assert_eq!(canvas.get(0, 16), 0);
+        assert!(
+            canvas.is_blank(),
+            "the dropped writes must not have landed anywhere"
+        );
+    }
+
+    #[test]
+    fn clear_blanks_a_painted_canvas() {
+        let mut canvas = Canvas::new(16);
+        canvas.set(0, 0, 1);
+        canvas.set(15, 15, 7);
+        canvas.clear();
+        assert!(canvas.is_blank());
+        assert_eq!(canvas.get(0, 0), 0);
+        assert_eq!(canvas.get(15, 15), 0);
+    }
+
+    #[test]
+    fn two_canvases_of_the_same_edge_and_cells_are_equal() {
+        let mut a = Canvas::new(16);
+        let mut b = Canvas::new(16);
+        a.set(2, 2, 4);
+        b.set(2, 2, 4);
+        assert_eq!(a, b);
+        b.set(2, 2, 5);
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn edge_reports_the_grid_it_was_built_with() {
+        let canvas = Canvas::new(16);
+        assert_eq!(canvas.edge(), 16);
     }
 }
 

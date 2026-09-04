@@ -84,3 +84,40 @@ fn the_sprite_ladder_is_integer_multiples_of_the_authored_size() {
         );
     }
 }
+
+/// Two sprite names are still hardcoded in Rust rather than reached through
+/// a def's `sprite_name()`: `render/base.rs` draws `"anchor"` for the base
+/// anchor tile, and `feral_processes_engine::DEFAULT_PLAYER_SPRITE` (loaded
+/// as `"player"`) is the player's own fallback before the wizard's drawn
+/// icon exists. `every_shipped_sprite_override_resolves_to_a_real_file` in
+/// the engine only censuses *def* overrides — of which zero ship — so it
+/// cannot see either of these; neither comes off a def at all, so nothing
+/// walks them the way a species or structure id is walked. Deleting or
+/// renaming either file is otherwise invisible to the whole suite: the
+/// anchor and the player would each silently revert to their glyph
+/// fallback (`#` and `@`) with every other test still green, which is
+/// exactly what the deleted `every_sprite_the_loader_asks_for_is_on_disk`
+/// used to catch.
+#[test]
+fn the_two_hardcoded_sprite_names_are_on_disk() {
+    // Mirrors `crates/gui/src/render/base.rs`'s literal `"anchor"` — that
+    // site names a bare `&str`, not a constant this test can reference.
+    let anchor = sprites_dir().join("anchor.png");
+    assert!(
+        anchor.is_file(),
+        "{} is missing; render/base.rs's anchor draw has no name census to \
+         catch this and would silently fall back to `#`",
+        anchor.display()
+    );
+
+    let player = sprites_dir().join(format!(
+        "{}.png",
+        feral_processes_engine::DEFAULT_PLAYER_SPRITE
+    ));
+    assert!(
+        player.is_file(),
+        "{} is missing; DEFAULT_PLAYER_SPRITE has no name census to catch \
+         this and would silently fall back to `@`",
+        player.display()
+    );
+}

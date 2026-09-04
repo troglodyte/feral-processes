@@ -548,8 +548,18 @@ impl StructureDef {
     /// The name a sprite loader looks this structure up by: the `sprite`
     /// override when authored, the id otherwise. The one place this
     /// fallback is written — see `sprite`'s doc comment.
+    ///
+    /// An override starting with `@` is treated as absent and falls back to
+    /// the id instead. `@` keys the runtime-only drawn-icon slot
+    /// (`sprites::DRAWN_ICON_KEY` in the renderer) that the player's own
+    /// pixel editor registers under — no file ever lands there — so a
+    /// structure allowed to name it would draw the player's own hand-drawn
+    /// icon on its tile.
     pub fn sprite_name(&self) -> &str {
-        self.sprite.as_deref().unwrap_or(&self.id)
+        self.sprite
+            .as_deref()
+            .filter(|s| !s.starts_with('@'))
+            .unwrap_or(&self.id)
     }
 }
 

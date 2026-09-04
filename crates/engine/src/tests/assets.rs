@@ -3123,6 +3123,24 @@ fn species_sprite_name_falls_back_to_the_id_and_honours_an_override() {
     assert_eq!(species.sprite_name(), "custom_species_sprite");
 }
 
+/// `@` keys the runtime-only drawn-icon slot (`sprites::DRAWN_ICON_KEY`) the
+/// player's own pixel editor registers under, never a file — an override
+/// naming it must fall back to the id rather than being honoured, or a
+/// modded species could draw the player's own drawn icon on its tile.
+#[test]
+fn species_sprite_name_falls_back_to_the_id_when_the_override_names_the_drawn_icon_slot() {
+    let game = Game::new(3406, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut species = game
+        .species_defs()
+        .into_iter()
+        .next()
+        .expect("the shipped roster is not empty");
+
+    species.sprite = Some("@drawn".to_string());
+
+    assert_eq!(species.sprite_name(), species.id.as_str());
+}
+
 #[test]
 fn structure_sprite_name_falls_back_to_the_id_and_honours_an_override() {
     let game = Game::new(3402, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -3139,6 +3157,22 @@ fn structure_sprite_name_falls_back_to_the_id_and_honours_an_override() {
 
     structure.sprite = Some("custom_structure_sprite".to_string());
     assert_eq!(structure.sprite_name(), "custom_structure_sprite");
+}
+
+/// The structure half of
+/// `species_sprite_name_falls_back_to_the_id_when_the_override_names_the_drawn_icon_slot`.
+#[test]
+fn structure_sprite_name_falls_back_to_the_id_when_the_override_names_the_drawn_icon_slot() {
+    let game = Game::new(3407, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut structure = game
+        .structure_defs()
+        .into_iter()
+        .next()
+        .expect("the shipped structure catalogue is not empty");
+
+    structure.sprite = Some("@drawn".to_string());
+
+    assert_eq!(structure.sprite_name(), structure.id.as_str());
 }
 
 /// A species or structure file authored before this field existed — every

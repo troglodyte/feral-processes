@@ -61,9 +61,11 @@ fn scan_sprite_dir(dir: &std::path::Path) -> Vec<String> {
 ///
 /// The `@` is what keeps it unreachable from anywhere else: every other key
 /// comes from `scan_sprite_dir`, which throws out any stem starting with
-/// `@` for exactly this reason, and a future `sprite:` field on a species
-/// would draw from the same scan — so no file and no mod can claim the slot
-/// the player drew for themselves.
+/// `@` for exactly this reason, and a species or structure's own `sprite:`
+/// field draws from the same scan through `sprite_name()`, which falls back
+/// to the def's id for an `@`-prefixed override rather than honouring it —
+/// so no file and no def, shipped or modded, can claim the slot the player
+/// drew for themselves.
 pub const DRAWN_ICON_KEY: &str = "@drawn";
 
 /// Where the loaded sprites live between the asset server and the renderer.

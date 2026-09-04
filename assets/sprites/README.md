@@ -25,8 +25,9 @@ legal filename character on every platform this ships to, and `"@drawn"`
 is the runtime-only key the player's own drawn icon registers under
 (`sprites::DRAWN_ICON_KEY`). Without the filter, an `@drawn.png` dropped in
 here would silently hijack the player's own drawing. A `sprite:` override
-starting with `@` is filtered the same way and so can never resolve to a
-file — don't author one.
+starting with `@` is not honoured either — `SpeciesDef::sprite_name()` and
+`StructureDef::sprite_name()` fall back to the def's own id instead — so it
+can never read the player's drawing off that slot: don't author one.
 
 ## The format is not negotiable
 

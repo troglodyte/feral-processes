@@ -491,6 +491,29 @@ pub struct CaravanSellRow {
     pub unit_price: u32,
 }
 
+/// A settlement's own counter — see `Game::settlement_view`.
+///
+/// Mirrors `CaravanView` and deliberately reuses its two row types:
+/// `CaravanOffer`/`CaravanOfferKind` for what is on the shelf,
+/// `CaravanSellRow` for what the player may sell into it. The two vendors
+/// price the same four kinds of row differently — a caravan reads
+/// `Game::caravan_unit_cost`, a settlement reads `Game::settlement_unit_cost`
+/// at its own `Temperament` — but a row's *shape* is identical, and a second
+/// pair of types here would be the copy that drifts the moment one grows a
+/// field the other needs too.
+///
+/// No `trader`/`description`/`ticks_left` fields: those name a caravan's own
+/// identity and its visit's clock, neither of which a settlement has — its
+/// name and blurb are already `SettlementView`'s, read from the hub screen
+/// this market opens from, and a settlement never leaves.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct SettlementMarketView {
+    pub offers: Vec<CaravanOffer>,
+    pub sells: Vec<CaravanSellRow>,
+    pub credits: u32,
+    pub currency: String,
+}
+
 /// One stack of the player's cargo a Stack market will take, priced.
 ///
 /// There is no buyback row to match it: a Stack trader keeps no shelf, so

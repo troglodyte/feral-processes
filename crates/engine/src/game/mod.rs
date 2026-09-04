@@ -37,6 +37,7 @@ pub(crate) mod pursuit;
 pub(crate) mod refactor;
 pub(crate) mod respec;
 pub(crate) mod routines;
+pub(crate) mod settlement_market;
 pub(crate) mod sortie;
 pub(crate) mod spawning;
 pub(crate) mod stack;

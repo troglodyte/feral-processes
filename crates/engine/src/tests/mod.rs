@@ -58,6 +58,7 @@ mod refactor;
 mod research;
 mod respec;
 mod routines;
+mod settlement_market;
 mod settlements;
 mod sorties;
 mod spawning;

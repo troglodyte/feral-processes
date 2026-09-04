@@ -92,7 +92,9 @@ impl Game {
             .get_mut::<Inventory>(player)
             .unwrap()
             .add(currency, payout);
-        self.stock_shelf(structure, &copy, taken);
+        if let Some(key) = self.shelf_key(structure) {
+            self.stock_shelf(key, &copy, taken);
+        }
         self.log(format!("You sell {taken} {name} for {payout} {money}."));
         self.tick();
         Ok(())
@@ -100,20 +102,53 @@ impl Game {
 
     /// The `BuybackLedger` key for `entity`, if it's a structure with a
     /// position — its kind and the tile it stands on. Every public buyback
-    /// call resolves an `Entity` through here, so no caller learns how the
-    /// ledger is keyed.
+    /// call on a structure resolves an `Entity` through here, so no caller
+    /// learns how the ledger is keyed.
+    ///
+    /// **Walks `Entity -> Structure -> Position`**, which is exactly what a
+    /// settlement cannot do — it carries no `Structure`. That is why
+    /// `settlement_shelf_key` is a second constructor beside this one
+    /// rather than a branch inside it: widening this to cover both would
+    /// have every caller pay for an entity lookup a settlement never has.
     fn shelf_key(&self, entity: Entity) -> Option<resources::ShelfKey> {
         let kind = self.world.get::<Structure>(entity)?.kind.clone();
         let pos = self.world.get::<Position>(entity)?;
         Some((kind, (pos.x, pos.y)))
     }
 
-    /// Adds `qty` of exactly this copy to `structure`'s shelf, merging into
-    /// the existing row if there is one.
-    fn stock_shelf(&mut self, structure: Entity, copy: &GearCopy, qty: u32) {
-        let Some(key) = self.shelf_key(structure) else {
-            return;
-        };
+    /// The `BuybackLedger` key for the settlement `key` names, if it has
+    /// materialized — `shelf_key`'s second constructor, reading
+    /// `resources::Settlements` for the tile rather than an `Entity`'s
+    /// `Structure`/`Position` pair.
+    ///
+    /// **Minted with a `"settlement/"` prefix** so it can never collide
+    /// with a `StructureId` out of `assets/structures/` — the tile a town
+    /// stands on and a structure's footprint are drawn from the same
+    /// coordinate space, so the id half of the key is the only thing that
+    /// can keep the two shelves apart. `ShelfKey` itself is untouched: it
+    /// is still `(StructureId, (i32, i32))`, since `StructureId` is a plain
+    /// `String` newtype and a minted string fits it with no widening and no
+    /// save-format change.
+    pub(crate) fn settlement_shelf_key(
+        &self,
+        key: crate::settlements::SettlementKey,
+    ) -> Option<resources::ShelfKey> {
+        let known = self
+            .world
+            .resource::<resources::Settlements>()
+            .0
+            .get(&key)?;
+        Some((format!("settlement/{}", known.def.id), known.tile))
+    }
+
+    /// Adds `qty` of exactly this copy to whichever shelf `key` names,
+    /// merging into the existing row if there is one.
+    ///
+    /// Takes an already-resolved `ShelfKey` rather than an `Entity`, so
+    /// `Game::apply_settlement_sale` can stock a settlement's shelf through
+    /// the same door `Game::sell_item` stocks a structure's — the ledger
+    /// does not care which kind of vendor resolved the key.
+    pub(crate) fn stock_shelf(&mut self, key: resources::ShelfKey, copy: &GearCopy, qty: u32) {
         let shelf = self
             .world
             .resource_mut::<BuybackLedger>()
@@ -162,24 +197,43 @@ impl Game {
     }
 
     /// What `structure` charges per unit to sell `item` back: what it paid
-    /// for it, marked up by `BUYBACK_PRICE_MULTIPLIER`. Floored at 1 the way
-    /// `program_payout` is, so neither a modded `sell_rate: 0` nor a modded
-    /// `value: 0` can hand goods out for free.
+    /// for it, marked up by `BUYBACK_PRICE_MULTIPLIER`.
     fn buyback_unit_cost(&self, structure: Entity, item: &ItemId) -> Option<u32> {
-        Some((self.sell_price(structure, item)? * tuning::BUYBACK_PRICE_MULTIPLIER).max(1))
+        Some(buyback_markup(self.sell_price(structure, item)?))
     }
 
-    /// Everything `structure` has bought off the player and will sell back,
-    /// already priced. Empty for a structure that doesn't trade or has an
-    /// untouched shelf — which is every trader until the player sells to one.
-    pub fn buyback_options(&self, structure: Entity) -> Vec<BuybackOption> {
-        let Some(key) = self.shelf_key(structure) else {
-            return Vec::new();
-        };
+    /// What a settlement charges to sell `item` back: what it would pay you
+    /// for it right now — `Game::settlement_sell_price` at its own
+    /// `Temperament` — marked up the same way a structure's shelf is.
+    ///
+    /// **Priced live, not off what it actually paid.** A settlement's shelf
+    /// is derived and reprices with the zone and the epoch, unlike a
+    /// structure's fixed `sell_rate`; buyback follows suit rather than
+    /// freezing the price a sale happened to land at.
+    fn settlement_buyback_unit_cost(
+        &self,
+        item: &ItemId,
+        temperament: crate::settlements::Temperament,
+    ) -> u32 {
+        buyback_markup(self.settlement_sell_price(item, temperament))
+    }
+
+    /// Everything on the shelf named by `key`, already priced through
+    /// `unit_cost` and sorted the way every buyback list is — category,
+    /// then rarity, then fusion tier, `buyback_options`'s own order. Shared
+    /// by `Game::buyback_options` (a structure) and
+    /// `Game::settlement_buyback_options` (a settlement): the ledger read
+    /// and the sort do not care which kind of vendor owns the shelf, only
+    /// how that vendor prices a row.
+    fn buyback_options_at(
+        &self,
+        key: &resources::ShelfKey,
+        unit_cost: impl Fn(&ItemId) -> Option<u32>,
+    ) -> Vec<BuybackOption> {
         self.world
             .resource::<BuybackLedger>()
             .0
-            .get(&key)
+            .get(key)
             .map(|shelf| {
                 let mut options: Vec<BuybackOption> = shelf
                     .iter()
@@ -188,7 +242,7 @@ impl Game {
                             name: self.copy_name(copy),
                             copy: copy.clone(),
                             qty: *qty,
-                            unit_cost: self.buyback_unit_cost(structure, &copy.item)?,
+                            unit_cost: unit_cost(&copy.item)?,
                         })
                     })
                     .collect();
@@ -204,32 +258,63 @@ impl Game {
             .unwrap_or_default()
     }
 
-    /// Buys back `qty` of `item` that the player previously sold to
-    /// `structure`, at `buyback_unit_cost` each.
+    /// Everything `structure` has bought off the player and will sell back,
+    /// already priced. Empty for a structure that doesn't trade or has an
+    /// untouched shelf — which is every trader until the player sells to one.
+    pub fn buyback_options(&self, structure: Entity) -> Vec<BuybackOption> {
+        let Some(key) = self.shelf_key(structure) else {
+            return Vec::new();
+        };
+        self.buyback_options_at(&key, |item| self.buyback_unit_cost(structure, item))
+    }
+
+    /// Everything the settlement `key` names has bought off the player and
+    /// will sell back — `buyback_options`'s settlement counterpart. Empty
+    /// for an unmaterialized settlement or one with an untouched shelf.
     ///
-    /// Separate from `buy_item` rather than folded into it: that list is an
-    /// infinite catalogue priced per item, this shelf is finite and drains as
-    /// it's bought.
-    pub fn buy_back(&mut self, structure: Entity, copy: GearCopy, qty: u32) -> Result<(), String> {
+    /// **A rare copy comes back as that rare copy**, never folded into an
+    /// ordinary one — `BuybackLedger` keys on the whole `GearCopy`, not on
+    /// the item alone, and this reads the same ledger `buyback_options`
+    /// does.
+    pub fn settlement_buyback_options(
+        &self,
+        key: crate::settlements::SettlementKey,
+    ) -> Vec<BuybackOption> {
+        let Some(temperament) = self
+            .world
+            .resource::<resources::Settlements>()
+            .0
+            .get(&key)
+            .map(|known| known.def.temperament)
+        else {
+            return Vec::new();
+        };
+        let Some(shelf_key) = self.settlement_shelf_key(key) else {
+            return Vec::new();
+        };
+        self.buyback_options_at(&shelf_key, |item| {
+            Some(self.settlement_buyback_unit_cost(item, temperament))
+        })
+    }
+
+    /// Buys back `qty` of `copy` off whichever shelf `key` names, at
+    /// `unit_cost` each. The core of `Game::buy_back` and
+    /// `Game::settlement_buy_back`: everything about spending Credits for a
+    /// shelved copy that does not depend on *which* vendor owns the shelf —
+    /// the funds check, the ledger draw-down, the goods coming home.
+    fn buy_back_at(
+        &mut self,
+        key: &resources::ShelfKey,
+        unit_cost: u32,
+        copy: GearCopy,
+        qty: u32,
+    ) -> Result<(), String> {
         let item = copy.item.clone();
-        if self.is_game_over().is_some() || self.has_active_battle() {
-            return Err("Can't do that right now.".into());
-        }
-        self.require_base()?;
-        if qty == 0 {
-            return Err("Buy back at least 1.".into());
-        }
-        let unit_cost = self
-            .buyback_unit_cost(structure, &item)
-            .ok_or_else(|| "That structure doesn't trade.".to_string())?;
-        let key = self
-            .shelf_key(structure)
-            .ok_or_else(|| "That structure doesn't trade.".to_string())?;
         let shelved = self
             .world
             .resource::<BuybackLedger>()
             .0
-            .get(&key)
+            .get(key)
             .and_then(|shelf| shelf.iter().find(|(c, _)| *c == copy))
             .map(|(_, held)| *held)
             .unwrap_or(0);
@@ -257,13 +342,13 @@ impl Game {
         self.add_copies(&copy, qty);
         {
             let mut ledger = self.world.resource_mut::<BuybackLedger>();
-            if let Some(shelf) = ledger.0.get_mut(&key) {
+            if let Some(shelf) = ledger.0.get_mut(key) {
                 if let Some(row) = shelf.iter_mut().find(|(c, _)| *c == copy) {
                     row.1 -= qty;
                 }
                 shelf.retain(|(_, held)| *held > 0);
                 if shelf.is_empty() {
-                    ledger.0.remove(&key);
+                    ledger.0.remove(key);
                 }
             }
         }
@@ -272,6 +357,67 @@ impl Game {
         ));
         self.tick();
         Ok(())
+    }
+
+    /// Buys back `qty` of `item` that the player previously sold to
+    /// `structure`, at `buyback_unit_cost` each.
+    ///
+    /// Separate from `buy_item` rather than folded into it: that list is an
+    /// infinite catalogue priced per item, this shelf is finite and drains
+    /// as it's bought.
+    pub fn buy_back(&mut self, structure: Entity, copy: GearCopy, qty: u32) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        self.require_base()?;
+        if qty == 0 {
+            return Err("Buy back at least 1.".into());
+        }
+        let unit_cost = self
+            .buyback_unit_cost(structure, &copy.item)
+            .ok_or_else(|| "That structure doesn't trade.".to_string())?;
+        let key = self
+            .shelf_key(structure)
+            .ok_or_else(|| "That structure doesn't trade.".to_string())?;
+        self.buy_back_at(&key, unit_cost, copy, qty)
+    }
+
+    /// Buys back `qty` of `copy` that the player previously sold to the
+    /// settlement `key` names — `buy_back`'s settlement counterpart, priced
+    /// through `settlement_buyback_unit_cost` rather than a structure's
+    /// fixed `sell_rate`.
+    ///
+    /// **No `require_base`.** A settlement stands on the zone surface, not
+    /// in base space, so `Game::settlement_reach` is the gate here — the
+    /// same one `Game::commit_settlement_basket` checks.
+    pub fn settlement_buy_back(
+        &mut self,
+        key: crate::settlements::SettlementKey,
+        copy: GearCopy,
+        qty: u32,
+    ) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        if !self.settlement_reach(key) {
+            return Err("There's nobody trading here.".into());
+        }
+        if qty == 0 {
+            return Err("Buy back at least 1.".into());
+        }
+        let temperament = self
+            .world
+            .resource::<resources::Settlements>()
+            .0
+            .get(&key)
+            .ok_or_else(|| "There's nobody trading here.".to_string())?
+            .def
+            .temperament;
+        let unit_cost = self.settlement_buyback_unit_cost(&copy.item, temperament);
+        let shelf_key = self
+            .settlement_shelf_key(key)
+            .ok_or_else(|| "There's nobody trading here.".to_string())?;
+        self.buy_back_at(&shelf_key, unit_cost, copy, qty)
     }
 
     /// The divisor `structure` prices programs by, if it buys them at all.
@@ -598,4 +744,19 @@ impl Game {
         self.tick();
         Ok(())
     }
+}
+
+/// What a shelf charges to sell a copy back, given what it would otherwise
+/// pay for one. Floored at 1 the way `program_payout` is, so neither a
+/// modded `sell_rate: 0` nor a modded `value: 0` can hand goods out for
+/// free.
+///
+/// A free function rather than a method, shared verbatim by
+/// `Game::buyback_unit_cost` (a structure) and
+/// `Game::settlement_buyback_unit_cost` (a settlement): the two disagree
+/// about *what the underlying price is* — one reads a fixed `sell_rate`,
+/// the other a `Temperament`-scaled `settlement_sell_price` — and agree
+/// completely about what buyback does to that price once it has one.
+fn buyback_markup(price: u32) -> u32 {
+    (price * tuning::BUYBACK_PRICE_MULTIPLIER).max(1)
 }

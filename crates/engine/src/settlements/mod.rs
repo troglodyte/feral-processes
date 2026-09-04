@@ -105,4 +105,30 @@ impl Temperament {
             Temperament::Mercantile => "Mercantile",
         }
     }
+
+    /// What this temperament scales a buy price by — `Game::marked_unit_cost`'s
+    /// `mult`, read by `Game::settlement_unit_cost`.
+    ///
+    /// Exhaustive on purpose, `Specialty`'s own reason: a fourth temperament
+    /// with no price to read is one that reads as broken rather than as
+    /// neutral. See `tuning::SETTLEMENT_OPEN_BUY_MULT` for the table and the
+    /// argument for Mercantile's asymmetry.
+    pub(crate) fn buy_mult(self) -> f32 {
+        match self {
+            Temperament::Open => crate::tuning::SETTLEMENT_OPEN_BUY_MULT,
+            Temperament::Guarded => crate::tuning::SETTLEMENT_GUARDED_BUY_MULT,
+            Temperament::Mercantile => crate::tuning::SETTLEMENT_MERCANTILE_BUY_MULT,
+        }
+    }
+
+    /// What this temperament scales what a settlement pays *you* by — see
+    /// `Game::settlement_sell_price` and `buy_mult`'s doc for why the two
+    /// axes are six constants and not one.
+    pub(crate) fn sell_mult(self) -> f32 {
+        match self {
+            Temperament::Open => crate::tuning::SETTLEMENT_OPEN_SELL_MULT,
+            Temperament::Guarded => crate::tuning::SETTLEMENT_GUARDED_SELL_MULT,
+            Temperament::Mercantile => crate::tuning::SETTLEMENT_MERCANTILE_SELL_MULT,
+        }
+    }
 }

@@ -27,7 +27,7 @@ pub use feral_processes_engine::ProgramRole;
 
 use app::arena::{ArenaPickKind, ArenaSession};
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -2225,18 +2225,27 @@ pub struct App {
     /// parallel test suite open the gate without writing to a
     /// process-global environment every other case in flight can see.
     sprite_forge_flag: bool,
-    /// Where the dev sprite editor reads and writes PNGs — `None` unless
-    /// the launcher installed one (`App::install_sprite_dir`), which it
-    /// only does inside a checkout. The other half of
-    /// `sprite_forge_enabled`'s gate.
-    sprite_dir: Option<PathBuf>,
+    /// Whether the launcher installed a sprite dir (`App::
+    /// install_sprite_dir`), which it only does inside a checkout — the
+    /// other half of `sprite_forge_enabled`'s gate. A bare flag rather than
+    /// the path itself: nothing ever read the path back (M1, final review)
+    /// — every real read/write derives `assets_dir().join("sprites")`
+    /// afresh (`crates/gui/src/sprites.rs`'s `load`/`install_library`/
+    /// `drain_writes`), so a stored path could disagree with the directory
+    /// actually used with no test able to see it, e.g. under `--assets
+    /// <override>`.
+    sprite_dir_installed: bool,
     /// The frontend's decoded, quantised sprite library, keyed by sprite
     /// name — `App::install_sprite_library`'s `enabled` half. Empty until
     /// installed, which is every non-dev session's whole life.
     sprite_library: HashMap<String, Canvas>,
     /// Sprite names switched off (`<name>.png.off` on disk) but not
-    /// deleted — `App::install_sprite_library`'s `disabled` half.
-    sprite_disabled: HashSet<String>,
+    /// deleted — `App::install_sprite_library`'s `disabled` half. Decoded,
+    /// same as `sprite_library`'s art, so `Enter` on an `Off` subject can
+    /// open the disabled art itself rather than a blank canvas — I2's fix:
+    /// the picker already tells the player the art survives the toggle, and
+    /// the only tool that can read it back was the one place that didn't.
+    sprite_disabled: HashMap<String, Canvas>,
     /// `App::sprite_subjects`' cached static half — `(name, label, glyph,
     /// color)` tuples (`StaticSpriteSubject`), parsed from `assets/species`/
     /// `assets/structures` once and kept for the rest of the session. `None`

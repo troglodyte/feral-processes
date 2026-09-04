@@ -6,8 +6,7 @@
 //! without touching an environment the parallel suite shares — the same
 //! reasoning `dev_arena_enabled` records.
 
-use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::collections::HashMap;
 
 use feral_processes_engine::icon::Canvas;
 
@@ -21,7 +20,7 @@ fn app_with_sprite_forge(seed: u32) -> App {
     app.game = None;
     app.mode = Mode::MainMenu;
     app.sprite_forge_flag = true;
-    app.install_sprite_dir(PathBuf::from("/does/not/matter"));
+    app.install_sprite_dir();
     app
 }
 
@@ -63,7 +62,7 @@ fn a_dir_alone_is_not_enough_without_the_flag() {
     let mut app = test_app(3);
     app.game = None;
     app.mode = Mode::MainMenu;
-    app.install_sprite_dir(PathBuf::from("/does/not/matter"));
+    app.install_sprite_dir();
     // `sprite_forge_flag` left false.
 
     assert!(!app.sprite_forge_enabled());
@@ -149,8 +148,8 @@ fn sprite_subjects_reads_art_state_off_the_installed_library() {
     let mut app = app_with_sprite_forge(6);
     let mut enabled = HashMap::new();
     enabled.insert("anchor".to_string(), Canvas::new(16));
-    let mut disabled = HashSet::new();
-    disabled.insert("player".to_string());
+    let mut disabled = HashMap::new();
+    disabled.insert("player".to_string(), Canvas::new(16));
     app.install_sprite_library(enabled, disabled);
 
     let subjects = app.sprite_subjects();
@@ -185,7 +184,7 @@ fn the_static_list_is_cached_but_art_state_stays_live() {
     // get wrong.
     let mut enabled = HashMap::new();
     enabled.insert("anchor".to_string(), Canvas::new(16));
-    app.install_sprite_library(enabled, HashSet::new());
+    app.install_sprite_library(enabled, HashMap::new());
 
     let third = app.sprite_subjects();
     assert_eq!(
@@ -217,6 +216,34 @@ fn open_editor(app: &mut App, name: &str) {
     assert_eq!(app.mode, Mode::SpriteEditor, "Enter must open the editor");
 }
 
+/// **M2, final review.** The picker has 49 rows and no scroll
+/// (`the_picker_shows_every_subject_with_no_scroll_at_1280x720`), so losing
+/// the highlight on every Esc from the editor means you cannot edit a row
+/// deep in the list, back out, and press `t` on the same row — every trip
+/// into the editor sends you back to the top. `keeps_highlight`'s new
+/// `(SpritePicker, SpriteEditor)` pair, in both directions, is the fix.
+#[test]
+fn esc_from_the_editor_returns_to_the_row_that_opened_it() {
+    let mut app = app_with_sprite_forge(61);
+    let subjects = app.sprite_subjects();
+    let idx = subjects.len() - 1;
+    assert!(idx > 0, "the fixture needs more than one subject");
+
+    open_editor(&mut app, &subjects[idx].name);
+    assert_eq!(
+        app.menu_selected, idx,
+        "opening the editor must not itself move the picker's highlight"
+    );
+
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::SpritePicker);
+    assert_eq!(
+        app.menu_selected, idx,
+        "Esc from the editor must return to the row that opened it, not row 0"
+    );
+}
+
 #[test]
 fn opening_a_subject_with_art_loads_the_installed_canvas_and_one_without_art_opens_blank() {
     let mut app = app_with_sprite_forge(20);
@@ -224,7 +251,7 @@ fn opening_a_subject_with_art_loads_the_installed_canvas_and_one_without_art_ope
     art.set(0, 0, 5);
     let mut enabled = HashMap::new();
     enabled.insert("anchor".to_string(), art);
-    app.install_sprite_library(enabled, HashSet::new());
+    app.install_sprite_library(enabled, HashMap::new());
 
     let subjects = app.sprite_subjects();
     let blank_name = subjects
@@ -248,6 +275,39 @@ fn opening_a_subject_with_art_loads_the_installed_canvas_and_one_without_art_ope
     assert!(
         view.canvas.cells.iter().all(|&c| c == 0),
         "a subject with no installed art opens on a blank canvas"
+    );
+}
+
+/// **I2, final review.** `Enter` on an `Off` subject must reopen the art
+/// that was disabled, not a blank canvas — the picker's own label already
+/// promises the art is "still on disk," and a blank canvas here is what let
+/// I1's loss chain look like drawing something new rather than destroying
+/// something old. `sprite_disabled` carries decoded canvases (not bare
+/// names) specifically so this fallback has something to open.
+#[test]
+fn entering_an_off_subject_reopens_its_disabled_art_not_a_blank_canvas() {
+    let mut app = app_with_sprite_forge(60);
+    let mut art = Canvas::new(16);
+    art.set(3, 4, 9);
+    let mut disabled = HashMap::new();
+    disabled.insert("anchor".to_string(), art.clone());
+    app.install_sprite_library(HashMap::new(), disabled);
+
+    let subjects = app.sprite_subjects();
+    let anchor = subjects.iter().find(|s| s.name == "anchor").unwrap();
+    assert_eq!(anchor.art, SpriteArt::Off, "the fixture's own premise");
+
+    open_editor(&mut app, "anchor");
+    let view = app.sprite_editor_view().expect("editor open");
+    let mut want = Vec::with_capacity(16 * 16);
+    for y in 0..16 {
+        for x in 0..16 {
+            want.push(art.get(x, y));
+        }
+    }
+    assert_eq!(
+        view.canvas.cells, want,
+        "Enter on an Off subject must load the disabled art, not blank"
     );
 }
 
@@ -298,8 +358,8 @@ fn picker_t_queues_disable_for_an_on_subject_and_enable_for_an_off_one() {
     let mut app = app_with_sprite_forge(24);
     let mut enabled = HashMap::new();
     enabled.insert("anchor".to_string(), Canvas::new(16));
-    let mut disabled = HashSet::new();
-    disabled.insert("player".to_string());
+    let mut disabled = HashMap::new();
+    disabled.insert("player".to_string(), Canvas::new(16));
     app.install_sprite_library(enabled, disabled);
 
     let subjects = app.sprite_subjects();
@@ -338,6 +398,49 @@ fn take_sprite_writes_drains_so_a_second_call_is_empty() {
 
     assert_eq!(app.take_sprite_writes().len(), 1);
     assert!(app.take_sprite_writes().is_empty());
+}
+
+/// **M5, final review.** At brush 2 the keyboard cursor is always snapped
+/// to an even coordinate (`CanvasEditor::step`'s own rule), and the pointer
+/// path must agree — a click at an odd coordinate must anchor the brush's
+/// 2x2 block at the *snapped* cell, not the raw one the pointer resolved
+/// to. Clicking (3, 3) must paint the block anchored at (2, 2), which
+/// reaches (3, 3) but never (4, 4) — the cell an unsnapped anchor at (3, 3)
+/// would have reached instead.
+#[test]
+fn the_pointer_snaps_to_the_brush_grid_like_the_keyboard_does() {
+    let mut app = app_with_sprite_forge(62);
+    open_editor(&mut app, "anchor");
+    app.handle_key(GameKey::Char('g')); // brush 1 -> 2
+    assert_eq!(app.sprite_editor_view().unwrap().canvas.brush, 2);
+
+    app.handle_pointer(
+        PointerHit::Cell(3, 3),
+        PointerButton::Primary,
+        PointerPhase::Down,
+    );
+    app.handle_pointer(
+        PointerHit::Cell(3, 3),
+        PointerButton::Primary,
+        PointerPhase::Up,
+    );
+
+    let view = app.sprite_editor_view().unwrap();
+    let edge = view.canvas.edge as usize;
+    let selected = view.canvas.selected;
+    for (x, y) in [(2usize, 2usize), (3, 2), (2, 3), (3, 3)] {
+        assert_eq!(
+            view.canvas.cells[y * edge + x],
+            selected,
+            "cell ({x}, {y}) should be inside the snapped block"
+        );
+    }
+    assert_ne!(
+        view.canvas.cells[4 * edge + 4],
+        selected,
+        "an unsnapped anchor at (3, 3) would have reached (4, 4); a snapped \
+         one anchored at (2, 2) must not"
+    );
 }
 
 #[test]
@@ -425,6 +528,10 @@ fn secondary_button_paints_index_zero_erase() {
 
 #[test]
 fn a_swatch_hit_selects_it() {
+    // `PointerHit::Swatch(6)` is `swatch_at`'s 0-based drawn position — the
+    // *seventh* swatch on screen — so it must land on `selected == 7`, not
+    // `6`. The old `== 6` expectation enshrined C1's off-by-one: the mouse
+    // selected the swatch to the left of the one it outlined.
     let mut app = app_with_sprite_forge(28);
     open_editor(&mut app, "anchor");
     assert_eq!(app.sprite_editor_view().unwrap().canvas.selected, 1);
@@ -439,7 +546,7 @@ fn a_swatch_hit_selects_it() {
         PointerButton::Primary,
         PointerPhase::Up,
     );
-    assert_eq!(app.sprite_editor_view().unwrap().canvas.selected, 6);
+    assert_eq!(app.sprite_editor_view().unwrap().canvas.selected, 7);
 }
 
 #[test]

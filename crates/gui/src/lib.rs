@@ -158,6 +158,11 @@ struct SpritePointer {
 /// mode check needed here beyond that, since a session is only ever open in
 /// `Mode::SpriteEditor` — and the tracker is reset in that case so a stroke
 /// cannot survive into a session that opens later.
+///
+/// **No interpolation between frames** (M6, final review): a fast drag
+/// reports only the cell under the pointer each frame, so a quick stroke at
+/// 60fps can leave a dotted rather than solid line. Acceptable for a dev
+/// tool — worth knowing, not worth fixing here.
 fn handle_sprite_pointer(
     app: &mut App,
     ctx: &egui::Context,

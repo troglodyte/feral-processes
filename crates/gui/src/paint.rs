@@ -730,6 +730,25 @@ pub(crate) fn painted_rect_stroke_count(
         .count()
 }
 
+/// `painted_rect_stroke_count`'s companion for a caller asking *which*
+/// rect was outlined rather than how many were — the swatch row's
+/// selection highlight is a stroke, so `painted_rects` (fills included)
+/// cannot answer "is the outline over the swatch the pointer was on."
+#[cfg(test)]
+pub(crate) fn painted_rect_stroke_boxes(
+    shapes: &[egui::epaint::ClippedShape],
+    color: Color,
+) -> Vec<egui::Rect> {
+    let want = to_egui(color);
+    shapes
+        .iter()
+        .filter_map(|cs| match &cs.shape {
+            egui::Shape::Rect(r) if r.stroke.color == want => Some(r.rect),
+            _ => None,
+        })
+        .collect()
+}
+
 #[cfg(test)]
 pub(crate) fn painted_rect_widths(shapes: &[egui::epaint::ClippedShape]) -> Vec<f32> {
     shapes

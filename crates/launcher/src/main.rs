@@ -96,8 +96,8 @@ fn main() {
     // which is the other half of `App::sprite_forge_enabled`'s gate:
     // `FERAL_DEV_SPRITES` alone must not be enough to offer a screen whose
     // whole purpose is writing into a source tree that build does not have.
-    if let Some(dev) = &paths.dev {
-        app.install_sprite_dir(dev.sprites.clone());
+    if paths.dev.is_some() {
+        app.install_sprite_dir();
     }
     // Generated into an expendable copy under `saves/`, never opened on the
     // `dev-saves/` source — the game autosaves, so playing the fixture

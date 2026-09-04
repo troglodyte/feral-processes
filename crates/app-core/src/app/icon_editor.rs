@@ -100,9 +100,15 @@ impl IconEditor {
         }
     }
 
-    /// The drawing as it stands — and, after either ending, the drawing
-    /// the wizard should act on: `Keep` leaves what was drawn here and
-    /// `Discard` leaves what the editor opened with.
+    /// **The last *committed* drawing, not the live canvas mid-edit — M3,
+    /// final review.** `opened_with` only changes on `Enter`
+    /// (`handle_key`'s `Keep` arm resyncs it to the canvas right there), so
+    /// this is safe to read as "the drawing as it stands" only *immediately
+    /// after* a `Keep` — which is the one real caller's only call site
+    /// (`creation.rs::handle_creation_key`'s `Keep` arm). Read it between
+    /// keystrokes and it is stale by definition; `Discard` never touches
+    /// this field at all, which is what lets it carry no icon of its own —
+    /// discarding is defined as the editor ending on what it started with.
     pub(crate) fn icon(&self) -> &PlayerIcon {
         &self.opened_with
     }

@@ -566,7 +566,7 @@ pub(crate) fn hit_rects(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use feral_processes_app_core::{GameKey, Mode};
+    use feral_processes_app_core::{GameKey, Mode, PointerButton, PointerPhase};
     use feral_processes_engine::icon::SPRITE_PALETTE;
 
     const CENSUS_W: f32 = 1280.0;
@@ -832,10 +832,33 @@ mod tests {
     /// below (`a_near_white_pixel_previews_tinted_by_the_subjects_hue`),
     /// since folding both claims into one assertion would hide a tint bug
     /// behind whichever count happened to still be right.
+    ///
+    /// **Pinned to `cipher` (M4, final review)**, not "whichever subject
+    /// sorts first": the preview cell is always drawn too, tinted by the
+    /// subject's own hue (`tint_multiply`), and a hue of identity-white
+    /// would make the tinted preview pixel land on the same raw colour as
+    /// the swatch and the grid cell, silently inflating the count to 3 — the
+    /// earlier fixture (index 0, the alphabetically-first subject) only
+    /// passed because that subject's colour happened not to be `White`. A
+    /// species named ahead of it with `color: White` would have made this
+    /// pass or fail depending on asset content nobody here was testing.
+    /// `cipher` is `GlyphColor::Cyan`, asserted below — nowhere near the
+    /// identity-tint hazard `SPRITE_PALETTE[8]`'s own near-white test exists
+    /// to cover.
     #[test]
     fn a_painted_cell_shows_on_the_canvas_and_the_palette_in_its_raw_colour() {
         let mut app = sprite_forge_app();
-        open_editor(&mut app, 0);
+        let subjects = app.sprite_subjects();
+        let index = subjects
+            .iter()
+            .position(|s| s.name == "cipher")
+            .expect("cipher ships in assets/species");
+        assert_eq!(
+            subjects[index].color,
+            Some(GlyphColor::Cyan),
+            "the fixture this test's premise rests on"
+        );
+        open_editor(&mut app, index);
         // Space paints the cursor's cell (0,0) with the opening swatch,
         // index 1 (`canvas_editor::FIRST_COLOUR`) — `SPRITE_PALETTE[0]`.
         app.handle_key(GameKey::Char(' '));
@@ -1058,5 +1081,51 @@ mod tests {
         assert_eq!(swatch_hit, Some(PointerHit::Swatch(0)));
 
         assert_eq!(rects.resolve((-1.0, -1.0)), None, "outside both panels");
+    }
+
+    /// **The seam neither side's own test spanned.** `swatch_at` answers in
+    /// drawn positions, `pick_swatch` writes `CanvasView::selected`, and
+    /// `draw_swatch_row` reads that back to outline exactly one swatch — so
+    /// the only honest question is whether the outline lands on the swatch
+    /// the pointer was actually over. Asked of the first, a middle and the
+    /// **last** entry of `SPRITE_PALETTE`; the last is the one an off-by-one
+    /// in either direction cannot reach at all, and the first is the one it
+    /// gets right by accident (`pick_swatch`'s clamp floors it).
+    #[test]
+    fn a_click_outlines_the_swatch_under_the_pointer() {
+        let mut app = sprite_forge_app();
+        open_editor(&mut app, 0);
+        let view = app.sprite_editor_view().expect("just opened");
+        let m = crate::text::ui_metrics(900.0);
+        let rects = crate::paint::with_painter(|p| hit_rects(p, CENSUS_W, &m, &view, app.zoom)).0;
+        let palette = rects.palette;
+        let swatch = palette.h;
+        let stride = swatch * (1.0 + canvas::SWATCH_GAP_RATIO);
+
+        for i in [0usize, SPRITE_PALETTE.len() / 2, SPRITE_PALETTE.len() - 1] {
+            let left = palette.x + i as f32 * stride;
+            let pos = (left + swatch * 0.5, palette.y + swatch * 0.5);
+            let hit = rects.resolve(pos).expect("inside a swatch");
+            app.handle_pointer(hit, PointerButton::Primary, PointerPhase::Down);
+            app.handle_pointer(hit, PointerButton::Primary, PointerPhase::Up);
+
+            let selected = app
+                .sprite_editor_view()
+                .expect("still open")
+                .canvas
+                .selected;
+            let (_, shapes) = crate::paint::with_painter(|p| {
+                canvas::draw_swatch_row(p, palette, selected, &SPRITE_PALETTE)
+            });
+            let outlined =
+                crate::paint::painted_rect_stroke_boxes(&shapes, canvas::SELECTED_SWATCH_COLOR);
+            assert_eq!(outlined.len(), 1, "exactly one swatch is outlined");
+            assert!(
+                (outlined[0].min.x - left).abs() < 0.5,
+                "clicking swatch {i} (drawn at x={left}) must outline that swatch, \
+                 not the one at x={}",
+                outlined[0].min.x
+            );
+        }
     }
 }

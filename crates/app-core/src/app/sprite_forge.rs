@@ -10,8 +10,8 @@
 //! mouse entry point. Drawing is `Mode::SpriteEditor`'s Task 7, not this
 //! module's.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::collections::{BTreeMap, HashMap};
+use std::path::Path;
 
 use feral_processes_engine::DEFAULT_PLAYER_SPRITE;
 use feral_processes_engine::abilities::AbilityDb;
@@ -125,10 +125,11 @@ pub(crate) struct SpriteEditor {
 }
 
 impl SpriteEditor {
-    /// Opens on `canvas` — the installed art for `subject` if
-    /// `App::sprite_library` had any, or a blank 16x16 canvas otherwise.
-    /// Blank is a legitimate opening state here, unlike the player's own
-    /// `@`: nothing filters it away before it can be saved.
+    /// Opens on `canvas` — `handle_sprite_picker_key`'s own resolution of
+    /// `App::sprite_library` (enabled) then `App::sprite_disabled` (off),
+    /// falling back to a blank 16x16 canvas only when the subject has never
+    /// had art at all. Blank is a legitimate opening state here, unlike the
+    /// player's own `@`: nothing filters it away before it can be saved.
     fn open(subject: String, canvas: Canvas) -> SpriteEditor {
         SpriteEditor {
             editor: CanvasEditor::open(canvas, SPRITE_PALETTE.len() as u8),
@@ -214,27 +215,35 @@ pub enum PointerPhase {
 }
 
 impl App {
-    /// Where the picker and (eventually) the editor read and write PNGs —
-    /// `assets/sprites/` in the checkout behind this build, or `None` if
-    /// there isn't one. Installed by the launcher unconditionally within a
+    /// Marks that a sprite dir exists for this build to read and write
+    /// PNGs through — installed by the launcher unconditionally within a
     /// checkout, mirroring `install_dev_templates`: the flag alone decides
     /// visibility from there, so installing this only when
     /// `FERAL_DEV_SPRITES` is set would make one flag mean two things. An
     /// installed build has no checkout to resolve this from at all, which
     /// is the other half of the gate — see `sprite_forge_enabled`.
-    pub fn install_sprite_dir(&mut self, dir: PathBuf) {
-        self.sprite_dir = Some(dir);
+    ///
+    /// **Takes no path** (M1, final review): the real directory every
+    /// read/write actually uses is `assets_dir().join("sprites")`, derived
+    /// fresh at each site in `crates/gui/src/sprites.rs` — a path stored
+    /// here was never read back as one, only tested with `.is_some()`, so
+    /// it could silently name a different directory than the one really in
+    /// use (e.g. under `--assets <override>`) with nothing to catch it.
+    pub fn install_sprite_dir(&mut self) {
+        self.sprite_dir_installed = true;
     }
 
     /// The frontend's decoded, quantised sprite library — `SpriteArt::On`
     /// for a name in `enabled`, `SpriteArt::Off` for one in `disabled`,
     /// `SpriteArt::None` for neither. app-core does no file I/O of its own;
-    /// a real frontend fills both sets by scanning `assets/sprites/` (Task
-    /// 8's job, not this one's).
+    /// a real frontend fills both maps by scanning `assets/sprites/` (Task
+    /// 8's job, not this one's). `disabled` is decoded pixels, not bare
+    /// names, so `Enter` on an `Off` subject can reopen the art itself — see
+    /// `sprite_disabled`'s own doc comment.
     pub fn install_sprite_library(
         &mut self,
         enabled: HashMap<String, Canvas>,
-        disabled: HashSet<String>,
+        disabled: HashMap<String, Canvas>,
     ) {
         self.sprite_library = enabled;
         self.sprite_disabled = disabled;
@@ -245,7 +254,7 @@ impl App {
     /// `install_sprite_dir` call ever lands) cannot offer a screen whose
     /// entire purpose is writing into a source tree it does not have.
     pub fn sprite_forge_enabled(&self) -> bool {
-        self.sprite_forge_flag && self.sprite_dir.is_some()
+        self.sprite_forge_flag && self.sprite_dir_installed
     }
 
     /// Every name the map can draw a sprite for: each species def, each
@@ -287,7 +296,7 @@ impl App {
             .map(|(name, label, glyph, color)| {
                 let art = if self.sprite_library.contains_key(name) {
                     SpriteArt::On
-                } else if self.sprite_disabled.contains(name) {
+                } else if self.sprite_disabled.contains_key(name) {
                     SpriteArt::Off
                 } else {
                     SpriteArt::None
@@ -353,11 +362,14 @@ impl App {
     /// subject with art between `On` and `Off` (queuing the rename cue) and
     /// does nothing on one with none to toggle. `Enter` opens
     /// `Mode::SpriteEditor` on the highlighted subject — loading its
-    /// installed canvas if `sprite_library` has one, or a blank one if not.
-    /// Up/Down still scroll the list, the same read-only-screen idiom
-    /// `handle_recipes_key` uses — `selected_index` is what both Enter and
-    /// the arrows go through, so there is one place that owns the
-    /// highlight.
+    /// installed canvas from `sprite_library` if it has one, falling back to
+    /// `sprite_disabled` for an `Off` subject (**I2's fix**: the picker
+    /// already says the art survived the toggle, so the one tool that can
+    /// read it back must actually do so rather than opening blank), and
+    /// only a genuinely art-less subject opens blank. Up/Down still scroll
+    /// the list, the same read-only-screen idiom `handle_recipes_key` uses —
+    /// `selected_index` is what both Enter and the arrows go through, so
+    /// there is one place that owns the highlight.
     pub(crate) fn handle_sprite_picker_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.mode = Mode::MainMenu;
@@ -385,6 +397,7 @@ impl App {
             let canvas = self
                 .sprite_library
                 .get(&subject.name)
+                .or_else(|| self.sprite_disabled.get(&subject.name))
                 .cloned()
                 .unwrap_or_else(|| Canvas::new(SPRITE_EDGE));
             self.sprite_editor = Some(SpriteEditor::open(subject.name.clone(), canvas));
@@ -449,6 +462,17 @@ impl App {
     /// (`PointerPhase`'s own doc comment); `hit` decides what happens at
     /// it — a `Cell` paints (the selected swatch on `Primary`, index 0 —
     /// erase — on `Secondary`), a `Swatch` selects.
+    ///
+    /// **`PointerHit::Swatch` carries `swatch_at`'s 0-based drawn
+    /// position** (its own doc comment says so), while `pick_swatch` — and
+    /// `CanvasView::selected` it writes — is 1-based (`FIRST_COLOUR = 1`;
+    /// `draw_swatch_row` outlines the swatch where `selected == i + 1`). The
+    /// `+ 1` below is that one conversion, made once at the seam neither
+    /// side's own test could see: `swatch_at` correctly tests its own
+    /// 0-based answer, `pick_swatch` correctly tests its own 1-based input,
+    /// and nothing crossed the boundary between the two until this line
+    /// existed. Get this wrong and the mouse selects the swatch to the left
+    /// of the one it outlines, and the palette's last entry is unreachable.
     pub fn handle_pointer(&mut self, hit: PointerHit, button: PointerButton, phase: PointerPhase) {
         if self.mode != Mode::SpriteEditor {
             return;
@@ -465,9 +489,14 @@ impl App {
                     PointerButton::Primary => sprite_editor.editor.view().selected,
                     PointerButton::Secondary => 0,
                 };
+                // M5, final review: snap to the brush grid before painting,
+                // or brush 2 anchors on whatever odd coordinate the pointer
+                // happened to land on — see `snap_to_brush`'s own doc
+                // comment.
+                let (x, y) = sprite_editor.editor.snap_to_brush(x, y);
                 sprite_editor.editor.paint_at(x, y, index);
             }
-            PointerHit::Swatch(index) => sprite_editor.editor.pick_swatch(index),
+            PointerHit::Swatch(index) => sprite_editor.editor.pick_swatch(index + 1),
         }
         if phase == PointerPhase::Up {
             sprite_editor.editor.end_stroke();

@@ -95,6 +95,16 @@ someone dropping in a file — a stray `.png.off` sitting next to an enabled
 sprite is normal, not a leftover to clean up, and is exactly how a piece of
 art gets shelved without losing it.
 
+## A save quantises the file, irreversibly
+
+The dev-only sprite editor reads any 16x16 PNG in this directory back onto
+its own `SPRITE_PALETTE`, snapping every pixel to the nearest of that
+palette's colours — so opening a piece of hand-authored art with a richer
+palette and pressing `[s]` writes back a quantised copy, with no warning and
+no backup kept anywhere. There is no undo for this once the file is
+overwritten (the editor's own `[u]` only reaches back through the session's
+own strokes). If you want to keep the original, copy it elsewhere first.
+
 ## Fallback
 
 A missing sprite is not an error. `Painter::sprite` returns `false` when

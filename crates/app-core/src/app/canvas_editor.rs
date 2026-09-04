@@ -191,10 +191,35 @@ impl CanvasEditor {
         self.selected = (index as i32).clamp(FIRST_COLOUR as i32, self.palette_len as i32) as u8;
     }
 
+    /// Snaps `(x, y)` to a legal brush anchor — `Self::snap`'s own rule,
+    /// exposed for the pointer path (M5, final review). The keyboard path
+    /// (`step`) can never leave the cursor off-grid, but a mouse click
+    /// resolves straight from pixels to a cell with no such guarantee — at
+    /// brush 2, an unsnapped click anchors on whatever coordinate the
+    /// pointer happened to land on, disagreeing with what the cursor the
+    /// same screen draws would have painted from. `App::handle_pointer`
+    /// calls this before `paint_at` so both input paths agree on what brush
+    /// 2 means. At brush 1 every legal coordinate is already its own
+    /// anchor, so this is a no-op.
+    pub(crate) fn snap_to_brush(&self, x: u8, y: u8) -> (u8, u8) {
+        let brush = self.brush as i32;
+        let last = self.last_anchor();
+        (
+            Self::snap(x as i32, last, brush),
+            Self::snap(y as i32, last, brush),
+        )
+    }
+
     /// Paints the brush's whole footprint anchored at `(x, y)` with
     /// `index`, snapshotting first — unless every cell in the footprint
     /// already holds `index`, in which case nothing happened and nothing
     /// is recorded. At brush 1 this is exactly the old one-cell paint.
+    ///
+    /// **Does not itself snap `(x, y)` to the brush grid** — `paint_at`'s
+    /// callers disagree on whether they need to: the keyboard path
+    /// (`handle_key`'s `Char(' ')`/`Backspace` arms) always passes
+    /// `self.cursor`, which `step` already keeps snapped, while the pointer
+    /// path must call `snap_to_brush` first (see its own doc comment).
     pub(crate) fn paint_at(&mut self, x: u8, y: u8, index: u8) {
         let brush = self.brush as usize;
         let (bx, by) = (x as usize, y as usize);

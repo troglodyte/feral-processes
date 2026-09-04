@@ -254,7 +254,17 @@ Each is its own plan and its own release.
 
 ## Open, deliberately
 
-- Whether the fight axis (`FIGHT_CONDITION_WEIGHT`) is worth turning on. It
-  ships at 0.0 and is a play question.
-- Whether the store's cap is the right pressure, or a base rack is wanted.
+- Whether the fight axis (`FIGHT_CONDITION_WEIGHT`) is worth turning on.
+  **Confirmed 2026-09-04: the field ships and the weight ships at 0.0**, so
+  the axis exists, is tunable, and has no effect until played. Do not delete
+  the field for being unused, and do not fit a non-zero value without a play
+  session behind it.
+- **The cap is a count now and a weight budget later.** Confirmed
+  2026-09-04: `MAX_DOWNED_PROGRAMS` as a flat row count is what phase 1
+  ships, with the intent to move to a carried-weight metric once the store
+  has been lived with. That later move wants a `DownedProgram::weight()`
+  *derived* from species and grade — the "derived, never stored" rule — so
+  no save field is added now and none is needed then. Whatever replaces the
+  cap keeps decision 9's refusal: a full pack refuses the drop and destroys
+  nothing already held.
 - Phase 4's real cost.

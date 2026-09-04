@@ -37,7 +37,7 @@ half-authored is worse than one skipped loudly.
 | `id` | Unique. The pool is indexed in id order, so this also decides tie-breaks between files. Must not be empty. |
 | `name` | What the map and the settlement's own screen call it. Must not be blank. |
 | `blurb` | One or two sentences, shown on the settlement screen. |
-| `kind` | `Mainframe` (a city, drawn `M`) or `Server` (a town, drawn `s`). A mainframe carries more shelf rows and higher tiers. |
+| `kind` | `Mainframe` (a city, drawn `M`) or `Server` (a town, drawn `s`), both drawn in `GlyphColor::Orange`. A mainframe carries more shelf rows and higher tiers. |
 | `specialty` | `Gear`, `Materials`, `Routines` or `Programs`. Weights what its shelf offers. |
 | `temperament` | `Open`, `Guarded` or `Mercantile`. How it prices and how quickly it warms to you. |
 

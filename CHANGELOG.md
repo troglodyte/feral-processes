@@ -33,6 +33,25 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.90
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+this release is test-only and stores nothing.
+
+- **A screen that reads a modifier arrow must be named in `App::handle_key`'s
+  fold, and a census now says so.** The fold rewrites
+  `ShiftLeft`/`ShiftRight`/`CtrlLeft`/`CtrlRight` to bare arrows for every
+  screen outside a four-mode allowlist, so a picker that grows the four arms
+  without being listed gets them unreachable — the modifiers silently become
+  plain steps and nothing fails to compile.
+- **It reads source, because that direction is unreachable at runtime.** The
+  fold precedes dispatch, so an unlisted screen's modifier arms are dead by
+  construction and behave identically to bare `Left` whether the bug is
+  present or not; comparing the two lists in source is the only place they
+  meet.
+- **`crates/app-core` is warning-clean.** `seed_profile` takes `&Path`, which
+  was the crate's only clippy warning.
+
 ## 0.13.89
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

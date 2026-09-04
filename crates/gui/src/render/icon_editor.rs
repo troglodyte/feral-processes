@@ -16,7 +16,7 @@
 //! pixel the player painted on purpose.
 
 use super::*;
-use feral_processes_app_core::{IconEditorView, IconFocus};
+use feral_processes_app_core::{CanvasFocus, IconEditorView};
 use feral_processes_engine::{ICON_GRID, ICON_PALETTE};
 
 /// A canvas cell's side, in `Metrics::line_height` units. Double what it
@@ -194,7 +194,7 @@ fn draw_canvas(view: &IconEditorView, painter: &Painter, g: &Geometry, m: &Metri
 
     let c = g.canvas;
     painter.rect(c.x, c.y, c.w, c.h, PANEL_BG);
-    let (thickness, color) = panel_border(view.focus == IconFocus::Canvas);
+    let (thickness, color) = panel_border(view.canvas.focus == CanvasFocus::Canvas);
     painter.rect_lines(c.x, c.y, c.w, c.h, thickness, color);
 
     let ox = c.x + m.inset;
@@ -202,7 +202,7 @@ fn draw_canvas(view: &IconEditorView, painter: &Painter, g: &Geometry, m: &Metri
     let side = ICON_GRID as f32 * g.cell;
     for y in 0..ICON_GRID {
         for x in 0..ICON_GRID {
-            let idx = view.cells[y * ICON_GRID + x];
+            let idx = view.canvas.cells[y * ICON_GRID + x];
             let (px, py) = (ox + x as f32 * g.cell, oy + y as f32 * g.cell);
             painter.rect(px, py, g.cell, g.cell, cell_color(idx));
         }
@@ -214,7 +214,7 @@ fn draw_canvas(view: &IconEditorView, painter: &Painter, g: &Geometry, m: &Metri
         painter.line(ox, y, ox + side, y, 1.0, GRID_LINE);
     }
 
-    let (cx, cy) = (view.cursor.0 as f32, view.cursor.1 as f32);
+    let (cx, cy) = (view.canvas.cursor.0 as f32, view.canvas.cursor.1 as f32);
     painter.rect_lines(
         ox + cx * g.cell,
         oy + cy * g.cell,
@@ -230,7 +230,7 @@ fn draw_palette(view: &IconEditorView, painter: &Painter, g: &Geometry, m: &Metr
 
     let p = g.palette;
     painter.rect(p.x, p.y, p.w, p.h, PANEL_BG);
-    let (thickness, color) = panel_border(view.focus == IconFocus::Palette);
+    let (thickness, color) = panel_border(view.canvas.focus == CanvasFocus::Palette);
     painter.rect_lines(p.x, p.y, p.w, p.h, thickness, color);
 
     let ox = p.x + m.inset;
@@ -239,8 +239,8 @@ fn draw_palette(view: &IconEditorView, painter: &Painter, g: &Geometry, m: &Metr
         let x = ox + i as f32 * (g.swatch + g.swatch_gap);
         painter.rect(x, oy, g.swatch, g.swatch, palette_color(rgb));
         // `selected` is 1-based — index 0 means transparent and is not a
-        // swatch, see `app::icon_editor::FIRST_COLOUR`.
-        if view.selected as usize == i + 1 {
+        // swatch, see `app::canvas_editor::FIRST_COLOUR`.
+        if view.canvas.selected as usize == i + 1 {
             painter.rect_lines(
                 x,
                 oy,
@@ -268,10 +268,14 @@ mod tests {
 
     fn blank_view() -> IconEditorView {
         IconEditorView {
-            cells: [0; ICON_GRID * ICON_GRID],
-            cursor: (0, 0),
-            selected: 1,
-            focus: IconFocus::Canvas,
+            canvas: feral_processes_app_core::CanvasView {
+                cells: vec![0; ICON_GRID * ICON_GRID],
+                edge: ICON_GRID as u8,
+                cursor: (0, 0),
+                selected: 1,
+                focus: CanvasFocus::Canvas,
+                brush: 1,
+            },
         }
     }
 
@@ -375,7 +379,7 @@ mod tests {
         let mut view = blank_view();
         // Index 7: away from both ends of the palette and from `selected`'s
         // opening value of 1, so this cannot pass by coincidence.
-        view.cells[0] = 7;
+        view.canvas.cells[0] = 7;
         let want = palette_color(ICON_PALETTE[6]);
 
         let m = crate::text::ui_metrics(900.0);
@@ -419,7 +423,7 @@ mod tests {
         let m = crate::text::ui_metrics(900.0);
 
         let mut on_canvas = blank_view();
-        on_canvas.focus = IconFocus::Canvas;
+        on_canvas.canvas.focus = CanvasFocus::Canvas;
         let (_, shapes) = crate::paint::with_painter(|p| draw_icon_editor(&on_canvas, p, &m));
         assert_eq!(
             crate::paint::painted_rect_stroke_count(&shapes, UNFOCUSED_BORDER),
@@ -428,7 +432,7 @@ mod tests {
         );
 
         let mut on_palette = blank_view();
-        on_palette.focus = IconFocus::Palette;
+        on_palette.canvas.focus = CanvasFocus::Palette;
         let (_, shapes) = crate::paint::with_painter(|p| draw_icon_editor(&on_palette, p, &m));
         assert_eq!(
             crate::paint::painted_rect_stroke_count(&shapes, UNFOCUSED_BORDER),

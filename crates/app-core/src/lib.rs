@@ -11,10 +11,11 @@ mod app;
 
 pub use app::arena::{ArenaRow, ArenaRowKind, DevTemplates};
 pub use app::building::{BaseStaffRow, StaffAction, StaffRow, Staffing, WorkOrderRow};
+pub use app::canvas_editor::{CanvasFocus, CanvasView};
 pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
 pub use app::group_menu::GroupMenuRow;
-pub use app::icon_editor::{IconEditorView, IconFocus};
+pub use app::icon_editor::IconEditorView;
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
 /// nothing else of app-core's internals.
 pub use app::telemetry::append_records;

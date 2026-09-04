@@ -1,65 +1,56 @@
-//! The player's 8x8 icon editor: its state, and the whole of its key
-//! table.
+//! The player's 8x8 icon editor: the wizard sink composed on
+//! `CanvasEditor`'s shared mechanics.
 //!
 //! Not a `Mode`, for `creation.rs`'s reason — it hangs off the wizard's
 //! Icon step as an `Option<IconEditor>` rather than costing every `Mode`
 //! census a row for a screen reachable from exactly one other screen.
 //!
-//! **Two panels, and `GameKey::Tab` between them.** The arrows act on
-//! whichever has focus, so they mean one thing at a time instead of
-//! meaning something different depending on a mode the player has to
-//! remember they are in. Which panel has focus is drawn, so the answer is
-//! on the screen rather than in their head. Everything else is
-//! unconditional: `Space` paints with the selected colour wherever focus
-//! sits, because picking a swatch and painting with it without tabbing
-//! back is the gesture the split is supposed to buy.
+//! **`IconEditor` keeps only what is its own**: what it opened with,
+//! `Enter`/`Esc`, and the outcome. Every other keystroke — `Tab`, the
+//! arrows, `Space`, `Backspace`, `u`, `x` — is `CanvasEditor`'s, taken back
+//! here only as `CanvasKey::Unhandled` vs `Handled` and folded into
+//! `IconEditorOutcome::Open` either way, since this screen does not care
+//! which key it was, only whether it ended the screen.
 //!
-//! **Undo is whole `PlayerIcon` snapshots, not a diff.** 64 bytes each and
-//! `ICON_UNDO_DEPTH` of them is 2 KB, which is small enough that simple
-//! wins. Only a keystroke that actually moves a cell pushes one — a held
-//! `Space` on a cell already the selected colour would otherwise fill the
-//! history with nothing, and undo would stop reaching the edit the player
-//! wants back.
+//! **The bridge between `Canvas` and `PlayerIcon` is a plain cell-by-cell
+//! copy**, `canvas_from_icon`/`icon_from_canvas` below — `PlayerIcon`'s
+//! codec and palette-range guard stay its own, so `CanvasEditor` never
+//! touches a `PlayerIcon` and never needs to know its palette is 15 wide.
 
-use std::collections::VecDeque;
-
+use crate::app::canvas_editor::{
+    CanvasEditor, CanvasKey, CanvasView, ICON_UNDO_DEPTH as CANVAS_UNDO_DEPTH,
+};
 use crate::*;
+use feral_processes_engine::icon::Canvas;
 use feral_processes_engine::{ICON_GRID, ICON_PALETTE, PlayerIcon};
 
-/// How far back `u` reaches.
-///
-/// Here rather than in `tuning.rs`: that file is how hard the game is, and
-/// this prices no fight, gates no progression and is invisible outside one
-/// screen.
-pub const ICON_UNDO_DEPTH: usize = 32;
+/// How far back `u` reaches — `CanvasEditor`'s own constant, re-exported
+/// under its established name here since `tests/icon_editor.rs` names it
+/// and must keep passing unchanged. Nothing in production code reads it
+/// through this name; only that test import does.
+#[allow(dead_code)]
+pub(crate) const ICON_UNDO_DEPTH: usize = CANVAS_UNDO_DEPTH;
 
-/// The lowest selectable swatch. Zero is not on the list — it means
-/// transparent, and `Backspace` is the verb that reaches it.
-const FIRST_COLOUR: u8 = 1;
-const LAST_COLOUR: u8 = ICON_PALETTE.len() as u8;
-
-/// Which of the editor's two panels the arrows are driving.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum IconFocus {
-    Canvas,
-    Palette,
-}
-
-/// What the icon editor screen draws — the canvas flattened row-major, and
-/// the three cursors laid over it.
-///
-/// `cells` is a flat copy rather than the `PlayerIcon` itself because the
-/// screen draws per-cell rectangles and never a texture: the grid lines and
-/// the cursor need per-cell rects anyway, and drawing it that way is what
-/// keeps a texture from being minted on every keystroke. They are *cells*
-/// and not pixels: each one paints an `ICON_CELL_PIXELS` block of the
-/// 16x16 sprite the upload builds.
+/// What the icon editor screen draws: `CanvasEditor`'s own view, unwrapped
+/// to nothing else — the icon editor has no chrome of its own beyond it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IconEditorView {
-    pub cells: [u8; ICON_GRID * ICON_GRID],
-    pub cursor: (u8, u8),
-    pub selected: u8,
-    pub focus: IconFocus,
+    pub canvas: CanvasView,
+}
+
+/// Field access through to `canvas` — `view.cursor` reads
+/// `view.canvas.cursor`, and likewise for `cells`, `selected` and `focus`.
+///
+/// `render/icon_editor.rs` names `view.canvas.<field>` explicitly, since it
+/// is being rewritten in the same change that introduced this nesting. This
+/// impl exists for `tests/icon_editor.rs`, which is not: that file's own
+/// gate is passing unedited, and it was written against the flat shape
+/// `IconEditorView` had before `CanvasView` existed.
+impl std::ops::Deref for IconEditorView {
+    type Target = CanvasView;
+    fn deref(&self) -> &CanvasView {
+        &self.canvas
+    }
 }
 
 /// How one keypress left the editor: still open, or one of the two endings
@@ -76,30 +67,51 @@ pub(crate) enum IconEditorOutcome {
     Discard,
 }
 
+/// Builds the `Canvas` `CanvasEditor` draws from, one cell at a time —
+/// `PlayerIcon::get` and `Canvas::set` are both public, so this needs
+/// nothing from `PlayerIcon` beyond its ordinary reading API.
+fn canvas_from_icon(icon: &PlayerIcon) -> Canvas {
+    let mut canvas = Canvas::new(ICON_GRID);
+    for y in 0..ICON_GRID {
+        for x in 0..ICON_GRID {
+            canvas.set(x, y, icon.get(x, y));
+        }
+    }
+    canvas
+}
+
+/// `canvas_from_icon`'s inverse — `PlayerIcon::set` already refuses an
+/// out-of-palette index, so a `Canvas` this editor could never have
+/// produced still decodes safely.
+fn icon_from_canvas(canvas: &Canvas) -> PlayerIcon {
+    let mut icon = PlayerIcon::default();
+    for y in 0..ICON_GRID {
+        for x in 0..ICON_GRID {
+            icon.set(x, y, canvas.get(x, y));
+        }
+    }
+    icon
+}
+
 pub(crate) struct IconEditor {
-    icon: PlayerIcon,
-    /// What the editor opened with. `Esc` puts it back, which is what lets
-    /// `Discard` carry no icon: discarding is defined as the editor ending
-    /// on what it started with, rather than as a caller remembering to
-    /// throw away a canvas it never looked at.
+    editor: CanvasEditor,
+    /// What the editor opened with — and, once `Enter` is pressed, what was
+    /// kept. `Esc` puts the *opened-with* value back onto the canvas but
+    /// never touches this field, which is what lets `Discard` carry no
+    /// icon: discarding is defined as the editor ending on what it started
+    /// with, rather than as a caller remembering to throw away a canvas it
+    /// never looked at.
     opened_with: PlayerIcon,
-    cursor: (u8, u8),
-    selected: u8,
-    focus: IconFocus,
-    history: VecDeque<PlayerIcon>,
 }
 
 impl IconEditor {
     /// Opens on `icon` — the drawing in progress, or a blank canvas for a
     /// player who has never opened this screen.
     pub(crate) fn open(icon: PlayerIcon) -> Self {
+        let canvas = canvas_from_icon(&icon);
         IconEditor {
-            opened_with: icon.clone(),
-            icon,
-            cursor: (0, 0),
-            selected: FIRST_COLOUR,
-            focus: IconFocus::Canvas,
-            history: VecDeque::new(),
+            editor: CanvasEditor::open(canvas, ICON_PALETTE.len() as u8),
+            opened_with: icon,
         }
     }
 
@@ -107,114 +119,34 @@ impl IconEditor {
     /// the wizard should act on: `Keep` leaves what was drawn here and
     /// `Discard` leaves what the editor opened with.
     pub(crate) fn icon(&self) -> &PlayerIcon {
-        &self.icon
+        &self.opened_with
     }
 
     /// What the screen draws.
     pub(crate) fn view(&self) -> IconEditorView {
-        let mut cells = [0u8; ICON_GRID * ICON_GRID];
-        for y in 0..ICON_GRID {
-            for x in 0..ICON_GRID {
-                cells[y * ICON_GRID + x] = self.icon.get(x, y);
-            }
-        }
         IconEditorView {
-            cells,
-            cursor: self.cursor,
-            selected: self.selected,
-            focus: self.focus,
+            canvas: self.editor.view(),
         }
     }
 
-    /// The editor's whole key table. Anything it does not bind leaves it
-    /// open and untouched.
+    /// `Enter`/`Esc` are this screen's own; every other key is
+    /// `CanvasEditor`'s, and this editor does not care which one it was —
+    /// only whether the screen is still open.
     pub(crate) fn handle_key(&mut self, key: GameKey) -> IconEditorOutcome {
         match key {
-            GameKey::Tab => {
-                self.focus = match self.focus {
-                    IconFocus::Canvas => IconFocus::Palette,
-                    IconFocus::Palette => IconFocus::Canvas,
-                }
+            GameKey::Enter => {
+                self.opened_with = icon_from_canvas(self.editor.canvas());
+                IconEditorOutcome::Keep
             }
-            GameKey::Up => self.step(0, -1),
-            GameKey::Down => self.step(0, 1),
-            GameKey::Left => self.step(-1, 0),
-            GameKey::Right => self.step(1, 0),
-            GameKey::Char(' ') => self.paint(self.selected),
-            GameKey::Backspace => self.paint(0),
-            GameKey::Char('u') => self.undo(),
-            GameKey::Char('x') => self.clear(),
-            GameKey::Enter => return IconEditorOutcome::Keep,
             GameKey::Esc => {
-                self.icon = self.opened_with.clone();
-                return IconEditorOutcome::Discard;
+                self.editor.set_canvas(canvas_from_icon(&self.opened_with));
+                IconEditorOutcome::Discard
             }
-            _ => {}
-        }
-        IconEditorOutcome::Open
-    }
-
-    /// One arrow press, on the focused panel alone.
-    ///
-    /// Neither cursor wraps. On the canvas that is what makes "seven
-    /// Lefts is the left edge" true from anywhere; on the palette it is
-    /// what keeps a held arrow from cycling past the swatch the player was
-    /// aiming at.
-    ///
-    /// The palette is a sequence rather than a grid, so both axes walk it —
-    /// back on Left and Up, forward on Right and Down. How it is laid out
-    /// is the screen's business, and a player who guesses the other axis
-    /// gets a move rather than a dead key.
-    fn step(&mut self, dx: i32, dy: i32) {
-        match self.focus {
-            IconFocus::Canvas => {
-                let last = ICON_GRID as i32 - 1;
-                self.cursor.0 = (self.cursor.0 as i32 + dx).clamp(0, last) as u8;
-                self.cursor.1 = (self.cursor.1 as i32 + dy).clamp(0, last) as u8;
-            }
-            IconFocus::Palette => {
-                self.selected = (self.selected as i32 + dx + dy)
-                    .clamp(FIRST_COLOUR as i32, LAST_COLOUR as i32)
-                    as u8;
+            _ => {
+                let _: CanvasKey = self.editor.handle_key(key);
+                IconEditorOutcome::Open
             }
         }
-    }
-
-    /// Writes `index` into the cursor cell, snapshotting first — unless the
-    /// cell already holds it, in which case nothing happened and nothing is
-    /// recorded.
-    fn paint(&mut self, index: u8) {
-        let (x, y) = (self.cursor.0 as usize, self.cursor.1 as usize);
-        if self.icon.get(x, y) == index {
-            return;
-        }
-        self.record();
-        self.icon.set(x, y, index);
-    }
-
-    /// `paint`'s rule over the whole canvas: clearing a canvas that is
-    /// already blank is not an edit.
-    fn clear(&mut self) {
-        if self.icon.is_blank() {
-            return;
-        }
-        self.record();
-        self.icon.clear();
-    }
-
-    fn undo(&mut self) {
-        if let Some(previous) = self.history.pop_back() {
-            self.icon = previous;
-        }
-    }
-
-    /// Snapshots the canvas as it stands, dropping the oldest entry once
-    /// the history is full.
-    fn record(&mut self) {
-        if self.history.len() == ICON_UNDO_DEPTH {
-            self.history.pop_front();
-        }
-        self.history.push_back(self.icon.clone());
     }
 }
 

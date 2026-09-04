@@ -24,7 +24,7 @@ fn blank_editor() -> IconEditor {
 fn move_cursor_to(editor: &mut IconEditor, x: u8, y: u8) {
     assert_eq!(
         editor.view().focus,
-        IconFocus::Canvas,
+        CanvasFocus::Canvas,
         "the cursor only moves while the canvas has focus"
     );
     for _ in 0..ICON_GRID - 1 {
@@ -48,7 +48,7 @@ fn cell(editor: &IconEditor, x: u8, y: u8) -> u8 {
 #[test]
 fn the_editor_opens_on_the_canvas_at_the_origin_with_the_first_colour() {
     let view = blank_editor().view();
-    assert_eq!(view.focus, IconFocus::Canvas);
+    assert_eq!(view.focus, CanvasFocus::Canvas);
     assert_eq!(view.cursor, (0, 0));
     assert_eq!(view.selected, 1, "index 0 is transparent, not a swatch");
     assert!(view.cells.iter().all(|&p| p == 0));
@@ -58,9 +58,9 @@ fn the_editor_opens_on_the_canvas_at_the_origin_with_the_first_colour() {
 fn tab_moves_focus_between_the_canvas_and_the_palette() {
     let mut editor = blank_editor();
     editor.handle_key(GameKey::Tab);
-    assert_eq!(editor.view().focus, IconFocus::Palette);
+    assert_eq!(editor.view().focus, CanvasFocus::Palette);
     editor.handle_key(GameKey::Tab);
-    assert_eq!(editor.view().focus, IconFocus::Canvas);
+    assert_eq!(editor.view().focus, CanvasFocus::Canvas);
 }
 
 #[test]

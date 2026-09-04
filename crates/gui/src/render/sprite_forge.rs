@@ -538,7 +538,13 @@ impl HitRects {
 /// `view`'s own edge/palette length feed the same `editor_geometry` the draw
 /// call built its rects from, then re-derives `inner`/`palette_inner`
 /// exactly as `draw_sprite_editor_session` does.
-pub(crate) fn hit_rects(painter: &Painter, w: f32, m: &Metrics, view: &SpriteEditorView, zoom: u16) -> HitRects {
+pub(crate) fn hit_rects(
+    painter: &Painter,
+    w: f32,
+    m: &Metrics,
+    view: &SpriteEditorView,
+    zoom: u16,
+) -> HitRects {
     let edge = view.canvas.edge as usize;
     let g = editor_geometry(painter, w, m, edge, view.palette.len(), zoom);
     let side = edge as f32 * g.cell;
@@ -1006,11 +1012,7 @@ mod tests {
             "right of the rect"
         );
         assert_eq!(cell_at((100.0, 49.9), rect, edge), None, "above the rect");
-        assert_eq!(
-            cell_at((100.0, 210.1), rect, edge),
-            None,
-            "below the rect"
-        );
+        assert_eq!(cell_at((100.0, 210.1), rect, edge), None, "below the rect");
     }
 
     /// A swatch hit lands on the swatch it is over, and misses the gap
@@ -1034,16 +1036,8 @@ mod tests {
             Some(1),
             "inside the second swatch"
         );
-        assert_eq!(
-            swatch_at((-1.0, 15.0), rect, 2),
-            None,
-            "left of the strip"
-        );
-        assert_eq!(
-            swatch_at((15.0, 31.0), rect, 2),
-            None,
-            "below the strip"
-        );
+        assert_eq!(swatch_at((-1.0, 15.0), rect, 2), None, "left of the strip");
+        assert_eq!(swatch_at((15.0, 31.0), rect, 2), None, "below the strip");
     }
 
     /// `HitRects::resolve` tries the canvas rect first and the palette rect

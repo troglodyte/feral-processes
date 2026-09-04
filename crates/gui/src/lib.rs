@@ -27,11 +27,12 @@ use bevy::ecs::system::SystemParam;
 use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
 use bevy::window::{PrimaryWindow, WindowMode};
+use bevy_egui::egui;
 use bevy_egui::{
     EguiContexts, EguiPlugin, EguiPreUpdateSet, EguiPrimaryContextPass, EguiUserTextures,
 };
 
-use feral_processes_app_core::{App, GameKey, Mode};
+use feral_processes_app_core::{App, GameKey, Mode, PointerButton, PointerHit, PointerPhase};
 use fx::Fx;
 use keys::{KeyRepeat, TextGate};
 use paint::{Color, Painter};
@@ -126,6 +127,101 @@ struct Frontend {
     last_mode: Mode,
     perf_on: bool,
     perf: perf::PerfMeter,
+    sprite_pointer: SpritePointer,
+}
+
+/// Frame-to-frame pointer state for `Mode::SpriteEditor` — the first mouse
+/// tracking anywhere in this crate, confined to that one screen by the
+/// guard at `handle_sprite_pointer`'s one call site.
+///
+/// `active` names which button is mid-stroke, so a fresh press (`None ->
+/// Some`) is `Down`, a held frame that still resolves is `Drag`, and a
+/// release or a switch of buttons is `Up`. `last_hit` is where the stroke
+/// last actually resolved: `App::handle_pointer` takes a `PointerHit` on
+/// every phase including `Up`, so a stroke dragged off both the canvas and
+/// the swatch row while still held still needs one to close with — the
+/// design's own rule that leaving the rect must end the stroke rather than
+/// let the next click join it, since a stroke is one undo entry.
+#[derive(Default)]
+struct SpritePointer {
+    active: Option<PointerButton>,
+    last_hit: Option<PointerHit>,
+}
+
+/// Reads the egui pointer and drives `App::handle_pointer` for the sprite
+/// editor's canvas and swatch panels — the mouse's one entry point into
+/// `crates/gui`, and it never sees a pixel further than this function:
+/// everything past `rects.resolve` is a `PointerHit`
+/// (`render::sprite_forge::cell_at`/`swatch_at`, tested headlessly).
+///
+/// A no-op whenever `render::sprite_editor_hit_rects` returns `None` — no
+/// mode check needed here beyond that, since a session is only ever open in
+/// `Mode::SpriteEditor` — and the tracker is reset in that case so a stroke
+/// cannot survive into a session that opens later.
+fn handle_sprite_pointer(
+    app: &mut App,
+    ctx: &egui::Context,
+    painter: &Painter,
+    tracker: &mut SpritePointer,
+) {
+    let Some(rects) = render::sprite_editor_hit_rects(app, painter) else {
+        *tracker = SpritePointer::default();
+        return;
+    };
+
+    let (primary_down, secondary_down, hover) = ctx.input(|i| {
+        (
+            i.pointer.primary_down(),
+            i.pointer.secondary_down(),
+            i.pointer.hover_pos(),
+        )
+    });
+    let now_button = if primary_down {
+        Some(PointerButton::Primary)
+    } else if secondary_down {
+        Some(PointerButton::Secondary)
+    } else {
+        None
+    };
+    let hit = hover.and_then(|pos| rects.resolve((pos.x, pos.y)));
+    if let Some(h) = hit {
+        tracker.last_hit = Some(h);
+    }
+
+    match (tracker.active, now_button) {
+        (None, Some(button)) => {
+            // A press that starts outside both panels opens no stroke —
+            // there is nothing to paint or select yet, and one may still
+            // begin later if the pointer moves onto a panel while held.
+            if let Some(h) = hit {
+                app.handle_pointer(h, button, PointerPhase::Down);
+                tracker.active = Some(button);
+            }
+        }
+        (Some(active), Some(button)) if active == button => {
+            if let Some(h) = hit {
+                app.handle_pointer(h, button, PointerPhase::Drag);
+            } else if let Some(last) = tracker.last_hit {
+                // The pointer left both rects while held — end the stroke
+                // now rather than waiting for release, so the next click
+                // cannot join it into one undo entry.
+                app.handle_pointer(last, active, PointerPhase::Up);
+                tracker.active = None;
+            }
+        }
+        (Some(active), _) => {
+            // Release, or a different button now down — either way the
+            // held stroke is over. `hit.or(tracker.last_hit)` is never
+            // `None` here: `active` could only be set by a `Down` that had
+            // a hit, and every hit since has been kept in `last_hit`.
+            if let Some(h) = hit.or(tracker.last_hit) {
+                app.handle_pointer(h, active, PointerPhase::Up);
+            }
+            tracker.active = None;
+            tracker.last_hit = None;
+        }
+        (None, None) => {}
+    }
 }
 
 /// Draws a brief centered readout, on top of whatever `render::draw` just
@@ -234,6 +330,7 @@ pub fn run(app: App) {
             last_mode,
             perf_on: false,
             perf: perf::PerfMeter::new(),
+            sprite_pointer: SpritePointer::default(),
         })
         .init_resource::<sprites::Sprites>()
         .add_systems(
@@ -423,6 +520,13 @@ fn frame(
     if fe.app.mode != fe.last_mode {
         fe.key_repeat.block_held();
         fe.last_mode = fe.app.mode;
+    }
+    // Confined to `Mode::SpriteEditor` by `render::sprite_editor_hit_rects`
+    // returning `None` everywhere else — see `handle_sprite_pointer`'s own
+    // doc comment for why no separate mode check is needed here.
+    {
+        let ctx = contexts.ctx_mut()?;
+        handle_sprite_pointer(&mut fe.app, ctx, &painter, &mut fe.sprite_pointer);
     }
     if input.keyboard.just_pressed(KeyCode::BracketLeft) {
         fe.volume = (fe.volume - VOLUME_STEP).max(0.0);

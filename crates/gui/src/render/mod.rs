@@ -186,7 +186,10 @@ pub(super) fn hp_critical(hp: i32, max_hp: i32) -> bool {
 /// resolved against these can never disagree with what's on screen. `None`
 /// when no editor session is open, which is also when `lib.rs` has nothing
 /// to read a pointer for.
-pub(crate) fn sprite_editor_hit_rects(app: &App, painter: &Painter) -> Option<sprite_forge::HitRects> {
+pub(crate) fn sprite_editor_hit_rects(
+    app: &App,
+    painter: &Painter,
+) -> Option<sprite_forge::HitRects> {
     let view = app.sprite_editor_view()?;
     let m = ui_metrics(painter.screen_h());
     Some(sprite_forge::hit_rects(

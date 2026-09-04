@@ -1703,6 +1703,7 @@ mod tests {
                         .collect::<Vec<_>>(),
                     &[Perk::Attacker],
                     selected,
+                    feral_processes_engine::tuning::RESPEC_CREDIT_COST,
                 ),
             ),
             (

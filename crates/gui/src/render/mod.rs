@@ -13,6 +13,7 @@ use feral_processes_app_core::{
     Staffing, SwapChoice, SwapRow, TradeChoice, equip_preview_tag, equip_swap_rows,
     inventory_item_actions, item_fusion_note, menu_shortcut, qty_column, stat_summary,
 };
+use feral_processes_engine::RespecSubject;
 use feral_processes_engine::components::{GlyphColor, MachineStatus, Rarity, TaskKind};
 use feral_processes_engine::items::{EquipmentSlot, GearCopy, ItemId, QualityBand, quality_band};
 use feral_processes_engine::structures::StructureCategory;
@@ -98,7 +99,7 @@ use party::{
     draw_rename_menu,
 };
 use popup::{PopupSize, Row, counted_item_row, draw_popup, text_row};
-use progression::{draw_perks_menu, draw_research_menu};
+use progression::{draw_perks_menu, draw_research_menu, draw_respec_confirm};
 use routines::{
     draw_extract, draw_extract_confirm, draw_extract_pick, draw_routine_etch, draw_routine_install,
     draw_routine_target, draw_routines,
@@ -1113,6 +1114,16 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             )
         }
         Mode::Perks => draw_perks_menu(game, selected, refusal, painter, m),
+        Mode::RespecPerksConfirm => {
+            let quote = game.respec_quote(RespecSubject::Perks);
+            draw_respec_confirm(&quote, "perk", refusal, painter, m)
+        }
+        Mode::RespecTalentsConfirm => {
+            if let Some(target) = app.pending_develop_target {
+                let quote = game.respec_quote(RespecSubject::Talents(target));
+                draw_respec_confirm(&quote, "talent", refusal, painter, m);
+            }
+        }
         Mode::Research => draw_research_menu(game, selected, refusal, painter, m),
         Mode::Contracts => draw_contracts(
             &contract_active,
@@ -1198,7 +1209,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 88] = [
+    const ALL_MODES: [Mode; 90] = [
         Mode::MainMenu,
         Mode::CreateCharacter,
         Mode::LoadGame,
@@ -1267,6 +1278,8 @@ mod tests {
         Mode::StackMarket,
         Mode::Caravan,
         Mode::TradeProgramConfirm,
+        Mode::RespecPerksConfirm,
+        Mode::RespecTalentsConfirm,
         Mode::Perks,
         Mode::Research,
         Mode::Contracts,
@@ -1352,7 +1365,10 @@ mod tests {
     /// Each draws nothing at all here, so the census can say where a refusal
     /// must *not* appear on them but not where it must. Their `draw_popup`
     /// calls are threaded the same way every other one is.
-    const NEEDS_PENDING_STATE: [Mode; 21] = [
+    const NEEDS_PENDING_STATE: [Mode; 22] = [
+        // Drawn off `pending_develop_target`, which the census app never
+        // sets — the same omission `Mode::FuseSecond` below is here for.
+        Mode::RespecTalentsConfirm,
         Mode::BattleTarget,
         Mode::BattleSpecial,
         Mode::CraftQuantity,

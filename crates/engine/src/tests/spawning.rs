@@ -1649,6 +1649,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             module_quality: crate::tuning::QUALITY_DEFAULT,
             perk_points: 0,
             unlocked_perks: Vec::new(),
+            bought_stats: crate::components::BoughtStats::default(),
             tutorial_seeded: true,
             fused_gear: Vec::new(),
             gear_copies: Vec::new(),
@@ -1689,6 +1690,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             purchased_tiers: 0,
             ring: 0,
             talents: Vec::new(),
+            bought_stats: crate::components::BoughtStats::default(),
             routines: Vec::new(),
             field_buffs: Vec::new(),
             // No NestSave anywhere in this data names this tile.

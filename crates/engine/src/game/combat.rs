@@ -719,7 +719,7 @@ impl Game {
     /// species-kit unlock — same slot competition, same treatment of what the
     /// program was carrying when it was decompiled — and one list is the only
     /// way to guarantee that.
-    fn talent_abilities(&self, entity: Entity) -> Vec<AbilityId> {
+    pub(crate) fn talent_abilities(&self, entity: Entity) -> Vec<AbilityId> {
         let Some(taken) = self.world.get::<Talents>(entity) else {
             return Vec::new();
         };

@@ -208,20 +208,38 @@ impl Game {
     fn bake_talent_stat(&mut self, entity: Entity, stat: TalentStat, percent: f32) {
         let gear = self.gear_bonus(entity);
         self.apply_equipment_delta(entity, gear, -1);
+        let mut receipt = self
+            .world
+            .get::<BoughtStats>(entity)
+            .copied()
+            .unwrap_or_default();
         {
             let mut stats = self.world.get_mut::<Stats>(entity).unwrap();
+            // Each arm records the *delta* it just wrote, not the percentage
+            // that produced it, because `raised` floors at a whole point and
+            // reads the current value — so the percentage is not enough to
+            // reconstruct this later. `Game::respec_talents` hands exactly
+            // these numbers back.
             match stat {
                 TalentStat::Hp => {
                     let raised = crate::game::refactor::raised(stats.max_hp, percent);
+                    receipt.max_hp += raised - stats.max_hp;
                     stats.hp += raised - stats.max_hp;
                     stats.max_hp = raised;
                 }
-                TalentStat::Atk => stats.atk = crate::game::refactor::raised(stats.atk, percent),
+                TalentStat::Atk => {
+                    let raised = crate::game::refactor::raised(stats.atk, percent);
+                    receipt.atk += raised - stats.atk;
+                    stats.atk = raised;
+                }
                 TalentStat::Def => {
-                    stats.mitigation = crate::game::refactor::raised(stats.mitigation, percent)
+                    let raised = crate::game::refactor::raised(stats.mitigation, percent);
+                    receipt.mitigation += raised - stats.mitigation;
+                    stats.mitigation = raised;
                 }
             }
         }
+        self.world.entity_mut(entity).insert(receipt);
         self.apply_equipment_delta(entity, gear, 1);
     }
 }

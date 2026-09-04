@@ -66,7 +66,8 @@ use battle::{
 };
 use components::{
     AbilityCooldowns, ActiveBuff, ActiveFieldBuff, ActiveStatus, BUILD_SITE_GLYPH, BaseAnchor,
-    Boss, BuffKind, BuffSource, BuildGoal, BuildSite, Caravan, CaravanStage, Carrying, CombatBuff,
+    Boss, BoughtStats, BuffKind, BuffSource, BuildGoal, BuildSite, Caravan, CaravanStage, Carrying,
+    CombatBuff,
     Creature, CustomName, Decompiler, DigSite, Durability, Equipment, EquippedItem, Experience,
     FieldBuff, FieldBuffKind, FusionCount, GearCopies, Glyph, GlyphColor, Hostile, Inventory,
     KernelRing, MachineStatus, Memories, Memory, Nemesis, Nest, NestGuardian, POWER_MAX, Perks,

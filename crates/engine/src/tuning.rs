@@ -341,8 +341,25 @@ pub const OVERFLOW_XP_BASE: u32 = 400;
 /// points earned grow like the square root of XP spent, which loses the race
 /// against a linear zone curve forever — which is the point.
 ///
-/// `perks_held` is `Perks::unlocked.len()`, derived and never stored.
+/// `perks_held` is `BoughtStats::ever_bought` — how many perk levels have
+/// **ever** been bought, not how many are held now. Read off
+/// `Perks::unlocked` it would reset to zero on a respec, and the loop would
+/// be: buy perks, wipe them, mint the rest at the opening rate. The two are
+/// equal for any run that never respecs, so this curve has not moved.
 pub const OVERFLOW_XP_STEP: u32 = 120;
+
+/// What one respec costs in Credits — `Game::respec_perks` wipes every perk
+/// level, `Game::respec_talents` every talent on one companion, and both
+/// charge this.
+///
+/// Flat, and the same number on both ledgers, by decision. A price that
+/// scales with what is being undone reads as a tax on experimenting, and an
+/// escalating one needs a stored counter per subject for no gain the player
+/// can see. Priced in Credits because they are the one currency that
+/// survives a breach, so a respec competes with building and gear rather
+/// than with the Stack.
+pub const RESPEC_CREDIT_COST: u32 = 250;
+
 
 /// The level cap in `zone` — the one expression of the formula.
 ///

@@ -2418,3 +2418,35 @@ pub struct ClassRow {
     /// gives up and what it gets for it, as a sentence.
     pub trade: String,
 }
+
+/// Which ledger a respec would clear — the parameter both `Game::respec_quote`
+/// and its refusal take, so the screens' footer and the commit ask exactly one
+/// question.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RespecSubject {
+    /// The player's perks.
+    Perks,
+    /// One companion's talents.
+    Talents(bevy_ecs::entity::Entity),
+}
+
+/// What a respec would cost and hand back — see `Game::respec_quote`.
+///
+/// Every figure is a call and none is stored, `views::BuildOrderRow`'s rule:
+/// the footer on the picker, the confirm page and the commit all read this
+/// one derivation, so they cannot quote different numbers.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RespecQuote {
+    /// `tuning::RESPEC_CREDIT_COST`, carried here so no renderer names it.
+    pub cost: u32,
+    /// Credits the player is holding.
+    pub credits: u32,
+    /// How many perk levels or talents would be wiped.
+    pub purchases: u32,
+    /// Points that come back — Perk Points, or talent points freed by
+    /// clearing the list.
+    pub points_returned: u32,
+    /// Why this is refused, or `None` if it would go through. The screens
+    /// grey the row on this and `App::report` speaks the same sentence.
+    pub refusal: Option<String>,
+}

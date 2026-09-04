@@ -2262,6 +2262,43 @@ impl Perks {
     }
 }
 
+/// Every stat point on this creature that came from a spendable choice — a
+/// perk level or a `TalentNode::Stat` — and can therefore be handed back by
+/// `Game::respec_perks` / `Game::respec_talents`.
+///
+/// The receipt exists because neither grant is invertible from `Stats`.
+/// `Perk::Buffer` and `TalentNode::Stat` are percentages of a maximum that
+/// has since moved, and both floor at a whole point, so reversing the
+/// arithmetic is off by a point per level in the common case — and a retune
+/// of either constant would silently change what an old save's respec hands
+/// back. Recording what was granted is the only thing that stays exact.
+///
+/// One component serves both ledgers: the player has no `Talents` and a
+/// companion has no `Perks`, so the two can never write it at once.
+///
+/// Absent means nothing bought, like `KernelRing` and `Refactors`.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BoughtStats {
+    pub atk: i32,
+    pub mitigation: i32,
+    pub max_hp: i32,
+    /// How many perk levels the player has **ever** bought, which a respec
+    /// deliberately does not reset.
+    ///
+    /// `Game::convert_overflow_xp` prices each minted Perk Point off this
+    /// rather than off `Perks::unlocked`, because that list empties on a
+    /// respec and the escalator it feeds is the only thing keeping banked
+    /// cap XP from being an unbounded power source. Read off the list, a
+    /// respec resets the price to the opening rate and the loop is: buy,
+    /// wipe, mint the rest cheap.
+    ///
+    /// Perk purchases only. A companion's talents have no bearing on the
+    /// player's XP drain, and counting them here would be exactly the drift
+    /// a shared field invites.
+    pub ever_bought: u32,
+}
+
+
 #[cfg(test)]
 mod rarity_tests {
     use super::Rarity;

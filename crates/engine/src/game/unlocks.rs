@@ -111,7 +111,7 @@ impl Game {
     /// `Perks` at all, so its overflow just sits there, which is the
     /// behaviour every creature had before the cap existed.
     ///
-    /// The price rises with perks already held, `OVERFLOW_XP_STEP`'s reason:
+    /// The price rises with perks ever bought, `OVERFLOW_XP_STEP`'s reason:
     /// flat, this is an unbounded linear power source. It re-reads the price
     /// after every point, so one call cannot mint a run's worth at the
     /// opening rate.
@@ -119,10 +119,18 @@ impl Game {
         let player = self.player_entity();
         let mut minted = 0;
         loop {
-            let held = match self.world.get::<Perks>(player) {
-                Some(perks) => perks.unlocked.len() as u32,
-                None => return minted,
-            };
+            // Off `BoughtStats::ever_bought` rather than `Perks::unlocked`,
+            // because a respec empties that list and would reset this
+            // escalator to the opening rate — see the field's own doc. The
+            // `Perks` lookup stays as the "is this the player" gate it
+            // always was.
+            if self.world.get::<Perks>(player).is_none() {
+                return minted;
+            }
+            let held = self
+                .world
+                .get::<BoughtStats>(player)
+                .map_or(0, |b| b.ever_bought);
             let price =
                 crate::tuning::OVERFLOW_XP_BASE + crate::tuning::OVERFLOW_XP_STEP * (held + minted);
             let Some(mut exp) = self.world.get_mut::<Experience>(player) else {
@@ -182,18 +190,39 @@ impl Game {
             .get::<Stats>(player)
             .map(|s| s.max_hp)
             .unwrap_or(0);
+        let mut receipt = self
+            .world
+            .get::<BoughtStats>(player)
+            .copied()
+            .unwrap_or_default();
+        // Counted for every perk, not just the three that move a stat: this
+        // is what `convert_overflow_xp` prices against, and a respec must not
+        // be able to lower it.
+        receipt.ever_bought += 1;
         if let Some(gain) = crate::perks::purchase_stat_gain(perk, max_hp)
             && let Some(mut stats) = self.world.get_mut::<Stats>(player)
         {
+            // The receipt is written from the same value that reaches
+            // `Stats`, in the same branch, so the two cannot disagree about
+            // what this purchase was worth — the drift a second computation
+            // of `purchase_stat_gain` would invite.
             match gain {
-                crate::perks::StatGain::Atk(n) => stats.atk += n,
-                crate::perks::StatGain::Mitigation(n) => stats.mitigation += n,
+                crate::perks::StatGain::Atk(n) => {
+                    stats.atk += n;
+                    receipt.atk += n;
+                }
+                crate::perks::StatGain::Mitigation(n) => {
+                    stats.mitigation += n;
+                    receipt.mitigation += n;
+                }
                 crate::perks::StatGain::MaxHp(n) => {
                     stats.max_hp += n;
                     stats.hp = stats.max_hp;
+                    receipt.max_hp += n;
                 }
             }
         }
+        self.world.entity_mut(player).insert(receipt);
         self.log(format!("You buy the {name} perk (level {level})."));
         self.note_deed(crate::contracts::Deed::UnlockedPerk);
         Ok(())

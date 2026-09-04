@@ -41,11 +41,13 @@ pub(super) fn draw_settlement(
 /// would have to be played into.
 pub(super) fn settlement_page_rows(view: &SettlementView) -> Vec<Row> {
     let mut rows = vec![
-        // Orange, `spawn_settlement_at`'s own hue for the glyph this page
-        // is opened from — the header colour and the map glyph agreeing is
-        // what keeps "what am I looking at" answered the same way on both
-        // surfaces.
-        Row::TextColored(view.name.clone(), ORANGE),
+        // A call to the same door the map glyph is drawn through
+        // (`spawn_settlement_at`'s `Glyph { color: GlyphColor::Orange }`,
+        // resolved by `glyph_color`), not a second, hand-copied orange —
+        // that is what keeps "what am I looking at" answered the same way
+        // on both surfaces. See CLAUDE.md: "A doc comment claiming to
+        // mirror other code must be a call, not a copy."
+        Row::TextColored(view.name.clone(), glyph_color(GlyphColor::Orange)),
         text_row(format!(
             "{}  ·  {}  ·  {}",
             view.kind, view.specialty, view.temperament
@@ -106,6 +108,36 @@ mod tests {
         ] {
             assert!(joined.contains(want), "the page never names {want:?}");
         }
+    }
+
+    /// The header's colour must be a *call* to the same door the map glyph
+    /// is drawn through, not a second, independently-authored orange — the
+    /// comment above `Row::TextColored(view.name.clone(), ORANGE)` claims
+    /// the two agree, and per CLAUDE.md's rule ("A doc comment claiming to
+    /// mirror other code must be a call, not a copy") that claim has to be
+    /// checked against `hud::palette::glyph(GlyphColor::Orange)` —
+    /// `spawn_settlement_at`'s own `Glyph { color: GlyphColor::Orange }` is
+    /// what the map actually resolves through `glyph_color`.
+    #[test]
+    fn the_header_wears_the_map_glyphs_own_orange() {
+        let view = SettlementView {
+            name: "Hollow Index".to_string(),
+            kind: "Server",
+            specialty: "Programs",
+            temperament: "Open",
+            blurb: "Programs come here when their owners do not come back for them.".to_string(),
+        };
+        let rows = settlement_page_rows(&view);
+        let Row::TextColored(text, color) = &rows[0] else {
+            panic!("the header row must be the first row and must carry a colour");
+        };
+        assert_eq!(text, &view.name);
+        assert_eq!(
+            *color,
+            glyph_color(GlyphColor::Orange),
+            "the header must draw the same orange the map glyph resolves through, not a \
+             hand-copied constant"
+        );
     }
 
     /// The widest row the real catalogue can build — name, kind, specialty,

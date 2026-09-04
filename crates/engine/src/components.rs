@@ -1562,9 +1562,8 @@ pub struct Memory {
 /// integers meaning different things, and reading one as the other is what
 /// put the base's roster on the open grid. Naming the space in the type is
 /// what stops that recurring. A *surface* variant, when content asks for one,
-/// is zone-local and has to be wiped by name in `Game::enter_next_zone`
-/// alongside `StackMemory`, `BuybackLedger` and `PopulatedChunks`; a base
-/// tile needs no such wipe, because the base travels with the party.
+/// needs no wipe either: the world is persistent, so a surface tile is as
+/// permanent as a base tile and a memory keyed to one stays true.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum MemorySubject {
     /// About nothing in particular — a memory of an event, not of a thing.
@@ -2173,10 +2172,10 @@ pub struct SurfaceLink;
 /// `Game::load`) and never destroyed: it carries no `Durability`, so
 /// `run_raid`'s `(With<Durability>, With<Structure>)` query cannot select
 /// it. Unlike a
-/// `SurfaceLink`, it survives `Game::enter_next_zone`'s stale-entity sweep
-/// — it is not zone-local — and is moved to the new zone's spawn point
-/// rather than despawned and respawned, so its identity carries across a
-/// breach.
+/// `SurfaceLink`, it stands where it was founded for the life of the run:
+/// a breach raises a tier and moves nothing, so the door back to the base
+/// is where the player last left it. `Game::move_anchor_to` is the one
+/// writer, and founding the Home is now its only caller.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct BaseAnchor;
 

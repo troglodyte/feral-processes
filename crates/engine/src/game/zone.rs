@@ -366,10 +366,10 @@ impl Game {
     ///
     /// Deliberately a loop over the real `enter_next_zone` rather than a
     /// write to `ZoneLevel`: everything that makes a breach coherent — the
-    /// base staying untouched out of phase, the zone-local wipes, fresh
-    /// spawns scaled to the new zone — lives in that function, and a
-    /// shortcut would produce a save that no amount of play could have
-    /// reached. `enter_next_zone` is
+    /// two resets, and the ground re-stocking at each tier on the way past
+    /// — lives in that function, and a shortcut would produce a save that no
+    /// amount of play could have reached. That matters more now, not less:
+    /// a written tier is a world that never hardened. `enter_next_zone` is
     /// `pub(crate)` and a `src/bin/` target is a separate crate, so this is
     /// also the seam that lets the tool reach it at all.
     ///

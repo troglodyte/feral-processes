@@ -1205,8 +1205,10 @@ pub struct BuybackLedger(pub BTreeMap<ShelfKey, Vec<(GearCopy, u32)>>);
 /// shop the party can walk to, and a caravan's whole shape is that it cannot
 /// be walked back to.
 ///
-/// Zone-local, and so wiped **by name** in `Game::enter_next_zone` beside
-/// `BuybackLedger` and `StackMemory`.
+/// Survives a breach, along with the wagon it remembers. It was wiped by
+/// name in `Game::enter_next_zone` while a breach rebuilt the world, since
+/// a caravan's journey is defined against an anchor tile in a sector that
+/// was about to stop existing — the sector does not stop existing now.
 #[derive(Resource, Default, Clone, Debug, PartialEq, Eq)]
 pub struct CaravanMemory {
     /// The visit this memory is about, or `None` before any trader has been
@@ -1508,13 +1510,15 @@ pub struct FrameMemory {
     pub bought: BTreeSet<usize>,
 }
 
-/// Everything the party has learned about every Stack frame in this zone.
+/// Everything the party has learned about every Stack frame at this tier.
 ///
-/// Zone-local, and **not** self-clearing: like `BuybackLedger` this has to
-/// be wiped by name in `Game::enter_next_zone`, because breaching does not
-/// despawn what a zone accumulated. Left behind, a stale entry would draw
-/// the previous sector's walked corridors onto a new sector's map at
-/// whatever tile happened to collide.
+/// **Not** self-clearing: it is wiped by name in `Game::enter_next_zone`,
+/// and the reason changed when the world became persistent. An entrance
+/// used to be despawned at a breach, so a stale entry would draw the last
+/// sector's walked corridors onto a fresh link that happened to land on a
+/// matching tile. Entrances survive now — but `FrameSpec` folds in the
+/// tier, so the frame behind a surviving entrance is re-carved, and every
+/// record here describes a frame that no longer exists.
 #[derive(Resource, Clone, Default, Debug, Serialize, Deserialize)]
 pub struct StackMemory(pub BTreeMap<FrameKey, FrameMemory>);
 
@@ -1534,9 +1538,11 @@ pub struct StackMemory(pub BTreeMap<FrameKey, FrameMemory>);
 /// `BTreeMap`: this is serialized, and a hash set would make the save
 /// encoding differ between runs holding identical state.
 ///
-/// Zone-local, like `BuybackLedger` and `StackMemory`, and so has to be
-/// wiped **by name** in `Game::enter_next_zone` — a mark left behind would
-/// tell the new sector that ground it has never populated is already full.
+/// Wiped **by name** in `Game::enter_next_zone`, and that line is the
+/// mechanism rather than a leftover: clearing the marks sends
+/// `Game::ensure_local_population` back over ground it has already covered
+/// to re-stock it at the new tier, which is the whole visible effect of a
+/// breach now that the map is never rebuilt.
 #[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct PopulatedChunks(pub BTreeSet<(i32, i32)>);
 

@@ -42,9 +42,10 @@ impl Game {
     /// `structure`, crediting the trade currency at `sell_price` per unit.
     /// The trade currency itself can't be sold (trading it for more of the
     /// same thing is meaningless, and would be exploitable if a modded
-    /// `sell_rate` was ever above 1). Build salvage *is* sellable — that is
-    /// the on-ramp that lets a player convert a doomed zone-local stockpile
-    /// into Credits before breaching.
+    /// `sell_rate` was ever above 1). Build salvage *is* sellable, which
+    /// used to be the on-ramp for converting a stockpile a breach was about
+    /// to destroy. A breach destroys nothing now, so selling salvage is an
+    /// ordinary choice about what to hold rather than a deadline.
     ///
     /// A fused copy fetches the same unit price as an ordinary one, so
     /// `Game::item_value` is untouched and `ItemDef::value`'s second meaning

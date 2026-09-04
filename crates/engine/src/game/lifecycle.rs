@@ -1157,9 +1157,8 @@ impl Game {
         let mut party: Vec<Entity> = party_slots.into_iter().map(|(_, e)| e).collect();
         party.truncate(MAX_PARTY_SIZE);
         game.world.insert_resource(Party(party));
-        // Unlike `BuybackLedger` and `StackMemory`, this is not zone-local:
-        // the program travels with you across a breach exactly as the party
-        // does, so `enter_next_zone` must not wipe it.
+        // `enter_next_zone` must not wipe this: the program travels with you
+        // across a breach exactly as the party does.
         game.world.insert_resource(WieldedProgram(wielded));
         // A record whose members all failed to load — a species file deleted
         // between sessions — is dropped rather than restored empty: an empty

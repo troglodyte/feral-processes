@@ -982,12 +982,21 @@ impl Game {
         kind: crate::settlements::SettlementKind,
         (x, y): (i32, i32),
     ) {
+        // `GlyphColor::Yellow` was `palette::WARN` and, worse, the authored
+        // colour of the Scrapper — a settlement and a scrapper nest were the
+        // same hue on the same map. `Orange` is the one variant no species
+        // authors: every hue a species declares is reachable on the surface
+        // (a nest takes its guardian's colour), which makes "unclaimed"
+        // mean unclaimed by a species rather than unclaimed outright, and
+        // Orange's only other uses are base space's `BuildSite` glyph and
+        // three base structures — a coordinate space that can never share a
+        // tile with a town.
         self.world.spawn((
             crate::components::Settlement { key },
             Position { x, y },
             Glyph {
                 ch: kind.glyph(),
-                color: GlyphColor::Yellow,
+                color: GlyphColor::Orange,
             },
         ));
     }

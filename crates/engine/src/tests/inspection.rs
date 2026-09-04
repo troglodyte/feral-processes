@@ -2163,6 +2163,81 @@ fn entity_label_names_the_anchor_and_a_surface_link_rather_than_falling_through_
 }
 
 #[test]
+fn entity_label_names_a_settlement_by_its_authored_name() {
+    let mut game = Game::new(4488, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let key = crate::settlements::SettlementKey { rx: 11, ry: -4 };
+    let entity = place_settlement(&mut game, key, pos.x + 3, pos.y);
+
+    assert_eq!(
+        game.entity_label(entity),
+        "Test Town",
+        "the map glyph's name has to come off resources::Settlements by key, \
+         never off the def id and never off a string built here"
+    );
+}
+
+/// `find_target_in_direction` used to look straight through a settlement
+/// the same way it still does for a nest or a surface link — no `Creature`,
+/// no `Structure`, and neither of the two arms the ray walks knew to ask
+/// about one. Verified red against the pre-fix code (the settlement query
+/// commented out of `find_target_in_direction`) before the query was
+/// restored, which is what proves this is the gap closing rather than a
+/// vacuous assertion.
+#[test]
+fn find_target_in_direction_finds_a_settlement_it_previously_looked_through() {
+    let mut game = Game::new(9101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let start = *game.world.get::<Position>(player).unwrap();
+    clear_creatures_east_of_player(&mut game, start, 5);
+    let key = crate::settlements::SettlementKey { rx: 7, ry: -3 };
+    let entity = place_settlement(&mut game, key, start.x + 2, start.y);
+
+    assert_eq!(
+        game.find_target_in_direction(1, 0, 5),
+        Some(InspectTarget::Settlement(entity)),
+        "a settlement standing on the ray must not be looked through"
+    );
+}
+
+/// `KnownSettlement::def` stores the whole resolved catalogue entry, and
+/// this is the reason: the report must not go back to `SettlementDb` for
+/// anything, or a mod removing or rewriting a file after a town has been
+/// reached would rewrite what the party already knows. Proven the strong
+/// way — the fixture's own id is never registered in the shipped catalogue
+/// at all, so a report that resolved through `SettlementDb` would have
+/// nothing to answer with.
+#[test]
+fn settlement_report_names_all_five_fields_off_the_resolved_def_stored_at_materialization() {
+    let mut game = Game::new(5510, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let key = crate::settlements::SettlementKey { rx: 3, ry: -9 };
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    place_settlement(&mut game, key, pos.x + 400, pos.y + 400);
+
+    assert!(
+        game.world
+            .resource::<crate::settlements::SettlementDb>()
+            .get(GENERIC_SETTLEMENT_ID)
+            .is_none(),
+        "the fixture's id must not exist in the shipped catalogue, or this test \
+         cannot tell settlement_report apart from a lookup through SettlementDb"
+    );
+
+    let view = game.settlement_report(key);
+    assert_eq!(view.name, "Test Town");
+    assert_eq!(
+        view.kind,
+        crate::settlements::SettlementKind::Server.label()
+    );
+    assert_eq!(view.specialty, crate::settlements::Specialty::Gear.label());
+    assert_eq!(
+        view.temperament,
+        crate::settlements::Temperament::Open.label()
+    );
+    assert_eq!(view.blurb, "A place raised for a test.");
+}
+
+#[test]
 fn a_manifest_carries_the_to_hit_pair_the_fight_actually_rolls() {
     let game = Game::new(4401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();

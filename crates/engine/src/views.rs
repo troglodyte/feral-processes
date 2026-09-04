@@ -1824,6 +1824,37 @@ pub enum InspectTarget {
     /// what is still to be fetched and how far along the raising is —
     /// through `Game::build_order_row`.
     BuildSite(Entity),
+    /// A settlement standing on the zone surface. Its own variant rather
+    /// than `Structure`, for `Caravan` and `BuildSite`'s reason one level
+    /// out: a manifest opened on a settlement would be a sheet with nothing
+    /// on it — no `Stats`, no stock, no tier. What the player gets instead
+    /// is the whole hub, through `Game::settlement_report` — reading a
+    /// town's identity from across the map is what examine is *for*, and
+    /// it stays correct once a later phase adds a market: reading a
+    /// Broker's board and signing it are already two different questions
+    /// (`Game::broker_reach`), so a shelf gets its own reach check without
+    /// this variant moving.
+    Settlement(Entity),
+}
+
+/// The whole of a settlement's hub screen — `Game::settlement_report`.
+///
+/// Identity only, Phase 2's decision: no action rows and no stubs for a
+/// market or a job board, both of which land as their own fields later
+/// rather than widening this one under a name that stops matching what it
+/// holds.
+///
+/// Every label is a call onto the resolved def's own enum — `kind.label()`,
+/// `specialty.label()`, `temperament.label()` — rather than a `match`
+/// re-stated here, which is what keeps a new catalogue variant's label
+/// living in exactly one place.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SettlementView {
+    pub name: String,
+    pub kind: &'static str,
+    pub specialty: &'static str,
+    pub temperament: &'static str,
+    pub blurb: String,
 }
 
 pub enum ManifestSubject {

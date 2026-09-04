@@ -1504,19 +1504,17 @@ fn a_worker_mid_delivery_is_not_stood_down_with_its_load() {
         Some(mine),
         "precondition: the order's want is what the body is on"
     );
-    // Nothing consumes Core Fragments beside the mine, so the worker sets
-    // off with the first cycle's payout of its own accord.
-    for _ in 0..60 {
-        if game.world.get::<Carrying>(worker).is_some() {
-            break;
-        }
-        game.tick();
-    }
-    let load = game
-        .world
-        .get::<Carrying>(worker)
-        .cloned()
-        .expect("precondition: the worker has to be holding a load");
+    // Planted directly rather than waited for. A real load rides on
+    // `task_progress_system`'s `mining_success_chance` roll, and this test's
+    // subject is what happens to a load already in hand — not whether a
+    // cycle happens to pay out inside whatever tick budget a loop is given.
+    // `a_downed_program_holding_a_load_is_still_taken_off_its_post` sets up
+    // the same precondition the same way.
+    let load = Carrying {
+        item: ItemId::from(ids::CORE_FRAGMENT),
+        qty: tuning::HAUL_CARRY_CAPACITY,
+    };
+    game.world.entity_mut(worker).insert(load.clone());
 
     // The player changes their mind mid-walk. The order's want disappears
     // and the standing job is all that is left to fill.

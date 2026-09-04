@@ -33,6 +33,22 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.89
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+nothing here is stored, and both new def fields are additive and
+`#[serde(default)]`, so an existing `.ron` parses untouched.
+
+- **A species or structure can name its own sprite.** `sprite:` in its `.ron`,
+  defaulting to the def's own id, so dropping `assets/sprites/rootkit.png`
+  into the tree is the whole of giving the Rootkit art.
+- **The loader reads the directory instead of a list in Rust.** The table
+  holds exactly what is on disk, so a name with no file behind it is now
+  unreachable rather than a warning several frames late.
+- **Nothing on screen changes yet.** All 47 shipped defs have no art and draw
+  the glyph they always did; this is the code half of entity sprites, and the
+  art is the next slice.
+
 ## 0.13.88
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —

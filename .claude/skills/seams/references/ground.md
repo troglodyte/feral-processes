@@ -60,3 +60,51 @@
   `note_static_turnover` has to ask what was live in the epoch that just
   *ended* to announce a clearing; a version that only reads
   `current_tick()` cannot answer that question at all.
+- **Where a settlement stands is derived off `(world seed, region)`, never
+  stored — `rock::RockDb::kind_at`'s rule, reached here by
+  `settlements::placement::settlement_at`.** The trap is folding a region's
+  `(rx, ry)` in as a single word instead of a byte at a time: neighbouring
+  regions — exactly the comparison this has to get right — differ in one
+  low bit of one coordinate, and one XOR-then-multiply round only carries a
+  difference about the fold prime's own width upward, so a whole-word fold
+  never reaches bit 63, the bit `derive::index` reads. Regions anti-correlate
+  into stripes that read as arbitrary one region at a time — the measured
+  failure `descriptions::Slot::tags` documents, reached here by
+  `rock::block_seed`'s route — and **never `%`** is why `derive::index`
+  exists at all. The derivation only answers a *candidate* cell: it cannot
+  see terrain, so `Game::ensure_local_settlements` walks outward from it for
+  somewhere walkable, bounded by `SETTLEMENT_SITE_SEARCH_TILES`, and records
+  the resolved tile in `resources::KnownSettlement` rather than re-deriving
+  it — a later change to how that walk breaks ties must not be able to move
+  a town the party has already reached. `resources::Settlements` stores the
+  *whole resolved* `SettlementDef`, `ActiveContract`'s reason: a catalogue
+  file edited or deleted mid-run must not rename or strand a place already
+  known. Keyed by `SettlementKey` (region coordinates) rather than `Entity`,
+  which does not survive a save, in a `BTreeMap` so the save encoding does
+  not depend on iteration order. **"Already known" does not mean "recently
+  visited"** — unlike `PopulatedChunks`, which `cull_to_cap` is free to
+  forget so old ground restocks with different wild programs on a return
+  visit, a settlement's record is permanent, and a modder deleting
+  `assets/settlements/` gets the pre-settlement game (an empty catalogue
+  derives to `None` everywhere) rather than an error.
+- **A settlement is the fourth arm of `move_player`'s bump ladder, and the
+  one arm that admits nobody.** Checked in `game/turn.rs` after the
+  surface-link arm and before the walkable read, `Game::find_settlement_at`
+  (mirroring `find_surface_link_at`'s query shape — `(&Position,
+  &Settlement)`, no `Entity`, no filter type) queues a cue and returns
+  before the step below it runs — the player's `Position` never changes,
+  unlike the Stack-entrance arm one line up, because a settlement is a
+  landmark read from the outside rather than a door with a hallway behind
+  it. **The trap is treating the cue, `resources::PendingVisit`, as a plain
+  read.** A getter passes every test except the one that calls it twice,
+  and without a drain the screen it opens reopens on the very next
+  keypress the player spends trying to walk away, since nothing ever
+  clears it. `Game::take_settlement_visit` is the drain —
+  `take_effects`/`take_transits`'s shape, `Some` once, `None` after — and
+  it is deliberately unserialized, `CurrentStack`'s reason: a save that
+  restored a pending visit would reopen the screen the instant the file
+  loaded. `find_target_in_direction`'s settlement query is ranked *last*,
+  behind a live creature on the same tile, because materialization walks
+  to the nearest walkable cell rather than the nearest empty one, so a
+  settlement and a wild program can share a tile and the program is the
+  one worth pointing `x` at.

@@ -479,6 +479,101 @@ change was made: a place can only be worth building on, defending or
 returning to if it is still there the next time the player crosses a
 portal.
 
+### Where a settlement stands is derived, never stored
+
+**Where a settlement stands is derived, never stored.**
+`crates/engine/src/settlements/placement.rs::settlement_at` divides the
+world into square regions of `SETTLEMENT_REGION_CHUNKS` chunks and folds
+`(world seed, region coordinates)` through an FNV-1a accumulator —
+`rock::RockDb::kind_at`'s rule, carried over to the zone surface. It only
+became legal to write once a breach stopped rebuilding the world (the entry
+above): a settlement placed against a seed that used to be reshuffled every
+zone would have moved out from under a relationship the player had already
+built with it.
+
+One fold answers three independent questions, each its own salt on the same
+base rather than a second scheme — `FrameSpec::rng_seed`'s precedent, so
+nothing here can invent a scheme that collides with it: whether the region
+holds a settlement at all (weighted `SETTLEMENT_REGION_PERCENT`), roughly
+where inside it, and which catalogue entry. **Every input goes in a byte at
+a time.** `region_seed` folds the seed and each region coordinate a byte at
+a time rather than as a single word, because one XOR-then-multiply round
+only carries a difference about the fold prime's own width upward, and
+neighbouring regions — exactly the comparison this has to get right — differ
+in one low bit of one coordinate. Folded as whole words, that difference
+never reaches bit 63, the bit `derive::index` reads, so neighbouring regions
+would anti-correlate into stripes that read as arbitrary — the measured
+failure `descriptions::Slot::tags` documents, reached here by
+`rock::block_seed`'s route. **Never `%`**, for the same reason. The test for
+it does not check a distribution; it checks that every shipped settlement
+turns up somewhere in a modest sweep, which a stripe cannot manage.
+
+**The derivation answers a candidate, not a fact about the ground.** It
+cannot see terrain, so `settlement_at` hands back a cell and
+`Game::ensure_local_settlements` — `ensure_local_population`'s shape —
+walks outward from it, bounded by `SETTLEMENT_SITE_SEARCH_TILES`, for
+somewhere walkable. That walk is itself deterministic, since the map is
+permanent and a pure function of the seed, but the *resolved* tile is what
+`resources::KnownSettlement::tile` records, not the candidate: a later
+change to how the walk breaks ties must not be able to move a town the
+party has already reached. The same record stores the settlement's whole
+resolved `SettlementDef` — `ActiveContract`'s reason one level over, so a
+catalogue file edited or deleted after materialization cannot rename or
+strand a place the party already knows — and `resources::Settlements` keys
+it by `SettlementKey` (region coordinates) rather than `Entity`, since an
+entity id does not survive a save. A `BTreeMap`, because the resource is
+serialized and a `HashMap`'s iteration order would make identical state
+encode differently between two runs.
+
+**"Already known" is permanent, unlike "already stocked."**
+`ensure_local_settlements` shares `ensure_local_population`'s shape but not
+its meaning: a populated chunk is a mark `cull_to_cap` is free to forget, so
+walking back over old ground restocks it with different wild programs. A
+settlement is a place, so the check is whether the region has ever been
+resolved, never whether it was recently visited — a town, once found, is the
+same town every time the party returns to it.
+
+### A settlement is entered by walking into it
+
+**A settlement is entered by walking into it, and the tile refuses to be
+entered at all.** `Game::move_player`'s bump ladder gains a fourth arm,
+checked in `crates/engine/src/game/turn.rs` after the wild-creature, nest
+and surface-link arms and before the walkable check that would otherwise
+treat the tile as ordinary ground — `Game::find_settlement_at`, mirroring
+`find_surface_link_at`'s query shape exactly (`(&Position, &Settlement)`, no
+`Entity`, no filter type). Unlike the surface-link arm one step up, a
+settlement is never a door: the bump writes a cue and returns before the
+step below it ever runs, so the player never moves onto the tile. That is
+the load-bearing difference from a Stack entrance — an entrance is a place
+you go *through*; a settlement is a landmark you read from the outside.
+
+**The cue is `resources::PendingVisit`, `CurrentStack`'s shape for the same
+reason.** It names *this instant*, not a fact about the world, and is
+deliberately unserialized: a save that restored one would reopen a screen
+the moment the file loaded rather than on the step that actually asked for
+it. `Game::take_settlement_visit` is a **drain** —
+`take_effects`/`take_transits`'s shape, answering `Some` once and `None` on
+every call after — and the drain is the entire feature, not decoration on a
+getter: a plain read passes four of the five tests written for it and still
+reopens the screen on the very next keypress the player spends walking
+away, since nothing would ever clear it. Verified the hard way, by
+temporarily swapping the drain for a `.clone()` read and watching
+`a_second_take_settlement_visit_answers_none` go red before restoring it.
+
+**Examine reaches the same gap `find_target_in_direction`'s own comment
+already named.** A settlement carries neither `Creature` nor `Structure`, so
+the ray looked straight through one the same way it still does for a nest or
+a zone portal; the settlement half of that gap closes with a query ranked
+last of four (`SETTLEMENT_ON_TILE`), behind a live creature on the same
+tile — materialization walks out to the nearest *walkable* cell rather than
+the nearest *empty* one, so a settlement can share a tile with a wild
+program, and the program is the more actionable of the two to point `x` at.
+`entity_label` and `Game::settlement_report` both read
+`resources::Settlements` by key and never `SettlementDb` — `Game::
+copy_name`'s rule — so the bump and examine render through the one
+derivation and cannot drift into two screens, and a catalogue file edited
+after the town was found cannot reach a party that already knows it.
+
 ### A Stack frame is regenerated; what the party *saw* of it is saved
 
 **A Stack frame is regenerated; what the party *saw* of it is saved.**

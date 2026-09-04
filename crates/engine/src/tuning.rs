@@ -3268,6 +3268,26 @@ pub const SIGNAL_NOISE_AMBUSH_MULT: f32 = 2.0;
 /// fast program both hits and dodges well. `atk` is deliberately absent from
 /// both: feeding it to-hit *and* damage compounds quadratically and is the
 /// most likely thing to break `balance_sim`'s curves.
+// ---------------------------------------------------------------------------
+// Settlements
+// ---------------------------------------------------------------------------
+
+/// How many chunks across a settlement region is.
+///
+/// The map is unbounded, so density is the only thing that can be tuned:
+/// this and `SETTLEMENT_REGION_PERCENT` together say how far apart towns
+/// are. At 8 chunks a region is 256 tiles across, which is a long walk
+/// rather than a stroll — a settlement has to be worth arriving at, and one
+/// visible from the last one is not.
+pub const SETTLEMENT_REGION_CHUNKS: i32 = 8;
+
+/// How likely a region is to hold a settlement at all, in percent.
+///
+/// Under 100 on purpose. A settlement in every region is a grid, and a grid
+/// is not a place — the emptiness between them is what makes finding one
+/// mean anything.
+pub const SETTLEMENT_REGION_PERCENT: usize = 45;
+
 pub const ACCURACY_PER_SPEED: f64 = 1.0;
 /// See `ACCURACY_PER_SPEED`. Levelling buys accuracy; it never buys mitigation.
 pub const ACCURACY_PER_LEVEL: f64 = 0.5;

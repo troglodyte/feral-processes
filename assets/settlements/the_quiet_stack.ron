@@ -1,0 +1,8 @@
+(
+    id: "the_quiet_stack",
+    name: "The Quiet Stack",
+    blurb: "Routines are written here and nowhere else, by people who do not explain them. The town keeps its voice down out of habit rather than fear.",
+    kind: Server,
+    specialty: Routines,
+    temperament: Guarded,
+)

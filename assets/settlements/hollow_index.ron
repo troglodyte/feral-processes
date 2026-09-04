@@ -1,0 +1,8 @@
+(
+    id: "hollow_index",
+    name: "Hollow Index",
+    blurb: "Programs come here when their owners do not come back for them. The Index feeds them, names them, and sells them on without pretending otherwise.",
+    kind: Server,
+    specialty: Programs,
+    temperament: Open,
+)

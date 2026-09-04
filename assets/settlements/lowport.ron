@@ -1,0 +1,8 @@
+(
+    id: "lowport",
+    name: "Lowport",
+    blurb: "A handful of shelters bolted to a dead relay mast. They will trade with anything that walks in and still has power to spare.",
+    kind: Server,
+    specialty: Materials,
+    temperament: Open,
+)

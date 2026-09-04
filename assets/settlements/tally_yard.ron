@@ -1,0 +1,8 @@
+(
+    id: "tally_yard",
+    name: "Tally Yard",
+    blurb: "Every crate that crosses this sector is counted here twice, once by the yard and once by whoever it is really for. Materials move cheap and questions move dear.",
+    kind: Mainframe,
+    specialty: Materials,
+    temperament: Mercantile,
+)

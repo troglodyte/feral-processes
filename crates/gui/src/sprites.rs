@@ -13,6 +13,8 @@
 //! supported way deleting `assets/sectors/` restores undifferentiated
 //! zones.
 
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
 use std::sync::Arc;
 
 use bevy::asset::{LoadState, RenderAssetUsages};
@@ -20,6 +22,8 @@ use bevy::image::{ImageLoaderSettings, ImageSampler};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy_egui::{EguiTextureHandle, EguiUserTextures};
+use feral_processes_app_core::SpriteOp;
+use feral_processes_engine::icon::{Canvas, quantise, sprite_rgba};
 use feral_processes_engine::{ICON_SIZE, PlayerIcon};
 
 use crate::paint::SpriteTable;
@@ -55,6 +59,96 @@ fn scan_sprite_dir(dir: &std::path::Path) -> Vec<String> {
         .collect();
     names.sort();
     names
+}
+
+/// Encodes `canvas` through `sprite_rgba` — the quantiser's exact inverse —
+/// and writes it to `path` as a PNG, overwriting whatever was there.
+///
+/// The one door the sprite editor's `[s]` reaches disk through. `canvas`'s
+/// own `edge()` sizes the image rather than assuming `ICON_SIZE`: the sprite
+/// canvas is always 16x16 by construction (`app-core`'s `SPRITE_EDGE`), but
+/// this codec has no reason to assume that of its caller.
+pub fn canvas_to_png(canvas: &Canvas, path: &Path) -> std::io::Result<()> {
+    let edge = canvas.edge();
+    let mut buf = image::RgbaImage::new(edge as u32, edge as u32);
+    for y in 0..edge {
+        for x in 0..edge {
+            let (r, g, b, a) = sprite_rgba(canvas.get(x, y));
+            buf.put_pixel(x as u32, y as u32, image::Rgba([r, g, b, a]));
+        }
+    }
+    buf.save(path)
+        .map_err(|e| std::io::Error::other(format!("{path:?}: {e}")))
+}
+
+/// Decodes a PNG at `path` back into a `Canvas`, quantising every pixel onto
+/// `SPRITE_PALETTE` through `quantise` — the codec's other half.
+///
+/// `None` on any failure: missing file, a file that isn't a PNG, a corrupt
+/// one, or one that isn't square — the same warn-and-carry-on contract
+/// `register`'s `LoadState::Failed` arm already keeps for a sprite that
+/// fails to load through the asset server. There is nothing to log to here
+/// (this runs off the render thread, ahead of the frame that would show a
+/// refusal), so the caller decides what a `None` means.
+pub fn png_to_canvas(path: &Path) -> Option<Canvas> {
+    let img = image::open(path).ok()?.into_rgba8();
+    let (w, h) = img.dimensions();
+    if w == 0 || w != h {
+        return None;
+    }
+    let edge = w as usize;
+    let mut canvas = Canvas::new(edge);
+    for y in 0..h {
+        for x in 0..w {
+            let p = img.get_pixel(x, y);
+            canvas.set(x as usize, y as usize, quantise((p[0], p[1], p[2], p[3])));
+        }
+    }
+    Some(canvas)
+}
+
+/// Everything installed art `dir` holds: every enabled sprite decoded to a
+/// `Canvas`, keyed by name, and the bare names of everything disabled (a
+/// `<name>.png.off` file — see `assets/sprites/README.md`'s naming rule).
+///
+/// **Deliberately not `scan_sprite_dir`.** That scan answers "what may the
+/// asset server load," a list of names; this answers "what does the sprite
+/// editor's library actually look like," which needs the pixels and the
+/// disabled set neither the loader nor the map ever ask for. A missing
+/// directory, like `scan_sprite_dir`, is the supported empty state rather
+/// than an error. A `.png` that fails to decode is silently dropped from
+/// `enabled` rather than surfaced — the same contract `png_to_canvas` keeps
+/// on its own.
+pub fn scan_library(dir: &Path) -> (HashMap<String, Canvas>, HashSet<String>) {
+    let mut enabled = HashMap::new();
+    let mut disabled = HashSet::new();
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return (enabled, disabled);
+    };
+    for path in entries.filter_map(|entry| entry.ok().map(|entry| entry.path())) {
+        let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if let Some(name) = file_name.strip_suffix(".png.off") {
+            if !name.starts_with('@') {
+                disabled.insert(name.to_string());
+            }
+            continue;
+        }
+        if path.extension().is_none_or(|ext| ext != "png") {
+            continue;
+        }
+        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        if stem.starts_with('@') {
+            continue;
+        }
+        if let Some(canvas) = png_to_canvas(&path) {
+            enabled.insert(stem.to_string(), canvas);
+        }
+    }
+    (enabled, disabled)
 }
 
 /// The `SpriteTable` key the player's own drawing is registered under.
@@ -195,6 +289,91 @@ pub fn load(
             .load(format!("sprites/{name}.png"));
         sprites.pending.push((name, handle));
     }
+}
+
+/// Installs `App::sprite_library`/`sprite_disabled` once at startup, so the
+/// picker's art column and the editor's opening canvas answer "what's
+/// installed" correctly from the very first frame rather than only after
+/// the first save.
+///
+/// Gated on `sprite_forge_enabled()` — the picker and editor are the only
+/// readers of this state, and both are unreachable without the flag *and*
+/// a checkout, so decoding every shipped sprite into a `Canvas` here would
+/// be pure cost with no reader on every other build and every ordinary run.
+pub fn install_library(mut frontend: ResMut<crate::Frontend>) {
+    if !frontend.app.sprite_forge_enabled() {
+        return;
+    }
+    let dir = frontend.app.assets_dir().join("sprites");
+    let (enabled, disabled) = scan_library(&dir);
+    frontend.app.install_sprite_library(enabled, disabled);
+}
+
+/// Drains `App::take_sprite_writes`, performs the write or the rename each
+/// one asks for, and — reusing `load`'s own upload path rather than a
+/// second one — pushes a `Save`/`Enable`'s reload onto `Sprites::pending`
+/// so `register` (ordered directly after this, in `PreUpdate`) can land it
+/// in the table this same frame.
+///
+/// A `Disable` never reaches `pending` at all: the file is gone from under
+/// the name the instant the rename lands, so there is nothing left to
+/// (re)load — it takes the name back out of the table itself, through
+/// `SpriteTable::remove`, so a disabled sprite stops drawing on the same
+/// frame the toggle was pressed rather than lagging a load cycle behind.
+///
+/// The library is rescanned and reinstalled once, after every write in the
+/// batch, rather than per write: the picker and editor only ever read it on
+/// the frame they're drawn, so one rescan per drained batch is enough to
+/// keep both from going stale, at a fraction of the cost of one rescan per
+/// op.
+pub fn drain_writes(
+    asset_server: Res<AssetServer>,
+    mut frontend: ResMut<crate::Frontend>,
+    mut sprites: ResMut<Sprites>,
+) {
+    let writes = frontend.app.take_sprite_writes();
+    if writes.is_empty() {
+        return;
+    }
+    let dir = frontend.app.assets_dir().join("sprites");
+    for write in writes {
+        let name = write.name;
+        let path = dir.join(format!("{name}.png"));
+        let off_path = dir.join(format!("{name}.png.off"));
+        match write.op {
+            SpriteOp::Save(canvas) => {
+                if let Err(e) = canvas_to_png(&canvas, &path) {
+                    warn!("sprite `{name}` failed to save: {e}");
+                    continue;
+                }
+            }
+            SpriteOp::Enable => {
+                if let Err(e) = std::fs::rename(&off_path, &path) {
+                    warn!("sprite `{name}` failed to enable: {e}");
+                    continue;
+                }
+            }
+            SpriteOp::Disable => {
+                if let Err(e) = std::fs::rename(&path, &off_path) {
+                    warn!("sprite `{name}` failed to disable: {e}");
+                    continue;
+                }
+                // `Arc::make_mut` for `register`'s reason: the renderer may
+                // be holding a clone of the old table from this frame.
+                Arc::make_mut(&mut sprites.table).remove(&name);
+                continue;
+            }
+        }
+        let handle = asset_server
+            .load_builder()
+            .with_settings(|settings: &mut ImageLoaderSettings| {
+                settings.sampler = ImageSampler::nearest();
+            })
+            .load(format!("sprites/{name}.png"));
+        sprites.pending.push((name, handle));
+    }
+    let (enabled, disabled) = scan_library(&dir);
+    frontend.app.install_sprite_library(enabled, disabled);
 }
 
 /// Hands each sprite to egui once its pixels have actually arrived.
@@ -571,4 +750,126 @@ mod tests {
     // CLAUDE.md's Testing section rules out ("No flaky tests. No sleep(),
     // no wall-clock dependence"). No amount of getting the harness right
     // changes that shape, so this task adds no test for it.
+
+    /// A fresh, unique scratch directory under the OS temp dir — never
+    /// `assets/sprites/`. `tag` keeps two tests' directories from ever
+    /// colliding even when run in parallel, the same disambiguator
+    /// `an_at_prefixed_stem_is_never_scanned` inlines by hand above.
+    fn codec_test_dir(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "feral_processes_gui_sprites_codec_{tag}_{}_{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// A canvas with a few painted cells — enough to exercise more than one
+    /// palette index and a still-transparent corner.
+    fn a_sprite_canvas() -> Canvas {
+        let mut canvas = Canvas::new(ICON_SIZE);
+        canvas.set(0, 0, 1);
+        canvas.set(3, 5, 12);
+        canvas.set(15, 15, 19);
+        canvas
+    }
+
+    /// The round trip `SPRITE_PALETTE`'s quantiser makes loss-free: every
+    /// painted index writes to a pixel that quantises straight back to the
+    /// same index, because `sprite_rgba` and `quantise` are exact inverses
+    /// on the palette's own colours.
+    #[test]
+    fn a_canvas_written_and_read_back_is_the_same_canvas() {
+        let dir = codec_test_dir("roundtrip");
+        let path = dir.join("subject.png");
+        let canvas = a_sprite_canvas();
+
+        canvas_to_png(&canvas, &path).expect("a fresh temp dir must accept the write");
+        let read_back = png_to_canvas(&path).expect("a file this codec just wrote must decode");
+
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(read_back, canvas);
+    }
+
+    /// The written file is a real 16x16 RGBA PNG — the exact contract
+    /// `crates/gui/tests/sprites.rs::the_shipped_sprites_are_one_cell`
+    /// polices for the shipped art, now true of a save this codec produces
+    /// too.
+    #[test]
+    fn a_written_file_is_16x16_rgba() {
+        let dir = codec_test_dir("dims");
+        let path = dir.join("subject.png");
+
+        canvas_to_png(&a_sprite_canvas(), &path).unwrap();
+        let img = image::open(&path).unwrap();
+
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(
+            (img.width(), img.height()),
+            (ICON_SIZE as u32, ICON_SIZE as u32)
+        );
+        assert_eq!(img.color(), image::ColorType::Rgba8);
+    }
+
+    /// `scan_library` reads the disabled set off a `.png.off` rename, and
+    /// the same file must be invisible to `scan_sprite_dir` — the loader's
+    /// own scan — without that scan needing to know `.off` exists at all:
+    /// its plain `extension() == "png"` filter already excludes it.
+    #[test]
+    fn a_disabled_file_is_absent_from_the_loader_scan_and_present_in_the_librarys_disabled_set() {
+        let dir = codec_test_dir("disabled");
+        canvas_to_png(&a_sprite_canvas(), &dir.join("on_subject.png")).unwrap();
+        std::fs::write(
+            dir.join("off_subject.png.off"),
+            b"irrelevant, never decoded",
+        )
+        .unwrap();
+
+        let loader_names = scan_sprite_dir(&dir);
+        let (enabled, disabled) = scan_library(&dir);
+
+        std::fs::remove_dir_all(&dir).ok();
+        assert_eq!(
+            loader_names,
+            vec!["on_subject".to_string()],
+            "a .png.off file's extension is \"off\", not \"png\" — already invisible to the \
+             loader's own filter, with no change to scan_sprite_dir"
+        );
+        assert!(enabled.contains_key("on_subject"));
+        assert_eq!(disabled, HashSet::from(["off_subject".to_string()]));
+        assert!(
+            !enabled.contains_key("off_subject"),
+            "a disabled sprite's pixels are not installed as art the map may draw"
+        );
+    }
+
+    /// A corrupt or non-PNG file at the expected path is a decode failure,
+    /// not a panic — the same contract every asset database in this repo
+    /// keeps for a malformed file on disk.
+    #[test]
+    fn png_to_canvas_on_a_corrupt_file_is_none() {
+        let dir = codec_test_dir("corrupt");
+        let path = dir.join("subject.png");
+        std::fs::write(&path, b"not a png at all").unwrap();
+
+        let result = png_to_canvas(&path);
+
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(result.is_none());
+    }
+
+    /// A missing file is the same "no answer" as a corrupt one — `png_to_
+    /// canvas` never distinguishes "absent" from "unreadable," matching
+    /// `Painter::sprite`'s own single fallback.
+    #[test]
+    fn png_to_canvas_on_a_missing_file_is_none() {
+        let dir = codec_test_dir("missing");
+        let path = dir.join("nothing_here.png");
+
+        let result = png_to_canvas(&path);
+
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(result.is_none());
+    }
 }

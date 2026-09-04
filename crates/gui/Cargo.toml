@@ -38,5 +38,11 @@ bevy = { version = "0.19", default-features = false, features = [
 ] }
 bevy_egui = "0.41"
 
+# Bevy's own `png` feature (above) is decode-only, so writing a PNG back out
+# — the sprite editor's save — needs the encoder named explicitly. Pinned to
+# the exact version already in `Cargo.lock` via bevy's own graph, so this
+# adds nothing to the dependency graph, only names a crate already there.
+image = { version = "0.25.10", default-features = false, features = ["png"] }
+
 [dev-dependencies]
 fontdue = "0.9"

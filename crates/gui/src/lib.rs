@@ -236,11 +236,31 @@ pub fn run(app: App) {
             perf: perf::PerfMeter::new(),
         })
         .init_resource::<sprites::Sprites>()
-        .add_systems(Startup, (setup, maximize_window, sprites::load))
+        .add_systems(
+            Startup,
+            (
+                setup,
+                maximize_window,
+                sprites::load,
+                sprites::install_library,
+            ),
+        )
         // In `PreUpdate` rather than the egui pass: registration needs
         // `EguiUserTextures` mutably, and the pass already holds the context.
         // It runs every frame but returns immediately once nothing is pending.
-        .add_systems(PreUpdate, (sprites::register, sync_drawn_icon))
+        // `drain_writes` is ordered ahead of `register` explicitly — an
+        // unordered tuple gives bevy no reason to run a save's own load
+        // request before `register` sees it, and the brief's promise ("a
+        // save reaches the table on the same frame") needs that order, not
+        // luck.
+        .add_systems(
+            PreUpdate,
+            (
+                sprites::drain_writes.before(sprites::register),
+                sprites::register,
+                sync_drawn_icon,
+            ),
+        )
         .add_systems(EguiPrimaryContextPass, frame);
     add_font_install(&mut bevy_app);
     bevy_app.run();

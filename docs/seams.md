@@ -11081,3 +11081,120 @@ The RNG discipline is the third part: predation is the only thing in
 preys. A route that quietly advanced the seeded stream every tick would have
 made every other seeded test in the suite depend on whether a route happened
 to be in flight.
+
+### The garrison clamp is on the settlement half alone, and both other placements are wrong
+
+`Game::total_raid_defense` is what `run_raid` subtracts from `RAID_DAMAGE`
+with `saturating_sub`, and it was a bare sum of `StructureDef::raid_defense`
+over deployed structures. Settlement aid adds a second term:
+`Game::garrison_defense`, `Standing::garrison_defense` summed over every
+town in `resources::Settlements` whose tile is within
+`SETTLEMENT_GARRISON_RADIUS` of the anchor, and **clamped to
+`SETTLEMENT_GARRISON_MAX` before the structure sum is added**.
+
+Both other placements of that clamp break something. **Omitted**, enough
+Allied neighbours drive the subtraction to zero and raids stop happening in
+everything but the log — `run_raid` still picks a target, still logs, and
+lands for nothing, so the mechanic is deleted rather than softened and no
+test notices because every raid assertion still fires. **On the total**, a
+settlement constant caps the player's own shield network, which is a
+different feature: two Shields grant 4 against `RAID_DAMAGE` 4 and already
+zero a sweep, deliberately, because that is a thing the player built.
+`the_garrison_cap_does_not_touch_the_structure_half` is the test that fails
+under the second mistake and passes under the first, which is why the suite
+carries both it and `the_settlement_half_of_raid_defense_is_capped`.
+
+`SETTLEMENT_GARRISON_MAX` sits strictly below `RAID_DAMAGE`, asserted in
+`relations.rs` rather than at the call site, so a retune of either constant
+that closes the gap fails the build.
+
+**`garrison_defense` is a magnitude and the other two aid queries are
+booleans**, which is what keeps three new queries from being three spellings
+of "is this town Allied". It ramps from `Warm`, so the band below the top
+buys something here as well as a standing route, and the ladder's summit is
+a difference in degree rather than a fourth gate.
+
+### A gift's species is derived; choosing it spends no draw, and spawning it spends what every adoption does
+
+`Game::request_program_gift` folds `(world seed, region, gifts taken)`
+through `contracts::fold` and reduces with `derive::index`, exactly as a
+town's board and shelf are seeded, with `SETTLEMENT_GIFT_SALT` keeping the
+three apart. So a reload cannot reroll what a town hands over, and burning
+fifty `GameRng` draws before asking changes nothing.
+
+**The precise claim is about the selection, not the door**, and the first
+version of the test got this wrong. `Game::adopt_program` rolls rarity and
+stats like every other adoption — the caravan's purchased program and the
+Stack's salvaged one pay the same cost — so "a gift draws no `GameRng`"
+fails, and correctly. `choosing_a_gifts_species_spends_no_draw` states it as
+it is: it adopts the same species by hand in a control run and asserts both
+leave the stream in the same place. A future reader tempted to strengthen
+that back to "the whole door draws nothing" would have to bypass
+`adopt_program`, which is one of the four doors into the roster and the only
+barrier `roster_parts` has.
+
+The pool is `habitat_pools`' **ordinary** half, sorted before the pick.
+Sorted because the draw indexes into it, `pick_lair_species`' reason; the
+apex half is excluded because a gifted boss inverts the whole "labour, not
+power" decision the feature rests on. That decision is
+`SETTLEMENT_GIFT_STAT_MULT` sitting below the 1.0 an adopted or purchased
+program gets, and it is **a tuning claim rather than a structural one** —
+`ProgramRole` is derived, so nothing stops the player fielding a gift; only
+the number makes that a bad trade.
+
+### A relay landing is band 1, filtered like a step, and the arrival cue is tied to reach
+
+A settlement tile admits nobody: `move_player`'s fourth arm queues the visit
+and returns before the walkable step below it. So `Game::relay_landing`
+searches from **band 1**, never band 0 — `standable_near` starts at 0
+because a town may stand on the cell the derivation named, and reusing it
+here would set the party down on the town itself, somewhere walking could
+never have taken them. The ring order is `spawning::ring_tiles`, extracted
+so the two searches share one definition of "nearest" rather than keeping
+two copies that drift.
+
+**`walkable` alone is not the question.** `move_player`'s ladder turns a
+step aside for a wild program, a nest, a Stack entrance and a settlement
+before it ever asks the tile, so the landing filter asks all four too. This
+is the "checks walkable, not empty" trap that put a town on a Stack entrance
+once already.
+
+**The arrival cue fires on reach, not on the trip.** The ring finds the
+nearest standable ground, which broken terrain can put several tiles out;
+queueing `PendingVisit` unconditionally opened a town page whose `[M]` and
+`[J]` were then refused by `Game::settlement_reach`, because that check is
+Chebyshev 1 and the landing was not. So the cue asks the same question the
+bump answers, and a distant set-down leaves the party looking at the map
+with a short walk still to do.
+
+**Neither travel door calls `require_surface`, and that is not an
+oversight.** The Relay stands in base space, so a surface check would refuse
+the only place an outbound trip can begin. Outbound asks
+`Game::dispatch_reach` for `AtRelay`; inbound cannot, because standing at a
+town is by definition not standing at the Relay, so it asks that a Relay
+stands at all and that the town is in reach. One rule — a Relay of yours,
+a town that will hold the link — with a departure point attached to the
+outbound half.
+
+### The town page's aid sentences are engine constants, because the census that measures them cannot build a `Game`
+
+`views::SettlementView::aid` is a `Vec<String>` of finished sentences rather
+than three figures, for two reasons. A read-only screen's rows are owned by
+the engine and drawn by gui, so a phrase assembled in the renderer is a
+transform in the wrong crate — `message_history`'s rule. And this game has
+never shown the player a tick, so the gift's remaining wait is banded into
+words the way `game::memories::age_phrase` bands a memory's age; a cooldown
+quoted as a number is a number nobody can read.
+
+**The sentences are `pub const` and `AID_LINES` is the census**, which is
+the non-obvious half. The page is a popup with no scroll, so its width and
+height gates live in `crates/gui` and must measure the worst case — but a
+gui test cannot ask what the live lines are, because `Game::world` is
+private and that is the architectural rule. A hand-copied list in the
+renderer would drift the first time a sentence was reworded, and `draw_row`
+clips vertically and never horizontally, so the drift would show up as a
+line silently drawn off the right edge. Both ends carry a census: the engine
+asserts every emitted line is in `AID_LINES` **and** that every line in it is
+reachable from some state, and the renderer measures the array itself. The
+width gate was verified by mutation.
+

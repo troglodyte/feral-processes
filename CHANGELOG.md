@@ -33,6 +33,31 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.100
+
+**An Allied town is worth something now, and the top of the standing ladder
+stops being a plateau.** Three aid consequences, free while the band holds:
+
+- **A friendly town keeps a detachment near your base**, softening GC
+  Entropy Sweeps — ramping from Warm, and capped so that however many
+  neighbours you win over, a sweep still lands for something.
+- **An Allied town will spare you a program for the asking**, arriving at
+  your anchor as base staff on a cooldown — labour for the crew, not a free
+  companion, because progression here is still earned by fighting.
+- **Its relay will carry you home, and carry you back out from yours** —
+  `[T]` on the town page and on the Relay hub, for exactly the ticks the
+  walk would have cost and none of the encounters.
+
+**`[G]` asks a town for a program and `[T]` rides its relay**, both
+uppercase, both on screens that already existed — no new screen ships with
+this.
+
+**The town page now says what the town is worth**, one line per aid it
+actually offers, in words rather than in numbers.
+
+**A save from 0.13.99 loads unchanged** — `save::SAVE_FORMAT_VERSION` stays
+at 32, since everything new is additive behind `#[serde(default)]`.
+
 ## 0.13.99
 
 **Caravan routes: load cargo at the Relay, send it to a town you know, and

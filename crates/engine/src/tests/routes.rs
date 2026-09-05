@@ -541,3 +541,261 @@ fn route_reports_reads_the_record_without_changing_it() {
         "reading the report moved nothing"
     );
 }
+
+// ---------------------------------------------------------------- Task 4
+// the tick
+
+/// A second settlement definition, distinctly named from `a_destination`'s
+/// "Test Town" — a predator and the town being raided must read apart in
+/// the log, or a test asserting on a name proves nothing.
+fn a_predator_def() -> SettlementDef {
+    SettlementDef {
+        id: "test_predator".to_string(),
+        name: "Highwaymen's Watch".to_string(),
+        blurb: "A place raised for a test.".to_string(),
+        kind: SettlementKind::Server,
+        specialty: Specialty::Materials,
+        temperament: Temperament::Guarded,
+    }
+}
+
+/// A full out-and-back pays exactly what `route_quote` quoted at dispatch,
+/// and raises standing on the way — `credit_trade_volume`'s door, called
+/// once the outbound leg sells.
+#[test]
+fn a_full_out_and_back_pays_the_quoted_proceeds_and_raises_standing() {
+    let (mut game, item, key) = a_dispatch_ready_base(7000, 300);
+    set_standing(&mut game, key, crate::tuning::SETTLEMENT_WARM_STANDING);
+    let temperament = game
+        .world
+        .resource::<crate::resources::Settlements>()
+        .0
+        .get(&key)
+        .unwrap()
+        .def
+        .temperament;
+    let quote = game.route_quote(&[(item.clone(), 300)], temperament);
+    assert!(
+        quote >= crate::tuning::SETTLEMENT_TRADE_CREDITS_PER_POINT,
+        "the manifest must be worth enough to move standing at all, or the test proves nothing"
+    );
+
+    let standing_before = game.standing(key);
+    let currency = game.trade_currency();
+    let credits_before: u32 = game
+        .base_stock()
+        .iter()
+        .find(|r| r.item == currency)
+        .map(|r| r.qty)
+        .unwrap_or(0);
+
+    game.dispatch_route(key, vec![(item, 300)], false)
+        .expect("a legal dispatch");
+    let total = game.world.resource::<crate::resources::Routes>().0[0].ticks_total;
+    for _ in 0..(2 * total) {
+        game.run_routes();
+    }
+
+    assert!(
+        game.world
+            .resource::<crate::resources::Routes>()
+            .0
+            .is_empty(),
+        "a one-off route comes home for good"
+    );
+    let credits_after: u32 = game
+        .base_stock()
+        .iter()
+        .find(|r| r.item == currency)
+        .map(|r| r.qty)
+        .unwrap_or(0);
+    assert_eq!(
+        credits_after - credits_before,
+        quote,
+        "the base must land exactly what was quoted, with nothing preying on this trip"
+    );
+    assert!(
+        game.standing(key) > standing_before,
+        "a paying trip must raise standing"
+    );
+}
+
+/// A Hostile town beside the line takes its cut and says so in the log —
+/// swept across seeds, `a_sortie_kill_leaves_a_downed_program_on_the_player`'s
+/// reason: whether the one roll a leg completion makes lands is chance, and
+/// a single seed proves only its own outcome.
+#[test]
+fn a_hostile_town_beside_the_route_taxes_it_and_says_so_in_the_log() {
+    let found = (7100..7160).any(|seed| {
+        let (mut game, item, key) = a_dispatch_ready_base(seed, 300);
+        set_standing(&mut game, key, crate::tuning::SETTLEMENT_WARM_STANDING);
+
+        let (ax, ay) = game.anchor_position().unwrap();
+        let tile = game
+            .world
+            .resource::<crate::resources::Settlements>()
+            .0
+            .get(&key)
+            .unwrap()
+            .tile;
+        let midpoint = ((ax + tile.0) / 2, (ay + tile.1) / 2);
+        let predator = SettlementKey { rx: 50, ry: 50 };
+        register_settlement(&mut game, predator, a_predator_def(), midpoint);
+        set_standing(
+            &mut game,
+            predator,
+            crate::tuning::SETTLEMENT_HOSTILE_STANDING,
+        );
+
+        game.dispatch_route(key, vec![(item, 300)], false)
+            .expect("a legal dispatch");
+        let total = game.world.resource::<crate::resources::Routes>().0[0].ticks_total;
+        for _ in 0..total {
+            game.run_routes();
+        }
+
+        let route = &game.world.resource::<crate::resources::Routes>().0[0];
+        let taxed = !route.losses.is_empty();
+        let logged = game
+            .message_log(200)
+            .iter()
+            .any(|line| line.text.contains(&a_predator_def().name));
+        taxed && logged
+    });
+    assert!(
+        found,
+        "no seed in the sweep saw the Hostile town take its cut and say so"
+    );
+}
+
+/// A standing route reloads the same manifest and departs again on its own
+/// arrival home, stock allowing.
+#[test]
+fn a_standing_route_departs_again_on_arrival() {
+    let (mut game, item, key) = a_dispatch_ready_base(7200, 600);
+    set_standing(&mut game, key, crate::tuning::SETTLEMENT_WARM_STANDING);
+    game.dispatch_route(key, vec![(item.clone(), 200)], true)
+        .expect("a legal dispatch");
+    let total = game.world.resource::<crate::resources::Routes>().0[0].ticks_total;
+    let _ = game.take_transits();
+
+    for _ in 0..(2 * total) {
+        game.run_routes();
+    }
+
+    let routes = game.world.resource::<crate::resources::Routes>().0.clone();
+    assert_eq!(
+        routes.len(),
+        1,
+        "a standing route does not come home for good"
+    );
+    let route = &routes[0];
+    assert!(route.standing);
+    assert!(!route.stalled);
+    assert_eq!(route.leg, RouteLeg::Outbound, "it has departed again");
+    assert_eq!(route.ticks_elapsed, 0, "the new leg has only just begun");
+    assert_eq!(route.cargo, vec![(item, 200)], "the same manifest reloads");
+
+    let walks = game.take_transits();
+    assert!(
+        !walks.is_empty(),
+        "the reload's own departure must have queued a cue"
+    );
+}
+
+/// Short stock stalls a standing route rather than severing it, and it is
+/// retried every tick — restocking releases it on the very next one.
+#[test]
+fn short_stock_stalls_it_and_restocking_releases_it() {
+    let (mut game, item, key) = a_dispatch_ready_base(7300, 200);
+    set_standing(&mut game, key, crate::tuning::SETTLEMENT_WARM_STANDING);
+    game.dispatch_route(key, vec![(item.clone(), 200)], true)
+        .expect("a legal dispatch");
+    let total = game.world.resource::<crate::resources::Routes>().0[0].ticks_total;
+
+    for _ in 0..(2 * total) {
+        game.run_routes();
+    }
+
+    let route = game.world.resource::<crate::resources::Routes>().0[0].clone();
+    assert!(
+        route.stalled,
+        "there is nothing left to reload, so it must park rather than depart or drop"
+    );
+    assert_eq!(
+        route.leg,
+        RouteLeg::Inbound,
+        "it stays parked at the inbound-complete point"
+    );
+
+    // Restock, and the very next tick releases it.
+    deploy_depot(&mut game, 0, 2, &item, 200);
+    game.run_routes();
+
+    let route = game.world.resource::<crate::resources::Routes>().0[0].clone();
+    assert!(!route.stalled, "restocking must release the stall");
+    assert_eq!(route.leg, RouteLeg::Outbound);
+    assert_eq!(route.ticks_elapsed, 0);
+}
+
+/// A severed route completes its trip and pays, and does not go again.
+#[test]
+fn a_severed_route_completes_its_trip_and_pays_but_does_not_go_again() {
+    let (mut game, item, key) = a_dispatch_ready_base(7400, 300);
+    set_standing(&mut game, key, crate::tuning::SETTLEMENT_WARM_STANDING);
+    game.dispatch_route(key, vec![(item, 300)], true)
+        .expect("a legal dispatch");
+    assert!(game.sever_route(key));
+
+    let total = game.world.resource::<crate::resources::Routes>().0[0].ticks_total;
+    let before_stock = stock_total(&game);
+    for _ in 0..(2 * total) {
+        game.run_routes();
+    }
+
+    assert!(
+        game.world
+            .resource::<crate::resources::Routes>()
+            .0
+            .is_empty(),
+        "a severed route does not go again"
+    );
+    assert!(
+        stock_total(&game) > before_stock,
+        "it still pays on its way home"
+    );
+}
+
+/// Predation is the only thing the tick may draw `GameRng` for, and it must
+/// not draw at all when nothing is near enough to prey.
+#[test]
+fn the_tick_draws_no_rng_when_nothing_preys() {
+    let (mut game, item, key) = a_dispatch_ready_base(7500, 300);
+    set_standing(&mut game, key, crate::tuning::SETTLEMENT_WARM_STANDING);
+    game.dispatch_route(key, vec![(item, 300)], false)
+        .expect("a legal dispatch");
+    let total = game.world.resource::<crate::resources::Routes>().0[0].ticks_total;
+    for _ in 0..(total - 1) {
+        game.run_routes();
+    }
+
+    fn peek(g: &mut Game) -> u64 {
+        use rand::RngExt;
+        g.world
+            .resource_mut::<crate::resources::GameRng>()
+            .0
+            .random()
+    }
+
+    super::support::reseed_rng(&mut game, 55);
+    let without = peek(&mut game);
+
+    super::support::reseed_rng(&mut game, 55);
+    game.run_routes();
+    let with = peek(&mut game);
+
+    assert_eq!(
+        without, with,
+        "no predator stands near this trip, so completing the leg must not touch GameRng"
+    );
+}

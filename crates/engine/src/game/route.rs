@@ -7,11 +7,13 @@
 //! save-worthy record push. `game/sortie.rs` is the shape being followed
 //! throughout, since both features dispatch from the same Relay.
 
+use rand::RngExt;
+
 use crate::Game;
 use crate::components::GlyphColor;
 use crate::game::sortie::DispatchReach;
 use crate::items::ItemId;
-use crate::resources;
+use crate::resources::{self, MessageKind};
 use crate::routes::{Route, RouteLeg};
 use crate::settlements::relations::Standing;
 use crate::settlements::{SettlementKey, Temperament};
@@ -316,5 +318,264 @@ impl Game {
             .collect();
         depots.sort_unstable();
         depots.into_iter().next()
+    }
+}
+
+impl Game {
+    /// One tick of every trip currently in flight — `run_sorties`' shape and
+    /// its guard: a route's completion (a sale, a deposit) is exactly the
+    /// "the world may change here" case that guard exists for.
+    pub(crate) fn run_routes(&mut self) {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return;
+        }
+        if self.world.resource::<resources::Routes>().0.is_empty() {
+            return;
+        }
+        let mut index = 0;
+        while index < self.world.resource::<resources::Routes>().0.len() {
+            // A trip that came home removed its own record, so the record
+            // behind it has slid into this index and must not be skipped —
+            // `step_sortie`'s reason for reading the step rather than the
+            // length.
+            if !self.step_route(index) {
+                index += 1;
+            }
+        }
+    }
+
+    /// Advances one trip by a tick. Returns whether the record at `index`
+    /// was dropped for good.
+    fn step_route(&mut self, index: usize) -> bool {
+        if self.world.resource::<resources::Routes>().0[index].stalled {
+            // The countdown does not move while stalled — it is parked at
+            // the inbound-complete point, and every tick just retries the
+            // reload rather than re-running predation and the deposit a
+            // second time.
+            self.try_reload_route(index);
+            return false;
+        }
+        let (elapsed, total, leg) = {
+            let route = &mut self.world.resource_mut::<resources::Routes>().0[index];
+            route.ticks_elapsed += 1;
+            (route.ticks_elapsed, route.ticks_total, route.leg)
+        };
+        if elapsed < total {
+            return false;
+        }
+        match leg {
+            RouteLeg::Outbound => {
+                self.complete_outbound_leg(index);
+                false
+            }
+            RouteLeg::Inbound => self.complete_inbound_leg(index),
+        }
+    }
+
+    /// The outbound leg lands: predation against the cargo, the sale of
+    /// what survives at the destination's own price, and standing paid on
+    /// the turnover — then the trip turns around.
+    ///
+    /// **`Route::cargo` is never mutated by predation** — only a local copy
+    /// is, which is what lets a standing route's next departure keep asking
+    /// for the manifest it was given rather than one that shrinks a little
+    /// on every trip a predator catches.
+    fn complete_outbound_leg(&mut self, index: usize) {
+        let (anchor, destination_tile, destination, temperament, mut surviving) = {
+            let route = &self.world.resource::<resources::Routes>().0[index];
+            (
+                self.anchor_position().unwrap_or((0, 0)),
+                route.destination_tile,
+                route.destination,
+                route.destination_def.temperament,
+                route.cargo.clone(),
+            )
+        };
+        let losses =
+            self.roll_cargo_predation(anchor, destination_tile, destination, &mut surviving);
+        let proceeds = self.route_quote(&surviving, temperament);
+        self.credit_trade_volume(destination, proceeds);
+        let name = self.settlement_name(destination);
+        let currency = self.trade_currency();
+        let currency_name = self.item_name(&currency).to_string();
+        self.log_base_kind(
+            MessageKind::Loot,
+            format!("The caravan sells its cargo at {name} for {proceeds} {currency_name}."),
+        );
+        let route = &mut self.world.resource_mut::<resources::Routes>().0[index];
+        route.proceeds = proceeds;
+        route.leg = RouteLeg::Inbound;
+        route.ticks_elapsed = 0;
+        route.losses = losses;
+    }
+
+    /// The inbound leg lands: predation against the proceeds, the deposit
+    /// of whatever survives into base stock, then a reload (standing, stock
+    /// allowing), a stall, or dropping the record for good. Returns whether
+    /// the record was dropped.
+    fn complete_inbound_leg(&mut self, index: usize) -> bool {
+        let (anchor, destination_tile, destination, mut proceeds) = {
+            let route = &self.world.resource::<resources::Routes>().0[index];
+            (
+                self.anchor_position().unwrap_or((0, 0)),
+                route.destination_tile,
+                route.destination,
+                route.proceeds,
+            )
+        };
+        let losses =
+            self.roll_proceeds_predation(anchor, destination_tile, destination, &mut proceeds);
+        let currency = self.trade_currency();
+        let landed = crate::game::base::stock::return_to_depots(self, &currency, proceeds);
+        let name = self.settlement_name(destination);
+        let currency_name = self.item_name(&currency).to_string();
+        self.log_base_kind(
+            MessageKind::Loot,
+            format!("The caravan returns from {name} with {landed} {currency_name}."),
+        );
+        self.queue_cargo_walk(false);
+        self.world.resource_mut::<resources::Routes>().0[index].losses = losses;
+
+        let standing = self.world.resource::<resources::Routes>().0[index].standing;
+        if !standing {
+            self.world
+                .resource_mut::<resources::Routes>()
+                .0
+                .remove(index);
+            return true;
+        }
+        self.try_reload_route(index);
+        false
+    }
+
+    /// Attempts to reload a route's own manifest from base stock and send
+    /// it out again — the initial attempt at inbound completion, and every
+    /// stalled tick's retry.
+    ///
+    /// Marks `stalled` on failure rather than dropping or severing the
+    /// record — a stalled work order's rule, retried every tick rather than
+    /// given up on.
+    fn try_reload_route(&mut self, index: usize) {
+        let (cargo, destination) = {
+            let route = &self.world.resource::<resources::Routes>().0[index];
+            (route.cargo.clone(), route.destination)
+        };
+        let ok = cargo
+            .iter()
+            .all(|(item, qty)| crate::game::base::work_orders::base_holding(self, item) >= *qty);
+        if !ok {
+            self.world.resource_mut::<resources::Routes>().0[index].stalled = true;
+            return;
+        }
+        for (item, qty) in &cargo {
+            crate::game::base::stock::spend_from_base(
+                self,
+                item,
+                *qty,
+                crate::base_ledger::ConsumeSource::Base,
+            );
+        }
+        self.queue_cargo_walk(true);
+        let route = &mut self.world.resource_mut::<resources::Routes>().0[index];
+        route.leg = RouteLeg::Outbound;
+        route.ticks_elapsed = 0;
+        route.proceeds = 0;
+        route.stalled = false;
+        let name = self.settlement_name(destination);
+        self.log_base(format!("The caravan reloads and departs again for {name}."));
+    }
+
+    /// Every known settlement close enough to this trip's segment, and
+    /// Hostile enough, to try preying on it — `routes::settlements_near_route`
+    /// filtered to `Standing::preys_on_routes`, the module doc's own
+    /// requirement of the caller.
+    fn route_predators(&self, base: (i32, i32), destination: (i32, i32)) -> Vec<SettlementKey> {
+        let candidates: Vec<(SettlementKey, (i32, i32))> = self
+            .world
+            .resource::<resources::Settlements>()
+            .0
+            .iter()
+            .filter(|(key, _)| self.standing_band(**key).preys_on_routes())
+            .map(|(key, settlement)| (*key, settlement.tile))
+            .collect();
+        crate::routes::settlements_near_route(&candidates, base, destination)
+    }
+
+    /// Rolls every predator near this trip against `cargo` in place,
+    /// reducing each line by `ROUTE_PREDATION_LOSS` on a hit, and returns
+    /// one line of narration per hit — also logged as it happens.
+    ///
+    /// **The only place this feature draws `resources::GameRng`**, and only
+    /// once nothing has filtered a predator out — an empty `predators` rolls
+    /// nothing at all.
+    fn roll_cargo_predation(
+        &mut self,
+        base: (i32, i32),
+        destination: (i32, i32),
+        destination_key: SettlementKey,
+        cargo: &mut [(ItemId, u32)],
+    ) -> Vec<String> {
+        let predators = self.route_predators(base, destination);
+        let mut losses = Vec::new();
+        for predator in predators {
+            let hit = self
+                .world
+                .resource_mut::<resources::GameRng>()
+                .0
+                .random_bool(crate::tuning::ROUTE_PREDATION_CHANCE as f64);
+            if !hit {
+                continue;
+            }
+            let mut taken_units = 0u32;
+            for (_, qty) in cargo.iter_mut() {
+                let take = (*qty as f32 * crate::tuning::ROUTE_PREDATION_LOSS) as u32;
+                *qty -= take;
+                taken_units += take;
+            }
+            let predator_name = self.settlement_name(predator);
+            let dest_name = self.settlement_name(destination_key);
+            let line = format!(
+                "{predator_name} raids the caravan bound for {dest_name}, seizing {taken_units} units of cargo."
+            );
+            self.log_base_kind(MessageKind::Outcome, line.clone());
+            losses.push(line);
+        }
+        losses
+    }
+
+    /// The same roll against `proceeds` — `ROUTE_PREDATION_LOSS` of the
+    /// figure taken per hit, in place. See `roll_cargo_predation` for the
+    /// draw itself.
+    fn roll_proceeds_predation(
+        &mut self,
+        base: (i32, i32),
+        destination: (i32, i32),
+        destination_key: SettlementKey,
+        proceeds: &mut u32,
+    ) -> Vec<String> {
+        let predators = self.route_predators(base, destination);
+        let mut losses = Vec::new();
+        let currency = self.trade_currency();
+        let currency_name = self.item_name(&currency).to_string();
+        for predator in predators {
+            let hit = self
+                .world
+                .resource_mut::<resources::GameRng>()
+                .0
+                .random_bool(crate::tuning::ROUTE_PREDATION_CHANCE as f64);
+            if !hit {
+                continue;
+            }
+            let take = (*proceeds as f32 * crate::tuning::ROUTE_PREDATION_LOSS) as u32;
+            *proceeds -= take;
+            let predator_name = self.settlement_name(predator);
+            let dest_name = self.settlement_name(destination_key);
+            let line = format!(
+                "{predator_name} tolls the caravan home from {dest_name}, taking {take} {currency_name}."
+            );
+            self.log_base_kind(MessageKind::Outcome, line.clone());
+            losses.push(line);
+        }
+        losses
     }
 }

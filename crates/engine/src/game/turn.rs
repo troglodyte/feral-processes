@@ -199,6 +199,12 @@ impl Game {
         // dispatched this tick does not fight before the base has finished
         // its own beat.
         self.run_sorties();
+        // Beside `run_sorties` and carrying its same guard: a route's
+        // completion is a sale or a deposit, `&mut Game` work exactly like a
+        // sortie's battle, and it sits after the crews and the Bays for the
+        // same reason — a route dispatched this tick does not complete a
+        // leg before the base has finished its own beat.
+        self.run_routes();
         self.schedule.run(&mut self.world);
         // Immediately after the schedule, where `haul_step_system`'s commands
         // have just flushed and the clock has not yet moved: a stranding is an

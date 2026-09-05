@@ -33,6 +33,18 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.101
+
+**A `settlements` template opens the game standing on a town's doorstep**, so
+the four standing bands, the aid page, dispatch and routes can be looked at
+without walking 128 tiles to find a town first.
+
+**Lowport is Allied, Tally Yard is Hostile and The Quiet Stack is Warm**, and
+a Dispatch Relay stands beside the Home — raised by the crew, not written in.
+
+**Both settlement specs are archived**, which is `INDEX.md`'s invariant; the
+aid spec had been left listed as open and unmerged.
+
 ## 0.13.100
 
 **An Allied town is worth something now, and the top of the standing ladder

@@ -336,10 +336,19 @@ it.
 
 **9.2 Every existing gear door stays open.** `equipment_drops_for` does not
 retire. It *cannot*: the Gear tool needs exactly its merged table, both
-schema directions and all. Its four live callers are untouched — the kill
-(`award_loot`), the nest cache (`zone.rs`), the Stack feature cache
-(`stack_features.rs`), and the surface boss at
-`SURFACE_BOSS_LOOT_RARITY_FLOOR`.
+schema directions and all.
+
+**Corrected 2026-09-05 while phase 5 was being built.** An earlier draft of
+this paragraph called the four gear doors four "callers" of
+`equipment_drops_for`. They are not. The function has **two** production
+callers — the kill (`award_loot`, `combat_rewards.rs:667`) and the nest
+cache (`zone.rs:132`) — and both are untouched. The other two doors reach
+gear by a different route: the Stack feature cache
+(`stack_features.rs:103`) and the surface boss (`combat_rewards.rs:771`, at
+`SURFACE_BOSS_LOOT_RARITY_FLOOR`) both call `grant_gear_drop` directly with
+their own item sources. All four doors stay open; only two of them run
+through this table. The distinction matters to whoever closes one later:
+two are a deletion at a `equipment_drops_for` loop, two are not.
 
 The tool is therefore **additive**, and the consequence is recorded here
 rather than discovered: a player who forges it sees roughly double the gear

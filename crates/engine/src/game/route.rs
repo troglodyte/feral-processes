@@ -371,9 +371,10 @@ impl Game {
             // The countdown does not move while stalled — it is parked at
             // the inbound-complete point, and every tick just retries the
             // reload rather than re-running predation and the deposit a
-            // second time.
-            self.try_reload_route(index);
-            return false;
+            // second time. `try_reload_route` reads `standing` itself, so a
+            // severed stalled route is dropped here rather than retried
+            // forever.
+            return self.try_reload_route(index);
         }
         let (elapsed, total, leg) = {
             let route = &mut self.world.resource_mut::<resources::Routes>().0[index];
@@ -461,7 +462,30 @@ impl Game {
         self.queue_cargo_walk(false);
         self.world.resource_mut::<resources::Routes>().0[index].losses = losses;
 
-        let standing = self.world.resource::<resources::Routes>().0[index].standing;
+        self.try_reload_route(index)
+    }
+
+    /// Attempts to reload a route's own manifest from base stock and send
+    /// it out again — the initial attempt at inbound completion, and every
+    /// stalled tick's retry. Returns whether the record was dropped for
+    /// good.
+    ///
+    /// **Reads `standing` first**, `complete_inbound_leg`'s own check moved
+    /// in here: a stalled route that gets severed is parked at home with its
+    /// proceeds already deposited, not in flight, so severing it must drop
+    /// the record rather than leave it consuming a `ROUTE_MAX_ACTIVE` slot
+    /// forever (stock never returns) or send it out on one more round trip
+    /// the player refused (stock does return) — Finding 2 of the
+    /// 2026-09-05 whole-branch review.
+    ///
+    /// Marks `stalled` on a standing route's failed reload rather than
+    /// dropping or severing the record — a stalled work order's rule,
+    /// retried every tick rather than given up on.
+    fn try_reload_route(&mut self, index: usize) -> bool {
+        let (cargo, destination, standing) = {
+            let route = &self.world.resource::<resources::Routes>().0[index];
+            (route.cargo.clone(), route.destination, route.standing)
+        };
         if !standing {
             self.world
                 .resource_mut::<resources::Routes>()
@@ -469,28 +493,12 @@ impl Game {
                 .remove(index);
             return true;
         }
-        self.try_reload_route(index);
-        false
-    }
-
-    /// Attempts to reload a route's own manifest from base stock and send
-    /// it out again — the initial attempt at inbound completion, and every
-    /// stalled tick's retry.
-    ///
-    /// Marks `stalled` on failure rather than dropping or severing the
-    /// record — a stalled work order's rule, retried every tick rather than
-    /// given up on.
-    fn try_reload_route(&mut self, index: usize) {
-        let (cargo, destination) = {
-            let route = &self.world.resource::<resources::Routes>().0[index];
-            (route.cargo.clone(), route.destination)
-        };
         let ok = cargo
             .iter()
             .all(|(item, qty)| crate::game::base::work_orders::base_holding(self, item) >= *qty);
         if !ok {
             self.world.resource_mut::<resources::Routes>().0[index].stalled = true;
-            return;
+            return false;
         }
         for (item, qty) in &cargo {
             crate::game::base::stock::spend_from_base(
@@ -508,6 +516,7 @@ impl Game {
         route.stalled = false;
         let name = self.settlement_name(destination);
         self.log_base(format!("The caravan reloads and departs again for {name}."));
+        false
     }
 
     /// Every known settlement close enough to this trip's segment, and

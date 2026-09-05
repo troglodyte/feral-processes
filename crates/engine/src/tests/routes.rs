@@ -898,3 +898,70 @@ fn proceeds_land_on_the_player_when_the_base_has_no_depot() {
          pack rather than being destroyed — see Game::return_material"
     );
 }
+
+/// FINDING 2 (HIGH), first half: a severed **stalled** route with no stock to
+/// reload must be dropped, not left parked forever. `try_reload_route`
+/// ignoring `standing` meant it kept retrying a reload every tick, finding
+/// none, and staying stalled — consuming a `ROUTE_MAX_ACTIVE` slot and
+/// blocking a fresh dispatch to that town for good.
+#[test]
+fn a_severed_stalled_route_with_no_stock_is_dropped_rather_than_stranded() {
+    let (mut game, item, key) = a_dispatch_ready_base(7700, 200);
+    set_standing(&mut game, key, crate::tuning::SETTLEMENT_WARM_STANDING);
+    game.dispatch_route(key, vec![(item, 200)], true)
+        .expect("a legal dispatch");
+    let total = game.world.resource::<crate::resources::Routes>().0[0].ticks_total;
+    for _ in 0..(2 * total) {
+        game.run_routes();
+    }
+    assert!(
+        game.world.resource::<crate::resources::Routes>().0[0].stalled,
+        "the base has no more of the item to reload with, so it must stall \
+         first, or this proves nothing"
+    );
+
+    assert!(game.sever_route(key));
+    game.run_routes();
+
+    assert!(
+        game.world
+            .resource::<crate::resources::Routes>()
+            .0
+            .is_empty(),
+        "a severed stalled route must be dropped, not left parked forever"
+    );
+}
+
+/// FINDING 2 (HIGH), second half: a severed stalled route must not depart
+/// again just because stock came back — severing is a refusal of the next
+/// trip, and a stalled route is parked at home with its proceeds already
+/// deposited, not in flight.
+#[test]
+fn a_severed_stalled_route_does_not_depart_again_when_stock_returns() {
+    let (mut game, item, key) = a_dispatch_ready_base(7701, 200);
+    set_standing(&mut game, key, crate::tuning::SETTLEMENT_WARM_STANDING);
+    game.dispatch_route(key, vec![(item.clone(), 200)], true)
+        .expect("a legal dispatch");
+    let total = game.world.resource::<crate::resources::Routes>().0[0].ticks_total;
+    for _ in 0..(2 * total) {
+        game.run_routes();
+    }
+    assert!(
+        game.world.resource::<crate::resources::Routes>().0[0].stalled,
+        "must stall first, or this proves nothing"
+    );
+
+    assert!(game.sever_route(key));
+    // Exactly the shape that lets a still-standing stalled route reload and
+    // depart again — a severed one must not take it.
+    deploy_depot(&mut game, 0, 2, &item, 200);
+    game.run_routes();
+
+    assert!(
+        game.world
+            .resource::<crate::resources::Routes>()
+            .0
+            .is_empty(),
+        "a severed route must not depart again just because stock returned"
+    );
+}

@@ -33,6 +33,20 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.99
+
+**Caravan routes: load cargo at the Relay, send it to a town you know, and
+the Credits come home.**
+
+**A route can be left standing, reloading and departing again until you
+sever it.**
+
+**A Hostile town near the line your caravan walks takes a cut of it.**
+
+**The Relay has a screen at last, and sorties finally have one too** —
+`[S]` picks a squad for a sortie site, `[C]` builds a cargo manifest for a
+town, `[X]` severs a standing route.
+
 ## 0.13.98
 
 **Towns post their own work.** Every settlement now keeps a job board,

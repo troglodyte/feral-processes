@@ -661,3 +661,238 @@ fn a_gift_and_its_cooldown_survive_a_save_and_load() {
         "last_gift_tick and gifts_taken must survive the round trip"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Relay travel — the aid ladder's second verb
+// ---------------------------------------------------------------------------
+
+/// A base with a Home and a Relay, the party standing on its floor, and one
+/// Allied town far enough out that walking would cost something.
+fn a_relay_and_an_ally(game: &mut Game) -> SettlementKey {
+    super::routes::deploy_relay(game);
+    let (ax, ay) = game.anchor_position().expect("a new game has an anchor");
+    let key = SettlementKey { rx: 2, ry: 0 };
+    place_settlement(game, key, ax + 12, ay + 5);
+    set_standing(game, key, SETTLEMENT_ALLIED_STANDING);
+    key
+}
+
+fn player_tile(game: &Game) -> (i32, i32) {
+    let p = game.world.get::<Position>(game.player_entity()).unwrap();
+    (p.x, p.y)
+}
+
+fn assert_travel_spent_nothing(game: &Game, was: (i32, i32), tick: u64, msg: &str) {
+    assert_eq!(player_tile(game), was, "{msg}: the party moved");
+    assert_eq!(
+        game.world.resource::<GameClock>().tick,
+        tick,
+        "{msg}: ticks were spent"
+    );
+}
+
+#[test]
+fn travelling_out_refuses_after_game_over_and_spends_nothing() {
+    let mut game = game();
+    let key = a_relay_and_an_ally(&mut game);
+    let (was, tick) = (player_tile(&game), game.world.resource::<GameClock>().tick);
+    game.world.resource_mut::<GameOver>().reason = Some("done".to_string());
+
+    assert!(game.travel_to_settlement(key).is_err());
+    assert_travel_spent_nothing(&game, was, tick, "game over");
+}
+
+#[test]
+fn travelling_out_refuses_during_a_battle_and_spends_nothing() {
+    let mut game = game();
+    let key = a_relay_and_an_ally(&mut game);
+    let (was, tick) = (player_tile(&game), game.world.resource::<GameClock>().tick);
+    game.world
+        .insert_resource(super::extraction::minimal_active_battle(&game));
+
+    assert!(game.travel_to_settlement(key).is_err());
+    assert_travel_spent_nothing(&game, was, tick, "active battle");
+}
+
+#[test]
+fn travelling_out_refuses_without_a_relay_and_spends_nothing() {
+    let mut game = game();
+    let (ax, ay) = game.anchor_position().unwrap();
+    let key = SettlementKey { rx: 2, ry: 0 };
+    place_settlement(&mut game, key, ax + 12, ay + 5);
+    set_standing(&mut game, key, SETTLEMENT_ALLIED_STANDING);
+    let (was, tick) = (player_tile(&game), game.world.resource::<GameClock>().tick);
+
+    assert!(game.travel_to_settlement(key).is_err());
+    assert_travel_spent_nothing(&game, was, tick, "no relay");
+}
+
+#[test]
+fn travelling_out_refuses_away_from_the_relay_and_spends_nothing() {
+    let mut game = game();
+    let key = a_relay_and_an_ally(&mut game);
+    // Off the laid floor, out past the base's edge — `dispatch_reach`'s own
+    // rule is floor and not merely walkable.
+    stand_in_base_at(&mut game, 40, 40);
+    let (was, tick) = (player_tile(&game), game.world.resource::<GameClock>().tick);
+
+    assert!(
+        game.travel_to_settlement(key).is_err(),
+        "a relay you are not standing in must not dispatch you"
+    );
+    assert_travel_spent_nothing(&game, was, tick, "off base");
+}
+
+#[test]
+fn travelling_out_refuses_an_unknown_town_and_spends_nothing() {
+    let mut game = game();
+    let _ = a_relay_and_an_ally(&mut game);
+    let (was, tick) = (player_tile(&game), game.world.resource::<GameClock>().tick);
+
+    assert!(
+        game.travel_to_settlement(SettlementKey { rx: 88, ry: 88 })
+            .is_err()
+    );
+    assert_travel_spent_nothing(&game, was, tick, "unknown town");
+}
+
+#[test]
+fn travelling_out_refuses_a_town_below_allied_and_spends_nothing() {
+    let mut game = game();
+    let key = a_relay_and_an_ally(&mut game);
+    set_standing(&mut game, key, SETTLEMENT_WARM_STANDING);
+    let (was, tick) = (player_tile(&game), game.world.resource::<GameClock>().tick);
+
+    assert!(game.travel_to_settlement(key).is_err());
+    assert_travel_spent_nothing(&game, was, tick, "warm town");
+}
+
+#[test]
+fn travelling_out_lands_beside_the_town_and_never_on_it() {
+    let mut game = game();
+    let key = a_relay_and_an_ally(&mut game);
+    let town = game
+        .world
+        .resource::<crate::resources::Settlements>()
+        .0
+        .get(&key)
+        .unwrap()
+        .tile;
+    let quote = game.travel_cost_ticks(key).expect("a quotable trip");
+    let before = game.world.resource::<GameClock>().tick;
+
+    game.travel_to_settlement(key).expect("the trip");
+
+    let landed = player_tile(&game);
+    assert_ne!(landed, town, "the party landed on the settlement tile");
+    assert!(
+        (landed.0 - town.0).abs() <= 1 && (landed.1 - town.1).abs() <= 1,
+        "landed at {landed:?}, not beside the town at {town:?}"
+    );
+    assert!(!game.in_base(), "the relay left the party in base space");
+    assert_eq!(
+        game.world.resource::<GameClock>().tick - before,
+        quote,
+        "the charge and the quote disagree"
+    );
+}
+
+#[test]
+fn arriving_by_relay_opens_the_town_the_way_walking_into_it_does() {
+    let mut game = game();
+    let key = a_relay_and_an_ally(&mut game);
+    game.travel_to_settlement(key).expect("the trip");
+    assert_eq!(game.take_settlement_visit(), Some(key));
+}
+
+#[test]
+fn travelling_home_lands_on_the_anchor_and_charges_the_walk() {
+    let mut game = game();
+    let key = a_relay_and_an_ally(&mut game);
+    game.travel_to_settlement(key).expect("the trip out");
+    let _ = game.take_settlement_visit();
+    let anchor = game.anchor_position().unwrap();
+    let from = player_tile(&game);
+    let expected = ((from.0 - anchor.0).abs().max((from.1 - anchor.1).abs()) as u64)
+        * SETTLEMENT_TRAVEL_TICKS_PER_TILE;
+    let before = game.world.resource::<GameClock>().tick;
+
+    game.travel_to_anchor(key).expect("the trip home");
+
+    assert_eq!(player_tile(&game), anchor);
+    assert_eq!(game.world.resource::<GameClock>().tick - before, expected);
+}
+
+#[test]
+fn travelling_home_refuses_from_out_of_reach_of_the_town_and_spends_nothing() {
+    let mut game = game();
+    let key = a_relay_and_an_ally(&mut game);
+    game.travel_to_settlement(key).expect("the trip out");
+    let _ = game.take_settlement_visit();
+    // Step away, so the town is no longer within a tile.
+    for _ in 0..3 {
+        game.move_player(-1, 0);
+    }
+    let (was, tick) = (player_tile(&game), game.world.resource::<GameClock>().tick);
+
+    assert!(game.travel_to_anchor(key).is_err());
+    assert_travel_spent_nothing(&game, was, tick, "out of reach");
+}
+
+#[test]
+fn travelling_home_refuses_a_town_below_allied_and_spends_nothing() {
+    let mut game = game();
+    let key = a_relay_and_an_ally(&mut game);
+    game.travel_to_settlement(key).expect("the trip out");
+    let _ = game.take_settlement_visit();
+    set_standing(&mut game, key, SETTLEMENT_WARM_STANDING);
+    let (was, tick) = (player_tile(&game), game.world.resource::<GameClock>().tick);
+
+    assert!(game.travel_to_anchor(key).is_err());
+    assert_travel_spent_nothing(&game, was, tick, "warm town");
+}
+
+#[test]
+fn a_town_with_nowhere_to_stand_beside_it_refuses_and_moves_nobody() {
+    let mut game = game();
+    super::routes::deploy_relay(&mut game);
+    let key = SettlementKey { rx: 5, ry: 5 };
+    // A town recorded on a tile the map has no walkable neighbour for: the
+    // record is what `Settlements` holds, and it is not re-derived, so a
+    // town can sit somewhere the landing search cannot answer for.
+    // Wall off the whole landing search around a far-off tile, so the ring
+    // walk genuinely has no answer rather than merely a distant one.
+    let boxed_in = (900, 900);
+    let mut overrides = game
+        .world
+        .resource::<crate::world::WorldMap>()
+        .overrides()
+        .clone();
+    let mut solid = game
+        .world
+        .resource_mut::<crate::world::WorldMap>()
+        .tile(boxed_in.0, boxed_in.1);
+    solid.walkable = false;
+    for cell in crate::game::spawning::ring_tiles(boxed_in, 0, SETTLEMENT_SITE_SEARCH_TILES) {
+        overrides.insert(cell, solid.clone());
+    }
+    game.world
+        .resource_mut::<crate::world::WorldMap>()
+        .restore_overrides(overrides);
+    game.world
+        .resource_mut::<crate::resources::Settlements>()
+        .0
+        .insert(
+            key,
+            crate::resources::KnownSettlement {
+                tile: boxed_in,
+                def: generic_settlement_def(),
+            },
+        );
+    set_standing(&mut game, key, SETTLEMENT_ALLIED_STANDING);
+    let (was, tick) = (player_tile(&game), game.world.resource::<GameClock>().tick);
+
+    assert_eq!(game.travel_cost_ticks(key), None, "an unquotable trip");
+    assert!(game.travel_to_settlement(key).is_err());
+    assert_travel_spent_nothing(&game, was, tick, "nowhere to land");
+}

@@ -92,7 +92,7 @@ impl Game {
     }
 
     /// Whether the run has a Relay standing at all, wherever it is.
-    fn has_relay(&mut self) -> bool {
+    pub(crate) fn has_relay(&mut self) -> bool {
         let mut query = self.world.query_filtered::<Entity, With<Structure>>();
         let standing: Vec<Entity> = query.iter(&self.world).collect();
         standing

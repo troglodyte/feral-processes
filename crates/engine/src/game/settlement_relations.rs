@@ -267,4 +267,174 @@ impl Game {
         }
         Some(pool[crate::derive::index(h, pool.len())].clone())
     }
+
+    /// What a relay trip to `key` would cost in ticks, or `None` if there is
+    /// no trip to quote — an unknown town, or one with nowhere to stand
+    /// beside it.
+    ///
+    /// The screen's figure and the door's charge come from here, so the two
+    /// cannot differ. Measured anchor-to-landing, which is the walk the trip
+    /// replaces whichever end the party sets off from.
+    pub fn travel_cost_ticks(&mut self, key: SettlementKey) -> Option<u64> {
+        let landing = self.relay_landing(key)?;
+        let (ax, ay) = self.anchor_position()?;
+        let steps = (landing.0 - ax).abs().max((landing.1 - ay).abs()) as u64;
+        Some(steps * crate::tuning::SETTLEMENT_TRAVEL_TICKS_PER_TILE)
+    }
+
+    /// **The relay carries the party out to an Allied town.** Every refusal
+    /// lands before anything is spent — no move, no ticks.
+    ///
+    /// The gate is `Game::dispatch_reach`, the door a squad and a route
+    /// already leave through, so the party has to be standing in the base
+    /// they are departing from. That is also why this does *not* call
+    /// `require_surface`: the Relay is in base space, so a surface check
+    /// would refuse the only place the trip can start.
+    ///
+    /// The trip spends the ticks the walk would have — `move_player` costs
+    /// one tick a step, so `SETTLEMENT_TRAVEL_TICKS_PER_TILE` at 1 removes
+    /// the encounters and the tedium and removes nothing else. Upkeep,
+    /// decay, needs and production all advance exactly as far.
+    pub fn travel_to_settlement(&mut self, key: SettlementKey) -> Result<(), String> {
+        if self.is_game_over().is_some() {
+            return Err("This run is over.".into());
+        }
+        if self.has_active_battle() {
+            return Err("Not in the middle of a fight.".into());
+        }
+        match self.dispatch_reach() {
+            crate::game::sortie::DispatchReach::NoRelay => {
+                return Err("You have no Relay to travel from.".into());
+            }
+            crate::game::sortie::DispatchReach::OffBase => {
+                return Err("The Relay only reaches you inside the base.".into());
+            }
+            crate::game::sortie::DispatchReach::AtRelay => {}
+        }
+        if !self
+            .world
+            .resource::<resources::Settlements>()
+            .0
+            .contains_key(&key)
+        {
+            return Err("There's no such settlement.".into());
+        }
+        if !self.standing_band(key).hosts_a_relay() {
+            let name = self.settlement_name(key);
+            return Err(format!("{name} won't hold a link open for you."));
+        }
+        let Some(landing) = self.relay_landing(key) else {
+            let name = self.settlement_name(key);
+            return Err(format!("There's nowhere to set down near {name}."));
+        };
+        let Some(ticks) = self.travel_cost_ticks(key) else {
+            return Err("There's nowhere to set down out there.".into());
+        };
+
+        // Past every refusal.
+        self.world
+            .insert_resource(crate::resources::Locale::Surface);
+        self.place_player_at(landing);
+        // Arriving must open the town exactly as walking into it does, so
+        // there is one arrival behaviour and not two.
+        self.world.resource_mut::<resources::PendingVisit>().0 = Some(key);
+        let name = self.settlement_name(key);
+        self.log(format!("The relay sets you down outside {name}."));
+        self.spend_travel_ticks(ticks);
+        Ok(())
+    }
+
+    /// **And carries the party back from one.** `key` is the town being
+    /// stood at, because the gate is that town's willingness to hold the
+    /// link — the same `hosts_a_relay` the outbound trip asks.
+    ///
+    /// The outbound gate cannot be reused: `dispatch_reach` answers
+    /// `OffBase` from anywhere but the base, and standing at a town is by
+    /// definition not standing at the Relay. So the rule here is the same
+    /// two facts minus the departure point — a Relay is standing, and this
+    /// town will hold the link.
+    pub fn travel_to_anchor(&mut self, key: SettlementKey) -> Result<(), String> {
+        if self.is_game_over().is_some() {
+            return Err("This run is over.".into());
+        }
+        if self.has_active_battle() {
+            return Err("Not in the middle of a fight.".into());
+        }
+        if !self.has_relay() {
+            return Err("You have no Relay to be pulled back to.".into());
+        }
+        if !self.settlement_reach(key) {
+            return Err("You'd have to be at the town to use its link.".into());
+        }
+        if !self.standing_band(key).hosts_a_relay() {
+            let name = self.settlement_name(key);
+            return Err(format!("{name} won't hold a link open for you."));
+        }
+        let Some(anchor) = self.anchor_position() else {
+            return Err("You have nowhere to be pulled back to.".into());
+        };
+
+        // Past every refusal.
+        let from = self
+            .world
+            .get::<crate::components::Position>(self.player_entity())
+            .map(|p| (p.x, p.y))
+            .unwrap_or(anchor);
+        let steps = (from.0 - anchor.0).abs().max((from.1 - anchor.1).abs()) as u64;
+        self.place_player_at(anchor);
+        self.log("The relay pulls you back, standing on the anchor.");
+        self.spend_travel_ticks(steps * crate::tuning::SETTLEMENT_TRAVEL_TICKS_PER_TILE);
+        Ok(())
+    }
+
+    /// The tile a relay trip to `key` sets down on — the nearest walkable
+    /// cell **beside** the town, never the town's own.
+    ///
+    /// Band 1 and not band 0, and that is the whole of it: a settlement tile
+    /// admits nobody (`move_player`'s fourth arm queues the visit and leaves
+    /// `Position` untouched), so landing on one puts the party somewhere
+    /// walking could never have taken them. The ring order is
+    /// `spawning::ring_tiles`, shared with `standable_near` rather than
+    /// copied.
+    ///
+    /// A tile holding a wild program, a nest, a Stack entrance or another
+    /// town is skipped too — `walkable` alone is not the same question as
+    /// "could the party have stepped here", which is the trap
+    /// `standable_near`'s own callers have hit before.
+    fn relay_landing(&mut self, key: SettlementKey) -> Option<(i32, i32)> {
+        let tile = self
+            .world
+            .resource::<resources::Settlements>()
+            .0
+            .get(&key)?
+            .tile;
+        let candidates =
+            crate::game::spawning::ring_tiles(tile, 1, crate::tuning::SETTLEMENT_SITE_SEARCH_TILES);
+        candidates.into_iter().find(|&(x, y)| {
+            self.world
+                .resource_mut::<crate::world::WorldMap>()
+                .tile(x, y)
+                .walkable
+                && self.find_wild_creature_at(x, y).is_none()
+                && self.find_nest_at(x, y).is_none()
+                && self.find_surface_link_at(x, y).is_none()
+                && self.find_settlement_at(x, y).is_none()
+        })
+    }
+
+    fn place_player_at(&mut self, (x, y): (i32, i32)) {
+        let player = self.player_entity();
+        if let Some(mut pos) = self.world.get_mut::<crate::components::Position>(player) {
+            pos.x = x;
+            pos.y = y;
+        }
+    }
+
+    /// The trip's time, spent through the world's own tick so that
+    /// everything a walk would have advanced still advances.
+    fn spend_travel_ticks(&mut self, ticks: u64) {
+        for _ in 0..ticks {
+            self.tick();
+        }
+    }
 }

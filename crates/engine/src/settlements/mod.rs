@@ -72,6 +72,34 @@ pub enum Specialty {
 }
 
 impl Specialty {
+    /// Which town a job speaks to — `AffinityClass::of_axis`'s shape, and
+    /// the one derivation of it.
+    ///
+    /// Exhaustive on `Objective` rather than on `Specialty`, which is the
+    /// direction that buys something: a sixth objective kind has to say
+    /// whose business it is instead of quietly interesting nobody, and every
+    /// specialty is named here so none can be left with an empty board.
+    /// `every_specialty_is_courted_by_an_objective` is the census on the
+    /// other axis.
+    pub(crate) fn of_objective(objective: &crate::contracts::Objective) -> Specialty {
+        use crate::contracts::Objective;
+        match objective {
+            Objective::Terminate { .. } => Specialty::Programs,
+            Objective::Deliver { .. } | Objective::Hold { .. } => Specialty::Materials,
+            Objective::Descend { .. } | Objective::Perform { .. } => Specialty::Routines,
+            Objective::Build { .. } | Objective::Breach { .. } => Specialty::Gear,
+        }
+    }
+
+    /// Whether this town would rather post that job than another. A
+    /// **ranking**, never a filter — `board_defs` draws favoured jobs as its
+    /// first tier, exactly as a `starter` jumps the Broker's queue, so a town
+    /// whose specialty nothing on offer speaks to still posts a full board
+    /// rather than an empty one.
+    pub(crate) fn favours(self, objective: &crate::contracts::Objective) -> bool {
+        Specialty::of_objective(objective) == self
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Specialty::Gear => "Gear",

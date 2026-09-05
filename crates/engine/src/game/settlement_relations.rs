@@ -105,7 +105,7 @@ impl Game {
     /// The town's own name, for a line about it — falling back to a generic
     /// rather than refusing to speak, since `adjust_standing` is reachable
     /// with a key no town has been materialized for.
-    fn settlement_name(&self, key: SettlementKey) -> String {
+    pub(crate) fn settlement_name(&self, key: SettlementKey) -> String {
         self.world
             .resource::<resources::Settlements>()
             .0

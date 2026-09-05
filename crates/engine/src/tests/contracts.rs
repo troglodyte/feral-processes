@@ -370,6 +370,7 @@ fn give(game: &mut Game, def: ContractDef, progress: u32) {
         .resource_mut::<ActiveContracts>()
         .active
         .push(ActiveContract {
+            issuer: None,
             def,
             progress,
             accepted_tick: tick,
@@ -1554,7 +1555,7 @@ fn an_active_or_finished_contract_is_not_offered_again() {
         .world
         .resource::<crate::contracts::ContractDb>()
         .repeatable(&taken);
-    assert_eq!(game.accept_contract(&taken), Ok(()));
+    assert_eq!(game.accept_contract(&taken, None), Ok(()));
     assert!(
         !board_ids(&mut game).contains(&taken),
         "a contract already in hand is not offered again"
@@ -1658,7 +1659,7 @@ fn accepting_puts_a_contract_in_hand_at_zero_progress() {
     game.world.resource_mut::<GameClock>().tick = 90;
     let id = first_offer(&mut game);
 
-    assert_eq!(game.accept_contract(&id), Ok(()));
+    assert_eq!(game.accept_contract(&id, None), Ok(()));
     let held = game.world.resource::<ActiveContracts>();
     assert_eq!(held.active.len(), 1);
     assert_eq!(held.active[0].def.id, id);
@@ -1682,7 +1683,10 @@ fn a_fourth_contract_is_refused_rather_than_silently_capped() {
         );
     }
     let id = first_offer(&mut game);
-    assert_eq!(game.accept_contract(&id), Err(ContractRefusal::TooMany));
+    assert_eq!(
+        game.accept_contract(&id, None),
+        Err(ContractRefusal::TooMany)
+    );
     assert_eq!(
         game.world.resource::<ActiveContracts>().active.len(),
         crate::tuning::MAX_ACTIVE_CONTRACTS
@@ -1703,11 +1707,11 @@ fn accepting_something_not_on_the_board_is_refused() {
         .expect("the shipped set is larger than one board");
 
     assert_eq!(
-        game.accept_contract(&elsewhere),
+        game.accept_contract(&elsewhere, None),
         Err(ContractRefusal::NotOffered)
     );
     assert_eq!(
-        game.accept_contract(&ContractId::from("no_such_contract")),
+        game.accept_contract(&ContractId::from("no_such_contract"), None),
         Err(ContractRefusal::NotOffered)
     );
 }
@@ -1717,9 +1721,9 @@ fn a_contract_already_in_hand_cannot_be_taken_twice() {
     let mut game = fresh();
     deploy_broker(&mut game);
     let id = first_offer(&mut game);
-    game.accept_contract(&id).unwrap();
+    game.accept_contract(&id, None).unwrap();
     assert_eq!(
-        game.accept_contract(&id),
+        game.accept_contract(&id, None),
         Err(ContractRefusal::AlreadyActive)
     );
 }
@@ -1729,7 +1733,7 @@ fn abandoning_drops_a_contract_and_loses_its_progress() {
     let mut game = fresh();
     deploy_broker(&mut game);
     let id = first_offer(&mut game);
-    game.accept_contract(&id).unwrap();
+    game.accept_contract(&id, None).unwrap();
     game.world.resource_mut::<ActiveContracts>().active[0].progress = 2;
 
     assert!(game.abandon_contract(&id));
@@ -1740,7 +1744,7 @@ fn abandoning_drops_a_contract_and_loses_its_progress() {
     );
     assert!(!game.abandon_contract(&id), "nothing left to abandon");
 
-    game.accept_contract(&id).unwrap();
+    game.accept_contract(&id, None).unwrap();
     assert_eq!(
         game.world.resource::<ActiveContracts>().active[0].progress,
         0,
@@ -1766,13 +1770,13 @@ fn a_finished_one_shot_cannot_be_accepted_again_and_a_repeatable_can() {
     game.world.resource_mut::<ActiveContracts>().done = vec![one_shot.clone(), repeatable.clone()];
 
     assert_eq!(
-        game.accept_contract(&one_shot),
+        game.accept_contract(&one_shot, None),
         Err(ContractRefusal::AlreadyDone)
     );
     // The repeatable one is refused only if this board did not roll it, which
     // is a different refusal and not the one under test.
     assert_ne!(
-        game.accept_contract(&repeatable),
+        game.accept_contract(&repeatable, None),
         Err(ContractRefusal::AlreadyDone),
         "a repeatable contract may be taken again once it is finished"
     );
@@ -1804,7 +1808,7 @@ fn delivering_takes_exactly_what_is_needed_and_no_more() {
     assert!(held >= 4, "the fixture needs spare stock, has {held}");
     let id = deliver_fixture(&mut game, 3);
 
-    assert_eq!(game.deliver_to_contract(&id), Ok(3));
+    assert_eq!(game.deliver_to_contract(&id, None), Ok(3));
     assert_eq!(
         carried(&game, "core_fragment"),
         held - 3,
@@ -1825,7 +1829,7 @@ fn a_partial_delivery_leaves_the_contract_open() {
     let held = carried(&game, "core_fragment");
     let id = deliver_fixture(&mut game, held + 4);
 
-    assert_eq!(game.deliver_to_contract(&id), Ok(held));
+    assert_eq!(game.deliver_to_contract(&id, None), Ok(held));
     assert_eq!(carried(&game, "core_fragment"), 0);
     assert_eq!(progress_of(&game, "quota"), held);
 }
@@ -1839,7 +1843,7 @@ fn a_refused_delivery_leaves_cargo_untouched() {
     // No Broker in range: every refusal lands before anything leaves cargo,
     // the ordering `use_symlink` and `install_routine` follow.
     assert_eq!(
-        game.deliver_to_contract(&id),
+        game.deliver_to_contract(&id, None),
         Err(ContractRefusal::NotOffered)
     );
     assert_eq!(carried(&game, "core_fragment"), before);
@@ -1851,7 +1855,7 @@ fn a_refused_delivery_leaves_cargo_untouched() {
         .unwrap();
     inventory.take(crate::items::ItemId::from("core_fragment"), before);
     assert_eq!(
-        game.deliver_to_contract(&id),
+        game.deliver_to_contract(&id, None),
         Err(ContractRefusal::NothingToDeliver)
     );
     assert_eq!(carried(&game, "core_fragment"), 0);
@@ -1863,7 +1867,7 @@ fn delivering_against_a_contract_that_is_not_held_is_refused() {
     let mut game = fresh();
     deploy_broker(&mut game);
     assert_eq!(
-        game.deliver_to_contract(&ContractId::from("quota")),
+        game.deliver_to_contract(&ContractId::from("quota"), None),
         Err(ContractRefusal::NotOffered)
     );
 }
@@ -2212,7 +2216,7 @@ fn a_rolled_contract_can_be_accepted() {
     let id = rolled.expect("the shipped templates reach a zone-1 board");
 
     assert_eq!(
-        game.accept_contract(&id),
+        game.accept_contract(&id, None),
         Ok(()),
         "the regression this whole shape exists for: every step of the accept \
          path used to re-resolve the def out of ContractDb by id, which a \
@@ -2420,7 +2424,7 @@ fn no_shipped_contract_or_template_can_be_offered_already_finished() {
     for _ in 0..12 {
         let offers = board_ids(&mut game);
         for id in offers {
-            assert_eq!(game.accept_contract(&id), Ok(()), "{id}");
+            assert_eq!(game.accept_contract(&id, None), Ok(()), "{id}");
             // A contract does not settle on acceptance — `contract_system`
             // raises the progress and `settle_contracts` pays, both inside a
             // tick. Without one here the census never reaches the failure it
@@ -2485,7 +2489,7 @@ fn the_board_is_readable_underground_and_nothing_can_be_taken_off_it() {
         "four frames down the sector is still offering what it was offering"
     );
     assert_eq!(
-        game.accept_contract(&id),
+        game.accept_contract(&id, None),
         Err(ContractRefusal::NotAtBroker),
         "reading the board and standing at it are different questions"
     );
@@ -2504,7 +2508,7 @@ fn a_contract_is_taken_from_anywhere_on_the_base() {
 
     stand_across_the_base(&mut game);
     assert_eq!(
-        game.accept_contract(&id),
+        game.accept_contract(&id, None),
         Ok(()),
         "standing on your own slab is standing at your Broker"
     );
@@ -2519,7 +2523,7 @@ fn taking_a_contract_off_the_base_is_refused_and_writes_nothing() {
 
     stand_off_base(&mut game);
     assert_eq!(
-        game.accept_contract(&id),
+        game.accept_contract(&id, None),
         Err(ContractRefusal::NotAtBroker),
         "a contract on the board a sector away is not a contract in hand"
     );
@@ -2534,7 +2538,7 @@ fn a_run_with_no_broker_is_refused_differently_from_one_away_from_its_broker() {
     let mut game = fresh();
     let id = ContractId::from("anything");
     assert_eq!(
-        game.accept_contract(&id),
+        game.accept_contract(&id, None),
         Err(ContractRefusal::NotOffered),
         "with nothing built, there is no board to be away from"
     );
@@ -2551,7 +2555,7 @@ fn handing_over_cargo_off_the_base_keeps_the_cargo() {
 
     stand_off_base(&mut game);
     assert_eq!(
-        game.deliver_to_contract(&id),
+        game.deliver_to_contract(&id, None),
         Err(ContractRefusal::NotAtBroker)
     );
     assert_eq!(
@@ -2569,7 +2573,7 @@ fn cargo_is_handed_over_from_anywhere_on_the_base() {
     let id = deliver_fixture(&mut game, 3);
 
     stand_across_the_base(&mut game);
-    assert_eq!(game.deliver_to_contract(&id), Ok(3));
+    assert_eq!(game.deliver_to_contract(&id, None), Ok(3));
 }
 
 /// Giving one back is deliberately not gated. A contract abandoned in the
@@ -2579,7 +2583,7 @@ fn a_contract_is_given_back_from_anywhere() {
     let mut game = fresh();
     deploy_broker(&mut game);
     let id = first_offer(&mut game);
-    game.accept_contract(&id).unwrap();
+    game.accept_contract(&id, None).unwrap();
 
     stand_off_base(&mut game);
     assert!(game.abandon_contract(&id));

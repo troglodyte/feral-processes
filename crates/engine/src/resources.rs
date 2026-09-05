@@ -1695,11 +1695,18 @@ pub struct Sortie {
     /// return travel still runs, because the countdown was always going to
     /// take that long and there is no teleport home.
     pub aborted: bool,
-    /// Always empty on this branch — see `save::SortieSave::loot`, which
-    /// this field round-trips through unchanged. Nothing writes it and
-    /// `return_sortie` no longer reads it; kept only so the field exists
-    /// for phase 3 to refill.
+    /// Always empty — see `save::SortieSave::loot`, which this field
+    /// round-trips through unchanged. Nothing writes it and `return_sortie`
+    /// no longer reads it; kept only so a save written before `programs`
+    /// existed still parses.
     pub loot: Vec<(crate::items::ItemId, u32)>,
+    /// Downed programs the squad is carrying home — banked at the kill and
+    /// delivered by `return_sortie`, never written to the player's store
+    /// mid-trip. A sortie is travel: a kill six screens away appearing in
+    /// the pack the instant it lands would make the trip telemetry rather
+    /// than a journey, and would let the store's own cap be hit by
+    /// something the player was not present for.
+    pub programs: Vec<crate::items::DownedProgram>,
     pub xp: u32,
     pub kills: u32,
     /// Who did not come back, named at the moment they fell — a Permadeath
@@ -1737,6 +1744,7 @@ impl Sortie {
             battles_done: 0,
             aborted: false,
             loot: Vec::new(),
+            programs: Vec::new(),
             xp: 0,
             kills: 0,
             casualties: Vec::new(),

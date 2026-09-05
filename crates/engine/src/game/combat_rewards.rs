@@ -501,16 +501,27 @@ impl Game {
     /// Defeated (not tamed) rogue programs no longer pay their species'
     /// `work_resource` directly — see
     /// `docs/superpowers/specs/2026-09-04-program-extraction-design.md`
-    /// section 5. This is what replaces the old `roll_work_resource_drop`:
-    /// the one writer of `components::DownedPrograms` from a defeat, so a
-    /// sortie's kills leave a program through this same call rather than a
-    /// copy of it (`game/sortie.rs`) — `Perk::Teardown`'s old trap, still
-    /// worth guarding against here.
+    /// section 5. This is what replaces the old `roll_work_resource_drop`
+    /// for a kill in front of the player: the roll goes straight into the
+    /// store, because the player is standing there to pick it up.
     ///
     /// `false` when the store is full (`tuning::MAX_DOWNED_PROGRAMS`):
     /// spec decision 9 is that the drop is refused and nothing already held
     /// is destroyed, never that the worst program on hand is dropped to
     /// make room.
+    ///
+    /// The roll lives in `downed_program_for` so a sortie can bank the
+    /// *identical* one onto `Sortie::programs` (`game/sortie.rs`) rather
+    /// than growing a second copy of it — `Perk::Teardown`'s old trap, and
+    /// the whole reason this is one call and not two.
+    pub(crate) fn leave_downed_program(&mut self, wild: Entity) -> bool {
+        self.downed_program_for(wild)
+            .is_some_and(|program| self.push_downed_program(program))
+    }
+
+    /// What a defeat is worth, with no opinion about where it lands — the
+    /// one roll, shared by the kill in front of the player and the kill six
+    /// screens away.
     ///
     /// Boss and rarity are read off `wild` itself
     /// (`is_boss_creature`/`rarity_of`), so this must run before `wild`
@@ -530,10 +541,11 @@ impl Game {
     /// Rolling condition off the pre-floor rarity and raising rarity only
     /// afterward would leave `grade()` — which folds both — understated for
     /// exactly the bosses this floor exists to protect.
-    pub(crate) fn leave_downed_program(&mut self, wild: Entity) -> bool {
-        let Some(species) = self.world.get::<Creature>(wild).map(|c| c.species.clone()) else {
-            return false;
-        };
+    pub(crate) fn downed_program_for(&mut self, wild: Entity) -> Option<DownedProgram> {
+        let species = self
+            .world
+            .get::<Creature>(wild)
+            .map(|c| c.species.clone())?;
         let boss = self.is_boss_creature(wild);
         let mut rarity = self.rarity_of(wild);
         if boss {
@@ -545,7 +557,7 @@ impl Game {
         if boss {
             condition = condition.max(crate::tuning::BOSS_CONDITION_FLOOR);
         }
-        self.push_downed_program(DownedProgram {
+        Some(DownedProgram {
             species,
             level,
             rarity,
@@ -556,9 +568,10 @@ impl Game {
 
     /// The one writer of `DownedPrograms`'s `Vec` itself — `leave_downed_program`
     /// for an ordinary kill, `grant_nest_cache` for a nest's own bonus
-    /// programs. A full store logs the refusal (spec decision 9) rather than
-    /// silently dropping the program on the floor, the same courtesy every
-    /// other refusal in the game gets.
+    /// programs, `return_sortie` for what a squad carried home. A full store
+    /// logs the refusal (spec decision 9) rather than silently dropping the
+    /// program on the floor, the same courtesy every other refusal in the
+    /// game gets.
     pub(crate) fn push_downed_program(&mut self, program: DownedProgram) -> bool {
         let player = self.player_entity();
         let full = self

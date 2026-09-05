@@ -302,6 +302,7 @@ impl Game {
                 battles_done: 0,
                 aborted: false,
                 loot: Vec::new(),
+                programs: Vec::new(),
                 xp: 0,
                 kills: 0,
                 casualties: Vec::new(),
@@ -492,9 +493,10 @@ impl Game {
         }
 
         // Priced while the fallen are still standing there: `kill_xp` and
-        // `leave_downed_program` both read the victim's own components, so
+        // `downed_program_for` both read the victim's own components, so
         // neither can move below the despawn.
         let mut earned = 0;
+        let mut banked: Vec<crate::items::DownedProgram> = Vec::new();
         for &hostile in &hostiles {
             if self.creature_alive(hostile) {
                 continue;
@@ -506,13 +508,14 @@ impl Game {
                     self.award_companion_xp(member, paid);
                 }
             }
-            // The same door a kill in front of the player leaves a program
-            // through, called rather than copied for `leave_downed_program`'s
-            // own reason. Unlike loot, this writes straight to the player's
-            // `DownedPrograms` rather than banking into `sortie.loot` for a
-            // Depot to receive later — a travel-and-deliver record for
-            // programs is `Sortie::programs`, phase 3's to build.
-            self.leave_downed_program(hostile);
+            // Banked onto the trip, not pushed into the player's store: the
+            // squad is carrying these home, and `return_sortie` is where
+            // they arrive. `downed_program_for` is the same roll the field
+            // kill uses, called rather than copied — `Perk::Teardown`'s old
+            // trap.
+            if let Some(program) = self.downed_program_for(hostile) {
+                banked.push(program);
+            }
         }
 
         // **Unconditional, and every hostile, living or not.** Whatever the
@@ -538,6 +541,7 @@ impl Game {
         let sortie = &mut self.world.resource_mut::<crate::resources::Sorties>().0[index];
         sortie.battles_done += 1;
         sortie.kills += kills as u32;
+        sortie.programs.append(&mut banked);
         sortie.xp += earned;
         if let Some((entity, name)) = downed {
             sortie.aborted = true;
@@ -587,8 +591,9 @@ impl Game {
     ///
     /// No loot delivery here: extraction retired the direct kill drop that
     /// used to fill `Sortie::loot`, so the field is always empty and a
-    /// delivery loop over it would never run. Phase 3's travel-and-deliver
-    /// record for downed programs is what re-earns this a body.
+    /// delivery loop over it would never run. What the squad carries is
+    /// `Sortie::programs`, and this is the door it arrives through —
+    /// nothing writes the player's store mid-trip.
     fn return_sortie(&mut self, index: usize) {
         let sortie = self
             .world
@@ -612,6 +617,24 @@ impl Game {
         ));
         for lost in &sortie.casualties {
             self.log_base(format!("{lost} did not come back."));
+        }
+        let carried = sortie.programs.len();
+        let mut delivered = 0;
+        for program in sortie.programs {
+            // Stops at the first refusal rather than trying each: once the
+            // store is full it stays full, so continuing would log the same
+            // line once per remaining program. `push_downed_program` says
+            // it once and spec decision 9 keeps everything already held.
+            if !self.push_downed_program(program) {
+                break;
+            }
+            delivered += 1;
+        }
+        if carried > 0 {
+            let plural = if carried == 1 { "" } else { "s" };
+            self.log_base(format!(
+                "They brought back {delivered} of {carried} downed program{plural}."
+            ));
         }
     }
 

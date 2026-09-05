@@ -5,9 +5,10 @@ use bevy_ecs::prelude::{Entity, With};
 
 use super::support::{scratch_assets_dir, stand_in_base, test_assets_dir};
 use crate::Game;
-use crate::components::{DownedPrograms, Glyph, GlyphColor, Position, Structure};
+use crate::components::{DownedPrograms, Glyph, GlyphColor, Position, Rarity, Structure};
 use crate::game::party::ProgramRole;
 use crate::game::sortie::{DispatchReach, SortieRefusal};
+use crate::items::DownedProgram;
 use crate::resources::DifficultyMode;
 use crate::resources::{Sortie, Sorties};
 use crate::sorties::SortieDb;
@@ -757,28 +758,28 @@ fn a_dispatched_sortie(seed: u32, mode: DifficultyMode) -> (Game, Vec<Entity>) {
     (game, squad)
 }
 
-/// A sortie's kill leaves a downed program on the player through
-/// `Game::leave_downed_program` — the same call an ordinary kill makes, not
-/// a copy of it (`game/combat_rewards.rs`'s own reason for splitting that
+/// A sortie's kill banks a downed program onto the trip through
+/// `Game::downed_program_for` — the same roll an ordinary kill makes, not a
+/// copy of it (`game/combat_rewards.rs`'s own reason for splitting that
 /// function out in the first place: a sortie paying through a drifted
 /// second copy is exactly the trap `Perk::Teardown` used to fall into).
+/// Where it *lands* is `Sortie::programs`, not the player's store: the
+/// squad carries it home.
 ///
 /// Swept across seeds, `nest_orphans_across`'s reason nearby: whether a
 /// battle this tick lands any kill at all depends on the habitat draw and
 /// the fight's own rolls, so a single seed proves only its own outcome.
 #[test]
-fn a_sortie_kill_leaves_a_downed_program_on_the_player() {
+fn a_sortie_kill_banks_a_downed_program_onto_the_trip() {
     let found = (5000..5020).any(|seed| {
         let (mut game, _) = a_dispatched_sortie(seed, DifficultyMode::Forgiving);
-        let player = game.player_entity();
-        let before = game.world.get::<DownedPrograms>(player).unwrap().0.len();
 
         // The same candidate pool `resolve_sortie_battle` itself draws
         // from, computed the same way it does (anchor position, `risk` as
         // the step bonus) — so a program landing outside this set would be
         // a defect the count-only version of this test could not see: a
-        // `.any()` over many seeds proves *something* grew the store, not
-        // that what grew it came from the fight.
+        // `.any()` over many seeds proves *something* was banked, not that
+        // what banked it came from the fight.
         let risk = game.world.resource::<Sorties>().0[0].risk;
         let (ax, ay) = game.anchor_position().unwrap_or((0, 0));
         let candidates = game
@@ -790,17 +791,154 @@ fn a_sortie_kill_leaves_a_downed_program_on_the_player() {
         for _ in 0..(total - 1) {
             game.wait();
         }
-        let after = &game.world.get::<DownedPrograms>(player).unwrap().0;
-        after.len() > before
-            && after[before..]
+        let carried = &game.world.resource::<Sorties>().0[0].programs;
+        !carried.is_empty()
+            && carried
                 .iter()
                 .all(|program| candidates.contains(&program.species))
     });
     assert!(
         found,
-        "no seed in the sweep left a downed program on the player, carrying a species the \
+        "no seed in the sweep banked a downed program onto the trip, carrying a species the \
          sortie's own habitat pool could actually have fought"
     );
+}
+
+/// A trip one tick short of home, carrying at least `least` downed
+/// programs.
+///
+/// Swept for the same reason the test above sweeps: whether a battle lands
+/// a kill at all depends on the habitat draw. The `least` argument is not
+/// decoration — a delivery test that meets a full store proves nothing
+/// about stopping at the first refusal unless there is a second program
+/// behind it.
+fn a_sortie_one_tick_from_home_carrying(least: usize) -> Game {
+    for seed in 5000..5060 {
+        let (mut game, _) = a_dispatched_sortie(seed, DifficultyMode::Forgiving);
+        let total = game.world.resource::<Sorties>().0[0].ticks_total;
+        for _ in 0..(total - 1) {
+            game.wait();
+        }
+        if game.world.resource::<Sorties>().0[0].programs.len() >= least {
+            return game;
+        }
+    }
+    panic!("no seed in the sweep banked {least} downed program(s) onto a trip");
+}
+
+/// The tick the trip comes home on — `a_sortie_one_tick_from_home_carrying`
+/// leaves it one short, so a single `wait` is the whole of the return.
+fn run_until_the_sortie_returns(game: &mut Game) {
+    game.wait();
+    assert!(
+        game.world.resource::<Sorties>().0.is_empty(),
+        "the fixture leaves the trip one tick from home, so this tick returns it"
+    );
+}
+
+/// Fills the store to its cap through the real door, so a delivery meets a
+/// genuinely full `DownedPrograms` rather than a hand-written component.
+fn fill_downed_program_store(game: &mut Game) {
+    let player = game.player_entity();
+    let held = game.world.get::<DownedPrograms>(player).unwrap().0.len();
+    for level in held..crate::tuning::MAX_DOWNED_PROGRAMS {
+        assert!(
+            game.push_downed_program(DownedProgram {
+                species: "scrapper".to_string(),
+                level: level as u32 + 1,
+                rarity: Rarity::Ordinary,
+                boss: false,
+                condition: crate::tuning::CONDITION_BASE,
+            }),
+            "the store should not refuse below its own cap"
+        );
+    }
+}
+
+/// Every line the log holds, repeats expanded and filtered to `needle` —
+/// `message_history` condenses an unbroken run into one row with a count,
+/// so a bare entry count would read a line said twice as a line said once.
+fn log_count(game: &Game, needle: &str) -> usize {
+    game.message_history(500)
+        .into_iter()
+        .filter(|row| row.text.contains(needle))
+        .map(|row| row.repeats.max(1))
+        .sum()
+}
+
+/// The whole point of the change: a kill six screens away does not appear
+/// in the pack the instant it lands.
+#[test]
+fn a_sorties_kill_does_not_reach_the_store_until_the_squad_returns() {
+    let game = a_sortie_one_tick_from_home_carrying(1);
+
+    assert!(
+        game.downed_program_rows().is_empty(),
+        "a program teleported home"
+    );
+    assert!(
+        !game.world.resource::<Sorties>().0[0].programs.is_empty(),
+        "the trip is not carrying anything"
+    );
+}
+
+/// What was banked is what arrives, in order — compared row for row rather
+/// than counted, so a delivery that invented or reordered programs could not
+/// pass. A trip routinely banks more than `MAX_DOWNED_PROGRAMS`, so the
+/// store takes the prefix it has room for and the rest is refused; that
+/// refusal is `a_full_store_refuses_a_delivery_and_destroys_nothing_held`'s
+/// subject.
+#[test]
+fn a_returning_sortie_delivers_its_programs() {
+    let mut game = a_sortie_one_tick_from_home_carrying(1);
+    let carried = game.world.resource::<Sorties>().0[0].programs.clone();
+
+    run_until_the_sortie_returns(&mut game);
+
+    let player = game.player_entity();
+    let held = &game.world.get::<DownedPrograms>(player).unwrap().0;
+    let room = carried.len().min(crate::tuning::MAX_DOWNED_PROGRAMS);
+    assert_eq!(held.as_slice(), &carried[..room]);
+}
+
+/// Spec decision 9 at the delivery door: a full store refuses, logs once,
+/// and destroys nothing it is already holding.
+#[test]
+fn a_full_store_refuses_a_delivery_and_destroys_nothing_held() {
+    let mut game = a_sortie_one_tick_from_home_carrying(2);
+    fill_downed_program_store(&mut game);
+    let held_before = game.downed_program_rows();
+
+    run_until_the_sortie_returns(&mut game);
+
+    assert_eq!(
+        game.downed_program_rows(),
+        held_before,
+        "a delivery displaced something already held"
+    );
+    assert_eq!(
+        log_count(&game, "No room to carry"),
+        1,
+        "the refusal should be said once, not once per program"
+    );
+}
+
+/// A save→load round trip, not a RON round trip — a RON round trip cannot
+/// catch a `#[serde(skip)]`.
+#[test]
+fn a_save_round_trip_preserves_a_sorties_carried_programs() {
+    let mut game = a_sortie_one_tick_from_home_carrying(1);
+    let before = game.world.resource::<Sorties>().0[0].programs.clone();
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_sortie_programs_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(loaded.world.resource::<Sorties>().0[0].programs, before);
 }
 
 /// **The load-bearing test of the feature.** A battle spawns its

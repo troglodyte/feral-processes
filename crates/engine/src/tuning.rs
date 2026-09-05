@@ -4391,3 +4391,15 @@ pub const TOOL_TIER_SCALE_STEP: f32 = 0.5;
 /// 3). A flat floor tied to *what was killed* rather than a second roll of
 /// the tool's own pool, so it stays modest next to `TOOL_BASE_UNITS`.
 pub const RICH_IN_UNITS: u32 = 1;
+
+/// What one carrier of any tool is worth in trade currency —
+/// `ItemDb::synthesise_tool_carriers`'s flat price, `ETCHED_DISK_VALUE`'s
+/// own shape but a single constant rather than an exclusive/ordinary split:
+/// a tool has no analog to an exclusive routine yet. Set below every
+/// shipped tool's own `forge_cost` (cheapest today is `salvage_clamp`'s 3
+/// `core_fragment`, worth 3), so forging a carrier and immediately selling
+/// it back is a loss rather than a Credit loop — the carrier is buyable
+/// nowhere (`game::caravan`'s `stock_pool` excludes a tool id the way it
+/// excludes an etched ability), so this only prices what selling a spare
+/// one back nets.
+pub const TOOL_CARRIER_VALUE: u32 = 2;

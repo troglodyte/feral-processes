@@ -2267,6 +2267,10 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // databases have, and the only reason `items` is loaded below
     // `abilities` rather than beside it.
     warnings.extend(items.synthesise_etched_disks(&abilities));
+    // Same ordering dependency as the etched disks just above: every
+    // carrier is derived from a loaded `ToolDef`, and `tools` finished
+    // loading before `items` did.
+    warnings.extend(items.synthesise_tool_carriers(&tools));
     let (perks, perk_warnings) = PerkDb::load_dir(&assets_dir.join("perks"))?;
     warnings.extend(perk_warnings);
     // Same absent-is-silent rule again — see `ClassDb`'s own doc. An empty

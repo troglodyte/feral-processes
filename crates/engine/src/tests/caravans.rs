@@ -739,6 +739,51 @@ fn no_craftable_is_sold_under_its_parts() {
     }
 }
 
+/// A tool carrier must never be a caravan's own offer — buying one would let
+/// Credits skip the research→forge chain the feature exists to make the
+/// player earn. `stock_pool`'s exclusion (`game::caravan`) is what this
+/// walks: an etched ability already gets the same treatment for the same
+/// reason.
+#[test]
+fn no_caravan_shelf_ever_stocks_a_tool_carrier() {
+    let mut game = fresh();
+    based(&mut game);
+    set_zone(&mut game, 4);
+
+    for offer in every_shelf(&mut game, 60) {
+        if let CaravanOfferKind::Material(item) = &offer.kind {
+            assert!(
+                item.tool_id().is_none(),
+                "{} is a tool carrier and must never be stocked for sale",
+                offer.name
+            );
+        }
+    }
+}
+
+/// A carrier already forged is still ordinary cargo on the *sell* side — the
+/// same asymmetry an etched disk already has (buyable nowhere, sellable
+/// anywhere held cargo is).
+#[test]
+fn a_held_tool_carrier_is_still_sellable_to_a_caravan() {
+    let mut game = fresh();
+    based(&mut game);
+    docked(&mut game);
+    let starter = crate::tools::ToolId(crate::tuning::STARTER_TOOL_ID.to_string());
+    let carrier = crate::ItemId::tool(&starter);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(carrier.clone(), 1);
+
+    let sells = game.caravan_view().unwrap().sells;
+    assert!(
+        sells.iter().any(|row| row.copy.item == carrier),
+        "a held carrier must be sellable back to the caravan"
+    );
+}
+
 /// The craft floor is **slack on the shipped item set** — every shipped
 /// recipe already costs less than its result is worth
 /// (`every_craftable_is_worth_more_than_its_parts`), so the census above

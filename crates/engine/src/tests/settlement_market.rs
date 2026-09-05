@@ -98,6 +98,31 @@ fn a_mainframe_carries_more_rows_than_a_server() {
     );
 }
 
+/// `settlement_shelf` draws through the same `draw_shelf`/`stock_pool`
+/// `game::caravan`'s own shelf does — a call, not a copy — but the sharing
+/// itself is what a test has to walk rather than take on faith. A tool
+/// carrier must never be a settlement's own offer, `no_caravan_shelf_ever_
+/// stocks_a_tool_carrier`'s reason: buying one would let Credits skip the
+/// research→forge chain the feature exists to make the player earn.
+#[test]
+fn no_settlement_shelf_ever_stocks_a_tool_carrier() {
+    let mut game = game();
+    let key = SettlementKey { rx: 5, ry: -5 };
+    register_settlement(&mut game, key, generic_settlement_def(), (0, 0));
+
+    for epoch in 0..60 {
+        for offer in game.settlement_shelf(key, epoch) {
+            if let CaravanOfferKind::Material(item) = &offer.kind {
+                assert!(
+                    item.tool_id().is_none(),
+                    "{} is a tool carrier and must never be stocked for sale",
+                    offer.name
+                );
+            }
+        }
+    }
+}
+
 /// Summed over 20 epochs rather than read off one draw: the weights are a
 /// lean, not a guarantee, and a single unlucky roll would make this test
 /// flaky against a perfectly good shelf. The sum is still fully

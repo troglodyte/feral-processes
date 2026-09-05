@@ -313,8 +313,17 @@ impl Game {
         // otherwise have to go and mine belongs here. That width is what
         // makes `stock_pool`'s currency exclusion the only thing standing
         // between a shelf and a Portal Fragment.
-        let mut materials =
-            self.stock_pool(|d| d.equipment.is_none() && d.id.etched_ability().is_none());
+        //
+        // A tool carrier is excluded the same way an etched ability is: a
+        // shelf that could hand a player one would let Credits buy past the
+        // research→forge chain the whole feature exists to make you earn.
+        // Nothing excludes a carrier from the *sell* side
+        // (`caravan_sell_rows`) — an etched disk already has that same
+        // asymmetry, so a spare or unwanted carrier still converts back to
+        // Credits like any other held cargo.
+        let mut materials = self.stock_pool(|d| {
+            d.equipment.is_none() && d.id.etched_ability().is_none() && d.id.tool_id().is_none()
+        });
         let mut programs: Vec<String> = self
             .world
             .resource::<SpeciesDb>()

@@ -75,7 +75,7 @@ const CORRIDOR_HEIGHT: f32 = 0.82;
 const WALL: Color = Color::new(0.22, 0.62, 0.62, 1.0);
 const FLOOR: Color = Color::new(0.10, 0.26, 0.30, 1.0);
 const CEILING: Color = Color::new(0.06, 0.14, 0.20, 1.0);
-pub(super) const VOID: Color = Color::new(0.02, 0.03, 0.05, 1.0);
+const VOID: Color = Color::new(0.02, 0.03, 0.05, 1.0);
 const DOOR: Color = Color::new(0.55, 0.42, 0.18, 1.0);
 const SEALED: Color = Color::new(0.62, 0.20, 0.24, 1.0);
 
@@ -210,6 +210,7 @@ fn flank_colors(row: &[StackCellView], i: usize) -> (Option<Color>, Option<Color
 /// piece of the projection derives from `slice`, so that origin is stated
 /// once here and the whole corridor follows it.
 pub(super) fn draw_stack(view: &StackView, painter: &Painter, pane: Rect, m: &Metrics, power: f32) {
+    painter.rect(pane.x, pane.y, pane.w, pane.h, VOID);
     // Floored before any geometry, so nothing inside the corridor's own band
     // can come out as hard `VOID`. Two places need it and neither is a bug in
     // the projection: the view runs out of cells before the corridor runs out

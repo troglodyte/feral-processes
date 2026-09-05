@@ -124,3 +124,29 @@ fn the_ui_font_has_every_glyph_the_hud_draws() {
         );
     }
 }
+
+/// The compass block draws `stack::Heading::arrow`'s answer, and a missing
+/// glyph in either face is a box or a blank rather than a compile error —
+/// so the nine are held here, where the fonts' other empirical assumptions
+/// already live.
+///
+/// Both faces, because the block is UI text today and a future caller
+/// drawing one on the map grid would reach for unscii without thinking to
+/// check.
+#[test]
+fn both_fonts_carry_every_compass_arrow() {
+    for ch in ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖', '●'] {
+        for (name, font) in [("unscii", &*FONT), ("DejaVu Sans Mono", &*UI)] {
+            assert_ne!(
+                font.lookup_glyph_index(ch),
+                0,
+                "{name} has no glyph for {ch:?} — the compass would draw a box"
+            );
+            let (metrics, _) = font.rasterize(ch, 16.0);
+            assert!(
+                metrics.width > 0 && metrics.height > 0,
+                "{name} rasterizes {ch:?} to nothing at 16px"
+            );
+        }
+    }
+}

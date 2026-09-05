@@ -11,24 +11,21 @@ use super::*;
 /// strip are the same sentence, and a second formatter is how the two would
 /// come to disagree about a place.
 ///
-/// The two tiers land here as they land everywhere else: `distance` is
-/// `None` for exactly the rows whose `label` is a generic noun, so the
-/// short form is not a special case this function decides.
+/// One form, and no branch. The tier lives entirely in `label` — a row the
+/// party has not reached says `a settlement` where a reached one says
+/// `Lowport`, and both carry a heading and a figure — so there is nothing
+/// here for this function to decide.
 pub(in crate::render) fn destination_line(row: &CompassRow) -> String {
-    match row.distance {
-        Some(d) => format!("{} · {} · {d}", row.label, row.bearing),
-        None => format!("{} · {}", row.label, row.bearing),
-    }
+    format!("{} · {} · {}", row.label, row.bearing, row.distance)
 }
 
 /// One row per `CompassRow`, in the order the engine hands them over — home,
 /// then settlements, then Stack entrances, each group nearest-first.
 ///
 /// The tiering is read and never re-decided: `label` already withholds a
-/// town's name until the party has walked to it, and `distance` is `None`
-/// for exactly the same rows. A renderer that decided either for itself
-/// would be a second statement of the rule that the strip on the map could
-/// then disagree with.
+/// town's name until the party has walked to it. A renderer that decided
+/// that for itself would be a second statement of the rule that the strip on
+/// the map could then disagree with.
 fn compass_rows(
     rows: &[CompassRow],
     selected: Option<CompassTarget>,
@@ -84,8 +81,8 @@ pub(super) fn draw_compass(
     let mut rows = compass_rows(&targets, pointing, selected);
     rows.push(text_row(""));
     rows.push(text_row(
-        "A place you have reached gives its name and a distance; one only \
-         recorded gives a bearing.",
+        "Somewhere you have been gives its name; somewhere only recorded is \
+         still a heading and a distance away.",
     ));
     rows.push(text_row(
         "Up/Down to scroll, Enter to point the compass, X to clear it, Esc to close.",
@@ -97,7 +94,7 @@ pub(super) fn draw_compass(
 mod tests {
     use super::*;
 
-    fn row(label: &str, distance: Option<i32>, visited: bool) -> CompassRow {
+    fn row(label: &str, distance: i32, visited: bool) -> CompassRow {
         CompassRow {
             target: CompassTarget::Town(feral_processes_engine::settlements::SettlementKey {
                 rx: 0,
@@ -105,6 +102,7 @@ mod tests {
             }),
             label: label.to_string(),
             bearing: "south",
+            arrow: '↓',
             distance,
             visited,
         }
@@ -121,23 +119,20 @@ mod tests {
     #[test]
     fn the_screen_draws_one_row_per_target() {
         let targets = vec![
-            row("home", Some(4), true),
-            row("a settlement", None, false),
-            row("Lowport", Some(219), true),
+            row("home", 4, true),
+            row("a settlement", 143, false),
+            row("Lowport", 219, true),
         ];
         assert_eq!(compass_rows(&targets, None, 0).len(), targets.len());
     }
 
-    /// The two tiers, as they reach the eye. A row that has been walked to
-    /// carries a figure; one the engine has merely recorded carries a
-    /// heading and nothing that would let it be navigated to precisely.
+    /// The one tier, as it reaches the eye. Both rows are navigable — a
+    /// heading and a figure each — and the only thing reaching a place buys
+    /// is being able to call it by name.
     #[test]
-    fn a_reached_row_shows_a_distance_and_an_unreached_one_shows_none() {
+    fn every_row_is_navigable_and_only_the_name_is_earned() {
         let rows = compass_rows(
-            &[
-                row("Lowport", Some(219), true),
-                row("a settlement", None, false),
-            ],
+            &[row("Lowport", 219, true), row("a settlement", 143, false)],
             None,
             0,
         );
@@ -149,10 +144,11 @@ mod tests {
 
         let unreached = text_of(&rows[1]);
         assert!(unreached.contains("a settlement"), "{unreached:?}");
-        assert!(unreached.contains("south"), "the bearing is the first tier");
+        assert!(unreached.contains("south"), "{unreached:?}");
         assert!(
-            !unreached.chars().any(|c| c.is_ascii_digit()),
-            "an unreached place gives up no figure: {unreached:?}"
+            unreached.contains("143"),
+            "an unreached place still says how far off it is — a bearing with \
+             no figure is a direction to wander in: {unreached:?}"
         );
     }
 
@@ -160,11 +156,11 @@ mod tests {
     /// the highlight is on, and the screen has to say both.
     #[test]
     fn the_pointed_at_row_is_marked_wherever_the_highlight_is() {
-        let target = row("Lowport", Some(219), true).target;
-        let rows = compass_rows(&[row("Lowport", Some(219), true)], Some(target), 0);
+        let target = row("Lowport", 219, true).target;
+        let rows = compass_rows(&[row("Lowport", 219, true)], Some(target), 0);
         assert!(text_of(&rows[0]).contains('«'), "{:?}", text_of(&rows[0]));
 
-        let rows = compass_rows(&[row("Lowport", Some(219), true)], None, 0);
+        let rows = compass_rows(&[row("Lowport", 219, true)], None, 0);
         assert!(!text_of(&rows[0]).contains('«'));
     }
 

@@ -225,7 +225,8 @@
   rather than a touch — a pane edge exactly on the quad's is the clearance
   holding. The vitals took the border because they are the readout that must
   never be covered and because the expanded pane would otherwise erase them;
-  `map_pane`'s bottom border went on to carry the compass strip (below). The filter header is the
+  `map_pane`'s bottom border carries nothing, and the compass tried it for
+  one release before moving inside the pane (below). The filter header is the
   body's first row again, at `m.small()` and **above** the refusal, and it
   costs a row through its own `LOG_FILTER_ROWS` — `LOG_TEXT_ROWS` stays the
   *message* count, or SPACE grows the pane by five rows instead of four.
@@ -255,25 +256,26 @@
   overlaps its **ink** by an area — three releases have now shipped this bug
   because the test named one rectangle instead.
 
-- **The compass strip's band on `map_pane`'s bottom border is bought
-  whether or not a destination is selected, and `pane_gap` buys two
-  clearances rather than one.** Two traps, and neither fails to compile.
-  The first is conditional layout: buying the band only while the compass
-  is pointing at something re-lays the entire tile grid on the keypress
-  that points it, which at the keyboard reads as the camera lurching, not
-  as a strip appearing — so `hud::layout::map_body` is a function of the
-  pane and the metrics alone and nothing about the selection reaches it.
-  The second is that this is the **first** strip on the map pane's bottom
-  border since the vitals moved off it, and the vitals now ride
-  `log_pane`'s *top* border: the two quads reach into the gap between the
-  panes from opposite sides, so `pane_gap = m.gap.max(clearance * 2.0)`.
-  At one clearance they overlap by exactly `clearance` and the log pane's
-  fill — painted after — cuts the compass strip in half. No arithmetic
-  test catches that; the assertion that does is
-  `base.rs::nothing_paints_over_the_compass_strip`, which asks the general
-  question (does *anything* painted afterwards land on the strip's quad),
-  and it goes red the moment the multiplier is dropped. Third and smaller:
-  the pane's **background fill** covers the whole pane and only its *body*
-  stops short, which is why `draw_playing_base` paints it rather than
-  `draw_surface_map`/`draw_stack` — a body-sized fill leaves the window
-  showing through beneath the last row of tiles.
+- **The compass is a block drawn *inside* the map pane, and it was a border
+  strip for exactly one release.** The trap is that "put a readout on the
+  map pane's bottom border" is a one-line change that costs two layout
+  changes, both invisible until something is painted over. A strip centres
+  its quad *on* its border line, so it reaches `strip_clearance` into the
+  pane: the map then has to buy a band it can never draw tiles in, and
+  buying it only while a destination is selected re-lays the entire tile
+  grid on the keypress that selects one — which at the keyboard reads as
+  the camera lurching, not as a strip appearing. Second, `map_pane`'s
+  bottom border and `log_pane`'s top border face each other across
+  `pane_gap`, and the vitals already reach *up* into it, so a strip
+  reaching *down* needs `pane_gap` to hold two clearances instead of one;
+  at one they overlap exactly and the log pane's fill — painted later —
+  cuts the compass in half. **A block inside the pane costs none of that**:
+  it overlays tiles that are still drawn, so `regions` never learns the
+  compass exists, and `base.rs::the_map_is_the_same_size_whether_or_not_a
+  _destination_is_picked` compares the map's background fill between the
+  two states to hold it. What the block *does* inherit is the body rule
+  above — it starts at `layout::strip_inset` below the pane's top edge,
+  because THREAT rides that border and its quad hangs down into the pane.
+  A block at `m.inset` is painted straight through the lower half of
+  THREAT's glyphs, which is the vitals/filter-header collision again in a
+  third place.

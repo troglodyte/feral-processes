@@ -1159,20 +1159,29 @@ pub struct AttentionRow {
 
 /// One place the compass can point at — see `Game::compass_targets`.
 ///
-/// The two tiers of knowledge land **only** in `label` and `distance`, so
-/// "what the party has actually reached is worth more than what the engine
-/// has merely recorded" is stated once in the engine and no surface
-/// re-decides it.
+/// The tier of knowledge lands **only** in `label`, so "a name is earned by
+/// walking there" is stated once in the engine and no surface re-decides
+/// it. `distance` was the second half of that rule until it turned out to
+/// be the wrong half: how far away a recorded place is, is not something
+/// arriving teaches you, and withholding it left the first tier unable to
+/// answer the question the compass exists for — *do I have the supplies to
+/// get there.* A bearing with no figure is a direction to wander in.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CompassRow {
     pub target: crate::settlements::CompassTarget,
-    /// The place's name once reached, a generic noun before that.
+    /// The place's name once reached, a generic noun before that — the
+    /// whole of what reaching somewhere buys.
     pub label: String,
     /// `game::stack::bearing`'s eight-point heading, reused rather than
     /// restated.
     pub bearing: &'static str,
-    /// Chebyshev tiles, and `None` until the party has been there.
-    pub distance: Option<i32>,
+    /// The same answer as an arrow, for the block the map draws. Carried
+    /// rather than derived by the renderer from `bearing`: a `match` on
+    /// those strings would need a fallback arm, and a fallback is how a
+    /// ninth heading ships pointing nowhere.
+    pub arrow: char,
+    /// Chebyshev tiles, and answered for every row the derivation returns.
+    pub distance: i32,
     pub visited: bool,
 }
 

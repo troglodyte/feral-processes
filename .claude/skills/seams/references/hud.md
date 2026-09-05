@@ -225,7 +225,7 @@
   rather than a touch — a pane edge exactly on the quad's is the clearance
   holding. The vitals took the border because they are the readout that must
   never be covered and because the expanded pane would otherwise erase them;
-  `map_pane`'s bottom border now carries nothing. The filter header is the
+  `map_pane`'s bottom border went on to carry the compass strip (below). The filter header is the
   body's first row again, at `m.small()` and **above** the refusal, and it
   costs a row through its own `LOG_FILTER_ROWS` — `LOG_TEXT_ROWS` stays the
   *message* count, or SPACE grows the pane by five rows instead of four.
@@ -254,3 +254,26 @@
   the pane draws, in both states, and asserts nothing painted afterwards
   overlaps its **ink** by an area — three releases have now shipped this bug
   because the test named one rectangle instead.
+
+- **The compass strip's band on `map_pane`'s bottom border is bought
+  whether or not a destination is selected, and `pane_gap` buys two
+  clearances rather than one.** Two traps, and neither fails to compile.
+  The first is conditional layout: buying the band only while the compass
+  is pointing at something re-lays the entire tile grid on the keypress
+  that points it, which at the keyboard reads as the camera lurching, not
+  as a strip appearing — so `hud::layout::map_body` is a function of the
+  pane and the metrics alone and nothing about the selection reaches it.
+  The second is that this is the **first** strip on the map pane's bottom
+  border since the vitals moved off it, and the vitals now ride
+  `log_pane`'s *top* border: the two quads reach into the gap between the
+  panes from opposite sides, so `pane_gap = m.gap.max(clearance * 2.0)`.
+  At one clearance they overlap by exactly `clearance` and the log pane's
+  fill — painted after — cuts the compass strip in half. No arithmetic
+  test catches that; the assertion that does is
+  `base.rs::nothing_paints_over_the_compass_strip`, which asks the general
+  question (does *anything* painted afterwards land on the strip's quad),
+  and it goes red the moment the multiplier is dropped. Third and smaller:
+  the pane's **background fill** covers the whole pane and only its *body*
+  stops short, which is why `draw_playing_base` paints it rather than
+  `draw_surface_map`/`draw_stack` — a body-sized fill leaves the window
+  showing through beneath the last row of tiles.

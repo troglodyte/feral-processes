@@ -201,3 +201,33 @@ fn the_selection_survives_a_save_and_a_load() {
         "the selection is saved state, not a cue about this instant"
     );
 }
+
+/// **The measured failure this feature closes.** Seed 1788625345 is
+/// `save_1788625345.bin`: six settlements recorded in
+/// `resources::Settlements`, none announced, and the run turned around
+/// roughly 60 tiles short of two of them after ~68,000 tiles of ground.
+/// Lowport stands at (-45, 219), south of a spawn near the origin.
+///
+/// `Game::new` already runs `ensure_local_settlements` over the 3x3 region
+/// block, so the towns are recorded at tick 0 — which is the whole point:
+/// nothing here needed discovering, only saying.
+#[test]
+fn the_run_that_walked_past_two_towns_is_told_where_one_of_them_is() {
+    let mut game = Game::new(1788625345, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    let rows = game.compass_targets();
+    let town = rows
+        .iter()
+        .find(|r| matches!(r.target, CompassTarget::Town(_)) && r.bearing == "south")
+        .unwrap_or_else(|| panic!("no town bears south on this seed: {rows:?}"));
+
+    assert!(!town.visited, "the run never reached it");
+    assert_eq!(
+        town.distance, None,
+        "an unreached town gives up no figure — the first tier is the bearing"
+    );
+    assert_eq!(
+        town.label, "a settlement",
+        "and no name either, or the compass is a scan"
+    );
+}

@@ -855,16 +855,23 @@ fn extraction_options_lists_every_installed_tool_with_its_own_preview_yield() {
         installed.len(),
         "one row per installed tool, in the same slot order"
     );
-    for (tool, (id, yield_rows)) in installed.iter().zip(options.iter()) {
+    for (tool, option) in installed.iter().zip(options.iter()) {
         assert_eq!(
-            &tool.id, id,
+            tool.id, option.tool,
             "extraction_options must walk installed_tools' own order"
         );
         assert_eq!(
-            yield_rows,
-            &game.extraction_yield(&prog, tool),
-            "the preview must be extraction_yield's own answer, not a second copy of it"
+            tool.name, option.name,
+            "the row must carry the tool's own display name, not a second copy of it"
         );
+        match &option.preview {
+            views::ExtractionPreview::Items(rows) => assert_eq!(
+                rows,
+                &game.extraction_yield(&prog, tool),
+                "the preview must be extraction_yield's own answer, not a second copy of it"
+            ),
+            other => panic!("a material tool must preview items, got {other:?}"),
+        }
     }
 }
 
@@ -891,11 +898,14 @@ fn extraction_options_preview_matches_what_extract_program_actually_grants() {
     let tool_id = ToolId(tuning::STARTER_TOOL_ID.to_string());
 
     let options = game.extraction_options(0);
-    let (_, preview) = options
+    let option = options
         .iter()
-        .find(|(id, _)| id == &tool_id)
+        .find(|o| o.tool == tool_id)
         .expect("the starter tool must be among the offered options");
-    let preview = totals(preview);
+    let views::ExtractionPreview::Items(rows) = &option.preview else {
+        panic!("the starter tool must preview items");
+    };
+    let preview = totals(rows);
 
     let before = totals(&game.world.get::<Inventory>(player).unwrap().items);
     game.extract_program(0, &tool_id)
@@ -1933,8 +1943,15 @@ fn the_previewed_yield_tracks_the_bench_tier() {
     give_downed_program(&mut game, test_program("scrapper", 5));
     build_program_bench(&mut game, Some(4));
 
-    let previewed = game.extraction_options(0);
-    let (tool_id, quoted) = previewed.first().cloned().expect("the starter tool");
+    let option = game
+        .extraction_options(0)
+        .into_iter()
+        .next()
+        .expect("the starter tool");
+    let tool_id = option.tool;
+    let views::ExtractionPreview::Items(quoted) = option.preview else {
+        panic!("the starter tool must preview items");
+    };
     let held_before = held_counts(&game, &quoted);
 
     game.extract_program(0, &tool_id)
@@ -2214,4 +2231,46 @@ fn the_draw_favours_the_first_candidate_without_forcing_it() {
         favoured * 2 > rest,
         "the first candidate is not favoured: {counts:?}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: the picker's view — `views::ExtractionOptionView` carrying the
+// tool's name, its bench-discounted tick cost and a preview the `Routines`
+// branch can answer honestly. See the phase-3 plan's Task 5.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_routine_tools_preview_names_the_pool_it_draws_from() {
+    let mut game = new_test_game();
+    let program = test_program("scrapper", 30);
+    let pool = game.routine_candidates(&program);
+    give_downed_program(&mut game, program);
+    install_routine_tool(&mut game);
+
+    let wanted = routine_tool_id(&game);
+    let option = game
+        .extraction_options(0)
+        .into_iter()
+        .find(|o| o.tool == wanted)
+        .expect("the routine tool is installed");
+
+    match option.preview {
+        views::ExtractionPreview::Routine(names) => {
+            assert_eq!(names.len(), pool.len(), "the pool and the preview disagree")
+        }
+        other => panic!("expected a routine preview, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_previews_tick_cost_is_the_one_the_act_spends() {
+    let mut game = new_test_game();
+    give_downed_program(&mut game, test_program("scrapper", 5));
+    build_program_bench(&mut game, Some(3));
+    let option = game.extraction_options(0).remove(0);
+    let before = ticks_elapsed(&game);
+
+    game.extract_program(0, &option.tool).expect("it runs");
+
+    assert_eq!(ticks_elapsed(&game) - before, option.ticks);
 }

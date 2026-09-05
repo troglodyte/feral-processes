@@ -51,7 +51,7 @@ impl App {
                 let Some(tool_idx) = self.selected_index(key, options.len()) else {
                     return;
                 };
-                let tool_id = options[tool_idx].0.clone();
+                let tool_id = options[tool_idx].tool.clone();
                 let outcome = self
                     .game
                     .as_mut()

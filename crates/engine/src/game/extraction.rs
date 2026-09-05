@@ -322,25 +322,47 @@ impl Game {
             .unwrap_or_default()
     }
 
-    /// Every installed tool and what it would give for the program at
-    /// `index` — `extraction_yield` called once per tool, in
-    /// `installed_tools`' own slot order, so the screen's preview and
-    /// `extract_program`'s grant read off the identical call. Empty for an
-    /// index the store doesn't hold, rather than a panic — the same
-    /// tolerance `extraction_yield`'s own callers already take on a stale
-    /// index.
-    pub fn extraction_options(&self, index: usize) -> Vec<(ToolId, Vec<(ItemId, u32)>)> {
+    /// Every installed tool and what it would do to the program at `index`,
+    /// in `installed_tools`' own slot order. Every figure on a row is a call
+    /// into the one derivation that the act itself uses —
+    /// `extraction_yield`, `extraction_ticks`, `routine_candidates` — so the
+    /// screen and the grant cannot disagree. Empty for an index the store
+    /// doesn't hold, rather than a panic — the same tolerance
+    /// `extraction_yield`'s own callers already take on a stale index.
+    pub fn extraction_options(&self, index: usize) -> Vec<crate::views::ExtractionOptionView> {
         let player = self.player_entity();
         let Some(program) = self
             .world
             .get::<DownedPrograms>(player)
             .and_then(|held| held.0.get(index))
+            .cloned()
         else {
             return Vec::new();
         };
         self.installed_tools()
-            .iter()
-            .map(|tool| (tool.id.clone(), self.extraction_yield(program, tool)))
+            .into_iter()
+            .map(|tool| {
+                let preview = if tool.category == ToolCategory::Routines {
+                    let pool = self.routine_candidates(&program);
+                    if pool.is_empty() {
+                        crate::views::ExtractionPreview::NothingToLearn
+                    } else {
+                        crate::views::ExtractionPreview::Routine(
+                            pool.iter()
+                                .map(|id| self.ability_display_name(id))
+                                .collect(),
+                        )
+                    }
+                } else {
+                    crate::views::ExtractionPreview::Items(self.extraction_yield(&program, &tool))
+                };
+                crate::views::ExtractionOptionView {
+                    ticks: self.extraction_ticks(&tool),
+                    name: tool.name.clone(),
+                    tool: tool.id.clone(),
+                    preview,
+                }
+            })
             .collect()
     }
 

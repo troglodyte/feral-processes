@@ -46,7 +46,13 @@ fn files_consuming_a_modifier() -> Vec<String> {
 fn every_screen_that_consumes_a_modifier_is_named_in_the_fold() {
     assert_eq!(
         files_consuming_a_modifier(),
-        ["basket", "caravan", "crafting", "creation"],
+        [
+            "basket",
+            "caravan",
+            "crafting",
+            "creation",
+            "settlement_market"
+        ],
         "a screen gained modifier arms; add its Mode to `handle_key`'s \
          fold in app/input.rs or the four keys never reach it"
     );

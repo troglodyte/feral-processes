@@ -1,7 +1,7 @@
-//! The settlement hub — identity only: name, kind, specialty, temperament,
-//! blurb. `Mode::CompanionMemories`'s shape one level over: opened two ways
-//! (a bump, or `x`) that both land on the same page, and nothing bound but
-//! Esc, since Phase 2 ships no verbs for a town yet.
+//! The settlement hub — identity: name, kind, specialty, temperament, blurb,
+//! and now (Phase 3) the door onto its market. `Mode::CompanionMemories`'s
+//! shape one level over: opened two ways (a bump, or `x`) that both land on
+//! the same page.
 
 use super::popup::*;
 use super::*;
@@ -66,7 +66,10 @@ pub(super) fn settlement_page_rows(view: &SettlementView) -> Vec<Row> {
             .map(text_row),
     );
     rows.push(text_row(""));
-    rows.push(text_row("Esc to go back"));
+    // Uppercase — `lowercase-letters-are-row-selectors`'s rule — even though
+    // this page has no rows to select, since a modder's free-text blurb
+    // could otherwise collide with a lowercase key.
+    rows.push(text_row("[M] Market  ·  Esc to go back"));
     rows
 }
 

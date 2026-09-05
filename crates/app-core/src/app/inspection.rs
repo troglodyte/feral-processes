@@ -125,17 +125,31 @@ impl App {
         self.close_screen();
     }
 
-    /// The settlement page: `Mode::CompanionMemories`'s shape, Esc only,
-    /// rather than `Mode::CellDescribe`'s "any key leaves" just above. A
-    /// settlement page is reached by walking into the tile as often as by
-    /// examining it, and a bump opens it on the same keypress that moved the
-    /// player — a direction key still held down must not double as the
-    /// dismissal the way it would if any key closed the screen.
+    /// The settlement page: `Mode::CompanionMemories`'s shape, Esc plus one
+    /// more key now that Phase 3 ships the market, rather than
+    /// `Mode::CellDescribe`'s "any key leaves" above. A settlement page is
+    /// reached by walking into the tile as often as by examining it, and a
+    /// bump opens it on the same keypress that moved the player — a
+    /// direction key still held down must not double as the dismissal the
+    /// way it would if any key closed the screen.
+    ///
+    /// `[M]`, uppercase, for `lowercase-letters-are-row-selectors`'s reason
+    /// even though this page has no rows to select — a modder's `blurb` is
+    /// free text and a lowercase key would collide with a letter the prose
+    /// happens to start a line with, if this page ever grows rows of its
+    /// own.
     pub(crate) fn handle_settlement_key(&mut self, key: GameKey) {
-        if key == GameKey::Esc {
-            self.pending_settlement = None;
-            self.status_line = None;
-            self.mode = Mode::Playing;
+        match key {
+            GameKey::Esc => {
+                self.pending_settlement = None;
+                self.status_line = None;
+                self.mode = Mode::Playing;
+            }
+            GameKey::Char('M') => {
+                self.settlement_amounts.clear();
+                self.mode = Mode::SettlementMarket;
+            }
+            _ => {}
         }
     }
 

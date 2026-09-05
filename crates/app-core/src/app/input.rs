@@ -181,7 +181,11 @@ impl App {
         let key = match key {
             _ if matches!(
                 self.mode,
-                Mode::Transfer | Mode::Caravan | Mode::CraftQuantity | Mode::CreateCharacter
+                Mode::Transfer
+                    | Mode::Caravan
+                    | Mode::SettlementMarket
+                    | Mode::CraftQuantity
+                    | Mode::CreateCharacter
             ) =>
             {
                 key
@@ -227,6 +231,7 @@ impl App {
             Mode::StructureManifest => self.handle_structure_manifest_key(key),
             Mode::CellDescribe => self.handle_cell_describe_key(key),
             Mode::Settlement => self.handle_settlement_key(key),
+            Mode::SettlementMarket => self.handle_settlement_market_key(key),
             Mode::Notification => self.handle_notification_key(key),
             Mode::Manifest => self.handle_manifest_key(key),
             Mode::ManifestPick => self.handle_manifest_pick_key(key),

@@ -54,6 +54,7 @@ mod popup;
 mod progression;
 mod routines;
 mod settlement;
+mod settlement_market;
 // `pub(crate)` rather than private: `lib.rs::handle_sprite_pointer` needs
 // `sprite_forge::HitRects` to name the type `sprite_editor_hit_rects` below
 // hands back — every other module here stays private because nothing
@@ -113,6 +114,7 @@ use routines::{
     draw_routine_target, draw_routines,
 };
 use settlement::draw_settlement;
+use settlement_market::{SettlementMarketBasket, draw_settlement_market};
 use sprite_forge::{draw_sprite_editor, draw_sprite_picker};
 use stack_market::draw_stack_market;
 use talents::{draw_develop, draw_develop_program};
@@ -893,6 +895,30 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             }),
         _ => None,
     };
+    // The settlement's own shelf, and each row's basket cell beside it —
+    // `caravan`'s shape exactly, one door over: `App::settlement_ceiling`
+    // takes `&self`, so it has to run before `game` below takes `&mut
+    // app.game`.
+    let settlement_market = match app.mode {
+        Mode::SettlementMarket => app.pending_settlement.and_then(|key| {
+            app.game
+                .as_mut()
+                .and_then(|g| g.settlement_view(key))
+                .map(|view| {
+                    let cells = (0..view.offers.len() + view.sells.len())
+                        .map(|row| {
+                            (
+                                app.settlement_amounts.get(row).copied().unwrap_or(0),
+                                app.settlement_ceiling(&view, row),
+                            )
+                        })
+                        .collect();
+                    let purse = app.settlement_purse_after(&view);
+                    SettlementMarketBasket { view, cells, purse }
+                })
+        }),
+        _ => None,
+    };
     // Read before `game` takes the whole of `app`, as the rows above are:
     // the figure is derived from more than one field, so the borrow cannot
     // be split at the call.
@@ -1017,6 +1043,15 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             stack::draw_cell_describe(app.pending_description.as_deref(), refusal, painter, m)
         }
         Mode::Settlement => draw_settlement(game, app.pending_settlement, refusal, painter, m),
+        Mode::SettlementMarket => draw_settlement_market(
+            game,
+            app.pending_settlement,
+            settlement_market,
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
         Mode::Inventory => draw_inventory(game, selected, refusal, painter, m),
         Mode::CompanionEquip => draw_companion_equip(
             game,
@@ -1249,7 +1284,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 93] = [
+    const ALL_MODES: [Mode; 94] = [
         Mode::MainMenu,
         Mode::CreateCharacter,
         Mode::LoadGame,
@@ -1286,6 +1321,7 @@ mod tests {
         Mode::StructureManifest,
         Mode::CellDescribe,
         Mode::Settlement,
+        Mode::SettlementMarket,
         Mode::Inventory,
         Mode::EquipSwap,
         Mode::InventoryItemAction,
@@ -1411,7 +1447,7 @@ mod tests {
     /// Each draws nothing at all here, so the census can say where a refusal
     /// must *not* appear on them but not where it must. Their `draw_popup`
     /// calls are threaded the same way every other one is.
-    const NEEDS_PENDING_STATE: [Mode; 22] = [
+    const NEEDS_PENDING_STATE: [Mode; 23] = [
         // Drawn off `pending_develop_target`, which the census app never
         // sets — the same omission `Mode::FuseSecond` below is here for.
         Mode::RespecTalentsConfirm,
@@ -1445,6 +1481,10 @@ mod tests {
         Mode::Caravan,
         Mode::TradeProgramConfirm,
         Mode::StructureAssign,
+        // The market needs a settlement actually adjacent, which the
+        // census app never places — `Mode::Caravan`'s case just above,
+        // one vendor over.
+        Mode::SettlementMarket,
     ];
 
     /// How many times `mode` paints `CENSUS_REFUSAL` with it set.

@@ -1311,6 +1311,18 @@ pub enum Mode {
     /// identity only, no action rows and no stub for the market or job
     /// board a later phase adds, so any key but Esc has nothing to do here.
     Settlement,
+    /// A settlement's shelf, opened with `[M]` from `Mode::Settlement` —
+    /// Phase 3's market. `Mode::Caravan`'s shape exactly: one basket
+    /// (`App::settlement_amounts`), Left/Right edits the highlighted row,
+    /// Enter commits both halves in one turn through
+    /// `Game::commit_settlement_basket`, and the screen stays open after a
+    /// commit rather than dropping to the map. It differs in two ways a
+    /// caravan's page does not: `App::pending_settlement` is the subject
+    /// (shared with the hub page rather than a fresh field, since a
+    /// settlement — unlike a wagon — never rolls away while its basket is
+    /// open), and Esc returns to `Mode::Settlement` rather than the map,
+    /// `Mode::CompanionEquip`'s shape one level over.
+    SettlementMarket,
     Inventory,
     /// Replacements for one equipment slot, reached by picking that slot on
     /// `Mode::Inventory`. Rows come from `equip_swap_rows`, so the picker
@@ -1680,6 +1692,10 @@ impl Mode {
             // case (see its own comment), so this screen is never actually
             // layered under one.
             | Mode::Settlement
+            // Reached only by a key press from `Mode::Settlement` itself,
+            // never by a bump — so the battle-preempts-the-bump case above
+            // does not apply here.
+            | Mode::SettlementMarket
             | Mode::Inventory
             | Mode::EquipSwap
             | Mode::InventoryItemAction
@@ -2086,6 +2102,12 @@ pub struct App {
     /// list can change without one. Cleared on commit and on leaving, so a
     /// reopened wagon never shows a stale basket.
     pub caravan_amounts: Vec<u32>,
+    /// How many of each settlement market row the basket is holding —
+    /// `caravan_amounts`' shape exactly, index-aligned with
+    /// `Game::settlement_view`'s drawn list the same way. Index alignment is
+    /// safe for the same reason: editing costs no tick and neither list can
+    /// change without one.
+    pub settlement_amounts: Vec<u32>,
     /// The recipe result picked in `Mode::Craft`, awaiting a quantity from
     /// `Mode::CraftQuantity` before `Game::craft` is actually called.
     pub pending_craft: Option<ItemId>,

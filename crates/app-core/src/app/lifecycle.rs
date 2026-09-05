@@ -95,6 +95,7 @@ impl App {
             basket_rows: Vec::new(),
             basket_amounts: Vec::new(),
             caravan_amounts: Vec::new(),
+            settlement_amounts: Vec::new(),
             basket_room: None,
             pending_craft: None,
             craft_quantity_input: String::new(),

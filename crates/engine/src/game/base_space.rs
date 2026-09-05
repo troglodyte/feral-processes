@@ -32,8 +32,9 @@ pub(crate) const BASE_EXIT_CELL: (i32, i32) = (0, 0);
 /// space — `from` first, `to` last — or nothing at all when there is no walk
 /// between them.
 ///
-/// Cosmetic, and its one caller is the sortie departure and arrival cue. Two
-/// things about it are deliberate.
+/// Cosmetic, and its callers are the sortie departure/arrival cue and a
+/// caravan route's — `Game::queue_transit_walk`. Two things about it are
+/// deliberate.
 ///
 /// It pathfinds on `BaseGrid::walkable` **alone and admits no blocked set**,
 /// unlike `hauling::post_field`, which refuses tiles other things stand on.
@@ -79,6 +80,36 @@ pub(crate) fn transit_path(grid: &BaseGrid, from: (i32, i32), to: (i32, i32)) ->
         path.push(here);
     }
     path
+}
+
+impl Game {
+    /// Queues one `TransitCue` for a walk between two base-space cells, or
+    /// queues nothing when there is no walk between them — `transit_path`'s
+    /// own "a walk that does not exist is nothing" rule, carried through
+    /// rather than re-checked here.
+    ///
+    /// The entity-free half of what `sortie::queue_squad_walk` used to do
+    /// whole: a sortie's cue reads a member's own glyph and tile off its
+    /// components first, and a caravan route's cargo has neither, so this
+    /// is the part both actually share.
+    pub(crate) fn queue_transit_walk(
+        &mut self,
+        glyph: char,
+        color: crate::components::GlyphColor,
+        from: (i32, i32),
+        to: (i32, i32),
+    ) {
+        let path = {
+            let grid = self.world.resource::<BaseGrid>();
+            transit_path(grid, from, to)
+        };
+        if path.len() < 2 {
+            return;
+        }
+        self.world
+            .resource_mut::<crate::resources::TransitQueue>()
+            .push(crate::resources::TransitCue { glyph, color, path });
+    }
 }
 
 impl Game {

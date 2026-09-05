@@ -339,20 +339,7 @@ impl Game {
             };
             let door = crate::game::base_space::BASE_EXIT_CELL;
             let (from, to) = if outbound { (tile, door) } else { (door, tile) };
-            let path = {
-                let grid = self.world.resource::<crate::base_grid::BaseGrid>();
-                crate::game::base_space::transit_path(grid, from, to)
-            };
-            if path.len() < 2 {
-                continue;
-            }
-            self.world
-                .resource_mut::<crate::resources::TransitQueue>()
-                .push(crate::resources::TransitCue {
-                    glyph: ch,
-                    color,
-                    path,
-                });
+            self.queue_transit_walk(ch, color, from, to);
         }
     }
 

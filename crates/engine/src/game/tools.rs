@@ -1,10 +1,10 @@
-//! Tool acquisition past the starter grant: `Game::forge_tool`, and this
-//! phase's remaining task, `Game::install_tool`/`Game::uninstall_tool` —
-//! the routine acquisition chain mirrored onto tools (spec decision 6).
-//! The catalogue and the slot formula both of these read live in
-//! `crate::tools`; the act itself, `Game::extract_program`, lives in
-//! `game/extraction.rs`.
+//! Tool acquisition past the starter grant: `Game::forge_tool`,
+//! `Game::install_tool`, `Game::uninstall_tool` — the routine acquisition
+//! chain mirrored onto tools (spec decision 6). The catalogue and the slot
+//! formula both of these read live in `crate::tools`; the act itself,
+//! `Game::extract_program`, lives in `game/extraction.rs`.
 
+use crate::components::Tools;
 use crate::tools::{ToolDb, ToolId};
 use crate::*;
 
@@ -56,6 +56,90 @@ impl Game {
         }
         self.grant_loot(ItemId::tool(tool), 1, LootSource::Forge);
         self.log(format!("You forge a {}.", def.name));
+        Ok(())
+    }
+
+    /// `id`'s display name, or the raw id for one `ToolDb` cannot resolve —
+    /// `ability_display_name`'s analog, needed by `uninstall_tool`, which
+    /// has only the id left once the slot is cleared.
+    fn tool_display_name(&self, id: &str) -> String {
+        self.world
+            .resource::<ToolDb>()
+            .get(id)
+            .map(|t| t.name.clone())
+            .unwrap_or_else(|| id.to_string())
+    }
+
+    /// Spends one carrier of `tool` to write it into the player's next free
+    /// slot. The player is the only tool holder, so there is no entity
+    /// argument and no `owns_routine_holder` rung — `install_disk`'s shape
+    /// with that one rung removed.
+    ///
+    /// Refusals, in order, all before anything is spent: game-over or an
+    /// active battle, an id `ToolDb` cannot resolve, the tool is already
+    /// installed, no free slot (`installed.len() >=
+    /// tools::player_tool_slots(level)`), no carrier held.
+    pub fn install_tool(&mut self, tool: &ToolId) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".to_string());
+        }
+        let def = self
+            .world
+            .resource::<ToolDb>()
+            .get(tool.as_str())
+            .cloned()
+            .ok_or_else(|| "Unknown tool.".to_string())?;
+        let player = self.player_entity();
+        let installed = self
+            .world
+            .get::<Tools>(player)
+            .map(|t| t.0.clone())
+            .unwrap_or_default();
+        if installed.contains(tool) {
+            return Err(format!("{} is already installed.", def.name));
+        }
+        let level = self.world.get::<Experience>(player).unwrap().level;
+        if installed.len() >= crate::tools::player_tool_slots(level) {
+            return Err("There's no free tool slot — pull one out first.".to_string());
+        }
+        let carrier = ItemId::tool(tool);
+        if self.world.get::<Inventory>(player).unwrap().count(&carrier) == 0 {
+            return Err(format!("You're not carrying {}.", self.item_name(&carrier)));
+        }
+        self.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .take(carrier.clone(), 1);
+        self.note_consumed(&carrier, 1, crate::base_ledger::ConsumeSource::Install);
+        self.world
+            .get_mut::<Tools>(player)
+            .unwrap()
+            .0
+            .push(tool.clone());
+        self.log(format!("You install the {}.", def.name));
+        Ok(())
+    }
+
+    /// Frees `slot`. What is in the slot *is* the tool — `install_disk`'s
+    /// rule — so this hands back no carrier; the player keeps only the
+    /// knowledge, which they never lost.
+    pub fn uninstall_tool(&mut self, slot: usize) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".to_string());
+        }
+        let player = self.player_entity();
+        let mut installed = self
+            .world
+            .get::<Tools>(player)
+            .map(|t| t.0.clone())
+            .unwrap_or_default();
+        if slot >= installed.len() {
+            return Err("That slot is empty.".to_string());
+        }
+        let tool = installed.remove(slot);
+        self.world.entity_mut(player).insert(Tools(installed));
+        let name = self.tool_display_name(tool.as_str());
+        self.log(format!("You pull the {name} tool."));
         Ok(())
     }
 }

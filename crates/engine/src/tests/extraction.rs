@@ -1253,3 +1253,221 @@ fn forging_spends_exactly_the_cost_and_grants_one_carrier() {
         "exactly one carrier must be granted"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Phase 2, task 3: `Game::install_tool` and `Game::uninstall_tool`.
+// ---------------------------------------------------------------------------
+
+fn hold_carrier(game: &mut Game, tool: &str, qty: u32) {
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::tool(&ToolId(tool.to_string())), qty);
+}
+
+#[test]
+fn install_refuses_after_game_over_and_changes_nothing() {
+    let mut game = Game::new(9201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    hold_carrier(&mut game, "core_tap", 1);
+    game.world.get_mut::<Experience>(player).unwrap().level = tuning::TOOL_SLOT_PER_LEVEL;
+    game.world.resource_mut::<GameOver>().reason = Some("done".to_string());
+    let before_tools = game.world.get::<Tools>(player).unwrap().0.clone();
+    let before_inv = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    let result = game.install_tool(&ToolId("core_tap".to_string()));
+
+    assert!(result.is_err(), "a game-over run must refuse installing");
+    assert_eq!(game.world.get::<Tools>(player).unwrap().0, before_tools);
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before_inv
+    );
+}
+
+#[test]
+fn install_refuses_during_an_active_battle_and_changes_nothing() {
+    let mut game = Game::new(9202, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    hold_carrier(&mut game, "core_tap", 1);
+    game.world.get_mut::<Experience>(player).unwrap().level = tuning::TOOL_SLOT_PER_LEVEL;
+    let battle = minimal_active_battle(&game);
+    game.world.insert_resource(battle);
+    let before_tools = game.world.get::<Tools>(player).unwrap().0.clone();
+    let before_inv = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    let result = game.install_tool(&ToolId("core_tap".to_string()));
+
+    assert!(result.is_err(), "an active battle must refuse installing");
+    assert_eq!(game.world.get::<Tools>(player).unwrap().0, before_tools);
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before_inv
+    );
+}
+
+#[test]
+fn install_refuses_an_unresolvable_tool_id_and_changes_nothing() {
+    let mut game = Game::new(9203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let before_tools = game.world.get::<Tools>(player).unwrap().0.clone();
+
+    let result = game.install_tool(&ToolId("no_such_tool".to_string()));
+
+    assert!(
+        result.is_err(),
+        "an id ToolDb cannot resolve must refuse installing"
+    );
+    assert_eq!(game.world.get::<Tools>(player).unwrap().0, before_tools);
+}
+
+#[test]
+fn install_refuses_a_tool_already_installed_and_changes_nothing() {
+    // The fresh game's starter tool is already in slot one — the "already
+    // installed" refusal must fire even with no carrier held, so it is
+    // checked before the carrier check.
+    let mut game = Game::new(9204, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let before_tools = game.world.get::<Tools>(player).unwrap().0.clone();
+
+    let result = game.install_tool(&ToolId(tuning::STARTER_TOOL_ID.to_string()));
+
+    let err = result.expect_err("an already-installed tool must refuse a second install");
+    assert!(
+        err.contains("already installed"),
+        "got: {err}, expected the already-installed refusal ahead of the carrier check"
+    );
+    assert_eq!(game.world.get::<Tools>(player).unwrap().0, before_tools);
+}
+
+#[test]
+fn install_refuses_when_no_free_slot_and_changes_nothing() {
+    // Level 1 has exactly one slot, already filled by the starter — a
+    // carrier is held so the only refusal that can fire is the slot cap.
+    let mut game = Game::new(9205, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    hold_carrier(&mut game, "core_tap", 1);
+    let before_tools = game.world.get::<Tools>(player).unwrap().0.clone();
+    let before_inv = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    let result = game.install_tool(&ToolId("core_tap".to_string()));
+
+    assert!(result.is_err(), "a full loadout must refuse installing");
+    assert_eq!(game.world.get::<Tools>(player).unwrap().0, before_tools);
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before_inv
+    );
+}
+
+#[test]
+fn install_refuses_when_no_carrier_is_held_and_changes_nothing() {
+    // A level step opens a second slot, but nothing was forged into it.
+    let mut game = Game::new(9206, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.get_mut::<Experience>(player).unwrap().level = tuning::TOOL_SLOT_PER_LEVEL;
+    let before_tools = game.world.get::<Tools>(player).unwrap().0.clone();
+
+    let result = game.install_tool(&ToolId("core_tap".to_string()));
+
+    assert!(
+        result.is_err(),
+        "installing with no carrier held must be refused"
+    );
+    assert_eq!(game.world.get::<Tools>(player).unwrap().0, before_tools);
+}
+
+#[test]
+fn installing_a_tool_burns_its_carrier_and_fills_the_slot() {
+    let mut game = Game::new(9207, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.get_mut::<Experience>(player).unwrap().level = tuning::TOOL_SLOT_PER_LEVEL;
+    hold_carrier(&mut game, "core_tap", 1);
+
+    game.install_tool(&ToolId("core_tap".to_string()))
+        .expect("nothing here refuses the install");
+
+    assert_eq!(
+        game.world.get::<Tools>(player).unwrap().0,
+        vec![
+            ToolId(tuning::STARTER_TOOL_ID.to_string()),
+            ToolId("core_tap".to_string())
+        ],
+        "the new tool must land in the next free slot, after the starter"
+    );
+    assert_eq!(
+        carrier_count(&game, &ToolId("core_tap".to_string())),
+        0,
+        "the carrier is spent, not kept alongside the installed tool"
+    );
+}
+
+#[test]
+fn installing_a_second_tool_only_succeeds_once_a_level_step_opens_a_slot() {
+    let mut game = Game::new(9208, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    hold_carrier(&mut game, "core_tap", 1);
+    game.world.get_mut::<Experience>(player).unwrap().level = tuning::TOOL_SLOT_PER_LEVEL - 1;
+
+    assert!(
+        game.install_tool(&ToolId("core_tap".to_string())).is_err(),
+        "one level short of the step, the loadout must still be full"
+    );
+
+    game.world.get_mut::<Experience>(player).unwrap().level = tuning::TOOL_SLOT_PER_LEVEL;
+
+    assert!(
+        game.install_tool(&ToolId("core_tap".to_string())).is_ok(),
+        "at the step itself, the newly opened slot must accept the held carrier"
+    );
+}
+
+#[test]
+fn uninstall_refuses_after_game_over_and_changes_nothing() {
+    let mut game = Game::new(9209, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.resource_mut::<GameOver>().reason = Some("done".to_string());
+    let before_tools = game.world.get::<Tools>(player).unwrap().0.clone();
+
+    let result = game.uninstall_tool(0);
+
+    assert!(result.is_err(), "a game-over run must refuse uninstalling");
+    assert_eq!(game.world.get::<Tools>(player).unwrap().0, before_tools);
+}
+
+#[test]
+fn uninstall_refuses_an_out_of_range_slot_and_changes_nothing() {
+    let mut game = Game::new(9210, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let before_tools = game.world.get::<Tools>(player).unwrap().0.clone();
+
+    let result = game.uninstall_tool(5);
+
+    assert!(result.is_err(), "an empty slot must refuse uninstalling");
+    assert_eq!(game.world.get::<Tools>(player).unwrap().0, before_tools);
+}
+
+#[test]
+fn uninstalling_frees_the_slot_and_grants_no_carrier_back() {
+    let mut game = Game::new(9211, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    assert_eq!(
+        game.world.get::<Tools>(player).unwrap().0,
+        vec![ToolId(tuning::STARTER_TOOL_ID.to_string())],
+        "test premise: the starter tool starts in the one slot"
+    );
+
+    game.uninstall_tool(0)
+        .expect("nothing here refuses pulling an installed tool");
+
+    assert!(
+        game.world.get::<Tools>(player).unwrap().0.is_empty(),
+        "the slot must be freed"
+    );
+    assert_eq!(
+        carrier_count(&game, &ToolId(tuning::STARTER_TOOL_ID.to_string())),
+        0,
+        "what was in the slot IS the tool — uninstalling must not hand a carrier back"
+    );
+}

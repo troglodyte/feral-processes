@@ -560,13 +560,13 @@ impl GearCopies {
 pub struct DownedPrograms(pub Vec<DownedProgram>);
 
 /// Player-only: tool ids installed in the player's tool slots, in slot
-/// order — position is what a later phase's extraction screen selects by,
-/// `Routines`' own reason for keeping its list ordered rather than keyed.
+/// order — position is what the extraction screen selects by, `Routines`'
+/// own reason for keeping its list ordered rather than keyed.
 ///
-/// Bounded by `tools::player_tool_slots(level)`, but nothing here enforces
-/// that cap yet: the only writer this phase has is the starter grant at
-/// `Game::new`, which fills exactly the base slot. `install_tool` (a later
-/// phase) is what has to respect the bound on every other write.
+/// Bounded by `tools::player_tool_slots(level)`. `Game::new`'s starter
+/// grant fills exactly the base slot; `Game::install_tool` is what enforces
+/// the bound on every write after that, `install_disk`'s own rule on the
+/// tool side of the acquisition chain.
 #[derive(Component, Default, Clone)]
 pub struct Tools(pub Vec<ToolId>);
 

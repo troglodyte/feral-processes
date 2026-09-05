@@ -1256,7 +1256,6 @@ impl Game {
                 ticks_total: r.ticks_total,
                 ticks_elapsed: r.ticks_elapsed,
                 proceeds: r.proceeds,
-                losses: r.losses,
             })
             .collect();
         game.world.insert_resource(crate::resources::Routes(routes));
@@ -1514,7 +1513,6 @@ impl Game {
                 ticks_total: r.ticks_total,
                 ticks_elapsed: r.ticks_elapsed,
                 proceeds: r.proceeds,
-                losses: r.losses.clone(),
             })
             .collect();
         // Gathered up front rather than queried per creature: the creature

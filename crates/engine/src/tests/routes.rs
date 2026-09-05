@@ -39,7 +39,6 @@ fn an_in_flight_route() -> Route {
         ticks_total: 400,
         ticks_elapsed: 150,
         proceeds: 0,
-        losses: vec!["Test Town skimmed a Wolf pack toll.".to_string()],
     }
 }
 
@@ -76,7 +75,6 @@ fn a_route_in_flight_survives_a_real_save_round_trip() {
     assert_eq!(after.ticks_total, before.ticks_total);
     assert_eq!(after.ticks_elapsed, before.ticks_elapsed);
     assert_eq!(after.proceeds, before.proceeds);
-    assert_eq!(after.losses, before.losses);
 }
 
 /// The whole feature is additive behind `#[serde(default)]` — no
@@ -498,7 +496,6 @@ fn a_legal_dispatch_spends_cargo_and_records_a_route() {
     assert_eq!(route.ticks_total, expected_ticks);
     assert_eq!(route.ticks_elapsed, 0);
     assert_eq!(route.proceeds, 0);
-    assert!(route.losses.is_empty());
 }
 
 /// A dispatch is *seen* to leave, the same as a sortie's squad —
@@ -677,6 +674,16 @@ fn a_hostile_town_beside_the_route_taxes_it_and_says_so_in_the_log() {
             crate::tuning::SETTLEMENT_HOSTILE_STANDING,
         );
 
+        let temperament = game
+            .world
+            .resource::<crate::resources::Settlements>()
+            .0
+            .get(&key)
+            .unwrap()
+            .def
+            .temperament;
+        let quote = game.route_quote(&[(item.clone(), 300)], temperament);
+
         game.dispatch_route(key, vec![(item, 300)], false)
             .expect("a legal dispatch");
         let total = game.world.resource::<crate::resources::Routes>().0[0].ticks_total;
@@ -684,8 +691,14 @@ fn a_hostile_town_beside_the_route_taxes_it_and_says_so_in_the_log() {
             game.run_routes();
         }
 
+        // `run_routes` has just landed the outbound leg (predation against
+        // the cargo, then the sale) — `route.proceeds` is what survived,
+        // so a hit reads directly as a shortfall against the untaxed quote.
+        // Predation is narrated only through the log as it happens, per
+        // Finding 3 of the 2026-09-05 whole-branch review — `Route` keeps
+        // no loss record of its own to read back.
         let route = &game.world.resource::<crate::resources::Routes>().0[0];
-        let taxed = !route.losses.is_empty();
+        let taxed = route.proceeds < quote;
         let logged = game
             .message_log(200)
             .iter()

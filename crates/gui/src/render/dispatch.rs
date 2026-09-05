@@ -357,7 +357,6 @@ mod tests {
             cargo: Vec::new(),
             ticks_left: 9_999,
             proceeds: 9_999,
-            losses: Vec::new(),
         }];
 
         let rows = dispatch_hub_rows(&sites, &destinations, &sortie_reports, &route_reports, 0);

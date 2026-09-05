@@ -78,7 +78,6 @@ pub struct RouteReport {
     pub cargo: Vec<(ItemId, u32)>,
     pub ticks_left: u64,
     pub proceeds: u32,
-    pub losses: Vec<String>,
 }
 
 /// The glyph and tint a caravan's cargo cue draws with — cosmetic, and
@@ -245,7 +244,6 @@ impl Game {
                 ticks_total: ticks,
                 ticks_elapsed: 0,
                 proceeds: 0,
-                losses: Vec::new(),
             });
         self.log_base(format!("A caravan departs for {name}."));
         Ok(())
@@ -293,7 +291,6 @@ impl Game {
                 cargo: r.cargo.clone(),
                 ticks_left: r.ticks_total.saturating_sub(r.ticks_elapsed),
                 proceeds: r.proceeds,
-                losses: r.losses.clone(),
             })
             .collect()
     }
@@ -412,8 +409,7 @@ impl Game {
                 route.cargo.clone(),
             )
         };
-        let losses =
-            self.roll_cargo_predation(anchor, destination_tile, destination, &mut surviving);
+        self.roll_cargo_predation(anchor, destination_tile, destination, &mut surviving);
         let proceeds = self.route_quote(&surviving, temperament);
         self.credit_trade_volume(destination, proceeds);
         let name = self.settlement_name(destination);
@@ -427,7 +423,6 @@ impl Game {
         route.proceeds = proceeds;
         route.leg = RouteLeg::Inbound;
         route.ticks_elapsed = 0;
-        route.losses = losses;
     }
 
     /// The inbound leg lands: predation against the proceeds, the deposit
@@ -444,8 +439,7 @@ impl Game {
                 route.proceeds,
             )
         };
-        let losses =
-            self.roll_proceeds_predation(anchor, destination_tile, destination, &mut proceeds);
+        self.roll_proceeds_predation(anchor, destination_tile, destination, &mut proceeds);
         let currency = self.trade_currency();
         let name = self.settlement_name(destination);
         let currency_name = self.item_name(&currency).to_string();
@@ -460,7 +454,6 @@ impl Game {
         // whole-branch review.
         self.return_material(&currency, proceeds);
         self.queue_cargo_walk(false);
-        self.world.resource_mut::<resources::Routes>().0[index].losses = losses;
 
         self.try_reload_route(index)
     }
@@ -536,8 +529,9 @@ impl Game {
     }
 
     /// Rolls every predator near this trip against `cargo` in place,
-    /// reducing each line by `ROUTE_PREDATION_LOSS` on a hit, and returns
-    /// one line of narration per hit — also logged as it happens.
+    /// reducing each line by `ROUTE_PREDATION_LOSS` on a hit — narrated to
+    /// the log as it happens, which is this feature's only record of a hit
+    /// (`Route` carries no loss log of its own; see the module doc).
     ///
     /// **The only place this feature draws `resources::GameRng`**, and only
     /// once nothing has filtered a predator out — an empty `predators` rolls
@@ -548,9 +542,8 @@ impl Game {
         destination: (i32, i32),
         destination_key: SettlementKey,
         cargo: &mut [(ItemId, u32)],
-    ) -> Vec<String> {
+    ) {
         let predators = self.route_predators(base, destination);
-        let mut losses = Vec::new();
         for predator in predators {
             let hit = self
                 .world
@@ -571,10 +564,8 @@ impl Game {
             let line = format!(
                 "{predator_name} raids the caravan bound for {dest_name}, seizing {taken_units} units of cargo."
             );
-            self.log_base_kind(MessageKind::Outcome, line.clone());
-            losses.push(line);
+            self.log_base_kind(MessageKind::Outcome, line);
         }
-        losses
     }
 
     /// The same roll against `proceeds` — `ROUTE_PREDATION_LOSS` of the
@@ -586,9 +577,8 @@ impl Game {
         destination: (i32, i32),
         destination_key: SettlementKey,
         proceeds: &mut u32,
-    ) -> Vec<String> {
+    ) {
         let predators = self.route_predators(base, destination);
-        let mut losses = Vec::new();
         let currency = self.trade_currency();
         let currency_name = self.item_name(&currency).to_string();
         for predator in predators {
@@ -607,9 +597,7 @@ impl Game {
             let line = format!(
                 "{predator_name} tolls the caravan home from {dest_name}, taking {take} {currency_name}."
             );
-            self.log_base_kind(MessageKind::Outcome, line.clone());
-            losses.push(line);
+            self.log_base_kind(MessageKind::Outcome, line);
         }
-        losses
     }
 }

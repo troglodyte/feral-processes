@@ -303,7 +303,6 @@ pub struct RouteSave {
     pub ticks_total: u64,
     pub ticks_elapsed: u64,
     pub proceeds: u32,
-    pub losses: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]

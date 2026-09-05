@@ -64,9 +64,6 @@ pub struct Route {
     /// Credits banked from the outbound sale, carried until the inbound leg
     /// deposits them into base stock.
     pub proceeds: u32,
-    /// What predation has taken from this trip so far, one line per hit —
-    /// the report's own words, not a number a screen has to phrase.
-    pub losses: Vec<String>,
 }
 
 /// Which of `candidates` — known settlements paired with their tile — lie

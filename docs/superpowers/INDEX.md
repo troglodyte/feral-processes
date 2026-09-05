@@ -24,7 +24,7 @@ spec resolves to a release tag.
 
 | Spec | State | Evidence |
 | --- | --- | --- |
-| `2026-09-04-settlements-design` | approved, **unbuilt** | six phases; `settlement` appears once in `crates/`, in a `tuning.rs` comment |
+| `2026-09-04-settlements-design` | **all six phases shipped** | Phase 6 (caravan routes) landed 2026-09-05 with `plans/2026-09-05-settlements-phase-6-routes.md`; sorties got their first UI with it |
 | `2026-09-02-combat-model-slice-2-design` | **built**, unplayed | a second swing for Strikers from level 8; `balance_sim` cannot gate it |
 | `2026-08-31-stack-wanderers-design` | approved, **unbuilt** | `FrameWanderers` exists nowhere in `crates/` |
 | `2026-08-24-rest-interruption-design` | never approved, **unbuilt** | `Game::rest_interrupted` does not exist |

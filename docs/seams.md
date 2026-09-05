@@ -10990,3 +10990,94 @@ run past a 600px popup and the wrap bounds a *row*, not the page. What is held
 instead is the delta: the board spends the contracts screen's chrome plus
 exactly its three-row header, so a fourth header row added later has to fail
 somewhere.
+
+### A route is one record with a `standing` flag, and a one-off is the flag turned off
+
+`routes::Route` (`crates/engine/src/routes.rs:42`) carries a manifest, a
+destination, a leg, a countdown, and a `standing: bool`. There is no
+`OneOffRoute` and no `RouteKind`.
+
+Two record types were the obvious shape and were rejected for the reason
+work orders had already settled: *a work order stores what was asked for,
+never how it will be done* — an item, a quantity and a `standing` flag. A
+one-off shipment and a standing route differ in exactly one respect, which
+is what happens at the moment the trip gets home. Everything before that
+moment — the refusal ladder, the manifest, the countdown, the sale at the
+far end, predation, the save form, the row on the hub — is identical. Two
+types would have duplicated all of it to express one branch, and the branch
+would then have had to be re-expressed at every reader anyway, since the hub
+lists both kinds in one column.
+
+The flag also makes severing trivial and total: `Game::sever_route`
+(`game/route.rs:261`) clears `standing` and touches nothing else. The trip in
+flight keeps its cargo, keeps its countdown, arrives, sells, and pays. There
+is no refund path, no cargo teleport and no half-delivered state, because
+"severed" is not a state a trip can be in — it is a property of whether a
+*next* trip is taken. A `Severed` leg variant was considered and is what
+would have needed all three of those.
+
+### A route and a squad leave through the same door, which is why the reach check has one name
+
+`Game::dispatch_reach` (`game/sortie.rs:76`) → `DispatchReach`
+`{NoRelay, OffBase, AtRelay}` gates both features, and both gate on
+`StructureDef::dispatches_sorties`.
+
+The alternative was a second structure flag — `runs_routes` — and a second
+building for a modder to author. It was rejected on content grounds first:
+the Relay is the base's one "send something away" building, and splitting
+cargo off it would have meant two structures, two reach functions, two rows
+on the base menu and two screens, to express one idea. Reusing the flag also
+keeps the older seam intact rather than weakening it: *a Relay is identified
+by `StructureDef::dispatches_sorties`, not by its id*, so a mod's second
+dispatch structure gets routes for free, exactly as it gets sorties.
+
+The rename `SortieReach` → `DispatchReach` was the cost, and it is a rename
+worth having done rather than left: a type named for one of its two consumers
+is a comment that will be wrong forever. It is compiler-checked, so unlike the
+two load-bearing renames recorded elsewhere in this file, nothing could have
+silently half-converted.
+
+### `Game::route_quote` is the one derivation the picker and the sale share
+
+`Game::route_quote(cargo, temperament)` (`game/route.rs:106`) prices a
+manifest at a town. The cargo picker's live preview calls it through
+`Game::route_manifest_quote` (`:118`), which resolves the destination's own
+`Temperament` so no screen has to hold one; the sale at the far end of the
+outbound leg calls it again.
+
+This is `Game::extraction_yield`'s argument reaching a second feature, and
+the repo's own doc-comment rule: *a doc comment claiming to mirror other code
+must be a call, not a copy.* A quoted figure and a granted figure that can
+differ is not a rounding bug the player forgives — it is the feature lying
+about what it is worth, on a screen whose entire job is to answer that
+question before they commit stock they cannot get back. The formula is
+short enough that two copies would have compiled, passed review, and drifted
+the first time a temperament multiplier moved.
+
+### Predation is a named query plus pure geometry, and neither half touches `Game`
+
+`Standing::preys_on_routes` (`settlements/relations.rs`) answers at the
+`Hostile` band alone; `routes::settlements_near_route`
+(`crates/engine/src/routes.rs:88`) answers which known towns lie within
+`ROUTE_PREDATION_RADIUS` of the *segment* from the base anchor to the
+destination — point-to-segment distance, no `&Game`, no RNG, no `%`.
+
+The query half is the shape the relations module already committed to when
+it shipped `refuses_service`: *a consequence of standing is a named query on
+the band, never a table of effects.* Route predation was named in that
+module's doc comment as the next arm before it existed, and it landed as one
+— an exhaustive match with its own census, not a new mechanism.
+
+The geometry half is separate and pure so it can be tested against a town
+beside the line, a town past either end and a town at the midpoint without
+standing up a world. Radius-from-the-destination was the cheap alternative
+and is wrong in the way that matters: it makes a town you have to walk *past*
+irrelevant, which is exactly the town a player would expect to be the
+problem.
+
+The RNG discipline is the third part: predation is the only thing in
+`Game::run_routes` (`game/route.rs:348`) that may draw from
+`resources::GameRng`, and a test asserts the tick draws nothing when nothing
+preys. A route that quietly advanced the seeded stream every tick would have
+made every other seeded test in the suite depend on whether a route happened
+to be in flight.

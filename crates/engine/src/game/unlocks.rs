@@ -380,6 +380,26 @@ impl Game {
                 self.log(format!("You learn the {name} routine."));
             }
         }
+        // `unlocks_tools`' own version of the loop above — a tool mirrors a
+        // routine rung for rung (spec decision 6), including the
+        // fresh-insert check: a second node naming an already-known tool
+        // must not repeat the log line.
+        for tool in &def.unlocks_tools {
+            let name = self
+                .world
+                .resource::<ToolDb>()
+                .get(tool.as_str())
+                .map(|t| t.name.clone())
+                .unwrap_or_else(|| tool.as_str().to_string());
+            let fresh = self
+                .world
+                .resource_mut::<KnownTools>()
+                .0
+                .insert(tool.clone());
+            if fresh {
+                self.log(format!("You learn to forge the {name}."));
+            }
+        }
         Ok(())
     }
 }

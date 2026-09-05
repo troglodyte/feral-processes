@@ -240,6 +240,10 @@ impl Game {
         world.insert_resource(KnownRoutines(
             [abilities::DECOMPILE_ABILITY_ID.to_string()].into(),
         ));
+        // Empty, not the starter tool: the starter is granted straight into
+        // the slot below, and knowledge is not what put it there — see
+        // `resources::KnownTools`'s doc.
+        world.init_resource::<KnownTools>();
         world.insert_resource(BuybackLedger::default());
         world.insert_resource(crate::resources::CaravanMemory::default());
         world.insert_resource(ZoneLevel::default());
@@ -504,6 +508,7 @@ impl Game {
         world.insert_resource(WieldedProgram::default());
         world.insert_resource(Research(data.researched.into_iter().collect()));
         world.insert_resource(KnownRoutines(data.known_routines.into_iter().collect()));
+        world.insert_resource(KnownTools(data.known_tools.into_iter().collect()));
         world.insert_resource(BuybackLedger({
             // The pre-0.8.9 shelves are drained into the current shape here
             // and read nowhere else, exactly as `fused_gear` is above.
@@ -1972,6 +1977,13 @@ impl Game {
                 .iter()
                 .cloned()
                 .collect(),
+            known_tools: self
+                .world
+                .resource::<KnownTools>()
+                .0
+                .iter()
+                .cloned()
+                .collect(),
             link_sites: {
                 let mut query = self.world.query_filtered::<&Position, With<SurfaceLink>>();
                 query.iter(&self.world).map(|p| (p.x, p.y)).collect()
@@ -2241,8 +2253,12 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     species.insert(crate::tests::support::generic_species());
     let (structures, structure_warnings) = StructureDb::load_dir(&assets_dir.join("structures"))?;
     warnings.extend(structure_warnings);
-    let (research, research_warnings) =
-        ResearchDb::load_dir(&assets_dir.join("research"), &structures, &abilities)?;
+    let (research, research_warnings) = ResearchDb::load_dir(
+        &assets_dir.join("research"),
+        &structures,
+        &abilities,
+        &tools,
+    )?;
     warnings.extend(research_warnings);
     let (mut items, item_warnings) = ItemDb::load_dir(&assets_dir.join("items"), &abilities)?;
     warnings.extend(item_warnings);

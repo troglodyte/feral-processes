@@ -103,9 +103,9 @@ use research::{ResearchDb, ResearchDef};
 pub use research::{ResearchId, ResearchRecipe};
 use resources::{
     AnchorEntity, BattleRewards, BattleState, BattleTimeline, BuybackLedger, ClosingRoster,
-    CurrentStack, EffectQueue, GameClock, GameOver, GameRng, KnownRoutines, Locale, MessageLog,
-    Party, PlayerEntity, Research, RosterFrame, StackMemory, TransitQueue, WieldedProgram, XpTally,
-    ZoneLevel, ZoneSpawnPoint,
+    CurrentStack, EffectQueue, GameClock, GameOver, GameRng, KnownRoutines, KnownTools, Locale,
+    MessageLog, Party, PlayerEntity, Research, RosterFrame, StackMemory, TransitQueue,
+    WieldedProgram, XpTally, ZoneLevel, ZoneSpawnPoint,
 };
 pub use resources::{
     DifficultyMode, EffectKind, HandCraftProgress, LabourDemand, LogEntry, LogLine,

@@ -912,3 +912,146 @@ fn extraction_options_preview_matches_what_extract_program_actually_grants() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Phase 2, task 1: `ResearchDef::unlocks_tools` and `resources::KnownTools`.
+// ---------------------------------------------------------------------------
+
+/// Builds a standalone `ResearchDb` from `nodes`, each `(id, unlocked
+/// tools)`, every node costing 1 Research Data with no prereqs. Loaded
+/// against the real shipped structures/abilities/tools so the tool ids
+/// themselves validate against real content, the same shape `research.rs`'s
+/// own `load` test fixture takes. Swapped onto a `Game` wholesale — no
+/// shipped research node names a tool yet (that is task 4's content), so
+/// there is no other way to exercise `unlock_research`'s tool-teaching loop
+/// in isolation.
+fn research_db_with_tool_unlocks(tag: &str, nodes: &[(&str, &[&str])]) -> ResearchDb {
+    let dir = std::env::temp_dir().join(format!(
+        "feral_extraction_research_{}_{tag}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for (node_id, tools) in nodes {
+        let names: Vec<String> = tools.iter().map(|t| format!("\"{t}\"")).collect();
+        let body = format!(
+            r#"(
+                id: "{node_id}",
+                name: "Test Node",
+                description: "d",
+                cost: 1,
+                unlocks_tools: [{}],
+            )"#,
+            names.join(", ")
+        );
+        std::fs::write(dir.join(format!("{node_id}.ron")), body).unwrap();
+    }
+    let assets = test_assets_dir();
+    let (structures, _) = StructureDb::load_dir(&assets.join("structures")).unwrap();
+    let (abilities, _) = AbilityDb::load_dir(&assets.join("abilities")).unwrap();
+    let (tool_db, _) = ToolDb::load_dir(&assets.join("tools")).unwrap();
+    let (db, warnings) = ResearchDb::load_dir(&dir, &structures, &abilities, &tool_db).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        warnings.is_empty(),
+        "fixture nodes must load clean: {warnings:?}"
+    );
+    db
+}
+
+/// Every line the log holds, repeats expanded and filtered to `needle` —
+/// `message_history` condenses an unbroken run into one row with a count,
+/// so a bare entry count would read a line said twice as a line said once.
+fn log_count(game: &Game, needle: &str) -> usize {
+    game.message_history(500)
+        .into_iter()
+        .filter(|row| row.text.contains(needle))
+        .map(|row| row.repeats.max(1))
+        .sum()
+}
+
+#[test]
+fn unlocking_a_node_teaches_its_tools_and_logs_once() {
+    let mut game = Game::new(9001, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(research_db_with_tool_unlocks(
+        "teach",
+        &[("test_node", &["core_tap"])],
+    ));
+    grant_research_data(&mut game, 1);
+
+    assert!(
+        !game.knows_tool(&ToolId("core_tap".to_string())),
+        "the fixture is vacuous unless the tool starts unknown"
+    );
+
+    game.unlock_research("test_node").unwrap();
+
+    assert!(
+        game.knows_tool(&ToolId("core_tap".to_string())),
+        "unlocking the node must teach the tool it names"
+    );
+    assert_eq!(
+        log_count(&game, "Core Tap"),
+        1,
+        "learning a tool must log exactly once"
+    );
+}
+
+#[test]
+fn a_tool_taught_by_two_nodes_logs_only_the_first_time() {
+    // The ability arm's own rule (`unlock_research`'s fresh-insert check):
+    // knowledge is a set, and re-teaching an already-known tool from a
+    // second node must not repeat the log line. Both nodes ship in the one
+    // `ResearchDb`, so the log is checked once at the end rather than after
+    // each unlock — the point under test is the second unlock's silence.
+    let mut game = Game::new(9002, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(research_db_with_tool_unlocks(
+        "double",
+        &[
+            ("test_node_a", &["core_tap"]),
+            ("test_node_b", &["core_tap"]),
+        ],
+    ));
+    grant_research_data(&mut game, 2);
+
+    game.unlock_research("test_node_a").unwrap();
+    game.unlock_research("test_node_b").unwrap();
+
+    assert!(game.knows_tool(&ToolId("core_tap".to_string())));
+    assert_eq!(
+        log_count(&game, "Core Tap"),
+        1,
+        "a tool already known must not log a second time"
+    );
+}
+
+#[test]
+fn known_tools_survive_a_save_load_round_trip() {
+    // Save -> load, not a RON round trip: `SaveData::known_tools` is
+    // `#[serde(default)]`, and only `Game::save`/`Game::load` exercise the
+    // path that would silently drop a skipped field.
+    let mut game = Game::new(9003, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.resource_mut::<KnownTools>().0 = [
+        ToolId("salvage_clamp".to_string()),
+        ToolId("core_tap".to_string()),
+    ]
+    .into();
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_known_tools_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        loaded.world.resource::<KnownTools>().0,
+        [
+            ToolId("salvage_clamp".to_string()),
+            ToolId("core_tap".to_string())
+        ]
+        .into(),
+        "a two-tool known set must come back exactly as saved"
+    );
+}

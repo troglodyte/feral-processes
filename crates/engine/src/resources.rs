@@ -80,6 +80,17 @@ pub struct Research(pub std::collections::HashSet<crate::research::ResearchId>);
 #[derive(Resource, Default)]
 pub struct KnownRoutines(pub BTreeSet<crate::abilities::AbilityId>);
 
+/// Which tools the player has researched and may forge — `KnownRoutines`'
+/// own rung of the tool acquisition chain (spec decision 6). Written by
+/// exactly one thing, `Game::unlock_research` (a node's `unlocks_tools`).
+/// Knowledge is permanent; forging spends materials, never the knowledge.
+///
+/// A `BTreeSet` for `KnownRoutines`'s own reason: the save writes this set
+/// out, and a `HashSet`'s iteration order would make the encoded bytes
+/// differ run to run.
+#[derive(Resource, Default)]
+pub struct KnownTools(pub BTreeSet<crate::tools::ToolId>);
+
 /// How many lines the log holds before dropping its oldest.
 ///
 /// Public because it is the whole of the history screen's reach: asking

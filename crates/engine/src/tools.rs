@@ -1,10 +1,10 @@
-//! The extraction tool catalogue, the player's tool slots, and the starter
-//! grant — see
+//! The extraction tool catalogue, the player's tool slots, the starter
+//! grant, and `knows_tool` — see
 //! `docs/superpowers/specs/2026-09-04-program-extraction-design.md`, section
-//! 2. Still nothing *consumes* a `ToolDef`: `Game::extract_program` is a
-//! later phase, and so is acquisition past the starter tool
-//! (`unlocks_tools`, `KnownTools`, `forge_tool`, `install_tool`) — this
-//! phase only gets a tool into a slot the one way `Game::new` does it.
+//! 2. The act itself, `Game::extract_program`, lives in
+//! `game/extraction.rs`; knowing a tool (`ResearchDef::unlocks_tools`,
+//! `resources::KnownTools`) is not yet enough to forge or install one —
+//! `forge_tool` and `install_tool` are this phase's remaining tasks.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -75,9 +75,9 @@ pub struct ToolDef {
     /// Not itself a rate: two tiers of the same category do not mean one is
     /// simply faster, they mean one reaches deeper into the same pool.
     pub tier: u32,
-    /// Game ticks `Game::extract_program` (a later phase) spends on a use —
-    /// `self.tick()`'s argument, the same currency `AbilityDef::power_cost`
-    /// is to a routine but paid in time rather than Power.
+    /// Game ticks `Game::extract_program` spends on a use — `self.tick()`'s
+    /// argument, the same currency `AbilityDef::power_cost` is to a
+    /// routine but paid in time rather than Power.
     pub ticks: u64,
 }
 
@@ -201,6 +201,16 @@ impl Game {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    /// Whether the player has researched `id` — `knows_routine`'s analog.
+    /// Every later gate (`forge_tool`) calls this rather than reaching into
+    /// `KnownTools` itself.
+    pub fn knows_tool(&self, id: &ToolId) -> bool {
+        self.world
+            .resource::<crate::resources::KnownTools>()
+            .0
+            .contains(id)
     }
 }
 

@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::items::ItemId;
 use crate::structures::{StructureDb, StructureId};
+use crate::tools::{ToolDb, ToolId};
 
 pub type ResearchId = String;
 
@@ -63,6 +64,13 @@ pub struct ResearchDef {
     /// themselves are data in `assets/abilities/`.
     #[serde(default)]
     pub unlocks_abilities: Vec<crate::abilities::AbilityId>,
+    /// Tools this node hands over the knowledge to forge, as tool ids added
+    /// to `resources::KnownTools` (see `Game::unlock_research`) —
+    /// `unlocks_abilities`'s own shape, mirrored rung for rung the way a
+    /// tool mirrors a routine throughout (spec decision 6). The tools
+    /// themselves are data in `assets/tools/`.
+    #[serde(default)]
+    pub unlocks_tools: Vec<ToolId>,
 }
 
 #[derive(Resource, Default)]
@@ -79,14 +87,16 @@ impl ResearchDb {
     /// to a fixpoint. Malformed files are skipped with a warning rather than
     /// aborting the load, so one bad mod file can't crash startup.
     ///
-    /// An unknown id in `unlocks_abilities` is treated more gently than an
-    /// unknown structure: the id is dropped and the node kept, because a node
-    /// also unlocks structures and recipes, and killing it over one bad
-    /// ability id would silently remove content the modder never touched.
+    /// An unknown id in `unlocks_abilities` or `unlocks_tools` is treated
+    /// more gently than an unknown structure: the id is dropped and the
+    /// node kept, because a node also unlocks structures and recipes, and
+    /// killing it over one bad ability or tool id would silently remove
+    /// content the modder never touched.
     pub fn load_dir(
         dir: &Path,
         structures: &StructureDb,
         abilities: &crate::abilities::AbilityDb,
+        tools: &ToolDb,
     ) -> std::io::Result<(Self, Vec<String>)> {
         let mut db = ResearchDb::default();
         let mut warnings = Vec::new();
@@ -107,6 +117,16 @@ impl ResearchDb {
                         if !known {
                             warnings.push(format!(
                                 "research {id:?}: unknown ability {ability:?} — dropped"
+                            ));
+                        }
+                        known
+                    });
+                    def.unlocks_tools.retain(|tool| {
+                        let known = tools.get(tool.as_str()).is_some();
+                        if !known {
+                            warnings.push(format!(
+                                "research {id:?}: unknown tool {:?} — dropped",
+                                tool.as_str()
                             ));
                         }
                         known
@@ -221,7 +241,8 @@ mod tests {
         let (structures, _) = StructureDb::load_dir(&assets.join("structures")).unwrap();
         let (abilities, _) =
             crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
-        let result = ResearchDb::load_dir(&dir, &structures, &abilities).unwrap();
+        let (tools, _) = ToolDb::load_dir(&assets.join("tools")).unwrap();
+        let result = ResearchDb::load_dir(&dir, &structures, &abilities, &tools).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
         result
     }
@@ -299,6 +320,34 @@ mod tests {
         assert_eq!(
             def.unlocks_abilities,
             vec!["priority_boost".to_string()],
+            "the unknown id is dropped and the known one kept"
+        );
+        assert_eq!(
+            def.unlocks_structures,
+            vec!["compiler".to_string()],
+            "the node's other unlocks are untouched"
+        );
+        assert_eq!(warnings.len(), 1, "the dropped id explains itself");
+    }
+
+    /// `unlocks_tools`' own version of the test above — a tool mirrors a
+    /// routine rung for rung (spec decision 6), and that includes how
+    /// gently a bad id in it is treated.
+    #[test]
+    fn an_unknown_tool_id_is_dropped_but_the_node_survives() {
+        let node = r#"(
+            id: "automation",
+            name: "Automation",
+            description: "Self-running compile jobs.",
+            cost: 8,
+            unlocks_structures: ["compiler"],
+            unlocks_tools: ["salvage_clamp", "no_such_tool"],
+        )"#;
+        let (db, warnings) = load("unknown_tool", &[("automation", node)]);
+        let def = db.get("automation").expect("the node itself must survive");
+        assert_eq!(
+            def.unlocks_tools,
+            vec![ToolId("salvage_clamp".to_string())],
             "the unknown id is dropped and the known one kept"
         );
         assert_eq!(
@@ -394,7 +443,9 @@ mod tests {
         let (structures, _) = StructureDb::load_dir(&assets.join("structures")).unwrap();
         let (abilities, _) =
             crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
-        let (db, warnings) = ResearchDb::load_dir(&research_dir, &structures, &abilities).unwrap();
+        let (tools, _) = ToolDb::load_dir(&assets.join("tools")).unwrap();
+        let (db, warnings) =
+            ResearchDb::load_dir(&research_dir, &structures, &abilities, &tools).unwrap();
         assert!(
             warnings.is_empty(),
             "the shipped tree must not warn: {warnings:?}"
@@ -487,8 +538,10 @@ mod tests {
         let (structures, _) = StructureDb::load_dir(&assets.join("structures")).unwrap();
         let (abilities, _) =
             crate::abilities::AbilityDb::load_dir(&assets.join("abilities")).unwrap();
+        let (tools, _) = ToolDb::load_dir(&assets.join("tools")).unwrap();
         let (db, _) =
-            ResearchDb::load_dir(&assets.join("research"), &structures, &abilities).unwrap();
+            ResearchDb::load_dir(&assets.join("research"), &structures, &abilities, &tools)
+                .unwrap();
         let path = db.recommended_ids();
         assert!(
             !path.is_empty(),

@@ -58,6 +58,18 @@ pub(super) fn settlement_page_rows(view: &SettlementView) -> Vec<Row> {
         text_row(format!("They regard you as {}.", view.standing)),
         text_row(""),
     ];
+    // What this town is currently worth, one row per aid — built in the
+    // engine (`Game::settlement_aid_lines`) rather than here, because a
+    // read-only page's rows are the engine's and a phrase assembled in a
+    // renderer is a transform in the wrong crate. An empty list draws
+    // nothing at all rather than a row saying "no": the page is about what
+    // this place is worth, not a checklist.
+    if !view.aid.is_empty() {
+        for line in &view.aid {
+            rows.push(text_row(line.clone()));
+        }
+        rows.push(text_row(""));
+    }
     // `wrap_text`'s pattern from `stack::cell_describe_rows` and every other
     // prose-on-screen page in this file: `draw_row` clips a row vertically
     // and never horizontally, so an author's blurb — free text, unbounded —
@@ -97,6 +109,7 @@ mod tests {
             temperament: "Open",
             blurb: "Programs come here when their owners do not come back for them.".to_string(),
             standing: "Neutral",
+            aid: Vec::new(),
         };
         let rows = settlement_page_rows(&view);
         let joined = rows
@@ -136,6 +149,7 @@ mod tests {
             temperament: "Open",
             blurb: "Programs come here when their owners do not come back for them.".to_string(),
             standing: "Neutral",
+            aid: Vec::new(),
         };
         let rows = settlement_page_rows(&view);
         let Row::TextColored(text, color) = &rows[0] else {
@@ -178,7 +192,33 @@ mod tests {
             // The longest label the band ladder can put on the page — the
             // census measures the worst case, not the common one.
             standing: "Neutral",
+            // Every aid line at once, which is what an Allied town with a
+            // Relay standing actually draws. The strings are the engine's,
+            // repeated here rather than derived because the census has to
+            // measure the page and not build a `Game` to do it — and
+            // `every_aid_line_the_engine_can_write_is_measured` is what
+            // holds the two lists together.
+            aid: aid_lines_worst_case(),
         })
+    }
+
+    /// The aid rows at their worst case: **every** sentence the engine can
+    /// write, all at once.
+    ///
+    /// Read off `settlement_relations::AID_LINES` rather than restated, so
+    /// a reworded sentence cannot slip past the width gate below — a gui
+    /// test cannot build a `Game` to ask what the live lines are, because
+    /// `Game::world` is private, so a shared constant is what holds the two
+    /// sides together.
+    ///
+    /// More rows than any single town draws (a town cannot both offer a
+    /// gift and be waiting to), which is the right way to be wrong: the
+    /// page is measured with room to spare rather than exactly.
+    fn aid_lines_worst_case() -> Vec<String> {
+        feral_processes_engine::AID_LINES
+            .iter()
+            .map(|line| line.to_string())
+            .collect()
     }
 
     /// A text-row popup page has no scroll, so height is a layout

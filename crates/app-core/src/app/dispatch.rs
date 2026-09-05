@@ -303,7 +303,7 @@ impl App {
         let cargo = route_cargo_manifest(&self.route_cargo_amounts, &stock);
         let game = self.game.as_ref()?;
         let quote = game.route_manifest_quote(destination, &cargo).unwrap_or(0);
-        let destination_name = game.settlement_report(destination).name;
+        let destination_name = game.settlement_name(destination);
         Some(RouteCargoBasket {
             destination,
             destination_name,

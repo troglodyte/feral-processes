@@ -84,6 +84,12 @@ pub use game::creation::{CharacterChoice, CreationCatalogue, DEFAULT_PLAYER_SPRI
 pub use game::environment::TerrainRow;
 pub use game::party::ProgramRole;
 pub use game::route::{RouteDestination, RouteRefusal, RouteReport};
+/// Every sentence the town page's aid rows can carry — exported so the
+/// renderer's width and height censuses measure the real strings rather than
+/// a parallel copy of them. See `game::settlement_relations::AID_GARRISON`.
+pub use game::settlement_relations::{
+    AID_GARRISON, AID_GIFT_LATER, AID_GIFT_READY, AID_GIFT_SOON, AID_LINES, AID_RELAY,
+};
 pub use game::sortie::{DispatchReach, SortieRefusal};
 pub use game::stack_view::ExamineDir;
 pub use icon::{

@@ -1887,6 +1887,10 @@ pub struct SettlementView {
     /// How the town regards the party — `Standing::label()`, a call onto
     /// the band's own enum for `kind`/`specialty`/`temperament`'s reason.
     pub standing: &'static str,
+    /// One sentence per aid this town currently offers, already in the
+    /// player's words — see `Game::settlement_aid_lines`. Empty when it
+    /// offers none, and an empty list draws no rows and no header.
+    pub aid: Vec<String>,
 }
 
 pub enum ManifestSubject {

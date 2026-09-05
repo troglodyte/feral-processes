@@ -896,3 +896,132 @@ fn a_town_with_nowhere_to_stand_beside_it_refuses_and_moves_nobody() {
     assert!(game.travel_to_settlement(key).is_err());
     assert_travel_spent_nothing(&game, was, tick, "nowhere to land");
 }
+
+// ---------------------------------------------------------------------------
+// What the town page says the town is worth
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_neutral_town_offers_nothing_and_the_page_says_nothing() {
+    let mut game = game();
+    let key = settlement_east_of_player(&mut game);
+    assert!(game.settlement_report(key).aid.is_empty());
+}
+
+#[test]
+fn a_warm_town_offers_its_garrison_alone() {
+    let mut game = game();
+    let key = settlement_east_of_player(&mut game);
+    set_standing(&mut game, key, SETTLEMENT_WARM_STANDING);
+    assert_eq!(game.settlement_report(key).aid, vec![AID_GARRISON]);
+}
+
+#[test]
+fn an_allied_town_with_a_relay_offers_all_three() {
+    let mut game = game();
+    super::routes::deploy_relay(&mut game);
+    let (ax, ay) = game.anchor_position().unwrap();
+    let key = SettlementKey { rx: 4, ry: 0 };
+    place_settlement(&mut game, key, ax + 3, ay);
+    set_standing(&mut game, key, SETTLEMENT_ALLIED_STANDING);
+
+    assert_eq!(
+        game.settlement_report(key).aid,
+        vec![AID_GARRISON, AID_GIFT_READY, AID_RELAY]
+    );
+}
+
+/// The travel line is a promise the door has to keep: without a Relay of
+/// your own there is no trip, however much the town likes you.
+#[test]
+fn the_relay_line_is_absent_until_a_relay_stands() {
+    let mut game = game();
+    let key = settlement_east_of_player(&mut game);
+    set_standing(&mut game, key, SETTLEMENT_ALLIED_STANDING);
+    let aid = game.settlement_report(key).aid;
+    assert!(
+        !aid.contains(&AID_RELAY.to_string()),
+        "the page offered a trip with no Relay standing: {aid:?}"
+    );
+}
+
+/// After a gift the page must say so, and in words rather than in ticks.
+#[test]
+fn a_spent_gift_reads_as_a_wait_and_never_as_a_number() {
+    let mut game = game();
+    let key = allied_neighbour(&mut game);
+    game.request_program_gift(key).expect("the gift");
+
+    let aid = game.settlement_report(key).aid;
+    assert!(aid.contains(&AID_GIFT_LATER.to_string()), "{aid:?}");
+    for line in &aid {
+        assert!(
+            !line.chars().any(|c| c.is_ascii_digit()),
+            "an aid line quotes a figure the player cannot read: {line}"
+        );
+    }
+}
+
+/// The census `AID_LINES` exists for: every sentence the derivation can
+/// actually emit is in the array the renderer measures. A line missing from
+/// it is a line nothing measures, and `draw_row` clips vertically only — so
+/// it would be lost off the right edge in silence.
+#[test]
+fn every_aid_line_the_engine_emits_is_one_the_census_measures() {
+    let mut game = game();
+    super::routes::deploy_relay(&mut game);
+    // Out of base space and standing on the anchor, with the town next to
+    // it: the gift needs the party within a tile of the town, and the relay
+    // line needs a Relay standing — this is the one spot both are true.
+    stand_in_base_at(&mut game, 0, 0);
+    game.leave_base().expect("step out onto the anchor");
+    let (ax, ay) = game.anchor_position().unwrap();
+    let key = SettlementKey { rx: 4, ry: 0 };
+    // `(ax + 1, ay)` would be the Relay's own numeric coordinates, and
+    // `place_settlement` despawns by coordinate without asking which space
+    // the entity is in — base space and the surface share numbers, which is
+    // the coincidence `move_player` documents at length. Placing the town
+    // one tile north instead keeps the Relay standing.
+    place_settlement(&mut game, key, ax, ay + 1);
+    assert!(
+        game.dispatch_reach() != crate::DispatchReach::NoRelay,
+        "the fixture despawned its own Relay"
+    );
+
+    let mut seen: Vec<String> = Vec::new();
+    for standing in [
+        SETTLEMENT_HOSTILE_STANDING,
+        SETTLEMENT_COLD_STANDING,
+        0,
+        SETTLEMENT_WARM_STANDING,
+        SETTLEMENT_ALLIED_STANDING,
+    ] {
+        set_standing(&mut game, key, standing);
+        seen.extend(game.settlement_report(key).aid);
+    }
+    // And the two the cooldown puts on the page.
+    set_standing(&mut game, key, SETTLEMENT_ALLIED_STANDING);
+    game.request_program_gift(key).expect("the gift");
+    seen.extend(game.settlement_report(key).aid);
+    game.world.resource_mut::<GameClock>().tick += SETTLEMENT_GIFT_COOLDOWN_TICKS * 3 / 4;
+    seen.extend(game.settlement_report(key).aid);
+
+    for line in &seen {
+        assert!(
+            AID_LINES.contains(&line.as_str()),
+            "the derivation emits a line AID_LINES does not carry:\n{line}"
+        );
+    }
+    for wanted in [
+        AID_GARRISON,
+        AID_GIFT_READY,
+        AID_GIFT_SOON,
+        AID_GIFT_LATER,
+        AID_RELAY,
+    ] {
+        assert!(
+            seen.iter().any(|l| l == wanted),
+            "no state in this walk produced {wanted:?} — it is measured but unreachable"
+        );
+    }
+}

@@ -92,6 +92,7 @@ fn register_a_known_settlement(app: &mut App, key: SettlementKey, tile: (i32, i3
         feral_processes_engine::settlements::relations::Relation {
             standing: feral_processes_engine::tuning::SETTLEMENT_WARM_STANDING,
             trade_credits: 0,
+            ..Default::default()
         },
     );
     save::save_to_file(&path, &data).unwrap();

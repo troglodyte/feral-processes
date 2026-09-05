@@ -105,7 +105,7 @@ impl Game {
     /// The town's own name, for a line about it — falling back to a generic
     /// rather than refusing to speak, since `adjust_standing` is reachable
     /// with a key no town has been materialized for.
-    pub(crate) fn settlement_name(&self, key: SettlementKey) -> String {
+    pub fn settlement_name(&self, key: SettlementKey) -> String {
         self.world
             .resource::<resources::Settlements>()
             .0
@@ -436,5 +436,103 @@ impl Game {
         for _ in 0..ticks {
             self.tick();
         }
+    }
+
+    /// What this town is currently worth to the party, one sentence per aid
+    /// it actually offers — the town screen's aid rows.
+    ///
+    /// **Finished sentences rather than figures**, for two reasons that both
+    /// bind. A read-only screen's rows are owned by the engine and drawn by
+    /// gui, so a phrase built in the renderer is a transform in the wrong
+    /// crate. And this game has never shown the player a tick: a cooldown
+    /// quoted as a number is a number nobody can read, so the wait is banded
+    /// the way `game::memories::age_phrase` bands a memory's age.
+    ///
+    /// Every sentence is a **call** to the door that will honour it, so the
+    /// page cannot offer something the door then refuses — including the
+    /// travel line, which asks for the party's own Relay and not merely the
+    /// town's willingness.
+    pub(crate) fn settlement_aid_lines(&mut self, key: SettlementKey) -> Vec<String> {
+        let mut lines = Vec::new();
+        let band = self.standing_band(key);
+
+        let garrisons = band.garrison_defense() > 0
+            && match (self.anchor_position(), self.settlement_tile(key)) {
+                (Some((ax, ay)), Some((tx, ty))) => {
+                    (tx - ax).abs().max((ty - ay).abs())
+                        <= crate::tuning::SETTLEMENT_GARRISON_RADIUS
+                }
+                _ => false,
+            };
+        if garrisons {
+            lines.push(AID_GARRISON.to_string());
+        }
+
+        match self.gift_available_in(key) {
+            None => {}
+            Some(0) => lines.push(AID_GIFT_READY.to_string()),
+            Some(remaining) => lines.push(
+                wait_line(remaining, crate::tuning::SETTLEMENT_GIFT_COOLDOWN_TICKS).to_string(),
+            ),
+        }
+
+        if band.hosts_a_relay() && self.has_relay() {
+            lines.push(AID_RELAY.to_string());
+        }
+        lines
+    }
+
+    fn settlement_tile(&self, key: SettlementKey) -> Option<(i32, i32)> {
+        self.world
+            .resource::<resources::Settlements>()
+            .0
+            .get(&key)
+            .map(|known| known.tile)
+    }
+}
+
+/// Every sentence the aid rows can write, and the whole of the vocabulary.
+///
+/// **Constants rather than inline literals**, because the town page has no
+/// scroll: its width and height censuses live in `crates/gui` and have to
+/// measure the *worst case*, and a gui test cannot build a `Game` to ask —
+/// `Game::world` is private, which is the architectural rule. Two parallel
+/// lists would drift the moment a sentence was reworded, and the drift would
+/// show up as a line silently drawn past the right edge, since `draw_row`
+/// clips vertically and never horizontally. So the strings are exported and
+/// `AID_LINES` is the census both sides read.
+pub const AID_GARRISON: &str = "They keep a detachment near your base.";
+/// See `AID_GARRISON`.
+pub const AID_GIFT_READY: &str = "They will spare you a program for the asking.";
+/// See `AID_GARRISON`.
+pub const AID_GIFT_SOON: &str = "They have nobody spare for you just yet.";
+/// See `AID_GARRISON`.
+pub const AID_GIFT_LATER: &str = "They have nobody spare for you for a good while yet.";
+/// See `AID_GARRISON`.
+pub const AID_RELAY: &str = "Their relay will carry you home.";
+
+/// The census: every sentence above, for the layout gates to measure.
+/// A line written by `Game::settlement_aid_lines` and missing here is a line
+/// nothing measures, which is the failure this array exists to make
+/// impossible.
+pub const AID_LINES: [&str; 5] = [
+    AID_GARRISON,
+    AID_GIFT_READY,
+    AID_GIFT_SOON,
+    AID_GIFT_LATER,
+    AID_RELAY,
+];
+
+/// How long until a town will spare a program again, in the player's words.
+///
+/// `game::memories::age_phrase` turned around: banded against the wait's own
+/// span rather than quoted as a tick count, because this game has never
+/// shown the player a tick. Two bands rather than four — a cooldown has no
+/// tail to describe, it either has most of its span left or it is nearly up.
+fn wait_line(remaining: u64, span: u64) -> &'static str {
+    if remaining * 2 > span.max(1) {
+        AID_GIFT_LATER
+    } else {
+        AID_GIFT_SOON
     }
 }

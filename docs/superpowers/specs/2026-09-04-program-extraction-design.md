@@ -308,8 +308,158 @@ Each is its own plan and its own release.
    `collect::plan_adjacent_take` and work orders all become instance-aware.
    Larger than 1-3 together, and deliberately last. Its cost is re-estimated
    once 1-3 are real.
-5. **The economy.** Gear drops move behind extraction — a `Parts`-category
-   tool yielding gear, and `equipment_drops_for` retires.
+5. **The economy.** A gear-yielding extraction tool. **Amended 2026-09-05,
+   when phase 5 was brainstormed: gear drops do *not* move behind
+   extraction and `equipment_drops_for` does *not* retire.** The tool is
+   additive and every existing gear door stays open. See §9, which is the
+   authority on this phase; this line is kept only so the amendment is
+   visible from the phase list.
+
+## 9. Phase 5: the Gear tool
+
+Brainstormed 2026-09-05, and it changed the phase. §8's bullet described
+gear drops *moving* behind extraction with `equipment_drops_for` retiring.
+Neither is what phase 5 does, and the bullet is amended above. Six
+decisions, each taken against a named alternative that would otherwise look
+attractive on a fresh read.
+
+**9.1 The lottery moves; it does not become a choice.** A `Gear` tool rolls
+the species' authored chances at extraction. It does not pay a guaranteed
+piece. Chosen against *certain, rationed by slots* — one piece every time,
+throttled by the store's ten rows and the four tool slots — which would have
+made gear a decision rather than a draw, and would have set the game's gear
+rate from scratch with no instrument in the repo able to check it. Also
+chosen against a **condition-driven** axis, which would have put
+`FIGHT_CONDITION_WEIGHT` to work; that weight ships at `0.0` deliberately
+and wants a play session behind any other value, so phase 5 does not spend
+it.
+
+**9.2 Every existing gear door stays open.** `equipment_drops_for` does not
+retire. It *cannot*: the Gear tool needs exactly its merged table, both
+schema directions and all. Its four live callers are untouched — the kill
+(`award_loot`), the nest cache (`zone.rs`), the Stack feature cache
+(`stack_features.rs`), and the surface boss at
+`SURFACE_BOSS_LOOT_RARITY_FLOOR`.
+
+The tool is therefore **additive**, and the consequence is recorded here
+rather than discovered: a player who forges it sees roughly double the gear
+rate on any program they bother to haul home. That is the accepted cost of
+not setting a new economy blind. The door list is the one thing that changes
+it, and closing a door later is a deletion at that callsite, not a redesign.
+Note what the compensating lever is *not*: 9.5 introduces no scale constant
+to turn down. If closing a door needs the tool to pay more, the honest
+levers are the authored chances in the species and item assets, or a scale
+constant introduced at that point with the play session that justified it.
+
+**9.3 `ToolCategory::Gear`, a fifth variant.** Pool-less, exactly the
+Routine Reader's shape: no `yields`, output derived from the program.
+Chosen against a **second `Parts` tool**, which needs no enum arm but leaves
+`Parts` meaning two different things — pool-driven and species-driven — with
+the fork inside `extract_program` keying off the *absence* of a `yields`
+pool, an implicit signal where a declared one is available. Also chosen
+against **retiring the category branch** for a declared `ToolDef` effect,
+with category demoted to a display label. That is the change that stops this
+fork growing an arm per phase, and it is the right one to revisit if phase 4
+wants to read an effect; it is not worth doing for a third arm alone.
+
+**9.4 A whiff pays nothing.** No consolation scrap, no pity timer. The
+program is consumed and the ticks are spent whether or not anything lands.
+Chosen against a **scrap floor** (a small `yields` pool paid every time),
+which would have kept the slot from ever being dead weight but would have
+given this tool both a pool and a derived output — the one thing that makes
+the Routine Reader's shape clean. Also chosen against a **pity timer**,
+which bounds the worst run at the cost of a new run-save field and a
+mechanic the game has nowhere else.
+
+**9.5 Tier scales the chance, and the baseline needs no new constant.**
+
+```
+Game::gear_chances(&DownedProgram, &ToolDef) -> Vec<(ItemId, f32)>
+```
+
+Beside `extraction_yield` in `extraction.rs`, and reading the bench the same
+way — `Game::extraction_bench_tier()` internally, **never a parameter**, for
+§3's amended reason. It takes `equipment_drops_for`'s table and scales every
+chance by `tier_scale(tool.tier + bench)`, where `bench` is the bench tier
+minus one, exactly as `extraction_yield` computes it.
+
+The baseline falls out of the shipped curve. `tier_scale(t) = 1.0 + (t-1) ×
+TOOL_TIER_SCALE_STEP`, so a tier-1 Gear tool on a never-upgraded Compiler is
+`tier_scale(1)` = **1.0**: the authored chance, untouched. A tier-3 Compiler
+doubles it. No `GEAR_TOOL_CHANCE_SCALE` is introduced, and the neutrality
+claim is therefore testable as an identity rather than as a number.
+
+Two deliberate divergences from `equipment_drops_for`:
+
+1. **`gear_chances` clamps to 1.0 inside.** Its source returns chances
+   unclamped on purpose, because its one caller clamps before rolling. This
+   one has two callers — the preview and the pull — and a value clamped
+   twice in two places is a crack they could differ through.
+2. **Grade and level do not enter.** `program.grade()` already sells
+   materials in `extraction_yield`. Leaving it out of the chance is what
+   makes "baseline is the authored chance" literally true rather than
+   approximately.
+
+**9.6 The preview quotes named odds.** `Mode::DownedPrograms` grows a row
+shape for chance-quoting tools: one line per candidate item with its live
+chance — `Kinetic Plating 12%` — computed by `gear_chances`, the same call
+the pull makes. Chosen against **names without numbers**, which keeps
+percentages off screen but makes a Compiler upgrade invisible (an upgraded
+bench would read identically to a fresh one), and against a **banded
+phrase** in the game's own vocabulary, which costs a banding table and hides
+any change that does not cross a boundary.
+
+**This is the first raw percentage on any screen in the game.** Noted as a
+precedent, not smuggled in.
+
+### The act
+
+`extract_program` grows a third arm. Roll each chance from `gear_chances`
+against the shared `GameRng`, and grant each hit through
+`Game::grant_gear_drop(item, Rarity::Ordinary)` — the one door a copy above
+`Ordinary` enters the game through, so found-gear-beats-crafted-gear still
+binds and `crafted_gear_is_never_rare` is untouched. Nothing lands means no
+log line and nothing granted.
+
+`DownedProgram::boss` does **not** carry `SURFACE_BOSS_LOOT_RARITY_FLOOR`
+through to the pull: a hauled-home boss pulls at `Ordinary`, because the
+boss's own door stays open (9.2) and is still paying its floor at the kill.
+
+### Content
+
+One asset — `assets/tools/harness_puller.ron`, name open — tier 1, no
+`yields`, `ticks` in the Routine Reader's band, since stripping a program's
+kit off it is slow work. Research: `field_ops` is the candidate node, with
+`runtime_patching` the alternative; the pick is a plan-time census of
+whether the node already grants something and whether it sits at the right
+zone depth. `forge_cost` is a guessed number like every other tool's, and
+should say so in its own asset comment.
+
+### Testing
+
+- **The neutrality identity.** A tier-1 Gear tool on an un-upgraded bench
+  quotes exactly `equipment_drops_for`'s figures for the same species. This
+  fails loudly the day anyone inserts a constant between the table and the
+  roll.
+- **Preview equals pull** on one program, the §3 invariant applied to the
+  new derivation.
+- **No above-`Ordinary` copy is minted outside `grant_gear_drop`.** An
+  absence, so it is asserted rather than left invisible.
+- A census that `ToolCategory::Gear`'s new arm is reachable — a fifth
+  variant is exactly the shape that ships as a blank.
+
+### Recorded interactions
+
+A running `DropBoost` field buff applies at extraction, because
+`equipment_drops_for` folds it in at the end and extraction requires no
+bench. A player can arm a buff and then strip. This reads as a fine synergy
+and is left in; it is written down so it is a decision rather than a
+surprise.
+
+### Not in phase 5
+
+Closing any gear door (9.2), the boss floor travelling with a downed
+program, `FIGHT_CONDITION_WEIGHT`, and a help page for extraction.
 
 ## Open, deliberately
 
@@ -327,3 +477,9 @@ Each is its own plan and its own release.
   cap keeps decision 9's refusal: a full pack refuses the drop and destroys
   nothing already held.
 - Phase 4's real cost.
+- **Which gear doors close.** Confirmed 2026-09-05: none, for now. Phase 5
+  ships a Gear tool alongside every existing door rather than in place of
+  any (§9.2), which roughly doubles the gear rate on an extracted program
+  and is accepted knowingly. Closing a door is the tuning lever, and it
+  wants a play session behind it — as does any constant introduced to
+  compensate the tool when one closes (§9.5 ships none).

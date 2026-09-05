@@ -474,6 +474,40 @@ constants (`VOID_ELEVATION`, `BLACK_ICE_ELEVATION`, `DEADLOCK_TEMPERATURE`,
 run instead of rotating it — see "A rock kind is a brightness, never a hue"
 under **The base** for what that closed.
 
+**Clearing `PopulatedChunks` is half the mechanism, and shipping only that
+half was the bug the whole-branch review caught.** The reasoning that
+produced it is sound and stops one step short: a chunk's mark is what says
+"stocked", so emptying the set sends `ensure_local_population` back over
+ground it has already covered, and it re-stocks at the new tier. What that
+misses is the gate inside `populate_chunk` — every placement is refused
+while `local_hostile_count` is at or above `WILD_LOCAL_DENSITY_TARGET`, and
+that count is of *living* bodies, not of new ones. The survivors are still
+standing. So on ground the party has actually worked — which is all the
+ground near the base, the portal and every route between them — the
+re-stock placed only what fit in the gaps, and zone 1's programs kept zone
+1's stats for the rest of the run. Nothing else would ever remove them:
+`cull_to_cap` evicts chunks *outside* `POPULATION_CHUNK_MARGIN`, which is
+exactly the complement of the ground in question, and `WILD_CREATURE_CAP`
+is 2000 and never fires.
+
+`Game::clear_local_wild` is the other half, and the two must be read
+together — either alone is inert or wrong. It was invisible in testing for
+a specific and instructive reason: the test that was supposed to prove the
+re-tier, `a_breach_spawns_the_next_tiers_wild_creatures`, hand-despawned
+zone 1's wild before breaching, with a comment explaining that the old
+breach used to do it. That made the test prove "an empty chunk re-stocks at
+the new tier" — true, and not the question. It breaches on populated ground
+now.
+
+**Two kinds of wild are kept, and the rule is the same one twice: an
+anonymous body is stock, a named one is not.** A `NestGuardian` belongs to a
+place, and clearing it leaves a nest bare until its own respawn timer comes
+round; its tier re-rolls when the nest is cleared, which is the door that
+already exists. A `Nemesis` is a program that beat you, and clearing it is
+the grudge being forgotten by the breach — precisely what a persistent world
+exists to stop. Neither exception is held by the compiler, and the nemesis
+one was found by a test rather than by review.
+
 This is the infrastructure the settlements work needs, and the reason the
 change was made: a place can only be worth building on, defending or
 returning to if it is still there the next time the player crosses a

@@ -60,6 +60,23 @@
   `note_static_turnover` has to ask what was live in the epoch that just
   *ended* to announce a clearing; a version that only reads
   `current_tick()` cannot answer that question at all.
+- **A breach's re-tier is two calls, and either one alone is inert.**
+  `enter_next_zone` clears `PopulatedChunks` *and* calls
+  `Game::clear_local_wild`. **The trap is that the first looks sufficient
+  and is not**: emptying the set does send `ensure_local_population` back
+  over covered ground, but `populate_chunk` refuses every placement while
+  `local_hostile_count` is at or above `WILD_LOCAL_DENSITY_TARGET`, and that
+  count includes the survivors — so the re-stock fills only the gaps and the
+  old tier's programs stand on worked ground for the rest of the run.
+  Nothing else removes them: `cull_to_cap` evicts chunks *outside*
+  `POPULATION_CHUNK_MARGIN`, the exact complement, and `WILD_CREATURE_CAP`
+  never fires. **The second trap is the test that hides it** — a breach test
+  that despawns the wild by hand before breaching proves only "an empty
+  chunk re-stocks at the new tier", which is not the question; breach on
+  populated ground or the test is vacuous. `clear_local_wild` keeps a
+  `NestGuardian` (it belongs to a place, and clearing it leaves the nest
+  bare until its respawn timer) and a `Nemesis` (clearing it is the grudge
+  being forgotten by the breach). Neither exception is held by the compiler.
 - **Where a settlement stands is derived off `(world seed, region)`, never
   stored — `rock::RockDb::kind_at`'s rule, reached here by
   `settlements::placement::settlement_at`.** The trap is folding a region's

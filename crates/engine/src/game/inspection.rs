@@ -1556,7 +1556,7 @@ impl Game {
                 target,
                 label,
                 bearing: crate::game::stack::bearing(dx, dy),
-                distance: visited.then(|| dx.abs().max(dy.abs())),
+                distance: dx.abs().max(dy.abs()),
                 visited,
             }
         };

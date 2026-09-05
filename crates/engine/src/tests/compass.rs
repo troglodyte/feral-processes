@@ -73,7 +73,7 @@ fn the_rows_run_home_then_settlements_then_links_each_nearest_first() {
 }
 
 #[test]
-fn an_unreached_settlement_gives_a_bearing_and_withholds_its_name_and_distance() {
+fn an_unreached_settlement_gives_a_bearing_and_a_distance_but_withholds_its_name() {
     let mut game = game();
     let (px, py) = player_at(&game);
     let key = SettlementKey { rx: 1, ry: 0 };
@@ -84,13 +84,17 @@ fn an_unreached_settlement_gives_a_bearing_and_withholds_its_name_and_distance()
         .into_iter()
         .find(|r| r.target == CompassTarget::Town(key))
         .expect("the town is listed");
-    assert_eq!(row.bearing, "south", "the bearing is the whole first tier");
-    assert_eq!(row.distance, None);
+    assert_eq!(row.bearing, "south");
+    assert_eq!(
+        row.distance, 12,
+        "how far away a recorded place is, is not something walking to it teaches"
+    );
     assert!(!row.visited);
     assert_ne!(
         row.label,
         game.settlement_report(key).name,
-        "a town the party has never walked to does not give up its name"
+        "the name is the one thing reaching a town buys — a town the party has \
+         never walked to is still `a settlement`"
     );
 }
 
@@ -108,7 +112,7 @@ fn a_reached_settlement_gives_its_name_and_a_distance() {
         .find(|r| r.target == CompassTarget::Town(key))
         .expect("the town is listed");
     assert_eq!(row.label, game.settlement_report(key).name);
-    assert_eq!(row.distance, Some(1));
+    assert_eq!(row.distance, 1);
     assert!(row.visited);
 }
 
@@ -121,7 +125,6 @@ fn home_is_always_reached_because_it_is_the_partys_own() {
         .find(|r| r.target == CompassTarget::Home)
         .expect("the anchor is listed");
     assert!(row.visited);
-    assert!(row.distance.is_some());
 }
 
 #[test]
@@ -222,12 +225,13 @@ fn the_run_that_walked_past_two_towns_is_told_where_one_of_them_is() {
         .unwrap_or_else(|| panic!("no town bears south on this seed: {rows:?}"));
 
     assert!(!town.visited, "the run never reached it");
-    assert_eq!(
-        town.distance, None,
-        "an unreached town gives up no figure — the first tier is the bearing"
+    assert!(
+        town.distance > 0,
+        "the whole complaint was a run that did not know how far it had left \
+         to go: {town:?}"
     );
     assert_eq!(
         town.label, "a settlement",
-        "and no name either, or the compass is a scan"
+        "the name is still earned by walking there"
     );
 }

@@ -38,12 +38,26 @@ alternative.
 1. **Two tiers of knowledge, and they are two fields.** A target the engine
    has recorded but the party has not reached gives a bearing and a generic
    label — "a settlement, south". Once reached it gives its name and a
-   distance. Rejected: listing only visited places (fixes "I found Lowport
+   distance. *(See the amendment below: `distance` was moved out of the
+   tier.)* Rejected: listing only visited places (fixes "I found Lowport
    once and cannot get back"; fixes nothing about the trog save, whose list
    would be empty), and listing everything in full (directly fixes the trog
    save, but is a scan with extra steps — the thing `Progression is earned
    by fighting` closed off alongside the Terminal, free rest and the
    Market's fragment listing).
+
+   **Amended 2026-09-05, after the feature shipped in 0.13.103: the tier is
+   one field, `label`, and `distance` is answered for every row.** The
+   two-field version was wrong about which half is earned. A name is
+   something arriving at a place teaches you; *how far away it is* is not —
+   the engine derived that figure from coordinates it already had, and
+   withholding it left the first tier unable to answer the only question the
+   compass exists for, which is whether the party can afford the trip. A
+   bearing with no figure is a direction to wander in, which is the fault
+   the feature was built to close rather than a softer form of it. The
+   rejected "listing everything in full" is still rejected and is still the
+   line: a generic noun is not a scan, because it names nothing the run has
+   not earned.
 2. **Three target kinds: home, settlements, Stack entrances. Nests are
    out.** Nests are numerous, destructible and hostile; a "go here" list of
    them is a hunting list, and entries would vanish under the player.
@@ -95,7 +109,7 @@ pub struct CompassRow {
     pub target: CompassTarget,
     pub label: String,             // "Lowport", or "a settlement" unvisited
     pub bearing: &'static str,     // game::stack::bearing, already written
-    pub distance: Option<i32>,     // None while unvisited
+    pub distance: i32,             // answered for every row — see decision 1
     pub visited: bool,
 }
 ```
@@ -105,8 +119,8 @@ as `-y`, with a diagonal rule that refuses to call a near-45-degree bearing
 due east. `announce_surface_links` (`stack.rs:256`) is the existing one-shot
 precedent for the same sentence.
 
-Decision 1 lands entirely in `label` and `distance`, so the tiering is
-stated once in the engine rather than by each surface.
+Decision 1 lands entirely in `label`, so the tiering is stated once in the
+engine rather than by each surface.
 
 `CompassTarget` keys by `SettlementKey` and by tile for `SettlementKey`'s
 own stated reason: entity ids are not stable across a save.
@@ -164,7 +178,7 @@ One line on `map_pane`'s bottom border:
 
 ```
 » Lowport · south · 219
-» a settlement · south
+» a settlement · south · 143
 ```
 
 Absent when nothing is selected, and absent off the zone surface.
@@ -174,8 +188,8 @@ Absent when nothing is selected, and absent off the zone surface.
 Engine:
 
 - Ordering is home, settlements, links, each nearest-first.
-- An unvisited settlement yields a generic label and `distance: None`; a
-  visited one yields its name and a figure.
+- An unvisited settlement yields a generic label and a figure; a visited
+  one yields its name and the same figure.
 - A selection naming a link that no longer exists is dropped.
 - `compass_targets()` is empty in `Locale::Stack` and `Locale::Base`.
 - **Seed 1788625345 is the regression fixture.** A fresh `Game::new` on it

@@ -2,9 +2,8 @@
 //! grant, and `knows_tool` — see
 //! `docs/superpowers/specs/2026-09-04-program-extraction-design.md`, section
 //! 2. The act itself, `Game::extract_program`, lives in
-//! `game/extraction.rs`; knowing a tool (`ResearchDef::unlocks_tools`,
-//! `resources::KnownTools`) is not yet enough to forge or install one —
-//! `forge_tool` and `install_tool` are this phase's remaining tasks.
+//! `game/extraction.rs`; `game/tools.rs` is `Game::forge_tool` and this
+//! phase's remaining task, `install_tool`/`uninstall_tool`.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -79,6 +78,17 @@ pub struct ToolDef {
     /// argument, the same currency `AbilityDef::power_cost` is to a
     /// routine but paid in time rather than Power.
     pub ticks: u64,
+    /// What `Game::forge_tool` spends to grant a carrier of this tool —
+    /// `(item, qty)` pairs, `craft_cost`'s shape but with no discount axis:
+    /// a tool's price is fixed on its own def rather than scaled by a
+    /// `careful` flag. Priced per tool rather than a flat blank spent for
+    /// every one, because a routine is one interchangeable object but tools
+    /// differ by tier — a tier-2 tool must be able to cost more than the
+    /// starter clamp (spec decisions doc, plan decision 1). `#[serde(default)]`
+    /// so a tool with nothing to spend can omit the field rather than spell
+    /// `[]`.
+    #[serde(default)]
+    pub forge_cost: Vec<(ItemId, u32)>,
 }
 
 impl ToolDef {

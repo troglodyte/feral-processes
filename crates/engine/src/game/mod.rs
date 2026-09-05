@@ -52,6 +52,7 @@ pub(crate) mod talents;
 pub(crate) mod taunt;
 pub(crate) mod telemetry;
 pub(crate) mod throw;
+pub(crate) mod tools;
 pub(crate) mod trace;
 pub(crate) mod trade;
 pub(crate) mod turn;

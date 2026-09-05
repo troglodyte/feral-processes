@@ -1055,3 +1055,201 @@ fn known_tools_survive_a_save_load_round_trip() {
         "a two-tool known set must come back exactly as saved"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Phase 2, task 2: `Game::forge_tool`.
+// ---------------------------------------------------------------------------
+
+const FORGE_TARGET_TOOL: &str = r#"(
+    id: "forge_target",
+    name: "Forge Target",
+    description: "d",
+    category: Materials,
+    yields: [("core_fragment", 1.0)],
+    tier: 1,
+    ticks: 5,
+    forge_cost: [("core_fragment", 5)],
+)"#;
+
+/// A fresh game with a custom `ToolDb` naming `forge_target` (5
+/// `core_fragment` to forge), and `forge_target` marked known — the
+/// starting point every forge test but the "unknown"/"unresearched" ones
+/// wants. Tagged so parallel tests don't collide on the same temp dir.
+fn game_ready_to_forge(seed: u32, tag: &str) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (tool_db, warnings) = load_tools(tag, &[("forge_target", FORGE_TARGET_TOOL)]);
+    assert!(
+        warnings.is_empty(),
+        "fixture tool must load clean: {warnings:?}"
+    );
+    game.world.insert_resource(tool_db);
+    game.world
+        .resource_mut::<KnownTools>()
+        .0
+        .insert(ToolId("forge_target".to_string()));
+    // The starter kit already carries a handful of `core_fragment` (the
+    // fixture's own cost item), so a test asserting an exact spend or an
+    // exact shortfall needs a known-empty pack to add onto.
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .items
+        .clear();
+    game
+}
+
+fn carrier_count(game: &Game, tool: &ToolId) -> u32 {
+    game.world
+        .get::<Inventory>(game.player_entity())
+        .unwrap()
+        .count(&ItemId::tool(tool))
+}
+
+#[test]
+fn forge_refuses_after_game_over_and_spends_nothing() {
+    let mut game = game_ready_to_forge(9101, "game_over");
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 10);
+    game.world.resource_mut::<GameOver>().reason = Some("done".to_string());
+    let before = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    let result = game.forge_tool(&ToolId("forge_target".to_string()));
+
+    assert!(result.is_err(), "a game-over run must refuse forging");
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before,
+        "nothing must be spent on a refusal"
+    );
+    assert_eq!(carrier_count(&game, &ToolId("forge_target".to_string())), 0);
+}
+
+#[test]
+fn forge_refuses_during_an_active_battle_and_spends_nothing() {
+    let mut game = game_ready_to_forge(9102, "battle");
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 10);
+    let battle = minimal_active_battle(&game);
+    game.world.insert_resource(battle);
+    let before = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    let result = game.forge_tool(&ToolId("forge_target".to_string()));
+
+    assert!(result.is_err(), "an active battle must refuse forging");
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before,
+        "nothing must be spent on a refusal"
+    );
+    assert_eq!(carrier_count(&game, &ToolId("forge_target".to_string())), 0);
+}
+
+#[test]
+fn forge_refuses_an_unresolvable_tool_id_and_spends_nothing() {
+    let mut game = game_ready_to_forge(9103, "unresolvable");
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 10);
+    let before = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    let result = game.forge_tool(&ToolId("no_such_tool".to_string()));
+
+    assert!(
+        result.is_err(),
+        "an id ToolDb cannot resolve must refuse forging"
+    );
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before,
+        "nothing must be spent on a refusal"
+    );
+}
+
+#[test]
+fn forge_refuses_an_unresearched_tool_and_spends_nothing() {
+    // The starter tool's own catalogue entry — resolvable, but never taught,
+    // since `Game::new` grants it straight into the slot without touching
+    // `KnownTools`.
+    let mut game = Game::new(9104, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 10);
+    assert!(
+        !game.knows_tool(&ToolId(tuning::STARTER_TOOL_ID.to_string())),
+        "test premise: the starter tool must not be known"
+    );
+    let before = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    let result = game.forge_tool(&ToolId(tuning::STARTER_TOOL_ID.to_string()));
+
+    assert!(result.is_err(), "an unresearched tool must refuse forging");
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before,
+        "nothing must be spent on a refusal"
+    );
+    assert_eq!(
+        carrier_count(&game, &ToolId(tuning::STARTER_TOOL_ID.to_string())),
+        0
+    );
+}
+
+#[test]
+fn forge_refuses_when_the_player_cannot_pay_and_spends_nothing() {
+    let mut game = game_ready_to_forge(9105, "unpayable");
+    let player = game.player_entity();
+    // Short by one of the fixture's 5-unit cost.
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 4);
+    let before = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    let result = game.forge_tool(&ToolId("forge_target".to_string()));
+
+    assert!(result.is_err(), "an unaffordable cost must refuse forging");
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before,
+        "nothing must be spent on a refusal"
+    );
+    assert_eq!(carrier_count(&game, &ToolId("forge_target".to_string())), 0);
+}
+
+#[test]
+fn forging_spends_exactly_the_cost_and_grants_one_carrier() {
+    let mut game = game_ready_to_forge(9106, "success");
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 12);
+
+    game.forge_tool(&ToolId("forge_target".to_string()))
+        .expect("nothing here refuses the forge");
+
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::CORE_FRAGMENT)),
+        7,
+        "exactly the def's cost (5) must leave the inventory"
+    );
+    assert_eq!(
+        carrier_count(&game, &ToolId("forge_target".to_string())),
+        1,
+        "exactly one carrier must be granted"
+    );
+}

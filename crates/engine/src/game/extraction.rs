@@ -91,33 +91,52 @@ impl Game {
         def.rich_in.clone().or_else(|| def.work_resource.clone())
     }
 
-    /// The best tier of any standing structure whose
-    /// `StructureDef::extracts_programs` is set, or `0` when none stands —
-    /// never a gate (spec decision 7), only a term. Ownership rather than
-    /// proximity, `Game::can_extract_routines`' rule
-    /// (`game/routines.rs:456`) rather than a distance check.
-    pub fn extraction_bench_tier(&self) -> u32 {
+    /// The standing structure whose `StructureDef::extracts_programs` is set
+    /// and whose tier is the best of them, with that tier — `None` when none
+    /// stands. Ownership rather than proximity,
+    /// `Game::can_extract_routines`' rule (`game/routines.rs:456`) rather
+    /// than a distance check.
+    ///
+    /// The def and the tier come out together because the screen names one
+    /// and prices the other, and a name that came from a different structure
+    /// than the tier did is a bench the player cannot find. One shipped
+    /// structure carries the flag, so the two agree today; a mod's second one
+    /// standing at a higher tier is what this exists for.
+    ///
+    /// Ties go to the last of `StructureDb::all`'s own order, which is sorted
+    /// — so two benches at one tier name the same one on every call rather
+    /// than by hash-order happenstance.
+    fn standing_extraction_bench(&self) -> Option<(&StructureDef, u32)> {
         self.world
             .resource::<StructureDb>()
             .all()
             .filter(|def| def.extracts_programs)
-            .filter_map(|def| self.best_structure_tier(&def.id))
-            .max()
+            .filter_map(|def| Some((def, self.best_structure_tier(&def.id)?)))
+            .max_by_key(|(_, tier)| *tier)
+    }
+
+    /// The best tier of any standing extraction bench, or `0` when none
+    /// stands — never a gate (spec decision 7), only a term.
+    pub fn extraction_bench_tier(&self) -> u32 {
+        self.standing_extraction_bench()
+            .map(|(_, tier)| tier)
             .unwrap_or(0)
     }
 
     /// The bench a screen names, when one stands. `None` and no name when
     /// none does, rather than a "no bench" string built here — what to say
     /// about an absence is the renderer's business.
+    ///
+    /// Not `bench_name`, which answers "what is this kind of bench called"
+    /// off the catalogue and is right for the refusal that names a structure
+    /// you do *not* have. This row names one you do, so the name has to come
+    /// off the same structure the tier did.
     pub fn extraction_bench(&self) -> Option<crate::views::ExtractionBenchView> {
-        let tier = self.extraction_bench_tier();
-        if tier == 0 {
-            return None;
-        }
-        Some(crate::views::ExtractionBenchView {
-            name: self.bench_name(|def| def.extracts_programs),
-            tier,
-        })
+        self.standing_extraction_bench()
+            .map(|(def, tier)| crate::views::ExtractionBenchView {
+                name: def.name.clone(),
+                tier,
+            })
     }
 
     /// What one use of `tool` costs in ticks, here and now —

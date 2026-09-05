@@ -603,6 +603,19 @@ impl StructureDb {
         self.structures.get(id)
     }
 
+    /// Adds `def`, replacing any structure already under its id.
+    ///
+    /// Test-only, and deliberately so — `SpeciesDb::insert`'s reason,
+    /// verbatim: the shipped catalogue is a directory of `.ron` files and a
+    /// mod's is too, so nothing in the game builds a structure in Rust. It
+    /// exists so a test can stand a *second* structure carrying a flag only
+    /// one shipped file carries, which is the only way to tell "the one
+    /// that answered" apart from "the first one in the catalogue".
+    #[cfg(test)]
+    pub(crate) fn insert(&mut self, def: StructureDef) {
+        self.structures.insert(def.id.clone(), def);
+    }
+
     /// Every loaded structure, grouped by `StructureCategory` and
     /// alphabetical by `name` inside each group.
     ///

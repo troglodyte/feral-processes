@@ -474,9 +474,15 @@ impl Game {
     }
 
     /// Display name of a structure carrying `flag`, for a message — no code
-    /// names a structure id. `pub(crate)` because `game/extraction.rs`'s
-    /// `extraction_bench` wants the same answer for the other flag.
-    pub(crate) fn bench_name(&self, flag: fn(&StructureDef) -> bool) -> String {
+    /// names a structure id.
+    ///
+    /// The *catalogue's* answer, not a standing structure's: the one caller
+    /// is a refusal telling the player what they need to build, so the
+    /// structure it names is by definition one they do not have. A row about
+    /// a bench that *is* standing must not use this — see
+    /// `Game::extraction_bench`, which reads the name off the same structure
+    /// that supplied its tier.
+    fn bench_name(&self, flag: fn(&StructureDef) -> bool) -> String {
         self.world
             .resource::<StructureDb>()
             .all()

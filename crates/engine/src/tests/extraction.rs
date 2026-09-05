@@ -1966,6 +1966,46 @@ fn the_previewed_yield_tracks_the_bench_tier() {
     }
 }
 
+/// The screen names the bench it priced. `extraction_bench_tier` takes the
+/// best tier over *standing* flagged structures while the name used to come
+/// from the first flagged structure in the catalogue, standing or not — one
+/// flagged structure ships, so the two agreed by luck rather than by
+/// construction, and a mod's second bench would have had the player looking
+/// for a Compiler they never built.
+///
+/// The fixture bench is named to sort last within its category, so the
+/// catalogue-order answer and the standing-structure answer are different
+/// strings rather than the same one twice.
+#[test]
+fn the_bench_a_screen_names_is_the_one_that_supplied_the_tier() {
+    let mut game = new_test_game();
+    let shipped = game
+        .world
+        .resource::<StructureDb>()
+        .all()
+        .find(|def| def.extracts_programs)
+        .cloned()
+        .expect("some shipped structure extracts programs");
+    let mut fixture = shipped.clone();
+    fixture.id = "zzz_bench_fixture".to_string();
+    fixture.name = "Zzz Bench Fixture".to_string();
+    game.world.resource_mut::<StructureDb>().insert(fixture);
+
+    // Only the fixture stands. The shipped bench is in the catalogue and
+    // nowhere on the map, which is exactly the case a catalogue lookup
+    // cannot tell apart.
+    let entity = spawn_structure_at(&mut game, "zzz_bench_fixture", 30, 30);
+    game.world.entity_mut(entity).insert(StructureTier(3));
+
+    let bench = game.extraction_bench().expect("a bench stands");
+    assert_eq!(bench.tier, 3, "the tier comes off the standing structure");
+    assert_eq!(
+        bench.name, "Zzz Bench Fixture",
+        "the name must come off the structure that supplied the tier, not \
+         the first flagged file in the catalogue"
+    );
+}
+
 /// The tick half of the bench, `GameClock` being this build's tick counter —
 /// `tests::wielded`'s own idiom for measuring what an act actually spends.
 fn ticks_elapsed(game: &Game) -> u64 {

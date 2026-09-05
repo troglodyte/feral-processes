@@ -33,6 +33,26 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.103
+
+**A destination and a bearing to it.** `u` opens a picker of the places the
+run already knows about — the home base, every settlement recorded, every
+Stack entrance — and the one you pick rides the zone map's bottom border
+until you clear it.
+
+**Two tiers, and the difference is what you have actually walked to.** A
+place the engine has recorded gives a bearing and a generic noun: *a
+settlement, south*. One the party has reached gives its name and a
+distance: *Lowport, south, 219*.
+
+**It surfaces what is recorded; it does not widen what gets recorded.** A
+town four regions out stays invisible until the party walks near enough for
+it to be materialized at all.
+
+**Nests are not destinations**, and the compass is hidden underground and in
+base space, where the party's `Position` is pinned and a live bearing would
+be frozen while reading as live.
+
 ## 0.13.102
 
 **Extraction tools are something you earn now.** Research teaches a tool,

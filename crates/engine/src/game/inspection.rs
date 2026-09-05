@@ -2,6 +2,7 @@
 //! renderer draws, plus inspect targeting.
 
 use crate::game::base::hauling::at_station;
+use crate::settlements::CompassTarget;
 use crate::tuning::{
     DIFFICULTY_EASY_MAX, DIFFICULTY_EVEN_MAX, DIFFICULTY_TOUGH_MAX, MAX_COMPANION_REFACTORS,
     MAX_FUSIONS,
@@ -9,6 +10,17 @@ use crate::tuning::{
 use crate::views::drawn_on_surface_map;
 use crate::*;
 use std::collections::HashSet;
+
+/// One town on the way to a `CompassRow`, carrying the figures its group is
+/// sorted by. A named struct rather than a five-tuple so the sort reads as
+/// fields rather than as positions — `stack::StackPos`' reason.
+struct KnownTown {
+    distance: i32,
+    tile: (i32, i32),
+    key: crate::settlements::SettlementKey,
+    label: String,
+    visited: bool,
+}
 
 /// Which of two things sharing one tile `find_target_in_direction` names —
 /// lower wins. The structure, because it is the glyph the map draws there.
@@ -1512,6 +1524,132 @@ impl Game {
         }
 
         rows
+    }
+
+    /// Every place the compass can point at, most reachable first.
+    ///
+    /// **One derivation, two readouts** — the picker screen and the strip on
+    /// the zone map's bottom border — in the shape `attention` above already
+    /// uses, and for its reason: a second derivation beside it is what would
+    /// let the screen and the strip disagree about where a town is.
+    ///
+    /// Empty off the zone surface. `Position` is pinned to the entrance tile
+    /// in the Stack and to the anchor in base space, so a bearing taken
+    /// there would be frozen while reading as live — the same shape
+    /// `require_surface` gives every other action that reaches through the
+    /// player's tile onto the zone map. It is one early return, not a filter
+    /// per row.
+    ///
+    /// Ordering is home, then settlements, then links, each group
+    /// nearest-first — `attention`'s rule, so "the first row" is stable
+    /// across runs without a second sort.
+    pub fn compass_targets(&mut self) -> Vec<CompassRow> {
+        if self.require_surface().is_err() {
+            return Vec::new();
+        }
+        let Some(origin) = self.world.get::<Position>(self.player_entity()).copied() else {
+            return Vec::new();
+        };
+        let row = |target, label: String, visited: bool, tile: (i32, i32)| {
+            let (dx, dy) = (tile.0 - origin.x, tile.1 - origin.y);
+            CompassRow {
+                target,
+                label,
+                bearing: crate::game::stack::bearing(dx, dy),
+                distance: visited.then(|| dx.abs().max(dy.abs())),
+                visited,
+            }
+        };
+
+        let mut rows = Vec::new();
+        // Always visited: it is the party's own.
+        if let Some(anchor) = self.anchor_position() {
+            rows.push(row(CompassTarget::Home, "home".to_string(), true, anchor));
+        }
+
+        let mut towns: Vec<KnownTown> = self
+            .world
+            .resource::<crate::resources::Settlements>()
+            .0
+            .iter()
+            .map(|(key, known)| {
+                let (dx, dy) = (known.tile.0 - origin.x, known.tile.1 - origin.y);
+                KnownTown {
+                    distance: dx.abs().max(dy.abs()),
+                    tile: known.tile,
+                    key: *key,
+                    label: if known.visited {
+                        known.def.name.clone()
+                    } else {
+                        "a settlement".to_string()
+                    },
+                    visited: known.visited,
+                }
+            })
+            .collect();
+        towns.sort_by_key(|t| (t.distance, t.tile));
+        for town in towns {
+            rows.push(row(
+                CompassTarget::Town(town.key),
+                town.label,
+                town.visited,
+                town.tile,
+            ));
+        }
+
+        // A link is visited iff the party has been down it. `FrameKey` is
+        // `(entrance tile, depth)`, so the record already there answers it
+        // and this needs no new field — descending is what counts.
+        let walked: std::collections::HashSet<(i32, i32)> = self
+            .world
+            .resource::<crate::resources::StackMemory>()
+            .0
+            .keys()
+            .map(|k| k.0)
+            .collect();
+        let mut links: Vec<(i32, (i32, i32))> = {
+            let mut q = self.world.query_filtered::<&Position, With<SurfaceLink>>();
+            q.iter(&self.world)
+                .map(|p| {
+                    (
+                        (p.x - origin.x).abs().max((p.y - origin.y).abs()),
+                        (p.x, p.y),
+                    )
+                })
+                .collect()
+        };
+        links.sort();
+        for (_, tile) in links {
+            let visited = walked.contains(&tile);
+            let label = if visited { "a walked link" } else { "a link" };
+            rows.push(row(
+                CompassTarget::Link(tile),
+                label.to_string(),
+                visited,
+                tile,
+            ));
+        }
+
+        rows
+    }
+
+    /// The selected destination, resolved against the live derivation, or
+    /// `None` when nothing is selected or the selection no longer exists.
+    pub fn compass_bearing(&mut self) -> Option<CompassRow> {
+        let selected = self
+            .world
+            .resource::<crate::resources::CompassBearing>()
+            .0?;
+        self.compass_targets()
+            .into_iter()
+            .find(|r| r.target == selected)
+    }
+
+    /// Points the compass, or clears it with `None`.
+    pub fn set_compass_bearing(&mut self, target: Option<CompassTarget>) {
+        self.world
+            .resource_mut::<crate::resources::CompassBearing>()
+            .0 = target;
     }
 
     /// A species' affinities, or `None` if no such species loaded.

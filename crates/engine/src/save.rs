@@ -1176,6 +1176,12 @@ pub struct SaveData {
     /// bump.
     #[serde(default)]
     pub standings: crate::resources::Standings,
+    /// Where the compass is pointing — see `resources::CompassBearing`.
+    /// Additive behind `#[serde(default)]`, so an older save loads with it
+    /// blank, which is where a new run starts. No `SAVE_FORMAT_VERSION`
+    /// bump.
+    #[serde(default)]
+    pub compass: crate::resources::CompassBearing,
     /// How loud the party has been in the stack they are currently in — see
     /// `resources::Trace`. Zero whenever `locale` is `Surface`, since
     /// `Game::clear_stack` is the one place it resets.
@@ -1651,6 +1657,7 @@ mod tests {
             populated_chunks: crate::resources::PopulatedChunks::default(),
             settlements: crate::resources::Settlements::default(),
             standings: crate::resources::Standings::default(),
+            compass: crate::resources::CompassBearing::default(),
             trace: 0,
             contracts: Vec::new(),
             contracts_done: Vec::new(),
@@ -1741,6 +1748,13 @@ mod tests {
         };
         // A `BTreeSet` of tuples, which is the same place a text encoding
         // tends to give up.
+        // A newtype over an `Option<enum>` with a tuple payload, and the
+        // other half of the compass' save coverage: the real save/load test
+        // in `tests::compass` catches a field `Game::save` never fills,
+        // while this catches one the text encoding drops.
+        data.compass = crate::resources::CompassBearing(Some(
+            crate::settlements::CompassTarget::Link((4, -7)),
+        ));
         data.populated_chunks.0.insert((3, -2));
         data.populated_chunks.0.insert((-14, 9));
         data.stack_memory.0.insert(

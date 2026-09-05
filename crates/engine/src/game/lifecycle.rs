@@ -269,6 +269,7 @@ impl Game {
         world.insert_resource(crate::resources::Settlements::default());
         world.insert_resource(crate::resources::Standings::default());
         world.insert_resource(crate::resources::PendingVisit::default());
+        world.insert_resource(crate::resources::CompassBearing::default());
         // Empty at both doors. `Game::load` refills it from the save below,
         // once every creature has an entity to name — see `SortieSave`.
         world.insert_resource(crate::resources::Sorties::default());
@@ -553,6 +554,7 @@ impl Game {
         world.insert_resource(crate::resources::Settlements::default());
         world.insert_resource(crate::resources::Standings::default());
         world.insert_resource(crate::resources::PendingVisit::default());
+        world.insert_resource(crate::resources::CompassBearing::default());
         // Empty at both doors. `Game::load` refills it from the save below,
         // once every creature has an entity to name — see `SortieSave`.
         world.insert_resource(crate::resources::Sorties::default());
@@ -1377,6 +1379,7 @@ impl Game {
         game.world.insert_resource(data.populated_chunks);
         game.restore_settlements(data.settlements);
         game.world.insert_resource(data.standings);
+        game.world.insert_resource(data.compass);
         game.world
             .insert_resource(crate::resources::Trace(data.trace));
         // Last, and after the WorldMap is in place: restoring a Stack
@@ -1996,6 +1999,10 @@ impl Game {
                 .resource::<crate::resources::Settlements>()
                 .clone(),
             standings: self.world.resource::<crate::resources::Standings>().clone(),
+            compass: self
+                .world
+                .resource::<crate::resources::CompassBearing>()
+                .clone(),
             populated_chunks: self
                 .world
                 .resource::<crate::resources::PopulatedChunks>()

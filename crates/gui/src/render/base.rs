@@ -3216,7 +3216,6 @@ mod tests {
             feral_processes_engine::resources::KnownSettlement {
                 tile: target,
                 def: feral_processes_engine::settlements::SettlementDef {
-                    visited: false,
                     id: "test_settlement".to_string(),
                     name: "Test Settlement".to_string(),
                     blurb: "A settlement placed for a test.".to_string(),
@@ -3224,6 +3223,7 @@ mod tests {
                     specialty: feral_processes_engine::settlements::Specialty::Materials,
                     temperament: feral_processes_engine::settlements::Temperament::Open,
                 },
+                visited: false,
             },
         );
         feral_processes_engine::save::save_to_file(&path, &data).unwrap();

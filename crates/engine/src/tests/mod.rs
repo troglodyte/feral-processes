@@ -25,6 +25,7 @@ mod combat_rewards;
 mod combat_specials;
 mod combat_status;
 mod combat_targeting;
+mod compass;
 mod construction;
 mod contracts;
 mod crafting;

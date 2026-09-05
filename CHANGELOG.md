@@ -33,6 +33,41 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.96
+
+**Existing saves load, and one resource is deliberately dropped from them.**
+`save::SAVE_FORMAT_VERSION` stays at 32 — `settlements` is additive behind
+`#[serde(default)]` and defaults to empty, so a save from before this
+release simply materializes its towns as the party reaches them. The
+exception is `StackMemory`: a frame's seed now folds in its tier, so a
+memory written by an older build describes a maze this build no longer
+generates. A save without the new `stack_memory_tiered` marker has its Stack
+fog of war cleared on load rather than restored onto the wrong cells.
+
+- **The world is persistent. A breach raises the tier; it does not rebuild
+  the sector.** There is one map for the run. The party does not move, the
+  ground does not change, the base stays where it stands, and every shelf,
+  entrance and structure survives the crossing — what changes is what walks
+  on it. A place can only be worth returning to if it is still there.
+- **Towns stand in the world, and where each one stands is derived from the
+  world seed rather than rolled.** Walk into one to enter it; it admits
+  nobody, so the tile is a door rather than a floor. `x` toward one from a
+  distance names it the same way.
+- **A settlement has a name, a kind, a specialty and a temperament, and all
+  four are content** — `assets/settlements/*.ron`, documented in that
+  directory's README. Deleting the directory is a supported install and
+  gives back a world with no towns in it.
+- **`[M]` opens a town's market: one shelf, one basket, one commit.** Buying
+  and selling settle in a single turn through the same core the caravan's
+  own counter uses, so a basket can be funded by its own sales, and the
+  buyback shelf a town keeps outlives anything built on its tile.
+- **A town's temperament prices both directions, and Mercantile is not the
+  average of the other two** — it competes on what it charges you and takes
+  its margin on what it pays you.
+- **`assets/sectors/` is retired.** Per-zone terrain deltas had nothing left
+  to vary once a breach stopped carving new ground, so the biome palette is
+  one fixed signal for the whole run.
+
 ## 0.13.95
 
 **Existing saves load, with one deliberate exception.**

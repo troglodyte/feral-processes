@@ -61,6 +61,7 @@ mod research;
 mod respec;
 mod routes;
 mod routines;
+mod settlement_aid_reach;
 mod settlement_boards;
 mod settlement_market;
 mod settlement_relations;

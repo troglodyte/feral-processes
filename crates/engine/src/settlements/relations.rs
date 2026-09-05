@@ -38,6 +38,21 @@ pub struct Relation {
     pub standing: i32,
     #[serde(default)]
     pub trade_credits: u32,
+    /// When this town last handed the party a program, or `None` if it
+    /// never has — `Game::request_program_gift`.
+    ///
+    /// **Time is the limiter because aid is free.** The price of a gift was
+    /// reaching `Allied`; with no Credit cost and no standing spent, the
+    /// only thing left to bound it is how often. Additive behind
+    /// `#[serde(default)]`, so it costs no `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub last_gift_tick: Option<u64>,
+    /// How many gifts this town has handed over, which is what makes the
+    /// *next* one's species derivable: the roll folds this count in, so a
+    /// reload cannot reroll a gift and a town does not hand over the same
+    /// program forever.
+    #[serde(default)]
+    pub gifts_taken: u32,
 }
 
 impl Relation {

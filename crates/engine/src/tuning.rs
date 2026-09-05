@@ -3504,6 +3504,13 @@ pub const SETTLEMENT_GARRISON_RADIUS: i32 = 40;
 /// shelf turning over. Unmeasured.
 pub const SETTLEMENT_GIFT_COOLDOWN_TICKS: u64 = 9_000;
 
+/// Salts a gift's species roll apart from a town's shelf
+/// (`SETTLEMENT_MARKET_SALT`) and its board (`SETTLEMENT_BOARD_SALT`). All
+/// three fold the world seed and the town's own region coordinates, so
+/// without three salts a town's first gift would be a function of the same
+/// number its shelf is.
+pub const SETTLEMENT_GIFT_SALT: u64 = 0x61F7_5E77_1E5E_0001;
+
 /// The `stat_mult` a gifted program is spawned at — **labour, not power**.
 ///
 /// Below the 1.0 an adopted or purchased program gets, on purpose: a free

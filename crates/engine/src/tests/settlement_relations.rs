@@ -362,3 +362,302 @@ fn the_garrison_cap_does_not_touch_the_structure_half() {
         "two shields ({with_shields}) were clamped by a settlement constant"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The gift — the aid ladder's first verb
+// ---------------------------------------------------------------------------
+
+/// Every program the party owns, whatever it is currently doing.
+fn owned_programs(game: &Game) -> usize {
+    game.world
+        .iter_entities()
+        .filter(|e| e.contains::<crate::components::Tamed>())
+        .count()
+}
+
+/// A town standing next to the player, Allied, with no gift taken yet.
+fn allied_neighbour(game: &mut Game) -> SettlementKey {
+    let key = settlement_east_of_player(game);
+    set_standing(game, key, SETTLEMENT_ALLIED_STANDING);
+    key
+}
+
+/// Asserts a refusal changed nothing a gift would have changed.
+fn assert_gift_spent_nothing(game: &Game, key: SettlementKey, roster: usize, msg: &str) {
+    assert_eq!(owned_programs(game), roster, "{msg}: the roster moved");
+    let relation = game
+        .world
+        .resource::<Standings>()
+        .0
+        .get(&key)
+        .copied()
+        .unwrap_or_default();
+    assert_eq!(
+        relation.last_gift_tick, None,
+        "{msg}: the cooldown was started"
+    );
+    assert_eq!(relation.gifts_taken, 0, "{msg}: the gift was counted");
+}
+
+#[test]
+fn a_gift_refuses_after_game_over_and_spends_nothing() {
+    let mut game = game();
+    let key = allied_neighbour(&mut game);
+    let roster = owned_programs(&game);
+    game.world.resource_mut::<GameOver>().reason = Some("done".to_string());
+
+    assert!(game.request_program_gift(key).is_err());
+    assert_gift_spent_nothing(&game, key, roster, "game over");
+}
+
+#[test]
+fn a_gift_refuses_during_an_active_battle_and_spends_nothing() {
+    let mut game = game();
+    let key = allied_neighbour(&mut game);
+    let roster = owned_programs(&game);
+    game.world
+        .insert_resource(super::extraction::minimal_active_battle(&game));
+
+    assert!(game.request_program_gift(key).is_err());
+    assert_gift_spent_nothing(&game, key, roster, "active battle");
+}
+
+#[test]
+fn a_gift_refuses_an_unknown_town_and_spends_nothing() {
+    let mut game = game();
+    let roster = owned_programs(&game);
+    let key = SettlementKey { rx: 99, ry: 99 };
+
+    assert!(game.request_program_gift(key).is_err());
+    assert_gift_spent_nothing(&game, key, roster, "unknown town");
+}
+
+#[test]
+fn a_gift_refuses_from_out_of_reach_and_spends_nothing() {
+    let mut game = game();
+    let key = SettlementKey { rx: 3, ry: 3 };
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    place_settlement(&mut game, key, pos.x + 30, pos.y + 30);
+    set_standing(&mut game, key, SETTLEMENT_ALLIED_STANDING);
+    let roster = owned_programs(&game);
+
+    assert!(game.request_program_gift(key).is_err());
+    assert_gift_spent_nothing(&game, key, roster, "out of reach");
+}
+
+#[test]
+fn a_gift_refuses_below_allied_and_spends_nothing() {
+    let mut game = game();
+    let key = settlement_east_of_player(&mut game);
+    set_standing(&mut game, key, SETTLEMENT_WARM_STANDING);
+    let roster = owned_programs(&game);
+
+    assert!(game.request_program_gift(key).is_err());
+    assert_gift_spent_nothing(&game, key, roster, "warm town");
+}
+
+#[test]
+fn a_gift_refuses_inside_the_cooldown_and_spends_nothing() {
+    let mut game = game();
+    let key = allied_neighbour(&mut game);
+    game.request_program_gift(key).expect("the first gift");
+    let roster = owned_programs(&game);
+    let after_first = *game.world.resource::<Standings>().0.get(&key).unwrap();
+
+    assert!(game.request_program_gift(key).is_err());
+    assert_eq!(owned_programs(&game), roster, "a second gift was granted");
+    assert_eq!(
+        *game.world.resource::<Standings>().0.get(&key).unwrap(),
+        after_first,
+        "the refused request moved the relation"
+    );
+}
+
+#[test]
+fn the_cooldown_releases_and_the_town_gifts_again() {
+    let mut game = game();
+    let key = allied_neighbour(&mut game);
+    game.request_program_gift(key).expect("the first gift");
+    let roster = owned_programs(&game);
+
+    game.world.resource_mut::<GameClock>().tick += SETTLEMENT_GIFT_COOLDOWN_TICKS;
+
+    game.request_program_gift(key).expect("the second gift");
+    assert_eq!(owned_programs(&game), roster + 1);
+    assert_eq!(
+        game.world
+            .resource::<Standings>()
+            .0
+            .get(&key)
+            .unwrap()
+            .gifts_taken,
+        2
+    );
+}
+
+#[test]
+fn a_gifted_program_joins_the_roster_as_staff() {
+    let mut game = game();
+    let key = allied_neighbour(&mut game);
+    let before: Vec<Entity> = game
+        .world
+        .iter_entities()
+        .filter(|e| e.contains::<crate::components::Tamed>())
+        .map(|e| e.id())
+        .collect();
+
+    game.request_program_gift(key).expect("the gift");
+
+    let after: Vec<Entity> = game
+        .world
+        .iter_entities()
+        .filter(|e| e.contains::<crate::components::Tamed>())
+        .map(|e| e.id())
+        .collect();
+    assert_eq!(after.len(), before.len() + 1);
+    let gifted = *after.iter().find(|e| !before.contains(e)).unwrap();
+    assert_eq!(
+        game.program_role(gifted),
+        Some(crate::game::party::ProgramRole::Staff),
+        "a gift is labour, not a party member"
+    );
+    // The roster barrier's own parts, not merely "an entity appeared".
+    assert!(game.world.get::<crate::components::Tamed>(gifted).is_some());
+    assert!(game.world.get::<crate::components::Stats>(gifted).is_some());
+    assert!(
+        game.world
+            .get::<crate::components::Hostile>(gifted)
+            .is_none()
+    );
+}
+
+/// The whole reason the species is derived: it must not move when the
+/// seeded stream does, so a reload — which replays a different number of
+/// draws — cannot reroll what a town hands over.
+#[test]
+fn a_gifts_species_ignores_game_rng() {
+    let species_of = |burn: u32| {
+        let mut game = game();
+        let key = allied_neighbour(&mut game);
+        {
+            let mut rng = game.world.resource_mut::<GameRng>();
+            for _ in 0..burn {
+                rng.0.random_range(0..1_000_000);
+            }
+        }
+        let before: Vec<Entity> = game
+            .world
+            .iter_entities()
+            .filter(|e| e.contains::<crate::components::Tamed>())
+            .map(|e| e.id())
+            .collect();
+        game.request_program_gift(key).expect("the gift");
+        let gifted = game
+            .world
+            .iter_entities()
+            .filter(|e| e.contains::<crate::components::Tamed>())
+            .map(|e| e.id())
+            .find(|e| !before.contains(e))
+            .unwrap();
+        game.world
+            .get::<crate::components::Creature>(gifted)
+            .unwrap()
+            .species
+            .clone()
+    };
+    assert_eq!(species_of(0), species_of(50));
+}
+
+/// And the other half, stated exactly: **choosing** the species spends no
+/// draw. Spawning one does — `adopt_program` rolls rarity and stats, and
+/// every other adoption in the game pays that same cost — so the claim is
+/// about the selection, not the door. The control adopts the same species
+/// by hand and must leave the stream in the same place.
+#[test]
+fn choosing_a_gifts_species_spends_no_draw() {
+    let mut gifted_game = game();
+    let key = allied_neighbour(&mut gifted_game);
+    let before: Vec<Entity> = gifted_game
+        .world
+        .iter_entities()
+        .filter(|e| e.contains::<crate::components::Tamed>())
+        .map(|e| e.id())
+        .collect();
+    gifted_game.request_program_gift(key).expect("the gift");
+    let gifted = gifted_game
+        .world
+        .iter_entities()
+        .filter(|e| e.contains::<crate::components::Tamed>())
+        .map(|e| e.id())
+        .find(|e| !before.contains(e))
+        .unwrap();
+    let species = gifted_game
+        .world
+        .get::<crate::components::Creature>(gifted)
+        .unwrap()
+        .species
+        .clone();
+    let after_gift = gifted_game
+        .world
+        .resource_mut::<GameRng>()
+        .0
+        .random_range(0..1_000_000);
+
+    let mut control = game();
+    let key = allied_neighbour(&mut control);
+    let _ = key;
+    let (ax, ay) = control.anchor_position().unwrap();
+    control
+        .adopt_program(&species, ax, ay, SETTLEMENT_GIFT_STAT_MULT)
+        .expect("the control adoption");
+    let after_control = control
+        .world
+        .resource_mut::<GameRng>()
+        .0
+        .random_range(0..1_000_000);
+
+    assert_eq!(
+        after_gift, after_control,
+        "picking the species cost a draw the plain adoption did not"
+    );
+}
+
+#[test]
+fn a_gift_is_available_only_at_allied_and_the_preview_matches_the_door() {
+    let mut game = game();
+    let key = settlement_east_of_player(&mut game);
+    assert_eq!(game.gift_available_in(key), None, "a neutral town gifts");
+
+    set_standing(&mut game, key, SETTLEMENT_ALLIED_STANDING);
+    assert_eq!(game.gift_available_in(key), Some(0), "allied gifts now");
+
+    game.request_program_gift(key).expect("the gift");
+    assert_eq!(
+        game.gift_available_in(key),
+        Some(SETTLEMENT_GIFT_COOLDOWN_TICKS),
+        "the preview must quote the cooldown the door will enforce"
+    );
+}
+
+#[test]
+fn a_gift_and_its_cooldown_survive_a_save_and_load() {
+    let mut game = game();
+    let key = allied_neighbour(&mut game);
+    game.request_program_gift(key).expect("the gift");
+    let before = *game.world.resource::<Standings>().0.get(&key).unwrap();
+    assert!(before.last_gift_tick.is_some());
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_settlement_gift_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        *loaded.world.resource::<Standings>().0.get(&key).unwrap(),
+        before,
+        "last_gift_tick and gifts_taken must survive the round trip"
+    );
+}

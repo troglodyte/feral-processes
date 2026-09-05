@@ -194,6 +194,7 @@ fn set_standing(game: &mut Game, key: SettlementKey, standing: i32) {
             Relation {
                 standing,
                 trade_credits: 0,
+                ..Default::default()
             },
         );
 }

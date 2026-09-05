@@ -329,6 +329,50 @@ mod tests {
         );
     }
 
+    /// Loading is not the bar for `settlements` either: it exists so a
+    /// session testing towns opens *standing at one that will deal with
+    /// them*, and the nearest town in this world is 128 tiles from the
+    /// anchor — a template parked at the base would load perfectly and put
+    /// the whole feature an hour away. So this reads the town page the way
+    /// the screen does, through `Game::settlement_report`, whose aid lines
+    /// are themselves reach-gated: a non-empty list is the assertion that
+    /// the party is close enough for an Allied town to do anything for
+    /// them.
+    #[test]
+    fn the_settlements_template_opens_at_an_allied_town() {
+        let out = std::env::temp_dir().join("feral_processes_template_settlements_town.bin");
+        generate("settlements", &out).unwrap();
+        let mut game = Game::load(&out, &assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&out);
+
+        let key = game
+            .view_entities(2, 2)
+            .into_iter()
+            .find_map(|view| game.settlement_key(view.entity))
+            .expect("the template has to park the party beside a town, not merely near one");
+
+        let report = game.settlement_report(key);
+        assert_eq!(
+            report.standing, "Allied",
+            "`{}` is the town the party stands at and the aid features are \
+             gated on its band; got {}",
+            report.name, report.standing
+        );
+        assert!(
+            !report.aid.is_empty(),
+            "an Allied town offering nothing means the party is out of reach \
+             of its garrison, its gift and the trip home — which is the whole \
+             of what this template exists to open on"
+        );
+        assert!(
+            game.structure_report()
+                .into_iter()
+                .any(|s| s.kind == "relay"),
+            "the trip home needs somewhere to come back to: dispatch, routes \
+             and inbound travel all read `StructureDef::dispatches_sorties`"
+        );
+    }
+
     /// Loading is not the bar for `chains`: it exists so that a session
     /// testing production chains starts with one *running*, and a template
     /// whose machines are misaligned by one tile would load perfectly and

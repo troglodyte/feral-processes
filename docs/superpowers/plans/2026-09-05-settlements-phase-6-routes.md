@@ -1,6 +1,6 @@
 # Settlements Phase 6 — Caravan routes
 
-Spec: `docs/superpowers/specs/2026-09-04-settlements-design.md`, "Phase 6".
+Spec: `docs/superpowers/archive/specs/2026-09-04-settlements-design.md`, "Phase 6".
 Branch: `feat/caravan-routes`. Scope confirmed with the user 2026-09-05:
 **both halves in one landing** (one-off dispatch *and* standing routes,
 including Hostile route predation), **plus the first dispatch screen, which

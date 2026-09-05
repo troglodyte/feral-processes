@@ -1,8 +1,7 @@
 # Settlement aid: what a friendly town is worth
 
-**Status:** built on `feat/settlement-aid`, unmerged and **unplayed**. See
-"Amended in the build" below for the four places the design did not survive
-contact.
+**Status:** shipped in `v0.13.100` and still **unplayed**. See "Amended in
+the build" below for the four places the design did not survive contact.
 
 The follow-on to `2026-09-04-settlements-design`, whose six numbered phases
 all shipped by `v0.13.99`. It builds the item that spec deferred by

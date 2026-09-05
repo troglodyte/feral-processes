@@ -5,7 +5,7 @@ A settlement is derived per region, materialized onto walkable ground as the
 party covers it, recorded in `resources::Settlements` and restored on load.
 What is missing is every way a player could know it is there.
 
-Spec: `docs/superpowers/specs/2026-09-04-settlements-design.md`, Phase 2.
+Spec: `docs/superpowers/archive/specs/2026-09-04-settlements-design.md`, Phase 2.
 Read that first, then this. Read `CLAUDE.md`, then invoke the `seams` skill
 for **the HUD** and **saves, logs and screens** before touching either.
 

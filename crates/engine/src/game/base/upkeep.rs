@@ -229,12 +229,51 @@ impl Game {
 
     pub(crate) fn total_raid_defense(&self) -> u32 {
         let structure_db = self.world.resource::<StructureDb>();
-        self.world
+        let structures: u32 = self
+            .world
             .iter_entities()
             .filter_map(|e| e.get::<Structure>())
             .filter_map(|s| structure_db.get(&s.kind))
             .map(|def| def.raid_defense)
-            .sum()
+            .sum();
+        structures + self.garrison_defense()
+    }
+
+    /// What the party's friendly neighbours station around the base — the
+    /// aid ladder's passive half, `Standing::garrison_defense` summed over
+    /// every known town within `SETTLEMENT_GARRISON_RADIUS` of the anchor.
+    ///
+    /// **The clamp is on this sum alone and never on the total.** Clamping
+    /// the total would cap the player's own shield network with a settlement
+    /// constant, which is a different feature and a regression — two Shields
+    /// already out-defend `SETTLEMENT_GARRISON_MAX` and must keep doing so.
+    /// Leaving it off entirely is worse: `run_raid` subtracts this from
+    /// `RAID_DAMAGE` with `saturating_sub`, so enough Allied neighbours take
+    /// every sweep to zero while still logging one, and raids stop happening
+    /// in everything but the message log.
+    ///
+    /// No anchor means no garrison rather than a panic: `anchor_position` is
+    /// `Option` because the anchor is a resource that a partially-built
+    /// world may not have yet.
+    fn garrison_defense(&self) -> u32 {
+        let Some((ax, ay)) = self.anchor_position() else {
+            return 0;
+        };
+        let towns: Vec<(crate::settlements::SettlementKey, (i32, i32))> = self
+            .world
+            .resource::<crate::resources::Settlements>()
+            .0
+            .iter()
+            .map(|(key, known)| (*key, known.tile))
+            .collect();
+        towns
+            .into_iter()
+            .filter(|(_, (tx, ty))| {
+                (tx - ax).abs().max((ty - ay).abs()) <= crate::tuning::SETTLEMENT_GARRISON_RADIUS
+            })
+            .map(|(key, _)| self.standing_band(key).garrison_defense())
+            .sum::<u32>()
+            .min(crate::tuning::SETTLEMENT_GARRISON_MAX)
     }
 
     /// Fires a GC Entropy Sweep now, skipping the per-tick roll — the dev

@@ -258,3 +258,107 @@ fn standing_survives_a_save_and_load() {
         "the remainder is what makes trade a volume rate rather than a rounding rule"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The garrison — the aid ladder's passive half
+// ---------------------------------------------------------------------------
+
+/// Plants a town at `standing`, `dx`/`dy` tiles from the base anchor.
+fn town_near_anchor(game: &mut Game, key: SettlementKey, dx: i32, dy: i32, standing: i32) {
+    let (ax, ay) = game.anchor_position().expect("a new game has an anchor");
+    place_settlement(game, key, ax + dx, ay + dy);
+    set_standing(game, key, standing);
+}
+
+#[test]
+fn an_allied_town_beside_the_anchor_stations_a_detachment() {
+    let mut game = game();
+    let before = game.total_raid_defense();
+    town_near_anchor(
+        &mut game,
+        SettlementKey { rx: 1, ry: 0 },
+        2,
+        0,
+        SETTLEMENT_ALLIED_STANDING,
+    );
+    assert_eq!(
+        game.total_raid_defense(),
+        before + SETTLEMENT_ALLIED_GARRISON
+    );
+}
+
+#[test]
+fn a_town_beyond_the_garrison_radius_stations_nobody() {
+    let mut game = game();
+    let before = game.total_raid_defense();
+    town_near_anchor(
+        &mut game,
+        SettlementKey { rx: 1, ry: 0 },
+        SETTLEMENT_GARRISON_RADIUS + 1,
+        0,
+        SETTLEMENT_ALLIED_STANDING,
+    );
+    assert_eq!(game.total_raid_defense(), before);
+}
+
+#[test]
+fn a_warm_town_garrisons_and_a_neutral_one_does_not() {
+    let mut game = game();
+    let before = game.total_raid_defense();
+    let key = SettlementKey { rx: 1, ry: 0 };
+
+    town_near_anchor(&mut game, key, 2, 0, 0);
+    assert_eq!(
+        game.total_raid_defense(),
+        before,
+        "a neutral town garrisons"
+    );
+
+    set_standing(&mut game, key, SETTLEMENT_WARM_STANDING);
+    let warm = game.total_raid_defense();
+    assert_eq!(warm, before + SETTLEMENT_WARM_GARRISON);
+
+    set_standing(&mut game, key, SETTLEMENT_ALLIED_STANDING);
+    assert!(
+        game.total_raid_defense() > warm,
+        "allied stations no more than warm"
+    );
+}
+
+/// The clamp, and it is checked on the exact figure rather than with a
+/// `<=`: an off-by-one in the cap would pass a bound check.
+#[test]
+fn the_settlement_half_of_raid_defense_is_capped() {
+    let mut game = game();
+    let before = game.total_raid_defense();
+    // Enough Allied neighbours that the uncapped sum would clear the ceiling
+    // several times over.
+    let towns = (SETTLEMENT_GARRISON_MAX / SETTLEMENT_ALLIED_GARRISON) + 3;
+    for i in 0..towns as i32 {
+        town_near_anchor(
+            &mut game,
+            SettlementKey { rx: i + 1, ry: 0 },
+            i + 2,
+            0,
+            SETTLEMENT_ALLIED_STANDING,
+        );
+    }
+    assert_eq!(game.total_raid_defense(), before + SETTLEMENT_GARRISON_MAX);
+}
+
+/// The test that fails if the clamp is applied to the total instead of to
+/// the settlement half: the player's own shield network is not capped by a
+/// settlement constant, and two Shields already out-defend it.
+#[test]
+fn the_garrison_cap_does_not_touch_the_structure_half() {
+    let mut game = game();
+    let (ax, ay) = game.anchor_position().unwrap();
+    let before = game.total_raid_defense();
+    spawn_structure_at(&mut game, "shield", ax + 3, ay);
+    spawn_structure_at(&mut game, "shield", ax + 4, ay);
+    let with_shields = game.total_raid_defense();
+    assert!(
+        with_shields > before + SETTLEMENT_GARRISON_MAX,
+        "two shields ({with_shields}) were clamped by a settlement constant"
+    );
+}

@@ -446,13 +446,18 @@ impl Game {
         let losses =
             self.roll_proceeds_predation(anchor, destination_tile, destination, &mut proceeds);
         let currency = self.trade_currency();
-        let landed = crate::game::base::stock::return_to_depots(self, &currency, proceeds);
         let name = self.settlement_name(destination);
         let currency_name = self.item_name(&currency).to_string();
         self.log_base_kind(
             MessageKind::Loot,
-            format!("The caravan returns from {name} with {landed} {currency_name}."),
+            format!("The caravan returns from {name} with {proceeds} {currency_name}."),
         );
+        // Depot first, the player's pack second, a log line for anything
+        // that fits nowhere — `Game::return_material`'s own rule. Calling
+        // `stock::return_to_depots` alone here silently destroyed whatever a
+        // Depot-less base could not catch, Finding 1 of the 2026-09-05
+        // whole-branch review.
+        self.return_material(&currency, proceeds);
         self.queue_cargo_walk(false);
         self.world.resource_mut::<resources::Routes>().0[index].losses = losses;
 

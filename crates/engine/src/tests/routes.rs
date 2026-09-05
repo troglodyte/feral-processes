@@ -6,7 +6,7 @@ use bevy_ecs::prelude::Entity;
 
 use super::support::{scratch_assets_dir, test_assets_dir};
 use crate::Game;
-use crate::components::{Glyph, GlyphColor, Position, Stock, Structure};
+use crate::components::{Glyph, GlyphColor, Inventory, Position, Stock, Structure};
 use crate::game::route::RouteRefusal;
 use crate::items::ItemId;
 use crate::resources::DifficultyMode;
@@ -827,5 +827,74 @@ fn the_tick_draws_no_rng_when_nothing_preys() {
     assert_eq!(
         without, with,
         "no predator stands near this trip, so completing the leg must not touch GameRng"
+    );
+}
+
+// ------------------------------------------------------------ Review findings
+// 2026-09-05 whole-branch review, `docs/superpowers/plans/
+// 2026-09-05-settlements-phase-6-routes.md`'s branch.
+
+/// A structure that holds cargo in its own output buffer but is **not** a
+/// Depot (`stores: false` on `mining_node`, the only field `return_to_depots`
+/// reads) — `spend_from_base` draws from every `Structure + Stock` entity
+/// regardless, so a dispatch can spend from here while nothing exists that
+/// could ever receive a deposit back.
+fn deploy_non_storing_buffer(game: &mut Game, x: i32, y: i32, item: &ItemId, qty: u32) {
+    let node = deploy_structure(game, "mining_node", x, y);
+    game.world.entity_mut(node).insert(Stock {
+        output: [(item.clone(), qty)].into_iter().collect(),
+        capacity: 9_999,
+        ..Default::default()
+    });
+}
+
+/// A base with a Relay and cargo sitting in a non-storing machine's buffer,
+/// but **no Depot standing at all** — Finding 1's reproduction. Dispatch
+/// still succeeds (`spend_from_base` draws from any buffer), but the inbound
+/// leg's proceeds have nowhere built to land.
+fn a_depot_less_dispatch_ready_base(seed: u32, qty: u32) -> (Game, ItemId, SettlementKey) {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    deploy_relay(&mut game);
+    let item = ItemId::from("cache_grain");
+    deploy_non_storing_buffer(&mut game, 0, 1, &item, qty);
+    let key = SettlementKey { rx: 5, ry: 5 };
+    register_settlement(&mut game, key, a_destination(), (500, 500));
+    (game, item, key)
+}
+
+/// FINDING 1 (HIGH): `complete_inbound_leg` must route proceeds through
+/// `Game::return_material` — Depot first, the player's pack second — rather
+/// than `return_to_depots` alone with the remainder discarded. A base with no
+/// Depot standing must not simply destroy the sale's proceeds.
+#[test]
+fn proceeds_land_on_the_player_when_the_base_has_no_depot() {
+    let (mut game, item, key) = a_depot_less_dispatch_ready_base(7600, 300);
+    set_standing(&mut game, key, crate::tuning::SETTLEMENT_WARM_STANDING);
+    let currency = game.trade_currency();
+
+    game.dispatch_route(key, vec![(item, 300)], false)
+        .expect("a legal dispatch — spend_from_base draws from any buffer");
+    let total = game.world.resource::<crate::resources::Routes>().0[0].ticks_total;
+    for _ in 0..(2 * total) {
+        game.run_routes();
+    }
+
+    assert!(
+        game.world
+            .resource::<crate::resources::Routes>()
+            .0
+            .is_empty(),
+        "a one-off route comes home for good"
+    );
+    let player = game.player_entity();
+    let carried = game
+        .world
+        .get::<Inventory>(player)
+        .map(|inv| inv.count(&currency))
+        .unwrap_or(0);
+    assert!(
+        carried > 0,
+        "with no Depot standing, the sale's proceeds must land in the player's \
+         pack rather than being destroyed — see Game::return_material"
     );
 }

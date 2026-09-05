@@ -163,3 +163,83 @@
   rounding rule**: ten small baskets pay nothing while one large basket of
   the same volume pays the lot, which reads as the feature being broken
   rather than as a threshold.
+- **A town's garrison is one clamped term in `Game::total_raid_defense`, and
+  the clamp is on the settlement half alone.** `run_raid` subtracts that
+  total from `RAID_DAMAGE` with `saturating_sub`, so **omitting** the clamp
+  lets enough Allied neighbours take every sweep to zero — the raid still
+  picks a target and still logs, so it reads as working and no assertion
+  fires — while putting it **on the total** caps the player's own shield
+  network with a settlement constant, and two Shields are supposed to zero a
+  sweep because that is a thing the player built.
+  `the_garrison_cap_does_not_touch_the_structure_half` fails under the
+  second mistake and passes under the first, which is why both tests exist.
+  `SETTLEMENT_GARRISON_MAX < RAID_DAMAGE` is asserted in `relations.rs`, so
+  closing that gap by retune fails the build.
+  `Standing::garrison_defense` is a **magnitude** and ramps from `Warm`;
+  `gifts_programs` and `hosts_a_relay` are booleans at `Allied`. That is
+  what keeps three new queries from being three spellings of one predicate.
+- **A gifted program's *species* is derived and spends no draw; adopting it
+  spends what every adoption spends.** The fold is `(world seed, region,
+  gifts taken)` with `SETTLEMENT_GIFT_SALT`, so a reload cannot reroll it —
+  but `Game::adopt_program` rolls rarity and stats like the caravan's
+  purchased program and the Stack's salvaged one, so a test asserting "the
+  gift draws no `GameRng`" fails, correctly. State it as
+  `choosing_a_gifts_species_spends_no_draw` does: adopt the same species by
+  hand in a control run and compare where the stream ends up. The pool is
+  `habitat_pools`' **ordinary** half, **sorted** (the draw indexes into it);
+  the apex half is excluded because a gifted boss inverts the whole "labour,
+  not power" decision. That decision is `SETTLEMENT_GIFT_STAT_MULT` alone —
+  a tuning claim, not a structural one, since `ProgramRole` is derived and
+  nothing stops the player fielding a gift.
+- **A relay landing searches from band 1, filters like a step, and only
+  queues the visit cue if it lands in reach.** Band 0 would set the party
+  down on the settlement tile, which admits nobody (`move_player`'s fourth
+  arm returns before the walkable step); `walkable` alone is not the
+  question, because that ladder also turns aside for a wild program, a nest
+  and a Stack entrance, and "checks walkable, not empty" has already put a
+  town on a Stack entrance once. The ring order is `spawning::ring_tiles`,
+  shared with `standable_near` rather than copied. And broken terrain can
+  put the nearest standable ground several tiles out, where `PendingVisit`
+  would open a town page whose `[M]` and `[J]` are then refused by the
+  Chebyshev-1 `settlement_reach` — so the cue asks that same question.
+  **Neither travel door calls `require_surface`**: the Relay is in base
+  space, so it would refuse the only place an outbound trip can start.
+- **The town page's aid sentences are `pub const` in the engine because the
+  census that measures them lives in gui and cannot build a `Game`.**
+  `Game::world` is private, so a renderer test cannot ask what the live
+  lines are; a hand-copied list would drift on the first rewording, and
+  `draw_row` clips vertically and never horizontally, so the drift is a line
+  lost off the right edge in silence. `AID_LINES` is what both ends read —
+  the engine asserts every emitted line is in it *and* that every line in it
+  is reachable, the renderer measures the array. Sentences and not figures,
+  because a read-only screen's rows belong to the engine
+  (`message_history`'s rule) and because this game has never shown the
+  player a tick: the gift's wait is banded into words the way
+  `memories::age_phrase` bands a memory's age.
+- **Relay travel is one seam in two crates, and shipping half of it is
+  silent.** `Game::spend_travel_ticks` must break on a fight or a game over
+  — it is the fourth multi-tick loop in the engine and the other three all
+  do, because a tick can start a fight (`nest_aggro_tick`) and the rest must
+  be dropped rather than resolving a world the party has left. And both
+  travel keys in app-core must call **`after_world_action` itself, not a
+  copy of it** (`finish_compile`'s rule): `handle_key`'s tail pays
+  `after_tick`, which does autosave and notifications, while
+  `after_world_action` is the only thing outside the battle screens that
+  writes `Mode::Battle`, drains `take_settlement_visit` and checks game
+  over. With neither half, a trip past a roused nest spends every tick with
+  the battle already running, the map is drawn over it until the player's
+  next action, a notification can take the screen mid-fight, and the arrival
+  cue sits queued to open a town page later for a town already left. The
+  charge is therefore **at most** the quote; a test asserting exact equality
+  is only valid for an uninterrupted trip.
+- **Every aid sentence on the town page must be a call, and getting that
+  wrong twice is the shipped history.** The garrison line restated
+  `garrison_defense`'s radius check under a doc comment claiming a call —
+  the fold returns a clamped *sum*, so `Game::town_garrisons` is the shared
+  per-town half both must use. The gift and relay lines ignored
+  `settlement_reach`, while both their doors ask it, so a town examined from
+  four tiles off (which `x` does — this page opens from anywhere inside
+  `EXAMINE_RANGE_TILES`) offered a gift and a trip and refused them in the
+  same breath. Assert the page and the doors in one test, never the page
+  alone.
+

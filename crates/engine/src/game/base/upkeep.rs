@@ -229,12 +229,73 @@ impl Game {
 
     pub(crate) fn total_raid_defense(&self) -> u32 {
         let structure_db = self.world.resource::<StructureDb>();
-        self.world
+        let structures: u32 = self
+            .world
             .iter_entities()
             .filter_map(|e| e.get::<Structure>())
             .filter_map(|s| structure_db.get(&s.kind))
             .map(|def| def.raid_defense)
-            .sum()
+            .sum();
+        structures + self.garrison_defense()
+    }
+
+    /// What the party's friendly neighbours station around the base — the
+    /// aid ladder's passive half, `Standing::garrison_defense` summed over
+    /// every known town within `SETTLEMENT_GARRISON_RADIUS` of the anchor.
+    ///
+    /// **The clamp is on this sum alone and never on the total.** Clamping
+    /// the total would cap the player's own shield network with a settlement
+    /// constant, which is a different feature and a regression — two Shields
+    /// already out-defend `SETTLEMENT_GARRISON_MAX` and must keep doing so.
+    /// Leaving it off entirely is worse: `run_raid` subtracts this from
+    /// `RAID_DAMAGE` with `saturating_sub`, so enough Allied neighbours take
+    /// every sweep to zero while still logging one, and raids stop happening
+    /// in everything but the message log.
+    ///
+    /// Which towns are near enough to count is `town_garrisons`' question,
+    /// not this one's — the page has to ask it per town, so the radius check
+    /// lives there and this is the fold over it.
+    fn garrison_defense(&self) -> u32 {
+        let towns: Vec<crate::settlements::SettlementKey> = self
+            .world
+            .resource::<crate::resources::Settlements>()
+            .0
+            .keys()
+            .copied()
+            .collect();
+        towns
+            .into_iter()
+            .map(|key| self.town_garrisons(key))
+            .sum::<u32>()
+            .min(crate::tuning::SETTLEMENT_GARRISON_MAX)
+    }
+
+    /// What one town contributes to the fold above — its band's answer if it
+    /// is near enough to the anchor to station anyone, and zero otherwise.
+    ///
+    /// Split out because the town page has to say whether *this* town
+    /// garrisons, and `garrison_defense` returns a clamped sum that cannot
+    /// answer for one. Both sides call this rather than restating the radius
+    /// check, so a new condition on the fold cannot leave the page promising
+    /// a detachment that no longer arrives.
+    pub(crate) fn town_garrisons(&self, key: crate::settlements::SettlementKey) -> u32 {
+        let Some((ax, ay)) = self.anchor_position() else {
+            return 0;
+        };
+        let Some(tile) = self
+            .world
+            .resource::<crate::resources::Settlements>()
+            .0
+            .get(&key)
+            .map(|known| known.tile)
+        else {
+            return 0;
+        };
+        if (tile.0 - ax).abs().max((tile.1 - ay).abs()) > crate::tuning::SETTLEMENT_GARRISON_RADIUS
+        {
+            return 0;
+        }
+        self.standing_band(key).garrison_defense()
     }
 
     /// Fires a GC Entropy Sweep now, skipping the per-tick roll — the dev

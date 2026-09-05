@@ -182,6 +182,47 @@ impl App {
                 self.menu_selected = 0;
                 self.mode = Mode::SettlementBoard;
             }
+            // `[G]` for a gift, and **no reach check of its own**, unlike
+            // `[M]` and `[J]` above. Those two open a *screen* whose view
+            // answers `None` from across the map, which would draw as an
+            // empty market; this calls a door that refuses in its own words
+            // and puts the reach rule in one place rather than two.
+            GameKey::Char('G') => {
+                let Some(key) = self.pending_settlement else {
+                    return;
+                };
+                let outcome = match &mut self.game {
+                    Some(game) => game.request_program_gift(key),
+                    None => return,
+                };
+                self.report(outcome);
+            }
+            // `[T]` for travel. On success the page **must** close: the
+            // party is no longer standing there, and a page left open would
+            // be describing a town on the other side of the map.
+            GameKey::Char('T') => {
+                let Some(key) = self.pending_settlement else {
+                    return;
+                };
+                let outcome = match &mut self.game {
+                    Some(game) => game.travel_to_anchor(key),
+                    None => return,
+                };
+                let went = outcome.is_ok();
+                self.report(outcome);
+                if went {
+                    self.pending_settlement = None;
+                    self.mode = Mode::Playing;
+                    // **`after_world_action` itself, not a copy of it** —
+                    // `finish_compile`'s rule, and travel is the same kind
+                    // of path: its ticks are ordinary game ticks and can
+                    // open a fight or end the run exactly as a move's can.
+                    // Without this the map is drawn over a live battle
+                    // until the player's next world action, and a
+                    // notification can take the screen mid-fight.
+                    self.after_world_action(true, false);
+                }
+            }
             _ => {}
         }
     }

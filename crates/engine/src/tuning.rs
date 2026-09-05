@@ -3465,6 +3465,79 @@ pub const SETTLEMENT_CONTRACT_STANDING: i32 = 10;
 /// or the board becomes a thing to avoid reading.
 pub const SETTLEMENT_ABANDON_STANDING: i32 = -4;
 
+/// What a town stations around your base once it likes you, added to
+/// `Game::total_raid_defense` — see `Standing::garrison_defense`. One Allied
+/// town is worth exactly one Shield (`assets/structures/shield.ron` grants
+/// `raid_defense: 2`), which is the scale that makes courting a neighbour
+/// comparable to building something.
+///
+/// Unmeasured: no instrument in this repo models a raid, so whether a
+/// garrison is *noticeable* is a play question.
+pub const SETTLEMENT_WARM_GARRISON: u32 = 1;
+/// See `SETTLEMENT_WARM_GARRISON`.
+pub const SETTLEMENT_ALLIED_GARRISON: u32 = 2;
+
+/// The ceiling on the **settlement half** of raid defense — the sum over
+/// towns is clamped to this before the structure sum is added, never after.
+///
+/// Strictly below `RAID_DAMAGE`, and that is the whole point: however many
+/// Allied neighbours the party collects, a sweep still lands for something.
+/// Without it, `RAID_DAMAGE.saturating_sub(total_raid_defense())` reaches
+/// zero and raids stop happening in everything but the log line, which is a
+/// mechanic deleted rather than softened. Structures may still zero a sweep
+/// — two Shields already do — because that is a thing the player built.
+pub const SETTLEMENT_GARRISON_MAX: u32 = 3;
+
+/// How close a town has to be to the base anchor to station anyone there,
+/// in Chebyshev tiles.
+///
+/// Inside `SETTLEMENT_NOTICE_RADIUS`, deliberately: a town far enough away
+/// to merely *hear* what you did is not close enough to keep a detachment
+/// on your doorstep. Unmeasured.
+pub const SETTLEMENT_GARRISON_RADIUS: i32 = 40;
+
+/// How long a town waits between gifts — see `Game::request_program_gift`.
+///
+/// The limiter, because aid is free: the price of a gift was reaching
+/// Allied, so the only thing left to bound it is time. Several times
+/// `SETTLEMENT_MARKET_ROTATION_TICKS`, since a gift is a larger event than a
+/// shelf turning over. Unmeasured.
+pub const SETTLEMENT_GIFT_COOLDOWN_TICKS: u64 = 9_000;
+
+/// Salts a gift's species roll apart from a town's shelf
+/// (`SETTLEMENT_MARKET_SALT`) and its board (`SETTLEMENT_BOARD_SALT`). All
+/// three fold the world seed and the town's own region coordinates, so
+/// without three salts a town's first gift would be a function of the same
+/// number its shelf is.
+pub const SETTLEMENT_GIFT_SALT: u64 = 0x61F7_5E77_1E5E_0001;
+
+/// The `stat_mult` a gifted program is spawned at — **labour, not power**.
+///
+/// Below the 1.0 an adopted or purchased program gets, on purpose: a free
+/// companion scaled to the zone is the shape closed off when scan, the
+/// Terminal, free rest and the Market's fragment listing were shut, because
+/// progression here is earned by fighting. A gift feeds the base's labour
+/// shortage instead. **This is the number doing that work** — nothing
+/// structural stops the player fielding a gift, since `ProgramRole` is
+/// derived; what makes it a bad trade is this constant. Unmeasured, and the
+/// first thing to revisit after a play session.
+pub const SETTLEMENT_GIFT_STAT_MULT: f32 = 0.6;
+/// Multiplies `SETTLEMENT_GIFT_STAT_MULT` when the town's `Specialty` is
+/// `Programs` — what a town known for programs gives you over one that
+/// merely likes you. Still below 1.0 after the multiply, or decision 5 is
+/// undone by the specialty case. Unmeasured.
+pub const SETTLEMENT_GIFT_SPECIALTY_MULT: f32 = 1.25;
+
+/// Ticks charged per Chebyshev tile of a relay trip — see
+/// `Game::travel_to_settlement`.
+///
+/// Exactly what the walk would have cost: `Game::move_player` spends one
+/// tick per step. So travel removes the encounters and the tedium and
+/// removes **nothing else** — upkeep, decay, needs and production all
+/// advance exactly as far as they would have. Not a guess, which is why it
+/// is the one constant in this feature with an argument instead of a shrug.
+pub const SETTLEMENT_TRAVEL_TICKS_PER_TILE: u64 = 1;
+
 // ─────────────────────────────────────────────────────────────────────────
 // Combat resolution: to-hit, crit, fumble, mitigation
 // ─────────────────────────────────────────────────────────────────────────

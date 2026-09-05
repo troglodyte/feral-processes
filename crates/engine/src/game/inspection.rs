@@ -807,10 +807,13 @@ impl Game {
     /// key with a materialized entity always has a `Settlements` record —
     /// see `entity_label`'s settlement arm for why that invariant holds.
     pub fn settlement_report(
-        &self,
+        &mut self,
         key: crate::settlements::SettlementKey,
     ) -> crate::views::SettlementView {
         let standing = self.standing_band(key).label();
+        // Before the borrow below: the aid lines call three doors of their
+        // own, one of which needs the world mutably.
+        let aid = self.settlement_aid_lines(key);
         let def = &self
             .world
             .resource::<crate::resources::Settlements>()
@@ -825,6 +828,7 @@ impl Game {
             temperament: def.temperament.label(),
             blurb: def.blurb.clone(),
             standing,
+            aid,
         }
     }
 

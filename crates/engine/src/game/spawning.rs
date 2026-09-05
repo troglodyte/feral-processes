@@ -1011,20 +1011,9 @@ impl Game {
     /// so this answers the same thing every time it is asked. The answer is
     /// recorded anyway — see `resources::KnownSettlement::tile`.
     fn standable_near(&mut self, from: (i32, i32)) -> Option<(i32, i32)> {
-        for band in 0i32..SETTLEMENT_SITE_SEARCH_TILES {
-            for dy in -band..=band {
-                for dx in -band..=band {
-                    if band > 0 && dx.abs() != band && dy.abs() != band {
-                        continue;
-                    }
-                    let (x, y) = (from.0 + dx, from.1 + dy);
-                    if self.world.resource_mut::<WorldMap>().tile(x, y).walkable {
-                        return Some((x, y));
-                    }
-                }
-            }
-        }
-        None
+        ring_tiles(from, 0, SETTLEMENT_SITE_SEARCH_TILES)
+            .into_iter()
+            .find(|&(x, y)| self.world.resource_mut::<WorldMap>().tile(x, y).walkable)
     }
 
     fn spawn_settlement_at(
@@ -1613,4 +1602,28 @@ pub(crate) fn nest_components(
             max_hp: NEST_DURABILITY,
         },
     )
+}
+
+/// Every tile in the square rings `min_band..max_band` around `from`,
+/// nearest ring first.
+///
+/// Extracted rather than written twice: `Game::standable_near` searches from
+/// band 0 (a settlement may stand on the cell the derivation named) and a
+/// relay landing searches from band 1 (a settlement tile admits nobody, so
+/// arriving on it is arriving somewhere `move_player` would have refused).
+/// The *order* is what both depend on — the answer is "the nearest one" —
+/// and two copies of a ring walk would eventually disagree about it.
+pub(crate) fn ring_tiles(from: (i32, i32), min_band: i32, max_band: i32) -> Vec<(i32, i32)> {
+    let mut out = Vec::new();
+    for band in min_band..max_band {
+        for dy in -band..=band {
+            for dx in -band..=band {
+                if band > 0 && dx.abs() != band && dy.abs() != band {
+                    continue;
+                }
+                out.push((from.0 + dx, from.1 + dy));
+            }
+        }
+    }
+    out
 }

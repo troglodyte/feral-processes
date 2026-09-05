@@ -566,7 +566,7 @@ fn extraction_yield_spends_no_gamerng_draw_even_with_teardown_bought() {
     );
 }
 
-fn minimal_active_battle(game: &Game) -> BattleState {
+pub(super) fn minimal_active_battle(game: &Game) -> BattleState {
     BattleState {
         player: game.player_entity(),
         round_targets: Vec::new(),

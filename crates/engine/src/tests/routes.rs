@@ -140,7 +140,7 @@ fn a_pre_routes_save_loads_with_no_routes() {
 /// Stands a Home and a Relay up in base space and puts the party on the
 /// laid floor beside them — `tests::sorties::deploy_relay`'s shape,
 /// repeated here rather than shared: each fixture file owns its own.
-fn deploy_relay(game: &mut Game) {
+pub(super) fn deploy_relay(game: &mut Game) {
     game.lay_starting_pocket();
     deploy_structure(game, "home", 0, 0);
     deploy_structure(game, "relay", 1, 0);
@@ -194,6 +194,7 @@ fn set_standing(game: &mut Game, key: SettlementKey, standing: i32) {
             Relation {
                 standing,
                 trade_credits: 0,
+                ..Default::default()
             },
         );
 }

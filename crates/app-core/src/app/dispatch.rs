@@ -156,6 +156,38 @@ impl App {
                     _ => self.refuse("Highlight a destination to send cargo to."),
                 }
             }
+            // `[T]` for travel out. `[C]`'s row resolution exactly — a
+            // continuous numbering over two sections, so a destination
+            // action landing on a site row refuses rather than acting on
+            // the wrong one. On success the hub closes: `travel_to_settlement`
+            // queues the arrival cue, and `Mode::Playing` is where the map
+            // and that cue meet.
+            GameKey::Char('T') => {
+                match dispatch_row(self.menu_selected, sites.len(), destinations.len()) {
+                    Some(DispatchRow::Destination(i)) => {
+                        let target = destinations[i].destination;
+                        let outcome = match &mut self.game {
+                            Some(game) => game.travel_to_settlement(target),
+                            None => return,
+                        };
+                        let went = outcome.is_ok();
+                        self.report(outcome);
+                        if went {
+                            self.close_screen();
+                            // `finish_compile`'s rule — the same
+                            // bookkeeping a move gets, since travel spends
+                            // ordinary ticks. It is also what **drains the
+                            // arrival cue**: `travel_to_settlement` queues
+                            // `PendingVisit` and `after_world_action` is the
+                            // one place that reads it, so without this the
+                            // town page opens later, on some unrelated
+                            // action, for a town already walked away from.
+                            self.after_world_action(true, false);
+                        }
+                    }
+                    _ => self.refuse("Highlight a destination to travel to."),
+                }
+            }
             GameKey::Char('X') => {
                 match dispatch_row(self.menu_selected, sites.len(), destinations.len()) {
                     Some(DispatchRow::Destination(i)) => {
@@ -303,7 +335,7 @@ impl App {
         let cargo = route_cargo_manifest(&self.route_cargo_amounts, &stock);
         let game = self.game.as_ref()?;
         let quote = game.route_manifest_quote(destination, &cargo).unwrap_or(0);
-        let destination_name = game.settlement_report(destination).name;
+        let destination_name = game.settlement_name(destination);
         Some(RouteCargoBasket {
             destination,
             destination_name,

@@ -14,7 +14,7 @@ use feral_processes_engine::settlements::SettlementKey;
 /// player standing on the pocket floor beside both — `app_at_a_contract_broker`'s
 /// shape, one desk over: the engine exposes no way to hand-place a
 /// structure from outside the crate, so this is a save round trip too.
-fn app_at_a_relay(seed: u32, item: &ItemId, qty: u32) -> App {
+pub(super) fn app_at_a_relay(seed: u32, item: &ItemId, qty: u32) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
     found_the_base(&mut app);
@@ -58,7 +58,7 @@ fn app_at_a_relay(seed: u32, item: &ItemId, qty: u32) -> App {
 /// A known settlement, `Open` and `Neutral` by default — `place_settlement_east_of_player`'s
 /// shape, but registered with no map entity, since a route test needs the
 /// town known rather than walked to.
-fn register_a_known_settlement(app: &mut App, key: SettlementKey, tile: (i32, i32)) {
+pub(super) fn register_a_known_settlement(app: &mut App, key: SettlementKey, tile: (i32, i32)) {
     let assets_dir = test_assets_dir();
     let path = scratch_path("dispatch_settlement", 0);
     let game = app.game.as_mut().unwrap();
@@ -92,6 +92,7 @@ fn register_a_known_settlement(app: &mut App, key: SettlementKey, tile: (i32, i3
         feral_processes_engine::settlements::relations::Relation {
             standing: feral_processes_engine::tuning::SETTLEMENT_WARM_STANDING,
             trade_credits: 0,
+            ..Default::default()
         },
     );
     save::save_to_file(&path, &data).unwrap();

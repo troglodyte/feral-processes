@@ -227,6 +227,7 @@ fn a_hostile_town_keeps_the_screen_open_and_refuses_the_basket() {
         feral_processes_engine::settlements::Relation {
             standing: feral_processes_engine::tuning::SETTLEMENT_MIN_STANDING,
             trade_credits: 0,
+            ..Default::default()
         },
     );
     save::save_to_file(&path, &data).unwrap();

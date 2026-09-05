@@ -113,6 +113,56 @@ impl Standing {
         }
     }
 
+    /// What this town stations around the party's base — the aid ladder's
+    /// passive half, added to `Game::total_raid_defense` for every known
+    /// town inside `SETTLEMENT_GARRISON_RADIUS` of the anchor.
+    ///
+    /// Exhaustive, `refuses_service`'s reason. **A magnitude rather than a
+    /// boolean**, and that is what keeps it from being a third spelling of
+    /// "is this town Allied": it ramps, so `Warm` buys something here as
+    /// well as a standing route, and the ladder's top is a difference in
+    /// degree the player can feel rather than a fourth gate.
+    ///
+    /// The sum over towns is clamped by `SETTLEMENT_GARRISON_MAX` at the
+    /// call site and not here — a per-town cap would silently make the
+    /// second Allied neighbour free.
+    pub fn garrison_defense(self) -> u32 {
+        match self {
+            Standing::Hostile | Standing::Cold | Standing::Neutral => 0,
+            Standing::Warm => crate::tuning::SETTLEMENT_WARM_GARRISON,
+            Standing::Allied => crate::tuning::SETTLEMENT_ALLIED_GARRISON,
+        }
+    }
+
+    /// Whether a town at this band will hand the party a program for
+    /// nothing — `Game::request_program_gift`.
+    ///
+    /// Exhaustive, `refuses_service`'s reason. `Allied` alone: this is the
+    /// top of the ladder's own reward, and a gift from a town that merely
+    /// favours you would leave `Allied` back where it started, which is the
+    /// asymmetry this whole feature exists to close.
+    pub fn gifts_programs(self) -> bool {
+        match self {
+            Standing::Hostile | Standing::Cold | Standing::Neutral | Standing::Warm => false,
+            Standing::Allied => true,
+        }
+    }
+
+    /// Whether this town will hold up its end of a relay link — the town's
+    /// half of `Game::travel_to_settlement`, and nothing else.
+    ///
+    /// Exhaustive, `refuses_service`'s reason. `Allied` alone. The structure
+    /// at the *party's* end is `StructureDef::dispatches_sorties`, asked
+    /// through `Game::dispatch_reach`; this query never speaks about it, so
+    /// a town's willingness and the party's infrastructure stay two
+    /// questions with one answer each.
+    pub fn hosts_a_relay(self) -> bool {
+        match self {
+            Standing::Hostile | Standing::Cold | Standing::Neutral | Standing::Warm => false,
+            Standing::Allied => true,
+        }
+    }
+
     /// Whether the town's market and job board are closed to the party.
     ///
     /// Exhaustive on purpose — see the module doc. The gate is at the
@@ -266,6 +316,98 @@ mod tests {
             );
         }
         assert!(Standing::Allied.job_slots() > Standing::Neutral.job_slots());
+    }
+
+    /// The census for the aid ladder's passive half: every band answers, the
+    /// ladder only ever climbs, and nothing below `Warm` stations anyone.
+    #[test]
+    fn every_standing_band_answers_what_garrison_it_sends() {
+        let ladder = [
+            Standing::Hostile,
+            Standing::Cold,
+            Standing::Neutral,
+            Standing::Warm,
+            Standing::Allied,
+        ];
+        for band in ladder {
+            let sends = band.garrison_defense() > 0;
+            assert_eq!(
+                sends,
+                matches!(band, Standing::Warm | Standing::Allied),
+                "{} answers the wrong way",
+                band.label()
+            );
+        }
+        for pair in ladder.windows(2) {
+            assert!(
+                pair[0].garrison_defense() <= pair[1].garrison_defense(),
+                "{} garrisons harder than {}",
+                pair[0].label(),
+                pair[1].label()
+            );
+        }
+        assert!(Standing::Allied.garrison_defense() > Standing::Warm.garrison_defense());
+    }
+
+    /// A garrison can never zero a sweep on its own, whatever the player has
+    /// or has not built. The cap is what holds it, and it is checked here
+    /// against the damage it is subtracted from rather than at the call site.
+    #[test]
+    fn the_garrison_cap_leaves_a_sweep_something_to_land() {
+        assert!(crate::tuning::SETTLEMENT_GARRISON_MAX < crate::tuning::RAID_DAMAGE);
+    }
+
+    /// The census for the gift: every band answers, `Allied` alone, and a
+    /// band that gifts never also refuses service.
+    #[test]
+    fn every_standing_band_answers_whether_it_gifts_programs() {
+        for band in [
+            Standing::Hostile,
+            Standing::Cold,
+            Standing::Neutral,
+            Standing::Warm,
+            Standing::Allied,
+        ] {
+            assert_eq!(
+                band.gifts_programs(),
+                band == Standing::Allied,
+                "{} answers the wrong way",
+                band.label()
+            );
+            if band.gifts_programs() {
+                assert!(
+                    !band.refuses_service(),
+                    "{} gifts programs but also refuses service",
+                    band.label()
+                );
+            }
+        }
+    }
+
+    /// The same census for the relay link.
+    #[test]
+    fn every_standing_band_answers_whether_it_hosts_a_relay() {
+        for band in [
+            Standing::Hostile,
+            Standing::Cold,
+            Standing::Neutral,
+            Standing::Warm,
+            Standing::Allied,
+        ] {
+            assert_eq!(
+                band.hosts_a_relay(),
+                band == Standing::Allied,
+                "{} answers the wrong way",
+                band.label()
+            );
+            if band.hosts_a_relay() {
+                assert!(
+                    !band.refuses_service(),
+                    "{} hosts a relay but also refuses service",
+                    band.label()
+                );
+            }
+        }
     }
 
     #[test]

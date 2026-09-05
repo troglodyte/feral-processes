@@ -33,6 +33,29 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.97
+
+**Towns remember you now.** Every settlement carries a standing that runs
+from Hostile through Neutral to Allied, shown on its hub page, and the game
+says so the moment you cross from one band into the next.
+
+**Trading at a town's counter earns its regard**, both directions counted —
+what you spend and what it pays you are equally business it did — and small
+baskets bank their leftover volume toward the next point rather than
+rounding to nothing.
+
+**So does clearing a nest or collapsing a stack near one.** A town hears
+about what happens within sixty tiles of it and nothing beyond that.
+
+**A town that has come to hate you shuts its counter.** The market screen
+still opens and says so, rather than dropping you back to the map with no
+explanation.
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` stays at 32 —
+`standings` is additive behind `#[serde(default)]`, so a save from before
+this release opens with every town at Neutral, which is where a new run
+starts anyway.
+
 ## 0.13.96
 
 **Existing saves load, and one resource is deliberately dropped from them.**

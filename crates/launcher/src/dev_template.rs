@@ -373,6 +373,54 @@ mod tests {
         );
     }
 
+    /// Loading is not the bar for `extraction` either. Its whole value is
+    /// state that a format migration or a careless hand-edit can strip while
+    /// the RON still parses perfectly: the original capture predated the
+    /// feature and carried no `tools:` key at all, and a template with an
+    /// empty `known_tools` would load, open the Tools screen, and show one
+    /// row — which is the state this recapture exists to replace. So this
+    /// reads what the two screens read.
+    #[test]
+    fn the_extraction_template_opens_on_the_whole_kit() {
+        let out = std::env::temp_dir().join("feral_processes_template_extraction_kit.bin");
+        generate("extraction", &out).unwrap();
+        let game = Game::load(&out, &assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&out);
+
+        let rows = game.tool_rows();
+        assert!(
+            rows.len() > 1,
+            "one row is the pre-recapture state: the starter alone, nothing              researched — got {rows:?}"
+        );
+        assert!(
+            rows.iter().filter(|r| r.slot.is_some()).count() > 1,
+            "a single filled slot shows no loadout, and installing is what              the screen is for"
+        );
+        assert!(
+            rows.iter().any(|r| r.slot.is_none() && r.carriers_held > 0),
+            "a forged carrier sitting uninstalled is what gives `[I]` on the              Tools screen something to do"
+        );
+
+        let programs = game.downed_program_rows();
+        assert!(
+            programs.len() > 1,
+            "the store is what a tool is pointed at; an empty one puts every              yield preview and the extraction door itself out of reach"
+        );
+        assert!(
+            programs
+                .iter()
+                .map(|p| p.rarity)
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                > 1,
+            "one rarity cannot show what grade does to a yield, which is the              axis the preview exists to expose"
+        );
+        assert!(
+            game.can_extract_routines(),
+            "a Compiler has to stand: `extraction_bench_tier` is the speed              term, and the routine branch is gated on a bench outright"
+        );
+    }
+
     /// Loading is not the bar for `chains`: it exists so that a session
     /// testing production chains starts with one *running*, and a template
     /// whose machines are misaligned by one tile would load perfectly and

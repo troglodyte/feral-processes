@@ -42,15 +42,17 @@ use feral_processes_engine::help::{self, HelpDb, HelpPage};
 use feral_processes_engine::icon::Canvas;
 use feral_processes_engine::items::{EquipmentSlot, EquipmentStats, GearCopy, ItemId};
 use feral_processes_engine::settlements::SettlementKey;
+use feral_processes_engine::sorties::SortieId;
 use feral_processes_engine::tuning::{
     ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, MAX_ACTIVE_CONTRACTS, MAX_FUSIONS,
 };
 use feral_processes_engine::{
     AchievementRow, BattleView, BrokerReach, CaravanReach, CharacterChoice, ContractRefusal,
-    ContractRow, CreationCatalogue, DifficultyMode, Entity, EntityView, FieldRoutinePick,
-    FieldRoutineTarget, FieldRoutineTargetView, Game, HandCraftProgress, LogEntry, LogLine,
-    MESSAGE_LOG_CAP, MessageSource, OrderPriority, ProgramSaleOption, SlotShift, SwingOutcome,
-    TransferRow, WorkOrder, WorkOrderReport, WorkProfile, condense,
+    ContractRow, CreationCatalogue, DifficultyMode, DispatchReach, Entity, EntityView,
+    FieldRoutinePick, FieldRoutineTarget, FieldRoutineTargetView, Game, HandCraftProgress,
+    LogEntry, LogLine, MESSAGE_LOG_CAP, MessageSource, OrderPriority, ProgramSaleOption,
+    RouteDestination, RouteRefusal, RouteReport, SlotShift, SortieRefusal, SortieReport, SortieRow,
+    StockRow, SwingOutcome, TransferRow, WorkOrder, WorkOrderReport, WorkProfile, condense,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -1504,6 +1506,32 @@ pub enum Mode {
     /// together by Enter — one basket, one commit, one turn. There is no
     /// per-item quantity page: `Mode::CaravanQuantity` was deleted with it.
     Caravan,
+    /// The Relay hub, opened with the base menu's "Dispatch" row — sortie
+    /// sites (`Game::sortie_board`), route destinations
+    /// (`Game::route_destinations`) numbered continuously in one list
+    /// (`app::dispatch::dispatch_row`, `contract_row`'s shape), and every
+    /// trip in flight (`Game::sortie_reports` / `Game::route_reports`) drawn
+    /// below as read-only status. Uppercase actions only, since lowercase is
+    /// a row selector: `[S]` opens `Mode::SortieSquad` for the highlighted
+    /// site, `[C]` opens `Mode::RouteCargo` for the highlighted destination,
+    /// `[X]` severs the standing route running to it, if one is there.
+    Dispatch,
+    /// Multi-select over `Game::base_staff`, opened with `[S]` from
+    /// `Mode::Dispatch`. `App::dispatch_squad` is the toggled set — `[X]`
+    /// toggles the highlighted candidate, Enter dispatches through
+    /// `Game::dispatch_sortie`. Every refusal lands before anything is
+    /// spent, so a squad picked past the base's own provisioning just says
+    /// so and stays open.
+    SortieSquad,
+    /// A cargo basket over `Game::base_stock`, opened with `[C]` from
+    /// `Mode::Dispatch` — `Mode::SettlementMarket`'s basket shape, one
+    /// door over: Left/Right edits the highlighted row,
+    /// `App::route_cargo_amounts` is the basket, Enter dispatches through
+    /// `Game::dispatch_route`. `App::route_standing` is a toggle for
+    /// whether the trip repeats — the engine's own `RouteRefusal::
+    /// NoStandingRoutes` is what refuses it below Warm, so this screen
+    /// never pre-filters the toggle into invisibility.
+    RouteCargo,
     /// Confirming the sale of the program picked in `Mode::TradeAction`.
     /// Programs take a confirmation where items don't: the sale is
     /// irreversible, and it silently cancels whatever the program was doing,
@@ -1752,6 +1780,12 @@ impl Mode {
             | Mode::RespecTalentsConfirm
             | Mode::StackMarket
             | Mode::Caravan
+            // Opened only by a key press from `Mode::Dispatch` itself,
+            // reached from the base menu — `Mode::SettlementMarket`'s
+            // reason exactly.
+            | Mode::Dispatch
+            | Mode::SortieSquad
+            | Mode::RouteCargo
             | Mode::Perks
             | Mode::Research
             | Mode::Contracts
@@ -2136,6 +2170,31 @@ pub struct App {
     /// safe for the same reason: editing costs no tick and neither list can
     /// change without one.
     pub settlement_amounts: Vec<u32>,
+    /// The sortie site picked with `[S]` on `Mode::Dispatch`, awaiting a
+    /// squad from `Mode::SortieSquad` before `Game::dispatch_sortie` is
+    /// called. The whole id rather than a board index — `sortie_board`'s
+    /// three-state rule means the board can shrink under this page, and the
+    /// id is what still finds the same row (or says it is gone).
+    pub pending_dispatch_site: Option<SortieId>,
+    /// The squad being built on `Mode::SortieSquad` — every base-staff
+    /// program `[X]` has toggled in, in toggle order. Cleared on the way in
+    /// and on the way out, `careful_craft`'s reason: a squad left standing
+    /// from an earlier visit would silently dispatch programs the player is
+    /// no longer looking at.
+    pub dispatch_squad: Vec<Entity>,
+    /// The destination picked with `[C]` on `Mode::Dispatch`, awaiting a
+    /// cargo basket from `Mode::RouteCargo` before `Game::dispatch_route` is
+    /// called.
+    pub pending_dispatch_destination: Option<SettlementKey>,
+    /// How many of each `Game::base_stock` row the cargo basket is holding —
+    /// `settlement_amounts`' shape exactly, index-aligned with that list the
+    /// same way.
+    pub route_cargo_amounts: Vec<u32>,
+    /// Whether the pending route is a standing arrangement rather than a
+    /// one-off — `standing_order`'s shape, cleared on the way in for the
+    /// same reason: a toggle left set would silently commit the next basket
+    /// to repeat.
+    pub route_standing: bool,
     /// The recipe result picked in `Mode::Craft`, awaiting a quantity from
     /// `Mode::CraftQuantity` before `Game::craft` is actually called.
     pub pending_craft: Option<ItemId>,

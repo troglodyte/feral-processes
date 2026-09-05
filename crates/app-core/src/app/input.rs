@@ -184,6 +184,7 @@ impl App {
                 Mode::Transfer
                     | Mode::Caravan
                     | Mode::SettlementMarket
+                    | Mode::RouteCargo
                     | Mode::CraftQuantity
                     | Mode::CreateCharacter
             ) =>
@@ -269,6 +270,9 @@ impl App {
             Mode::TradeQuantity => self.handle_trade_quantity_key(key),
             Mode::StackMarket => self.handle_stack_market_key(key),
             Mode::Caravan => self.handle_caravan_key(key),
+            Mode::Dispatch => self.handle_dispatch_key(key),
+            Mode::SortieSquad => self.handle_sortie_squad_key(key),
+            Mode::RouteCargo => self.handle_route_cargo_key(key),
             Mode::Perks => self.handle_perks_key(key),
             Mode::RespecPerksConfirm => self.handle_respec_perks_confirm_key(key),
             Mode::RespecTalentsConfirm => self.handle_respec_talents_confirm_key(key),

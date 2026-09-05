@@ -51,6 +51,7 @@ fn every_screen_that_consumes_a_modifier_is_named_in_the_fold() {
             "caravan",
             "crafting",
             "creation",
+            "dispatch",
             "settlement_market"
         ],
         "a screen gained modifier arms; add its Mode to `handle_key`'s \

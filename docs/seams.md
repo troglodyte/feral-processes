@@ -11309,3 +11309,57 @@ asserts every emitted line is in `AID_LINES` **and** that every line in it is
 reachable from some state, and the renderer measures the array itself. The
 width gate was verified by mutation.
 
+
+### The compass strip's band is bought unconditionally, and the gap between the panes holds two clearances
+
+`map_pane`'s bottom border carried nothing from the release the vitals moved
+off it until the compass shipped, and both halves of what that border now
+costs were decided against a named alternative rather than falling out of
+the code.
+
+**Buying the band only when it is used is the version that looks cheaper and
+is worse.** A strip riding a border has its background quad centred *on* the
+border line, so it reaches `strip_clearance` into the pane as far as out of
+it — the rule the log pane already pays through `strip_inset`. For the map
+pane the body is a tile grid, and a tile grid whose height changes re-lays
+every cell in it: the number of visible rows changes, `tile_origin_px`
+shifts, and the whole viewport steps. Doing that on the keypress that picks
+a destination reads at the keyboard as the camera lurching, not as a strip
+appearing — the player has no way to attribute the movement to the thing
+they just did, because what they did was choose a place, not move. So
+`hud::layout::map_body` takes the pane and the metrics and nothing else, and
+the band is gone from the map whether or not the compass is pointing at
+anything. The price is a few pixels of map, permanently, and it is the
+right trade: a viewport that never moves is worth more than the rows.
+
+**The second half is that this border is not alone.** The vitals ride
+`log_pane`'s *top* border and their quad reaches `clearance` upward, into the
+gap between the panes; the compass strip rides `map_pane`'s bottom border and
+its quad reaches `clearance` downward, into the same gap. `pane_gap` was
+`m.gap.max(clearance)` — sized for exactly one of them — so with both mounted
+the quads overlap by precisely `clearance`, and `draw_log_pane` runs after
+`draw_map_frame`, so the log pane's fill cuts the compass strip in half. This
+is the same failure the vitals/filter-header collision was, one border over,
+and it is the fourth time the shape has shipped. `pane_gap =
+m.gap.max(clearance * 2.0)` closes it.
+
+What is worth noticing is which test catches it. The arithmetic tests in
+`hud::layout` stay green through the whole bug: they compare quad edges
+against *named pane rects*, and every one of those relationships still holds
+while the strip is being painted over. The assertion that goes red is
+`base.rs::nothing_paints_over_the_compass_strip`, which finds the strip's own
+quad in the shape list and asks whether **anything** painted after it
+overlaps that box by an area. Dropping the `* 2.0` was checked by mutation
+and it fails; that is the whole reason to prefer the general question to a
+named-rectangle one, and it is stated at length in the hud seam already.
+
+**A third, smaller decision rides along.** The band is *background*, not
+body: the pane's fill has to cover the whole pane or the window shows through
+under the last row of tiles, while the tiles themselves must stop short. That
+split is why `draw_playing_base` paints the fill and `draw_surface_map` /
+`draw_stack` no longer do — each of those now receives the body rect alone,
+which is the same shape as CLAUDE.md's "the panes take their origin from the
+caller": one statement per view, in the caller, rather than a rule each
+drawer has to remember. `base::MAP_BG` is named rather than a literal for
+that reason — two literals is how the band would come to be a different
+colour from the map above it.

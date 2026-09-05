@@ -346,16 +346,21 @@ fn the_hot_keys_stayed_on_the_map() {
 /// key of its own that opened a picker of teleport-capable structures and
 /// charged Power Cells — reachable on turn one, before the run had earned
 /// anything. The way home is `symbolic_links` researched, etched, installed
-/// and run from the `a` list like every other field routine, so the key it
-/// used to sit on has to do nothing rather than a lesser version of it.
+/// and run from the `a` list like every other field routine.
+///
+/// The letter itself was free from then until the compass took it, which is
+/// what this now holds: `u` opens the destination picker and nothing that
+/// moves the party or spends anything.
 #[test]
-fn u_is_no_longer_a_map_key() {
+fn u_opens_the_compass_and_never_a_way_home() {
     let mut app = test_app(4015);
+    let before = app.game.as_ref().unwrap().current_tick();
     app.handle_key(GameKey::Char('u'));
+    assert_eq!(app.mode, Mode::Compass);
     assert_eq!(
-        app.mode,
-        Mode::Playing,
-        "u opened a screen; symlink lives in the field-routine list now"
+        app.game.as_ref().unwrap().current_tick(),
+        before,
+        "the compass reads; symlink lives in the field-routine list and costs"
     );
 }
 

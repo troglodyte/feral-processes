@@ -128,6 +128,15 @@ fn a_posted_worker_levels_up_in_the_base_log_beside_its_machine() {
     game.assign_cronjob(worker, node).unwrap();
     park_at_post(&mut game, worker, node);
     game.world.get_mut::<Experience>(worker).unwrap().xp_to_next = 1;
+    // A node level that puts `systems::mining_success_chance` at its 1.0
+    // clamp, so every cycle in the window below pays out. This test is about
+    // *where* a level-up is logged, not about mining odds, and a chancy
+    // payout makes it a knife-edge that a shifted `GameRng` stream — a new
+    // resource, a reordered query — tips over at random. The roll is still
+    // taken, so the stream position is unchanged.
+    if let Some(mut node_def) = game.world.get_mut::<crate::components::ResourceNode>(node) {
+        node_def.level = Some(100);
+    }
 
     for _ in 0..60 {
         game.wait();

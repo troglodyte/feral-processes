@@ -1157,6 +1157,25 @@ pub struct AttentionRow {
     pub threat: bool,
 }
 
+/// One place the compass can point at — see `Game::compass_targets`.
+///
+/// The two tiers of knowledge land **only** in `label` and `distance`, so
+/// "what the party has actually reached is worth more than what the engine
+/// has merely recorded" is stated once in the engine and no surface
+/// re-decides it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CompassRow {
+    pub target: crate::settlements::CompassTarget,
+    /// The place's name once reached, a generic noun before that.
+    pub label: String,
+    /// `game::stack::bearing`'s eight-point heading, reused rather than
+    /// restated.
+    pub bearing: &'static str,
+    /// Chebyshev tiles, and `None` until the party has been there.
+    pub distance: Option<i32>,
+    pub visited: bool,
+}
+
 /// One program assigned to a structure — see `StructureReport::assignees`.
 #[derive(Clone)]
 pub struct Assignee {

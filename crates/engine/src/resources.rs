@@ -1621,7 +1621,31 @@ pub struct KnownSettlement {
     /// knows.
     pub tile: (i32, i32),
     pub def: crate::settlements::SettlementDef,
+    /// Whether the party has actually walked to it.
+    ///
+    /// Written on the arm of `Game::move_player` that already queues
+    /// `PendingVisit`, and deliberately not derived from `Standings`: that
+    /// resource allows a standing with a town the party has never reached,
+    /// which routes need, so it is the wrong proxy. Additive behind
+    /// `#[serde(default)]` — an older save simply carries every known town
+    /// unvisited, which costs its compass row a name and a distance until
+    /// the party walks back.
+    #[serde(default)]
+    pub visited: bool,
 }
+
+/// Where the compass is pointing, or `None` when nothing is selected.
+///
+/// Serialized behind `#[serde(default)]`, so an older save loads with the
+/// compass blank — which is where a new run starts anyway. No
+/// `SAVE_FORMAT_VERSION` bump.
+///
+/// A target that stops existing needs no cleanup hook: a selection that is
+/// not among `Game::compass_targets`' rows — a link `Game::collapse_stack`
+/// took the way out with — is simply dropped by the derivation, and the
+/// strip goes blank.
+#[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct CompassBearing(pub Option<crate::settlements::CompassTarget>);
 
 /// The settlement the player's last step bumped into, waiting for a
 /// frontend to open its screen.

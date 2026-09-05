@@ -35,6 +35,7 @@ mod battle;
 mod building;
 mod canvas;
 mod caravan;
+mod compass;
 mod contracts;
 mod crafting;
 mod creation;
@@ -1284,6 +1285,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             m,
         ),
         Mode::History => draw_history(game, selected, refusal, painter, m),
+        Mode::Compass => compass::draw_compass(game, selected, refusal, painter, m),
         Mode::Structures => draw_structures(game, selected, refusal, painter, m),
         Mode::StructureAssign => {
             if let Some(staffing) = &staffing {
@@ -1358,7 +1360,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 100] = [
+    const ALL_MODES: [Mode; 101] = [
         Mode::MainMenu,
         Mode::CreateCharacter,
         Mode::LoadGame,
@@ -1441,6 +1443,7 @@ mod tests {
         Mode::Research,
         Mode::Contracts,
         Mode::History,
+        Mode::Compass,
         Mode::Structures,
         Mode::StructureAssign,
         Mode::Recipes,

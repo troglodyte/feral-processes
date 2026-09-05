@@ -13,7 +13,7 @@
 //! segments comes first.
 
 use super::palette;
-use super::strip::{Mount, Piece, draw_pieces, fitting, sep};
+use super::strip::{Mount, Piece, draw_pieces, fitting, label, sep, value};
 use crate::paint::{Painter, Rect};
 use crate::text::Metrics;
 use feral_processes_engine::TerrainRow;
@@ -110,18 +110,33 @@ pub(in crate::render) fn draw_map_frame(
     ground: Option<TerrainRow>,
     threat: Threat,
     watching: Option<&str>,
+    compass: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
     painter.rect_lines(pane.x, pane.y, pane.w, pane.h, 2.0, palette::PANE_BORDER);
 
+    // **The bottom border, which used to carry nothing.** The band its quad
+    // reaches into is bought unconditionally by `layout::map_body`, so the
+    // tile grid does not re-lay itself the moment a destination is picked;
+    // absent here means the compass is pointing at nothing, or the party is
+    // somewhere `Game::compass_bearing` answers `None` for.
+    if let Some(line) = compass {
+        let pieces = compass_pieces(line);
+        let avail = (pane.w - m.inset * 2.0).max(0.0);
+        let shown = fitting(&[pieces], avail, painter, m);
+        draw_pieces(pane, Mount::BottomLeft, &shown, painter, m);
+    }
+
     let pieces = threat_pieces(threat);
     if let Some(name) = watching {
         // **The watch line takes the ground's mount rather than a border of
-        // its own.** `map_pane`'s bottom border deliberately carries nothing
-        // (see `hud::layout`), and a strip mounted there would either cover
-        // the map's bottom row of tiles or make the pane buy the height and
-        // re-lay the whole grid the moment `w` was pressed. The ground
+        // its own.** `map_pane`'s bottom border is the compass strip's, and
+        // that band is bought unconditionally (`hud::layout::map_body`) for
+        // exactly the reason a watch line could not have it: a mount bought
+        // only while it is in use re-lays the whole tile grid the moment `w`
+        // is pressed, and the compass is pointing at nothing far more often
+        // than the camera is parked. The ground
         // readout is ambient and the player can spare it for the seconds
         // they are looking elsewhere; "you are looking somewhere else, and
         // here is the way back" cannot be spared, so it wins the mount
@@ -143,6 +158,14 @@ pub(in crate::render) fn draw_map_frame(
         draw_pieces(pane, Mount::TopLeft, &shown, painter, m);
     }
     draw_pieces(pane, Mount::TopRight, &pieces, painter, m);
+}
+
+/// The compass strip's one segment. `»` because it is a heading rather than
+/// a reading — the other two mounts on this frame state what *is* true of
+/// where you are standing, and this states where you have said you are
+/// going.
+fn compass_pieces(line: &str) -> Vec<Piece> {
+    vec![label("» "), value(line.to_string())]
 }
 
 #[cfg(test)]
@@ -240,7 +263,7 @@ mod tests {
             // segment plus one pixel and no more.
             let pane_w = m.inset * 2.0 + threat_w + weather_w + 1.0;
             let pane = Rect::new(0.0, 0.0, pane_w, 200.0);
-            draw_map_frame(pane, Some(row), threat, None, p, &m);
+            draw_map_frame(pane, Some(row), threat, None, None, p, &m);
         });
         let text = painted_text(&shapes).join("");
         assert!(
@@ -270,6 +293,7 @@ mod tests {
                     hostiles: 0,
                     shielded: false,
                 },
+                None,
                 None,
                 p,
                 &m,
@@ -354,7 +378,7 @@ mod tests {
 
             let char_w = p.measure_ui_advance("M", m.font_size);
             let regions = crate::render::hud::layout::regions(1280.0, 720.0, char_w, &m, false);
-            draw_map_frame(regions.map_pane, Some(row), threat, None, p, &m);
+            draw_map_frame(regions.map_pane, Some(row), threat, None, None, p, &m);
 
             (chosen_event, chosen_condition)
         });

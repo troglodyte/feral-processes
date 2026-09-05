@@ -292,3 +292,104 @@ fn the_output_page_costs_no_time_and_binds_nothing_but_esc() {
         "reading a page must not pass game time"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The compass — a fourth screen you open, read and close, and the one of the
+// four that also acts: Enter points it at the highlighted destination.
+
+#[test]
+fn u_opens_the_compass_and_esc_returns_to_the_map() {
+    let mut app = test_app(120);
+    app.handle_key(GameKey::Char('u'));
+    assert_eq!(app.mode, Mode::Compass);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
+}
+
+#[test]
+fn scrolling_the_compass_never_leaves_it() {
+    let mut app = test_app(121);
+    app.handle_key(GameKey::Char('u'));
+    for key in [GameKey::Up, GameKey::Down, GameKey::Down, GameKey::Up] {
+        app.handle_key(key);
+        assert_eq!(app.mode, Mode::Compass, "{key:?} should only scroll");
+    }
+}
+
+#[test]
+fn enter_points_the_compass_at_the_highlighted_row() {
+    let mut app = test_app(122);
+    app.handle_key(GameKey::Char('u'));
+    let first = app
+        .game
+        .as_mut()
+        .unwrap()
+        .compass_targets()
+        .remove(0)
+        .target;
+
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(
+        app.game
+            .as_mut()
+            .unwrap()
+            .compass_bearing()
+            .map(|r| r.target),
+        Some(first),
+        "the selection is the highlighted row, and it is the engine's to hold"
+    );
+}
+
+#[test]
+fn uppercase_x_clears_the_selection() {
+    let mut app = test_app(123);
+    app.handle_key(GameKey::Char('u'));
+    app.handle_key(GameKey::Enter);
+    assert!(app.game.as_mut().unwrap().compass_bearing().is_some());
+
+    app.handle_key(GameKey::Char('X'));
+
+    assert_eq!(
+        app.game.as_mut().unwrap().compass_bearing(),
+        None,
+        "uppercase, because lowercase letters are row selectors"
+    );
+    assert_eq!(app.mode, Mode::Compass, "clearing is not a way out");
+}
+
+#[test]
+fn the_selection_survives_closing_and_reopening_the_screen() {
+    let mut app = test_app(124);
+    app.handle_key(GameKey::Char('u'));
+    app.handle_key(GameKey::Enter);
+    let chosen = app
+        .game
+        .as_mut()
+        .unwrap()
+        .compass_bearing()
+        .map(|r| r.target);
+    assert!(chosen.is_some());
+
+    app.handle_key(GameKey::Esc);
+    app.handle_key(GameKey::Char('u'));
+
+    assert_eq!(
+        app.game
+            .as_mut()
+            .unwrap()
+            .compass_bearing()
+            .map(|r| r.target),
+        chosen,
+        "the selection is saved state, not a property of the screen being open"
+    );
+}
+
+/// Opening the compass is reading the map, not acting on it — `L`'s rule.
+#[test]
+fn opening_the_compass_costs_no_game_time() {
+    let mut app = test_app(125);
+    let before = app.game.as_ref().unwrap().current_tick();
+    app.handle_key(GameKey::Char('u'));
+    assert_eq!(app.game.as_ref().unwrap().current_tick(), before);
+}

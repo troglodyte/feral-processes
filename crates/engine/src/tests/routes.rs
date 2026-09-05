@@ -180,7 +180,14 @@ fn register_settlement(game: &mut Game, key: SettlementKey, def: SettlementDef, 
     game.world
         .resource_mut::<crate::resources::Settlements>()
         .0
-        .insert(key, crate::resources::KnownSettlement { tile, def });
+        .insert(
+            key,
+            crate::resources::KnownSettlement {
+                tile,
+                def,
+                visited: false,
+            },
+        );
 }
 
 /// Sets a town's standing directly, skipping every trade and contract mover

@@ -81,6 +81,7 @@ pub(super) fn register_a_known_settlement(app: &mut App, key: SettlementKey, til
                 specialty: feral_processes_engine::settlements::Specialty::Materials,
                 temperament: feral_processes_engine::settlements::Temperament::Open,
             },
+            visited: false,
         },
     );
     // Warm and up is what `Standing::allows_standing_route` asks for; the

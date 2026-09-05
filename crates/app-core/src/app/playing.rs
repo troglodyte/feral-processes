@@ -196,6 +196,15 @@ impl App {
                 self.mode = Mode::History;
                 return;
             }
+            // Where the run's known destinations lie. A `return` for `L`'s
+            // reason — reading the map is not an action and must not cost a
+            // turn. Lowercase because it is bound on the zone map, where
+            // lowercase is the convention; `u` is one of the three letters
+            // left there and none of the three is mnemonic.
+            GameKey::Char('u') => {
+                self.mode = Mode::Compass;
+                return;
+            }
             // Next to `L` because it acts on the same log, and a `return`
             // rather than a fallthrough because changing what you can see
             // must not cost a turn. History keeps the only uppercase letter

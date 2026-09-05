@@ -7,7 +7,7 @@ use super::support::{scratch_assets_dir, stand_in_base, test_assets_dir};
 use crate::Game;
 use crate::components::{DownedPrograms, Glyph, GlyphColor, Position, Structure};
 use crate::game::party::ProgramRole;
-use crate::game::sortie::{SortieReach, SortieRefusal};
+use crate::game::sortie::{DispatchReach, SortieRefusal};
 use crate::resources::DifficultyMode;
 use crate::resources::{Sortie, Sorties};
 use crate::sorties::SortieDb;
@@ -263,18 +263,18 @@ fn deploy(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
 /// errands, and a screen that cannot tell them apart says the wrong
 /// sentence.
 #[test]
-fn sortie_reach_reports_the_three_states() {
+fn dispatch_reach_reports_the_three_states() {
     let mut game = Game::new(4400, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    assert_eq!(game.sortie_reach(), SortieReach::NoRelay);
+    assert_eq!(game.dispatch_reach(), DispatchReach::NoRelay);
 
     deploy_relay(&mut game);
-    assert_eq!(game.sortie_reach(), SortieReach::AtRelay);
+    assert_eq!(game.dispatch_reach(), DispatchReach::AtRelay);
 
     // Out of base space entirely — on the open grid, where no floor can
     // answer for the party.
     game.world
         .insert_resource(crate::resources::Locale::Surface);
-    assert_eq!(game.sortie_reach(), SortieReach::OffBase);
+    assert_eq!(game.dispatch_reach(), DispatchReach::OffBase);
 }
 
 /// It measures the base and not the distance to the mast: a Relay stands on
@@ -287,7 +287,7 @@ fn the_far_side_of_the_base_still_reaches_the_relay() {
     let edge = crate::tuning::STARTING_POCKET_RADIUS;
     assert!(edge - 1 > 2, "the far edge must be beyond arm's length");
     super::support::stand_in_base_at(&mut game, edge, 0);
-    assert_eq!(game.sortie_reach(), SortieReach::AtRelay);
+    assert_eq!(game.dispatch_reach(), DispatchReach::AtRelay);
 }
 
 // ------------------------------------------------------------ the board

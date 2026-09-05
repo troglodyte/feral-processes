@@ -348,10 +348,13 @@ pub struct StructureDef {
     #[serde(default)]
     pub issues_contracts: bool,
     /// Whether a squad can be dispatched from this structure — see
-    /// `Game::sortie_reach`. `issues_contracts`' shape and for its reason: a
+    /// `Game::dispatch_reach`. `issues_contracts`' shape and for its reason: a
     /// Relay has no per-structure configuration either, since what it offers
     /// is derived from the world seed, the sector and the clock rather than
-    /// authored on the building.
+    /// authored on the building. Also the gate a caravan route dispatches
+    /// through — the field name stays as-is even though it now names two
+    /// features, per the settlements Phase 6 decision that a route uses the
+    /// same structure and the same flag rather than a second one.
     ///
     /// **A flag rather than the engine naming `"relay"`.** Hardcoding the
     /// shipped id would put game content in Rust and make a mod's second

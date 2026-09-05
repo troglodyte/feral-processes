@@ -156,6 +156,29 @@ impl App {
                     _ => self.refuse("Highlight a destination to send cargo to."),
                 }
             }
+            // `[T]` for travel out. `[C]`'s row resolution exactly — a
+            // continuous numbering over two sections, so a destination
+            // action landing on a site row refuses rather than acting on
+            // the wrong one. On success the hub closes: `travel_to_settlement`
+            // queues the arrival cue, and `Mode::Playing` is where the map
+            // and that cue meet.
+            GameKey::Char('T') => {
+                match dispatch_row(self.menu_selected, sites.len(), destinations.len()) {
+                    Some(DispatchRow::Destination(i)) => {
+                        let target = destinations[i].destination;
+                        let outcome = match &mut self.game {
+                            Some(game) => game.travel_to_settlement(target),
+                            None => return,
+                        };
+                        let went = outcome.is_ok();
+                        self.report(outcome);
+                        if went {
+                            self.close_screen();
+                        }
+                    }
+                    _ => self.refuse("Highlight a destination to travel to."),
+                }
+            }
             GameKey::Char('X') => {
                 match dispatch_row(self.menu_selected, sites.len(), destinations.len()) {
                     Some(DispatchRow::Destination(i)) => {

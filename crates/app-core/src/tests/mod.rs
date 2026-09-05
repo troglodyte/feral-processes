@@ -37,6 +37,7 @@ mod respec;
 mod routines;
 mod saves;
 mod settlement;
+mod settlement_aid;
 mod settlement_board;
 mod settlement_market;
 mod sprite_forge;

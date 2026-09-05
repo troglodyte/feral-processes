@@ -1310,9 +1310,21 @@ pub enum Mode {
     /// walking into the tile drains `Game::take_settlement_visit` in
     /// `App::after_world_action`, and `x` toward one resolves
     /// `InspectTarget::Settlement` through `Game::settlement_key`. A plain
-    /// popup like `Mode::StructureManifest` beside it — Phase 2 ships
-    /// identity only, no action rows and no stub for the market or job
-    /// board a later phase adds, so any key but Esc has nothing to do here.
+    /// popup like `Mode::StructureManifest` beside it — identity first, and
+    /// four uppercase keys since.
+    ///
+    /// `[M]` opens the market and `[J]` the job board, each asking its own
+    /// reach check first, because `x` opens this page from anywhere inside
+    /// `EXAMINE_RANGE_TILES` while `Game::settlement_reach` is Chebyshev 1,
+    /// and a screen opened from across the map would draw an empty one.
+    ///
+    /// `[G]` and `[T]` are the aid verbs, both `Allied`-only. They make
+    /// **no reach check of their own**, deliberately: each calls a door
+    /// that refuses in its own words, which puts the reach rule in one
+    /// place rather than two. `[G]` asks the town for a program through
+    /// `Game::request_program_gift`; `[T]` rides its relay home through
+    /// `Game::travel_to_anchor` and closes this page on success, because
+    /// the party is no longer standing at the town it describes.
     Settlement,
     /// A settlement's shelf, opened with `[M]` from `Mode::Settlement` —
     /// Phase 3's market. `Mode::Caravan`'s shape exactly: one basket
@@ -1515,7 +1527,10 @@ pub enum Mode {
     /// below as read-only status. Uppercase actions only, since lowercase is
     /// a row selector: `[S]` opens `Mode::SortieSquad` for the highlighted
     /// site, `[C]` opens `Mode::RouteCargo` for the highlighted destination,
-    /// `[X]` severs the standing route running to it, if one is there.
+    /// `[X]` severs the standing route running to it, if one is there, and
+    /// `[T]` travels there in person through `Game::travel_to_settlement`,
+    /// closing the hub on success. The last three all resolve their row
+    /// through `dispatch_row` and refuse on a site row.
     Dispatch,
     /// Multi-select over `Game::base_staff`, opened with `[S]` from
     /// `Mode::Dispatch`. `App::dispatch_squad` is the toggled set — `[X]`

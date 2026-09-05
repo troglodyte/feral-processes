@@ -335,9 +335,16 @@ impl Game {
         self.world
             .insert_resource(crate::resources::Locale::Surface);
         self.place_player_at(landing);
-        // Arriving must open the town exactly as walking into it does, so
-        // there is one arrival behaviour and not two.
-        self.world.resource_mut::<resources::PendingVisit>().0 = Some(key);
+        // Arriving opens the town exactly as walking into it does — but
+        // **only if the landing is actually within reach**. The ring finds
+        // the nearest standable ground, which broken terrain can put several
+        // tiles out, and a page that opened from there would offer a market
+        // and a board that `settlement_reach` then refuses. So the cue is
+        // tied to the same question the bump answers, and a distant set-down
+        // leaves the party looking at the map with a walk left to do.
+        if self.settlement_reach(key) {
+            self.world.resource_mut::<resources::PendingVisit>().0 = Some(key);
+        }
         let name = self.settlement_name(key);
         self.log(format!("The relay sets you down outside {name}."));
         self.spend_travel_ticks(ticks);

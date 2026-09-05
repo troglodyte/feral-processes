@@ -785,9 +785,18 @@ fn travelling_out_lands_beside_the_town_and_never_on_it() {
 
     let landed = player_tile(&game);
     assert_ne!(landed, town, "the party landed on the settlement tile");
+    // Near, not necessarily adjacent: the ring finds the *nearest standable*
+    // ground, and broken terrain can put that a few tiles out.
     assert!(
-        (landed.0 - town.0).abs() <= 1 && (landed.1 - town.1).abs() <= 1,
-        "landed at {landed:?}, not beside the town at {town:?}"
+        (landed.0 - town.0).abs().max((landed.1 - town.1).abs()) < SETTLEMENT_SITE_SEARCH_TILES,
+        "landed at {landed:?}, nowhere near the town at {town:?}"
+    );
+    assert!(
+        game.world
+            .resource_mut::<crate::world::WorldMap>()
+            .tile(landed.0, landed.1)
+            .walkable,
+        "the relay set the party down somewhere they could not have walked"
     );
     assert!(!game.in_base(), "the relay left the party in base space");
     assert_eq!(
@@ -798,11 +807,16 @@ fn travelling_out_lands_beside_the_town_and_never_on_it() {
 }
 
 #[test]
-fn arriving_by_relay_opens_the_town_the_way_walking_into_it_does() {
+fn arriving_by_relay_opens_the_town_exactly_when_walking_into_it_would() {
     let mut game = game();
     let key = a_relay_and_an_ally(&mut game);
     game.travel_to_settlement(key).expect("the trip");
-    assert_eq!(game.take_settlement_visit(), Some(key));
+
+    // The cue fires on the same question the bump answers, never on the
+    // trip alone: a set-down several tiles out would otherwise open a page
+    // whose market and board `settlement_reach` immediately refuses.
+    let in_reach = game.settlement_view(key).is_some();
+    assert_eq!(game.take_settlement_visit().is_some(), in_reach);
 }
 
 #[test]

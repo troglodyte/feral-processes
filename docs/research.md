@@ -106,7 +106,7 @@ there is no node you can reach two ways.
 | Isometric Commerce | - | 14 | - | `market` |
 | Power Grid | - | 10 | - | `power_conduit` |
 | Fortification | - | 18 | `power_grid` | `shield`, `patch_node` |
-| Program Refactoring | 2 | 75 | `automation` | `annealing_node`, `refactor_bench` |
+| Program Refactoring | 2 | 75 | `automation` | `annealing_node`, `refactor_bench`; tool `component_stripper` |
 | Reactive Armor | - | 24 | `automation` | `armory` |
 | Routine Fabrication | - | 26 | `automation` | `log_scraper`, `lathe`, `transcriber`, `disk_press` |
 | Weapon Fabrication | - | 24 | `automation` | `fabricator` |

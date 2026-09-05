@@ -206,6 +206,19 @@ const BASE_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
+        // Not `Locality::Base`, and for the Caravan row's reason directly
+        // above: `dispatch_reach` already measures base space, so a second
+        // locality clause here would be the same fact read twice.
+        label: "Dispatch",
+        target: Mode::Dispatch,
+        locality: Locality::Anywhere,
+        available: |app| {
+            app.game
+                .as_mut()
+                .is_some_and(|g| g.dispatch_reach() != DispatchReach::NoRelay)
+        },
+    },
+    GroupEntry {
         // Not base-only, and for the Recipes row's reason one notch further:
         // the ledger is *history*, so it reads the same wherever the party
         // is standing — and the base keeps producing while they are in the

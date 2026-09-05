@@ -3860,6 +3860,43 @@ pub const SORTIE_XP_MULTIPLIER: f32 = 0.6;
 pub const SORTIE_MAX_BATTLE_ROUNDS: u32 = 60;
 
 // ---------------------------------------------------------------------------
+// Caravan routes
+// ---------------------------------------------------------------------------
+
+/// Ticks of travel every route pays regardless of destination —
+/// `SORTIE_TRAVEL_BASE_TICKS`'s shape, its own constant rather than a shared
+/// one because a route's clock counts tiles to one town and a sortie's
+/// counts a step of risk; the two have no reason to move together.
+///
+/// Unmeasured: no arena or balance instrument prices trade throughput, so
+/// this is a starting value to be corrected once the feature is played.
+pub const ROUTE_TICKS_BASE: u64 = 100;
+
+/// Extra ticks per tile of Chebyshev distance from the base anchor to the
+/// destination — `sortie_duration`'s rule that a trip's length is a property
+/// of the place, quoted once and run by the countdown. Unmeasured.
+pub const ROUTE_TICKS_PER_TILE: u64 = 2;
+
+/// How close a known settlement has to stand to the base→destination segment
+/// to be able to prey on the trip — point-to-**segment** distance, in tiles,
+/// so a town beside the middle of a long route is caught exactly as one at
+/// either end. Unmeasured.
+pub const ROUTE_PREDATION_RADIUS: i32 = 15;
+
+/// Chance, per predator, per leg completion, that a hit actually lands.
+/// Unmeasured.
+pub const ROUTE_PREDATION_CHANCE: f32 = 0.25;
+
+/// Fraction of the cargo (outbound) or the proceeds (inbound) a successful
+/// hit takes. Unmeasured.
+pub const ROUTE_PREDATION_LOSS: f32 = 0.3;
+
+/// Trips a base may run at once, dispatched and standing combined.
+/// Unmeasured — the cap exists so a maxed-out Relay cannot queue unbounded
+/// `TransitCue` traffic, not because a throughput number was derived for it.
+pub const ROUTE_MAX_ACTIVE: usize = 4;
+
+// ---------------------------------------------------------------------------
 // Caravan traders
 // ---------------------------------------------------------------------------
 

@@ -38,6 +38,7 @@ mod caravan;
 mod contracts;
 mod crafting;
 mod creation;
+mod dispatch;
 mod extraction;
 mod field;
 mod frame_map;
@@ -91,6 +92,7 @@ use building::{
 use caravan::{CaravanBasket, draw_caravan};
 use contracts::draw_contracts;
 use crafting::{draw_compiling, draw_craft_menu, draw_craft_quantity, draw_recipes};
+use dispatch::{draw_dispatch, draw_route_cargo, draw_sortie_squad};
 use extraction::draw_downed_programs;
 use field::{draw_field_routine, draw_field_routine_ally};
 use frame_map::{draw_frame_map, draw_frame_map_cursor, draw_map_inset};
@@ -928,6 +930,33 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         }),
         _ => None,
     };
+    // The hub's own two sections, `settlement_market`'s reason one rung up:
+    // `App::dispatch_hub_sections`/`dispatch_trip_reports` take `&mut self`,
+    // so they have to run before `game` below takes `&mut app.game`.
+    let dispatch_sections = match app.mode {
+        Mode::Dispatch => app.dispatch_hub_sections(),
+        _ => None,
+    };
+    let dispatch_trips = match app.mode {
+        Mode::Dispatch => app.dispatch_trip_reports(),
+        _ => (Vec::new(), Vec::new()),
+    };
+    let sortie_squad_site = match app.mode {
+        Mode::SortieSquad => app.sortie_squad_site(),
+        _ => None,
+    };
+    let sortie_squad_candidates = match app.mode {
+        Mode::SortieSquad => app.sortie_squad_candidates(),
+        _ => Vec::new(),
+    };
+    let sortie_squad_cost = match app.mode {
+        Mode::SortieSquad => app.sortie_squad_cost(),
+        _ => Vec::new(),
+    };
+    let route_cargo_basket = match app.mode {
+        Mode::RouteCargo => app.route_cargo_basket(),
+        _ => None,
+    };
     // Read before `game` takes the whole of `app`, as the rows above are:
     // the figure is derived from more than one field, so the borrow cannot
     // be split at the call.
@@ -1181,6 +1210,27 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         ),
         Mode::StackMarket => draw_stack_market(game, selected, refusal, painter, m),
         Mode::Caravan => draw_caravan(game, caravan, selected, refusal, painter, m),
+        Mode::Dispatch => draw_dispatch(
+            dispatch_sections
+                .as_ref()
+                .map(|(sites, destinations)| (sites.as_slice(), destinations.as_slice())),
+            &dispatch_trips.0,
+            &dispatch_trips.1,
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
+        Mode::SortieSquad => draw_sortie_squad(
+            sortie_squad_site.as_ref(),
+            &sortie_squad_candidates,
+            &sortie_squad_cost,
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
+        Mode::RouteCargo => draw_route_cargo(route_cargo_basket, selected, refusal, painter, m),
         Mode::Trade => draw_trade_menu(game, selected, refusal, painter, m),
         Mode::TradeAction => draw_trade_action_menu(
             game,
@@ -1305,7 +1355,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 96] = [
+    const ALL_MODES: [Mode; 99] = [
         Mode::MainMenu,
         Mode::CreateCharacter,
         Mode::LoadGame,
@@ -1377,6 +1427,9 @@ mod tests {
         Mode::TradeQuantity,
         Mode::StackMarket,
         Mode::Caravan,
+        Mode::Dispatch,
+        Mode::SortieSquad,
+        Mode::RouteCargo,
         Mode::TradeProgramConfirm,
         Mode::RespecPerksConfirm,
         Mode::RespecTalentsConfirm,

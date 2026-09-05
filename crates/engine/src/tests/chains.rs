@@ -542,6 +542,11 @@ const BURST_PROGRAM: &str = r#"(
     affinities: (heal: 0.85, damage: 1.3),
 )"#;
 
+/// The seeds both mining comparisons sweep. Five is enough that one tied
+/// run cannot decide the answer, and few enough that the pair of sweeps
+/// stays under a second.
+const MINING_SAMPLE_SEEDS: [u32; 5] = [4181, 991, 20_313, 77, 60_509];
+
 /// Posts one program of `species` to a fresh Mining Node, runs it for
 /// `ticks`, and returns what landed in the node's buffer.
 ///
@@ -552,7 +557,15 @@ const BURST_PROGRAM: &str = r#"(
 /// anything. 250 ticks is the ceiling for a comparison of *reliability*
 /// (one unit a cycle either way); a comparison of *yield* has to stop well
 /// short of it, since the Leech is taking two.
-fn units_mined_by(tag: &str, species: &str, ticks: u32) -> u32 {
+///
+/// **The seed is a parameter because one run is not a measurement.** Bevy's
+/// query iteration order is not stable between processes, so which draw a
+/// mining roll takes is not fixed by the seed alone, and a single pair of
+/// runs can land on a tie — this comparison failed once at 8 against 8 on a
+/// strict `>`. Both callers sweep `MINING_SAMPLE_SEEDS` and compare totals,
+/// which is what makes the assertion about the class rather than about a
+/// lucky stream position.
+fn units_mined_by(tag: &str, species: &str, ticks: u32, seed: u32) -> u32 {
     let dir = modded_assets_dir(
         tag,
         &[],
@@ -566,7 +579,7 @@ fn units_mined_by(tag: &str, species: &str, ticks: u32) -> u32 {
         &[],
         &[],
     );
-    let mut game = Game::new(4181, DifficultyMode::Forgiving, &dir).unwrap();
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &dir).unwrap();
     // Deploying and posting are base actions; the party stands in the base.
     stand_in_base(&mut game);
     let node = deploy_upgradeable_node(&mut game);
@@ -610,12 +623,18 @@ fn units_mined_by(tag: &str, species: &str, ticks: u32) -> u32 {
 /// nothing else.
 #[test]
 fn a_leech_fills_a_node_buffer_faster_than_a_striker() {
-    let leech = units_mined_by("class_leech", "leechmon", 100);
-    let striker = units_mined_by("class_striker", "strikermon", 100);
+    let mut leech = 0;
+    let mut striker = 0;
+    for seed in MINING_SAMPLE_SEEDS {
+        leech += units_mined_by("class_leech", "leechmon", 100, seed);
+        striker += units_mined_by("class_striker", "strikermon", 100, seed);
+    }
     assert!(
         leech > striker,
         "the drain class has to draw more out of the same tap \
-         (leech took {leech}, striker took {striker})"
+         (leech took {leech}, striker took {striker} across \
+         {} seeds)",
+        MINING_SAMPLE_SEEDS.len()
     );
 }
 
@@ -626,17 +645,27 @@ fn a_sharper_program_mines_more_from_the_same_node() {
     // faster one fills the buffer and the comparison flattens. It was 250
     // until per-chunk population shifted the RNG stream and the sharp run
     // landed exactly on the cap.
-    let sharp = units_mined_by("int_sharp", "sharpmon", 180);
-    let dull = units_mined_by("int_dull", "dullmon", 180);
+    let mut sharp = 0;
+    let mut dull = 0;
+    for seed in MINING_SAMPLE_SEEDS {
+        let run = units_mined_by("int_sharp", "sharpmon", 180, seed);
+        // The clog bound is per run, not on the total: a sweep that sums
+        // past the cap is fine, a single run that reaches it is the case
+        // where the comparison has stopped measuring anything.
+        assert!(
+            run < 20,
+            "every run must stay under DEFAULT_OUTPUT_CAPACITY or the node \
+             clogs and the comparison stops measuring anything (seed {seed} \
+             mined {run})"
+        );
+        sharp += run;
+        dull += units_mined_by("int_dull", "dullmon", 180, seed);
+    }
     assert!(
         sharp > dull,
         "who you post to a node has to change what it produces \
-         (sharp mined {sharp}, dull mined {dull})"
-    );
-    assert!(
-        sharp < 20,
-        "both runs must stay under DEFAULT_OUTPUT_CAPACITY or the node \
-         clogs and the comparison stops measuring anything (sharp mined {sharp})"
+         (sharp mined {sharp}, dull mined {dull} across {} seeds)",
+        MINING_SAMPLE_SEEDS.len()
     );
 }
 

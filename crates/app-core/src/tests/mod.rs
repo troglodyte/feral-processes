@@ -13,6 +13,7 @@ mod crafting;
 mod creation;
 mod dev_console;
 mod develop;
+mod dispatch;
 mod excavate;
 mod extraction;
 mod field;

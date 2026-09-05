@@ -39,7 +39,7 @@
   id.** The research gate really is pure data, but `has_relay` is not —
   naming `"relay"` in Rust puts content in the engine and makes a mod's
   second dispatch structure impossible. `issues_contracts`' shape and
-  argument. **`Game::sortie_reach` measures the base, never the distance to
+  argument. **`Game::dispatch_reach` measures the base, never the distance to
   the mast** — `base_pos` then `BaseGrid::is_floor`. Three states,
   `NoPost::BoxedIn`'s rule.
 - **The board is derived and the whole record travels.** Recomputed from the
@@ -92,3 +92,42 @@
   that is the whole of what differs. The rest of `award_loot` — Trace, the
   `Terminate` feat, boss records, fragments — is deliberately **not** shared:
   those belong to a fight the player was in.
+
+- **A route is one record with a `standing` flag, and a one-off is the flag
+  turned off.** `routes::Route` carries the manifest, the destination, the
+  leg, the countdown and `standing: bool` — there is no `RouteKind` and no
+  second type, `WorkOrder`'s shape and its reason: the record stores what was
+  asked for, never how it will be done. The two kinds differ at exactly one
+  moment, the arrival home, and everything before it — refusals, countdown,
+  the sale, predation, the save form, the hub row — is shared. **`sever_route`
+  clears `standing` and nothing else**: the trip in flight keeps its cargo,
+  arrives, sells and pays, so there is no refund path and no half-delivered
+  state. A `Severed` leg variant is what would have needed all three.
+- **A route and a squad leave through the same door.** `Game::dispatch_reach`
+  → `DispatchReach {NoRelay, OffBase, AtRelay}` gates both, both on
+  `StructureDef::dispatches_sorties`. A second `runs_routes` flag was
+  rejected: it buys a second building, a second reach function, a second base
+  menu row and a second screen to express one idea, and it weakens the seam
+  above rather than reusing it — a mod's second dispatch structure gets
+  routes for free exactly as it gets sorties. The `SortieReach` →
+  `DispatchReach` rename is the cost and is compiler-checked, so unlike the
+  two load-bearing renames it could not half-convert.
+- **`Game::route_quote` is the one derivation the picker's preview and the
+  sale at the far end share**, reached from the screen through
+  `route_manifest_quote`, which resolves the destination's own `Temperament`
+  so no screen holds one. `extraction_yield`'s argument on a second feature.
+  The trap is that the formula is short enough for a second copy to compile,
+  pass review and drift the first time a temperament multiplier moves — and
+  a quoted figure that differs from the granted one is the feature lying on
+  the one screen whose whole job is to answer what a manifest is worth before
+  stock is spent that cannot be got back.
+- **Predation is a named query plus pure geometry, and neither half touches
+  `Game`.** `Standing::preys_on_routes` answers at `Hostile` alone —
+  `refuses_service`'s rule, the arm the relations module's doc comment named
+  before it existed — and `routes::settlements_near_route` answers which
+  known towns lie within `ROUTE_PREDATION_RADIUS` of the **segment** anchor →
+  destination. Radius-from-the-destination is the cheap version and is wrong
+  in the way that matters: it makes the town you have to walk *past*
+  irrelevant. **Predation is also the only thing in `run_routes` that may
+  draw `GameRng`**, asserted by a test, or a route in flight would shift the
+  seeded stream for every other test in the suite.

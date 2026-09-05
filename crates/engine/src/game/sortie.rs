@@ -18,7 +18,7 @@ use crate::items::ItemId;
 /// different errands, and a screen that cannot tell them apart says the
 /// wrong sentence.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SortieReach {
+pub enum DispatchReach {
     NoRelay,
     OffBase,
     AtRelay,
@@ -54,7 +54,12 @@ pub enum SortieRefusal {
 }
 
 impl Game {
-    /// Where the player is standing, as far as sorties are concerned.
+    /// Where the player is standing, as far as the Relay is concerned —
+    /// shared by a sortie's board and a caravan route's dispatch, since both
+    /// gate on the same structure. Renamed off `SortieReach` for exactly
+    /// that reason: routes reuse this call rather than a second reach check,
+    /// and a name that still said "sortie" would lie about what it now
+    /// gates.
     ///
     /// **It measures the base, never the distance to the Relay** — this is
     /// `Game::broker_reach` one verb along, and for its argument:
@@ -68,21 +73,21 @@ impl Game {
     /// Floor and not merely `walkable`, `broker_reach`'s rule: the mast is
     /// reachable from the base's laid ground, not from a corridor mined out
     /// past its edge.
-    pub fn sortie_reach(&mut self) -> SortieReach {
+    pub fn dispatch_reach(&mut self) -> DispatchReach {
         if !self.has_relay() {
-            return SortieReach::NoRelay;
+            return DispatchReach::NoRelay;
         }
         let Some((x, y)) = self.base_pos() else {
-            return SortieReach::OffBase;
+            return DispatchReach::OffBase;
         };
         if self
             .world
             .resource::<crate::base_grid::BaseGrid>()
             .is_floor(x, y)
         {
-            SortieReach::AtRelay
+            DispatchReach::AtRelay
         } else {
-            SortieReach::OffBase
+            DispatchReach::OffBase
         }
     }
 
@@ -124,9 +129,9 @@ impl Game {
     ///
     /// An empty catalogue gives an empty `Vec` and **not** `None`, which
     /// means "no Relay" — the two leave the player different errands, which
-    /// is `SortieReach`'s own argument one level down.
+    /// is `DispatchReach`'s own argument one level down.
     pub fn sortie_board(&mut self) -> Option<Vec<crate::views::SortieRow>> {
-        if self.sortie_reach() == SortieReach::NoRelay {
+        if self.dispatch_reach() == DispatchReach::NoRelay {
             return None;
         }
         let seed = self.sortie_board_seed();
@@ -214,7 +219,7 @@ impl Game {
         id: &crate::sorties::SortieId,
         members: &[Entity],
     ) -> Result<(), SortieRefusal> {
-        if self.sortie_reach() != SortieReach::AtRelay {
+        if self.dispatch_reach() != DispatchReach::AtRelay {
             return Err(SortieRefusal::NotAtRelay);
         }
         let Some(row) = self
@@ -334,20 +339,7 @@ impl Game {
             };
             let door = crate::game::base_space::BASE_EXIT_CELL;
             let (from, to) = if outbound { (tile, door) } else { (door, tile) };
-            let path = {
-                let grid = self.world.resource::<crate::base_grid::BaseGrid>();
-                crate::game::base_space::transit_path(grid, from, to)
-            };
-            if path.len() < 2 {
-                continue;
-            }
-            self.world
-                .resource_mut::<crate::resources::TransitQueue>()
-                .push(crate::resources::TransitCue {
-                    glyph: ch,
-                    color,
-                    path,
-                });
+            self.queue_transit_walk(ch, color, from, to);
         }
     }
 

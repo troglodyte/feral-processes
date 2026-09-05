@@ -1656,6 +1656,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             routines: Vec::new(),
             field_buffs: Vec::new(),
             sorties: Vec::new(),
+            routes: Vec::new(),
             name: String::new(),
             class: None,
             glyph: '@',

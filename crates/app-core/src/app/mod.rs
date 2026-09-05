@@ -13,6 +13,7 @@ pub(crate) mod contracts;
 mod crafting;
 pub(crate) mod creation;
 pub(crate) mod dev_console;
+pub(crate) mod dispatch;
 mod excavate;
 mod extraction;
 mod field;

@@ -3421,26 +3421,40 @@ fn every_shipped_tool_id_is_unique() {
     );
 }
 
-/// Every `unlocks_tools` id across `ResearchDb` names a real, loaded tool —
-/// `every_shipped_tools_yields_resolve_to_real_items`'s own rule, turned on
-/// the other reference a research node can make to the tool catalogue.
-/// `ResearchDb::load_dir` already drops an unknown id at load time, so a
-/// typo here would silently vanish rather than fail this census loudly —
-/// this walks `ToolDb` directly instead of trusting the dropped-or-not
-/// outcome.
+/// Every `unlocks_tools` id across the shipped research `.ron` files names
+/// a real, loaded tool — `every_shipped_tools_yields_resolve_to_real_items`'s
+/// own rule, turned on the other reference a research node can make to the
+/// tool catalogue.
+///
+/// Parses `assets/research/*.ron` directly rather than reading a loaded
+/// `ResearchDb`: `ResearchDb::load_dir` already retains an unknown
+/// `unlocks_tools` id away at load time and keeps the node (task 1's own
+/// rule), so a census over the *loaded* db would only ever see survivors —
+/// a typo could never make it fail. `every_shipped_tool_id_is_unique`'s own
+/// precedent for reading the shipped tree off disk instead of through the
+/// loader.
 #[test]
 fn every_researched_tool_unlock_resolves_to_a_shipped_tool() {
-    let game = Game::new(4107, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let research = game.world.resource::<crate::research::ResearchDb>();
-    let tools = game.world.resource::<ToolDb>();
+    let (tools, tool_warnings) = ToolDb::load_dir(&test_assets_dir().join("tools")).unwrap();
+    assert!(
+        tool_warnings.is_empty(),
+        "shipped tool files must load clean: {tool_warnings:?}"
+    );
 
     let mut checked = 0;
-    for node in research.all() {
-        for tool in &node.unlocks_tools {
+    for entry in std::fs::read_dir(test_assets_dir().join("research")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|e| e.to_str()) != Some("ron") {
+            continue;
+        }
+        let text = std::fs::read_to_string(&path).unwrap();
+        let def: crate::research::ResearchDef = ron::from_str(&text)
+            .unwrap_or_else(|e| panic!("{path:?} must parse as a ResearchDef: {e}"));
+        for tool in &def.unlocks_tools {
             assert!(
                 tools.get(tool.as_str()).is_some(),
-                "research {:?} unlocks unknown tool {:?}",
-                node.id,
+                "{:?} unlocks unknown tool {:?}",
+                path,
                 tool
             );
             checked += 1;

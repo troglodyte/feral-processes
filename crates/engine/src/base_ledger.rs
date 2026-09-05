@@ -112,9 +112,9 @@ pub enum Event {
 /// Core Fragments came from a Mining Node against kills, base rock and
 /// caches, and a record with no source answers none of it.
 ///
-/// An enum rather than a `&str` at each of the nineteen call sites, for
+/// An enum rather than a `&str` at each of the seventeen call sites, for
 /// `MachineStatus::as_str`'s reason: the wire strings are written once, a
-/// mistyped tag cannot silently create a nineteenth source, and the match
+/// mistyped tag cannot silently create an eighteenth source, and the match
 /// is exhaustive so a new variant has to be given a name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LootSource {

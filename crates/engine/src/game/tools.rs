@@ -17,7 +17,8 @@ impl Game {
     /// decision 7 keeps the whole feature structure-free until phase 3.
     /// Every refusal lands before anything is spent: game-over or an
     /// active battle, an id `ToolDb` cannot resolve, a tool the player
-    /// hasn't researched, then a cost they cannot pay.
+    /// hasn't researched, an already-installed tool, then a cost they
+    /// cannot pay.
     pub fn forge_tool(&mut self, tool: &ToolId) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".to_string());
@@ -32,12 +33,31 @@ impl Game {
             return Err(format!("You haven't researched the {}.", def.name));
         }
         let player = self.player_entity();
+        // A carrier `install_tool` will always refuse — `etch_disk` allows
+        // this (a second disk can still go on a companion), but the player
+        // is the only tool holder, so a second carrier of an installed tool
+        // has nowhere to go.
+        if self
+            .world
+            .get::<Tools>(player)
+            .is_some_and(|t| t.0.contains(tool))
+        {
+            return Err(format!("{} is already installed.", def.name));
+        }
+        // Folded into a per-item total before the check: a modded
+        // `forge_cost` naming one item on two lines must be checked (and
+        // spent) against their sum, or each line passes independently
+        // against a total neither alone asked for and `Inventory::take`'s
+        // own `min` silently under-charges the second line.
+        let mut cost: std::collections::BTreeMap<&ItemId, u32> = std::collections::BTreeMap::new();
+        for (item, qty) in &def.forge_cost {
+            *cost.entry(item).or_insert(0) += qty;
+        }
         {
             let inventory = self.world.get::<Inventory>(player).unwrap();
-            if let Some((item, qty)) = def
-                .forge_cost
+            if let Some((item, qty)) = cost
                 .iter()
-                .find(|(item, qty)| inventory.count(item) < *qty)
+                .find(|(item, qty)| inventory.count(item) < **qty)
             {
                 return Err(format!(
                     "Not enough {} ({}/{}).",
@@ -47,11 +67,11 @@ impl Game {
                 ));
             }
         }
-        for (item, qty) in &def.forge_cost {
+        for (item, qty) in &cost {
             self.world
                 .get_mut::<Inventory>(player)
                 .unwrap()
-                .take(item.clone(), *qty);
+                .take((*item).clone(), *qty);
             self.note_consumed(item, *qty, crate::base_ledger::ConsumeSource::Craft);
         }
         self.grant_loot(ItemId::tool(tool), 1, LootSource::Forge);
@@ -76,9 +96,10 @@ impl Game {
     /// with that one rung removed.
     ///
     /// Refusals, in order, all before anything is spent: game-over or an
-    /// active battle, an id `ToolDb` cannot resolve, the tool is already
-    /// installed, no free slot (`installed.len() >=
-    /// tools::player_tool_slots(level)`), no carrier held.
+    /// active battle, an id `ToolDb` cannot resolve, the player cannot hold
+    /// tools at all, the tool is already installed, no free slot
+    /// (`installed.len() >= tools::player_tool_slots(level)`), no carrier
+    /// held.
     pub fn install_tool(&mut self, tool: &ToolId) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".to_string());
@@ -90,11 +111,16 @@ impl Game {
             .cloned()
             .ok_or_else(|| "Unknown tool.".to_string())?;
         let player = self.player_entity();
+        // `install_disk`'s own shape: refused here, before the spend, not
+        // read tolerantly and then `unwrap()`ed on the write below — the
+        // player always spawns with `Tools`, so this is unreachable today,
+        // but the write past the spend must not be the first place that
+        // would find out otherwise.
         let installed = self
             .world
             .get::<Tools>(player)
             .map(|t| t.0.clone())
-            .unwrap_or_default();
+            .ok_or_else(|| "That can't hold tools.".to_string())?;
         if installed.contains(tool) {
             return Err(format!("{} is already installed.", def.name));
         }

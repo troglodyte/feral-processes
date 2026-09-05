@@ -1175,6 +1175,36 @@ fn forge_refuses_an_unresolvable_tool_id_and_spends_nothing() {
 }
 
 #[test]
+fn forge_refuses_an_already_installed_tool_and_spends_nothing() {
+    // The starter is installed into slot one at `Game::new` and known
+    // unconditionally (Critical 1) — the natural case for "already
+    // installed", since a second carrier of a tool already in a slot has
+    // nowhere to go: the player is the only tool holder.
+    let mut game = Game::new(9110, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 10);
+    let before = game.world.get::<Inventory>(player).unwrap().items.clone();
+    let starter = ToolId(tuning::STARTER_TOOL_ID.to_string());
+
+    let result = game.forge_tool(&starter);
+
+    let err = result.expect_err("an already-installed tool must refuse forging");
+    assert!(
+        err.contains("already installed"),
+        "got: {err}, expected the already-installed refusal"
+    );
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before,
+        "nothing must be spent on a refusal"
+    );
+    assert_eq!(carrier_count(&game, &starter), 0);
+}
+
+#[test]
 fn forge_refuses_an_unresearched_tool_and_spends_nothing() {
     // `core_tap` ships real content but nothing teaches it by default.
     // Unlike `core_tap`, the starter (`salvage_clamp`) cannot stand in for
@@ -1284,6 +1314,99 @@ fn forging_spends_exactly_the_cost_and_grants_one_carrier() {
     );
 }
 
+const DUPLICATE_COST_TOOL: &str = r#"(
+    id: "duplicate_cost_tool",
+    name: "Duplicate Cost Tool",
+    description: "d",
+    category: Materials,
+    yields: [("core_fragment", 1.0)],
+    tier: 1,
+    ticks: 5,
+    forge_cost: [("core_fragment", 3), ("core_fragment", 2)],
+)"#;
+
+/// A game with the fixture tool above known, and a cleared pack — so a
+/// test can add exactly the `core_fragment` it wants to check against the
+/// summed cost (3 + 2 = 5) rather than the two individual lines.
+fn game_ready_to_forge_duplicate_cost(seed: u32, tag: &str) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (tool_db, warnings) = load_tools(tag, &[("duplicate_cost_tool", DUPLICATE_COST_TOOL)]);
+    assert!(
+        warnings.is_empty(),
+        "fixture tool must load clean: {warnings:?}"
+    );
+    game.world.insert_resource(tool_db);
+    game.world
+        .resource_mut::<KnownTools>()
+        .0
+        .insert(ToolId("duplicate_cost_tool".to_string()));
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .items
+        .clear();
+    game
+}
+
+#[test]
+fn forge_refuses_when_a_duplicated_cost_line_is_short_of_the_summed_total() {
+    // Minor 5: each cost line was checked independently against the
+    // currently held count, so 3 `core_fragment` passed both a "need 3"
+    // line and a "need 2" line — a total (5) it cannot actually pay.
+    let mut game = game_ready_to_forge_duplicate_cost(9108, "dup_short");
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 3);
+
+    let result = game.forge_tool(&ToolId("duplicate_cost_tool".to_string()));
+
+    assert!(
+        result.is_err(),
+        "3 core_fragment must not pay a 3+2=5 summed cost"
+    );
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::CORE_FRAGMENT)),
+        3,
+        "nothing must be spent on a refusal"
+    );
+    assert_eq!(
+        carrier_count(&game, &ToolId("duplicate_cost_tool".to_string())),
+        0
+    );
+}
+
+#[test]
+fn forge_spends_the_summed_total_when_a_cost_line_is_duplicated() {
+    let mut game = game_ready_to_forge_duplicate_cost(9109, "dup_paid");
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 5);
+
+    game.forge_tool(&ToolId("duplicate_cost_tool".to_string()))
+        .expect("5 core_fragment must pay a 3+2=5 summed cost");
+
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::CORE_FRAGMENT)),
+        0,
+        "the summed cost (5) must leave the inventory, not just the larger line (3)"
+    );
+    assert_eq!(
+        carrier_count(&game, &ToolId("duplicate_cost_tool".to_string())),
+        1
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Phase 2, task 3: `Game::install_tool` and `Game::uninstall_tool`.
 // ---------------------------------------------------------------------------
@@ -1350,6 +1473,28 @@ fn install_refuses_an_unresolvable_tool_id_and_changes_nothing() {
         "an id ToolDb cannot resolve must refuse installing"
     );
     assert_eq!(game.world.get::<Tools>(player).unwrap().0, before_tools);
+}
+
+#[test]
+fn install_refuses_a_player_with_no_tools_component_and_spends_nothing() {
+    // Minor 8: unreachable today (the player always spawns with `Tools`),
+    // but the refusal must read the component before the spend rather than
+    // discovering it is missing on the `unwrap()` that writes the slot.
+    let mut game = Game::new(9212, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    hold_carrier(&mut game, "core_tap", 1);
+    game.world.entity_mut(player).remove::<Tools>();
+    let before_inv = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    let result = game.install_tool(&ToolId("core_tap".to_string()));
+
+    let err = result.expect_err("a player with no Tools component must refuse installing");
+    assert_eq!(err, "That can't hold tools.");
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before_inv,
+        "nothing must be spent on a refusal"
+    );
 }
 
 #[test]
@@ -1613,5 +1758,55 @@ fn tool_rows_drops_a_known_tool_id_the_catalogue_cannot_resolve() {
     assert!(
         rows.iter().all(|r| r.id.as_str() != "no_such_tool"),
         "an id ToolDb cannot resolve must not produce a row"
+    );
+}
+
+/// Minor 9: `TOOL_SLOT_CAP` only bounds what is *installed*; a modded
+/// research tree can teach more tools than any shipped one does, so
+/// `tool_rows` needs its own ceiling — the screen has no scroll.
+#[test]
+fn tool_rows_never_exceeds_max_tool_rows_however_many_are_known() {
+    let mut game = Game::new(9306, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let extra = tuning::MAX_TOOL_ROWS + 5;
+    let files: Vec<(String, String)> = (0..extra)
+        .map(|i| {
+            let id = format!("bound_tool_{i}");
+            (
+                id.clone(),
+                format!(
+                    r#"(
+                        id: "{id}",
+                        name: "Bound Tool {i}",
+                        description: "d",
+                        category: Materials,
+                        yields: [("core_fragment", 1.0)],
+                        tier: 1,
+                        ticks: 1,
+                    )"#
+                ),
+            )
+        })
+        .collect();
+    let file_refs: Vec<(&str, &str)> = files
+        .iter()
+        .map(|(id, body)| (id.as_str(), body.as_str()))
+        .collect();
+    let (tool_db, warnings) = load_tools("row_bound", &file_refs);
+    assert!(
+        warnings.is_empty(),
+        "fixture tools must load clean: {warnings:?}"
+    );
+    game.world.insert_resource(tool_db);
+    let mut known = game.world.resource_mut::<KnownTools>();
+    for (id, _) in &files {
+        known.0.insert(ToolId(id.clone()));
+    }
+
+    let rows = game.tool_rows();
+
+    assert_eq!(
+        rows.len(),
+        tuning::MAX_TOOL_ROWS,
+        "{extra} known tools (plus the starter) must be trimmed to the row bound"
     );
 }

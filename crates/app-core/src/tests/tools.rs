@@ -47,24 +47,6 @@ fn app_with_cargo(seed: u32, cargo: &[(&str, u32)], level: u32) -> App {
     app
 }
 
-/// `app_with_cargo`'s reason, but for a test that wants a forging refusal
-/// on cost: a fresh game's default kit already grants starting
-/// `core_fragment` (`classes::apply_kit`'s no-class branch), so provoking a
-/// cost refusal needs the pack cleared first rather than merely left
-/// untouched.
-fn app_with_empty_pack(seed: u32, level: u32) -> App {
-    let mut app = test_app(seed);
-    let path = scratch_path("empty_pack", seed);
-    app.game.as_mut().unwrap().save(&path).unwrap();
-    let mut data = save::load_from_file(&path).unwrap();
-    data.player.level = level;
-    data.player.inventory.clear();
-    save::save_to_file(&path, &data).unwrap();
-    app.game = Some(Game::load(&path, &test_assets_dir()).unwrap());
-    let _ = std::fs::remove_file(&path);
-    app
-}
-
 /// The same fixture, plus one held carrier of `tool` — `app_with_known_
 /// tool`'s reason, ported to a tool already forged.
 fn app_holding_a_carrier(seed: u32, tool: &str, level: u32) -> App {
@@ -314,12 +296,21 @@ fn pulling_the_starter_leaves_it_re_forgeable_and_its_row_present() {
 /// trap shut.
 #[test]
 fn a_refusal_from_forging_names_the_item_once_in_the_status_line() {
-    let mut app = app_with_empty_pack(9406, 1);
+    // core_tap is known but never installed, so forging it refuses on cost.
+    // The starter can't stand in for this any more: it starts in slot one,
+    // so forging it now hits the "already installed" refusal (Minor 7)
+    // before the cost check ever runs.
+    let mut app = app_with_known_tool(9406, "core_tap", &[], 1);
     open_via_menu(&mut app, 'p', "Tools");
-    // The starter is known from turn one (Critical 1's fix), so an empty
-    // pack refuses forging it on cost rather than on "haven't researched" —
-    // the highlighted row from a fresh game is already this one.
-    assert_eq!(app.menu_selected, 0);
+    let idx = app
+        .game
+        .as_ref()
+        .unwrap()
+        .tool_rows()
+        .iter()
+        .position(|r| r.id.as_str() == "core_tap")
+        .expect("core_tap must have a row once known");
+    app.menu_selected = idx;
 
     app.handle_key(GameKey::Char('F'));
 
@@ -328,7 +319,7 @@ fn a_refusal_from_forging_names_the_item_once_in_the_status_line() {
         .clone()
         .expect("an unaffordable forge must refuse");
     assert_eq!(
-        status.matches("Core Fragment").count(),
+        status.matches("Charge Coil").count(),
         1,
         "the refusal must not be duplicated onto the line: {status:?}"
     );

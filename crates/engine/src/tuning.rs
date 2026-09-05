@@ -4349,6 +4349,17 @@ pub const TOOL_SLOT_PER_LEVEL: u32 = 8;
 /// carry one of every category stops being a choice at all.
 pub const TOOL_SLOT_CAP: u32 = 4;
 
+/// How many rows `Game::tool_rows` may return — `MAX_DOWNED_PROGRAMS`'s own
+/// reason: `Mode::Tools` is a read-only row list with no scroll, so this
+/// doubles as a layout constraint that must fit at 1280x720, asserted by
+/// `the_tallest_tools_list_fits_its_popup_at_1280x720` and verified by
+/// mutation. `TOOL_SLOT_CAP` only bounds what is *installed*; a modded
+/// research tree can teach arbitrarily many tools with nothing forged yet,
+/// so `tool_rows` needs its own ceiling instead of inheriting the slot
+/// cap — twice it, headroom for a kit wider than the shipped one without
+/// reopening the screen to an unbounded catalogue.
+pub const MAX_TOOL_ROWS: usize = 8;
+
 /// `Game::extraction_yield`'s base unit count — the multiplier scaled by
 /// `game::extraction::tier_scale(tool.tier)` and `DownedProgram::grade()`
 /// (identity `1.0` at `Ordinary`, full condition, level 0). **Checked**

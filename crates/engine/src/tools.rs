@@ -55,6 +55,20 @@ pub enum ToolCategory {
     Routines,
 }
 
+impl ToolCategory {
+    /// The label `render/tools.rs`'s row draws — `MachineStatus::as_str`'s
+    /// own reason: a player-facing string built from `{:?}` breaks the
+    /// moment a variant is renamed for engine-only clarity.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ToolCategory::Materials => "Materials",
+            ToolCategory::Parts => "Parts",
+            ToolCategory::Cores => "Cores",
+            ToolCategory::Routines => "Routines",
+        }
+    }
+}
+
 /// A moddable extraction tool. `assets/tools/README.md` is the schema
 /// reference.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -251,7 +265,11 @@ impl Game {
     ///
     /// Sorted by id for a deterministic screen, `ToolDb::all`'s own reason;
     /// an id neither store can resolve against `ToolDb` is dropped rather
-    /// than surfaced as a hole, `installed_tools`'s tolerance.
+    /// than surfaced as a hole, `installed_tools`'s tolerance. Trimmed to
+    /// `tuning::MAX_TOOL_ROWS` afterward — `MAX_NEED_ROWS`'s own reason,
+    /// trimmed here rather than left to the screen's own capacity check,
+    /// since the screen has no scroll and a modded research tree can teach
+    /// more tools than any shipped one does.
     pub fn tool_rows(&self) -> Vec<crate::views::ToolRow> {
         let player = self.player_entity();
         let db = self.world.resource::<ToolDb>();
@@ -269,6 +287,7 @@ impl Game {
             .collect();
         ids.sort();
         ids.dedup();
+        ids.truncate(crate::tuning::MAX_TOOL_ROWS);
 
         ids.into_iter()
             .filter_map(|id| {
@@ -294,6 +313,24 @@ impl Game {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The row `MachineStatus::as_str` names as its own precedent: a
+    /// player-facing string must be its own match, not a `{:?}` of a
+    /// variant name an engine-only rename could quietly reword.
+    #[test]
+    fn every_tool_category_has_a_named_label() {
+        for category in [
+            ToolCategory::Materials,
+            ToolCategory::Parts,
+            ToolCategory::Cores,
+            ToolCategory::Routines,
+        ] {
+            assert!(
+                !category.as_str().is_empty(),
+                "{category:?} has no as_str label"
+            );
+        }
+    }
 
     #[test]
     fn one_tool_slot_a_level_step_clamped_to_a_modest_cap() {

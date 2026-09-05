@@ -8,12 +8,14 @@
 //! **The consequences are named queries, not a table of effects** — the
 //! perks module (`crates/engine/src/perks.rs`) is the shape being copied,
 //! and for its reason: a consequence is a hook into a particular formula
-//! with no shared shape to express as data. `refuses_service` is the one
-//! shipped so far; town-sourced raids, hostile patrols and Phase 6's route
-//! predation are each a *new query* answered by the same exhaustive match,
-//! not a rewrite. `every_standing_band_answers_whether_it_refuses_service`
-//! is the census — exhaustive on `Standing`, `cell_mark`'s rule, so a sixth
-//! band with no answer fails to compile rather than shipping as neutral.
+//! with no shared shape to express as data. `refuses_service`,
+//! `preys_on_routes` and `allows_standing_route` are the ones shipped so
+//! far; town-sourced raids and hostile patrols are each a *new query*
+//! answered by the same exhaustive match, not a rewrite.
+//! `every_standing_band_answers_whether_it_refuses_service` is the census
+//! shape — exhaustive on `Standing`, `cell_mark`'s rule, so a sixth band
+//! with no answer fails to compile rather than shipping as neutral; each
+//! query has its own.
 
 use serde::{Deserialize, Serialize};
 
@@ -123,6 +125,35 @@ impl Standing {
             Standing::Cold | Standing::Neutral | Standing::Warm | Standing::Allied => false,
         }
     }
+
+    /// Whether a town at this band preys on a caravan route passing near it
+    /// — Phase 6's route predation, the third consequence named by the
+    /// module doc.
+    ///
+    /// Exhaustive, `refuses_service`'s reason. `Hostile` alone: a town that
+    /// merely dislikes the party still lets a route through untaxed, which
+    /// keeps predation a bottom-of-the-ladder consequence rather than
+    /// something every unfriendly town charges.
+    pub fn preys_on_routes(self) -> bool {
+        match self {
+            Standing::Hostile => true,
+            Standing::Cold | Standing::Neutral | Standing::Warm | Standing::Allied => false,
+        }
+    }
+
+    /// Whether a town at this band will host a **standing** route — a
+    /// one-off dispatch needs only `!refuses_service`, so this is a
+    /// stricter gate than access: the town has to actually favour the
+    /// party before it commits to a recurring arrangement, not merely
+    /// tolerate them.
+    ///
+    /// Exhaustive, `refuses_service`'s reason. `Warm` and up.
+    pub fn allows_standing_route(self) -> bool {
+        match self {
+            Standing::Hostile | Standing::Cold | Standing::Neutral => false,
+            Standing::Warm | Standing::Allied => true,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -149,6 +180,68 @@ mod tests {
                 "{} answers the wrong way",
                 band.label()
             );
+        }
+    }
+
+    /// The same census for Phase 6's route predation: every band answers,
+    /// and only the bottom one preys.
+    #[test]
+    fn every_standing_band_answers_whether_it_preys_on_routes() {
+        for band in [
+            Standing::Hostile,
+            Standing::Cold,
+            Standing::Neutral,
+            Standing::Warm,
+            Standing::Allied,
+        ] {
+            assert_eq!(
+                band.preys_on_routes(),
+                band == Standing::Hostile,
+                "{} answers the wrong way",
+                band.label()
+            );
+        }
+    }
+
+    /// A Hostile town does not host a standing route — it refuses service
+    /// entirely, so a stricter gate above it would be unreachable.
+    #[test]
+    fn a_hostile_town_does_not_host_a_standing_route() {
+        assert!(!Standing::Hostile.allows_standing_route());
+    }
+
+    /// A Warm town does not prey on a route: predation is the bottom band's
+    /// consequence alone.
+    #[test]
+    fn a_warm_town_does_not_prey_on_routes() {
+        assert!(!Standing::Warm.preys_on_routes());
+    }
+
+    /// The same census for the standing-route gate: every band answers, and
+    /// it opens strictly above the bare access gate — `Warm` and up, not
+    /// merely `!refuses_service`.
+    #[test]
+    fn every_standing_band_answers_whether_it_allows_a_standing_route() {
+        for band in [
+            Standing::Hostile,
+            Standing::Cold,
+            Standing::Neutral,
+            Standing::Warm,
+            Standing::Allied,
+        ] {
+            assert_eq!(
+                band.allows_standing_route(),
+                matches!(band, Standing::Warm | Standing::Allied),
+                "{} answers the wrong way",
+                band.label()
+            );
+            if band.allows_standing_route() {
+                assert!(
+                    !band.refuses_service(),
+                    "{} allows a standing route but also refuses service",
+                    band.label()
+                );
+            }
         }
     }
 

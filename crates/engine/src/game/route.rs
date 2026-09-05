@@ -314,10 +314,9 @@ impl Game {
         self.queue_transit_walk(ROUTE_CARGO_GLYPH, ROUTE_CARGO_COLOR, from, to);
     }
 
-    /// The base's own Depot standing lowest in tile order —
-    /// `game::base::stock::spend_from_base`'s own draw order, reused here
-    /// purely for a deterministic pick: the cue is cosmetic, and any
-    /// consistent choice is as good as any other.
+    /// The base's own Depot standing lowest in tile order — a deterministic
+    /// pick and nothing more: the cue is cosmetic, and any consistent choice
+    /// is as good as any other.
     fn nearest_depot_tile(&self) -> Option<(i32, i32)> {
         let structures = self.world.resource::<crate::structures::StructureDb>();
         let mut depots: Vec<(i32, i32)> = self

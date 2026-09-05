@@ -276,8 +276,13 @@ impl App {
     }
 
     /// The cargo basket over `Game::base_stock` for `pending_dispatch_destination`
-    /// — `None` once that destination is gone (nothing clears it early, so a
-    /// stale key just draws nothing, `settlement_market`'s own fallback).
+    /// — `None` only when there is no active game or no pending destination
+    /// at all. **Not** a graceful fallback for a destination that has since
+    /// vanished: `game.settlement_report(destination)` below `.expect()`s a
+    /// `resources::Settlements` record for the key, which is safe only
+    /// because nothing removes a settlement from that resource today — a
+    /// stale key here panics rather than drawing nothing. A future removal
+    /// path needs its own refusal before this comment's old claim is true.
     pub fn route_cargo_basket(&mut self) -> Option<RouteCargoBasket> {
         let destination = self.pending_dispatch_destination?;
         let game = self.game.as_ref()?;

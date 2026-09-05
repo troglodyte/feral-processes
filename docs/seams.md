@@ -10829,3 +10829,79 @@ through it. The shipped test asserts this at Open, the cheapest
 temperament to buy at, with a modded underpriced item, since the floor has
 slack against the real shipped catalogue and would not have caught a
 before/after ordering bug on real assets alone.
+
+### Standing has one writer, and its consequences are named queries rather than a table of effects
+
+A town's opinion of the party is a signed `i32` per `SettlementKey` in
+`resources::Standings`, and `Game::adjust_standing` is the only thing that
+writes it. Everything else — trade volume across a counter, a nest cleared
+near a town, and from Phase 5 a contract completed or abandoned — is a
+*caller* of that door, never a write beside it. What the door holds is the
+clamp to `SETTLEMENT_MIN_STANDING..MAX`, and the announcement of a band
+crossing, which follows `set_machine_status`'s rule exactly: entering a band
+is news, staying in it is not. A mover that wrote the map directly would
+have to restate both, and the one that forgot the transition check would
+announce every basket.
+
+**The band is derived on every read, never stored.** `relations::band` maps
+the number onto `Hostile`/`Cold`/`Neutral`/`Warm`/`Allied` through four
+`tuning` thresholds. Storing the band beside the number is the change to
+refuse: a retune of a threshold would then leave every existing save filed
+under a boundary that has moved, and the two records would disagree with no
+compiler complaint. The cost of deriving is a comparison ladder per lookup,
+which is nothing.
+
+**The consequences are queries on the band, not data.** This is the perks
+module's seam, copied deliberately, and for the same argument: a consequence
+is a hook into a particular formula — a market's open/closed gate here, a
+raid roll or a patrol's hostility later — with no shared shape between them
+to express as a table. `Standing::refuses_service` is the one shipped, its
+match exhaustive on the band (`cell_mark`'s rule) so a sixth band with no
+answer fails to compile rather than shipping as neutral, and
+`every_standing_band_answers_whether_it_refuses_service` walks the ladder to
+prove each answer is reachable. Town-sourced raids and Phase 6's route
+predation are each a *new query* answered by the same match — the extension
+the design asked to be left room for, without a `Consequence` enum and a
+lookup table nothing yet needs.
+
+**`resources::Standings` is a second map beside `resources::Settlements`
+rather than two fields on `KnownSettlement`.** That record is the town's
+identity — which catalogue entry stands here, on which tile — written once
+at materialization and never again; this is the relationship, written all
+run long. Keeping them apart is also what leaves room for a standing with a
+town the party has not walked to, which Phase 6's routes will need. Both are
+`BTreeMap`s for `Stock`'s reason: they are serialized, and a hash map would
+make the save encoding differ between runs holding identical state. The save
+field is additive behind `#[serde(default)]`, so no `SAVE_FORMAT_VERSION`
+bump — an old save loads every town at Neutral, which is where a new run
+starts anyway.
+
+**`Relation::trade_credits` is a remainder, and dropping it turns a volume
+rule into a rounding rule.** Trade pays one point per
+`SETTLEMENT_TRADE_CREDITS_PER_POINT` Credits moved across the counter, both
+directions counted, since what the party spends and what the town pays them
+are equally business the town did. With nowhere to keep the leftover, a
+player who trades in ten small baskets earns nothing while one who trades
+the same volume in a single basket earns the lot — which reads as the mover
+being broken rather than as a threshold. The test that holds it splits one
+threshold's worth across ten baskets and asserts the same payout.
+
+### A town that refuses service answers with a closed view, never `None`
+
+`Game::settlement_view` returning `None` was already spoken for: app-core's
+`App::close_if_settlement_gone` reads it as the party having stepped off the
+town's tile and drops them back to the map. So refuse-service could not
+reuse it — a hostile town would have shut the screen under the player with
+no line explaining why, which reads as a crash rather than as a consequence.
+The view carries `closed: bool` instead, with empty `offers` and `sells`,
+and the renderer returns a short page saying the counter is shut. The gate
+is applied twice on purpose, once in the view and once at the top of
+`Game::commit_settlement_basket` — the second is what holds
+`commit_caravan_basket`'s rule that every refusal lands before anything is
+spent, since a view is a draw and a commit is the thing that could spend.
+
+The gate sits at the bottom band alone. A town that merely dislikes the
+party still takes their Credits, which is what keeps the middle of the
+ladder about price rather than about access — and what leaves
+`Temperament`'s six price constants as the only thing moving a number until
+a later phase gives standing a price term of its own.

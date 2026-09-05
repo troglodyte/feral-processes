@@ -125,3 +125,41 @@
   to the nearest walkable cell rather than the nearest empty one, so a
   settlement and a wild program can share a tile and the program is the
   one worth pointing `x` at.
+- **`Game::adjust_standing` is the one writer of a town's opinion, and the
+  band under it is derived on every read.** `resources::Standings` holds a
+  signed `i32` per `SettlementKey`; `relations::band` maps it onto
+  `Hostile`/`Cold`/`Neutral`/`Warm`/`Allied` through four `tuning`
+  thresholds. **The trap is a mover that writes the map directly.** The
+  door holds two things nothing else does — the clamp, and the
+  announcement, which speaks only on a *band crossing*
+  (`set_machine_status`'s rule) — so the mover that skips it either lets
+  standing run past its bounds or announces every basket. **The second
+  trap is storing the band**: a retune of a threshold then leaves old
+  saves filed under a boundary that has moved, and nothing in the compiler
+  notices the two records disagreeing.
+- **A consequence of standing is a *named query* on the band, never a
+  table of effects.** `Standing::refuses_service` is the one shipped and
+  its match is exhaustive (`cell_mark`'s rule), so a sixth band with no
+  answer fails to compile rather than shipping as neutral;
+  `every_standing_band_answers_whether_it_refuses_service` is the census.
+  This is `perks.rs`'s seam copied on purpose — town-sourced raids and
+  Phase 6's route predation are each a new query answered by the same
+  match, so **the change to refuse is a `Consequence` enum and a lookup
+  table**, which buys nothing the exhaustive match does not already give
+  and costs a save-format decision the moment anything stores one.
+- **A town refusing service answers with a *closed* view, never `None`.**
+  `Game::settlement_view`'s `None` is already spoken for —
+  `App::close_if_settlement_gone` reads it as the party having stepped off
+  the tile and drops them to the map — so reusing it shuts the screen
+  under the player with no line saying why, which reads as a crash. The
+  view carries `closed: bool` with empty rows instead, and the gate is
+  applied a *second* time at the top of `Game::commit_settlement_basket`:
+  a view is a draw, and only the commit can spend, which is where
+  `commit_caravan_basket`'s "every refusal lands before anything is spent"
+  rule actually bites.
+- **`Relation::trade_credits` is a remainder, not a total.** Trade pays one
+  standing point per `SETTLEMENT_TRADE_CREDITS_PER_POINT` Credits moved,
+  both directions counted. **Drop the remainder and the mover becomes a
+  rounding rule**: ten small baskets pay nothing while one large basket of
+  the same volume pays the lot, which reads as the feature being broken
+  rather than as a threshold.

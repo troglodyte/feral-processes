@@ -810,6 +810,7 @@ impl Game {
         &self,
         key: crate::settlements::SettlementKey,
     ) -> crate::views::SettlementView {
+        let standing = self.standing_band(key).label();
         let def = &self
             .world
             .resource::<crate::resources::Settlements>()
@@ -823,6 +824,7 @@ impl Game {
             specialty: def.specialty.label(),
             temperament: def.temperament.label(),
             blurb: def.blurb.clone(),
+            standing,
         }
     }
 

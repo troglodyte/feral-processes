@@ -1731,6 +1731,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         stack_memory_tiered: true,
         populated_chunks: crate::resources::PopulatedChunks::default(),
         settlements: Default::default(),
+        standings: Default::default(),
         trace: 0,
         contracts: Vec::new(),
         contracts_done: Vec::new(),

@@ -3393,6 +3393,49 @@ pub const SETTLEMENT_MERCANTILE_BUY_MULT: f32 = 1.0;
 /// See `SETTLEMENT_OPEN_BUY_MULT`.
 pub const SETTLEMENT_MERCANTILE_SELL_MULT: f32 = 0.85;
 
+// ── Relations: what a town thinks of you ──
+// See `settlements::relations`. The band thresholds are read on every
+// lookup rather than stored, so moving one re-bands every existing save.
+
+/// The floor and ceiling `settlements::relations::clamp` holds standing to,
+/// and the only bounds in the feature — `Game::adjust_standing` is the one
+/// writer, which is what makes a single clamp enough.
+pub const SETTLEMENT_MIN_STANDING: i32 = -100;
+/// See `SETTLEMENT_MIN_STANDING`.
+pub const SETTLEMENT_MAX_STANDING: i32 = 100;
+
+/// At or below this, a town refuses service — see
+/// `settlements::relations::Standing::refuses_service`. Deliberately far
+/// from zero: closing a market is the harshest thing standing does, and a
+/// player must have worked at it rather than drifted into it.
+pub const SETTLEMENT_HOSTILE_STANDING: i32 = -50;
+/// The top of the Cold band; below this a town is merely unfriendly.
+pub const SETTLEMENT_COLD_STANDING: i32 = -15;
+/// The bottom of the Warm band.
+pub const SETTLEMENT_WARM_STANDING: i32 = 15;
+/// The bottom of the Allied band.
+pub const SETTLEMENT_ALLIED_STANDING: i32 = 50;
+
+/// How many Credits have to move across a town's counter to buy one point
+/// of standing. Counted on the whole basket — what the party spends *and*
+/// what it is paid — since either direction is business the town did.
+/// `Relation::trade_credits` keeps the remainder, so the figure is a volume
+/// rate rather than a per-basket rounding.
+pub const SETTLEMENT_TRADE_CREDITS_PER_POINT: u32 = 250;
+
+/// How near a town something has to happen for the town to hear about it —
+/// `Game::credit_nearby_settlements`. Roughly a quarter of
+/// `SETTLEMENT_REGION_CHUNKS * CHUNK_SIZE`, so clearing a nest is local news
+/// to at most the town whose region it stands in.
+pub const SETTLEMENT_NOTICE_RADIUS: i32 = 60;
+
+/// What bringing down a nest within that radius is worth.
+pub const SETTLEMENT_NEST_CLEARED_STANDING: i32 = 4;
+
+/// What collapsing a stack within that radius is worth — more than a nest,
+/// since a stack is the larger thing and takes its guardian with it.
+pub const SETTLEMENT_STACK_COLLAPSED_STANDING: i32 = 8;
+
 // ─────────────────────────────────────────────────────────────────────────
 // Combat resolution: to-hit, crit, fumble, mitigation
 // ─────────────────────────────────────────────────────────────────────────

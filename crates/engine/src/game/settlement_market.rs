@@ -214,6 +214,20 @@ impl Game {
             .get(&key)?
             .def
             .temperament;
+        // Refuse-service is a *closed counter*, not a missing one: `None`
+        // here is what `App::close_if_settlement_gone` reads as the party
+        // having walked away, and a town shutting its door on them is
+        // something they have to be able to stand in front of and read.
+        let closed = self.standing_band(key).refuses_service();
+        if closed {
+            return Some(views::SettlementMarketView {
+                offers: Vec::new(),
+                sells: Vec::new(),
+                credits: self.banked(&self.trade_currency()),
+                currency: self.item_name(&self.trade_currency()).to_string(),
+                closed,
+            });
+        }
         let epoch = self.settlement_epoch();
         let mut offers = self.settlement_shelf(key, epoch);
         // Grouped for the eye here and never in `settlement_shelf`, the
@@ -231,6 +245,7 @@ impl Game {
             sells: self.settlement_sell_rows(temperament),
             credits,
             currency: self.item_name(&currency).to_string(),
+            closed,
         })
     }
 
@@ -275,6 +290,9 @@ impl Game {
         }
         if !self.settlement_reach(key) {
             return Err("There's nobody trading here.".into());
+        }
+        if self.standing_band(key).refuses_service() {
+            return Err("They won't trade with you.".into());
         }
         if sells.is_empty() && buys.is_empty() {
             return Err("Nothing in the basket.".into());
@@ -327,7 +345,11 @@ impl Game {
         let sold = planned_sells.len();
         let bought = planned_buys.len();
 
-        self.settle_basket(commerce::BasketPlan {
+        // Both directions: what the party spends and what the town pays
+        // them are equally business the town did. Credited only on a
+        // committed basket — `settle_basket` can still refuse on funds.
+        let volume = proceeds + cost;
+        let settled = self.settle_basket(commerce::BasketPlan {
             proceeds,
             cost,
             sold,
@@ -344,7 +366,11 @@ impl Game {
                     game.charge_for_offer(price, &money, delivered);
                 }
             },
-        })
+        });
+        if settled.is_ok() {
+            self.credit_trade_volume(key, volume);
+        }
+        settled
     }
 
     /// The sale itself — infallible behind `refuse_sale_offer`, priced

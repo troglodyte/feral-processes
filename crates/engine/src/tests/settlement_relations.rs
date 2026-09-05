@@ -1,0 +1,260 @@
+//! Standing with a town — Phase 4's one door and its movers.
+//!
+//! Every test here goes through `Game::adjust_standing` or a mover that
+//! calls it. Nothing writes `resources::Standings` by hand except the
+//! fixtures that need a town already at a band, which is exactly the shape
+//! the "one door" rule is meant to leave: setting the state is a test
+//! convenience, moving it is the feature.
+
+use super::support::*;
+use crate::components::Durability;
+use crate::items::{GearCopy, ids};
+use crate::resources::Standings;
+use crate::settlements::SettlementKey;
+use crate::settlements::relations::Standing;
+use crate::tuning::*;
+use crate::*;
+
+fn game() -> Game {
+    Game::new(4242, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
+}
+
+fn settlement_east_of_player(game: &mut Game) -> SettlementKey {
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let key = SettlementKey { rx: 0, ry: 0 };
+    place_settlement(game, key, pos.x + 1, pos.y);
+    key
+}
+
+/// Puts a town at `standing` without going through the door — a fixture
+/// convenience, and the only place in this file that writes the resource.
+fn set_standing(game: &mut Game, key: SettlementKey, standing: i32) {
+    game.world
+        .resource_mut::<Standings>()
+        .0
+        .entry(key)
+        .or_default()
+        .standing = standing;
+}
+
+// ---------------------------------------------------------------------------
+// The door
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_town_starts_neutral_and_at_zero() {
+    let game = game();
+    let key = SettlementKey { rx: 7, ry: -3 };
+    assert_eq!(game.standing(key), 0);
+    assert_eq!(game.standing_band(key), Standing::Neutral);
+}
+
+#[test]
+fn the_door_clamps_at_both_ends() {
+    let mut game = game();
+    let key = settlement_east_of_player(&mut game);
+
+    game.adjust_standing(key, SETTLEMENT_MAX_STANDING * 10);
+    assert_eq!(game.standing(key), SETTLEMENT_MAX_STANDING);
+
+    game.adjust_standing(key, -SETTLEMENT_MAX_STANDING * 20);
+    assert_eq!(game.standing(key), SETTLEMENT_MIN_STANDING);
+}
+
+/// `set_machine_status`' rule, one subsystem over: entering a band is news
+/// and staying in it is not.
+#[test]
+fn a_band_crossing_is_announced_once() {
+    let mut game = game();
+    let key = settlement_east_of_player(&mut game);
+    let name = game.settlement_report(key).name;
+
+    // Counted over the whole history, summing `repeats`: `message_history`
+    // folds identical lines, so a second, identical announcement would
+    // otherwise hide inside the first entry rather than showing as a row.
+    let spoken = |game: &Game| -> usize {
+        game.message_history(500)
+            .iter()
+            .filter(|entry| entry.text.contains(&name))
+            .map(|entry| entry.repeats)
+            .sum()
+    };
+
+    game.adjust_standing(key, SETTLEMENT_WARM_STANDING);
+    assert_eq!(spoken(&game), 1, "a crossing must speak exactly once");
+    assert!(
+        game.message_history(500)
+            .iter()
+            .any(|entry| entry.text.contains("Warm")),
+        "the line must name the band it crossed into"
+    );
+
+    game.adjust_standing(key, 1);
+    assert_eq!(spoken(&game), 1, "staying in a band is not news");
+}
+
+#[test]
+fn a_move_that_changes_nothing_says_nothing() {
+    let mut game = game();
+    let key = settlement_east_of_player(&mut game);
+    game.adjust_standing(key, SETTLEMENT_MAX_STANDING);
+
+    let before = game.message_history(500).len();
+    game.adjust_standing(key, 5);
+    assert_eq!(game.standing(key), SETTLEMENT_MAX_STANDING);
+    assert_eq!(
+        game.message_history(500).len(),
+        before,
+        "a clamped no-op must not announce a crossing"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Movers
+// ---------------------------------------------------------------------------
+
+#[test]
+fn trading_at_a_towns_counter_earns_standing_with_it() {
+    let mut game = game();
+    let key = settlement_east_of_player(&mut game);
+    // Enough cargo that one basket clears the volume threshold on its own.
+    let scrap = ItemId::from(ids::CORE_FRAGMENT);
+    let unit = game
+        .settlement_sell_price(&scrap, crate::settlements::Temperament::Open)
+        .max(1);
+    let qty = (SETTLEMENT_TRADE_CREDITS_PER_POINT / unit) + 1;
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(scrap.clone(), qty);
+
+    let copy = GearCopy::plain(scrap);
+    game.commit_settlement_basket(key, vec![(copy, qty)], Vec::new())
+        .expect("the basket commits");
+
+    assert!(
+        game.standing(key) > 0,
+        "volume across the counter must move standing, got {}",
+        game.standing(key)
+    );
+}
+
+#[test]
+fn bringing_down_a_nest_beside_a_town_is_noticed_and_one_far_away_is_not() {
+    let mut game = game();
+    let key = settlement_east_of_player(&mut game);
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+
+    let far = game.spawn_nest("scrapper", pos.x + SETTLEMENT_NOTICE_RADIUS + 5, pos.y);
+    game.world.get_mut::<Durability>(far).unwrap().hp = 1;
+    game.attack_nest(far);
+    assert_eq!(
+        game.standing(key),
+        0,
+        "a nest beyond the radius is not the town's news"
+    );
+
+    let near = game.spawn_nest("scrapper", pos.x + 2, pos.y + 2);
+    game.world.get_mut::<Durability>(near).unwrap().hp = 1;
+    game.attack_nest(near);
+    assert_eq!(game.standing(key), SETTLEMENT_NEST_CLEARED_STANDING);
+}
+
+#[test]
+fn collapsing_a_stack_beside_a_town_is_noticed() {
+    let mut game = game();
+    let key = settlement_east_of_player(&mut game);
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let entrance = (pos.x + 3, pos.y + 3);
+    game.spawn_entrance_at(entrance.0, entrance.1);
+
+    game.collapse_stack(entrance);
+
+    assert_eq!(game.standing(key), SETTLEMENT_STACK_COLLAPSED_STANDING);
+}
+
+// ---------------------------------------------------------------------------
+// The consequence
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_hostile_town_shuts_its_counter_rather_than_vanishing() {
+    let mut game = game();
+    let key = settlement_east_of_player(&mut game);
+    set_standing(&mut game, key, SETTLEMENT_HOSTILE_STANDING);
+
+    let view = game
+        .settlement_view(key)
+        .expect("the screen must still open — `None` closes it under the player");
+    assert!(view.closed);
+    assert!(view.offers.is_empty());
+    assert!(view.sells.is_empty());
+}
+
+/// `commit_caravan_basket`'s rule: every refusal lands before anything is
+/// spent.
+#[test]
+fn a_hostile_town_refuses_a_basket_and_spends_nothing() {
+    let mut game = game();
+    let key = settlement_east_of_player(&mut game);
+    let scrap = ItemId::from(ids::CORE_FRAGMENT);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(scrap.clone(), 5);
+    set_standing(&mut game, key, SETTLEMENT_HOSTILE_STANDING);
+
+    let held = |game: &Game| {
+        game.world
+            .get::<Inventory>(game.player_entity())
+            .unwrap()
+            .count(&scrap)
+    };
+    let before = held(&game);
+    let copy = GearCopy::plain(scrap.clone());
+    let refusal = game
+        .commit_settlement_basket(key, vec![(copy, 5)], Vec::new())
+        .expect_err("a hostile town takes nothing");
+    assert!(refusal.contains("won't trade"), "{refusal}");
+    assert_eq!(held(&game), before, "a refusal must spend nothing");
+}
+
+#[test]
+fn the_hub_page_names_the_band() {
+    let mut game = game();
+    let key = settlement_east_of_player(&mut game);
+    game.adjust_standing(key, SETTLEMENT_ALLIED_STANDING);
+    assert_eq!(game.settlement_report(key).standing, "Allied");
+}
+
+// ---------------------------------------------------------------------------
+// The save
+// ---------------------------------------------------------------------------
+
+#[test]
+fn standing_survives_a_save_and_load() {
+    let mut game = game();
+    let key = settlement_east_of_player(&mut game);
+    game.adjust_standing(key, SETTLEMENT_WARM_STANDING + 2);
+    game.credit_trade_volume(key, SETTLEMENT_TRADE_CREDITS_PER_POINT / 2);
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_settlement_standing_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(loaded.standing(key), game.standing(key));
+    assert_eq!(
+        loaded
+            .world
+            .resource::<Standings>()
+            .0
+            .get(&key)
+            .map(|r| r.trade_credits),
+        Some(SETTLEMENT_TRADE_CREDITS_PER_POINT / 2),
+        "the remainder is what makes trade a volume rate rather than a rounding rule"
+    );
+}

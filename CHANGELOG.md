@@ -33,6 +33,18 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.104
+
+**The compass gives a distance for every destination**, not only the ones
+you have walked to. Reaching a place buys its name; how far off it is was
+never something arriving taught you, and a bearing with no figure is a
+direction to wander in rather than a trip you can plan.
+
+**And it is a block in the map's top-right corner now**, under the threat
+readout — an arrow, the name and the distance — instead of a line along the
+map's bottom edge. The block sits over the map rather than beside it, so
+picking a destination no longer costs the map any height.
+
 ## 0.13.103
 
 **A destination and a bearing to it.** `u` opens a picker of the places the

@@ -33,6 +33,33 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.105
+
+**The Compiler is where a program gets taken apart properly.** Standing one
+anywhere makes an extraction quicker; every tier you upgrade it past the
+first makes the same tool draw more out of the same program.
+
+**A tool that reads routines instead of materials.** The Routine Reader —
+taught by Cortex Hacking — reads a downed program for what it was running
+and keeps one, favouring the earliest thing its species knows that you
+don't. It teaches knowledge only: an exclusive routine still comes off a
+program the one way it always has, by breaking down one you control.
+
+**A downed program remembers what it was running.** A wild program carrying
+a routine leaves that routine on the record, and the Reader offers it first.
+
+**A sortie carries its kills home rather than teleporting them.** Programs
+its squad downs ride back with it and arrive when it does.
+
+**A trip can out-earn what you can carry, and the overflow is lost.** The
+store refuses a delivery it has no room for and destroys nothing you were
+already holding — but the programs it turned away are gone, and a long
+sortie routinely downs more than the store's ten. Empty the store before
+a squad comes home.
+
+**None of this has been played.** It is green and unseen, like the two
+phases before it.
+
 ## 0.13.104
 
 **The compass gives a distance for every destination**, not only the ones

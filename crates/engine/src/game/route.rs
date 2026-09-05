@@ -110,6 +110,26 @@ impl Game {
             .sum()
     }
 
+    /// `route_quote` with `destination`'s own `Temperament` resolved
+    /// internally — the cargo picker's live preview crosses the app-core/
+    /// engine seam with no `Temperament` of its own to carry, so this is the
+    /// one door that resolves it rather than leaking the type out. `None`
+    /// for a destination the run has not discovered.
+    pub fn route_manifest_quote(
+        &self,
+        destination: SettlementKey,
+        cargo: &[(ItemId, u32)],
+    ) -> Option<u32> {
+        let temperament = self
+            .world
+            .resource::<resources::Settlements>()
+            .0
+            .get(&destination)?
+            .def
+            .temperament;
+        Some(self.route_quote(cargo, temperament))
+    }
+
     /// Every settlement the run has discovered, as a caravan destination —
     /// three-state exactly as `board_defs`: `None` for no Relay,
     /// `Some(vec![])` for a Relay with no known settlement reachable yet,

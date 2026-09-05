@@ -83,6 +83,8 @@ pub use game::contracts::{BrokerReach, ContractRefusal};
 pub use game::creation::{CharacterChoice, CreationCatalogue, DEFAULT_PLAYER_SPRITE};
 pub use game::environment::TerrainRow;
 pub use game::party::ProgramRole;
+pub use game::route::{RouteDestination, RouteRefusal, RouteReport};
+pub use game::sortie::{DispatchReach, SortieRefusal};
 pub use game::stack_view::ExamineDir;
 pub use icon::{
     ICON_CELL_PIXELS, ICON_GRID, ICON_PALETTE, ICON_SIZE, PlayerIcon, SPRITE_ALPHA_THRESHOLD,

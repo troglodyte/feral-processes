@@ -283,6 +283,36 @@ fn route_quote_sums_settlement_sell_price_per_line() {
     assert_eq!(game.route_quote(&cargo, temperament), expected);
 }
 
+/// `route_manifest_quote` is `route_quote` with the destination's own
+/// `Temperament` resolved internally — the cargo picker's live preview has
+/// no `Temperament` of its own to carry across the app-core/engine seam, so
+/// this is the one door that resolves it rather than leaking the type out.
+#[test]
+fn route_manifest_quote_resolves_the_destinations_own_temperament() {
+    let (game, item, key) = a_dispatch_ready_base(6003, 40);
+    let temperament = game
+        .world
+        .resource::<crate::resources::Settlements>()
+        .0
+        .get(&key)
+        .unwrap()
+        .def
+        .temperament;
+    let cargo = vec![(item.clone(), 7)];
+    let expected = game.route_quote(&cargo, temperament);
+    assert_eq!(game.route_manifest_quote(key, &cargo), Some(expected));
+}
+
+/// A destination the run has not discovered has no `Temperament` to
+/// resolve, so the quote answers `None` rather than pricing off a default.
+#[test]
+fn route_manifest_quote_is_none_for_an_unknown_destination() {
+    let (game, item, _) = a_dispatch_ready_base(6004, 40);
+    let cargo = vec![(item, 7)];
+    let unknown = SettlementKey { rx: 999, ry: 999 };
+    assert_eq!(game.route_manifest_quote(unknown, &cargo), None);
+}
+
 /// Every refusal lands before anything is spent, asserted **per refusal** —
 /// a single test over one of them passes against every path that never
 /// spends anyway. `every_refusal_spends_nothing`'s shape, one door over.

@@ -1,6 +1,8 @@
 # Settlement aid: what a friendly town is worth
 
-**Status:** approved, unimplemented
+**Status:** built on `feat/settlement-aid`, unmerged and **unplayed**. See
+"Amended in the build" below for the four places the design did not survive
+contact.
 
 The follow-on to `2026-09-04-settlements-design`, whose six numbered phases
 all shipped by `v0.13.99`. It builds the item that spec deferred by
@@ -304,3 +306,44 @@ app-core tests, `tests/dispatch.rs`'s shape:
 - **Town-sourced raids and hostile patrols** stay deferred. They are the
   angry end of the same ladder and each is another named query on the same
   exhaustive match — this spec does not block them and does not build them.
+
+## Amended in the build, 2026-09-05
+
+Recorded here rather than left for a reader to discover by diffing. Each was
+argued in a doc comment at the time; this is the same argument written back.
+
+1. **`travel_to_anchor` takes a `SettlementKey`**, not no arguments. The gate
+   is the *town's* willingness to hold the link, so the door has to know
+   which town.
+2. **The gate is two rules, not one.** §3 claimed a single rule for both
+   directions. The Relay stands in base space, so `require_surface` would
+   refuse the only place an outbound trip can start, and `dispatch_reach`
+   answers `OffBase` from the town an inbound trip starts at. Outbound asks
+   `DispatchReach::AtRelay`; inbound asks that a Relay stands and that the
+   town is in reach.
+3. **`[G]` and `[T]` make no app-core reach check**, where §4 said they
+   would copy `[M]`/`[J]`'s. Those two open a *screen* whose view answers
+   `None` from across the map; these call doors that refuse in their own
+   words, so the reach rule lives in one place. The aid *lines* on the page
+   are reach-gated to match, which the first build missed.
+4. **`standable_near` was not widened.** `spawning::ring_tiles` was
+   extracted instead, so the band-0 and band-1 searches share one definition
+   of "nearest" rather than one calling the other with a flag.
+
+## Found by review, and fixed
+
+The whole-branch review caught four things the suite did not, all now fixed
+with tests. Kept here because each is a trap this feature's shape invites:
+
+- **The tick loop did not break on a fight**, unlike every other multi-tick
+  loop in the engine, and **neither travel key called `after_world_action`**,
+  so a battle opened mid-trip left the map drawn over it and the arrival cue
+  queued for a later, unrelated action.
+- **The garrison aid line was a copy** of the fold's radius check under a doc
+  comment claiming it was a call.
+- **The gift and relay lines ignored reach**, offering what the doors then
+  refused.
+- **`travel_to_anchor` had four refusals with no test**, which is exactly the
+  hole the per-refusal rule exists to close: the two shipped tests passed
+  against all six paths.
+

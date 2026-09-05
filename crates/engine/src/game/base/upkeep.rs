@@ -266,14 +266,40 @@ impl Game {
             .iter()
             .map(|(key, known)| (*key, known.tile))
             .collect();
+        let _ = (ax, ay);
         towns
             .into_iter()
-            .filter(|(_, (tx, ty))| {
-                (tx - ax).abs().max((ty - ay).abs()) <= crate::tuning::SETTLEMENT_GARRISON_RADIUS
-            })
-            .map(|(key, _)| self.standing_band(key).garrison_defense())
+            .map(|(key, _)| self.town_garrisons(key))
             .sum::<u32>()
             .min(crate::tuning::SETTLEMENT_GARRISON_MAX)
+    }
+
+    /// What one town contributes to the fold above — its band's answer if it
+    /// is near enough to the anchor to station anyone, and zero otherwise.
+    ///
+    /// Split out because the town page has to say whether *this* town
+    /// garrisons, and `garrison_defense` returns a clamped sum that cannot
+    /// answer for one. Both sides call this rather than restating the radius
+    /// check, so a new condition on the fold cannot leave the page promising
+    /// a detachment that no longer arrives.
+    pub(crate) fn town_garrisons(&self, key: crate::settlements::SettlementKey) -> u32 {
+        let Some((ax, ay)) = self.anchor_position() else {
+            return 0;
+        };
+        let Some(tile) = self
+            .world
+            .resource::<crate::resources::Settlements>()
+            .0
+            .get(&key)
+            .map(|known| known.tile)
+        else {
+            return 0;
+        };
+        if (tile.0 - ax).abs().max((tile.1 - ay).abs()) > crate::tuning::SETTLEMENT_GARRISON_RADIUS
+        {
+            return 0;
+        }
+        self.standing_band(key).garrison_defense()
     }
 
     /// Fires a GC Entropy Sweep now, skipping the per-tick roll — the dev

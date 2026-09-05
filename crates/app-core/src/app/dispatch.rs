@@ -174,6 +174,15 @@ impl App {
                         self.report(outcome);
                         if went {
                             self.close_screen();
+                            // `finish_compile`'s rule — the same
+                            // bookkeeping a move gets, since travel spends
+                            // ordinary ticks. It is also what **drains the
+                            // arrival cue**: `travel_to_settlement` queues
+                            // `PendingVisit` and `after_world_action` is the
+                            // one place that reads it, so without this the
+                            // town page opens later, on some unrelated
+                            // action, for a town already walked away from.
+                            self.after_world_action(true, false);
                         }
                     }
                     _ => self.refuse("Highlight a destination to travel to."),

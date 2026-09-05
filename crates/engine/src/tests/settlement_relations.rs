@@ -888,7 +888,7 @@ fn a_town_with_nowhere_to_stand_beside_it_refuses_and_moves_nobody() {
         .tile(boxed_in.0, boxed_in.1);
     solid.walkable = false;
     for cell in crate::game::spawning::ring_tiles(boxed_in, 0, SETTLEMENT_SITE_SEARCH_TILES) {
-        overrides.insert(cell, solid.clone());
+        overrides.insert(cell, solid);
     }
     game.world
         .resource_mut::<crate::world::WorldMap>()
@@ -934,15 +934,45 @@ fn a_warm_town_offers_its_garrison_alone() {
 fn an_allied_town_with_a_relay_offers_all_three() {
     let mut game = game();
     super::routes::deploy_relay(&mut game);
+    // Standing at the town, not merely near it: the two verbs are
+    // reach-gated because their doors are, so a page read from across the
+    // map offers the garrison alone.
+    stand_in_base_at(&mut game, 0, 0);
+    game.leave_base().expect("step out onto the anchor");
     let (ax, ay) = game.anchor_position().unwrap();
     let key = SettlementKey { rx: 4, ry: 0 };
-    place_settlement(&mut game, key, ax + 3, ay);
+    place_settlement(&mut game, key, ax, ay + 1);
     set_standing(&mut game, key, SETTLEMENT_ALLIED_STANDING);
 
     assert_eq!(
         game.settlement_report(key).aid,
         vec![AID_GARRISON, AID_GIFT_READY, AID_RELAY]
     );
+}
+
+/// The gate the review found missing: this page opens from anywhere inside
+/// `EXAMINE_RANGE_TILES`, and both verbs' doors ask for Chebyshev 1. A town
+/// read from four tiles off must not offer what it would then refuse.
+#[test]
+fn a_town_read_from_out_of_reach_offers_neither_verb() {
+    let mut game = game();
+    super::routes::deploy_relay(&mut game);
+    stand_in_base_at(&mut game, 0, 0);
+    game.leave_base().expect("step out onto the anchor");
+    let (ax, ay) = game.anchor_position().unwrap();
+    let key = SettlementKey { rx: 4, ry: 0 };
+    place_settlement(&mut game, key, ax, ay + 4);
+    set_standing(&mut game, key, SETTLEMENT_ALLIED_STANDING);
+
+    let aid = game.settlement_report(key).aid;
+    assert_eq!(
+        aid,
+        vec![AID_GARRISON],
+        "an out-of-reach town made an offer"
+    );
+    // And the doors agree, which is the property the page is standing in for.
+    assert!(game.request_program_gift(key).is_err());
+    assert!(game.travel_to_anchor(key).is_err());
 }
 
 /// The travel line is a promise the door has to keep: without a Relay of
@@ -1038,4 +1068,103 @@ fn every_aid_line_the_engine_emits_is_one_the_census_measures() {
             "no state in this walk produced {wanted:?} — it is measured but unreachable"
         );
     }
+}
+
+/// `travel_to_anchor`'s remaining refusals, one test each — the review found
+/// four of its six covered by nothing, and a door's refusals are exactly
+/// where one test over one path passes against every other path that never
+/// spends anyway.
+#[test]
+fn travelling_home_refuses_after_game_over_and_spends_nothing() {
+    let mut game = game();
+    let key = a_relay_and_an_ally(&mut game);
+    game.travel_to_settlement(key).expect("the trip out");
+    let _ = game.take_settlement_visit();
+    let (was, tick) = (player_tile(&game), game.world.resource::<GameClock>().tick);
+    game.world.resource_mut::<GameOver>().reason = Some("done".to_string());
+
+    assert!(game.travel_to_anchor(key).is_err());
+    assert_travel_spent_nothing(&game, was, tick, "game over");
+}
+
+#[test]
+fn travelling_home_refuses_during_a_battle_and_spends_nothing() {
+    let mut game = game();
+    let key = a_relay_and_an_ally(&mut game);
+    game.travel_to_settlement(key).expect("the trip out");
+    let _ = game.take_settlement_visit();
+    let (was, tick) = (player_tile(&game), game.world.resource::<GameClock>().tick);
+    game.world
+        .insert_resource(super::extraction::minimal_active_battle(&game));
+
+    assert!(game.travel_to_anchor(key).is_err());
+    assert_travel_spent_nothing(&game, was, tick, "active battle");
+}
+
+#[test]
+fn travelling_home_refuses_without_a_relay_and_spends_nothing() {
+    let mut game = game();
+    let key = a_relay_and_an_ally(&mut game);
+    game.travel_to_settlement(key).expect("the trip out");
+    let _ = game.take_settlement_visit();
+    // Take the Relay away, leaving the party standing at the town.
+    let relays: Vec<Entity> = game
+        .world
+        .iter_entities()
+        .filter(|e| {
+            e.get::<crate::components::Structure>()
+                .is_some_and(|s| s.kind == "relay")
+        })
+        .map(|e| e.id())
+        .collect();
+    assert!(!relays.is_empty(), "the fixture stood no Relay up");
+    for relay in relays {
+        game.world.despawn(relay);
+    }
+    let (was, tick) = (player_tile(&game), game.world.resource::<GameClock>().tick);
+
+    assert!(game.travel_to_anchor(key).is_err());
+    assert_travel_spent_nothing(&game, was, tick, "no relay");
+}
+
+/// The trip stops the moment a tick opens a fight, `Game::wait`'s rule —
+/// travel is the fourth multi-tick loop in the engine and the other three
+/// all break. Without it the journey resolved in full while a battle waited
+/// on a screen the player could not yet see.
+#[test]
+fn a_trip_interrupted_by_a_fight_stops_paying_for_itself() {
+    let mut game = game();
+    let key = a_relay_and_an_ally(&mut game);
+    let quote = game.travel_cost_ticks(key).expect("a quotable trip");
+    assert!(quote > 1, "the fixture's trip is too short to interrupt");
+
+    // A guardian already in pursuit, standing on the landing tile's doorstep
+    // — `nest_aggro_tick` closes on the party from inside `tick`, which is
+    // exactly how a fight opens mid-journey in play.
+    let town = game
+        .world
+        .resource::<crate::resources::Settlements>()
+        .0
+        .get(&key)
+        .unwrap()
+        .tile;
+    let nest = spawn_bare_nest(&mut game, town.0 + 4, town.1 + 4);
+    spawn_pursuing_guardian(&mut game, nest, "sentinel", town.0 + 2, town.1);
+    let before = game.world.resource::<GameClock>().tick;
+
+    game.travel_to_settlement(key).expect("the trip");
+
+    let spent = game.world.resource::<GameClock>().tick - before;
+    assert!(
+        spent <= quote,
+        "the trip charged {spent} against a quote of {quote}"
+    );
+    assert!(
+        game.has_active_battle(),
+        "the fixture never opened a fight, so this test proves nothing"
+    );
+    assert!(
+        spent < quote,
+        "a fight opened and the trip still charged the full {quote}"
+    );
 }

@@ -439,8 +439,23 @@ impl Game {
 
     /// The trip's time, spent through the world's own tick so that
     /// everything a walk would have advanced still advances.
+    ///
+    /// **Breaks on a fight or a game over, `Game::wait`'s rule** — a tick
+    /// can start a fight (`nest_aggro_tick` is the precedent) and the rest
+    /// of them must be dropped the moment one does, rather than resolving a
+    /// world the party is no longer standing in while a battle waits on the
+    /// screen. Travel is the fourth multi-tick loop in the engine and the
+    /// other three all break; without it, a relay trip past a roused nest
+    /// spent every tick of the journey with the fight already running.
+    ///
+    /// The charge is therefore **at most** the quote, never more. A trip
+    /// interrupted early costs the player less, which is the right way for
+    /// the two figures to disagree.
     fn spend_travel_ticks(&mut self, ticks: u64) {
         for _ in 0..ticks {
+            if self.is_game_over().is_some() || self.has_active_battle() {
+                break;
+            }
             self.tick();
         }
     }
@@ -463,38 +478,33 @@ impl Game {
         let mut lines = Vec::new();
         let band = self.standing_band(key);
 
-        let garrisons = band.garrison_defense() > 0
-            && match (self.anchor_position(), self.settlement_tile(key)) {
-                (Some((ax, ay)), Some((tx, ty))) => {
-                    (tx - ax).abs().max((ty - ay).abs())
-                        <= crate::tuning::SETTLEMENT_GARRISON_RADIUS
-                }
-                _ => false,
-            };
-        if garrisons {
+        // A *call* to the fold's own per-town term, not a second copy of
+        // its radius check: `Game::garrison_defense` sums and clamps, so it
+        // cannot answer for one town, and `town_garrisons` is the half both
+        // sides share. A restated radius here is a page that keeps
+        // promising a detachment after the fold learns a new condition.
+        if self.town_garrisons(key) > 0 {
             lines.push(AID_GARRISON.to_string());
         }
 
-        match self.gift_available_in(key) {
-            None => {}
-            Some(0) => lines.push(AID_GIFT_READY.to_string()),
-            Some(remaining) => lines.push(
-                wait_line(remaining, crate::tuning::SETTLEMENT_GIFT_COOLDOWN_TICKS).to_string(),
-            ),
-        }
-
-        if band.hosts_a_relay() && self.has_relay() {
-            lines.push(AID_RELAY.to_string());
+        // The two verbs are **reach-gated, exactly as their doors are**.
+        // This page opens from anywhere inside `EXAMINE_RANGE_TILES` — `x`
+        // toward a town four tiles off lands here — while both doors ask
+        // the Chebyshev-1 `settlement_reach`, so an ungated line offered a
+        // gift and a trip that were then refused in the same breath.
+        if self.settlement_reach(key) {
+            match self.gift_available_in(key) {
+                None => {}
+                Some(0) => lines.push(AID_GIFT_READY.to_string()),
+                Some(remaining) => lines.push(
+                    wait_line(remaining, crate::tuning::SETTLEMENT_GIFT_COOLDOWN_TICKS).to_string(),
+                ),
+            }
+            if band.hosts_a_relay() && self.has_relay() {
+                lines.push(AID_RELAY.to_string());
+            }
         }
         lines
-    }
-
-    fn settlement_tile(&self, key: SettlementKey) -> Option<(i32, i32)> {
-        self.world
-            .resource::<resources::Settlements>()
-            .0
-            .get(&key)
-            .map(|known| known.tile)
     }
 }
 

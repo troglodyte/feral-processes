@@ -76,6 +76,15 @@ pub enum Standing {
     Allied,
 }
 
+/// A garrison can never zero a sweep on its own, whatever the player has or
+/// has not built.
+///
+/// A **compile-time** assertion rather than a test, because the claim in
+/// `docs/seams.md` is that closing this gap by retune fails the build —
+/// a `#[test]` would only fail the suite, and it also reads to clippy as an
+/// assertion on a constant, which it is.
+const _: () = assert!(crate::tuning::SETTLEMENT_GARRISON_MAX < crate::tuning::RAID_DAMAGE);
+
 /// The one banding. Ordered from the bottom so the thresholds read as the
 /// ladder they are.
 pub fn band(standing: i32) -> Standing {
@@ -362,14 +371,6 @@ mod tests {
             );
         }
         assert!(Standing::Allied.garrison_defense() > Standing::Warm.garrison_defense());
-    }
-
-    /// A garrison can never zero a sweep on its own, whatever the player has
-    /// or has not built. The cap is what holds it, and it is checked here
-    /// against the damage it is subtracted from rather than at the call site.
-    #[test]
-    fn the_garrison_cap_leaves_a_sweep_something_to_land() {
-        assert!(crate::tuning::SETTLEMENT_GARRISON_MAX < crate::tuning::RAID_DAMAGE);
     }
 
     /// The census for the gift: every band answers, `Allied` alone, and a

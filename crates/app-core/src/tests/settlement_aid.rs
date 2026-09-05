@@ -184,9 +184,17 @@ fn t_on_a_site_row_refuses() {
     assert!(app.status_line.is_some(), "a site row travelled");
 }
 
+/// The arrival cue must never be left queued. `travel_to_settlement` sets
+/// `PendingVisit`, and `after_world_action` is the only thing that reads it
+/// — without that call the page opened later, on some unrelated action, for
+/// a town the party had already walked away from.
+///
+/// Every assertion here is unconditional: the first version of this test
+/// branched on whether the landing happened to be in reach, and in this
+/// fixture it never was, so its interesting half was dead code.
 #[test]
-fn t_on_a_destination_row_travels_and_closes_the_hub() {
-    let (mut app, key) = app_at_a_hub_with_an_ally(7311);
+fn t_on_a_destination_row_travels_and_leaves_no_cue_dangling() {
+    let (mut app, _key) = app_at_a_hub_with_an_ally(7311);
     let (sites, destinations) = app.dispatch_hub_sections().unwrap_or_default();
     assert!(
         !destinations.is_empty(),
@@ -204,23 +212,56 @@ fn t_on_a_destination_row_travels_and_closes_the_hub() {
     );
     let landed = app.game.as_ref().unwrap().player_status().position;
     assert_ne!(landed, town, "the party landed on the settlement tile");
-    // Near, not necessarily adjacent — the ring finds the nearest standable
-    // ground, and the page opens only when that turned out to be in reach.
-    let in_reach = (landed.0 - town.0).abs().max((landed.1 - town.1).abs()) <= 1;
-    if in_reach {
-        assert_eq!(
-            app.mode,
-            Mode::Settlement,
-            "arriving in reach must open the page"
-        );
-        assert_eq!(app.pending_settlement, Some(key));
-    } else {
-        assert_eq!(
-            app.mode,
-            Mode::Playing,
-            "a distant set-down must not open the page"
-        );
-    }
+    assert!(
+        app.game.as_mut().unwrap().take_settlement_visit().is_none(),
+        "an arrival cue was left queued for a later, unrelated action to open"
+    );
+    assert_ne!(
+        app.mode,
+        Mode::Dispatch,
+        "the hub stayed open after the trip"
+    );
+}
+
+/// And the in-reach case, forced rather than hoped for: a town one tile off
+/// the anchor guarantees the band-1 landing search answers within a tile of
+/// it, because the anchor itself is walkable — the party is standing on it.
+/// So the page must open, which is the half the old test never reached.
+#[test]
+fn arriving_within_reach_opens_the_town_page() {
+    let mut app = app_at_a_relay(7313, &ItemId::from("cache_grain"), 10);
+    let key = SettlementKey { rx: 6, ry: 6 };
+    register_a_known_settlement(&mut app, key, (0, 0));
+
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("aid_near", 7313);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    let anchor = data.anchor.expect("the fixture founded a base");
+    // Diagonally off the anchor. Nothing is despawned by a registration, and
+    // the landing filter asks about creatures, nests, links and towns rather
+    // than structures, so the base-space coordinates this happens to share
+    // cannot affect the answer.
+    data.settlements.0.get_mut(&key).unwrap().tile = (anchor.0 + 1, anchor.1 + 1);
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    set_standing(&mut app, key, SETTLEMENT_ALLIED_STANDING);
+
+    app.mode = Mode::Dispatch;
+    let (sites, destinations) = app.dispatch_hub_sections().unwrap_or_default();
+    assert!(!destinations.is_empty());
+    app.menu_selected = sites.len();
+
+    app.handle_key(GameKey::Char('T'));
+
+    assert_eq!(app.status_line, None, "the trip was refused");
+    assert_eq!(
+        app.mode,
+        Mode::Settlement,
+        "arriving in reach must open the page"
+    );
+    assert_eq!(app.pending_settlement, Some(key));
 }
 
 #[test]

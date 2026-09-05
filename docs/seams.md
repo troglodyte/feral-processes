@@ -11167,6 +11167,29 @@ Chebyshev 1 and the landing was not. So the cue asks the same question the
 bump answers, and a distant set-down leaves the party looking at the map
 with a short walk still to do.
 
+**The trip's tick loop breaks on a fight or a game over, and app-core pays
+`after_world_action` for it.** These are one seam in two crates and the
+branch shipped neither at first. `Game::spend_travel_ticks` is the fourth
+multi-tick loop in the engine and the other three (`Game::wait`, the drag
+steps beside it, `Game::extract_program`) all break: a tick can start a
+fight — `nest_aggro_tick` is the precedent — and the rest must be dropped
+rather than resolving a world the party is no longer standing in. So the
+charge is **at most** the quote, and a trip cut short costs less, which is
+the right direction for the two figures to disagree.
+`a_trip_interrupted_by_a_fight_stops_paying_for_itself` puts a pursuing
+guardian on the landing's doorstep and is mutation-verified: without the
+break it charges all eleven ticks with the battle already live.
+
+The app-core half is `finish_compile`'s rule stated again — **`after_world_action`
+itself, not a copy of it.** `handle_key`'s tail calls `after_tick`, which
+does autosave, telemetry and notifications; `after_world_action` is the only
+thing outside the battle screens that writes `Mode::Battle`, drains
+`take_settlement_visit` and calls `check_game_over`. Both travel keys set
+their mode and then call it. Without that the map was drawn over a live
+fight until the player's next world action, a notification could take the
+screen mid-fight, and the arrival cue sat queued to open a town page later,
+for a town already walked away from.
+
 **Neither travel door calls `require_surface`, and that is not an
 oversight.** The Relay stands in base space, so a surface check would refuse
 the only place an outbound trip can begin. Outbound asks
@@ -11185,6 +11208,20 @@ transform in the wrong crate — `message_history`'s rule. And this game has
 never shown the player a tick, so the gift's remaining wait is banded into
 words the way `game::memories::age_phrase` bands a memory's age; a cooldown
 quoted as a number is a number nobody can read.
+
+**Every line is a call to the door that will honour it, and two of the three
+took a review to get there.** The garrison line first restated
+`garrison_defense`'s anchor lookup and radius check — a copy under a doc
+comment claiming a call, which is the thing CLAUDE.md forbids by name; the
+shared half is now `Game::town_garrisons`, split out because the fold
+returns a clamped *sum* and cannot answer for one town. And the gift and
+relay lines first ignored reach entirely, so a town examined from four tiles
+off — which `x` does, since this page opens from anywhere inside
+`EXAMINE_RANGE_TILES` while both doors ask the Chebyshev-1
+`settlement_reach` — offered a gift and a trip and then refused both in the
+same breath. `a_town_read_from_out_of_reach_offers_neither_verb` asserts the
+page and the doors together, which is the only form of that test worth
+having.
 
 **The sentences are `pub const` and `AID_LINES` is the census**, which is
 the non-obvious half. The page is a popup with no scroll, so its width and

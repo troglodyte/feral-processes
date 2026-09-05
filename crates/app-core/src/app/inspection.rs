@@ -213,6 +213,14 @@ impl App {
                 if went {
                     self.pending_settlement = None;
                     self.mode = Mode::Playing;
+                    // **`after_world_action` itself, not a copy of it** —
+                    // `finish_compile`'s rule, and travel is the same kind
+                    // of path: its ticks are ordinary game ticks and can
+                    // open a fight or end the run exactly as a move's can.
+                    // Without this the map is drawn over a live battle
+                    // until the player's next world action, and a
+                    // notification can take the screen mid-fight.
+                    self.after_world_action(true, false);
                 }
             }
             _ => {}

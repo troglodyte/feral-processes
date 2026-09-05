@@ -216,3 +216,30 @@
   (`message_history`'s rule) and because this game has never shown the
   player a tick: the gift's wait is banded into words the way
   `memories::age_phrase` bands a memory's age.
+- **Relay travel is one seam in two crates, and shipping half of it is
+  silent.** `Game::spend_travel_ticks` must break on a fight or a game over
+  — it is the fourth multi-tick loop in the engine and the other three all
+  do, because a tick can start a fight (`nest_aggro_tick`) and the rest must
+  be dropped rather than resolving a world the party has left. And both
+  travel keys in app-core must call **`after_world_action` itself, not a
+  copy of it** (`finish_compile`'s rule): `handle_key`'s tail pays
+  `after_tick`, which does autosave and notifications, while
+  `after_world_action` is the only thing outside the battle screens that
+  writes `Mode::Battle`, drains `take_settlement_visit` and checks game
+  over. With neither half, a trip past a roused nest spends every tick with
+  the battle already running, the map is drawn over it until the player's
+  next action, a notification can take the screen mid-fight, and the arrival
+  cue sits queued to open a town page later for a town already left. The
+  charge is therefore **at most** the quote; a test asserting exact equality
+  is only valid for an uninterrupted trip.
+- **Every aid sentence on the town page must be a call, and getting that
+  wrong twice is the shipped history.** The garrison line restated
+  `garrison_defense`'s radius check under a doc comment claiming a call —
+  the fold returns a clamped *sum*, so `Game::town_garrisons` is the shared
+  per-town half both must use. The gift and relay lines ignored
+  `settlement_reach`, while both their doors ask it, so a town examined from
+  four tiles off (which `x` does — this page opens from anywhere inside
+  `EXAMINE_RANGE_TILES`) offered a gift and a trip and refused them in the
+  same breath. Assert the page and the doors in one test, never the page
+  alone.
+

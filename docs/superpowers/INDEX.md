@@ -24,7 +24,7 @@ spec resolves to a release tag.
 
 | Spec | State | Evidence |
 | --- | --- | --- |
-| `2026-09-05-settlement-aid-design` | approved, **unbuilt** | `Standing::garrison_defense` exists nowhere in `crates/`; the follow-on to the settlements spec's deferred aid rewards |
+| `2026-09-05-settlement-aid-design` | **built**, unmerged, unplayed | on `feat/settlement-aid` with `plans/2026-09-05-settlement-aid.md`; move to `archive/specs/` when it lands |
 | `2026-09-04-settlements-design` | **all six phases shipped** | Phase 6 (caravan routes) landed 2026-09-05 with `plans/2026-09-05-settlements-phase-6-routes.md`; sorties got their first UI with it |
 | `2026-09-02-combat-model-slice-2-design` | **built**, unplayed | a second swing for Strikers from level 8; `balance_sim` cannot gate it |
 | `2026-08-31-stack-wanderers-design` | approved, **unbuilt** | `FrameWanderers` exists nowhere in `crates/` |

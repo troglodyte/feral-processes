@@ -716,6 +716,14 @@ pub struct ActiveContract {
     /// `Game::deliver_to_contract` — nothing else raises it.
     pub progress: u32,
     pub accepted_tick: u64,
+    /// Which town posted it, or `None` for the run's own Broker. The whole
+    /// vocabulary of Phase 5: it is what decides where the job may be
+    /// delivered, whose standing its completion moves, and whose board it
+    /// counts against. Additive behind `#[serde(default)]`, so no
+    /// `SAVE_FORMAT_VERSION` bump — a save written before towns posted work
+    /// loads every held contract as the Broker's, which is what it was.
+    #[serde(default)]
+    pub issuer: Option<crate::settlements::SettlementKey>,
 }
 
 /// What the run is holding and what it has finished.

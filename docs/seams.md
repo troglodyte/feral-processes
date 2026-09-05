@@ -10905,3 +10905,88 @@ party still takes their Credits, which is what keeps the middle of the
 ladder about price rather than about access — and what leaves
 `Temperament`'s six price constants as the only thing moving a number until
 a later phase gives standing a price term of its own.
+
+### A contract is delivered where it was signed, and `issuer` is the whole of it
+
+Phase 5 gave towns their own job boards. The obvious shape was a second
+subsystem — a `TownContract`, a town board module, a second delivery door —
+and it was rejected before it was written, because everything a town posts is
+already a `ContractDef`: the objectives, the rewards and the `.ron` schema are
+data enums that needed no editing at all, which is what the design promised
+and what turned out to be true.
+
+What actually needed inventing was one thing: **where a job came from**.
+`resources::ActiveContract` gained `issuer: Option<SettlementKey>` and that
+single value answers all four questions the feature asks — whose board the job
+came off, where it may be handed over, whose standing its completion moves,
+and which held rows a town's screen may list. `None` is the run's own Broker,
+which is what every contract in every existing save was.
+
+A dedicated enum (`ContractDesk::{Broker, Town(key)}`) was weighed and
+dropped. It reads better in a signature and it is a second thing to keep in
+step with the save field, which would have carried the `Option` anyway:
+`#[serde(default)]` on an `Option` is what makes a pre-Phase-5 file load its
+held contracts as the Broker's, and an enum would have needed its own default
+saying the same thing twice.
+
+**The delivery rule is the load-bearing half.** `Objective::Deliver` is the
+one objective that does not poll — it advances only through an act at a
+counter — so with two counters in the game it needed a rule, and "wherever you
+are standing" is the wrong one: it makes a town's job finishable at the base
+you never left, and it makes the Broker a universal drop-off that no town can
+compete with. The rule is `held.issuer == at`, one clause inside
+`deliver_to_contract`'s existing find, and it is deliberately **not** a second
+`ContractRefusal` variant: a town's job is simply not one of the Broker's held
+deliveries, which is exactly what `NotOffered` already means.
+
+The trap the tests had to close is that the two reaches are mutually exclusive
+by construction — `settlement_reach` is false in base space and `broker_reach`
+answers `AtBroker` only there — so a test standing in one place proves nothing
+about the refusal being the issuer's rather than the reach's.
+`a_job_is_delivered_where_it_was_signed` stands at both counters in turn and
+asserts `broker_reach() == AtBroker` before the refusal it cares about.
+
+### A town's board is the Broker's, with four things changed
+
+`board_defs` takes the issuer and shares the pool, the roll, the two-tier draw
+and the `swap_remove` stream with the Broker's board. Four things differ, and
+naming them is cheaper than a second function that would drift:
+
+1. **The reach that gates it.** `settlement_reach` for a town — one call,
+   because a town's counter answers "is there one" and "are you at it"
+   together, where `broker_reach` splits them.
+2. **The seed.** A town folds its own region coordinates, its own salt and its
+   own epoch (`SETTLEMENT_BOARD_ROTATION_TICKS`, slower than the Broker's,
+   because a town is a place you *walk to* and a board that had rotated by the
+   time you arrived is unplannable). Two towns in one sector post different
+   work, which is the whole reason the key is in the fold. **The two folds are
+   different lengths and neither is padded to match**: a trailing zero word on
+   the Broker's arm would have reshuffled every board in every existing save
+   for nothing.
+3. **How many slots it fills.** `Standing::job_slots`, the second named query
+   on the band, added the way `relations.rs`' module doc asks — a new query
+   answered by the same exhaustive match, not a table of effects. Courting a
+   town buys posted work rather than only a price, which is the first
+   consequence of standing that is not a number on a receipt.
+4. **Which tier goes first.** A town's is its `Specialty`; the Broker's is the
+   `starter` queue. Both are **rankings and never filters**, so a board whose
+   pool speaks to nobody still fills every slot it has —
+   `Specialty::of_objective` is exhaustive on `Objective` rather than on
+   `Specialty`, which is the direction that buys something: a sixth objective
+   kind has to say whose business it is instead of quietly interesting nobody.
+
+Two smaller omissions carry weight. A town never posts an **onboarding**
+mission — the chain is the Broker's errand, and a tutorial job accepted at a
+town is one `ensure_tutorial_held` would hand straight back out. And a Hostile
+town answers `Some(vec![])` rather than `None`, `settlement_view`'s rule: a
+closed counter is not a missing one, and the player has to be able to stand in
+front of it and read that it is shut.
+
+**The screen is one section taller than the Broker's**, since an Allied town
+posts four jobs where a Broker posts three, and the page has no scroll. An
+absolute fits-the-popup gate is the wrong instrument — `draw_contracts` has
+never had one, because a numbered list carrying authored prose genuinely can
+run past a 600px popup and the wrap bounds a *row*, not the page. What is held
+instead is the delta: the board spends the contracts screen's chrome plus
+exactly its three-row header, so a fourth header row added later has to fail
+somewhere.

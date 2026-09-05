@@ -33,6 +33,32 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## Unreleased
+
+**Towns post their own work.** Every settlement now keeps a job board,
+opened with `[J]` from its hub page, drawing on exactly the same contracts
+the Broker does — no new schema, no new objective kinds, nothing to author.
+
+**How many jobs a town posts is how much it likes you**, from one at Cold up
+to four for an Allied town, and a Hostile one posts none at all. Courting a
+town buys you work as well as a better price.
+
+**A town leads its board with what it is good for** — a Materials town posts
+the fetching, a Programs town the hunting — but it is a preference and not a
+filter, so a board is never short of jobs it could have posted.
+
+**A job is delivered where it was signed.** A town's contract is handed over
+at that town's counter and the Broker will not take it, which is what makes
+walking out to a settlement worth the trip.
+
+**Finishing a town's job raises its regard for you, and handing one back
+lowers it** — by less than finishing raises it, so a job you turn out not to
+want is never worse than one you never took.
+
+**Two towns in one sector post different work**, and a town's board turns
+over more slowly than the Broker's, so what you saw on the way out is still
+there when you arrive.
+
 ## 0.13.97
 
 **Towns remember you now.** Every settlement carries a standing that runs

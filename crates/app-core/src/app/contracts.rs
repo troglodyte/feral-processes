@@ -101,7 +101,7 @@ impl App {
             Some(ContractScreenRow::Offer(row)) => {
                 let id = offers[row].id.clone();
                 let Some(game) = &mut self.game else { return };
-                let outcome = game.accept_contract(&id).map_err(refusal_line);
+                let outcome = game.accept_contract(&id, None).map_err(refusal_line);
                 self.report(outcome);
             }
             // Picking one you already hold hands over a delivery. Nothing
@@ -111,7 +111,7 @@ impl App {
                 let id = active[row].id.clone();
                 let Some(game) = &mut self.game else { return };
                 let outcome = game
-                    .deliver_to_contract(&id)
+                    .deliver_to_contract(&id, None)
                     .map(|_| ())
                     .map_err(|why| match why {
                         ContractRefusal::NotOffered => {
@@ -129,7 +129,7 @@ impl App {
 /// A refusal in the player's words. The engine returns a typed
 /// `ContractRefusal` precisely so this wording lives on the screen side,
 /// where the vocabulary already is.
-fn refusal_line(why: ContractRefusal) -> String {
+pub(crate) fn refusal_line(why: ContractRefusal) -> String {
     match why {
         ContractRefusal::TooMany => {
             format!("You are already holding {MAX_ACTIVE_CONTRACTS}. Finish or abandon one first.")

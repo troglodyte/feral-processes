@@ -179,6 +179,7 @@ impl Game {
                 def,
                 progress: 0,
                 accepted_tick,
+                issuer: None,
             },
         );
         // `Outcome` rather than `Info`, `complete_contract`'s reason: a
@@ -287,6 +288,14 @@ impl Game {
             MessageKind::Loot,
             format!("{} paid {paid}.", contract.def.name),
         );
+        // The fourth mover into `adjust_standing`, and a caller of the one
+        // door rather than a write beside it. Below the payout so a band
+        // crossing announces itself after the job it closed, and reached
+        // through `contract.issuer` alone — nothing here asks where the
+        // player is standing, because finishing is not delivering.
+        if let Some(key) = contract.issuer {
+            self.adjust_standing(key, crate::tuning::SETTLEMENT_CONTRACT_STANDING);
+        }
         // Below the reward loop rather than above it, so the alert screen
         // can quote the same figure the `Loot` line just logged. Moving it
         // does not reopen double-payment: the contract already left
@@ -433,8 +442,32 @@ impl Game {
     /// which is pinned to the surface entrance tile the whole time they are
     /// down there — that reading is what `broker_reach` retired.
     pub fn contract_board(&mut self) -> Option<Vec<crate::views::ContractRow>> {
-        let defs = self.board_defs()?;
-        Some(defs.iter().map(|def| self.contract_row(def, 0)).collect())
+        let defs = self.board_defs(None)?;
+        Some(
+            defs.iter()
+                .map(|def| self.contract_row(def, 0, None))
+                .collect(),
+        )
+    }
+
+    /// A town's own board, the Broker's counterpart.
+    ///
+    /// `None` says there is no counter to read — no such town, or the party
+    /// is not standing at it — and is what the settlement screen's row test
+    /// asks. `Some(vec![])` is a board that is *closed*: a Hostile town
+    /// posts nothing, and the difference is `settlement_view`'s own, since a
+    /// town shutting its door is something the player has to be able to
+    /// stand in front of and read.
+    pub fn settlement_board(
+        &mut self,
+        key: crate::settlements::SettlementKey,
+    ) -> Option<Vec<crate::views::ContractRow>> {
+        let defs = self.board_defs(Some(key))?;
+        Some(
+            defs.iter()
+                .map(|def| self.contract_row(def, 0, Some(key)))
+                .collect(),
+        )
     }
 
     /// The board as **definitions** rather than worded rows — what
@@ -448,8 +481,25 @@ impl Game {
     /// def, for a different reason (a file edited mid-run must not strand a
     /// contract already accepted), and that is exactly the shape a rolled one
     /// needs.
-    fn board_defs(&mut self) -> Option<Vec<crate::contracts::ContractDef>> {
-        if self.broker_reach() == BrokerReach::NoBroker {
+    /// `issuer` is the whole of the difference between the two boards:
+    /// `None` is the run's own Broker, `Some(key)` the town at that key. The
+    /// pool, the roll and the two-tier draw are shared; what changes is the
+    /// reach that gates it, the seed it is drawn with, how many slots it
+    /// fills, and which tier goes first.
+    fn board_defs(
+        &mut self,
+        issuer: Option<crate::settlements::SettlementKey>,
+    ) -> Option<Vec<crate::contracts::ContractDef>> {
+        if let Some(key) = issuer {
+            if !self.settlement_reach(key) {
+                return None;
+            }
+            // A closed counter, not a missing one — `settlement_view`'s rule,
+            // and the reason `job_slots` answers zero for the same band.
+            if self.standing_band(key).refuses_service() {
+                return Some(Vec::new());
+            }
+        } else if self.broker_reach() == BrokerReach::NoBroker {
             return None;
         }
         // Onboarding owns the board while it runs. A new player choosing
@@ -465,11 +515,19 @@ impl Game {
         // ordinary unfinished contracts, so `offerable` would happily list
         // step 3 beside step 1's held copy; once the chain is over they are
         // all in `done` and refused there, so this is the only guard needed.
-        if self.in_tutorial() {
+        if issuer.is_none() && self.in_tutorial() {
             return Some(Vec::new());
         }
+        let seed = self.board_seed(issuer);
         let mut pool = self.offerable_contracts();
-        pool.extend(self.rolled_contracts());
+        // Onboarding is the Broker's errand and nobody else's: a town has no
+        // stake in a chain about standing the player's own base up, and a
+        // tutorial mission on a town board could be accepted somewhere
+        // `ensure_tutorial_held` would then re-hand-out.
+        if issuer.is_some() {
+            pool.retain(|def| def.tutorial.is_none());
+        }
+        pool.extend(self.rolled_contracts(seed));
         // Starters first, and only then the rest of the pool. Three slots
         // drawn uniformly out of everything eligible left a new run's first
         // contract to chance, which is not what an onboarding job is for.
@@ -481,17 +539,65 @@ impl Game {
         // is where onboarding ends — one of the shipped starters is that very
         // breach — and a board that kept pushing them would hand a zone-4 run's
         // Broker a job to go and kill three drones.
-        let onboarding = self.world.resource::<ZoneLevel>().0 <= 1;
-        let (mut starters, mut rest): (Vec<_>, Vec<_>) =
-            pool.into_iter().partition(|def| onboarding && def.starter);
-        let mut rng = StdRng::seed_from_u64(self.board_seed());
+        //
+        // A town's first tier is its **specialty** rather than the starter
+        // queue, one level up from the same idea and for the same reason: a
+        // Materials town whose board rolled three hunts reads as a town with
+        // no character. It is a ranking and never a filter, so a board whose
+        // pool speaks to nobody still fills every slot it has.
+        let (mut favoured, mut rest): (Vec<_>, Vec<_>) = match issuer {
+            Some(key) => {
+                let specialty = self.settlement_specialty(key)?;
+                pool.into_iter()
+                    .partition(|def| specialty.favours(&def.objective))
+            }
+            None => {
+                let onboarding = self.world.resource::<ZoneLevel>().0 <= 1;
+                pool.into_iter().partition(|def| onboarding && def.starter)
+            }
+        };
+        let slots = match issuer {
+            Some(key) => self.standing_band(key).job_slots(),
+            None => crate::tuning::CONTRACT_BOARD_SLOTS,
+        };
+        let mut rng = StdRng::seed_from_u64(seed);
         let mut defs = Vec::new();
-        for tier in [&mut starters, &mut rest] {
-            while defs.len() < crate::tuning::CONTRACT_BOARD_SLOTS && !tier.is_empty() {
+        for tier in [&mut favoured, &mut rest] {
+            while defs.len() < slots && !tier.is_empty() {
                 defs.push(tier.swap_remove(rng.random_range(0..tier.len())));
             }
         }
         Some(defs)
+    }
+
+    /// A town's board as **defs** rather than worded rows.
+    ///
+    /// `offerable_contracts_for_test`'s precedent, and for the same reason a
+    /// board carries defs at all: a rolled contract has no `ContractDb`
+    /// entry, so a test that wants to read one's `Objective` back cannot
+    /// look it up by id.
+    #[cfg(test)]
+    pub(crate) fn settlement_board_defs_for_test(
+        &mut self,
+        key: crate::settlements::SettlementKey,
+    ) -> Option<Vec<crate::contracts::ContractDef>> {
+        self.board_defs(Some(key))
+    }
+
+    /// What the town at `key` is good for, or `None` if the run has not
+    /// resolved one there.
+    fn settlement_specialty(
+        &self,
+        key: crate::settlements::SettlementKey,
+    ) -> Option<crate::settlements::Specialty> {
+        Some(
+            self.world
+                .resource::<crate::resources::Settlements>()
+                .0
+                .get(&key)?
+                .def
+                .specialty,
+        )
     }
 
     /// Every template rolled once against this sector, keeping the ones that
@@ -502,10 +608,9 @@ impl Game {
     /// stream. That is `FrameSpec::salted`'s rule and it buys something
     /// concrete here: a template that rolls nothing spends no draws, so adding
     /// or deleting a template file cannot reshuffle what the others offered.
-    fn rolled_contracts(&mut self) -> Vec<crate::contracts::ContractDef> {
+    fn rolled_contracts(&mut self, seed: u64) -> Vec<crate::contracts::ContractDef> {
         let pools = self.template_pools();
         let zone = self.world.resource::<ZoneLevel>().0;
-        let seed = self.board_seed();
         let templates: Vec<crate::contracts::ContractTemplate> = self
             .world
             .resource::<crate::contracts::ContractDb>()
@@ -712,7 +817,7 @@ impl Game {
             .resource::<ActiveContracts>()
             .active
             .iter()
-            .map(|held| self.contract_row(&held.def, held.progress))
+            .map(|held| self.contract_row(&held.def, held.progress, held.issuer))
             .collect()
     }
 
@@ -728,11 +833,11 @@ impl Game {
         let db = self.world.resource::<crate::contracts::ContractDb>();
         let widest = self.widest_pools();
         db.iter()
-            .map(|def| self.contract_row(def, 0))
+            .map(|def| self.contract_row(def, 0, None))
             .chain(
                 db.templates()
                     .filter_map(|t| t.widest(&widest))
-                    .map(|def| self.contract_row(&def, 0)),
+                    .map(|def| self.contract_row(&def, 0, None)),
             )
             .collect()
     }
@@ -840,16 +945,39 @@ impl Game {
     /// `FrameSpec::salted`'s measured reason: a whole-word XOR leaves low
     /// output bits a fixed function of the input, and consecutive epochs
     /// differ in exactly one low bit.
-    fn board_seed(&self) -> u64 {
-        let epoch = self.current_tick() / crate::tuning::CONTRACT_REFRESH_CYCLES as u64;
+    ///
+    /// A town folds its own region coordinates and its own salt and epoch in
+    /// place of the sector's, which is what makes two towns in one sector
+    /// post different work, and what keeps a town's board from rotating in
+    /// lockstep with its shelf.
+    fn board_seed(&self, issuer: Option<crate::settlements::SettlementKey>) -> u64 {
+        // Two folds of different *lengths*, never one padded to match: a
+        // trailing zero word on the Broker's arm would reshuffle every board
+        // every existing save has, for nothing.
         let mut h = 0xcbf2_9ce4_8422_2325_u64;
-        for word in [
-            self.world.resource::<crate::world::WorldMap>().seed() as u64,
-            self.world.resource::<ZoneLevel>().0 as u64,
-            epoch,
-            CONTRACT_BOARD_SALT,
-        ] {
-            h = fold(h, &word.to_le_bytes());
+        let world_seed = self.world.resource::<crate::world::WorldMap>().seed() as u64;
+        match issuer {
+            Some(key) => {
+                for word in [
+                    world_seed,
+                    key.rx as i64 as u64,
+                    key.ry as i64 as u64,
+                    self.current_tick() / crate::tuning::SETTLEMENT_BOARD_ROTATION_TICKS,
+                    crate::tuning::SETTLEMENT_BOARD_SALT,
+                ] {
+                    h = fold(h, &word.to_le_bytes());
+                }
+            }
+            None => {
+                for word in [
+                    world_seed,
+                    self.world.resource::<ZoneLevel>().0 as u64,
+                    self.current_tick() / crate::tuning::CONTRACT_REFRESH_CYCLES as u64,
+                    CONTRACT_BOARD_SALT,
+                ] {
+                    h = fold(h, &word.to_le_bytes());
+                }
+            }
         }
         h
     }
@@ -859,8 +987,11 @@ impl Game {
         &self,
         def: &crate::contracts::ContractDef,
         progress: u32,
+        issuer: Option<crate::settlements::SettlementKey>,
     ) -> crate::views::ContractRow {
         crate::views::ContractRow {
+            issuer,
+            issuer_name: issuer.map(|key| self.settlement_name(key)),
             id: def.id.clone(),
             name: def.name.clone(),
             description: def.description.clone(),
@@ -953,11 +1084,19 @@ impl Game {
     /// Every refusal is checked before anything is written, the ordering
     /// `use_symlink` and `install_routine` follow — a refused acceptance must
     /// leave the run exactly as it found it.
-    pub fn accept_contract(&mut self, id: &ContractId) -> Result<(), ContractRefusal> {
-        let Some(board) = self.board_defs() else {
+    pub fn accept_contract(
+        &mut self,
+        id: &ContractId,
+        issuer: Option<crate::settlements::SettlementKey>,
+    ) -> Result<(), ContractRefusal> {
+        let Some(board) = self.board_defs(issuer) else {
             return Err(ContractRefusal::NotOffered);
         };
-        if self.broker_reach() != BrokerReach::AtBroker {
+        // `board_defs` already refused an unreachable town, so the second
+        // check is the Broker's alone — `settlement_reach` is the town's
+        // whole answer to both questions, where `broker_reach` splits
+        // "standing at all" from "standing on the base".
+        if issuer.is_none() && self.broker_reach() != BrokerReach::AtBroker {
             return Err(ContractRefusal::NotAtBroker);
         }
         {
@@ -990,9 +1129,17 @@ impl Game {
                 def,
                 progress: 0,
                 accepted_tick,
+                issuer,
             },
         );
-        self.log_kind(MessageKind::Outcome, format!("Contract taken: {name}."));
+        let from = match issuer {
+            Some(key) => format!(" for {}", self.settlement_name(key)),
+            None => String::new(),
+        };
+        self.log_kind(
+            MessageKind::Outcome,
+            format!("Contract taken: {name}{from}."),
+        );
         Ok(())
     }
 
@@ -1013,8 +1160,16 @@ impl Game {
         if held.active[idx].def.tutorial.is_some() {
             return false;
         }
-        let name = held.active.remove(idx).def.name;
+        let given_back = held.active.remove(idx);
+        let name = given_back.def.name;
+        let issuer = given_back.issuer;
         self.log_kind(MessageKind::Outcome, format!("Contract abandoned: {name}."));
+        // Below the removal, `complete_contract`'s ordering: the announcement
+        // `adjust_standing` may make is about the town, not about the job,
+        // and a band crossing reads wrong above the line that says why.
+        if let Some(key) = issuer {
+            self.adjust_standing(key, crate::tuning::SETTLEMENT_ABANDON_STANDING);
+        }
         true
     }
 
@@ -1029,12 +1184,30 @@ impl Game {
     /// objectives share one completion path.
     ///
     /// Every refusal lands before any item leaves cargo.
-    pub fn deliver_to_contract(&mut self, id: &ContractId) -> Result<u32, ContractRefusal> {
-        match self.broker_reach() {
-            BrokerReach::NoBroker => return Err(ContractRefusal::NotOffered),
-            BrokerReach::OffBase => return Err(ContractRefusal::NotAtBroker),
-            BrokerReach::AtBroker => {}
+    pub fn deliver_to_contract(
+        &mut self,
+        id: &ContractId,
+        at: Option<crate::settlements::SettlementKey>,
+    ) -> Result<u32, ContractRefusal> {
+        match at {
+            Some(key) => {
+                if !self.settlement_reach(key) {
+                    return Err(ContractRefusal::NotAtBroker);
+                }
+                if self.standing_band(key).refuses_service() {
+                    return Err(ContractRefusal::NotAtBroker);
+                }
+            }
+            None => match self.broker_reach() {
+                BrokerReach::NoBroker => return Err(ContractRefusal::NotOffered),
+                BrokerReach::OffBase => return Err(ContractRefusal::NotAtBroker),
+                BrokerReach::AtBroker => {}
+            },
         }
+        // **A contract is delivered where it was signed** — the `issuer`
+        // match is what makes that true, and it is here rather than in a
+        // second refusal because a town's job is simply not one of the
+        // Broker's held deliveries and vice versa.
         let Some((idx, item, wanted)) = self
             .world
             .resource::<ActiveContracts>()
@@ -1042,7 +1215,7 @@ impl Game {
             .iter()
             .enumerate()
             .find_map(|(idx, held)| match &held.def.objective {
-                Objective::Deliver { item, count } if held.def.id == *id => {
+                Objective::Deliver { item, count } if held.def.id == *id && held.issuer == at => {
                     Some((idx, item.clone(), count.saturating_sub(held.progress)))
                 }
                 _ => None,

@@ -3436,6 +3436,35 @@ pub const SETTLEMENT_NEST_CLEARED_STANDING: i32 = 4;
 /// since a stack is the larger thing and takes its guardian with it.
 pub const SETTLEMENT_STACK_COLLAPSED_STANDING: i32 = 8;
 
+/// Salts a town's job board apart from its shelf (`SETTLEMENT_MARKET_SALT`)
+/// and from the Broker's board (`CONTRACT_BOARD_SALT`). All three fold the
+/// world seed and an epoch, so without three salts a town's board and its
+/// shelf would rotate in lockstep off one number.
+pub const SETTLEMENT_BOARD_SALT: u64 = 0x005E_771E_B0A7_D001;
+
+/// How many cycles a town's board stands before it re-derives. Slower than
+/// the Broker's `CONTRACT_REFRESH_CYCLES` because a town is a place you walk
+/// to: a board that had rotated by the time you arrived would make the walk
+/// unplannable.
+pub const SETTLEMENT_BOARD_ROTATION_TICKS: u64 = 1800;
+
+/// How many jobs a town posts, by how much it likes you — see
+/// `Standing::job_slots`. Hostile posts none (`refuses_service`), and the
+/// ladder is what makes courting a town buy something other than a price.
+pub const SETTLEMENT_COLD_BOARD_SLOTS: usize = 1;
+pub const SETTLEMENT_NEUTRAL_BOARD_SLOTS: usize = 2;
+pub const SETTLEMENT_WARM_BOARD_SLOTS: usize = 3;
+pub const SETTLEMENT_ALLIED_BOARD_SLOTS: usize = 4;
+
+/// What finishing a town's own job is worth to it — more than clearing a
+/// nest on its doorstep, since the job was asked for.
+pub const SETTLEMENT_CONTRACT_STANDING: i32 = 10;
+
+/// And what handing one back costs. Smaller in magnitude than the reward:
+/// taking a job you cannot finish should not be worse than never taking it,
+/// or the board becomes a thing to avoid reading.
+pub const SETTLEMENT_ABANDON_STANDING: i32 = -4;
+
 // ─────────────────────────────────────────────────────────────────────────
 // Combat resolution: to-hit, crit, fumble, mitigation
 // ─────────────────────────────────────────────────────────────────────────

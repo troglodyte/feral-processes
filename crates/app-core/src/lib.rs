@@ -1323,6 +1323,14 @@ pub enum Mode {
     /// open), and Esc returns to `Mode::Settlement` rather than the map,
     /// `Mode::CompanionEquip`'s shape one level over.
     SettlementMarket,
+    /// A settlement's job board, opened with `[J]` from `Mode::Settlement` —
+    /// Phase 5. `Mode::Contracts`' shape exactly, and deliberately so: two
+    /// stacked sections numbered continuously, `app::contracts::contract_row`
+    /// shared as the resolver, `[A]` to hand one back. What differs is the
+    /// issuer it passes into all three engine doors — the held section is
+    /// **this town's jobs alone**, because a contract is delivered where it
+    /// was signed and a row that could not act reads as a broken key.
+    SettlementBoard,
     Inventory,
     /// Replacements for one equipment slot, reached by picking that slot on
     /// `Mode::Inventory`. Rows come from `equip_swap_rows`, so the picker
@@ -1706,6 +1714,8 @@ impl Mode {
             // never by a bump — so the battle-preempts-the-bump case above
             // does not apply here.
             | Mode::SettlementMarket
+            // `Mode::SettlementMarket`'s reason exactly.
+            | Mode::SettlementBoard
             | Mode::Inventory
             | Mode::EquipSwap
             | Mode::InventoryItemAction

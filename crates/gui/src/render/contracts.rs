@@ -104,7 +104,12 @@ fn contract_footer() -> [&'static str; 2] {
 
 /// One contract's headline row. A held one shows its progress; an offer has
 /// none to show, which is why the bar is not simply always drawn.
-fn contract_line(contract: &ContractRow, idx: usize, selected: usize, held: bool) -> Row {
+pub(super) fn contract_line(
+    contract: &ContractRow,
+    idx: usize,
+    selected: usize,
+    held: bool,
+) -> Row {
     let progress = if held {
         format!(" [{}/{}]", contract.progress, contract.target)
     } else {
@@ -130,6 +135,21 @@ fn contract_line(contract: &ContractRow, idx: usize, selected: usize, held: bool
         *color = GREEN;
     }
     row
+}
+
+/// How many rows the contracts screen spends on chrome alone — headers, the
+/// two empty-section lines, the blank separators and the footer.
+///
+/// Exists for `render/settlement_board.rs`'s parity census, and built by
+/// calling `contract_rows` rather than counting the pushes by eye, which is
+/// the only version of it that can catch a row added here later.
+#[cfg(test)]
+pub(super) fn contract_rows_for_census(
+    active: &[ContractRow],
+    offers: &[ContractRow],
+    reach: BrokerReach,
+) -> usize {
+    contract_rows(active, offers, reach, usize::MAX).len()
 }
 
 #[cfg(test)]
@@ -163,6 +183,8 @@ mod tests {
 
     fn row(id: &str, tutorial: bool) -> ContractRow {
         ContractRow {
+            issuer: None,
+            issuer_name: None,
             id: id.into(),
             name: "A Contract".to_string(),
             description: "d".to_string(),

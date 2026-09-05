@@ -55,6 +55,7 @@ mod popup;
 mod progression;
 mod routines;
 mod settlement;
+mod settlement_board;
 mod settlement_market;
 // `pub(crate)` rather than private: `lib.rs::handle_sprite_pointer` needs
 // `sprite_forge::HitRects` to name the type `sprite_editor_hit_rects` below
@@ -835,6 +836,11 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         }
         _ => (Vec::new(), Vec::new(), BrokerReach::NoBroker),
     };
+    // The town board's own pair, `contract_sections`' rule one vendor over.
+    let (town_active, town_offers) = match app.mode {
+        Mode::SettlementBoard => app.settlement_board_sections(),
+        _ => (Vec::new(), Vec::new()),
+    };
     let scanned = match app.mode {
         Mode::WorkStructure => app.workable_structures(),
         Mode::Remove => app.nearby_structures(),
@@ -1046,6 +1052,15 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             stack::draw_cell_describe(app.pending_description.as_deref(), refusal, painter, m)
         }
         Mode::Settlement => draw_settlement(game, app.pending_settlement, refusal, painter, m),
+        Mode::SettlementBoard => settlement_board::draw_settlement_board(
+            game,
+            app.pending_settlement,
+            (&town_active, &town_offers),
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
         Mode::SettlementMarket => draw_settlement_market(
             game,
             app.pending_settlement,
@@ -1290,7 +1305,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 95] = [
+    const ALL_MODES: [Mode; 96] = [
         Mode::MainMenu,
         Mode::CreateCharacter,
         Mode::LoadGame,
@@ -1328,6 +1343,7 @@ mod tests {
         Mode::CellDescribe,
         Mode::Settlement,
         Mode::SettlementMarket,
+        Mode::SettlementBoard,
         Mode::Inventory,
         Mode::EquipSwap,
         Mode::InventoryItemAction,

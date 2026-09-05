@@ -92,6 +92,25 @@ impl Standing {
         }
     }
 
+    /// How many jobs this town posts on its board — the second consequence,
+    /// added as a *new query* rather than a table, which is the extension
+    /// shape the module doc names.
+    ///
+    /// Exhaustive, `refuses_service`'s reason. `Hostile` answering zero is a
+    /// second statement of the same closure rather than a duplicate of it:
+    /// the board is refused whole by `refuses_service` before a slot count is
+    /// ever asked for, and answering anything else here would be a number no
+    /// caller could reach and nobody could correct.
+    pub fn job_slots(self) -> usize {
+        match self {
+            Standing::Hostile => 0,
+            Standing::Cold => crate::tuning::SETTLEMENT_COLD_BOARD_SLOTS,
+            Standing::Neutral => crate::tuning::SETTLEMENT_NEUTRAL_BOARD_SLOTS,
+            Standing::Warm => crate::tuning::SETTLEMENT_WARM_BOARD_SLOTS,
+            Standing::Allied => crate::tuning::SETTLEMENT_ALLIED_BOARD_SLOTS,
+        }
+    }
+
     /// Whether the town's market and job board are closed to the party.
     ///
     /// Exhaustive on purpose — see the module doc. The gate is at the
@@ -131,6 +150,29 @@ mod tests {
                 band.label()
             );
         }
+    }
+
+    /// The same census for the second consequence: every band answers, the
+    /// ladder only ever climbs, and a closed town posts nothing.
+    #[test]
+    fn every_standing_band_answers_how_many_jobs_it_posts() {
+        let ladder = [
+            Standing::Hostile,
+            Standing::Cold,
+            Standing::Neutral,
+            Standing::Warm,
+            Standing::Allied,
+        ];
+        assert_eq!(Standing::Hostile.job_slots(), 0);
+        for pair in ladder.windows(2) {
+            assert!(
+                pair[0].job_slots() <= pair[1].job_slots(),
+                "{} posts more than {}",
+                pair[0].label(),
+                pair[1].label()
+            );
+        }
+        assert!(Standing::Allied.job_slots() > Standing::Neutral.job_slots());
     }
 
     #[test]

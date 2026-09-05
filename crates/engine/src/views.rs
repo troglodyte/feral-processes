@@ -2176,6 +2176,14 @@ pub struct EarnedSummary {
 /// about what you just took is exactly the failure that costs.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ContractRow {
+    /// Which town posted it, or `None` for the run's own Broker — see
+    /// `resources::ActiveContract::issuer`. Carried on the row so a screen
+    /// can tell a held town job from a held Broker job without a second
+    /// lookup, and so the delivery key is the row's own.
+    pub issuer: Option<crate::settlements::SettlementKey>,
+    /// That town's name, resolved once here rather than in a renderer —
+    /// `Game::copy_name`'s rule.
+    pub issuer_name: Option<String>,
     pub id: crate::contracts::ContractId,
     pub name: String,
     pub description: String,

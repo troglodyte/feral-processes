@@ -58,6 +58,15 @@ impl Game {
         let destroyed = durability.hp == 0;
         if destroyed {
             self.log(format!("The {label} crashes and collapses!"));
+            // Read before `despawn_nest` deletes the entity carrying it —
+            // `grant_nest_cache`'s own ordering constraint, one line over.
+            if let Some(pos) = self.world.get::<Position>(nest) {
+                let tile = (pos.x, pos.y);
+                self.credit_nearby_settlements(
+                    tile,
+                    crate::tuning::SETTLEMENT_NEST_CLEARED_STANDING,
+                );
+            }
             // Reads Nest::species, so this has to run before despawn_nest
             // deletes the component it's reading.
             self.grant_nest_cache(nest);

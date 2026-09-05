@@ -1128,6 +1128,13 @@ pub struct SaveData {
     /// `SAVE_FORMAT_VERSION` bump.
     #[serde(default)]
     pub settlements: crate::resources::Settlements,
+    /// What each of those towns thinks of the party — see
+    /// `resources::Standings`. Additive behind `#[serde(default)]`, so a
+    /// save written before relations existed loads every town at Neutral,
+    /// which is where a new run starts anyway. No `SAVE_FORMAT_VERSION`
+    /// bump.
+    #[serde(default)]
+    pub standings: crate::resources::Standings,
     /// How loud the party has been in the stack they are currently in — see
     /// `resources::Trace`. Zero whenever `locale` is `Surface`, since
     /// `Game::clear_stack` is the one place it resets.
@@ -1600,6 +1607,7 @@ mod tests {
             stack_memory_tiered: true,
             populated_chunks: crate::resources::PopulatedChunks::default(),
             settlements: crate::resources::Settlements::default(),
+            standings: crate::resources::Standings::default(),
             trace: 0,
             contracts: Vec::new(),
             contracts_done: Vec::new(),

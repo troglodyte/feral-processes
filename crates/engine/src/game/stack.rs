@@ -291,7 +291,7 @@ impl Game {
     /// species — and because it already reads as "the way down" to anyone
     /// who has played a roguelike. It is the same mark the Stack view puts
     /// on a link down.
-    fn spawn_entrance_at(&mut self, x: i32, y: i32) {
+    pub(crate) fn spawn_entrance_at(&mut self, x: i32, y: i32) {
         self.world.spawn((
             SurfaceLink,
             Position { x, y },
@@ -578,6 +578,14 @@ impl Game {
             .resource_mut::<StackMemory>()
             .0
             .retain(|&(tile, _), _| tile != entrance);
+
+        // The entrance tile the stack stood on, not the party's — a
+        // guardian beaten at depth is still news at the surface, and this
+        // is where the surface says it happened.
+        self.credit_nearby_settlements(
+            entrance,
+            crate::tuning::SETTLEMENT_STACK_COLLAPSED_STANDING,
+        );
 
         self.spawn_entrance_at(nx, ny);
         let (dx, dy) = (nx - entrance.0, ny - entrance.1);

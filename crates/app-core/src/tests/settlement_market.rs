@@ -207,3 +207,39 @@ fn the_buy_budget_counts_the_baskets_own_sales_in() {
         "a pending sale should raise what the offer rows may reach"
     );
 }
+
+/// The refuse-service consequence at the screen: a hostile town leaves the
+/// mode standing and answers with a refusal, rather than dropping the
+/// player back to the map as `close_if_settlement_gone` would.
+///
+/// Standing is set through a save round trip — the only door app-core has
+/// onto an engine resource, `place_settlement_east_of_player`'s own reason.
+#[test]
+fn a_hostile_town_keeps_the_screen_open_and_refuses_the_basket() {
+    let (mut app, key) = app_at_the_market(9_411);
+
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("settlement_hostile", 9_411);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    data.standings.0.insert(
+        key,
+        feral_processes_engine::settlements::Relation {
+            standing: feral_processes_engine::tuning::SETTLEMENT_MIN_STANDING,
+            trade_credits: 0,
+        },
+    );
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(
+        app.mode,
+        Mode::SettlementMarket,
+        "a shut counter is a page the player stands in front of, not a closed screen"
+    );
+    let refusal = app.status_line.clone().unwrap_or_default();
+    assert!(refusal.contains("won't trade"), "{refusal:?}");
+}

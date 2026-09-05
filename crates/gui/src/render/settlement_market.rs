@@ -53,6 +53,17 @@ pub(super) fn settlement_market_page_rows(
     purse: u32,
     selected: usize,
 ) -> Vec<Row> {
+    // A closed counter is a page, not an empty list: every figure below is
+    // about a basket, and there is no basket to be had here.
+    if view.closed {
+        return vec![
+            Row::TextColored("The counter is shut to you.".to_string(), TEXT),
+            text_row(""),
+            text_row("They will not trade until you have made it right."),
+            text_row(""),
+            text_row("Esc to go back"),
+        ];
+    }
     let money = &view.currency;
     // What a row is holding, and out of what — `caravan_page_rows`' own
     // `cell` closure, unchanged: an offer says *whether*, cargo says how
@@ -237,6 +248,7 @@ mod tests {
             sells,
             credits: 9_999_999,
             currency: "Credits".to_string(),
+            closed: false,
         };
         let cells: Vec<(u32, u32)> = (0..view.offers.len() + view.sells.len())
             .map(|i| {
@@ -275,6 +287,7 @@ mod tests {
             }],
             credits: 100,
             currency: "Credits".to_string(),
+            closed: false,
         };
         let text = |rows: Vec<Row>| -> Vec<String> {
             rows.into_iter()
@@ -416,6 +429,34 @@ mod tests {
         assert_eq!(
             said, 1,
             "the page painted the refusal {said} times, not once"
+        );
+    }
+    /// The closed counter is a page with something on it, not an empty
+    /// list: every figure the ordinary page shows is about a basket, and a
+    /// shut town has none to offer.
+    #[test]
+    fn a_shut_counter_says_so_and_offers_nothing() {
+        let mut game = census_game();
+        let view = SettlementMarketView {
+            offers: Vec::new(),
+            sells: Vec::new(),
+            credits: 500,
+            currency: "Credits".to_string(),
+            closed: true,
+        };
+        let rows = settlement_market_page_rows(&mut game, &view, &[], 500, 0);
+        let joined = rows
+            .iter()
+            .map(|row| match row {
+                Row::Text(t) | Row::TextColored(t, _) => t.clone(),
+                Row::Item { text, .. } => text.clone(),
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(joined.contains("shut"), "{joined}");
+        assert!(
+            !rows.iter().any(|row| matches!(row, Row::Item { .. })),
+            "a shut counter must offer no selectable row"
         );
     }
 }

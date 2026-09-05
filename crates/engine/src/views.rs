@@ -512,6 +512,12 @@ pub struct SettlementMarketView {
     pub sells: Vec<CaravanSellRow>,
     pub credits: u32,
     pub currency: String,
+    /// The town refuses to trade — `settlements::relations::Standing::
+    /// refuses_service`. A *closed* counter rather than an absent one: the
+    /// screen still opens, with no rows and a line saying why, because
+    /// `None` from `Game::settlement_view` is already spoken for as "the
+    /// party has walked away" and closes the screen under them.
+    pub closed: bool,
 }
 
 /// One stack of the player's cargo a Stack market will take, priced.
@@ -1878,6 +1884,9 @@ pub struct SettlementView {
     pub specialty: &'static str,
     pub temperament: &'static str,
     pub blurb: String,
+    /// How the town regards the party — `Standing::label()`, a call onto
+    /// the band's own enum for `kind`/`specialty`/`temperament`'s reason.
+    pub standing: &'static str,
 }
 
 pub enum ManifestSubject {

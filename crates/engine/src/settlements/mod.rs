@@ -17,9 +17,11 @@
 
 pub mod catalogue;
 pub mod placement;
+pub mod relations;
 
 pub use catalogue::{SettlementDb, SettlementDef};
 pub use placement::{SettlementKey, settlement_at};
+pub use relations::{Relation, Standing};
 
 use serde::{Deserialize, Serialize};
 

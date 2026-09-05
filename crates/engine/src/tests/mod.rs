@@ -60,6 +60,7 @@ mod research;
 mod respec;
 mod routines;
 mod settlement_market;
+mod settlement_relations;
 mod settlements;
 mod sorties;
 mod spawning;

@@ -52,6 +52,10 @@ pub(super) fn settlement_page_rows(view: &SettlementView) -> Vec<Row> {
             "{}  ·  {}  ·  {}",
             view.kind, view.specialty, view.temperament
         )),
+        // Its own row rather than a fourth token on the line above: that
+        // line is identity — what this place *is* — and standing is the one
+        // thing on the page that changes while the party stands there.
+        text_row(format!("They regard you as {}.", view.standing)),
         text_row(""),
     ];
     // `wrap_text`'s pattern from `stack::cell_describe_rows` and every other
@@ -92,6 +96,7 @@ mod tests {
             specialty: "Programs",
             temperament: "Open",
             blurb: "Programs come here when their owners do not come back for them.".to_string(),
+            standing: "Neutral",
         };
         let rows = settlement_page_rows(&view);
         let joined = rows
@@ -108,6 +113,7 @@ mod tests {
             view.specialty,
             view.temperament,
             view.blurb.as_str(),
+            view.standing,
         ] {
             assert!(joined.contains(want), "the page never names {want:?}");
         }
@@ -129,6 +135,7 @@ mod tests {
             specialty: "Programs",
             temperament: "Open",
             blurb: "Programs come here when their owners do not come back for them.".to_string(),
+            standing: "Neutral",
         };
         let rows = settlement_page_rows(&view);
         let Row::TextColored(text, color) = &rows[0] else {
@@ -168,6 +175,9 @@ mod tests {
             specialty: widest.specialty.label(),
             temperament: widest.temperament.label(),
             blurb: widest.blurb.clone(),
+            // The longest label the band ladder can put on the page — the
+            // census measures the worst case, not the common one.
+            standing: "Neutral",
         })
     }
 

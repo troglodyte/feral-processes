@@ -1564,6 +1564,23 @@ pub struct PopulatedChunks(pub BTreeSet<(i32, i32)>);
 #[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Settlements(pub BTreeMap<crate::settlements::SettlementKey, KnownSettlement>);
 
+/// What every town the party has dealt with thinks of them.
+///
+/// **A second map beside `Settlements` rather than a field on
+/// `KnownSettlement`**, and the split is the point: that record is the
+/// town's *identity* — which entry stands here, on which tile — and is
+/// written once at materialization and never again. This is the
+/// relationship, written all run long by one door
+/// (`Game::adjust_standing`). Keeping them apart is also what leaves room
+/// for a standing with a town the party has not walked to yet, which
+/// Phase 6's routes will need.
+///
+/// A `BTreeMap` for `Settlements`' own reason: it is serialized, and a hash
+/// map would make the save encoding differ between runs holding identical
+/// state.
+#[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct Standings(pub BTreeMap<crate::settlements::SettlementKey, crate::settlements::Relation>);
+
 /// A settlement that has been materialized onto the map.
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct KnownSettlement {

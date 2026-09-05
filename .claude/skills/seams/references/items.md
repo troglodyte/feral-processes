@@ -317,6 +317,37 @@
   grants nothing (corrupting the seeded stream) or quote a distribution
   instead of a figure — either way "3 Core Fragments" previewed and 2 or 4
   granted reads as a bug that was never wrong, just nondeterministic.
+- **`extraction_yield` and `extraction_ticks` read the bench tier
+  themselves; the spec's `structure_tier` parameter does not exist.** A
+  parameter is a thing a caller can get wrong, and both functions have two
+  callers — the screen's preview and the act — whose entire reason for
+  sharing one derivation is that a quoted figure and a granted one must not
+  differ. The argument is the crack they would differ through: the preview
+  passing `0`, or a tier read a frame earlier, is silently wrong in a way
+  neither caller looks buggy for.
+- **The bench's yield term is `tier - 1` and its tick term is `tier`, and
+  the asymmetry is load-bearing.** `Game::best_structure_tier` reads a
+  never-upgraded structure as tier 1, so a `tier` term in the yield would
+  pay `TOOL_TIER_SCALE_STEP`'s full step — +50% of the material economy on
+  the shipped `0.5` — for merely having built a Compiler most bases already
+  have. Standing the bench buys time; upgrading it buys materials. Neither
+  is a gate: decision 7 keeps extraction working in the field, at the base
+  and in the Stack alike, because the starting tool is useless otherwise.
+- **`Game::take_routine` owns the effect and neither door owns a copy of
+  it.** `extract_routine` (a tamed program) and a `Routines`-category tool
+  through `extract_program` (a downed one) both call it. The exclusive
+  branch popping `ItemId::etched(id)` back out instead of teaching is the
+  whole of why exactly one copy of an exclusive routine exists in a run,
+  and two implementations that agree today are the shape that stops
+  agreeing later. The *refusals* stay unshared on purpose — the tamed door
+  needs a bench and an ownership check, the tool door needs neither.
+- **A downed program's routine pool is derived from species and level, so
+  it cannot offer what the individual was actually carrying.**
+  `DownedProgram` is five fields; a wild program's `roll_wild_routine` grant
+  is not one of them. No shipped species declares an exclusive routine
+  either, so the Reader's exclusive branch is implemented and currently
+  unreachable in shipped content — a test has to mint a species to exercise
+  it. Do not read that branch as dead code.
 - **The drop-neutrality gate is a single point, and `apportion` conserves
   the unit *total* under any weighting** — so a tool's `yields` weights
   have no lever on the gate at all, only which items a fixed count becomes.

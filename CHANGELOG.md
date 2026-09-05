@@ -33,6 +33,25 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.104
+
+**The Compiler is where a program gets taken apart properly.** Standing one
+anywhere makes an extraction quicker; every tier you upgrade it past the
+first makes the same tool draw more out of the same program.
+
+**A tool that reads routines instead of materials.** The Routine Reader —
+taught by Cortex Hacking — reads a downed program for what it was running
+and keeps one, favouring the earliest thing its species knows that you
+don't. An exclusive routine comes back as its disk, and there is still
+exactly one in the run.
+
+**A sortie carries its kills home rather than teleporting them.** Programs
+its squad downs ride back with it and arrive when it does. A full store
+refuses the delivery and destroys nothing you were already holding.
+
+**None of this has been played.** It is green and unseen, like the two
+phases before it.
+
 ## 0.13.102
 
 **Extraction tools are something you earn now.** Research teaches a tool,

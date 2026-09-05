@@ -147,6 +147,30 @@ Each unit draws one item from `yields` by weight. Then `rich_in` adds
 `SpeciesDef::rich_in: Option<ItemId>` is `#[serde(default)]` and **falls back
 to `work_resource`** when absent, so no shipped species file changes.
 
+**Amended 2026-09-05, when phase 3 built it.** Two things above are not what
+shipped, and both are deliberate:
+
+1. **There is no `structure_tier` parameter.** `Game::extraction_yield`
+   takes `(&DownedProgram, &ToolDef)` and reads
+   `Game::extraction_bench_tier()` itself. A parameter is a thing a caller
+   can get wrong, and this function has two callers — the screen's preview
+   and the act — whose whole reason for sharing one derivation is that a
+   quoted figure and a granted figure must not be able to differ. The
+   argument would be the crack they differed through. `Game::extraction_ticks`
+   reads the tier the same way, for the same reason.
+2. **The bench enters the yield as `tier - 1`, not `tier`.**
+   `Game::best_structure_tier` reads a never-upgraded structure as tier 1,
+   so `tier_scale(tool.tier + structure_tier)` as written would pay
+   `TOOL_TIER_SCALE_STEP`'s full step — +50% of the material economy on the
+   shipped `0.5` — for merely having built a Compiler. The upgrade is what
+   sells yield, matching the rule the craft quality floor already takes off
+   the same accessor. The *speed* half (`tuning::EXTRACT_BENCH_TICK_STEP`,
+   a divisor floored at one tick) does use the full tier, so standing the
+   bench is worth time and upgrading it is worth materials.
+
+A phase 5 that re-derives the spec's literal formula would silently undo
+both. The shipped shape is the one in `docs/seams.md`.
+
 ## 4. The act
 
 ```
@@ -169,7 +193,10 @@ its `StructureTier` as `structure_tier`. Reuses `can_extract_routines`'
 `routine_is_exclusive` reads `AbilityDef::exclusive` alone
 (`routines.rs:188`), so nothing about the one-copy invariant rests on the
 program having been tamed. The tamed-program path stays; both call one shared
-inner function, not two copies.
+inner function, not two copies — shipped 2026-09-05 as `Game::take_routine`,
+which owns the effect alone. Each door keeps its own refusals: the tamed one
+requires an extraction bench and checks ownership, the tool one requires
+neither, because decision 7 forbids the structure being a gate.
 
 ## 5. Sources
 

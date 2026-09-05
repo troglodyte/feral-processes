@@ -115,13 +115,13 @@ there is no node you can reach two ways.
 | Overclock Cores | 2 | 45 | `weapon_bench` | recipe `overclock_core` at the fabricator — 6 `portal_fragment` |
 | Self-Execution | - | 14 | `routine_fabrication` | `priority_boost` |
 | Ablative Lattice | 3 | 110 | `firewall` | recipe `ablative_plating` at the armory — 12 `portal_fragment` |
-| Cortex Hacking | 3 | 125 | `neural_amp` | recipe `cortex_hack` at the fabricator — 12 `portal_fragment` |
+| Cortex Hacking | 3 | 125 | `neural_amp` | recipe `cortex_hack` at the fabricator — 12 `portal_fragment`; tool `routine_reader` |
 | Field Operations | - | 20 | `self_exec` | `repair_loop`, `trickle_charge` |
 | Monofilament Edge | 3 | 110 | `overclock` | recipe `monofilament_whip` at the fabricator — 12 `portal_fragment` |
 | Runtime Patching | 2 | 60 | `self_exec` | `hot_patch` |
 | Symbolic Links | - | 22 | `self_exec` | `symlink` |
 | Adaptive Plating | 2 | 70 | `field_ops` | `hardened_shell`, `overclock`, `ablative_layer` |
-| Deep Analysis | 3 | 130 | `field_ops` | `deep_scan`, `trace_analysis`, `stealth_protocol`, `salvage_routine` |
+| Deep Analysis | 3 | 130 | `field_ops` | `deep_scan`, `trace_analysis`, `stealth_protocol`, `salvage_routine`; tool `core_tap` |
 | Kernel Privileges | 3 | 135 | `runtime_patching` | `null_route` |
 | Address Translation | 3 | 140 | `deep_analysis` | `buffer_overrun`, `wild_jump` |
 | Mesh Plating | 3 | 120 | `adaptive_plating` | `hardened_shell_party` |

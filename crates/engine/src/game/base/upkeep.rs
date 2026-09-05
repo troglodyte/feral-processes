@@ -252,24 +252,20 @@ impl Game {
     /// every sweep to zero while still logging one, and raids stop happening
     /// in everything but the message log.
     ///
-    /// No anchor means no garrison rather than a panic: `anchor_position` is
-    /// `Option` because the anchor is a resource that a partially-built
-    /// world may not have yet.
+    /// Which towns are near enough to count is `town_garrisons`' question,
+    /// not this one's — the page has to ask it per town, so the radius check
+    /// lives there and this is the fold over it.
     fn garrison_defense(&self) -> u32 {
-        let Some((ax, ay)) = self.anchor_position() else {
-            return 0;
-        };
-        let towns: Vec<(crate::settlements::SettlementKey, (i32, i32))> = self
+        let towns: Vec<crate::settlements::SettlementKey> = self
             .world
             .resource::<crate::resources::Settlements>()
             .0
-            .iter()
-            .map(|(key, known)| (*key, known.tile))
+            .keys()
+            .copied()
             .collect();
-        let _ = (ax, ay);
         towns
             .into_iter()
-            .map(|(key, _)| self.town_garrisons(key))
+            .map(|key| self.town_garrisons(key))
             .sum::<u32>()
             .min(crate::tuning::SETTLEMENT_GARRISON_MAX)
     }

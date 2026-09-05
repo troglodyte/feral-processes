@@ -1,14 +1,17 @@
-//! Caravan routes: the record, its save form and the tick that runs it.
-//!
-//! Task 1/2 only, per `docs/superpowers/plans/2026-09-05-settlements-phase-6-routes.md`
-//! — no dispatch door exists yet, so every fixture here builds a
-//! `resources::Route` by hand and pushes it into `resources::Routes`.
+//! Caravan routes: the record, its save form, the dispatch doors and the
+//! tick that runs them — Tasks 1 through 4, per
+//! `docs/superpowers/plans/2026-09-05-settlements-phase-6-routes.md`.
+
+use bevy_ecs::prelude::Entity;
 
 use super::support::{scratch_assets_dir, test_assets_dir};
 use crate::Game;
+use crate::components::{Glyph, GlyphColor, Position, Stock, Structure};
+use crate::game::route::RouteRefusal;
 use crate::items::ItemId;
 use crate::resources::DifficultyMode;
 use crate::routes::{Route, RouteLeg};
+use crate::settlements::relations::{Relation, Standing};
 use crate::settlements::{SettlementDef, SettlementKey, SettlementKind, Specialty, Temperament};
 
 /// A destination town, resolved, the way a route's record stores it.
@@ -130,5 +133,411 @@ fn a_pre_routes_save_loads_with_no_routes() {
             .0
             .is_empty(),
         "a pre-routes save has no routes in flight"
+    );
+}
+
+// ---------------------------------------------------------------- Task 3
+// the dispatch doors
+
+/// Stands a Home and a Relay up in base space and puts the party on the
+/// laid floor beside them — `tests::sorties::deploy_relay`'s shape,
+/// repeated here rather than shared: each fixture file owns its own.
+fn deploy_relay(game: &mut Game) {
+    game.lay_starting_pocket();
+    deploy_structure(game, "home", 0, 0);
+    deploy_structure(game, "relay", 1, 0);
+    super::support::stand_in_base_at(game, 1, 1);
+}
+
+/// A structure of `kind` standing at `(x, y)` in base space.
+fn deploy_structure(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
+    game.world
+        .spawn((
+            Structure {
+                kind: kind.to_string(),
+            },
+            Position { x, y },
+            Glyph {
+                ch: 'K',
+                color: GlyphColor::Magenta,
+            },
+        ))
+        .id()
+}
+
+/// A Depot at `(x, y)` holding `qty` of `item` on its output shelf.
+fn deploy_depot(game: &mut Game, x: i32, y: i32, item: &ItemId, qty: u32) {
+    let depot = deploy_structure(game, "depot", x, y);
+    game.world.entity_mut(depot).insert(Stock {
+        output: [(item.clone(), qty)].into_iter().collect(),
+        capacity: 9_999,
+        ..Default::default()
+    });
+}
+
+/// Registers a known settlement at `key`/`tile` with no map entity —
+/// `tests::settlement_market::register_settlement`'s shape: a route test
+/// needs the town *known*, never walked to.
+fn register_settlement(game: &mut Game, key: SettlementKey, def: SettlementDef, tile: (i32, i32)) {
+    game.world
+        .resource_mut::<crate::resources::Settlements>()
+        .0
+        .insert(key, crate::resources::KnownSettlement { tile, def });
+}
+
+/// Sets a town's standing directly, skipping every trade and contract mover
+/// that would ordinarily earn it.
+fn set_standing(game: &mut Game, key: SettlementKey, standing: i32) {
+    game.world
+        .resource_mut::<crate::resources::Standings>()
+        .0
+        .insert(
+            key,
+            Relation {
+                standing,
+                trade_credits: 0,
+            },
+        );
+}
+
+/// A base with a Home, a Relay and a Depot holding `qty` of a Material item,
+/// plus one known settlement — `Neutral` by default — reachable from it.
+/// Returns the game, the cargo item and the destination's key.
+fn a_dispatch_ready_base(seed: u32, qty: u32) -> (Game, ItemId, SettlementKey) {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    deploy_relay(&mut game);
+    let item = ItemId::from("cache_grain");
+    deploy_depot(&mut game, 0, 1, &item, qty);
+    let key = SettlementKey { rx: 5, ry: 5 };
+    register_settlement(&mut game, key, a_destination(), (500, 500));
+    (game, item, key)
+}
+
+/// Sums what the base's shelves hold, so a refusal can be shown to have
+/// spent nothing.
+fn stock_total(game: &Game) -> u32 {
+    game.base_stock().iter().map(|r| r.qty).sum()
+}
+
+/// No board without a Relay, and no panic either — `no_relay_means_no_board`'s
+/// shape.
+#[test]
+fn no_relay_means_no_route_destinations() {
+    let mut game = Game::new(6000, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert!(game.route_destinations().is_none());
+}
+
+/// A Relay with nothing known yet is an empty board, not the absence of
+/// one — `board_defs`' three-state rule, and once a town is known it lists
+/// its band and the duration `dispatch_route` will actually run.
+#[test]
+fn route_destinations_lists_every_known_settlement() {
+    let mut game = Game::new(6001, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    deploy_relay(&mut game);
+    // `Game::new` already runs `ensure_local_settlements`, so the fixture
+    // clears what world generation found nearby before asserting the empty
+    // state — otherwise this proves nothing about the three-state rule.
+    game.world
+        .resource_mut::<crate::resources::Settlements>()
+        .0
+        .clear();
+    assert_eq!(
+        game.route_destinations(),
+        Some(Vec::new()),
+        "a Relay with no known settlement yet is an empty board"
+    );
+
+    let key = SettlementKey { rx: 2, ry: -1 };
+    register_settlement(&mut game, key, a_destination(), (200, -100));
+    let rows = game.route_destinations().expect("a Relay stands");
+    assert_eq!(rows.len(), 1);
+    let row = &rows[0];
+    assert_eq!(row.destination, key);
+    assert_eq!(row.name, a_destination().name);
+    assert_eq!(row.band, Standing::Neutral);
+    let (ax, ay) = game.anchor_position().unwrap();
+    let d = (ax - 200).abs().max((ay - (-100)).abs()) as u64;
+    assert_eq!(
+        row.ticks,
+        crate::tuning::ROUTE_TICKS_BASE + crate::tuning::ROUTE_TICKS_PER_TILE * d,
+        "the row must quote the same duration the trip will actually run"
+    );
+}
+
+/// `route_quote` is the sum of `settlement_sell_price` over the manifest —
+/// the one derivation a preview and a sale both call, so they cannot quote
+/// different numbers.
+#[test]
+fn route_quote_sums_settlement_sell_price_per_line() {
+    let (game, item, key) = a_dispatch_ready_base(6002, 40);
+    let temperament = game
+        .world
+        .resource::<crate::resources::Settlements>()
+        .0
+        .get(&key)
+        .unwrap()
+        .def
+        .temperament;
+    let cargo = vec![(item.clone(), 7)];
+    let expected = game.settlement_sell_price(&item, temperament) * 7;
+    assert_eq!(game.route_quote(&cargo, temperament), expected);
+}
+
+/// Every refusal lands before anything is spent, asserted **per refusal** —
+/// a single test over one of them passes against every path that never
+/// spends anyway. `every_refusal_spends_nothing`'s shape, one door over.
+#[test]
+fn every_refusal_leaves_stock_and_routes_exactly_as_they_were() {
+    #[allow(clippy::type_complexity)]
+    let cases: Vec<(
+        &str,
+        Box<dyn Fn() -> (Game, SettlementKey, Vec<(ItemId, u32)>, bool)>,
+    )> = vec![
+        (
+            "not at the Relay",
+            Box::new(|| {
+                let (mut game, item, key) = a_dispatch_ready_base(6100, 20);
+                game.world
+                    .insert_resource(crate::resources::Locale::Surface);
+                (game, key, vec![(item, 5)], false)
+            }),
+        ),
+        (
+            "an unknown destination",
+            Box::new(|| {
+                let (game, item, _key) = a_dispatch_ready_base(6101, 20);
+                (
+                    game,
+                    SettlementKey { rx: 99, ry: 99 },
+                    vec![(item, 5)],
+                    false,
+                )
+            }),
+        ),
+        (
+            "a Hostile town",
+            Box::new(|| {
+                let (mut game, item, key) = a_dispatch_ready_base(6102, 20);
+                set_standing(&mut game, key, crate::tuning::SETTLEMENT_HOSTILE_STANDING);
+                (game, key, vec![(item, 5)], false)
+            }),
+        ),
+        (
+            "standing asked for below Warm",
+            Box::new(|| {
+                let (game, item, key) = a_dispatch_ready_base(6103, 20);
+                (game, key, vec![(item, 5)], true)
+            }),
+        ),
+        (
+            "an empty manifest",
+            Box::new(|| {
+                let (game, _item, key) = a_dispatch_ready_base(6104, 20);
+                (game, key, Vec::new(), false)
+            }),
+        ),
+        (
+            "understocked cargo",
+            Box::new(|| {
+                let (game, item, key) = a_dispatch_ready_base(6105, 3);
+                (game, key, vec![(item, 20)], false)
+            }),
+        ),
+        (
+            "a duplicate destination",
+            Box::new(|| {
+                let (mut game, item, key) = a_dispatch_ready_base(6106, 40);
+                game.dispatch_route(key, vec![(item.clone(), 5)], false)
+                    .expect("the first dispatch must succeed");
+                (game, key, vec![(item, 5)], false)
+            }),
+        ),
+        (
+            "too many routes",
+            Box::new(|| {
+                let (mut game, item, _key) = a_dispatch_ready_base(6107, 400);
+                for n in 0..crate::tuning::ROUTE_MAX_ACTIVE {
+                    let k = SettlementKey {
+                        rx: 10 + n as i32,
+                        ry: 10,
+                    };
+                    register_settlement(&mut game, k, a_destination(), (1000 + n as i32, 1000));
+                    game.dispatch_route(k, vec![(item.clone(), 5)], false)
+                        .expect("filling to the cap must succeed");
+                }
+                let extra = SettlementKey { rx: 999, ry: 999 };
+                register_settlement(&mut game, extra, a_destination(), (2000, 2000));
+                (game, extra, vec![(item, 5)], false)
+            }),
+        ),
+    ];
+
+    for (name, build) in cases {
+        let (mut game, key, cargo, standing) = build();
+        let before_stock = stock_total(&game);
+        let before_routes = game.world.resource::<crate::resources::Routes>().0.len();
+        assert!(
+            game.dispatch_route(key, cargo, standing).is_err(),
+            "{name} should have been refused"
+        );
+        assert_eq!(stock_total(&game), before_stock, "{name} spent something");
+        assert_eq!(
+            game.world.resource::<crate::resources::Routes>().0.len(),
+            before_routes,
+            "{name} filed a record anyway"
+        );
+    }
+}
+
+/// A refusal names its own reason where the reason is worth naming, rather
+/// than a bare `Err(())` a screen could not word.
+#[test]
+fn a_hostile_town_is_refused_with_its_own_variant() {
+    let (mut game, item, key) = a_dispatch_ready_base(6200, 20);
+    set_standing(&mut game, key, crate::tuning::SETTLEMENT_HOSTILE_STANDING);
+    assert_eq!(
+        game.dispatch_route(key, vec![(item, 5)], false),
+        Err(RouteRefusal::Refused)
+    );
+}
+
+#[test]
+fn a_standing_route_below_warm_is_refused_with_its_own_variant() {
+    let (mut game, item, key) = a_dispatch_ready_base(6201, 20);
+    assert_eq!(
+        game.dispatch_route(key, vec![(item, 5)], true).unwrap_err(),
+        RouteRefusal::NoStandingRoutes
+    );
+}
+
+/// The stricter gate is standing's alone — a one-off dispatch needs only
+/// `!refuses_service`, so the same Neutral town takes it.
+#[test]
+fn a_one_off_below_warm_still_dispatches() {
+    let (mut game, item, key) = a_dispatch_ready_base(6202, 20);
+    assert!(game.dispatch_route(key, vec![(item, 5)], false).is_ok());
+}
+
+#[test]
+fn understocked_cargo_names_what_is_short() {
+    let (mut game, item, key) = a_dispatch_ready_base(6203, 3);
+    let err = game
+        .dispatch_route(key, vec![(item.clone(), 20)], false)
+        .unwrap_err();
+    assert_eq!(
+        err,
+        RouteRefusal::Understocked {
+            item,
+            need: 20,
+            held: 3,
+        }
+    );
+}
+
+/// A successful dispatch spends the manifest and files the whole resolved
+/// record — `dispatch_sortie`'s shape.
+#[test]
+fn a_legal_dispatch_spends_cargo_and_records_a_route() {
+    let (mut game, item, key) = a_dispatch_ready_base(6300, 40);
+    set_standing(&mut game, key, crate::tuning::SETTLEMENT_WARM_STANDING);
+    let before = stock_total(&game);
+    let (ax, ay) = game.anchor_position().unwrap();
+    let tile = game
+        .world
+        .resource::<crate::resources::Settlements>()
+        .0
+        .get(&key)
+        .unwrap()
+        .tile;
+    let d = (ax - tile.0).abs().max((ay - tile.1).abs()) as u64;
+    let expected_ticks = crate::tuning::ROUTE_TICKS_BASE + crate::tuning::ROUTE_TICKS_PER_TILE * d;
+
+    game.dispatch_route(key, vec![(item.clone(), 12)], true)
+        .expect("a legal dispatch");
+
+    assert_eq!(stock_total(&game), before - 12);
+    let routes = game.world.resource::<crate::resources::Routes>().0.clone();
+    assert_eq!(routes.len(), 1);
+    let route = &routes[0];
+    assert_eq!(route.destination, key);
+    assert_eq!(route.destination_tile, tile);
+    assert_eq!(route.cargo, vec![(item, 12)]);
+    assert!(route.standing);
+    assert!(!route.stalled);
+    assert_eq!(route.leg, RouteLeg::Outbound);
+    assert_eq!(route.ticks_total, expected_ticks);
+    assert_eq!(route.ticks_elapsed, 0);
+    assert_eq!(route.proceeds, 0);
+    assert!(route.losses.is_empty());
+}
+
+/// A dispatch is *seen* to leave, the same as a sortie's squad —
+/// `a_dispatch_queues_one_walk_out_per_member`'s shape, one cue rather than
+/// one per member since cargo has no bodies.
+#[test]
+fn a_dispatch_queues_one_cargo_walk() {
+    let (mut game, item, key) = a_dispatch_ready_base(6301, 40);
+    game.dispatch_route(key, vec![(item, 5)], false)
+        .expect("a legal dispatch");
+
+    let walks = game.take_transits();
+    assert_eq!(walks.len(), 1, "one cargo cue on departure");
+    assert_eq!(
+        walks[0].path.last(),
+        Some(&crate::game::base_space::BASE_EXIT_CELL),
+        "base space has one door and the walk ends at it"
+    );
+}
+
+/// `Game::sever_route` clears `standing` and nothing else — the trip in
+/// flight still completes and still pays.
+#[test]
+fn severing_clears_standing_and_nothing_else() {
+    let (mut game, item, key) = a_dispatch_ready_base(6400, 40);
+    set_standing(&mut game, key, crate::tuning::SETTLEMENT_WARM_STANDING);
+    game.dispatch_route(key, vec![(item.clone(), 5)], true)
+        .unwrap();
+
+    assert!(game.sever_route(key));
+    let routes = game.world.resource::<crate::resources::Routes>().0.clone();
+    assert_eq!(routes.len(), 1, "severing does not drop the trip in flight");
+    let route = &routes[0];
+    assert!(!route.standing);
+    assert_eq!(route.leg, RouteLeg::Outbound);
+    assert_eq!(route.cargo, vec![(item, 5)]);
+
+    assert!(
+        !game.sever_route(key),
+        "severing an already-severed route clears nothing further"
+    );
+}
+
+#[test]
+fn severing_an_absent_route_does_nothing() {
+    let mut game = Game::new(6401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert!(!game.sever_route(SettlementKey { rx: 1, ry: 1 }));
+}
+
+/// The report reads the record without changing it — `sortie_reports`'
+/// rule, so a screen that draws it twice cannot move the trip.
+#[test]
+fn route_reports_reads_the_record_without_changing_it() {
+    let (mut game, item, key) = a_dispatch_ready_base(6500, 40);
+    set_standing(&mut game, key, crate::tuning::SETTLEMENT_WARM_STANDING);
+    game.dispatch_route(key, vec![(item, 5)], true).unwrap();
+
+    let reports = game.route_reports();
+    assert_eq!(reports.len(), 1);
+    let report = &reports[0];
+    assert_eq!(report.destination, key);
+    assert!(report.standing);
+    assert!(!report.stalled);
+    assert_eq!(report.leg, RouteLeg::Outbound);
+
+    let after = game.world.resource::<crate::resources::Routes>().0.clone();
+    assert_eq!(after.len(), 1);
+    assert_eq!(
+        after[0].ticks_elapsed, 0,
+        "reading the report moved nothing"
     );
 }

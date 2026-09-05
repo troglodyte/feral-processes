@@ -2091,17 +2091,48 @@ fn species_declaring_an_exclusive_routine(game: &mut Game) -> (String, String) {
 /// The pool is the species' own kit at the program's level, minus what the
 /// player already knows. A level gate that did not apply would teach a
 /// level-30 routine off a level-2 kill.
+///
+/// Equality at every rung, not a subset relation between two levels: a
+/// subset claim holds just as well with no gate at all, since the pool a
+/// missing gate produces is the same at every level. The expected rows come
+/// off `SpeciesDb` rather than being written out here, so re-levelling the
+/// scrapper's kit moves the test with it — the fixture premise below is the
+/// only thing that would then need looking at.
 #[test]
 fn the_routine_pool_is_the_species_kit_at_that_level() {
     let game = new_test_game();
-    let low = game.routine_candidates(&test_program("scrapper", 1));
-    let high = game.routine_candidates(&test_program("scrapper", 30));
+    let kit = game
+        .world
+        .resource::<SpeciesDb>()
+        .get("scrapper")
+        .expect("the scrapper ships")
+        .abilities
+        .clone();
+    let top = kit
+        .iter()
+        .map(|declared| declared.level)
+        .max()
+        .expect("the scrapper declares a routine");
     assert!(
-        low.len() <= high.len(),
-        "a higher-level program cannot offer fewer routines: {low:?} vs {high:?}"
+        kit.iter().all(|declared| declared.level > 1),
+        "fixture premise: nothing in the kit is declared at level 1, so a \
+         level-1 program's pool is the empty case a missing gate cannot \
+         produce — {kit:?}"
     );
-    for id in &low {
-        assert!(high.contains(id), "{id} vanished at a higher level");
+
+    // One rung past the top, so the last entry's own boundary is walked
+    // from both sides rather than only from below.
+    for level in 1..=top + 1 {
+        let expected: Vec<crate::abilities::AbilityId> = kit
+            .iter()
+            .filter(|declared| declared.level <= level)
+            .map(|declared| declared.id.clone())
+            .collect();
+        assert_eq!(
+            game.routine_candidates(&test_program("scrapper", level)),
+            expected,
+            "the level {level} pool is not the kit at that level"
+        );
     }
 }
 
@@ -2194,6 +2225,14 @@ fn an_exclusive_routine_from_a_downed_program_leaves_exactly_one_copy() {
 /// The first entry is favoured, not guaranteed — decision 4. Run the draw
 /// enough times to see both outcomes; a deterministic pick would fail this
 /// and a uniform one would fail the skew assertion.
+///
+/// **The bar has to clear a uniform draw, not merely a hostile one.** Over
+/// a two-candidate pool — every shipped species declares at most two
+/// routines — a uniform draw already splits ~100/100 across these 200
+/// seeds, so "the favoured one won more than a third of the draws" is true
+/// with no weight at all. `ROUTINE_TOOL_FIRST_UNKNOWN_WEIGHT = 3` splits
+/// 75/25, about 150/50 here; the ratio bar below sits between the two so
+/// that dropping the weight to 1 fails it.
 #[test]
 fn the_draw_favours_the_first_candidate_without_forcing_it() {
     let mut counts: std::collections::BTreeMap<String, u32> = Default::default();
@@ -2202,9 +2241,10 @@ fn the_draw_favours_the_first_candidate_without_forcing_it() {
         let mut game = test_game_with_seed(seed);
         let program = test_program("scrapper", 30);
         let pool = game.routine_candidates(&program);
-        if pool.len() < 2 {
-            return; // nothing to skew between; the pool census covers this
-        }
+        assert!(
+            pool.len() >= 2,
+            "fixture premise: seed {seed} leaves nothing to skew between — {pool:?}"
+        );
         first_id.get_or_insert(pool[0].clone());
         give_downed_program(&mut game, program);
         install_routine_tool(&mut game);
@@ -2227,9 +2267,14 @@ fn the_draw_favours_the_first_candidate_without_forcing_it() {
         favoured > 0 && rest > 0,
         "the draw is deterministic: {counts:?}"
     );
+    // 1.75x: midway in ratio between the shipped weight's 3x and a uniform
+    // draw's 1x, so both a weakened weight and a strengthened one are still
+    // several standard deviations clear of it.
     assert!(
-        favoured * 2 > rest,
-        "the first candidate is not favoured: {counts:?}"
+        favoured * 4 > rest * 7,
+        "the first candidate is not favoured over a uniform draw \
+         ({favoured} vs {rest}, need {favoured} > {}): {counts:?}",
+        rest * 7 / 4
     );
 }
 
@@ -2271,6 +2316,31 @@ fn a_previews_tick_cost_is_the_one_the_act_spends() {
     let before = ticks_elapsed(&game);
 
     game.extract_program(0, &option.tool).expect("it runs");
+
+    assert_eq!(ticks_elapsed(&game) - before, option.ticks);
+}
+
+/// The same claim for the `Routines` branch, which spends its ticks in a
+/// loop of its own. The test above draws slot 0 — always the starter tool,
+/// always the `Materials` branch — so without this the routine branch's
+/// whole tick loop can be deleted with the suite still green, and a tool the
+/// screen quotes a cost for becomes free to use.
+#[test]
+fn a_routine_extractions_tick_cost_is_the_one_the_act_spends() {
+    let mut game = new_test_game();
+    give_downed_program(&mut game, test_program("scrapper", 30));
+    build_program_bench(&mut game, Some(3));
+    install_routine_tool(&mut game);
+    let wanted = routine_tool_id(&game);
+    let option = game
+        .extraction_options(0)
+        .into_iter()
+        .find(|o| o.tool == wanted)
+        .expect("the routine tool is installed");
+    assert!(option.ticks > 0, "a quote of zero would assert nothing");
+    let before = ticks_elapsed(&game);
+
+    game.extract_program(0, &wanted).expect("it runs");
 
     assert_eq!(ticks_elapsed(&game) - before, option.ticks);
 }

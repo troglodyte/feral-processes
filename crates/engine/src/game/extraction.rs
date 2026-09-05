@@ -4,23 +4,30 @@
 //! `docs/superpowers/specs/2026-09-04-program-extraction-design.md`,
 //! sections 3 and 4.
 
+use crate::abilities::AbilityId;
+use crate::game::routines::RoutineTaken;
 use crate::items::DownedProgram;
 use crate::species::SpeciesId;
-use crate::tools::{ToolDef, ToolId};
+use crate::tools::{ToolCategory, ToolDef, ToolId};
 use crate::*;
 
 /// How much each tier past 1 scales `extraction_yield`'s unit count — see
 /// `tuning::TOOL_TIER_SCALE_STEP`. `1.0` at tier 1, which is
 /// `salvage_clamp`'s own tier, so Task 6's drop-neutrality test (fitted
 /// against the starter tool) cannot see this curve move.
+///
+/// Its argument is the tool's own tier plus the bench's term
+/// (`Game::extraction_bench_tier` minus one) — the one shared curve
+/// `tuning::TOOL_TIER_SCALE_STEP` says both axes take, rather than a
+/// second constant that could drift away from it.
 fn tier_scale(tier: u32) -> f32 {
     1.0 + tier.saturating_sub(1) as f32 * tuning::TOOL_TIER_SCALE_STEP
 }
 
 /// Splits `units` whole items across `pool` by weight, deterministically —
 /// largest-remainder apportionment (Hamilton's method) rather than a draw
-/// per unit. `extraction_yield` is `&self` because the screen's preview (a
-/// later task) calls it once per installed tool with nothing spent, so it
+/// per unit. `extraction_yield` is `&self` because the screen's preview
+/// calls it once per installed tool with nothing spent, so it
 /// cannot touch the shared `GameRng`; apportioning rather than sampling is
 /// also what makes `extract_program` calling this once and granting its
 /// `Vec` verbatim *sufficient* to prove the previewed figure and the
@@ -84,12 +91,72 @@ impl Game {
         def.rich_in.clone().or_else(|| def.work_resource.clone())
     }
 
-    /// What extracting `program` with `tool` grants — the one derivation,
-    /// called by `extract_program` (below) and by the screen's preview (a
-    /// later task) alike, so a quoted figure and a granted one cannot
-    /// differ.
+    /// The standing structure whose `StructureDef::extracts_programs` is set
+    /// and whose tier is the best of them, with that tier — `None` when none
+    /// stands. Ownership rather than proximity,
+    /// `Game::can_extract_routines`' rule (`game/routines.rs:456`) rather
+    /// than a distance check.
     ///
-    /// `units = round(TOOL_BASE_UNITS * tier_scale(tool.tier) *
+    /// The def and the tier come out together because the screen names one
+    /// and prices the other, and a name that came from a different structure
+    /// than the tier did is a bench the player cannot find. One shipped
+    /// structure carries the flag, so the two agree today; a mod's second one
+    /// standing at a higher tier is what this exists for.
+    ///
+    /// Ties go to the last of `StructureDb::all`'s own order, which is sorted
+    /// — so two benches at one tier name the same one on every call rather
+    /// than by hash-order happenstance.
+    fn standing_extraction_bench(&self) -> Option<(&StructureDef, u32)> {
+        self.world
+            .resource::<StructureDb>()
+            .all()
+            .filter(|def| def.extracts_programs)
+            .filter_map(|def| Some((def, self.best_structure_tier(&def.id)?)))
+            .max_by_key(|(_, tier)| *tier)
+    }
+
+    /// The best tier of any standing extraction bench, or `0` when none
+    /// stands — never a gate (spec decision 7), only a term.
+    pub fn extraction_bench_tier(&self) -> u32 {
+        self.standing_extraction_bench()
+            .map(|(_, tier)| tier)
+            .unwrap_or(0)
+    }
+
+    /// The bench a screen names, when one stands. `None` and no name when
+    /// none does, rather than a "no bench" string built here — what to say
+    /// about an absence is the renderer's business.
+    ///
+    /// Not `bench_name`, which answers "what is this kind of bench called"
+    /// off the catalogue and is right for the refusal that names a structure
+    /// you do *not* have. This row names one you do, so the name has to come
+    /// off the same structure the tier did.
+    pub fn extraction_bench(&self) -> Option<crate::views::ExtractionBenchView> {
+        self.standing_extraction_bench()
+            .map(|(def, tier)| crate::views::ExtractionBenchView {
+                name: def.name.clone(),
+                tier,
+            })
+    }
+
+    /// What one use of `tool` costs in ticks, here and now —
+    /// `ToolDef::ticks` divided down by any standing bench's tier
+    /// (`tuning::EXTRACT_BENCH_TICK_STEP`), floored at one. The one
+    /// derivation, `extraction_yield`'s rule: `extract_program` spends
+    /// exactly this and the screen quotes exactly this, so a promised cost
+    /// and a paid one cannot differ.
+    pub fn extraction_ticks(&self, tool: &ToolDef) -> u64 {
+        let tier = self.extraction_bench_tier() as f32;
+        let divisor = 1.0 + tuning::EXTRACT_BENCH_TICK_STEP * tier;
+        ((tool.ticks as f32 / divisor).round() as u64).max(1)
+    }
+
+    /// What extracting `program` with `tool` grants — the one derivation,
+    /// called by `extract_program` (below) and by the screen's preview
+    /// (`extraction_options`) alike, so a quoted figure and a granted one
+    /// cannot differ.
+    ///
+    /// `units = round(TOOL_BASE_UNITS * tier_scale(tool.tier + bench) *
     /// program.grade())`, split across `tool.yields` by weight
     /// (`apportion`), plus `Perk::Teardown`'s `salvage_bonus` added to the
     /// unit count as a flat addend — never a second `GameRng` draw, the
@@ -102,12 +169,18 @@ impl Game {
     /// (`scrapper` extracted with `salvage_clamp`, both naming
     /// `core_fragment`, is exactly this case).
     ///
-    /// No `structure_tier` parameter: the spec's signature carries one, but
-    /// the structure that would supply it (`StructureDef::
-    /// extracts_programs`) is phase 3 — a parameter every phase-1 caller
-    /// passed a hardcoded zero would be a lie about what this depends on.
+    /// Still no `structure_tier` parameter, now that phase 3 has authored
+    /// the structure that would supply one: the tier is read inside, from
+    /// `Game::extraction_bench_tier`, because a parameter with exactly one
+    /// correct value is how the screen ends up quoting a tier-0 figure
+    /// while the act grants a tier-3 one — the divergence this function
+    /// being the one derivation exists to prevent.
     pub fn extraction_yield(&self, program: &DownedProgram, tool: &ToolDef) -> Vec<(ItemId, u32)> {
-        let scale = tier_scale(tool.tier);
+        // The bench's term is `tier - 1`, not `tier` — a bench that has
+        // never been upgraded pays nothing, and the upgrade is what sells
+        // yield. See `tuning::TOOL_TIER_SCALE_STEP`'s neighbouring doc.
+        let bench = self.extraction_bench_tier().saturating_sub(1);
+        let scale = tier_scale(tool.tier + bench);
         let base_units = (tuning::TOOL_BASE_UNITS * scale * program.grade()).round() as u32;
         let bonus = crate::perks::salvage_bonus(self.player_perks());
         let units = base_units + bonus;
@@ -122,6 +195,142 @@ impl Game {
         }
 
         granted
+    }
+
+    /// What a `Routines` tool could take out of `program`: every routine its
+    /// species declares at or below the program's own level, in the species
+    /// file's order, minus anything already known.
+    ///
+    /// **Exclusive routines are excluded outright.** The tamed door
+    /// (`extract_routine`) may hand one back as a disk because
+    /// `install_disk` consumed a disk to put it on that program in the first
+    /// place — the pop is a return, and the run's copy count never moves.
+    /// Nothing was consumed to put a routine in *this* pool: it is derived
+    /// from `SpeciesDef::abilities`, so two downed programs of one species
+    /// would mint two disks of something the whole exclusive pool exists to
+    /// keep at one. The Reader teaches knowledge; it does not press disks.
+    ///
+    /// Unreachable on shipped assets — no shipped species kit names an
+    /// exclusive routine, and `nothing_a_new_game_ships_with_teaches_an_
+    /// exclusive_routine` censures one appearing — but a census is a promise
+    /// about today's files, and this is the construction that holds for a
+    /// mod's.
+    ///
+    /// **`DownedProgram::carried` heads the pool**, ahead of the kit and
+    /// outside its level gate: it is what that individual was running, not
+    /// what its species hands out, so no level of its species declares it.
+    /// The head is where `ROUTINE_TOOL_FIRST_UNKNOWN_WEIGHT` lands, so a
+    /// program that got lucky at spawn is likeliest to teach the thing that
+    /// made it worth killing. It takes every filter below all the same —
+    /// known, exclusive, unresolvable, duplicated.
+    ///
+    /// The rest of the pool is `install_innate_routines`' own level gate,
+    /// read off the same `SpeciesDef::abilities`: what a downed program
+    /// *would* have been carrying by species and level is derived rather
+    /// than stored, and only the one unpredictable part is a save field.
+    ///
+    /// Deduplicated, because a species may declare the same id at two levels
+    /// and a pool with a repeat would weight it twice by accident.
+    pub fn routine_candidates(&self, program: &DownedProgram) -> Vec<AbilityId> {
+        let species = self.world.resource::<SpeciesDb>().get(&program.species);
+        let kit = species.map(|def| def.abilities.as_slice()).unwrap_or(&[]);
+        let db = self.world.resource::<AbilityDb>();
+        let mut pool: Vec<AbilityId> = Vec::new();
+        let offered = program.carried.iter().cloned().chain(
+            kit.iter()
+                .filter(|declared| declared.level <= program.level)
+                .map(|declared| declared.id.clone()),
+        );
+        for id in offered {
+            if db.get(&id).is_none() {
+                continue;
+            }
+            if self.knows_routine(&id) || self.routine_is_exclusive(&id) {
+                continue;
+            }
+            if pool.contains(&id) {
+                continue;
+            }
+            pool.push(id);
+        }
+        pool
+    }
+
+    /// A `Routines` tool's use: one routine off `program`, drawn from
+    /// `routine_candidates` with `tuning::ROUTINE_TOOL_FIRST_UNKNOWN_WEIGHT`
+    /// on the first, then `take_routine`'s two branches.
+    ///
+    /// The `GameRng` draw is the reason this is here rather than inside
+    /// `extraction_yield`: that function is `&self` precisely so the screen's
+    /// preview can call it with nothing spent, and a preview that consumed a
+    /// random draw would make what a player *gets* depend on whether they
+    /// looked at the menu first. A screen quotes the pool instead of an
+    /// outcome, which is the honest thing to show for a draw that has not
+    /// happened yet.
+    fn extract_routine_from_program(
+        &mut self,
+        index: usize,
+        program: &DownedProgram,
+        tool: &ToolDef,
+    ) -> Result<(), String> {
+        let pool = self.routine_candidates(program);
+        if pool.is_empty() {
+            return Err("You already know everything that program can teach.".to_string());
+        }
+        let weights: Vec<u32> = pool
+            .iter()
+            .enumerate()
+            .map(|(i, _)| {
+                if i == 0 {
+                    tuning::ROUTINE_TOOL_FIRST_UNKNOWN_WEIGHT
+                } else {
+                    1
+                }
+            })
+            .collect();
+        let total: u32 = weights.iter().sum();
+        let roll = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_range(0..total)
+        };
+        let picked = crate::abilities::weighted_pick(&weights, roll)
+            .map(|i| pool[i].clone())
+            .unwrap_or_else(|| pool[0].clone());
+
+        let player = self.player_entity();
+        self.world
+            .get_mut::<DownedPrograms>(player)
+            .unwrap()
+            .0
+            .remove(index);
+
+        let label = self.downed_program_label(program);
+        let ability_name = self.ability_display_name(&picked);
+        match self.take_routine(&picked) {
+            RoutineTaken::DiskPopped => self.log_kind(
+                MessageKind::Loot,
+                format!(
+                    "You read {label} out with the {}: its {ability_name} disk comes back intact.",
+                    tool.name
+                ),
+            ),
+            RoutineTaken::Learned => self.log_kind(
+                MessageKind::Loot,
+                format!(
+                    "You read {label} out with the {}: you learn its {ability_name} routine.",
+                    tool.name
+                ),
+            ),
+        }
+
+        let ticks = self.extraction_ticks(tool);
+        for _ in 0..ticks {
+            if self.is_game_over().is_some() || self.has_active_battle() {
+                break;
+            }
+            self.tick();
+        }
+        Ok(())
     }
 
     /// One row per held program, in store order — `Mode::DownedPrograms`'s
@@ -153,25 +362,47 @@ impl Game {
             .unwrap_or_default()
     }
 
-    /// Every installed tool and what it would give for the program at
-    /// `index` — `extraction_yield` called once per tool, in
-    /// `installed_tools`' own slot order, so the screen's preview and
-    /// `extract_program`'s grant read off the identical call. Empty for an
-    /// index the store doesn't hold, rather than a panic — the same
-    /// tolerance `extraction_yield`'s own callers already take on a stale
-    /// index.
-    pub fn extraction_options(&self, index: usize) -> Vec<(ToolId, Vec<(ItemId, u32)>)> {
+    /// Every installed tool and what it would do to the program at `index`,
+    /// in `installed_tools`' own slot order. Every figure on a row is a call
+    /// into the one derivation that the act itself uses —
+    /// `extraction_yield`, `extraction_ticks`, `routine_candidates` — so the
+    /// screen and the grant cannot disagree. Empty for an index the store
+    /// doesn't hold, rather than a panic — the same tolerance
+    /// `extraction_yield`'s own callers already take on a stale index.
+    pub fn extraction_options(&self, index: usize) -> Vec<crate::views::ExtractionOptionView> {
         let player = self.player_entity();
         let Some(program) = self
             .world
             .get::<DownedPrograms>(player)
             .and_then(|held| held.0.get(index))
+            .cloned()
         else {
             return Vec::new();
         };
         self.installed_tools()
-            .iter()
-            .map(|tool| (tool.id.clone(), self.extraction_yield(program, tool)))
+            .into_iter()
+            .map(|tool| {
+                let preview = if tool.category == ToolCategory::Routines {
+                    let pool = self.routine_candidates(&program);
+                    if pool.is_empty() {
+                        crate::views::ExtractionPreview::NothingToLearn
+                    } else {
+                        crate::views::ExtractionPreview::Routine(
+                            pool.iter()
+                                .map(|id| self.ability_display_name(id))
+                                .collect(),
+                        )
+                    }
+                } else {
+                    crate::views::ExtractionPreview::Items(self.extraction_yield(&program, &tool))
+                };
+                crate::views::ExtractionOptionView {
+                    ticks: self.extraction_ticks(&tool),
+                    name: tool.name.clone(),
+                    tool: tool.id.clone(),
+                    preview,
+                }
+            })
             .collect()
     }
 
@@ -194,7 +425,7 @@ impl Game {
     /// installed. Then the program is removed, `extraction_yield` is
     /// called exactly once and its `Vec` granted verbatim through
     /// `grant_loot` under `LootSource::Extract`, one log line, and finally
-    /// `self.tick()` `tool.ticks` times — `commit_caravan_basket`'s
+    /// `self.tick()` `extraction_ticks` times — `commit_caravan_basket`'s
     /// ordering (refusals, then spend, then the log, then the tick cost).
     ///
     /// The tick loop breaks early on a game over or a battle opening
@@ -218,6 +449,13 @@ impl Game {
             .into_iter()
             .find(|def| &def.id == tool)
             .ok_or_else(|| "That tool isn't installed.".to_string())?;
+
+        // The `Routines` category takes the other branch entirely: no
+        // `yields` pool is read, and the refusal below has to land there,
+        // above the removal, or a program is spent teaching nothing.
+        if tool_def.category == ToolCategory::Routines {
+            return self.extract_routine_from_program(index, &program, &tool_def);
+        }
 
         let granted = self.extraction_yield(&program, &tool_def);
 
@@ -255,7 +493,11 @@ impl Game {
             );
         }
 
-        for _ in 0..tool_def.ticks {
+        // Read before the loop, not inside it: a bench demolished by a raid
+        // mid-extraction must not change what this use was already priced
+        // at — `commit_caravan_basket`'s rule that a spend is quoted once.
+        let ticks = self.extraction_ticks(&tool_def);
+        for _ in 0..ticks {
             if self.is_game_over().is_some() || self.has_active_battle() {
                 break;
             }

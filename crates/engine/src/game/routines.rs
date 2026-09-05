@@ -5,6 +5,18 @@ use crate::classes::PlayerClass;
 use crate::components::Routines;
 use crate::*;
 
+/// Which of `Game::take_routine`'s two branches ran, so each caller words
+/// its own line — the tamed-program door and the downed-program door
+/// describe the same effect in different sentences, and a shared function
+/// returning a shared string would make one of them wrong.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RoutineTaken {
+    /// Ordinary: the knowledge entered `KnownRoutines`. No disk.
+    Learned,
+    /// Exclusive: the etched disk came back out, and nothing was learned.
+    DiskPopped,
+}
+
 impl Game {
     /// `id`'s display name, falling back to the raw id if the ability set
     /// doesn't define it (a mod removed since a save referenced it). Every
@@ -461,13 +473,20 @@ impl Game {
             .any(|def| self.has_structure(&def.id))
     }
 
-    /// Display name of a bench that would allow extraction, for the refusal
-    /// message — no code names a structure id.
-    fn extraction_bench_name(&self) -> String {
+    /// Display name of a structure carrying `flag`, for a message — no code
+    /// names a structure id.
+    ///
+    /// The *catalogue's* answer, not a standing structure's: the one caller
+    /// is a refusal telling the player what they need to build, so the
+    /// structure it names is by definition one they do not have. A row about
+    /// a bench that *is* standing must not use this — see
+    /// `Game::extraction_bench`, which reads the name off the same structure
+    /// that supplied its tier.
+    fn bench_name(&self, flag: fn(&StructureDef) -> bool) -> String {
         self.world
             .resource::<StructureDb>()
             .all()
-            .find(|def| def.extracts_routines)
+            .find(|def| flag(def))
             .map(|def| def.name.clone())
             .unwrap_or_else(|| "an extraction bench".to_string())
     }
@@ -540,7 +559,7 @@ impl Game {
         if !self.can_extract_routines() {
             return Err(format!(
                 "You need {} standing somewhere to extract a routine.",
-                self.extraction_bench_name()
+                self.bench_name(|def| def.extracts_routines)
             ));
         }
         let owner = self
@@ -563,22 +582,48 @@ impl Game {
 
         let name = self.dissolve_tamed_program(creature);
         let ability_name = self.ability_display_name(&ability);
-        if exclusive {
-            let disk = ItemId::etched(&ability);
-            self.grant_loot(disk.clone(), 1, LootSource::Etch);
-            self.log(format!(
+        match self.take_routine(&ability) {
+            RoutineTaken::DiskPopped => self.log(format!(
                 "You break {name} down and pry its {ability_name} disk back out intact."
-            ));
+            )),
+            RoutineTaken::Learned => self.log(format!(
+                "You break {name} down and learn its {ability_name} routine."
+            )),
+        }
+        self.tick();
+        Ok(())
+    }
+
+    /// The one place a routine comes off a program — `extract_routine`'s
+    /// tamed-program door and `extract_program`'s `Routines`-tool door both
+    /// call this rather than each carrying a copy of the two branches.
+    /// Callers own their refusals and their log lines; this owns only the
+    /// effect.
+    ///
+    /// **Exclusive routines pop the disk and teach nothing.** That is what
+    /// keeps exactly one copy in the run, and it is the reason this function
+    /// exists instead of two implementations that agree today.
+    ///
+    /// The pop conserves copies only because a disk was consumed to put the
+    /// routine there — `install_disk`'s spend, which the tamed door's caller
+    /// can rely on and a downed program's cannot. `Game::routine_candidates`
+    /// therefore never offers an exclusive routine at all, rather than
+    /// reaching this branch and minting a second copy of one; see its doc,
+    /// and the spec's amended section 4.
+    ///
+    /// `&str` rather than `&AbilityId` because that alias is `String`, and
+    /// both neighbours a caller has already gone through (`knows_routine`,
+    /// `routine_is_exclusive`) take `&str`.
+    pub(crate) fn take_routine(&mut self, ability: &str) -> RoutineTaken {
+        if self.routine_is_exclusive(ability) {
+            self.grant_loot(ItemId::etched(ability), 1, LootSource::Etch);
+            RoutineTaken::DiskPopped
         } else {
             self.world
                 .resource_mut::<KnownRoutines>()
                 .0
-                .insert(ability.clone());
-            self.log(format!(
-                "You break {name} down and learn its {ability_name} routine."
-            ));
+                .insert(ability.to_string());
+            RoutineTaken::Learned
         }
-        self.tick();
-        Ok(())
     }
 }

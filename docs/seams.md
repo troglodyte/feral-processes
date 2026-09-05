@@ -10616,8 +10616,9 @@ of a figure, and either way a screen showing "3 Core Fragments" that then
 grants 2 or 4 would read as a bug even though nothing was wrong — the
 seam this closes.
 
-The formula: `units = round(TOOL_BASE_UNITS * tier_scale(tool.tier) *
-program.grade())`, plus `Perk::Teardown`'s `salvage_bonus` added as a flat
+The formula: `units = round(TOOL_BASE_UNITS * tier_scale(tool.tier +
+bench_term) * program.grade())`, where `bench_term` is phase 3's standing
+extraction bench (below), plus `Perk::Teardown`'s `salvage_bonus` added as a flat
 addend to the unit count (never a second draw — the discipline the retired
 `roll_work_resource_drop` followed and this reasserts). `units` is split
 across `tool.yields` by weight through `apportion` (below), and then
@@ -10771,6 +10772,107 @@ carriers became real items, a brand-new character could be offered one before
 the research that teaches it exists. A minted item joins every pool that
 filters by value rather than by name, and the two shipped pools that do are
 not in the same file or the same subsystem.
+
+### The bench's tier is read inside the derivation, never passed to it
+
+The spec writes the yield formula as `extraction_yield(program, tool,
+structure_tier)`. It ships as `extraction_yield(program, tool)`, reading
+`Game::extraction_bench_tier()` itself, and the missing parameter is the
+point rather than an omission.
+
+A parameter is a thing a caller can get wrong, and there are two callers:
+`Game::extraction_options` (the screen's preview) and `Game::extract_program`
+(the act). The whole reason `extraction_yield` exists as one function is
+that a quoted figure and a granted figure must not be able to differ — and
+a `structure_tier` argument is precisely the crack they would differ
+through, because the screen could pass `0` (or a tier read a frame earlier,
+or the tier of the wrong bench) while the act passed the real one. Nothing
+about that failure would look like a bug in either caller; the preview
+would simply be quietly wrong, which is the failure mode the one-derivation
+rule was adopted to prevent in `BuildOrderRow`.
+
+The same argument applies to `Game::extraction_ticks`, which reads the tier
+the same way for the same reason: what a use costs in time is quoted on the
+screen and paid by the act, and those must be one number.
+
+### Standing the bench buys time; upgrading it buys materials
+
+`StructureDef::extracts_programs` (the Compiler) enters the two formulas by
+two different terms, and the asymmetry is deliberate.
+
+The yield term is `bench_tier - 1`. `Game::best_structure_tier` reads a
+structure with no `StructureTier` as tier 1 — a bench with no upgrade path
+and a bench never upgraded are the same thing to a player — so a `tier`
+term would pay `TOOL_TIER_SCALE_STEP`'s full step for merely having built a
+Compiler, which on the shipped `0.5` is +50% of the entire material economy
+for a structure most bases already have. `tier - 1` makes the *upgrade* the
+thing that sells yield, which is the identical rule the craft quality floor
+already takes off the same accessor.
+
+The tick term is the full `bench_tier`, through `EXTRACT_BENCH_TICK_STEP` as
+a divisor rather than a subtraction, floored at one tick. So owning the
+bench at all is worth something — it is just worth time rather than
+materials. A divisor is what keeps any tier from reaching zero, and the
+floor of one is what keeps an extraction from becoming a free action: a
+door that costs nothing is a place to stand and think in, which every other
+spend in this game refuses to be.
+
+Neither term is a gate. Spec decision 7 stands: extraction works in the
+field, at the base and in the Stack alike, because the starting tool is
+useless otherwise.
+
+### `Game::take_routine` is the one place a routine comes off a program
+
+Two doors now salvage a routine: `Game::extract_routine` breaks down a
+*tamed* program you control, and a `Routines`-category tool run through
+`Game::extract_program` reads one out of a *downed* program you are
+carrying. They share `take_routine`, which owns only the effect — the
+ordinary branch inserts the knowledge into `KnownRoutines`, the exclusive
+branch pops `ItemId::etched(id)` back out and teaches nothing.
+
+Each caller keeps its own refusals and its own log line, and that split is
+where the value is. The effect is the half that must not drift: the
+exclusive branch popping a disk instead of teaching is the whole of why
+there is still exactly one copy of an exclusive routine in a run, and two
+implementations that agree today are the shape that stops agreeing later.
+The refusals are the half that must *not* be shared — `extract_routine`
+requires an extraction bench and checks ownership of the creature; the tool
+path requires neither, because a researched, forged and installed tool is
+already the steeper gate and decision 7 forbids the structure being one.
+
+The pool the tool draws from is derived, never stored: a `DownedProgram` is
+five fields, so what it *would* have been running comes from its species'
+declared kit gated to its level, minus what the player already knows. A
+known-only pool means the refusal ("you already know everything that
+program can teach") lands before the program is spent, which is the same
+protection `extract_routine`'s own already-known check gives the tamed door.
+
+### A sortie banks its programs and delivers them at the door
+
+An off-screen battle no longer writes the player's store. `resolve_sortie_battle`
+appends to `Sortie::programs`; `return_sortie` is the only thing that hands
+them over, one at a time through `push_downed_program`.
+
+Two things follow, and both are the reason. First, a sortie is *travel*: a
+kill six screens away appearing in the pack the instant it lands makes the
+trip telemetry rather than a journey, and lets the store's own cap be
+consumed by something the player was not present for. Second, spec decision
+9's refusal now lands at a door the player is standing at — a full store
+refuses the delivery, keeps everything already held, and says so once.
+
+The delivery loop **stops at the first refusal** rather than trying each
+remaining program. Once the store is full it stays full, so continuing
+would log the identical line once per leftover; and because
+`message_history` condenses repeats, a test counting log *entries* could
+not tell the two apart. The `break` is what actually holds this, and it is
+worth knowing that removing it fails the full-store test loudly rather than
+subtly.
+
+The roll is shared, not copied: `leave_downed_program` split into
+`downed_program_for` (the roll) and `push_downed_program` (the store), and
+the sortie calls the former. That function was made one call rather than
+two in the first place because a drifted second copy is exactly the trap
+`Perk::Teardown` fell into on the old material-drop path.
 
 ### The commit door is shared, and the charge stays with the vendor
 

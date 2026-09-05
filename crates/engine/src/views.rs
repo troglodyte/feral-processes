@@ -2572,6 +2572,47 @@ pub struct DownedProgramRow {
     pub grade: f32,
 }
 
+/// The extraction bench a screen names — `Game::extraction_bench`. Absent
+/// entirely when none stands, so a renderer never has to read a tier of
+/// zero as "none".
+#[derive(Clone, Debug)]
+pub struct ExtractionBenchView {
+    pub name: String,
+    pub tier: u32,
+}
+
+/// One installed tool and what it would do to the program on the block —
+/// `Game::extraction_options`. Carries the tool's display name so the
+/// renderer joins nothing: the phase-1 rows zipped this list against
+/// `installed_tools()` positionally, which was structural but left the
+/// renderer holding two sequences that had to stay in step.
+#[derive(Clone, Debug)]
+pub struct ExtractionOptionView {
+    pub tool: ToolId,
+    pub name: String,
+    /// What this use costs in time, bench discount already applied.
+    pub ticks: u64,
+    pub preview: ExtractionPreview,
+}
+
+/// What a tool would draw out — the two categories answer in different
+/// currencies, and the `Routines` one cannot answer with an outcome at all.
+#[derive(Clone, Debug)]
+pub enum ExtractionPreview {
+    /// `extraction_yield`'s own rows, granted verbatim. Empty when the
+    /// grade rounds to no units at all.
+    Items(Vec<(ItemId, u32)>),
+    /// A `Routines` tool: the pool the draw comes from, in
+    /// `routine_candidates`' order (the first is the favourite), as display
+    /// names. An outcome cannot be quoted — the draw has not happened, and
+    /// making it happen to fill a menu row would let looking at the menu
+    /// change what you get.
+    Routine(Vec<String>),
+    /// A `Routines` tool with an empty pool: the refusal `extract_program`
+    /// would answer with, shown before it is spent.
+    NothingToLearn,
+}
+
 /// One row of `Mode::Tools`'s list — see `Game::tool_rows`.
 ///
 /// One row per tool the player *knows* plus any tool actually *installed*

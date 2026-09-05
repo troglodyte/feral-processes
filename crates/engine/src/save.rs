@@ -271,11 +271,16 @@ pub struct SortieSave {
     pub battles_total: u32,
     pub battles_done: u32,
     pub aborted: bool,
-    /// Always empty on this branch — extraction retired the direct kill
-    /// drop that used to fill it, and phase 3 (a travel-and-deliver record
-    /// for downed programs) is what refills it. Kept, not deleted, so a
-    /// save written mid-branch still parses.
+    /// Always empty — extraction retired the direct kill drop that used to
+    /// fill it, and phase 3 added `programs` beside it rather than refilling
+    /// it. Kept, not deleted, so a save written before `programs` existed
+    /// still parses.
     pub loot: Vec<(ItemId, u32)>,
+    /// What the squad is carrying home — see `resources::Sortie::programs`.
+    /// Additive behind a default, which is why phase 3 needed no
+    /// `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub programs: Vec<crate::items::DownedProgram>,
     pub xp: u32,
     pub kills: u32,
     pub casualties: Vec<String>,

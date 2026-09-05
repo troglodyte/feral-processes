@@ -19,6 +19,7 @@ fn program(condition: u8, rarity: Rarity, level: u32) -> DownedProgram {
         rarity,
         boss: false,
         condition,
+        carried: None,
     }
 }
 
@@ -62,9 +63,18 @@ fn downed_programs_survive_a_save_load_round_trip() {
     // Save -> load, not a RON round trip: `PlayerSave::downed_programs` is
     // `#[serde(default)]`, and a RON round trip can't catch a field that
     // silently defaults away — only `Game::save`/`Game::load` exercise the
-    // path that would drop it.
+    // path that would drop it. `DownedProgram::carried` is `#[serde(default)]`
+    // for the same reason and takes the same risk, so one of the three
+    // carries a routine and is asserted by name below.
     let mut game = Game::new(4471, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
+    let carrier = game
+        .world
+        .resource::<AbilityDb>()
+        .wild_pool()
+        .first()
+        .map(|(def, _)| def.id.clone())
+        .expect("some shipped routine is in the wild pool");
     let held = vec![
         program(15, Rarity::Ordinary, 3),
         program(88, Rarity::Prismatic, 47),
@@ -74,6 +84,7 @@ fn downed_programs_survive_a_save_load_round_trip() {
             rarity: Rarity::Silver,
             boss: true,
             condition: 60,
+            carried: Some(carrier.clone()),
         },
     ];
     game.world.get_mut::<DownedPrograms>(player).unwrap().0 = held.clone();
@@ -93,6 +104,11 @@ fn downed_programs_survive_a_save_load_round_trip() {
     assert_eq!(
         restored.0, held,
         "three distinct downed programs must come back exactly as saved"
+    );
+    assert_eq!(
+        restored.0[2].carried,
+        Some(carrier),
+        "the carried routine must survive the save, not default away"
     );
 }
 
@@ -374,6 +390,7 @@ fn rich_in_overrides_work_resource_and_reaches_extraction_yields_output() {
         rarity: Rarity::Gold,
         condition: 70,
         boss: false,
+        carried: None,
     };
     let tool = starter_tool_def(&game);
     let granted = totals(&game.extraction_yield(&prog, &tool));
@@ -789,6 +806,7 @@ fn downed_program_rows_reflect_the_store_in_order_with_species_names_resolved() 
             rarity: Rarity::Silver,
             boss: true,
             condition: 60,
+            carried: None,
         },
     ];
     game.world.get_mut::<DownedPrograms>(player).unwrap().0 = held.clone();
@@ -855,16 +873,23 @@ fn extraction_options_lists_every_installed_tool_with_its_own_preview_yield() {
         installed.len(),
         "one row per installed tool, in the same slot order"
     );
-    for (tool, (id, yield_rows)) in installed.iter().zip(options.iter()) {
+    for (tool, option) in installed.iter().zip(options.iter()) {
         assert_eq!(
-            &tool.id, id,
+            tool.id, option.tool,
             "extraction_options must walk installed_tools' own order"
         );
         assert_eq!(
-            yield_rows,
-            &game.extraction_yield(&prog, tool),
-            "the preview must be extraction_yield's own answer, not a second copy of it"
+            tool.name, option.name,
+            "the row must carry the tool's own display name, not a second copy of it"
         );
+        match &option.preview {
+            views::ExtractionPreview::Items(rows) => assert_eq!(
+                rows,
+                &game.extraction_yield(&prog, tool),
+                "the preview must be extraction_yield's own answer, not a second copy of it"
+            ),
+            other => panic!("a material tool must preview items, got {other:?}"),
+        }
     }
 }
 
@@ -891,11 +916,14 @@ fn extraction_options_preview_matches_what_extract_program_actually_grants() {
     let tool_id = ToolId(tuning::STARTER_TOOL_ID.to_string());
 
     let options = game.extraction_options(0);
-    let (_, preview) = options
+    let option = options
         .iter()
-        .find(|(id, _)| id == &tool_id)
+        .find(|o| o.tool == tool_id)
         .expect("the starter tool must be among the offered options");
-    let preview = totals(preview);
+    let views::ExtractionPreview::Items(rows) = &option.preview else {
+        panic!("the starter tool must preview items");
+    };
+    let preview = totals(rows);
 
     let before = totals(&game.world.get::<Inventory>(player).unwrap().items);
     game.extract_program(0, &tool_id)
@@ -1809,4 +1837,628 @@ fn tool_rows_never_exceeds_max_tool_rows_however_many_are_known() {
         tuning::MAX_TOOL_ROWS,
         "{extra} known tools (plus the starter) must be trimmed to the row bound"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: the extraction bench — `StructureDef::extracts_programs` and what
+// its tier is worth to a yield. See the phase-3 plan's Task 1.
+// ---------------------------------------------------------------------------
+
+/// The plan's fixture game, so the phase-3 tests below all fit the same
+/// world: a fresh run on shipped assets, where no bench stands and
+/// `extraction_bench_tier` is therefore zero until one is built.
+fn new_test_game() -> Game {
+    Game::new(4490, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
+}
+
+/// A downed program of `species` at `level`, median condition and ordinary
+/// rarity — the two axes the bench tests hold fixed, since only the bench's
+/// term is under test here.
+fn test_program(species: &str, level: u32) -> DownedProgram {
+    DownedProgram {
+        species: species.to_string(),
+        level,
+        rarity: Rarity::Ordinary,
+        boss: false,
+        condition: tuning::CONDITION_BASE,
+        carried: None,
+    }
+}
+
+fn starter_tool(game: &Game) -> ToolDef {
+    starter_tool_def(game)
+}
+
+fn give_downed_program(game: &mut Game, program: DownedProgram) {
+    let player = game.player_entity();
+    game.world
+        .get_mut::<DownedPrograms>(player)
+        .unwrap()
+        .0
+        .push(program);
+}
+
+/// What the player holds of each item a quoted yield names, before the act —
+/// so a granted row can be compared against the quote item by item rather
+/// than as a total that a compensating error could survive.
+fn held_counts(game: &Game, quoted: &[(ItemId, u32)]) -> std::collections::BTreeMap<ItemId, u32> {
+    quoted
+        .iter()
+        .map(|(item, _)| (item.clone(), held(game, item)))
+        .collect()
+}
+
+/// Stands whichever structure `Game::extraction_bench_tier` looks for, at
+/// `tier` (`None` for a structure that has never been upgraded, which is
+/// what `build_structure` leaves behind — see `best_structure_tier`'s doc
+/// on why a missing `StructureTier` reads as tier 1).
+fn build_program_bench(game: &mut Game, tier: Option<u32>) {
+    let bench = game
+        .world
+        .resource::<StructureDb>()
+        .all()
+        .find(|def| def.extracts_programs)
+        .map(|def| def.id.clone())
+        .expect("some shipped structure extracts programs");
+    let entity = spawn_structure_at(game, &bench, 30, 30);
+    if let Some(t) = tier {
+        game.world.entity_mut(entity).insert(StructureTier(t));
+    }
+}
+
+/// The whole of decision 2's first half: a Compiler that has never been
+/// upgraded is worth nothing to a yield. Without this the fresh-bench case
+/// silently pays `TOOL_TIER_SCALE_STEP`'s full step, which on the shipped
+/// `0.5` is +50% of the entire material economy for a structure most bases
+/// already have.
+#[test]
+fn a_fresh_bench_does_not_change_a_yield() {
+    let mut game = new_test_game();
+    let program = test_program("scrapper", 5);
+    let tool = starter_tool(&game);
+    let before = game.extraction_yield(&program, &tool);
+
+    build_program_bench(&mut game, None);
+
+    assert_eq!(game.extraction_bench_tier(), 1, "the bench is standing");
+    assert_eq!(
+        game.extraction_yield(&program, &tool),
+        before,
+        "tier 1 is the identity — only upgrades sell yield"
+    );
+}
+
+#[test]
+fn an_upgraded_bench_raises_a_yield_by_the_shared_tier_curve() {
+    let mut game = new_test_game();
+    let program = test_program("scrapper", 5);
+    let tool = starter_tool(&game);
+    let before: u32 = game
+        .extraction_yield(&program, &tool)
+        .iter()
+        .map(|(_, qty)| qty)
+        .sum();
+
+    build_program_bench(&mut game, Some(5));
+
+    let after: u32 = game
+        .extraction_yield(&program, &tool)
+        .iter()
+        .map(|(_, qty)| qty)
+        .sum();
+    assert!(
+        after > before,
+        "tier 5 must pay more than no bench at all: {after} vs {before}"
+    );
+}
+
+/// Decision 3: the tier is read inside `extraction_yield`, so the figure
+/// the screen quotes through `extraction_options` and the figure
+/// `extract_program` grants move together. A parameter is how those two
+/// come apart.
+#[test]
+fn the_previewed_yield_tracks_the_bench_tier() {
+    let mut game = new_test_game();
+    give_downed_program(&mut game, test_program("scrapper", 5));
+    build_program_bench(&mut game, Some(4));
+
+    let option = game
+        .extraction_options(0)
+        .into_iter()
+        .next()
+        .expect("the starter tool");
+    let tool_id = option.tool;
+    let views::ExtractionPreview::Items(quoted) = option.preview else {
+        panic!("the starter tool must preview items");
+    };
+    let held_before = held_counts(&game, &quoted);
+
+    game.extract_program(0, &tool_id)
+        .expect("the extraction runs");
+
+    for (item, qty) in &quoted {
+        assert_eq!(
+            held(&game, item),
+            held_before.get(item).copied().unwrap_or(0) + qty,
+            "granted {item} does not match the quoted {qty}"
+        );
+    }
+}
+
+/// The screen names the bench it priced. `extraction_bench_tier` takes the
+/// best tier over *standing* flagged structures while the name used to come
+/// from the first flagged structure in the catalogue, standing or not — one
+/// flagged structure ships, so the two agreed by luck rather than by
+/// construction, and a mod's second bench would have had the player looking
+/// for a Compiler they never built.
+///
+/// The fixture bench is named to sort last within its category, so the
+/// catalogue-order answer and the standing-structure answer are different
+/// strings rather than the same one twice.
+#[test]
+fn the_bench_a_screen_names_is_the_one_that_supplied_the_tier() {
+    let mut game = new_test_game();
+    let shipped = game
+        .world
+        .resource::<StructureDb>()
+        .all()
+        .find(|def| def.extracts_programs)
+        .cloned()
+        .expect("some shipped structure extracts programs");
+    let mut fixture = shipped.clone();
+    fixture.id = "zzz_bench_fixture".to_string();
+    fixture.name = "Zzz Bench Fixture".to_string();
+    game.world.resource_mut::<StructureDb>().insert(fixture);
+
+    // Only the fixture stands. The shipped bench is in the catalogue and
+    // nowhere on the map, which is exactly the case a catalogue lookup
+    // cannot tell apart.
+    let entity = spawn_structure_at(&mut game, "zzz_bench_fixture", 30, 30);
+    game.world.entity_mut(entity).insert(StructureTier(3));
+
+    let bench = game.extraction_bench().expect("a bench stands");
+    assert_eq!(bench.tier, 3, "the tier comes off the standing structure");
+    assert_eq!(
+        bench.name, "Zzz Bench Fixture",
+        "the name must come off the structure that supplied the tier, not \
+         the first flagged file in the catalogue"
+    );
+}
+
+/// The tick half of the bench, `GameClock` being this build's tick counter —
+/// `tests::wielded`'s own idiom for measuring what an act actually spends.
+fn ticks_elapsed(game: &Game) -> u64 {
+    game.world.resource::<crate::resources::GameClock>().tick
+}
+
+#[test]
+fn a_standing_bench_makes_an_extraction_faster() {
+    let mut game = new_test_game();
+    let tool = starter_tool(&game);
+    let bare = game.extraction_ticks(&tool);
+    assert_eq!(bare, tool.ticks, "no bench is the tool's own figure");
+
+    build_program_bench(&mut game, None);
+
+    assert!(
+        game.extraction_ticks(&tool) < bare,
+        "a fresh bench must already be worth time: {} vs {bare}",
+        game.extraction_ticks(&tool)
+    );
+}
+
+#[test]
+fn an_upgraded_bench_is_faster_still_and_never_free() {
+    let mut game = new_test_game();
+    let tool = starter_tool(&game);
+    build_program_bench(&mut game, Some(1));
+    let tier_one = game.extraction_ticks(&tool);
+    build_program_bench(&mut game, Some(5));
+    let tier_five = game.extraction_ticks(&tool);
+
+    assert!(tier_five < tier_one, "{tier_five} vs {tier_one}");
+    assert!(tier_five >= 1, "an extraction never costs zero time");
+}
+
+/// The tick cost is what the act actually spends, not just what a number
+/// says. Without this the formula could be right and unwired.
+#[test]
+fn the_act_spends_the_bench_reduced_tick_cost() {
+    let mut game = new_test_game();
+    give_downed_program(&mut game, test_program("scrapper", 5));
+    build_program_bench(&mut game, Some(5));
+    let tool = starter_tool(&game);
+    let expected = game.extraction_ticks(&tool);
+    let before = ticks_elapsed(&game);
+
+    game.extract_program(0, &tool.id)
+        .expect("the extraction runs");
+
+    assert_eq!(ticks_elapsed(&game) - before, expected);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: the routine branch — a `Routines` tool taking a routine out of a
+// downed program, sharing `Game::take_routine` with the tamed-program door.
+// See the phase-3 plan's Task 3.
+// ---------------------------------------------------------------------------
+
+/// The draw's fixture: one fresh run per seed, since `GameRng` is shared and
+/// a second extraction in the same run would sample a stream the first one
+/// already moved.
+fn test_game_with_seed(seed: u32) -> Game {
+    Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
+}
+
+/// Installs the shipped `Routines` tool, found by its category rather than
+/// by its id — `build_program_bench`'s rule, so renaming the file moves no
+/// test. Straight into `components::Tools`, past the slot and carrier gates
+/// `install_tool` enforces: those have their own tests, and what is under
+/// test here is the branch the tool takes once it is in hand.
+fn install_routine_tool(game: &mut Game) {
+    let id = game
+        .world
+        .resource::<ToolDb>()
+        .all()
+        .find(|def| def.category == ToolCategory::Routines)
+        .map(|def| def.id.clone())
+        .expect("some shipped tool reads routines");
+    let player = game.player_entity();
+    game.world.get_mut::<Tools>(player).unwrap().0.push(id);
+}
+
+/// The installed `Routines` tool, found by its category — the
+/// `build_program_bench` rule again.
+fn routine_tool_id(game: &Game) -> ToolId {
+    game.installed_tools()
+        .into_iter()
+        .find(|def| def.category == ToolCategory::Routines)
+        .map(|def| def.id)
+        .expect("a Routines tool is installed")
+}
+
+/// A species whose whole kit is one exclusive routine, minted here because no
+/// shipped species declares one — the exclusive pool is authored to reach the
+/// player as an already-written disk off a boss
+/// (`tests::exclusive_routines`), so the downed-program door has no shipped
+/// case to fire on. A one-entry kit also makes the draw certain, which is
+/// what lets the disk count be asserted at all.
+fn species_declaring_an_exclusive_routine(game: &mut Game) -> (String, String) {
+    let ability = game
+        .world
+        .resource::<AbilityDb>()
+        .exclusive_pool()
+        .first()
+        .map(|def| def.id.clone())
+        .expect("the shipped exclusive pool is empty");
+    let mut def = game
+        .world
+        .resource::<SpeciesDb>()
+        .get("scrapper")
+        .expect("the scrapper ships")
+        .clone();
+    def.id = "exclusive_kit_fixture".to_string();
+    def.abilities = vec![crate::species::SpeciesAbility {
+        id: ability.clone(),
+        level: 1,
+    }];
+    let species = def.id.clone();
+    game.world.resource_mut::<SpeciesDb>().insert(def);
+    (species, ability)
+}
+
+/// The pool is the species' own kit at the program's level, minus what the
+/// player already knows. A level gate that did not apply would teach a
+/// level-30 routine off a level-2 kill.
+///
+/// Equality at every rung, not a subset relation between two levels: a
+/// subset claim holds just as well with no gate at all, since the pool a
+/// missing gate produces is the same at every level. The expected rows come
+/// off `SpeciesDb` rather than being written out here, so re-levelling the
+/// scrapper's kit moves the test with it — the fixture premise below is the
+/// only thing that would then need looking at.
+#[test]
+fn the_routine_pool_is_the_species_kit_at_that_level() {
+    let game = new_test_game();
+    let kit = game
+        .world
+        .resource::<SpeciesDb>()
+        .get("scrapper")
+        .expect("the scrapper ships")
+        .abilities
+        .clone();
+    let top = kit
+        .iter()
+        .map(|declared| declared.level)
+        .max()
+        .expect("the scrapper declares a routine");
+    assert!(
+        kit.iter().all(|declared| declared.level > 1),
+        "fixture premise: nothing in the kit is declared at level 1, so a \
+         level-1 program's pool is the empty case a missing gate cannot \
+         produce — {kit:?}"
+    );
+
+    // One rung past the top, so the last entry's own boundary is walked
+    // from both sides rather than only from below.
+    for level in 1..=top + 1 {
+        let expected: Vec<crate::abilities::AbilityId> = kit
+            .iter()
+            .filter(|declared| declared.level <= level)
+            .map(|declared| declared.id.clone())
+            .collect();
+        assert_eq!(
+            game.routine_candidates(&test_program("scrapper", level)),
+            expected,
+            "the level {level} pool is not the kit at that level"
+        );
+    }
+}
+
+/// A carried routine heads the pool, so
+/// `ROUTINE_TOOL_FIRST_UNKNOWN_WEIGHT` — which lands on the head — favours
+/// the thing that made this individual worth killing over the kit every one
+/// of its kind hands out. It sits outside the level gate on purpose: no
+/// level of its species declares it.
+#[test]
+fn a_carried_routine_heads_the_pool_and_never_doubles_the_kit() {
+    let game = new_test_game();
+    let mut program = test_program("scrapper", 30);
+    let kit = game.routine_candidates(&program);
+    assert!(!kit.is_empty(), "fixture premise: the kit offers something");
+    let prize = game
+        .world
+        .resource::<AbilityDb>()
+        .wild_pool()
+        .into_iter()
+        .map(|(def, _)| def.id.clone())
+        .find(|id| !kit.contains(id))
+        .expect("some wild-pool routine is outside the scrapper's own kit");
+
+    program.carried = Some(prize.clone());
+    let pool = game.routine_candidates(&program);
+
+    assert_eq!(pool.first(), Some(&prize), "the prize must head the pool");
+    assert_eq!(
+        &pool[1..],
+        kit.as_slice(),
+        "the kit must follow it, in its own order and unchanged"
+    );
+
+    // A carrier running something its own kit declares anyway is one row,
+    // not two — the dedupe `carried_routine` leans on when it declines to
+    // store a kit routine in the first place.
+    program.carried = Some(kit[0].clone());
+    assert_eq!(
+        game.routine_candidates(&program),
+        kit,
+        "a carried kit routine must not appear twice"
+    );
+}
+
+#[test]
+fn a_routine_already_known_leaves_the_pool() {
+    let mut game = new_test_game();
+    let program = test_program("scrapper", 30);
+    let first = game
+        .routine_candidates(&program)
+        .first()
+        .cloned()
+        .expect("the scrapper declares a routine");
+    game.world
+        .resource_mut::<KnownRoutines>()
+        .0
+        .insert(first.clone());
+
+    assert!(
+        !game.routine_candidates(&program).contains(&first),
+        "a known routine is still being offered"
+    );
+}
+
+/// The refusal, asserted the way every other refusal in this feature is:
+/// nothing spent. A program consumed for a routine the player already had is
+/// the exact waste `extract_routine`'s own "already known" check exists to
+/// prevent.
+#[test]
+fn a_routine_tool_with_nothing_left_to_teach_refuses_and_spends_nothing() {
+    let mut game = new_test_game();
+    let program = test_program("scrapper", 30);
+    for id in game.routine_candidates(&program) {
+        game.world.resource_mut::<KnownRoutines>().0.insert(id);
+    }
+    give_downed_program(&mut game, program);
+    install_routine_tool(&mut game);
+    let tool = routine_tool_id(&game);
+    let ticks_before = ticks_elapsed(&game);
+
+    let refusal = game.extract_program(0, &tool);
+
+    assert!(refusal.is_err(), "it should have refused");
+    assert_eq!(game.downed_program_rows().len(), 1, "the program was spent");
+    assert_eq!(ticks_elapsed(&game), ticks_before, "time was spent");
+}
+
+#[test]
+fn a_routine_tool_teaches_a_routine_and_consumes_the_program() {
+    let mut game = new_test_game();
+    let program = test_program("scrapper", 30);
+    let pool = game.routine_candidates(&program);
+    give_downed_program(&mut game, program);
+    install_routine_tool(&mut game);
+    let tool = routine_tool_id(&game);
+
+    game.extract_program(0, &tool).expect("the extraction runs");
+
+    assert!(
+        game.downed_program_rows().is_empty(),
+        "the program survived"
+    );
+    assert!(
+        pool.iter().any(|id| game.knows_routine(id)),
+        "nothing from the pool was learned"
+    );
+}
+
+/// The invariant the whole exclusive pool rests on, held the only way this
+/// door can hold it: an exclusive routine is never in a downed program's
+/// pool at all.
+///
+/// The tamed door conserves copies because `install_disk` spent a disk to
+/// put the routine on that program, so popping one back is a return. This
+/// pool is derived from `SpeciesDef::abilities` — nothing was spent — so
+/// letting it through would press a fresh disk per kill, and two downed
+/// programs of one species would end the run with two copies of something
+/// there is meant to be one of.
+#[test]
+fn an_exclusive_routine_is_never_in_a_downed_programs_pool() {
+    let mut game = new_test_game();
+    let (species, ability) = species_declaring_an_exclusive_routine(&mut game);
+    let program = test_program(&species, 30);
+
+    assert!(
+        !game.routine_candidates(&program).contains(&ability),
+        "an exclusive routine is being offered off a downed program"
+    );
+
+    // And the door refuses rather than finding something else to hand over:
+    // the fixture's whole kit is that one exclusive, so an empty pool is the
+    // only honest answer and no disk may exist afterwards.
+    give_downed_program(&mut game, program);
+    install_routine_tool(&mut game);
+    let tool = routine_tool_id(&game);
+
+    let refusal = game.extract_program(0, &tool);
+
+    assert!(refusal.is_err(), "it should have refused");
+    assert_eq!(game.downed_program_rows().len(), 1, "the program was spent");
+    assert!(!game.knows_routine(&ability), "an exclusive was learned");
+    assert_eq!(
+        held(&game, &ItemId::etched(&ability)),
+        0,
+        "the reader pressed a disk out of nothing"
+    );
+}
+
+/// The first entry is favoured, not guaranteed — decision 4. Run the draw
+/// enough times to see both outcomes; a deterministic pick would fail this
+/// and a uniform one would fail the skew assertion.
+///
+/// **The bar has to clear a uniform draw, not merely a hostile one.** Over
+/// a two-candidate pool — every shipped species declares at most two
+/// routines — a uniform draw already splits ~100/100 across these 200
+/// seeds, so "the favoured one won more than a third of the draws" is true
+/// with no weight at all. `ROUTINE_TOOL_FIRST_UNKNOWN_WEIGHT = 3` splits
+/// 75/25, about 150/50 here; the ratio bar below sits between the two so
+/// that dropping the weight to 1 fails it.
+#[test]
+fn the_draw_favours_the_first_candidate_without_forcing_it() {
+    let mut counts: std::collections::BTreeMap<String, u32> = Default::default();
+    let mut first_id = None;
+    for seed in 0..200u32 {
+        let mut game = test_game_with_seed(seed);
+        let program = test_program("scrapper", 30);
+        let pool = game.routine_candidates(&program);
+        assert!(
+            pool.len() >= 2,
+            "fixture premise: seed {seed} leaves nothing to skew between — {pool:?}"
+        );
+        first_id.get_or_insert(pool[0].clone());
+        give_downed_program(&mut game, program);
+        install_routine_tool(&mut game);
+        let tool = routine_tool_id(&game);
+        game.extract_program(0, &tool).expect("the extraction runs");
+        for id in pool {
+            if game.knows_routine(&id) || held(&game, &ItemId::etched(&id)) > 0 {
+                *counts.entry(id.to_string()).or_default() += 1;
+            }
+        }
+    }
+    let first = first_id.expect("a pool");
+    let favoured = counts.get(first.as_str()).copied().unwrap_or(0);
+    let rest: u32 = counts
+        .iter()
+        .filter(|(id, _)| id.as_str() != first.as_str())
+        .map(|(_, n)| n)
+        .sum();
+    assert!(
+        favoured > 0 && rest > 0,
+        "the draw is deterministic: {counts:?}"
+    );
+    // 1.75x: midway in ratio between the shipped weight's 3x and a uniform
+    // draw's 1x, so both a weakened weight and a strengthened one are still
+    // several standard deviations clear of it.
+    assert!(
+        favoured * 4 > rest * 7,
+        "the first candidate is not favoured over a uniform draw \
+         ({favoured} vs {rest}, need {favoured} > {}): {counts:?}",
+        rest * 7 / 4
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: the picker's view — `views::ExtractionOptionView` carrying the
+// tool's name, its bench-discounted tick cost and a preview the `Routines`
+// branch can answer honestly. See the phase-3 plan's Task 5.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_routine_tools_preview_names_the_pool_it_draws_from() {
+    let mut game = new_test_game();
+    let program = test_program("scrapper", 30);
+    let pool = game.routine_candidates(&program);
+    give_downed_program(&mut game, program);
+    install_routine_tool(&mut game);
+
+    let wanted = routine_tool_id(&game);
+    let option = game
+        .extraction_options(0)
+        .into_iter()
+        .find(|o| o.tool == wanted)
+        .expect("the routine tool is installed");
+
+    match option.preview {
+        views::ExtractionPreview::Routine(names) => {
+            assert_eq!(names.len(), pool.len(), "the pool and the preview disagree")
+        }
+        other => panic!("expected a routine preview, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_previews_tick_cost_is_the_one_the_act_spends() {
+    let mut game = new_test_game();
+    give_downed_program(&mut game, test_program("scrapper", 5));
+    build_program_bench(&mut game, Some(3));
+    let option = game.extraction_options(0).remove(0);
+    let before = ticks_elapsed(&game);
+
+    game.extract_program(0, &option.tool).expect("it runs");
+
+    assert_eq!(ticks_elapsed(&game) - before, option.ticks);
+}
+
+/// The same claim for the `Routines` branch, which spends its ticks in a
+/// loop of its own. The test above draws slot 0 — always the starter tool,
+/// always the `Materials` branch — so without this the routine branch's
+/// whole tick loop can be deleted with the suite still green, and a tool the
+/// screen quotes a cost for becomes free to use.
+#[test]
+fn a_routine_extractions_tick_cost_is_the_one_the_act_spends() {
+    let mut game = new_test_game();
+    give_downed_program(&mut game, test_program("scrapper", 30));
+    build_program_bench(&mut game, Some(3));
+    install_routine_tool(&mut game);
+    let wanted = routine_tool_id(&game);
+    let option = game
+        .extraction_options(0)
+        .into_iter()
+        .find(|o| o.tool == wanted)
+        .expect("the routine tool is installed");
+    assert!(option.ticks > 0, "a quote of zero would assert nothing");
+    let before = ticks_elapsed(&game);
+
+    game.extract_program(0, &wanted).expect("it runs");
+
+    assert_eq!(ticks_elapsed(&game) - before, option.ticks);
 }

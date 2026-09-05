@@ -74,17 +74,27 @@ research, forging and installing more.
 
 A `Routines` tool has no `yields` — omit the field, or write `yields: []`;
 both parse the same way, since it defaults to empty. Running one on a
-downed program is a different act entirely: it takes the routine branch a
-later phase adds (`extract_routine`'s two paths — ordinary teaches the
-routine, exclusive pops the etched disk back out), never a weighted draw
-from an item pool.
+downed program is a different act entirely: it takes the routine branch
+(`Game::take_routine`'s two paths — ordinary teaches the routine, exclusive
+pops the etched disk back out), never a weighted draw from an item pool. A
+populated `yields` on a `Routines` file is authored content nothing will
+ever read, which is why two censuses refuse it
+(`assets.rs::every_non_routines_tool_has_a_non_empty_yield_pool` and
+`::a_routines_tool_ships_an_empty_yield_pool`).
 
-No `Routines` tool ships yet — the branch it needs doesn't exist until a
-later phase, so the census holding every other category to a non-empty
-`yields` (`assets.rs::every_non_routines_tool_has_a_non_empty_yield_pool`)
-currently walks nothing in this category and passes vacuously. That's
-correct, not a gap: the day a `Routines` file ships, the same census starts
-checking it for real.
+What it can take is not authored on the tool either. The pool is the *downed
+program's own species kit* — every ability its `../species/` file declares at
+or below the program's level, in that file's order, minus anything the player
+already knows (`Game::routine_candidates`). One is drawn from that pool at
+random, weighted so the **first** entry is favoured rather than certain
+(`tuning::ROUTINE_TOOL_FIRST_UNKNOWN_WEIGHT`): the species' declaration order
+ranks what a Reader most likely pulls out, without making it a lookup table.
+A program whose whole kit the player already knows is refused before it is
+spent, not consumed for nothing.
+
+`routine_reader.ron` ships in this category. Its `ticks` is deliberately the
+highest of any shipped tool — reading a program out is the slowest thing you
+can do to one — and, like the rest of the extraction numbers, untuned.
 
 ## The starter tool
 

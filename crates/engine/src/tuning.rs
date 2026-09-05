@@ -4292,7 +4292,7 @@ pub const CONDITION_BOSS_BONUS: u8 = 10;
 pub const FIGHT_CONDITION_WEIGHT: f32 = 0.0;
 
 /// The floor a boss's own downed program's `condition` cannot fall below —
-/// applied on top of the ordinary roll, in `Game::leave_downed_program`. A
+/// applied on top of the ordinary roll, in `Game::downed_program_for`. A
 /// boss fight ends standing over a single, stationary target, so what it
 /// leaves behind is never the ragged result an unlucky pack kill can be.
 pub const BOSS_CONDITION_FLOOR: u8 = 80;
@@ -4395,6 +4395,49 @@ pub const TOOL_BASE_UNITS: f32 = 3.0;
 /// `tier_scale(1) == 1.0` regardless of this constant's value, so the
 /// drop-neutrality test cannot see it move and it is free to set here.
 pub const TOOL_TIER_SCALE_STEP: f32 = 0.5;
+
+// How a standing extraction bench's tier enters `Game::extraction_yield`:
+// as `tier - 1` steps of `TOOL_TIER_SCALE_STEP`, not as `tier`.
+//
+// There is no constant here on purpose — this doc is the constant. A
+// freshly built bench reads as tier 1 (`Game::best_structure_tier`: a
+// structure with no `StructureTier` and one never upgraded are the same
+// thing to a player), so a `tier` term would pay `TOOL_TIER_SCALE_STEP`'s
+// full step for a structure most bases already have, which is +50% of the
+// whole material economy on the shipped `0.5`. `tier - 1` makes the
+// *upgrade* the thing that sells yield — `best_structure_tier`'s own
+// documented rule for the craft quality floor — and leaves phase 1's
+// drop-neutrality gate (fitted with no bench standing at all) unmoved.
+// The speed half, `EXTRACT_BENCH_TICK_STEP`, uses the full tier instead:
+// owning the bench is worth something, it is just worth time rather than
+// materials.
+
+/// How much each tier of a standing extraction bench divides an
+/// extraction's tick cost: `ticks / (1 + EXTRACT_BENCH_TICK_STEP * tier)`,
+/// floored at one tick. Uses the bench's **full** tier, unlike the yield
+/// term (which uses `tier - 1`) — standing the bench at all is worth time,
+/// and upgrading it is worth materials. A quotient rather than a
+/// subtraction so no tier can reach zero, and a floor of one so an
+/// extraction is never a free action: `Game::extract_program` ticking
+/// nothing would make the store a place to stand and think in, which is
+/// what every other spend in the game refuses to be.
+///
+/// A guess, like every other number this feature ships: at `0.25` a fresh
+/// bench pays `0.8x` and a tier-5 bench `0.44x`. Nothing in the repo can
+/// check it — `balance_sim` models no loot and no time cost.
+pub const EXTRACT_BENCH_TICK_STEP: f32 = 0.25;
+
+/// Relative weight on the *first* candidate in `Game::routine_candidates`
+/// when a `Routines` tool draws — every other candidate weighs 1. The
+/// species' own declaration order is the ranking, so the earliest routine it
+/// has never taught the player is the likely outcome without being the
+/// certain one. At `3` against a two-candidate pool the first wins three
+/// draws in four.
+///
+/// A guess. Deterministic (weight infinity) would make a `Routines` tool a
+/// lookup table the player memorises; uniform would make the kit's own
+/// ordering mean nothing.
+pub const ROUTINE_TOOL_FIRST_UNKNOWN_WEIGHT: u32 = 3;
 
 /// Extra units of a program's `rich_in` item (or its `work_resource`
 /// fallback, `Game::rich_in`) that `extraction_yield` adds on top of the

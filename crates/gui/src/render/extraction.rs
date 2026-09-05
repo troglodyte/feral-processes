@@ -10,6 +10,7 @@
 
 use super::popup::*;
 use super::*;
+use feral_processes_engine::views::ExtractionPreview;
 
 pub(super) fn draw_downed_programs(
     game: &Game,
@@ -81,44 +82,57 @@ fn draw_downed_program_list(
     );
 }
 
-/// Page two: the program named by `index`, and every installed tool's own
-/// preview yield for it — `Game::extraction_options`' order and figures,
-/// never re-derived here. `Game::installed_tools` supplies the tool's
-/// display name, which `extraction_options` doesn't carry (it names tools
-/// by `ToolId` alone), joined by **position** rather than by looking each
-/// id back up: `extraction_options` builds its `Vec` by mapping
-/// `installed_tools()` in order (see its own doc), so the two are already
-/// the same sequence and a positional `zip` is structural where a
-/// find-by-id join would only be resting on ids happening to be unique.
+/// Page two: the program named by `index`, the bench that is working on it,
+/// and every installed tool's own preview for it —
+/// `Game::extraction_options`' order, names and figures, never re-derived
+/// here. Phase 1 zipped the option list against `installed_tools()` to reach
+/// a display name; the name rides the row now, so the renderer holds one
+/// sequence rather than two that had to stay in step.
 pub(super) fn extraction_options_rows(game: &Game, index: usize, selected: usize) -> Vec<Row> {
     let programs = game.downed_program_rows();
     let Some(program) = programs.get(index) else {
         return vec![text_row("That program is gone.")];
     };
-    let tools = game.installed_tools();
     let options = game.extraction_options(index);
+
+    // What to say about an absent bench is the renderer's to word — the
+    // engine answers `None` rather than building a "no bench" string.
+    let bench = match game.extraction_bench() {
+        Some(b) => format!(
+            "{} tier {} — faster, and richer above tier 1.",
+            b.name, b.tier
+        ),
+        None => "No extraction bench standing.".to_string(),
+    };
 
     let mut rows = vec![
         text_row(format!(
             "Extracting the level {} {} (condition {}%).",
             program.level, program.name, program.condition
         )),
+        text_row(bench),
         text_row(""),
     ];
     if options.is_empty() {
         rows.push(text_row("No tool is installed."));
     }
-    for (i, (tool, (_, yield_rows))) in tools.iter().zip(options.iter()).enumerate() {
-        let yield_text = if yield_rows.is_empty() {
-            "nothing usable".to_string()
-        } else {
-            yield_rows
+    for (i, option) in options.iter().enumerate() {
+        let outcome = match &option.preview {
+            ExtractionPreview::Items(rows) if rows.is_empty() => "nothing usable".to_string(),
+            ExtractionPreview::Items(rows) => rows
                 .iter()
                 .map(|(item, qty)| format!("{qty} {}", game.item_name(item)))
                 .collect::<Vec<_>>()
-                .join(", ")
+                .join(", "),
+            ExtractionPreview::Routine(names) => format!("a routine — {}", names.join(" / ")),
+            ExtractionPreview::NothingToLearn => "nothing left to teach".to_string(),
         };
-        let label = format!("[{}] {}: {yield_text}", menu_shortcut(i), tool.name);
+        let label = format!(
+            "[{}] {}: {outcome} ({} ticks)",
+            menu_shortcut(i),
+            option.name,
+            option.ticks
+        );
         rows.push(item_row(label, i == selected));
     }
     rows.push(text_row(""));
@@ -151,7 +165,7 @@ mod tests {
     use feral_processes_engine::DifficultyMode;
     use feral_processes_engine::items::DownedProgram;
     use feral_processes_engine::save;
-    use feral_processes_engine::tools::ToolId;
+    use feral_processes_engine::tools::{ToolDb, ToolId};
     use feral_processes_engine::tuning::{self, MAX_DOWNED_PROGRAMS, TOOL_SLOT_CAP};
 
     fn assets_dir() -> std::path::PathBuf {
@@ -165,6 +179,7 @@ mod tests {
             rarity,
             boss: true,
             condition: 100,
+            carried: None,
         }
     }
 
@@ -192,8 +207,9 @@ mod tests {
             .expect("Rarity::ALL is non-empty")
     }
 
-    /// A real `Game` holding `held`, with `tools` installed if given — through
-    /// a save/edit/load round trip, `app_holding_downed_programs`'s reason
+    /// A real `Game` holding `held`, with `tools` installed and `bench`
+    /// (a structure kind and its tier) standing if given — through a
+    /// save/edit/load round trip, `app_holding_downed_programs`'s reason
     /// (`crates/app-core/src/tests/support.rs`): the engine exposes no way to
     /// hand-place a `DownedProgram` from outside itself, and `Game::world` is
     /// private to it besides — this crate could not reach in even if it
@@ -203,7 +219,12 @@ mod tests {
     /// binary runs cases as concurrent threads, and two calls sharing a
     /// seed shared one file and raced (`scratch_path`'s own reason, in
     /// app-core's fixtures).
-    fn game_with_state(seed: u32, held: Vec<DownedProgram>, tools: Option<Vec<ToolId>>) -> Game {
+    fn game_with_state(
+        seed: u32,
+        held: Vec<DownedProgram>,
+        tools: Option<Vec<ToolId>>,
+        bench: Option<(String, u32)>,
+    ) -> Game {
         static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let assets = assets_dir();
@@ -218,6 +239,21 @@ mod tests {
         if let Some(tools) = tools {
             data.player.tools = tools;
         }
+        if let Some((kind, tier)) = bench {
+            // `extraction_bench_tier` asks only whether one is standing
+            // anywhere, so the tile it lands on is arbitrary.
+            data.structures.push(save::StructureSave {
+                kind,
+                position: (0, 0),
+                durability: None,
+                tier: Some(tier),
+                stock_input: Vec::new(),
+                stock_output: Vec::new(),
+                standing_work: false,
+                standing_guard: false,
+                power_fuel: tuning::POWER_UPKEEP_TICKS,
+            });
+        }
         save::save_to_file(&path, &data).unwrap();
         let loaded = Game::load(&path, &assets).unwrap();
         let _ = std::fs::remove_file(&path);
@@ -225,7 +261,7 @@ mod tests {
     }
 
     fn game_holding_downed_programs(seed: u32, held: Vec<DownedProgram>) -> Game {
-        game_with_state(seed, held, None)
+        game_with_state(seed, held, None, None)
     }
 
     /// The list page's worst case: `MAX_DOWNED_PROGRAMS` rows, every one the
@@ -241,28 +277,56 @@ mod tests {
         game_holding_downed_programs(9700, held)
     }
 
-    /// The tool page's worst case: the same widest program above, run
-    /// through `TOOL_SLOT_CAP` filled slots rather than the single starter
-    /// tool a fresh run installs — spec section 6 names that cap as the
-    /// asserted constraint, so a page that only ever sees one tool never
-    /// exercises it. Only two tools ship (`salvage_clamp`, `core_tap`), so
-    /// the slots repeat rather than naming four distinct ones — the cap on
-    /// *row count* is what this fixture is for, not a fourth tool file.
+    /// Every shipped tool id, catalogue order — cycled into the slots below
+    /// rather than two ids named here, so a new tool file (the Routine
+    /// Reader was one) joins the worst case instead of being the row the
+    /// census never drew. Loaded straight off disk because `Game` exposes no
+    /// whole-catalogue accessor: `tool_rows` answers for what the player
+    /// knows, which on a fresh run is the starter alone.
+    fn every_shipped_tool_id() -> Vec<ToolId> {
+        let (db, _) = ToolDb::load_dir(&assets_dir().join("tools")).unwrap();
+        db.all().map(|def| def.id.clone()).collect()
+    }
+
+    /// The longest-named structure that improves an extraction, at the top of
+    /// its own upgrade ladder — the widest bench line the header can draw,
+    /// derived the way `widest_species_id` is. `None` if nothing ships with
+    /// the flag, which its own engine census already fails on.
+    fn widest_bench(probe: &Game) -> Option<(String, u32)> {
+        probe
+            .structure_defs()
+            .into_iter()
+            .filter(|def| def.extracts_programs)
+            .max_by_key(|def| def.name.chars().count())
+            .map(|def| {
+                let tier = def.upgrade.as_ref().map(|u| u.max_tier).unwrap_or(1);
+                (def.id, tier)
+            })
+    }
+
+    /// The tool page's worst case: the same widest program above, run through
+    /// `TOOL_SLOT_CAP` filled slots rather than the single starter tool a
+    /// fresh run installs — spec section 6 names that cap as the asserted
+    /// constraint, so a page that only ever sees one tool never exercises it.
+    /// Exactly `TOOL_SLOT_CAP` tools ship as of phase 3, so the wrap below
+    /// repeats nothing today; it is there so a removed tool file still
+    /// fills every slot rather than quietly shrinking the fixture the cap
+    /// is asserted against.
+    ///
+    /// A top-tier bench stands too, so the header line under test is the
+    /// long one — "no bench standing" is the shorter of the two, and a
+    /// census fitted against it would measure a string the screen only draws
+    /// on a fresh run.
     fn tallest_and_widest_options_game() -> Game {
         let probe = Game::new(9698, DifficultyMode::Forgiving, &assets_dir()).unwrap();
         let species = widest_species_id(&probe);
         let rarity = widest_rarity();
         let held = vec![program(&species, 999, rarity)];
-        let tools = (0..TOOL_SLOT_CAP)
-            .map(|i| {
-                ToolId(if i % 2 == 0 {
-                    tuning::STARTER_TOOL_ID.to_string()
-                } else {
-                    "core_tap".to_string()
-                })
-            })
+        let shipped = every_shipped_tool_id();
+        let tools = (0..TOOL_SLOT_CAP as usize)
+            .map(|i| shipped[i % shipped.len()].clone())
             .collect();
-        game_with_state(9702, held, Some(tools))
+        game_with_state(9702, held, Some(tools), widest_bench(&probe))
     }
 
     /// This page has no scroll (spec section 6), so its height is a layout
@@ -307,8 +371,15 @@ mod tests {
         });
     }
 
-    /// The tool page's own worst case: the widest program, so the header
-    /// line is included too, run through `TOOL_SLOT_CAP` filled slots.
+    /// The tool page's own worst case: the widest program and the widest
+    /// bench, so both header lines are included, run through
+    /// `TOOL_SLOT_CAP` filled slots.
+    ///
+    /// Verified by mutation the way the list census above was, and with the
+    /// same finding: `PopupSize::Large` at 720px holds 28 rows against this
+    /// page's 9, so a `+1` slot stays green — the fixture had to reach 40
+    /// slots (a 45-row page) before this failed, and was reverted. The cap
+    /// constant is the thing under test, not a second copy of it here.
     #[test]
     fn the_tallest_extraction_options_page_fits_its_popup_at_1280x720() {
         let game = tallest_and_widest_options_game();

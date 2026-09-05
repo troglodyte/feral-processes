@@ -3310,13 +3310,10 @@ fn every_shipped_tools_yields_resolve_to_real_items() {
 /// an empty pool on any other category is a tool that does nothing when
 /// used. See `tools::ToolCategory`'s own doc and `assets/tools/README.md`.
 ///
-/// **This passes vacuously today.** No `Routines`-category tool ships in
-/// phase 1 (the routine branch it needs is a later phase), so every shipped
-/// tool takes the asserted branch and the excluded one below checks
-/// nothing. That is correct — see the task report for how the failure
-/// branch was confirmed by hand, since a census nobody can make fail is not
-/// a census. The day a `Routines` tool ships, this starts exercising the
-/// exclusion for real.
+/// This passed vacuously through phases 1 and 2, when no `Routines` tool
+/// shipped and every tool took the asserted branch. The Routine Reader
+/// ships as of phase 3, so the exclusion is now walked for real and a
+/// `yields` pool authored onto it would be caught here.
 #[test]
 fn every_non_routines_tool_has_a_non_empty_yield_pool() {
     let game = Game::new(4103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -3525,6 +3522,39 @@ fn every_shipped_tool_can_actually_be_obtained() {
     );
 }
 
+/// The `Routines` branch is unreachable content until some shipped tool is
+/// in that category — `every_non_routines_tool_has_a_non_empty_yield_pool`
+/// only says what a `Routines` tool is *exempt* from, never that one exists.
+#[test]
+fn a_shipped_tool_reads_routines() {
+    let game = Game::new(4110, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let tools = game.world.resource::<ToolDb>();
+    assert!(
+        tools
+            .all()
+            .any(|def| def.category == ToolCategory::Routines),
+        "no shipped tool takes the routine branch"
+    );
+}
+
+/// A `Routines` tool reads no yield pool at all, so a populated one is
+/// authored content that silently never runs. Stated over the `Routines`
+/// tools alone, rather than as the exclusion arm of the every-category
+/// census above: that one fails on the *other* categories too, and a
+/// reviewer reading its failure has to work out which half broke.
+#[test]
+fn a_routines_tool_ships_an_empty_yield_pool() {
+    let game = Game::new(4111, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let tools = game.world.resource::<ToolDb>();
+    for def in tools.all().filter(|d| d.category == ToolCategory::Routines) {
+        assert!(
+            def.yields.is_empty(),
+            "{} is a Routines tool with a yield pool that will never be read",
+            def.id
+        );
+    }
+}
+
 /// Every shipped species' `Game::rich_in` — authored, or `work_resource`
 /// fallen back to — names a real, loaded item. Spec section 7's own census:
 /// no shipped species authors `rich_in` yet (decision 5 is that none had
@@ -3616,4 +3646,21 @@ fn every_settlement_shape_is_authored_somewhere() {
              nothing"
         );
     }
+}
+
+/// A shipped structure must actually carry the flag, or every bench term
+/// in `extraction_yield` is unreachable and the phase ships as a no-op.
+#[test]
+fn some_shipped_structure_extracts_programs() {
+    let (db, warnings) =
+        crate::structures::StructureDb::load_dir(&test_assets_dir().join("structures"))
+            .expect("the shipped structures load");
+    assert!(
+        warnings.is_empty(),
+        "shipped structures warned: {warnings:?}"
+    );
+    assert!(
+        db.all().any(|def| def.extracts_programs),
+        "no shipped structure sets extracts_programs"
+    );
 }

@@ -131,3 +131,17 @@
   irrelevant. **Predation is also the only thing in `run_routes` that may
   draw `GameRng`**, asserted by a test, or a route in flight would shift the
   seeded stream for every other test in the suite.
+
+- **A sortie banks its downed programs and delivers them in `return_sortie`;
+  an off-screen battle never writes the player's store.** A kill six screens
+  away appearing in the pack the instant it lands makes the trip telemetry
+  rather than travel, and lets the store's cap be consumed by something the
+  player was not present for. The delivery loop **stops at the first
+  refusal** rather than trying each remaining program: once the store is
+  full it stays full, and `message_history` condenses repeats, so a test
+  counting log entries cannot tell "said once" from "said eight times" — the
+  `break` is what holds it. The roll is shared, not copied:
+  `leave_downed_program` split into `downed_program_for` (the roll) and
+  `push_downed_program` (the store), and the sortie calls the former,
+  because a drifted second copy is exactly the trap `Perk::Teardown` fell
+  into on the old material-drop path.

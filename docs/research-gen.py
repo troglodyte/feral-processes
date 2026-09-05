@@ -12,14 +12,14 @@
 # must stay monotone in `req` -- a node gated below its own prerequisite is a
 # gate that can never fire. See assets/research/README.md.
 N = [
- # id                    name                  zone cost requires             unlocks (kind, [ids])
+ # id                    name                  zone cost requires             unlocks (kind, [ids])                                        tools
  ("automation",          "Automation",           0,   8, [],                  ("structures", ["compiler"])),
  ("commerce",            "Isometric Commerce",   0,  14, [],                  ("structures", ["market"])),
  ("power_grid",          "Power Grid",           0,  10, [],                  ("structures", ["power_conduit"])),
  ("armor_bench",         "Reactive Armor",       0,  24, ["automation"],      ("structures", ["armory"])),
  ("weapon_bench",        "Weapon Fabrication",   0,  24, ["automation"],      ("structures", ["fabricator"])),
  ("routine_fabrication", "Routine Fabrication",  0,  26, ["automation"],      ("structures", ["log_scraper", "lathe", "transcriber", "disk_press"])),
- ("program_refactoring", "Program Refactoring",  2,  75, ["automation"],      ("structures", ["annealing_node", "refactor_bench"])),
+ ("program_refactoring", "Program Refactoring",  2,  75, ["automation"],      ("structures", ["annealing_node", "refactor_bench"]), ["component_stripper"]),
  ("fortification",       "Fortification",        0,  18, ["power_grid"],      ("structures", ["shield", "patch_node"])),
  ("self_exec",           "Self-Execution",       0,  14, ["routine_fabrication"], ("abilities", ["priority_boost"])),
  ("field_ops",           "Field Operations",     0,  20, ["self_exec"],       ("abilities", ["repair_loop", "trickle_charge"])),
@@ -27,18 +27,25 @@ N = [
  ("runtime_patching",    "Runtime Patching",     2,  60, ["self_exec"],       ("abilities", ["hot_patch"])),
  ("adaptive_plating",    "Adaptive Plating",     2,  70, ["field_ops"],       ("abilities", ["hardened_shell", "overclock", "ablative_layer"])),
  ("mesh_plating",        "Mesh Plating",         3, 120, ["adaptive_plating"], ("abilities", ["hardened_shell_party"])),
- ("deep_analysis",       "Deep Analysis",        3, 130, ["field_ops"],       ("abilities", ["deep_scan", "trace_analysis", "stealth_protocol", "salvage_routine"])),
+ ("deep_analysis",       "Deep Analysis",        3, 130, ["field_ops"],       ("abilities", ["deep_scan", "trace_analysis", "stealth_protocol", "salvage_routine"]), ["core_tap"]),
  ("address_translation", "Address Translation",  3, 140, ["deep_analysis"],   ("abilities", ["buffer_overrun", "wild_jump"])),
  ("kernel_privileges",   "Kernel Privileges",    3, 135, ["runtime_patching"], ("abilities", ["null_route"])),
  ("firewall",            "Firewall Plating",     2,  45, ["armor_bench"],     ("recipe", ["firewall_plating", "armory", "6"])),
  ("ablative",            "Ablative Lattice",     3, 110, ["firewall"],        ("recipe", ["ablative_plating", "armory", "12"])),
  ("neural_amp",          "Neural Interfacing",   2,  55, ["weapon_bench"],    ("recipe", ["neural_amplifier", "fabricator", "6"])),
- ("cortex",              "Cortex Hacking",       3, 125, ["neural_amp"],      ("recipe", ["cortex_hack", "fabricator", "12"])),
+ ("cortex",              "Cortex Hacking",       3, 125, ["neural_amp"],      ("recipe", ["cortex_hack", "fabricator", "12"]), ["routine_reader"]),
  ("overclock",           "Overclock Cores",      2,  45, ["weapon_bench"],    ("recipe", ["overclock_core", "fabricator", "6"])),
  ("monofilament",        "Monofilament Edge",    3, 110, ["overclock"],       ("recipe", ["monofilament_whip", "fabricator", "12"])),
 ]
-K = "id name zone cost req unlocks".split()
+# `tools` last so a 6-element tuple (a node granting none) simply stops
+# short — `zip` truncates, and the `setdefault` below fills it in.
+K = "id name zone cost req unlocks tools".split()
+# A node may grant a tool *as well as* its main payload, so `tools` is an
+# optional 7th element rather than a second `kind` — three nodes carry one
+# and every other tuple stays the length it was.
 R = [dict(zip(K, r)) for r in N]
+for _r in R:
+    _r.setdefault("tools", [])
 BY = {r["id"]: r for r in R}
 
 # Every recipe node in the tree is priced in this one item, which is what
@@ -122,8 +129,13 @@ def unlock_text(r):
     kind, ids = r["unlocks"]
     if kind == "recipe":
         item, bench, price = ids
-        return f'recipe `{item}` at the {bench} — {price} `{RECIPE_CURRENCY}`'
-    return ", ".join(f"`{i}`" for i in ids)
+        main = f'recipe `{item}` at the {bench} — {price} `{RECIPE_CURRENCY}`'
+    else:
+        main = ", ".join(f"`{i}`" for i in ids)
+    # Appended rather than folded into `kind`: a node's tool grant sits
+    # beside its main payload, and three of them have both.
+    tools = "; ".join(f"tool `{t}`" for t in r["tools"])
+    return f"{main}; {tools}" if tools else main
 
 
 counts = {k: sum(1 for r in R if r["unlocks"][0] == k) for k in ("structures", "abilities", "recipe")}

@@ -491,6 +491,15 @@ pub struct StructureDef {
     /// grant no extraction, exactly as before this field existed.
     #[serde(default)]
     pub extracts_routines: bool,
+    /// If true, owning one of these anywhere makes an *extraction* better —
+    /// `Game::extract_program`, not `Game::extract_routine`. Never a gate:
+    /// spec decision 7 is that extraction works in the field, at the base
+    /// and in the Stack alike, because the starting tool is useless
+    /// otherwise. Ownership rather than proximity, `extracts_routines`'
+    /// own rule. `#[serde(default)]` so existing structure files (including
+    /// mods) improve nothing, exactly as before this field existed.
+    #[serde(default)]
+    pub extracts_programs: bool,
 }
 
 fn default_durability() -> u32 {
@@ -592,6 +601,19 @@ impl StructureDb {
 
     pub fn get(&self, id: &str) -> Option<&StructureDef> {
         self.structures.get(id)
+    }
+
+    /// Adds `def`, replacing any structure already under its id.
+    ///
+    /// Test-only, and deliberately so — `SpeciesDb::insert`'s reason,
+    /// verbatim: the shipped catalogue is a directory of `.ron` files and a
+    /// mod's is too, so nothing in the game builds a structure in Rust. It
+    /// exists so a test can stand a *second* structure carrying a flag only
+    /// one shipped file carries, which is the only way to tell "the one
+    /// that answered" apart from "the first one in the catalogue".
+    #[cfg(test)]
+    pub(crate) fn insert(&mut self, def: StructureDef) {
+        self.structures.insert(def.id.clone(), def);
     }
 
     /// Every loaded structure, grouped by `StructureCategory` and

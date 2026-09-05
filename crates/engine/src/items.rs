@@ -364,6 +364,27 @@ pub struct DownedProgram {
     /// `tuning::CONDITION_BASE` and its neighbours for the roll, which is a
     /// later phase's to call; this field only carries the result.
     pub condition: u8,
+    /// The routine *this individual* was running, when it was running one
+    /// its species does not hand out anyway — `Game::roll_wild_routine`'s
+    /// prize, read off the victim's `Routines` at the kill and stored,
+    /// because the component despawns with it and no derivation from species
+    /// and level could recover it. `Game::routine_candidates` puts it at the
+    /// head of the pool, which is what makes a carrier worth reading out.
+    ///
+    /// **The one stored thing on this record that isn't derivable**, and the
+    /// exception is what a carrier *is*: everything else here is a fact
+    /// about the species and the kill, this is a fact about the one program.
+    ///
+    /// Never an exclusive routine. Every shipped exclusive leaves
+    /// `wild_weight` unset, so `AbilityDb::wild_pool` cannot draw one and
+    /// nothing wild can be carrying one; and `routine_candidates` filters
+    /// exclusives out of the whole pool regardless, head included, so a mod
+    /// authoring `wild_weight` on an exclusive does not reopen that door.
+    ///
+    /// `#[serde(default)]`: additive, so an older save loads with `None` and
+    /// `SAVE_FORMAT_VERSION` does not move.
+    #[serde(default)]
+    pub carried: Option<crate::abilities::AbilityId>,
 }
 
 impl DownedProgram {
@@ -392,8 +413,9 @@ impl DownedProgram {
 
     /// The condition roll a kill takes once, at the moment it leaves a
     /// program behind — spec section 1's formula, verbatim.
-    /// `Game::leave_downed_program` is the one caller, so a boss's own
-    /// floors (`tuning::BOSS_CONDITION_FLOOR`) apply there rather than here:
+    /// `Game::downed_program_for` is the one caller — the shared roll behind
+    /// both `leave_downed_program` and a sortie's banked kills — so a boss's
+    /// own floors (`tuning::BOSS_CONDITION_FLOOR`) apply there, not here:
     /// this function knows only what a kill's own terms are worth, not that
     /// a boss's result gets raised afterward.
     ///

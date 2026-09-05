@@ -496,6 +496,16 @@ is skipped with a warning logged in-game rather than crashing startup.
     // (`Game::has_structure`), not proximity, so a bench built anywhere on
     // the map counts. This is how the Compiler works.
     extracts_routines: true,
+
+    // Optional; can be left out entirely (defaults to false). If true,
+    // owning one of these anywhere makes extracting a *downed* program
+    // better — `Game::extract_program`, the tool-driven teardown, not
+    // `extracts_routines`' tamed-program door. Never a gate: standing one
+    // makes an extraction faster, and every tier above the first raises
+    // what it yields, but a player with no bench at all can still extract.
+    // Ownership, not proximity, the same rule as above. This is how the
+    // Compiler works.
+    extracts_programs: true,
 )
 ```
 

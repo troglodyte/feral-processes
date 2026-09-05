@@ -147,6 +147,30 @@ Each unit draws one item from `yields` by weight. Then `rich_in` adds
 `SpeciesDef::rich_in: Option<ItemId>` is `#[serde(default)]` and **falls back
 to `work_resource`** when absent, so no shipped species file changes.
 
+**Amended 2026-09-05, when phase 3 built it.** Two things above are not what
+shipped, and both are deliberate:
+
+1. **There is no `structure_tier` parameter.** `Game::extraction_yield`
+   takes `(&DownedProgram, &ToolDef)` and reads
+   `Game::extraction_bench_tier()` itself. A parameter is a thing a caller
+   can get wrong, and this function has two callers — the screen's preview
+   and the act — whose whole reason for sharing one derivation is that a
+   quoted figure and a granted figure must not be able to differ. The
+   argument would be the crack they differed through. `Game::extraction_ticks`
+   reads the tier the same way, for the same reason.
+2. **The bench enters the yield as `tier - 1`, not `tier`.**
+   `Game::best_structure_tier` reads a never-upgraded structure as tier 1,
+   so `tier_scale(tool.tier + structure_tier)` as written would pay
+   `TOOL_TIER_SCALE_STEP`'s full step — +50% of the material economy on the
+   shipped `0.5` — for merely having built a Compiler. The upgrade is what
+   sells yield, matching the rule the craft quality floor already takes off
+   the same accessor. The *speed* half (`tuning::EXTRACT_BENCH_TICK_STEP`,
+   a divisor floored at one tick) does use the full tier, so standing the
+   bench is worth time and upgrading it is worth materials.
+
+A phase 5 that re-derives the spec's literal formula would silently undo
+both. The shipped shape is the one in `docs/seams.md`.
+
 ## 4. The act
 
 ```
@@ -169,7 +193,30 @@ its `StructureTier` as `structure_tier`. Reuses `can_extract_routines`'
 `routine_is_exclusive` reads `AbilityDef::exclusive` alone
 (`routines.rs:188`), so nothing about the one-copy invariant rests on the
 program having been tamed. The tamed-program path stays; both call one shared
-inner function, not two copies.
+inner function, not two copies — shipped 2026-09-05 as `Game::take_routine`,
+which owns the effect alone. Each door keeps its own refusals: the tamed one
+requires an extraction bench and checks ownership, the tool one requires
+neither, because decision 7 forbids the structure being a gate.
+
+**Amended 2026-09-05: "verified safe" above is wrong, and the shipped code
+does something else.** The one-copy invariant never rested on
+`routine_is_exclusive`'s inputs. It rests on a disk having been *consumed*:
+`install_disk` spends one to put an exclusive routine on a tamed program, so
+`take_routine` popping it back out is a return, and the run's copy count does
+not move. Nothing is spent to put a routine in a *downed* program's pool —
+`Game::routine_candidates` derives it from `SpeciesDef::abilities` — so two
+kills of one species would have pressed two disks of something the exclusive
+pool exists to keep at one. That no shipped species kit names an exclusive
+routine made it unreachable, not safe; `nothing_a_new_game_ships_with_
+teaches_an_exclusive_routine` is a census of today's files, not a
+construction.
+
+What shipped: `routine_candidates` **excludes exclusive routines outright**,
+so the Reader teaches knowledge and never mints a disk, and the downed door
+cannot reach `take_routine`'s exclusive branch at all. `take_routine` keeps
+both branches and stays shared — the tamed door still needs the exclusive
+one. `an_exclusive_routine_is_never_in_a_downed_programs_pool` replaced the
+test that asserted the old reading.
 
 ## 5. Sources
 
@@ -232,8 +279,10 @@ Engine tests:
   equals the granted one
 - every refusal path spends nothing — asserted **per refusal**, since one
   test over one path passes against the others
-- an exclusive routine extracted from a downed program leaves exactly one
-  copy in the run
+- an exclusive routine is never offered off a downed program at all —
+  **amended 2026-09-05**, see section 4; this read "extracted from a downed
+  program leaves exactly one copy in the run", which the shipped exclusion
+  makes unreachable rather than true
 - `FIGHT_CONDITION_WEIGHT = 0.0` makes condition independent of the killing
   blow
 - a save round-trip preserves a store of programs and a tool loadout (a RON

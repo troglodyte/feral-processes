@@ -1907,6 +1907,76 @@ fn a_kill_leaves_exactly_one_downed_program_carrying_species_level_and_rarity() 
     );
 }
 
+/// A carrier's prize rides home on its downed program. `roll_wild_routine`
+/// is the only thing that puts a routine on a wild program, the roll happens
+/// once at spawn, and the `Routines` component goes away with the body — so
+/// unless the kill reads it, what made that individual worth killing is gone
+/// before any tool can be pointed at it.
+///
+/// Only what the species does *not* declare: `routine_candidates` derives
+/// the rest of the pool from the kit and dedupes, so a kit routine stored
+/// here would be dropped on arrival and the field would be carrying nothing.
+#[test]
+fn a_kill_records_the_routine_its_victim_was_carrying() {
+    let mut game = Game::new(912, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|s| !s.is_boss && !s.abilities.is_empty())
+        .expect("some shipped species declares a routine");
+    // Drawn from the pool a real carrier's routine comes from, so this is
+    // the shipped case rather than an id invented here.
+    let prize = game
+        .world
+        .resource::<AbilityDb>()
+        .wild_pool()
+        .into_iter()
+        .map(|(def, _)| def.id.clone())
+        .find(|id| !species.abilities.iter().any(|declared| &declared.id == id))
+        .expect("some wild-pool routine is outside this species' own kit");
+
+    let wild = corpse_of(&mut game, &species.id);
+    game.world
+        .entity_mut(wild)
+        .insert(Routines(vec![prize.clone()]));
+
+    game.award_loot(wild);
+
+    let held = &game.world.get::<DownedPrograms>(player).unwrap().0;
+    assert_eq!(
+        held[0].carried,
+        Some(prize),
+        "the routine the victim was running must ride home on the program"
+    );
+}
+
+/// The other half: a routine the species hands out to every one of its kind
+/// is not a prize, and storing it would put a duplicate at the head of a
+/// pool the kit already supplies.
+#[test]
+fn a_kill_records_no_carrier_for_a_routine_the_species_declares() {
+    let mut game = Game::new(913, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|s| !s.is_boss && !s.abilities.is_empty())
+        .expect("some shipped species declares a routine");
+    let declared = species.abilities[0].id.clone();
+
+    let wild = corpse_of(&mut game, &species.id);
+    game.world.entity_mut(wild).insert(Routines(vec![declared]));
+
+    game.award_loot(wild);
+
+    let held = &game.world.get::<DownedPrograms>(player).unwrap().0;
+    assert_eq!(
+        held[0].carried, None,
+        "a routine the whole species declares is not one individual's prize"
+    );
+}
+
 #[test]
 fn a_boss_kills_program_is_at_or_above_both_floors() {
     let mut game = Game::new(911, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -2004,6 +2074,7 @@ fn a_full_store_refuses_the_drop_logs_and_destroys_nothing() {
         rarity: Rarity::Ordinary,
         boss: false,
         condition: 50,
+        carried: None,
     };
     game.world.get_mut::<DownedPrograms>(player).unwrap().0 =
         vec![filler.clone(); tuning::MAX_DOWNED_PROGRAMS];

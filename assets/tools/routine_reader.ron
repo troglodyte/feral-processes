@@ -1,0 +1,13 @@
+(
+    id: "routine_reader",
+    name: "Routine Reader",
+    description: "Reads a downed process for the routines it was running, and keeps one.",
+    category: Routines,
+    // No `yields`: a Routines tool reads no pool. What comes out is drawn
+    // from the program's own species kit — see `Game::routine_candidates`.
+    tier: 1,
+    // Longer than the material tools: reading a program out is the slowest
+    // thing you can do to one. Untuned, like every other figure here.
+    ticks: 40,
+    forge_cost: [("logic_wafer", 4), ("core_fragment", 12)],
+)

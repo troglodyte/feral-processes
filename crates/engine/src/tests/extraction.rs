@@ -1810,3 +1810,141 @@ fn tool_rows_never_exceeds_max_tool_rows_however_many_are_known() {
         "{extra} known tools (plus the starter) must be trimmed to the row bound"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Phase 3: the extraction bench — `StructureDef::extracts_programs` and what
+// its tier is worth to a yield. See the phase-3 plan's Task 1.
+// ---------------------------------------------------------------------------
+
+/// The plan's fixture game, so the phase-3 tests below all fit the same
+/// world: a fresh run on shipped assets, where no bench stands and
+/// `extraction_bench_tier` is therefore zero until one is built.
+fn new_test_game() -> Game {
+    Game::new(4490, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
+}
+
+/// A downed program of `species` at `level`, median condition and ordinary
+/// rarity — the two axes the bench tests hold fixed, since only the bench's
+/// term is under test here.
+fn test_program(species: &str, level: u32) -> DownedProgram {
+    DownedProgram {
+        species: species.to_string(),
+        level,
+        rarity: Rarity::Ordinary,
+        boss: false,
+        condition: tuning::CONDITION_BASE,
+    }
+}
+
+fn starter_tool(game: &Game) -> ToolDef {
+    starter_tool_def(game)
+}
+
+fn give_downed_program(game: &mut Game, program: DownedProgram) {
+    let player = game.player_entity();
+    game.world
+        .get_mut::<DownedPrograms>(player)
+        .unwrap()
+        .0
+        .push(program);
+}
+
+/// What the player holds of each item a quoted yield names, before the act —
+/// so a granted row can be compared against the quote item by item rather
+/// than as a total that a compensating error could survive.
+fn held_counts(game: &Game, quoted: &[(ItemId, u32)]) -> std::collections::BTreeMap<ItemId, u32> {
+    quoted
+        .iter()
+        .map(|(item, _)| (item.clone(), held(game, item)))
+        .collect()
+}
+
+/// Stands whichever structure `Game::extraction_bench_tier` looks for, at
+/// `tier` (`None` for a structure that has never been upgraded, which is
+/// what `build_structure` leaves behind — see `best_structure_tier`'s doc
+/// on why a missing `StructureTier` reads as tier 1).
+fn build_program_bench(game: &mut Game, tier: Option<u32>) {
+    let bench = game
+        .world
+        .resource::<StructureDb>()
+        .all()
+        .find(|def| def.extracts_programs)
+        .map(|def| def.id.clone())
+        .expect("some shipped structure extracts programs");
+    let entity = spawn_structure_at(game, &bench, 30, 30);
+    if let Some(t) = tier {
+        game.world.entity_mut(entity).insert(StructureTier(t));
+    }
+}
+
+/// The whole of decision 2's first half: a Compiler that has never been
+/// upgraded is worth nothing to a yield. Without this the fresh-bench case
+/// silently pays `TOOL_TIER_SCALE_STEP`'s full step, which on the shipped
+/// `0.5` is +50% of the entire material economy for a structure most bases
+/// already have.
+#[test]
+fn a_fresh_bench_does_not_change_a_yield() {
+    let mut game = new_test_game();
+    let program = test_program("scrapper", 5);
+    let tool = starter_tool(&game);
+    let before = game.extraction_yield(&program, &tool);
+
+    build_program_bench(&mut game, None);
+
+    assert_eq!(game.extraction_bench_tier(), 1, "the bench is standing");
+    assert_eq!(
+        game.extraction_yield(&program, &tool),
+        before,
+        "tier 1 is the identity — only upgrades sell yield"
+    );
+}
+
+#[test]
+fn an_upgraded_bench_raises_a_yield_by_the_shared_tier_curve() {
+    let mut game = new_test_game();
+    let program = test_program("scrapper", 5);
+    let tool = starter_tool(&game);
+    let before: u32 = game
+        .extraction_yield(&program, &tool)
+        .iter()
+        .map(|(_, qty)| qty)
+        .sum();
+
+    build_program_bench(&mut game, Some(5));
+
+    let after: u32 = game
+        .extraction_yield(&program, &tool)
+        .iter()
+        .map(|(_, qty)| qty)
+        .sum();
+    assert!(
+        after > before,
+        "tier 5 must pay more than no bench at all: {after} vs {before}"
+    );
+}
+
+/// Decision 3: the tier is read inside `extraction_yield`, so the figure
+/// the screen quotes through `extraction_options` and the figure
+/// `extract_program` grants move together. A parameter is how those two
+/// come apart.
+#[test]
+fn the_previewed_yield_tracks_the_bench_tier() {
+    let mut game = new_test_game();
+    give_downed_program(&mut game, test_program("scrapper", 5));
+    build_program_bench(&mut game, Some(4));
+
+    let previewed = game.extraction_options(0);
+    let (tool_id, quoted) = previewed.first().cloned().expect("the starter tool");
+    let held_before = held_counts(&game, &quoted);
+
+    game.extract_program(0, &tool_id)
+        .expect("the extraction runs");
+
+    for (item, qty) in &quoted {
+        assert_eq!(
+            held(&game, item),
+            held_before.get(item).copied().unwrap_or(0) + qty,
+            "granted {item} does not match the quoted {qty}"
+        );
+    }
+}

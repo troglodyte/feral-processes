@@ -13,6 +13,11 @@ use crate::*;
 /// `tuning::TOOL_TIER_SCALE_STEP`. `1.0` at tier 1, which is
 /// `salvage_clamp`'s own tier, so Task 6's drop-neutrality test (fitted
 /// against the starter tool) cannot see this curve move.
+///
+/// Its argument is the tool's own tier plus the bench's term
+/// (`Game::extraction_bench_tier` minus one) — the one shared curve
+/// `tuning::TOOL_TIER_SCALE_STEP` says both axes take, rather than a
+/// second constant that could drift away from it.
 fn tier_scale(tier: u32) -> f32 {
     1.0 + tier.saturating_sub(1) as f32 * tuning::TOOL_TIER_SCALE_STEP
 }
@@ -84,12 +89,41 @@ impl Game {
         def.rich_in.clone().or_else(|| def.work_resource.clone())
     }
 
+    /// The best tier of any standing structure whose
+    /// `StructureDef::extracts_programs` is set, or `0` when none stands —
+    /// never a gate (spec decision 7), only a term. Ownership rather than
+    /// proximity, `Game::can_extract_routines`' rule
+    /// (`game/routines.rs:456`) rather than a distance check.
+    pub fn extraction_bench_tier(&self) -> u32 {
+        self.world
+            .resource::<StructureDb>()
+            .all()
+            .filter(|def| def.extracts_programs)
+            .filter_map(|def| self.best_structure_tier(&def.id))
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// The bench a screen names, when one stands. `None` and no name when
+    /// none does, rather than a "no bench" string built here — what to say
+    /// about an absence is the renderer's business.
+    pub fn extraction_bench(&self) -> Option<crate::views::ExtractionBenchView> {
+        let tier = self.extraction_bench_tier();
+        if tier == 0 {
+            return None;
+        }
+        Some(crate::views::ExtractionBenchView {
+            name: self.bench_name(|def| def.extracts_programs),
+            tier,
+        })
+    }
+
     /// What extracting `program` with `tool` grants — the one derivation,
     /// called by `extract_program` (below) and by the screen's preview (a
     /// later task) alike, so a quoted figure and a granted one cannot
     /// differ.
     ///
-    /// `units = round(TOOL_BASE_UNITS * tier_scale(tool.tier) *
+    /// `units = round(TOOL_BASE_UNITS * tier_scale(tool.tier + bench) *
     /// program.grade())`, split across `tool.yields` by weight
     /// (`apportion`), plus `Perk::Teardown`'s `salvage_bonus` added to the
     /// unit count as a flat addend — never a second `GameRng` draw, the
@@ -102,12 +136,18 @@ impl Game {
     /// (`scrapper` extracted with `salvage_clamp`, both naming
     /// `core_fragment`, is exactly this case).
     ///
-    /// No `structure_tier` parameter: the spec's signature carries one, but
-    /// the structure that would supply it (`StructureDef::
-    /// extracts_programs`) is phase 3 — a parameter every phase-1 caller
-    /// passed a hardcoded zero would be a lie about what this depends on.
+    /// Still no `structure_tier` parameter, now that phase 3 has authored
+    /// the structure that would supply one: the tier is read inside, from
+    /// `Game::extraction_bench_tier`, because a parameter with exactly one
+    /// correct value is how the screen ends up quoting a tier-0 figure
+    /// while the act grants a tier-3 one — the divergence this function
+    /// being the one derivation exists to prevent.
     pub fn extraction_yield(&self, program: &DownedProgram, tool: &ToolDef) -> Vec<(ItemId, u32)> {
-        let scale = tier_scale(tool.tier);
+        // The bench's term is `tier - 1`, not `tier` — a bench that has
+        // never been upgraded pays nothing, and the upgrade is what sells
+        // yield. See `tuning::TOOL_TIER_SCALE_STEP`'s neighbouring doc.
+        let bench = self.extraction_bench_tier().saturating_sub(1);
+        let scale = tier_scale(tool.tier + bench);
         let base_units = (tuning::TOOL_BASE_UNITS * scale * program.grade()).round() as u32;
         let bonus = crate::perks::salvage_bonus(self.player_perks());
         let units = base_units + bonus;

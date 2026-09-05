@@ -1,7 +1,7 @@
 (
     id: "compiler",
     name: "Compiler",
-    description: "Assign a program here and it compiles Core Fragments from whatever is touching it into ICE Breakers. Put it next to a Mining Node. Also the bench that extracts a routine out of a program you own.",
+    description: "Assign a program here and it compiles Core Fragments from whatever is touching it into ICE Breakers. Put it next to a Mining Node. Also the bench that extracts a routine out of a program you own, and the one that makes tearing a downed program down faster — richer, too, with every tier above the first.",
     glyph: '&',
     color: Green,
     build_cost: [("core_fragment", 16)],
@@ -9,6 +9,7 @@
     capacity: 20,
     assembles: Some((item: "ice_breaker", ticks_per_unit: 8)),
     extracts_routines: true,
+    extracts_programs: true,
     upgrade: Some((max_tier: 5, cost: [("core_fragment", 12), ("cache_grain", 1)])),
     power_draw: 3,
 )

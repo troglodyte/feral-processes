@@ -461,13 +461,14 @@ impl Game {
             .any(|def| self.has_structure(&def.id))
     }
 
-    /// Display name of a bench that would allow extraction, for the refusal
-    /// message — no code names a structure id.
-    fn extraction_bench_name(&self) -> String {
+    /// Display name of a structure carrying `flag`, for a message — no code
+    /// names a structure id. `pub(crate)` because `game/extraction.rs`'s
+    /// `extraction_bench` wants the same answer for the other flag.
+    pub(crate) fn bench_name(&self, flag: fn(&StructureDef) -> bool) -> String {
         self.world
             .resource::<StructureDb>()
             .all()
-            .find(|def| def.extracts_routines)
+            .find(|def| flag(def))
             .map(|def| def.name.clone())
             .unwrap_or_else(|| "an extraction bench".to_string())
     }
@@ -540,7 +541,7 @@ impl Game {
         if !self.can_extract_routines() {
             return Err(format!(
                 "You need {} standing somewhere to extract a routine.",
-                self.extraction_bench_name()
+                self.bench_name(|def| def.extracts_routines)
             ));
         }
         let owner = self

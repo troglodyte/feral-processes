@@ -3617,3 +3617,20 @@ fn every_settlement_shape_is_authored_somewhere() {
         );
     }
 }
+
+/// A shipped structure must actually carry the flag, or every bench term
+/// in `extraction_yield` is unreachable and the phase ships as a no-op.
+#[test]
+fn some_shipped_structure_extracts_programs() {
+    let (db, warnings) =
+        crate::structures::StructureDb::load_dir(&test_assets_dir().join("structures"))
+            .expect("the shipped structures load");
+    assert!(
+        warnings.is_empty(),
+        "shipped structures warned: {warnings:?}"
+    );
+    assert!(
+        db.all().any(|def| def.extracts_programs),
+        "no shipped structure sets extracts_programs"
+    );
+}

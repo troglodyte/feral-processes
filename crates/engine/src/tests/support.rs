@@ -853,13 +853,19 @@ pub(super) fn spawn_data_cache(game: &mut Game, offset: i32) {
 /// Deploys a structure of `kind` at an absolute position, bypassing
 /// `place_structure`'s Home, cost and distance rules — for tests about what
 /// a standing structure *enables*, not about the build rules.
-pub(super) fn spawn_structure_at(game: &mut Game, kind: &str, x: i32, y: i32) {
-    game.world.spawn((
-        Structure {
-            kind: kind.to_string(),
-        },
-        Position { x, y },
-    ));
+/// Returns the entity it spawned, so a fixture that stands a structure can
+/// then address it — `build_program_bench` inserting a `StructureTier` is
+/// the case that needed it, and a helper that could not be addressed is why
+/// `run_one_full_gather_cycle_at_tier` below spawns its own by hand.
+pub(super) fn spawn_structure_at(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
+    game.world
+        .spawn((
+            Structure {
+                kind: kind.to_string(),
+            },
+            Position { x, y },
+        ))
+        .id()
 }
 
 /// Marks a `Game` that has already had `stand_ample_grid_supply` run against

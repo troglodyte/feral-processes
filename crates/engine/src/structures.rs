@@ -491,6 +491,15 @@ pub struct StructureDef {
     /// grant no extraction, exactly as before this field existed.
     #[serde(default)]
     pub extracts_routines: bool,
+    /// If true, owning one of these anywhere makes an *extraction* better —
+    /// `Game::extract_program`, not `Game::extract_routine`. Never a gate:
+    /// spec decision 7 is that extraction works in the field, at the base
+    /// and in the Stack alike, because the starting tool is useless
+    /// otherwise. Ownership rather than proximity, `extracts_routines`'
+    /// own rule. `#[serde(default)]` so existing structure files (including
+    /// mods) improve nothing, exactly as before this field existed.
+    #[serde(default)]
+    pub extracts_programs: bool,
 }
 
 fn default_durability() -> u32 {

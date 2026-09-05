@@ -2544,6 +2544,15 @@ pub struct DownedProgramRow {
     pub grade: f32,
 }
 
+/// The extraction bench a screen names — `Game::extraction_bench`. Absent
+/// entirely when none stands, so a renderer never has to read a tier of
+/// zero as "none".
+#[derive(Clone, Debug)]
+pub struct ExtractionBenchView {
+    pub name: String,
+    pub tier: u32,
+}
+
 /// One row of `Mode::Tools`'s list — see `Game::tool_rows`.
 ///
 /// One row per tool the player *knows* plus any tool actually *installed*

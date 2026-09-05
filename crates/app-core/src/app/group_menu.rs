@@ -350,6 +350,18 @@ const PARTY_ROWS: &[GroupEntry] = &[
         locality: Locality::Anywhere,
         available: |app| app.game.as_ref().is_some_and(|g| !g.perk_defs().is_empty()),
     },
+    GroupEntry {
+        // Not `base_only`: extraction itself works anywhere (spec decision
+        // 7), and forging/installing carry no locality gate either — see
+        // `Game::forge_tool`/`install_tool`. Always non-empty in practice —
+        // the starter tool is installed at `Game::new` and never leaves
+        // `Game::tool_rows()`'s union unless pulled — but the row still
+        // asks rather than assuming, `Companions`' own reason.
+        label: "Tools",
+        target: Mode::Tools,
+        locality: Locality::Anywhere,
+        available: |app| app.game.as_ref().is_some_and(|g| !g.tool_rows().is_empty()),
+    },
 ];
 
 impl App {

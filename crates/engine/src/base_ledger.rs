@@ -112,9 +112,9 @@ pub enum Event {
 /// Core Fragments came from a Mining Node against kills, base rock and
 /// caches, and a record with no source answers none of it.
 ///
-/// An enum rather than a `&str` at each of the eighteen call sites, for
+/// An enum rather than a `&str` at each of the seventeen call sites, for
 /// `MachineStatus::as_str`'s reason: the wire strings are written once, a
-/// mistyped tag cannot silently create a nineteenth source, and the match
+/// mistyped tag cannot silently create an eighteenth source, and the match
 /// is exhaustive so a new variant has to be given a name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LootSource {
@@ -133,6 +133,9 @@ pub enum LootSource {
     /// A routine disk the player made, by etching a blank or by extracting
     /// one from a program.
     Etch,
+    /// A tool carrier the player forged — `Game::forge_tool`, `Etch`'s own
+    /// sibling on the tool side of the acquisition chain.
+    Forge,
     /// A downed program taken apart with a tool — `Game::extract_program`.
     /// Distinct from `Kill`: the program already left the fight as its own
     /// carried object (`items::DownedProgram`), so what a tool draws out of
@@ -151,6 +154,7 @@ impl LootSource {
             LootSource::Trade => "trade",
             LootSource::Refund => "refund",
             LootSource::Etch => "etch",
+            LootSource::Forge => "forge",
             LootSource::Extract => "extract",
         }
     }

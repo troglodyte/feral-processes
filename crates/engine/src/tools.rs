@@ -1,10 +1,9 @@
-//! The extraction tool catalogue, the player's tool slots, and the starter
-//! grant — see
+//! The extraction tool catalogue, the player's tool slots, the starter
+//! grant, and `knows_tool` — see
 //! `docs/superpowers/specs/2026-09-04-program-extraction-design.md`, section
-//! 2. Still nothing *consumes* a `ToolDef`: `Game::extract_program` is a
-//! later phase, and so is acquisition past the starter tool
-//! (`unlocks_tools`, `KnownTools`, `forge_tool`, `install_tool`) — this
-//! phase only gets a tool into a slot the one way `Game::new` does it.
+//! 2. The act itself, `Game::extract_program`, lives in
+//! `game/extraction.rs`; `game/tools.rs` is `Game::forge_tool` and this
+//! phase's remaining task, `install_tool`/`uninstall_tool`.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -13,7 +12,7 @@ use bevy_ecs::prelude::Resource;
 use serde::{Deserialize, Serialize};
 
 use crate::Game;
-use crate::components::Tools;
+use crate::components::{Inventory, Tools};
 use crate::items::ItemId;
 
 /// A tool's id, `items::ItemId`'s shape: `#[serde(transparent)]` so a `.ron`
@@ -56,6 +55,20 @@ pub enum ToolCategory {
     Routines,
 }
 
+impl ToolCategory {
+    /// The label `render/tools.rs`'s row draws — `MachineStatus::as_str`'s
+    /// own reason: a player-facing string built from `{:?}` breaks the
+    /// moment a variant is renamed for engine-only clarity.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ToolCategory::Materials => "Materials",
+            ToolCategory::Parts => "Parts",
+            ToolCategory::Cores => "Cores",
+            ToolCategory::Routines => "Routines",
+        }
+    }
+}
+
 /// A moddable extraction tool. `assets/tools/README.md` is the schema
 /// reference.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -75,10 +88,21 @@ pub struct ToolDef {
     /// Not itself a rate: two tiers of the same category do not mean one is
     /// simply faster, they mean one reaches deeper into the same pool.
     pub tier: u32,
-    /// Game ticks `Game::extract_program` (a later phase) spends on a use —
-    /// `self.tick()`'s argument, the same currency `AbilityDef::power_cost`
-    /// is to a routine but paid in time rather than Power.
+    /// Game ticks `Game::extract_program` spends on a use — `self.tick()`'s
+    /// argument, the same currency `AbilityDef::power_cost` is to a
+    /// routine but paid in time rather than Power.
     pub ticks: u64,
+    /// What `Game::forge_tool` spends to grant a carrier of this tool —
+    /// `(item, qty)` pairs, `craft_cost`'s shape but with no discount axis:
+    /// a tool's price is fixed on its own def rather than scaled by a
+    /// `careful` flag. Priced per tool rather than a flat blank spent for
+    /// every one, because a routine is one interchangeable object but tools
+    /// differ by tier — a tier-2 tool must be able to cost more than the
+    /// starter clamp (spec decisions doc, plan decision 1). `#[serde(default)]`
+    /// so a tool with nothing to spend can omit the field rather than spell
+    /// `[]`.
+    #[serde(default)]
+    pub forge_cost: Vec<(ItemId, u32)>,
 }
 
 impl ToolDef {
@@ -202,11 +226,111 @@ impl Game {
             })
             .unwrap_or_default()
     }
+
+    /// Every tool id `knows_tool` answers true for: `KnownTools` plus
+    /// `tuning::STARTER_TOOL_ID`, which `Game::new` forges straight into the
+    /// slot without going through research (`STARTER_TOOL_ID`'s own
+    /// creation-only doc). One function so `knows_tool` and `tool_rows`
+    /// cannot compute the union differently — a stored grant would make
+    /// pulling the starter permanently strand it, since nothing ever taught
+    /// it in the first place; deriving the answer instead means the
+    /// starter's row and its "known" status survive being pulled, and a
+    /// phase-1 save that never wrote `known_tools` gets the same repair for
+    /// free.
+    fn known_tool_ids(&self) -> Vec<ToolId> {
+        let mut ids: Vec<ToolId> = self
+            .world
+            .resource::<crate::resources::KnownTools>()
+            .0
+            .iter()
+            .cloned()
+            .collect();
+        ids.push(ToolId(crate::tuning::STARTER_TOOL_ID.to_string()));
+        ids
+    }
+
+    /// Whether the player has researched `id` — `knows_routine`'s analog.
+    /// Every later gate (`forge_tool`) calls this rather than reaching into
+    /// `KnownTools` itself.
+    pub fn knows_tool(&self, id: &ToolId) -> bool {
+        self.known_tool_ids().iter().any(|known| known == id)
+    }
+
+    /// `Mode::Tools`'s whole list — `views::ToolRow`'s own doc: the union of
+    /// every tool the player knows (`known_tool_ids`, which includes the
+    /// starter unconditionally) and every tool actually installed (plan
+    /// decision 3), since neither set alone would show a freshly researched
+    /// tool nobody has forged yet (known but neither installed nor
+    /// carried) a row.
+    ///
+    /// Sorted by id for a deterministic screen, `ToolDb::all`'s own reason;
+    /// an id neither store can resolve against `ToolDb` is dropped rather
+    /// than surfaced as a hole, `installed_tools`'s tolerance. Trimmed to
+    /// `tuning::MAX_TOOL_ROWS` afterward — `MAX_NEED_ROWS`'s own reason,
+    /// trimmed here rather than left to the screen's own capacity check,
+    /// since the screen has no scroll and a modded research tree can teach
+    /// more tools than any shipped one does.
+    pub fn tool_rows(&self) -> Vec<crate::views::ToolRow> {
+        let player = self.player_entity();
+        let db = self.world.resource::<ToolDb>();
+        let installed = self
+            .world
+            .get::<Tools>(player)
+            .map(|t| t.0.clone())
+            .unwrap_or_default();
+        let inventory = self.world.get::<Inventory>(player);
+
+        let mut ids: Vec<ToolId> = self
+            .known_tool_ids()
+            .into_iter()
+            .chain(installed.clone())
+            .collect();
+        ids.sort();
+        ids.dedup();
+        ids.truncate(crate::tuning::MAX_TOOL_ROWS);
+
+        ids.into_iter()
+            .filter_map(|id| {
+                let def = db.get(id.as_str())?;
+                let slot = installed.iter().position(|t| t == &id);
+                let carriers_held = inventory
+                    .map(|inv| inv.count(&ItemId::tool(&id)))
+                    .unwrap_or(0);
+                Some(crate::views::ToolRow {
+                    id,
+                    name: def.name.clone(),
+                    category: def.category,
+                    tier: def.tier,
+                    ticks: def.ticks,
+                    slot,
+                    carriers_held,
+                })
+            })
+            .collect()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The row `MachineStatus::as_str` names as its own precedent: a
+    /// player-facing string must be its own match, not a `{:?}` of a
+    /// variant name an engine-only rename could quietly reword.
+    #[test]
+    fn every_tool_category_has_a_named_label() {
+        for category in [
+            ToolCategory::Materials,
+            ToolCategory::Parts,
+            ToolCategory::Cores,
+            ToolCategory::Routines,
+        ] {
+            assert!(
+                !category.as_str().is_empty(),
+                "{category:?} has no as_str label"
+            );
+        }
+    }
 
     #[test]
     fn one_tool_slot_a_level_step_clamped_to_a_modest_cap() {

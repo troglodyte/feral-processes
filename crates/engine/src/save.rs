@@ -1108,6 +1108,15 @@ pub struct SaveData {
     /// documents below.
     #[serde(default)]
     pub known_routines: Vec<crate::abilities::AbilityId>,
+    /// Which tools the player has researched — see
+    /// `resources::KnownTools`. Sorted on write for the reason `researched`
+    /// is. Unlike `known_routines` above, this field was born after the
+    /// save became field-named RON (`SAVE_FORMAT_VERSION` 29), so
+    /// `#[serde(default)]` genuinely means what it says here: a save
+    /// written before this field existed loads with an empty set, and
+    /// costs no version bump.
+    #[serde(default)]
+    pub known_tools: Vec<ToolId>,
     /// Every Stack entrance standing on the zone map — see
     /// `components::SurfaceLink`. Only the tile: an entrance carries no
     /// state of its own, and which stack it opens onto is a pure function
@@ -1634,6 +1643,7 @@ mod tests {
             buyback_shelves: Vec::new(),
             researched: Vec::new(),
             known_routines: Vec::new(),
+            known_tools: Vec::new(),
             link_sites: Vec::new(),
             locale: crate::resources::Locale::Surface,
             stack_memory: crate::resources::StackMemory::default(),
@@ -1930,8 +1940,14 @@ mod tests {
             .filter(|line| !line.trim_start().starts_with("tools: ["))
             .collect::<Vec<_>>()
             .join("\n");
+        // A bare `.contains("tools:")` also matches `known_tools:` — a
+        // sibling field this same phase adds — and would fail the premise
+        // check for the wrong reason. The line-anchored check the removal
+        // filter itself uses is what actually proves the key is gone.
         assert!(
-            !older.contains("tools:"),
+            !older
+                .lines()
+                .any(|line| line.trim_start().starts_with("tools: [")),
             "the key has to actually be gone for this to prove anything"
         );
         std::fs::write(&path, &older).unwrap();
@@ -1960,8 +1976,13 @@ mod tests {
         let mut data = sample_data();
         data.player.tools = Vec::new();
         let text = to_ron(&data).unwrap();
+        // Line-anchored rather than a bare `.contains`, for the reason the
+        // migration test above takes the same care: `known_tools: []` also
+        // contains the substring `"tools: []"` and would satisfy a loose
+        // check regardless of what `player.tools` actually serialized to.
         assert!(
-            text.contains("tools: []"),
+            text.lines()
+                .any(|line| line.trim_start().starts_with("tools: []")),
             "the fixture must actually write the empty list to be a real test"
         );
 

@@ -1218,7 +1218,7 @@ impl Game {
     /// lands `qty` in full; callers still read the return, since it's the
     /// same value they'd otherwise have to pass through by hand.
     ///
-    /// **`source` is the whole reason this is one door.** Eighteen callers
+    /// **`source` is the whole reason this is one door.** Seventeen callers
     /// pass through here, and B5 — what share of a sector's Core Fragments
     /// a Mining Node is actually worth — is unanswerable without knowing
     /// which of them a unit came through.

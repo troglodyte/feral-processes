@@ -33,5 +33,6 @@ pub(crate) mod settlement_market;
 pub(crate) mod sprite_forge;
 pub(crate) mod stack_market;
 pub(crate) mod telemetry;
+mod tools;
 pub(crate) mod trade;
 mod transfer;

@@ -49,12 +49,32 @@ impl ItemId {
     pub fn etched_ability(&self) -> Option<&str> {
         self.0.strip_prefix(ETCHED_DISK_PREFIX)
     }
+
+    /// The id of the carrier item holding `tool`'s knowledge — the item
+    /// `Game::forge_tool` grants and `Game::install_tool` spends.
+    /// `etched`'s own reason: a synthetic id with no `.ron` behind it, so a
+    /// tool needs no item file of its own.
+    pub fn tool(tool: &crate::tools::ToolId) -> Self {
+        ItemId(format!("{TOOL_ITEM_PREFIX}{}", tool.as_str()))
+    }
+
+    /// The tool id a carrier item holds, or `None` if this isn't one — the
+    /// inverse of `tool`, `etched_ability`'s own reason.
+    pub fn tool_id(&self) -> Option<crate::tools::ToolId> {
+        self.0
+            .strip_prefix(TOOL_ITEM_PREFIX)
+            .map(|id| crate::tools::ToolId(id.to_string()))
+    }
 }
 
 /// What `ItemId::etched` puts in front of an ability id. Not in `ids`
 /// because it is not an id — it is the scheme every etched disk's id is
 /// built from, and `ids` is a list of specific shipped items.
 pub const ETCHED_DISK_PREFIX: &str = "etched_";
+
+/// What `ItemId::tool` puts in front of a tool id — `ETCHED_DISK_PREFIX`'s
+/// own reason.
+pub const TOOL_ITEM_PREFIX: &str = "tool_";
 
 impl From<&str> for ItemId {
     fn from(s: &str) -> Self {

@@ -1380,6 +1380,16 @@ pub enum Mode {
     /// two-mode shape: there is no per-tier structure here to keep apart
     /// from the list the way a Kernel Ring's ladder is.
     DownedPrograms,
+    /// The tool kit, reached from the party menu — see
+    /// `docs/superpowers/specs/2026-09-04-program-extraction-design.md`,
+    /// section 6. One row per tool the player knows plus any tool actually
+    /// installed (`Game::tool_rows`, plan decision 3), so a researched but
+    /// unforged tool has a row for the forge verb to act on. A flat list,
+    /// not `Mode::DownedPrograms`'s two-page shape — there is no
+    /// per-program drill-down here, only the row under the highlight and
+    /// three actions on it: `F` forges a carrier, `I` installs a held one,
+    /// `X` pulls an installed one back out.
+    Tools,
     Companion,
     /// One program's three equipment slots, reached with `E` from
     /// `Mode::Companion`. The same three rows the inventory screen leads
@@ -1766,6 +1776,7 @@ impl Mode {
             | Mode::ItemDescribe
             | Mode::EraseQuantity
             | Mode::DownedPrograms
+            | Mode::Tools
             | Mode::Companion
             | Mode::CompanionEquip
             | Mode::CompanionMemories

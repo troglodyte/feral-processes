@@ -12,4 +12,9 @@
     yields: [("core_fragment", 1.0), ("bytecode_block", 0.4)],
     tier: 1,
     ticks: 20,
+    // This prices a *replacement* — it does not gate the one `Game::new`
+    // grants straight into slot one (plan decision 1). Cheap and in the
+    // tool's own yield currency, since losing the starter shouldn't cost
+    // more than a couple of kills to undo.
+    forge_cost: [("core_fragment", 3)],
 )

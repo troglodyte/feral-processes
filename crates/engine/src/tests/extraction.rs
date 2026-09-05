@@ -9,7 +9,7 @@
 use super::support::*;
 use crate::components::Tools;
 use crate::items::DownedProgram;
-use crate::tools::{ToolDb, ToolDef, ToolId};
+use crate::tools::{ToolCategory, ToolDb, ToolDef, ToolId};
 use crate::*;
 
 fn program(condition: u8, rarity: Rarity, level: u32) -> DownedProgram {
@@ -911,4 +911,902 @@ fn extraction_options_preview_matches_what_extract_program_actually_grants() {
             "the previewed yield for {item:?} must equal what was actually granted"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2, task 1: `ResearchDef::unlocks_tools` and `resources::KnownTools`.
+// ---------------------------------------------------------------------------
+
+/// Builds a standalone `ResearchDb` from `nodes`, each `(id, unlocked
+/// tools)`, every node costing 1 Research Data with no prereqs. Loaded
+/// against the real shipped structures/abilities/tools so the tool ids
+/// themselves validate against real content, the same shape `research.rs`'s
+/// own `load` test fixture takes. Swapped onto a `Game` wholesale — no
+/// shipped research node names a tool yet (that is task 4's content), so
+/// there is no other way to exercise `unlock_research`'s tool-teaching loop
+/// in isolation.
+fn research_db_with_tool_unlocks(tag: &str, nodes: &[(&str, &[&str])]) -> ResearchDb {
+    let dir = std::env::temp_dir().join(format!(
+        "feral_extraction_research_{}_{tag}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for (node_id, tools) in nodes {
+        let names: Vec<String> = tools.iter().map(|t| format!("\"{t}\"")).collect();
+        let body = format!(
+            r#"(
+                id: "{node_id}",
+                name: "Test Node",
+                description: "d",
+                cost: 1,
+                unlocks_tools: [{}],
+            )"#,
+            names.join(", ")
+        );
+        std::fs::write(dir.join(format!("{node_id}.ron")), body).unwrap();
+    }
+    let assets = test_assets_dir();
+    let (structures, _) = StructureDb::load_dir(&assets.join("structures")).unwrap();
+    let (abilities, _) = AbilityDb::load_dir(&assets.join("abilities")).unwrap();
+    let (tool_db, _) = ToolDb::load_dir(&assets.join("tools")).unwrap();
+    let (db, warnings) = ResearchDb::load_dir(&dir, &structures, &abilities, &tool_db).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(
+        warnings.is_empty(),
+        "fixture nodes must load clean: {warnings:?}"
+    );
+    db
+}
+
+/// Every line the log holds, repeats expanded and filtered to `needle` —
+/// `message_history` condenses an unbroken run into one row with a count,
+/// so a bare entry count would read a line said twice as a line said once.
+fn log_count(game: &Game, needle: &str) -> usize {
+    game.message_history(500)
+        .into_iter()
+        .filter(|row| row.text.contains(needle))
+        .map(|row| row.repeats.max(1))
+        .sum()
+}
+
+#[test]
+fn unlocking_a_node_teaches_its_tools_and_logs_once() {
+    let mut game = Game::new(9001, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(research_db_with_tool_unlocks(
+        "teach",
+        &[("test_node", &["core_tap"])],
+    ));
+    grant_research_data(&mut game, 1);
+
+    assert!(
+        !game.knows_tool(&ToolId("core_tap".to_string())),
+        "the fixture is vacuous unless the tool starts unknown"
+    );
+
+    game.unlock_research("test_node").unwrap();
+
+    assert!(
+        game.knows_tool(&ToolId("core_tap".to_string())),
+        "unlocking the node must teach the tool it names"
+    );
+    assert_eq!(
+        log_count(&game, "Core Tap"),
+        1,
+        "learning a tool must log exactly once"
+    );
+}
+
+#[test]
+fn a_tool_taught_by_two_nodes_logs_only_the_first_time() {
+    // The ability arm's own rule (`unlock_research`'s fresh-insert check):
+    // knowledge is a set, and re-teaching an already-known tool from a
+    // second node must not repeat the log line. Both nodes ship in the one
+    // `ResearchDb`, so the log is checked once at the end rather than after
+    // each unlock — the point under test is the second unlock's silence.
+    let mut game = Game::new(9002, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(research_db_with_tool_unlocks(
+        "double",
+        &[
+            ("test_node_a", &["core_tap"]),
+            ("test_node_b", &["core_tap"]),
+        ],
+    ));
+    grant_research_data(&mut game, 2);
+
+    game.unlock_research("test_node_a").unwrap();
+    game.unlock_research("test_node_b").unwrap();
+
+    assert!(game.knows_tool(&ToolId("core_tap".to_string())));
+    assert_eq!(
+        log_count(&game, "Core Tap"),
+        1,
+        "a tool already known must not log a second time"
+    );
+}
+
+#[test]
+fn known_tools_survive_a_save_load_round_trip() {
+    // Save -> load, not a RON round trip: `SaveData::known_tools` is
+    // `#[serde(default)]`, and only `Game::save`/`Game::load` exercise the
+    // path that would silently drop a skipped field.
+    let mut game = Game::new(9003, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.resource_mut::<KnownTools>().0 = [
+        ToolId("salvage_clamp".to_string()),
+        ToolId("core_tap".to_string()),
+    ]
+    .into();
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_known_tools_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        loaded.world.resource::<KnownTools>().0,
+        [
+            ToolId("salvage_clamp".to_string()),
+            ToolId("core_tap".to_string())
+        ]
+        .into(),
+        "a two-tool known set must come back exactly as saved"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2, task 2: `Game::forge_tool`.
+// ---------------------------------------------------------------------------
+
+const FORGE_TARGET_TOOL: &str = r#"(
+    id: "forge_target",
+    name: "Forge Target",
+    description: "d",
+    category: Materials,
+    yields: [("core_fragment", 1.0)],
+    tier: 1,
+    ticks: 5,
+    forge_cost: [("core_fragment", 5)],
+)"#;
+
+/// A fresh game with a custom `ToolDb` naming `forge_target` (5
+/// `core_fragment` to forge), and `forge_target` marked known — the
+/// starting point every forge test but the "unknown"/"unresearched" ones
+/// wants. Tagged so parallel tests don't collide on the same temp dir.
+fn game_ready_to_forge(seed: u32, tag: &str) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (tool_db, warnings) = load_tools(tag, &[("forge_target", FORGE_TARGET_TOOL)]);
+    assert!(
+        warnings.is_empty(),
+        "fixture tool must load clean: {warnings:?}"
+    );
+    game.world.insert_resource(tool_db);
+    game.world
+        .resource_mut::<KnownTools>()
+        .0
+        .insert(ToolId("forge_target".to_string()));
+    // The starter kit already carries a handful of `core_fragment` (the
+    // fixture's own cost item), so a test asserting an exact spend or an
+    // exact shortfall needs a known-empty pack to add onto.
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .items
+        .clear();
+    game
+}
+
+fn carrier_count(game: &Game, tool: &ToolId) -> u32 {
+    game.world
+        .get::<Inventory>(game.player_entity())
+        .unwrap()
+        .count(&ItemId::tool(tool))
+}
+
+#[test]
+fn forge_refuses_after_game_over_and_spends_nothing() {
+    let mut game = game_ready_to_forge(9101, "game_over");
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 10);
+    game.world.resource_mut::<GameOver>().reason = Some("done".to_string());
+    let before = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    let result = game.forge_tool(&ToolId("forge_target".to_string()));
+
+    assert!(result.is_err(), "a game-over run must refuse forging");
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before,
+        "nothing must be spent on a refusal"
+    );
+    assert_eq!(carrier_count(&game, &ToolId("forge_target".to_string())), 0);
+}
+
+#[test]
+fn forge_refuses_during_an_active_battle_and_spends_nothing() {
+    let mut game = game_ready_to_forge(9102, "battle");
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 10);
+    let battle = minimal_active_battle(&game);
+    game.world.insert_resource(battle);
+    let before = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    let result = game.forge_tool(&ToolId("forge_target".to_string()));
+
+    assert!(result.is_err(), "an active battle must refuse forging");
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before,
+        "nothing must be spent on a refusal"
+    );
+    assert_eq!(carrier_count(&game, &ToolId("forge_target".to_string())), 0);
+}
+
+#[test]
+fn forge_refuses_an_unresolvable_tool_id_and_spends_nothing() {
+    let mut game = game_ready_to_forge(9103, "unresolvable");
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 10);
+    let before = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    let result = game.forge_tool(&ToolId("no_such_tool".to_string()));
+
+    assert!(
+        result.is_err(),
+        "an id ToolDb cannot resolve must refuse forging"
+    );
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before,
+        "nothing must be spent on a refusal"
+    );
+}
+
+#[test]
+fn forge_refuses_an_already_installed_tool_and_spends_nothing() {
+    // The starter is installed into slot one at `Game::new` and known
+    // unconditionally (Critical 1) — the natural case for "already
+    // installed", since a second carrier of a tool already in a slot has
+    // nowhere to go: the player is the only tool holder.
+    let mut game = Game::new(9110, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 10);
+    let before = game.world.get::<Inventory>(player).unwrap().items.clone();
+    let starter = ToolId(tuning::STARTER_TOOL_ID.to_string());
+
+    let result = game.forge_tool(&starter);
+
+    let err = result.expect_err("an already-installed tool must refuse forging");
+    assert!(
+        err.contains("already installed"),
+        "got: {err}, expected the already-installed refusal"
+    );
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before,
+        "nothing must be spent on a refusal"
+    );
+    assert_eq!(carrier_count(&game, &starter), 0);
+}
+
+#[test]
+fn forge_refuses_an_unresearched_tool_and_spends_nothing() {
+    // `core_tap` ships real content but nothing teaches it by default.
+    // Unlike `core_tap`, the starter (`salvage_clamp`) cannot stand in for
+    // "unresearched" any more: `knows_tool` answers true for
+    // `STARTER_TOOL_ID` unconditionally (Critical 1's fix) — see
+    // `pulling_the_starter_leaves_it_known_and_re_forgeable`.
+    let mut game = Game::new(9104, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 10);
+    assert!(
+        !game.knows_tool(&ToolId("core_tap".to_string())),
+        "test premise: core_tap must not be known by default"
+    );
+    let before = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    let result = game.forge_tool(&ToolId("core_tap".to_string()));
+
+    assert!(result.is_err(), "an unresearched tool must refuse forging");
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before,
+        "nothing must be spent on a refusal"
+    );
+    assert_eq!(carrier_count(&game, &ToolId("core_tap".to_string())), 0);
+}
+
+#[test]
+fn pulling_the_starter_leaves_it_known_and_re_forgeable() {
+    // Critical 1: a stored grant would make pulling the starter (its own
+    // uninstall) permanently strand it, since nothing ever taught it in the
+    // first place. `knows_tool` must answer true for `STARTER_TOOL_ID`
+    // unconditionally instead, so the door back in never closes.
+    let mut game = Game::new(9107, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let starter = ToolId(tuning::STARTER_TOOL_ID.to_string());
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 10);
+
+    game.uninstall_tool(0)
+        .expect("pulling the starter must succeed");
+
+    assert!(
+        game.knows_tool(&starter),
+        "the starter's knowledge must survive being pulled"
+    );
+    assert!(
+        game.tool_rows().iter().any(|r| r.id == starter),
+        "the starter's row must survive being pulled"
+    );
+
+    game.forge_tool(&starter)
+        .expect("the starter must still be forgeable once pulled");
+    assert_eq!(carrier_count(&game, &starter), 1);
+}
+
+#[test]
+fn forge_refuses_when_the_player_cannot_pay_and_spends_nothing() {
+    let mut game = game_ready_to_forge(9105, "unpayable");
+    let player = game.player_entity();
+    // Short by one of the fixture's 5-unit cost.
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 4);
+    let before = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    let result = game.forge_tool(&ToolId("forge_target".to_string()));
+
+    assert!(result.is_err(), "an unaffordable cost must refuse forging");
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before,
+        "nothing must be spent on a refusal"
+    );
+    assert_eq!(carrier_count(&game, &ToolId("forge_target".to_string())), 0);
+}
+
+#[test]
+fn forging_spends_exactly_the_cost_and_grants_one_carrier() {
+    let mut game = game_ready_to_forge(9106, "success");
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 12);
+
+    game.forge_tool(&ToolId("forge_target".to_string()))
+        .expect("nothing here refuses the forge");
+
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::CORE_FRAGMENT)),
+        7,
+        "exactly the def's cost (5) must leave the inventory"
+    );
+    assert_eq!(
+        carrier_count(&game, &ToolId("forge_target".to_string())),
+        1,
+        "exactly one carrier must be granted"
+    );
+}
+
+const DUPLICATE_COST_TOOL: &str = r#"(
+    id: "duplicate_cost_tool",
+    name: "Duplicate Cost Tool",
+    description: "d",
+    category: Materials,
+    yields: [("core_fragment", 1.0)],
+    tier: 1,
+    ticks: 5,
+    forge_cost: [("core_fragment", 3), ("core_fragment", 2)],
+)"#;
+
+/// A game with the fixture tool above known, and a cleared pack — so a
+/// test can add exactly the `core_fragment` it wants to check against the
+/// summed cost (3 + 2 = 5) rather than the two individual lines.
+fn game_ready_to_forge_duplicate_cost(seed: u32, tag: &str) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (tool_db, warnings) = load_tools(tag, &[("duplicate_cost_tool", DUPLICATE_COST_TOOL)]);
+    assert!(
+        warnings.is_empty(),
+        "fixture tool must load clean: {warnings:?}"
+    );
+    game.world.insert_resource(tool_db);
+    game.world
+        .resource_mut::<KnownTools>()
+        .0
+        .insert(ToolId("duplicate_cost_tool".to_string()));
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .items
+        .clear();
+    game
+}
+
+#[test]
+fn forge_refuses_when_a_duplicated_cost_line_is_short_of_the_summed_total() {
+    // Minor 5: each cost line was checked independently against the
+    // currently held count, so 3 `core_fragment` passed both a "need 3"
+    // line and a "need 2" line — a total (5) it cannot actually pay.
+    let mut game = game_ready_to_forge_duplicate_cost(9108, "dup_short");
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 3);
+
+    let result = game.forge_tool(&ToolId("duplicate_cost_tool".to_string()));
+
+    assert!(
+        result.is_err(),
+        "3 core_fragment must not pay a 3+2=5 summed cost"
+    );
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::CORE_FRAGMENT)),
+        3,
+        "nothing must be spent on a refusal"
+    );
+    assert_eq!(
+        carrier_count(&game, &ToolId("duplicate_cost_tool".to_string())),
+        0
+    );
+}
+
+#[test]
+fn forge_spends_the_summed_total_when_a_cost_line_is_duplicated() {
+    let mut game = game_ready_to_forge_duplicate_cost(9109, "dup_paid");
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 5);
+
+    game.forge_tool(&ToolId("duplicate_cost_tool".to_string()))
+        .expect("5 core_fragment must pay a 3+2=5 summed cost");
+
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::CORE_FRAGMENT)),
+        0,
+        "the summed cost (5) must leave the inventory, not just the larger line (3)"
+    );
+    assert_eq!(
+        carrier_count(&game, &ToolId("duplicate_cost_tool".to_string())),
+        1
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2, task 3: `Game::install_tool` and `Game::uninstall_tool`.
+// ---------------------------------------------------------------------------
+
+fn hold_carrier(game: &mut Game, tool: &str, qty: u32) {
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::tool(&ToolId(tool.to_string())), qty);
+}
+
+#[test]
+fn install_refuses_after_game_over_and_changes_nothing() {
+    let mut game = Game::new(9201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    hold_carrier(&mut game, "core_tap", 1);
+    game.world.get_mut::<Experience>(player).unwrap().level = tuning::TOOL_SLOT_PER_LEVEL;
+    game.world.resource_mut::<GameOver>().reason = Some("done".to_string());
+    let before_tools = game.world.get::<Tools>(player).unwrap().0.clone();
+    let before_inv = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    let result = game.install_tool(&ToolId("core_tap".to_string()));
+
+    assert!(result.is_err(), "a game-over run must refuse installing");
+    assert_eq!(game.world.get::<Tools>(player).unwrap().0, before_tools);
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before_inv
+    );
+}
+
+#[test]
+fn install_refuses_during_an_active_battle_and_changes_nothing() {
+    let mut game = Game::new(9202, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    hold_carrier(&mut game, "core_tap", 1);
+    game.world.get_mut::<Experience>(player).unwrap().level = tuning::TOOL_SLOT_PER_LEVEL;
+    let battle = minimal_active_battle(&game);
+    game.world.insert_resource(battle);
+    let before_tools = game.world.get::<Tools>(player).unwrap().0.clone();
+    let before_inv = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    let result = game.install_tool(&ToolId("core_tap".to_string()));
+
+    assert!(result.is_err(), "an active battle must refuse installing");
+    assert_eq!(game.world.get::<Tools>(player).unwrap().0, before_tools);
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before_inv
+    );
+}
+
+#[test]
+fn install_refuses_an_unresolvable_tool_id_and_changes_nothing() {
+    let mut game = Game::new(9203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let before_tools = game.world.get::<Tools>(player).unwrap().0.clone();
+
+    let result = game.install_tool(&ToolId("no_such_tool".to_string()));
+
+    assert!(
+        result.is_err(),
+        "an id ToolDb cannot resolve must refuse installing"
+    );
+    assert_eq!(game.world.get::<Tools>(player).unwrap().0, before_tools);
+}
+
+#[test]
+fn install_refuses_a_player_with_no_tools_component_and_spends_nothing() {
+    // Minor 8: unreachable today (the player always spawns with `Tools`),
+    // but the refusal must read the component before the spend rather than
+    // discovering it is missing on the `unwrap()` that writes the slot.
+    let mut game = Game::new(9212, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    hold_carrier(&mut game, "core_tap", 1);
+    game.world.entity_mut(player).remove::<Tools>();
+    let before_inv = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    let result = game.install_tool(&ToolId("core_tap".to_string()));
+
+    let err = result.expect_err("a player with no Tools component must refuse installing");
+    assert_eq!(err, "That can't hold tools.");
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before_inv,
+        "nothing must be spent on a refusal"
+    );
+}
+
+#[test]
+fn install_refuses_a_tool_already_installed_and_changes_nothing() {
+    // The fresh game's starter tool is already in slot one — the "already
+    // installed" refusal must fire even with no carrier held, so it is
+    // checked before the carrier check.
+    let mut game = Game::new(9204, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let before_tools = game.world.get::<Tools>(player).unwrap().0.clone();
+
+    let result = game.install_tool(&ToolId(tuning::STARTER_TOOL_ID.to_string()));
+
+    let err = result.expect_err("an already-installed tool must refuse a second install");
+    assert!(
+        err.contains("already installed"),
+        "got: {err}, expected the already-installed refusal ahead of the carrier check"
+    );
+    assert_eq!(game.world.get::<Tools>(player).unwrap().0, before_tools);
+}
+
+#[test]
+fn install_refuses_when_no_free_slot_and_changes_nothing() {
+    // Level 1 has exactly one slot, already filled by the starter — a
+    // carrier is held so the only refusal that can fire is the slot cap.
+    let mut game = Game::new(9205, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    hold_carrier(&mut game, "core_tap", 1);
+    let before_tools = game.world.get::<Tools>(player).unwrap().0.clone();
+    let before_inv = game.world.get::<Inventory>(player).unwrap().items.clone();
+
+    let result = game.install_tool(&ToolId("core_tap".to_string()));
+
+    assert!(result.is_err(), "a full loadout must refuse installing");
+    assert_eq!(game.world.get::<Tools>(player).unwrap().0, before_tools);
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before_inv
+    );
+}
+
+#[test]
+fn install_refuses_when_no_carrier_is_held_and_changes_nothing() {
+    // A level step opens a second slot, but nothing was forged into it.
+    let mut game = Game::new(9206, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.get_mut::<Experience>(player).unwrap().level = tuning::TOOL_SLOT_PER_LEVEL;
+    let before_tools = game.world.get::<Tools>(player).unwrap().0.clone();
+
+    let result = game.install_tool(&ToolId("core_tap".to_string()));
+
+    assert!(
+        result.is_err(),
+        "installing with no carrier held must be refused"
+    );
+    assert_eq!(game.world.get::<Tools>(player).unwrap().0, before_tools);
+}
+
+#[test]
+fn installing_a_tool_burns_its_carrier_and_fills_the_slot() {
+    let mut game = Game::new(9207, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.get_mut::<Experience>(player).unwrap().level = tuning::TOOL_SLOT_PER_LEVEL;
+    hold_carrier(&mut game, "core_tap", 1);
+
+    game.install_tool(&ToolId("core_tap".to_string()))
+        .expect("nothing here refuses the install");
+
+    assert_eq!(
+        game.world.get::<Tools>(player).unwrap().0,
+        vec![
+            ToolId(tuning::STARTER_TOOL_ID.to_string()),
+            ToolId("core_tap".to_string())
+        ],
+        "the new tool must land in the next free slot, after the starter"
+    );
+    assert_eq!(
+        carrier_count(&game, &ToolId("core_tap".to_string())),
+        0,
+        "the carrier is spent, not kept alongside the installed tool"
+    );
+}
+
+#[test]
+fn installing_a_second_tool_only_succeeds_once_a_level_step_opens_a_slot() {
+    let mut game = Game::new(9208, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    hold_carrier(&mut game, "core_tap", 1);
+    game.world.get_mut::<Experience>(player).unwrap().level = tuning::TOOL_SLOT_PER_LEVEL - 1;
+
+    assert!(
+        game.install_tool(&ToolId("core_tap".to_string())).is_err(),
+        "one level short of the step, the loadout must still be full"
+    );
+
+    game.world.get_mut::<Experience>(player).unwrap().level = tuning::TOOL_SLOT_PER_LEVEL;
+
+    assert!(
+        game.install_tool(&ToolId("core_tap".to_string())).is_ok(),
+        "at the step itself, the newly opened slot must accept the held carrier"
+    );
+}
+
+#[test]
+fn uninstall_refuses_after_game_over_and_changes_nothing() {
+    let mut game = Game::new(9209, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.resource_mut::<GameOver>().reason = Some("done".to_string());
+    let before_tools = game.world.get::<Tools>(player).unwrap().0.clone();
+
+    let result = game.uninstall_tool(0);
+
+    assert!(result.is_err(), "a game-over run must refuse uninstalling");
+    assert_eq!(game.world.get::<Tools>(player).unwrap().0, before_tools);
+}
+
+#[test]
+fn uninstall_refuses_an_out_of_range_slot_and_changes_nothing() {
+    let mut game = Game::new(9210, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let before_tools = game.world.get::<Tools>(player).unwrap().0.clone();
+
+    let result = game.uninstall_tool(5);
+
+    assert!(result.is_err(), "an empty slot must refuse uninstalling");
+    assert_eq!(game.world.get::<Tools>(player).unwrap().0, before_tools);
+}
+
+#[test]
+fn uninstalling_frees_the_slot_and_grants_no_carrier_back() {
+    let mut game = Game::new(9211, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    assert_eq!(
+        game.world.get::<Tools>(player).unwrap().0,
+        vec![ToolId(tuning::STARTER_TOOL_ID.to_string())],
+        "test premise: the starter tool starts in the one slot"
+    );
+
+    game.uninstall_tool(0)
+        .expect("nothing here refuses pulling an installed tool");
+
+    assert!(
+        game.world.get::<Tools>(player).unwrap().0.is_empty(),
+        "the slot must be freed"
+    );
+    assert_eq!(
+        carrier_count(&game, &ToolId(tuning::STARTER_TOOL_ID.to_string())),
+        0,
+        "what was in the slot IS the tool — uninstalling must not hand a carrier back"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2, task 5: `Game::tool_rows`.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn tool_rows_lists_the_installed_starter_tool() {
+    // The starter is both installed (`Game::new`, into slot one) and known
+    // (`knows_tool`'s unconditional `STARTER_TOOL_ID` answer, Critical 1's
+    // fix) — either alone would already put a row on screen; this pins the
+    // row's own figures regardless of which side of the union wins.
+    let game = Game::new(9301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let starter = ToolId(tuning::STARTER_TOOL_ID.to_string());
+    assert!(
+        game.knows_tool(&starter),
+        "test premise: the starter is known unconditionally"
+    );
+
+    let rows = game.tool_rows();
+    let row = rows
+        .iter()
+        .find(|r| r.id == starter)
+        .expect("the installed starter tool must have a row");
+    assert_eq!(row.slot, Some(0));
+    assert_eq!(row.carriers_held, 0);
+    assert_eq!(row.name, "Salvage Clamp");
+    assert_eq!(row.tier, 1);
+}
+
+#[test]
+fn tool_rows_lists_a_known_but_unforged_tool_with_no_slot_and_no_carrier() {
+    let mut game = Game::new(9302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let core_tap = ToolId("core_tap".to_string());
+    game.world
+        .resource_mut::<KnownTools>()
+        .0
+        .insert(core_tap.clone());
+
+    let rows = game.tool_rows();
+    let row = rows
+        .iter()
+        .find(|r| r.id == core_tap)
+        .expect("a known tool must have a row even with nothing forged");
+    assert_eq!(row.slot, None, "nothing has installed it yet");
+    assert_eq!(row.carriers_held, 0, "nothing has been forged yet");
+    assert_eq!(row.category, ToolCategory::Cores);
+    assert_eq!(row.tier, 2);
+}
+
+#[test]
+fn tool_rows_reports_a_held_carrier_that_is_not_yet_installed() {
+    let mut game = Game::new(9303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let core_tap = ToolId("core_tap".to_string());
+    game.world
+        .resource_mut::<KnownTools>()
+        .0
+        .insert(core_tap.clone());
+    hold_carrier(&mut game, "core_tap", 3);
+
+    let row = game
+        .tool_rows()
+        .into_iter()
+        .find(|r| r.id == core_tap)
+        .expect("a known tool with a held carrier must have a row");
+    assert_eq!(
+        row.slot, None,
+        "holding a carrier is not the same as installing it"
+    );
+    assert_eq!(row.carriers_held, 3);
+}
+
+#[test]
+fn tool_rows_is_sorted_by_id_for_a_deterministic_screen() {
+    let mut game = Game::new(9304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world
+        .resource_mut::<KnownTools>()
+        .0
+        .insert(ToolId("core_tap".to_string()));
+
+    let ids: Vec<String> = game
+        .tool_rows()
+        .into_iter()
+        .map(|r| r.id.as_str().to_string())
+        .collect();
+    let mut sorted = ids.clone();
+    sorted.sort();
+    assert_eq!(
+        ids, sorted,
+        "the same set drawn twice must list in the same order"
+    );
+    assert_eq!(
+        ids,
+        vec!["core_tap".to_string(), "salvage_clamp".to_string()],
+        "core_tap sorts before the installed starter, salvage_clamp"
+    );
+}
+
+#[test]
+fn tool_rows_drops_a_known_tool_id_the_catalogue_cannot_resolve() {
+    // A mod's tool file removed since a save referenced it — `installed_tools`'
+    // own tolerance (there is no per-tool fallback to show in its place),
+    // ported to the known-but-unresolvable case.
+    let mut game = Game::new(9305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world
+        .resource_mut::<KnownTools>()
+        .0
+        .insert(ToolId("no_such_tool".to_string()));
+
+    let rows = game.tool_rows();
+    assert!(
+        rows.iter().all(|r| r.id.as_str() != "no_such_tool"),
+        "an id ToolDb cannot resolve must not produce a row"
+    );
+}
+
+/// Minor 9: `TOOL_SLOT_CAP` only bounds what is *installed*; a modded
+/// research tree can teach more tools than any shipped one does, so
+/// `tool_rows` needs its own ceiling — the screen has no scroll.
+#[test]
+fn tool_rows_never_exceeds_max_tool_rows_however_many_are_known() {
+    let mut game = Game::new(9306, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let extra = tuning::MAX_TOOL_ROWS + 5;
+    let files: Vec<(String, String)> = (0..extra)
+        .map(|i| {
+            let id = format!("bound_tool_{i}");
+            (
+                id.clone(),
+                format!(
+                    r#"(
+                        id: "{id}",
+                        name: "Bound Tool {i}",
+                        description: "d",
+                        category: Materials,
+                        yields: [("core_fragment", 1.0)],
+                        tier: 1,
+                        ticks: 1,
+                    )"#
+                ),
+            )
+        })
+        .collect();
+    let file_refs: Vec<(&str, &str)> = files
+        .iter()
+        .map(|(id, body)| (id.as_str(), body.as_str()))
+        .collect();
+    let (tool_db, warnings) = load_tools("row_bound", &file_refs);
+    assert!(
+        warnings.is_empty(),
+        "fixture tools must load clean: {warnings:?}"
+    );
+    game.world.insert_resource(tool_db);
+    let mut known = game.world.resource_mut::<KnownTools>();
+    for (id, _) in &files {
+        known.0.insert(ToolId(id.clone()));
+    }
+
+    let rows = game.tool_rows();
+
+    assert_eq!(
+        rows.len(),
+        tuning::MAX_TOOL_ROWS,
+        "{extra} known tools (plus the starter) must be trimmed to the row bound"
+    );
 }

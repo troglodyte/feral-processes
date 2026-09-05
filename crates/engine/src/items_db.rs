@@ -452,6 +452,78 @@ impl ItemDb {
         warnings
     }
 
+    /// Derives one carrier item per loaded tool and returns a warning for
+    /// every id a real `.ron` file had already claimed —
+    /// `synthesise_etched_disks`'s own shape, ported: the carrier set is a
+    /// function of the tool set, so a hand-written file per tool would be
+    /// one more chance for the two to drift, and nothing would notice a
+    /// carrier whose tool had been deleted, where this cannot produce one
+    /// at all.
+    ///
+    /// Every field spelled out rather than `..Default::default()`, the same
+    /// discipline: a new `ItemDef` field is a compile error here and
+    /// someone has to decide what a carrier does about it.
+    ///
+    /// **Buyable: no. Sellable: yes.** `game::caravan`'s `stock_pool`
+    /// excludes a tool id (`ItemId::tool_id`) the same way it already
+    /// excludes an etched ability, because a shelf that could hand a player
+    /// a carrier would let Credits buy past the research→forge chain the
+    /// whole feature exists to make you earn. Nothing excludes a carrier
+    /// from `caravan_sell_rows`/`settlement_sell_rows`/`market_sell_rows` —
+    /// an etched disk already has that same asymmetry — so a spare or
+    /// unwanted carrier converts back to Credits like any other held cargo.
+    /// `TOOL_CARRIER_VALUE` prices that sell-back below every shipped
+    /// tool's own `forge_cost`, so forging one and reselling it is a loss.
+    pub fn synthesise_tool_carriers(&mut self, tools: &crate::tools::ToolDb) -> Vec<String> {
+        let mut warnings = Vec::new();
+        for tool in tools.all() {
+            let id = ItemId::tool(&tool.id);
+            if self.items.contains_key(id.as_str()) {
+                warnings.push(format!(
+                    "item file {} shadows the carrier derived for tool {}; the file wins and \
+                     the tool cannot be installed from a derived carrier",
+                    id.as_str(),
+                    tool.id
+                ));
+                continue;
+            }
+            self.items.insert(
+                id.0.clone(),
+                ItemDef {
+                    id,
+                    name: format!("{} Carrier", tool.name),
+                    // The tool's own line, so a carrier in cargo reads as
+                    // what installing it will do — `synthesise_etched_
+                    // disks`'s reason for copying `ability.description`.
+                    description: tool.description.clone(),
+                    banked: false,
+                    value: Some(crate::tuning::TOOL_CARRIER_VALUE),
+                    role: None,
+                    equipment: None,
+                    taming_potency: None,
+                    consume: None,
+                    // Minted, not compiled at a bench — `forge_tool` is the
+                    // one door, so there is no recipe for a work order or
+                    // the crafting menu to find.
+                    craftable: None,
+                    droppable: None,
+                    cache_drop: None,
+                    // A carrier installs into a slot; it is not worn.
+                    grants: None,
+                    upgrade: None,
+                    enables_rest: false,
+                    // Every carrier derives the same family tag from
+                    // "Carrier", harmless for `synthesise_etched_disks`'s
+                    // reason: excluded from `game::caravan`'s stock pool,
+                    // a carrier can never reach the base stock strip tags
+                    // are for.
+                    abbrev: None,
+                },
+            );
+        }
+        warnings
+    }
+
     pub fn get(&self, id: &str) -> Option<&ItemDef> {
         self.items.get(id)
     }
@@ -480,21 +552,29 @@ impl ItemDb {
     /// what the wizard offers plus a census rather than by a check inside
     /// the writer.
     ///
-    /// Three exclusions, each for its own reason. The **trade currency** is
+    /// Four exclusions, each for its own reason. The **trade currency** is
     /// the allowance itself, so buying it with itself is a no-op — its own
     /// filter rather than `ItemDef::banked`, the caravan's rule. The
     /// **craft currency** is what the Stack exists to pay you, and starting
     /// with a purse of it short-circuits the loop the Stack is for.
     /// A **banked** item is not cargo at all. `EconomyRole::Currency`
     /// deliberately stays: every shipped class kit opens with 4-6 Core
-    /// Fragments, and this shelf replaces that kit.
+    /// Fragments, and this shelf replaces that kit. A **tool carrier**
+    /// (`ItemId::tool_id`) is `game::caravan`'s own reason again: it is
+    /// buyable nowhere, so the wizard's flat allowance handing one over for
+    /// free would let a new run skip the research→forge chain the whole
+    /// feature exists to make you earn — `TOOL_CARRIER_VALUE`'s low price
+    /// would otherwise seat every carrier at the front of this shelf.
     ///
     /// Sorted `(price, id)` because `ItemDb` keys by `String` in a
     /// `HashMap`, so the rows — and the digit shortcuts over them — would
     /// otherwise land in a different order every run.
     pub fn creation_shelf(&self) -> Vec<crate::views::StartingItemRow> {
-        let barred =
-            |id: &ItemId| Some(id) == self.trade_currency() || Some(id) == self.craft_currency();
+        let barred = |id: &ItemId| {
+            Some(id) == self.trade_currency()
+                || Some(id) == self.craft_currency()
+                || id.tool_id().is_some()
+        };
         let mut rows: Vec<crate::views::StartingItemRow> = self
             .all()
             .filter(|def| !def.banked && !barred(&def.id))
@@ -586,6 +666,99 @@ mod tests {
         let out = ItemDb::load_dir(&dir, &abilities).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
         out
+    }
+
+    /// `load_fixture`'s own shape, for a scratch `ToolDb` — the fixture
+    /// `synthesise_tool_carriers` mints against.
+    fn load_tool_fixture(files: &[(&str, &str)]) -> crate::tools::ToolDb {
+        static NEXT: AtomicU32 = AtomicU32::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "feral_itemdb_tools_{}_{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for (n, b) in files {
+            std::fs::write(dir.join(n), b).unwrap();
+        }
+        let (db, warnings) = crate::tools::ToolDb::load_dir(&dir).unwrap();
+        assert!(
+            warnings.is_empty(),
+            "tool fixture must load clean: {warnings:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        db
+    }
+
+    const WIDGET_TOOL: &str = r#"(
+        id: "widget",
+        name: "Widget",
+        description: "Pulls a widget out of a downed process.",
+        category: Materials,
+        yields: [("core_fragment", 1.0)],
+        tier: 1,
+        ticks: 5,
+    )"#;
+
+    #[test]
+    fn synthesise_tool_carriers_mints_a_real_item_per_tool() {
+        let (mut db, _) = load_fixture(&[]);
+        let tools = load_tool_fixture(&[("widget.ron", WIDGET_TOOL)]);
+
+        let warnings = db.synthesise_tool_carriers(&tools);
+
+        assert!(
+            warnings.is_empty(),
+            "a clean tool set must synthesise clean: {warnings:?}"
+        );
+        let carrier_id = ItemId::tool(&crate::tools::ToolId("widget".to_string()));
+        let carrier = db
+            .get(carrier_id.as_str())
+            .expect("a carrier item must exist for the tool");
+        assert_eq!(carrier.name, "Widget Carrier");
+        assert_eq!(carrier.value, Some(crate::tuning::TOOL_CARRIER_VALUE));
+        assert!(
+            carrier.craftable.is_none(),
+            "a carrier is minted by forging, not compiled at a bench"
+        );
+        assert!(carrier.equipment.is_none(), "a carrier is not worn");
+    }
+
+    /// The wizard's flat allowance would otherwise hand a new run a tool
+    /// carrier for free — `TOOL_CARRIER_VALUE` is cheap enough to clear
+    /// `CREATION_SHELF_MAX_VALUE` on its own — which is the same
+    /// research→forge chain `game::caravan`'s `stock_pool` exclusion
+    /// protects, one screen over.
+    #[test]
+    fn creation_shelf_never_offers_a_tool_carrier() {
+        let (mut db, _) = load_fixture(&[]);
+        let tools = load_tool_fixture(&[("widget.ron", WIDGET_TOOL)]);
+        assert!(db.synthesise_tool_carriers(&tools).is_empty());
+
+        let carrier_id = ItemId::tool(&crate::tools::ToolId("widget".to_string()));
+        assert!(
+            db.creation_shelf().iter().all(|row| row.id != carrier_id),
+            "a tool carrier must never be offered on the creation shelf"
+        );
+    }
+
+    #[test]
+    fn a_modders_item_file_shadows_a_derived_carrier_and_warns() {
+        let (mut db, _) = load_fixture(&[(
+            "tool_widget.ron",
+            r#"(id: "tool_widget", name: "Hand-authored Carrier")"#,
+        )]);
+        let tools = load_tool_fixture(&[("widget.ron", WIDGET_TOOL)]);
+
+        let warnings = db.synthesise_tool_carriers(&tools);
+
+        assert_eq!(warnings.len(), 1, "the shadowed id must warn: {warnings:?}");
+        assert_eq!(
+            db.get("tool_widget").unwrap().name,
+            "Hand-authored Carrier",
+            "the file on disk must win over the derived carrier"
+        );
     }
 
     #[test]

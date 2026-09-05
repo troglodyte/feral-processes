@@ -10,4 +10,8 @@
     yields: [("annealed_core", 1.0), ("cache_grain", 0.3)],
     tier: 2,
     ticks: 32,
+    // A tier-2 tool costs more than the starter clamp's replacement price
+    // (plan decision 1) — priced in the refined intermediates a Cores tool
+    // is a step up from, not the raw salvage a Materials tool draws.
+    forge_cost: [("logic_wafer", 3), ("charge_coil", 1)],
 )

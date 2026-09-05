@@ -10698,6 +10698,80 @@ Both shipped pools (`salvage_clamp`, `core_tap`) have exactly two entries,
 where the paradox cannot occur — a three-item modded pool that exhibits it
 is the method behaving as documented, not a bug to fix by swapping methods.
 
+### The starter tool's knowledge is derived, never stored
+
+`Game::knows_tool` answers true for `tuning::STARTER_TOOL_ID` as well as for
+anything in `resources::KnownTools`, and `Game::tool_rows` unions the same
+`known_tool_ids()` helper so the two cannot disagree.
+
+Phase 2 first shipped the other way: `KnownTools` started empty and the
+starter was granted straight into the slot at `Game::new`, on the reasoning
+that `install_tool`'s already-installed refusal was enough to stop a
+duplicate. It was — and it also made pulling the starter unrecoverable. Three
+decisions taken in three separate tasks composed into it. The starter was
+never *known*; `uninstall_tool` correctly hands back no carrier, mirroring
+`install_disk`, where you at least keep the knowledge and can etch another
+disk; and the tools screen binds `X` to act on the highlighted row, which is
+row 0 the moment the screen opens. New game, party menu, Tools, `X`, and the
+run has no tool at all. Because phase 1 deleted `roll_work_resource_drop`,
+every kill from that point pays nothing but a `DownedProgram` that piles up
+to `MAX_DOWNED_PROGRAMS` and then starts refusing; and because `tool_rows()`
+returns empty, the Tools row drops out of the party menu, so the screen that
+would fix it is gone too.
+
+Deriving the answer rather than granting it is what makes the repair free.
+A grant at `Game::new` fixes new runs only, and every save already written by
+phase 1 carries the trap forever unless a migration goes looking for it —
+`Game::load` may not pay what `Game::new` pays, which is the profile rule.
+Derived, there is no save field, nothing to migrate, and
+`salvage_clamp.ron`'s authored `forge_cost` becomes what its own comment
+already claims it is: the price of a replacement.
+
+Do not "fix" this a second time by refusing to pull your last tool, or by
+adding a confirmation prompt. Recoverability is the fix; a modal guarding an
+action that is no longer harmful is a worse screen for no gain.
+
+### A synthetic item id needs a minted `ItemDef` behind it
+
+`ItemDb::synthesise_tool_carriers` mints one `ItemDef` per shipped tool at
+load, beside `synthesise_etched_disks` and called from the same place in
+`Game::new`'s asset load, for the same reason.
+
+`ItemId::tool(id)` and `ItemId::etched(ability)` are both synthetic ids with
+no `.ron` file behind them, and reading that as "so neither needs an item
+file" is half the truth. What makes an etched disk a legible object anywhere
+outside the two functions that spell its id is that `synthesise_etched_disks`
+gives it a real `ItemDef` — name, description, `value`, `droppable`. Phase 2
+shipped `ItemId::tool` without that rung, and nothing failed: `Game::item_name`
+falls through to its documented raw-id fallback, so the pack showed a row
+called `tool_core_tap`, `install_tool`'s own refusal read "You're not
+carrying tool_core_tap.", and the carrier reached every trader priced at the
+default. No test caught it because every test in the feature names a tool
+through `ToolDef::name`, which is correct everywhere it is used and never
+touches the carrier.
+
+The rung is what the trap is: a fallback that returns something plausible
+means the missing half never announces itself.
+
+### A tool carrier is sold everywhere and bought nowhere
+
+The exclusions are `game::caravan`'s shared `stock_pool` — which also backs a
+settlement's shelf through `draw_shelf` — and `ItemDb::creation_shelf`, both
+filtering on `ItemId::tool_id`. The sell side is deliberately untouched.
+
+This is the asymmetry an etched disk already has, and the argument is the
+same: what a vendor stocks is the world offering you a thing, and a tool is
+something you research and forge rather than something you find on a shelf.
+Selling one is just the player disposing of a carrier they will not install.
+
+The half that had to be found rather than reasoned out is the character
+creation shelf. `TOOL_CARRIER_VALUE` is deliberately below every shipped
+`forge_cost`, which put it under `CREATION_SHELF_MAX_VALUE` — so the moment
+carriers became real items, a brand-new character could be offered one before
+the research that teaches it exists. A minted item joins every pool that
+filters by value rather than by name, and the two shipped pools that do are
+not in the same file or the same subsystem.
+
 ### The commit door is shared, and the charge stays with the vendor
 
 Settlements Phase 3 needed a second buyer/seller — a town's shelf — without

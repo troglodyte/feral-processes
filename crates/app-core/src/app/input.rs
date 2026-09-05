@@ -243,6 +243,7 @@ impl App {
             Mode::ItemDescribe => self.handle_item_describe_key(key),
             Mode::EraseQuantity => self.handle_erase_quantity_key(key),
             Mode::DownedPrograms => self.handle_downed_programs_key(key),
+            Mode::Tools => self.handle_tools_key(key),
             Mode::Companion => self.handle_companion_key(key),
             Mode::CompanionEquip => self.handle_companion_equip_key(key),
             Mode::CompanionMemories => self.handle_companion_memories_key(key),

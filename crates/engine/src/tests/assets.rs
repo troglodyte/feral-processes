@@ -3421,6 +3421,110 @@ fn every_shipped_tool_id_is_unique() {
     );
 }
 
+/// Every `unlocks_tools` id across the shipped research `.ron` files names
+/// a real, loaded tool — `every_shipped_tools_yields_resolve_to_real_items`'s
+/// own rule, turned on the other reference a research node can make to the
+/// tool catalogue.
+///
+/// Parses `assets/research/*.ron` directly rather than reading a loaded
+/// `ResearchDb`: `ResearchDb::load_dir` already retains an unknown
+/// `unlocks_tools` id away at load time and keeps the node (task 1's own
+/// rule), so a census over the *loaded* db would only ever see survivors —
+/// a typo could never make it fail. `every_shipped_tool_id_is_unique`'s own
+/// precedent for reading the shipped tree off disk instead of through the
+/// loader.
+#[test]
+fn every_researched_tool_unlock_resolves_to_a_shipped_tool() {
+    let (tools, tool_warnings) = ToolDb::load_dir(&test_assets_dir().join("tools")).unwrap();
+    assert!(
+        tool_warnings.is_empty(),
+        "shipped tool files must load clean: {tool_warnings:?}"
+    );
+
+    let mut checked = 0;
+    for entry in std::fs::read_dir(test_assets_dir().join("research")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|e| e.to_str()) != Some("ron") {
+            continue;
+        }
+        let text = std::fs::read_to_string(&path).unwrap();
+        let def: crate::research::ResearchDef = ron::from_str(&text)
+            .unwrap_or_else(|e| panic!("{path:?} must parse as a ResearchDef: {e}"));
+        for tool in &def.unlocks_tools {
+            assert!(
+                tools.get(tool.as_str()).is_some(),
+                "{:?} unlocks unknown tool {:?}",
+                path,
+                tool
+            );
+            checked += 1;
+        }
+    }
+    assert!(
+        checked > 0,
+        "the census walked no unlocks_tools entries at all"
+    );
+}
+
+/// Every shipped tool's `forge_cost` names a real, loaded item —
+/// `every_shipped_tools_yields_resolve_to_real_items`'s rule again, over the
+/// other item reference a tool def carries.
+#[test]
+fn every_shipped_tool_forge_cost_resolves_to_a_real_item() {
+    let game = Game::new(4108, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let items = game.world.resource::<ItemDb>();
+    let tools = game.world.resource::<ToolDb>();
+
+    let mut checked = 0;
+    for def in tools.all() {
+        for (item, _) in &def.forge_cost {
+            assert!(
+                items.get(item.as_str()).is_some(),
+                "tool {:?} forge_cost names unknown item {:?}",
+                def.id,
+                item
+            );
+            checked += 1;
+        }
+    }
+    assert!(
+        checked > 0,
+        "the census walked no forge_cost entries at all"
+    );
+}
+
+/// A tool nothing grants is content nobody can ever forge —
+/// `every_shipped_field_routine_can_actually_be_obtained`'s own rule, ported
+/// to tools. Every shipped tool other than `STARTER_TOOL_ID` (granted
+/// straight into the first slot at `Game::new`, no research required) must
+/// be named by some research node's `unlocks_tools`, or it ships with no
+/// door into the game at all.
+#[test]
+fn every_shipped_tool_can_actually_be_obtained() {
+    let game = Game::new(4109, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let research = game.world.resource::<crate::research::ResearchDb>();
+    let tools = game.world.resource::<ToolDb>();
+
+    let granted: std::collections::HashSet<&str> = research
+        .all()
+        .flat_map(|node| node.unlocks_tools.iter())
+        .map(|id| id.as_str())
+        .collect();
+
+    let unreachable: Vec<&str> = tools
+        .all()
+        .map(|def| def.id.as_str())
+        .filter(|id| *id != crate::tuning::STARTER_TOOL_ID)
+        .filter(|id| !granted.contains(id))
+        .collect();
+
+    assert!(
+        unreachable.is_empty(),
+        "these tools are in no research node's unlocks_tools and are not the starter tool, \
+         so nothing in a real game can ever hand them over: {unreachable:?}"
+    );
+}
+
 /// Every shipped species' `Game::rich_in` — authored, or `work_resource`
 /// fallen back to — names a real, loaded item. Spec section 7's own census:
 /// no shipped species authors `rich_in` yet (decision 5 is that none had

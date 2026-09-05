@@ -4349,6 +4349,17 @@ pub const TOOL_SLOT_PER_LEVEL: u32 = 8;
 /// carry one of every category stops being a choice at all.
 pub const TOOL_SLOT_CAP: u32 = 4;
 
+/// How many rows `Game::tool_rows` may return — `MAX_DOWNED_PROGRAMS`'s own
+/// reason: `Mode::Tools` is a read-only row list with no scroll, so this
+/// doubles as a layout constraint that must fit at 1280x720, asserted by
+/// `the_tallest_tools_list_fits_its_popup_at_1280x720` and verified by
+/// mutation. `TOOL_SLOT_CAP` only bounds what is *installed*; a modded
+/// research tree can teach arbitrarily many tools with nothing forged yet,
+/// so `tool_rows` needs its own ceiling instead of inheriting the slot
+/// cap — twice it, headroom for a kit wider than the shipped one without
+/// reopening the screen to an unbounded catalogue.
+pub const MAX_TOOL_ROWS: usize = 8;
+
 /// `Game::extraction_yield`'s base unit count — the multiplier scaled by
 /// `game::extraction::tier_scale(tool.tier)` and `DownedProgram::grade()`
 /// (identity `1.0` at `Ordinary`, full condition, level 0). **Checked**
@@ -4391,3 +4402,15 @@ pub const TOOL_TIER_SCALE_STEP: f32 = 0.5;
 /// 3). A flat floor tied to *what was killed* rather than a second roll of
 /// the tool's own pool, so it stays modest next to `TOOL_BASE_UNITS`.
 pub const RICH_IN_UNITS: u32 = 1;
+
+/// What one carrier of any tool is worth in trade currency —
+/// `ItemDb::synthesise_tool_carriers`'s flat price, `ETCHED_DISK_VALUE`'s
+/// own shape but a single constant rather than an exclusive/ordinary split:
+/// a tool has no analog to an exclusive routine yet. Set below every
+/// shipped tool's own `forge_cost` (cheapest today is `salvage_clamp`'s 3
+/// `core_fragment`, worth 3), so forging a carrier and immediately selling
+/// it back is a loss rather than a Credit loop — the carrier is buyable
+/// nowhere (`game::caravan`'s `stock_pool` excludes a tool id the way it
+/// excludes an etched ability), so this only prices what selling a spare
+/// one back nets.
+pub const TOOL_CARRIER_VALUE: u32 = 2;

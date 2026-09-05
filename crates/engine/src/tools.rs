@@ -54,6 +54,7 @@ pub enum ToolCategory {
     Parts,
     Cores,
     Routines,
+    Gear,
 }
 
 impl ToolCategory {
@@ -66,6 +67,7 @@ impl ToolCategory {
             ToolCategory::Parts => "Parts",
             ToolCategory::Cores => "Cores",
             ToolCategory::Routines => "Routines",
+            ToolCategory::Gear => "Gear",
         }
     }
 }

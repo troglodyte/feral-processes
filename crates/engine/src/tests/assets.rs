@@ -3342,6 +3342,14 @@ fn every_non_routines_tool_has_a_non_empty_yield_pool() {
                     def.id
                 );
             }
+            ToolCategory::Gear => {
+                assert!(
+                    def.yields.is_empty(),
+                    "tool {:?} is category Gear and must not declare a yields pool — it rolls \
+                     the species' own drop table instead",
+                    def.id
+                );
+            }
         }
     }
     assert!(

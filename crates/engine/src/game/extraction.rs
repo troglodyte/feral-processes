@@ -197,6 +197,49 @@ impl Game {
         granted
     }
 
+    /// The chance of each gear item a `Gear` tool could pull off `program`,
+    /// scaled by the tool's tier and the bench's.
+    ///
+    /// The pool is `equipment_drops_for`'s — both schema directions merged,
+    /// sorted by item id, with a running `DropBoost` already folded in.
+    /// Extraction needs no bench to stand, so a player may arm a buff and
+    /// then strip; that is a recorded interaction, not an oversight (spec
+    /// §9's "Recorded interactions").
+    ///
+    /// **The baseline needs no constant.** `tier_scale(1)` is `1.0`, and the
+    /// bench's term is `tier - 1` like `extraction_yield`'s, so a tier-1
+    /// tool on a never-upgraded bench — or no bench at all — quotes the
+    /// authored chance untouched. `a_tier_one_gear_tool_with_no_bench_
+    /// quotes_the_authored_chances` asserts that as an identity rather than
+    /// as a number, so inserting a scale constant here fails loudly.
+    ///
+    /// **Grade does not enter.** `program.grade()` already sells materials
+    /// in `extraction_yield`; leaving it out is what makes the baseline
+    /// literally the authored chance rather than approximately it.
+    ///
+    /// **Clamped here, unlike its source.** `equipment_drops_for` returns
+    /// chances unclamped because its one caller clamps before rolling. This
+    /// has two callers — the screen's preview and the pull — whose whole
+    /// reason for sharing a derivation is that a quoted figure and a rolled
+    /// one cannot differ, so the clamp lands once, inside.
+    pub fn gear_chances(&self, program: &DownedProgram, tool: &ToolDef) -> Vec<(ItemId, f32)> {
+        let Some(species) = self
+            .world
+            .resource::<SpeciesDb>()
+            .get(&program.species)
+            .cloned()
+        else {
+            return Vec::new();
+        };
+        let bench = self.extraction_bench_tier().saturating_sub(1);
+        let scale = tier_scale(tool.tier + bench);
+        let mut chances = self.equipment_drops_for(&species);
+        for (_, chance) in &mut chances {
+            *chance = (*chance * scale).clamp(0.0, 1.0);
+        }
+        chances
+    }
+
     /// What a `Routines` tool could take out of `program`: every routine its
     /// species declares at or below the program's own level, in the species
     /// file's order, minus anything already known.

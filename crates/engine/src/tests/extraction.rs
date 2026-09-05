@@ -2462,3 +2462,133 @@ fn a_routine_extractions_tick_cost_is_the_one_the_act_spends() {
 
     assert_eq!(ticks_elapsed(&game) - before, option.ticks);
 }
+
+/// A `Gear` tool is defined in-test rather than off an asset: the shipped
+/// one arrives in Task 4, and the derivation must be provable without it.
+fn gear_tool(tier: u32) -> ToolDef {
+    ToolDef {
+        id: ToolId("test_gear_tool".to_string()),
+        name: "Test Gear Tool".to_string(),
+        description: "Pulls worn gear off a downed process.".to_string(),
+        category: ToolCategory::Gear,
+        yields: Vec::new(),
+        tier,
+        ticks: 40,
+        forge_cost: Vec::new(),
+    }
+}
+
+/// Picks a species that actually has gear to drop — `equipment_drops_for`
+/// merges both schema directions, so "has drops" is a question only it can
+/// answer. Mirrors `a_running_drop_boost_field_buff_scales_every_
+/// equipment_drop_chance`'s idiom in `tests/combat_rewards.rs`.
+fn species_with_gear(game: &Game) -> SpeciesDef {
+    game.species_defs()
+        .into_iter()
+        .find(|s| !game.equipment_drops_for(s).is_empty())
+        .expect("at least one shipped species should drop gear")
+}
+
+/// **The neutrality identity.** A tier-1 `Gear` tool with no bench standing
+/// quotes the authored chances exactly — not approximately, not scaled by
+/// grade. Written as an identity against `equipment_drops_for` rather than
+/// against a literal, so it fails the day anyone inserts a constant between
+/// the table and the roll (spec §9.5, and the Global Constraint above).
+#[test]
+fn a_tier_one_gear_tool_with_no_bench_quotes_the_authored_chances() {
+    let game = Game::new(4201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = species_with_gear(&game);
+    let authored = game.equipment_drops_for(&species);
+
+    let mut downed = program(50, Rarity::Ordinary, 3);
+    downed.species = species.id.clone();
+
+    assert_eq!(game.extraction_bench_tier(), 0, "no bench should stand here");
+    let quoted = game.gear_chances(&downed, &gear_tool(1));
+
+    assert_eq!(quoted.len(), authored.len());
+    for ((q_item, q_chance), (a_item, a_chance)) in quoted.iter().zip(authored.iter()) {
+        assert_eq!(q_item, a_item);
+        assert_eq!(
+            *q_chance,
+            a_chance.clamp(0.0, 1.0),
+            "a tier-1 tool on no bench must quote the authored chance for {q_item:?}"
+        );
+    }
+}
+
+/// Grade must not enter the chance. Two programs of the same species at
+/// opposite ends of every grade axis quote identically — what grade sells
+/// is materials, in `extraction_yield`.
+#[test]
+fn program_grade_does_not_move_a_gear_chance() {
+    let game = Game::new(4202, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = species_with_gear(&game);
+
+    let mut poor = program(1, Rarity::Ordinary, 1);
+    poor.species = species.id.clone();
+    let mut rich = program(100, Rarity::Gold, 30);
+    rich.species = species.id.clone();
+
+    assert_eq!(
+        game.gear_chances(&poor, &gear_tool(1)),
+        game.gear_chances(&rich, &gear_tool(1)),
+        "grade sells materials, never gear odds"
+    );
+}
+
+/// Tier scales the chance, and the curve is the shipped one — a tier-2 tool
+/// is `1.0 + TOOL_TIER_SCALE_STEP` times the authored figure, clamped.
+#[test]
+fn a_higher_tier_gear_tool_scales_the_authored_chance() {
+    let game = Game::new(4203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = species_with_gear(&game);
+    let authored = game.equipment_drops_for(&species);
+
+    let mut downed = program(50, Rarity::Ordinary, 3);
+    downed.species = species.id.clone();
+
+    let scaled = game.gear_chances(&downed, &gear_tool(2));
+    let step = crate::tuning::TOOL_TIER_SCALE_STEP;
+
+    for ((s_item, s_chance), (a_item, a_chance)) in scaled.iter().zip(authored.iter()) {
+        assert_eq!(s_item, a_item);
+        let expected = (a_chance * (1.0 + step)).clamp(0.0, 1.0);
+        assert!(
+            (s_chance - expected).abs() < 1e-6,
+            "tier 2 should quote {expected} for {s_item:?}, got {s_chance}"
+        );
+    }
+}
+
+/// Clamped inside, unlike its source. `equipment_drops_for` returns chances
+/// unclamped on purpose (its one caller clamps before rolling); this one has
+/// two callers — the preview and the pull — and a value clamped twice in two
+/// places is a crack they could differ through (spec §9.5).
+#[test]
+fn a_gear_chance_never_exceeds_one() {
+    let game = Game::new(4204, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = species_with_gear(&game);
+
+    let mut downed = program(50, Rarity::Ordinary, 3);
+    downed.species = species.id.clone();
+
+    // A tier far past anything shippable, so every authored chance is
+    // pushed over 1.0 before the clamp.
+    for (item, chance) in game.gear_chances(&downed, &gear_tool(99)) {
+        assert!(
+            (0.0..=1.0).contains(&chance),
+            "chance for {item:?} escaped the clamp: {chance}"
+        );
+    }
+}
+
+/// A species the run has no def for quotes nothing rather than panicking —
+/// a mod species removed between save and load is the real case.
+#[test]
+fn an_unknown_species_quotes_no_gear() {
+    let game = Game::new(4205, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut downed = program(50, Rarity::Ordinary, 3);
+    downed.species = "no_such_species".to_string();
+    assert!(game.gear_chances(&downed, &gear_tool(1)).is_empty());
+}

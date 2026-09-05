@@ -118,6 +118,18 @@ impl Game {
         })
     }
 
+    /// What one use of `tool` costs in ticks, here and now —
+    /// `ToolDef::ticks` divided down by any standing bench's tier
+    /// (`tuning::EXTRACT_BENCH_TICK_STEP`), floored at one. The one
+    /// derivation, `extraction_yield`'s rule: `extract_program` spends
+    /// exactly this and the screen quotes exactly this, so a promised cost
+    /// and a paid one cannot differ.
+    pub fn extraction_ticks(&self, tool: &ToolDef) -> u64 {
+        let tier = self.extraction_bench_tier() as f32;
+        let divisor = 1.0 + tuning::EXTRACT_BENCH_TICK_STEP * tier;
+        ((tool.ticks as f32 / divisor).round() as u64).max(1)
+    }
+
     /// What extracting `program` with `tool` grants — the one derivation,
     /// called by `extract_program` (below) and by the screen's preview (a
     /// later task) alike, so a quoted figure and a granted one cannot
@@ -234,7 +246,7 @@ impl Game {
     /// installed. Then the program is removed, `extraction_yield` is
     /// called exactly once and its `Vec` granted verbatim through
     /// `grant_loot` under `LootSource::Extract`, one log line, and finally
-    /// `self.tick()` `tool.ticks` times — `commit_caravan_basket`'s
+    /// `self.tick()` `extraction_ticks` times — `commit_caravan_basket`'s
     /// ordering (refusals, then spend, then the log, then the tick cost).
     ///
     /// The tick loop breaks early on a game over or a battle opening
@@ -295,7 +307,11 @@ impl Game {
             );
         }
 
-        for _ in 0..tool_def.ticks {
+        // Read before the loop, not inside it: a bench demolished by a raid
+        // mid-extraction must not change what this use was already priced
+        // at — `commit_caravan_basket`'s rule that a spend is quoted once.
+        let ticks = self.extraction_ticks(&tool_def);
+        for _ in 0..ticks {
             if self.is_game_over().is_some() || self.has_active_battle() {
                 break;
             }

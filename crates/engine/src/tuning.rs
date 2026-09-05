@@ -4412,6 +4412,21 @@ pub const TOOL_TIER_SCALE_STEP: f32 = 0.5;
 // owning the bench is worth something, it is just worth time rather than
 // materials.
 
+/// How much each tier of a standing extraction bench divides an
+/// extraction's tick cost: `ticks / (1 + EXTRACT_BENCH_TICK_STEP * tier)`,
+/// floored at one tick. Uses the bench's **full** tier, unlike the yield
+/// term (which uses `tier - 1`) — standing the bench at all is worth time,
+/// and upgrading it is worth materials. A quotient rather than a
+/// subtraction so no tier can reach zero, and a floor of one so an
+/// extraction is never a free action: `Game::extract_program` ticking
+/// nothing would make the store a place to stand and think in, which is
+/// what every other spend in the game refuses to be.
+///
+/// A guess, like every other number this feature ships: at `0.25` a fresh
+/// bench pays `0.8x` and a tier-5 bench `0.44x`. Nothing in the repo can
+/// check it — `balance_sim` models no loot and no time cost.
+pub const EXTRACT_BENCH_TICK_STEP: f32 = 0.25;
+
 /// Extra units of a program's `rich_in` item (or its `work_resource`
 /// fallback, `Game::rich_in`) that `extraction_yield` adds on top of the
 /// tool's own draw — from any tool, regardless of category (spec section

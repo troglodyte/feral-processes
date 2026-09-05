@@ -1948,3 +1948,55 @@ fn the_previewed_yield_tracks_the_bench_tier() {
         );
     }
 }
+
+/// The tick half of the bench, `GameClock` being this build's tick counter —
+/// `tests::wielded`'s own idiom for measuring what an act actually spends.
+fn ticks_elapsed(game: &Game) -> u64 {
+    game.world.resource::<crate::resources::GameClock>().tick
+}
+
+#[test]
+fn a_standing_bench_makes_an_extraction_faster() {
+    let mut game = new_test_game();
+    let tool = starter_tool(&game);
+    let bare = game.extraction_ticks(&tool);
+    assert_eq!(bare, tool.ticks, "no bench is the tool's own figure");
+
+    build_program_bench(&mut game, None);
+
+    assert!(
+        game.extraction_ticks(&tool) < bare,
+        "a fresh bench must already be worth time: {} vs {bare}",
+        game.extraction_ticks(&tool)
+    );
+}
+
+#[test]
+fn an_upgraded_bench_is_faster_still_and_never_free() {
+    let mut game = new_test_game();
+    let tool = starter_tool(&game);
+    build_program_bench(&mut game, Some(1));
+    let tier_one = game.extraction_ticks(&tool);
+    build_program_bench(&mut game, Some(5));
+    let tier_five = game.extraction_ticks(&tool);
+
+    assert!(tier_five < tier_one, "{tier_five} vs {tier_one}");
+    assert!(tier_five >= 1, "an extraction never costs zero time");
+}
+
+/// The tick cost is what the act actually spends, not just what a number
+/// says. Without this the formula could be right and unwired.
+#[test]
+fn the_act_spends_the_bench_reduced_tick_cost() {
+    let mut game = new_test_game();
+    give_downed_program(&mut game, test_program("scrapper", 5));
+    build_program_bench(&mut game, Some(5));
+    let tool = starter_tool(&game);
+    let expected = game.extraction_ticks(&tool);
+    let before = ticks_elapsed(&game);
+
+    game.extract_program(0, &tool.id)
+        .expect("the extraction runs");
+
+    assert_eq!(ticks_elapsed(&game) - before, expected);
+}

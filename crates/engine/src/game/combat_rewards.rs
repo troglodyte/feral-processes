@@ -553,6 +553,7 @@ impl Game {
         }
         let level = self.ability_user_level(wild);
         let overkill_term = self.overkill_term(wild);
+        let carried = self.carried_routine(wild, &species);
         let mut condition = DownedProgram::roll_condition(rarity, boss, overkill_term);
         if boss {
             condition = condition.max(crate::tuning::BOSS_CONDITION_FLOOR);
@@ -563,7 +564,45 @@ impl Game {
             rarity,
             boss,
             condition,
+            carried,
         })
+    }
+
+    /// What `wild` was actually running that its species does not declare —
+    /// `roll_wild_routine`'s prize, for `DownedProgram::carried`.
+    ///
+    /// Read off the live `Routines` component, so this shares
+    /// `downed_program_for`'s constraint exactly: it must run before the
+    /// despawn, because nothing about a species and a level can reconstruct
+    /// which individual got lucky at spawn.
+    ///
+    /// **Minus the species kit.** `Game::routine_candidates` derives the
+    /// rest of the pool from `SpeciesDef::abilities` and dedupes, so an
+    /// entry already declared there would be dropped on arrival — storing it
+    /// would buy a field's worth of save for nothing. What is left is the
+    /// only thing this record could not otherwise say.
+    ///
+    /// The first such entry, not all of them: `roll_wild_routine` installs
+    /// exactly one routine, so a second is a mod's or a fixture's doing and
+    /// one prize per kill stays the rule either way.
+    fn carried_routine(
+        &self,
+        wild: Entity,
+        species: &SpeciesId,
+    ) -> Option<crate::abilities::AbilityId> {
+        let installed = self.world.get::<Routines>(wild)?;
+        let db = self.world.resource::<SpeciesDb>();
+        let declared = db.get(species).map(|def| def.abilities.as_slice());
+        installed
+            .0
+            .iter()
+            .find(|id| {
+                !declared
+                    .unwrap_or(&[])
+                    .iter()
+                    .any(|declared| &declared.id == *id)
+            })
+            .cloned()
     }
 
     /// The one writer of `DownedPrograms`'s `Vec` itself — `leave_downed_program`

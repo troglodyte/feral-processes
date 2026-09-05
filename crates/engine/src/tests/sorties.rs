@@ -849,6 +849,7 @@ fn fill_downed_program_store(game: &mut Game) {
                 rarity: Rarity::Ordinary,
                 boss: false,
                 condition: crate::tuning::CONDITION_BASE,
+                carried: None,
             }),
             "the store should not refuse below its own cap"
         );

@@ -16,6 +16,7 @@ fn program(species: &str, condition: u8, rarity: Rarity, level: u32) -> DownedPr
         rarity,
         boss: false,
         condition,
+        carried: None,
     }
 }
 

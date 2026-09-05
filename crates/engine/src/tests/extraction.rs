@@ -19,6 +19,7 @@ fn program(condition: u8, rarity: Rarity, level: u32) -> DownedProgram {
         rarity,
         boss: false,
         condition,
+        carried: None,
     }
 }
 
@@ -62,9 +63,18 @@ fn downed_programs_survive_a_save_load_round_trip() {
     // Save -> load, not a RON round trip: `PlayerSave::downed_programs` is
     // `#[serde(default)]`, and a RON round trip can't catch a field that
     // silently defaults away — only `Game::save`/`Game::load` exercise the
-    // path that would drop it.
+    // path that would drop it. `DownedProgram::carried` is `#[serde(default)]`
+    // for the same reason and takes the same risk, so one of the three
+    // carries a routine and is asserted by name below.
     let mut game = Game::new(4471, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
+    let carrier = game
+        .world
+        .resource::<AbilityDb>()
+        .wild_pool()
+        .first()
+        .map(|(def, _)| def.id.clone())
+        .expect("some shipped routine is in the wild pool");
     let held = vec![
         program(15, Rarity::Ordinary, 3),
         program(88, Rarity::Prismatic, 47),
@@ -74,6 +84,7 @@ fn downed_programs_survive_a_save_load_round_trip() {
             rarity: Rarity::Silver,
             boss: true,
             condition: 60,
+            carried: Some(carrier.clone()),
         },
     ];
     game.world.get_mut::<DownedPrograms>(player).unwrap().0 = held.clone();
@@ -93,6 +104,11 @@ fn downed_programs_survive_a_save_load_round_trip() {
     assert_eq!(
         restored.0, held,
         "three distinct downed programs must come back exactly as saved"
+    );
+    assert_eq!(
+        restored.0[2].carried,
+        Some(carrier),
+        "the carried routine must survive the save, not default away"
     );
 }
 
@@ -374,6 +390,7 @@ fn rich_in_overrides_work_resource_and_reaches_extraction_yields_output() {
         rarity: Rarity::Gold,
         condition: 70,
         boss: false,
+        carried: None,
     };
     let tool = starter_tool_def(&game);
     let granted = totals(&game.extraction_yield(&prog, &tool));
@@ -789,6 +806,7 @@ fn downed_program_rows_reflect_the_store_in_order_with_species_names_resolved() 
             rarity: Rarity::Silver,
             boss: true,
             condition: 60,
+            carried: None,
         },
     ];
     game.world.get_mut::<DownedPrograms>(player).unwrap().0 = held.clone();
@@ -1843,6 +1861,7 @@ fn test_program(species: &str, level: u32) -> DownedProgram {
         rarity: Rarity::Ordinary,
         boss: false,
         condition: tuning::CONDITION_BASE,
+        carried: None,
     }
 }
 
@@ -2174,6 +2193,47 @@ fn the_routine_pool_is_the_species_kit_at_that_level() {
             "the level {level} pool is not the kit at that level"
         );
     }
+}
+
+/// A carried routine heads the pool, so
+/// `ROUTINE_TOOL_FIRST_UNKNOWN_WEIGHT` — which lands on the head — favours
+/// the thing that made this individual worth killing over the kit every one
+/// of its kind hands out. It sits outside the level gate on purpose: no
+/// level of its species declares it.
+#[test]
+fn a_carried_routine_heads_the_pool_and_never_doubles_the_kit() {
+    let game = new_test_game();
+    let mut program = test_program("scrapper", 30);
+    let kit = game.routine_candidates(&program);
+    assert!(!kit.is_empty(), "fixture premise: the kit offers something");
+    let prize = game
+        .world
+        .resource::<AbilityDb>()
+        .wild_pool()
+        .into_iter()
+        .map(|(def, _)| def.id.clone())
+        .find(|id| !kit.contains(id))
+        .expect("some wild-pool routine is outside the scrapper's own kit");
+
+    program.carried = Some(prize.clone());
+    let pool = game.routine_candidates(&program);
+
+    assert_eq!(pool.first(), Some(&prize), "the prize must head the pool");
+    assert_eq!(
+        &pool[1..],
+        kit.as_slice(),
+        "the kit must follow it, in its own order and unchanged"
+    );
+
+    // A carrier running something its own kit declares anyway is one row,
+    // not two — the dedupe `carried_routine` leans on when it declines to
+    // store a kit routine in the first place.
+    program.carried = Some(kit[0].clone());
+    assert_eq!(
+        game.routine_candidates(&program),
+        kit,
+        "a carried kit routine must not appear twice"
+    );
 }
 
 #[test]

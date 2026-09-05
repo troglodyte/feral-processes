@@ -216,34 +216,42 @@ impl Game {
     /// about today's files, and this is the construction that holds for a
     /// mod's.
     ///
-    /// The level gate is `install_innate_routines`' own, read off the same
-    /// `SpeciesDef::abilities`: a downed program carries no `Routines`
-    /// component to read, so what it *would* have been carrying is derived
-    /// from its species and level rather than stored — the "derived, never
-    /// stored" rule that kept `DownedProgram` a five-field record.
+    /// **`DownedProgram::carried` heads the pool**, ahead of the kit and
+    /// outside its level gate: it is what that individual was running, not
+    /// what its species hands out, so no level of its species declares it.
+    /// The head is where `ROUTINE_TOOL_FIRST_UNKNOWN_WEIGHT` lands, so a
+    /// program that got lucky at spawn is likeliest to teach the thing that
+    /// made it worth killing. It takes every filter below all the same —
+    /// known, exclusive, unresolvable, duplicated.
+    ///
+    /// The rest of the pool is `install_innate_routines`' own level gate,
+    /// read off the same `SpeciesDef::abilities`: what a downed program
+    /// *would* have been carrying by species and level is derived rather
+    /// than stored, and only the one unpredictable part is a save field.
     ///
     /// Deduplicated, because a species may declare the same id at two levels
     /// and a pool with a repeat would weight it twice by accident.
     pub fn routine_candidates(&self, program: &DownedProgram) -> Vec<AbilityId> {
-        let Some(species) = self.world.resource::<SpeciesDb>().get(&program.species) else {
-            return Vec::new();
-        };
+        let species = self.world.resource::<SpeciesDb>().get(&program.species);
+        let kit = species.map(|def| def.abilities.as_slice()).unwrap_or(&[]);
         let db = self.world.resource::<AbilityDb>();
         let mut pool: Vec<AbilityId> = Vec::new();
-        for declared in &species.abilities {
-            if declared.level > program.level {
+        let offered = program.carried.iter().cloned().chain(
+            kit.iter()
+                .filter(|declared| declared.level <= program.level)
+                .map(|declared| declared.id.clone()),
+        );
+        for id in offered {
+            if db.get(&id).is_none() {
                 continue;
             }
-            if db.get(&declared.id).is_none() {
+            if self.knows_routine(&id) || self.routine_is_exclusive(&id) {
                 continue;
             }
-            if self.knows_routine(&declared.id) || self.routine_is_exclusive(&declared.id) {
+            if pool.contains(&id) {
                 continue;
             }
-            if pool.contains(&declared.id) {
-                continue;
-            }
-            pool.push(declared.id.clone());
+            pool.push(id);
         }
         pool
     }

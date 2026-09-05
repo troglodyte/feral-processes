@@ -179,6 +179,7 @@ mod tests {
             rarity,
             boss: true,
             condition: 100,
+            carried: None,
         }
     }
 

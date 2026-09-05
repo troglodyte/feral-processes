@@ -116,6 +116,9 @@ impl Game {
                 rarity: Rarity::Ordinary,
                 boss: false,
                 condition,
+                // Wreckage, not a kill: no individual was running anything,
+                // so there is no carrier's prize in here.
+                carried: None,
             });
             if landed {
                 self.log_kind(

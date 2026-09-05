@@ -2631,6 +2631,13 @@ fn install_harness_puller(game: &mut Game) -> ToolId {
 /// `Inventory` count for a material and every `GearCopies` row naming
 /// `item`, regardless of quality or affix.
 ///
+/// **Why this exists, not `held()` alone**: `held()` reads only
+/// `Inventory`. An equippable gear pull lands in `GearCopies` instead, at a
+/// quality rolled by `grant_gear_drop` rather than the exact default
+/// `held()` probes for, so `held()` would silently under-count (report zero
+/// gained) for any equippable item a `Gear` tool grants. Do not "simplify"
+/// this back to `held()` — see the full derivation below.
+///
 /// **Deviation from the task brief**, which used `held()` alone for this
 /// per-item check: `held()`'s probe copy (`gear(item, 0)`) is always
 /// `Rarity::Ordinary`, tier 0, no affixes, `quality: QUALITY_DEFAULT` — the

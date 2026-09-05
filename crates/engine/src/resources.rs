@@ -1621,6 +1621,17 @@ pub struct KnownSettlement {
     /// knows.
     pub tile: (i32, i32),
     pub def: crate::settlements::SettlementDef,
+    /// Whether the party has actually walked to it.
+    ///
+    /// Written on the arm of `Game::move_player` that already queues
+    /// `PendingVisit`, and deliberately not derived from `Standings`: that
+    /// resource allows a standing with a town the party has never reached,
+    /// which routes need, so it is the wrong proxy. Additive behind
+    /// `#[serde(default)]` — an older save simply carries every known town
+    /// unvisited, which costs its compass row a name and a distance until
+    /// the party walks back.
+    #[serde(default)]
+    pub visited: bool,
 }
 
 /// The settlement the player's last step bumped into, waiting for a

@@ -44,7 +44,14 @@ fn register_settlement(
     game.world
         .resource_mut::<crate::resources::Settlements>()
         .0
-        .insert(key, crate::resources::KnownSettlement { tile, def });
+        .insert(
+            key,
+            crate::resources::KnownSettlement {
+                tile,
+                def,
+                visited: false,
+            },
+        );
 }
 
 // ---------------------------------------------------------------------------

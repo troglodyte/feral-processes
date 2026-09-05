@@ -3216,6 +3216,7 @@ mod tests {
             feral_processes_engine::resources::KnownSettlement {
                 tile: target,
                 def: feral_processes_engine::settlements::SettlementDef {
+                    visited: false,
                     id: "test_settlement".to_string(),
                     name: "Test Settlement".to_string(),
                     blurb: "A settlement placed for a test.".to_string(),

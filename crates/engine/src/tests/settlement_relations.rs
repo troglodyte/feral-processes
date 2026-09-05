@@ -901,6 +901,7 @@ fn a_town_with_nowhere_to_stand_beside_it_refuses_and_moves_nobody() {
             crate::resources::KnownSettlement {
                 tile: boxed_in,
                 def: generic_settlement_def(),
+                visited: false,
             },
         );
     set_standing(&mut game, key, SETTLEMENT_ALLIED_STANDING);

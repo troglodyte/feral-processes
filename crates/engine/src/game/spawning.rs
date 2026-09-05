@@ -942,6 +942,7 @@ impl Game {
                         crate::resources::KnownSettlement {
                             tile,
                             def: def.clone(),
+                            visited: false,
                         },
                     );
                 self.spawn_settlement_at(key, def.kind, tile);

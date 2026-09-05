@@ -127,6 +127,7 @@ pub(super) fn place_settlement(
             crate::resources::KnownSettlement {
                 tile: (x, y),
                 def: def.clone(),
+                visited: false,
             },
         );
     game.world

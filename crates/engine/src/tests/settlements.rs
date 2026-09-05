@@ -136,3 +136,28 @@ fn walking_onto_ordinary_ground_beside_a_settlement_still_moves_you_and_queues_n
         "a step that never touched the settlement tile must queue no visit"
     );
 }
+
+#[test]
+fn walking_into_a_settlement_marks_it_visited() {
+    let mut game = game();
+    let (key, _) = settlement_east_of_player(&mut game);
+
+    game.move_player(1, 0);
+
+    assert!(
+        game.world.resource::<crate::resources::Settlements>().0[&key].visited,
+        "the arm that queues the visit is the one that records having been there"
+    );
+}
+
+#[test]
+fn a_settlement_merely_materialized_nearby_is_not_visited() {
+    let mut game = game();
+    let (key, _) = settlement_east_of_player(&mut game);
+
+    assert!(
+        !game.world.resource::<crate::resources::Settlements>().0[&key].visited,
+        "recording where a town stands is not the same as having walked to it — \
+         the whole point of the compass' two tiers"
+    );
+}

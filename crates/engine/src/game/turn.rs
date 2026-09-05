@@ -547,6 +547,17 @@ impl Game {
             self.world
                 .resource_mut::<crate::resources::PendingVisit>()
                 .0 = Some(key);
+            // The same arm records having been there: reaching a town is
+            // what promotes its compass row from a bearing to a name and a
+            // distance, and this bump is the only thing that means reached.
+            if let Some(known) = self
+                .world
+                .resource_mut::<crate::resources::Settlements>()
+                .0
+                .get_mut(&key)
+            {
+                known.visited = true;
+            }
             self.tick();
             return;
         }

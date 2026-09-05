@@ -393,6 +393,7 @@ pub(crate) fn place_settlement_east_of_player(
         feral_processes_engine::resources::KnownSettlement {
             tile: target,
             def: generic_settlement_def(),
+            visited: false,
         },
     );
     save::save_to_file(&path, &data).unwrap();
@@ -421,6 +422,7 @@ pub(crate) fn place_settlement_far_from_player(
         feral_processes_engine::resources::KnownSettlement {
             tile: (px + 12, py),
             def: generic_settlement_def(),
+            visited: false,
         },
     );
     save::save_to_file(&path, &data).unwrap();
@@ -474,6 +476,7 @@ pub(crate) fn place_settlement_and_a_pursuing_guardian(
         feral_processes_engine::resources::KnownSettlement {
             tile: target,
             def: generic_settlement_def(),
+            visited: false,
         },
     );
     data.nests.push(save::NestSave {

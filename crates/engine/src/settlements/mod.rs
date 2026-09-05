@@ -25,6 +25,21 @@ pub use relations::{Relation, Standing};
 
 use serde::{Deserialize, Serialize};
 
+/// A place the compass can point at.
+///
+/// Save-stable by construction and deliberately never an `Entity` — for
+/// `SettlementKey`'s own stated reason (`placement.rs`): entity ids are not
+/// stable across a save, and the compass' selection is serialized.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum CompassTarget {
+    /// The party's own anchor.
+    Home,
+    Town(SettlementKey),
+    /// A Stack entrance, named by its surface tile — the same key
+    /// `resources::FrameKey` already hangs a frame's memory off.
+    Link((i32, i32)),
+}
+
 /// How big a settlement is, and how much it can do.
 ///
 /// Two rather than a scale, because the difference is meant to be legible

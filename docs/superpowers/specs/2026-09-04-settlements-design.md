@@ -291,12 +291,15 @@ towns along a route prey on it.
 `RouteSave` stores the whole resolved settlement record, same rule as everywhere
 else.
 
-**Worth knowing:** sorties are engine-complete and have **no UI at all** — no
-`Mode`, no key, no screen calls `dispatch_sortie` or `sortie_board`. The only
-player-visible trace is the party screen's "Away on a sortie" label
-(`crates/gui/src/render/party.rs:270`). Building the route screen puts most of a
-sortie screen on the table for nearly free. Out of scope unless asked, but flag
-it at Phase 6 rather than discovering it there.
+**Worth knowing** (written before Phase 6, **superseded 2026-09-05**): this
+paragraph said sorties were engine-complete with **no UI at all** — no `Mode`,
+no key, nothing calling `dispatch_sortie` or `sortie_board` — and put a sortie
+screen out of scope unless asked. Phase 6 built it anyway, because the route
+screen did put it on the table for nearly free: `v0.13.99` ships
+`Mode::Dispatch` and `Mode::SortieSquad`, `draw_dispatch` and
+`draw_sortie_squad`, and `crates/app-core/src/tests/dispatch.rs` covering the
+squad picker. Do not read the old sentence as open work; `INDEX.md` recorded
+the outcome correctly while this line did not.
 
 ## Before implementation
 

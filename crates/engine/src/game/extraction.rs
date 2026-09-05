@@ -376,6 +376,80 @@ impl Game {
         Ok(())
     }
 
+    /// The `Gear` branch of `extract_program`. Rolls each chance from
+    /// `gear_chances` and grants every hit through `grant_gear_drop` — the
+    /// one door a copy above `Ordinary` enters the game through, so
+    /// found-gear-beats-crafted-gear still binds and
+    /// `crafted_gear_is_never_rare` is untouched.
+    ///
+    /// `Rarity::Ordinary` is the floor, deliberately: the boss's own door
+    /// is still open and still paying `SURFACE_BOSS_LOOT_RARITY_FLOOR` at
+    /// the kill, so `DownedProgram::boss` does not carry a second floor
+    /// here (spec §9's act).
+    ///
+    /// A miss pays nothing — no pool, no consolation — and the program and
+    /// the ticks are spent regardless (spec §9.4).
+    fn extract_gear_from_program(
+        &mut self,
+        index: usize,
+        program: &DownedProgram,
+        tool_def: &ToolDef,
+    ) -> Result<(), String> {
+        let chances = self.gear_chances(program, tool_def);
+
+        let player = self.player_entity();
+        self.world
+            .get_mut::<DownedPrograms>(player)
+            .unwrap()
+            .0
+            .remove(index);
+
+        let mut taken: Vec<String> = Vec::new();
+        for (item, chance) in chances {
+            let hit = {
+                let mut rng = self.world.resource_mut::<GameRng>();
+                rng.0.random_bool(chance as f64)
+            };
+            if hit {
+                let copy = self.grant_gear_drop(item, Rarity::Ordinary);
+                taken.push(self.drop_label(&copy));
+                self.record_drop(copy, 1);
+            }
+        }
+
+        let label = self.downed_program_label(program);
+        if taken.is_empty() {
+            self.log_kind(
+                MessageKind::Loot,
+                format!(
+                    "You work {label} over with the {} and find nothing worth wearing.",
+                    tool_def.name
+                ),
+            );
+        } else {
+            self.log_kind(
+                MessageKind::Loot,
+                format!(
+                    "You work {label} over with the {}: {}.",
+                    tool_def.name,
+                    taken.join(", ")
+                ),
+            );
+        }
+
+        // Quoted once, before the loop — a bench demolished mid-extraction
+        // must not change what this use was already priced at.
+        let ticks = self.extraction_ticks(tool_def);
+        for _ in 0..ticks {
+            if self.is_game_over().is_some() || self.has_active_battle() {
+                break;
+            }
+            self.tick();
+        }
+
+        Ok(())
+    }
+
     /// One row per held program, in store order — `Mode::DownedPrograms`'s
     /// whole list. The species' display name falls back to the raw id for a
     /// mod species since removed, `downed_program_label`'s own tolerance,
@@ -498,6 +572,14 @@ impl Game {
         // above the removal, or a program is spent teaching nothing.
         if tool_def.category == ToolCategory::Routines {
             return self.extract_routine_from_program(index, &program, &tool_def);
+        }
+
+        // The `Gear` category takes a third branch: no `yields` pool, and
+        // the outcome is rolled rather than apportioned. It sits beside the
+        // `Routines` return rather than inside the materials path because
+        // the two share nothing but the program's removal.
+        if tool_def.category == ToolCategory::Gear {
+            return self.extract_gear_from_program(index, &program, &tool_def);
         }
 
         let granted = self.extraction_yield(&program, &tool_def);

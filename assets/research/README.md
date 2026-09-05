@@ -65,6 +65,12 @@ Core Fragments.
     // manufacture. Companions never gain anything from this list — their kit
     // comes from their species file instead.
     unlocks_abilities: ["hot_patch"],
+
+    // Optional; defaults to none. Tool ids this node hands over the
+    // knowledge to forge — see assets/tools/README.md. `unlocks_abilities`'s
+    // own shape: what it hands over is knowledge, not an item, so a forged
+    // tool still has to be installed into a slot before it does anything.
+    unlocks_tools: ["core_tap"],
 )
 ```
 
@@ -82,9 +88,10 @@ Core Fragments.
   `unlocks_structures`, is dropped at load time with a warning — it could
   never be reached or acted on. Dropping cascades: anything that required
   the dropped node goes too.
-- An unknown id in `unlocks_abilities` is treated more gently: that id is
-  dropped with a warning and the node itself still loads, because a node's
-  structures and recipes are innocent of a bad ability id.
+- An unknown id in `unlocks_abilities` or `unlocks_tools` is treated more
+  gently: that id is dropped with a warning and the node itself still
+  loads, because a node's structures and recipes are innocent of a bad
+  ability or tool id.
 - Two nodes may name the same ability. Knowing a routine is a set membership,
   so the second unlock is silently a no-op rather than a wasted purchase —
   what limits how many copies you can install is Routine Disks, not how many

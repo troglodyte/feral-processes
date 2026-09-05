@@ -58,6 +58,15 @@ research, forging and installing more.
     // currency `power_cost` is to a routine but paid in ticks rather than
     // Power.
     ticks: 20,
+
+    // Optional; defaults to empty. What `Game::forge_tool` spends to grant
+    // one carrier of this tool, as (item id, quantity) pairs — a routine
+    // spends a flat blank Routine Disk because every routine is the same
+    // interchangeable object, but tools differ by tier, so a tier-2 tool
+    // must be able to cost more than a tier-1 one. Knowing a tool
+    // (`../research/README.md`'s `unlocks_tools`) is not enough on its own
+    // to forge one if this is non-empty and the cost isn't held.
+    forge_cost: [("core_fragment", 3)],
 )
 ```
 
@@ -86,4 +95,6 @@ constant breaks that grant; the census
 `assets.rs::starter_tool_id_resolves_to_a_shipped_tool` catches it.
 
 Granted at creation only, on `abilities::DECOMPILE_ABILITY_ID`'s terms — a
-new game gets it, a loaded save does not add it retroactively.
+new game gets it, a loaded save does not add it retroactively. Its own
+`forge_cost` prices a *replacement* only — it never gates the one
+`Game::new` grants.

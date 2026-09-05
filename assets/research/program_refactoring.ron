@@ -1,9 +1,10 @@
 (
     id: "program_refactoring",
     name: "Program Refactoring",
-    description: "Rewrite a tamed program instead of replacing it. Unlocks the Annealing Node and the Refactor Bench.",
+    description: "Rewrite a tamed program instead of replacing it. Unlocks the Annealing Node, the Refactor Bench, and the Component Stripper — pulling a program apart for parts instead of scrap.",
     cost: 75,
     min_zone: 2,
     requires: ["automation"],
     unlocks_structures: ["annealing_node", "refactor_bench"],
+    unlocks_tools: ["component_stripper"],
 )

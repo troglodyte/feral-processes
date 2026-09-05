@@ -3,10 +3,14 @@
     name: "Component Stripper",
     description: "Pulls whole components out of a downed process instead of scrap.",
     category: Parts,
-    // A plausible pool, not a tuned one: same footing as `core_tap.ron` —
-    // this tool isn't the starter and isn't read by the drop-neutrality
-    // test, so reweigh freely once it's actually played.
-    yields: [("logic_wafer", 1.0), ("packet_buffer", 0.5)],
+    // Weighted toward the starter's band rather than above it: a lateral
+    // unlock should pay laterally. `salvage_clamp` averages ~1.9 value a
+    // unit (Core Fragment 1 at 1.0, Bytecode Block 4 at 0.4) and this pool
+    // averages 3.0, because the cheapest shipped *part* is worth 3 against
+    // a fragment's 1 — a Parts pool cannot reach 1.9 at any weighting, so
+    // that residual is the floor of the category and not a loose number.
+    // Everything else here is still untuned; reweigh once it is played.
+    yields: [("logic_wafer", 1.0), ("charge_coil", 0.5)],
     tier: 1,
     ticks: 24,
     // Forged from the same low-tier salvage a Salvage Clamp already draws,

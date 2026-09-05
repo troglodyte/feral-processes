@@ -333,3 +333,27 @@
   only ever adding to the total. Both shipped pools have two entries, where
   the paradox cannot occur — a three-item modded pool exhibiting it is the
   method working as documented, not a regression to chase.
+- **The starter tool's knowledge is derived, never stored** — `knows_tool`
+  answers true for `tuning::STARTER_TOOL_ID`, and `tool_rows` unions the same
+  helper. Granting it into `KnownTools` at `Game::new` instead compiles,
+  passes, and makes pulling the starter unrecoverable: `uninstall_tool`
+  correctly returns no carrier, so with no knowledge behind it there is
+  nothing to re-forge, and `tool_rows()` going empty takes the Tools row out
+  of the party menu — the screen that would fix it disappears with it. Since
+  phase 1 deleted `roll_work_resource_drop`, every kill afterwards pays
+  nothing. Derived also repairs saves phase 1 already wrote, which a grant at
+  creation cannot. Do not re-fix it with a confirmation prompt or a
+  refuse-to-pull-your-last-tool rule.
+- **A synthetic item id needs a minted `ItemDef` behind it**, and
+  `Game::item_name`'s raw-id fallback is why nothing tells you when it is
+  missing. `ItemId::tool` shipped without `synthesise_tool_carriers` and the
+  pack showed `tool_core_tap`, the refusal line said "You're not carrying
+  tool_core_tap", and a trader priced it at the default — all of it silent,
+  because every test in the feature names a tool through `ToolDef::name`.
+- **A tool carrier is sold everywhere and bought nowhere**, the etched disk's
+  asymmetry, filtered through `ItemId::tool_id` in `caravan::stock_pool` (the
+  settlement shelf's source too) and `ItemDb::creation_shelf`. The second one
+  is the one nobody predicts: `TOOL_CARRIER_VALUE` sits below every shipped
+  `forge_cost`, which also puts it under `CREATION_SHELF_MAX_VALUE`, so a new
+  character was offered a carrier for a tool no research had taught yet. A
+  minted item joins every pool that filters by *value* rather than by name.

@@ -33,6 +33,29 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.102
+
+**Extraction tools are something you earn now.** Research teaches a tool,
+you forge one from materials, and installing it burns the forged tool into a
+slot. The Salvage Clamp you start with is no longer the only one you will
+ever have.
+
+**Two tools past the starter**, each behind the research node whose subject
+it shares — a Component Stripper that pulls whole components out of a downed
+process (Program Refactoring), and the Core Tap that draws the compiled core
+out from under its shell (Deep Analysis).
+
+**Tool slots grow with level**, to a ceiling of four.
+
+**A new screen, `[T]` from the party menu.** One row per tool you know or
+have installed, with the slot it sits in and how many you are carrying:
+`[F]` forges, `[I]` installs, `[X]` pulls one back out.
+
+**Pulling a tool does not hand the forged tool back** — what is in the slot
+*is* the tool, the same rule an installed Routine Disk follows. You keep the
+knowledge, so anything you have researched can be forged again, the starter
+included.
+
 ## 0.13.101
 
 **A `settlements` template opens the game standing on a town's doorstep**, so

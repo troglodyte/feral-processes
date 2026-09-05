@@ -1725,3 +1725,9 @@ impl Sortie {
         }
     }
 }
+
+/// Every caravan route currently in flight, dispatched or standing. Saved;
+/// see `save::RouteSave`. `Sorties`' shape — see `routes::Route`'s doc for
+/// why it needs no membership scheme.
+#[derive(Resource, Default, Clone, Debug)]
+pub struct Routes(pub Vec<crate::routes::Route>);

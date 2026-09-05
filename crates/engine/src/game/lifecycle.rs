@@ -268,6 +268,9 @@ impl Game {
         // Empty at both doors. `Game::load` refills it from the save below,
         // once every creature has an entity to name — see `SortieSave`.
         world.insert_resource(crate::resources::Sorties::default());
+        // Empty at both doors too, `Sorties`' reason, though a route needs
+        // no creature to have spawned first — see `save::RouteSave`.
+        world.insert_resource(crate::resources::Routes::default());
         world.insert_resource(crate::resources::Trace::default());
         world.insert_resource(crate::resources::RunFeats::default());
         world.insert_resource(crate::resources::SeenConditions::default());
@@ -548,6 +551,9 @@ impl Game {
         // Empty at both doors. `Game::load` refills it from the save below,
         // once every creature has an entity to name — see `SortieSave`.
         world.insert_resource(crate::resources::Sorties::default());
+        // Empty at both doors too, `Sorties`' reason, though a route needs
+        // no creature to have spawned first — see `save::RouteSave`.
+        world.insert_resource(crate::resources::Routes::default());
         world.insert_resource(crate::resources::Trace::default());
         world.insert_resource(crate::resources::RunFeats::default());
         world.insert_resource(crate::resources::SeenConditions::default());
@@ -1232,6 +1238,28 @@ impl Game {
             .collect();
         game.world
             .insert_resource(crate::resources::Sorties(sorties));
+        // Straight field-for-field, `routes::Route`'s own reason: cargo
+        // names no entity, so there is nothing here to reconcile against
+        // `sortie_members` above.
+        let routes: Vec<crate::routes::Route> = data
+            .player
+            .routes
+            .into_iter()
+            .map(|r| crate::routes::Route {
+                destination: r.destination,
+                destination_def: r.destination_def,
+                destination_tile: r.destination_tile,
+                cargo: r.cargo,
+                standing: r.standing,
+                stalled: r.stalled,
+                leg: r.leg,
+                ticks_total: r.ticks_total,
+                ticks_elapsed: r.ticks_elapsed,
+                proceeds: r.proceeds,
+                losses: r.losses,
+            })
+            .collect();
+        game.world.insert_resource(crate::resources::Routes(routes));
 
         let mut structure_positions: HashMap<(i32, i32), Entity> = HashMap::new();
         for s in data.structures {
@@ -1466,6 +1494,27 @@ impl Game {
                 xp: s.xp,
                 kills: s.kills,
                 casualties: s.casualties.clone(),
+            })
+            .collect();
+        // No membership to gather, `routes::Route`'s own reason: a
+        // field-for-field conversion is the whole of it.
+        let routes: Vec<save::RouteSave> = self
+            .world
+            .resource::<crate::resources::Routes>()
+            .0
+            .iter()
+            .map(|r| save::RouteSave {
+                destination: r.destination,
+                destination_def: r.destination_def.clone(),
+                destination_tile: r.destination_tile,
+                cargo: r.cargo.clone(),
+                standing: r.standing,
+                stalled: r.stalled,
+                leg: r.leg,
+                ticks_total: r.ticks_total,
+                ticks_elapsed: r.ticks_elapsed,
+                proceeds: r.proceeds,
+                losses: r.losses.clone(),
             })
             .collect();
         // Gathered up front rather than queried per creature: the creature
@@ -1858,6 +1907,7 @@ impl Game {
                 routines,
                 field_buffs,
                 sorties,
+                routes,
                 name,
                 class: identity.class,
                 glyph,

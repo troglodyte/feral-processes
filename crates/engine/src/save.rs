@@ -169,6 +169,14 @@ pub struct PlayerSave {
     /// clear it.
     #[serde(default)]
     pub sorties: Vec<SortieSave>,
+    /// Every caravan route currently in flight, dispatched or standing — see
+    /// `resources::Routes`.
+    ///
+    /// Additive behind `#[serde(default)]`, so a save written before routes
+    /// existed loads with none and costs no `SAVE_FORMAT_VERSION` bump —
+    /// `sorties`' own precedent just above.
+    #[serde(default)]
+    pub routes: Vec<RouteSave>,
     /// The player's own chosen name — see `components::CustomName`. Empty
     /// for a save written before character creation existed, or for a
     /// choice that named nothing: `CustomName::sanitize` treats the two the
@@ -271,6 +279,31 @@ pub struct SortieSave {
     pub xp: u32,
     pub kills: u32,
     pub casualties: Vec<String>,
+}
+
+/// One caravan route in flight, dispatched or standing.
+///
+/// **Carries the whole record**, unlike `SortieSave`: cargo names no entity,
+/// so there is no id whose stability across a save could be a problem, and
+/// `routes::Route`'s membership-free shape needs no reassembly on load — a
+/// straight field-for-field conversion in `game/lifecycle.rs` is the whole of
+/// it.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RouteSave {
+    pub destination: crate::settlements::SettlementKey,
+    /// The whole resolved destination, not its id — `SortieSave::site`'s
+    /// reason: a catalogue file edited or a board that rotates mid-trip must
+    /// not be able to rewrite or strand it.
+    pub destination_def: crate::settlements::SettlementDef,
+    pub destination_tile: (i32, i32),
+    pub cargo: Vec<(ItemId, u32)>,
+    pub standing: bool,
+    pub stalled: bool,
+    pub leg: crate::routes::RouteLeg,
+    pub ticks_total: u64,
+    pub ticks_elapsed: u64,
+    pub proceeds: u32,
+    pub losses: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -1576,6 +1609,7 @@ mod tests {
                 routines: Vec::new(),
                 field_buffs: Vec::new(),
                 sorties: Vec::new(),
+                routes: Vec::new(),
                 name: String::new(),
                 class: None,
                 glyph: '@',

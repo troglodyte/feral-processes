@@ -58,6 +58,7 @@ mod raids;
 mod refactor;
 mod research;
 mod respec;
+mod routes;
 mod routines;
 mod settlement_boards;
 mod settlement_market;

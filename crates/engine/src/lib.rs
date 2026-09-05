@@ -30,6 +30,7 @@ pub mod progression;
 pub mod research;
 pub mod resources;
 pub mod rock;
+pub mod routes;
 pub mod save;
 pub mod settlements;
 pub mod sorties;

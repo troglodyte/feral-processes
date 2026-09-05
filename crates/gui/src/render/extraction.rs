@@ -308,8 +308,10 @@ mod tests {
     /// `TOOL_SLOT_CAP` filled slots rather than the single starter tool a
     /// fresh run installs — spec section 6 names that cap as the asserted
     /// constraint, so a page that only ever sees one tool never exercises it.
-    /// Fewer tools ship than there are slots, so the cycle repeats; the cap
-    /// on *row count* is what this fixture is for, not a fourth tool file.
+    /// Exactly `TOOL_SLOT_CAP` tools ship as of phase 3, so the wrap below
+    /// repeats nothing today; it is there so a removed tool file still
+    /// fills every slot rather than quietly shrinking the fixture the cap
+    /// is asserted against.
     ///
     /// A top-tier bench stands too, so the header line under test is the
     /// long one — "no bench standing" is the shorter of the two, and a

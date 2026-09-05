@@ -104,7 +104,7 @@ impl Game {
         // `ability_user_level(nest)` rather than a second hand-rolled
         // derivation: a `Nest` carries no `Experience` either, so this is
         // the same "no `Experience`, read `ZoneLevel`" answer
-        // `leave_downed_program` gives a wild `Creature` — one function
+        // `downed_program_for` gives a wild `Creature` — one function
         // both sites call, hoisted out of the loop since it doesn't change
         // between programs.
         let level = self.ability_user_level(nest);

@@ -413,8 +413,9 @@ impl DownedProgram {
 
     /// The condition roll a kill takes once, at the moment it leaves a
     /// program behind — spec section 1's formula, verbatim.
-    /// `Game::leave_downed_program` is the one caller, so a boss's own
-    /// floors (`tuning::BOSS_CONDITION_FLOOR`) apply there rather than here:
+    /// `Game::downed_program_for` is the one caller — the shared roll behind
+    /// both `leave_downed_program` and a sortie's banked kills — so a boss's
+    /// own floors (`tuning::BOSS_CONDITION_FLOOR`) apply there, not here:
     /// this function knows only what a kill's own terms are worth, not that
     /// a boss's result gets raised afterward.
     ///

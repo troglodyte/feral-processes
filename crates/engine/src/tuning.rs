@@ -4292,7 +4292,7 @@ pub const CONDITION_BOSS_BONUS: u8 = 10;
 pub const FIGHT_CONDITION_WEIGHT: f32 = 0.0;
 
 /// The floor a boss's own downed program's `condition` cannot fall below —
-/// applied on top of the ordinary roll, in `Game::leave_downed_program`. A
+/// applied on top of the ordinary roll, in `Game::downed_program_for`. A
 /// boss fight ends standing over a single, stationary target, so what it
 /// leaves behind is never the ragged result an unlucky pack kill can be.
 pub const BOSS_CONDITION_FLOOR: u8 = 80;

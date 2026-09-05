@@ -3310,13 +3310,10 @@ fn every_shipped_tools_yields_resolve_to_real_items() {
 /// an empty pool on any other category is a tool that does nothing when
 /// used. See `tools::ToolCategory`'s own doc and `assets/tools/README.md`.
 ///
-/// **This passes vacuously today.** No `Routines`-category tool ships in
-/// phase 1 (the routine branch it needs is a later phase), so every shipped
-/// tool takes the asserted branch and the excluded one below checks
-/// nothing. That is correct — see the task report for how the failure
-/// branch was confirmed by hand, since a census nobody can make fail is not
-/// a census. The day a `Routines` tool ships, this starts exercising the
-/// exclusion for real.
+/// This passed vacuously through phases 1 and 2, when no `Routines` tool
+/// shipped and every tool took the asserted branch. The Routine Reader
+/// ships as of phase 3, so the exclusion is now walked for real and a
+/// `yields` pool authored onto it would be caught here.
 #[test]
 fn every_non_routines_tool_has_a_non_empty_yield_pool() {
     let game = Game::new(4103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

@@ -26,8 +26,8 @@ fn tier_scale(tier: u32) -> f32 {
 
 /// Splits `units` whole items across `pool` by weight, deterministically —
 /// largest-remainder apportionment (Hamilton's method) rather than a draw
-/// per unit. `extraction_yield` is `&self` because the screen's preview (a
-/// later task) calls it once per installed tool with nothing spent, so it
+/// per unit. `extraction_yield` is `&self` because the screen's preview
+/// calls it once per installed tool with nothing spent, so it
 /// cannot touch the shared `GameRng`; apportioning rather than sampling is
 /// also what makes `extract_program` calling this once and granting its
 /// `Vec` verbatim *sufficient* to prove the previewed figure and the
@@ -152,9 +152,9 @@ impl Game {
     }
 
     /// What extracting `program` with `tool` grants — the one derivation,
-    /// called by `extract_program` (below) and by the screen's preview (a
-    /// later task) alike, so a quoted figure and a granted one cannot
-    /// differ.
+    /// called by `extract_program` (below) and by the screen's preview
+    /// (`extraction_options`) alike, so a quoted figure and a granted one
+    /// cannot differ.
     ///
     /// `units = round(TOOL_BASE_UNITS * tier_scale(tool.tier + bench) *
     /// program.grade())`, split across `tool.yields` by weight

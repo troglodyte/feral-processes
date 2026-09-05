@@ -82,11 +82,13 @@ impl Specialty {
 
 /// How a settlement treats you before you have done anything.
 ///
-/// Authored now and read by nothing yet: the hooks are prices (Phase 3) and
-/// standing (Phase 4), and both want the whole catalogue to already carry
-/// the field rather than every shipped town needing a re-author when they
-/// land. `every_temperament_is_authored_somewhere` in `tests/assets.rs` is
-/// what keeps an unreachable variant from shipping in the meantime.
+/// Read as a price: `buy_mult`/`sell_mult` are called from
+/// `game/settlement_market.rs`, which is the whole of what a temperament
+/// does today. Standing (Phase 4) is the second hook and is deliberately
+/// not wired yet — a standing gate added now would be a second price
+/// formula for that phase to unpick.
+/// `every_temperament_is_authored_somewhere` in `tests/assets.rs` is what
+/// keeps an unreachable variant from shipping.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Temperament {
     /// Trades readily, asks little.

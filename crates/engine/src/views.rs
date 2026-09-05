@@ -16,6 +16,7 @@ use crate::research::ResearchId;
 use crate::resources::DifficultyMode;
 use crate::species::{AffinityClass, MoveDef};
 use crate::structures::StructureId;
+use crate::tools::{ToolCategory, ToolId};
 use crate::world::Biome;
 use bevy_ecs::prelude::Entity;
 
@@ -2541,4 +2542,28 @@ pub struct DownedProgramRow {
     pub condition: u8,
     pub boss: bool,
     pub grade: f32,
+}
+
+/// One row of `Mode::Tools`'s list — see `Game::tool_rows`.
+///
+/// One row per tool the player *knows* plus any tool actually *installed*
+/// (plan decision 3, task 5): a tool researched but never forged still
+/// needs a row for the forge verb to act on, and the starter tool is
+/// installed without ever entering `KnownTools` (task 1's own ruling), so
+/// neither set alone would list it. `slot`/`carriers_held` are the two
+/// figures that tell those rows apart — a screen reading this needs no
+/// second lookup into either store.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ToolRow {
+    pub id: ToolId,
+    pub name: String,
+    pub category: ToolCategory,
+    pub tier: u32,
+    pub ticks: u64,
+    /// `Some(slot index)` while installed, `None` for a known-but-not-yet-
+    /// forged-or-installed tool.
+    pub slot: Option<usize>,
+    /// Carriers held in `Inventory` (`ItemId::tool(id)`) — forged but not
+    /// yet installed.
+    pub carriers_held: u32,
 }

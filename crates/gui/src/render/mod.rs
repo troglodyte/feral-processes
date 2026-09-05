@@ -68,6 +68,7 @@ mod stack_market;
 mod stock;
 mod structure_manifest;
 mod talents;
+mod tools;
 mod trade;
 mod transfer;
 
@@ -123,6 +124,7 @@ use settlement_market::{SettlementMarketBasket, draw_settlement_market};
 use sprite_forge::{draw_sprite_editor, draw_sprite_picker};
 use stack_market::draw_stack_market;
 use talents::{draw_develop, draw_develop_program};
+use tools::draw_tools;
 use trade::{
     draw_trade_action_menu, draw_trade_menu, draw_trade_program_confirm, draw_trade_quantity_menu,
 };
@@ -1136,6 +1138,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::DownedPrograms => {
             draw_downed_programs(game, pending_downed_program, selected, refusal, painter, m)
         }
+        Mode::Tools => draw_tools(game, selected, refusal, painter, m),
         Mode::Companion => draw_companion_menu(game, selected, refusal, painter, m),
         Mode::Fuse => draw_fuse_menu(game, selected, refusal, painter, m),
         Mode::FuseSecond => {
@@ -1355,7 +1358,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 99] = [
+    const ALL_MODES: [Mode; 100] = [
         Mode::MainMenu,
         Mode::CreateCharacter,
         Mode::LoadGame,
@@ -1400,6 +1403,7 @@ mod tests {
         Mode::ItemDescribe,
         Mode::EraseQuantity,
         Mode::DownedPrograms,
+        Mode::Tools,
         Mode::Companion,
         Mode::CompanionEquip,
         Mode::CompanionMemories,

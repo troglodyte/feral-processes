@@ -44,6 +44,7 @@ mod sprite_forge;
 mod stack;
 mod stack_market;
 mod telemetry;
+mod tools;
 mod trade;
 mod transfer;
 mod watch;

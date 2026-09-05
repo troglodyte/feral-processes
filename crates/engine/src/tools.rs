@@ -12,7 +12,7 @@ use bevy_ecs::prelude::Resource;
 use serde::{Deserialize, Serialize};
 
 use crate::Game;
-use crate::components::Tools;
+use crate::components::{Inventory, Tools};
 use crate::items::ItemId;
 
 /// A tool's id, `items::ItemId`'s shape: `#[serde(transparent)]` so a `.ron`
@@ -221,6 +221,50 @@ impl Game {
             .resource::<crate::resources::KnownTools>()
             .0
             .contains(id)
+    }
+
+    /// `Mode::Tools`'s whole list — `views::ToolRow`'s own doc: the union of
+    /// every tool the player knows and every tool actually installed
+    /// (plan decision 3), since neither set alone would show the starter
+    /// tool a row (installed but never known) or a freshly researched tool
+    /// nobody has forged yet (known but neither installed nor carried).
+    ///
+    /// Sorted by id for a deterministic screen, `ToolDb::all`'s own reason;
+    /// an id neither store can resolve against `ToolDb` is dropped rather
+    /// than surfaced as a hole, `installed_tools`'s tolerance.
+    pub fn tool_rows(&self) -> Vec<crate::views::ToolRow> {
+        let player = self.player_entity();
+        let db = self.world.resource::<ToolDb>();
+        let known = self.world.resource::<crate::resources::KnownTools>();
+        let installed = self
+            .world
+            .get::<Tools>(player)
+            .map(|t| t.0.clone())
+            .unwrap_or_default();
+        let inventory = self.world.get::<Inventory>(player);
+
+        let mut ids: Vec<ToolId> = known.0.iter().cloned().chain(installed.clone()).collect();
+        ids.sort();
+        ids.dedup();
+
+        ids.into_iter()
+            .filter_map(|id| {
+                let def = db.get(id.as_str())?;
+                let slot = installed.iter().position(|t| t == &id);
+                let carriers_held = inventory
+                    .map(|inv| inv.count(&ItemId::tool(&id)))
+                    .unwrap_or(0);
+                Some(crate::views::ToolRow {
+                    id,
+                    name: def.name.clone(),
+                    category: def.category,
+                    tier: def.tier,
+                    ticks: def.ticks,
+                    slot,
+                    carriers_held,
+                })
+            })
+            .collect()
     }
 }
 

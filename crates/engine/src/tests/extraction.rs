@@ -9,7 +9,7 @@
 use super::support::*;
 use crate::components::Tools;
 use crate::items::DownedProgram;
-use crate::tools::{ToolDb, ToolDef, ToolId};
+use crate::tools::{ToolCategory, ToolDb, ToolDef, ToolId};
 use crate::*;
 
 fn program(condition: u8, rarity: Rarity, level: u32) -> DownedProgram {
@@ -1469,5 +1469,118 @@ fn uninstalling_frees_the_slot_and_grants_no_carrier_back() {
         carrier_count(&game, &ToolId(tuning::STARTER_TOOL_ID.to_string())),
         0,
         "what was in the slot IS the tool — uninstalling must not hand a carrier back"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2, task 5: `Game::tool_rows`.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn tool_rows_lists_the_installed_starter_tool_even_though_it_is_not_known() {
+    // The starter is granted straight into slot one at `Game::new` and
+    // never added to `KnownTools` (task 1's own ruling) — a screen reading
+    // only the known set would never show it a row at all.
+    let game = Game::new(9301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let starter = ToolId(tuning::STARTER_TOOL_ID.to_string());
+    assert!(
+        !game.knows_tool(&starter),
+        "test premise: the starter is installed but not known"
+    );
+
+    let rows = game.tool_rows();
+    let row = rows
+        .iter()
+        .find(|r| r.id == starter)
+        .expect("the installed starter tool must have a row");
+    assert_eq!(row.slot, Some(0));
+    assert_eq!(row.carriers_held, 0);
+    assert_eq!(row.name, "Salvage Clamp");
+    assert_eq!(row.tier, 1);
+}
+
+#[test]
+fn tool_rows_lists_a_known_but_unforged_tool_with_no_slot_and_no_carrier() {
+    let mut game = Game::new(9302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let core_tap = ToolId("core_tap".to_string());
+    game.world
+        .resource_mut::<KnownTools>()
+        .0
+        .insert(core_tap.clone());
+
+    let rows = game.tool_rows();
+    let row = rows
+        .iter()
+        .find(|r| r.id == core_tap)
+        .expect("a known tool must have a row even with nothing forged");
+    assert_eq!(row.slot, None, "nothing has installed it yet");
+    assert_eq!(row.carriers_held, 0, "nothing has been forged yet");
+    assert_eq!(row.category, ToolCategory::Cores);
+    assert_eq!(row.tier, 2);
+}
+
+#[test]
+fn tool_rows_reports_a_held_carrier_that_is_not_yet_installed() {
+    let mut game = Game::new(9303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let core_tap = ToolId("core_tap".to_string());
+    game.world
+        .resource_mut::<KnownTools>()
+        .0
+        .insert(core_tap.clone());
+    hold_carrier(&mut game, "core_tap", 3);
+
+    let row = game
+        .tool_rows()
+        .into_iter()
+        .find(|r| r.id == core_tap)
+        .expect("a known tool with a held carrier must have a row");
+    assert_eq!(
+        row.slot, None,
+        "holding a carrier is not the same as installing it"
+    );
+    assert_eq!(row.carriers_held, 3);
+}
+
+#[test]
+fn tool_rows_is_sorted_by_id_for_a_deterministic_screen() {
+    let mut game = Game::new(9304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world
+        .resource_mut::<KnownTools>()
+        .0
+        .insert(ToolId("core_tap".to_string()));
+
+    let ids: Vec<String> = game
+        .tool_rows()
+        .into_iter()
+        .map(|r| r.id.as_str().to_string())
+        .collect();
+    let mut sorted = ids.clone();
+    sorted.sort();
+    assert_eq!(
+        ids, sorted,
+        "the same set drawn twice must list in the same order"
+    );
+    assert_eq!(
+        ids,
+        vec!["core_tap".to_string(), "salvage_clamp".to_string()],
+        "core_tap sorts before the installed starter, salvage_clamp"
+    );
+}
+
+#[test]
+fn tool_rows_drops_a_known_tool_id_the_catalogue_cannot_resolve() {
+    // A mod's tool file removed since a save referenced it — `installed_tools`'
+    // own tolerance (there is no per-tool fallback to show in its place),
+    // ported to the known-but-unresolvable case.
+    let mut game = Game::new(9305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world
+        .resource_mut::<KnownTools>()
+        .0
+        .insert(ToolId("no_such_tool".to_string()));
+
+    let rows = game.tool_rows();
+    assert!(
+        rows.iter().all(|r| r.id.as_str() != "no_such_tool"),
+        "an id ToolDb cannot resolve must not produce a row"
     );
 }

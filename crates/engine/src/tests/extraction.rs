@@ -2014,30 +2014,25 @@ fn test_game_with_seed(seed: u32) -> Game {
     Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
 }
 
-/// Installs a `Routines`-category tool built here rather than found in the
-/// catalogue: no shipped tool is in that category until task 4, deliberately,
-/// so that no commit on this branch hands the player a tool whose branch is
-/// not written yet. Task 4 replaces this with the shipped one.
+/// Installs the shipped `Routines` tool, found by its category rather than
+/// by its id — `build_program_bench`'s rule, so renaming the file moves no
+/// test. Straight into `components::Tools`, past the slot and carrier gates
+/// `install_tool` enforces: those have their own tests, and what is under
+/// test here is the branch the tool takes once it is in hand.
 fn install_routine_tool(game: &mut Game) {
-    let def = ToolDef {
-        id: ToolId("test_routine_reader".to_string()),
-        name: "Test Routine Reader".to_string(),
-        description: "A fixture for the routine branch.".to_string(),
-        category: ToolCategory::Routines,
-        yields: Vec::new(),
-        tier: 1,
-        ticks: 4,
-        forge_cost: Vec::new(),
-    };
-    let id = def.id.clone();
-    game.world.resource_mut::<ToolDb>().insert(def);
+    let id = game
+        .world
+        .resource::<ToolDb>()
+        .all()
+        .find(|def| def.category == ToolCategory::Routines)
+        .map(|def| def.id.clone())
+        .expect("some shipped tool reads routines");
     let player = game.player_entity();
     game.world.get_mut::<Tools>(player).unwrap().0.push(id);
 }
 
 /// The installed `Routines` tool, found by its category — the
-/// `build_program_bench` rule, so task 4 swapping the fixture for the shipped
-/// Reader leaves every call site alone.
+/// `build_program_bench` rule again.
 fn routine_tool_id(game: &Game) -> ToolId {
     game.installed_tools()
         .into_iter()

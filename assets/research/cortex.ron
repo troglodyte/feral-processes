@@ -1,10 +1,11 @@
 (
     id: "cortex",
     name: "Cortex Hacking",
-    description: "Compile Cortex Hacks at a Fabricator.",
+    description: "Compile Cortex Hacks at a Fabricator. Also teaches the Routine Reader, which reads a downed process for the routines it was running and keeps one.",
     cost: 125,
     min_zone: 3,
     requires: ["neural_amp"],
+    unlocks_tools: ["routine_reader"],
     unlocks_recipes: [(
         result: "cortex_hack",
         cost: [("portal_fragment", 12), ("cache_grain", 3)],

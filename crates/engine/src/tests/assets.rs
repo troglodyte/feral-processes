@@ -3525,6 +3525,39 @@ fn every_shipped_tool_can_actually_be_obtained() {
     );
 }
 
+/// The `Routines` branch is unreachable content until some shipped tool is
+/// in that category — `every_non_routines_tool_has_a_non_empty_yield_pool`
+/// only says what a `Routines` tool is *exempt* from, never that one exists.
+#[test]
+fn a_shipped_tool_reads_routines() {
+    let game = Game::new(4110, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let tools = game.world.resource::<ToolDb>();
+    assert!(
+        tools
+            .all()
+            .any(|def| def.category == ToolCategory::Routines),
+        "no shipped tool takes the routine branch"
+    );
+}
+
+/// A `Routines` tool reads no yield pool at all, so a populated one is
+/// authored content that silently never runs. Stated over the `Routines`
+/// tools alone, rather than as the exclusion arm of the every-category
+/// census above: that one fails on the *other* categories too, and a
+/// reviewer reading its failure has to work out which half broke.
+#[test]
+fn a_routines_tool_ships_an_empty_yield_pool() {
+    let game = Game::new(4111, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let tools = game.world.resource::<ToolDb>();
+    for def in tools.all().filter(|d| d.category == ToolCategory::Routines) {
+        assert!(
+            def.yields.is_empty(),
+            "{} is a Routines tool with a yield pool that will never be read",
+            def.id
+        );
+    }
+}
+
 /// Every shipped species' `Game::rich_in` — authored, or `work_resource`
 /// fallen back to — names a real, loaded item. Spec section 7's own census:
 /// no shipped species authors `rich_in` yet (decision 5 is that none had

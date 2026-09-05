@@ -242,4 +242,27 @@
   `EXAMINE_RANGE_TILES`) offered a gift and a trip and refused them in the
   same breath. Assert the page and the doors in one test, never the page
   alone.
-
+- **An aid radius is a fraction of `settlements::placement::REGION_TILES`,
+  never a flat number.** `SETTLEMENT_GARRISON_RADIUS` shipped at 40 and
+  `ROUTE_PREDATION_RADIUS` at 15 against a derivation that stands one town
+  per 256-tile region, inset 24 tiles from its border — the median nearest
+  town is 147 tiles from the anchor, so over 2,000 sampled worlds the first
+  found a garrison in **1.6%** and the second found a predator beside a lane
+  in **none**. **The trap is that a dead radius is indistinguishable from a
+  weak one at the keyboard**: the player cannot tell "the garrison is not
+  noticeable" from "there was no garrison", so a playtest returns the same
+  answer either way and the constant gets nudged instead of scaled. The
+  garrison radius is now `REGION_TILES / 2` and sits **outside**
+  `SETTLEMENT_NOTICE_RADIUS`, inverting the doc comment that held it at 40 —
+  noticing a deed needs proximity to the deed and the party roams, while
+  stationing a detachment needs only willingness, which
+  `Standing::garrison_defense` already gates at `Warm`. **The second trap is
+  reading the nearest-town route as still under-tuned**: its corridor is
+  short and points away from everywhere else, so it is unpreyable at *any*
+  radius, and route risk is a property of hauling past somebody — 8% of
+  second-nearest lanes, 18% of third. The gate is
+  `tests/settlement_aid_reach.rs`, which samples worlds off the real
+  derivation rather than asserting the values, so a ratio check cannot go
+  vacuous; `aid_reach_probe` is the `#[ignore]`d sweep,
+  `wild_density_probe`'s shape. `SETTLEMENT_NOTICE_RADIUS` is still flat and
+  still unmeasured.

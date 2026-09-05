@@ -54,6 +54,17 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-09-05 — Do the settlement aid radii reach anything?](2026-09-05-settlement-aid-reach.md)
+  — Both were dead by geometry. Towns are derived one per 256-tile region, so
+  the median nearest town is **147 tiles** from the anchor:
+  `SETTLEMENT_GARRISON_RADIUS` at a flat 40 found one in **1.6%** of worlds
+  and `ROUTE_PREDATION_RADIUS` at 15 found one beside a lane in **none of
+  2,000**. Both are now fractions of `placement::REGION_TILES` — half a
+  region and a quarter — reaching 39% of worlds and 18% of third-nearest
+  lanes. The finding that could not be guessed: a lane to the **nearest**
+  town is unpreyable at any radius, so route risk is a property of hauling
+  past somebody rather than of trading at all.
+
 - [2026-09-01 — Are the creation stat pool's exchange rates commensurate?](2026-09-01-creation-stat-pool-exchange-rates.md)
   — Attack is worth about **1.2-1.8x** Integrity per point of the five-point
   creation pool, not the 2.5x the rates imply on paper, because Attack

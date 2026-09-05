@@ -3491,10 +3491,25 @@ pub const SETTLEMENT_GARRISON_MAX: u32 = 3;
 /// How close a town has to be to the base anchor to station anyone there,
 /// in Chebyshev tiles.
 ///
-/// Inside `SETTLEMENT_NOTICE_RADIUS`, deliberately: a town far enough away
-/// to merely *hear* what you did is not close enough to keep a detachment
-/// on your doorstep. Unmeasured.
-pub const SETTLEMENT_GARRISON_RADIUS: i32 = 40;
+/// **Half a region, and scaled off region spacing rather than flat.** The
+/// anchor does not move, so this radius is a per-run coin flip against a
+/// derivation that puts at most one town in every
+/// `SETTLEMENT_REGION_CHUNKS`-chunk square. At the flat 40 it shipped with,
+/// 1.6% of worlds had any town near enough to garrison at all — the ladder's
+/// passive half was unreachable by geometry rather than unearned. Half a
+/// region reaches 39%, which is the anchor's own region and the ones
+/// touching it, and is still a thing the seed decides rather than a thing
+/// every base gets.
+///
+/// This is deliberately **outside** `SETTLEMENT_NOTICE_RADIUS`, inverting
+/// what shipped. The two measure different things: noticing a deed needs
+/// proximity to the *deed*, and the party roams, so a quarter-region hears
+/// plenty; stationing a detachment needs only willingness, which
+/// `Standing::garrison_defense` already gates at `Warm`. Distance here is a
+/// sanity bound on how far a town will reach, not the price of the aid.
+///
+/// Measured — `docs/measurements/2026-09-05-settlement-aid-reach.md`.
+pub const SETTLEMENT_GARRISON_RADIUS: i32 = crate::settlements::placement::REGION_TILES / 2;
 
 /// How long a town waits between gifts — see `Game::request_program_gift`.
 ///
@@ -3953,8 +3968,26 @@ pub const ROUTE_TICKS_PER_TILE: u64 = 2;
 /// How close a known settlement has to stand to the base→destination segment
 /// to be able to prey on the trip — point-to-**segment** distance, in tiles,
 /// so a town beside the middle of a long route is caught exactly as one at
-/// either end. Unmeasured.
-pub const ROUTE_PREDATION_RADIUS: i32 = 15;
+/// either end.
+///
+/// **A quarter of a region**, `SETTLEMENT_GARRISON_RADIUS`'s reason: a flat
+/// number is measured against nothing, and at the 15 this shipped with no
+/// sampled world in 2,000 had a town near any lane. A quarter-region is the
+/// same reach `SETTLEMENT_NOTICE_RADIUS` gives a town over its own ground,
+/// which is the right size for "a lane this town can see" — they are kept
+/// as two constants because one is about a deed and one about a corridor,
+/// and nothing says they must move together.
+///
+/// **A route to the *nearest* town stays unpreyable at any radius, and that
+/// is geometry rather than tuning.** Its corridor is short and points away
+/// from everywhere else; the derivation insets each town from its region's
+/// border, so the next town is a median 216 tiles off that segment. Trips to
+/// a farther market are what carry risk — 8% of second-nearest lanes and
+/// 18% of third-nearest have a town in the band, before `preys_on_routes`
+/// narrows those to `Hostile` towns the party has actually found.
+///
+/// Measured — `docs/measurements/2026-09-05-settlement-aid-reach.md`.
+pub const ROUTE_PREDATION_RADIUS: i32 = crate::settlements::placement::REGION_TILES / 4;
 
 /// Chance, per predator, per leg completion, that a hit actually lands.
 /// Unmeasured.

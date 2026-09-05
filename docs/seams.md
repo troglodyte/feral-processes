@@ -11188,6 +11188,61 @@ of "is this town Allied". It ramps from `Warm`, so the band below the top
 buys something here as well as a standing route, and the ladder's summit is
 a difference in degree rather than a fourth gate.
 
+### An aid radius is a fraction of region spacing, and both flat ones were dead
+
+`SETTLEMENT_GARRISON_RADIUS` shipped at a flat 40 and `ROUTE_PREDATION_RADIUS`
+at a flat 15. Neither number was measured against anything, and the thing
+they had to be measured against is `settlements::placement::REGION_TILES` —
+`SETTLEMENT_REGION_CHUNKS * CHUNK_SIZE`, 256 tiles, one town per region at
+`SETTLEMENT_REGION_PERCENT` occupancy, each inset 24 tiles from its region's
+border. Against that spacing the median distance from the anchor to the
+nearest town is **147 tiles**.
+
+So the radii found nothing. Over 2,000 sampled worlds a town stood within 40
+of the anchor in **1.6%** of them, and a town stood within 15 of a trade lane
+in **none**. Both features were unreachable by geometry rather than unearned
+— which is worse than a bad number, because the player cannot tell "the
+garrison is too weak" from "there was no garrison", and neither can a
+playtest. Both are now `REGION_TILES / 2` and `REGION_TILES / 4`, reaching
+39% of worlds and 18% of third-nearest lanes. The full sweep is
+`docs/measurements/2026-09-05-settlement-aid-reach.md`.
+
+**The garrison radius is now deliberately outside `SETTLEMENT_NOTICE_RADIUS`,
+inverting what shipped.** The old doc comment argued the ordering the other
+way — a town far enough away to merely *hear* what you did is not close
+enough to keep a detachment on your doorstep — and that sentence is what held
+the constant at 40. It does not survive the measurement, because the two
+radii do not measure the same kind of thing. Noticing a deed needs proximity
+to the *deed*, and the party roams, so a quarter-region hears plenty over a
+run; stationing a detachment needs only willingness, and willingness is
+already gated at `Warm` by `Standing::garrison_defense`. Distance there is a
+sanity bound on how far a town will reach, not the price of the aid. Keeping
+the ordering would have meant a ceiling of 6.8%, which is the same defect
+with a rounder number.
+
+**A lane to the *nearest* town is unpreyable at any radius, and that is
+geometry rather than tuning.** It is short and points away from everywhere
+else, so even a 128-tile band — half a region, at which "beside the lane" has
+stopped meaning anything — catches a second town in 5.8% of worlds. Risk on a
+route is therefore a property of hauling *past* somebody, which only a trip to
+a farther market does: 8% of second-nearest lanes and 18% of third-nearest.
+Do not read the nearest-town case as evidence the radius is still too small.
+
+The gate is `crates/engine/src/tests/settlement_aid_reach.rs`, and it is a
+gate on **reach** rather than on the values: it samples worlds off the real
+derivation and fails, with the measured share in the message, if either
+constant is flattened back. A ratio assertion alone would have been vacuous;
+a value assertion alone would have said nothing about why the value was
+chosen. `aid_reach_probe` in the same file is the `#[ignore]`d sweep behind
+the numbers, `wild_density_probe`'s shape.
+
+What this does **not** say is how often either thing fires. Reach is the
+geometry gate only — a garrison still needs that town at `Warm`, and
+predation needs a `Hostile` town the party has found plus a
+`ROUTE_PREDATION_CHANCE` roll per leg. The shares are ceilings on how often
+the seed permits the feature, not rates, and `SETTLEMENT_NOTICE_RADIUS` is
+still a flat number nobody has measured.
+
 ### A gift's species is derived; choosing it spends no draw, and spawning it spends what every adoption does
 
 `Game::request_program_gift` folds `(world seed, region, gifts taken)`

@@ -2000,3 +2000,223 @@ fn the_act_spends_the_bench_reduced_tick_cost() {
 
     assert_eq!(ticks_elapsed(&game) - before, expected);
 }
+
+// ---------------------------------------------------------------------------
+// Phase 3: the routine branch — a `Routines` tool taking a routine out of a
+// downed program, sharing `Game::take_routine` with the tamed-program door.
+// See the phase-3 plan's Task 3.
+// ---------------------------------------------------------------------------
+
+/// The draw's fixture: one fresh run per seed, since `GameRng` is shared and
+/// a second extraction in the same run would sample a stream the first one
+/// already moved.
+fn test_game_with_seed(seed: u32) -> Game {
+    Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
+}
+
+/// Installs a `Routines`-category tool built here rather than found in the
+/// catalogue: no shipped tool is in that category until task 4, deliberately,
+/// so that no commit on this branch hands the player a tool whose branch is
+/// not written yet. Task 4 replaces this with the shipped one.
+fn install_routine_tool(game: &mut Game) {
+    let def = ToolDef {
+        id: ToolId("test_routine_reader".to_string()),
+        name: "Test Routine Reader".to_string(),
+        description: "A fixture for the routine branch.".to_string(),
+        category: ToolCategory::Routines,
+        yields: Vec::new(),
+        tier: 1,
+        ticks: 4,
+        forge_cost: Vec::new(),
+    };
+    let id = def.id.clone();
+    game.world.resource_mut::<ToolDb>().insert(def);
+    let player = game.player_entity();
+    game.world.get_mut::<Tools>(player).unwrap().0.push(id);
+}
+
+/// The installed `Routines` tool, found by its category — the
+/// `build_program_bench` rule, so task 4 swapping the fixture for the shipped
+/// Reader leaves every call site alone.
+fn routine_tool_id(game: &Game) -> ToolId {
+    game.installed_tools()
+        .into_iter()
+        .find(|def| def.category == ToolCategory::Routines)
+        .map(|def| def.id)
+        .expect("a Routines tool is installed")
+}
+
+/// A species whose whole kit is one exclusive routine, minted here because no
+/// shipped species declares one — the exclusive pool is authored to reach the
+/// player as an already-written disk off a boss
+/// (`tests::exclusive_routines`), so the downed-program door has no shipped
+/// case to fire on. A one-entry kit also makes the draw certain, which is
+/// what lets the disk count be asserted at all.
+fn species_declaring_an_exclusive_routine(game: &mut Game) -> (String, String) {
+    let ability = game
+        .world
+        .resource::<AbilityDb>()
+        .exclusive_pool()
+        .first()
+        .map(|def| def.id.clone())
+        .expect("the shipped exclusive pool is empty");
+    let mut def = game
+        .world
+        .resource::<SpeciesDb>()
+        .get("scrapper")
+        .expect("the scrapper ships")
+        .clone();
+    def.id = "exclusive_kit_fixture".to_string();
+    def.abilities = vec![crate::species::SpeciesAbility {
+        id: ability.clone(),
+        level: 1,
+    }];
+    let species = def.id.clone();
+    game.world.resource_mut::<SpeciesDb>().insert(def);
+    (species, ability)
+}
+
+/// The pool is the species' own kit at the program's level, minus what the
+/// player already knows. A level gate that did not apply would teach a
+/// level-30 routine off a level-2 kill.
+#[test]
+fn the_routine_pool_is_the_species_kit_at_that_level() {
+    let game = new_test_game();
+    let low = game.routine_candidates(&test_program("scrapper", 1));
+    let high = game.routine_candidates(&test_program("scrapper", 30));
+    assert!(
+        low.len() <= high.len(),
+        "a higher-level program cannot offer fewer routines: {low:?} vs {high:?}"
+    );
+    for id in &low {
+        assert!(high.contains(id), "{id} vanished at a higher level");
+    }
+}
+
+#[test]
+fn a_routine_already_known_leaves_the_pool() {
+    let mut game = new_test_game();
+    let program = test_program("scrapper", 30);
+    let first = game
+        .routine_candidates(&program)
+        .first()
+        .cloned()
+        .expect("the scrapper declares a routine");
+    game.world
+        .resource_mut::<KnownRoutines>()
+        .0
+        .insert(first.clone());
+
+    assert!(
+        !game.routine_candidates(&program).contains(&first),
+        "a known routine is still being offered"
+    );
+}
+
+/// The refusal, asserted the way every other refusal in this feature is:
+/// nothing spent. A program consumed for a routine the player already had is
+/// the exact waste `extract_routine`'s own "already known" check exists to
+/// prevent.
+#[test]
+fn a_routine_tool_with_nothing_left_to_teach_refuses_and_spends_nothing() {
+    let mut game = new_test_game();
+    let program = test_program("scrapper", 30);
+    for id in game.routine_candidates(&program) {
+        game.world.resource_mut::<KnownRoutines>().0.insert(id);
+    }
+    give_downed_program(&mut game, program);
+    install_routine_tool(&mut game);
+    let tool = routine_tool_id(&game);
+    let ticks_before = ticks_elapsed(&game);
+
+    let refusal = game.extract_program(0, &tool);
+
+    assert!(refusal.is_err(), "it should have refused");
+    assert_eq!(game.downed_program_rows().len(), 1, "the program was spent");
+    assert_eq!(ticks_elapsed(&game), ticks_before, "time was spent");
+}
+
+#[test]
+fn a_routine_tool_teaches_a_routine_and_consumes_the_program() {
+    let mut game = new_test_game();
+    let program = test_program("scrapper", 30);
+    let pool = game.routine_candidates(&program);
+    give_downed_program(&mut game, program);
+    install_routine_tool(&mut game);
+    let tool = routine_tool_id(&game);
+
+    game.extract_program(0, &tool).expect("the extraction runs");
+
+    assert!(
+        game.downed_program_rows().is_empty(),
+        "the program survived"
+    );
+    assert!(
+        pool.iter().any(|id| game.knows_routine(id)),
+        "nothing from the pool was learned"
+    );
+}
+
+/// The invariant the whole exclusive pool rests on, restated for the new
+/// door: an exclusive routine taken off a downed program leaves exactly one
+/// copy in the run — the disk — and teaches nothing.
+#[test]
+fn an_exclusive_routine_from_a_downed_program_leaves_exactly_one_copy() {
+    let mut game = new_test_game();
+    let (species, ability) = species_declaring_an_exclusive_routine(&mut game);
+    let program = test_program(&species, 30);
+    give_downed_program(&mut game, program);
+    install_routine_tool(&mut game);
+    let tool = routine_tool_id(&game);
+
+    game.extract_program(0, &tool).expect("the extraction runs");
+
+    assert!(!game.knows_routine(&ability), "an exclusive was learned");
+    assert_eq!(
+        held(&game, &ItemId::etched(&ability)),
+        1,
+        "exactly one disk, no more and no fewer"
+    );
+}
+
+/// The first entry is favoured, not guaranteed — decision 4. Run the draw
+/// enough times to see both outcomes; a deterministic pick would fail this
+/// and a uniform one would fail the skew assertion.
+#[test]
+fn the_draw_favours_the_first_candidate_without_forcing_it() {
+    let mut counts: std::collections::BTreeMap<String, u32> = Default::default();
+    let mut first_id = None;
+    for seed in 0..200u32 {
+        let mut game = test_game_with_seed(seed);
+        let program = test_program("scrapper", 30);
+        let pool = game.routine_candidates(&program);
+        if pool.len() < 2 {
+            return; // nothing to skew between; the pool census covers this
+        }
+        first_id.get_or_insert(pool[0].clone());
+        give_downed_program(&mut game, program);
+        install_routine_tool(&mut game);
+        let tool = routine_tool_id(&game);
+        game.extract_program(0, &tool).expect("the extraction runs");
+        for id in pool {
+            if game.knows_routine(&id) || held(&game, &ItemId::etched(&id)) > 0 {
+                *counts.entry(id.to_string()).or_default() += 1;
+            }
+        }
+    }
+    let first = first_id.expect("a pool");
+    let favoured = counts.get(first.as_str()).copied().unwrap_or(0);
+    let rest: u32 = counts
+        .iter()
+        .filter(|(id, _)| id.as_str() != first.as_str())
+        .map(|(_, n)| n)
+        .sum();
+    assert!(
+        favoured > 0 && rest > 0,
+        "the draw is deterministic: {counts:?}"
+    );
+    assert!(
+        favoured * 2 > rest,
+        "the first candidate is not favoured: {counts:?}"
+    );
+}

@@ -5,6 +5,18 @@ use crate::classes::PlayerClass;
 use crate::components::Routines;
 use crate::*;
 
+/// Which of `Game::take_routine`'s two branches ran, so each caller words
+/// its own line — the tamed-program door and the downed-program door
+/// describe the same effect in different sentences, and a shared function
+/// returning a shared string would make one of them wrong.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RoutineTaken {
+    /// Ordinary: the knowledge entered `KnownRoutines`. No disk.
+    Learned,
+    /// Exclusive: the etched disk came back out, and nothing was learned.
+    DiskPopped,
+}
+
 impl Game {
     /// `id`'s display name, falling back to the raw id if the ability set
     /// doesn't define it (a mod removed since a save referenced it). Every
@@ -564,22 +576,44 @@ impl Game {
 
         let name = self.dissolve_tamed_program(creature);
         let ability_name = self.ability_display_name(&ability);
-        if exclusive {
-            let disk = ItemId::etched(&ability);
-            self.grant_loot(disk.clone(), 1, LootSource::Etch);
-            self.log(format!(
+        match self.take_routine(&ability) {
+            RoutineTaken::DiskPopped => self.log(format!(
                 "You break {name} down and pry its {ability_name} disk back out intact."
-            ));
+            )),
+            RoutineTaken::Learned => self.log(format!(
+                "You break {name} down and learn its {ability_name} routine."
+            )),
+        }
+        self.tick();
+        Ok(())
+    }
+
+    /// The one place a routine comes off a program — `extract_routine`'s
+    /// tamed-program door and `extract_program`'s `Routines`-tool door both
+    /// call this rather than each carrying a copy of the two branches.
+    /// Callers own their refusals and their log lines; this owns only the
+    /// effect.
+    ///
+    /// **Exclusive routines pop the disk and teach nothing.** That is what
+    /// keeps exactly one copy in the run, and it is the reason this function
+    /// exists instead of two implementations that agree today.
+    /// `routine_is_exclusive` reads `AbilityDef::exclusive` alone, so nothing
+    /// about the invariant rested on the program having been tamed — spec
+    /// section 4 verified this before the second door was cut.
+    ///
+    /// `&str` rather than `&AbilityId` because that alias is `String`, and
+    /// both neighbours a caller has already gone through (`knows_routine`,
+    /// `routine_is_exclusive`) take `&str`.
+    pub(crate) fn take_routine(&mut self, ability: &str) -> RoutineTaken {
+        if self.routine_is_exclusive(ability) {
+            self.grant_loot(ItemId::etched(ability), 1, LootSource::Etch);
+            RoutineTaken::DiskPopped
         } else {
             self.world
                 .resource_mut::<KnownRoutines>()
                 .0
-                .insert(ability.clone());
-            self.log(format!(
-                "You break {name} down and learn its {ability_name} routine."
-            ));
+                .insert(ability.to_string());
+            RoutineTaken::Learned
         }
-        self.tick();
-        Ok(())
     }
 }

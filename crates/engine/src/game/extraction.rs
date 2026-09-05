@@ -4,9 +4,11 @@
 //! `docs/superpowers/specs/2026-09-04-program-extraction-design.md`,
 //! sections 3 and 4.
 
+use crate::abilities::AbilityId;
+use crate::game::routines::RoutineTaken;
 use crate::items::DownedProgram;
 use crate::species::SpeciesId;
-use crate::tools::{ToolDef, ToolId};
+use crate::tools::{ToolCategory, ToolDef, ToolId};
 use crate::*;
 
 /// How much each tier past 1 scales `extraction_yield`'s unit count — see
@@ -176,6 +178,121 @@ impl Game {
         granted
     }
 
+    /// What a `Routines` tool could take out of `program`: every routine its
+    /// species declares at or below the program's own level, in the species
+    /// file's order, minus anything already known. An exclusive routine is
+    /// never known, so it is always in — and it is the one thing here that
+    /// cannot be got any other way.
+    ///
+    /// The level gate is `install_innate_routines`' own, read off the same
+    /// `SpeciesDef::abilities`: a downed program carries no `Routines`
+    /// component to read, so what it *would* have been carrying is derived
+    /// from its species and level rather than stored — the "derived, never
+    /// stored" rule that kept `DownedProgram` a five-field record.
+    ///
+    /// Deduplicated, because a species may declare the same id at two levels
+    /// and a pool with a repeat would weight it twice by accident.
+    pub fn routine_candidates(&self, program: &DownedProgram) -> Vec<AbilityId> {
+        let Some(species) = self.world.resource::<SpeciesDb>().get(&program.species) else {
+            return Vec::new();
+        };
+        let db = self.world.resource::<AbilityDb>();
+        let mut pool: Vec<AbilityId> = Vec::new();
+        for declared in &species.abilities {
+            if declared.level > program.level {
+                continue;
+            }
+            if db.get(&declared.id).is_none() {
+                continue;
+            }
+            if self.knows_routine(&declared.id) {
+                continue;
+            }
+            if pool.contains(&declared.id) {
+                continue;
+            }
+            pool.push(declared.id.clone());
+        }
+        pool
+    }
+
+    /// A `Routines` tool's use: one routine off `program`, drawn from
+    /// `routine_candidates` with `tuning::ROUTINE_TOOL_FIRST_UNKNOWN_WEIGHT`
+    /// on the first, then `take_routine`'s two branches.
+    ///
+    /// The `GameRng` draw is the reason this is here rather than inside
+    /// `extraction_yield`: that function is `&self` precisely so the screen's
+    /// preview can call it with nothing spent, and a preview that consumed a
+    /// random draw would make what a player *gets* depend on whether they
+    /// looked at the menu first. A screen quotes the pool instead of an
+    /// outcome, which is the honest thing to show for a draw that has not
+    /// happened yet.
+    fn extract_routine_from_program(
+        &mut self,
+        index: usize,
+        program: &DownedProgram,
+        tool: &ToolDef,
+    ) -> Result<(), String> {
+        let pool = self.routine_candidates(program);
+        if pool.is_empty() {
+            return Err("You already know everything that program can teach.".to_string());
+        }
+        let weights: Vec<u32> = pool
+            .iter()
+            .enumerate()
+            .map(|(i, _)| {
+                if i == 0 {
+                    tuning::ROUTINE_TOOL_FIRST_UNKNOWN_WEIGHT
+                } else {
+                    1
+                }
+            })
+            .collect();
+        let total: u32 = weights.iter().sum();
+        let roll = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_range(0..total)
+        };
+        let picked = crate::abilities::weighted_pick(&weights, roll)
+            .map(|i| pool[i].clone())
+            .unwrap_or_else(|| pool[0].clone());
+
+        let player = self.player_entity();
+        self.world
+            .get_mut::<DownedPrograms>(player)
+            .unwrap()
+            .0
+            .remove(index);
+
+        let label = self.downed_program_label(program);
+        let ability_name = self.ability_display_name(&picked);
+        match self.take_routine(&picked) {
+            RoutineTaken::DiskPopped => self.log_kind(
+                MessageKind::Loot,
+                format!(
+                    "You read {label} out with the {}: its {ability_name} disk comes back intact.",
+                    tool.name
+                ),
+            ),
+            RoutineTaken::Learned => self.log_kind(
+                MessageKind::Loot,
+                format!(
+                    "You read {label} out with the {}: you learn its {ability_name} routine.",
+                    tool.name
+                ),
+            ),
+        }
+
+        let ticks = self.extraction_ticks(tool);
+        for _ in 0..ticks {
+            if self.is_game_over().is_some() || self.has_active_battle() {
+                break;
+            }
+            self.tick();
+        }
+        Ok(())
+    }
+
     /// One row per held program, in store order — `Mode::DownedPrograms`'s
     /// whole list. The species' display name falls back to the raw id for a
     /// mod species since removed, `downed_program_label`'s own tolerance,
@@ -270,6 +387,13 @@ impl Game {
             .into_iter()
             .find(|def| &def.id == tool)
             .ok_or_else(|| "That tool isn't installed.".to_string())?;
+
+        // The `Routines` category takes the other branch entirely: no
+        // `yields` pool is read, and the refusal below has to land there,
+        // above the removal, or a program is spent teaching nothing.
+        if tool_def.category == ToolCategory::Routines {
+            return self.extract_routine_from_program(index, &program, &tool_def);
+        }
 
         let granted = self.extraction_yield(&program, &tool_def);
 

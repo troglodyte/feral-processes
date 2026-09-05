@@ -4427,6 +4427,18 @@ pub const TOOL_TIER_SCALE_STEP: f32 = 0.5;
 /// check it — `balance_sim` models no loot and no time cost.
 pub const EXTRACT_BENCH_TICK_STEP: f32 = 0.25;
 
+/// Relative weight on the *first* candidate in `Game::routine_candidates`
+/// when a `Routines` tool draws — every other candidate weighs 1. The
+/// species' own declaration order is the ranking, so the earliest routine it
+/// has never taught the player is the likely outcome without being the
+/// certain one. At `3` against a two-candidate pool the first wins three
+/// draws in four.
+///
+/// A guess. Deterministic (weight infinity) would make a `Routines` tool a
+/// lookup table the player memorises; uniform would make the kit's own
+/// ordering mean nothing.
+pub const ROUTINE_TOOL_FIRST_UNKNOWN_WEIGHT: u32 = 3;
+
 /// Extra units of a program's `rich_in` item (or its `work_resource`
 /// fallback, `Game::rich_in`) that `extraction_yield` adds on top of the
 /// tool's own draw — from any tool, regardless of category (spec section

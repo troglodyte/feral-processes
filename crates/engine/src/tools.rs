@@ -175,6 +175,15 @@ impl ToolDb {
         self.tools.get(id)
     }
 
+    /// A tool that no `assets/tools/` file backs, for a test that needs a
+    /// category the shipped catalogue does not carry yet. `#[cfg(test)]`
+    /// because a runtime caller would be authoring content in Rust, which
+    /// `assets/tools/README.md` is the answer to.
+    #[cfg(test)]
+    pub(crate) fn insert(&mut self, def: ToolDef) {
+        self.tools.insert(def.id.as_str().to_string(), def);
+    }
+
     /// Every loaded tool, by id. `HashMap` iteration order is randomized per
     /// instance, so without this a tool screen's numbering (a later phase)
     /// would shuffle between sessions even though nothing about the files

@@ -85,6 +85,13 @@ pub struct KnownRoutines(pub BTreeSet<crate::abilities::AbilityId>);
 /// exactly one thing, `Game::unlock_research` (a node's `unlocks_tools`).
 /// Knowledge is permanent; forging spends materials, never the knowledge.
 ///
+/// **Never holds `tuning::STARTER_TOOL_ID`.** The starter is known
+/// unconditionally — `tools::Game::known_tool_ids` derives that answer on
+/// every read instead of it being granted in here, so pulling the starter
+/// out of its slot can never strand it with no door back in. Storing the
+/// grant here would also need a `Game::load` migration for every save
+/// written before this field existed; deriving it needs none.
+///
 /// A `BTreeSet` for `KnownRoutines`'s own reason: the save writes this set
 /// out, and a `HashSet`'s iteration order would make the encoded bytes
 /// differ run to run.

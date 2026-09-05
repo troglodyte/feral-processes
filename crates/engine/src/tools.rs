@@ -213,21 +213,41 @@ impl Game {
             .unwrap_or_default()
     }
 
+    /// Every tool id `knows_tool` answers true for: `KnownTools` plus
+    /// `tuning::STARTER_TOOL_ID`, which `Game::new` forges straight into the
+    /// slot without going through research (`STARTER_TOOL_ID`'s own
+    /// creation-only doc). One function so `knows_tool` and `tool_rows`
+    /// cannot compute the union differently — a stored grant would make
+    /// pulling the starter permanently strand it, since nothing ever taught
+    /// it in the first place; deriving the answer instead means the
+    /// starter's row and its "known" status survive being pulled, and a
+    /// phase-1 save that never wrote `known_tools` gets the same repair for
+    /// free.
+    fn known_tool_ids(&self) -> Vec<ToolId> {
+        let mut ids: Vec<ToolId> = self
+            .world
+            .resource::<crate::resources::KnownTools>()
+            .0
+            .iter()
+            .cloned()
+            .collect();
+        ids.push(ToolId(crate::tuning::STARTER_TOOL_ID.to_string()));
+        ids
+    }
+
     /// Whether the player has researched `id` — `knows_routine`'s analog.
     /// Every later gate (`forge_tool`) calls this rather than reaching into
     /// `KnownTools` itself.
     pub fn knows_tool(&self, id: &ToolId) -> bool {
-        self.world
-            .resource::<crate::resources::KnownTools>()
-            .0
-            .contains(id)
+        self.known_tool_ids().iter().any(|known| known == id)
     }
 
     /// `Mode::Tools`'s whole list — `views::ToolRow`'s own doc: the union of
-    /// every tool the player knows and every tool actually installed
-    /// (plan decision 3), since neither set alone would show the starter
-    /// tool a row (installed but never known) or a freshly researched tool
-    /// nobody has forged yet (known but neither installed nor carried).
+    /// every tool the player knows (`known_tool_ids`, which includes the
+    /// starter unconditionally) and every tool actually installed (plan
+    /// decision 3), since neither set alone would show a freshly researched
+    /// tool nobody has forged yet (known but neither installed nor
+    /// carried) a row.
     ///
     /// Sorted by id for a deterministic screen, `ToolDb::all`'s own reason;
     /// an id neither store can resolve against `ToolDb` is dropped rather
@@ -235,7 +255,6 @@ impl Game {
     pub fn tool_rows(&self) -> Vec<crate::views::ToolRow> {
         let player = self.player_entity();
         let db = self.world.resource::<ToolDb>();
-        let known = self.world.resource::<crate::resources::KnownTools>();
         let installed = self
             .world
             .get::<Tools>(player)
@@ -243,7 +262,11 @@ impl Game {
             .unwrap_or_default();
         let inventory = self.world.get::<Inventory>(player);
 
-        let mut ids: Vec<ToolId> = known.0.iter().cloned().chain(installed.clone()).collect();
+        let mut ids: Vec<ToolId> = self
+            .known_tool_ids()
+            .into_iter()
+            .chain(installed.clone())
+            .collect();
         ids.sort();
         ids.dedup();
 

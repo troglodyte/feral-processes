@@ -1176,9 +1176,11 @@ fn forge_refuses_an_unresolvable_tool_id_and_spends_nothing() {
 
 #[test]
 fn forge_refuses_an_unresearched_tool_and_spends_nothing() {
-    // The starter tool's own catalogue entry — resolvable, but never taught,
-    // since `Game::new` grants it straight into the slot without touching
-    // `KnownTools`.
+    // `core_tap` ships real content but nothing teaches it by default.
+    // Unlike `core_tap`, the starter (`salvage_clamp`) cannot stand in for
+    // "unresearched" any more: `knows_tool` answers true for
+    // `STARTER_TOOL_ID` unconditionally (Critical 1's fix) — see
+    // `pulling_the_starter_leaves_it_known_and_re_forgeable`.
     let mut game = Game::new(9104, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     game.world
@@ -1186,12 +1188,12 @@ fn forge_refuses_an_unresearched_tool_and_spends_nothing() {
         .unwrap()
         .add(ItemId::from(ids::CORE_FRAGMENT), 10);
     assert!(
-        !game.knows_tool(&ToolId(tuning::STARTER_TOOL_ID.to_string())),
-        "test premise: the starter tool must not be known"
+        !game.knows_tool(&ToolId("core_tap".to_string())),
+        "test premise: core_tap must not be known by default"
     );
     let before = game.world.get::<Inventory>(player).unwrap().items.clone();
 
-    let result = game.forge_tool(&ToolId(tuning::STARTER_TOOL_ID.to_string()));
+    let result = game.forge_tool(&ToolId("core_tap".to_string()));
 
     assert!(result.is_err(), "an unresearched tool must refuse forging");
     assert_eq!(
@@ -1199,10 +1201,38 @@ fn forge_refuses_an_unresearched_tool_and_spends_nothing() {
         before,
         "nothing must be spent on a refusal"
     );
-    assert_eq!(
-        carrier_count(&game, &ToolId(tuning::STARTER_TOOL_ID.to_string())),
-        0
+    assert_eq!(carrier_count(&game, &ToolId("core_tap".to_string())), 0);
+}
+
+#[test]
+fn pulling_the_starter_leaves_it_known_and_re_forgeable() {
+    // Critical 1: a stored grant would make pulling the starter (its own
+    // uninstall) permanently strand it, since nothing ever taught it in the
+    // first place. `knows_tool` must answer true for `STARTER_TOOL_ID`
+    // unconditionally instead, so the door back in never closes.
+    let mut game = Game::new(9107, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let starter = ToolId(tuning::STARTER_TOOL_ID.to_string());
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 10);
+
+    game.uninstall_tool(0)
+        .expect("pulling the starter must succeed");
+
+    assert!(
+        game.knows_tool(&starter),
+        "the starter's knowledge must survive being pulled"
     );
+    assert!(
+        game.tool_rows().iter().any(|r| r.id == starter),
+        "the starter's row must survive being pulled"
+    );
+
+    game.forge_tool(&starter)
+        .expect("the starter must still be forgeable once pulled");
+    assert_eq!(carrier_count(&game, &starter), 1);
 }
 
 #[test]
@@ -1477,15 +1507,16 @@ fn uninstalling_frees_the_slot_and_grants_no_carrier_back() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn tool_rows_lists_the_installed_starter_tool_even_though_it_is_not_known() {
-    // The starter is granted straight into slot one at `Game::new` and
-    // never added to `KnownTools` (task 1's own ruling) — a screen reading
-    // only the known set would never show it a row at all.
+fn tool_rows_lists_the_installed_starter_tool() {
+    // The starter is both installed (`Game::new`, into slot one) and known
+    // (`knows_tool`'s unconditional `STARTER_TOOL_ID` answer, Critical 1's
+    // fix) — either alone would already put a row on screen; this pins the
+    // row's own figures regardless of which side of the union wins.
     let game = Game::new(9301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let starter = ToolId(tuning::STARTER_TOOL_ID.to_string());
     assert!(
-        !game.knows_tool(&starter),
-        "test premise: the starter is installed but not known"
+        game.knows_tool(&starter),
+        "test premise: the starter is known unconditionally"
     );
 
     let rows = game.tool_rows();

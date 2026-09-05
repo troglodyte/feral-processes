@@ -2551,6 +2551,12 @@ fn a_higher_tier_gear_tool_scales_the_authored_chance() {
     let scaled = game.gear_chances(&downed, &gear_tool(2));
     let step = crate::tuning::TOOL_TIER_SCALE_STEP;
 
+    assert_eq!(
+        scaled.len(),
+        authored.len(),
+        "a clamp must not drop a row — filtering one out would satisfy every \
+         per-item assertion below while still failing spec §9.5"
+    );
     for ((s_item, s_chance), (a_item, a_chance)) in scaled.iter().zip(authored.iter()) {
         assert_eq!(s_item, a_item);
         let expected = (a_chance * (1.0 + step)).clamp(0.0, 1.0);
@@ -2569,13 +2575,21 @@ fn a_higher_tier_gear_tool_scales_the_authored_chance() {
 fn a_gear_chance_never_exceeds_one() {
     let game = Game::new(4204, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let species = species_with_gear(&game);
+    let authored = game.equipment_drops_for(&species);
 
     let mut downed = program(50, Rarity::Ordinary, 3);
     downed.species = species.id.clone();
 
     // A tier far past anything shippable, so every authored chance is
     // pushed over 1.0 before the clamp.
-    for (item, chance) in game.gear_chances(&downed, &gear_tool(99)) {
+    let clamped = game.gear_chances(&downed, &gear_tool(99));
+    assert_eq!(
+        clamped.len(),
+        authored.len(),
+        "a clamp must not drop a row — filtering one out instead would satisfy \
+         every per-item assertion below while still failing spec §9.5"
+    );
+    for (item, chance) in clamped {
         assert!(
             (0.0..=1.0).contains(&chance),
             "chance for {item:?} escaped the clamp: {chance}"

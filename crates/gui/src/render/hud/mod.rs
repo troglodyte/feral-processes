@@ -14,6 +14,7 @@
 
 pub(super) mod bar;
 pub(super) mod column;
+pub(super) mod compass_block;
 pub(super) mod layout;
 pub(super) mod log_frame;
 pub(super) mod map_frame;

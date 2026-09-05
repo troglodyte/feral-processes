@@ -1175,6 +1175,11 @@ pub struct CompassRow {
     /// `game::stack::bearing`'s eight-point heading, reused rather than
     /// restated.
     pub bearing: &'static str,
+    /// The same answer as an arrow, for the block the map draws. Carried
+    /// rather than derived by the renderer from `bearing`: a `match` on
+    /// those strings would need a fallback arm, and a fallback is how a
+    /// ninth heading ships pointing nowhere.
+    pub arrow: char,
     /// Chebyshev tiles, and answered for every row the derivation returns.
     pub distance: i32,
     pub visited: bool,

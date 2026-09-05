@@ -2633,6 +2633,37 @@ fn a_bearing_only_goes_diagonal_when_neither_axis_dominates() {
     assert_eq!(bearing(0, 0), "here");
 }
 
+/// The word and the arrow are two readings of one answer, and this is what
+/// keeps them from drifting: every offset that names a direction points an
+/// arrow in that direction, and no two headings share one.
+///
+/// Both are exhaustive matches on `Heading`, so a ninth point fails to
+/// compile rather than reaching a fallback — this covers the other half,
+/// which the compiler cannot see: that the two matches agree about *which*
+/// point is which.
+#[test]
+fn every_heading_reads_the_same_as_a_word_and_as_an_arrow() {
+    use crate::game::stack::heading;
+    let pairs = [
+        ((0, -10), "north", '↑'),
+        ((10, -10), "north-east", '↗'),
+        ((10, 0), "east", '→'),
+        ((10, 10), "south-east", '↘'),
+        ((0, 10), "south", '↓'),
+        ((-10, 10), "south-west", '↙'),
+        ((-10, 0), "west", '←'),
+        ((-10, -10), "north-west", '↖'),
+        ((0, 0), "here", '●'),
+    ];
+    for ((dx, dy), word, arrow) in pairs {
+        let h = heading(dx, dy);
+        assert_eq!(h.label(), word, "at ({dx}, {dy})");
+        assert_eq!(h.arrow(), arrow, "at ({dx}, {dy})");
+    }
+    let arrows: std::collections::HashSet<char> = pairs.iter().map(|p| p.2).collect();
+    assert_eq!(arrows.len(), pairs.len(), "two headings share an arrow");
+}
+
 /// An entrance is a place, and places survive a breach now. The tile stays
 /// put; what changes is the frame behind it, because `FrameSpec::tier`
 /// moved — which is also why `StackMemory` is cleared, since every record

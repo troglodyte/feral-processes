@@ -799,34 +799,15 @@ pub(super) fn draw_playing_base(
     // Read here for `terrain`'s reason — it takes `&mut self`, and this is
     // where every other such call already lands before the borrows below.
     // `None` off the zone surface falls out of the engine's own answer
-    // rather than from a second `Locale` check here.
-    let compass = game
-        .compass_bearing()
-        .map(|row| super::compass::destination_line(&row));
-    let map_body = hud::layout::map_body(regions.map_pane, m);
-    // **The pane's background is painted over the whole pane; only its
-    // *body* stops short of the bottom border.** That band is where the
-    // compass strip's quad reaches into the pane — bought unconditionally
-    // by `hud::layout::map_body`, so picking a destination never re-lays the
-    // tile grid — and it still has to be filled, or the window shows
-    // through beneath the last row of tiles.
-    painter.rect(
-        regions.map_pane.x,
-        regions.map_pane.y,
-        regions.map_pane.w,
-        regions.map_pane.h,
-        if game.stack_view().is_some() {
-            super::stack::VOID
-        } else {
-            MAP_BG
-        },
-    );
+    // rather than from a second `Locale` check here, and `None` is also
+    // what "nothing is selected" looks like.
+    let compass = game.compass_bearing();
     if let Some(view) = game.stack_view() {
-        draw_stack(&view, painter, map_body, m, status.power);
+        draw_stack(&view, painter, regions.map_pane, m, status.power);
         // Over the corridor, not part of it: the same map the `g` screen
         // draws, small enough to leave the view readable.
         if let Some(map) = game.frame_map() {
-            draw_map_inset(&map, stack_zoom, painter, map_body, m);
+            draw_map_inset(&map, stack_zoom, painter, regions.map_pane, m);
         }
         // No surface entities are fetched down here, so there is nothing to
         // count hostiles among — the threat readout names what the surface
@@ -843,7 +824,6 @@ pub(super) fn draw_playing_base(
             // Never underground: watching is base space's, and the Stack
             // view is a corridor projection with no camera to move.
             None,
-            compass.as_deref(),
             painter,
             m,
         );
@@ -852,7 +832,7 @@ pub(super) fn draw_playing_base(
             game,
             fx,
             painter,
-            map_body,
+            regions.map_pane,
             tile_px,
             glyph_px,
             &status,
@@ -871,10 +851,16 @@ pub(super) fn draw_playing_base(
                 shielded: game.raid_defense_active(),
             },
             watch_label.as_deref(),
-            compass.as_deref(),
             painter,
             m,
         );
+    }
+    // **After the frame, so it sits over the map rather than under it**, and
+    // outside the branch because it is the same block in both — though
+    // `compass_bearing` answers `None` underground, so the Stack never in
+    // fact draws one.
+    if let Some(row) = &compass {
+        hud::compass_block::draw_compass_block(regions.map_pane, row, painter, m);
     }
 
     // The BASE blocks are base-space only, and `structure_report` walks
@@ -1022,12 +1008,6 @@ fn history_rows(entries: &[LogEntry], selected: usize) -> Vec<Row> {
         .collect()
 }
 
-/// The zone map's ground colour, painted under every tile. Named rather than
-/// a literal at the fill because `draw_playing_base` paints the pane and
-/// this draws the body, and two literals is how the strip band would come to
-/// be a different colour from the map above it.
-pub(super) const MAP_BG: Color = Color::new(0.03, 0.03, 0.05, 1.0);
-
 /// The zone map: terrain, entities and effects, drawn top-down into the pane
 /// at the origin. The other half of the pane's contents is `draw_stack`,
 /// which replaces this entirely while the party is underground.
@@ -1134,6 +1114,13 @@ fn draw_surface_map(
     let outdoors = base_pos.is_none();
     let shield_outline = fx.shield_outline(game.raid_defense_active());
 
+    painter.rect(
+        pane.x,
+        pane.y,
+        pane.w,
+        pane.h,
+        Color::new(0.03, 0.03, 0.05, 1.0),
+    );
     for (ry, row) in tiles.iter().enumerate() {
         for (rx, tile) in row.iter().enumerate() {
             // An exposed rock face is brighter than the hole it is part of,
@@ -4149,7 +4136,7 @@ mod tests {
         let pane = Rect::new(0.0, 0.0, 1200.0, 600.0);
 
         let (_, shapes) = with_painter(|p| {
-            hud::map_frame::draw_map_frame(pane, row, threat, Some("Ivy"), None, p, &m);
+            hud::map_frame::draw_map_frame(pane, row, threat, Some("Ivy"), p, &m);
         });
         let text = crate::paint::painted_text(&shapes).join("");
         assert!(
@@ -4167,7 +4154,7 @@ mod tests {
         );
 
         let (_, shapes) = with_painter(|p| {
-            hud::map_frame::draw_map_frame(pane, row, threat, None, None, p, &m);
+            hud::map_frame::draw_map_frame(pane, row, threat, None, p, &m);
         });
         let text = crate::paint::painted_text(&shapes).join("");
         assert!(
@@ -4471,84 +4458,138 @@ mod tests {
 }
 
 #[cfg(test)]
-mod compass_strip_tests {
+mod compass_block_tests {
     use super::tests::*;
     use super::*;
     use crate::paint::{painted_text, with_painter};
     use crate::text::ui_metrics;
 
+    /// Every arrow `Heading::arrow` can answer with. Nothing else the map
+    /// screen paints uses one, which is what makes them the marker this
+    /// module tests against — the block's words ("home", "13 tiles") all
+    /// collide with the log's own arrival lines.
+    const ARROWS: [char; 9] = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖', '●'];
+
     /// Points the app's compass at its first destination and draws the map.
-    fn shapes_with_compass(point: bool) -> Vec<bevy_egui::egui::epaint::ClippedShape> {
+    /// Returns the shapes and the arrow the block should be showing.
+    fn shapes_with_compass(point: bool) -> (Vec<bevy_egui::egui::epaint::ClippedShape>, char) {
         let mut app = playing_app();
+        let mut arrow = ' ';
         if point {
             let game = app.game.as_mut().expect("a game");
-            let target = game.compass_targets().first().map(|r| r.target);
-            game.set_compass_bearing(target);
+            let first = game.compass_targets().first().cloned();
+            arrow = first.as_ref().map(|r| r.arrow).unwrap_or(' ');
+            game.set_compass_bearing(first.map(|r| r.target));
         }
         let mut fx = Fx::new();
         let m = ui_metrics(900.0);
         let (_, shapes) = with_painter(|p| {
             draw_playing_base(&mut app, &mut fx, None, p, &m);
         });
-        shapes
+        (shapes, arrow)
     }
 
-    /// **Decision 4, and the whole reason the band is bought
-    /// unconditionally.** A map that resized the instant a destination was
-    /// picked would read as a camera fault rather than as a strip appearing.
+    /// **The whole reason the compass stopped being a border strip.** As a
+    /// strip it reached into the pane, so the map had to buy a band it
+    /// could never draw tiles in — and buying that band only while a
+    /// destination was selected would have re-laid the entire tile grid on
+    /// the keypress that selected one. A block floating inside the pane
+    /// overlays tiles that are still drawn, so this compares the map's own
+    /// background fill between the two states and expects it not to move.
     #[test]
-    fn the_maps_body_is_the_same_height_whether_or_not_a_destination_is_picked() {
+    fn the_map_is_the_same_size_whether_or_not_a_destination_is_picked() {
+        let fill = |point: bool| {
+            shapes_with_compass(point)
+                .0
+                .iter()
+                .find_map(|cs| match &cs.shape {
+                    bevy_egui::egui::Shape::Rect(r) if r.fill.a() > 0 => Some(r.rect),
+                    _ => None,
+                })
+                .expect("the map pane paints a background")
+        };
+        assert_eq!(
+            fill(true),
+            fill(false),
+            "picking a destination moved the map"
+        );
+    }
+
+    #[test]
+    fn the_block_names_the_destination_and_is_absent_with_none_picked() {
+        let (shapes, arrow) = shapes_with_compass(true);
+        let with = painted_text(&shapes).join("");
+        assert!(
+            with.contains(arrow),
+            "the compass block never painted its {arrow:?}: {with:?}"
+        );
+        assert!(
+            with.contains(" tiles"),
+            "and the block carries the figure: {with:?}"
+        );
+
+        let without = painted_text(&shapes_with_compass(false).0).join("");
+        assert!(
+            !without.chars().any(|c| ARROWS.contains(&c)),
+            "nothing is selected, so the corner is empty: {without:?}"
+        );
+    }
+
+    /// **The block sits under the THREAT readout, not through it.** That
+    /// strip rides the pane's top border and its background quad hangs
+    /// `strip_clearance` down *into* the pane, so a block starting at
+    /// `pane.y + m.inset` would be painted straight over the lower half of
+    /// its glyphs — the same fault the vitals/filter-header collision was,
+    /// which shipped three times before anyone caught it.
+    #[test]
+    fn the_block_clears_the_threat_readout_it_sits_beneath() {
         let m = ui_metrics(900.0);
         let pane = Rect::new(0.0, 0.0, 1200.0, 600.0);
-        let body = hud::layout::map_body(pane, &m);
-        assert!(body.h < pane.h, "the band is bought out of the pane");
-        assert_eq!(
-            body,
-            hud::layout::map_body(pane, &m),
-            "the body is a function of the pane and the metrics alone — \
-             nothing about the selection reaches it"
+        let row = feral_processes_engine::CompassRow {
+            target: feral_processes_engine::settlements::CompassTarget::Home,
+            label: "home".to_string(),
+            bearing: "south",
+            arrow: '↓',
+            distance: 219,
+            visited: true,
+        };
+        let (block, _) = with_painter(|p| {
+            hud::compass_block::draw_compass_block(pane, &row, p, &m).expect("it fits")
+        });
+        assert!(
+            block.y >= pane.y + hud::layout::strip_inset(&m) - 0.001,
+            "the block starts at {} and the THREAT strip's quad reaches {} \
+             into the pane",
+            block.y,
+            pane.y + hud::layout::strip_inset(&m)
+        );
+        assert!(
+            block.x + block.w <= pane.x + pane.w - m.inset + 0.001,
+            "and it stays inside the right edge"
         );
     }
 
+    /// A pane too narrow for the block draws nothing rather than a box
+    /// hanging off the edge — `strip::fitting`'s rule in the one form a
+    /// fixed-size box can take it.
     #[test]
-    fn the_strip_names_the_destination_and_is_absent_with_none_picked() {
-        let with = painted_text(&shapes_with_compass(true)).join("");
+    fn a_pane_with_no_room_for_the_block_draws_none_of_it() {
+        let m = ui_metrics(900.0);
+        let row = feral_processes_engine::CompassRow {
+            target: feral_processes_engine::settlements::CompassTarget::Home,
+            label: "a settlement with an implausibly long name".to_string(),
+            bearing: "south",
+            arrow: '↓',
+            distance: 219,
+            visited: false,
+        };
+        let (drawn, shapes) = with_painter(|p| {
+            hud::compass_block::draw_compass_block(Rect::new(0.0, 0.0, 40.0, 600.0), &row, p, &m)
+        });
+        assert_eq!(drawn, None);
         assert!(
-            with.contains('»'),
-            "the compass strip never painted: {with:?}"
-        );
-
-        let without = painted_text(&shapes_with_compass(false)).join("");
-        assert!(
-            !without.contains('»'),
-            "nothing is selected, so the border carries nothing: {without:?}"
-        );
-    }
-
-    /// `nothing_paints_over_the_vitals_strip`'s question at the other
-    /// border. The two strips reach into the same gap from opposite sides,
-    /// which is why `layout::regions` buys two clearances there.
-    #[test]
-    fn nothing_paints_over_the_compass_strip() {
-        let shapes = shapes_with_compass(true);
-        let index = shapes
-            .iter()
-            .position(|cs| {
-                matches!(&cs.shape, bevy_egui::egui::Shape::Text(t) if t.galley.text().contains('»'))
-            })
-            .expect("the compass strip was never painted");
-        let quad = shapes[..index]
-            .iter()
-            .rev()
-            .find_map(|cs| match &cs.shape {
-                bevy_egui::egui::Shape::Rect(r) if r.fill.a() > 0 => Some(r.rect),
-                _ => None,
-            })
-            .expect("the compass strip has no background quad ahead of it");
-        assert_eq!(
-            covering_rect_after(&shapes, index, quad),
-            None,
-            "something opaque painted over the compass strip's {quad:?}"
+            painted_text(&shapes).join("").is_empty(),
+            "a refusal must not paint half a block"
         );
     }
 }

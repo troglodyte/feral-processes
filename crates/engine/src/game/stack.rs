@@ -54,29 +54,88 @@ impl StackLocale<'_> {
     }
 }
 
+/// One of the eight points, or `Here`.
+///
+/// **A named type rather than two parallel matches**, because there are two
+/// renderings of the same answer — the word the log and the picker use, and
+/// the arrow the compass block draws — and a second `match (dx, dy)` for the
+/// arrows would be a copy that drifts. `label` and `arrow` are exhaustive on
+/// this, so an author cannot add a ninth point and reach a fallback.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Heading {
+    North,
+    NorthEast,
+    East,
+    SouthEast,
+    South,
+    SouthWest,
+    West,
+    NorthWest,
+    /// Only reachable at `dx == dy == 0`, where every direction is as good
+    /// as any other.
+    Here,
+}
+
+impl Heading {
+    pub fn label(self) -> &'static str {
+        match self {
+            Heading::North => "north",
+            Heading::South => "south",
+            Heading::East => "east",
+            Heading::West => "west",
+            Heading::NorthEast => "north-east",
+            Heading::NorthWest => "north-west",
+            Heading::SouthEast => "south-east",
+            Heading::SouthWest => "south-west",
+            Heading::Here => "here",
+        }
+    }
+
+    /// The glyph the compass block draws. Both shipped fonts carry all
+    /// eight — verified in `crates/gui/tests/font_rasterization.rs` — and
+    /// `Here` takes a dot rather than an arrow, because there is no
+    /// direction to point in when you are standing on the thing.
+    pub fn arrow(self) -> char {
+        match self {
+            Heading::North => '↑',
+            Heading::South => '↓',
+            Heading::East => '→',
+            Heading::West => '←',
+            Heading::NorthEast => '↗',
+            Heading::NorthWest => '↖',
+            Heading::SouthEast => '↘',
+            Heading::SouthWest => '↙',
+            Heading::Here => '●',
+        }
+    }
+}
+
 /// Eight-point compass heading for an offset, with north as `-y` to match
 /// `stack::Dir`.
 ///
 /// A direction counts as diagonal when neither axis dominates the other by
 /// more than half — a strict "whichever is larger" split would call a
 /// near-45° bearing due east and send the player off at an angle.
-pub(crate) fn bearing(dx: i32, dy: i32) -> &'static str {
+pub fn heading(dx: i32, dy: i32) -> Heading {
     let (ax, ay) = (dx.abs(), dy.abs());
     let horizontal = ax * 2 > ay;
     let vertical = ay * 2 > ax;
     match (vertical.then_some(dy < 0), horizontal.then_some(dx > 0)) {
-        (Some(true), None) => "north",
-        (Some(false), None) => "south",
-        (None, Some(true)) => "east",
-        (None, Some(false)) => "west",
-        (Some(true), Some(true)) => "north-east",
-        (Some(true), Some(false)) => "north-west",
-        (Some(false), Some(true)) => "south-east",
-        (Some(false), Some(false)) => "south-west",
-        // Only reachable at dx == dy == 0, where every direction is as good
-        // as any other.
-        (None, None) => "here",
+        (Some(true), None) => Heading::North,
+        (Some(false), None) => Heading::South,
+        (None, Some(true)) => Heading::East,
+        (None, Some(false)) => Heading::West,
+        (Some(true), Some(true)) => Heading::NorthEast,
+        (Some(true), Some(false)) => Heading::NorthWest,
+        (Some(false), Some(true)) => Heading::SouthEast,
+        (Some(false), Some(false)) => Heading::SouthWest,
+        (None, None) => Heading::Here,
     }
+}
+
+/// The word for `heading`'s answer — a call, not a second match.
+pub(crate) fn bearing(dx: i32, dy: i32) -> &'static str {
+    heading(dx, dy).label()
 }
 
 /// The `Locale::Stack` payload, unpacked — see `Game::stack_pos`. A

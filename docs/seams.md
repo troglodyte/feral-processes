@@ -11310,56 +11310,62 @@ reachable from some state, and the renderer measures the array itself. The
 width gate was verified by mutation.
 
 
-### The compass strip's band is bought unconditionally, and the gap between the panes holds two clearances
+### The compass is a block inside the map pane, and it was a border strip for one release
 
 `map_pane`'s bottom border carried nothing from the release the vitals moved
-off it until the compass shipped, and both halves of what that border now
-costs were decided against a named alternative rather than falling out of
-the code.
+off it, and it carries nothing again. The compass shipped on it in 0.13.103
+and moved off it in the next release, and what the round trip is worth
+recording is the *cost* of that border rather than the taste question of
+where a readout looks best.
 
-**Buying the band only when it is used is the version that looks cheaper and
-is worse.** A strip riding a border has its background quad centred *on* the
-border line, so it reaches `strip_clearance` into the pane as far as out of
-it — the rule the log pane already pays through `strip_inset`. For the map
-pane the body is a tile grid, and a tile grid whose height changes re-lays
-every cell in it: the number of visible rows changes, `tile_origin_px`
-shifts, and the whole viewport steps. Doing that on the keypress that picks
-a destination reads at the keyboard as the camera lurching, not as a strip
-appearing — the player has no way to attribute the movement to the thing
-they just did, because what they did was choose a place, not move. So
-`hud::layout::map_body` takes the pane and the metrics and nothing else, and
-the band is gone from the map whether or not the compass is pointing at
-anything. The price is a few pixels of map, permanently, and it is the
-right trade: a viewport that never moves is worth more than the rows.
+**A border strip is never only a border strip.** `border_strip` centres its
+background quad *on* the line it rides, so it reaches `strip_clearance` into
+the pane as far as out of it — the rule the log pane already pays through
+`strip_inset`. For a pane whose body is a tile grid that is not a few pixels
+of padding: the map has to buy a band it can never draw tiles in, and the
+number of visible rows is a function of the body's height, so buying the
+band *conditionally* re-lays every cell on the frame a destination is
+picked. At the keyboard that reads as the camera lurching, because the
+player did not move — they chose a place. So the band had to be
+unconditional, which meant paying for it on every frame of the whole run to
+serve a readout that is absent most of it.
 
-**The second half is that this border is not alone.** The vitals ride
-`log_pane`'s *top* border and their quad reaches `clearance` upward, into the
-gap between the panes; the compass strip rides `map_pane`'s bottom border and
-its quad reaches `clearance` downward, into the same gap. `pane_gap` was
-`m.gap.max(clearance)` — sized for exactly one of them — so with both mounted
-the quads overlap by precisely `clearance`, and `draw_log_pane` runs after
-`draw_map_frame`, so the log pane's fill cuts the compass strip in half. This
-is the same failure the vitals/filter-header collision was, one border over,
-and it is the fourth time the shape has shipped. `pane_gap =
-m.gap.max(clearance * 2.0)` closes it.
+**And that border faces another one.** `map_pane`'s bottom edge and
+`log_pane`'s top edge sit `pane_gap` apart, and the vitals ride the log's
+top border reaching `clearance` *up* into that gap. A strip on the map's
+bottom border reaches `clearance` *down* into the same gap, so `pane_gap`
+had to hold two clearances rather than one — and at one they overlapped by
+exactly `clearance`, with `draw_log_pane` running after `draw_map_frame`, so
+the log pane's own fill cut the compass strip in half. That is the
+vitals/filter-header collision for the third time, one border over.
 
-What is worth noticing is which test catches it. The arithmetic tests in
-`hud::layout` stay green through the whole bug: they compare quad edges
-against *named pane rects*, and every one of those relationships still holds
-while the strip is being painted over. The assertion that goes red is
-`base.rs::nothing_paints_over_the_compass_strip`, which finds the strip's own
-quad in the shape list and asks whether **anything** painted after it
-overlaps that box by an area. Dropping the `* 2.0` was checked by mutation
-and it fails; that is the whole reason to prefer the general question to a
-named-rectangle one, and it is stated at length in the hud seam already.
+**A block floating inside the pane costs neither.** It overlays tiles that
+are still drawn, so `regions` never learns the compass exists: no band, no
+conditional layout, and `pane_gap` went back to one clearance. The
+assertion that holds it is `base.rs::the_map_is_the_same_size_whether_or
+_not_a_destination_is_picked`, which compares the map's own background fill
+between "a destination is selected" and "none is" and expects the same
+rectangle — a property the strip version could only ever approximate by
+paying for the band forever.
 
-**A third, smaller decision rides along.** The band is *background*, not
-body: the pane's fill has to cover the whole pane or the window shows through
-under the last row of tiles, while the tiles themselves must stop short. That
-split is why `draw_playing_base` paints the fill and `draw_surface_map` /
-`draw_stack` no longer do — each of those now receives the body rect alone,
-which is the same shape as CLAUDE.md's "the panes take their origin from the
-caller": one statement per view, in the caller, rather than a rule each
-drawer has to remember. `base::MAP_BG` is named rather than a literal for
-that reason — two literals is how the band would come to be a different
-colour from the map above it.
+What the block *inherits* is the one rule that survived the move: it starts
+at `layout::strip_inset` below the pane's top edge, not at `m.inset`,
+because the THREAT readout rides that top border and its quad hangs down
+into the pane. A block at `m.inset` paints straight through the lower half
+of THREAT's glyphs. The general lesson is the one the hud seam already
+states and this is now the fourth instance of: **a strip's quad is bigger
+than the strip**, and anything sharing a border with one has to measure from
+the quad rather than from the line.
+
+**A second decision rides along, in the engine.** The block draws an arrow
+where the picker draws a word, and those are two renderings of one answer.
+`game::stack::bearing` used to be a `match (dx, dy)` returning `&'static
+str`; a parallel match returning `char` would have been the copy that
+drifts, and — worse — a `match` in the renderer on those strings needs a
+fallback arm, which is how a ninth heading ships pointing nowhere
+(`cell_mark`'s rule). So the match was extracted to `stack::Heading`, with
+`label` and `arrow` both exhaustive on it. The compiler then holds that
+every heading has both; `every_heading_reads_the_same_as_a_word_and_as_an
+_arrow` holds the half it cannot see, which is that the two agree about
+which point is which.
+

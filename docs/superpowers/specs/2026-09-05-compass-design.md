@@ -75,6 +75,20 @@ alternative.
    only while a target is selected would resize the map the instant one is
    picked, which reads as a camera fault. A few pixels of map, always, in
    exchange for a stable viewport.
+
+   **Decisions 3 and 4 amended together, 2026-09-05, one release after the
+   feature shipped: the compass is a block *inside* the map pane's top-right
+   corner, not a strip on any border.** Decision 3 read "the one border
+   carrying nothing" as though the border were free. It is not: a strip's
+   quad reaches into the pane, so the map has to buy a band it cannot draw
+   tiles in — which is the whole of decision 4 — and that border also faces
+   `log_pane`'s top border, where the vitals already reach up into the gap
+   between them, so `pane_gap` had to grow to hold both. The rejected "arrow
+   at the map's rim" was closer to right than it looked: an overlay inside
+   the pane costs *no* layout at all, which makes decision 4's "a few pixels
+   of map, always" unnecessary rather than merely cheap. The block draws the
+   arrow, the name and the distance, and sits under the THREAT readout
+   rather than beside it. `docs/seams.md` carries the argument in full.
 5. **Hidden off the zone surface.** `Position` is pinned to the entrance
    tile in the Stack and to the anchor in base space, so a live bearing
    would be frozen while reading as live. `compass_targets` returns empty
@@ -172,13 +186,18 @@ Three censuses a new `Mode` must clear, none of which fail to compile:
   adding a variant merge cleanly in the entries and not in the count, and
   it breaks only on the merge commit.
 
-## The strip
+## The block
 
-One line on `map_pane`'s bottom border:
+A block in the map pane's top-right corner, under the THREAT readout
+(amended — this was one line on `map_pane`'s bottom border for one
+release; see decisions 3 and 4):
 
 ```
-» Lowport · south · 219
-» a settlement · south · 143
+────────────────── THREAT clear · no defence ┐
+                              ┌─────────────┐
+                              │  ↓  Lowport │
+                              │     219 tiles│
+                              └─────────────┘
 ```
 
 Absent when nothing is selected, and absent off the zone surface.

@@ -102,6 +102,7 @@ mod tests {
             }),
             label: label.to_string(),
             bearing: "south",
+            arrow: '↓',
             distance,
             visited,
         }

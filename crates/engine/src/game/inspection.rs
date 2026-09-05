@@ -1552,10 +1552,12 @@ impl Game {
         };
         let row = |target, label: String, visited: bool, tile: (i32, i32)| {
             let (dx, dy) = (tile.0 - origin.x, tile.1 - origin.y);
+            let heading = crate::game::stack::heading(dx, dy);
             CompassRow {
                 target,
                 label,
-                bearing: crate::game::stack::bearing(dx, dy),
+                bearing: heading.label(),
+                arrow: heading.arrow(),
                 distance: dx.abs().max(dy.abs()),
                 visited,
             }

@@ -7,13 +7,31 @@ use crate::tuning::{
     NEST_CACHE_CREDIT_ZONE_BONUS, NEST_CACHE_CREDITS, NEST_CACHE_PROGRAM_COUNT, NEST_DURABILITY,
     NEST_PATH_SEARCH_MARGIN, NEST_PURSUIT_STEPS_PER_TICK, NEST_RESPAWN_TICKS, NEST_TETHER_RADIUS,
 };
-use crate::world::SectorShape;
 use crate::*;
 
+/// A breach raises the tier, and everything spawned after it is scaled
+/// against the new one.
+///
+/// **The zone-1 wild are not cleared out by this test**, and that is the
+/// assertion. `Game::clear_local_wild` is what removes them, inside the
+/// breach — an earlier draft of this test hand-despawned them first, which
+/// made it prove only "if the ground is empty, new spawns are at the new
+/// tier" and left the case the player actually meets, breaching on ground
+/// they have already worked, untested. A creature keeps the stats it was
+/// rolled with, so a survivor inspected below reads as the tier failing to
+/// reach the spawner.
 #[test]
-fn entering_a_zone_portal_increments_zone_and_doubles_wild_stats() {
+fn a_breach_spawns_the_next_tiers_wild_creatures() {
     let mut game = Game::new(40, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     assert_eq!(game.player_status().zone, 1);
+    let before = {
+        let mut query = game.world.query_filtered::<Entity, With<Hostile>>();
+        query.iter(&game.world).count()
+    };
+    assert!(
+        before > 0,
+        "zone 1 should already be populated, or the breach has nothing to clear"
+    );
 
     breach_through_a_portal(&mut game);
 
@@ -529,7 +547,7 @@ fn breaching_leaves_a_cronjob_assignment_pointing_at_a_live_structure() {
 }
 
 #[test]
-fn zone_transition_carries_tamed_companions_and_the_base_but_leaves_wild_creatures_behind() {
+fn a_breach_carries_companions_moves_nobody_and_clears_the_local_wild() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let ppos = *game.world.get::<Position>(player).unwrap();
@@ -592,6 +610,7 @@ fn zone_transition_carries_tamed_companions_and_the_base_but_leaves_wild_creatur
             },
         ))
         .id();
+    let companion_before = *game.world.get::<Position>(companion).unwrap();
 
     breach_through_a_portal(&mut game);
 
@@ -600,9 +619,15 @@ fn zone_transition_carries_tamed_companions_and_the_base_but_leaves_wild_creatur
         game.world.get::<Tamed>(companion).is_some(),
         "the companion should still be tamed after breaching"
     );
+    // The ground survives a breach; what is standing on it does not.
+    // `Game::clear_local_wild` removes the wild inside the margin the
+    // re-stock is about to cover, because `populate_chunk` counts survivors
+    // against its density target and would otherwise fill only the gaps —
+    // leaving the old tier standing on worked ground for the rest of the
+    // run. A `NestGuardian` is the exception and is kept.
     assert!(
         game.world.get::<Creature>(wild).is_none(),
-        "wild creatures should be left behind, not carried through the portal"
+        "a breach must clear the wild off the ground it is about to re-stock"
     );
     assert!(
         game.world.get::<Structure>(home).is_some(),
@@ -616,16 +641,30 @@ fn zone_transition_carries_tamed_companions_and_the_base_but_leaves_wild_creatur
         },
         "and stays exactly where it was, not repositioned onto the new zone's spawn point"
     );
-    let companion_pos = *game.world.get::<Position>(companion).unwrap();
-    let player_pos = *game.world.get::<Position>(player).unwrap();
+    // The old breach teleported the player and every `Tamed` onto the new
+    // zone's spawn point, which is what used to put these two on the same
+    // tile. Nothing moves now, so what is pinned is that nothing moved.
     assert_eq!(
-        companion_pos, player_pos,
-        "the companion should travel with the player into the new zone"
+        *game.world.get::<Position>(companion).unwrap(),
+        companion_before,
+        "a breach moved a companion that was standing still"
+    );
+    assert_eq!(
+        *game.world.get::<Position>(player).unwrap(),
+        ppos,
+        "a breach moved the player"
     );
 }
 
+/// A breach destroys nothing the party is carrying, currencies included.
+///
+/// The burn existed so a stockpile could not fund breaches past content it
+/// never engaged with. Portal Fragments drop only from bosses killed
+/// underground — the game's single source — so the fight gate was always
+/// upstream of the stockpile, and the burn was a second lock on a door
+/// already locked. Deleting it removes a rule, not a brake.
 #[test]
-fn breaching_wipes_the_currency_and_craft_currency_stacks() {
+fn a_breach_destroys_nothing_in_the_pack() {
     let mut game = Game::new(945, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     {
@@ -633,59 +672,49 @@ fn breaching_wipes_the_currency_and_craft_currency_stacks() {
         inv.add(ItemId::from(ids::PORTAL_FRAGMENT), 25);
         inv.add(ItemId::from(ids::CORE_FRAGMENT), 40);
         inv.add(ItemId::from(ids::CREDITS), 30);
+        inv.add(ItemId::from("cache_grain"), 17);
     }
+
+    let items = [
+        ids::PORTAL_FRAGMENT,
+        ids::CORE_FRAGMENT,
+        ids::CREDITS,
+        "cache_grain",
+    ];
+    // Read rather than assumed: a fresh run already carries some of these,
+    // and the old test could ignore that only because it asserted zero.
+    let before: Vec<u32> = items.iter().map(|i| count_item(&game, i)).collect();
 
     game.enter_next_zone();
 
-    assert_eq!(
-        count_item(&game, ids::PORTAL_FRAGMENT),
-        0,
-        "the next zone's portal has to be funded in the zone you leave from"
-    );
-    assert_eq!(
-        count_item(&game, ids::CORE_FRAGMENT),
-        0,
-        "and so does everything the base is bought with"
-    );
-    assert_eq!(
-        count_item(&game, ids::CREDITS),
-        30,
-        "Credits are the one liquid thing that crosses a breach — selling \
-         a doomed stockpile before you go is the point of a trader"
-    );
+    for (item, want) in items.iter().zip(before) {
+        assert_eq!(
+            count_item(&game, item),
+            want,
+            "{item} did not survive the breach intact"
+        );
+    }
 }
 
-/// Cache Grain is a `WorkResource`, not one of the two currency roles
-/// `enter_next_zone` wipes by name — so unlike Portal Fragment and Core
-/// Fragment in the zone-currency stacks test above, it must ride the breach
-/// through untouched, the same as any other banked material.
+/// Nothing is lost, so nothing is announced as lost.
 #[test]
-fn breaching_carries_cache_grain_through_while_wiping_both_currencies() {
-    let mut game = Game::new(951, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+fn a_breach_announces_no_loss() {
+    let mut game = Game::new(947, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    {
-        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
-        inv.add(ItemId::from("cache_grain"), 17);
-        inv.add(ItemId::from(ids::PORTAL_FRAGMENT), 25);
-        inv.add(ItemId::from(ids::CORE_FRAGMENT), 40);
-    }
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::PORTAL_FRAGMENT), 3);
 
     game.enter_next_zone();
 
-    assert_eq!(
-        count_item(&game, "cache_grain"),
-        17,
-        "Cache Grain is a work resource, not a currency — it must cross the breach"
-    );
-    assert_eq!(
-        count_item(&game, ids::PORTAL_FRAGMENT),
-        0,
-        "while the build currency it's not is wiped, same as the other currency test"
-    );
-    assert_eq!(
-        count_item(&game, ids::CORE_FRAGMENT),
-        0,
-        "and the craft currency alongside it"
+    assert!(
+        !game
+            .message_log(200)
+            .iter()
+            .any(|e| e.text.contains("decohere")),
+        "a breach still announced a loss: {:?}",
+        game.message_log(200)
     );
 }
 
@@ -764,43 +793,6 @@ fn breaching_keeps_a_running_field_buff() {
     assert_eq!(
         buff.remaining, 9,
         "a breach must not itself age or reset a buff"
-    );
-}
-
-#[test]
-fn the_decohere_message_only_fires_when_there_was_something_to_lose() {
-    let mut game = Game::new(947, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let player = game.player_entity();
-    game.world
-        .get_mut::<Inventory>(player)
-        .unwrap()
-        .take(ItemId::from(ids::CORE_FRAGMENT), u32::MAX);
-
-    game.enter_next_zone();
-
-    assert!(
-        !game
-            .message_log(200)
-            .iter()
-            .any(|e| e.text.contains("decohere")),
-        "an empty wallet shouldn't be announced as a loss"
-    );
-
-    game.world
-        .get_mut::<Inventory>(player)
-        .unwrap()
-        .add(ItemId::from(ids::PORTAL_FRAGMENT), 3);
-    game.enter_next_zone();
-
-    // "{qty} {name}", the same unpluralized shape `describe_structure`
-    // uses for a teleport cost — item names are modder-supplied data, not
-    // English to inflect.
-    assert!(
-        game.message_log(200)
-            .iter()
-            .any(|e| e.text.contains("3 Portal Fragment")),
-        "a real loss is named and counted: {:?}",
-        game.message_log(200)
     );
 }
 
@@ -2116,242 +2108,89 @@ fn the_cache_lines_are_loot_kind() {
 }
 
 // ---------------------------------------------------------------------------
-// Sector traits reaching world generation
+// The persistent world
 // ---------------------------------------------------------------------------
 //
-// Three sites build a `WorldMap` for real play — `Game::new`, `Game::load`
-// and `enter_next_zone` — and all three must derive through
-// `sectors::for_zone`. Which sector a zone gets is `tests::sectors`' subject;
-// what is under test here is the wiring, so these drive scratch installs
-// holding one sector or none rather than searching the shipped pool for a
-// seed.
+// A breach used to rebuild the map from a fresh seed, which is what
+// `assets/sectors/` varied and what every test in this block used to check.
+// The map is permanent now: a breach raises a tier and the ground does not
+// move. These are the tests on that guarantee.
 
-/// Every zone past the first is Cold Storage in this install: Deadlock
-/// over most of the ground, holes exactly where a neutral sector puts them.
-const ONLY_COLD: &str = r#"(
-    id: "cold_storage",
-    name: "Cold Storage",
-    description: "Long-idle allocations, frost-locked and slow to answer.",
-    shape: (deadlock_temperature: 1.15),
-    palette: (ground_hue: 200.0, hazard_hue: 12.0),
-)"#;
-
-/// Walks the player onto a zone portal, which is what a breach is.
 fn breach(game: &mut Game) {
-    breach_through_a_portal(game);
+    game.enter_next_zone();
 }
 
-/// How many tiles of `biome` a map has around its origin.
-fn count_biome(map: &mut WorldMap, biome: Biome) -> usize {
-    (-32..32)
-        .flat_map(|y| (-32..32).map(move |x| (x, y)))
-        .filter(|&(x, y)| map.tile(x, y).biome == biome)
-        .count()
+fn sample_tiles(game: &mut Game) -> Vec<Biome> {
+    let map = game.world.resource_mut::<WorldMap>().into_inner();
+    (-20..20)
+        .flat_map(|y| (-20..20).map(move |x| (x, y)))
+        .map(|(x, y)| map.tile(x, y).biome)
+        .collect()
 }
 
-/// Zone 1 is neutral through the real constructor, not just through
-/// `for_zone`. The opening ring's roster depends on it.
+/// The whole of what a breach does to the world resource: nothing.
+///
+/// `base_spaces_seed_and_its_seams_survive_a_breach` pins the same property
+/// from base space's side; this is the surface's.
 #[test]
-fn a_new_game_generates_zone_one_at_the_neutral_shape() {
-    let game = Game::new(4242, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    assert_eq!(
-        game.world.resource::<WorldMap>().shape(),
-        SectorShape::NEUTRAL
-    );
-}
-
-/// The wiring test: a breach into a Static-Field sector must put Static
-/// Field on the ground. It is a crisp assertion because the latitude falloff
-/// leaves a neutral sector with *no* Deadlock at all near the origin, so
-/// this cannot pass on terrain that was already there.
-#[test]
-fn breaching_into_a_cold_sector_generates_its_biome() {
-    let assets = assets_dir_with_sectors("zone_cold", &[("cold.ron", ONLY_COLD)]);
-    let mut game = Game::new(4242, DifficultyMode::Forgiving, &assets).unwrap();
-    assert_eq!(
-        count_biome(
-            game.world.resource_mut::<WorldMap>().as_mut(),
-            Biome::Deadlock
-        ),
-        0,
-        "zone 1 is neutral, and a neutral sector generates no Deadlock here"
-    );
+fn a_breach_leaves_the_map_and_its_seed_alone() {
+    let mut game = Game::new(4242, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let seed = game.world.resource::<WorldMap>().seed();
+    let ground = sample_tiles(&mut game);
 
     breach(&mut game);
+
     assert_eq!(game.player_status().zone, 2);
-
-    let cold = count_biome(
-        game.world.resource_mut::<WorldMap>().as_mut(),
-        Biome::Deadlock,
+    assert_eq!(
+        game.world.resource::<WorldMap>().seed(),
+        seed,
+        "a breach reseeded the world map"
     );
-    assert!(
-        cold > 500,
-        "zone 2 generated {cold} Deadlock tiles of 4096 — the sector's shape \
-         is not reaching `enter_next_zone`"
-    );
-}
-
-/// The roster moves with the biome mix, and it moves for free: there is no
-/// species-pool knob, because `Game::habitat_pools` already filters by the
-/// tile's biome. A second knob pointing at the same outcome could disagree
-/// with this one.
-///
-/// Asserted against the *same seed under a neutral install* rather than
-/// against an absolute count, since what is claimed is a shift and not a
-/// number.
-#[test]
-fn a_cold_sectors_wild_population_leans_on_deadlock_species() {
-    let count_cold_dwellers = |assets: &std::path::Path| {
-        let mut game = Game::new(4242, DifficultyMode::Forgiving, assets).unwrap();
-        breach(&mut game);
-        let species: Vec<String> = {
-            let mut query = game.world.query_filtered::<&Creature, With<Hostile>>();
-            query.iter(&game.world).map(|c| c.species.clone()).collect()
-        };
-        let db = game.species_defs();
-        species
-            .iter()
-            .filter(|s| {
-                db.iter()
-                    .find(|d| &d.id == *s)
-                    .is_some_and(|d| d.habitats.contains(&Biome::Deadlock))
-            })
-            .count()
-    };
-
-    let cold = assets_dir_with_sectors("zone_roster_cold", &[("cold.ron", ONLY_COLD)]);
-    let neutral = assets_dir_with_sectors("zone_roster_neutral", &[]);
-    let in_cold = count_cold_dwellers(&cold);
-    let in_neutral = count_cold_dwellers(&neutral);
-
-    assert!(
-        in_cold > in_neutral,
-        "a Deadlock sector spawned {in_cold} Static-Field-dwelling programs \
-         against a neutral sector's {in_neutral} — the biome mix is not reaching \
-         `habitat_pools`"
+    assert_eq!(
+        sample_tiles(&mut game),
+        ground,
+        "a breach moved the ground under the party"
     );
 }
 
-/// `Game::load` must rebuild the map at the same shape `enter_next_zone`
-/// built it with. Reconstructing at a different one regenerates every
-/// unwalked chunk differently, which can strand a party inside rock — the
-/// same class of bug the Stack-frame RNG rule exists to prevent.
-///
-/// Through a real save file rather than a recomputation in the same process,
-/// because what is being claimed is that the two saved numbers are enough.
+/// A tile the player changed stays changed. `tile_overrides` is the sparse
+/// overlay of exactly those changes, and it used to be discarded with the
+/// map it described — which is the sharpest single statement of why no
+/// place was worth returning to.
 #[test]
-fn a_sectors_shape_survives_a_save_and_load_round_trip() {
-    let assets = assets_dir_with_sectors("zone_roundtrip", &[("cold.ron", ONLY_COLD)]);
-    let mut game = Game::new(4242, DifficultyMode::Forgiving, &assets).unwrap();
-    breach(&mut game);
-
-    let shape = game.world.resource::<WorldMap>().shape();
-    let before: Vec<Biome> = {
-        let mut map = game.world.resource_mut::<WorldMap>();
-        // Deliberately far from anywhere the party has walked, so these
-        // chunks are regenerated by the load rather than restored from the
-        // override overlay.
-        (0..64).map(|i| map.tile(400 + i, -350 - i).biome).collect()
+fn a_breach_keeps_the_tiles_the_player_changed() {
+    let mut game = Game::new(4242, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let cut = Tile {
+        biome: Biome::Excavated,
+        walkable: true,
+        rock_shade: None,
     };
+    game.world
+        .resource_mut::<WorldMap>()
+        .set_override(12, -7, cut);
 
-    let path = std::env::temp_dir().join(format!(
-        "feral_processes_sector_roundtrip_{}.bin",
-        std::process::id()
-    ));
-    game.save(&path).unwrap();
-    let mut loaded = Game::load(&path, &assets).unwrap();
-    let _ = std::fs::remove_file(&path);
+    game.enter_next_zone();
 
     assert_eq!(
-        loaded.world.resource::<WorldMap>().shape(),
-        shape,
-        "the load rebuilt the map at a different shape"
+        game.world.resource_mut::<WorldMap>().tile(12, -7).biome,
+        cut.biome,
+        "a breach reverted a tile the player had changed"
     );
-    let after: Vec<Biome> = {
-        let mut map = loaded.world.resource_mut::<WorldMap>();
-        (0..64).map(|i| map.tile(400 + i, -350 - i).biome).collect()
-    };
-    assert_eq!(before, after, "unwalked terrain regenerated differently");
 }
 
-/// Absence is supported, at every zone rather than only at zone 1. Deleting
-/// `assets/sectors/` restores the pre-sector game exactly, the way deleting
-/// `assets/affixes/` or the enemy policy does — and an omission is invisible
-/// without a test saying so.
+/// The party stands where it stood. The old breach teleported them onto a
+/// fresh `ZoneSpawnPoint`, which is what made a place impossible to return
+/// to.
 #[test]
-fn with_no_sectors_installed_every_zone_generates_at_the_neutral_shape() {
-    let assets = assets_dir_with_sectors("zone_no_sectors", &[]);
-    let mut game = Game::new(4242, DifficultyMode::Forgiving, &assets).unwrap();
+fn a_breach_does_not_move_the_party() {
+    let mut game = Game::new(4242, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let before = *game.world.get::<Position>(player).unwrap();
 
-    for zone in 2..=5 {
-        breach(&mut game);
-        assert_eq!(game.player_status().zone, zone);
-
-        let seed = game.world.resource::<WorldMap>().seed();
-        assert_eq!(
-            game.world.resource::<WorldMap>().shape(),
-            SectorShape::NEUTRAL,
-            "zone {zone} is not neutral"
-        );
-        // The seed is read back off the live map rather than recomputed, so
-        // this does not carry a second copy of how a breach advances it.
-        let mut reference = WorldMap::new(seed);
-        let live: Vec<Biome> = {
-            let mut map = game.world.resource_mut::<WorldMap>();
-            (-40..40).map(|i| map.tile(i, i * 2).biome).collect()
-        };
-        let expected: Vec<Biome> = (-40..40).map(|i| reference.tile(i, i * 2).biome).collect();
-        assert_eq!(live, expected, "zone {zone} did not generate as neutral");
-    }
-}
-
-/// A breach says *where* you have landed, not only how hard it is. The
-/// level line is untouched: a neutral sector must read exactly as it did
-/// before sectors existed, which is the same absence-is-supported property
-/// the generation side has.
-#[test]
-fn breaching_into_a_named_sector_announces_it() {
-    let assets = assets_dir_with_sectors("zone_announce", &[("cold.ron", ONLY_COLD)]);
-    let mut game = Game::new(4242, DifficultyMode::Forgiving, &assets).unwrap();
     breach(&mut game);
 
-    let log = game
-        .message_log(200)
-        .into_iter()
-        .map(|l| l.text)
-        .collect::<Vec<_>>()
-        .join("\n");
-    assert!(
-        log.contains("level 2 sector"),
-        "the level line should be unchanged: {log}"
-    );
-    assert!(
-        log.contains("Cold Storage"),
-        "the sector's name should be announced: {log}"
-    );
-    assert!(
-        log.contains("frost-locked"),
-        "the sector's description should be announced: {log}"
-    );
-}
-
-#[test]
-fn breaching_into_a_neutral_sector_logs_only_the_level_line() {
-    let assets = assets_dir_with_sectors("zone_announce_neutral", &[]);
-    let mut game = Game::new(4242, DifficultyMode::Forgiving, &assets).unwrap();
-    breach(&mut game);
-
-    let breach_lines: Vec<String> = game
-        .message_log(200)
-        .into_iter()
-        .map(|l| l.text)
-        .filter(|m| m.contains("breach the portal"))
-        .collect();
-    assert_eq!(
-        breach_lines.len(),
-        1,
-        "a neutral sector should add no second line: {breach_lines:?}"
-    );
+    let after = *game.world.get::<Position>(player).unwrap();
+    assert_eq!((after.x, after.y), (before.x, before.y));
 }
 
 /// The base is out of phase, not on the zone surface — a breach must not
@@ -2408,41 +2247,15 @@ fn breaching_leaves_every_structures_absolute_position_untouched() {
     );
 }
 
-/// `BaseGrid` is base-space's own ground and is not zone-local — the
-/// surrounding wipe-by-name block in `enter_next_zone` (`StackMemory`,
-/// `BuybackLedger`, `PopulatedChunks`) is the pattern every zone-local
-/// resource follows, and `BaseGrid` failing to appear in that list is the
-/// whole point of this task, not an oversight. Compared by value rather
-/// than by cell count, so a breach that rewrote every cell to the same
-/// count but different coordinates would still be caught.
+/// The anchor is the door back to a base that travels with the party, and
+/// it used to be teleported to each new zone's spawn point. There is one
+/// map now and the party does not move, so neither does the door.
+///
+/// Hand-displaced first because `find_walkable_start` resolves `(0, 0)`, so
+/// an untouched fixture could not tell "left alone" from "moved to a spawn
+/// point that happens to be where it already was".
 #[test]
-fn breaching_does_not_touch_the_base_grid() {
-    let mut game = Game::new(949, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    build_a_base(&mut game);
-    let before = game.world.resource::<crate::base_grid::BaseGrid>().clone();
-    assert_ne!(
-        before,
-        crate::base_grid::BaseGrid::default(),
-        "the fixture must have actually laid a pocket, or this proves nothing"
-    );
-
-    game.enter_next_zone();
-
-    assert_eq!(
-        game.world.resource::<crate::base_grid::BaseGrid>(),
-        &before,
-        "a breach must not touch base space at all"
-    );
-}
-
-/// The anchor is on the zone surface, not in base space — unlike a
-/// `Structure`, it really does have to move to the new zone's spawn point
-/// on every breach (Task 4 wired the write; this confirms it fires). The
-/// anchor is hand-displaced first because `find_walkable_start` always
-/// resolves `(0, 0)`, so an untouched fixture starting at `(0, 0)` could
-/// not tell "moved to the new spawn" apart from "never moved at all".
-#[test]
-fn breaching_moves_the_anchor_to_the_new_spawn_point() {
+fn a_breach_leaves_the_anchor_where_it_stands() {
     let mut game = Game::new(950, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let anchor = game.world.resource::<AnchorEntity>().0;
     {
@@ -2453,11 +2266,43 @@ fn breaching_moves_the_anchor_to_the_new_spawn_point() {
 
     game.enter_next_zone();
 
-    let spawn = *game.world.resource::<ZoneSpawnPoint>();
     let after = *game.world.get::<Position>(anchor).unwrap();
-    assert_eq!(
-        (after.x, after.y),
-        (spawn.x, spawn.y),
-        "the anchor must land on the new zone's spawn point, not stay where it was displaced to"
+    assert_eq!((after.x, after.y), (40, -15), "a breach moved the anchor");
+}
+
+/// A nest's guardian is the exception to `Game::clear_local_wild`, and stays
+/// standing through a breach.
+///
+/// A nest is a place and survives; the body standing over it is part of that
+/// place, and clearing it would leave the nest bare until its own respawn
+/// timer came round. The asymmetry is the whole of the `Without<NestGuardian>`
+/// filter, and nothing in the compiler holds it — dropping the filter clears
+/// guardians too and the only symptom is nests that look abandoned for a
+/// while after every breach.
+#[test]
+fn a_breach_clears_the_wild_but_leaves_a_nests_guardian_standing() {
+    let mut game = Game::new(44, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+
+    let nest = game.spawn_nest("scrapper", ppos.x + 4, ppos.y);
+    let guardian = {
+        let mut query = game.world.query::<(Entity, &NestGuardian)>();
+        query
+            .iter(&game.world)
+            .find(|(_, g)| g.nest == nest)
+            .map(|(e, _)| e)
+            .expect("spawning a nest should have given it a guardian")
+    };
+
+    breach_through_a_portal(&mut game);
+
+    assert_eq!(game.player_status().zone, 2);
+    assert!(
+        game.world.get::<Nest>(nest).is_some(),
+        "a nest is a place and survives a breach"
+    );
+    assert!(
+        game.world.get::<Creature>(guardian).is_some(),
+        "a breach cleared a nest's own guardian, leaving the nest bare"
     );
 }

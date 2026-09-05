@@ -408,6 +408,206 @@ every later roll in the run, which silently rewrote the outcome of a
 seeded combat test three files away. `FrameSpec::rng_seed` is the one
 scheme to salt off — don't invent a second that could collide with it.
 
+### A breach raises a tier now, and does not rebuild the world
+
+**A breach raises a tier now, and does not rebuild the world.** Every zone
+used to be a migration: `enter_next_zone` despawned every `Hostile`, `Nest`
+and `SurfaceLink`, reseeded `WorldMap` from
+`seed().wrapping_add(0x9E37_79B9)`, teleported the party and the base anchor
+onto the fresh ground's first walkable tile, and burned the two spendable
+currencies — `currency()` (Core Fragments) and `craft_currency()` (Portal
+Fragments) — out of the player's `Inventory`, reported through
+`base_ledger::Event::Consume`. Buyback shelves and the caravan went with it.
+Nothing of the zone survived the trip, which is why nothing in it was ever
+worth returning to.
+
+That migration is gone. There is one `WorldMap`, minted once at `Game::new`
+and never reseeded; the party does not move; every `Structure`'s `Position`
+was already untouched by the old sweep (`BaseGrid` is out of phase — see the
+entries under **The base** below) and now so is everything else.
+`enter_next_zone` is left with three things to do: raise `ZoneLevel`, reset
+`StackMemory` and `PopulatedChunks`, and re-run `ensure_local_population` so
+ground the player has already walked restocks at the new tier. That third
+step is the entire visible effect of a breach now — the world hardens under
+the party instead of being replaced beneath them.
+
+**Why the currency burn could go.** It existed to stop a stockpile chaining
+breaches past content it never engaged with — Core Fragments funding a
+`zone_build_cost` line the player hadn't earned yet. But the only thing the
+burn ever actually gated was itself: `craft_currency()` (Portal Fragments)
+has exactly one source in the whole game, `award_loot`'s underground branch
+(`STACK_BOSS_PORTAL_FRAGMENT_DROP`, paid only for a lair guardian killed
+below ground — see "Which side of the ground a boss dies on…" below), so the
+fight gate that decides how many fragments a run can ever hold was always
+upstream of the stockpile the burn was trying to drain. Deleting the burn
+removes a rule the fight gate had already made redundant, not a brake on
+anything a player could exploit. `currency()` (Core Fragments) was never
+gated at all — a Mining Node keeps producing them at any tier — so burning
+them on the way through a portal only ever cost time re-earning what
+production would hand back regardless.
+
+**Why the two surviving resets are the mechanism, not leftovers.** Clearing
+`PopulatedChunks` is not a wipe in the old sense — it is what makes the
+world visibly harden: the mark records which chunks
+`Game::ensure_local_population` has already stocked, so emptying it sends
+that pass back over ground it has already covered, at the new tier's spawn
+tables. Clearing `StackMemory` is not zone-local bookkeeping either any
+more (the entry right below has the detail): `FrameSpec` now folds
+`ZoneLevel` into `rng_seed`, so a link that survives a breach in place hands
+back a **re-carved** frame the next time it's descended, and the old memory
+describes a frame that no longer exists behind that tile. Both resets exist
+because something about the place actually changed, not because the old
+convention was "anything zone-local gets wiped by name."
+
+**Why sectors had nothing left to vary.** `sectors.rs`, `assets/sectors/`
+and `world::SectorShape` are deleted outright, not merely unused. A sector
+existed to give a zone its own name, flavour text and hue rotation on top of
+the terrain `WorldMap::classify` produced, and every one of those was a
+property of *which zone you were currently in*, assigned once at the breach
+that carried you there. Once a breach stopped regenerating the world, there
+was no second value left to assign a sector *to* — the terrain under the
+party never changes, so a palette keyed to "the zone you're standing in"
+had nothing left to rotate. `WorldMap::classify` now reads flat module
+constants (`VOID_ELEVATION`, `BLACK_ICE_ELEVATION`, `DEADLOCK_TEMPERATURE`,
+`NULL_TEMPERATURE`, `NULL_MOISTURE`, `BACKPLANE_MOISTURE`) and
+`render/base.rs`'s `biome_tint` answers to one reference table for the whole
+run instead of rotating it — see "A rock kind is a brightness, never a hue"
+under **The base** for what that closed.
+
+**Clearing `PopulatedChunks` is half the mechanism, and shipping only that
+half was the bug the whole-branch review caught.** The reasoning that
+produced it is sound and stops one step short: a chunk's mark is what says
+"stocked", so emptying the set sends `ensure_local_population` back over
+ground it has already covered, and it re-stocks at the new tier. What that
+misses is the gate inside `populate_chunk` — every placement is refused
+while `local_hostile_count` is at or above `WILD_LOCAL_DENSITY_TARGET`, and
+that count is of *living* bodies, not of new ones. The survivors are still
+standing. So on ground the party has actually worked — which is all the
+ground near the base, the portal and every route between them — the
+re-stock placed only what fit in the gaps, and zone 1's programs kept zone
+1's stats for the rest of the run. Nothing else would ever remove them:
+`cull_to_cap` evicts chunks *outside* `POPULATION_CHUNK_MARGIN`, which is
+exactly the complement of the ground in question, and `WILD_CREATURE_CAP`
+is 2000 and never fires.
+
+`Game::clear_local_wild` is the other half, and the two must be read
+together — either alone is inert or wrong. It was invisible in testing for
+a specific and instructive reason: the test that was supposed to prove the
+re-tier, `a_breach_spawns_the_next_tiers_wild_creatures`, hand-despawned
+zone 1's wild before breaching, with a comment explaining that the old
+breach used to do it. That made the test prove "an empty chunk re-stocks at
+the new tier" — true, and not the question. It breaches on populated ground
+now.
+
+**Two kinds of wild are kept, and the rule is the same one twice: an
+anonymous body is stock, a named one is not.** A `NestGuardian` belongs to a
+place, and clearing it leaves a nest bare until its own respawn timer comes
+round; its tier re-rolls when the nest is cleared, which is the door that
+already exists. A `Nemesis` is a program that beat you, and clearing it is
+the grudge being forgotten by the breach — precisely what a persistent world
+exists to stop. Neither exception is held by the compiler, and the nemesis
+one was found by a test rather than by review.
+
+This is the infrastructure the settlements work needs, and the reason the
+change was made: a place can only be worth building on, defending or
+returning to if it is still there the next time the player crosses a
+portal.
+
+### Where a settlement stands is derived, never stored
+
+**Where a settlement stands is derived, never stored.**
+`crates/engine/src/settlements/placement.rs::settlement_at` divides the
+world into square regions of `SETTLEMENT_REGION_CHUNKS` chunks and folds
+`(world seed, region coordinates)` through an FNV-1a accumulator —
+`rock::RockDb::kind_at`'s rule, carried over to the zone surface. It only
+became legal to write once a breach stopped rebuilding the world (the entry
+above): a settlement placed against a seed that used to be reshuffled every
+zone would have moved out from under a relationship the player had already
+built with it.
+
+One fold answers three independent questions, each its own salt on the same
+base rather than a second scheme — `FrameSpec::rng_seed`'s precedent, so
+nothing here can invent a scheme that collides with it: whether the region
+holds a settlement at all (weighted `SETTLEMENT_REGION_PERCENT`), roughly
+where inside it, and which catalogue entry. **Every input goes in a byte at
+a time.** `region_seed` folds the seed and each region coordinate a byte at
+a time rather than as a single word, because one XOR-then-multiply round
+only carries a difference about the fold prime's own width upward, and
+neighbouring regions — exactly the comparison this has to get right — differ
+in one low bit of one coordinate. Folded as whole words, that difference
+never reaches bit 63, the bit `derive::index` reads, so neighbouring regions
+would anti-correlate into stripes that read as arbitrary — the measured
+failure `descriptions::Slot::tags` documents, reached here by
+`rock::block_seed`'s route. **Never `%`**, for the same reason. The test for
+it does not check a distribution; it checks that every shipped settlement
+turns up somewhere in a modest sweep, which a stripe cannot manage.
+
+**The derivation answers a candidate, not a fact about the ground.** It
+cannot see terrain, so `settlement_at` hands back a cell and
+`Game::ensure_local_settlements` — `ensure_local_population`'s shape —
+walks outward from it, bounded by `SETTLEMENT_SITE_SEARCH_TILES`, for
+somewhere walkable. That walk is itself deterministic, since the map is
+permanent and a pure function of the seed, but the *resolved* tile is what
+`resources::KnownSettlement::tile` records, not the candidate: a later
+change to how the walk breaks ties must not be able to move a town the
+party has already reached. The same record stores the settlement's whole
+resolved `SettlementDef` — `ActiveContract`'s reason one level over, so a
+catalogue file edited or deleted after materialization cannot rename or
+strand a place the party already knows — and `resources::Settlements` keys
+it by `SettlementKey` (region coordinates) rather than `Entity`, since an
+entity id does not survive a save. A `BTreeMap`, because the resource is
+serialized and a `HashMap`'s iteration order would make identical state
+encode differently between two runs.
+
+**"Already known" is permanent, unlike "already stocked."**
+`ensure_local_settlements` shares `ensure_local_population`'s shape but not
+its meaning: a populated chunk is a mark `cull_to_cap` is free to forget, so
+walking back over old ground restocks it with different wild programs. A
+settlement is a place, so the check is whether the region has ever been
+resolved, never whether it was recently visited — a town, once found, is the
+same town every time the party returns to it.
+
+### A settlement is entered by walking into it
+
+**A settlement is entered by walking into it, and the tile refuses to be
+entered at all.** `Game::move_player`'s bump ladder gains a fourth arm,
+checked in `crates/engine/src/game/turn.rs` after the wild-creature, nest
+and surface-link arms and before the walkable check that would otherwise
+treat the tile as ordinary ground — `Game::find_settlement_at`, mirroring
+`find_surface_link_at`'s query shape exactly (`(&Position, &Settlement)`, no
+`Entity`, no filter type). Unlike the surface-link arm one step up, a
+settlement is never a door: the bump writes a cue and returns before the
+step below it ever runs, so the player never moves onto the tile. That is
+the load-bearing difference from a Stack entrance — an entrance is a place
+you go *through*; a settlement is a landmark you read from the outside.
+
+**The cue is `resources::PendingVisit`, `CurrentStack`'s shape for the same
+reason.** It names *this instant*, not a fact about the world, and is
+deliberately unserialized: a save that restored one would reopen a screen
+the moment the file loaded rather than on the step that actually asked for
+it. `Game::take_settlement_visit` is a **drain** —
+`take_effects`/`take_transits`'s shape, answering `Some` once and `None` on
+every call after — and the drain is the entire feature, not decoration on a
+getter: a plain read passes four of the five tests written for it and still
+reopens the screen on the very next keypress the player spends walking
+away, since nothing would ever clear it. Verified the hard way, by
+temporarily swapping the drain for a `.clone()` read and watching
+`a_second_take_settlement_visit_answers_none` go red before restoring it.
+
+**Examine reaches the same gap `find_target_in_direction`'s own comment
+already named.** A settlement carries neither `Creature` nor `Structure`, so
+the ray looked straight through one the same way it still does for a nest or
+a zone portal; the settlement half of that gap closes with a query ranked
+last of four (`SETTLEMENT_ON_TILE`), behind a live creature on the same
+tile — materialization walks out to the nearest *walkable* cell rather than
+the nearest *empty* one, so a settlement can share a tile with a wild
+program, and the program is the more actionable of the two to point `x` at.
+`entity_label` and `Game::settlement_report` both read
+`resources::Settlements` by key and never `SettlementDb` — `Game::
+copy_name`'s rule — so the bump and examine render through the one
+derivation and cannot drift into two screens, and a catalogue file edited
+after the town was found cannot reach a party that already knows it.
+
 ### A Stack frame is regenerated; what the party *saw* of it is saved
 
 **A Stack frame is regenerated; what the party *saw* of it is saved.**
@@ -415,8 +615,12 @@ scheme to salt off — don't invent a second that could collide with it.
 the maze goes in the save. `resources::StackMemory` does: mapped cells,
 emptied caches, opened seals, cleared lairs, fight sites — that is the
 run's history, not the world's shape, and no seed can hand it back. It is
-keyed by `(link tile, depth)` and is zone-local, so like `BuybackLedger`
-it has to be wiped **by name** in `enter_next_zone`.
+keyed by `(entrance, depth)`, and it is cleared in `enter_next_zone` for a
+sharper reason than "zone-local" now that the world persists and
+`BuybackLedger` isn't wiped alongside it any more: `FrameSpec::rng_seed`
+folds in `ZoneLevel`'s tier, so a breach re-carves the frame behind every
+surviving link, and the old memory of what was seen, emptied and cleared
+describes a frame that no longer exists.
 
 ### `view_cone` is the one walk both Stack views are built from
 
@@ -1428,11 +1632,13 @@ Five things about the shape are load-bearing:
   eviction breaks on purpose, and it keeps `try_spawn_habitat_creature` —
   which owns species, rarity, the opening ring and boss substitution — free
   of a threaded seed.
-- **`PopulatedChunks` is zone-local**, so like `BuybackLedger` and
-  `StackMemory` it must be wiped **by name** in `enter_next_zone`. A mark
-  carried forward tells the new sector that ground it has never stocked is
-  already full, which empties the new zone exactly where the old one was
-  populated.
+- **`PopulatedChunks` is reset by name in `enter_next_zone`, alongside
+  `StackMemory`.** The world is persistent, so this is not a fresh zone's
+  ground being marked clean — it is the *same* ground, whose old mark now
+  means something different: a mark carried forward would tell
+  `ensure_local_population` that ground it stocked at the old tier is
+  already full, so nothing would ever re-stock it at the new one and the
+  world would keep reading like the tier it was born at.
 - **`cull_to_cap` takes its candidates from where hostiles actually stand,
   not from the mark set.** Reading the marks instead is the version that
   reads better and is wrong: a program that wanders across a chunk boundary
@@ -1502,41 +1708,53 @@ its equivalent, a fifth mover goes through *that* predicate, not beside it.
 ### `BaseGrid` is the one base resource that is not zone-local
 
 **`BaseGrid` is the one base resource that is not zone-local, and
-`Game::enter_next_zone` says so by omission.** Four resources are
-zone-scoped and wiped by name on every breach, all inside that one
-function: `resources::BuybackLedger` and `resources::PopulatedChunks` are
-replaced outright with `insert_resource(::default())`, `resources::StackMemory`
-the same, and the two currencies (`Game::currency`, `Game::craft_currency`)
-are drained from the player's `Inventory` item by item. `BaseGrid` never
+`Game::enter_next_zone` says so by omission.** Two resources are
+zone-scoped and wiped by name on every breach, both inside that one
+function: `resources::StackMemory` and `resources::PopulatedChunks` are
+replaced outright with `insert_resource(::default())`. `BaseGrid` never
 appears in `enter_next_zone` at all — not reset, not migrated, not even
 read. That silence is deliberate: the base is out of phase, not on the
 zone surface, so a breach has nothing to say about it. Every `Structure`'s
-`Position` is a `BaseGrid` coordinate (see the entry below), untouched by
-the sweep that despawns `Hostile`, `Nest` and `SurfaceLink`, and the grid
+`Position` is a `BaseGrid` coordinate (see the entry below), and the grid
 the base is carved out of carries forward whole, the same way the
-structures standing on it do. `breaching_does_not_touch_the_base_grid`
-(`tests/zone.rs`) pins exactly this: it builds a base, breaches, and
-asserts the `BaseGrid` compares equal by value — not by cell count, so a
-breach that rewrote every cell to the same count at different coordinates
-would still fail it.
+structures standing on it do.
+`breaching_carries_every_structure_and_its_offset_from_home`
+(`tests/zone.rs`) pins exactly this: it moves a Home and a second structure
+off the coordinates they spawned at, breaches, and asserts both
+`Position`s still hold exactly where they were set — not merely that the
+entities survived, which would pass even against a version that recentred
+the base on a new spawn point.
+
+Before the world went persistent this omission stood beside two more:
+`resources::BuybackLedger` was wiped the same way `StackMemory` still is,
+and the two currencies (`Game::currency`, `Game::craft_currency`) were
+drained from the player's `Inventory` item by item — on top of a sweep,
+also since deleted, that despawned every `Hostile`, `Nest` and
+`SurfaceLink` before the new zone was carved. All of that is gone outright
+now, not merely stopped touching `BaseGrid` — there is no fresh zone for
+stale entities to ride into and no reason left to strand a stockpile the
+player is about to keep playing beside (see "A breach raises a tier now,
+and does not rebuild the world" above). `BaseGrid`'s exemption did not get
+narrower when they left; the resources that used to flank it did.
+
 `BaseGrid`'s own module doc says it is saved wholesale in `SaveData`
 "the same way `resources::StackMemory`/`PopulatedChunks` are" — that
 sentence is about the *encoding*, a plain embedded field rather than a
 mirrored save-shaped type, and does not extend to the *lifecycle*. Those
 two are re-created every breach and `BaseGrid` is not, which is what makes
-the four neighbours a pattern rather than a rule: zone-local state gets
-wiped by name at breach, and `BaseGrid` is the deliberate exception to it,
-not a fifth entry that was left out. **The next base resource has to ask
+the pair a pattern rather than a rule: zone-local state gets wiped by name
+at breach, and `BaseGrid` is the deliberate exception to it, not a
+resource that happened to be left out. **The next base resource has to ask
 which of the two it is before reaching for either.** Something a zone's
 own geometry could invalidate — the way a Stack link's map or a chunk's
-population mark would be — is a wipe-by-name candidate like its four
-neighbours. Something that lives in base space, the way `BaseGrid` and
-every `Structure` on it do, needs the omission instead, and nothing
-enforces that choice: there is no test that fails if a future resource is
-wired into the sweep by habit, or forgotten out of it when it should have
-been. The call has to be made deliberately, against what space the
-resource actually lives in, not against which pattern is already sitting
-in `enter_next_zone` to copy.
+population mark would be — is a wipe-by-name candidate like
+`StackMemory` and `PopulatedChunks`. Something that lives in base space,
+the way `BaseGrid` and every `Structure` on it do, needs the omission
+instead, and nothing enforces that choice: there is no test that fails if
+a future resource is wired into the sweep by habit, or forgotten out of it
+when it should have been. The call has to be made deliberately, against
+what space the resource actually lives in, not against which pattern is
+already sitting in `enter_next_zone` to copy.
 
 ### Base space carries its own seed, because base space travels
 
@@ -1544,59 +1762,71 @@ in `enter_next_zone` to copy.
 
 `rock::RockDb::kind_at` decides what any base-space coordinate is made of by
 folding a seed with the block the coordinate falls in. The obvious seed to
-fold is the world's, and it is wrong.
+fold is the world's, and reading it live would still be wrong — for a
+reason that used to be urgent and is now closer to an invariant this seam
+happens to already satisfy.
 
-`WorldMap::seed()` reads like the run's identity. It is not:
-`enter_next_zone` mints the next zone's map from
-`seed().wrapping_add(0x9E37_79B9)`, so the world seed is a *zone's* identity
-and is different in every one of them. `BaseGrid`, meanwhile, is among the
-handful of things that survive a breach intact — the base is what a run
-carries between zones.
+Before the world went persistent, `enter_next_zone` minted the next zone's
+map from `seed().wrapping_add(0x9E37_79B9)` on every breach — the world
+seed was a *zone's* identity, different in every one of them, while
+`BaseGrid` carried forward untouched. Salted off the world seed, every rock
+seam in the base would have reshuffled the moment the player portalled: a
+player who had spent a zone learning where the hard rock in their base was
+would come back to a different base, and a wall left half-cut would come
+back a *different kind* with a different ceiling under an already-spent
+`Durability` — a Fused wall reloading as ordinary rock at 24 max_hp with 90
+points of progress on it.
 
-Salted off the world seed, therefore, every seam in the base would reshuffle
-the moment the player portalled. A player who had spent a zone learning where
-the hard rock in their base was would come back to a different base. Worse,
-and quieter: a wall left half-cut keeps its `Durability` across the breach,
-so it would come back as a *different kind* with a different ceiling under an
-already-spent meter — a Fused wall reloading as ordinary rock at 24 max_hp
-with 90 points of progress on it.
+The world is persistent now — one `WorldMap`, minted once at `Game::new`,
+never reseeded — so `WorldMap::seed()` is constant for the whole run and
+the two seeds no longer have any way to diverge. That does not make the
+separate field pointless: `BaseGrid` is out of phase from the zone surface
+by construction (the entry above), and `rock::kind_at` reading a resource
+that belongs to a different subsystem is a coupling the base does not need
+just because today's numbers happen to agree. So `BaseGrid` still mints its
+own `seed: u32` at `Game::new` and saves it with the grid. `#[serde(default)]`,
+so a save written before kinds existed loads at seed 0 — a valid
+deterministic layout rather than a special case — and additive, so no
+`SAVE_FORMAT_VERSION` bump.
 
-So `BaseGrid` mints its own `seed: u32` at `Game::new` and saves it with the
-grid. `#[serde(default)]`, so a save written before kinds existed loads at
-seed 0 — a valid deterministic layout rather than a special case — and
-additive, so no `SAVE_FORMAT_VERSION` bump.
-
-`base_spaces_seed_and_its_seams_survive_a_breach` is the test, and it asserts
-**both** halves in one function: that the world seed moved, and that the base
-seed and its seams did not. The first assertion is what makes the second mean
-anything — without it the test passes against a game in which neither seed
-ever changes, which is exactly the state a refactor could leave it in.
+`base_spaces_seed_and_its_seams_survive_a_breach` is the test. It used to
+assert two things moving in opposite directions — that the world seed
+moved and the base's did not — and that asymmetry was what made the "did
+not" half mean anything. Neither seed moves any more, so the test now
+asserts the zone level itself advanced before it checks either seed, which
+is what stops it from passing vacuously against a call that never actually
+breached.
 
 ### A rock kind is a brightness, never a hue
 
 **A rock kind authors a `shade`, and the reason it cannot author a hue or a
 colour is the map's oldest rule.**
 
-`sectors.rs`'s `SectorPalette` states it: hue answers "can I walk here", and
-the spread *within* a band is what tells terrain apart. `render/base.rs`
-records the consequence for anything told apart inside one band — "brightness
-rather than hue, since hue is already spoken for". Rock is a hole in the map
-and shares the hot family with `DataVoid` and `BlackIce`.
+`render/base.rs`'s `biome_tint` states it: hue answers "can I walk here",
+and the spread *within* a band is what tells terrain apart. The comment
+records the consequence for anything told apart inside one band —
+"brightness rather than hue, since hue is already spoken for". Rock is a
+hole in the map and shares the hot family with `DataVoid` and `BlackIce`.
 
 A free RGB on `RockDef` would let the first mod ship a green wall, which
-reads to a player as crossable ground. An authored *hue* is no better and is
-worse in one specific way: `biome_tint` rotates every biome's hue by however
-far the current sector's anchor has moved, so an authored hue would fight
-that rotation and a seam the player had learned to recognise would change
-appearance on a breach — the same failure the base seed above exists to
-prevent, arriving through the palette instead.
+reads to a player as crossable ground. An authored *hue* used to be worse
+in one further, specific way: `biome_tint` used to rotate every biome's hue
+by however far the current sector's anchor had moved, so an authored hue
+would have fought that rotation and a seam the player had learned to
+recognise would have changed appearance on a breach — the same failure the
+base seed above used to exist to prevent, arriving through the palette
+instead. Sectors are retired and `biome_tint` no longer rotates anything —
+it forwards straight to `biome_reference_tint`, one fixed table for the
+whole run — so that second danger is gone with them. What is left is the
+first reason alone, and it was always sufficient on its own: hue is a fixed,
+shared signal for "can I cross this," and a rock kind may not spend it.
 
 So a kind carries a brightness factor against `Biome::Entropy`'s own colour,
 `RockDb::load_dir` refuses a file outside `SHADE_BAND`, and the renderer
-scales *before* `biome_tint`'s rotation. A dense seam is a brighter patch of
-the hole it is part of, which is the same axis `Excavated` and `Entropy` are
-already separated on, and it stays inside the impassable band under every
-sector palette.
+scales `biome_tint`'s output rather than replacing it. A dense seam is a
+brighter patch of the hole it is part of, which is the same axis
+`Excavated` and `Entropy` are already separated on, and it stays inside the
+impassable band under the one palette the run now has.
 
 The band's lower bound is 1.0 rather than 0.0 for a reason worth keeping: an
 exposed face darker than the wall around it would be *harder* to see than
@@ -4434,8 +4664,8 @@ a milling draw taken every tick for every idle program would shift it harder
 than anything else in the game. `idle_staff_take_no_rng_draws` predates the
 drift and still holds it.
 
-**The fold is a byte at a time**, following `sectors::sector_seed`, and that
-is load-bearing rather than stylistic: `derive::index` reads bit 63, one
+**The fold is a byte at a time**, following `descriptions::Slot::tags`'s
+pattern, and that is load-bearing rather than stylistic: `derive::index` reads bit 63, one
 XOR-then-multiply round carries a difference only about the prime's own width
 upward, and a step counter differs from its predecessor in its lowest bits
 alone. Folded as a single word it never reaches the bit that decides, and
@@ -4514,11 +4744,17 @@ that moved rather than as a fixture short something.
 
 **A trader's buyback shelf is keyed by `(kind, tile)`, not by `Entity`**
 (`resources::BuybackLedger`). It deliberately outlives the building, so a
-raided Market rebuilt on the same footprint reopens with its stock. That
-also means `enter_next_zone` has to clear it *explicitly* — which brings
-up the wider trap: **breaching does not despawn structures.** The base
-travels, repositioned around the new spawn point; the only despawn is the
-no-Home fallback. Anything zone-local has to be wiped by name.
+raided Market rebuilt on the same footprint reopens with its stock. Before
+the world went persistent that also meant `enter_next_zone` had to clear
+the ledger *explicitly* on every breach — the wider trap then was that
+**breaching does not despawn structures**, so the base was repositioned
+around a fresh spawn point while a zone's worth of sale history sat there
+unless swept by name. Neither half of that is true any more: the world is
+persistent, the base never moves, and `BuybackLedger` is no longer wiped
+at all — it simply carries forward, the same way `BaseGrid` and every
+`Structure` on it always did. `StackMemory` and `PopulatedChunks` are what
+is still wiped by name, and "A breach raises a tier now, and does not
+rebuild the world" above has why.
 
 ### `BattleState::planned` indexes `Party` positionally
 
@@ -6301,14 +6537,21 @@ disagree, and would have hit the scavenged tier —
 flat run able to re-equip, and a zone material in one of those recipes is
 precisely what it refuses.
 
-**Cache Grain survives a breach and Core Fragments do not.** `enter_next_zone`
-wipes exactly `currency()` and `craft_currency()`; everything else in the
-inventory travels. Cache Grain declares no `role`, so it crosses — which is
-deliberate, since the alternative is a run that breaches into zone 3 holding
-nothing the zone-2 ladder wants and cannot upgrade until it has re-tapped.
-The layering property has its own test,
-`core_fragments_keep_flowing_once_the_second_zone_material_arrives`: a new
-tier must not retire the one below it, or every recipe still denominated in
+**Cache Grain does not retire Core Fragments, and neither is touched by a
+breach any more.** Before the world went persistent, `enter_next_zone`
+wiped exactly `currency()` and `craft_currency()` out of the player's
+`Inventory` on every breach, and Cache Grain — which declares no `role` —
+was the one build material deliberately built to cross that wipe: the
+alternative was a run that breached into zone 3 holding nothing the zone-2
+ladder wants and unable to upgrade until it had re-tapped. That wipe is
+gone (see "A breach raises a tier now, and does not rebuild the world"):
+nothing in `Inventory` is cleared at breach any more, Core Fragments
+included, so surviving a breach no longer sets Cache Grain apart from
+anything else. What the layering property's own test still pins is the
+half of this that never depended on the wipe:
+`core_fragments_keep_flowing_once_the_second_zone_material_arrives` asserts
+a Mining Node still produces Core Fragments in zone 3 — a new tier must
+not retire the one below it, or every recipe still denominated in
 fragments is stranded.
 
 **Fixtures go through `stock_upgrade_materials`.** Seven existing tests went
@@ -7131,9 +7374,9 @@ the machine's tile could never be read by the drift hook it exists for
 row renders it as base coordinates rather than as a map location.
 
 A *surface* variant, when content asks for one, is **zone-local** and has to
-be wiped by name in `Game::enter_next_zone` alongside `StackMemory`,
-`BuybackLedger` and `PopulatedChunks`. A base tile needs no such wipe,
-because the base travels with the party across a breach.
+be wiped by name in `Game::enter_next_zone` alongside `StackMemory` and
+`PopulatedChunks`. A base tile needs no such wipe, because the base
+travels with the party across a breach.
 
 Serde lives on `MemorySubject` directly rather than on a `save::` mirror of
 it, which is the opposite call from `save::CronjobKind`. A mirror would be a
@@ -9259,9 +9502,8 @@ A record whose members all failed to load — a species file deleted between
 sessions — is dropped rather than restored empty. An empty squad is a
 countdown nothing ever comes home from.
 
-`Sorties` is **not** wiped by `enter_next_zone`, unlike `BuybackLedger` and
-`StackMemory`. The base travels through a breach and so does anything it has
-sent out.
+`Sorties` is **not** wiped by `enter_next_zone`, unlike `StackMemory`. The
+base travels through a breach and so does anything it has sent out.
 
 ### Two formulas were extracted rather than copied, and both had a term worth losing
 
@@ -9478,11 +9720,16 @@ What that fixes is a run that had walked. The anchor spawns at the sector's
 arrival point in `Game::new`, and founding used to leave it there: a player
 who crossed half a zone and deployed their Home on ground they liked opened
 their base back at the tile they materialised on, with no way to say so and
-nothing on screen to explain it. `Game::move_anchor_to` is the one writer,
-shared with `enter_next_zone` — the other thing that decides where the door
-stands, since a base that travels has to take its door with it — and both
-*move* the entity rather than despawning and respawning it, so
-`resources::AnchorEntity` names the same anchor for the whole run.
+nothing on screen to explain it. `Game::move_anchor_to` is `place_structure`'s
+fix, and it *moves* the entity rather than despawning and respawning it, so
+`resources::AnchorEntity` names the same anchor for the whole run. It used
+to have a second caller: `enter_next_zone` called it again on every
+breach, because the anchor was a zone-surface fixture riding a world that
+reseeded under it, and a base that travelled had to take its door along.
+The world is persistent now — the anchor never needs to move again once
+founding places it, the same as everything else on the surface — so
+`move_anchor_to` is back down to the one call it always needed for the
+reason stated here.
 
 **The one refusal it needed is a Stack link.** `Game::move_player` treats a
 link tile as a descent rather than a step, so a party can be *standing* on
@@ -10450,3 +10697,135 @@ to the total, because the remainder ranking can reorder as `units` changes.
 Both shipped pools (`salvage_clamp`, `core_tap`) have exactly two entries,
 where the paradox cannot occur — a three-item modded pool that exhibits it
 is the method behaving as documented, not a bug to fix by swapping methods.
+
+### The commit door is shared, and the charge stays with the vendor
+
+Settlements Phase 3 needed a second buyer/seller — a town's shelf — without
+a second copy of the funding rule or the apply order that `Game::
+commit_caravan_basket` already owned. Splitting it was two commits rather
+than one: `d6cd9d51` extracted the generic half first, as a pure refactor
+with the existing five caravan tests as the gate and no behaviour change
+allowed to leak in; `9b3497b6` then wrote the settlement's own validation
+and closures against the extracted door. Doing the extraction and the new
+caller in the same commit would have left no way to tell "did the refactor
+change anything" from "does the new vendor work" if either broke.
+
+`Game::settle_basket` (`game/commerce.rs`) owns exactly what is true of
+*any* basket once every question has already been asked and passed: the
+funding comparison as one expression (`held + proceeds < cost`), that sells
+apply before buys (so a basket can be funded by its own sales), and the
+single `tick()`. It takes a `BasketPlan<Sells, Buys>` — two totals, two
+counts for the outcome sentence, and two `FnOnce(&mut Game)` closures, one
+per half — rather than resolved line data. Two generic parameters rather
+than `Box<dyn Fn>`, because there are exactly two call sites today and
+nothing here needs dynamic dispatch.
+
+**What deliberately stayed out: the currency charge itself.** The plan's
+own survey called `Inventory::add`/`take` generic, and moving them into the
+core looked like the obvious next line to pull. It isn't, because the core
+would then have to walk *per-line* data — item, amount — to know what to
+debit and credit, and the only shape that data comes in is
+`CaravanOfferKind`: gear copies, routine disks, programs and material
+stacks, each delivered differently (`deliver_caravan_offer` is a four-way
+match). Pulling the charge in would drag that whole shape into
+`commerce.rs`, which is precisely what the plan's Task 1 says must not
+happen — a settlement has no `CaravanOfferKind` and was never going to get
+one. So each vendor's own apply closure debits and credits its own
+currency, in its own shape, and calls `settle_basket` only for the parts
+that don't care what a "buy" or a "sell" *is*.
+
+**That leaves a drift surface `commerce.rs` cannot see**: a vendor's
+closure could quote one `cost` into the `BasketPlan` and charge a different
+number when it actually runs, and nothing in either function's signature
+stops it. `settle_basket` checks the *sum* against the player's funds; it
+has no way to check that what gets charged per line is what was quoted to
+build that sum. Nothing here is a type the compiler can hold apart, so the
+invariant is a test instead — the settlement basket's own commit comment
+says so explicitly, and its regression is written against a `Material` row
+on purpose: a Gear, Routine or Program row's `qty` is always 1, so a buy
+closure that forgot to multiply by `qty` would still pass by coincidence on
+every row but that one. The test was verified to fail with that
+multiplication removed, then reverted.
+
+### A settlement's buyback keys through a minted string, not a widened `ShelfKey`
+
+A structure's buyback shelf is keyed by `(StructureId, (i32, i32))` —
+kind and tile, `Game::shelf_key` walking `Entity -> Structure -> Position`
+to build it. A settlement needed the same ledger, but a settlement carries
+no `Structure` and no `Entity` a caller already has in hand — it is a
+`SettlementKey` resolved through `resources::Settlements`. The question was
+whether `ShelfKey` needed a second variant to fit both, and the answer
+worked out to no: `StructureId` is a bare `type StructureId = String`
+newtype, so any string is a legal first half of the key. `Game::
+settlement_shelf_key` mints `"settlement/<def id>"` paired with the tile
+`resources::Settlements` already records, and that is a full `ShelfKey`
+with no type change and no `SAVE_FORMAT_VERSION` bump — `BuybackLedger`
+already persists through `SaveData::buyback_shelves` and does not know or
+care that one of its keys is now a mint rather than a real structure kind.
+
+**The prefix is load-bearing, not decorative.** A structure's footprint and
+a settlement's tile are drawn from the same coordinate space, so the tile
+half of the key cannot tell two shelves standing on the same cell apart —
+only the id half can. `"settlement/"` can never collide with an id out of
+`assets/structures/*.ron`, because nothing in that schema is allowed to
+contain a `/`. A test plants a structure and a settlement on the same tile
+and sells to both, which is the only way this would have been caught if the
+prefix had been dropped.
+
+**Widening `ShelfKey` to an enum was the alternative seriously
+considered, and rejected for what it would have bought.** An enum key is
+the "correct" modeling instinct — a settlement genuinely isn't a structure
+— but every variant of a saved enum key needs bincode to keep encoding it
+positionally forever, which is a save-format change for a distinction the
+string half already draws for free. The one place a widened type *would*
+have paid for itself is `Game::shelf_key`, which cannot be reused for a
+settlement at all: it dereferences an `Entity` a settlement was never
+spawned as. That is why `settlement_shelf_key` is a second constructor
+beside it rather than a branch inside it — reusing the function would mean
+every caller, structure and settlement alike, paying for an `Entity`
+lookup the settlement side never has.
+
+`Game::stock_shelf`, `buyback_options` (split into `buyback_options_at`)
+and `buy_back` (split into `buy_back_at`) all took the same follow-on shape
+once the key existed: reworked to take an already-resolved `ShelfKey`
+rather than resolve one from an `Entity` internally, so a settlement's
+buyback list and purchase share the ledger walk and the sort with a
+structure's instead of duplicating either.
+
+### Temperament moves prices both ways off a neutral middle, and Mercantile is not their average
+
+A settlement's `Temperament` (`Open`, `Guarded`, `Mercantile`) was authored
+in the schema before this phase and read by nothing — `settlements/mod.rs`
+says so directly, because the field wanted to ship once rather than force
+a re-author of every town when pricing landed. This phase is what gives it
+a formula: `Game::marked_unit_cost` (the caravan's markup-and-floor compute,
+`mult`-parameterized) takes `Temperament::buy_mult`, and `Game::
+settlement_sell_price` takes `Temperament::sell_mult`. Six constants in
+`tuning.rs`, not a formula over one "friendliness" scalar — Open is -10%
+to buy / +10% to sell, Guarded is the mirror (+10% / -10%), and Mercantile
+is ~0% / -15%.
+
+**Mercantile is deliberately not the average of Open and Guarded.** A
+single friendliness axis would put it at the midpoint of both — a
+±0%-ish trader who is simply less extreme. That reads as "boring" rather
+than as a third *kind* of vendor, and it also doesn't say anything a
+number line between the other two doesn't already say. The chosen shape
+instead splits the two axes apart: Mercantile competes on the *buy* side,
+pricing at roughly what an ordinary shopper already expects (buy_mult
+~1.0, cheaper than Guarded's markup and not far from Open's discount), and
+takes its margin on the *sell* side instead, paying you the least of the
+three temperaments. That asymmetry — "everything is business, including
+what it pays you" — is the entire reason a third variant is worth having
+rather than one slider with three notches; a symmetric third point on the
+same line would be redundant with interpolating between the other two.
+
+**The craft-ingredient floor has to survive every temperament, not just
+the neutral one**, because a temperament is a *discount*, and a
+craftable priced below the sum of its own ingredients is an infinite
+Credit loop regardless of who is selling it that cheap. `marked_unit_cost`
+applies `mult` to the markup and takes the floor *after*, never before —
+so a discount can shrink the markup toward the floor but never punch
+through it. The shipped test asserts this at Open, the cheapest
+temperament to buy at, with a modded underpriced item, since the floor has
+slack against the real shipped catalogue and would not have caught a
+before/after ordering bug on real assets alone.

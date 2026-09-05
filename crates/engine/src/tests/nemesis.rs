@@ -1013,13 +1013,12 @@ fn entity_view_nemesis_is_true_for_a_marked_hostile_and_false_otherwise() {
     );
 }
 
-/// Breaching despawns every zone-local hostile (`enter_next_zone`'s stale
-/// sweep, `Or<(With<Hostile>, With<Nest>, With<SurfaceLink>)>`), and a
-/// nemesis is nothing but `Nemesis` riding on one of those entities — so
-/// there is no separate ledger for this task to forget to clear. The test
-/// exists to pin that structural fact, not to add a new sweep.
+/// A nemesis is nothing but `Nemesis` riding on a wild creature, and wild
+/// creatures are not swept at a breach any more — the world is persistent,
+/// so the thing that beat you is still out there, at the new tier. There is
+/// no separate ledger either way; this pins the structural fact.
 #[test]
-fn a_breach_clears_every_nemesis() {
+fn a_breach_leaves_a_nemesis_standing() {
     let mut game = Game::new(45, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let wild = spawn_overwhelming_wild(&mut game);
     game.start_battle(vec![wild]);
@@ -1032,9 +1031,9 @@ fn a_breach_clears_every_nemesis() {
 
     game.enter_next_zone();
 
-    assert!(
-        nemesis_holders(&mut game).is_empty(),
-        "no entity anywhere in the world should still carry Nemesis after \
-         a breach"
+    assert_eq!(
+        game.world.get::<Nemesis>(wild).map(|n| n.0),
+        Some(1),
+        "a breach cleared a grudge the world no longer has a reason to forget"
     );
 }

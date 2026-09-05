@@ -1,0 +1,8 @@
+(
+    id: "kernel_reach",
+    name: "Kernel Reach",
+    blurb: "A city grown around a fault in the substrate, where the oldest routines still run untouched. Its fabricators will compile anything, and its archivists will tell you nothing.",
+    kind: Mainframe,
+    specialty: Gear,
+    temperament: Guarded,
+)

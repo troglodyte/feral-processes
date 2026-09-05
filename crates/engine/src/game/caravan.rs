@@ -16,6 +16,7 @@
 //! rhythm belongs to the base and travels with it.
 
 use crate::base_grid::BaseGrid;
+use crate::game::commerce;
 use crate::game::contracts::fold;
 use crate::*;
 
@@ -196,7 +197,7 @@ const CARAVAN_ROUTINE_RANK: u8 = crate::items::ItemCategory::Currency as u8 + 1;
 /// moves three separate draws inside `roll_shelf_copy`. A copy cannot be
 /// rolled plain and upgraded afterwards without drawing twice and shifting
 /// the stream.
-enum Drawn {
+pub(crate) enum Drawn {
     Gear(ItemId),
     Routine(String),
     Program(String),
@@ -239,12 +240,62 @@ impl Game {
             return Vec::new();
         };
         let mut rng = StdRng::seed_from_u64(self.visit_seed(visit.visit) ^ SHELF_SALT);
+        let drawn = self.draw_shelf(&mut rng, def.rows, def.weights, def.bonus_share);
+
+        let kinds: Vec<views::CaravanOfferKind> = drawn
+            .into_iter()
+            .map(|(d, bonus)| match d {
+                Drawn::Gear(item) => {
+                    views::CaravanOfferKind::Gear(self.roll_shelf_copy(item, &mut rng, bonus))
+                }
+                Drawn::Routine(ability) => views::CaravanOfferKind::Routine(ability),
+                Drawn::Program(species) => views::CaravanOfferKind::Program(species),
+                Drawn::Material(item) => views::CaravanOfferKind::Material(item),
+            })
+            .collect();
+
+        kinds
+            .into_iter()
+            .enumerate()
+            .map(|(index, kind)| {
+                let qty = match &kind {
+                    views::CaravanOfferKind::Material(_) => {
+                        rng.random_range(1..=crate::tuning::CARAVAN_MATERIAL_STACK)
+                    }
+                    _ => 1,
+                };
+                self.caravan_row(index, kind, qty)
+            })
+            .collect()
+    }
+
+    /// Draws `rows` shelf slots from the four pools, weighted by `weights`
+    /// and skipping whichever has run dry — shared by `Game::caravan_shelf`
+    /// and `Game::settlement_shelf`, which differ only in *how many* rows
+    /// they draw and how those rows are weighted, never in the mechanics of
+    /// the draw itself. A third copy of this loop is the copy that drifts.
+    ///
+    /// Returns each drawn row paired with whether it won `bonus_share`'s
+    /// standout roll — `bonus_row_count`'s own rule, chosen as a set of
+    /// ordinals over the gear rows rather than per row, so the share a
+    /// caller authors is what the shelf actually shows. A gear row's copy is
+    /// deliberately **not** rolled here: `Game::roll_shelf_copy` needs the
+    /// caller's own `StdRng` positioned *after* every row's identity and
+    /// every bonus ordinal are drawn, which is why this hands back `Drawn`
+    /// rather than a finished `CaravanOfferKind`.
+    pub(crate) fn draw_shelf(
+        &self,
+        rng: &mut StdRng,
+        rows: u32,
+        weights: crate::caravans::CaravanWeights,
+        bonus_share: u32,
+    ) -> Vec<(Drawn, bool)> {
         // **Every pool is drawn from without replacement**, by `swap_remove`
         // off a seeded index: a row names something no other row on this
         // shelf names. Drained rather than shuffled once, because draining is
         // what the fallback below reads — a pool that has run out stops being
         // offered as a bucket, which is the same clause that already skips a
-        // pool that was empty to begin with. The pools are rebuilt per visit,
+        // pool that was empty to begin with. The pools are rebuilt per call,
         // so a wagon may stock what the last one did.
         //
         // Gear is pooled **per slot** rather than as one list, because the
@@ -284,7 +335,7 @@ impl Game {
         // the last row is drawn. See `Drawn`.
         let mut gear_ordinal = 0usize;
         let mut drawn: Vec<Drawn> = Vec::new();
-        for _ in 0..def.rows {
+        for _ in 0..rows {
             // The weights are re-read every row rather than a pool being
             // shuffled once, so a trader whose best-weighted category has
             // run dry fills the rest of its shelf out of the others instead
@@ -293,16 +344,16 @@ impl Game {
             // the last pool empties.
             let mut buckets: Vec<(u32, u8)> = Vec::new();
             if gear_by_slot.iter().any(|pool| !pool.is_empty()) {
-                buckets.push((def.weights.gear, 0));
+                buckets.push((weights.gear, 0));
             }
             if !routines.is_empty() {
-                buckets.push((def.weights.routines, 1));
+                buckets.push((weights.routines, 1));
             }
             if !programs.is_empty() {
-                buckets.push((def.weights.programs, 2));
+                buckets.push((weights.programs, 2));
             }
             if !materials.is_empty() {
-                buckets.push((def.weights.materials, 3));
+                buckets.push((weights.materials, 3));
             }
             let total: u32 = buckets.iter().map(|(w, _)| w).sum();
             if total == 0 {
@@ -352,11 +403,11 @@ impl Game {
 
         // Which of the gear rows are standout stock. Chosen as a *set of
         // ordinals* over the gear rows rather than rolled per row, so the
-        // share the def authors is what the shelf actually shows — a per-row
-        // chance leaves a twelve-row wagon able to come up with none, which
-        // is the case the field exists to rule out.
+        // share the caller authors is what the shelf actually shows — a
+        // per-row chance leaves a twelve-row wagon able to come up with
+        // none, which is the case the field exists to rule out.
         let gear_rows = drawn.iter().filter(|d| matches!(d, Drawn::Gear(_))).count();
-        let bonus_rows = bonus_row_count(gear_rows, def.bonus_share);
+        let bonus_rows = bonus_row_count(gear_rows, bonus_share);
         let mut ordinals: Vec<usize> = (0..gear_rows).collect();
         for i in 0..bonus_rows {
             let pick = rng.random_range(i..gear_rows);
@@ -366,31 +417,15 @@ impl Game {
             ordinals[..bonus_rows].iter().copied().collect();
 
         let mut gear_ordinal = 0usize;
-        let kinds: Vec<views::CaravanOfferKind> = drawn
+        drawn
             .into_iter()
-            .map(|d| match d {
-                Drawn::Gear(item) => {
-                    let bonus = bonus.contains(&gear_ordinal);
+            .map(|d| {
+                let is_bonus = matches!(&d, Drawn::Gear(_)) && {
+                    let won = bonus.contains(&gear_ordinal);
                     gear_ordinal += 1;
-                    views::CaravanOfferKind::Gear(self.roll_shelf_copy(item, &mut rng, bonus))
-                }
-                Drawn::Routine(ability) => views::CaravanOfferKind::Routine(ability),
-                Drawn::Program(species) => views::CaravanOfferKind::Program(species),
-                Drawn::Material(item) => views::CaravanOfferKind::Material(item),
-            })
-            .collect();
-
-        kinds
-            .into_iter()
-            .enumerate()
-            .map(|(index, kind)| {
-                let qty = match &kind {
-                    views::CaravanOfferKind::Material(_) => {
-                        rng.random_range(1..=crate::tuning::CARAVAN_MATERIAL_STACK)
-                    }
-                    _ => 1,
+                    won
                 };
-                self.caravan_row(index, kind, qty)
+                (d, is_bonus)
             })
             .collect()
     }
@@ -484,7 +519,7 @@ impl Game {
     /// the two grades of row cannot drift into being two different items.
     /// Every axis a copy has is still rolled on both paths; only the numbers
     /// they are drawn against move.
-    fn roll_shelf_copy(&self, item: ItemId, rng: &mut StdRng, bonus: bool) -> GearCopy {
+    pub(crate) fn roll_shelf_copy(&self, item: ItemId, rng: &mut StdRng, bonus: bool) -> GearCopy {
         // Narrowing the range rather than swapping the table: `rarity_for_roll`
         // walks the ladder rarest-first, so a roll drawn from `0.0..span`
         // raises every rung by the same factor and keeps their proportions.
@@ -531,7 +566,37 @@ impl Game {
         kind: views::CaravanOfferKind,
         qty: u32,
     ) -> views::CaravanOffer {
-        let (name, detail, unit_cost) = match &kind {
+        let (name, detail) = self.offer_text(&kind);
+        let unit_cost = match &kind {
+            views::CaravanOfferKind::Gear(copy) => self.caravan_unit_cost(&copy.item),
+            views::CaravanOfferKind::Routine(ability) => {
+                self.caravan_unit_cost(&ItemId::etched(ability))
+            }
+            views::CaravanOfferKind::Program(species) => {
+                let mult = self.world.resource::<ZoneLevel>().stat_multiplier() as f32;
+                self.program_price(species, mult)
+            }
+            views::CaravanOfferKind::Material(item) => self.caravan_unit_cost(item),
+        };
+        views::CaravanOffer {
+            index,
+            kind,
+            name,
+            detail,
+            unit_cost,
+            qty,
+        }
+    }
+
+    /// The row's headline and detail line for `kind` — shared with
+    /// `Game::settlement_row`. The two vendors price the same four kinds of
+    /// row differently (a caravan reads `caravan_unit_cost`, a settlement
+    /// reads `settlement_unit_cost` at its own `Temperament`) but must
+    /// describe the goods identically, or the same item would read as two
+    /// different things on two shelves. Pricing is deliberately absent —
+    /// each caller prices its own row right after calling this.
+    pub(crate) fn offer_text(&self, kind: &views::CaravanOfferKind) -> (String, String) {
+        match kind {
             views::CaravanOfferKind::Gear(copy) => (
                 self.copy_name(copy),
                 // The item's authored line, not a stat block: what a copy is
@@ -541,7 +606,6 @@ impl Game {
                 self.item_description(&copy.item)
                     .unwrap_or_default()
                     .to_string(),
-                self.caravan_unit_cost(&copy.item),
             ),
             views::CaravanOfferKind::Routine(ability) => {
                 let disk = ItemId::etched(ability);
@@ -552,7 +616,6 @@ impl Game {
                         .get(ability)
                         .map(|def| def.description.clone())
                         .unwrap_or_default(),
-                    self.caravan_unit_cost(&disk),
                 )
             }
             views::CaravanOfferKind::Program(species) => {
@@ -574,41 +637,48 @@ impl Game {
                     }
                     None => String::new(),
                 };
-                (name, detail, self.program_price(species, mult))
+                (name, detail)
             }
             views::CaravanOfferKind::Material(item) => (
                 self.item_name(item).to_string(),
                 self.item_description(item).unwrap_or_default().to_string(),
-                self.caravan_unit_cost(item),
             ),
-        };
-        views::CaravanOffer {
-            index,
-            kind,
-            name,
-            detail,
-            unit_cost,
-            qty,
         }
     }
 
     /// What a caravan charges for one of `item`.
     ///
-    /// `Game::item_value` at `CARAVAN_MARKUP`, scaled by the sector, and then
-    /// floored **strictly above** what the recipe's ingredients are worth.
-    ///
-    /// The markup is the whole product: everything a caravan sells is
-    /// compilable at a bench or findable in the Stack, so a trader that
-    /// undercut either would make both pointless. The craft floor is the
-    /// second bound and the non-obvious one — a craftable sold for less than
-    /// its ingredients is an infinite Credit loop through the nearest
-    /// counter, the same fault `every_craftable_is_worth_more_than_its_parts`
-    /// holds shut on the item set itself. Read off `ItemDef::craftable`
-    /// rather than `Game::craft_recipes`, so `Perk::LeanCompiler` cannot buy
-    /// its way under the floor.
+    /// `Game::marked_unit_cost` at `mult: 1.0` — a caravan applies no
+    /// temperament of its own. See that function for the markup and the
+    /// craft floor.
     pub(crate) fn caravan_unit_cost(&self, item: &ItemId) -> u32 {
+        self.marked_unit_cost(item, 1.0)
+    }
+
+    /// `Game::item_value` at `CARAVAN_MARKUP` times `mult`, scaled by the
+    /// sector, and then floored **strictly above** what the recipe's
+    /// ingredients are worth.
+    ///
+    /// Shared by `Game::caravan_unit_cost` (`mult: 1.0`) and
+    /// `Game::settlement_unit_cost` (`mult` its `Temperament::buy_mult`).
+    /// `mult` scales only the markup half, applied **before** the floor is
+    /// taken — which is what stops a temperament discount from pushing a
+    /// price under what its own ingredients are worth. Applying the floor
+    /// first and the discount after would let Open's -10% do exactly that.
+    ///
+    /// The markup is the whole product: everything a vendor here sells is
+    /// compilable at a bench or findable in the Stack, so one that undercut
+    /// either would make both pointless. The craft floor is the second
+    /// bound and the non-obvious one — a craftable sold for less than its
+    /// ingredients is an infinite Credit loop through the nearest counter,
+    /// the same fault `every_craftable_is_worth_more_than_its_parts` holds
+    /// shut on the item set itself. Read off `ItemDef::craftable` rather
+    /// than `Game::craft_recipes`, so `Perk::LeanCompiler` cannot buy its
+    /// way under the floor.
+    pub(crate) fn marked_unit_cost(&self, item: &ItemId, mult: f32) -> u32 {
         let zone = self.world.resource::<ZoneLevel>().stat_multiplier().max(1) as u32;
-        let marked = (self.item_value(item) as f32 * crate::tuning::CARAVAN_MARKUP).ceil() as u32;
+        let marked =
+            (self.item_value(item) as f32 * crate::tuning::CARAVAN_MARKUP * mult).ceil() as u32;
         let parts: u32 = self
             .world
             .resource::<ItemDb>()
@@ -1176,8 +1246,8 @@ impl Game {
             return Err(format!("Not enough {money} (need {price})."));
         }
 
-        self.refuse_caravan_delivery(&offer, self.roster_room())?;
-        let delivered = self.deliver_caravan_offer(&offer);
+        self.refuse_offer_delivery(&offer, self.roster_room())?;
+        let delivered = self.deliver_offer(&offer);
         self.charge_for_caravan_offer(&offer, price, &money, delivered);
         self.tick();
         Ok(())
@@ -1186,7 +1256,10 @@ impl Game {
     /// How many programs the roster has room for. Split out because a basket
     /// has to test its Program rows *together* — one at a time each of two
     /// would pass against a roster with one slot left.
-    fn roster_room(&self) -> usize {
+    ///
+    /// `pub(crate)` because a program bought off any vendor's shelf spends
+    /// the same roster slot — `Game::commit_settlement_basket` reads it too.
+    pub(crate) fn roster_room(&self) -> usize {
         self.pet_capacity().saturating_sub(self.pet_count())
     }
 
@@ -1195,8 +1268,11 @@ impl Game {
     /// row before the first one moves.
     ///
     /// `room` is how many programs may still be adopted, which the caller
-    /// counts down across a basket rather than re-reading per row.
-    fn refuse_caravan_delivery(
+    /// counts down across a basket rather than re-reading per row. Nothing
+    /// here names a caravan — a shelf's Program row is a shelf's Program
+    /// row whichever vendor drew it — so `Game::commit_settlement_basket`
+    /// asks the same question rather than restating it.
+    pub(crate) fn refuse_offer_delivery(
         &self,
         offer: &views::CaravanOffer,
         room: usize,
@@ -1217,11 +1293,12 @@ impl Game {
         Ok(())
     }
 
-    /// Hands the goods over. **Infallible**, because
-    /// `refuse_caravan_delivery` has already asked every question — which is
-    /// what lets a basket deliver several rows knowing none of them can
-    /// strand the rest half-committed.
-    fn deliver_caravan_offer(&mut self, offer: &views::CaravanOffer) -> String {
+    /// Hands the goods over. **Infallible**, because `refuse_offer_delivery`
+    /// has already asked every question — which is what lets a basket
+    /// deliver several rows knowing none of them can strand the rest
+    /// half-committed. Shared with `Game::commit_settlement_basket`: what a
+    /// shelf row hands over does not depend on which vendor drew it.
+    pub(crate) fn deliver_offer(&mut self, offer: &views::CaravanOffer) -> String {
         match &offer.kind {
             views::CaravanOfferKind::Gear(copy) => {
                 self.add_copies(copy, offer.qty);
@@ -1243,7 +1320,7 @@ impl Game {
                 let anchor = self.anchor_position().unwrap_or((0, 0));
                 match self.adopt_program(species, anchor.0, anchor.1, mult) {
                     Some(program) => format!("{} is yours", self.creature_label(program)),
-                    // Unreachable behind `refuse_caravan_delivery`, and a
+                    // Unreachable behind `refuse_offer_delivery`, and a
                     // no-op rather than a panic: the row is still marked
                     // spent below, so a mod that breaks here loses one shelf
                     // slot instead of the run.
@@ -1254,7 +1331,8 @@ impl Game {
     }
 
     /// Takes the money, spends the shelf slot and says so. The tail of a
-    /// purchase, shared so a basket's rows read exactly as a single buy's do.
+    /// caravan purchase, shared so a basket's rows read exactly as a single
+    /// buy's do.
     fn charge_for_caravan_offer(
         &mut self,
         offer: &views::CaravanOffer,
@@ -1262,13 +1340,23 @@ impl Game {
         money: &str,
         delivered: String,
     ) {
+        self.spend_caravan_row(offer.index);
+        self.charge_for_offer(price, money, delivered);
+    }
+
+    /// Takes the money and announces the buy — the half of a purchase every
+    /// vendor shares, once its price is already settled. Spending the shelf
+    /// slot (a caravan's `CaravanMemory`) is the caller's own memory to
+    /// write and stays out here, which is what lets
+    /// `Game::commit_settlement_basket` call this directly with no such
+    /// memory of its own to write.
+    pub(crate) fn charge_for_offer(&mut self, price: u32, money: &str, delivered: String) {
         let player = self.player_entity();
         let currency = self.trade_currency();
         self.world
             .get_mut::<Inventory>(player)
             .unwrap()
             .take(currency, price);
-        self.spend_caravan_row(offer.index);
         self.log_kind(
             MessageKind::Outcome,
             format!("{price} {money}, and {delivered}."),
@@ -1306,7 +1394,7 @@ impl Game {
         if self.caravan_reach() != CaravanReach::AtCaravan {
             return Err("There's nobody buying anything here.".into());
         }
-        let taken = self.refuse_caravan_sale(&copy, qty)?;
+        let taken = self.refuse_sale_offer(&copy, qty)?;
         self.apply_caravan_sale(&copy, taken);
         self.tick();
         Ok(())
@@ -1321,7 +1409,11 @@ impl Game {
     /// one moves. The reach and the battle are the caller's to check: they
     /// are facts about the visit rather than about the row, and asking them
     /// once per row would put the same refusal on the screen five times.
-    fn refuse_caravan_sale(&mut self, copy: &GearCopy, qty: u32) -> Result<u32, String> {
+    /// Nothing here names a caravan — `qty == 0`, the trade currency and a
+    /// banked item are refused the same way at every counter — so
+    /// `Game::commit_settlement_basket` shares this rather than restating
+    /// it.
+    pub(crate) fn refuse_sale_offer(&mut self, copy: &GearCopy, qty: u32) -> Result<u32, String> {
         let item = copy.item.clone();
         if qty == 0 {
             return Err("Sell at least 1.".into());
@@ -1341,7 +1433,7 @@ impl Game {
         Ok(have.min(qty))
     }
 
-    /// The sale itself — infallible behind `refuse_caravan_sale`, and silent
+    /// The sale itself — infallible behind `refuse_sale_offer`, and silent
     /// about the turn so a basket spends one tick for the whole visit rather
     /// than one per line. Returns what it paid.
     fn apply_caravan_sale(&mut self, copy: &GearCopy, taken: u32) -> u32 {
@@ -1367,24 +1459,15 @@ impl Game {
     /// positions — the screen sorts its rows for the eye and the shelf's
     /// identity must not move with them.
     ///
-    /// **Two ordering rules, and they are the whole of why this function
-    /// exists.**
-    ///
-    /// *Every refusal lands before anything is spent.* `buy_caravan_offer`
-    /// already holds this and says why: a purchase that took the Credits and
-    /// then failed is the one bug the player cannot undo, and a caravan has
-    /// no buyback to put it right with. A basket makes that stricter rather
-    /// than looser — a half-committed basket is the same bug wearing a
-    /// bigger coat.
-    ///
-    /// *Sells land before buys.* `transfer_items`' take-before-give rule, and
-    /// here it is what lets a basket be funded by its own sales — the entire
-    /// reason the two sections are one basket. The other way round the buy is
-    /// refused for want of money the player is in the middle of making.
-    ///
-    /// **One tick for the whole commit**, not one per line: the basket is the
-    /// visit. The tick spent may be the one the trader leaves on, and
-    /// `close_if_gone` still runs after it.
+    /// Every question is asked here, with no side effect, before anything
+    /// moves: `refuse_sale_offer` and `refuse_offer_delivery` price and
+    /// validate every line, and the roster's remaining room is counted down
+    /// across the basket rather than re-read per row, or two programs asked
+    /// one at a time would both pass against a roster with one slot left.
+    /// What happens once every line has passed — the funding comparison,
+    /// applying sells before buys, the one `tick()` — is
+    /// `Game::settle_basket`, shared with every other vendor a basket can be
+    /// built for; this function's own job ends at handing it a plan.
     pub fn commit_caravan_basket(
         &mut self,
         sells: Vec<(GearCopy, u32)>,
@@ -1404,7 +1487,7 @@ impl Game {
         let mut planned_sells = Vec::new();
         let mut proceeds = 0u32;
         for (copy, qty) in sells {
-            let taken = self.refuse_caravan_sale(&copy, qty)?;
+            let taken = self.refuse_sale_offer(&copy, qty)?;
             proceeds += self.caravan_sell_price(&copy.item) * taken;
             planned_sells.push((copy, taken));
         }
@@ -1425,7 +1508,7 @@ impl Game {
             // Counted down across the basket, not re-read per row: two
             // programs asked one at a time would both pass against a roster
             // with one slot left.
-            self.refuse_caravan_delivery(&offer, room)?;
+            self.refuse_offer_delivery(&offer, room)?;
             if matches!(offer.kind, views::CaravanOfferKind::Program(_)) {
                 room -= 1;
             }
@@ -1435,33 +1518,26 @@ impl Game {
 
         let currency = self.trade_currency();
         let money = self.item_name(&currency).to_string();
-        let held = self
-            .world
-            .get::<Inventory>(self.player_entity())
-            .map(|inv| inv.count(&currency))
-            .unwrap_or(0);
-        // The sales are counted **in**, which is the funding rule stated as
-        // arithmetic: a basket may spend money it is about to make.
-        if held + proceeds < cost {
-            return Err(format!("Not enough {money} (need {cost})."));
-        }
-
-        // ---- nothing below may refuse ----
         let sold = planned_sells.len();
-        for (copy, taken) in planned_sells {
-            self.apply_caravan_sale(&copy, taken);
-        }
         let bought = planned_buys.len();
-        for offer in planned_buys {
-            let price = offer.unit_cost * offer.qty;
-            let delivered = self.deliver_caravan_offer(&offer);
-            self.charge_for_caravan_offer(&offer, price, &money, delivered);
-        }
-        self.tick();
-        Ok(match (sold, bought) {
-            (0, b) => format!("Bought {b}."),
-            (s, 0) => format!("Sold {s}."),
-            (s, b) => format!("Sold {s}, bought {b}."),
+
+        self.settle_basket(commerce::BasketPlan {
+            proceeds,
+            cost,
+            sold,
+            bought,
+            apply_sells: move |game: &mut Game| {
+                for (copy, taken) in planned_sells {
+                    game.apply_caravan_sale(&copy, taken);
+                }
+            },
+            apply_buys: move |game: &mut Game| {
+                for offer in planned_buys {
+                    let price = offer.unit_cost * offer.qty;
+                    let delivered = game.deliver_offer(&offer);
+                    game.charge_for_caravan_offer(&offer, price, &money, delivered);
+                }
+            },
         })
     }
 }

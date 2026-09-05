@@ -3288,26 +3288,110 @@ pub const SIGNAL_NOISE_WEIGHT: u32 = 1;
 /// through what it lets happen to you rather than through a bigger number.
 pub const SIGNAL_NOISE_AMBUSH_MULT: f32 = 2.0;
 
-// ---------------------------------------------------------------------------
-// Sector traits
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────
+// Settlements: where towns stand, what their shelves carry, how they price
+// ─────────────────────────────────────────────────────────────────────────
 
-/// Least standable ground a sector may leave, as a fraction of the tiles
-/// around the origin (see `sectors::walkable_fraction`).
+/// How many chunks across a settlement region is.
 ///
-/// A playability bound rather than content, which is why it is here and not
-/// in the `.ron`: nothing about a threshold delta stops an authored sector
-/// generating a map that is almost entirely Data Void and Black Ice, and
-/// that is not merely ugly. `enter_next_zone` calls `find_walkable_start` on
-/// the new map, every spawn, structure and Stack link refuses an unwalkable
-/// tile, and `stamp_platform` needs somewhere to lay the base — a sector
-/// with no ground is a stranded run.
+/// The map is unbounded, so density is the only thing that can be tuned:
+/// this and `SETTLEMENT_REGION_PERCENT` together say how far apart towns
+/// are. At 8 chunks a region is 256 tiles across, which is a long walk
+/// rather than a stroll — a settlement has to be worth arriving at, and one
+/// visible from the last one is not.
+pub const SETTLEMENT_REGION_CHUNKS: i32 = 8;
+
+/// How likely a region is to hold a settlement at all, in percent.
 ///
-/// Set well under the neutral shape's own figure so an authored sector has
-/// real room to be hostile, and well over zero so it still refuses one that
-/// strands the player. A sector under this floor is skipped at load with a
-/// warning, like any other malformed file.
-pub const MIN_SECTOR_WALKABLE_FRACTION: f64 = 0.45;
+/// Under 100 on purpose. A settlement in every region is a grid, and a grid
+/// is not a place — the emptiness between them is what makes finding one
+/// mean anything.
+pub const SETTLEMENT_REGION_PERCENT: usize = 45;
+
+/// How far from its derived cell a settlement will look for ground it can
+/// stand on.
+///
+/// Bounded rather than unbounded: a region that is mostly Data Void should
+/// leave its settlement unplaced rather than shove it hundreds of tiles to
+/// the first standable tile anywhere, which would put it somewhere the
+/// derivation never chose and, at the extreme, outside its own region.
+pub const SETTLEMENT_SITE_SEARCH_TILES: i32 = 24;
+
+/// How often a settlement's shelf turns over — one epoch per this many
+/// ticks, `Game::settlement_epoch`'s divisor.
+///
+/// Its own constant rather than a reused `CARAVAN_VISIT_INTERVAL_TICKS`: a
+/// settlement's shelf is a property of the *world*, seeded off
+/// `WorldMap::seed()`, where a caravan's visit is a property of the *base*
+/// that travels. Sharing the rotation would tie two schedules nothing else
+/// connects.
+pub const SETTLEMENT_MARKET_ROTATION_TICKS: u64 = 900;
+
+/// Salts a settlement's shelf seed apart from its placement (`placement.rs`
+/// has its own four salts) and from everything else derived off the world
+/// seed. Own constant, `CARAVAN_SALT`'s rule.
+pub const SETTLEMENT_MARKET_SALT: u64 = 0x5E77_1E5E_5EED_0004;
+
+/// How many shelf rows a Server draws — `Game::draw_shelf`'s `rows`.
+///
+/// A Server is a stop, not a destination (`SettlementKind`'s own doc), so
+/// its shelf is deliberately thin: a `CaravanDef`'s `rows` field is the
+/// same knob per shipped trader, and this is its Server-sized reading.
+pub const SETTLEMENT_SERVER_ROWS: u32 = 6;
+
+/// A Mainframe's shelf rows — more than double a Server's, so a city reads
+/// as worth the walk rather than as a bigger version of the same stop.
+pub const SETTLEMENT_MAINFRAME_ROWS: u32 = 14;
+
+/// What share of a Server's gear rows are standout stock —
+/// `bonus_row_count`'s `share`, a `CaravanDef::bonus_share` reading sized
+/// for the smaller settlement.
+pub const SETTLEMENT_SERVER_BONUS_SHARE: u32 = 15;
+
+/// A Mainframe's standout share — a city's gear is worth digging through in
+/// a way a Server's thin shelf cannot support.
+pub const SETTLEMENT_MAINFRAME_BONUS_SHARE: u32 = 35;
+
+/// Every shelf bucket's weight before `Specialty` adds its own bonus —
+/// `Game::specialty_weights`. Equal, so an unbiased bucket only exists in
+/// the sense that no specialty favours it; the shelf still draws from all
+/// four.
+pub const SETTLEMENT_BASE_WEIGHT: u32 = 10;
+
+/// What a settlement's own `Specialty` adds to its favoured bucket's
+/// weight, on top of `SETTLEMENT_BASE_WEIGHT`. Large relative to the base
+/// weight so a specialty reads as a lean on the shelf rather than as
+/// flavour text nothing draws differently.
+pub const SETTLEMENT_SPECIALTY_WEIGHT_BONUS: u32 = 25;
+
+/// What a settlement pays per point of `Game::item_value`, before its
+/// `Temperament` scales it — `Game::settlement_sell_price`. Its own
+/// constant rather than a reused `STACK_MARKET_SELL_RATE`: the two are
+/// unrelated vendors that only happen to share a number today.
+pub const SETTLEMENT_SELL_RATE: u32 = 1;
+
+/// The Temperament price table (shape, not fitted): how much a settlement's
+/// own disposition moves what you pay and what it pays you, each scaling
+/// `Game::marked_unit_cost`'s markup half or `SETTLEMENT_SELL_RATE`
+/// respectively. Six constants rather than a formula over one "friendliness"
+/// scalar, because Mercantile is deliberately **not the average** of Open
+/// and Guarded: it competes on the buy side and takes its margin on the
+/// sell side, which a single axis cannot express — see `Temperament::buy_mult`
+/// and `Temperament::sell_mult`.
+pub const SETTLEMENT_OPEN_BUY_MULT: f32 = 0.9;
+/// See `SETTLEMENT_OPEN_BUY_MULT`.
+pub const SETTLEMENT_OPEN_SELL_MULT: f32 = 1.1;
+/// See `SETTLEMENT_OPEN_BUY_MULT`.
+pub const SETTLEMENT_GUARDED_BUY_MULT: f32 = 1.1;
+/// See `SETTLEMENT_OPEN_BUY_MULT`.
+pub const SETTLEMENT_GUARDED_SELL_MULT: f32 = 0.9;
+/// Roughly neutral on the buy side — Mercantile competes for your custom
+/// there rather than discounting or marking up. See `SETTLEMENT_OPEN_BUY_MULT`.
+pub const SETTLEMENT_MERCANTILE_BUY_MULT: f32 = 1.0;
+/// Where Mercantile actually takes its margin — steeper than Guarded's sell
+/// discount, because everything is business including what it pays you.
+/// See `SETTLEMENT_OPEN_BUY_MULT`.
+pub const SETTLEMENT_MERCANTILE_SELL_MULT: f32 = 0.85;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Combat resolution: to-hit, crit, fumble, mitigation

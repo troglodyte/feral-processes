@@ -1515,29 +1515,35 @@ fn stand_before_the_lair(game: &mut Game) -> (i32, i32) {
         .as_ref()
         .unwrap()
         .clone();
-    let lair = (0..level.height)
-        .flat_map(|y| (0..level.width).map(move |x| (x, y)))
-        .find(|&(x, y)| level.cell(x, y) == CellKind::Lair)
-        .expect("the bottom frame should hold a lair");
-
-    let seal = [Dir::North, Dir::East, Dir::South, Dir::West]
-        .into_iter()
-        .map(|dir| {
-            let (dx, dy) = dir.delta();
-            (lair.0 + dx, lair.1 + dy)
-        })
-        .find(|&(x, y)| level.cell(x, y) == CellKind::SealedDoor)
-        .expect("the lair must be sealed and reachable");
-
-    let (facing, mouth) = [Dir::North, Dir::East, Dir::South, Dir::West]
-        .into_iter()
-        .find_map(|dir| {
-            let (dx, dy) = dir.delta();
-            let outside = (seal.0 + dx, seal.1 + dy);
-            (outside != lair && level.walkable(outside.0, outside.1))
-                .then_some((dir.turn_left().turn_left(), outside))
-        })
-        .expect("the seal must have a way up to it");
+    // Every (lair, seal, approach) combination rather than the first of
+    // each: a frame may carve more than one lair, and a lair more than one
+    // sealed face, so committing to the first of either can pick a seal
+    // that happens to be walled in and read as the generator failing to
+    // connect one that isn't.
+    let (lair, facing, mouth) =
+        (0..level.height)
+            .flat_map(|y| (0..level.width).map(move |x| (x, y)))
+            .filter(|&(x, y)| level.cell(x, y) == CellKind::Lair)
+            .find_map(|lair| {
+                [Dir::North, Dir::East, Dir::South, Dir::West]
+                    .into_iter()
+                    .map(|dir| {
+                        let (dx, dy) = dir.delta();
+                        (lair.0 + dx, lair.1 + dy)
+                    })
+                    .filter(|&(x, y)| level.cell(x, y) == CellKind::SealedDoor)
+                    .find_map(|seal| {
+                        [Dir::North, Dir::East, Dir::South, Dir::West]
+                            .into_iter()
+                            .find_map(|dir| {
+                                let (dx, dy) = dir.delta();
+                                let outside = (seal.0 + dx, seal.1 + dy);
+                                (outside != lair && level.walkable(outside.0, outside.1))
+                                    .then_some((lair, dir.turn_left().turn_left(), outside))
+                            })
+                    })
+            })
+            .expect("the bottom frame should hold a sealed lair with a way up to it");
 
     let Locale::Stack {
         depth,
@@ -2627,25 +2633,31 @@ fn a_bearing_only_goes_diagonal_when_neither_axis_dominates() {
     assert_eq!(bearing(0, 0), "here");
 }
 
-/// Breaching does not touch a `Structure` at all — the base is out of
-/// phase, not on the zone surface — but anything that actually is
-/// zone-local still has to be wiped or swept in `enter_next_zone`.
-/// Entrances are zone-local: each opens onto a frame generated for its own
-/// sector.
+/// An entrance is a place, and places survive a breach now. The tile stays
+/// put; what changes is the frame behind it, because `FrameSpec::tier`
+/// moved — which is also why `StackMemory` is cleared, since every record
+/// in it describes a frame that no longer exists.
 #[test]
-fn a_breach_leaves_the_previous_sectors_entrances_behind() {
+fn a_breach_leaves_every_entrance_standing_and_re_tiers_it() {
     let mut game = game();
     let before = entrance_tiles(&mut game);
+    assert!(!before.is_empty(), "test premise: the run opens with links");
+
     breach_through_a_portal(&mut game);
     assert_eq!(game.player_status().zone, 2);
 
-    let after = entrance_tiles(&mut game);
     assert_eq!(
-        after.len(),
-        crate::tuning::STACK_LINKS_PER_ZONE,
-        "the new sector should hold its own links and no more — old ones rode the breach along"
+        entrance_tiles(&mut game),
+        before,
+        "a breach moved or replaced the zone's entrances"
     );
-    assert_ne!(before, after, "the new sector needs its own links");
+    assert!(
+        game.world
+            .resource::<crate::resources::StackMemory>()
+            .0
+            .is_empty(),
+        "a re-tiered entrance keeps memory of a frame that no longer exists"
+    );
 }
 
 /// A link on the arrival tile means starting the run standing on one; a
@@ -3190,6 +3202,7 @@ fn a_frames_shape_still_matches_what_trace_was_tuned_against() {
             entrance: (30, 30),
             depth,
             frames: 4,
+            tier: 1,
         };
         let frame = crate::stack::generate(spec);
         let cells = || (0..frame.height).flat_map(|y| (0..frame.width).map(move |x| (x, y)));

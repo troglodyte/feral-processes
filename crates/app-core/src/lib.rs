@@ -41,6 +41,7 @@ use feral_processes_engine::components::Rarity;
 use feral_processes_engine::help::{self, HelpDb, HelpPage};
 use feral_processes_engine::icon::Canvas;
 use feral_processes_engine::items::{EquipmentSlot, EquipmentStats, GearCopy, ItemId};
+use feral_processes_engine::settlements::SettlementKey;
 use feral_processes_engine::tuning::{
     ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, MAX_ACTIVE_CONTRACTS, MAX_FUSIONS,
 };
@@ -1300,6 +1301,28 @@ pub enum Mode {
     /// leaves, like `Mode::StructureManifest`, because there is nothing to
     /// page through.
     CellDescribe,
+    /// A settlement's identity page — name, kind, specialty, temperament,
+    /// blurb — the whole of `Game::settlement_report`. Reached two ways that
+    /// land on the same screen and the same `App::pending_settlement`:
+    /// walking into the tile drains `Game::take_settlement_visit` in
+    /// `App::after_world_action`, and `x` toward one resolves
+    /// `InspectTarget::Settlement` through `Game::settlement_key`. A plain
+    /// popup like `Mode::StructureManifest` beside it — Phase 2 ships
+    /// identity only, no action rows and no stub for the market or job
+    /// board a later phase adds, so any key but Esc has nothing to do here.
+    Settlement,
+    /// A settlement's shelf, opened with `[M]` from `Mode::Settlement` —
+    /// Phase 3's market. `Mode::Caravan`'s shape exactly: one basket
+    /// (`App::settlement_amounts`), Left/Right edits the highlighted row,
+    /// Enter commits both halves in one turn through
+    /// `Game::commit_settlement_basket`, and the screen stays open after a
+    /// commit rather than dropping to the map. It differs in two ways a
+    /// caravan's page does not: `App::pending_settlement` is the subject
+    /// (shared with the hub page rather than a fresh field, since a
+    /// settlement — unlike a wagon — never rolls away while its basket is
+    /// open), and Esc returns to `Mode::Settlement` rather than the map,
+    /// `Mode::CompanionEquip`'s shape one level over.
+    SettlementMarket,
     Inventory,
     /// Replacements for one equipment slot, reached by picking that slot on
     /// `Mode::Inventory`. Rows come from `equip_swap_rows`, so the picker
@@ -1670,6 +1693,19 @@ impl Mode {
             | Mode::ManifestPick
             | Mode::StructureManifest
             | Mode::CellDescribe
+            // Opened from the map by a bump or by `x`. `x` never layers over
+            // a fight. A bump can: the settlement arm of the bump ladder
+            // queues the visit and calls `self.tick()` itself, and
+            // `nest_aggro_tick` inside that tick can start a battle for a
+            // `Pursuing` guardian already adjacent to the player — but
+            // `App::after_world_action` gives the battle the mode in that
+            // case (see its own comment), so this screen is never actually
+            // layered under one.
+            | Mode::Settlement
+            // Reached only by a key press from `Mode::Settlement` itself,
+            // never by a bump — so the battle-preempts-the-bump case above
+            // does not apply here.
+            | Mode::SettlementMarket
             | Mode::Inventory
             | Mode::EquipSwap
             | Mode::InventoryItemAction
@@ -2019,6 +2055,14 @@ pub struct App {
     /// another page's field is a distinct failure per axis, and the two are
     /// set by different keys and cleared at different times.
     pub pending_memory_program: Option<Entity>,
+    /// The settlement `Mode::Settlement` is showing, set from either of the
+    /// two doors onto it: `Game::take_settlement_visit`, drained in
+    /// `after_world_action` the tick a bump lands on the tile, or
+    /// `Game::settlement_key` off the `Entity` an `x` toward one resolves
+    /// to. A key rather than an `Entity` because the bump cue already hands
+    /// back one — `Game::settlement_report`'s own reason for taking the
+    /// same type.
+    pub pending_settlement: Option<SettlementKey>,
     /// The program `Mode::CompanionEquip` is showing the slots of, picked
     /// with `E` on the roster.
     pub pending_equip_program: Option<Entity>,
@@ -2076,6 +2120,12 @@ pub struct App {
     /// list can change without one. Cleared on commit and on leaving, so a
     /// reopened wagon never shows a stale basket.
     pub caravan_amounts: Vec<u32>,
+    /// How many of each settlement market row the basket is holding —
+    /// `caravan_amounts`' shape exactly, index-aligned with
+    /// `Game::settlement_view`'s drawn list the same way. Index alignment is
+    /// safe for the same reason: editing costs no tick and neither list can
+    /// change without one.
+    pub settlement_amounts: Vec<u32>,
     /// The recipe result picked in `Mode::Craft`, awaiting a quantity from
     /// `Mode::CraftQuantity` before `Game::craft` is actually called.
     pub pending_craft: Option<ItemId>,

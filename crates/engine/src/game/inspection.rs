@@ -31,39 +31,15 @@ const CREATURE_ON_TILE: u8 = 2;
 /// base cell beside the counter. The rank is here for the *total* order the
 /// walk needs rather than to settle a collision that can happen.
 const CARAVAN_ON_TILE: u8 = 3;
+/// Last of the four: a settlement can share its tile with a wild program the
+/// way any two surface entities can — materialization walks out to the
+/// nearest *walkable* ground, not the nearest *empty* one — and a live
+/// creature is the more immediately actionable of the two. A player
+/// pointing `x` at a wild program standing on a town's doorstep wants the
+/// program, not the settlement behind it.
+const SETTLEMENT_ON_TILE: u8 = 4;
 
 impl Game {
-    /// Which sector the party is standing in, or `None` for a neutral one.
-    ///
-    /// Both inputs come off live state the save already carries, which is
-    /// why a sector needs no field of its own — see `sectors::for_zone`,
-    /// which is the only place the choice is made.
-    pub fn sector(&self) -> Option<&crate::sectors::SectorDef> {
-        crate::sectors::for_zone(
-            self.world.resource::<WorldMap>().seed(),
-            self.world.resource::<ZoneLevel>().0,
-            self.world.resource::<crate::sectors::SectorDb>(),
-        )
-    }
-
-    /// This sector's ground and hazard hues, in degrees, falling back to the
-    /// neutral pair.
-    ///
-    /// Two floats and no `Color`: what a hue *looks like* is
-    /// `crates/gui/src/render/base.rs`'s business, and the engine shipping a
-    /// palette would put the colour table on the wrong side of the drawing
-    /// seam. The renderer reads these as the anchors its two bands rotate
-    /// about, not as finished colours.
-    pub fn sector_hues(&self) -> (f32, f32) {
-        self.sector().map_or(
-            (
-                crate::sectors::NEUTRAL_GROUND_HUE,
-                crate::sectors::NEUTRAL_HAZARD_HUE,
-            ),
-            |def| (def.palette.ground_hue, def.palette.hazard_hue),
-        )
-    }
-
     /// The tile grid the map renders — the zone surface, or base space when
     /// the party is out of phase, both through the one renderer.
     ///
@@ -507,11 +483,14 @@ impl Game {
         };
         // A caravan carries neither `Creature` nor `Structure`, so the ray
         // looked straight through one — the same gap it still has for nests,
-        // surface links and zone portals (`TODO.md`). This closes the part of
-        // it that has a name to read out, and it is gathered in the *same*
-        // walk for the reason the other two are: two walks and a caller
-        // choosing between them would have to re-derive distance to compare,
-        // putting the ray rule in two places.
+        // surface links and zone portals (`TODO.md`). Settlements shared
+        // that gap too, until the query below closed their share of it; the
+        // three left are unclaimed because none of them has a screen of its
+        // own for `x` to open yet. This closes the part of it that has a
+        // name to read out, and it is gathered in the *same* walk for the
+        // reason the other two are: two walks and a caller choosing between
+        // them would have to re-derive distance to compare, putting the ray
+        // rule in two places.
         //
         // Gated on the same space test, because a caravan is the one entity
         // that changes spaces mid-visit: ungated, a ray across the open grid
@@ -538,6 +517,23 @@ impl Game {
                 e,
             ))
         }));
+        // A settlement carries neither `Creature` nor `Structure` either,
+        // and never stands in base space at all — `stands_in_base_space`
+        // answers `false` for it unconditionally, so the same `== in_base`
+        // gate the caravan arm uses reduces to "only found on the surface"
+        // here, with no case where it could alias onto a base-space ray.
+        {
+            let mut settlements = self
+                .world
+                .query::<(Entity, &Position, &crate::components::Settlement)>();
+            let on_ray_now: Vec<(i32, Entity)> = settlements
+                .iter(&self.world)
+                .filter_map(|(e, p, _)| on_ray(p).map(|step| (step, e)))
+                .collect();
+            candidates.extend(on_ray_now.into_iter().filter_map(|(step, e)| {
+                (self.stands_in_base_space(e) == in_base).then_some((step, SETTLEMENT_ON_TILE, e))
+            }));
+        }
 
         let found = candidates
             .into_iter()
@@ -546,6 +542,7 @@ impl Game {
                 STRUCTURE_ON_TILE => InspectTarget::Structure(entity),
                 BUILD_SITE_ON_TILE => InspectTarget::BuildSite(entity),
                 CARAVAN_ON_TILE => InspectTarget::Caravan(entity),
+                SETTLEMENT_ON_TILE => InspectTarget::Settlement(entity),
                 _ => InspectTarget::Creature(entity),
             });
         // Only on a hit. Pointing `x` at blank ground reports nothing, and
@@ -745,6 +742,22 @@ impl Game {
             "The Anchor".to_string()
         } else if self.world.get::<SurfaceLink>(entity).is_some() {
             "Stack Entrance".to_string()
+        } else if let Some(settlement) = self.world.get::<crate::components::Settlement>(entity) {
+            // Off `resources::Settlements` by key, never the def id and
+            // never a hand-built string here — `Game::copy_name`'s rule: a
+            // name built in a renderer is what lets a drop line and the
+            // next screen disagree about what a player is looking at, and
+            // this map glyph and `settlement_report`'s page are two readers
+            // of the same record. Unlike a structure's def, this cannot go
+            // missing at read time: `spawn_settlement_at`'s two callers both
+            // write the `resources::Settlements` entry before spawning the
+            // entity that names it, in the same function body.
+            self.world
+                .resource::<crate::resources::Settlements>()
+                .0
+                .get(&settlement.key)
+                .map(|known| known.def.name.clone())
+                .expect("a Settlement entity's key always has a matching Settlements record")
         } else if let Some(dig) = self.world.get::<DigSite>(entity) {
             // A dig site is named by its tile, because it has nothing else:
             // no def, no species, and no glyph. Without this arm it falls
@@ -775,6 +788,52 @@ impl Game {
         } else {
             "You".to_string()
         }
+    }
+
+    /// The whole of a settlement's hub screen — the one derivation, so a
+    /// bump and an `x` open the same page rather than two builders that
+    /// could drift.
+    ///
+    /// Reads `resources::Settlements`, never `SettlementDb`: the recorded
+    /// `KnownSettlement::def` is the resolved copy taken when the town was
+    /// materialized, so a catalogue file edited or deleted after that does
+    /// not reach a party that already knows this place — `ActiveContract`'s
+    /// reason, one level over.
+    ///
+    /// Takes the settlement's own key rather than the map `Entity`, since a
+    /// caller reaches this two ways — the bump cue (`take_settlement_visit`)
+    /// already hands back a key, and examine has one `Entity` and needs
+    /// `settlement_key` to get from one to the other first. Infallible: a
+    /// key with a materialized entity always has a `Settlements` record —
+    /// see `entity_label`'s settlement arm for why that invariant holds.
+    pub fn settlement_report(
+        &self,
+        key: crate::settlements::SettlementKey,
+    ) -> crate::views::SettlementView {
+        let def = &self
+            .world
+            .resource::<crate::resources::Settlements>()
+            .0
+            .get(&key)
+            .expect("a materialized settlement's key always has a Settlements record")
+            .def;
+        crate::views::SettlementView {
+            name: def.name.clone(),
+            kind: def.kind.label(),
+            specialty: def.specialty.label(),
+            temperament: def.temperament.label(),
+            blurb: def.blurb.clone(),
+        }
+    }
+
+    /// The key a `Settlement` entity carries, for a caller holding only the
+    /// `Entity` half of `InspectTarget::Settlement` — `entity_label`'s own
+    /// lookup, exposed rather than repeated at the one other call site that
+    /// needs it.
+    pub fn settlement_key(&self, entity: Entity) -> Option<crate::settlements::SettlementKey> {
+        self.world
+            .get::<crate::components::Settlement>(entity)
+            .map(|s| s.key)
     }
 
     /// The tile every scan around the party is centered on, **in the

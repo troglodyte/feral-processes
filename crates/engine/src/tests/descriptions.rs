@@ -564,6 +564,24 @@ fn game() -> Game {
     .unwrap()
 }
 
+/// The world whose depth-1 frame carries the shut-door repro the two
+/// occlusion tests below pin: a `Door` at (4, 18) with an unopened `Cache`
+/// directly behind it at (4, 19), approached from (4, 17) and (4, 16).
+///
+/// Its own seed rather than `game()`'s 16, because the geometry is an
+/// accident of generation and seed 16 stopped carving it when
+/// `FrameSpec::tier` joined the frame seed. Pinning it here keeps the two
+/// tests exact — see their comments for why a search would be weaker — and
+/// keeps every other test on the shared fixture.
+fn game_behind_a_shut_door() -> Game {
+    Game::new(
+        21,
+        DifficultyMode::Forgiving,
+        &crate::tests::support::test_assets_dir(),
+    )
+    .unwrap()
+}
+
 /// The first cell of the current frame holding `kind`.
 fn cell_of(game: &Game, kind: CellKind) -> Option<(i32, i32)> {
     let level = crate::tests::support::frame(game);
@@ -1744,9 +1762,9 @@ fn examining_on_the_surface_answers_nothing() {
     assert_eq!(game.describe_view_direction(ExamineDir::Ahead), None);
 }
 
-/// The examine ray must not see through a wall or a shut door: seed 16's
-/// depth-1 frame has a `Door` at (2, 18) sitting directly between the party
-/// and an unopened `Cache` at (2, 19), so standing at (2, 16) or (2, 17)
+/// The examine ray must not see through a wall or a shut door: seed 21's
+/// depth-1 frame has a `Door` at (4, 18) sitting directly between the party
+/// and an unopened `Cache` at (4, 19), so standing at (4, 16) or (4, 17)
 /// facing South puts the cache one and two cells past the door on the
 /// `Ahead` ray. Before `visible_rows` existed, `describe_view_direction`
 /// walked the raw `view_cone` with no occlusion at all and read straight
@@ -1757,26 +1775,26 @@ fn examining_on_the_surface_answers_nothing() {
 /// the fix already handles and could miss the one that broke it.
 #[test]
 fn examining_ahead_does_not_see_through_a_shut_door() {
-    let mut game = game();
+    let mut game = game_behind_a_shut_door();
     crate::tests::support::descend(&mut game);
     let level = crate::tests::support::frame(&game);
     assert_eq!(
-        level.cell(2, 18),
+        level.cell(4, 18),
         CellKind::Door,
-        "fixture drifted: no door at (2, 18)"
+        "fixture drifted: no door at (4, 18)"
     );
     assert_eq!(
-        level.cell(2, 19),
+        level.cell(4, 19),
         CellKind::Cache,
-        "fixture drifted: no cache at (2, 19)"
+        "fixture drifted: no cache at (4, 19)"
     );
 
     let pos = game.stack_pos().unwrap();
     let behind_the_door = game
-        .cell_paragraph(pos, (2, 19))
+        .cell_paragraph(pos, (4, 19))
         .expect("an unopened cache has a paragraph");
 
-    for stand in [(2, 16), (2, 17)] {
+    for stand in [(4, 16), (4, 17)] {
         crate::tests::support::stand_at(&mut game, stand, Dir::South);
         let seen = game.describe_view_direction(ExamineDir::Ahead);
         assert_ne!(
@@ -1801,24 +1819,24 @@ fn examining_ahead_does_not_see_through_a_shut_door() {
 /// feature.
 #[test]
 fn the_map_does_not_remember_a_cell_behind_a_shut_door() {
-    let mut game = game();
+    let mut game = game_behind_a_shut_door();
     crate::tests::support::descend(&mut game);
     let level = crate::tests::support::frame(&game);
     assert_eq!(
-        level.cell(2, 18),
+        level.cell(4, 18),
         CellKind::Door,
-        "fixture drifted: no door at (2, 18)"
+        "fixture drifted: no door at (4, 18)"
     );
     assert_eq!(
-        level.cell(2, 19),
+        level.cell(4, 19),
         CellKind::Cache,
-        "fixture drifted: no cache at (2, 19)"
+        "fixture drifted: no cache at (4, 19)"
     );
 
-    crate::tests::support::stand_at(&mut game, (2, 16), Dir::South);
+    crate::tests::support::stand_at(&mut game, (4, 16), Dir::South);
     let seen = game.remember_view_silent();
     assert!(
-        !seen.contains(&(2, 19)),
+        !seen.contains(&(4, 19)),
         "the map recorded a cell behind a shut door as seen: {seen:?}"
     );
 }

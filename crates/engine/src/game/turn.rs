@@ -169,6 +169,7 @@ impl Game {
         // stocked yet would answer "empty" and spend a spawn filling in what
         // is about to arrive properly.
         self.ensure_local_population();
+        self.ensure_local_settlements();
         self.maybe_spawn_wild_creature();
         // Before the schedule, not after, so a body posted this tick makes
         // progress this tick rather than standing at its machine for one.
@@ -527,6 +528,19 @@ impl Game {
             // The entrance survives, unlike a zone portal — it is a place
             // you come back to, not a one-way door.
             self.enter_stack(nx, ny);
+            self.tick();
+            return;
+        }
+        if let Some(key) = self.find_settlement_at(nx, ny) {
+            // The fourth arm of the same ladder, and the one that admits
+            // nobody: a settlement is a landmark to read from the outside,
+            // not a door with a hallway behind it, so the bump queues the
+            // visit for app-core to open and leaves the player standing
+            // exactly where they were — this returns before the step below
+            // ever runs.
+            self.world
+                .resource_mut::<crate::resources::PendingVisit>()
+                .0 = Some(key);
             self.tick();
             return;
         }

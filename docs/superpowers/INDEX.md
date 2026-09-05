@@ -20,10 +20,11 @@ The checks: a distinctive symbol from
 each spec resolves in `crates/` or `assets/`, and the commit that added each
 spec resolves to a release tag.
 
-## What is open — the eleven in `specs/`
+## What is open — the specs still in `specs/`
 
 | Spec | State | Evidence |
 | --- | --- | --- |
+| `2026-09-04-settlements-design` | approved, **unbuilt** | six phases; `settlement` appears once in `crates/`, in a `tuning.rs` comment |
 | `2026-09-02-combat-model-slice-2-design` | **built**, unplayed | a second swing for Strikers from level 8; `balance_sim` cannot gate it |
 | `2026-08-31-stack-wanderers-design` | approved, **unbuilt** | `FrameWanderers` exists nowhere in `crates/` |
 | `2026-08-24-rest-interruption-design` | never approved, **unbuilt** | `Game::rest_interrupted` does not exist |
@@ -210,6 +211,6 @@ the earliest tag containing the commit that added the spec.
 
 ## What is actually open
 
-The eleven specs above, and `docs/content-gaps.md` for engine mechanics that are
+The specs above, and `docs/content-gaps.md` for engine mechanics that are
 built and tested with no asset using them. `TODO.md` was deleted at `v0.12.0`
 and is not a backlog any more.

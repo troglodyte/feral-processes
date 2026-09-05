@@ -665,7 +665,7 @@ const WANDER_CHOICES: usize = 9;
 
 /// Folds `(index, step)` into a seed whose **high** bits carry both.
 ///
-/// A byte at a time, following `sectors::sector_seed`, and that is not
+/// A byte at a time, following `descriptions::Slot::tags`, and that is not
 /// decoration: `derive::index` reads bit 63, one XOR-then-multiply round
 /// carries a difference only about the prime's own width upward, and a step
 /// counter folded in as a single word differs from its predecessor in its

@@ -446,6 +446,13 @@ impl Game {
             entrance,
             depth,
             frames,
+            // The world map is persistent, so the seed above is fixed for
+            // the whole run and the tier is the only thing left that moves
+            // a surviving entrance's frame. Read live rather than stored on
+            // the link, which is a bare marker: `components::SurfaceLink`
+            // has no fields and every other Stack difficulty term reads
+            // `ZoneLevel` the same way.
+            tier: self.world.resource::<ZoneLevel>().0,
         }
     }
 
@@ -890,8 +897,8 @@ impl Game {
     /// The pack is drawn from the biome of the **entrance tile** — the
     /// surface terrain the link opens in. The Stack has no biome of its
     /// own, and rather than invent one, this reads the frame as the
-    /// substrate beneath the ground above it: descend under a Mainframe
-    /// sector and Mainframe programs are what live down there. It costs no
+    /// substrate beneath the ground above it: descend under a Backplane
+    /// sector and Backplane programs are what live down there. It costs no
     /// new content and it gives the player a reason to care which link
     /// they picked.
     ///

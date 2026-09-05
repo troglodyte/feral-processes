@@ -188,15 +188,13 @@ impl Game {
             perks: perk_db,
             talents: talent_db,
             affixes: affix_db,
-            sectors: sector_db,
+            settlements: settlement_db,
             policy: enemy_policy,
             warnings: load_warnings,
         } = load_asset_dbs(assets_dir)?;
 
         // Zone 1 is always neutral, but this still routes through the one
-        // door rather than assuming so — `for_zone` owns that rule, and a
-        // second copy of it here is where the two would drift.
-        let mut world_map = crate::sectors::map_for_zone(seed, ZoneLevel::default().0, &sector_db);
+        let mut world_map = WorldMap::new(seed);
         let start = find_walkable_start(&mut world_map);
 
         let mut world = World::new();
@@ -210,7 +208,7 @@ impl Game {
         world.insert_resource(perk_db);
         world.insert_resource(talent_db);
         world.insert_resource(affix_db);
-        world.insert_resource(sector_db);
+        world.insert_resource(settlement_db);
         world.insert_resource(enemy_policy);
         world.insert_resource(description_db);
         world.insert_resource(memory_db);
@@ -264,6 +262,8 @@ impl Game {
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
         world.insert_resource(crate::resources::PopulatedChunks::default());
+        world.insert_resource(crate::resources::Settlements::default());
+        world.insert_resource(crate::resources::PendingVisit::default());
         // Empty at both doors. `Game::load` refills it from the save below,
         // once every creature has an entity to name — see `SortieSave`.
         world.insert_resource(crate::resources::Sorties::default());
@@ -345,6 +345,7 @@ impl Game {
             game.log(warning);
         }
         game.ensure_local_population();
+        game.ensure_local_settlements();
         game.spawn_surface_links(STACK_LINKS_PER_ZONE);
         game.log("Connection established. You materialize at the edge of the Grid.");
         // Before the first tick, so the very first contracts screen a run
@@ -438,7 +439,7 @@ impl Game {
             perks: perk_db,
             talents: talent_db,
             affixes: affix_db,
-            sectors: sector_db,
+            settlements: settlement_db,
             policy: enemy_policy,
             warnings: load_warnings,
         } = load_asset_dbs(assets_dir)?;
@@ -447,7 +448,7 @@ impl Game {
         // needs no field of its own. Rebuilding at a different shape would
         // regenerate every unwalked chunk differently and could strand the
         // party inside rock.
-        let mut world_map = crate::sectors::map_for_zone(data.seed, data.zone, &sector_db);
+        let mut world_map = WorldMap::new(data.seed);
         let overrides: HashMap<(i32, i32), Tile> = data.tile_overrides.into_iter().collect();
         world_map.restore_overrides(overrides);
 
@@ -476,7 +477,7 @@ impl Game {
         world.insert_resource(perk_db);
         world.insert_resource(talent_db);
         world.insert_resource(affix_db);
-        world.insert_resource(sector_db);
+        world.insert_resource(settlement_db);
         world.insert_resource(enemy_policy);
         world.insert_resource(description_db);
         world.insert_resource(memory_db);
@@ -540,6 +541,8 @@ impl Game {
         world.insert_resource(CurrentStack::default());
         world.insert_resource(StackMemory::default());
         world.insert_resource(crate::resources::PopulatedChunks::default());
+        world.insert_resource(crate::resources::Settlements::default());
+        world.insert_resource(crate::resources::PendingVisit::default());
         // Empty at both doors. `Game::load` refills it from the save below,
         // once every creature has an entity to name — see `SortieSave`.
         world.insert_resource(crate::resources::Sorties::default());
@@ -1188,9 +1191,8 @@ impl Game {
         let mut party: Vec<Entity> = party_slots.into_iter().map(|(_, e)| e).collect();
         party.truncate(MAX_PARTY_SIZE);
         game.world.insert_resource(Party(party));
-        // Unlike `BuybackLedger` and `StackMemory`, this is not zone-local:
-        // the program travels with you across a breach exactly as the party
-        // does, so `enter_next_zone` must not wipe it.
+        // `enter_next_zone` must not wipe this: the program travels with you
+        // across a breach exactly as the party does.
         game.world.insert_resource(WieldedProgram(wielded));
         // A record whose members all failed to load — a species file deleted
         // between sessions — is dropped rather than restored empty: an empty
@@ -1330,8 +1332,16 @@ impl Game {
         // Before `restore_locale`, which records what the party can see from
         // where they are standing and would otherwise write into a map that
         // is about to be overwritten.
-        game.world.insert_resource(data.stack_memory);
+        // A `FrameMemory` written before `FrameSpec::rng_seed` folded in
+        // `tier` describes frames this build no longer generates, so it is
+        // dropped rather than restored — see `SaveData::stack_memory_tiered`.
+        game.world.insert_resource(if data.stack_memory_tiered {
+            data.stack_memory
+        } else {
+            crate::resources::StackMemory::default()
+        });
         game.world.insert_resource(data.populated_chunks);
+        game.restore_settlements(data.settlements);
         game.world
             .insert_resource(crate::resources::Trace(data.trace));
         // Last, and after the WorldMap is in place: restoring a Stack
@@ -1917,6 +1927,11 @@ impl Game {
             },
             locale: self.locale(),
             stack_memory: self.world.resource::<StackMemory>().clone(),
+            stack_memory_tiered: true,
+            settlements: self
+                .world
+                .resource::<crate::resources::Settlements>()
+                .clone(),
             populated_chunks: self
                 .world
                 .resource::<crate::resources::PopulatedChunks>()
@@ -2140,7 +2155,7 @@ struct AssetDbs {
     perks: PerkDb,
     talents: crate::talents::TalentDb,
     affixes: AffixDb,
-    sectors: crate::sectors::SectorDb,
+    settlements: crate::settlements::SettlementDb,
     policy: crate::resources::EnemyPolicy,
     warnings: Vec<String>,
 }
@@ -2202,15 +2217,14 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
     // pre-affix game — see `AffixDb`.
     let (affixes, affix_warnings) = AffixDb::load_dir(&assets_dir.join("affixes"))?;
     warnings.extend(affix_warnings);
-    // Same story, and the same absent-is-silent rule — see `SectorDb`. A
-    // sector that would strand a run is skipped here with a warning rather
-    // than reaching `enter_next_zone`, which has no way to refuse.
-    let (sectors, sector_warnings) =
-        crate::sectors::SectorDb::load_dir(&assets_dir.join("sectors"))?;
-    warnings.extend(sector_warnings);
     // A file, not a directory, and an absent one is silent — see
     // `policy::load_file`. Nothing downstream branches on whether it loaded;
     // `Game::choose_wild_action` reads the resource and falls back.
+    // Absent is the pre-settlement game, `MemoryDb`'s rule: no settlements
+    // derive anywhere and nothing draws one.
+    let (settlements, settlement_warnings) =
+        crate::settlements::SettlementDb::load_dir(&assets_dir.join("settlements"))?;
+    warnings.extend(settlement_warnings);
     let (policy, policy_warnings) =
         crate::policy::load_file(&assets_dir.join("policies/enemy_battle.ron"))?;
     warnings.extend(policy_warnings);
@@ -2300,7 +2314,7 @@ fn load_asset_dbs(assets_dir: &Path) -> std::io::Result<AssetDbs> {
         items,
         perks,
         affixes,
-        sectors,
+        settlements,
         policy: crate::resources::EnemyPolicy(policy),
         warnings,
     })

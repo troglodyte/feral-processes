@@ -8,7 +8,7 @@
     base_mitigation: 17,
     taming_difficulty: 0.95,
     growth_multiplier: 2.0,
-    habitats: [OpenGrid, Mainframe, NullSector, Deadlock],
+    habitats: [OpenGrid, Backplane, NullSector, Deadlock],
     base_speed: 13,
     base_int: 18,
     moves: [

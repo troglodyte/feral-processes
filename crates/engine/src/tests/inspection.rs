@@ -1996,59 +1996,6 @@ fn a_manifest_carries_the_programs_rare_tier() {
     );
 }
 
-/// Every zone past the first is Cold Storage here, with hues nothing else
-/// in the shipped set uses, so a fallback cannot pass for the real answer.
-const ONLY_COLD: &str = r#"(
-    id: "cold_storage",
-    name: "Cold Storage",
-    description: "Long-idle allocations, frost-locked and slow to answer.",
-    shape: (deadlock_temperature: 1.15),
-    palette: (ground_hue: 205.0, hazard_hue: 12.0),
-)"#;
-
-/// The engine hands the renderer two numbers and no colour: the table and
-/// everything about it stays in `crates/gui`.
-#[test]
-fn zone_one_reports_the_neutral_hues() {
-    let assets = assets_dir_with_sectors("hues_zone_one", &[("cold.ron", ONLY_COLD)]);
-    let game = Game::new(4242, DifficultyMode::Forgiving, &assets).unwrap();
-    assert_eq!(
-        game.sector_hues(),
-        (
-            crate::sectors::NEUTRAL_GROUND_HUE,
-            crate::sectors::NEUTRAL_HAZARD_HUE
-        )
-    );
-}
-
-#[test]
-fn a_sectors_own_hues_are_reported_after_a_breach() {
-    let assets = assets_dir_with_sectors("hues_breached", &[("cold.ron", ONLY_COLD)]);
-    let mut game = Game::new(4242, DifficultyMode::Forgiving, &assets).unwrap();
-    breach_through_a_portal(&mut game);
-    assert_eq!(game.player_status().zone, 2);
-
-    assert_eq!(game.sector_hues(), (205.0, 12.0));
-}
-
-/// Absence is supported here too: with no sectors installed the renderer is
-/// handed the neutral pair at every zone, which is what reproduces the
-/// shipped colour table exactly.
-#[test]
-fn with_no_sectors_installed_the_hues_stay_neutral() {
-    let assets = assets_dir_with_sectors("hues_absent", &[]);
-    let mut game = Game::new(4242, DifficultyMode::Forgiving, &assets).unwrap();
-    breach_through_a_portal(&mut game);
-
-    assert_eq!(
-        game.sector_hues(),
-        (
-            crate::sectors::NEUTRAL_GROUND_HUE,
-            crate::sectors::NEUTRAL_HAZARD_HUE
-        )
-    );
-}
-
 /// The three facts that decide what a program is worth at a post, in one
 /// answer — `Game::work_profile`, which the Base Staff screen reads.
 ///
@@ -2213,6 +2160,81 @@ fn entity_label_names_the_anchor_and_a_surface_link_rather_than_falling_through_
     // this guards against a fix that widened the match past the two new
     // arms and swallowed the fall-through's real case.
     assert_eq!(game.entity_label(game.player_entity()), "You");
+}
+
+#[test]
+fn entity_label_names_a_settlement_by_its_authored_name() {
+    let mut game = Game::new(4488, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    let key = crate::settlements::SettlementKey { rx: 11, ry: -4 };
+    let entity = place_settlement(&mut game, key, pos.x + 3, pos.y);
+
+    assert_eq!(
+        game.entity_label(entity),
+        "Test Town",
+        "the map glyph's name has to come off resources::Settlements by key, \
+         never off the def id and never off a string built here"
+    );
+}
+
+/// `find_target_in_direction` used to look straight through a settlement
+/// the same way it still does for a nest or a surface link — no `Creature`,
+/// no `Structure`, and neither of the two arms the ray walks knew to ask
+/// about one. Verified red against the pre-fix code (the settlement query
+/// commented out of `find_target_in_direction`) before the query was
+/// restored, which is what proves this is the gap closing rather than a
+/// vacuous assertion.
+#[test]
+fn find_target_in_direction_finds_a_settlement_it_previously_looked_through() {
+    let mut game = Game::new(9101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let start = *game.world.get::<Position>(player).unwrap();
+    clear_creatures_east_of_player(&mut game, start, 5);
+    let key = crate::settlements::SettlementKey { rx: 7, ry: -3 };
+    let entity = place_settlement(&mut game, key, start.x + 2, start.y);
+
+    assert_eq!(
+        game.find_target_in_direction(1, 0, 5),
+        Some(InspectTarget::Settlement(entity)),
+        "a settlement standing on the ray must not be looked through"
+    );
+}
+
+/// `KnownSettlement::def` stores the whole resolved catalogue entry, and
+/// this is the reason: the report must not go back to `SettlementDb` for
+/// anything, or a mod removing or rewriting a file after a town has been
+/// reached would rewrite what the party already knows. Proven the strong
+/// way — the fixture's own id is never registered in the shipped catalogue
+/// at all, so a report that resolved through `SettlementDb` would have
+/// nothing to answer with.
+#[test]
+fn settlement_report_names_all_five_fields_off_the_resolved_def_stored_at_materialization() {
+    let mut game = Game::new(5510, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let key = crate::settlements::SettlementKey { rx: 3, ry: -9 };
+    let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    place_settlement(&mut game, key, pos.x + 400, pos.y + 400);
+
+    assert!(
+        game.world
+            .resource::<crate::settlements::SettlementDb>()
+            .get(GENERIC_SETTLEMENT_ID)
+            .is_none(),
+        "the fixture's id must not exist in the shipped catalogue, or this test \
+         cannot tell settlement_report apart from a lookup through SettlementDb"
+    );
+
+    let view = game.settlement_report(key);
+    assert_eq!(view.name, "Test Town");
+    assert_eq!(
+        view.kind,
+        crate::settlements::SettlementKind::Server.label()
+    );
+    assert_eq!(view.specialty, crate::settlements::Specialty::Gear.label());
+    assert_eq!(
+        view.temperament,
+        crate::settlements::Temperament::Open.label()
+    );
+    assert_eq!(view.blurb, "A place raised for a test.");
 }
 
 #[test]

@@ -266,37 +266,33 @@ mod seams {
         );
     }
 
-    /// The breach destroys the two currencies outright, and nothing else in
-    /// the ledger could see it: a run's fragments would otherwise read as
-    /// produced and never accounted for.
+    /// The breach used to destroy both currencies outright, and this was the
+    /// only place that could see it — a run's fragments would otherwise have
+    /// read as produced and never accounted for. It destroys nothing now, so
+    /// what is pinned here is the absence of the sink.
     #[test]
-    fn a_breach_counts_what_it_destroys() {
+    fn a_breach_is_not_a_sink() {
         let mut game = game(4109);
         game.grant_loot(
             ItemId::from(ids::CORE_FRAGMENT),
             7,
             crate::base_ledger::LootSource::Kill,
         );
-        // Read rather than assumed: a fresh run starts with a few of these
-        // in the pack, and the wipe takes the whole holding.
-        let player = game.player_entity();
-        let held = game
-            .world
-            .get::<crate::components::Inventory>(player)
-            .unwrap()
-            .count(&ItemId::from(ids::CORE_FRAGMENT));
-        assert!(
-            held > 7,
-            "the fixture must hold more than it was just given"
-        );
+        let consumed = |g: &Game| {
+            g.world
+                .resource::<BaseLedger>()
+                .lifetime
+                .get(&ItemId::from(ids::CORE_FRAGMENT))
+                .map_or(0, |e| e.consumed)
+        };
+        let before = consumed(&game);
 
         game.enter_next_zone();
 
         assert_eq!(
-            game.world.resource::<BaseLedger>().lifetime[&ItemId::from(ids::CORE_FRAGMENT)]
-                .consumed,
-            held,
-            "the wipe is a sink and has to be counted as one"
+            consumed(&game),
+            before,
+            "a breach reported a consumption, but it no longer destroys anything"
         );
     }
 

@@ -366,32 +366,24 @@ fn vignette_floor(power: f32) -> f32 {
 /// makes: a new `Biome` must not compile until someone has decided which
 /// side of that rule it falls on.
 ///
-/// `hues` is the sector's `(ground, hazard)` pair from `Game::sector_hues`,
-/// and it moves the two *bands* rather than recolouring biomes. The match
-/// below stays the reference table it always was — the sector rotates each
-/// entry's hue by however far its own band's anchor has moved, so every
-/// biome keeps its offset within the band along with its saturation and
-/// value. That is what leaves the brightness spread — the thing that
-/// actually separates the five walkable biomes from each other, and that
-/// keeps Platform much the darkest — untouched by a sector.
-///
-/// **The neutral pair is a zero rotation and is not applied**, so an install
-/// with no `assets/sectors/` draws these literals bit for bit.
-fn biome_tint(biome: Biome, hues: (f32, f32)) -> Color {
-    let base = biome_reference_tint(biome);
-    let (anchor, authored) = if biome.walkable() {
-        (feral_processes_engine::sectors::NEUTRAL_GROUND_HUE, hues.0)
-    } else {
-        (feral_processes_engine::sectors::NEUTRAL_HAZARD_HUE, hues.1)
-    };
-    rotate_hue(base, authored - anchor)
+/// This used to take a `(ground, hazard)` hue pair and rotate the table
+/// below by however far a zone's sector had moved its band — the world is
+/// persistent now, there is one palette for the whole run, and sectors are
+/// retired, so there is nothing left to rotate. `biome_tint` stays the named
+/// door onto this table rather than folding into `biome_reference_tint`
+/// because it is the one CLAUDE.md cites as the map's colour rule, and
+/// because the exhaustive match belongs to a function whose whole job is
+/// answering "what colour is this biome" — a caller should never have to
+/// know the reference table is a second function away.
+fn biome_tint(biome: Biome) -> Color {
+    biome_reference_tint(biome)
 }
 
 /// `c` scaled toward white by `factor`, hue untouched.
 ///
 /// Clamped at 1.0 so a channel cannot wrap, and applied to the *biome's own*
 /// colour rather than to a fixed value, so a rock face brightens whatever
-/// the sector palette has done to the hole around it.
+/// colour the hole around it is drawn in.
 fn brighten(c: Color, factor: f32) -> Color {
     Color::new(
         (c.r * factor).min(1.0),
@@ -401,58 +393,10 @@ fn brighten(c: Color, factor: f32) -> Color {
     )
 }
 
-/// `c` with its hue moved `degrees` around the wheel, saturation and value
-/// untouched.
-///
-/// The saturation/value spread is what separates the biomes within a band
-/// from each other; hue is what separates walkable from not. Moving only H
-/// shifts the band without disturbing either — see `biome_tint`.
-///
-/// A zero rotation returns `c` itself rather than round-tripping it through
-/// HSV and back. Not an optimisation: it is what makes "deleting
-/// `assets/sectors/` restores today's game" exactly true rather than true to
-/// within a float epsilon.
-fn rotate_hue(c: Color, degrees: f32) -> Color {
-    if degrees == 0.0 {
-        return c;
-    }
-    let (h, s, v) = rgb_to_hsv(c);
-    hsv_to_rgb((h + degrees).rem_euclid(360.0), s, v, c.a)
-}
-
-fn rgb_to_hsv(c: Color) -> (f32, f32, f32) {
-    let max = c.r.max(c.g).max(c.b);
-    let min = c.r.min(c.g).min(c.b);
-    let d = max - min;
-    let h = if d == 0.0 {
-        0.0
-    } else if max == c.r {
-        60.0 * (((c.g - c.b) / d).rem_euclid(6.0))
-    } else if max == c.g {
-        60.0 * ((c.b - c.r) / d + 2.0)
-    } else {
-        60.0 * ((c.r - c.g) / d + 4.0)
-    };
-    (h, if max == 0.0 { 0.0 } else { d / max }, max)
-}
-
-fn hsv_to_rgb(h: f32, s: f32, v: f32, a: f32) -> Color {
-    let c = v * s;
-    let x = c * (1.0 - ((h / 60.0).rem_euclid(2.0) - 1.0).abs());
-    let m = v - c;
-    let (r, g, b) = match (h / 60.0) as u32 % 6 {
-        0 => (c, x, 0.0),
-        1 => (x, c, 0.0),
-        2 => (0.0, c, x),
-        3 => (0.0, x, c),
-        4 => (x, 0.0, c),
-        _ => (c, 0.0, x),
-    };
-    Color::new(r + m, g + m, b + m, a)
-}
-
-/// The colour each biome has in a neutral sector: the table every sector's
-/// palette is a rotation of.
+/// The colour each biome has. Was "the colour each biome has in a neutral
+/// sector, the table every sector's palette is a rotation of" — sectors are
+/// retired and there is one palette for the whole run, so this table is now
+/// the whole of `biome_tint` rather than what it rotated.
 fn biome_reference_tint(biome: Biome) -> Color {
     match biome {
         // Hot: the edge of the world. Nothing is ever placed on these, so
@@ -477,7 +421,7 @@ fn biome_reference_tint(biome: Biome) -> Color {
         // one that reads as dark navy behind a base, because everything else
         // on that screen is competing with it.
         Biome::Platform => Color::new(0.06, 0.11, 0.32, 1.0),
-        Biome::Mainframe => Color::new(0.25, 0.85, 0.85, 1.0),
+        Biome::Backplane => Color::new(0.25, 0.85, 0.85, 1.0),
         Biome::Deadlock => Color::new(0.70, 0.92, 0.95, 1.0),
         Biome::OpenGrid => Color::new(0.35, 0.85, 0.60, 1.0),
         Biome::NullSector => Color::new(0.20, 0.50, 0.52, 1.0),
@@ -556,7 +500,7 @@ fn draw_biome(painter: &Painter, biome: Biome, r: Rect, tint: Color, world: (i32
     );
     let h = tile_hash(world);
     match biome {
-        Biome::Mainframe => draw_traces(painter, r, ink, h),
+        Biome::Backplane => draw_traces(painter, r, ink, h),
         Biome::OpenGrid => draw_dot(painter, r, ink),
         Biome::NullSector => draw_broken_grid(painter, r, ink, h),
         Biome::Deadlock => draw_speckle(painter, r, ink, h),
@@ -573,8 +517,8 @@ fn draw_biome(painter: &Painter, biome: Biome, r: Rect, tint: Color, world: (i32
     }
 }
 
-/// Mainframe: a circuit trace entering the tile and terminating in a pad.
-/// Which side it enters from is hashed, so a field of Mainframe reads as
+/// Backplane: a circuit trace entering the tile and terminating in a pad.
+/// Which side it enters from is hashed, so a field of Backplane reads as
 /// routed board rather than as one motif stamped in a grid.
 fn draw_traces(painter: &Painter, r: Rect, ink: Color, h: u32) {
     let (cx, cy) = (r.x + r.w / 2.0, r.y + r.h / 2.0);
@@ -1153,13 +1097,9 @@ fn draw_surface_map(
     // Cloud shadows are the zone map's alone. Base space is a pocket cut
     // out of rock with no sky over it, and the Stack draws through
     // `render/stack.rs` and never reaches here at all — so this one flag is
-    // the whole of the gate. Read once for the same reason `hues` is: it is
-    // a property of the locale, not of a tile.
+    // the whole of the gate: it is a property of the locale, not of a tile.
     let outdoors = base_pos.is_none();
     let shield_outline = fx.shield_outline(game.raid_defense_active());
-    // Read once for the whole map: the sector is a property of the zone, so
-    // asking per tile would be the same answer several thousand times.
-    let hues = game.sector_hues();
 
     painter.rect(
         pane.x,
@@ -1171,13 +1111,12 @@ fn draw_surface_map(
     for (ry, row) in tiles.iter().enumerate() {
         for (rx, tile) in row.iter().enumerate() {
             // An exposed rock face is brighter than the hole it is part of,
-            // and *only* brighter: scaled before `biome_tint`'s hue
-            // rotation, so a seam stays inside the impassable band under
-            // every sector palette. Hue is already spoken for by
-            // passability, which is why a kind cannot author one.
+            // and *only* brighter: scaled before `biome_tint` is applied, so
+            // a seam stays inside the impassable band. Hue is already spoken
+            // for by passability, which is why a kind cannot author one.
             let biome_color = match tile.rock_shade {
-                Some(shade) => brighten(biome_tint(tile.biome, hues), shade),
-                None => biome_tint(tile.biome, hues),
+                Some(shade) => brighten(biome_tint(tile.biome), shade),
+                None => biome_tint(tile.biome),
             };
             // Terrain no longer carries a glyph — the biome is drawn as
             // geometry — so this stays `None` unless something is standing
@@ -2157,7 +2096,7 @@ mod tests {
     /// frame's title text are two separate calls inside `draw_playing_base`.
     /// The `@` is the one glyph on the map whose colour is a **role** and not
     /// the hue its entity authored. `GlyphColor::Cyan` is what the player
-    /// spawns with and what a Mainframe-blue structure may author too; br
+    /// spawns with and what a Backplane-blue structure may author too; br
     /// cyan is the player's alone, and reading it off `is_player` is what
     /// keeps it that way.
     ///
@@ -3124,8 +3063,7 @@ mod tests {
     }
 
     /// ...and with nothing loaded the map is exactly what it was. This is
-    /// what makes `assets/sprites/` deletable, the same supported way
-    /// `assets/sectors/` is.
+    /// what makes `assets/sprites/` deletable and optional by construction.
     #[test]
     fn an_empty_sprite_table_leaves_the_glyph_map_alone() {
         let (images, glyphs) = drawn_map(SpriteTable::default());
@@ -3232,6 +3170,75 @@ mod tests {
         assert!(
             glyphs.iter().any(|g| *g == creature.glyph.to_string()),
             "the glyph is what is left when no sprite is loaded: {glyphs:?}"
+        );
+    }
+
+    /// A settlement carries none of `stands_in_base_space`'s tags —
+    /// `Caravan`/`Structure`/`BuildSite`/`Tamed` — so it falls through
+    /// `Game::view_entities_at` to the surface map and lands in
+    /// `draw_surface_map`'s `actor` slot exactly like a nest. Nothing states
+    /// that anywhere; this is the assertion.
+    ///
+    /// Reached through the save round trip rather than a fixture that spawns
+    /// a component directly — `Game`'s `world` is private from out here and
+    /// deliberately stays that way, `attention_drives_all_three_markers`'s
+    /// reason. The tile east of spawn is cleared of anything else the fresh
+    /// seed put there, or the actor slot could resolve to whichever entity
+    /// iteration happens to visit last rather than to the settlement this
+    /// test is about.
+    ///
+    /// `SettlementKind::Mainframe` (glyph `'M'`), not `Server` (glyph
+    /// `'s'`) — `'s'` is also the Sprite species' glyph
+    /// (`assets/species/sprite.ron`), and this seed's draw box already
+    /// carries wild Sprites before the fixture adds anything, so a `Server`
+    /// settlement made this assertion pass with the settlement entity
+    /// absent entirely. No shipped species uses `'M'` (verified against
+    /// every file under `assets/species/`), so this glyph can only have
+    /// come from the settlement.
+    #[test]
+    fn a_settlement_draws_its_glyph_on_the_surface_map() {
+        let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets())
+            .expect("the shipped assets must load");
+        let path = std::env::temp_dir().join(format!(
+            "fp_gui_settlement_glyph_{}.sav",
+            std::process::id()
+        ));
+        game.save(&path).unwrap();
+        let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
+        let (px, py) = data.player.position;
+        let target = (px + 1, py);
+        data.creatures.retain(|c| c.position != target);
+        data.nests.retain(|n| n.position != target);
+        data.link_sites.retain(|&site| site != target);
+        let key = feral_processes_engine::settlements::SettlementKey { rx: 0, ry: 0 };
+        data.settlements.0.insert(
+            key,
+            feral_processes_engine::resources::KnownSettlement {
+                tile: target,
+                def: feral_processes_engine::settlements::SettlementDef {
+                    id: "test_settlement".to_string(),
+                    name: "Test Settlement".to_string(),
+                    blurb: "A settlement placed for a test.".to_string(),
+                    kind: feral_processes_engine::settlements::SettlementKind::Mainframe,
+                    specialty: feral_processes_engine::settlements::Specialty::Materials,
+                    temperament: feral_processes_engine::settlements::Temperament::Open,
+                },
+            },
+        );
+        feral_processes_engine::save::save_to_file(&path, &data).unwrap();
+        let mut game = Game::load(&path, &test_assets()).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        // Not asserted against `SpriteTable::default()`: an empty table
+        // paints no texture no matter what the fixture spawns, which is
+        // what made this line read as coverage while proving nothing —
+        // `a_creature_with_no_art_draws_its_glyph` above already owns that
+        // fact.
+        let (_images, glyphs) = drawn_map_centered_on(&mut game, SpriteTable::default(), target);
+
+        assert!(
+            glyphs.iter().any(|g| *g == "M"),
+            "a Mainframe settlement's glyph never reached the surface map: {glyphs:?}"
         );
     }
 
@@ -3680,7 +3687,7 @@ mod tests {
         Biome::DataVoid,
         Biome::Deadlock,
         Biome::NullSector,
-        Biome::Mainframe,
+        Biome::Backplane,
         Biome::OpenGrid,
         Biome::BlackIce,
         Biome::Platform,
@@ -3695,25 +3702,25 @@ mod tests {
         c.r > c.g && c.r > c.b
     }
 
-    /// The neutral pair, which every non-sector screen and every zone 1 draws
-    /// with.
-    const NEUTRAL: (f32, f32) = (
-        feral_processes_engine::sectors::NEUTRAL_GROUND_HUE,
-        feral_processes_engine::sectors::NEUTRAL_HAZARD_HUE,
-    );
-
-    /// Every hue pair a sector is allowed to author, at one-degree steps.
-    ///
-    /// The whole band rather than only the hue pairs `assets/sectors/`
-    /// happens to ship, because the bounds in `sectors::GROUND_HUE_BAND`
-    /// claim a sweep like this exists — and because the failure being
-    /// guarded against is a *mod* authoring a legal-but-unreadable palette,
-    /// which a census over the shipped three could never see.
-    fn every_legal_hue_pair() -> impl Iterator<Item = (f32, f32)> {
-        let (glo, ghi) = feral_processes_engine::sectors::GROUND_HUE_BAND;
-        let (hlo, hhi) = feral_processes_engine::sectors::HAZARD_HUE_BAND;
-        (glo as i32..=ghi as i32)
-            .flat_map(move |g| (hlo as i32..=hhi as i32).map(move |h| (g as f32, h as f32)))
+    /// Kept for `no_two_walkable_biomes_share_a_hue`, which needs hue in
+    /// isolation to check the five walkable biomes stay distinguishable from
+    /// each other. Nothing in production reads hue back out of a `Color` any
+    /// more — `rotate_hue` was the one caller, and it is gone with the
+    /// sectors it rotated a palette for.
+    fn rgb_to_hsv(c: Color) -> (f32, f32, f32) {
+        let max = c.r.max(c.g).max(c.b);
+        let min = c.r.min(c.g).min(c.b);
+        let d = max - min;
+        let h = if d == 0.0 {
+            0.0
+        } else if max == c.r {
+            60.0 * (((c.g - c.b) / d).rem_euclid(6.0))
+        } else if max == c.g {
+            60.0 * ((c.b - c.r) / d + 2.0)
+        } else {
+            60.0 * ((c.r - c.g) / d + 4.0)
+        };
+        (h, if max == 0.0 { 0.0 } else { d / max }, max)
     }
 
     /// The palette's one load-bearing promise: hue tells the player whether
@@ -3721,70 +3728,58 @@ mod tests {
     /// A biome tinted into the wrong family is worse than a drawing bug —
     /// it tells the player they can walk into the void.
     ///
-    /// This is the gate the whole band-swap design exists to satisfy. A free
-    /// per-biome palette could not have one, which is why a sector authors
-    /// two numbers inside stated bounds rather than seven colours.
+    /// This used to sweep every hue pair a sector was legally allowed to
+    /// author, because a mod's sector palette could otherwise author a
+    /// legal-but-unreadable one. Sectors are retired and there is one
+    /// palette for the whole run, so the sweep is gone; the property it
+    /// protected — hue answers passability — is still worth asserting
+    /// against the one palette that ships.
     #[test]
-    fn every_biomes_tint_says_whether_it_can_be_walked_on_in_every_legal_sector() {
-        for hues in every_legal_hue_pair() {
-            for biome in ALL_BIOMES {
-                assert_eq!(
-                    reads_as_hostile(biome_tint(biome, hues)),
-                    !biome.walkable(),
-                    "at hues {hues:?}, {biome:?} is walkable={} but its tint {:?} reads \
-                     the other way — hue is the map's only signal for passability",
-                    biome.walkable(),
-                    biome_tint(biome, hues),
-                );
-            }
+    fn every_biomes_tint_says_whether_it_can_be_walked_on() {
+        for biome in ALL_BIOMES {
+            assert_eq!(
+                reads_as_hostile(biome_tint(biome)),
+                !biome.walkable(),
+                "{biome:?} is walkable={} but its tint {:?} reads the other way — hue is \
+                 the map's only signal for passability",
+                biome.walkable(),
+                biome_tint(biome),
+            );
         }
     }
 
     /// What separates the five walkable biomes from each other is brightness,
-    /// not hue — hue is spoken for by the rule above. So a sector may move
-    /// the band but must not disturb the order inside it, and Platform in
-    /// particular has to stay much the darkest: it is the only biome the
-    /// player lays, it covers whole screens wherever a base stands, and that
-    /// number was taken down twice after being seen on screen behind a full
-    /// base.
+    /// not hue — hue is spoken for by the rule above. Platform in particular
+    /// has to stay much the darkest: it is the only biome the player lays,
+    /// it covers whole screens wherever a base stands, and that number was
+    /// taken down twice after being seen on screen behind a full base.
     #[test]
-    fn a_sector_never_reorders_the_walkable_biomes_by_brightness() {
+    fn platform_is_the_darkest_walkable_biome() {
         let value = |c: Color| c.r.max(c.g).max(c.b);
         let walkable: Vec<Biome> = ALL_BIOMES.into_iter().filter(|b| b.walkable()).collect();
-        let mut expected: Vec<Biome> = walkable.clone();
-        expected.sort_by(|a, b| {
-            value(biome_tint(*a, NEUTRAL))
-                .partial_cmp(&value(biome_tint(*b, NEUTRAL)))
+        let mut sorted: Vec<Biome> = walkable.clone();
+        sorted.sort_by(|a, b| {
+            value(biome_tint(*a))
+                .partial_cmp(&value(biome_tint(*b)))
                 .unwrap()
         });
         assert_eq!(
-            expected.first(),
+            sorted.first(),
             Some(&Biome::Platform),
             "Platform must be the darkest walkable biome"
         );
-
-        for hues in every_legal_hue_pair() {
-            let mut got = walkable.clone();
-            got.sort_by(|a, b| {
-                value(biome_tint(*a, hues))
-                    .partial_cmp(&value(biome_tint(*b, hues)))
-                    .unwrap()
-            });
-            assert_eq!(got, expected, "hues {hues:?} reordered the walkable biomes");
-        }
     }
 
-    /// Deleting `assets/sectors/` restores today's game **exactly**, not
-    /// approximately: the neutral pair is a zero rotation, and a zero
-    /// rotation is not applied at all. Asserted against the literals rather
-    /// than against a recomputation, so a drift in either direction fails.
+    /// The shipped table, locked in against an accidental edit to
+    /// `biome_reference_tint`. Asserted against the literals rather than a
+    /// recomputation, so a drift in either direction fails.
     #[test]
-    fn the_neutral_hues_reproduce_the_shipped_table_exactly() {
+    fn biome_tint_matches_the_shipped_reference_table() {
         let table = [
             (Biome::DataVoid, Color::new(0.95, 0.60, 0.15, 1.0)),
             (Biome::BlackIce, Color::new(0.95, 0.32, 0.18, 1.0)),
             (Biome::Platform, Color::new(0.06, 0.11, 0.32, 1.0)),
-            (Biome::Mainframe, Color::new(0.25, 0.85, 0.85, 1.0)),
+            (Biome::Backplane, Color::new(0.25, 0.85, 0.85, 1.0)),
             (Biome::Deadlock, Color::new(0.70, 0.92, 0.95, 1.0)),
             (Biome::OpenGrid, Color::new(0.35, 0.85, 0.60, 1.0)),
             (Biome::NullSector, Color::new(0.20, 0.50, 0.52, 1.0)),
@@ -3792,57 +3787,28 @@ mod tests {
             (Biome::Entropy, Color::new(0.10, 0.04, 0.04, 1.0)),
         ];
         for (biome, expected) in table {
-            let got = biome_tint(biome, NEUTRAL);
+            let got = biome_tint(biome);
             assert_eq!(
                 (got.r, got.g, got.b, got.a),
                 (expected.r, expected.g, expected.b, expected.a),
-                "{biome:?} is not what it was before sectors existed"
+                "{biome:?} is not what the shipped table says it is"
             );
         }
     }
 
-    /// The five walkable biomes must stay telling-apart-able in every
-    /// sector, and brightness alone does not do it: Mainframe and OpenGrid
-    /// have *identical* value (0.85), so hue is the only thing separating
-    /// them. A palette that set every walkable biome to one hue — which is
-    /// what replacing H rather than rotating it does — would leave those two
-    /// as two near-identical cyans differing only in saturation.
-    ///
-    /// Distinct hues rather than a distance threshold because that is the
-    /// mechanism: a rotation moves all five by the same amount, so it
-    /// preserves distinctness exactly, and nothing else does.
+    /// The five walkable biomes must stay telling-apart-able, and brightness
+    /// alone does not do it: Backplane and OpenGrid have *identical* value
+    /// (0.85), so hue is the only thing separating them.
     #[test]
-    fn no_sector_collapses_two_walkable_biomes_onto_one_hue() {
+    fn no_two_walkable_biomes_share_a_hue() {
         let walkable: Vec<Biome> = ALL_BIOMES.into_iter().filter(|b| b.walkable()).collect();
-        for hues in every_legal_hue_pair() {
-            for (i, a) in walkable.iter().enumerate() {
-                for b in &walkable[i + 1..] {
-                    let (ha, _, _) = rgb_to_hsv(biome_tint(*a, hues));
-                    let (hb, _, _) = rgb_to_hsv(biome_tint(*b, hues));
-                    assert!(
-                        (ha - hb).abs() > 1.0,
-                        "at hues {hues:?}, {a:?} and {b:?} are both at hue {ha} — \
-                         a sector may move the band, not flatten it"
-                    );
-                }
-            }
-        }
-    }
-
-    /// The transform's actual job, tested where the zero-rotation
-    /// short-circuit above cannot reach: a rotation moves hue and leaves
-    /// saturation and value alone. A round trip that clamped or lost
-    /// precision would show up here as a drifting S or V, which is exactly
-    /// what would flatten the brightness spread the test above depends on.
-    #[test]
-    fn a_rotation_moves_only_hue() {
-        for hues in every_legal_hue_pair() {
-            for biome in ALL_BIOMES {
-                let (_, s0, v0) = rgb_to_hsv(biome_tint(biome, NEUTRAL));
-                let (_, s1, v1) = rgb_to_hsv(biome_tint(biome, hues));
+        for (i, a) in walkable.iter().enumerate() {
+            for b in &walkable[i + 1..] {
+                let (ha, _, _) = rgb_to_hsv(biome_tint(*a));
+                let (hb, _, _) = rgb_to_hsv(biome_tint(*b));
                 assert!(
-                    (s0 - s1).abs() < 1e-4 && (v0 - v1).abs() < 1e-4,
-                    "at hues {hues:?}, {biome:?} moved from S={s0} V={v0} to S={s1} V={v1}"
+                    (ha - hb).abs() > 1.0,
+                    "{a:?} and {b:?} are both at hue {ha}"
                 );
             }
         }

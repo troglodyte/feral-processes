@@ -31,7 +31,7 @@ pub mod research;
 pub mod resources;
 pub mod rock;
 pub mod save;
-pub mod sectors;
+pub mod settlements;
 pub mod sorties;
 pub mod species;
 pub mod stack;

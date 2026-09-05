@@ -35,6 +35,8 @@ mod research;
 mod respec;
 mod routines;
 mod saves;
+mod settlement;
+mod settlement_market;
 mod sprite_forge;
 mod stack;
 mod stack_market;

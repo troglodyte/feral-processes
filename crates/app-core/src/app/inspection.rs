@@ -72,6 +72,17 @@ impl App {
                 self.status_line = None;
                 self.mode = Mode::CellDescribe;
             }
+            // A settlement gets the shape `Caravan` and `BuildSite` above
+            // don't: it has a page of its own, `Mode::Settlement`, the same
+            // one a bump opens — `Game::settlement_key` is the one bridge
+            // from the `Entity` `InspectTarget` carries to the key both
+            // doors render through, so the bump and `x` cannot drift into
+            // two derivations of the same town.
+            Some(InspectTarget::Settlement(entity)) => {
+                self.pending_settlement = game.settlement_key(entity);
+                self.status_line = None;
+                self.mode = Mode::Settlement;
+            }
             // Nothing standing there — but in base space the ray may still
             // have run into a wall, and a wall is now something with a name.
             // Asked only after the creature and structure arms, because a
@@ -112,6 +123,51 @@ impl App {
     pub(crate) fn handle_cell_describe_key(&mut self, _key: GameKey) {
         self.pending_description = None;
         self.close_screen();
+    }
+
+    /// The settlement page: `Mode::CompanionMemories`'s shape, Esc plus one
+    /// more key now that Phase 3 ships the market, rather than
+    /// `Mode::CellDescribe`'s "any key leaves" above. A settlement page is
+    /// reached by walking into the tile as often as by examining it, and a
+    /// bump opens it on the same keypress that moved the player — a
+    /// direction key still held down must not double as the dismissal the
+    /// way it would if any key closed the screen.
+    ///
+    /// `[M]`, uppercase, for `lowercase-letters-are-row-selectors`'s reason
+    /// even though this page has no rows to select — a modder's `blurb` is
+    /// free text and a lowercase key would collide with a letter the prose
+    /// happens to start a line with, if this page ever grows rows of its
+    /// own.
+    pub(crate) fn handle_settlement_key(&mut self, key: GameKey) {
+        match key {
+            GameKey::Esc => {
+                self.pending_settlement = None;
+                self.status_line = None;
+                self.mode = Mode::Playing;
+            }
+            // The reach check is asked *here* rather than left to the
+            // screen, because `x` opens this page from anywhere inside
+            // `EXAMINE_RANGE_TILES` while `Game::settlement_reach` is
+            // Chebyshev 1 — so a town read from across the map would open a
+            // market whose `settlement_view` is `None`, which
+            // `draw_settlement_market` draws as nothing at all.
+            // `Game::broker_reach`'s split, one vendor over: reading a
+            // board and trading at it are two questions.
+            GameKey::Char('M') => {
+                let reachable = self.pending_settlement.is_some_and(|key| {
+                    self.game
+                        .as_mut()
+                        .is_some_and(|game| game.settlement_view(key).is_some())
+                });
+                if !reachable {
+                    self.refuse("You'd have to walk over there to trade.");
+                    return;
+                }
+                self.settlement_amounts.clear();
+                self.mode = Mode::SettlementMarket;
+            }
+            _ => {}
+        }
     }
 
     /// You, then every program you own — everyone the manifest can page

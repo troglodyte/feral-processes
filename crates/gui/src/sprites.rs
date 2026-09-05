@@ -10,8 +10,8 @@
 //! name is absent from the table, `Painter::sprite` reports that it drew
 //! nothing, and the caller falls back to the entity's glyph. Deleting
 //! `assets/sprites/` therefore restores the glyph map exactly, the same
-//! supported way deleting `assets/sectors/` restores undifferentiated
-//! zones.
+//! supported way deleting `assets/settlements/` restores a world with no
+//! towns in it.
 
 use std::collections::HashMap;
 use std::path::Path;

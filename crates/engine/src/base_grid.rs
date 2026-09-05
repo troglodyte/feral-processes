@@ -50,11 +50,13 @@ pub struct BaseGrid {
     /// what any coordinate is made of.
     ///
     /// **Its own, and deliberately not `WorldMap::seed()`.** The world seed
-    /// changes on every breach — `enter_next_zone` mints the next zone from
-    /// `wrapping_add(0x9E37_79B9)` — while this grid *travels* with the run.
-    /// Salted off the world seed, every seam in the base would reshuffle
-    /// each time the player portalled, and a half-cut wall would come back a
-    /// different kind under its already-saved `Durability`.
+    /// was reseeded on every breach when this was written, so salting off it
+    /// would have reshuffled every seam in the base each time the player
+    /// portalled, bringing a half-cut wall back as a different kind under
+    /// its already-saved `Durability`. The world is persistent now and that
+    /// seed no longer moves, so the hazard is history — but the separation
+    /// stays, because base space and the zone surface are different spaces
+    /// and one should not be able to reshape the other by accident.
     ///
     /// `#[serde(default)]`, so a save written before rock kinds existed
     /// loads at 0 — a valid, deterministic layout rather than a special

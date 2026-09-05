@@ -753,11 +753,12 @@ fn another_structure_on_the_tile_inherits_nothing() {
     assert!(game.buyback_options(shield).is_empty());
 }
 
-/// Build salvage and breach keys are wiped at a breach so a stockpile can't
-/// fund content it never engaged with. A shelf holding that same salvage
-/// would be exactly the loophole, so it goes too.
+/// The wipe this guarded is gone: a breach destroys no currency, so a shelf
+/// is no longer a loophole around one. A market is base-space and permanent
+/// and its buyback ledger is keyed by `(kind, tile)`, so what you sold is
+/// still there to buy back.
 #[test]
-fn a_breach_clears_every_shelf() {
+fn a_breach_leaves_every_shelf_stocked() {
     let mut game = Game::new(152, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     let market = spawn_market_at(&mut game, 5, 5);
@@ -769,18 +770,11 @@ fn a_breach_clears_every_shelf() {
 
     game.enter_next_zone();
 
-    // Asserting the ledger, not just `buyback_options`: the market is
-    // base-space and permanent, so its tile key never changes and
-    // `buyback_options` alone couldn't tell "the ledger was wiped" apart
-    // from "the ledger still matches the same trader at the same spot".
-    assert!(
-        game.world
-            .resource::<resources::BuybackLedger>()
-            .0
-            .is_empty(),
-        "a shelf must not carry a doomed stockpile across a breach"
+    assert_eq!(
+        game.buyback_options(market)[0].qty,
+        3,
+        "a breach emptied a shelf that nothing was spent to fill"
     );
-    assert!(game.buyback_options(market).is_empty());
 }
 
 #[test]

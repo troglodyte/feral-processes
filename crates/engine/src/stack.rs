@@ -266,8 +266,8 @@ impl CellKind {
 
 /// Everything a frame is a function of.
 ///
-/// A struct rather than four positional arguments because the arguments are
-/// all integers and three of them are interchangeable at a glance, which is
+/// A struct rather than five positional arguments because the arguments are
+/// all integers and four of them are interchangeable at a glance, which is
 /// exactly the shape of call that ends up transposed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FrameSpec {
@@ -281,6 +281,16 @@ pub struct FrameSpec {
     /// How many frames this stack runs before it bottoms out — see
     /// `frames_for`.
     pub frames: u32,
+    /// The `ZoneLevel` this frame is carved for.
+    ///
+    /// The world map is persistent — a breach raises a tier and never
+    /// reseeds — so without this term a link at a fixed tile would hand
+    /// back the identical maze at every tier for the rest of the run. It
+    /// is what "an entrance re-tiers in place" means: the tile stays, the
+    /// frame behind it is re-carved. `resources::StackMemory` is keyed by
+    /// `(entrance, depth)` and so goes stale the moment this moves, which
+    /// is why `enter_next_zone` still clears it.
+    pub tier: u32,
 }
 
 impl FrameSpec {
@@ -306,6 +316,7 @@ impl FrameSpec {
             self.entrance.0 as u32 as u64,
             self.entrance.1 as u32 as u64,
             self.depth as u64,
+            self.tier as u64,
         ] {
             h ^= word;
             h = h.wrapping_mul(0x0000_0100_0000_01b3);
@@ -1317,7 +1328,34 @@ mod tests {
             entrance: (0, 0),
             depth,
             frames: 9,
+            tier: 1,
         }
+    }
+
+    /// The persistent world's whole reason for `FrameSpec::tier`: the map is
+    /// never reseeded, so an entrance that survives a breach would otherwise
+    /// hand back the maze it handed back before it.
+    #[test]
+    fn a_frame_is_recarved_when_its_tier_moves() {
+        let at = |tier| {
+            generate(FrameSpec {
+                world_seed: 7,
+                entrance: (12, -30),
+                depth: 2,
+                frames: 9,
+                tier,
+            })
+        };
+        let (one, two) = (at(1), at(2));
+        assert_ne!(
+            one.cells, two.cells,
+            "the same entrance at a new tier must be a new frame"
+        );
+        assert_eq!(
+            one.cells,
+            at(1).cells,
+            "and a tier that has not moved must still be reproducible"
+        );
     }
 
     /// Every frame of one layout, over a sweep wide enough to field a good
@@ -1509,6 +1547,7 @@ mod tests {
                 entrance: (0, 0),
                 depth: 4,
                 frames: 4,
+                tier: 1,
             });
             let lair = *cells_of(&level, CellKind::Lair)
                 .first()
@@ -1663,6 +1702,7 @@ mod tests {
             entrance: (3, 4),
             depth: 4,
             frames: 4,
+            tier: 1,
         });
         assert_eq!(level.link_down, None);
         assert!(
@@ -1902,6 +1942,7 @@ mod tests {
             entrance: (2, 2),
             depth: 4,
             frames: 4,
+            tier: 1,
         });
         assert!(
             cells_of(&level, CellKind::Fault).is_empty(),
@@ -2074,6 +2115,7 @@ mod tests {
             entrance: (3, -4),
             depth: 2,
             frames: 4,
+            tier: 1,
         };
         let seeds = [
             spec.salted(&[]),
@@ -2108,6 +2150,7 @@ mod tests {
             entrance: (3, -4),
             depth: 2,
             frames: 4,
+            tier: 1,
         };
         // A 64x64 grid of cells, each compared to its eastward neighbour —
         // 4096 adjacent pairs. Fixing `y` and only sweeping `x` (an earlier
@@ -2145,6 +2188,7 @@ mod tests {
             entrance: (3, -4),
             depth: 2,
             frames: 4,
+            tier: 1,
         };
         let b = FrameSpec { depth: 3, ..a };
         assert_ne!(a.salted(&[9, 9, 9]), b.salted(&[9, 9, 9]));
@@ -2159,6 +2203,7 @@ mod tests {
             entrance: (3, -4),
             depth: 2,
             frames: 4,
+            tier: 1,
         };
         assert_eq!(spec.salted(&[4, 5]), spec.salted(&[4, 5]));
         assert_eq!(spec.salted(&[]), spec.rng_seed());

@@ -352,6 +352,176 @@ pub(crate) fn place_wild_program_east(app: &mut App, east: i32) -> Entity {
         .entity
 }
 
+/// A settlement one tile east of the player — `test_assets_dir`'s catalogue
+/// is never consulted, since a hand-built def is all a fixture that never
+/// opens the market or job board needs.
+///
+/// The engine exposes `resources::Settlements`/`resources::KnownSettlement`
+/// publicly and restores an entity from it on load
+/// (`Game::restore_settlements`), which is the one door app-core has onto a
+/// settlement: unlike a creature or a structure, there is no
+/// `Game::place_structure`-shaped public setter, and the engine's own
+/// `tests::support::place_settlement` is `pub(super)` to that crate alone.
+/// So this goes through the same save-edit-reload trick every other fixture
+/// here uses, writing `SaveData::settlements` directly.
+///
+/// Clears the target tile of a creature, a nest or a Stack entrance, any of
+/// which would answer the bump ladder *before* `find_settlement_at` is ever
+/// reached — the settlement arm is the fourth, after the wild-creature, nest
+/// and surface-link arms, and any of those three intercepting the press
+/// would make this fixture's tests exercise the wrong feature.
+pub(crate) fn place_settlement_east_of_player(
+    app: &mut App,
+) -> (
+    feral_processes_engine::settlements::SettlementKey,
+    (i32, i32),
+) {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("settlement", 0);
+    let game = app.game.as_mut().unwrap();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    let target = (px + 1, py);
+    data.creatures.retain(|c| c.position != target);
+    data.nests.retain(|n| n.position != target);
+    data.link_sites.retain(|&site| site != target);
+    let key = feral_processes_engine::settlements::SettlementKey { rx: 0, ry: 0 };
+    data.settlements.0.insert(
+        key,
+        feral_processes_engine::resources::KnownSettlement {
+            tile: target,
+            def: generic_settlement_def(),
+        },
+    );
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    (key, target)
+}
+
+/// `place_settlement_east_of_player`, plus a `Pursuing` nest guardian
+/// standing one tile *north* of the player — for the regression that
+/// `nest_aggro_tick` runs inside the same `tick()` `Game::move_player`'s
+/// settlement arm drives (`turn.rs:236`, right after `nest_respawn_tick`),
+/// so a provoked guardian already adjacent to the player can start a battle
+/// in the very tick that queues the settlement visit.
+///
+/// The guardian sits north rather than on the settlement's own tile east of
+/// the player: `find_wild_creature_at` is the bump ladder's *first* arm and
+/// would intercept the press before `find_settlement_at` (the fourth) is
+/// ever reached if the guardian sat there instead. North also keeps it off
+/// `nest_aggro_tick`'s field walk entirely — it's already adjacent, so the
+/// first per-pursuer check (`chebyshev(pos, player_pos) <= 1`) fires before
+/// any step is taken, with no dependency on `pursuit_field`'s route.
+///
+/// The nest sits on the guardian's own tile — `nest_aggro_tick`'s leash
+/// check only compares `chebyshev` distance between the two, so co-locating
+/// them costs nothing and needs no second tile cleared.
+pub(crate) fn place_settlement_and_a_pursuing_guardian(
+    app: &mut App,
+) -> (
+    feral_processes_engine::settlements::SettlementKey,
+    (i32, i32),
+) {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("settlement_battle", 0);
+    let game = app.game.as_mut().unwrap();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    let target = (px + 1, py);
+    let guardian_pos = (px, py - 1);
+    data.creatures
+        .retain(|c| c.position != target && c.position != guardian_pos);
+    data.nests
+        .retain(|n| n.position != target && n.position != guardian_pos);
+    data.link_sites.retain(|&site| site != target);
+    let key = feral_processes_engine::settlements::SettlementKey { rx: 0, ry: 0 };
+    data.settlements.0.insert(
+        key,
+        feral_processes_engine::resources::KnownSettlement {
+            tile: target,
+            def: generic_settlement_def(),
+        },
+    );
+    data.nests.push(save::NestSave {
+        species: "scrapper".to_string(),
+        position: guardian_pos,
+        durability: 20,
+        pending_respawns: Vec::new(),
+    });
+    data.creatures.push(CreatureSave {
+        sortie_index: None,
+        boss: false,
+        species: "scrapper".to_string(),
+        position: guardian_pos,
+        hp: 10,
+        max_hp: 10,
+        atk: 1,
+        mitigation: 1,
+        tamed: false,
+        power: 100.0,
+        level: 1,
+        xp: 0,
+        xp_to_next: 10,
+        cronjob: None,
+        party_slot: None,
+        wielded: false,
+        zone: 1,
+        custom_name: None,
+        hp_roll: 1.0,
+        atk_roll: 1.0,
+        def_roll: 1.0,
+        growth_roll: 1.0,
+        fusions: 0,
+        refactors: 0,
+        purchased_tiers: 0,
+        ring: 0,
+        talents: Vec::new(),
+        bought_stats: Default::default(),
+        routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
+        field_buffs: Vec::new(),
+        nest_position: Some(guardian_pos),
+        pursuing: true,
+        carrying: None,
+        rarity: Default::default(),
+        nemesis_grudges: 0,
+        equipment: Vec::new(),
+        program_id: 0,
+        disposition: None,
+        disgruntled: None,
+        memories: Vec::new(),
+        needs: Default::default(),
+        off_shift: None,
+        staff: false,
+        downed: false,
+    });
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    (key, target)
+}
+
+/// A settlement def with every required field filled in — there is no
+/// `#[serde(default)]` on `SettlementDef`, so a fixture that skipped one
+/// would not compile, and this is the one place a test settlement's prose
+/// is authored rather than borrowed from the shipped catalogue.
+fn generic_settlement_def() -> feral_processes_engine::settlements::SettlementDef {
+    feral_processes_engine::settlements::SettlementDef {
+        id: "test_settlement".to_string(),
+        name: "Test Settlement".to_string(),
+        blurb: "A settlement placed for a test.".to_string(),
+        kind: feral_processes_engine::settlements::SettlementKind::Server,
+        specialty: feral_processes_engine::settlements::Specialty::Materials,
+        temperament: feral_processes_engine::settlements::Temperament::Open,
+    }
+}
+
 /// A game where the player owns one tamed program carrying `routines` and
 /// has a Compiler standing, so the extraction flow has both of its
 /// preconditions. Built by editing a save and reloading it, for the same
@@ -911,6 +1081,7 @@ pub(crate) fn app_underground(seed: u32) -> App {
         entrance: data.player.position,
         depth: 1,
         frames: 2,
+        tier: 1,
     };
     let entry = generate(spec).entry;
     data.locale = Locale::Stack {
@@ -948,6 +1119,7 @@ pub(crate) fn app_underground_with_no_rest_charge(seed: u32) -> App {
         entrance: data.player.position,
         depth: 1,
         frames: 2,
+        tier: 1,
     };
     let entry = generate(spec).entry;
     data.locale = Locale::Stack {

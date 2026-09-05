@@ -110,8 +110,8 @@ own strokes). If you want to keep the original, copy it elsewhere first.
 A missing sprite is not an error. `Painter::sprite` returns `false` when
 it has nothing under that name and the caller draws the `glyph` instead,
 so deleting this directory restores the glyph map exactly — the same
-supported way deleting `assets/sectors/` restores undifferentiated
-zones. That is what lets a modded species ship without a sprite rather
+supported way deleting `assets/settlements/` restores a world with no
+towns in it. That is what lets a modded species ship without a sprite rather
 than shipping invisible.
 
 ## What is here

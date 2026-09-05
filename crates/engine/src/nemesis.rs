@@ -43,7 +43,7 @@ struct LineBank {
 /// treats a `None` name as "mark it, promote it, recharge it — just don't
 /// rename it" rather than a fault. Deleting `assets/nemesis/` restores the
 /// pre-nemesis game's naming, the same supported way to play that deleting
-/// `assets/sectors/` or `assets/policies/enemy_battle.ron` is.
+/// `assets/settlements/` or `assets/policies/enemy_battle.ron` is.
 #[derive(Resource, Default)]
 pub struct NemesisDb {
     names: Vec<String>,
@@ -122,7 +122,7 @@ fn load_bank(path: &Path, warnings: &mut Vec<String>) -> Vec<String> {
 /// bank edit or a `rand` upgrade, since this is arithmetic rather than an
 /// `StdRng` sequence.
 ///
-/// FNV-1a, folded a byte at a time for the reason `sectors::sector_seed`
+/// FNV-1a, folded a byte at a time for the reason `descriptions::Slot::tags`
 /// documents and measures: one XOR-then-multiply round only carries a
 /// difference about the prime's own width (~41 bits) upward, so folding
 /// each roll in as a single 32-bit word would leave two close rolls landing

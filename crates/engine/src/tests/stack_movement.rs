@@ -27,13 +27,37 @@ fn underground_on(mode: DifficultyMode) -> Game {
     game
 }
 
+/// The first underground fixture whose frame satisfies `wanted`.
+///
+/// A frame's shape is a function of its `FrameSpec`, and the tier is now
+/// part of that — so any test that needs a *particular* shape (a walkable
+/// cell hard against the west border, say) cannot pin a world seed and
+/// assume the maze that seed used to carve. Searching states the
+/// requirement instead of encoding a frame that happened to meet it, and
+/// self-repairs the next time the stream moves.
+fn underground_whose_frame(wanted: impl Fn(&crate::stack::Frame) -> bool) -> Game {
+    (16..256)
+        .map(|seed| {
+            let mut game = surfaced_with_routines_from(seed, DifficultyMode::Forgiving);
+            let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
+            game.enter_stack(pos.x, pos.y);
+            game
+        })
+        .find(|game| wanted(&frame(game)))
+        .expect("no seed in the sweep carved a frame with the shape this test needs")
+}
+
 /// The same, but still on open grid — for the Stack-only refusals.
 fn surfaced_with_routines() -> Game {
     surfaced_with_routines_on(DifficultyMode::Forgiving)
 }
 
 fn surfaced_with_routines_on(mode: DifficultyMode) -> Game {
-    let mut game = Game::new(16, mode, &test_assets_dir()).unwrap();
+    surfaced_with_routines_from(16, mode)
+}
+
+fn surfaced_with_routines_from(seed: u32, mode: DifficultyMode) -> Game {
+    let mut game = Game::new(seed, mode, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     game.world
         .entity_mut(player)
@@ -202,7 +226,7 @@ fn phasing_is_refused_by_two_deep_rock() {
 /// void and useless to a player standing at the edge of the world.
 #[test]
 fn phasing_off_the_edge_of_the_frame_is_refused() {
-    let mut game = underground();
+    let mut game = underground_whose_frame(|level| (0..level.height).any(|y| level.walkable(1, y)));
     let level = frame(&game);
     let from = cells(&level)
         .into_iter()

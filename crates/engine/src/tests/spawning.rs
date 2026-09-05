@@ -12,7 +12,7 @@ use crate::tuning::{
 use crate::*;
 
 #[test]
-fn entering_a_zone_portal_despawns_nests_left_behind_in_the_old_zone() {
+fn a_breach_leaves_a_nest_standing() {
     let mut game = Game::new(602, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let nest = game
         .world
@@ -35,13 +35,11 @@ fn entering_a_zone_portal_despawns_nests_left_behind_in_the_old_zone() {
 
     breach_through_a_portal(&mut game);
 
-    // Note: `enter_next_zone` spawns fresh initial creatures for the new
-    // zone, which can legitimately include brand-new nests — so this
-    // must check the specific entity spawned above, not just count all
-    // `Nest` entities in the world.
+    // The specific entity spawned above, not a count: `ensure_local_population`
+    // legitimately adds nests of its own at the new tier.
     assert!(
-        game.world.get_entity(nest).is_err(),
-        "a Nest left behind in the old zone must be despawned on zone transition, not just its guardians"
+        game.world.get::<Nest>(nest).is_some(),
+        "a breach despawned a nest — a nest is part of the place, and the place persists"
     );
 }
 
@@ -1730,7 +1728,9 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         link_sites: Vec::new(),
         locale: crate::resources::Locale::Surface,
         stack_memory: crate::resources::StackMemory::default(),
+        stack_memory_tiered: true,
         populated_chunks: crate::resources::PopulatedChunks::default(),
+        settlements: Default::default(),
         trace: 0,
         contracts: Vec::new(),
         contracts_done: Vec::new(),

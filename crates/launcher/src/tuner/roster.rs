@@ -225,7 +225,7 @@ mod tests {
     base_atk: 3,
     base_mitigation: 2,
     taming_difficulty: 0.15,
-    habitats: [OpenGrid, Mainframe],
+    habitats: [OpenGrid, Backplane],
     base_speed: 13,
     moves: [
         (name: "Buzz", power: 4),

@@ -133,7 +133,7 @@ impl Disposition {
     /// runs once per program: at `roster_parts` for a new one, and on the
     /// load path for a file written before dispositions existed.
     ///
-    /// **The id goes in a byte at a time**, `sectors::sector_seed`'s idiom
+    /// **The id goes in a byte at a time**, `descriptions::Slot::tags`'s idiom
     /// and for its exact reason: one XOR-then-multiply round carries a
     /// difference only about the prime's own width upward, so folding a small
     /// id as a single word leaves programs 1, 2 and 3 differing nowhere near
@@ -209,7 +209,7 @@ mod tests {
         }
     }
 
-    /// The trap `sectors::sector_seed` documents, reached by the same route:
+    /// The trap `descriptions::Slot::tags` documents, reached by the same route:
     /// fold a small id as one word and every program on a roster takes the
     /// same disposition while each answer still looks arbitrary. A real
     /// roster is tens of programs, so the first twenty ids must not collapse

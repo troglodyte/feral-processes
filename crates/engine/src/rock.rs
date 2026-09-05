@@ -98,8 +98,8 @@ impl RockDef {
     /// nothing loadable.
     ///
     /// An empty directory is a supported install: it restores *uniform*
-    /// rock, the same supported way deleting `assets/sectors/` restores
-    /// undifferentiated zones. It does **not** restore the one-shot — the
+    /// rock, the same supported way deleting `assets/settlements/` restores
+    /// a world with no towns in it. It does **not** restore the one-shot — the
     /// fallback carries the same floor of 2 that ordinary rock does, because
     /// the swing floor is a bug fix and not content, and someone deleting
     /// this directory is asking for one kind of rock rather than for their
@@ -259,7 +259,7 @@ const VEIN_BLOCK: i32 = 4;
 /// carries a difference only about the prime's own width upward, so folding
 /// a block coordinate as a single word would leave neighbouring blocks
 /// differing nowhere near bit 63 — which is the bit `derive::index` reads.
-/// That is the measured failure `sectors::sector_seed` documents, reached
+/// That is the measured failure `descriptions::Slot::tags` documents, reached
 /// here by the same route.
 fn block_seed(seed: u32, x: i32, y: i32) -> u64 {
     let mut h = 0xcbf2_9ce4_8422_2325_u64;

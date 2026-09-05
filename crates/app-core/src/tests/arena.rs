@@ -881,6 +881,21 @@ fn row_labels(app: &App) -> Vec<String> {
 const ENCOUNTER_CYCLE_STATES: usize = 4;
 
 /// Steps the `Encounter:` row `n` times to the right.
+/// The biome the encounter cycle seeded itself with, read back off the
+/// encounter rather than named.
+///
+/// It comes from `catalog.biomes.first()` — a property of the shipped
+/// species roster, which moved once already when a `Biome` variant was
+/// renamed. Naming it here restates a fact this test does not own.
+fn seeded_biome(app: &App) -> Biome {
+    match app.arena.as_ref().unwrap().scenario.encounter {
+        Some(Encounter::Field { biome })
+        | Some(Encounter::Stack { biome, .. })
+        | Some(Encounter::Lair { biome, .. }) => biome,
+        None => panic!("the cycle should have landed on an encounter"),
+    }
+}
+
 fn cycle_encounter(app: &mut App, n: usize) {
     highlight(app, ArenaRowKind::Encounter);
     for _ in 0..n {
@@ -939,6 +954,7 @@ fn a_stack_encounter_shows_a_depth_row_and_a_field_one_does_not() {
     let stack = row_kinds(&app);
     assert!(stack.contains(&ArenaRowKind::EncounterDepth), "{stack:?}");
 
+    let seeded = seeded_biome(&app);
     highlight(&mut app, ArenaRowKind::EncounterDepth);
     app.handle_key(GameKey::Right);
     app.handle_key(GameKey::Left);
@@ -946,7 +962,7 @@ fn a_stack_encounter_shows_a_depth_row_and_a_field_one_does_not() {
     assert_eq!(
         app.arena.as_ref().unwrap().scenario.encounter,
         Some(Encounter::Stack {
-            biome: Biome::Deadlock,
+            biome: seeded,
             depth: 1,
         }),
         "depth floors at 1, and the biome beside it is untouched"
@@ -964,13 +980,14 @@ fn a_lair_encounter_carries_its_biome_over_and_nudges_its_own_depth() {
     let kinds = row_kinds(&app);
     assert!(kinds.contains(&ArenaRowKind::EncounterDepth), "{kinds:?}");
 
+    let seeded = seeded_biome(&app);
     highlight(&mut app, ArenaRowKind::EncounterDepth);
     app.handle_key(GameKey::Right);
     app.handle_key(GameKey::Right);
     assert_eq!(
         app.arena.as_ref().unwrap().scenario.encounter,
         Some(Encounter::Lair {
-            biome: Biome::Deadlock,
+            biome: seeded,
             depth: 3,
         }),
         "the biome survives the step onto Lair and the depth dial moves"

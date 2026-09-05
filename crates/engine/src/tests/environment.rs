@@ -23,7 +23,7 @@ fn for_biome_claims_the_three_ground_conditions() {
         Some(GroundCondition::DanglingReads)
     );
     assert_eq!(
-        GroundCondition::for_biome(Biome::Mainframe),
+        GroundCondition::for_biome(Biome::Backplane),
         Some(GroundCondition::ThermalLoad)
     );
     assert_eq!(
@@ -295,7 +295,7 @@ fn attrition_never_touches_the_party() {
 /// "simplifying" the hook into a direct write to `Stats::hp`.
 #[test]
 fn a_mitigation_buff_reduces_the_bite() {
-    let mut game = game_about_to_step(Biome::Mainframe);
+    let mut game = game_about_to_step(Biome::Backplane);
     let player = game.player_entity();
     {
         let mut stats = game.world.get_mut::<Stats>(player).unwrap();
@@ -303,7 +303,7 @@ fn a_mitigation_buff_reduces_the_bite() {
         stats.hp = 400;
     }
     let unmitigated = {
-        let mut probe = game_about_to_step(Biome::Mainframe);
+        let mut probe = game_about_to_step(Biome::Backplane);
         let p = probe.player_entity();
         {
             let mut stats = probe.world.get_mut::<Stats>(p).unwrap();
@@ -563,7 +563,7 @@ fn every_claimed_biome_is_one_classify_can_produce() {
     let producible = [
         Biome::Deadlock,
         Biome::NullSector,
-        Biome::Mainframe,
+        Biome::Backplane,
         Biome::OpenGrid,
     ];
     for event in StaticEvent::all() {
@@ -660,7 +660,7 @@ fn static_at_draws_no_game_rng() {
     reseed_rng(&mut game, 4242);
 
     for epoch in 0..100u64 {
-        let _ = game.static_in_epoch(Biome::Mainframe, epoch);
+        let _ = game.static_in_epoch(Biome::Backplane, epoch);
     }
     let _ = game.static_at(Biome::OpenGrid);
 
@@ -682,7 +682,7 @@ fn static_at_survives_a_save_and_load_round_trip() {
     set_tick(&mut game, 40 * STATIC_EPOCH_TICKS + 10);
     let biomes = [
         Biome::NullSector,
-        Biome::Mainframe,
+        Biome::Backplane,
         Biome::OpenGrid,
         Biome::Deadlock,
     ];
@@ -704,7 +704,7 @@ fn static_at_survives_a_save_and_load_round_trip() {
     );
 }
 
-/// Two biomes whose pools are the **same shape** — Mainframe's `{clear×3,
+/// Two biomes whose pools are the **same shape** — Backplane's `{clear×3,
 /// ThreadStorm}` and Open Grid's `{clear×3, PacketFlood}`, each a single
 /// weight-1 event against `STATIC_CLEAR_WEIGHT`, both a pool of 4 — differing
 /// only in the biome word `static_seed` mixes in, must not answer *live or
@@ -714,7 +714,7 @@ fn static_at_survives_a_save_and_load_round_trip() {
 /// place.
 ///
 /// **Same-shaped pools, not merely different ones**: the original version of
-/// this test compared Null Sector against Mainframe, whose pools are `{clear
+/// this test compared Null Sector against Backplane, whose pools are `{clear
 /// ×3, LeakingMemory, SignalNoise}` (total 5) against `{clear×3,
 /// ThreadStorm}` (total 4). `assert_ne!` held there even with `biome_ord`
 /// deleted from `static_seed` entirely, because a different pool *size*
@@ -722,7 +722,7 @@ fn static_at_survives_a_save_and_load_round_trip() {
 /// two sequences differed for a reason that had nothing to do with the
 /// biome reaching the hash. Comparing which epochs are *live* (`is_some()`)
 /// between two pools of identical size and shape is what isolates the
-/// biome word's own contribution: with it deleted, Mainframe's and Open
+/// biome word's own contribution: with it deleted, Backplane's and Open
 /// Grid's live/clear sequences become bit-identical.
 ///
 /// This does **not** guard `derive::index` against `%`: that reduction's
@@ -736,7 +736,7 @@ fn static_at_survives_a_save_and_load_round_trip() {
 fn adjacent_biomes_decorrelate_across_epochs() {
     let game = fresh_game(503);
     let mainframe_live: Vec<bool> = (0..200u64)
-        .map(|epoch| game.static_in_epoch(Biome::Mainframe, epoch).is_some())
+        .map(|epoch| game.static_in_epoch(Biome::Backplane, epoch).is_some())
         .collect();
     let open_grid_live: Vec<bool> = (0..200u64)
         .map(|epoch| game.static_in_epoch(Biome::OpenGrid, epoch).is_some())
@@ -927,7 +927,7 @@ fn environment_biome_at_refuses_zone_one_and_platform() {
 }
 
 /// A single ambush attempt on a fresh, independently seeded fixture: builds
-/// the game, stamps the player's own tile as `Mainframe`, sets the clock to
+/// the game, stamps the player's own tile as `Backplane`, sets the clock to
 /// `tick`, reseeds `GameRng` to `rng_seed`, then reports whether that one
 /// `maybe_ambush` call started a battle. Independent games rather than one
 /// game looped, so a battle starting on one trial never blocks the next.
@@ -940,7 +940,7 @@ fn ambush_fires(seed: u32, rng_seed: u64, tick: u64) -> bool {
         pos.x,
         pos.y,
         Tile {
-            biome: Biome::Mainframe,
+            biome: Biome::Backplane,
             walkable: true,
             rock_shade: None,
         },
@@ -952,7 +952,7 @@ fn ambush_fires(seed: u32, rng_seed: u64, tick: u64) -> bool {
 }
 
 /// The multiplier reaches the roll, not just the number on `Terrain`: the
-/// same 400 seeded trials, once with Mainframe's epoch forced to
+/// same 400 seeded trials, once with Backplane's epoch forced to
 /// `ThreadStorm` and once forced clear, must ambush more often live than
 /// clear. Asserted as a **difference**, never an absolute rate — an
 /// absolute is a seed-luck test that fails the day an unrelated change
@@ -964,11 +964,11 @@ fn ambush_multiplier_reaches_the_roll() {
     let mut probe = fresh_game(seed);
     probe.world.resource_mut::<ZoneLevel>().0 = 2;
     let live_epoch = (0..2000u64)
-        .find(|&e| probe.static_in_epoch(Biome::Mainframe, e) == Some(StaticEvent::ThreadStorm))
-        .expect("ThreadStorm must be reachable in Mainframe's pool");
+        .find(|&e| probe.static_in_epoch(Biome::Backplane, e) == Some(StaticEvent::ThreadStorm))
+        .expect("ThreadStorm must be reachable in Backplane's pool");
     let clear_epoch = (0..2000u64)
-        .find(|&e| probe.static_in_epoch(Biome::Mainframe, e).is_none())
-        .expect("clear must be reachable in Mainframe's pool");
+        .find(|&e| probe.static_in_epoch(Biome::Backplane, e).is_none())
+        .expect("clear must be reachable in Backplane's pool");
 
     let trials = 400u64;
     let live_hits = (0..trials)

@@ -35,6 +35,7 @@ fn app_at_a_market(credits: u32) -> App {
             entrance: data.player.position,
             depth: 1,
             frames: 2,
+            tier: 1,
         };
         let frame = generate(spec);
         let stall = (0..frame.height)

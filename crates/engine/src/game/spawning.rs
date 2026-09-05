@@ -6,8 +6,8 @@ use crate::resources::PopulatedChunks;
 use crate::tuning::{
     BOSS_SPAWN_CHANCE, DANGER_RAMP_TILES, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_DURABILITY,
     NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN, NEST_SPAWN_CHANCE, NEST_TETHER_RADIUS,
-    OPENING_RING_TILES, PACK_GATHER_RADIUS, POPULATION_CHUNK_MARGIN, WILD_CREATURE_CAP,
-    ZONE_GROUP_STEP, ZONE_ONE_GROUP_CAP, ZONE_STAT_STEP, chunk_wild_population,
+    OPENING_RING_TILES, PACK_GATHER_RADIUS, POPULATION_CHUNK_MARGIN, SETTLEMENT_SITE_SEARCH_TILES,
+    WILD_CREATURE_CAP, ZONE_GROUP_STEP, ZONE_ONE_GROUP_CAP, ZONE_STAT_STEP, chunk_wild_population,
 };
 use crate::tuning::{
     GOLD_SPAWN_CHANCE, GROUP_SIZE_DISTANCE_GROWTH, GROUP_SIZE_STEP_FRAMES, GROUP_SIZE_STEP_ZONES,
@@ -816,6 +816,57 @@ impl Game {
     /// is meant to keep living while they are below, which is the same rule
     /// `Trace`'s group-size lever states about surface spawns continuing to
     /// roll underground.
+    /// Despawns the wild programs standing on the ground a breach is about
+    /// to re-stock — every `Hostile` inside `POPULATION_CHUNK_MARGIN` of the
+    /// player's chunk that is not a nest's own guardian.
+    ///
+    /// **Clearing `PopulatedChunks` is not enough on its own, and that is
+    /// the whole reason this exists.** `populate_chunk` gates every
+    /// placement on `local_hostile_count` being under
+    /// `WILD_LOCAL_DENSITY_TARGET`, and that count includes the survivors —
+    /// so on ground the party has already worked, a breach would place only
+    /// what fits in the gaps and the old tier's programs would stand there
+    /// for the rest of the run. Nothing else removes them: `cull_to_cap`
+    /// evicts whole chunks *outside* the margin, which is exactly the ground
+    /// this covers the complement of.
+    ///
+    /// **Two kinds of wild are kept, and the rule is the same one twice: an
+    /// anonymous body is stock, and a named one is not.**
+    ///
+    /// - A `NestGuardian` belongs to a place. Its tier re-rolls when the
+    ///   nest is cleared and respawns, the same way the nest's own contents
+    ///   do; despawning it here would leave a nest with no body standing
+    ///   over it until the respawn timer came round.
+    /// - A `Nemesis` is a program that beat you and that the world is meant
+    ///   to remember. Clearing it is the grudge being forgotten by the
+    ///   breach, which is precisely what the persistent world exists to
+    ///   stop.
+    ///
+    /// Neither exception is held by the compiler. Both have a test.
+    pub(crate) fn clear_local_wild(&mut self) {
+        let pos = *self.world.get::<Position>(self.player_entity()).unwrap();
+        let (px, py) = (pos.x.div_euclid(CHUNK_SIZE), pos.y.div_euclid(CHUNK_SIZE));
+        let doomed: Vec<Entity> = {
+            let mut query = self
+                .world
+                .query_filtered::<
+                    (Entity, &Position),
+                    (With<Hostile>, Without<NestGuardian>, Without<Nemesis>),
+                >();
+            query
+                .iter(&self.world)
+                .filter(|(_, p)| {
+                    (p.x.div_euclid(CHUNK_SIZE) - px).abs() <= POPULATION_CHUNK_MARGIN
+                        && (p.y.div_euclid(CHUNK_SIZE) - py).abs() <= POPULATION_CHUNK_MARGIN
+                })
+                .map(|(e, _)| e)
+                .collect()
+        };
+        for e in doomed {
+            self.world.despawn(e);
+        }
+    }
+
     pub(crate) fn ensure_local_population(&mut self) {
         let pos = *self.world.get::<Position>(self.player_entity()).unwrap();
         let (px, py) = (pos.x.div_euclid(CHUNK_SIZE), pos.y.div_euclid(CHUNK_SIZE));
@@ -832,6 +883,173 @@ impl Game {
                 self.populate_chunk(cx, cy);
             }
         }
+    }
+
+    /// Materializes any settlement whose region the party has reached.
+    ///
+    /// `ensure_local_population`'s shape, and deliberately so — but the two
+    /// mean different things by "already done". A populated chunk is a mark
+    /// that can be *forgotten*: `cull_to_cap` evicts whole chunks so walking
+    /// back finds different programs. A settlement is a place, so its record
+    /// is permanent, and the check below is whether this region is known
+    /// rather than whether it has been visited.
+    ///
+    /// Makes no claim about where the party is beyond which regions are near
+    /// them, so it needs no `require_surface` guard for the reason
+    /// `ensure_local_population` states: it stocks ground, and the surface
+    /// keeps existing while the party is below.
+    pub(crate) fn ensure_local_settlements(&mut self) {
+        let pos = *self.world.get::<Position>(self.player_entity()).unwrap();
+        let here = crate::settlements::placement::region_of(pos.x, pos.y);
+        let seed = self.world.resource::<WorldMap>().seed();
+        for ry in (here.ry - 1)..=(here.ry + 1) {
+            for rx in (here.rx - 1)..=(here.rx + 1) {
+                let key = crate::settlements::SettlementKey { rx, ry };
+                if self
+                    .world
+                    .resource::<crate::resources::Settlements>()
+                    .0
+                    .contains_key(&key)
+                {
+                    continue;
+                }
+                let Some(placed) = crate::settlements::settlement_at(
+                    seed,
+                    self.world.resource::<crate::settlements::SettlementDb>(),
+                    key,
+                ) else {
+                    continue;
+                };
+                let Some(def) = self
+                    .world
+                    .resource::<crate::settlements::SettlementDb>()
+                    .get(&placed.def_id)
+                    .cloned()
+                else {
+                    continue;
+                };
+                let Some(tile) = self.standable_near(placed.cell) else {
+                    // No ground it could stand on inside its own region.
+                    // Left unrecorded rather than marked empty, so a region
+                    // is not written off on the strength of one walk.
+                    continue;
+                };
+                self.world
+                    .resource_mut::<crate::resources::Settlements>()
+                    .0
+                    .insert(
+                        key,
+                        crate::resources::KnownSettlement {
+                            tile,
+                            def: def.clone(),
+                        },
+                    );
+                self.spawn_settlement_at(key, def.kind, tile);
+            }
+        }
+    }
+
+    /// Finds a settlement at `(x, y)`, if any — checked in `move_player`
+    /// after the surface-link arm, so walking onto a town's tile queues a
+    /// visit instead of just bumping into a blocking glyph.
+    ///
+    /// `Game::find_surface_link_at`'s shape exactly, one field over: the
+    /// settlement's own `Position` and `Settlement` components, no `Entity`
+    /// in the query and no filter type. An `Entity` is not what a caller
+    /// wants here — the key is the thing every other door onto a settlement
+    /// (`entity_label`, `settlement_report`) already indexes by, and it is
+    /// what survives a save where the entity would not.
+    pub(crate) fn find_settlement_at(
+        &mut self,
+        x: i32,
+        y: i32,
+    ) -> Option<crate::settlements::SettlementKey> {
+        let mut query = self
+            .world
+            .query_filtered::<(&Position, &crate::components::Settlement), ()>();
+        query
+            .iter(&self.world)
+            .find(|(p, _)| p.x == x && p.y == y)
+            .map(|(_, s)| s.key)
+    }
+
+    /// Drains the settlement visit `move_player`'s door arm queued, if any
+    /// — `Game::take_effects`/`take_transits`' shape: answers `Some` once
+    /// and `None` on every call after.
+    ///
+    /// The drain is load-bearing and not incidental. A plain getter would
+    /// pass every other test this feature has, but leaves app-core with no
+    /// way to tell "the player just bumped this tile" from "the player is
+    /// still standing here" — so the screen it opens would reopen on the
+    /// very next keypress spent walking away, and the tile would read as a
+    /// wall the player can never leave.
+    pub fn take_settlement_visit(&mut self) -> Option<crate::settlements::SettlementKey> {
+        self.world
+            .resource_mut::<crate::resources::PendingVisit>()
+            .0
+            .take()
+    }
+
+    /// Rebuilds the map entity for every settlement a save already knew.
+    ///
+    /// `restore_surface_links`'s counterpart, and the same division: the
+    /// record is what persists, the entity is the drawable half and is
+    /// rebuilt from it. Taking the tile and the kind off the record rather
+    /// than re-deriving them is what makes a catalogue edited between
+    /// sessions unable to move a town the party has already walked to.
+    pub(crate) fn restore_settlements(&mut self, known: crate::resources::Settlements) {
+        for (key, settlement) in &known.0 {
+            self.spawn_settlement_at(*key, settlement.def.kind, settlement.tile);
+        }
+        self.world.insert_resource(known);
+    }
+
+    /// The nearest tile to `from` a settlement could stand on, searched
+    /// outward in rings.
+    ///
+    /// Deterministic: the map is permanent and a pure function of the seed,
+    /// so this answers the same thing every time it is asked. The answer is
+    /// recorded anyway — see `resources::KnownSettlement::tile`.
+    fn standable_near(&mut self, from: (i32, i32)) -> Option<(i32, i32)> {
+        for band in 0i32..SETTLEMENT_SITE_SEARCH_TILES {
+            for dy in -band..=band {
+                for dx in -band..=band {
+                    if band > 0 && dx.abs() != band && dy.abs() != band {
+                        continue;
+                    }
+                    let (x, y) = (from.0 + dx, from.1 + dy);
+                    if self.world.resource_mut::<WorldMap>().tile(x, y).walkable {
+                        return Some((x, y));
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn spawn_settlement_at(
+        &mut self,
+        key: crate::settlements::SettlementKey,
+        kind: crate::settlements::SettlementKind,
+        (x, y): (i32, i32),
+    ) {
+        // `GlyphColor::Yellow` was `palette::WARN` and, worse, the authored
+        // colour of the Scrapper — a settlement and a scrapper nest were the
+        // same hue on the same map. `Orange` is the one variant no species
+        // authors: every hue a species declares is reachable on the surface
+        // (a nest takes its guardian's colour), which makes "unclaimed"
+        // mean unclaimed by a species rather than unclaimed outright, and
+        // Orange's only other uses are base space's `BuildSite` glyph and
+        // three base structures — a coordinate space that can never share a
+        // tile with a town.
+        self.world.spawn((
+            crate::components::Settlement { key },
+            Position { x, y },
+            Glyph {
+                ch: kind.glyph(),
+                color: GlyphColor::Orange,
+            },
+        ));
     }
 
     /// Places one chunk's worth of wild programs inside chunk `(cx, cy)`.

@@ -1205,8 +1205,10 @@ pub struct BuybackLedger(pub BTreeMap<ShelfKey, Vec<(GearCopy, u32)>>);
 /// shop the party can walk to, and a caravan's whole shape is that it cannot
 /// be walked back to.
 ///
-/// Zone-local, and so wiped **by name** in `Game::enter_next_zone` beside
-/// `BuybackLedger` and `StackMemory`.
+/// Survives a breach, along with the wagon it remembers. It was wiped by
+/// name in `Game::enter_next_zone` while a breach rebuilt the world, since
+/// a caravan's journey is defined against an anchor tile in a sector that
+/// was about to stop existing — the sector does not stop existing now.
 #[derive(Resource, Default, Clone, Debug, PartialEq, Eq)]
 pub struct CaravanMemory {
     /// The visit this memory is about, or `None` before any trader has been
@@ -1508,13 +1510,15 @@ pub struct FrameMemory {
     pub bought: BTreeSet<usize>,
 }
 
-/// Everything the party has learned about every Stack frame in this zone.
+/// Everything the party has learned about every Stack frame at this tier.
 ///
-/// Zone-local, and **not** self-clearing: like `BuybackLedger` this has to
-/// be wiped by name in `Game::enter_next_zone`, because breaching does not
-/// despawn what a zone accumulated. Left behind, a stale entry would draw
-/// the previous sector's walked corridors onto a new sector's map at
-/// whatever tile happened to collide.
+/// **Not** self-clearing: it is wiped by name in `Game::enter_next_zone`,
+/// and the reason changed when the world became persistent. An entrance
+/// used to be despawned at a breach, so a stale entry would draw the last
+/// sector's walked corridors onto a fresh link that happened to land on a
+/// matching tile. Entrances survive now — but `FrameSpec` folds in the
+/// tier, so the frame behind a surviving entrance is re-carved, and every
+/// record here describes a frame that no longer exists.
 #[derive(Resource, Clone, Default, Debug, Serialize, Deserialize)]
 pub struct StackMemory(pub BTreeMap<FrameKey, FrameMemory>);
 
@@ -1534,11 +1538,60 @@ pub struct StackMemory(pub BTreeMap<FrameKey, FrameMemory>);
 /// `BTreeMap`: this is serialized, and a hash set would make the save
 /// encoding differ between runs holding identical state.
 ///
-/// Zone-local, like `BuybackLedger` and `StackMemory`, and so has to be
-/// wiped **by name** in `Game::enter_next_zone` — a mark left behind would
-/// tell the new sector that ground it has never populated is already full.
+/// Wiped **by name** in `Game::enter_next_zone`, and that line is the
+/// mechanism rather than a leftover: clearing the marks sends
+/// `Game::ensure_local_population` back over ground it has already covered
+/// to re-stock it at the new tier, which is the whole visible effect of a
+/// breach now that the map is never rebuilt.
 #[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct PopulatedChunks(pub BTreeSet<(i32, i32)>);
+
+/// Every settlement the party has reached, keyed by its region.
+///
+/// **Keyed by `SettlementKey`, not by `Entity`** — `party_slot`'s reason,
+/// one level out: entity ids are not stable across a save, and a region's
+/// coordinates are the one name for this place that cannot drift.
+///
+/// **Stores the whole resolved `SettlementDef`**, following `ActiveContract`
+/// and `SortieSave`. A catalogue file edited or deleted mid-run must not
+/// strand or rewrite a town the party has already walked to and, from Phase
+/// 4, earned standing with — the derivation says which entry *would* stand
+/// in a region, and this says which one does.
+///
+/// A `BTreeMap` rather than a `HashMap` for the reason `Stock` keys by one:
+/// this is serialized, and a hash map would make the save encoding differ
+/// between runs holding identical state.
+#[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct Settlements(pub BTreeMap<crate::settlements::SettlementKey, KnownSettlement>);
+
+/// A settlement that has been materialized onto the map.
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct KnownSettlement {
+    /// The tile it actually stands on.
+    ///
+    /// Recorded rather than re-derived. `settlement_at` answers with a
+    /// *candidate* cell — the derivation cannot see the ground — and
+    /// materialization walks out from it for somewhere standable. That walk
+    /// is deterministic, since the map is permanent and itself a pure
+    /// function of the seed, but recording the answer means a later change
+    /// to how the walk breaks ties cannot move a town the party already
+    /// knows.
+    pub tile: (i32, i32),
+    pub def: crate::settlements::SettlementDef,
+}
+
+/// The settlement the player's last step bumped into, waiting for a
+/// frontend to open its screen.
+///
+/// Deliberately not serialized, `CurrentStack`'s reason: this is a cue about
+/// *this instant*, not a fact about the world, and a save that restored one
+/// would reopen a screen the moment the file loaded rather than on the step
+/// that actually asked for it. `Game::take_settlement_visit` is the one
+/// door that reads it, and reading it clears it — `EffectQueue`/
+/// `TransitQueue`'s shape — so a keypress the player spends walking away
+/// from the tile does not find the screen reopening under it.
+#[derive(Resource, Default)]
+pub struct PendingVisit(pub Option<crate::settlements::SettlementKey>);
 
 /// The frame the player is currently standing in, or `None` on the surface.
 ///

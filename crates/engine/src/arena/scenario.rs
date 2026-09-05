@@ -452,14 +452,14 @@ mod tests {
         let s = Scenario::from_ron(
             r#"(
                 player: Fresh(level: 3, zone: 1),
-                encounter: Some(Field(biome: Mainframe)),
+                encounter: Some(Field(biome: Backplane)),
             )"#,
         )
         .unwrap();
         assert_eq!(
             s.encounter,
             Some(Encounter::Field {
-                biome: Biome::Mainframe
+                biome: Biome::Backplane
             })
         );
         assert!(s.opponents.is_empty());
@@ -494,7 +494,7 @@ mod tests {
     fn an_encounter_beside_opponents_is_an_err_naming_both() {
         let err = Scenario::from_ron(
             r#"(
-                encounter: Some(Field(biome: Mainframe)),
+                encounter: Some(Field(biome: Backplane)),
                 opponents: [(species: "glitch", count: 1)],
             )"#,
         )

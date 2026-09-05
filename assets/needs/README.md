@@ -9,7 +9,7 @@ a broken def costs the game that one need and nothing else.
 nothing is seeded, nothing drains, no program ever leaves a post and every
 program's need strain reads zero — exactly the pre-needs game. That is the
 same supported way to play that deleting `assets/memories/` or
-`assets/sectors/` is.
+`assets/settlements/` is.
 
 ## What a need is
 

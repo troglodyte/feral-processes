@@ -155,7 +155,7 @@ mod tests {
         let groups = roll(
             &mut game,
             &Encounter::Field {
-                biome: Biome::Mainframe,
+                biome: Biome::Backplane,
             },
         )
         .unwrap();
@@ -167,16 +167,16 @@ mod tests {
         // anything this module decides.
         let db = game.world.resource::<SpeciesDb>();
         let resident: Vec<String> = db
-            .habitat_matches(Biome::Mainframe)
+            .habitat_matches(Biome::Backplane)
             .into_iter()
-            .chain(db.boss_habitat_matches(Biome::Mainframe))
+            .chain(db.boss_habitat_matches(Biome::Backplane))
             .map(|d| d.id.clone())
             .collect();
         assert!(!groups.is_empty());
         for group in &groups {
             assert!(
                 resident.contains(&group.species),
-                "`{}` does not live on Mainframe: {resident:?}",
+                "`{}` does not live on Backplane: {resident:?}",
                 group.species
             );
         }
@@ -249,7 +249,7 @@ mod tests {
                 .count()
         };
 
-        let biome = Biome::Mainframe;
+        let biome = Biome::Backplane;
         assert_eq!(
             boss_count(Encounter::Lair { biome, depth: 4 }),
             1,
@@ -268,7 +268,7 @@ mod tests {
         let groups = roll(
             &mut game,
             &Encounter::Lair {
-                biome: Biome::Mainframe,
+                biome: Biome::Backplane,
                 depth: 4,
             },
         )

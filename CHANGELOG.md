@@ -33,7 +33,7 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
-## Unreleased
+## 0.13.98
 
 **Towns post their own work.** Every settlement now keeps a job board,
 opened with `[J]` from its hub page, drawing on exactly the same contracts

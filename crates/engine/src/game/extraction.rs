@@ -180,9 +180,22 @@ impl Game {
 
     /// What a `Routines` tool could take out of `program`: every routine its
     /// species declares at or below the program's own level, in the species
-    /// file's order, minus anything already known. An exclusive routine is
-    /// never known, so it is always in — and it is the one thing here that
-    /// cannot be got any other way.
+    /// file's order, minus anything already known.
+    ///
+    /// **Exclusive routines are excluded outright.** The tamed door
+    /// (`extract_routine`) may hand one back as a disk because
+    /// `install_disk` consumed a disk to put it on that program in the first
+    /// place — the pop is a return, and the run's copy count never moves.
+    /// Nothing was consumed to put a routine in *this* pool: it is derived
+    /// from `SpeciesDef::abilities`, so two downed programs of one species
+    /// would mint two disks of something the whole exclusive pool exists to
+    /// keep at one. The Reader teaches knowledge; it does not press disks.
+    ///
+    /// Unreachable on shipped assets — no shipped species kit names an
+    /// exclusive routine, and `nothing_a_new_game_ships_with_teaches_an_
+    /// exclusive_routine` censures one appearing — but a census is a promise
+    /// about today's files, and this is the construction that holds for a
+    /// mod's.
     ///
     /// The level gate is `install_innate_routines`' own, read off the same
     /// `SpeciesDef::abilities`: a downed program carries no `Routines`
@@ -205,7 +218,7 @@ impl Game {
             if db.get(&declared.id).is_none() {
                 continue;
             }
-            if self.knows_routine(&declared.id) {
+            if self.knows_routine(&declared.id) || self.routine_is_exclusive(&declared.id) {
                 continue;
             }
             if pool.contains(&declared.id) {

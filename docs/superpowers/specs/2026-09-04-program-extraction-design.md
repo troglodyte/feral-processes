@@ -198,6 +198,26 @@ which owns the effect alone. Each door keeps its own refusals: the tamed one
 requires an extraction bench and checks ownership, the tool one requires
 neither, because decision 7 forbids the structure being a gate.
 
+**Amended 2026-09-05: "verified safe" above is wrong, and the shipped code
+does something else.** The one-copy invariant never rested on
+`routine_is_exclusive`'s inputs. It rests on a disk having been *consumed*:
+`install_disk` spends one to put an exclusive routine on a tamed program, so
+`take_routine` popping it back out is a return, and the run's copy count does
+not move. Nothing is spent to put a routine in a *downed* program's pool —
+`Game::routine_candidates` derives it from `SpeciesDef::abilities` — so two
+kills of one species would have pressed two disks of something the exclusive
+pool exists to keep at one. That no shipped species kit names an exclusive
+routine made it unreachable, not safe; `nothing_a_new_game_ships_with_
+teaches_an_exclusive_routine` is a census of today's files, not a
+construction.
+
+What shipped: `routine_candidates` **excludes exclusive routines outright**,
+so the Reader teaches knowledge and never mints a disk, and the downed door
+cannot reach `take_routine`'s exclusive branch at all. `take_routine` keeps
+both branches and stays shared — the tamed door still needs the exclusive
+one. `an_exclusive_routine_is_never_in_a_downed_programs_pool` replaced the
+test that asserted the old reading.
+
 ## 5. Sources
 
 | Site | Today | After |
@@ -259,8 +279,10 @@ Engine tests:
   equals the granted one
 - every refusal path spends nothing — asserted **per refusal**, since one
   test over one path passes against the others
-- an exclusive routine extracted from a downed program leaves exactly one
-  copy in the run
+- an exclusive routine is never offered off a downed program at all —
+  **amended 2026-09-05**, see section 4; this read "extracted from a downed
+  program leaves exactly one copy in the run", which the shipped exclusion
+  makes unreachable rather than true
 - `FIGHT_CONDITION_WEIGHT = 0.0` makes condition independent of the killing
   blow
 - a save round-trip preserves a store of programs and a tool loadout (a RON

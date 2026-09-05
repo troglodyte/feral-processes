@@ -2200,25 +2200,43 @@ fn a_routine_tool_teaches_a_routine_and_consumes_the_program() {
     );
 }
 
-/// The invariant the whole exclusive pool rests on, restated for the new
-/// door: an exclusive routine taken off a downed program leaves exactly one
-/// copy in the run — the disk — and teaches nothing.
+/// The invariant the whole exclusive pool rests on, held the only way this
+/// door can hold it: an exclusive routine is never in a downed program's
+/// pool at all.
+///
+/// The tamed door conserves copies because `install_disk` spent a disk to
+/// put the routine on that program, so popping one back is a return. This
+/// pool is derived from `SpeciesDef::abilities` — nothing was spent — so
+/// letting it through would press a fresh disk per kill, and two downed
+/// programs of one species would end the run with two copies of something
+/// there is meant to be one of.
 #[test]
-fn an_exclusive_routine_from_a_downed_program_leaves_exactly_one_copy() {
+fn an_exclusive_routine_is_never_in_a_downed_programs_pool() {
     let mut game = new_test_game();
     let (species, ability) = species_declaring_an_exclusive_routine(&mut game);
     let program = test_program(&species, 30);
+
+    assert!(
+        !game.routine_candidates(&program).contains(&ability),
+        "an exclusive routine is being offered off a downed program"
+    );
+
+    // And the door refuses rather than finding something else to hand over:
+    // the fixture's whole kit is that one exclusive, so an empty pool is the
+    // only honest answer and no disk may exist afterwards.
     give_downed_program(&mut game, program);
     install_routine_tool(&mut game);
     let tool = routine_tool_id(&game);
 
-    game.extract_program(0, &tool).expect("the extraction runs");
+    let refusal = game.extract_program(0, &tool);
 
+    assert!(refusal.is_err(), "it should have refused");
+    assert_eq!(game.downed_program_rows().len(), 1, "the program was spent");
     assert!(!game.knows_routine(&ability), "an exclusive was learned");
     assert_eq!(
         held(&game, &ItemId::etched(&ability)),
-        1,
-        "exactly one disk, no more and no fewer"
+        0,
+        "the reader pressed a disk out of nothing"
     );
 }
 

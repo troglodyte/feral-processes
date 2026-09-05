@@ -597,9 +597,13 @@ impl Game {
     /// **Exclusive routines pop the disk and teach nothing.** That is what
     /// keeps exactly one copy in the run, and it is the reason this function
     /// exists instead of two implementations that agree today.
-    /// `routine_is_exclusive` reads `AbilityDef::exclusive` alone, so nothing
-    /// about the invariant rested on the program having been tamed — spec
-    /// section 4 verified this before the second door was cut.
+    ///
+    /// The pop conserves copies only because a disk was consumed to put the
+    /// routine there — `install_disk`'s spend, which the tamed door's caller
+    /// can rely on and a downed program's cannot. `Game::routine_candidates`
+    /// therefore never offers an exclusive routine at all, rather than
+    /// reaching this branch and minting a second copy of one; see its doc,
+    /// and the spec's amended section 4.
     ///
     /// `&str` rather than `&AbilityId` because that alias is `String`, and
     /// both neighbours a caller has already gone through (`knows_routine`,

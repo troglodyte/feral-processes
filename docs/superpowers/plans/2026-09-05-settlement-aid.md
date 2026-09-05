@@ -15,7 +15,7 @@ variant**. One additive save field.
 **Tech Stack:** Rust, `bevy_ecs` 0.19, three of the four workspace crates
 (`engine`, `app-core`, `gui`).
 
-**Spec:** `docs/superpowers/specs/2026-09-05-settlement-aid-design.md` — read it
+**Spec:** `docs/superpowers/archive/specs/2026-09-05-settlement-aid-design.md` — read it
 first; this plan argues from it and does not restate its decisions.
 
 **Branch:** `feat/settlement-aid`, already created, with the spec committed.

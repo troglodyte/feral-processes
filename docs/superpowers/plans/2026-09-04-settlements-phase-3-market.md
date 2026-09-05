@@ -3,7 +3,7 @@
 A settlement gets a shelf you can buy from and sell to, and the commit
 door the caravan already owns becomes the door both of them use.
 
-Spec: `docs/superpowers/specs/2026-09-04-settlements-design.md`, Phase 3.
+Spec: `docs/superpowers/archive/specs/2026-09-04-settlements-design.md`, Phase 3.
 Read it, then `CLAUDE.md`, then invoke the `seams` skill and read
 **`references/items.md`** — every trap in this plan comes from there.
 

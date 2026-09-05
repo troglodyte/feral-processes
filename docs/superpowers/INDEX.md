@@ -6,7 +6,7 @@ one-read answer to "did this ship, and where is its argument".
 
 ## The invariant
 
-**`archive/specs/` is implemented. `specs/` is not.** Ninety-seven specs are
+**`archive/specs/` is implemented. `specs/` is not.** Ninety-nine specs are
 archived and every one of them shipped; the ones left in `specs/` are open,
 parked, partial or superseded, and each says which in its own header. Sorting
 the directory *is* the answer, so no sweep is needed next time.
@@ -14,7 +14,8 @@ the directory *is* the answer, so no sweep is needed next time.
 Two independent checks agree on the ninety-five audited on 2026-09-02; the
 ninety-sixth, `2026-09-02-base-instrumentation-design`, shipped in `v0.13.84`
 and was archived on landing rather than by a later sweep — which is the
-cheaper habit and the one to keep.
+cheaper habit and the one to keep. The two settlement specs were archived the
+same way on 2026-09-05.
 
 The checks: a distinctive symbol from
 each spec resolves in `crates/` or `assets/`, and the commit that added each
@@ -24,8 +25,6 @@ spec resolves to a release tag.
 
 | Spec | State | Evidence |
 | --- | --- | --- |
-| `2026-09-05-settlement-aid-design` | **built**, unmerged, unplayed | on `feat/settlement-aid` with `plans/2026-09-05-settlement-aid.md`; move to `archive/specs/` when it lands |
-| `2026-09-04-settlements-design` | **all six phases shipped** | Phase 6 (caravan routes) landed 2026-09-05 with `plans/2026-09-05-settlements-phase-6-routes.md`; sorties got their first UI with it |
 | `2026-09-02-combat-model-slice-2-design` | **built**, unplayed | a second swing for Strikers from level 8; `balance_sim` cannot gate it |
 | `2026-08-31-stack-wanderers-design` | approved, **unbuilt** | `FrameWanderers` exists nowhere in `crates/` |
 | `2026-08-24-rest-interruption-design` | never approved, **unbuilt** | `Game::rest_interrupted` does not exist |
@@ -37,6 +36,12 @@ spec resolves to a release tag.
 | `2026-08-19-combat-model-ac-and-weapon-damage-design` | **partial** | slice 1 shipped; slices 2-4 deliberately deferred |
 | `2026-08-13-creeping-base-footprint-design` | **superseded** | `build_radius_bonus` / `clear_platform` survive only in doc comments recording their retirement |
 | `2026-08-22-collect-picker-design` | **superseded** | `collect_basket` absent; `Mode::Transfer` shipped instead |
+
+**Settlements are archived with deferred work behind them, and that is not a
+contradiction.** Both specs shipped everything they scoped; town-sourced
+raids, hostile patrols and a server growing into a mainframe were deferred *by
+decision* and are recorded as such in the two archived specs, not carried here
+as open rows. A future spec claims them.
 
 `docs/content-gaps.md` holds built-but-unused engine mechanics, which is a
 different question and not this file's job. **`TODO.md` no longer exists** —

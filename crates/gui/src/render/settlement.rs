@@ -73,7 +73,7 @@ pub(super) fn settlement_page_rows(view: &SettlementView) -> Vec<Row> {
     // Uppercase — `lowercase-letters-are-row-selectors`'s rule — even though
     // this page has no rows to select, since a modder's free-text blurb
     // could otherwise collide with a lowercase key.
-    rows.push(text_row("[M] Market  ·  Esc to go back"));
+    rows.push(text_row("[M] Market  ·  [J] Jobs  ·  Esc to go back"));
     rows
 }
 

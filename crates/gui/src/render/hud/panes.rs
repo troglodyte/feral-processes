@@ -771,6 +771,8 @@ mod tests {
     /// census measures the worst case rather than a convenient one.
     fn contract(name: &str, objective: &str, progress: u32, target: u32) -> ContractRow {
         ContractRow {
+            issuer: None,
+            issuer_name: None,
             id: feral_processes_engine::contracts::ContractId::from(name),
             name: name.to_string(),
             description: String::new(),

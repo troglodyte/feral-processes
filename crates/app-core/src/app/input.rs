@@ -232,6 +232,7 @@ impl App {
             Mode::CellDescribe => self.handle_cell_describe_key(key),
             Mode::Settlement => self.handle_settlement_key(key),
             Mode::SettlementMarket => self.handle_settlement_market_key(key),
+            Mode::SettlementBoard => self.handle_settlement_board_key(key),
             Mode::Notification => self.handle_notification_key(key),
             Mode::Manifest => self.handle_manifest_key(key),
             Mode::ManifestPick => self.handle_manifest_pick_key(key),

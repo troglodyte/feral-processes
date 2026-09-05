@@ -3440,7 +3440,7 @@ pub const SETTLEMENT_STACK_COLLAPSED_STANDING: i32 = 8;
 /// and from the Broker's board (`CONTRACT_BOARD_SALT`). All three fold the
 /// world seed and an epoch, so without three salts a town's board and its
 /// shelf would rotate in lockstep off one number.
-pub const SETTLEMENT_BOARD_SALT: u64 = 0x5E77_1E_B0A7_D001;
+pub const SETTLEMENT_BOARD_SALT: u64 = 0x005E_771E_B0A7_D001;
 
 /// How many cycles a town's board stands before it re-derives. Slower than
 /// the Broker's `CONTRACT_REFRESH_CYCLES` because a town is a place you walk

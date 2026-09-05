@@ -238,3 +238,42 @@
   measured.
 - **Engine test fixtures live in `crates/engine/src/tests/support.rs`.** Look
   there before writing a new one.
+
+- **A contract is delivered where it was signed, and
+  `ActiveContract::issuer` is the whole of it.** `None` is the run's own
+  Broker; `Some(key)` the town that posted the job. One value answers whose
+  board it came off, where it may be handed over, whose standing its
+  completion moves and which held rows a town's screen lists. The rule is
+  one clause inside `deliver_to_contract`'s existing find (`held.issuer ==
+  at`) and deliberately **not** a new `ContractRefusal` variant — a town's
+  job is simply not one of the Broker's held deliveries, which is what
+  `NotOffered` already means. **The trap is that the two reaches are
+  mutually exclusive by construction**: `settlement_reach` is false in base
+  space and `broker_reach` answers `AtBroker` only there, so a test standing
+  in one place proves nothing about the refusal being the *issuer*'s rather
+  than the reach's. `a_job_is_delivered_where_it_was_signed` stands at both
+  counters in turn. Additive behind `#[serde(default)]`, so no version bump
+  — a pre-Phase-5 save loads its held contracts as the Broker's, which is
+  what they were.
+- **A town's board is `board_defs` with four things changed**, sharing the
+  pool, the roll, the two-tier draw and the `swap_remove` stream: the reach
+  that gates it (`settlement_reach`, one call, where `broker_reach` splits
+  the two questions), the seed, the slot count and which tier goes first.
+  **The two seed folds are different lengths and neither is padded to
+  match** — a trailing zero word on the Broker's arm reshuffles every board
+  in every existing save for nothing. A town folds its region coordinates,
+  its own salt and its own slower epoch, because a board that had rotated by
+  the time you walked there is unplannable. Slots come from
+  `Standing::job_slots`, the second named query on the band and the first
+  consequence of standing that is not a number on a receipt. The first tier
+  is the town's `Specialty` where the Broker's is the `starter` queue, and
+  **both are rankings and never filters**, so a board whose pool speaks to
+  nobody still fills every slot it has — `Specialty::of_objective` is
+  exhaustive on `Objective`, not on `Specialty`, which is the direction that
+  makes a sixth objective kind say whose business it is. Two omissions carry
+  weight: a town never posts an onboarding mission (`ensure_tutorial_held`
+  would hand it straight back out), and a Hostile town answers
+  `Some(vec![])` rather than `None`, `settlement_view`'s rule. The screen is
+  one section taller than the Broker's and **has no absolute height gate** —
+  `draw_contracts` has never had one either; what is held is the delta, the
+  contracts screen's chrome plus exactly a three-row header.

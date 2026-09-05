@@ -345,7 +345,10 @@ fn handing_a_towns_job_back_costs_standing() {
     assert!(game.abandon_contract(&id));
 
     assert_eq!(game.standing(key), before + SETTLEMENT_ABANDON_STANDING);
-    assert!(SETTLEMENT_ABANDON_STANDING < 0);
+    assert!(
+        game.standing(key) < before,
+        "handing a job back has to cost something"
+    );
 }
 
 /// The whole rule of the delivery half: a job is delivered where it was

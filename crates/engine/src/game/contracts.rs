@@ -576,6 +576,7 @@ impl Game {
     /// board carries defs at all: a rolled contract has no `ContractDb`
     /// entry, so a test that wants to read one's `Objective` back cannot
     /// look it up by id.
+    #[cfg(test)]
     pub(crate) fn settlement_board_defs_for_test(
         &mut self,
         key: crate::settlements::SettlementKey,

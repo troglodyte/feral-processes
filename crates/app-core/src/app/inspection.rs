@@ -166,6 +166,22 @@ impl App {
                 self.settlement_amounts.clear();
                 self.mode = Mode::SettlementMarket;
             }
+            // `[J]` for jobs, and the same reach check for the same reason:
+            // `Game::settlement_board` answers `None` from across the map,
+            // which the screen would draw as a board with nothing on it.
+            GameKey::Char('J') => {
+                let reachable = self.pending_settlement.is_some_and(|key| {
+                    self.game
+                        .as_mut()
+                        .is_some_and(|game| game.settlement_board(key).is_some())
+                });
+                if !reachable {
+                    self.refuse("You'd have to walk over there to read their board.");
+                    return;
+                }
+                self.menu_selected = 0;
+                self.mode = Mode::SettlementBoard;
+            }
             _ => {}
         }
     }

@@ -402,6 +402,34 @@ pub(crate) fn place_settlement_east_of_player(
     (key, target)
 }
 
+/// `place_settlement_east_of_player`, out of reach — twelve tiles east, so
+/// `Game::settlement_reach` (Chebyshev 1) answers no while `x` still would.
+/// The tile needs no clearing: nothing walks into it.
+pub(crate) fn place_settlement_far_from_player(
+    app: &mut App,
+) -> feral_processes_engine::settlements::SettlementKey {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("settlement_far", 0);
+    let game = app.game.as_mut().unwrap();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    let key = feral_processes_engine::settlements::SettlementKey { rx: 0, ry: 0 };
+    data.settlements.0.insert(
+        key,
+        feral_processes_engine::resources::KnownSettlement {
+            tile: (px + 12, py),
+            def: generic_settlement_def(),
+        },
+    );
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    key
+}
+
 /// `place_settlement_east_of_player`, plus a `Pursuing` nest guardian
 /// standing one tile *north* of the player — for the regression that
 /// `nest_aggro_tick` runs inside the same `tick()` `Game::move_player`'s

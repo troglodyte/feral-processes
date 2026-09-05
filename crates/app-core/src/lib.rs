@@ -1590,6 +1590,18 @@ pub enum Mode {
     /// keeps: `MESSAGE_LOG_CAP` lines, minus the blow-by-blow that
     /// `MessageLog::retain_outcomes_since_battle` drops when a fight ends.
     History,
+    /// Where the run's known destinations lie — the home base, every
+    /// settlement `resources::Settlements` has recorded, and every Stack
+    /// entrance standing on the zone map. Up/Down scroll, Enter points the
+    /// compass at the highlighted row, `X` clears it, Esc closes.
+    ///
+    /// Scrolls rather than capping its rows, `Mode::History`'s shape: towns
+    /// accumulate all run long, and a no-scroll page would eventually hide a
+    /// destination.
+    ///
+    /// Uppercase `X` because lowercase letters are row selectors on any
+    /// screen with rows.
+    Compass,
     /// Every structure in the zone and what is assigned to it — see
     /// `Game::structure_report`. Enter on a workable row staffs it
     /// (`Mode::StructureAssign`); demolishing and upgrading stay on their own
@@ -1817,6 +1829,7 @@ impl Mode {
             | Mode::Research
             | Mode::Contracts
             | Mode::History
+            | Mode::Compass
             | Mode::Structures
             | Mode::StructureAssign
             | Mode::Recipes

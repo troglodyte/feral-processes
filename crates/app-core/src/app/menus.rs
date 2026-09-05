@@ -219,6 +219,41 @@ impl App {
         self.scroll(key, rows);
     }
 
+    /// The destination picker. Scrolls like the history; Enter points the
+    /// compass at the highlighted row and `X` clears it.
+    ///
+    /// The row list is `Game::compass_targets` and nothing else — the same
+    /// call the strip on the zone map reads, so the two cannot disagree
+    /// about where a town is. A selection is never validated here either:
+    /// the derivation drops a target that stopped existing, so a link the
+    /// party collapsed goes blank on its own.
+    pub(crate) fn handle_compass_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.close_screen();
+            return;
+        }
+        let rows = self
+            .game
+            .as_mut()
+            .map(|g| g.compass_targets())
+            .unwrap_or_default();
+        if key == GameKey::Char('X') {
+            if let Some(game) = self.game.as_mut() {
+                game.set_compass_bearing(None);
+            }
+            return;
+        }
+        let Some(idx) = self.selected_index(key, rows.len()) else {
+            return;
+        };
+        let Some(target) = rows.get(idx).map(|r| r.target) else {
+            return;
+        };
+        if let Some(game) = self.game.as_mut() {
+            game.set_compass_bearing(Some(target));
+        }
+    }
+
     /// The structure roster. Scrolls like the history, and Enter staffs the
     /// highlighted structure — see `Mode::Structures` for why this one screen
     /// acts where the other two read-only views don't.

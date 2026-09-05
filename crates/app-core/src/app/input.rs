@@ -280,6 +280,7 @@ impl App {
             Mode::Research => self.handle_research_key(key),
             Mode::Contracts => self.handle_contracts_key(key),
             Mode::History => self.handle_history_key(key),
+            Mode::Compass => self.handle_compass_key(key),
             Mode::Structures => self.handle_structures_key(key),
             Mode::StructureAssign => self.handle_structure_assign_key(key),
             Mode::Recipes => self.handle_recipes_key(key),

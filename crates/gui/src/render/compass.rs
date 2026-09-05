@@ -7,6 +7,20 @@ use feral_processes_engine::settlements::{CompassTarget, SettlementKind};
 use super::popup::*;
 use super::*;
 
+/// What a destination reads as, in one place — the picker's row and the map
+/// strip are the same sentence, and a second formatter is how the two would
+/// come to disagree about a place.
+///
+/// The two tiers land here as they land everywhere else: `distance` is
+/// `None` for exactly the rows whose `label` is a generic noun, so the
+/// short form is not a special case this function decides.
+pub(in crate::render) fn destination_line(row: &CompassRow) -> String {
+    match row.distance {
+        Some(d) => format!("{} · {} · {d}", row.label, row.bearing),
+        None => format!("{} · {}", row.label, row.bearing),
+    }
+}
+
 /// One row per `CompassRow`, in the order the engine hands them over — home,
 /// then settlements, then Stack entrances, each group nearest-first.
 ///
@@ -33,10 +47,7 @@ fn compass_rows(
             } else {
                 ""
             };
-            let text = match row.distance {
-                Some(d) => format!("{} · {} · {d}{mark}", row.label, row.bearing),
-                None => format!("{} · {}{mark}", row.label, row.bearing),
-            };
+            let text = format!("{}{mark}", destination_line(row));
             let (glyph, color) = target_glyph(row.target);
             with_icon(item_row(text, i == highlight), glyph, color)
         })

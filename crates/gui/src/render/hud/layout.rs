@@ -98,6 +98,22 @@ pub(in crate::render) fn strip_inset(m: &Metrics) -> f32 {
     strip_clearance(m) + m.inset
 }
 
+/// The map pane's body — the pane, less the band its bottom-border strip
+/// reaches into.
+///
+/// **Bought unconditionally**, whether or not the compass is pointing at
+/// anything. Buying it only while a target is selected would re-lay the
+/// whole tile grid the instant one was picked, which reads at the keyboard
+/// as a camera fault rather than as a strip appearing. A few pixels of map,
+/// always, in exchange for a viewport that never moves.
+///
+/// The frame itself still takes the *whole* pane: the border is drawn on the
+/// pane's own edges and the strip rides that bottom run, which is the band
+/// this subtracts.
+pub(in crate::render) fn map_body(pane: Rect, m: &Metrics) -> Rect {
+    Rect::new(pane.x, pane.y, pane.w, (pane.h - strip_inset(m)).max(0.0))
+}
+
 /// The five regions, in window pixels.
 ///
 /// `key_bar` overlaps the bottom edge of `log_pane` deliberately: the
@@ -162,11 +178,14 @@ pub(in crate::render) fn regions(
     let log_h = |rows: f32| m.line_height * (rows + LOG_FILTER_ROWS) + strip_inset(m) * 2.0;
     let collapsed_log_h = log_h(LOG_TEXT_ROWS);
     let key_h = m.line_height;
-    // The log pane's vitals ride its *top* border and paint above it, into
-    // the space between the two panes. `m.gap` is narrower than that reach
-    // at every window size, so the breathing space between them is
-    // whichever is larger.
-    let pane_gap = m.gap.max(clearance);
+    // The log pane's vitals ride its *top* border and paint above it, and
+    // the compass strip rides the map pane's *bottom* border and paints
+    // below it — into the same space, from opposite sides. So the gap has to
+    // hold **two** clearances rather than one, or the two quads overlap and
+    // whichever is painted second cuts the other in half. `m.gap` is
+    // narrower than that reach at every window size, so the breathing space
+    // between them is whichever is larger.
+    let pane_gap = m.gap.max(clearance * 2.0);
     let map_h = screen_h - content_top - collapsed_log_h - key_h - pane_gap;
 
     // Pinned at the bottom, so the expanded pane grows upward *over* the
@@ -327,9 +346,11 @@ mod tests {
     /// against the real painted quads; this one pins the arithmetic, so a
     /// separation narrowed back to `m.gap` fails here without a `Painter`.
     ///
-    /// `map_pane`'s bottom border carries nothing at all now, which is why
-    /// this asserts about the log pane's top instead of flipping the sign
-    /// on the old one.
+    /// `map_pane`'s bottom border carries the compass strip, which reaches
+    /// *down* into the same gap this one reaches *up* into — which is why
+    /// `pane_gap` holds two clearances and why this asserts about the log
+    /// pane's top rather than flipping the sign on the old one.
+    /// `base.rs::nothing_paints_over_the_compass_strip` is the other half.
     ///
     /// The collapsed state only, and deliberately: an *expanded* log is an
     /// overlay over the bottom of the map, so its top border is somewhere

@@ -14,6 +14,7 @@ pub use app::building::{BaseStaffRow, StaffAction, StaffRow, Staffing, WorkOrder
 pub use app::canvas_editor::{CanvasFocus, CanvasView};
 pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
+pub use app::dispatch::{RouteCargoBasket, SortieSquadRow};
 pub use app::group_menu::GroupMenuRow;
 pub use app::icon_editor::IconEditorView;
 pub use app::sprite_forge::{

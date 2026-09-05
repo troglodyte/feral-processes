@@ -13,7 +13,9 @@ Moving and living:
 - r — recharge: restores Integrity and Power for you and the programs at your side. A program that
   is not with you is not repaired by it — base staff mend at a Repair Bay, and a squad away on a
   sortie lives on the provisions you paid for at dispatch. Free inside your base; anywhere else it
-  burns a Power Outlet. It takes no time either way.
+  burns a Power Outlet. It takes no time either way. Outside your base it can also be interrupted —
+  something finds you mid-recharge, the Outlet is spent and nothing is restored. Inside your base it
+  never is.
 
 The three menus:
 

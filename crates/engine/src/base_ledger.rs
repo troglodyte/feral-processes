@@ -133,6 +133,12 @@ pub enum LootSource {
     /// A routine disk the player made, by etching a blank or by extracting
     /// one from a program.
     Etch,
+    /// A downed program taken apart with a tool — `Game::extract_program`.
+    /// Distinct from `Kill`: the program already left the fight as its own
+    /// carried object (`items::DownedProgram`), so what a tool draws out of
+    /// it is a second, later event with its own source rather than a late
+    /// arrival of the kill's own loot.
+    Extract,
 }
 
 impl LootSource {
@@ -145,6 +151,7 @@ impl LootSource {
             LootSource::Trade => "trade",
             LootSource::Refund => "refund",
             LootSource::Etch => "etch",
+            LootSource::Extract => "extract",
         }
     }
 }

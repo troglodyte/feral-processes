@@ -382,6 +382,22 @@
   log. A key the engine supports everywhere has to be bound in *both*
   dispatches, and only the Stack arms whose behaviour differs are listed in
   the help page's "In the Stack" sublist.
+- **A charged rest rolls `REST_AMBUSH_CHANCE` for an interrupt, and the roll
+  rides the branch that takes the charge.** That placement — below the
+  payment, above every restore — is the whole feature, and all three of its
+  properties are consequences of it rather than checks. **The trap is adding
+  the locale test it looks like it is missing**: base space is safe because a
+  free rest never reaches the roll, so an `in_base` guard *inside* the roll is
+  either a no-op or, written the other way round, the thing that makes the
+  slab dangerous. The second trap is the refund a reader will want to add —
+  the outlet is spent and nothing is restored *on purpose*, since a refund
+  makes the risk free and the constant meaningless. The third is that a roll
+  which hits but **fields no pack must lapse into an ordinary rest**, or a
+  charge burns for no fight at all, which is the one outcome a player cannot
+  read as anything but a bug. **This is the first roll site that cannot know
+  its locale by construction** — every other spawn path is reached from one
+  kind of movement, so `surface_ambush_pack` and `stack_encounter_pack` are
+  named as a pair and each states its own placement rules once.
 - **A rest repairs the programs standing with the player and nobody else** —
   `InParty` and `Wielded` yes, `Sortie` and `Staff` no. The walk used to be
   over every `Tamed` program the player owned, so a rest four frames down the

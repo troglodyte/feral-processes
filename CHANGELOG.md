@@ -33,6 +33,90 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.95
+
+**Existing saves load, with one deliberate exception.**
+`save::SAVE_FORMAT_VERSION` stays at 32 — both `DownedPrograms` and `Tools`
+are additive behind `#[serde(default)]`. `downed_programs` defaults to
+empty, exactly the pre-extraction game. `tools` does not: a save written
+before this release paid its material income through the kill drop this
+release retires, so an absent `tools` key defaults to the starter tool
+rather than an empty loadout — a migration for a save that predates the
+concept entirely, not a re-grant into one that already made a choice.
+
+- **A defeated wild program is left behind as a downed program you carry,
+  not a pile of raw materials.** Species, level, rarity, boss flag and a
+  rolled condition all travel with it in a new player store,
+  `components::DownedPrograms`, capped at 10; a kill, a nest cache and a
+  boss kill all leave one.
+- **A carried tool strips a downed program down into what it drops.** The
+  new `assets/tools/*.ron` catalogue ships two — `salvage_clamp` (the
+  starter tool, forged into slot 1 at creation) and `core_tap` — each
+  reaching a different category of the program for a different pool of
+  items, at a ticked time cost.
+- **`Mode::DownedPrograms`, opened from the pack, lists what you're
+  carrying and previews exactly what each installed tool would give before
+  you commit to one.** The previewed figure and the granted one can never
+  differ — both read `Game::extraction_yield`, the one derivation.
+- **The starter tool pays a median kill the same as the material drop it
+  replaces.** `SpeciesDef::work_resource`'s old kill-time drop is retired;
+  every shipped species keeps paying what it always did through the new
+  `rich_in` field, which defaults to `work_resource` and needed no
+  authoring pass.
+- **Extraction is deterministic, not a dice roll.** The yield is a
+  weighted apportionment of a fixed unit count, so it spends no RNG and a
+  quoted preview always matches what you actually get.
+
+## 0.13.94
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` is untouched —
+nothing here reaches the save at all.
+
+- **Powering down out in the field can be interrupted.** A charged rest rolls
+  `REST_AMBUSH_CHANCE` once the charge has been taken; on a hit a pack engages,
+  the outlet is spent and nothing is restored.
+- **A free rest inside your base never rolls**, and it is safe by placement
+  rather than by a locale check — the roll rides the branch that takes the
+  charge, so base space cannot lapse into being rollable.
+- **A jumped rest clears nothing**, which is the rule a refused rest already
+  followed: the heal, the Power refill and the field buffs all sit below the
+  roll.
+- **A roll that hits but fields no pack lapses into an ordinary rest**, so a
+  charge is never burnt for no fight at all.
+- **`surface_ambush_pack` is an extraction out of `maybe_ambush`, not a copy.**
+  A rest is the first roll site that cannot know its locale by construction, so
+  the two pack builders are named as a pair and each states its placement rules
+  once.
+- **Three app-core fixtures no longer use a field rest as a one-line map
+  action**, since `r` can now open a battle.
+- **Sprite Forge's test scratch directory no longer races itself.** Keyed on
+  the pid alone it was shared by all 21 sprite-forge tests at once, so a full
+  workspace run failed intermittently on `AlreadyExists` — never when the file
+  was run alone, which is the shape that reads as unrelated.
+
+## 0.13.93
+
+**Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` is untouched —
+nothing here reaches the save at all.
+
+- **A tile's con read is the glyph's own hue again, and the corner earmark is
+  what the tiles that cannot spend that hue pay instead.** No mark small
+  enough to share a cell with four other channels carries a scan as well as
+  the ink in the middle of the cell does.
+- **`ConRead` is the one place that is decided** — `Glyph(rung)`,
+  `Earmark(rung)` or `None`, one value rather than two conditions agreeing at
+  two draw sites, so "never both and never neither" is a property of the type
+  rather than of a convention.
+- **Two tiles cannot spend the hue: one drawn as a sprite, and a boss.** Art
+  is authored near-white precisely so egui's tint multiplies through it, and a
+  boss's magenta is the ink rather than a fifth rung.
+- **The boss's corner mark goes with it**, its census retargeted from "not any
+  other mark" to "not any con rung" — the reading a magenta glyph could
+  actually be mistaken for.
+- **`ConRead::of` takes the sprite call's own answer and never
+  `sprite.is_some()`**, so a name the table has nothing under falls back to a
+  glyph that can still carry the rung.
+
 ## 0.13.92
 
 **Existing saves load unchanged.** `save::SAVE_FORMAT_VERSION` is untouched —

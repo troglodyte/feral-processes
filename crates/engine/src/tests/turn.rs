@@ -1961,3 +1961,170 @@ fn resting_mid_intrusion_says_why_instead_of_nothing() {
 
     assert!(!refusal.is_empty(), "and it is not silence");
 }
+
+// --- Powering down in the field can be interrupted -------------------------
+//
+// The roll sits below the payment and above the restore. Every test here is
+// a consequence of that one placement, so they are written as a group.
+
+/// The charge is spent, the fight is open, and *nothing* was restored. No
+/// refund is the mechanic rather than an oversight — a refund makes the risk
+/// free and `REST_AMBUSH_CHANCE` meaningless.
+#[test]
+fn an_interrupted_field_rest_burns_the_charge_and_restores_nothing() {
+    let game = first_rng_seed_where(
+        |seed| {
+            let mut game = a_hurt_player_holding_one_outlet();
+            reseed_rng(&mut game, seed);
+            game.rest().unwrap();
+            game
+        },
+        |game| game.has_active_battle(),
+    );
+
+    let player = game.player_entity();
+    let stats = *game.world.get::<Stats>(player).unwrap();
+    let reserve = *game.world.get::<PowerReserve>(player).unwrap();
+    assert_eq!(stats.hp, 1, "an interrupted rest must restore no Integrity");
+    assert_eq!(
+        reserve.get(),
+        10.0,
+        "an interrupted rest must restore no Power"
+    );
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::OUTLET)),
+        0,
+        "the charge is spent even though the rest was jumped — there is no refund"
+    );
+}
+
+/// The other side of the same roll: a charged rest that is not interrupted
+/// behaves exactly as it did before this feature existed.
+#[test]
+fn an_uninterrupted_field_rest_still_fully_restores() {
+    let game = first_rng_seed_where(
+        |seed| {
+            let mut game = a_hurt_player_holding_one_outlet();
+            reseed_rng(&mut game, seed);
+            game.rest().unwrap();
+            game
+        },
+        |game| !game.has_active_battle(),
+    );
+
+    let player = game.player_entity();
+    let stats = *game.world.get::<Stats>(player).unwrap();
+    let reserve = *game.world.get::<PowerReserve>(player).unwrap();
+    assert_eq!(stats.hp, stats.max_hp, "a rest that was not jumped heals");
+    assert_eq!(reserve.get(), 100.0, "a rest that was not jumped recharges");
+    assert_eq!(
+        game.world
+            .get::<Inventory>(player)
+            .unwrap()
+            .count(&ItemId::from(ids::OUTLET)),
+        0,
+        "the charge is spent either way"
+    );
+}
+
+/// Base space stays the one safe ground, and it is safe *by placement* — the
+/// roll rides the branch that takes a charge, and a free rest never enters
+/// it. Asserted on the RNG stream rather than on the outcome, because a 0.15
+/// chance passes an outcome test five times in six by luck.
+#[test]
+fn a_free_base_rest_never_rolls_for_an_interrupt() {
+    use rand::SeedableRng;
+
+    let mut game = Game::new(18, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.hp = 1;
+    }
+    stand_in_base_beside_home(&mut game);
+
+    reseed_rng(&mut game, 4242);
+    game.rest().unwrap();
+
+    let next: u64 = game.world.resource_mut::<GameRng>().0.random();
+    let expected: u64 = rand::rngs::StdRng::seed_from_u64(4242).random();
+    assert_eq!(
+        next, expected,
+        "a free base rest must not draw from GameRng at all"
+    );
+}
+
+/// Underground and above ground both roll, and each draws its own kind of
+/// pack. `StackSpawn` is the tag `end_battle` sweeps by, so a Stack interrupt
+/// that fielded a surface pack would leave bodies behind on the way out.
+#[test]
+fn each_locale_draws_its_own_pack_kind_when_a_rest_is_jumped() {
+    let surface = first_rng_seed_where(
+        |seed| {
+            let mut game = a_hurt_player_holding_one_outlet();
+            reseed_rng(&mut game, seed);
+            game.rest().unwrap();
+            game
+        },
+        |game| game.has_active_battle(),
+    );
+    assert!(
+        !any_combatant_is_a_stack_spawn(&surface),
+        "a surface rest must field a surface pack"
+    );
+
+    let underground = first_rng_seed_where(
+        |seed| {
+            let mut game = a_hurt_player_holding_one_outlet();
+            descend(&mut game);
+            reseed_rng(&mut game, seed);
+            game.rest().unwrap();
+            game
+        },
+        |game| game.has_active_battle(),
+    );
+    assert!(
+        any_combatant_is_a_stack_spawn(&underground),
+        "a Stack rest must field a Stack pack, tagged for end_battle to sweep"
+    );
+}
+
+/// A hurt, drained player standing in the open with exactly one rest charge —
+/// the fixture every interrupt test above shares.
+fn a_hurt_player_holding_one_outlet() -> Game {
+    let mut game = Game::new(21, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    // Exactly one, not one *more*: the starting kit already ships outlets,
+    // so "the charge is spent" is only readable as a count of zero if the
+    // pack held precisely the charge the rest is about to take. Through
+    // `take`/`add` rather than pushing a row, since `Inventory::count` reads
+    // the first matching slot and a second one would be invisible.
+    let outlet = ItemId::from(ids::OUTLET);
+    {
+        let mut inv = game.world.get_mut::<Inventory>(player).unwrap();
+        let held = inv.count(&outlet);
+        inv.take(outlet.clone(), held);
+        inv.add(outlet.clone(), 1);
+    }
+    {
+        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+        stats.hp = 1;
+    }
+    {
+        let mut reserve = game.world.get_mut::<PowerReserve>(player).unwrap();
+        *reserve = PowerReserve::new(10.0);
+    }
+    game
+}
+
+fn any_combatant_is_a_stack_spawn(game: &Game) -> bool {
+    let state = game.world.resource::<BattleState>();
+    state
+        .groups
+        .iter()
+        .flat_map(|g| g.members.iter())
+        .any(|&e| game.world.get::<StackSpawn>(e).is_some())
+}

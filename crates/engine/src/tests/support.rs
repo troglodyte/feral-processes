@@ -67,6 +67,7 @@ pub(crate) fn generic_species() -> SpeciesDef {
             effect: None,
         }],
         work_resource: None,
+        rich_in: None,
         equipment_drop: None,
         is_boss: false,
         abilities: Vec::new(),

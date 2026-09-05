@@ -24,6 +24,7 @@ pub(crate) mod crafting;
 pub(crate) mod creation;
 pub(crate) mod descriptions;
 pub(crate) mod environment;
+pub(crate) mod extraction;
 pub(crate) mod field;
 pub(crate) mod gear_power;
 pub(crate) mod inspection;

@@ -196,8 +196,18 @@ additive behind `#[serde(default)]`. **No `SAVE_FORMAT_VERSION` bump.**
 
 Both are read-only row lists with **no scroll**, so height is a layout
 constraint: `MAX_DOWNED_PROGRAMS` and `TOOL_SLOT_CAP` must both fit at
-1280x720, asserted by test and verified by mutation. Both join
-`ALL_MODES` and `needs_status_banner`.
+1280x720, asserted by test and verified by mutation. Both join `ALL_MODES`
+only — **amended 2026-09-04**: `needs_status_banner` is an allowlist of the
+few non-popup modes that need a bottom-edge banner because a popup would
+cover their own refusal line; a popup screen already has a refusal slot of
+its own, and adding one to the allowlist makes
+`every_screen_draws_a_refusal_exactly_once` paint the refusal twice.
+
+`Mode::DownedPrograms` shipped in phase 1 (task 7) and correctly joined only
+`ALL_MODES`, never `needs_status_banner` — implementation never acted on
+this sentence's error. `Mode::Tools` is phase 2's screen and does not exist
+yet; this amendment is here so whoever builds it doesn't act on the error
+either.
 
 The engine owns the row count and gui draws it; any per-row transform lives
 in the engine, the `message_history` rule.

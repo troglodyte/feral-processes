@@ -1,6 +1,13 @@
 # Powering down in the field can be interrupted
 
-**Status:** written from recovered prior art, **never approved and not implemented**. `Game::rest_interrupted` does not exist. Audited 2026-09-02 against the source tree, not against this header.
+**Status:** **implemented and shipped in `v0.13.94`**, approved 2026-09-04.
+Built as designed, with the three open questions below answered: no
+first-strike penalty and no Trace raise (the burned charge is the whole
+cost), and the log line does name the charge. The roll is
+`Game::roll_rest_interrupt` — *not* the `Game::rest_interrupted` this
+document's own history section says was documented but never existed. The
+seam entry went into `docs/seams.md` and `CLAUDE.md` **with the merge**,
+which is the ordering rule this feature exists as a monument to.
 
 A charged rest rolls for an ambush once the charge has been taken. On a hit a
 pack engages and nothing is restored. A free rest inside base space never

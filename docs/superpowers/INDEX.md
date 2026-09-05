@@ -6,8 +6,8 @@ one-read answer to "did this ship, and where is its argument".
 
 ## The invariant
 
-**`archive/specs/` is implemented. `specs/` is not.** Ninety-six specs are
-archived and every one of them shipped; the eleven left in `specs/` are open,
+**`archive/specs/` is implemented. `specs/` is not.** Ninety-seven specs are
+archived and every one of them shipped; the ones left in `specs/` are open,
 parked, partial or superseded, and each says which in its own header. Sorting
 the directory *is* the answer, so no sweep is needed next time.
 

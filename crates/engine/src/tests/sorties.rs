@@ -5,7 +5,7 @@ use bevy_ecs::prelude::{Entity, With};
 
 use super::support::{scratch_assets_dir, stand_in_base, test_assets_dir};
 use crate::Game;
-use crate::components::{Glyph, GlyphColor, Position, Structure};
+use crate::components::{DownedPrograms, Glyph, GlyphColor, Position, Structure};
 use crate::game::party::ProgramRole;
 use crate::game::sortie::{SortieReach, SortieRefusal};
 use crate::resources::DifficultyMode;
@@ -757,6 +757,52 @@ fn a_dispatched_sortie(seed: u32, mode: DifficultyMode) -> (Game, Vec<Entity>) {
     (game, squad)
 }
 
+/// A sortie's kill leaves a downed program on the player through
+/// `Game::leave_downed_program` — the same call an ordinary kill makes, not
+/// a copy of it (`game/combat_rewards.rs`'s own reason for splitting that
+/// function out in the first place: a sortie paying through a drifted
+/// second copy is exactly the trap `Perk::Teardown` used to fall into).
+///
+/// Swept across seeds, `nest_orphans_across`'s reason nearby: whether a
+/// battle this tick lands any kill at all depends on the habitat draw and
+/// the fight's own rolls, so a single seed proves only its own outcome.
+#[test]
+fn a_sortie_kill_leaves_a_downed_program_on_the_player() {
+    let found = (5000..5020).any(|seed| {
+        let (mut game, _) = a_dispatched_sortie(seed, DifficultyMode::Forgiving);
+        let player = game.player_entity();
+        let before = game.world.get::<DownedPrograms>(player).unwrap().0.len();
+
+        // The same candidate pool `resolve_sortie_battle` itself draws
+        // from, computed the same way it does (anchor position, `risk` as
+        // the step bonus) — so a program landing outside this set would be
+        // a defect the count-only version of this test could not see: a
+        // `.any()` over many seeds proves *something* grew the store, not
+        // that what grew it came from the fight.
+        let risk = game.world.resource::<Sorties>().0[0].risk;
+        let (ax, ay) = game.anchor_position().unwrap_or((0, 0));
+        let candidates = game
+            .habitat_pools(ax, ay, None, risk)
+            .map(|(c, _)| c)
+            .unwrap_or_default();
+
+        let total = game.world.resource::<Sorties>().0[0].ticks_total;
+        for _ in 0..(total - 1) {
+            game.wait();
+        }
+        let after = &game.world.get::<DownedPrograms>(player).unwrap().0;
+        after.len() > before
+            && after[before..]
+                .iter()
+                .all(|program| candidates.contains(&program.species))
+    });
+    assert!(
+        found,
+        "no seed in the sweep left a downed program on the player, carrying a species the \
+         sortie's own habitat pool could actually have fought"
+    );
+}
+
 /// **The load-bearing test of the feature.** A battle spawns its
 /// opposition, fights it and despawns it inside one call, so no bevy system
 /// ever observes it. A hostile that outlives its battle is a defect, not a
@@ -1141,63 +1187,6 @@ fn a_pre_sortie_save_loads_with_no_sorties() {
         "a pre-sortie save has nobody away"
     );
     assert_eq!(loaded.base_staff().len(), 5, "and everyone is staff again");
-}
-
-/// Loot lands in depots; what does not fit is logged rather than dropped in
-/// silence — `return_to_depots`' existing rule.
-#[test]
-fn overflow_loot_is_logged_rather_than_lost() {
-    let (mut game, _) = a_dispatched_sortie(4803, DifficultyMode::Forgiving);
-    let scrap = crate::items::ItemId::from(crate::items::ids::CORE_FRAGMENT);
-    {
-        let record = &mut game.world.resource_mut::<Sorties>().0[0];
-        record.loot = vec![(scrap.clone(), 100_000)];
-        record.battles_done = record.battles_total;
-        record.ticks_elapsed = record.ticks_total - 1;
-    }
-
-    let before = game.message_history(400).len();
-    game.run_sorties();
-
-    assert!(game.world.resource::<Sorties>().0.is_empty());
-    let said: Vec<String> = game.message_history(400)[before..]
-        .iter()
-        .map(|l| l.text.clone())
-        .collect();
-    assert!(
-        said.iter().any(|l| l.contains("no shelf to stand on")),
-        "what did not fit must be said out loud: {said:?}"
-    );
-}
-
-/// Loot that does fit lands on a Depot shelf, so the base is actually paid.
-#[test]
-fn returned_loot_lands_on_a_shelf() {
-    let (mut game, _) = a_dispatched_sortie(4804, DifficultyMode::Forgiving);
-    let scrap = crate::items::ItemId::from(crate::items::ids::CORE_FRAGMENT);
-    let before = game
-        .base_stock()
-        .iter()
-        .find(|r| r.item == scrap)
-        .map(|r| r.qty)
-        .unwrap_or(0);
-    {
-        let record = &mut game.world.resource_mut::<Sorties>().0[0];
-        record.loot = vec![(scrap.clone(), 7)];
-        // Every battle already fought, or the last tick fires all of them at
-        // once and the haul under test is buried in what they dropped.
-        record.battles_done = record.battles_total;
-        record.ticks_elapsed = record.ticks_total - 1;
-    }
-    game.run_sorties();
-
-    let after = game
-        .base_stock()
-        .iter()
-        .find(|r| r.item == scrap)
-        .map(|r| r.qty)
-        .unwrap_or(0);
-    assert_eq!(after, before + 7);
 }
 
 /// The report is derived off the record and evicts nothing — a screen that

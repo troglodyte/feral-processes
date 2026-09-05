@@ -137,6 +137,71 @@ pub(crate) fn app_owning_a_developed_program(seed: u32, level: u32, ring: u32) -
     app
 }
 
+/// An app whose player already holds `programs` in
+/// `components::DownedPrograms`, without playing to a kill for one — the
+/// engine exposes no way to hand-place one from outside the crate,
+/// `distant_programs`' reason for the same save round trip.
+pub(crate) fn app_holding_downed_programs(
+    seed: u32,
+    programs: Vec<feral_processes_engine::items::DownedProgram>,
+) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = scratch_path("downed_programs", seed);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.player.downed_programs = programs;
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    app
+}
+
+/// An app on `Mode::Inventory` with at least ten distinct cargo rows, so
+/// the fourth letter row (`DIGIT_ROWS` + 3 — lowercase `d`) resolves to a
+/// real row rather than `selected_index` falling out on an out-of-range
+/// index regardless of what key was pressed. A test asserting only that
+/// lowercase `d` leaves the mode unchanged on a short inventory would pass
+/// against several wrong implementations — this fixture is what makes it
+/// actually exercise the row-selector branch.
+pub(crate) fn app_on_inventory_with_many_items(seed: u32) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = scratch_path("many_items", seed);
+    let game = app.game.as_mut().unwrap();
+    let items: Vec<ItemId> = game
+        .item_defs()
+        .iter()
+        .take(10)
+        .map(|def| def.id.clone())
+        .collect();
+    assert!(
+        items.len() >= 10,
+        "test premise: the shipped catalogue defines at least ten items"
+    );
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    // Merged, `app_owning_a_program_and_a_compiler_deep`'s reason: pushing a
+    // second row for something the starting kit already carries is
+    // invisible, since `Inventory::count` reads the first match and
+    // `Game::load` restores the `Vec` verbatim.
+    for item in items {
+        if !data.player.inventory.iter().any(|(i, _)| *i == item) {
+            data.player.inventory.push((item, 1));
+        }
+    }
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    app
+}
+
 /// The shared body: one program per name `pick` returns. It takes the
 /// `Game` because the count-based caller wants whichever species the roster
 /// happens to list first, and that is not knowable until one is loaded.

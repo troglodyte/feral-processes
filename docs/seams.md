@@ -2706,6 +2706,74 @@ makes the party reach their zone's ceiling faster, never raises it, and
 that clamp is the only reason the lever is inert in zone 1 rather than
 turning a cap of 1 into a pack of 3.
 
+### A charged rest rolls for an interrupt, and the roll rides the branch that takes the charge
+
+`Game::rest` pays for a field rest by taking one `ItemDef::enables_rest` unit
+out of the pack, then restores. `REST_AMBUSH_CHANCE` is rolled **between**
+those two things, inside the branch that took the charge.
+
+**Why the placement is the design.** Three properties fall out of it, and
+none of them is a check anyone has to remember to write:
+
+1. **Base space is safe without a locale test.** A free rest never enters the
+   branch, so it never reaches the roll. Written the other way round — the
+   roll above the payment, guarded by `in_base()` — the same behaviour needs
+   a condition that a later reader can invert, delete or get wrong.
+2. **A jumped rest clears nothing.** The heal, the Power refill, the roster
+   walk and `drop_until_rest_buffs_on_party` all sit below the roll, which is
+   the rule a *refused* rest already followed. The two failure modes agree
+   because they leave by the same door, not because two branches were kept in
+   step.
+3. **There is no refund.** The outlet is gone and nothing is restored.
+   Powering down in the open is what left the party exposed; a refund makes
+   the risk free and makes the constant describe nothing.
+
+**What was rejected.** A first-strike penalty on top of the lost charge — the
+charge is the whole cost until a play session says otherwise, and a second
+penalty stacked before anyone had felt the first is how a modest number turns
+punitive without a measurement. And a Trace raise for an underground
+interrupt: Trace already carries a group-size lever, so raising it here would
+mean one roll costs the charge, the fight *and* bigger packs afterwards —
+three penalties deep for an event the player did not choose. `raise_trace`
+stays at three sources.
+
+**A roll that hits but fields no pack lapses into an ordinary rest.** Both
+pack builders return empty rather than refusing — boxed in by unwalkable
+tiles, or a biome with no ordinary species — and the caller reads empty as
+"the roll lapsed". A charge burnt for no fight at all is the one outcome a
+player cannot read as anything but a bug.
+
+**This is the first roll site that cannot know its locale by construction.**
+`maybe_ambush` is reached only from `move_player` and `maybe_stack_encounter`
+only from a Stack step, so each knew where it was and stated its placement
+rules once, in place. A rest happens anywhere, so the pack has to be chosen —
+`stack_encounter_pack` underground, `surface_ambush_pack` above. That second
+one is an **extraction** out of `maybe_ambush` rather than a copy of it, for
+the reason CLAUDE.md's code principles give: two hand-written copies of a
+placement rule drift, and the copy that drifts is the one nobody runs.
+
+**Why the constant is not comparable to the ones above it.**
+`RANDOM_ENCOUNTER_CHANCE` (0.02) and `STACK_ENCOUNTER_CHANCE` (0.08) are
+*rates* — they accumulate over a walk, and the number that matters is the
+one compounded over 40-300 steps. `REST_AMBUSH_CHANCE` (0.15) is the whole
+risk of one discrete event. It looks like an order of magnitude more and is
+not. It is deliberately modest: an outlet that buys a fight too often stops
+reading as a way to recover at all.
+
+**Unmeasured.** `balance_sim` models no rest and no Stack term, so 0.15 is
+ungated by every instrument in the repo. The arena cannot reach it either —
+it authors a fight, not a field turn. Whether the number is right is a play
+question and nothing here can answer it.
+
+**A note on this feature's history, which is the reason the ordering rule
+exists.** It was built once on a branch cut from `0.13.11`, never merged, and
+`CLAUDE.md` described it as shipped anyway — naming `Game::rest_interrupted`
+and `REST_AMBUSH_CHANCE`, both of which existed nowhere. That is the second
+recorded instance of a seam doc describing unmerged code in this repo. The
+rule it produced: **the seam entry lands with the merge, never with the
+plan.**
+
+
 ### A Stack cell that can be used up needs both halves
 
 **A Stack cell that can be used up needs both halves.** A cache, a seal,
@@ -5853,7 +5921,7 @@ generation must not draw from `resources::GameRng`" above makes the same
 argument for a Stack frame's own seed; this is the battle-teardown
 instance of the identical trap.
 
-### A tile says three things on three channels, and the glyph is the one that says *what*
+### A tile's con read takes the glyph's own hue whenever it can, and `ConRead` is the one place that is decided
 
 **A tile says three things on three channels, and the glyph is the one that
 says *what*.** `game::inspection::difficulty_color` used to *replace*
@@ -5869,36 +5937,109 @@ and a nemesis Blue, *instead of* a rung — so on exactly the two tiles where
 being both drew one fact and dropped the other, since `is_nemesis` was
 checked first and won.
 
-The con read moves to a bar along the **bottom** edge, `RARITY_BAR_PX`
-thick and full width — the rarity bar's mirror, so the two derived readings
-frame the tile and the glyph between them is free again. Identity rides
-corner marks: the nemesis mark that already existed as belt-and-braces, and
-a new boss mark in the opposite corner. A creature that is both now wears
-both **and** keeps its rung. Three readings, three channels, nothing spent.
-
 `difficulty_color` loses its `is_boss`/`is_nemesis` parameters entirely and
 answers one question. `EntityView::difficulty` is `Option<GlyphColor>` and
 is `None` for everything that is not hostile — *no reading*, not a reading
-worth nothing, because a bar under a companion would say the player can
-beat their own program.
+worth nothing, because a con read on a companion would say the player can
+beat their own program. That much of the change stands.
 
-Three geometry decisions are load-bearing and none would fail to compile.
-`staffed_mark_rect` was extracted from the tile loop because the bottom
-edge now has a bar to clear, and the test that pinned its clearance
-hand-copied the arithmetic — the copy that drifts. Its lift is
-`Fx::staffed_bob`, so a missing offset is invisible while a machine is
-worked and shows only at rest, and for a stranded mark, which never bobs at
-all. And the boss mark takes the **bottom**-right rather than the free
-top-left corner on a colour argument: under the rarity bar its magenta sits
-0.391 from Prismatic, where the con rungs beneath it are all warm and none
-nearer than 0.718.
+#### Two rejected homes, and the one the read has now
 
-The boss mark keeps the magenta a boss already wore, so the fact reads the
-same after moving off the glyph. Blue — the nemesis's vacated hue — is the
-obvious alternative and is exactly `CUTTING_OUTLINE` (`palette::PLAN`,
-`0x4a7fd0`), which the census holding the mark apart from every other mark
-on a tile fails at distance 0. That census is what says the mark is not any
-of the eleven other things a tile can be wearing at once.
+The read first moved **off the glyph entirely**, onto a bar along the
+bottom edge — `RARITY_BAR_PX` thick and full width, the rarity bar's
+mirror, so the two derived readings framed the tile. Rejected on sight in
+play: two identical strips on opposite edges read as one decorative frame
+rather than as two different questions, and the one a player scans a
+screenful of tiles for was the harder of the two to pick out.
+
+It then became a right-angled **earmark folded into the top-left corner**.
+Also rejected, and for the reason that settles the seam: a corner wedge is
+a *second* thing to look at. The con read is not a detail confirmed on a
+tile the player has already stopped at — it is the scan itself, and no mark
+small enough to share a tile with four other channels can carry a scan as
+well as the ink in the middle of the cell can.
+
+So **the glyph's hue carries it again, and the earmark is what the tiles
+that cannot spend that hue pay instead.** `ConRead` is the whole decision,
+and it is one value rather than two conditions agreeing at two draw sites:
+`Glyph(rung)`, `Earmark(rung)`, `None`. The property is "never both and
+never neither" — a rung on the glyph *and* in the corner reads as two
+different creatures, a rung in neither reads as harmless, and both are
+silent faults that compile. The test sweeps the whole matrix rather than
+its interesting corner.
+
+Exactly two tiles cannot spend the hue, and neither is arbitrary. One drawn
+as a **sprite**: `assets/sprites/README.md` asks art to be authored
+near-white precisely because egui *multiplies* the tile colour through it,
+so a con rung would repaint the drawing rather than tint it — the same
+argument that makes the player's drawn icon the one sprite drawn untinted,
+one seam along. And a **boss**, whose magenta is the ink; that is the
+`is_boss` parameter `difficulty_color` shed, reappearing where it belongs,
+in the renderer, as a hue rather than as a fifth rung.
+
+The boss's corner mark is deleted with the move. Its whole job was to keep
+the fact readable while the hue was spent on the con rung, and the hue is
+not spent any more. What survives it is the **census**, retargeted: it used
+to hold the mark apart from every other mark a tile could wear, and now
+holds the *hue* apart from every con rung, which is the reading a magenta
+glyph could actually be mistaken for. Nemesis keeps its cyan mark — it
+never had a hue to lose.
+
+**The gate is the trap.** `ConRead::of` takes `drew_sprite`, the sprite
+call's **own answer**, and never `sprite.is_some()`. A name the table has
+nothing under falls back to the glyph — the whole of what keeps
+`assets/sprites/` optional — and that glyph is free to carry the rung. Read
+off the name instead and every tile whose art failed to load pays a corner
+for nothing, which reads as the con read having moved for no reason. That
+is what forced the sprite attempt **out of** the glyph draw and into its own
+`let`: the answer has to exist before the ink is chosen, and `drew_sprite`
+is deliberately not a `mut` seeded with a default, which is the shape that
+ships wrong the day a third branch is added.
+
+Shipped today, `assets/sprites/` holds `anchor.png` and `player.png` and
+nothing hostile, so the earmark's only live case is a boss. That is the
+feature working, not a dead branch — the sprite arm is what makes an entity
+tileset droppable without taking the map's danger read with it.
+
+**The earmark's own geometry** stayed as it was drawn for the rejected
+design, because none of it depended on being the primary read.
+`difficulty_mark_points` is a `poly` with its right angle at the corner and
+its hypotenuse running into the tile, leg `CON_MARK` (0.34 of the tile),
+chosen so the wedge's area lands within a few percent of the full-width bar
+that preceded it. A **shape and not a fifth coloured strip**: the top edge
+already belongs to the rarity bar, and a second bar there asks the player
+to tell two readings apart by hue alone on adjacent pixels.
+
+**The trap is that the rarity bar is painted first and owns the full width
+of that edge.** The earmark drops below `RARITY_BAR_PX` and insets from the
+left by `IDENTITY_MARK_INSET`, exactly as `nemesis_mark_rect` does; flush
+into the corner it silently covers one end of the rarity channel, and
+nothing fails to compile. The nemesis mark is the other neighbour on that
+edge, and it is precisely the creature whose con read the player most wants
+beside it — `CON_MARK` is a fraction of the tile where the mark's inset is
+absolute, so the gap between them is narrowest at the deepest zoom and
+`the_con_earmark_never_meets_the_nemesis_mark` sweeps 24→64px rather than
+asserting at one.
+
+`staffed_mark_rect` was extracted from the tile loop when the bottom edge
+had a bar to clear, and the test that pinned that clearance hand-copied the
+arithmetic — the copy that drifts. The bar is gone and the extraction is
+still worth keeping, because the reason underneath it never depended on the
+bar: its lift is `Fx::staffed_bob`, so a resting place that has drifted off
+the tile is invisible while a machine is worked and shows only at rest, and
+for a stranded mark, which never bobs at all. It dropped its
+`- RARITY_BAR_PX` term when the bar left; leaving it would have been a 2px
+lie that read as deliberate geometry.
+
+`boss_color` keeps the magenta a boss always wore, so the fact reads the
+same however many homes the con read has had in between. Blue — the
+nemesis's vacated hue — is the obvious alternative and is exactly
+`CUTTING_OUTLINE` (`palette::PLAN`, `0x4a7fd0`), which the census fails at
+distance 0. That census is what says a boss's glyph is not any of the
+twelve other things a tile can be wearing at once, and the con rungs are
+the entries in it that now matter most: magenta and a rung share one
+channel, so a boss misread as a rung is the map answering "can I win this
+fight" with a lie.
 
 ### There are four doors into the roster, and `Game::roster_parts()` is the only barrier
 
@@ -10301,6 +10442,227 @@ carry all four figures rather than the sector/run pair the design sketch gave
 MINED alone, because dominant provenance puts a machine-dominated Power Cell
 under MINED and dropping the hand column there hides the units that motivate
 the whole instrument.
+
+### `DownedPrograms` is a third player store, and it is not `Inventory`
+
+A defeated wild program is left behind as `items::DownedProgram` — species,
+level, rarity, boss flag and condition — carried in
+`components::DownedPrograms`, a player-only `Vec` capped at
+`tuning::MAX_DOWNED_PROGRAMS`. It does not go into `Inventory`, and that is
+a decision rather than an omission.
+
+`Inventory` is `Vec<(ItemId, u32)>`, and its `count`/`take`
+(`components.rs`) both read the **first** matching row — the seam
+`components.rs` already states in `Inventory`'s own doc comment: it is by
+definition the *plain-copy* store, which is what lets recipes, `Stock`,
+`assembler_system`, hauling and banking read it with no instance rule. A
+species id repeated across two rows would be indistinguishable to any of
+those readers, which is fine for a stack of Core Fragments and wrong for two
+kills of different levels and rarities — a level-30 Prismatic kill and a
+level-2 Ordinary one are not interchangeable, and collapsing them into a
+count against a per-species id would either need `Inventory` to grow an
+instance rule none of its other readers want, or would silently merge two
+programs that should not merge.
+
+`GearCopies` already solved this exact problem for gear — a carried copy
+that is not a plain stack — and `DownedPrograms` is its second instance of
+the same shape: a plain-copy store and one or more instanced stores beside
+it, never one store trying to be both. `Game::rich_in`,
+`Game::extraction_yield` and `Game::extract_program` all read
+`DownedPrograms` directly and grant *into* `Inventory` (via `grant_loot`)
+rather than ever reading a `DownedProgram` back out of it — the store is a
+one-way source for the plain-copy economy, not a member of it.
+
+### `FIGHT_CONDITION_WEIGHT` ships at `0.0`, and the fight axis is structurally inert, not merely zero-weighted
+
+The spec's condition formula has a fourth term, `FIGHT_CONDITION_WEIGHT *
+overkill_term`, where `overkill_term` is how far the killing blow went past
+zero as a fraction of `max_hp`. The constant ships at `0.0` "until played" —
+worded as a tuning decision, which invites a future session to read it as
+"raise this and the fight axis comes alive." It will not.
+
+`Game::apply_damage` (`combat_damage.rs`) is the only code path that lowers
+a creature's HP, and its `lower_hp` step clamps `hp` to zero **before**
+`award_loot` ever runs. `Game::overkill_term` (`combat_rewards.rs`) reads
+`Stats::hp` off the entity *after* the kill, by which point it is always
+exactly `0`, making `overkill_term` always `0.0` on the real kill path
+regardless of how brutal the actual blow was. Raising
+`FIGHT_CONDITION_WEIGHT` off zero today would multiply a term that is
+always zero by a nonzero weight and still get zero — the axis is inert by
+construction, not by tuning. Making it responsive needs the raw blow (the
+`dmg` that would have taken `hp` negative) threaded through from
+`resolve_attack`'s caller into `award_loot`, which nothing in phase 1 does.
+
+`overkill_term`'s own doc comment says as much, and `DownedProgram::
+roll_condition` is deliberately pure and takes `overkill_term` as a plain
+`f32` rather than reading a live entity, specifically so
+`FIGHT_CONDITION_WEIGHT = 0.0`'s independence claim is testable against
+real variation in that parameter (a test passing a nonzero value directly)
+rather than a term that can never move on the call path a real kill takes.
+That test proves the *formula* is independent of the term when the weight
+is zero; it does not and cannot prove the term ever varies in play, because
+under today's `apply_damage` it never does.
+
+### A downed program's `level` comes from `Game::ability_user_level`, not the player's own level
+
+`Game::leave_downed_program` (`combat_rewards.rs`) stamps `DownedProgram::
+level` from `self.ability_user_level(wild)` — the wild program's own level,
+which for an entity with no `Experience` component resolves to the current
+`ZoneLevel`. It is not the player's level, and using the player's would have
+been the easy wrong choice: a player-level stamp measures *when in the run*
+the kill happened rather than *what was killed*, and since
+`extraction_yield`'s unit count multiplies `DownedProgram::grade()` (which
+folds `level` in) against the flat `tuning::TOOL_BASE_UNITS`, a player-level
+stamp would make a zone-1 kill on a heavily-levelled player pay as if it
+were a much tougher program — breaking decision 8's drop-neutrality by
+construction rather than by drift.
+
+The accepted gap this leaves: `ZoneLevel` does not move while the party is
+underground (`docs/seams.md`'s Stack section — world generation and
+zone-derived scaling are surface concepts), so a Stack kill's depth never
+raises the `DownedProgram` it leaves behind. A level-1-zone program killed
+four frames down the Stack grades identically to one killed at the
+entrance. Nothing in phase 1 measures whether that matters; it is a known
+limitation of reusing `ability_user_level` rather than a new Stack-depth
+term, and the fix (if wanted) is a depth input to `ability_user_level` or a
+second call at the leave site, not to `extraction.rs`.
+
+### `Game::extract_program` is the one door a downed program is spent through
+
+Every other route to a `DownedProgram` — `Game::rich_in`,
+`Game::extraction_yield`, `Game::downed_program_rows`,
+`Game::extraction_options` — only *reads* the store or a species def.
+`Game::extract_program` (`game/extraction.rs`) is the only place a
+`DownedProgram` is removed from `DownedPrograms` and the only place
+anything is granted or spent on its behalf, following
+`commit_caravan_basket`'s ordering: every refusal lands before anything is
+spent.
+
+The refusals, in the order the function checks them: the run is over or a
+battle is active; `index` names no held program; `tool` is not among
+`installed_tools()`. Each is asserted **per refusal**, not by one test over
+one path — a single test exercising, say, the game-over check would pass
+even if the out-of-range-index check spent something on its way to
+returning an error, because nothing about testing one refusal exercises the
+others. `crates/engine/src/tests/extraction.rs` has one test per refusal
+(`extraction_refuses_...`), each asserting the exact same two things: the
+call returns `Err`, and both `DownedPrograms` and `Inventory` are byte-for-
+byte unchanged from before the call. That pairing — index still present,
+inventory untouched — is what rules out a refusal that removed the program
+before discovering the tool wasn't installed.
+
+Once past every refusal, the order is: remove the program from the `Vec`,
+call `extraction_yield` exactly once, grant its `Vec` verbatim through
+`grant_loot` under `LootSource::Extract`, log one line, then spend
+`tool.ticks` — the tick loop breaking early on a game over or a battle
+opening mid-spend, the same shape a `Drag` step's multi-tick loop takes,
+and safe for the same reason: nothing left to spend has landed before the
+first tick, so there is nothing to unwind if the loop stops short.
+
+`tools::player_tool_slots` (no production caller — only its own unit tests
+call it) and the shipped `core_tap.ron` (unreachable — nothing but the
+creation-only starter grant writes `Tools` in phase 1) are both phase-2
+machinery landed early rather than an oversight: a second tool needs
+`install_tool` to reach a second slot, and neither exists yet.
+
+### `Game::extraction_yield` is the one derivation the preview and the grant share
+
+`extraction_yield(&self, program, tool) -> Vec<(ItemId, u32)>` takes
+`&self`, not `&mut self`, and reads no `GameRng` — both facts are the same
+decision seen from two sides. `Game::extraction_options` (the screen's
+preview, called once per installed tool with nothing spent) and
+`Game::extract_program` (the act) both call it, and because the function is
+pure and deterministic, calling it twice on identical inputs returns
+identical output with no coincidence required — the same guarantee
+`BuildOrderRow` gives a build request's quoted cost against what raising it
+actually spends. A version that drew from `GameRng` would force the preview
+to either spend a draw it has no business spending (corrupting the seeded
+stream from a screen that grants nothing) or quote a distribution instead
+of a figure, and either way a screen showing "3 Core Fragments" that then
+grants 2 or 4 would read as a bug even though nothing was wrong — the
+seam this closes.
+
+The formula: `units = round(TOOL_BASE_UNITS * tier_scale(tool.tier) *
+program.grade())`, plus `Perk::Teardown`'s `salvage_bonus` added as a flat
+addend to the unit count (never a second draw — the discipline the retired
+`roll_work_resource_drop` followed and this reasserts). `units` is split
+across `tool.yields` by weight through `apportion` (below), and then
+`rich_in`'s bonus part is added on top from `tuning::RICH_IN_UNITS`,
+merged into an existing row if the tool's own pool already names the same
+item rather than creating a duplicate one.
+
+### The drop-neutrality gate is a single-point median check, and the tool's `yields` weights have no lever on it
+
+Decision 8 requires phase 1 to be drop-neutral: replacing
+`roll_work_resource_drop` with extraction must not change what an ordinary
+kill actually pays. The gate that stands for that requirement,
+`tests::extraction::the_starter_tool_is_drop_neutral_for_a_median_kill`,
+asserts one point — a median kill (`Ordinary`, `CONDITION_BASE` condition,
+level 1, grade `0.606`) through the starter tool must total exactly `3`
+units, the retired roll's own mean.
+
+`tuning::TOOL_BASE_UNITS`'s own doc comment works out what that test
+actually pins: `round(TOOL_BASE_UNITS * 0.606)` stays `2` (before
+`rich_in`'s flat `+1`) for any `TOOL_BASE_UNITS` in `[2.475, 4.125)` —
+verified empirically against the real rounding boundary, not just
+algebraically. Every value in that roughly-70%-wide band reads as equally
+drop-neutral to this gate, though a starter tool at one end feels rougly
+half again as strong as one at the other in play; only a play session or a
+wider-coverage test (more than one point on the grade curve) could tell
+them apart, and nothing in phase 1 does.
+
+Separately, `apportion` (below) conserves the unit **total** under any
+weighting of `tool.yields` — it only decides which items the fixed unit
+count becomes, never how large that count is — so `salvage_clamp.ron`'s
+particular weights do not enter this gate at all, and no combination of
+authored weights could narrow the band above either. The gate is real
+protection against the *starter tool's overall strength* drifting; it says
+nothing about the *mix* of items a kill pays out, which is a second,
+unmeasured axis a later phase should add coverage for if the mix itself
+ever needs to be load-bearing (a recipe that specifically wants Core
+Fragments over Bytecode Blocks, say).
+
+The gate also only ever measures **per extraction**, while decision 8's own
+wording is "per kill" — a kill and an extraction are the same event only
+because phase 1 has no queue, no store overflow policy beyond a flat
+refusal, and no tick cost distinguishable from an ordinary action. The
+`MAX_DOWNED_PROGRAMS` cap and `tool.ticks`' time cost are both real
+leakage against a strict per-kill reading (a full store forgoes a drop
+entirely; the tick cost is time the retired roll never spent) that this
+gate does not and cannot see, because it calls `extraction_yield` directly
+rather than playing a run. A later phase should measure both once the
+economy is played rather than simulated at one point.
+
+### The yield is a deterministic weighted apportionment, not an RNG draw
+
+`apportion(pool, units)` (`game/extraction.rs`) splits a whole unit count
+across a weighted pool by Hamilton's method — largest-remainder
+apportionment — rather than by drawing `units` times from the pool. Each
+pool entry's exact share is `units * weight / total`; the integer floor of
+that is granted outright, and the pool's fractional remainders are ranked
+largest-first (ties broken by the pool's own order, so two equal
+remainders resolve identically on every call rather than by float-
+comparison happenstance) to hand out whatever units the floors left
+unclaimed.
+
+This is what makes `extraction_yield`'s determinism possible at all — a
+per-unit weighted draw would need `GameRng` and would make two calls with
+identical inputs disagree, which is exactly the gap between a quoted
+preview and a granted result the seam above exists to close. It is also
+why extraction spends no `GameRng` draw: `extraction_yield_spends_no_
+gamerng_draw_even_with_teardown_bought` (`tests/extraction.rs`) asserts
+the seeded stream is bit-identical before and after a call, with
+`Perk::Teardown`'s bonus bought — the one case that might plausibly have
+needed a second roll and doesn't, because the bonus is a flat addend to
+`units` before `apportion` runs, not a second weighted pick.
+
+Hamilton's method carries a known defect, the Alabama paradox: with three
+or more pool entries, one additional unit (`Perk::Teardown`'s bonus, say)
+can *shrink* another entry's allocated share rather than only ever adding
+to the total, because the remainder ranking can reorder as `units` changes.
+Both shipped pools (`salvage_clamp`, `core_tap`) have exactly two entries,
+where the paradox cannot occur — a three-item modded pool that exhibits it
+is the method behaving as documented, not a bug to fix by swapping methods.
 
 ### The commit door is shared, and the charge stays with the vendor
 

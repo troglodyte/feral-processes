@@ -26,8 +26,8 @@ your current strength — green is much weaker, yellow an even match, orange not
 dangerous, and magenta is a boss whatever the numbers say.
 
 The first thing worth doing is a Home. It anchors a platform, it lets you recharge free anywhere on
-that platform — out in the field a recharge burns a Power Outlet — and it is where everything you
-build has to stand. After that the run is yours.
+that platform — out in the field a recharge burns a Power Outlet and can be interrupted — and it is
+where everything you build has to stand. After that the run is yours.
 
 Read on: [the controls](controls), [what a fight is](intrusions), [zones and
 breaching](zones), [getting stronger](getting-stronger), and [your base](your-base).

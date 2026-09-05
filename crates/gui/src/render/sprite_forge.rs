@@ -578,7 +578,19 @@ mod tests {
     /// than a hand-built fixture, `creation.rs::wizard_app`'s reason.
     fn sprite_forge_app() -> feral_processes_app_core::App {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let tmp = std::env::temp_dir().join(format!("fp_gui_sprite_forge_{}", std::process::id()));
+        // A per-call counter as well as the pid, `app-core`'s `scratch_path`
+        // convention: libtest runs these on a thread pool, so a path keyed on
+        // the process alone is shared by every sprite-forge test at once and
+        // the `remove_dir_all`/`create_dir_all` pair races against itself —
+        // `create_dir_all` answers `AlreadyExists` when another thread wins
+        // the mkdir. Seen once in a full-workspace run and never when the
+        // file is run alone, which is the shape that reads as unrelated.
+        static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let tmp = std::env::temp_dir().join(format!(
+            "fp_gui_sprite_forge_{}_{unique}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
         feral_processes_app_core::App::new(

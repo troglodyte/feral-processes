@@ -35,6 +35,7 @@ mod easter_eggs;
 mod environment;
 mod equipment;
 mod exclusive_routines;
+mod extraction;
 mod field;
 mod gear_detail;
 mod gear_passives;

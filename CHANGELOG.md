@@ -33,6 +33,12 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.106
+
+**Both settlement aid radii were dead by geometry, and are now fractions of region spacing rather than flat numbers.** Towns stand one per 256-tile region, so the garrison radius found a town near the anchor in 1.6% of worlds and route predation found one beside a trade lane in none of 2,000 — half a region and a quarter reach 39% and 18%.
+
+**A route to your nearest market is safe by construction, and that is the design.** Its corridor is short and points away from every other town, so predation is a risk you take by hauling past somebody rather than by trading at all.
+
 ## 0.13.105
 
 **The Compiler is where a program gets taken apart properly.** Standing one

@@ -836,7 +836,22 @@ git commit -m "feat(extraction): the block quotes a Gear tool's odds"
 
 ---
 
-### Task 4: The research grant, and the censuses
+### Task 4: The research doc, and the censuses
+
+> **Amended during execution, 2026-09-05.** Step 3 (the `deep_analysis.ron`
+> grant) **moved into Task 2**. An existing census this plan did not know
+> about — `every_shipped_tool_can_actually_be_obtained`
+> (`tests/assets.rs:3508`) — fails the moment a tool ships that no research
+> node unlocks, so shipping the asset in Task 2 while holding its grant
+> until Task 4 left the suite red at the boundary, against this plan's own
+> Global Constraints. The grant went forward; the doc row and the censuses
+> stayed here.
+>
+> That same census also makes the planned `a_research_node_teaches_the_gear_tool`
+> **redundant** — it already asserts, generically and for every tool, what
+> that test would assert for one. Drop it. `a_shipped_tool_pulls_gear` is
+> not redundant and stays: nothing else asserts that the `Gear` branch has
+> any shipped content reaching it at all.
 
 **Files:**
 - Modify: `assets/research/deep_analysis.ron`

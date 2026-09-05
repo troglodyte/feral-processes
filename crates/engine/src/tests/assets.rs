@@ -3452,3 +3452,64 @@ fn every_species_rich_in_resolves_to_a_real_item() {
         "the census walked no species with a rich_in at all"
     );
 }
+
+/// Every `SettlementKind`, `Specialty` and `Temperament` variant is authored
+/// by at least one shipped town.
+///
+/// **The census `settlements/mod.rs` cites, written.** `Temperament`'s doc
+/// comment named `every_temperament_is_authored_somewhere` as what keeps an
+/// unreachable variant from shipping, and no such test existed — the
+/// catalogue happened to author all three, so the claim was true and
+/// unheld. Widened to all three axes, since a `Specialty` nothing authors
+/// means `specialty_weights` has an arm no shelf is ever drawn through, and
+/// an unauthored `SettlementKind` means one of `settlement_rows`' two row
+/// counts is dead.
+///
+/// `cell_mark`'s rule turned outward: the matches are already exhaustive, so
+/// a new variant fails to compile in the *engine*. What it cannot catch is a
+/// variant that compiles everywhere and is authored nowhere, which ships as
+/// content that exists only in Rust.
+#[test]
+fn every_settlement_shape_is_authored_somewhere() {
+    use crate::settlements::{SettlementDb, SettlementKind, Specialty, Temperament};
+
+    let (db, warnings) = SettlementDb::load_dir(&test_assets_dir().join("settlements"))
+        .expect("the catalogue loads");
+    assert!(
+        warnings.is_empty(),
+        "shipped settlements warned: {warnings:?}"
+    );
+    let defs: Vec<_> = db.iter().collect();
+    assert!(!defs.is_empty(), "the census walked an empty catalogue");
+
+    for kind in [SettlementKind::Mainframe, SettlementKind::Server] {
+        assert!(
+            defs.iter().any(|d| d.kind == kind),
+            "no shipped settlement is a {kind:?}, so one of `settlement_rows`' row counts is \
+             unreachable content"
+        );
+    }
+    for specialty in [
+        Specialty::Gear,
+        Specialty::Materials,
+        Specialty::Routines,
+        Specialty::Programs,
+    ] {
+        assert!(
+            defs.iter().any(|d| d.specialty == specialty),
+            "no shipped settlement specializes in {specialty:?}, so `specialty_weights` has an \
+             arm no shelf is ever drawn through"
+        );
+    }
+    for temperament in [
+        Temperament::Open,
+        Temperament::Guarded,
+        Temperament::Mercantile,
+    ] {
+        assert!(
+            defs.iter().any(|d| d.temperament == temperament),
+            "no shipped settlement is {temperament:?}, so its `buy_mult`/`sell_mult` pair prices \
+             nothing"
+        );
+    }
+}

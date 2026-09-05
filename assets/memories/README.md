@@ -8,7 +8,7 @@ a broken def costs the game that one memory kind and nothing else.
 **This directory may be deleted.** An empty catalogue is valid and inert:
 nothing can be remembered, every program's Morale reads zero, and the game is
 exactly the pre-memory game. That is the same supported way to play that
-deleting `assets/sectors/` or `assets/policies/enemy_battle.ron` is.
+deleting `assets/settlements/` or `assets/policies/enemy_battle.ron` is.
 
 ## What a memory is
 

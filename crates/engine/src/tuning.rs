@@ -3289,18 +3289,8 @@ pub const SIGNAL_NOISE_WEIGHT: u32 = 1;
 pub const SIGNAL_NOISE_AMBUSH_MULT: f32 = 2.0;
 
 // ─────────────────────────────────────────────────────────────────────────
-// Combat resolution: to-hit, crit, fumble, mitigation
+// Settlements: where towns stand, what their shelves carry, how they price
 // ─────────────────────────────────────────────────────────────────────────
-
-/// Accuracy and Evasion are **derived, never stored** — see
-/// `battle::accuracy_of`/`evasion_of`. Both come off `SpeciesDef::base_speed`
-/// (range 6..=14 across the shipped roster) plus entity level plus gear, so a
-/// fast program both hits and dodges well. `atk` is deliberately absent from
-/// both: feeding it to-hit *and* damage compounds quadratically and is the
-/// most likely thing to break `balance_sim`'s curves.
-// ---------------------------------------------------------------------------
-// Settlements
-// ---------------------------------------------------------------------------
 
 /// How many chunks across a settlement region is.
 ///
@@ -3403,6 +3393,16 @@ pub const SETTLEMENT_MERCANTILE_BUY_MULT: f32 = 1.0;
 /// See `SETTLEMENT_OPEN_BUY_MULT`.
 pub const SETTLEMENT_MERCANTILE_SELL_MULT: f32 = 0.85;
 
+// ─────────────────────────────────────────────────────────────────────────
+// Combat resolution: to-hit, crit, fumble, mitigation
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Accuracy and Evasion are **derived, never stored** — see
+/// `battle::accuracy_of`/`evasion_of`. Both come off `SpeciesDef::base_speed`
+/// (range 6..=14 across the shipped roster) plus entity level plus gear, so a
+/// fast program both hits and dodges well. `atk` is deliberately absent from
+/// both: feeding it to-hit *and* damage compounds quadratically and is the
+/// most likely thing to break `balance_sim`'s curves.
 pub const ACCURACY_PER_SPEED: f64 = 1.0;
 /// See `ACCURACY_PER_SPEED`. Levelling buys accuracy; it never buys mitigation.
 pub const ACCURACY_PER_LEVEL: f64 = 0.5;

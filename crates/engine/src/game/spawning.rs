@@ -816,6 +816,57 @@ impl Game {
     /// is meant to keep living while they are below, which is the same rule
     /// `Trace`'s group-size lever states about surface spawns continuing to
     /// roll underground.
+    /// Despawns the wild programs standing on the ground a breach is about
+    /// to re-stock — every `Hostile` inside `POPULATION_CHUNK_MARGIN` of the
+    /// player's chunk that is not a nest's own guardian.
+    ///
+    /// **Clearing `PopulatedChunks` is not enough on its own, and that is
+    /// the whole reason this exists.** `populate_chunk` gates every
+    /// placement on `local_hostile_count` being under
+    /// `WILD_LOCAL_DENSITY_TARGET`, and that count includes the survivors —
+    /// so on ground the party has already worked, a breach would place only
+    /// what fits in the gaps and the old tier's programs would stand there
+    /// for the rest of the run. Nothing else removes them: `cull_to_cap`
+    /// evicts whole chunks *outside* the margin, which is exactly the ground
+    /// this covers the complement of.
+    ///
+    /// **Two kinds of wild are kept, and the rule is the same one twice: an
+    /// anonymous body is stock, and a named one is not.**
+    ///
+    /// - A `NestGuardian` belongs to a place. Its tier re-rolls when the
+    ///   nest is cleared and respawns, the same way the nest's own contents
+    ///   do; despawning it here would leave a nest with no body standing
+    ///   over it until the respawn timer came round.
+    /// - A `Nemesis` is a program that beat you and that the world is meant
+    ///   to remember. Clearing it is the grudge being forgotten by the
+    ///   breach, which is precisely what the persistent world exists to
+    ///   stop.
+    ///
+    /// Neither exception is held by the compiler. Both have a test.
+    pub(crate) fn clear_local_wild(&mut self) {
+        let pos = *self.world.get::<Position>(self.player_entity()).unwrap();
+        let (px, py) = (pos.x.div_euclid(CHUNK_SIZE), pos.y.div_euclid(CHUNK_SIZE));
+        let doomed: Vec<Entity> = {
+            let mut query = self
+                .world
+                .query_filtered::<
+                    (Entity, &Position),
+                    (With<Hostile>, Without<NestGuardian>, Without<Nemesis>),
+                >();
+            query
+                .iter(&self.world)
+                .filter(|(_, p)| {
+                    (p.x.div_euclid(CHUNK_SIZE) - px).abs() <= POPULATION_CHUNK_MARGIN
+                        && (p.y.div_euclid(CHUNK_SIZE) - py).abs() <= POPULATION_CHUNK_MARGIN
+                })
+                .map(|(e, _)| e)
+                .collect()
+        };
+        for e in doomed {
+            self.world.despawn(e);
+        }
+    }
+
     pub(crate) fn ensure_local_population(&mut self) {
         let pos = *self.world.get::<Position>(self.player_entity()).unwrap();
         let (px, py) = (pos.x.div_euclid(CHUNK_SIZE), pos.y.div_euclid(CHUNK_SIZE));

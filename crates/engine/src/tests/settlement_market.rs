@@ -362,8 +362,14 @@ fn a_towns_shelf_and_a_structures_shelf_at_the_same_tile_do_not_collide() {
 
     let plating = crate::ItemId::from(ids::FIREWALL_PLATING);
     give(&mut game, &plating, 1);
-    stand_in_base(&mut game);
-    game.sell_item(market, gear(&plating, 0), 1).unwrap();
+    // The two sales are made from the two different spaces they are each
+    // reachable from, and crossing back is not decoration: `settlement_reach`
+    // refuses while the party is in base space, because a `Position` is only
+    // a surface tile in `Locale::Open` and the base grid's cells would
+    // otherwise be compared against a town's coordinates.
+    from_inside_the_base(&mut game, |game| {
+        game.sell_item(market, gear(&plating, 0), 1).unwrap();
+    });
 
     let rare = GearCopy {
         rarity: Rarity::Gold,
@@ -381,5 +387,114 @@ fn a_towns_shelf_and_a_structures_shelf_at_the_same_tile_do_not_collide() {
         structure_shelf[0].copy, settlement_shelf[0].copy,
         "test premise: two different copies, so a collided key would show one \
          shelf's item on the other's row"
+    );
+}
+
+/// Every refusal `Game::commit_settlement_basket` can give leaves the purse
+/// and the pack exactly as they were.
+///
+/// **Asserted per refusal, which is the whole point of the seam.** Nine
+/// paths can refuse and most of them return before the function has done
+/// anything at all, so a single test over one of them passes against the
+/// eight that were never at risk — `commit_caravan_basket`'s own
+/// `every_refusal_leaves_credits_and_cargo_exactly_as_they_were` states the
+/// same rule one vendor over. The one that has to be checked hardest is the
+/// funding refusal, since by then the sells have already been *planned*.
+#[test]
+fn every_settlement_refusal_leaves_the_purse_and_the_pack_alone() {
+    let mut game = game();
+    let (key, tile) = settlement_east_of_player(&mut game);
+    let item = ItemId::from(ids::CORE_FRAGMENT);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(item.clone(), 3);
+
+    let epoch = game.settlement_epoch();
+    let dearest = game
+        .settlement_shelf(key, epoch)
+        .into_iter()
+        .max_by_key(|o| o.unit_cost * o.qty)
+        .expect("test premise: the shelf is not empty");
+
+    let holdings = |g: &Game| -> (u32, u32) {
+        let held = g
+            .world
+            .get::<Inventory>(g.player_entity())
+            .map(|inv| inv.count(&ItemId::from(ids::CORE_FRAGMENT)))
+            .unwrap_or(0);
+        (credits(g), held)
+    };
+    let before = holdings(&game);
+
+    // Each entry is one refusal path, checked on its own — the assertion
+    // after every one is what stops a later path being covered only by an
+    // earlier path's early return.
+    let refusals: Vec<(&str, Box<dyn Fn(&mut Game) -> Result<String, String>>)> = vec![
+        (
+            "an empty basket",
+            Box::new(move |g: &mut Game| g.commit_settlement_basket(key, vec![], vec![])),
+        ),
+        (
+            "a row that is not on the shelf",
+            Box::new(move |g: &mut Game| g.commit_settlement_basket(key, vec![], vec![9_999])),
+        ),
+        (
+            "selling nothing",
+            Box::new(move |g: &mut Game| {
+                g.commit_settlement_basket(
+                    key,
+                    vec![(GearCopy::plain(ItemId::from(ids::CORE_FRAGMENT)), 0)],
+                    vec![],
+                )
+            }),
+        ),
+        (
+            "selling what you do not hold",
+            Box::new(move |g: &mut Game| {
+                g.commit_settlement_basket(
+                    key,
+                    vec![(GearCopy::plain(ItemId::from("nothing_at_all")), 1)],
+                    vec![],
+                )
+            }),
+        ),
+        (
+            "a basket the purse cannot fund",
+            Box::new(move |g: &mut Game| {
+                g.commit_settlement_basket(key, vec![], vec![dearest.index])
+            }),
+        ),
+    ];
+    assert!(
+        before.0 < dearest.unit_cost * dearest.qty,
+        "test premise: a fresh player cannot afford the dearest row"
+    );
+
+    for (what, refuse) in refusals {
+        assert!(
+            refuse(&mut game).is_err(),
+            "{what} should have been refused"
+        );
+        assert_eq!(holdings(&game), before, "{what} spent something");
+    }
+
+    // And out of reach, which is the one refusal that is a property of where
+    // the party is standing rather than of the basket.
+    let away = Position {
+        x: tile.0 + 9,
+        y: tile.1 + 9,
+    };
+    *game.world.get_mut::<Position>(player).unwrap() = away;
+    assert!(
+        game.commit_settlement_basket(key, vec![], vec![dearest.index])
+            .is_err(),
+        "a town nine tiles away should refuse to trade"
+    );
+    assert_eq!(
+        holdings(&game),
+        before,
+        "an out-of-reach basket spent something"
     );
 }

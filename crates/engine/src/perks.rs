@@ -672,8 +672,8 @@ mod tests {
 
     /// No group file at all is the pre-grouping screen exactly: one
     /// unlabelled run in `Perk::all()` order. Deleting `groups.ron` restores
-    /// the flat list the same supported way deleting `assets/sectors/`
-    /// restores undifferentiated zones.
+    /// the flat list the same supported way deleting `assets/settlements/`
+    /// restores a world with no towns in it.
     #[test]
     fn no_group_file_leaves_the_catalogue_flat() {
         let dir = scratch_dir("groups_absent");

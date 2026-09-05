@@ -348,7 +348,11 @@ impl Game {
     /// - Clearing `PopulatedChunks` is what makes the world visibly harden.
     ///   It marks which chunks have been stocked, so emptying it sends
     ///   `Game::ensure_local_population` back over ground it has already
-    ///   covered to re-stock it at the new tier.
+    ///   covered to re-stock it at the new tier. It is paired with
+    ///   `Game::clear_local_wild` and is inert without it: `populate_chunk`
+    ///   counts the survivors against `WILD_LOCAL_DENSITY_TARGET`, so on
+    ///   ground already worked an unpaired re-stock fills only the gaps and
+    ///   leaves the old tier standing.
     /// - Clearing `StackMemory` is what makes an entrance re-tier. A
     ///   surviving link keys a `FrameSpec` that now folds in the tier, so
     ///   the frame behind it is re-carved and the memory of the old one —
@@ -371,6 +375,7 @@ impl Game {
             "You breach the portal and materialize in a level {new_level} sector. Hostile signal strength has spiked."
         ));
 
+        self.clear_local_wild();
         self.ensure_local_population();
         self.ensure_local_settlements();
     }

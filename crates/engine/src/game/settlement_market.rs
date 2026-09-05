@@ -22,10 +22,17 @@
 //! "already bought" memory. `Game::caravan_shelf` has `CaravanMemory` and
 //! the Stack market has `FrameMemory::bought`; a settlement's shelf has
 //! nothing that stops the same rolled row being bought twice inside one
-//! epoch. That is a real gap, not a design choice — it was out of this
-//! phase's scope (`Task 2`/`3` of the settlements market plan) and belongs
-//! with whichever change wires up the interactive screen, which is the
-//! first place anything would need to track "already spent this visit."
+//! `SETTLEMENT_MARKET_ROTATION_TICKS` epoch, so a row can be taken as many
+//! times as the purse allows until the shelf rotates. That is a real gap
+//! and a known one, **deferred to Phase 4** by decision: the shape it wants
+//! is `CaravanMemory`'s — a `(SettlementKey, epoch)` keyed set of spent row
+//! indices, written where `apply_buys` delivers and filtered out of
+//! `settlement_view`'s offer list, additive behind `#[serde(default)]` and
+//! so costing no `SAVE_FORMAT_VERSION` bump. It is not an economy exploit
+//! in the meantime — buying at `marked_unit_cost` scaled by `buy_mult`
+//! and selling back at `SETTLEMENT_SELL_RATE * sell_mult` loses on every
+//! round trip — it is an absence of scarcity, which is a Phase 4 concern
+//! anyway, since standing is what is meant to gate a town's better rows.
 
 use crate::game::caravan::Drawn;
 use crate::game::commerce;
@@ -50,7 +57,19 @@ impl Game {
     /// admitting the player, the same as a wall — so the player's `Position`
     /// can never equal `KnownSettlement::tile`; it can only ever be one of
     /// its eight neighbours, however they approached.
+    ///
+    /// **The space guard is the first line, not an omission.** A `Position`
+    /// is a *surface* tile only while `Locale::Open`: in base space it is a
+    /// base-grid cell and underground it is the pinned entrance tile, and
+    /// either can land within a tile of a town's coordinates by coincidence
+    /// — `find_target_in_direction`'s own settlement arm gates the same way
+    /// two files over. Nothing player-facing reaches this today (the market
+    /// is only opened from a surface bump or an `x`), but all four callers
+    /// are `pub`.
     pub(crate) fn settlement_reach(&self, key: SettlementKey) -> bool {
+        if self.in_base() || self.is_underground() {
+            return false;
+        }
         let Some(known) = self.world.resource::<resources::Settlements>().0.get(&key) else {
             return false;
         };

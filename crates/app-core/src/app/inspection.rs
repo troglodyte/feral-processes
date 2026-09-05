@@ -145,7 +145,24 @@ impl App {
                 self.status_line = None;
                 self.mode = Mode::Playing;
             }
+            // The reach check is asked *here* rather than left to the
+            // screen, because `x` opens this page from anywhere inside
+            // `EXAMINE_RANGE_TILES` while `Game::settlement_reach` is
+            // Chebyshev 1 — so a town read from across the map would open a
+            // market whose `settlement_view` is `None`, which
+            // `draw_settlement_market` draws as nothing at all.
+            // `Game::broker_reach`'s split, one vendor over: reading a
+            // board and trading at it are two questions.
             GameKey::Char('M') => {
+                let reachable = self.pending_settlement.is_some_and(|key| {
+                    self.game
+                        .as_mut()
+                        .is_some_and(|game| game.settlement_view(key).is_some())
+                });
+                if !reachable {
+                    self.refuse("You'd have to walk over there to trade.");
+                    return;
+                }
                 self.settlement_amounts.clear();
                 self.mode = Mode::SettlementMarket;
             }

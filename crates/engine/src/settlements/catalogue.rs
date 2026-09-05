@@ -22,6 +22,17 @@ use super::{SettlementKind, Specialty, Temperament};
 /// neutral settlement, it is one whose behaviour hooks have nothing to read
 /// — and a file that silently loads half-authored is worse than one that is
 /// skipped loudly.
+///
+/// **The cost of that is on the save side, and it is not the asset side's
+/// cost.** `resources::KnownSettlement` embeds a whole resolved def, so
+/// `SaveData::settlements` carries this struct verbatim and a *new required
+/// field* therefore breaks every existing save, not merely an un-updated
+/// `.ron`. The `ActiveContract` precedent this shape follows does not have
+/// that problem — `ContractDef`'s optional fields do carry
+/// `#[serde(default)]`. So: a field added here for the asset schema's sake
+/// wants `#[serde(default)]` anyway, or a `SAVE_FORMAT_VERSION` bump, and
+/// the required-field rule above applies to what a *shipped file must
+/// author*, not to what serde must be able to fill in.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct SettlementDef {
     pub id: String,

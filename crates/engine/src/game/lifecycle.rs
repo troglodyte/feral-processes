@@ -1332,7 +1332,14 @@ impl Game {
         // Before `restore_locale`, which records what the party can see from
         // where they are standing and would otherwise write into a map that
         // is about to be overwritten.
-        game.world.insert_resource(data.stack_memory);
+        // A `FrameMemory` written before `FrameSpec::rng_seed` folded in
+        // `tier` describes frames this build no longer generates, so it is
+        // dropped rather than restored — see `SaveData::stack_memory_tiered`.
+        game.world.insert_resource(if data.stack_memory_tiered {
+            data.stack_memory
+        } else {
+            crate::resources::StackMemory::default()
+        });
         game.world.insert_resource(data.populated_chunks);
         game.restore_settlements(data.settlements);
         game.world
@@ -1920,6 +1927,7 @@ impl Game {
             },
             locale: self.locale(),
             stack_memory: self.world.resource::<StackMemory>().clone(),
+            stack_memory_tiered: true,
             settlements: self
                 .world
                 .resource::<crate::resources::Settlements>()

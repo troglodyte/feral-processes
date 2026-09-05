@@ -12,24 +12,26 @@ use crate::*;
 /// A breach raises the tier, and everything spawned after it is scaled
 /// against the new one.
 ///
-/// The zone-1 wild are cleared out first, which the old breach did for us by
-/// despawning them: the world is persistent now, so a creature that was
-/// already standing there keeps the stats it was rolled with, and only what
-/// `ensure_local_population` puts down afterwards is at the new tier. Left
-/// in, they would be inspected below and read as the tier failing to reach
-/// the spawner.
+/// **The zone-1 wild are not cleared out by this test**, and that is the
+/// assertion. `Game::clear_local_wild` is what removes them, inside the
+/// breach — an earlier draft of this test hand-despawned them first, which
+/// made it prove only "if the ground is empty, new spawns are at the new
+/// tier" and left the case the player actually meets, breaching on ground
+/// they have already worked, untested. A creature keeps the stats it was
+/// rolled with, so a survivor inspected below reads as the tier failing to
+/// reach the spawner.
 #[test]
 fn a_breach_spawns_the_next_tiers_wild_creatures() {
     let mut game = Game::new(40, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     assert_eq!(game.player_status().zone, 1);
-
-    let old_wild: Vec<Entity> = {
+    let before = {
         let mut query = game.world.query_filtered::<Entity, With<Hostile>>();
-        query.iter(&game.world).collect()
+        query.iter(&game.world).count()
     };
-    for e in old_wild {
-        game.world.despawn(e);
-    }
+    assert!(
+        before > 0,
+        "zone 1 should already be populated, or the breach has nothing to clear"
+    );
 
     breach_through_a_portal(&mut game);
 
@@ -545,7 +547,7 @@ fn breaching_leaves_a_cronjob_assignment_pointing_at_a_live_structure() {
 }
 
 #[test]
-fn a_breach_carries_companions_and_leaves_the_wild_where_they_stand() {
+fn a_breach_carries_companions_moves_nobody_and_clears_the_local_wild() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let ppos = *game.world.get::<Position>(player).unwrap();
@@ -617,9 +619,15 @@ fn a_breach_carries_companions_and_leaves_the_wild_where_they_stand() {
         game.world.get::<Tamed>(companion).is_some(),
         "the companion should still be tamed after breaching"
     );
+    // The ground survives a breach; what is standing on it does not.
+    // `Game::clear_local_wild` removes the wild inside the margin the
+    // re-stock is about to cover, because `populate_chunk` counts survivors
+    // against its density target and would otherwise fill only the gaps —
+    // leaving the old tier standing on worked ground for the rest of the
+    // run. A `NestGuardian` is the exception and is kept.
     assert!(
-        game.world.get::<Creature>(wild).is_some(),
-        "a wild program stands on ground that still exists, so it stays standing"
+        game.world.get::<Creature>(wild).is_none(),
+        "a breach must clear the wild off the ground it is about to re-stock"
     );
     assert!(
         game.world.get::<Structure>(home).is_some(),
@@ -2260,4 +2268,41 @@ fn a_breach_leaves_the_anchor_where_it_stands() {
 
     let after = *game.world.get::<Position>(anchor).unwrap();
     assert_eq!((after.x, after.y), (40, -15), "a breach moved the anchor");
+}
+
+/// A nest's guardian is the exception to `Game::clear_local_wild`, and stays
+/// standing through a breach.
+///
+/// A nest is a place and survives; the body standing over it is part of that
+/// place, and clearing it would leave the nest bare until its own respawn
+/// timer came round. The asymmetry is the whole of the `Without<NestGuardian>`
+/// filter, and nothing in the compiler holds it — dropping the filter clears
+/// guardians too and the only symptom is nests that look abandoned for a
+/// while after every breach.
+#[test]
+fn a_breach_clears_the_wild_but_leaves_a_nests_guardian_standing() {
+    let mut game = Game::new(44, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+
+    let nest = game.spawn_nest("scrapper", ppos.x + 4, ppos.y);
+    let guardian = {
+        let mut query = game.world.query::<(Entity, &NestGuardian)>();
+        query
+            .iter(&game.world)
+            .find(|(_, g)| g.nest == nest)
+            .map(|(e, _)| e)
+            .expect("spawning a nest should have given it a guardian")
+    };
+
+    breach_through_a_portal(&mut game);
+
+    assert_eq!(game.player_status().zone, 2);
+    assert!(
+        game.world.get::<Nest>(nest).is_some(),
+        "a nest is a place and survives a breach"
+    );
+    assert!(
+        game.world.get::<Creature>(guardian).is_some(),
+        "a breach cleared a nest's own guardian, leaving the nest bare"
+    );
 }

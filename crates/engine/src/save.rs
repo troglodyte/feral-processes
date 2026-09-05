@@ -1091,6 +1091,24 @@ pub struct SaveData {
     /// that is saved rather than regenerated: a frame is a pure function of
     /// its spec, but which parts of it the player has *seen* is history.
     pub stack_memory: crate::resources::StackMemory,
+    /// Whether `stack_memory` was written by a build whose `FrameSpec`
+    /// seed already folds in the frame's `tier`.
+    ///
+    /// **This is a migration marker, not state.** Folding `tier` into
+    /// `FrameSpec::rng_seed` means an entrance at the same `(tile, depth)`
+    /// now generates a *different* maze than it did before, so a
+    /// `FrameMemory` written by an older build indexes cells of a frame
+    /// that no longer exists: corridors drawn as walked that are solid
+    /// rock, and consumed-feature indices marking the wrong cells — a cache
+    /// the party never opened reading as emptied, or an emptied one
+    /// lootable again. `Game::load` drops the whole resource when this is
+    /// `false`, which costs an old save nothing but its Stack fog of war.
+    ///
+    /// Additive behind `#[serde(default)]`, so it costs no
+    /// `SAVE_FORMAT_VERSION` bump — `player.tutorial_seeded` is the same
+    /// shape, two screens up in the same function.
+    #[serde(default)]
+    pub stack_memory_tiered: bool,
     /// Which world chunks of this zone have had their wild population
     /// placed — see `resources::PopulatedChunks`. Saved rather than derived
     /// because it is history, not geometry: the chunks a run has stocked
@@ -1579,6 +1597,7 @@ mod tests {
             link_sites: Vec::new(),
             locale: crate::resources::Locale::Surface,
             stack_memory: crate::resources::StackMemory::default(),
+            stack_memory_tiered: true,
             populated_chunks: crate::resources::PopulatedChunks::default(),
             settlements: crate::resources::Settlements::default(),
             trace: 0,

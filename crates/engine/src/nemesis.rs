@@ -43,7 +43,7 @@ struct LineBank {
 /// treats a `None` name as "mark it, promote it, recharge it — just don't
 /// rename it" rather than a fault. Deleting `assets/nemesis/` restores the
 /// pre-nemesis game's naming, the same supported way to play that deleting
-/// `assets/sectors/` or `assets/policies/enemy_battle.ron` is.
+/// `assets/settlements/` or `assets/policies/enemy_battle.ron` is.
 #[derive(Resource, Default)]
 pub struct NemesisDb {
     names: Vec<String>,

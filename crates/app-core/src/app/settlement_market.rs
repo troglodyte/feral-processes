@@ -103,8 +103,13 @@ impl App {
             .and_then(|g| g.settlement_view(settlement_key))
         else {
             // The party stepped off the settlement's tile, or it never
-            // materialized in the first place.
+            // materialized in the first place. The key is dropped with the
+            // basket, not left behind: three arms drop out of this screen
+            // and all three must leave `pending_settlement` in the same
+            // state, or which one you left by decides what a later reader
+            // sees.
             self.settlement_amounts.clear();
+            self.pending_settlement = None;
             self.mode = Mode::Playing;
             return;
         };

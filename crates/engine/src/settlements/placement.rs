@@ -142,7 +142,7 @@ fn fold<const N: usize>(mut h: u64, words: [u64; N]) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::settlements::{SettlementDb, SettlementKind, Specialty, Temperament};
+    use crate::settlements::SettlementDb;
 
     fn shipped() -> SettlementDb {
         let (db, warnings) =
@@ -378,32 +378,16 @@ mod tests {
     /// on the screen.
     #[test]
     fn every_shipped_settlement_authors_a_known_shape() {
+        // The three `matches!` over `kind`/`specialty`/`temperament` that
+        // used to stand here could not fail: they are exhaustive alternations
+        // over closed enums, so any value that parsed at all passed them. What
+        // is actually worth holding — that every *variant* is reachable
+        // somewhere in the pool — is a property of the catalogue rather than
+        // of a def, and lives in `tests/assets.rs` as
+        // `every_settlement_shape_is_authored_somewhere`.
         for def in shipped().iter() {
             assert!(!def.blurb.trim().is_empty(), "{} has no blurb", def.id);
-            assert!(
-                matches!(def.kind, SettlementKind::Mainframe | SettlementKind::Server),
-                "{} has no kind",
-                def.id
-            );
-            assert!(
-                matches!(
-                    def.specialty,
-                    Specialty::Gear
-                        | Specialty::Materials
-                        | Specialty::Routines
-                        | Specialty::Programs
-                ),
-                "{} has no specialty",
-                def.id
-            );
-            assert!(
-                matches!(
-                    def.temperament,
-                    Temperament::Open | Temperament::Guarded | Temperament::Mercantile
-                ),
-                "{} has no temperament",
-                def.id
-            );
+            assert!(!def.name.trim().is_empty(), "{} has no name", def.id);
         }
     }
 }

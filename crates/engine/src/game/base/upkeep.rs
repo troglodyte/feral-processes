@@ -566,6 +566,126 @@ impl Game {
         }
     }
 
+    /// Everything a town raid *is*, once it has been decided one happens.
+    ///
+    /// Split from the roll for `run_raid`'s reason: the console fires the
+    /// real thing, and the decision stays with the one caller that should
+    /// be making it.
+    ///
+    /// **It takes rather than breaks**, which is the whole of what makes
+    /// this a different event from a sweep. The four economy roles are
+    /// separate on purpose; raiders at the *base* take what the *base* runs
+    /// on, so the cost is construction. Progression is earned by fighting
+    /// and is deliberately untouched.
+    pub(crate) fn run_town_raid(&mut self, key: crate::settlements::SettlementKey) {
+        let name = self.settlement_name(key);
+        // Before the outcome branches, `run_raid`'s placement: the lesson is
+        // "something you did caused this", and a raid turned away is still a
+        // raid that happened.
+        self.notify(crate::notifications::NotificationKind::FirstRaid);
+
+        let cut = self.total_raid_defense() * crate::tuning::SETTLEMENT_RAID_DEFENSE_PER_POINT;
+        let percent = crate::tuning::SETTLEMENT_RAID_HAUL_PERCENT.saturating_sub(cut);
+        // **Before the floor, and the order is load-bearing.** The floor
+        // exists so a share of a *small bank* does not round to nothing; run
+        // after a defense that already drove the share to zero it would hand
+        // the raiders a unit anyway, delete the deflect outcome, and leave
+        // the log claiming a shield network that had stopped working. Two
+        // different zeroes, and only one of them is the floor's business.
+        if percent == 0 {
+            if let Some(defender) = self.first_raid_defender() {
+                self.push_effect(defender, EffectKind::Deflected);
+            }
+            self.log_base_kind(
+                MessageKind::Raid,
+                format!("Raiders out of {name} probe your defences and turn back empty-handed."),
+            );
+            return;
+        }
+
+        let currency = self.currency();
+        let money = self.item_name(&currency).to_string();
+        let banked = self.banked(&currency);
+        let want = (banked * percent / 100)
+            .max(crate::tuning::SETTLEMENT_RAID_HAUL_FLOOR)
+            .min(crate::tuning::SETTLEMENT_RAID_HAUL_CAP);
+        let player = self.player_entity();
+        // `Inventory::take` is the third bound: it takes what is there and
+        // reports it, so an empty store is an outcome rather than an
+        // underflow.
+        let taken = self
+            .world
+            .get_mut::<Inventory>(player)
+            .map(|mut inv| inv.take(currency, want))
+            .unwrap_or(0);
+
+        if taken == 0 {
+            self.log_base_kind(
+                MessageKind::Raid,
+                format!("Raiders out of {name} ransack your stores and find them bare."),
+            );
+            return;
+        }
+        self.log_base_kind(
+            MessageKind::Raid,
+            format!("Raiders out of {name} carry off {taken} {money} from your stores."),
+        );
+    }
+
+    /// Which standing structure a deflected town raid flashes over — the
+    /// lowest-tiled one that actually contributes `raid_defense`.
+    ///
+    /// **A `Structure` and never the anchor.** A `VisualEffect` names a
+    /// base-space cell (`render/base.rs` draws the queue only while
+    /// `base_pos` is `Some`), and the anchor is a zone-surface fixture whose
+    /// tile is also the party's pinned `Position` out of phase — so a flash
+    /// on it paints the player's own cell, which is exactly the cross-space
+    /// aliasing that gate was added to close. `docs/seams.md` records the
+    /// ambient sweep suppressing its flash rather than moving it there; this
+    /// moves it onto something that is genuinely in the right space instead.
+    ///
+    /// **A deflect always has one.** Turning a raid away needs
+    /// `SETTLEMENT_RAID_DEFENSE_PER_POINT * defense >= SETTLEMENT_RAID_HAUL_PERCENT`,
+    /// so defense of at least 5, while the settlement half is clamped at
+    /// `SETTLEMENT_GARRISON_MAX` (3) — a garrison alone can never reach the
+    /// branch that calls this. The `Option` is honesty about the signature,
+    /// not a case the game reaches.
+    ///
+    /// Sorted by tile, `run_repair_bays`' rule: bevy's query iteration order
+    /// is not stable, so two Shields would otherwise flash different cells
+    /// between runs.
+    fn first_raid_defender(&mut self) -> Option<Entity> {
+        let defended: Vec<(String, Entity, (i32, i32))> = {
+            let mut query = self
+                .world
+                .query_filtered::<(Entity, &Structure, &Position), With<Durability>>();
+            query
+                .iter(&self.world)
+                .map(|(e, s, p)| (s.kind.clone(), e, (p.x, p.y)))
+                .collect()
+        };
+        let structure_db = self.world.resource::<StructureDb>();
+        defended
+            .into_iter()
+            .filter(|(kind, _, _)| {
+                structure_db.get(kind).is_some_and(|def| def.raid_defense > 0)
+            })
+            .min_by_key(|(_, _, tile)| *tile)
+            .map(|(_, entity, _)| entity)
+    }
+
+    /// Fires a town raid now, skipping the roll — the dev console's door and
+    /// the only way a test reaches a `SETTLEMENT_RAID_CHANCE_PER_TICK`
+    /// event. `dev_force_raid`'s precedent exactly: it calls the real body,
+    /// so the console cannot disagree with the game about the haul, the
+    /// defense cut or the lines.
+    ///
+    /// Reachable only through the `FERAL_DEV_CONSOLE` gate.
+    #[doc(hidden)]
+    pub fn dev_force_town_raid(&mut self, key: crate::settlements::SettlementKey) {
+        self.run_town_raid(key);
+    }
+
     /// Applies `dmg` to `structure`'s `Durability`, destroying (despawning)
     /// it and clearing any cronjob assignment pointing at it if that
     /// brings it to 0.

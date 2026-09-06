@@ -2001,3 +2001,206 @@ fn the_second_sector_is_where_sweeps_begin() {
         "raid_check never damaged a zone 2 structure across 300 seeds — the zone gate may be over-blocking"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Town-sourced raids: what one takes, and what turns it away
+// ---------------------------------------------------------------------------
+
+/// Puts a Hostile town `dx` east of the anchor and hands back its key.
+fn hostile_neighbour(game: &mut Game, dx: i32) -> crate::settlements::SettlementKey {
+    let (ax, ay) = game.anchor_position().expect("a new game has an anchor");
+    let key = crate::settlements::SettlementKey { rx: 1, ry: 0 };
+    place_settlement(game, key, ax + dx, ay);
+    game.world
+        .resource_mut::<crate::resources::Standings>()
+        .0
+        .entry(key)
+        .or_default()
+        .standing = crate::tuning::SETTLEMENT_HOSTILE_STANDING;
+    key
+}
+
+/// Gives the player `qty` of the build currency and returns what they hold.
+fn stock_the_bank(game: &mut Game, qty: u32) -> u32 {
+    let currency = game.currency();
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .expect("the player carries an inventory")
+        .add(currency.clone(), qty);
+    game.banked(&currency)
+}
+
+#[test]
+fn a_town_raid_carries_off_a_share_of_the_bank() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let key = hostile_neighbour(&mut game, 2);
+    let before = stock_the_bank(&mut game, 200);
+    assert_eq!(game.total_raid_defense(), 0, "fixture assumes no defense");
+
+    game.dev_force_town_raid(key);
+
+    let after = game.banked(&game.currency());
+    let taken = before - after;
+    assert_eq!(
+        taken,
+        before * crate::tuning::SETTLEMENT_RAID_HAUL_PERCENT / 100,
+        "the share is the whole rule when nothing is capped or floored"
+    );
+}
+
+#[test]
+fn a_town_raid_is_capped_however_rich_the_base_is() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let key = hostile_neighbour(&mut game, 2);
+    let before = stock_the_bank(&mut game, 100_000);
+
+    game.dev_force_town_raid(key);
+
+    let taken = before - game.banked(&game.currency());
+    assert_eq!(taken, crate::tuning::SETTLEMENT_RAID_HAUL_CAP);
+}
+
+#[test]
+fn a_town_raid_on_a_thin_bank_still_takes_something() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let key = hostile_neighbour(&mut game, 2);
+    let currency = game.currency();
+    let player = game.player_entity();
+    let held = game.banked(&currency);
+    game.world
+        .get_mut::<Inventory>(player)
+        .expect("the player carries an inventory")
+        .take(currency.clone(), held);
+    let before = stock_the_bank(&mut game, 3);
+    assert_eq!(
+        before * crate::tuning::SETTLEMENT_RAID_HAUL_PERCENT / 100,
+        0,
+        "fixture must be thin enough that the share rounds away"
+    );
+
+    game.dev_force_town_raid(key);
+
+    let taken = before - game.banked(&game.currency());
+    assert_eq!(
+        taken,
+        crate::tuning::SETTLEMENT_RAID_HAUL_FLOOR,
+        "the floor is why this is not a no-op"
+    );
+}
+
+#[test]
+fn a_town_raid_on_an_empty_store_finds_nothing_and_says_so() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let key = hostile_neighbour(&mut game, 2);
+    let currency = game.currency();
+    let player = game.player_entity();
+    let held = game.banked(&currency);
+    game.world
+        .get_mut::<Inventory>(player)
+        .expect("the player carries an inventory")
+        .take(currency.clone(), held);
+
+    game.dev_force_town_raid(key);
+
+    assert_eq!(game.banked(&currency), 0);
+    let line = &game.message_history(1)[0].text;
+    assert!(
+        line.contains("bare"),
+        "an empty store gets its own line, not a haul of zero: {line}"
+    );
+}
+
+/// The order in `run_town_raid` that this pins: the zero check runs *before*
+/// the floor. Run the other way the floor hands raiders a unit anyway, the
+/// shield network silently stops working, and the log still says it worked.
+///
+/// The effect assertion is the second half. A deflect flash names a
+/// **base-space** cell, so it has to ride a `Structure` — the anchor is a
+/// zone-surface fixture and a flash on its tile paints the party's own cell,
+/// which is the aliasing `render/base.rs`' `base_pos` gate already closed
+/// for the ambient sweep. Asserting the *position* and not just the count is
+/// what makes that non-vacuous.
+#[test]
+fn enough_defense_turns_a_town_raid_away_and_the_floor_does_not_undo_it() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let key = hostile_neighbour(&mut game, 2);
+    let before = stock_the_bank(&mut game, 200);
+    let needed = crate::tuning::SETTLEMENT_RAID_HAUL_PERCENT
+        .div_ceil(crate::tuning::SETTLEMENT_RAID_DEFENSE_PER_POINT);
+    for i in 0..needed {
+        game.world.spawn((
+            Structure {
+                kind: "shield".to_string(),
+            },
+            Position {
+                x: 40 + i as i32,
+                y: 40,
+            },
+            Durability { hp: 30, max_hp: 30 },
+        ));
+    }
+    assert!(
+        game.total_raid_defense() * crate::tuning::SETTLEMENT_RAID_DEFENSE_PER_POINT
+            >= crate::tuning::SETTLEMENT_RAID_HAUL_PERCENT,
+        "fixture must actually reach the deflect threshold"
+    );
+
+    game.dev_force_town_raid(key);
+
+    assert_eq!(game.banked(&game.currency()), before, "nothing was taken");
+    let effects = game.take_effects();
+    assert_eq!(effects.len(), 1, "a deflect draws one effect");
+    assert_eq!(
+        effects[0].pos,
+        (40, 40),
+        "the flash rides the lowest-tiled defender, never the anchor"
+    );
+}
+
+/// A maxed garrison is real relief and never immunity — the runtime half of
+/// the `const _`, asserted through the actual raid rather than the constants.
+#[test]
+fn a_garrison_alone_softens_a_town_raid_without_stopping_it() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let key = hostile_neighbour(&mut game, 2);
+    let (ax, ay) = game.anchor_position().unwrap();
+    for i in 0..4 {
+        let ally = crate::settlements::SettlementKey { rx: 2 + i, ry: 0 };
+        place_settlement(&mut game, ally, ax + 2, ay + 2 + i);
+        game.world
+            .resource_mut::<crate::resources::Standings>()
+            .0
+            .entry(ally)
+            .or_default()
+            .standing = crate::tuning::SETTLEMENT_ALLIED_STANDING;
+    }
+    assert_eq!(
+        game.total_raid_defense(),
+        crate::tuning::SETTLEMENT_GARRISON_MAX,
+        "the settlement half is clamped and no structure is standing"
+    );
+    let before = stock_the_bank(&mut game, 200);
+
+    game.dev_force_town_raid(key);
+
+    let taken = before - game.banked(&game.currency());
+    assert!(taken > 0, "a garrison alone must never zero a town raid");
+    assert!(
+        taken < before * crate::tuning::SETTLEMENT_RAID_HAUL_PERCENT / 100,
+        "and it must actually soften one"
+    );
+}
+
+#[test]
+fn a_town_raid_names_the_town_that_sent_it() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let key = hostile_neighbour(&mut game, 2);
+    stock_the_bank(&mut game, 200);
+    let name = game.settlement_name(key);
+
+    game.dev_force_town_raid(key);
+
+    let line = &game.message_history(1)[0].text;
+    assert!(line.contains(&name), "the line must have an author: {line}");
+}

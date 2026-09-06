@@ -33,6 +33,33 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.106
+
+**A tool that pulls gear off a downed program instead of a routine.** The
+Harness Puller — taught by Deep Analysis — rolls that program's own gear
+drop chances and hands over whatever lands, through the same rare-tier door
+a found copy walks through: a pulled item can be rare, affixed and rolled
+for quality exactly like one that dropped at the kill.
+
+**It is a second door, not a replacement.** Every existing way gear drops —
+at the kill, from a nest cache, from a Stack feature cache, off the surface
+boss — still pays exactly as before. Gear simply turns up more often
+overall for any program you haul home and strip.
+
+**A miss pays nothing.** No consolation scrap; the program is spent and the
+time is spent whether anything comes off it or not.
+
+**A better Compiler raises the odds.** Both the tool's own tier and the
+extraction bench's tier push the chance up — a tier-1 tool worked at a
+never-upgraded bench pays exactly the species' authored odds, and every
+tier past that is what buys more.
+
+**The extraction screen quotes the odds per item before you spend the
+program**, the same figure the pull itself rolls against.
+
+**None of this has been played.** It is green and unseen, like the phases
+before it.
+
 ## 0.13.105
 
 **The Compiler is where a program gets taken apart properly.** Standing one

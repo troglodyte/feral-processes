@@ -3305,3 +3305,162 @@ fn loading_no_such_program_refuses_and_spends_nothing() {
     assert!(game.load_teardown_rig(&[9], &clamp("salvage_clamp")).is_err());
     assert!(game.world.get::<Hopper>(rig).unwrap().queue.is_empty());
 }
+
+// ---------------------------------------------------------------------------
+// Phase 4, task 4: `Game::run_teardown_rigs`, the step that turns a loaded
+// hopper into plain items in the rig's own output buffer.
+// ---------------------------------------------------------------------------
+
+/// The step tests' shared fixture, **with no supply standing** — so the rig
+/// draws 3 against a grid of nothing and `power_grid_system` puts it in the
+/// dark. `a_staffed_rig_loaded_with_one_program` is this plus the grid, so
+/// the dark case is reached the way the game reaches it rather than by
+/// writing to `resources::PowerGrid` by hand.
+///
+/// `Task::required` is 1 because nothing here reads it: a rig's pace is
+/// `Game::extraction_ticks`, not a per-batch counter.
+fn a_dark_staffed_rig_loaded_with_one_program() -> (Game, Entity) {
+    let (mut game, rig) = player_beside_a_rig_holding(1);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: rig,
+        progress: 0,
+        required: 1,
+    });
+    game.load_teardown_rig(&[0], &clamp("salvage_clamp"))
+        .unwrap();
+    (game, rig)
+}
+
+fn a_staffed_rig_loaded_with_one_program() -> (Game, Entity) {
+    let (mut game, rig) = a_dark_staffed_rig_loaded_with_one_program();
+    stand_ample_grid_supply(&mut game);
+    (game, rig)
+}
+
+/// **The identity.** Spec section 3's one-derivation invariant, applied to
+/// the rig as a third caller. It fails loudly the day anyone re-derives the
+/// yield formula inside the step.
+#[test]
+fn what_a_rig_pays_equals_what_extraction_yield_quotes_for_the_same_pair() {
+    let (mut game, rig) = a_staffed_rig_loaded_with_one_program();
+    let entry = game.world.get::<Hopper>(rig).unwrap().queue[0].clone();
+    let tool = game
+        .installed_tools()
+        .into_iter()
+        .find(|d| d.id == entry.tool)
+        .unwrap();
+    let quoted = game.extraction_yield(&entry.program, &tool);
+    let ticks = game.extraction_ticks(&tool);
+    assert!(!quoted.is_empty(), "the fixture needs a payout to compare");
+
+    for _ in 0..ticks {
+        game.tick();
+    }
+
+    let output = &game.world.get::<Stock>(rig).unwrap().output;
+    for (item, qty) in &quoted {
+        assert_eq!(
+            output.get(item).copied().unwrap_or(0),
+            *qty,
+            "the rig paid a different figure than extraction_yield quoted for {item:?}"
+        );
+    }
+    assert!(game.world.get::<Hopper>(rig).unwrap().queue.is_empty());
+}
+
+#[test]
+fn an_unstaffed_rig_advances_nothing() {
+    let (mut game, rig) = player_beside_a_rig_holding(1);
+    stand_ample_grid_supply(&mut game);
+    game.load_teardown_rig(&[0], &clamp("salvage_clamp"))
+        .unwrap();
+    for _ in 0..50 {
+        game.tick();
+    }
+    assert_eq!(game.world.get::<Hopper>(rig).unwrap().queue.len(), 1);
+    assert_eq!(game.world.get::<Hopper>(rig).unwrap().progress, 0);
+    assert!(game.world.get::<Stock>(rig).unwrap().output.is_empty());
+}
+
+#[test]
+fn a_dark_rig_advances_nothing() {
+    let (mut game, rig) = a_dark_staffed_rig_loaded_with_one_program();
+    for _ in 0..50 {
+        game.tick();
+    }
+    assert_eq!(
+        game.world.get::<MachineStatus>(rig).unwrap(),
+        &MachineStatus::Unpowered,
+        "the fixture must actually be dark, or this passes for the wrong reason"
+    );
+    assert_eq!(game.world.get::<Hopper>(rig).unwrap().queue.len(), 1);
+    assert_eq!(game.world.get::<Hopper>(rig).unwrap().progress, 0);
+}
+
+/// **The completion gate is room for the whole payout, not room for one
+/// unit.** The assembler can use `> 0` because it makes one unit at a time;
+/// a program pays several, and clamping to the room available would destroy
+/// units. A rig that cannot hold the payout holds the program.
+#[test]
+fn a_rig_that_cannot_hold_the_whole_yield_holds_the_program() {
+    let (mut game, rig) = a_staffed_rig_loaded_with_one_program();
+    let entry = game.world.get::<Hopper>(rig).unwrap().queue[0].clone();
+    let tool = game
+        .installed_tools()
+        .into_iter()
+        .find(|d| d.id == entry.tool)
+        .unwrap();
+    let total: u32 = game
+        .extraction_yield(&entry.program, &tool)
+        .iter()
+        .map(|(_, q)| *q)
+        .sum();
+    assert!(total > 1, "the fixture needs a payout bigger than one unit");
+
+    let capacity = {
+        let mut stock = game.world.get_mut::<Stock>(rig).unwrap();
+        let capacity = stock.capacity;
+        stock
+            .output
+            .insert(ItemId::from("core_fragment"), capacity - 1);
+        capacity
+    };
+
+    for _ in 0..100 {
+        game.tick();
+    }
+    assert_eq!(
+        game.world.get::<Hopper>(rig).unwrap().queue.len(),
+        1,
+        "the program should still be waiting, not part-paid"
+    );
+    assert_eq!(
+        game.world
+            .get::<Stock>(rig)
+            .unwrap()
+            .output
+            .get(&ItemId::from("core_fragment"))
+            .copied(),
+        Some(capacity - 1),
+        "nothing should have been added"
+    );
+    assert_eq!(
+        game.world.get::<MachineStatus>(rig).unwrap(),
+        &MachineStatus::Clogged
+    );
+}
+
+/// The whole loop: the rig runs while the party is not standing there.
+#[test]
+fn a_rig_strips_while_the_party_is_in_a_zone() {
+    let (mut game, rig) = a_staffed_rig_loaded_with_one_program();
+    descend(&mut game);
+    for _ in 0..100 {
+        game.tick();
+    }
+    assert!(game.world.get::<Hopper>(rig).unwrap().queue.is_empty());
+    assert!(!game.world.get::<Stock>(rig).unwrap().output.is_empty());
+}
+

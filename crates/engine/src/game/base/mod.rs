@@ -24,6 +24,7 @@ pub(crate) mod offshift;
 pub(crate) mod power;
 pub(crate) mod repair;
 pub(crate) mod stock;
+pub(crate) mod teardown;
 pub(crate) mod transfer;
 pub(crate) mod upkeep;
 pub(crate) mod work_orders;

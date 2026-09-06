@@ -1460,10 +1460,11 @@ fn every_shipped_machine_declares_a_power_draw() {
         checked += 1;
     }
     assert_eq!(
-        checked, 16,
-        "the plan's table named 15 machines and the Cache Tap is the \
-         sixteenth; if that count changed, change this deliberately rather \
-         than letting the check go vacuous"
+        checked, 17,
+        "the plan's table named 15 machines, the Cache Tap is the \
+         sixteenth and the Teardown Rig is the seventeenth; if that count \
+         changed, change this deliberately rather than letting the check go \
+         vacuous"
     );
 }
 
@@ -1635,8 +1636,8 @@ fn every_upgrade_path_asks_for_a_zone_material() {
         checked += 1;
     }
     assert_eq!(
-        checked, 8,
-        "expected the eight upgradeable structures — the six nodes plus the two compile benches, whose tier is what a compiled copy's quality floor is built out of; one that lost its path would drop out of this scan unnoticed"
+        checked, 9,
+        "expected the nine upgradeable structures — the six nodes, the two compile benches whose tier is what a compiled copy's quality floor is built out of, and the Teardown Rig, whose tier is a bench tier too; one that lost its path would drop out of this scan unnoticed"
     );
 }
 
@@ -3683,5 +3684,87 @@ fn some_shipped_structure_extracts_programs() {
     assert!(
         db.all().any(|def| def.extracts_programs),
         "no shipped structure sets extracts_programs"
+    );
+}
+
+/// **A rig with no hopper is a machine that can never be loaded.** `strips`
+/// is the whole feature's gate, and a zero there ships a structure that
+/// builds, staffs, draws power and refuses every deposit.
+#[test]
+fn every_structure_that_strips_declares_a_hopper_and_an_output() {
+    let game = Game::new(4110, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structures = game.world.resource::<StructureDb>();
+
+    let mut checked = 0;
+    for def in structures.all() {
+        let Some(strips) = &def.strips else { continue };
+        assert!(
+            strips.hopper > 0,
+            "structure {:?} strips programs but holds none",
+            def.id
+        );
+        assert!(
+            def.capacity > 0,
+            "structure {:?} strips programs but has nowhere to put the yield",
+            def.id
+        );
+        checked += 1;
+    }
+    assert!(checked > 0, "no shipped structure strips programs at all");
+}
+
+/// The rig is a bench too, so manual extraction gains a second one. The
+/// Compiler keeps its own flag — moving it would silently downgrade
+/// manual extraction for a run in progress (spec 10.3).
+#[test]
+fn the_teardown_rig_is_also_an_extraction_bench_and_the_compiler_still_is() {
+    let game = Game::new(4111, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structures = game.world.resource::<StructureDb>();
+
+    let rig = structures
+        .get("teardown_rig")
+        .expect("teardown_rig should be a shipped structure");
+    assert!(rig.strips.is_some(), "the rig should strip programs");
+    assert!(rig.extracts_programs, "the rig should be a manual bench too");
+
+    let compiler = structures
+        .get("compiler")
+        .expect("compiler should be a shipped structure");
+    assert!(
+        compiler.extracts_programs,
+        "the Compiler keeps its bench flag — moving it downgrades a run in progress"
+    );
+}
+
+/// **`runs_a_job` is doubly load-bearing.** `spawn_structure` only inserts
+/// a `MachineStatus` for a structure that runs a job, and
+/// `idle_machine_system` skips one that does not. A rig missing from both
+/// ships as a machine that can never say it is unstaffed — green, and
+/// unreachable.
+#[test]
+fn a_structure_that_strips_runs_a_job() {
+    let game = Game::new(4112, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structures = game.world.resource::<StructureDb>();
+    let rig = structures
+        .get("teardown_rig")
+        .expect("teardown_rig should be a shipped structure");
+    assert!(
+        rig.runs_a_job(),
+        "a rig that runs no job carries no MachineStatus and is skipped by idle_machine_system"
+    );
+}
+
+/// The research node that hands the rig over resolves to it.
+#[test]
+fn the_teardown_node_unlocks_the_rig() {
+    let game = Game::new(4113, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let research = game.world.resource::<ResearchDb>();
+    let node = research
+        .get("teardown")
+        .expect("teardown should be a shipped research node");
+    assert!(
+        node.unlocks_structures
+            .contains(&"teardown_rig".to_string()),
+        "the teardown node should unlock the rig"
     );
 }

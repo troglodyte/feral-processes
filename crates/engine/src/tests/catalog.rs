@@ -60,7 +60,11 @@ fn structure_defs_are_grouped_by_category_and_stable_across_sessions() {
         // expresses — a structure is filed by what it needs, not by every use.
         // The Compiler moved here off the same rule when it stopped printing
         // catalysts from nothing; it is still the routine-extraction bench,
-        // which is the same "filed by what it needs" case.
+        // which is the same "filed by what it needs" case. The Teardown Rig
+        // joins them on that rule too: `category()` reads `strips`, and a rig
+        // wants a posted program and pays items out, which is what
+        // `Assembler` means here rather than a seventh variant every menu
+        // would have to learn to draw.
         assert_eq!(
             assemblers,
             [
@@ -73,6 +77,7 @@ fn structure_defs_are_grouped_by_category_and_stable_across_sessions() {
                 "lathe",
                 "refactor_bench",
                 "refinery",
+                "teardown_rig",
                 "transcriber",
                 "winding_node"
             ]

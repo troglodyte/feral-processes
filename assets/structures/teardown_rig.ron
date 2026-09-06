@@ -1,0 +1,13 @@
+(
+    id: "teardown_rig",
+    name: "Teardown Rig",
+    description: "Hand it the programs you dropped and it strips them while you are out. Post a program here, keep it powered, and collect what it leaves in the buffer. It is an extraction bench too, so upgrading it pays your own teardowns as well.",
+    glyph: 'V',
+    color: Orange,
+    build_cost: [("core_fragment", 20), ("bytecode_block", 6)],
+    capacity: 20,
+    strips: Some((hopper: 6)),
+    upgrade: Some((max_tier: 5, cost: [("core_fragment", 12), ("cache_grain", 1)])),
+    extracts_programs: true,
+    power_draw: 3,
+)

@@ -1,8 +1,11 @@
 # Program extraction
 
-**Status:** phases 1, 2, 3 and 5 shipped; phase 4 (§10) approved,
-unimplemented. Git and `docs/superpowers/INDEX.md` are the authority on
-what landed — this line is a signpost, not a record.
+**Status:** all five phases shipped — 1-3 and 5 by `v0.13.108`, phase 4
+(§10, the Teardown Rig) in `v0.13.114`. Unplayed. This spec stays in
+`specs/` rather than `archive/specs/` because seventeen source doc comments
+pin this path; see INDEX's "Do not move these". Git and
+`docs/superpowers/INDEX.md` are the authority on what landed — this line is
+a signpost, not a record.
 
 Kills stop paying materials directly. A defeated wild program is left as a
 carried, instanced **downed program**; carried **tools** extract materials,

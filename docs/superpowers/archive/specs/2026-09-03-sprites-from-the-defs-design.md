@@ -1,7 +1,8 @@
 # Sprites from the defs
 
 **Date:** 2026-09-03
-**Status:** approved, not implemented
+**Status:** implemented — `SpeciesDef::sprite_name()`,
+`StructureDef::sprite_name()` and the `sprite:` field resolve in `crates/`.
 
 A species or structure can name a one-cell sprite, and the loader finds it by
 reading the directory instead of a list in Rust. Ships with **no art and no

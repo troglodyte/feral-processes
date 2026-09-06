@@ -1,6 +1,7 @@
 # The compass
 
-**Status:** approved, unimplemented
+**Status:** implemented — the bearing in `v0.13.103`, a distance on every
+row in `v0.13.104`. Unplayed.
 
 A selected destination and a bearing to it. The player opens a picker
 (`u`), chooses one of the places the run already knows about — the home

@@ -1,21 +1,28 @@
 # Design specs: what shipped, and where its argument is
 
-**Audited 2026-09-02** against the source tree and the release tags — not
-against the specs' own headers, which had lied for weeks. This file is the
-one-read answer to "did this ship, and where is its argument".
+**Audited 2026-09-02, re-audited 2026-09-06** against the source tree and
+the release tags — not against the specs' own headers, which had lied for
+weeks and had rotted again by the second pass. This file is the one-read
+answer to "did this ship, and where is its argument".
 
 ## The invariant
 
-**`archive/specs/` is implemented. `specs/` is not.** Ninety-nine specs are
-archived and every one of them shipped; the ones left in `specs/` are open,
+**`archive/specs/` is implemented. `specs/` is not — with two named
+exceptions.** Every archived spec shipped; the ones left in `specs/` are open,
 parked, partial or superseded, and each says which in its own header. Sorting
 the directory *is* the answer, so no sweep is needed next time.
 
-Two independent checks agree on the ninety-five audited on 2026-09-02; the
-ninety-sixth, `2026-09-02-base-instrumentation-design`, shipped in `v0.13.84`
-and was archived on landing rather than by a later sweep — which is the
-cheaper habit and the one to keep. The two settlement specs were archived the
-same way on 2026-09-05.
+**The two exceptions are built and stay in `specs/` anyway**, because source
+doc comments pin their paths and moving them would edit `crates/`:
+`2026-09-04-program-extraction-design` (seventeen `//!` and `///` citations)
+and `2026-09-04-dev-sprite-editor-design` (`sprite_forge.rs` and
+`docs/seams.md`). Both say so in their own headers. They are the only two, and
+a third should not be created without moving the citations with it.
+
+The archive habit worth keeping is archiving **on landing**, not by a later
+sweep — `2026-09-02-base-instrumentation-design` and the two settlement specs
+were done that way. The 2026-09-06 pass had to move six specs that had gone
+built without moving, which is what the habit avoids.
 
 The checks: a distinctive symbol from
 each spec resolves in `crates/` or `assets/`, and the commit that added each
@@ -25,36 +32,43 @@ spec resolves to a release tag.
 
 | Spec | State | Evidence |
 | --- | --- | --- |
-| `2026-09-06-town-raids-and-hostile-patrols-design` | 7a **built**, unplayed; 7b **unbuilt** | `Standing::sends_raiders`, `Game::raiding_towns` and `Game::town_raid_check` resolve in `crates/engine`; `TownPatrol` still exists nowhere |
-| `2026-09-04-program-extraction-design` | **built**, unplayed | every phase including 4 (§10); `StructureDef::strips` and `Game::run_teardown_rigs` resolve in `crates/engine` |
-| `2026-09-02-combat-model-slice-2-design` | **built**, unplayed | a second swing for Strikers from level 8; `balance_sim` cannot gate it |
+| `2026-09-04-program-extraction-design` | **built**, unplayed; path-pinned | all five phases, 4 (§10) in `v0.13.114`; `StructureDef::strips` and `Game::run_teardown_rigs` resolve in `crates/engine` |
+| `2026-09-04-dev-sprite-editor-design` | **built**, unplayed; path-pinned | `crates/app-core/src/app/sprite_forge.rs` |
 | `2026-08-31-stack-wanderers-design` | approved, **unbuilt** | `FrameWanderers` exists nowhere in `crates/` |
-| `2026-08-24-rest-interruption-design` | never approved, **unbuilt** | `Game::rest_interrupted` does not exist |
 | `2026-08-24-departure-memories-design` | brainstorm parked | no departure memory in `assets/memories/` |
 | `2026-08-24-stack-depth-compounding-design` | question posed, no shape chosen | measurement only |
 | `2026-08-17-zones-as-difficulty-parked` | parked | no shape chosen |
 | `2026-08-17-item-synergy-burnout-parked` | parked | nothing stacks yet |
 | `2026-08-18-gear-passives-balance-measurement` | **not run** | a measurement protocol, never executed; the design it measures shipped in `v0.11.2` |
-| `2026-08-19-combat-model-ac-and-weapon-damage-design` | **partial** | slice 1 shipped; slices 2-4 deliberately deferred |
+| `2026-08-19-combat-model-ac-and-weapon-damage-design` | **partial** | slices 1 and 2 shipped (slice 2 has its own archived spec); slices 3-4 deliberately deferred |
 | `2026-08-13-creeping-base-footprint-design` | **superseded** | `build_radius_bonus` / `clear_platform` survive only in doc comments recording their retirement |
 | `2026-08-22-collect-picker-design` | **superseded** | `collect_basket` absent; `Mode::Transfer` shipped instead |
 
-**Settlements are archived with deferred work behind them, and that is not a
-contradiction.** Both specs shipped everything they scoped; town-sourced
-raids, hostile patrols and a server growing into a mainframe were deferred *by
-decision* and are recorded as such in the two archived specs, not carried here
-as open rows. Two of the three are now claimed by
-`2026-09-06-town-raids-and-hostile-patrols-design`, which is the open row
-above; a server growing into a mainframe is still unclaimed.
+**The settlement ladder is finished and has no open row.** The two settlement
+specs shipped everything they scoped, and the three things they deferred *by
+decision* have since resolved: town-sourced raids and hostile patrols were
+claimed by `2026-09-06-town-raids-and-hostile-patrols-design` and both shipped
+(`v0.13.113` and `v0.13.115`). **A server growing into a mainframe is the one
+deferral still unclaimed by any spec** — it is the only settlement work left,
+and nothing in `specs/` covers it.
+
+Program extraction is likewise finished: five phases, nothing unbuilt. What
+both leave behind is tuning — thirteen guessed constants in the hostility
+spec, seven in the aid spec, and a `FIGHT_CONDITION_WEIGHT` shipped at 0.0 in
+extraction. None of them are answerable by any instrument in this repo.
+`balance_sim` models no raids, no towns, no loot and no class.
 
 `docs/content-gaps.md` holds built-but-unused engine mechanics, which is a
 different question and not this file's job. **`TODO.md` no longer exists** —
 it was deleted at `v0.12.0`; references to it here and in source comments are
 historical, and git history is where its 62 lines live.
 
-## Do not move these nine
+## Do not move these
 
-Cited from source doc comments, so their paths are load-bearing:
+Cited from source doc comments, so their paths are load-bearing. Two live in
+`specs/` despite being built — `2026-09-04-program-extraction-design` and
+`2026-09-04-dev-sprite-editor-design`, the invariant's two exceptions above.
+The other nine are already in `archive/specs/`:
 `2026-07-31-the-stack`, `2026-08-03-nest-aggression`,
 `2026-08-05-stack-movement-routines`, `2026-08-06-easter-eggs`,
 `2026-08-09-battle-telemetry`, `2026-08-17-base-power-grid`,
@@ -64,14 +78,16 @@ Cited from source doc comments, so their paths are load-bearing:
 `2026-08-19-windows-and-macos-distribution`, `2026-08-21-item-quality` and
 `2026-08-23-rock-kinds-and-mining-mode`.
 
-## The plans have been deleted twice
+## The plans have been deleted three times
 
 Forty-six were deleted on 2026-08-13; forty-six more accumulated and
-forty-three of those were deleted on 2026-09-02, leaving only the plans for
-work that has not shipped. They are write-once scaffolding superseded by the
+forty-three of those were deleted on 2026-09-02; eighteen more accumulated and
+all eighteen went on 2026-09-06, every one of them naming work that had
+shipped or been superseded. `plans/` is empty and the directory is gone until
+the next plan is written. They are write-once scaffolding superseded by the
 code they produced, nothing outside the directory cites one, and git history
 holds them: `git log --diff-filter=D -- 'docs/superpowers/plans/*'` finds the
-deletion and `git show <commit>^:<path>` reads any of them back.
+deletions and `git show <commit>^:<path>` reads any of them back.
 `CLAUDE.md`'s **Process weight** section is the lesson that motivated it.
 
 The forty-seventh file in the first batch was not a plan and moved to
@@ -153,7 +169,7 @@ the policy", not which change shipped it.
 | `2026-08-12-exclusive-routines` | Disk-first routines and the exclusive pool | v0.8.7 |
 | `2026-08-17-nemesis` | Nemesis: a lost fight gets a name, a rising grudge and a mark on the map | v0.9.3 |
 | `2026-08-19-companion-progression-design` | Companion rings, levels past the cap, and per-class talent trees | v0.11.9 |
-| `2026-08-19-combat-model-ac-and-weapon-damage-design` | Attack rolls, percentage-point Mitigation, weapon damage ranges, crits and a fumble ladder — **slice 1 of four; slices 2-4 deferred** | v0.12.0 |
+| `2026-08-19-combat-model-ac-and-weapon-damage-design` | Attack rolls, percentage-point Mitigation, weapon damage ranges, crits and a fumble ladder — **slice 1 of four; slice 2 shipped separately, slices 3-4 deferred** | v0.12.0 |
 
 ## The specs archived on 2026-09-02
 
@@ -198,6 +214,26 @@ the earliest tag containing the commit that added the spec.
 | `2026-09-01-character-creation-design` | Character creation | `v0.13.75` |
 | `2026-09-01-player-classes-design` | Player-only classes | `v0.13.81` |
 | `2026-09-02-base-as-the-price-of-progress-design` | A working base is the price of progress | `v0.13.80` |
+
+## The specs archived on 2026-09-06
+
+Six that had gone built without moving. "Release" is the earliest tag
+containing the commit that added the spec, which for four of these is
+`v0.13.100` — they were written on branches that merged there. Where the
+implementation landed in a different release the row says so.
+
+| Spec | What it designed | Release |
+| --- | --- | --- |
+| `2026-09-02-combat-model-slice-2-design` | A second swing for Strikers from level 8 | `v0.13.100` |
+| `2026-09-03-player-icon-editor-design` | The player icon editor | `v0.13.100` (built `v0.13.87`) |
+| `2026-09-03-sprites-from-the-defs-design` | A `sprite:` field on species and structures, and a directory scan | `v0.13.100` |
+| `2026-09-04-perk-and-talent-respec-design` | Taking a perk or a talent back, for Credits | `v0.13.100` |
+| `2026-09-05-compass-design` | A selected destination and a bearing to it | `v0.13.103` (distance `v0.13.104`) |
+| `2026-09-06-town-raids-and-hostile-patrols-design` | Town-sourced raids (7a) and hostile patrols (7b) | `v0.13.113` (7b `v0.13.115`) |
+
+`2026-08-24-rest-interruption-design` was archived earlier, on landing in
+`v0.13.94`, but its row was left in the open table above until this pass —
+which is the same rot from the other direction.
 
 ## Four rows that need a footnote
 

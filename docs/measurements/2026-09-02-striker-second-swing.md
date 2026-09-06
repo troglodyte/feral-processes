@@ -4,7 +4,7 @@
 **Build:** `v0.13.82` (`bd38fbcb`), immediately after combat slice 2 shipped.
 **Question:** slice 2 gave a Striker a second ordinary swing from
 `EXTRA_ATTACK_LEVEL` (8). Risk 1 of
-[`the slice 2 spec`](../superpowers/specs/2026-09-02-combat-model-slice-2-design.md)
+[`the slice 2 spec`](../superpowers/archive/specs/2026-09-02-combat-model-slice-2-design.md)
 says that roughly doubles a Striker's damage and that nothing re-derives the
 level cap against it, because `balance_sim` models no class and cannot see the
 feature at all. So: how much is it actually worth?

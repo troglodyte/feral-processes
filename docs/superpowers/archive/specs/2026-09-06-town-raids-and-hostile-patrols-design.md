@@ -1,5 +1,8 @@
 # Town-sourced raids and hostile patrols
 
+**Status:** both phases shipped — 7a (town-sourced raids) in `v0.13.113`,
+7b (hostile patrols) in `v0.13.115`. Unplayed.
+
 The angry end of the settlement ladder. Both were named as deferred by
 `2026-09-04-settlements-design.md` ("Hostility (later) | Town-sourced raids;
 hostile patrols. **Structure the code for these now.**") and again by

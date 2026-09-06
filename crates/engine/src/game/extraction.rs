@@ -185,9 +185,27 @@ impl Game {
         let bonus = crate::perks::salvage_bonus(self.player_perks());
         let units = base_units + bonus;
 
-        let mut granted = apportion(&tool.yields, units);
+        // Filtered *before* apportionment, so the units the research
+        // currency would have taken redistribute across what is left rather
+        // than vanishing — a body is worth what it is worth, whatever a mod
+        // authored into the pool.
+        let pool: Vec<(ItemId, f32)> = tool
+            .yields
+            .iter()
+            .filter(|(item, _)| self.is_extractable(item))
+            .cloned()
+            .collect();
+        let mut granted = apportion(&pool, units);
 
-        if let Some(rich) = self.rich_in(&program.species) {
+        // The `rich_in` bonus is additive with nothing to redistribute to,
+        // so a species rich in the research currency simply pays none. This
+        // is the reachable case on shipped schema: `rich_in` falls back to
+        // `SpeciesDef::work_resource`, which `assets/species/README.md`
+        // names `research_data` as an example of.
+        if let Some(rich) = self
+            .rich_in(&program.species)
+            .filter(|i| self.is_extractable(i))
+        {
             match granted.iter_mut().find(|(item, _)| *item == rich) {
                 Some(entry) => entry.1 += tuning::RICH_IN_UNITS,
                 None => granted.push((rich, tuning::RICH_IN_UNITS)),
@@ -195,6 +213,25 @@ impl Game {
         }
 
         granted
+    }
+
+    /// Whether a downed program may yield `item` at all.
+    ///
+    /// One rule, and it is the research currency: research is earned by
+    /// running a Research Node, and a body is not a shortcut past it. Every
+    /// door out of a downed program asks this — the tool pool and the
+    /// `rich_in` bonus in `extraction_yield`, and the gear table in
+    /// `gear_chances` — so the three cannot drift.
+    ///
+    /// **Keyed on the role, never the id.** `EconomyRole`'s own contract is
+    /// that engine logic asks for "the item with role X" rather than naming
+    /// one, so a mod that renames or replaces its research currency is
+    /// covered and no content moves into Rust. `ItemDb::research_currency`
+    /// is the accessor; a catalogue with no research currency at all leaves
+    /// nothing to exclude, which is the correct answer rather than a
+    /// failure.
+    fn is_extractable(&self, item: &ItemId) -> bool {
+        self.world.resource::<ItemDb>().research_currency() != Some(item)
     }
 
     /// The chance of each gear item a `Gear` tool could pull off `program`,
@@ -236,6 +273,10 @@ impl Game {
         let bench = self.extraction_bench_tier().saturating_sub(1);
         let scale = tier_scale(tool.tier + bench);
         let mut chances = self.equipment_drops_for(&species);
+        // The same rule the material door takes — `Game::is_extractable`.
+        // Reachable here through either schema direction: a species'
+        // `equipment_drop`, or a `droppable` a mod put on the currency.
+        chances.retain(|(item, _)| self.is_extractable(item));
         for (_, chance) in &mut chances {
             *chance = (*chance * scale).clamp(0.0, 1.0);
         }

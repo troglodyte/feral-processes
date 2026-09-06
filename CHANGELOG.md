@@ -33,6 +33,28 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.116
+
+**A program's manifest now says what it feels and what it remembers.** Every
+program on the roster — party members and base staff alike — heads a MEMORIES
+box with its mood and names the two strongest things behind it, so the sheet
+you open to find out what a program *is* finally answers that too.
+
+**Mood reads as a word and a number, and both screens say it the same way.**
+The `R` page's header changed from `Morale -14` to `Mood bitter (-14)`; the
+bands are anchored to the point where morale stops shifting extraction, so a
+retune of that term moves the words with it.
+
+**A program you have not tamed still has no mood, and deleting
+`assets/memories/` still leaves the game whole.** The box follows the memory
+store rather than ownership, so a wild program drops it outright while an
+owned one with no catalogue keeps it and says nothing has happened yet.
+
+**The MOVES box gave up being full-width to pay for the new one.** A band and
+two half-width boxes take the same room, so nothing was trimmed to make space
+— every move, potential roll and decompile figure the sheet showed before is
+still on it.
+
 ## 0.13.115
 
 **A town that hates you now puts people on the ground between you and it.** A

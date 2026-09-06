@@ -90,7 +90,15 @@ pub struct Relation {
 }
 ```
 
-Three additive fields behind `#[serde(default)]`, so **no `SAVE_FORMAT_VERSION`
+Plus a fourth the implementation plan surfaced: `commerce_credits: u32`, the
+sub-threshold remainder. `Relation::trade_credits` exists for exactly this
+reason on the standing axis — without somewhere to keep what is left over, a
+player who trades in ten small baskets feeds a town nothing while one who trades
+the same volume in a single basket feeds it the lot, which makes the mover a
+rounding rule rather than a volume rule. Commerce needs its own remainder rather
+than sharing that one, because the two thresholds differ.
+
+Four additive fields behind `#[serde(default)]`, so **no `SAVE_FORMAT_VERSION`
 bump**. A RON round-trip test cannot catch a skipped field, so this needs a real
 save → load → assert test on all three, not a round-trip.
 

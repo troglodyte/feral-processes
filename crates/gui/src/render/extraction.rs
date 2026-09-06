@@ -128,19 +128,26 @@ pub(super) fn extraction_options_rows(game: &Game, index: usize, selected: usize
         // horizontally, so an unwrapped join would run off the popup in
         // silence for the widest species.
         let (head, continuations) = match &option.preview {
-            ExtractionPreview::Items(yields) if yields.is_empty() => {
-                (format!("{head_prefix}: nothing usable {ticks_suffix}"), Vec::new())
-            }
+            ExtractionPreview::Items(yields) if yields.is_empty() => (
+                format!("{head_prefix}: nothing usable {ticks_suffix}"),
+                Vec::new(),
+            ),
             ExtractionPreview::Items(yields) => {
                 let outcome = yields
                     .iter()
                     .map(|(item, qty)| format!("{qty} {}", game.item_name(item)))
                     .collect::<Vec<_>>()
                     .join(", ");
-                (format!("{head_prefix}: {outcome} {ticks_suffix}"), Vec::new())
+                (
+                    format!("{head_prefix}: {outcome} {ticks_suffix}"),
+                    Vec::new(),
+                )
             }
             ExtractionPreview::Routine(names) => (
-                format!("{head_prefix}: a routine — {} {ticks_suffix}", names.join(" / ")),
+                format!(
+                    "{head_prefix}: a routine — {} {ticks_suffix}",
+                    names.join(" / ")
+                ),
                 Vec::new(),
             ),
             ExtractionPreview::NothingToLearn => (
@@ -157,7 +164,10 @@ pub(super) fn extraction_options_rows(game: &Game, index: usize, selected: usize
                     .map(|(name, chance)| format!("{name} {:.0}%", chance * 100.0))
                     .collect::<Vec<_>>()
                     .join(", ");
-                (format!("{head_prefix} {ticks_suffix}"), continuation_lines(&outcome))
+                (
+                    format!("{head_prefix} {ticks_suffix}"),
+                    continuation_lines(&outcome),
+                )
             }
         };
         rows.push(item_row(head, i == selected));

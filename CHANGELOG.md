@@ -33,6 +33,23 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.107
+
+**The `extraction` template opens on the whole extraction kit**, which the
+one it replaces could not: that capture predated the feature it is named for
+and carried no `tools:` key at all, so it opened with the starter Salvage
+Clamp alone and nothing researched.
+
+**All four tools known, three installed and a forged carrier in the pack**,
+with six downed programs from real kills spanning Ordinary to Prismatic plus
+a boss — so the Tools screen, every yield preview and the extraction door
+are one keypress from the opening frame rather than an hour of play away.
+
+**It is held to that by a test**, `the_extraction_template_opens_on_the_whole
+_kit`, the assertion the other three templates each already carry: a fixture
+whose keys a format migration strips would still parse, still load, and still
+open on nothing.
+
 ## 0.13.106
 
 **Both settlement aid radii were dead by geometry, and are now fractions of region spacing rather than flat numbers.** Towns stand one per 256-tile region, so the garrison radius found a town near the anchor in 1.6% of worlds and route predation found one beside a trade lane in none of 2,000 — half a region and a quarter reach 39% and 18%.

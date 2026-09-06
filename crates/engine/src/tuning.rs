@@ -3530,6 +3530,53 @@ pub const SETTLEMENT_GARRISON_MAX: u32 = 3;
 /// Measured — `docs/measurements/2026-09-05-settlement-aid-reach.md`.
 pub const SETTLEMENT_GARRISON_RADIUS: i32 = crate::settlements::placement::REGION_TILES / 2;
 
+/// How often a Hostile neighbour tries the party's stores — `Game::town_raid_check`.
+///
+/// **Half `RAID_CHANCE_PER_TICK`**, so an angry neighbour raises total raid
+/// pressure by half again rather than doubling it. The ambient sweep is
+/// weather; this is somebody's decision, and it should be the rarer of the
+/// two.
+pub const SETTLEMENT_RAID_CHANCE_PER_TICK: f64 = 0.006;
+
+/// How close a Hostile town has to be to the anchor to bother, in Chebyshev
+/// tiles.
+///
+/// **Equal to `SETTLEMENT_GARRISON_RADIUS` today, and deliberately its own
+/// constant.** The hostile half of the ladder must reach exactly as far as
+/// the friendly half or one band's consequence is geometrically rarer than
+/// the other's — but retuning aid must not silently retune hostility, so the
+/// equality is an argued coincidence rather than a shared symbol. See
+/// `docs/measurements/2026-09-05-settlement-aid-reach.md` for the 39%-of-
+/// worlds figure this inherits.
+pub const SETTLEMENT_RAID_RADIUS: i32 = crate::settlements::placement::REGION_TILES / 2;
+
+/// The share of the party's banked build currency a raid takes, in percent.
+pub const SETTLEMENT_RAID_HAUL_PERCENT: u32 = 10;
+
+/// How many percentage points each point of `Game::total_raid_defense` cuts
+/// off that share.
+///
+/// At 2, a maxed garrison (`SETTLEMENT_GARRISON_MAX`, 3) cuts 6 of the 10 —
+/// real relief, never immunity, which is the claim the `const _` in
+/// `settlements::relations` fails the *build* over. Two Shields plus a
+/// garrison do reach zero, because that is a thing the player built.
+pub const SETTLEMENT_RAID_DEFENSE_PER_POINT: u32 = 2;
+
+/// The least a raid that lands takes.
+///
+/// A percentage of a small bank rounds to zero, and a raid that takes
+/// nothing while still logging is the mechanic deleted rather than softened
+/// — `SETTLEMENT_GARRISON_MAX`'s failure, from the other side. Applied only
+/// after the share survives defense; see `Game::run_town_raid` for why that
+/// order is load-bearing.
+pub const SETTLEMENT_RAID_HAUL_FLOOR: u32 = 1;
+
+/// The most a raid takes, whatever the bank holds.
+///
+/// A percentage of a large bank scales without limit, which would make
+/// banking itself the punished behaviour. A rich base is bled, not gutted.
+pub const SETTLEMENT_RAID_HAUL_CAP: u32 = 40;
+
 /// How long a town waits between gifts — see `Game::request_program_gift`.
 ///
 /// The limiter, because aid is free: the price of a gift was reaching

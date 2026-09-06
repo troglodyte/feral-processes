@@ -3127,3 +3127,181 @@ fn a_loaded_hopper_survives_save_and_load() {
     assert_eq!(hopper.queue, vec![entry]);
     assert_eq!(hopper.progress, 5);
 }
+
+// ---------------------------------------------------------------------------
+// Phase 4, task 3: `Game::load_teardown_rig`, the one door a downed program
+// leaves the pack for a machine through.
+// ---------------------------------------------------------------------------
+
+/// A fixture: a rig at (3,3), the player beside it, and `n` programs in the
+/// pack, one per level so a test can say which row it means.
+fn player_beside_a_rig_holding(n: usize) -> (Game, Entity) {
+    let mut game = Game::new(4130, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base_at(&mut game, 3, 4);
+    let rig = spawn_machine_at(&mut game, "teardown_rig", 3, 3);
+    let player = game.player_entity();
+    let mut held = game.world.get_mut::<DownedPrograms>(player).unwrap();
+    for level in 1..=n as u32 {
+        held.0.push(program(70, Rarity::Ordinary, level));
+    }
+    (game, rig)
+}
+
+fn clamp(id: &str) -> ToolId {
+    ToolId(id.to_string())
+}
+
+/// Pushes a tool straight into the player's slots. The loadout is written by
+/// hand throughout this file (`a_tool_loadout_survives_a_save_load_round_trip`
+/// and the phase-2 tests) rather than driven through `install_tool`, which
+/// would want a carrier item and a level's worth of slots first — neither of
+/// which any refusal here is about.
+fn install_tool_for_test(game: &mut Game, tool: &str) {
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Tools>(player)
+        .unwrap()
+        .0
+        .push(clamp(tool));
+}
+
+#[test]
+fn loading_a_rig_moves_the_named_programs_out_of_the_pack() {
+    let (mut game, rig) = player_beside_a_rig_holding(3);
+    game.load_teardown_rig(&[0, 2], &clamp("salvage_clamp"))
+        .unwrap();
+
+    let player = game.player_entity();
+    let left = &game.world.get::<DownedPrograms>(player).unwrap().0;
+    assert_eq!(left.len(), 1, "one program should still be in the pack");
+    assert_eq!(left[0].level, 2, "the one not named should be the one left");
+
+    let queue = &game.world.get::<Hopper>(rig).unwrap().queue;
+    assert_eq!(queue.len(), 2);
+    assert!(queue.iter().all(|e| e.tool == clamp("salvage_clamp")));
+    assert_eq!(
+        queue.iter().map(|e| e.program.level).collect::<Vec<_>>(),
+        vec![1, 3],
+        "the queue takes them in store order, which is the order the player sees"
+    );
+}
+
+/// An over-ask clamps rather than refusing — `take_from_adjacent`'s own
+/// rule — and the remainder is still in the pack. Nothing is destroyed
+/// (decision 9).
+#[test]
+fn a_bulk_load_past_the_hopper_clamps_and_leaves_the_rest_in_the_pack() {
+    let (mut game, rig) = player_beside_a_rig_holding(10);
+    let all: Vec<usize> = (0..10).collect();
+    game.load_teardown_rig(&all, &clamp("salvage_clamp"))
+        .unwrap();
+
+    let hopper_size = 6; // assets/structures/teardown_rig.ron
+    let queue_len = game.world.get::<Hopper>(rig).unwrap().queue.len();
+    assert_eq!(queue_len, hopper_size);
+
+    let player = game.player_entity();
+    let left = game.world.get::<DownedPrograms>(player).unwrap().0.len();
+    assert_eq!(left, 10 - hopper_size, "the remainder stays in the pack");
+}
+
+#[test]
+fn loading_with_no_rig_adjacent_refuses_and_spends_nothing() {
+    let mut game = Game::new(4131, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base_at(&mut game, 3, 4);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<DownedPrograms>(player)
+        .unwrap()
+        .0
+        .push(program(70, Rarity::Ordinary, 1));
+
+    assert!(
+        game.load_teardown_rig(&[0], &clamp("salvage_clamp"))
+            .is_err()
+    );
+    assert_eq!(game.world.get::<DownedPrograms>(player).unwrap().0.len(), 1);
+}
+
+#[test]
+fn loading_with_an_uninstalled_tool_refuses_and_spends_nothing() {
+    let (mut game, rig) = player_beside_a_rig_holding(1);
+    assert!(game.load_teardown_rig(&[0], &clamp("no_such_tool")).is_err());
+
+    let player = game.player_entity();
+    assert_eq!(game.world.get::<DownedPrograms>(player).unwrap().0.len(), 1);
+    assert!(game.world.get::<Hopper>(rig).unwrap().queue.is_empty());
+}
+
+/// A Routine Reader teaches knowledge and a Harness Puller pays a
+/// `GearCopy`; neither is a plain item, so neither can land in a
+/// `Stock::output` (spec 10.4). Both stay hand work.
+#[test]
+fn a_routines_tool_refuses_at_the_deposit_and_spends_nothing() {
+    let (mut game, rig) = player_beside_a_rig_holding(1);
+    install_tool_for_test(&mut game, "routine_reader");
+    assert!(
+        game.load_teardown_rig(&[0], &clamp("routine_reader"))
+            .is_err()
+    );
+
+    let player = game.player_entity();
+    assert_eq!(game.world.get::<DownedPrograms>(player).unwrap().0.len(), 1);
+    assert!(game.world.get::<Hopper>(rig).unwrap().queue.is_empty());
+}
+
+#[test]
+fn a_gear_tool_refuses_at_the_deposit_and_spends_nothing() {
+    let (mut game, rig) = player_beside_a_rig_holding(1);
+    install_tool_for_test(&mut game, "harness_puller");
+    assert!(
+        game.load_teardown_rig(&[0], &clamp("harness_puller"))
+            .is_err()
+    );
+
+    let player = game.player_entity();
+    assert_eq!(game.world.get::<DownedPrograms>(player).unwrap().0.len(), 1);
+    assert!(game.world.get::<Hopper>(rig).unwrap().queue.is_empty());
+}
+
+#[test]
+fn loading_a_full_hopper_refuses_and_spends_nothing() {
+    let (mut game, rig) = player_beside_a_rig_holding(10);
+    let all: Vec<usize> = (0..6).collect();
+    game.load_teardown_rig(&all, &clamp("salvage_clamp"))
+        .unwrap();
+
+    let player = game.player_entity();
+    let before = game.world.get::<DownedPrograms>(player).unwrap().0.len();
+    assert!(
+        game.load_teardown_rig(&[0], &clamp("salvage_clamp"))
+            .is_err()
+    );
+    assert_eq!(
+        game.world.get::<DownedPrograms>(player).unwrap().0.len(),
+        before
+    );
+    assert_eq!(game.world.get::<Hopper>(rig).unwrap().queue.len(), 6);
+}
+
+#[test]
+fn loading_during_a_battle_refuses_and_spends_nothing() {
+    let (mut game, rig) = player_beside_a_rig_holding(1);
+    let player = game.player_entity();
+    let wild = spawn_wild_on_player_tile(&mut game);
+    insert_battle(&mut game, player, vec![wild]);
+
+    assert!(
+        game.load_teardown_rig(&[0], &clamp("salvage_clamp"))
+            .is_err()
+    );
+    assert_eq!(game.world.get::<DownedPrograms>(player).unwrap().0.len(), 1);
+    assert!(game.world.get::<Hopper>(rig).unwrap().queue.is_empty());
+}
+
+#[test]
+fn loading_no_such_program_refuses_and_spends_nothing() {
+    let (mut game, rig) = player_beside_a_rig_holding(1);
+    assert!(game.load_teardown_rig(&[9], &clamp("salvage_clamp")).is_err());
+    assert!(game.world.get::<Hopper>(rig).unwrap().queue.is_empty());
+}

@@ -5,6 +5,7 @@
 //! sections 3 and 4.
 
 use crate::abilities::AbilityId;
+use crate::components::{Hopper, HopperEntry};
 use crate::game::routines::RoutineTaken;
 use crate::items::DownedProgram;
 use crate::species::SpeciesId;
@@ -579,7 +580,7 @@ impl Game {
     /// What to call `program` in a log line — its species' display name
     /// (falling back to the raw id for a mod species since removed) and
     /// its level.
-    fn downed_program_label(&self, program: &DownedProgram) -> String {
+    pub(crate) fn downed_program_label(&self, program: &DownedProgram) -> String {
         let name = self
             .world
             .resource::<SpeciesDb>()
@@ -682,6 +683,142 @@ impl Game {
             self.tick();
         }
 
+        Ok(())
+    }
+    /// The Teardown Rig the player is standing beside, lowest tile first
+    /// when a base somehow has two touching the party's cell.
+    ///
+    /// Adjacency rather than ownership, unlike `can_extract_routines`: this
+    /// is a physical handover, and `take_from_adjacent` / `give_to_adjacent`
+    /// are the rule for those. Sorted by tile before the pick,
+    /// `adjacent_stock`'s reason — bevy's iteration order is not stable and
+    /// an identical save must answer one keypress the same way on every run.
+    pub fn adjacent_teardown_rig(&self) -> Option<Entity> {
+        let (px, py) = self.base_pos()?;
+        let db = self.world.resource::<StructureDb>();
+        let mut found: Vec<(i32, i32, Entity)> = self
+            .world
+            .iter_entities()
+            .filter_map(|e| {
+                let kind = &e.get::<Structure>()?.kind;
+                let p = e.get::<Position>()?;
+                db.get(kind)?.strips.as_ref()?;
+                Some((p.x, p.y, e.id()))
+            })
+            .filter(|(x, y, _)| {
+                crate::game::base::collect::ORTHOGONAL
+                    .iter()
+                    .any(|(dx, dy)| (*x, *y) == (px + dx, py + dy))
+            })
+            .collect();
+        found.sort();
+        found.into_iter().map(|(_, _, e)| e).next()
+    }
+
+    /// The one door a downed program leaves the pack for a machine through
+    /// — spec section 10's deposit.
+    ///
+    /// Bulk-shaped so the per-row verb and the bulk verb share one set of
+    /// refusals; a single index is a one-element slice. Refusals in order,
+    /// all before anything moves (`commit_caravan_basket`'s rule): the run
+    /// is over or a battle is active, no rig is adjacent, the tool is not
+    /// installed, the tool's category cannot pay a plain item, the hopper
+    /// has no room, `indices` names no held program.
+    ///
+    /// **An over-ask is clamped, not refused** — `take_from_adjacent`'s own
+    /// rule. Ten into six free slots takes six and says so; the remainder
+    /// stays in the pack and nothing is destroyed (decision 9).
+    pub fn load_teardown_rig(&mut self, indices: &[usize], tool: &ToolId) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".to_string());
+        }
+        let rig = self
+            .adjacent_teardown_rig()
+            .ok_or_else(|| "There is no rig here to load.".to_string())?;
+        let tool_def = self
+            .installed_tools()
+            .into_iter()
+            .find(|def| &def.id == tool)
+            .ok_or_else(|| "That tool isn't installed.".to_string())?;
+        // A Routine Reader teaches knowledge and a Harness Puller pays a
+        // `GearCopy`; neither is a plain item, so neither could land in a
+        // `Stock::output` at all (spec 10.4). Refused at the deposit rather
+        // than at the step, so a program is never taken for work the rig
+        // could not do.
+        if matches!(
+            tool_def.category,
+            ToolCategory::Routines | ToolCategory::Gear
+        ) {
+            return Err(format!("The {} is work for your hands.", tool_def.name));
+        }
+
+        let capacity = {
+            let kind = self.world.get::<Structure>(rig).unwrap().kind.clone();
+            self.world
+                .resource::<StructureDb>()
+                .get(&kind)
+                .and_then(|def| def.strips.as_ref())
+                .map(|s| s.hopper as usize)
+                .unwrap_or(0)
+        };
+        let room = capacity.saturating_sub(self.world.get::<Hopper>(rig).unwrap().queue.len());
+        if room == 0 {
+            return Err("The rig is full.".to_string());
+        }
+
+        let player = self.player_entity();
+        let held = self.world.get::<DownedPrograms>(player).unwrap().0.len();
+        // Deduplicated and sorted so a caller passing an index twice cannot
+        // remove two programs, and so the removal below can walk backwards.
+        let mut wanted: Vec<usize> = indices.iter().copied().filter(|i| *i < held).collect();
+        wanted.sort_unstable();
+        wanted.dedup();
+        if wanted.is_empty() {
+            return Err("No such downed program.".to_string());
+        }
+        let asked = wanted.len();
+        wanted.truncate(room);
+        let taking = wanted.len();
+
+        // Highest index first, so every earlier index is still valid as the
+        // removals happen. Put back into store order afterwards, which is
+        // the order the player sees them in.
+        let mut moved: Vec<DownedProgram> = Vec::with_capacity(taking);
+        {
+            let mut store = self.world.get_mut::<DownedPrograms>(player).unwrap();
+            for index in wanted.iter().rev() {
+                moved.push(store.0.remove(*index));
+            }
+        }
+        moved.reverse();
+
+        let labels: Vec<String> = moved.iter().map(|p| self.downed_program_label(p)).collect();
+        {
+            let mut hopper = self.world.get_mut::<Hopper>(rig).unwrap();
+            for program in moved {
+                hopper.queue.push(HopperEntry {
+                    program,
+                    tool: tool.clone(),
+                });
+            }
+        }
+
+        let left_behind = asked - taking;
+        let line = if left_behind == 0 {
+            format!("You load the rig with {}.", labels.join(", "))
+        } else {
+            format!(
+                "You load the rig with {}. {left_behind} more stay in your pack — it is full.",
+                labels.join(", ")
+            )
+        };
+        self.log_base(line);
+
+        // The turn `transfer_items` charges for a handover, and for its
+        // reason: handing cargo across is the same errand. Not
+        // `extraction_ticks` — the rig pays those, and charging both would
+        // make automation cost more than doing it by hand.
+        self.tick();
         Ok(())
     }
 }

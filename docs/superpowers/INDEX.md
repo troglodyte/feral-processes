@@ -25,6 +25,7 @@ spec resolves to a release tag.
 
 | Spec | State | Evidence |
 | --- | --- | --- |
+| `2026-09-04-program-extraction-design` | **partial** | phases 1, 2, 3 and 5 shipped and are unplayed; phase 4 (§10) approved, **unbuilt** — `StructureDef::strips` exists nowhere in `crates/` |
 | `2026-09-02-combat-model-slice-2-design` | **built**, unplayed | a second swing for Strikers from level 8; `balance_sim` cannot gate it |
 | `2026-08-31-stack-wanderers-design` | approved, **unbuilt** | `FrameWanderers` exists nowhere in `crates/` |
 | `2026-08-24-rest-interruption-design` | never approved, **unbuilt** | `Game::rest_interrupted` does not exist |

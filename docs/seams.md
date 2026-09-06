@@ -8497,8 +8497,35 @@ site — `base_int`'s idiom in the same expression.
 costs.** A NEEDS box of its own did not fit at 1280x720 even at two rows —
 the program page has the least clearance in the renderer — so the rows share
 the WORK box, which is the box about what a program is like to *post*
-anyway. `MAX_BAND_ROWS` dropped from 4 to 3 to pay for the space; nothing
-shipped has more than two moves, so it trims nothing that exists today.
+anyway. `MAX_MOVE_ROWS` (then `MAX_BAND_ROWS`) dropped from 4 to 3 to pay for
+the space; nothing shipped has more than two moves, so it trims nothing that
+exists today.
+
+**The MEMORIES box was bought a different way, and the way is the point.** A
+full-width band and two columned boxes side by side occupy the *same grid
+row*, so demoting MOVES from a band to a columned box paid for a whole new box
+outright: measured at 1280x720, the program page clears its footer by the same
+17.33px after both changes as it did before either. Every other shape was
+measured first and every one of them cost something real — a MEMORIES box
+added beside the band overlapped the footer outright; freeing two SPECIES rows
+and two more elsewhere still left 1.33px, under the 10px floor. Clearance
+moves in whole 16px rows and the exact 2-partition decides which column
+absorbs a columned box, so trimming rows from a columned box buys roughly half
+a row and trimming the band buys a whole one — which is why the band was the
+only lever that worked. Reach for that trade before trimming a cap the next
+time this page has to carry something new.
+
+**A row demoted into a half-width column is a legibility question, not a
+containment one.** `fitted_stat_row` elides the label into whatever the value
+leaves, so a census asserting the halves do not collide passes against a label
+of *any* length — verified, by widening every shipped move name by 34
+characters and watching the assertion stay green. `no_move_row_is_cut_to_fit_its_column`
+and `no_memories_row_is_cut_to_fit_its_column` assert the row is drawn
+**whole** instead, which is falsifiable and is the property that matters: a
+move cut to `Cascade Log…ic` costs the player the move's identity in silence.
+The row's *size* is deliberately not asserted — `fitted_stat_row` drops the
+whole row to `m.small()` before it cuts anything, and a smaller row is still a
+complete one.
 `MAX_NEED_ROWS` trims the need rows *before* the box's own cap, so a modded
 catalogue spends its "+N more" on needs rather than pushing the post row off
 the end.

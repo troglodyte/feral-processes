@@ -151,9 +151,20 @@ pub(super) fn memory_page_rows(name: &str, morale: f32, entries: &[MemoryRow]) -
         // The one derived figure the whole store adds up to, and the reason
         // the page has a header at all. Coloured by sign rather than by
         // band: what a player wants off a glance is whether this program is
-        // carrying more scar than bond, and a five-step scale would be a
-        // claim about magnitude the sum cannot support.
-        Row::TextColored(format!("Morale {morale:+.0}"), morale_color(morale)),
+        // carrying more scar than bond, and the hue is a claim about
+        // direction, which is all a signed sum supports.
+        //
+        // **"Mood", and the same word the manifest's box uses**, with the
+        // same band from the same `views::morale_band` call. This page said
+        // "Morale" and the sheet would have said "Mood" — one number under
+        // two names on two screens reads as two different numbers, which is
+        // the drift this repo has already paid for four times. The word the
+        // player sees is "Mood"; `Game::morale` keeps its name, because the
+        // engine's vocabulary is not the screen's.
+        Row::TextColored(
+            format!("Mood {} ({morale:+.0})", morale_band(morale)),
+            morale_color(morale),
+        ),
         text_row(""),
     ];
 
@@ -979,8 +990,13 @@ mod tests {
     /// that only checked a number was *present* passes against a hardcoded
     /// zero, which is exactly what a header reading `morale` off nothing
     /// would be.
+    ///
+    /// **The word and the number, and both out of the engine**: this page and
+    /// the manifest's MEMORIES box say the same thing about the same figure,
+    /// so the band comes from `views::morale_band` at both and the header is
+    /// held to carrying it rather than only to carrying the digits.
     #[test]
-    fn the_page_heads_itself_with_the_morale_figure() {
+    fn the_page_heads_itself_with_the_mood_figure() {
         let sour = memory_page_rows(
             "Kestrel",
             -14.0,
@@ -992,8 +1008,13 @@ mod tests {
             Row::Text(t) | Row::TextColored(t, _) => t.clone(),
             _ => panic!("the second row is the header"),
         };
-        assert!(header(&sour).contains("-14"), "{}", header(&sour));
-        assert!(header(&sweet).contains("+9"), "{}", header(&sweet));
+        assert_eq!(header(&sour), format!("Mood {} (-14)", morale_band(-14.0)));
+        assert_eq!(header(&sweet), format!("Mood {} (+9)", morale_band(9.0)));
+        assert_ne!(
+            morale_band(-14.0),
+            morale_band(9.0),
+            "the band has to separate these two, or the header is only a number"
+        );
     }
 
     /// A row has to say what the memory is *about*, or two maulings by

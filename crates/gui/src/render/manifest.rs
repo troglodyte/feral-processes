@@ -8,7 +8,7 @@ use super::*;
 use feral_processes_engine::components::TaskKind;
 use feral_processes_engine::species::{AffinityClass, MoveDef};
 use feral_processes_engine::{
-    DifficultyMode, ManifestEquipSlot, ManifestSubject, ManifestView, PlayerManifest,
+    DifficultyMode, ManifestEquipSlot, ManifestMood, ManifestSubject, ManifestView, PlayerManifest,
     ProgramManifest,
 };
 
@@ -18,6 +18,18 @@ use feral_processes_engine::{
 /// header is `HEADER_ROWS` × `line_height` tall, which is a hair over twice
 /// `m.title()`).
 const HEADER_GLYPH_SCALE: u16 = 2;
+
+/// How many memories the MEMORIES box names under its mood line.
+///
+/// A **renderer** constant and not an engine one: `ManifestMood` carries
+/// `MANIFEST_MOOD_MEMORIES` of them precisely so this is a layout decision
+/// the width census can measure past, rather than a truncation baked into the
+/// view where a fixture could never build a row this box does not draw.
+///
+/// Two, because that is what the box has room for — see
+/// `manifest_layout::MAX_MOVE_ROWS` for what a third row would cost. The `R`
+/// page is where the whole store is read; this is the glance.
+pub(super) const MANIFEST_MEMORY_ROWS: usize = 2;
 
 /// What the manifest's footer can offer, which depends on how the screen was
 /// opened. Bundled rather than passed as two loose bools, which read as
@@ -738,6 +750,22 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
         full_width: false,
     });
 
+    // What this program is carrying, under what it adds up to.
+    //
+    // **Present exactly when the program has a `Memories` store**, which is
+    // every program on the roster and nothing else — so a wild one drops the
+    // box without an ownership check here, and an owned one nothing has
+    // happened to yet keeps it and says so. An install with
+    // `assets/memories/` deleted lands in that second case at every program
+    // at once, which is the supported way to play without this feature.
+    if let Some(mood) = &p.mood {
+        sections.push(Section {
+            title: "MEMORIES",
+            rows: section_rows(mood_rows(mood)),
+            full_width: false,
+        });
+    }
+
     // Only for a program that has been developed, the way the `fused` and
     // `upgraded` header tags only show once they mean something: an
     // undeveloped program's box would be three rows of zero on a page whose
@@ -760,8 +788,17 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
     if !p.moves.is_empty() {
         sections.push(Section {
             title: "MOVES",
-            rows: section_rows_capped(p.moves.iter().map(move_row).collect(), MAX_BAND_ROWS),
-            full_width: true,
+            rows: section_rows_capped(p.moves.iter().map(move_row).collect(), MAX_MOVE_ROWS),
+            // **Columned, and it was the page's full-width band until
+            // MEMORIES arrived.** A band and two columned boxes side by side
+            // occupy the same grid row, so demoting this one paid for the new
+            // box outright — measured, the program page holds the same
+            // clearance at 1280x720 as it did before either change. The
+            // widest shipped move row is narrower than the widest gear row by
+            // a distance, which is why EQUIPMENT could not have made this
+            // trade instead; `no_move_row_is_cut_to_fit_its_column` is what holds
+            // that, rather than the arithmetic.
+            full_width: false,
         });
     }
 }
@@ -807,6 +844,44 @@ fn post_label(kind: TaskKind) -> &'static str {
         // "Building  Depot (under construction)".
         TaskKind::Construct => "Building",
     }
+}
+
+/// The MEMORIES box's rows: the mood line, then the strongest
+/// `MANIFEST_MEMORY_ROWS` entries behind it.
+///
+/// Split out of `program_sections` for `memory_page_rows`' reason — the width
+/// census has to measure this box at its **worst** case, and a mood carrying
+/// the widest shipped def against the widest shipped subject is a state a
+/// fixture can state and a `Game` would have to be played into.
+///
+/// **The band and the number together**, unlike the needs rows above, which
+/// are banded alone. A need's bar is one reserve on a known scale; morale is a
+/// signed sum with no bar anywhere, so the word alone could not be compared
+/// between two programs and the number alone reads as a quantity of nothing.
+/// `views::morale_band` owns the word — a renderer that picked its own would
+/// be the second place in the codebase deciding what a morale figure means.
+///
+/// A memory's own row leads with **what it is about** where it has a subject,
+/// because that is the half a player scans for: three programs mauled by the
+/// same species is the pattern, and the def's name is the same handful of
+/// phrases down the whole column. The blurb is deliberately absent — it is a
+/// property of the kind rather than of the program, and the `R` page is where
+/// it is said.
+fn mood_rows(mood: &ManifestMood) -> Vec<SectionRow> {
+    let mut rows = vec![stat("Mood", format!("{} ({:+.0})", mood.band, mood.sum))];
+    if mood.memories.is_empty() {
+        // The same state the `R` page words for itself, kept short here
+        // because this is a value column and not a page.
+        rows.push(stat("Carrying", "nothing yet"));
+    }
+    for entry in mood.memories.iter().take(MANIFEST_MEMORY_ROWS) {
+        let label = match &entry.subject {
+            Some(subject) => format!("{} — {subject}", entry.name),
+            None => entry.name.clone(),
+        };
+        rows.push(stat(label, format!("{:+.0}", entry.intensity)));
+    }
+    rows
 }
 
 fn move_row(mv: &MoveDef) -> SectionRow {
@@ -967,6 +1042,37 @@ mod tests {
             // test builds one, so this fixture holds every other box at its
             // worst case without that one moving under it.
             needs: vec![],
+            // `None` on purpose, for `needs`' reason: this is the wild
+            // program's state, so every other box sits at its worst case
+            // without the MEMORIES box moving under it. `owned_program`
+            // below is the fixture that carries one.
+            mood: None,
+        }
+    }
+
+    /// `plain_program` as the player owns it: a mood, and so the MEMORIES
+    /// box. The two are the page's real alternatives — a program with a
+    /// `Memories` store is on the roster, and one without it is wild.
+    fn owned_program(memories: Vec<MemoryRow>) -> ProgramManifest {
+        ProgramManifest {
+            is_tamed: true,
+            mood: Some(ManifestMood {
+                sum: -11.0,
+                band: morale_band(-11.0),
+                memories,
+            }),
+            ..plain_program(6, 6)
+        }
+    }
+
+    /// A `MemoryRow` differing only in the fields these tests care about.
+    fn memory(name: &str, subject: Option<&str>, intensity: f32) -> MemoryRow {
+        MemoryRow {
+            name: name.to_string(),
+            blurb: "b".to_string(),
+            subject: subject.map(str::to_string),
+            intensity,
+            age: "recently".to_string(),
         }
     }
 
@@ -1460,6 +1566,240 @@ mod tests {
         });
     }
 
+    /// The box `manifest_layout` really gives `title` on a program's page at
+    /// `w` x `h`, rather than a width written down here. `None` when the page
+    /// does not draw that box at all.
+    ///
+    /// The program is owned and fully developed, which is the state that puts
+    /// the most columned boxes on the page — and which column a box lands in
+    /// is what decides its `x`, so a census measuring a thinner page would be
+    /// measuring a box the player never sees.
+    fn program_box_rect(
+        game: &Game,
+        program: ProgramManifest,
+        title: &str,
+        w: f32,
+        h: f32,
+    ) -> Option<Rect> {
+        let m = ui_metrics(h);
+        let view = program_view(program, vec![worn("WEP"), worn("ARM"), worn("MOD")]);
+        let sections = sections_for(game, &view);
+        let l = manifest_layout(w, h, 2, &sections, &m);
+        l.sections
+            .iter()
+            .zip(&sections)
+            .find(|(_, s)| s.title == title)
+            .map(|(rect, _)| *rect)
+    }
+
+    /// The fullest program page there is: owned, developed, posted, kitted.
+    fn worst_case_owned(moves: Vec<MoveDef>, memories: Vec<MemoryRow>) -> ProgramManifest {
+        let mut program = owned_program(memories);
+        program.base_speed = 14;
+        program.base_int = 12;
+        program.base_job = Some(AffinityClass::Striker);
+        program.post = Some((TaskKind::GatherResource, "Mining Node".to_string()));
+        program.ring = 3;
+        program.level_cap = 12;
+        program.talents_earned = 6;
+        program.talents_spent = 6;
+        program.moves = moves;
+        program
+    }
+
+    /// **MOVES stopped being the page's full-width band to pay for MEMORIES**,
+    /// so every shipped move row now has to fit a half-width column instead
+    /// of the whole frame.
+    ///
+    /// **The bar is "drawn whole", not "does not overflow".** Containment is
+    /// not a testable property of this row: `fitted_stat_row` elides the
+    /// label into whatever the value leaves, so `label_end <= value_start`
+    /// holds by construction and a census asserting it passes against a move
+    /// name of any length whatever — measured, by widening every shipped name
+    /// by 34 characters and watching it stay green. What the demotion
+    /// actually put at risk is legibility: a name cut to `Cascade Log…ic`
+    /// costs the player the move's identity in silence, and that is what this
+    /// holds against.
+    ///
+    /// Over the real `assets/species/` catalogue rather than a hand-picked
+    /// worst case — a move's width is its authored name plus its tag list,
+    /// and choosing the widest by eye is how a census goes stale when a
+    /// species is added. Measured against the box `manifest_layout` really
+    /// gives MOVES, at every window in `CENSUS_WINDOWS`.
+    ///
+    /// The size is *not* asserted: `fitted_stat_row` drops the whole row to
+    /// `m.small()` before it cuts anything, and a smaller row is still a
+    /// complete one. Only the cut is a loss.
+    #[test]
+    fn no_move_row_is_cut_to_fit_its_column() {
+        let game = census_game();
+        let moves: Vec<MoveDef> = game
+            .species_defs()
+            .into_iter()
+            .flat_map(|def| def.moves.clone())
+            .collect();
+        assert!(!moves.is_empty(), "the shipped species have moves");
+
+        with_painter(|p| {
+            for (w, h) in CENSUS_WINDOWS {
+                let m = ui_metrics(h);
+                // One move on the page, so the box is measured where the
+                // renderer puts it for a species with a single wide move —
+                // the row is what is under test, not the box's height.
+                for mv in &moves {
+                    let program = worst_case_owned(
+                        vec![mv.clone()],
+                        vec![memory("Mauled by", Some("Husk"), -8.0)],
+                    );
+                    let rect = program_box_rect(&game, program, "MOVES", w, h)
+                        .expect("a program with a move draws a MOVES box");
+                    let SectionRow::Stat(label, value) = move_row(mv) else {
+                        panic!("a move row is a stat row");
+                    };
+                    let row = fitted_stat_row(p, &label, &value, rect, &m);
+                    assert_eq!(
+                        (row.label.as_str(), row.value.as_str()),
+                        (label.as_str(), value.as_str()),
+                        "the MOVES row for {:?} is cut to fit its half-width column \
+                         at {w}x{h} — the player loses part of the move's name",
+                        mv.name
+                    );
+                }
+            }
+        });
+    }
+
+    /// The MEMORIES box's rows are as wide as a memory def's name plus the
+    /// subject it names, both authored and joined by `mood_rows` — so the
+    /// census is `assets/memories/` crossed with the widest subject
+    /// `Game::subject_name` can render into one.
+    ///
+    /// **"Drawn whole", for `no_move_row_is_cut_to_fit_its_column`'s reason** —
+    /// read that one for why containment is not the property here. A subject
+    /// is the half of this row a player scans the column for, so a cut costs
+    /// exactly the thing the row exists to say.
+    #[test]
+    fn no_memories_row_is_cut_to_fit_its_column() {
+        let game = census_game();
+        // The widest thing `Game::subject_name` can put after a def's name:
+        // a species or structure name out of the shipped catalogues, or the
+        // base-tile phrase, whichever measures longest.
+        let mut subjects: Vec<String> = game
+            .species_defs()
+            .into_iter()
+            .map(|d| d.name.clone())
+            .chain(game.structure_defs().into_iter().map(|d| d.name.clone()))
+            .collect();
+        subjects.push("the base at (-128, -128)".to_string());
+        let widest_subject = subjects
+            .iter()
+            .max_by_key(|s| s.chars().count())
+            .expect("the shipped catalogues are not empty")
+            .clone();
+
+        let rows: Vec<MemoryRow> = game
+            .memory_defs()
+            .into_iter()
+            .map(|def| memory(&def.name, Some(&widest_subject), -99.0))
+            .collect();
+        assert!(!rows.is_empty(), "the shipped catalogue has memories");
+
+        with_painter(|p| {
+            for (w, h) in CENSUS_WINDOWS {
+                let m = ui_metrics(h);
+                for entry in &rows {
+                    let program = worst_case_owned(Vec::new(), vec![entry.clone(), entry.clone()]);
+                    let rect = program_box_rect(&game, program, "MEMORIES", w, h)
+                        .expect("an owned program draws a MEMORIES box");
+                    for row in mood_rows(&ManifestMood {
+                        sum: -99.0,
+                        band: morale_band(-99.0),
+                        memories: vec![entry.clone(), entry.clone()],
+                    }) {
+                        let SectionRow::Stat(label, value) = row else {
+                            panic!("a memories row is a stat row");
+                        };
+                        let fitted = fitted_stat_row(p, &label, &value, rect, &m);
+                        assert_eq!(
+                            (fitted.label.as_str(), fitted.value.as_str()),
+                            (label.as_str(), value.as_str()),
+                            "a MEMORIES row is cut to fit its column at {w}x{h}"
+                        );
+                    }
+                }
+            }
+        });
+    }
+
+    /// **The box is gated on the store, not on ownership.** A wild program
+    /// has no `Memories` component, so `Game::manifest` hands the renderer
+    /// `None` and the box is absent — which is also what an install with
+    /// `assets/memories/` deleted looks like from the *other* direction: the
+    /// store is still there, so the box stays and says nothing has happened.
+    /// Those two states must not collapse into one, or deleting the
+    /// catalogue would silently take a box off every roster page.
+    #[test]
+    fn the_memories_box_follows_the_store_and_not_the_catalogue() {
+        let game = census_game();
+
+        let wild = program_view(plain_program(6, 6), Vec::new());
+        let titles: Vec<&str> = sections_for(&game, &wild).iter().map(|s| s.title).collect();
+        assert!(
+            !titles.contains(&"MEMORIES"),
+            "a wild program has no store and so no box: {titles:?}"
+        );
+
+        let empty = program_view(owned_program(Vec::new()), Vec::new());
+        let sections = sections_for(&game, &empty);
+        let box_rows = sections
+            .iter()
+            .find(|s| s.title == "MEMORIES")
+            .map(|s| s.rows.clone())
+            .expect("an owned program with an empty catalogue keeps its box");
+        assert_eq!(
+            box_rows,
+            vec![
+                SectionRow::Stat("Mood".to_string(), "uneasy (-11)".to_string()),
+                SectionRow::Stat("Carrying".to_string(), "nothing yet".to_string()),
+            ],
+            "the box says what it knows rather than disappearing"
+        );
+    }
+
+    /// The mood line leads with the word and carries the number, and each
+    /// memory row leads with what it is *about* — the half a player scans a
+    /// column for. Only `MANIFEST_MEMORY_ROWS` of them are drawn, however
+    /// many the view carries.
+    #[test]
+    fn the_memories_box_names_the_mood_then_the_strongest_few() {
+        let game = census_game();
+        let view = program_view(
+            owned_program(vec![
+                memory("Mauled by", Some("Husk"), -8.0),
+                memory("Jammed here", Some("Lathe"), -4.0),
+                memory("Hard won", None, 3.0),
+            ]),
+            Vec::new(),
+        );
+        let sections = sections_for(&game, &view);
+        let rows = sections
+            .iter()
+            .find(|s| s.title == "MEMORIES")
+            .map(|s| s.rows.clone())
+            .expect("an owned program draws the box");
+
+        assert_eq!(
+            rows,
+            vec![
+                SectionRow::Stat("Mood".to_string(), "uneasy (-11)".to_string()),
+                SectionRow::Stat("Mauled by — Husk".to_string(), "-8".to_string()),
+                SectionRow::Stat("Jammed here — Lathe".to_string(), "-4".to_string()),
+            ],
+            "the third memory is carried by the view and drawn by neither"
+        );
+        assert_eq!(rows.len(), 1 + MANIFEST_MEMORY_ROWS);
+    }
+
     /// **The bug this branch was opened for.** A gear copy's name carries its
     /// affix at *both* ends — `Game::copy_name` puts a prefix word in front
     /// of the item name and a suffix phrase behind it — and nothing on this
@@ -1513,16 +1853,18 @@ mod tests {
 
     /// `manifest_layout::tests::worst_case_program` lists ROUTINES before
     /// MOVES, but `sections_for` does not: `program_sections` pushes MOVES
-    /// last (it's the full-width band), and EQUIPMENT and ROUTINES are
-    /// appended only after `program_sections` returns (see `sections_for`'s
-    /// own doc). That drift is currently harmless — MOVES is the only
-    /// `full_width` box, so `best_column_split` filters it out before packing
-    /// the columned rest, and order stops mattering the moment a box leaves
-    /// that set — but this project has previously shipped a layout fixture
-    /// that drifted from what the renderer actually emits and hid a real
-    /// overflow behind a green suite. Pinning the real sequence here is what
-    /// would catch that again if a future change ever made full-width order
-    /// matter.
+    /// last, and EQUIPMENT and ROUTINES are appended only after
+    /// `program_sections` returns (see `sections_for`'s own doc).
+    ///
+    /// **That drift stopped being free when MOVES lost its `full_width`
+    /// flag.** While it was the page's band, `best_column_split` filtered it
+    /// out before packing the columned rest and its position could not change
+    /// anything. It is now one columned box among eight, so its place in the
+    /// sequence decides which column it lands in whenever two partitions tie
+    /// — which is exactly what `columned_sections_fill_left_then_right`
+    /// pins. This project has previously shipped a layout fixture that
+    /// drifted from what the renderer emits and hid a real overflow behind a
+    /// green suite; pinning the real sequence here is what catches that.
     ///
     /// The gear is what makes this a program's *worst* case rather than a
     /// typical one: EQUIPMENT was a player-only box until any program the
@@ -1538,7 +1880,12 @@ mod tests {
         )
         .expect("shipped assets load");
 
-        let mut program = plain_program(14, 12);
+        let mut program = owned_program(vec![
+            memory("Mauled by", Some("Husk"), -8.0),
+            memory("Jammed here", Some("Lathe"), -4.0),
+        ]);
+        program.base_speed = 14;
+        program.base_int = 12;
         program.moves = vec![MoveDef {
             name: "Strike".to_string(),
             power: 5,
@@ -1571,8 +1918,9 @@ mod tests {
                 ("COMBAT", 4, false),
                 ("SPECIES", 5, false),
                 ("WORK", 4, false),
+                ("MEMORIES", 3, false),
                 ("DEVELOPMENT", 3, false),
-                ("MOVES", 1, true),
+                ("MOVES", 1, false),
                 ("EQUIPMENT", 2, false),
                 ("ROUTINES", 1, false),
             ],

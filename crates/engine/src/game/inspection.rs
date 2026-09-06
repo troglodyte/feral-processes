@@ -1892,7 +1892,32 @@ impl Game {
                 affinities: species.affinities.non_neutral(),
                 base_job: species.affinity_class(),
                 needs: self.need_rows(entity),
+                mood: self.manifest_mood(entity),
             })),
+        })
+    }
+
+    /// What `entity` feels, for the manifest's MEMORIES box — see
+    /// `views::ManifestMood`.
+    ///
+    /// **Gated on the store and not on ownership.** `Memories` is minted at
+    /// `roster_parts` and nowhere else, so its absence already means "not on
+    /// the roster"; a `Tamed` check here would be a second expression of that
+    /// rule, and the two could disagree about a program mid-taming.
+    ///
+    /// Every figure is a call: `morale` for the sum, `memory_report` for the
+    /// rows in the order the `R` page shows them. Neither evicts — a
+    /// read-only sheet that rewrote the roster it draws would make what a
+    /// program remembers depend on whether anyone opened its manifest.
+    fn manifest_mood(&self, entity: Entity) -> Option<crate::views::ManifestMood> {
+        self.world.get::<crate::components::Memories>(entity)?;
+        let mut memories = self.memory_report(entity);
+        memories.truncate(crate::views::MANIFEST_MOOD_MEMORIES);
+        let sum = self.morale(entity);
+        Some(crate::views::ManifestMood {
+            sum,
+            band: crate::views::morale_band(sum),
+            memories,
         })
     }
 

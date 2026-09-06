@@ -2092,6 +2092,84 @@ pub struct ProgramManifest {
     /// `assets/needs/` deleted, so the section is absent entirely rather than
     /// present and empty.
     pub needs: Vec<NeedRow>,
+    /// What this program is carrying, and what it adds up to — see
+    /// `ManifestMood`.
+    ///
+    /// **`None` is "has no `Memories` store", not "remembers nothing".** The
+    /// store is minted at `roster_parts` and nowhere else, so its absence
+    /// *is* "not on the roster" — the same asymmetry `Game::remember` relies
+    /// on to leave hostiles, structures and the player alone without a branch
+    /// at the call site. A wild program therefore drops the box structurally
+    /// rather than by an ownership check here, and an owned one that nothing
+    /// has happened to yet is `Some` with an empty `memories`.
+    pub mood: Option<ManifestMood>,
+}
+
+/// What one owned program feels, as the manifest's MEMORIES box draws it: the
+/// signed sum, the word that sum reads as, and the strongest few entries
+/// behind it.
+///
+/// **One derivation, `Game::memory_report`'s rule.** Every figure here is a
+/// call into the engine rather than a formula the renderer keeps a copy of —
+/// `memories` is `memory_report` truncated, not a second sort, and `sum` is
+/// `Game::morale` rather than a fold over the rows the renderer can see. The
+/// renderer can only see the truncated few, so a sum derived there would
+/// quietly stop matching the `R` page's.
+///
+/// `memories` carries **more rows than the box draws**, capped at
+/// `MANIFEST_MOOD_MEMORIES`: the truncation is the renderer's, and a view
+/// that pre-cut to exactly two would leave the width census unable to measure
+/// anything but the two a fixture happened to build.
+#[derive(Debug, Clone)]
+pub struct ManifestMood {
+    /// `Game::morale` — the signed sum of every memory, decayed to now and
+    /// felt through this program's disposition.
+    pub sum: f32,
+    /// What `sum` reads as in words — see `morale_band`.
+    pub band: &'static str,
+    /// The strongest entries, magnitude-first, as `Game::memory_report`
+    /// orders them. Empty for a program nothing has happened to, and for an
+    /// install with `assets/memories/` deleted.
+    pub memories: Vec<MemoryRow>,
+}
+
+/// How many memory rows `ManifestMood` carries. Two more than the manifest
+/// draws, so the box's width census has rows to measure past the ones it
+/// shows and a later change to how many are drawn is a renderer change.
+pub const MANIFEST_MOOD_MEMORIES: usize = 4;
+
+/// Which word a morale sum reads as.
+///
+/// **Banded against where morale stops mattering**, not against an invented
+/// range: `systems::morale_shift` prices a point at
+/// `MEMORY_MORALE_PER_POINT` and caps the whole term at
+/// `MEMORY_MORALE_MAX_SHIFT`, so the sum saturates at their quotient and
+/// every point past it changes nothing. The extremes are named for that
+/// point, and the quotient is *derived* here rather than written as a
+/// literal — a retune of either constant has to move these words with it, or
+/// the sheet would keep calling a saturated program by a middling name.
+///
+/// `need_band`'s rule otherwise: four bands whose boundaries are the
+/// player's read of the figure rather than the mechanism's own thresholds,
+/// so one word means the same thing wherever it appears.
+///
+/// Symmetric around zero, which is the state three different things share —
+/// a program with no memories, one whose grudges and bonds cancel, and an
+/// install with `assets/memories/` deleted. "even" is a real answer for all
+/// three and not a missing one.
+pub fn morale_band(sum: f32) -> &'static str {
+    // Where `morale_shift` saturates: past this the sum buys nothing.
+    let full =
+        (crate::tuning::MEMORY_MORALE_MAX_SHIFT / crate::tuning::MEMORY_MORALE_PER_POINT) as f32;
+    // Half of saturation is the inner boundary, so the two outer words are
+    // reserved for a program whose feelings are actually moving its work.
+    match sum {
+        s if s >= full => "devoted",
+        s if s >= full / 2.0 => "content",
+        s if s > -full / 2.0 => "even",
+        s if s > -full => "uneasy",
+        _ => "bitter",
+    }
 }
 
 /// One need on the manifest: what it is called, how it is doing, and what the

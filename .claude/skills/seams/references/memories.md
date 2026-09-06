@@ -94,3 +94,23 @@
   ever shown the player a tick. Two censuses hold it, so
   `MEMORY_CAP_PER_PROGRAM` is a **layout** constraint first — raising it past
   what fits means giving the page a scroll.
+- **The manifest shows the same figure under the same word, and neither
+  renderer picks it.** `views::morale_band` is the one place a morale sum
+  becomes a word, called by the `R` page's header and by the manifest's
+  MEMORIES box — the page said "Morale" and the sheet would have said "Mood",
+  and one number under two names on two screens reads as two numbers. The
+  bands are anchored to `MEMORY_MORALE_MAX_SHIFT / MEMORY_MORALE_PER_POINT`
+  and **derive** that quotient, so a retune of either constant moves the words
+  with it. `Game::morale` keeps its own name: the engine's vocabulary is not
+  the screen's.
+- **`ProgramManifest::mood` is `None` for "no store", never for "remembers
+  nothing".** It is gated on the `Memories` component and not on `Tamed`,
+  which is `remember`'s asymmetry read from the reading end — the store is
+  minted at `roster_parts` and nowhere else, so its absence *is* "not on the
+  roster". A wild program drops the box structurally; an owned one with
+  `assets/memories/` deleted keeps it and says nothing has happened. Collapse
+  those two and deleting the catalogue silently takes a box off every roster
+  page. The view carries `MANIFEST_MOOD_MEMORIES` rows and the renderer draws
+  `MANIFEST_MEMORY_ROWS` of them, so how many are shown is a layout decision
+  a width census can measure past — and `sum` is `Game::morale` over the whole
+  store, never a fold over the few rows the sheet can see.

@@ -2549,3 +2549,122 @@ fn service_moves_morale_off_zero() {
         "and a program that has done nothing is still exactly at the baseline"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The manifest's MEMORIES box: what the sheet says a program feels, out of the
+// same two calls the `R` page reads. `views::morale_band` is the word both
+// screens use, so it lives beside `need_band` and neither renderer picks one.
+// ---------------------------------------------------------------------------
+
+/// **The band is anchored to where morale stops mattering**, not to a range
+/// invented for the screen: `systems::morale_shift` saturates at
+/// `MEMORY_MORALE_MAX_SHIFT / MEMORY_MORALE_PER_POINT`, and past that point a
+/// program's feelings buy it nothing. The extremes are named for exactly that
+/// figure, derived from the two constants here as `morale_band` derives it —
+/// a retune of either has to move both, and a literal in either place would
+/// let the words go quietly stale.
+#[test]
+fn the_mood_bands_are_anchored_to_where_morale_stops_paying() {
+    let full =
+        (crate::tuning::MEMORY_MORALE_MAX_SHIFT / crate::tuning::MEMORY_MORALE_PER_POINT) as f32;
+
+    assert_eq!(crate::views::morale_band(full), "devoted");
+    assert_eq!(crate::views::morale_band(full * 2.0), "devoted");
+    assert_eq!(crate::views::morale_band(full - 0.1), "content");
+    assert_eq!(crate::views::morale_band(full / 2.0), "content");
+
+    assert_eq!(crate::views::morale_band(0.0), "even");
+    assert_eq!(crate::views::morale_band(full / 2.0 - 0.1), "even");
+    assert_eq!(crate::views::morale_band(-full / 2.0 + 0.1), "even");
+
+    assert_eq!(crate::views::morale_band(-full / 2.0), "uneasy");
+    assert_eq!(crate::views::morale_band(-full + 0.1), "uneasy");
+    assert_eq!(crate::views::morale_band(-full), "bitter");
+    assert_eq!(crate::views::morale_band(-full * 2.0), "bitter");
+}
+
+/// **`ManifestMood` is `Some` exactly when the program holds a store**, which
+/// is `remember`'s rule read from the other end: the store is minted at
+/// `roster_parts` and nowhere else, so its absence *is* "not on the roster".
+/// A wild program therefore drops the manifest's box structurally, and an
+/// owned one nothing has happened to keeps it and reads `even`.
+///
+/// The wild half is what a `Tamed` check here would get wrong in the same
+/// direction as everything else in this module: it would be a second
+/// expression of a rule the component already states.
+#[test]
+fn only_a_program_on_the_roster_carries_a_mood() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let owned = spawn_tamed(&mut game, 10, 3);
+    let wild = spawn_wild_on_player_tile(&mut game);
+
+    let wild_view = game.manifest(wild).expect("a wild program has a sheet");
+    let ManifestSubject::Program(p) = &wild_view.subject else {
+        panic!("a creature's sheet is a program sheet");
+    };
+    assert!(p.mood.is_none(), "a wild program holds no store");
+
+    let owned_view = game.manifest(owned).expect("an owned program has a sheet");
+    let ManifestSubject::Program(p) = &owned_view.subject else {
+        panic!("a creature's sheet is a program sheet");
+    };
+    let mood = p.mood.as_ref().expect("an owned program holds a store");
+    assert_eq!(mood.sum, 0.0);
+    assert_eq!(mood.band, "even");
+    assert!(
+        mood.memories.is_empty(),
+        "nothing has happened to it yet: {:?}",
+        mood.memories
+    );
+}
+
+/// The sheet's rows are `memory_report`'s, so they arrive **magnitude-first**
+/// and already named — and the sum beside them is `Game::morale` rather than a
+/// fold over the few the view carries, which would drift the moment the store
+/// held more than `MANIFEST_MOOD_MEMORIES`.
+#[test]
+fn the_manifests_mood_is_the_report_and_the_whole_sum() {
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    set_tick(&mut game, 1_000);
+    // More kinds than the view carries, so the truncation is exercised and
+    // the sum has entries outside it to be wrong about.
+    for (def, subject) in [
+        ("mauled_by", MemorySubject::Species("husk".to_string())),
+        ("hard_won", MemorySubject::Nothing),
+        ("cutting_rock", MemorySubject::Activity(TaskKind::Excavate)),
+        ("stranded_at", MemorySubject::BaseTile { x: 2, y: 3 }),
+        ("swept_here", MemorySubject::Structure("lathe".to_string())),
+        ("frayed_here", MemorySubject::Structure("lathe".to_string())),
+    ] {
+        game.remember(program, def, subject);
+    }
+
+    let view = game
+        .manifest(program)
+        .expect("an owned program has a sheet");
+    let ManifestSubject::Program(p) = &view.subject else {
+        panic!("a creature's sheet is a program sheet");
+    };
+    let mood = p.mood.as_ref().expect("an owned program holds a store");
+
+    assert_eq!(
+        mood.memories.len(),
+        crate::views::MANIFEST_MOOD_MEMORIES,
+        "six kinds were written and the view carries its cap"
+    );
+    let magnitudes: Vec<f32> = mood.memories.iter().map(|m| m.intensity.abs()).collect();
+    let mut sorted = magnitudes.clone();
+    sorted.sort_by(|a, b| b.partial_cmp(a).unwrap());
+    assert_eq!(magnitudes, sorted, "strongest first: {magnitudes:?}");
+
+    assert_eq!(mood.sum, game.morale(program));
+    let carried: f32 = mood.memories.iter().map(|m| m.intensity).sum();
+    assert_ne!(
+        mood.sum, carried,
+        "the sum has to come from the whole store, not from the rows the sheet \
+         can see — this fixture writes two kinds past the cap so the two figures \
+         genuinely differ"
+    );
+    assert_eq!(mood.band, crate::views::morale_band(mood.sum));
+}

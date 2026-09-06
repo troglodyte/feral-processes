@@ -885,6 +885,24 @@ impl Game {
             .collect()
     }
 
+    /// Every memory kind the catalogue defines, name-sorted.
+    ///
+    /// **Sorted, because `MemoryDb::all` is map iteration order** and says so
+    /// — a census walking it unsorted would compare a different "widest" row
+    /// run to run and pass or fail on hash order. The renderer never draws
+    /// this list; it exists for the width censuses and the asset pairing
+    /// census, which need every def rather than the few a program holds.
+    pub fn memory_defs(&self) -> Vec<crate::memories::MemoryDef> {
+        let mut defs: Vec<_> = self
+            .world
+            .resource::<crate::memories::MemoryDb>()
+            .all()
+            .cloned()
+            .collect();
+        defs.sort_by(|a, b| a.name.cmp(&b.name));
+        defs
+    }
+
     /// Every perk currently on offer, in picker order. The renderer's only
     /// route to a perk's name, description and price — those are authored in
     /// `assets/perks/*.ron`, not derivable from the `Perk` variant, and the

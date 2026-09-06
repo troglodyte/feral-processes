@@ -55,8 +55,9 @@ an honest "unknown".
 ## Entries
 
 - [2026-09-05 — Do the settlement aid radii reach anything?](2026-09-05-settlement-aid-reach.md)
-  — Both were dead by geometry. Towns are derived one per 256-tile region, so
-  the median nearest town is **147 tiles** from the anchor:
+  — Both were dead by geometry. Towns were derived one per 256-tile region at
+  the time, so the median nearest town was **147 tiles** from the anchor
+  (128-tile regions and a 71-tile median since 2026-09-06):
   `SETTLEMENT_GARRISON_RADIUS` at a flat 40 found one in **1.6%** of worlds
   and `ROUTE_PREDATION_RADIUS` at 15 found one beside a lane in **none of
   2,000**. Both are now fractions of `placement::REGION_TILES` — half a

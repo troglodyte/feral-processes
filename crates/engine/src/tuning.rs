@@ -3296,10 +3296,24 @@ pub const SIGNAL_NOISE_AMBUSH_MULT: f32 = 2.0;
 ///
 /// The map is unbounded, so density is the only thing that can be tuned:
 /// this and `SETTLEMENT_REGION_PERCENT` together say how far apart towns
-/// are. At 8 chunks a region is 256 tiles across, which is a long walk
-/// rather than a stroll — a settlement has to be worth arriving at, and one
-/// visible from the last one is not.
-pub const SETTLEMENT_REGION_CHUNKS: i32 = 8;
+/// are. At 4 chunks a region is 128 tiles across — the map viewport is
+/// about 45 x 25 tiles, so the nearest town is a median three screens off
+/// and a town is still never visible from the last one, which is the claim
+/// the spacing exists to make.
+///
+/// **Halved from 8 (256 tiles) after play read as too far to walk.** The
+/// measured median from the anchor to the nearest town went 147 tiles to
+/// 71, and the 90th percentile 227 to 102 — the tail is what was actually
+/// wrong, since a quarter of runs asked for a 200-tile hike before the
+/// player had met anyone. Every settlement radius is a fraction of
+/// `placement::REGION_TILES`, so this is close to a pure travel-time change:
+/// the share of worlds with a town inside `SETTLEMENT_GARRISON_RADIUS` is
+/// 39.6% at 4 chunks against 39.2% at 8. It is not *exactly* one, because
+/// `placement::REGION_EDGE_INSET` is flat and did not scale — see the
+/// 2026-09-06 follow-up in
+/// `docs/measurements/2026-09-05-settlement-aid-reach.md`, which records
+/// both sweeps and the predation share that fell with it.
+pub const SETTLEMENT_REGION_CHUNKS: i32 = 4;
 
 /// How likely a region is to hold a settlement at all, in percent.
 ///

@@ -435,6 +435,47 @@ impl Game {
         self.run_raid();
     }
 
+    /// The roll for a town-sourced raid, and the one caller that decides one
+    /// happens.
+    ///
+    /// **Roll first, gate after** — `raid_check`'s and
+    /// `maybe_spawn_wild_creature`'s shared discipline: the number of draws
+    /// a tick costs is a constant, so it cannot depend on what the world
+    /// happens to hold. Note what that does and does not buy — it keeps the
+    /// stream stable across *worlds*, not across *versions*: this check is a
+    /// second unconditional draw per tick, and adding it moved the stream
+    /// for every seeded test that ticks.
+    ///
+    /// **Neither `RAID_MIN_ZONE` nor `RAID_MIN_BASE_STAFF` applies, and both
+    /// omissions are deliberate.** The zone floor exists so a player who has
+    /// not engaged the game is not swept; reaching `Hostile` with a town
+    /// near the anchor *is* engagement, and gating it on depth would make
+    /// the consequence of a choice wait on an unrelated axis. The staff
+    /// floor stops a base already reduced to wreckage from being ground
+    /// down — but this raid breaks nothing, so there is no attrition spiral
+    /// for it to prevent, and a base with nobody on shift is exactly the one
+    /// whose stores are easiest to walk off with.
+    pub(crate) fn town_raid_check(&mut self) {
+        let roll = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0
+                .random_bool(crate::tuning::SETTLEMENT_RAID_CHANCE_PER_TICK)
+        };
+        if !roll {
+            return;
+        }
+        let candidates = self.raiding_towns();
+        if candidates.is_empty() {
+            return;
+        }
+        // One draw, over an order `raiding_towns` documents as stable.
+        let key = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            candidates[rng.0.random_range(0..candidates.len())]
+        };
+        self.run_town_raid(key);
+    }
+
     /// How many base-staff programs (`Game::base_staff`) could actually
     /// defend the base — the population `RAID_MIN_BASE_STAFF` is measured
     /// against. A body that cannot defend or absorb the next raid must not

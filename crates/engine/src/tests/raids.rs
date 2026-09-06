@@ -2204,3 +2204,80 @@ fn a_town_raid_names_the_town_that_sent_it() {
     let line = &game.message_history(1)[0].text;
     assert!(line.contains(&name), "the line must have an author: {line}");
 }
+
+/// The seam every raid gate in this file already respects: a miss must cost
+/// exactly its own draw and nothing else, or every seeded spawn test in the
+/// suite moves. Asserted by running the check on a world with no angry
+/// neighbour at all and comparing the next draw against a world that never
+/// ran it.
+#[test]
+fn a_town_raid_check_with_no_hostile_neighbour_costs_one_draw_and_no_more() {
+    use rand::Rng;
+    let mut ran = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut untouched = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert!(
+        ran.raiding_towns().is_empty(),
+        "fixture has no angry neighbour"
+    );
+
+    ran.town_raid_check();
+    // The one draw the check is allowed, replayed by hand on the control so
+    // the two streams are compared from the same offset.
+    {
+        let mut rng = untouched.world.resource_mut::<crate::resources::GameRng>();
+        let _ = rng
+            .0
+            .random_bool(crate::tuning::SETTLEMENT_RAID_CHANCE_PER_TICK);
+    }
+
+    let a = ran
+        .world
+        .resource_mut::<crate::resources::GameRng>()
+        .0
+        .random::<u64>();
+    let b = untouched
+        .world
+        .resource_mut::<crate::resources::GameRng>()
+        .0
+        .random::<u64>();
+    assert_eq!(a, b, "the gate drew more than its roll");
+}
+
+/// A raid the roll declined must not resolve — the gate is after the roll,
+/// but it is still a gate.
+#[test]
+fn a_town_with_no_standing_problem_is_never_raided_however_the_roll_lands() {
+    let mut game = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (ax, ay) = game.anchor_position().unwrap();
+    let key = crate::settlements::SettlementKey { rx: 1, ry: 0 };
+    place_settlement(&mut game, key, ax + 2, ay);
+    let before = stock_the_bank(&mut game, 500);
+
+    for _ in 0..2000 {
+        game.town_raid_check();
+    }
+
+    assert_eq!(
+        game.banked(&game.currency()),
+        before,
+        "a Neutral neighbour never sends anyone, whatever the rolls did"
+    );
+}
+
+/// And the positive: over enough ticks a Hostile neighbour does land one.
+#[test]
+fn a_hostile_neighbour_eventually_lands_a_raid() {
+    let mut game = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let _key = hostile_neighbour(&mut game, 2);
+    let before = stock_the_bank(&mut game, 5_000);
+
+    for _ in 0..5_000 {
+        game.town_raid_check();
+    }
+
+    assert!(
+        game.banked(&game.currency()) < before,
+        "5000 ticks at {} should land many raids",
+        crate::tuning::SETTLEMENT_RAID_CHANCE_PER_TICK
+    );
+}

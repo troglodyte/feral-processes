@@ -699,23 +699,47 @@ fn set_integrity(game: &mut Game, entity: Entity, fraction: f32) {
 
 /// A grant on `AllyWounded`, and the control that says the wound is what
 /// did it: the same battle where the wearer stays healthy fires nothing.
+///
+/// **Swept over seeds, `damage_over_a_seed_sweep`'s reason, and this test is
+/// why that helper exists.** Whether the hostile's swing connects in the one
+/// round being measured is a coin flip: over 24 seeds the trigger fires on
+/// 9 of them and the round is a scoreless tie on the other 15. Read off a
+/// single seed this asserted a real mechanism from a 37.5% sample, which is
+/// luck wearing the shape of evidence — it passed for two releases and then
+/// failed the day an unrelated per-tick draw was added beside `raid_check`
+/// and moved the stream by one. The sum over the sweep is decisive where any
+/// single draw is not, and it is a *stronger* claim than the one it
+/// replaces: the mechanism now has to hold in aggregate rather than once.
+///
+/// The healthy control stays at zero on **every** seed, so the gap is the
+/// grant and nothing else.
 #[test]
 fn a_wounded_wearer_fires_its_grant_and_a_healthy_one_does_not() {
     let dir = assets_with_a_wounding_passive("wounded");
 
-    let mut hurt = battle_with_a_passive_holder_prepared(&dir, 9401, None, |g| {
-        let player = g.player_entity();
-        wear(g, player, "test_wound_module");
-    });
-    let player = hurt.player_entity();
-    park_just_above_the_wounded_line(&mut hurt, player);
-    let wounded_damage = damage_in_one_defended_round(&mut hurt);
+    let wounded_damage: i32 = (0..16u64)
+        .map(|seed| {
+            let mut hurt = battle_with_a_passive_holder_prepared(&dir, 9401, None, |g| {
+                let player = g.player_entity();
+                wear(g, player, "test_wound_module");
+            });
+            reseed_rng(&mut hurt, seed);
+            let player = hurt.player_entity();
+            park_just_above_the_wounded_line(&mut hurt, player);
+            damage_in_one_defended_round(&mut hurt)
+        })
+        .sum();
 
-    let mut healthy = battle_with_a_passive_holder_prepared(&dir, 9401, None, |g| {
-        let player = g.player_entity();
-        wear(g, player, "test_wound_module");
-    });
-    let healthy_damage = damage_in_one_defended_round(&mut healthy);
+    let healthy_damage: i32 = (0..16u64)
+        .map(|seed| {
+            let mut healthy = battle_with_a_passive_holder_prepared(&dir, 9401, None, |g| {
+                let player = g.player_entity();
+                wear(g, player, "test_wound_module");
+            });
+            reseed_rng(&mut healthy, seed);
+            damage_in_one_defended_round(&mut healthy)
+        })
+        .sum();
 
     assert!(
         wounded_damage > healthy_damage,

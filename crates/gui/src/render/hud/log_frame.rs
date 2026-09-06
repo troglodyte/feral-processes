@@ -273,7 +273,7 @@ fn divider() -> Vec<Piece> {
 /// nothing else on the census requires. `?` is still where it is discovered.
 fn keybar_segments() -> Vec<Vec<Piece>> {
     vec![
-        keycap("<>", "ascend/descend"),
+        keycap("< >", "ascend/descend"),
         divider(),
         keycap("b", "base"),
         keycap("i", "pack"),
@@ -449,7 +449,7 @@ mod tests {
     /// of the verbs; and `?`, which is where every key this bar had to cut
     /// now lives. A bar that drops `?` strands the keys the four-line block
     /// used to name — and `hjkl` is one of those now.
-    const ESSENTIAL: [&str; 5] = ["<> ascend/descend", "b base", "i pack", "? help", "q menu"];
+    const ESSENTIAL: [&str; 5] = ["< > ascend/descend", "b base", "i pack", "? help", "q menu"];
 
     fn entry(kind: MessageKind, source: MessageSource) -> LogEntry {
         LogEntry {

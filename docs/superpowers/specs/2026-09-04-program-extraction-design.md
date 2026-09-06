@@ -516,7 +516,10 @@ program, `FIGHT_CONDITION_WEIGHT`, and a help page for extraction.
 - Phase 4's real cost.
 - **Which gear doors close.** Confirmed 2026-09-05: none, for now. Phase 5
   ships a Gear tool alongside every existing door rather than in place of
-  any (§9.2), which roughly doubles the gear rate on an extracted program
+  any (§9.2), which raises the gear rate on an extracted program by the
+  species' own authored chance at a fresh bench and by up to three times it
+  at a fully upgraded Compiler (corrected 2026-09-05 — this line said
+  "roughly doubles" while §9.2 and §9.5 carried the corrected figure)
   and is accepted knowingly. Closing a door is the tuning lever, and it
   wants a play session behind it — as does any constant introduced to
   compensate the tool when one closes (§9.5 ships none).

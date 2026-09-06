@@ -10821,6 +10821,59 @@ Neither term is a gate. Spec decision 7 stands: extraction works in the
 field, at the base and in the Stack alike, because the starting tool is
 useless otherwise.
 
+### `Game::gear_chances` is the one derivation the odds preview and the pull share, and it needs no scale constant
+
+Phase 5's `Gear` tool category (the Harness Puller) does not reuse
+`extraction_yield`'s materials formula — a chance is not a unit count — but
+it reuses the same discipline: `Game::gear_chances(&self, program, tool) ->
+Vec<(ItemId, f32)>` is the one function both `Game::extraction_options` (the
+screen's preview) and `extract_gear_from_program` (the roll) call, for the
+same reason a `structure_tier` parameter was refused above — a quoted
+figure and a rolled one must not be able to differ, and the only way to
+guarantee that is one function neither caller can pass a stale or wrong
+input to. It reads `Game::extraction_bench_tier()` itself rather than
+taking it as an argument, exactly as `extraction_yield` and
+`extraction_ticks` do.
+
+The pool is `equipment_drops_for`'s, and the chance is scaled by the same
+`tier_scale(tool.tier + bench)` curve `extraction_yield` uses, where `bench`
+is `extraction_bench_tier() - 1` — a never-upgraded bench (or none at all)
+contributes nothing, the same rule `extraction_yield` follows for the same
+reason (standing the bench buys time; upgrading it buys the multiplier).
+
+**The baseline needs no constant, and none exists.** `tier_scale(1)` is
+exactly `1.0`, so a tier-1 tool worked at tier-1 (or no) bench quotes
+`equipment_drops_for`'s authored chance completely untouched —
+`a_tier_one_gear_tool_with_no_bench_quotes_the_authored_chances` asserts
+this as an identity against the species' own authored figures, not as a
+hand-copied number. Introducing a scale constant here — even one meant only
+to make the tool feel like a distinct system, or to compensate for some
+other tuning knob — silently breaks that identity and would fail the test
+loudly, but only because the test exists; a change that also touched the
+test to match would break the baseline in the exact same way that leaves
+nothing to catch it. There is deliberately nothing here for a later tuning
+pass to reach for except the tool's own tier and the bench's.
+
+The result is **clamped inside `gear_chances`**, unlike `equipment_drops_for`
+itself, which returns unclamped chances because each of its three
+callers — `award_loot`, the nest cache, and `gear_chances` itself — clamps
+right before rolling. `gear_chances` has two callers of its own (the
+preview and the roll) with the identical requirement, so the clamp moved
+into the shared function rather than being copied at each call site — the
+same reasoning that keeps the bench-tier read inside rather than passed in.
+
+**Phase 5 is additive, not a migration.** `equipment_drops_for` keeps
+exactly the two production callers it had before phase 5 — the kill
+(`Game::award_loot`, `game/combat_rewards.rs`) and cache placement
+(`game/zone.rs`) — untouched. The Harness Puller does call
+`equipment_drops_for` directly, inside `gear_chances`
+(`game/extraction.rs:236`) — that *is* a third caller of the table — but it
+adds no fourth *drop door*: `gear_chances` only reads the same authored
+chances that `award_loot` and the nest cache already roll, and it does not
+retire or reroute either existing one. A program that dies still rolls its
+gear at the kill exactly as before; pulling it down for scrap first is a
+second chance at the same table, not the table moving house.
+
 ### `Game::take_routine` is the one place a routine comes off a program
 
 Two doors now salvage a routine: `Game::extract_routine` breaks down a

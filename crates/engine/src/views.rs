@@ -2595,7 +2595,7 @@ pub struct ExtractionOptionView {
     pub preview: ExtractionPreview,
 }
 
-/// What a tool would draw out — the two categories answer in different
+/// What a tool would draw out — the three categories answer in different
 /// currencies, and the `Routines` one cannot answer with an outcome at all.
 #[derive(Clone, Debug)]
 pub enum ExtractionPreview {
@@ -2611,6 +2611,16 @@ pub enum ExtractionPreview {
     /// A `Routines` tool with an empty pool: the refusal `extract_program`
     /// would answer with, shown before it is spent.
     NothingToLearn,
+    /// A `Gear` tool: each candidate item and its live chance, from
+    /// `Game::gear_chances` — the same call the pull makes, so the quoted
+    /// figure and the rolled one are one value rather than two. Tier
+    /// scaling and any running `DropBoost` are already in these numbers.
+    ///
+    /// The first raw percentages on an *extraction* screen (spec §9.6) —
+    /// `battle.rs` and `inventory.rs` already print odds elsewhere in the
+    /// game — chosen over a name-only list because an upgraded Compiler
+    /// must not read identically to a fresh one.
+    Chances(Vec<(String, f32)>),
 }
 
 /// One row of `Mode::Tools`'s list — see `Game::tool_rows`.

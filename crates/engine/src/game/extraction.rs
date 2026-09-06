@@ -197,6 +197,51 @@ impl Game {
         granted
     }
 
+    /// The chance of each gear item a `Gear` tool could pull off `program`,
+    /// scaled by the tool's tier and the bench's.
+    ///
+    /// The pool is `equipment_drops_for`'s — both schema directions merged,
+    /// sorted by item id, with a running `DropBoost` already folded in.
+    /// Extraction needs no bench to stand, so a player may arm a buff and
+    /// then strip; that is a recorded interaction, not an oversight (spec
+    /// §9's "Recorded interactions").
+    ///
+    /// **The baseline needs no constant.** `tier_scale(1)` is `1.0`, and the
+    /// bench's term is `tier - 1` like `extraction_yield`'s, so a tier-1
+    /// tool on a never-upgraded bench — or no bench at all — quotes the
+    /// authored chance untouched. `a_tier_one_gear_tool_with_no_bench_
+    /// quotes_the_authored_chances` asserts that as an identity rather than
+    /// as a number, so inserting a scale constant here fails loudly.
+    ///
+    /// **Grade does not enter.** `program.grade()` already sells materials
+    /// in `extraction_yield`; leaving it out is what makes the baseline
+    /// literally the authored chance rather than approximately it.
+    ///
+    /// **Clamped here, unlike its source.** `equipment_drops_for` returns
+    /// chances unclamped because each of its three callers — the kill
+    /// (`award_loot`), the nest cache (`game/zone.rs`), and this function —
+    /// clamps before rolling. This has two callers of its own — the screen's
+    /// preview and the pull — whose whole reason for sharing a derivation is
+    /// that a quoted figure and a rolled one cannot differ, so the clamp
+    /// lands once, inside.
+    pub fn gear_chances(&self, program: &DownedProgram, tool: &ToolDef) -> Vec<(ItemId, f32)> {
+        let Some(species) = self
+            .world
+            .resource::<SpeciesDb>()
+            .get(&program.species)
+            .cloned()
+        else {
+            return Vec::new();
+        };
+        let bench = self.extraction_bench_tier().saturating_sub(1);
+        let scale = tier_scale(tool.tier + bench);
+        let mut chances = self.equipment_drops_for(&species);
+        for (_, chance) in &mut chances {
+            *chance = (*chance * scale).clamp(0.0, 1.0);
+        }
+        chances
+    }
+
     /// What a `Routines` tool could take out of `program`: every routine its
     /// species declares at or below the program's own level, in the species
     /// file's order, minus anything already known.
@@ -333,6 +378,79 @@ impl Game {
         Ok(())
     }
 
+    /// The `Gear` branch of `extract_program`. Rolls each chance from
+    /// `gear_chances` and grants every hit through `grant_gear_drop` — the
+    /// one door a copy above `Ordinary` enters the game through, so
+    /// found-gear-beats-crafted-gear still binds and
+    /// `crafted_gear_is_never_rare` is untouched.
+    ///
+    /// `Rarity::Ordinary` is the floor, deliberately: the boss's own door
+    /// is still open and still paying `SURFACE_BOSS_LOOT_RARITY_FLOOR` at
+    /// the kill, so `DownedProgram::boss` does not carry a second floor
+    /// here (spec §9's act).
+    ///
+    /// A miss pays nothing — no pool, no consolation — and the program and
+    /// the ticks are spent regardless (spec §9.4).
+    fn extract_gear_from_program(
+        &mut self,
+        index: usize,
+        program: &DownedProgram,
+        tool_def: &ToolDef,
+    ) -> Result<(), String> {
+        let chances = self.gear_chances(program, tool_def);
+
+        let player = self.player_entity();
+        self.world
+            .get_mut::<DownedPrograms>(player)
+            .unwrap()
+            .0
+            .remove(index);
+
+        let mut taken: Vec<String> = Vec::new();
+        for (item, chance) in chances {
+            let hit = {
+                let mut rng = self.world.resource_mut::<GameRng>();
+                rng.0.random_bool(chance as f64)
+            };
+            if hit {
+                let copy = self.grant_gear_drop(item, Rarity::Ordinary);
+                taken.push(self.drop_label(&copy));
+            }
+        }
+
+        let label = self.downed_program_label(program);
+        if taken.is_empty() {
+            self.log_kind(
+                MessageKind::Loot,
+                format!(
+                    "You work {label} over with the {} and find nothing worth wearing.",
+                    tool_def.name
+                ),
+            );
+        } else {
+            self.log_kind(
+                MessageKind::Loot,
+                format!(
+                    "You work {label} over with the {}: {}.",
+                    tool_def.name,
+                    taken.join(", ")
+                ),
+            );
+        }
+
+        // Quoted once, before the loop — a bench demolished mid-extraction
+        // must not change what this use was already priced at.
+        let ticks = self.extraction_ticks(tool_def);
+        for _ in 0..ticks {
+            if self.is_game_over().is_some() || self.has_active_battle() {
+                break;
+            }
+            self.tick();
+        }
+
+        Ok(())
+    }
+
     /// One row per held program, in store order — `Mode::DownedPrograms`'s
     /// whole list. The species' display name falls back to the raw id for a
     /// mod species since removed, `downed_program_label`'s own tolerance,
@@ -382,19 +500,30 @@ impl Game {
         self.installed_tools()
             .into_iter()
             .map(|tool| {
-                let preview = if tool.category == ToolCategory::Routines {
-                    let pool = self.routine_candidates(&program);
-                    if pool.is_empty() {
-                        crate::views::ExtractionPreview::NothingToLearn
-                    } else {
-                        crate::views::ExtractionPreview::Routine(
-                            pool.iter()
-                                .map(|id| self.ability_display_name(id))
-                                .collect(),
+                let preview = match tool.category {
+                    ToolCategory::Routines => {
+                        let pool = self.routine_candidates(&program);
+                        if pool.is_empty() {
+                            crate::views::ExtractionPreview::NothingToLearn
+                        } else {
+                            crate::views::ExtractionPreview::Routine(
+                                pool.iter()
+                                    .map(|id| self.ability_display_name(id))
+                                    .collect(),
+                            )
+                        }
+                    }
+                    ToolCategory::Gear => crate::views::ExtractionPreview::Chances(
+                        self.gear_chances(&program, &tool)
+                            .into_iter()
+                            .map(|(item, chance)| (self.item_name(&item).to_string(), chance))
+                            .collect(),
+                    ),
+                    ToolCategory::Materials | ToolCategory::Parts | ToolCategory::Cores => {
+                        crate::views::ExtractionPreview::Items(
+                            self.extraction_yield(&program, &tool),
                         )
                     }
-                } else {
-                    crate::views::ExtractionPreview::Items(self.extraction_yield(&program, &tool))
                 };
                 crate::views::ExtractionOptionView {
                     ticks: self.extraction_ticks(&tool),
@@ -455,6 +584,14 @@ impl Game {
         // above the removal, or a program is spent teaching nothing.
         if tool_def.category == ToolCategory::Routines {
             return self.extract_routine_from_program(index, &program, &tool_def);
+        }
+
+        // The `Gear` category takes a third branch: no `yields` pool, and
+        // the outcome is rolled rather than apportioned. It sits beside the
+        // `Routines` return rather than inside the materials path because
+        // the two share nothing but the program's removal.
+        if tool_def.category == ToolCategory::Gear {
+            return self.extract_gear_from_program(index, &program, &tool_def);
         }
 
         let granted = self.extraction_yield(&program, &tool_def);

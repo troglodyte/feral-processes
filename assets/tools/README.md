@@ -32,6 +32,8 @@ research, forging and installing more.
     //   Cores       compiled cores
     //   Routines    the program's installed routine, not an item at all —
     //               see "The Routines category" below
+    //   Gear        the program's worn equipment, not a pool at all —
+    //               see "The Gear category" below
     //
     // Fixed and closed: the engine groups the tool screen by this field, so
     // there is no free-text category to invent.
@@ -43,8 +45,8 @@ research, forging and installing more.
     // twice as likely as one at 0.4, and the pool is normalised at draw
     // time. Every id must name a real shipped item.
     //
-    // Required and non-empty for every category except `Routines`, which
-    // takes no `yields` at all — see below.
+    // Required and non-empty for every category except `Routines` and
+    // `Gear`, neither of which takes a `yields` pool at all — see below.
     yields: [("core_fragment", 1.0), ("bytecode_block", 0.4)],
 
     // Scales the unit count one use produces, alongside the structure the
@@ -95,6 +97,32 @@ spent, not consumed for nothing.
 `routine_reader.ron` ships in this category. Its `ticks` is deliberately the
 highest of any shipped tool — reading a program out is the slowest thing you
 can do to one — and, like the rest of the extraction numbers, untuned.
+
+## The `Gear` category
+
+A `Gear` tool has no `yields` either, for the same reason a `Routines` tool
+doesn't: what comes off a downed program isn't a pool authored on the tool
+file at all. It's the program's own species' authored equipment drop table
+(`equipment_drops_for`), rolled once per candidate item at extraction
+(`Game::gear_chances`, `Game::extract_program`'s `Gear` branch). A hit is
+granted through the one door a copy above `Ordinary` enters the game
+through, `Game::grant_gear_drop` — never a second rarity roll authored here.
+
+`tier` still matters, and matters *more* than it does elsewhere: it
+multiplies every authored chance through the same shared curve tool tier
+already uses everywhere else (`tuning::TOOL_TIER_SCALE_STEP`), so raising a
+`Gear` tool's tier by one step is a flat multiplier on the game's *entire*
+gear-drop rate, not a change scoped to this one tool. The extraction bench's
+own tier stacks on top of the tool's by the same curve, and it is the larger
+of the two: a bench at its shipped ceiling (`assets/structures/compiler.ron`'s
+`max_tier: 5`) already multiplies every candidate by 3x before the tool's
+own tier is even considered. Tune either with a play session behind it, not
+a guess.
+
+A miss pays nothing — no consolation pool, no fallback yield — and the
+program and the ticks are spent regardless, the same as any other pull.
+
+`harness_puller.ron` ships in this category.
 
 ## The starter tool
 

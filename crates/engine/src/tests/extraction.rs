@@ -2462,3 +2462,466 @@ fn a_routine_extractions_tick_cost_is_the_one_the_act_spends() {
 
     assert_eq!(ticks_elapsed(&game) - before, option.ticks);
 }
+
+/// A `Gear` tool is defined in-test rather than off an asset: the shipped
+/// one arrives in Task 4, and the derivation must be provable without it.
+fn gear_tool(tier: u32) -> ToolDef {
+    ToolDef {
+        id: ToolId("test_gear_tool".to_string()),
+        name: "Test Gear Tool".to_string(),
+        description: "Pulls worn gear off a downed process.".to_string(),
+        category: ToolCategory::Gear,
+        yields: Vec::new(),
+        tier,
+        ticks: 40,
+        forge_cost: Vec::new(),
+    }
+}
+
+/// Picks a species that actually has gear to drop — `equipment_drops_for`
+/// merges both schema directions, so "has drops" is a question only it can
+/// answer. Mirrors `a_running_drop_boost_field_buff_scales_every_
+/// equipment_drop_chance`'s idiom in `tests/combat_rewards.rs`.
+fn species_with_gear(game: &Game) -> SpeciesDef {
+    game.species_defs()
+        .into_iter()
+        .find(|s| !game.equipment_drops_for(s).is_empty())
+        .expect("at least one shipped species should drop gear")
+}
+
+/// **The neutrality identity.** A tier-1 `Gear` tool with no bench standing
+/// quotes the authored chances exactly — not approximately, not scaled by
+/// grade. Written as an identity against `equipment_drops_for` rather than
+/// against a literal, so it fails the day anyone inserts a constant between
+/// the table and the roll (spec §9.5, and the Global Constraint above).
+#[test]
+fn a_tier_one_gear_tool_with_no_bench_quotes_the_authored_chances() {
+    let game = Game::new(4201, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = species_with_gear(&game);
+    let authored = game.equipment_drops_for(&species);
+
+    let mut downed = program(50, Rarity::Ordinary, 3);
+    downed.species = species.id.clone();
+
+    assert_eq!(game.extraction_bench_tier(), 0, "no bench should stand here");
+    let quoted = game.gear_chances(&downed, &gear_tool(1));
+
+    assert_eq!(quoted.len(), authored.len());
+    for ((q_item, q_chance), (a_item, a_chance)) in quoted.iter().zip(authored.iter()) {
+        assert_eq!(q_item, a_item);
+        assert_eq!(
+            *q_chance,
+            a_chance.clamp(0.0, 1.0),
+            "a tier-1 tool on no bench must quote the authored chance for {q_item:?}"
+        );
+    }
+}
+
+/// Grade must not enter the chance. Two programs of the same species at
+/// opposite ends of every grade axis quote identically — what grade sells
+/// is materials, in `extraction_yield`.
+#[test]
+fn program_grade_does_not_move_a_gear_chance() {
+    let game = Game::new(4202, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = species_with_gear(&game);
+
+    let mut poor = program(1, Rarity::Ordinary, 1);
+    poor.species = species.id.clone();
+    let mut rich = program(100, Rarity::Gold, 30);
+    rich.species = species.id.clone();
+
+    assert_eq!(
+        game.gear_chances(&poor, &gear_tool(1)),
+        game.gear_chances(&rich, &gear_tool(1)),
+        "grade sells materials, never gear odds"
+    );
+}
+
+/// Tier scales the chance, and the curve is the shipped one — a tier-2 tool
+/// is `1.0 + TOOL_TIER_SCALE_STEP` times the authored figure, clamped.
+#[test]
+fn a_higher_tier_gear_tool_scales_the_authored_chance() {
+    let game = Game::new(4203, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = species_with_gear(&game);
+    let authored = game.equipment_drops_for(&species);
+
+    let mut downed = program(50, Rarity::Ordinary, 3);
+    downed.species = species.id.clone();
+
+    let scaled = game.gear_chances(&downed, &gear_tool(2));
+    let step = crate::tuning::TOOL_TIER_SCALE_STEP;
+
+    assert_eq!(
+        scaled.len(),
+        authored.len(),
+        "a clamp must not drop a row — filtering one out would satisfy every \
+         per-item assertion below while still failing spec §9.5"
+    );
+    for ((s_item, s_chance), (a_item, a_chance)) in scaled.iter().zip(authored.iter()) {
+        assert_eq!(s_item, a_item);
+        let expected = (a_chance * (1.0 + step)).clamp(0.0, 1.0);
+        assert!(
+            (s_chance - expected).abs() < 1e-6,
+            "tier 2 should quote {expected} for {s_item:?}, got {s_chance}"
+        );
+    }
+}
+
+/// Clamped inside, unlike its source. `equipment_drops_for` returns chances
+/// unclamped on purpose (its one caller clamps before rolling); this one has
+/// two callers — the preview and the pull — and a value clamped twice in two
+/// places is a crack they could differ through (spec §9.5).
+#[test]
+fn a_gear_chance_never_exceeds_one() {
+    let game = Game::new(4204, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = species_with_gear(&game);
+    let authored = game.equipment_drops_for(&species);
+
+    let mut downed = program(50, Rarity::Ordinary, 3);
+    downed.species = species.id.clone();
+
+    // A tier far past anything shippable, so every authored chance is
+    // pushed over 1.0 before the clamp.
+    let clamped = game.gear_chances(&downed, &gear_tool(99));
+    assert_eq!(
+        clamped.len(),
+        authored.len(),
+        "a clamp must not drop a row — filtering one out instead would satisfy \
+         every per-item assertion below while still failing spec §9.5"
+    );
+    for (item, chance) in clamped {
+        assert!(
+            (0.0..=1.0).contains(&chance),
+            "chance for {item:?} escaped the clamp: {chance}"
+        );
+    }
+}
+
+/// A species the run has no def for quotes nothing rather than panicking —
+/// a mod species removed between save and load is the real case.
+#[test]
+fn an_unknown_species_quotes_no_gear() {
+    let game = Game::new(4205, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut downed = program(50, Rarity::Ordinary, 3);
+    downed.species = "no_such_species".to_string();
+    assert!(game.gear_chances(&downed, &gear_tool(1)).is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5, task 2: `extract_program`'s `Gear` branch and the shipped
+// Harness Puller tool that takes it.
+// ---------------------------------------------------------------------------
+
+/// The shipped Gear tool, installed into the player's one slot. `Tools` is
+/// a bare `Vec<ItemId>`-shaped newtype over `ToolId`, so this bypasses
+/// research and forging deliberately — what is under test is the branch,
+/// not the door to it.
+fn install_harness_puller(game: &mut Game) -> ToolId {
+    let id = ToolId("harness_puller".to_string());
+    assert!(
+        game.world.resource::<ToolDb>().get(id.as_str()).is_some(),
+        "harness_puller.ron must load before this test can install it"
+    );
+    let player = game.player_entity();
+    game.world.get_mut::<Tools>(player).unwrap().0 = vec![id.clone()];
+    id
+}
+
+/// Every copy of `item` the player holds, across *both* stores — the plain
+/// `Inventory` count for a material and every `GearCopies` row naming
+/// `item`, regardless of quality or affix.
+///
+/// **Why this exists, not `held()` alone**: `held()` reads only
+/// `Inventory`. An equippable gear pull lands in `GearCopies` instead, at a
+/// quality rolled by `grant_gear_drop` rather than the exact default
+/// `held()` probes for, so `held()` would silently under-count (report zero
+/// gained) for any equippable item a `Gear` tool grants. Do not "simplify"
+/// this back to `held()` — see the full derivation below.
+///
+/// **Deviation from the task brief**, which used `held()` alone for this
+/// per-item check: `held()`'s probe copy (`gear(item, 0)`) is always
+/// `Rarity::Ordinary`, tier 0, no affixes, `quality: QUALITY_DEFAULT` — the
+/// exact shape `GearCopy::is_plain` tests true for — so `held()` only ever
+/// reads `Inventory`, never `GearCopies`, no matter which item it is asked
+/// about (see `tests/support.rs::held_at`). `grant_gear_drop` rolls an
+/// equippable copy's quality from `QUALITY_DROP_BASE` (70, spread up to 90
+/// — see `tuning::QUALITY_DROP_BASE`'s own doc: "always below" `QUALITY_
+/// DEFAULT`, 100), so a granted equippable copy can never be the exact
+/// probe `held()` looks for. On this test's fixture (seed 4206), one of the
+/// certain candidates (`cortex_hack`) is equippable, so `held()` alone
+/// reports zero both before and after and the assertion fails even though
+/// `extract_gear_from_program` granted it correctly — proven independently
+/// by `a_gear_pull_grants_a_copy_through_the_rare_tier_door`, which reads
+/// `GearCopies` directly. This helper is the fix: sum both stores, the same
+/// shape `tests/combat_rewards.rs`'s own gear-drop tests use (filtering
+/// `GearCopies` by `copy.item` rather than expecting an exact-`GearCopy`
+/// match).
+fn total_copies_held(game: &Game, item: &ItemId) -> u32 {
+    let plain = held(game, item);
+    let geared: u32 = game
+        .world
+        .get::<GearCopies>(game.player_entity())
+        .map(|ledger| {
+            ledger
+                .copies
+                .iter()
+                .filter(|(copy, _)| &copy.item == item)
+                .map(|(_, qty)| *qty)
+                .sum()
+        })
+        .unwrap_or(0);
+    plain + geared
+}
+
+/// A pull that is *certain* to land, without hunting for a seed: a bench at
+/// a high tier pushes every authored chance past 1.0, where `gear_chances`
+/// clamps it. The certainty comes from the shipped mechanism rather than
+/// from a fixture, so this test also proves the bench term reaches the
+/// chance at all.
+#[test]
+fn a_gear_pull_that_is_certain_grants_every_candidate_and_spends_the_program() {
+    let mut game = Game::new(4206, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = species_with_gear(&game);
+    build_program_bench(&mut game, Some(20));
+
+    let tool_id = install_harness_puller(&mut game);
+    let tool = game
+        .world
+        .resource::<ToolDb>()
+        .get(tool_id.as_str())
+        .unwrap()
+        .clone();
+
+    let mut downed = program(50, Rarity::Ordinary, 3);
+    downed.species = species.id.clone();
+
+    let certain: Vec<ItemId> = game
+        .gear_chances(&downed, &tool)
+        .into_iter()
+        .filter(|(_, chance)| *chance >= 1.0)
+        .map(|(item, _)| item)
+        .collect();
+    assert!(
+        !certain.is_empty(),
+        "test premise: a tier-20 bench should make at least one candidate certain"
+    );
+
+    let before: Vec<u32> = certain
+        .iter()
+        .map(|item| total_copies_held(&game, item))
+        .collect();
+    give_downed_program(&mut game, downed);
+    let store_before = game.world
+        .get::<DownedPrograms>(game.player_entity())
+        .unwrap()
+        .0
+        .len();
+
+    game.extract_program(0, &tool_id).expect("the pull should succeed");
+
+    assert_eq!(
+        game.world
+            .get::<DownedPrograms>(game.player_entity())
+            .unwrap()
+            .0
+            .len(),
+        store_before - 1,
+        "the program is spent"
+    );
+    for (item, before) in certain.iter().zip(before.iter()) {
+        assert!(
+            total_copies_held(&game, item) > *before,
+            "a certain pull should have granted {item:?}"
+        );
+    }
+}
+
+/// The gear branch grants a **real copy** through `grant_gear_drop` rather
+/// than a plain inventory row — the copy lands in the player's `GearCopies`
+/// ledger, which is what proves it went through the one rare-tier door
+/// (spec §9's act). A branch that granted plain loot instead would satisfy
+/// the test above and fail this one.
+#[test]
+fn a_gear_pull_grants_a_copy_through_the_rare_tier_door() {
+    let mut game = Game::new(4211, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = species_with_gear(&game);
+    build_program_bench(&mut game, Some(20));
+    let tool_id = install_harness_puller(&mut game);
+
+    let mut downed = program(50, Rarity::Ordinary, 3);
+    downed.species = species.id.clone();
+    give_downed_program(&mut game, downed);
+
+    let player = game.player_entity();
+    let before = game
+        .world
+        .get::<GearCopies>(player)
+        .map(|ledger| ledger.copies.len())
+        .unwrap_or(0);
+
+    game.extract_program(0, &tool_id).expect("the pull should succeed");
+
+    let after = game
+        .world
+        .get::<GearCopies>(player)
+        .map(|ledger| ledger.copies.len())
+        .unwrap_or(0);
+    assert!(
+        after > before,
+        "an equippable pull must enter the GearCopies ledger, not the plain inventory"
+    );
+}
+
+/// A miss pays nothing at all — no consolation scrap, no pool — and still
+/// spends the program and the ticks (spec §9.4). The miss is constructed
+/// rather than waited for: a species the run has no def for quotes an empty
+/// chance list, so the pull cannot land.
+#[test]
+fn a_gear_pull_that_finds_nothing_pays_nothing_and_still_spends_the_program() {
+    let mut game = Game::new(4207, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let tool_id = install_harness_puller(&mut game);
+
+    let mut downed = program(50, Rarity::Ordinary, 3);
+    downed.species = "no_such_species".to_string();
+    give_downed_program(&mut game, downed);
+
+    let player = game.player_entity();
+    let before_items = game.world.get::<Inventory>(player).unwrap().items.clone();
+    let before_copies = game
+        .world
+        .get::<GearCopies>(player)
+        .map(|ledger| ledger.copies.len())
+        .unwrap_or(0);
+    let store_before = game.world.get::<DownedPrograms>(player).unwrap().0.len();
+
+    game.extract_program(0, &tool_id).expect("the pull should succeed");
+
+    assert_eq!(
+        game.world.get::<DownedPrograms>(player).unwrap().0.len(),
+        store_before - 1,
+        "the program is spent on a miss too"
+    );
+    assert_eq!(
+        game.world.get::<Inventory>(player).unwrap().items,
+        before_items,
+        "a Gear tool has no yields pool and pays nothing on a miss"
+    );
+    assert_eq!(
+        game.world
+            .get::<GearCopies>(player)
+            .map(|ledger| ledger.copies.len())
+            .unwrap_or(0),
+        before_copies
+    );
+}
+
+/// The Global Constraint, asserted rather than assumed: phase 5 deleted no
+/// gear door. `equipment_drops_for` still answers for `award_loot`.
+#[test]
+fn the_kill_still_rolls_its_own_gear_after_phase_five() {
+    let game = Game::new(4208, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = species_with_gear(&game);
+    assert!(
+        !game.equipment_drops_for(&species).is_empty(),
+        "equipment_drops_for must keep answering for award_loot — phase 5 is additive"
+    );
+}
+
+/// **The final-review regression**: a successful gear pull must log the
+/// event exactly once. `extract_gear_from_program` used to call
+/// `self.record_drop(copy, 1)` on every hit *in addition to* building its
+/// own summary line below the loop — `record_drop`'s no-battle fallback
+/// (`announce_drops`) then pushed a second `"Salvage:"` header plus one row
+/// per item, so the player saw the branch's own sentence and a Salvage
+/// tally for the same pull. `extract_program` refuses outright while a
+/// battle is live, so that fallback was the *only* reachable branch here —
+/// there was no live-battle path to hide the duplicate behind.
+///
+/// Raw `MessageLog::lines` are compared here rather than
+/// `Game::message_history`'s condensed view: `resources::condense` folds a
+/// repeated line into the *same* `LogEntry` with its `repeats` field
+/// bumped, so counting condensed entries can under-report a real duplicate
+/// that happened to fold into an entry already inside the lookback window
+/// (`CONDENSE_LOOKBACK`). Raw lines carry no such fold — a second `push_kind`
+/// call always shows up as a second element of `lines`, which is exactly
+/// what this test needs to tell "logged once" from "logged twice."
+#[test]
+fn a_successful_gear_pull_logs_the_event_exactly_once() {
+    let mut game = Game::new(4212, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = species_with_gear(&game);
+    // A tier-20 bench pushes every candidate's chance past 1.0, where
+    // `gear_chances` clamps it — the same certainty trick
+    // `a_gear_pull_that_is_certain_grants_every_candidate_and_spends_the_
+    // program` uses, so this test needs no seed hunt to guarantee a hit.
+    build_program_bench(&mut game, Some(20));
+    let tool_id = install_harness_puller(&mut game);
+
+    let mut downed = program(50, Rarity::Ordinary, 3);
+    downed.species = species.id.clone();
+    give_downed_program(&mut game, downed);
+
+    let before = game.world.resource::<MessageLog>().lines.len();
+
+    game.extract_program(0, &tool_id)
+        .expect("the pull should succeed");
+
+    let pushed = &game.world.resource::<MessageLog>().lines[before..];
+    let loot_lines: Vec<_> = pushed
+        .iter()
+        .filter(|line| line.kind == MessageKind::Loot)
+        .collect();
+
+    assert_eq!(
+        loot_lines.len(),
+        1,
+        "a gear pull must push exactly one Loot line for the event, not a \
+         summary sentence plus a Salvage: tally; got {loot_lines:?}"
+    );
+    assert!(
+        loot_lines[0].text.contains("Harness Puller"),
+        "the single line must be the branch's own summary sentence, not \
+         record_drop's \"Salvage:\" header; got {:?}",
+        loot_lines[0].text
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5, task 3: the screen quotes the same numbers the pull uses.
+// ---------------------------------------------------------------------------
+
+/// The §3 invariant applied to the new derivation: what the screen quotes
+/// is what the pull rolls, because both call one function.
+#[test]
+fn the_preview_quotes_gear_chances_verbatim() {
+    let mut game = Game::new(4209, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = species_with_gear(&game);
+    let tool_id = install_harness_puller(&mut game);
+    let tool = game
+        .world
+        .resource::<ToolDb>()
+        .get(tool_id.as_str())
+        .unwrap()
+        .clone();
+
+    let mut downed = program(50, Rarity::Ordinary, 3);
+    downed.species = species.id.clone();
+    let expected = game.gear_chances(&downed, &tool);
+    give_downed_program(&mut game, downed);
+
+    let options = game.extraction_options(0);
+    let option = options
+        .iter()
+        .find(|o| o.tool == tool_id)
+        .expect("the installed Gear tool should have a row");
+
+    match &option.preview {
+        crate::views::ExtractionPreview::Chances(rows) => {
+            assert_eq!(rows.len(), expected.len());
+            for ((name, chance), (item, expected_chance)) in rows.iter().zip(expected.iter()) {
+                assert_eq!(name, &game.item_name(item));
+                assert_eq!(chance, expected_chance);
+            }
+        }
+        other => panic!("a Gear tool should preview chances, got {other:?}"),
+    }
+}

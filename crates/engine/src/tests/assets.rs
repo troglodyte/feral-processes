@@ -3342,6 +3342,14 @@ fn every_non_routines_tool_has_a_non_empty_yield_pool() {
                     def.id
                 );
             }
+            ToolCategory::Gear => {
+                assert!(
+                    def.yields.is_empty(),
+                    "tool {:?} is category Gear and must not declare a yields pool — it rolls \
+                     the species' own drop table instead",
+                    def.id
+                );
+            }
         }
     }
     assert!(
@@ -3534,6 +3542,19 @@ fn a_shipped_tool_reads_routines() {
             .all()
             .any(|def| def.category == ToolCategory::Routines),
         "no shipped tool takes the routine branch"
+    );
+}
+
+/// A `Gear` category with no tool in it would ship the whole third branch
+/// as unreachable content — `every_non_routines_tool_has_a_non_empty_yield_pool`
+/// only says what a `Gear` tool is *exempt* from, never that one exists.
+#[test]
+fn a_shipped_tool_pulls_gear() {
+    let game = Game::new(4210, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let tools = game.world.resource::<ToolDb>();
+    assert!(
+        tools.all().any(|def| def.category == ToolCategory::Gear),
+        "no shipped tool takes the gear branch"
     );
 }
 

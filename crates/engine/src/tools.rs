@@ -54,6 +54,7 @@ pub enum ToolCategory {
     Parts,
     Cores,
     Routines,
+    Gear,
 }
 
 impl ToolCategory {
@@ -66,6 +67,7 @@ impl ToolCategory {
             ToolCategory::Parts => "Parts",
             ToolCategory::Cores => "Cores",
             ToolCategory::Routines => "Routines",
+            ToolCategory::Gear => "Gear",
         }
     }
 }
@@ -325,6 +327,7 @@ mod tests {
             ToolCategory::Parts,
             ToolCategory::Cores,
             ToolCategory::Routines,
+            ToolCategory::Gear,
         ] {
             assert!(
                 !category.as_str().is_empty(),

@@ -1,0 +1,22 @@
+(
+    id: "harness_puller",
+    name: "Harness Puller",
+    description: "Pulls the worn harness off a downed process, gear and all.",
+    // The fifth category, and the second one with no `yields`: what comes
+    // out is the species' own drop table rolled at extraction, not a pool
+    // drawn from. See `Game::gear_chances`.
+    category: Gear,
+    // Tier is not decoration here — it multiplies every authored drop
+    // chance through the shared `tier_scale` curve, so a tier-2 Gear tool
+    // would be a straight 1.5x on the game's whole gear rate. Raise this
+    // only with a play session behind it.
+    tier: 1,
+    // The Routine Reader's band: stripping a program's kit off it is the
+    // slow kind of work. Guessed, like every other figure in this
+    // directory — no instrument in the repo checks it.
+    ticks: 40,
+    // The real gate on this tool, since `deep_analysis` (Task 4) may
+    // already be researched when it ships. Priced against the Core Tap's
+    // band, above the starter clamp's replacement price. Also guessed.
+    forge_cost: [("annealed_core", 2), ("logic_wafer", 4)],
+)

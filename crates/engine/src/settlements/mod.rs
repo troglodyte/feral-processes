@@ -16,10 +16,12 @@
 //! once a breach stopped rebuilding the world.
 
 pub mod catalogue;
+pub mod growth;
 pub mod placement;
 pub mod relations;
 
 pub use catalogue::{SettlementDb, SettlementDef};
+pub use growth::Vitality;
 pub use placement::{SettlementKey, settlement_at};
 pub use relations::{Relation, Standing};
 

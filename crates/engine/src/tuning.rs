@@ -3366,6 +3366,119 @@ pub const SETTLEMENT_SERVER_BONUS_SHARE: u32 = 15;
 /// a way a Server's thin shelf cannot support.
 pub const SETTLEMENT_MAINFRAME_BONUS_SHARE: u32 = 35;
 
+/// A grown-but-Steady city's shelf rows — `growth::Vitality::rows`.
+///
+/// Between the shipped `SETTLEMENT_SERVER_ROWS` (6) and
+/// `SETTLEMENT_MAINFRAME_ROWS` (14), and it is the value an *untouched*
+/// city draws: `SETTLEMENT_COMMERCE_*` bands 0 as Steady, and 0 is where
+/// every authored Mainframe starts in every fresh world. So this, not 14,
+/// is the number a player meets first.
+pub const SETTLEMENT_STEADY_ROWS: u32 = 10;
+
+/// A Steady city's standout share, `SETTLEMENT_STEADY_ROWS`' companion and
+/// midway between the two shipped shares for its reason.
+pub const SETTLEMENT_STEADY_BONUS_SHARE: u32 = 25;
+
+/// The earliest tick a Server can grow into a Mainframe on the clock alone
+/// — `growth::due_tick`'s floor.
+///
+/// **Measured, not guessed**: see `docs/measurements/2026-09-06-run-length.md`.
+/// Shipped dev-save templates reach a mature run state at ticks 5344-6944,
+/// which is a *floor* on how long a real run takes (a driven template skips
+/// the ticks a player spends walking and reading). This sits below that
+/// floor so the earliest-dated towns in a world grow inside a run that
+/// never trades with them, and still 1.7x `SETTLEMENT_BOARD_ROTATION_TICKS`
+/// — the longest *recurring* cadence shipped, and so the class growth could
+/// be mistaken for — so growth cannot read as one more rotation.
+/// `SETTLEMENT_GIFT_COOLDOWN_TICKS` (9000) is longer still but is a
+/// one-shot gate rather than a cadence; the measurement records why that is
+/// the wrong comparison and what it costs to sit below it.
+pub const SETTLEMENT_GROWTH_DUE_MIN: u64 = 3000;
+
+/// The latest tick a Server can grow on the clock alone.
+///
+/// Roughly twice the measured maturity floor, which is deliberate: towns
+/// dated in the upper half of this span do **not** grow within a typical run
+/// unless the player trades them forward. A span that every town cleared on
+/// time would make `SETTLEMENT_COMMERCE_PULL_TICKS` decorative.
+pub const SETTLEMENT_GROWTH_DUE_MAX: u64 = 12000;
+
+/// Salts the growth clock apart from `placement.rs`' four questions and from
+/// `SETTLEMENT_MARKET_SALT`. Own constant, `CARAVAN_SALT`'s rule: one fold,
+/// salted per question, so no two questions off a region can collide.
+pub const SETTLEMENT_GROWTH_SALT: u64 = 0x5E77_1E5E_5EED_0005;
+
+/// How many Credits of trade buy one point of commerce —
+/// `Game::credit_trade_volume`'s second reading of the same volume.
+///
+/// **Cheaper than `SETTLEMENT_TRADE_CREDITS_PER_POINT` (250) on purpose.**
+/// If the two were equal, commerce and standing would move in lockstep off
+/// one input and the second axis would be a second spelling of the first.
+/// At 150, commerce responds visibly faster than goodwill does — which is
+/// the right asymmetry: a town notices your money before it likes you.
+pub const SETTLEMENT_COMMERCE_CREDITS_PER_POINT: u32 = 150;
+
+/// How many ticks one point of commerce pulls a Server's growth date
+/// earlier — `growth::pull_ticks`.
+///
+/// At `SETTLEMENT_COMMERCE_MAX` (100) this is 2500 ticks, which is most of
+/// the way from `SETTLEMENT_GROWTH_DUE_MAX` toward `_MIN` but provably
+/// never past it — see the `const _` in `growth.rs`. Trade is meant to be
+/// the difference between a town that grows this run and one that does not,
+/// not a button that founds a city.
+pub const SETTLEMENT_COMMERCE_PULL_TICKS: u64 = 25;
+
+/// How long one drift epoch is — `Game::settlement_growth_tick` settles
+/// commerce against `now / this`, `static_epoch`'s shape, so a fast-forward
+/// cannot be outrun and no per-tick arithmetic runs over every town.
+pub const SETTLEMENT_COMMERCE_DECAY_TICKS: u64 = 600;
+
+/// Points of commerce a town loses per epoch to plain neglect.
+///
+/// Two per 600 ticks costs a city about 20 points across a mature run — a
+/// drift the player can outpace with modest trade and will not notice if
+/// they are using the town at all. Neglect starves a city over roughly
+/// 12000 ticks, which is a run's worth of ignoring it, not a punishment for
+/// a quiet week.
+pub const SETTLEMENT_COMMERCE_DECAY: i32 = 2;
+
+/// **Extra** points lost per epoch while the town's band is `Hostile` — on
+/// top of `SETTLEMENT_COMMERCE_DECAY`, not instead of it.
+///
+/// Triples the drift, so a city you have turned Hostile starves in about a
+/// third of the time neglect alone would take. Read off the *current* band
+/// and never a history: repairing standing stops the acceleration the tick
+/// it lands.
+pub const SETTLEMENT_COMMERCE_HOSTILE_DECAY: i32 = 4;
+
+/// The floor every commerce writer clamps to — `growth::clamp_commerce`,
+/// `relations::clamp`'s rule and the same reason: one clamp is only enough
+/// because there is one door.
+///
+/// Mirrors `SETTLEMENT_MIN_STANDING`/`_MAX_STANDING`'s +/-100 axis so the two
+/// per-town numbers read on the same scale.
+pub const SETTLEMENT_COMMERCE_MIN: i32 = -100;
+
+/// The ceiling. See `SETTLEMENT_COMMERCE_MIN`.
+pub const SETTLEMENT_COMMERCE_MAX: i32 = 100;
+
+/// At or above this, a grown city is Thriving and draws a full Mainframe
+/// shelf — `growth::vitality`.
+///
+/// **Must be strictly above zero**, and `growth.rs` asserts it at compile
+/// time. Zero is where an untouched authored Mainframe sits, and a
+/// threshold at or below zero would band Tally Yard and Kernel Reach as
+/// Thriving in every fresh world before anyone had traded a Credit.
+pub const SETTLEMENT_COMMERCE_THRIVING: i32 = 40;
+
+/// At or below this, a grown city is Starved and its shelf falls to the
+/// Server floor.
+///
+/// **Must be strictly below zero**, asserted in `growth.rs`, for
+/// `SETTLEMENT_COMMERCE_THRIVING`'s mirrored reason: a threshold at or above
+/// zero would open every authored Mainframe Starved.
+pub const SETTLEMENT_COMMERCE_STARVED: i32 = -40;
+
 /// Every shelf bucket's weight before `Specialty` adds its own bonus —
 /// `Game::specialty_weights`. Equal, so an unbiased bucket only exists in
 /// the sense that no specialty favours it; the shelf still draws from all

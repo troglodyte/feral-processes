@@ -364,6 +364,12 @@ fn rich_in_overrides_work_resource_and_reaches_extraction_yields_output() {
     // sets `rich_in` to something other than `work_resource`, so `def.
     // rich_in.clone().or_else(...)` in `Game::rich_in` has a test that
     // fails if it's collapsed to `work_resource` alone.
+    //
+    // The marker was `research_data` until research data stopped being
+    // extractable (`Game::is_extractable`), which made it unreachable here
+    // and turned this test red. `charge_coil` replaces it on the same
+    // requirement the original was picked for: not in `salvage_clamp`'s own
+    // pool, so its presence can only have come from `rich_in`.
     let mut game = Game::new(4479, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let template = game
         .species_defs()
@@ -373,14 +379,14 @@ fn rich_in_overrides_work_resource_and_reaches_extraction_yields_output() {
     let overridden = SpeciesDef {
         id: "rich_in_override_species".to_string(),
         work_resource: Some(ItemId::from(crate::items::ids::CORE_FRAGMENT)),
-        rich_in: Some(ItemId::from(crate::items::ids::RESEARCH_DATA)),
+        rich_in: Some(ItemId::from(crate::items::ids::CHARGE_COIL)),
         ..template
     };
     game.world.resource_mut::<SpeciesDb>().insert(overridden);
 
     assert_eq!(
         game.rich_in(&"rich_in_override_species".to_string()),
-        Some(ItemId::from(crate::items::ids::RESEARCH_DATA)),
+        Some(ItemId::from(crate::items::ids::CHARGE_COIL)),
         "Game::rich_in must answer the override, not the species' own work_resource"
     );
 
@@ -397,13 +403,13 @@ fn rich_in_overrides_work_resource_and_reaches_extraction_yields_output() {
 
     assert_eq!(
         granted
-            .get(&ItemId::from(crate::items::ids::RESEARCH_DATA))
+            .get(&ItemId::from(crate::items::ids::CHARGE_COIL))
             .copied(),
         Some(tuning::RICH_IN_UNITS),
         "the override's bonus must reach extraction_yield's output: {granted:?}"
     );
 
-    // Baseline: the same fixture with no override at all — `research_data`
+    // Baseline: the same fixture with no override at all — `charge_coil`
     // is not in the starter tool's own pool (`salvage_clamp` names only
     // `core_fragment` and `bytecode_block`), so its presence above can only
     // have come from `rich_in`, never from `apportion`'s weight split.
@@ -424,7 +430,7 @@ fn rich_in_overrides_work_resource_and_reaches_extraction_yields_output() {
     };
     let plain_granted = totals(&game.extraction_yield(&plain_prog, &tool));
     assert!(
-        !plain_granted.contains_key(&ItemId::from(crate::items::ids::RESEARCH_DATA)),
+        !plain_granted.contains_key(&ItemId::from(crate::items::ids::CHARGE_COIL)),
         "with rich_in unset, falling back to work_resource (core_fragment) must not somehow \
          still grant research_data — the override above must be what put it there: \
          {plain_granted:?}"
@@ -2503,7 +2509,11 @@ fn a_tier_one_gear_tool_with_no_bench_quotes_the_authored_chances() {
     let mut downed = program(50, Rarity::Ordinary, 3);
     downed.species = species.id.clone();
 
-    assert_eq!(game.extraction_bench_tier(), 0, "no bench should stand here");
+    assert_eq!(
+        game.extraction_bench_tier(),
+        0,
+        "no bench should stand here"
+    );
     let quoted = game.gear_chances(&downed, &gear_tool(1));
 
     assert_eq!(quoted.len(), authored.len());
@@ -2711,13 +2721,15 @@ fn a_gear_pull_that_is_certain_grants_every_candidate_and_spends_the_program() {
         .map(|item| total_copies_held(&game, item))
         .collect();
     give_downed_program(&mut game, downed);
-    let store_before = game.world
+    let store_before = game
+        .world
         .get::<DownedPrograms>(game.player_entity())
         .unwrap()
         .0
         .len();
 
-    game.extract_program(0, &tool_id).expect("the pull should succeed");
+    game.extract_program(0, &tool_id)
+        .expect("the pull should succeed");
 
     assert_eq!(
         game.world
@@ -2759,7 +2771,8 @@ fn a_gear_pull_grants_a_copy_through_the_rare_tier_door() {
         .map(|ledger| ledger.copies.len())
         .unwrap_or(0);
 
-    game.extract_program(0, &tool_id).expect("the pull should succeed");
+    game.extract_program(0, &tool_id)
+        .expect("the pull should succeed");
 
     let after = game
         .world
@@ -2794,7 +2807,8 @@ fn a_gear_pull_that_finds_nothing_pays_nothing_and_still_spends_the_program() {
         .unwrap_or(0);
     let store_before = game.world.get::<DownedPrograms>(player).unwrap().0.len();
 
-    game.extract_program(0, &tool_id).expect("the pull should succeed");
+    game.extract_program(0, &tool_id)
+        .expect("the pull should succeed");
 
     assert_eq!(
         game.world.get::<DownedPrograms>(player).unwrap().0.len(),
@@ -2924,4 +2938,141 @@ fn the_preview_quotes_gear_chances_verbatim() {
         }
         other => panic!("a Gear tool should preview chances, got {other:?}"),
     }
+}
+
+// ---------------------------------------------------------------------------
+// Research data is never extractable. The rule keys on the item carrying
+// `EconomyRole::ResearchCurrency`, never on the id `"research_data"` —
+// `EconomyRole`'s own doc is that engine logic asks for the item with a role
+// rather than naming one, so a mod that renames its research currency is
+// covered and no content moves into Rust.
+// ---------------------------------------------------------------------------
+
+/// The research currency for this run, whatever it is called.
+fn research_currency(game: &Game) -> ItemId {
+    game.world
+        .resource::<ItemDb>()
+        .research_currency()
+        .expect("a shipped run has a research currency")
+        .clone()
+}
+
+/// A tool whose pool is *entirely* research currency draws nothing at all —
+/// the filter must not leave the units to be apportioned across an empty
+/// pool, and must not panic getting there.
+#[test]
+fn a_tool_pool_of_pure_research_currency_yields_nothing() {
+    let game = Game::new(4301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let rd = research_currency(&game);
+
+    let mut tool = starter_tool(&game);
+    tool.yields = vec![(rd.clone(), 1.0)];
+
+    let granted = game.extraction_yield(&program(80, Rarity::Gold, 20), &tool);
+    assert!(
+        !granted.iter().any(|(item, _)| *item == rd),
+        "research currency reached a yield: {granted:?}"
+    );
+    // The `rich_in` bonus is a separate, legitimate addend and still pays —
+    // what must be empty is the tool's own contribution, so the whole yield
+    // is exactly that bonus and nothing else.
+    let total: u32 = totals(&granted).values().sum();
+    assert_eq!(
+        total,
+        tuning::RICH_IN_UNITS,
+        "the pool contributed units it had no extractable item for: {granted:?}"
+    );
+}
+
+/// A mixed pool still pays its full unit count — the filter drops the row
+/// *before* apportionment, so the surviving items take the research
+/// currency's share rather than the body being worth less for having been
+/// authored with it.
+#[test]
+fn research_currency_in_a_pool_redistributes_rather_than_shrinking_the_yield() {
+    let game = Game::new(4302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let rd = research_currency(&game);
+    let prog = program(80, Rarity::Gold, 20);
+
+    let clean = starter_tool(&game);
+    let mut tainted = clean.clone();
+    tainted.yields.push((rd.clone(), 1.0));
+
+    let clean_total: u32 = totals(&game.extraction_yield(&prog, &clean)).values().sum();
+    let tainted_rows = game.extraction_yield(&prog, &tainted);
+    let tainted_total: u32 = totals(&tainted_rows).values().sum();
+
+    assert!(
+        !tainted_rows.iter().any(|(item, _)| *item == rd),
+        "research currency reached a yield: {tainted_rows:?}"
+    );
+    assert_eq!(
+        tainted_total, clean_total,
+        "the units the research currency would have taken must redistribute, not vanish"
+    );
+}
+
+/// The live vector on shipped data: `rich_in` falls back to
+/// `SpeciesDef::work_resource`, and `assets/species/README.md` names
+/// `research_data` as an example of exactly that. A species authored that way
+/// must pay no bonus rather than banking one.
+#[test]
+fn a_species_rich_in_research_currency_pays_no_bonus() {
+    let mut game = Game::new(4303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let rd = research_currency(&game);
+
+    let species_id = "scrapper".to_string();
+    {
+        let mut db = game.world.resource_mut::<SpeciesDb>();
+        let mut def = db.get(&species_id).expect("scrapper ships").clone();
+        def.rich_in = Some(rd.clone());
+        db.insert(def);
+    }
+
+    let tool = starter_tool(&game);
+    let granted = game.extraction_yield(&program(80, Rarity::Gold, 20), &tool);
+    assert!(
+        !granted.iter().any(|(item, _)| *item == rd),
+        "a rich_in of research currency paid a bonus: {granted:?}"
+    );
+}
+
+/// The gear door takes the same filter. Authored onto the species rather
+/// than asserted against shipped assets: no shipped species drops the
+/// research currency, so a test that merely read the shipped table would
+/// pass with the filter deleted and read as coverage while proving nothing.
+#[test]
+fn a_gear_pull_never_quotes_research_currency() {
+    let mut game = Game::new(4304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let rd = research_currency(&game);
+    let species_id = species_with_gear(&game).id;
+
+    {
+        let mut db = game.world.resource_mut::<SpeciesDb>();
+        let mut def = db.get(&species_id).expect("picked from the db").clone();
+        def.equipment_drop = Some((rd.clone(), 1.0));
+        db.insert(def);
+    }
+
+    let mut downed = program(50, Rarity::Ordinary, 3);
+    downed.species = species_id.clone();
+
+    // The premise: without the filter this table really would quote it.
+    let authored = game
+        .world
+        .resource::<SpeciesDb>()
+        .get(&species_id)
+        .unwrap()
+        .clone();
+    let raw = game.equipment_drops_for(&authored);
+    assert!(
+        raw.iter().any(|(item, _)| *item == rd),
+        "test premise: the authored table must name the research currency"
+    );
+
+    let quoted = game.gear_chances(&downed, &gear_tool(1));
+    assert!(
+        !quoted.iter().any(|(item, _)| *item == rd),
+        "research currency reached a gear quote: {quoted:?}"
+    );
 }

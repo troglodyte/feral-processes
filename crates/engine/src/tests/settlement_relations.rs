@@ -1169,3 +1169,143 @@ fn a_trip_interrupted_by_a_fight_stops_paying_for_itself() {
         "a fight opened and the trip still charged the full {quote}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Is the ladder reachable?
+// ---------------------------------------------------------------------------
+
+/// How many deeds either end of the ladder may sit from `Neutral`.
+///
+/// **Not a `tuning.rs` constant** — `ZONE_MATERIALS`' shape. This is a census
+/// bound holding a claim about the design, not a knob the engine reads.
+///
+/// Five is not a number anyone picked: it is the pace the way *up* already
+/// sets, `SETTLEMENT_ALLIED_STANDING / SETTLEMENT_CONTRACT_STANDING`. The
+/// census exists to hold the other end to it.
+const LADDER_DEED_BUDGET: usize = 5;
+
+/// Applies `deed` through the one door until the town reads `target`, and
+/// answers how many it took — `None` if the standing clamps before ever
+/// getting there.
+///
+/// Goes through `Game::adjust_standing` rather than writing the resource the
+/// way `set_standing` does, because bypassing the door is precisely the hole
+/// this census closes: a fixture that sets the number proves a band can be
+/// *rendered* and says nothing about whether a player can reach one.
+fn deeds_to_reach(
+    game: &mut Game,
+    key: SettlementKey,
+    deed: i32,
+    target: Standing,
+) -> Option<usize> {
+    set_standing(game, key, 0);
+    let mut count = 0;
+    loop {
+        let before = game.standing(key);
+        game.adjust_standing(key, deed);
+        count += 1;
+        if game.standing_band(key) == target {
+            return Some(count);
+        }
+        // Clamped at a bound without having crossed into `target`: no number
+        // of further deeds will do it either.
+        if game.standing(key) == before {
+            return None;
+        }
+    }
+}
+
+/// **Every band must be reachable through movers that actually exist.**
+///
+/// The aid work measured whether a garrison's *radius* reaches anything
+/// (`docs/measurements/2026-09-05-settlement-aid-reach.md`) and left the
+/// matching question about the ladder itself open — that document names it as
+/// its own blind spot, that predation "needs a `Hostile` town the party has
+/// already found". Both bottom-band consequences,
+/// `Standing::refuses_service` and `Standing::preys_on_routes`, are wired end
+/// to end and tested, and neither can fire while the game's only negative
+/// mover is a fraction of the threshold it has to reach.
+///
+/// The failure this catches is not a wrong answer from any one function. It
+/// is a feature that is complete, green and unreachable — which reads at the
+/// keyboard exactly like a feature that is merely rare.
+#[test]
+fn every_band_is_reachable_through_movers_that_exist() {
+    let mut game = game();
+    let key = settlement_east_of_player(&mut game);
+
+    for (deed, target, mover) in [
+        (
+            SETTLEMENT_CONTRACT_STANDING,
+            Standing::Warm,
+            "SETTLEMENT_CONTRACT_STANDING",
+        ),
+        (
+            SETTLEMENT_CONTRACT_STANDING,
+            Standing::Allied,
+            "SETTLEMENT_CONTRACT_STANDING",
+        ),
+        (
+            SETTLEMENT_ABANDON_STANDING,
+            Standing::Cold,
+            "SETTLEMENT_ABANDON_STANDING",
+        ),
+        (
+            SETTLEMENT_ABANDON_STANDING,
+            Standing::Hostile,
+            "SETTLEMENT_ABANDON_STANDING",
+        ),
+    ] {
+        match deeds_to_reach(&mut game, key, deed, target) {
+            None => panic!("{target:?} is unreachable at any number of {mover} deeds"),
+            Some(count) => assert!(
+                count <= LADDER_DEED_BUDGET,
+                "{target:?} takes {count} {mover} deeds; the budget is \
+                 {LADDER_DEED_BUDGET}, the pace the way up already sets"
+            ),
+        }
+    }
+}
+
+/// **And back out again.**
+///
+/// `Hostile` closes both the market and the board
+/// (`Standing::refuses_service`), so the two movers that carry a town down
+/// there — finishing and handing back its own jobs — are the very ones out
+/// of reach from inside it. That cost nothing while `Hostile` sat thirteen
+/// abandonments away and no run ever arrived; it is a dead end the moment
+/// the band is reachable, which is what
+/// `every_band_is_reachable_through_movers_that_exist` just made it.
+///
+/// `Game::credit_nearby_settlements` is the way back and takes no standing
+/// gate at all: a deed done near a town moves it whatever it thinks of the
+/// party. So the exit is to do them favours they did not ask for.
+#[test]
+fn a_hostile_town_can_be_won_back_by_deeds_it_did_not_ask_for() {
+    let mut game = game();
+    let key = settlement_east_of_player(&mut game);
+    let tile = game.world.resource::<crate::resources::Settlements>().0[&key].tile;
+
+    set_standing(&mut game, key, SETTLEMENT_HOSTILE_STANDING);
+    assert!(
+        game.standing_band(key).refuses_service(),
+        "test premise: the town is meant to be shut to the party"
+    );
+
+    // The strongest deed a town notices, done on its doorstep. Bounded by
+    // the same budget the way down is held to — a way out that takes longer
+    // than the way in is a punishment the player cannot read as one.
+    let mut deeds = 0;
+    while game.standing_band(key) == Standing::Hostile {
+        assert!(
+            deeds < LADDER_DEED_BUDGET,
+            "a Hostile town could not be won back inside {LADDER_DEED_BUDGET} deeds"
+        );
+        game.credit_nearby_settlements(tile, SETTLEMENT_STACK_COLLAPSED_STANDING);
+        deeds += 1;
+    }
+    assert!(
+        !game.standing_band(key).refuses_service(),
+        "the band climbed but the town is still refusing service"
+    );
+}

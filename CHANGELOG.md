@@ -33,6 +33,33 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.115
+
+**A town that hates you now puts people on the ground between you and it.** A
+settlement at `Hostile` standing near the party fields a patrol on its own
+ground, up to three of them, and they are ordinary wildlife with a tether
+rather than a species you have never seen.
+
+**They notice you before you have to fight them.** A patrol gives chase when
+you come within eight tiles, which is inside the range you can examine one
+from — so you can see whose it is, and turn around, before it sees you.
+
+**Repairing standing sends them home.** The moment a town stops being
+Hostile its patrol stands down where it stands and goes back to wandering,
+which is the way out of that band made visible.
+
+**Killing one costs you with that town and with nobody else.** A full patrol
+wiped in self-defence costs less than clearing one nest on that town's
+doorstep pays back, so the ladder out of `Hostile` stays climbable while
+they are in the way. Decompiling one costs nothing at all.
+
+**They wear their town's colour in the corner of their tile**, in the one
+corner nothing else on the map claims — so a patrol member still says what
+it is, how dangerous it is and how rare it is at the same time.
+
+**A patrol caught mid-chase is still chasing when you load.** Older saves
+keep loading exactly as they did.
+
 ## 0.13.114
 
 **A Teardown Rig strips downed programs while you are somewhere else.** Research

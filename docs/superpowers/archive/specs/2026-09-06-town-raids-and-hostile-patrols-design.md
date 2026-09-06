@@ -518,12 +518,14 @@ regression — a patrol mark must not spend the identity hue.
   spec recorded the same thing about its seven figures. Thirteen more here.
   Is a haul of 40 a setback or an inconvenience? Does a three-member patrol
   read as a threat or as scenery? Both are answerable only at the keyboard.
-- **Whether the two radii should ever diverge.** `SETTLEMENT_RAID_RADIUS` and
-  `SETTLEMENT_GARRISON_RADIUS` are the same expression today, and the aid
-  measurement (`docs/measurements/2026-09-05-settlement-aid-reach.md`) says
-  that reaches 39% of worlds. If hostility should be more common than aid —
-  a defensible design position — it is a one-constant change and this spec
-  does not take it.
+- ~~**Whether the two radii should ever diverge.**~~ **Closed 2026-09-06: they
+  stay equal.** `SETTLEMENT_RAID_RADIUS` and `SETTLEMENT_GARRISON_RADIUS` remain
+  the same expression, reaching the 39% of worlds the aid measurement
+  (`docs/measurements/2026-09-05-settlement-aid-reach.md`) recorded. A town near
+  enough to help is exactly a town near enough to hurt. They stay two constants
+  for this spec's original reason — retuning the friendly reach must not
+  silently retune the hostile one. Recorded in
+  `2026-09-06-settlement-growth-design.md`.
 - **Whether a patrol should ever leave its town's ground.** Deferred above.
   Route predation already exists; a patrol that marches on the base is a
   third mechanic and would want its own brainstorm.

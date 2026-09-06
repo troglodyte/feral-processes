@@ -48,9 +48,10 @@ spec resolves to a release tag.
 specs shipped everything they scoped, and the three things they deferred *by
 decision* have since resolved: town-sourced raids and hostile patrols were
 claimed by `2026-09-06-town-raids-and-hostile-patrols-design` and both shipped
-(`v0.13.113` and `v0.13.115`). **A server growing into a mainframe is the one
-deferral still unclaimed by any spec** — it is the only settlement work left,
-and nothing in `specs/` covers it.
+(`v0.13.113` and `v0.13.115`), and **a server growing into a mainframe is now
+claimed by `2026-09-06-settlement-growth-design`** — the last settlement
+deferral, and the one currently being built. **Nothing on the settlements path
+is unclaimed any more.**
 
 Program extraction is likewise finished: five phases, nothing unbuilt. What
 both leave behind is tuning — thirteen guessed constants in the hostility

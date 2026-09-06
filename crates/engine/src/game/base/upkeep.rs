@@ -298,6 +298,42 @@ impl Game {
         self.standing_band(key).garrison_defense()
     }
 
+    /// Every known town near enough to the anchor and angry enough to send
+    /// raiders at it — the hostile mirror of `garrison_defense`'s fold, and
+    /// deliberately a *list* rather than a count, because this event has an
+    /// author and the log line has to name it.
+    ///
+    /// Two filters and a discovery rule. The radius is Chebyshev to the
+    /// anchor, as the garrison's is. The band is asked through
+    /// `Standing::sends_raiders`, never restated here. And a town whose
+    /// tile has never been resolved is absent from `Settlements` entirely,
+    /// so it is excluded by construction rather than by a third check —
+    /// `town_garrisons`' rule, and the same reason: aid and hostility both
+    /// follow discovery.
+    ///
+    /// Order is `Settlements`' own `BTreeMap` order, which is stable across
+    /// a save round trip. `town_raid_check` picks from this with one draw
+    /// and would otherwise be seed-unstable.
+    pub(crate) fn raiding_towns(&self) -> Vec<crate::settlements::SettlementKey> {
+        let Some((ax, ay)) = self.anchor_position() else {
+            return Vec::new();
+        };
+        let near: Vec<crate::settlements::SettlementKey> = self
+            .world
+            .resource::<crate::resources::Settlements>()
+            .0
+            .iter()
+            .filter(|(_, known)| {
+                (known.tile.0 - ax).abs().max((known.tile.1 - ay).abs())
+                    <= crate::tuning::SETTLEMENT_RAID_RADIUS
+            })
+            .map(|(key, _)| *key)
+            .collect();
+        near.into_iter()
+            .filter(|&key| self.standing_band(key).sends_raiders())
+            .collect()
+    }
+
     /// Fires a GC Entropy Sweep now, skipping the per-tick roll — the dev
     /// console's trigger.
     ///

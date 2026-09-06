@@ -1309,3 +1309,57 @@ fn a_hostile_town_can_be_won_back_by_deeds_it_did_not_ask_for() {
         "the band climbed but the town is still refusing service"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Who sends raiders — three refusals, asserted separately
+// ---------------------------------------------------------------------------
+
+/// Three tests and not one, `commit_caravan_basket`'s rule: a single test
+/// over one refusal passes against every other path that was never going to
+/// fire anyway.
+#[test]
+fn a_hostile_town_beside_the_anchor_is_a_raid_source() {
+    let mut game = game();
+    town_near_anchor(
+        &mut game,
+        SettlementKey { rx: 1, ry: 0 },
+        2,
+        0,
+        SETTLEMENT_HOSTILE_STANDING,
+    );
+    assert_eq!(game.raiding_towns(), vec![SettlementKey { rx: 1, ry: 0 }]);
+}
+
+#[test]
+fn a_neutral_town_beside_the_anchor_sends_nobody() {
+    let mut game = game();
+    town_near_anchor(&mut game, SettlementKey { rx: 1, ry: 0 }, 2, 0, 0);
+    assert!(game.raiding_towns().is_empty());
+}
+
+#[test]
+fn a_hostile_town_beyond_the_raid_radius_sends_nobody() {
+    let mut game = game();
+    town_near_anchor(
+        &mut game,
+        SettlementKey { rx: 1, ry: 0 },
+        SETTLEMENT_RAID_RADIUS + 1,
+        0,
+        SETTLEMENT_HOSTILE_STANDING,
+    );
+    assert!(game.raiding_towns().is_empty());
+}
+
+/// Hostility follows discovery, the rule `town_garrisons` already keeps for
+/// aid: `Settlements` records a tile only once a town is *found*, and a
+/// place the party has never met does not know where they live.
+#[test]
+fn a_hostile_town_never_found_sends_nobody() {
+    let mut game = game();
+    let key = SettlementKey { rx: 1, ry: 0 };
+    set_standing(&mut game, key, SETTLEMENT_HOSTILE_STANDING);
+    assert!(
+        game.raiding_towns().is_empty(),
+        "an unresolved town has no tile to measure from"
+    );
+}

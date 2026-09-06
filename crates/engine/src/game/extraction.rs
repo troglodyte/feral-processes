@@ -218,10 +218,12 @@ impl Game {
     /// literally the authored chance rather than approximately it.
     ///
     /// **Clamped here, unlike its source.** `equipment_drops_for` returns
-    /// chances unclamped because its one caller clamps before rolling. This
-    /// has two callers — the screen's preview and the pull — whose whole
-    /// reason for sharing a derivation is that a quoted figure and a rolled
-    /// one cannot differ, so the clamp lands once, inside.
+    /// chances unclamped because each of its three callers — the kill
+    /// (`award_loot`), the nest cache (`game/zone.rs`), and this function —
+    /// clamps before rolling. This has two callers of its own — the screen's
+    /// preview and the pull — whose whole reason for sharing a derivation is
+    /// that a quoted figure and a rolled one cannot differ, so the clamp
+    /// lands once, inside.
     pub fn gear_chances(&self, program: &DownedProgram, tool: &ToolDef) -> Vec<(ItemId, f32)> {
         let Some(species) = self
             .world
@@ -413,7 +415,6 @@ impl Game {
             if hit {
                 let copy = self.grant_gear_drop(item, Rarity::Ordinary);
                 taken.push(self.drop_label(&copy));
-                self.record_drop(copy, 1);
             }
         }
 

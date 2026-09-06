@@ -2827,6 +2827,64 @@ fn the_kill_still_rolls_its_own_gear_after_phase_five() {
     );
 }
 
+/// **The final-review regression**: a successful gear pull must log the
+/// event exactly once. `extract_gear_from_program` used to call
+/// `self.record_drop(copy, 1)` on every hit *in addition to* building its
+/// own summary line below the loop — `record_drop`'s no-battle fallback
+/// (`announce_drops`) then pushed a second `"Salvage:"` header plus one row
+/// per item, so the player saw the branch's own sentence and a Salvage
+/// tally for the same pull. `extract_program` refuses outright while a
+/// battle is live, so that fallback was the *only* reachable branch here —
+/// there was no live-battle path to hide the duplicate behind.
+///
+/// Raw `MessageLog::lines` are compared here rather than
+/// `Game::message_history`'s condensed view: `resources::condense` folds a
+/// repeated line into the *same* `LogEntry` with its `repeats` field
+/// bumped, so counting condensed entries can under-report a real duplicate
+/// that happened to fold into an entry already inside the lookback window
+/// (`CONDENSE_LOOKBACK`). Raw lines carry no such fold — a second `push_kind`
+/// call always shows up as a second element of `lines`, which is exactly
+/// what this test needs to tell "logged once" from "logged twice."
+#[test]
+fn a_successful_gear_pull_logs_the_event_exactly_once() {
+    let mut game = Game::new(4212, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = species_with_gear(&game);
+    // A tier-20 bench pushes every candidate's chance past 1.0, where
+    // `gear_chances` clamps it — the same certainty trick
+    // `a_gear_pull_that_is_certain_grants_every_candidate_and_spends_the_
+    // program` uses, so this test needs no seed hunt to guarantee a hit.
+    build_program_bench(&mut game, Some(20));
+    let tool_id = install_harness_puller(&mut game);
+
+    let mut downed = program(50, Rarity::Ordinary, 3);
+    downed.species = species.id.clone();
+    give_downed_program(&mut game, downed);
+
+    let before = game.world.resource::<MessageLog>().lines.len();
+
+    game.extract_program(0, &tool_id)
+        .expect("the pull should succeed");
+
+    let pushed = &game.world.resource::<MessageLog>().lines[before..];
+    let loot_lines: Vec<_> = pushed
+        .iter()
+        .filter(|line| line.kind == MessageKind::Loot)
+        .collect();
+
+    assert_eq!(
+        loot_lines.len(),
+        1,
+        "a gear pull must push exactly one Loot line for the event, not a \
+         summary sentence plus a Salvage: tally; got {loot_lines:?}"
+    );
+    assert!(
+        loot_lines[0].text.contains("Harness Puller"),
+        "the single line must be the branch's own summary sentence, not \
+         record_drop's \"Salvage:\" header; got {:?}",
+        loot_lines[0].text
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Phase 5, task 3: the screen quotes the same numbers the pull uses.
 // ---------------------------------------------------------------------------

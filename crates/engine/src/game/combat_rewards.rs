@@ -73,9 +73,10 @@ impl Game {
     ///
     /// A running `DropBoost` field buff scales every chance here by its
     /// power, last — so it applies uniformly regardless of which side of
-    /// the schema a drop came from. The result can run past 1.0; the one
-    /// caller, `award_loot`, already clamps before rolling, so this leaves
-    /// it unclamped rather than duplicating that.
+    /// the schema a drop came from. The result can run past 1.0; each of its
+    /// three callers — `award_loot`, the nest cache (`game/zone.rs`), and
+    /// `gear_chances` — already clamps before rolling, so this leaves it
+    /// unclamped rather than duplicating that.
     pub(crate) fn equipment_drops_for(&self, species: &SpeciesDef) -> Vec<(ItemId, f32)> {
         let mut drops: Vec<(ItemId, f32)> = species.equipment_drop.iter().cloned().collect();
         for def in self.world.resource::<ItemDb>().all() {

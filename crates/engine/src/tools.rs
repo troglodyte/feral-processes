@@ -327,6 +327,7 @@ mod tests {
             ToolCategory::Parts,
             ToolCategory::Cores,
             ToolCategory::Routines,
+            ToolCategory::Gear,
         ] {
             assert!(
                 !category.as_str().is_empty(),

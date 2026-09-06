@@ -10855,8 +10855,9 @@ nothing to catch it. There is deliberately nothing here for a later tuning
 pass to reach for except the tool's own tier and the bench's.
 
 The result is **clamped inside `gear_chances`**, unlike `equipment_drops_for`
-itself, which returns unclamped chances because its own two callers each
-clamp right before rolling. `gear_chances` has two callers of its own (the
+itself, which returns unclamped chances because each of its three
+callers — `award_loot`, the nest cache, and `gear_chances` itself — clamps
+right before rolling. `gear_chances` has two callers of its own (the
 preview and the roll) with the identical requirement, so the clamp moved
 into the shared function rather than being copied at each call site — the
 same reasoning that keeps the bench-tier read inside rather than passed in.
@@ -10864,12 +10865,14 @@ same reasoning that keeps the bench-tier read inside rather than passed in.
 **Phase 5 is additive, not a migration.** `equipment_drops_for` keeps
 exactly the two production callers it had before phase 5 — the kill
 (`Game::award_loot`, `game/combat_rewards.rs`) and cache placement
-(`game/zone.rs`) — untouched. The Harness Puller adds a third *consumer* of
-the same authored chances (through `gear_chances`, not by calling
-`equipment_drops_for` directly a third time) rather than retiring or
-rerouting either existing one. A program that dies still rolls its gear at
-the kill exactly as before; pulling it down for scrap first is a second
-chance at the same table, not the table moving house.
+(`game/zone.rs`) — untouched. The Harness Puller does call
+`equipment_drops_for` directly, inside `gear_chances`
+(`game/extraction.rs:236`) — that *is* a third caller of the table — but it
+adds no fourth *drop door*: `gear_chances` only reads the same authored
+chances that `award_loot` and the nest cache already roll, and it does not
+retire or reroute either existing one. A program that dies still rolls its
+gear at the kill exactly as before; pulling it down for scrap first is a
+second chance at the same table, not the table moving house.
 
 ### `Game::take_routine` is the one place a routine comes off a program
 

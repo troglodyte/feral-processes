@@ -44,7 +44,8 @@ for quality exactly like one that dropped at the kill.
 **It is a second door, not a replacement.** Every existing way gear drops —
 at the kill, from a nest cache, from a Stack feature cache, off the surface
 boss — still pays exactly as before. Gear simply turns up more often
-overall for any program you haul home and strip.
+overall for any program you haul home and strip — and a fully upgraded
+Compiler makes it dramatically more likely, not merely somewhat.
 
 **A miss pays nothing.** No consolation scrap; the program is spent and the
 time is spent whether anything comes off it or not.

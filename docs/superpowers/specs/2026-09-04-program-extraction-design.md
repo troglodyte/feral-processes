@@ -351,14 +351,23 @@ through this table. The distinction matters to whoever closes one later:
 two are a deletion at a `equipment_drops_for` loop, two are not.
 
 The tool is therefore **additive**, and the consequence is recorded here
-rather than discovered: a player who forges it sees roughly double the gear
-rate on any program they bother to haul home. That is the accepted cost of
-not setting a new economy blind. The door list is the one thing that changes
-it, and closing a door later is a deletion at that callsite, not a redesign.
-Note what the compensating lever is *not*: 9.5 introduces no scale constant
-to turn down. If closing a door needs the tool to pay more, the honest
-levers are the authored chances in the species and item assets, or a scale
-constant introduced at that point with the play session that justified it.
+rather than discovered: a player who forges it sees a second, independent
+roll at the same table on any program they bother to haul home. That is the
+accepted cost of not setting a new economy blind. The door list is the one
+thing that changes it, and closing a door later is a deletion at that
+callsite, not a redesign. Note what the compensating lever is *not*: 9.5
+introduces no scale constant to turn down. If closing a door needs the tool
+to pay more, the honest levers are the authored chances in the species and
+item assets, or a scale constant introduced at that point with the play
+session that justified it.
+
+**Corrected 2026-09-05, after the final review.** "Roughly double" understated
+the range and was written before the ceiling in 9.5 was checked against
+`compiler.ron`. The actual range: at a fresh bench (or none at all) the tool
+adds the authored chance on top of the kill's own unchanged roll — the
+"roughly double" case, and the floor of the range, not its whole story. At a
+fully upgraded tier-5 Compiler, that added roll runs up to **3x** the
+authored chance (9.5's corrected ceiling), not merely double.
 
 **9.3 `ToolCategory::Gear`, a fifth variant.** Pool-less, exactly the
 Routine Reader's shape: no `yields`, output derived from the program.
@@ -397,6 +406,14 @@ TOOL_TIER_SCALE_STEP`, so a tier-1 Gear tool on a never-upgraded Compiler is
 `tier_scale(1)` = **1.0**: the authored chance, untouched. A tier-3 Compiler
 doubles it. No `GEAR_TOOL_CHANCE_SCALE` is introduced, and the neutrality
 claim is therefore testable as an identity rather than as a number.
+
+**Corrected 2026-09-05, after the final review.** The tier-3 figure above is
+correct but is not the ceiling. `assets/structures/compiler.ron` ships
+`max_tier: 5`, so a fully upgraded Compiler contributes `bench = 5 - 1 = 4`
+to the scale's argument. A tier-1 Harness Puller worked there rolls
+`tier_scale(1 + 4)` = **3.0** — three times the authored chance, not two.
+Any future tuning pass against "roughly doubles" should read against this
+figure instead.
 
 Two deliberate divergences from `equipment_drops_for`:
 
@@ -470,6 +487,11 @@ A running `DropBoost` field buff applies at extraction, because
 bench. A player can arm a buff and then strip. This reads as a fine synergy
 and is left in; it is written down so it is a decision rather than a
 surprise.
+
+The two multipliers compound rather than substitute: `DropBoost` scales the
+chance inside `equipment_drops_for` first, and `gear_chances` applies
+`tier_scale` on top of that already-boosted figure. A maxed bench (9.5's 3x)
+stacked with an armed buff pushes most candidates straight to the 1.0 clamp.
 
 ### Not in phase 5
 

@@ -3405,12 +3405,31 @@ pub const SETTLEMENT_MIN_STANDING: i32 = -100;
 pub const SETTLEMENT_MAX_STANDING: i32 = 100;
 
 /// At or below this, a town refuses service — see
-/// `settlements::relations::Standing::refuses_service`. Deliberately far
-/// from zero: closing a market is the harshest thing standing does, and a
-/// player must have worked at it rather than drifted into it.
-pub const SETTLEMENT_HOSTILE_STANDING: i32 = -50;
-/// The top of the Cold band; below this a town is merely unfriendly.
-pub const SETTLEMENT_COLD_STANDING: i32 = -15;
+/// `settlements::relations::Standing::refuses_service`. A player must have
+/// worked at it rather than drifted into it: closing a market is the
+/// harshest thing standing does.
+///
+/// **Measured in deeds, not in points, and that is the whole of the fix
+/// here.** The two negative thresholds used to mirror the positive ones
+/// exactly (`-50`/`-15` against `+50`/`+15`), which reads as symmetric and
+/// is not: the movers are not mirrored. The way up pays
+/// `SETTLEMENT_CONTRACT_STANDING` (`+10`) a deed, so `Allied` is five deeds
+/// out. The way down charges `SETTLEMENT_ABANDON_STANDING` (`-4`) — smaller
+/// on purpose, see its own doc — so a mirrored `-50` put `Hostile`
+/// **thirteen** abandoned contracts away, with no other negative mover in
+/// the game to help and any single trade or cleared nest undoing progress.
+/// Nothing reached it, so `Standing::refuses_service` and
+/// `Standing::preys_on_routes` were wired, tested and unreachable.
+///
+/// Mirroring the *effort* instead puts both ends five deeds from `Neutral`
+/// and leaves the mover asymmetry where it was designed to be.
+/// `every_band_is_reachable_through_movers_that_exist` is the census that
+/// holds it; `SETTLEMENT_MIN_STANDING` still leaves room below.
+pub const SETTLEMENT_HOSTILE_STANDING: i32 = -20;
+/// The top of the Cold band; below this a town is merely unfriendly. Two
+/// deeds out, mirroring `SETTLEMENT_WARM_STANDING`'s distance in deeds
+/// rather than in points — see `SETTLEMENT_HOSTILE_STANDING`.
+pub const SETTLEMENT_COLD_STANDING: i32 = -8;
 /// The bottom of the Warm band.
 pub const SETTLEMENT_WARM_STANDING: i32 = 15;
 /// The bottom of the Allied band.

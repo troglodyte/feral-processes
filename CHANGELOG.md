@@ -33,6 +33,34 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.110
+
+**A town can now actually turn on you.** `Hostile` sat fifty points below
+neutral while the only thing in the game that lowers standing is abandoning
+a job, at four points a time — thirteen abandonments at one town, undone by
+any single trade or cleared nest. Nothing ever reached it, so a shut market
+and a preyed-on caravan route were wired, tested and impossible to meet.
+
+**The ladder is measured in deeds now, not in points.** Both ends sit five
+deeds from neutral: five finished jobs to `Allied`, five abandoned ones to
+`Hostile`. The old thresholds mirrored each other numerically while the
+movers behind them did not, which is what made the bottom unreachable.
+
+**Handing a job back still costs less than finishing one pays.** That
+asymmetry was deliberate and is untouched — taking work you cannot finish
+should not be worse than never reading the board.
+
+**A town you have lost can be won back by deeds it did not ask for.** Going
+`Hostile` closes the market and the board, so the jobs that took you there
+are out of reach from inside it; clearing nests and collapsing Stacks near
+the town is the way back up.
+
+**A standing you have already earned may re-read.** The bands are derived on
+every lookup rather than stored, so an existing save's towns re-band against
+the new thresholds — no save-format change, and nothing stops loading.
+
+**None of this has been played.** It is green and unseen.
+
 ## 0.13.109
 
 **`.` no longer waits inside your base.** The key is bound on the zone

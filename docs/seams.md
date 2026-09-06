@@ -11579,3 +11579,70 @@ every heading has both; `every_heading_reads_the_same_as_a_word_and_as_an
 _arrow` holds the half it cannot see, which is that the two agree about
 which point is which.
 
+
+### A `DownedProgram` exists in exactly two places, and what leaves a rig is plain items
+
+`DownedPrograms` on the player and `Hopper` on a Teardown Rig. That is the
+whole list, and it is the boundary phase 4 was designed around rather than a
+count that happens to be two today.
+
+`components::Hopper` is a machine-private `Vec<HopperEntry>` — a program and
+the tool the player chose for it — and nothing takes an entry back out of it
+except `Game::run_teardown_rigs` (`game/base/teardown.rs`), which removes the
+head entry and writes **plain items** into that structure's ordinary
+`Stock::output`. `Inventory`, `Stock`, `Carrying`, a depot and a work order
+never hold one, and none of them gained an instance rule for the rig.
+
+That is the seam `DownedPrograms is a third player store` states, standing:
+`Inventory` is by definition the plain-copy store, which is what lets
+recipes, `Stock`, `assembler_system`, hauling, banking and
+`collect::plan_adjacent_take` read it with no instance rule at all. The
+obvious way to automate teardown — make `Carrying` and the hauling chain
+instance-aware so a worker fetches a body to a machine — spends exactly that
+seam, at every one of those readers, to buy a convenience nobody asked for.
+The private hopper buys the same loop for nothing: the player walks the body
+over (`Game::load_teardown_rig`), and from the buffer onward the yield is
+indistinguishable from anything else a machine makes. **Work orders did not
+change at all**, and that is the measure of it.
+
+The two doors are the place to look if this ever has to widen. A third store
+is a third thing that can hold a body the other two do not know about, and
+the first symptom is a program that survives a save in one of them and not
+the others.
+
+### The Teardown Rig is a `&mut Game` pass and not a bevy system, and that is forced
+
+`Game::extraction_yield` and `Game::extraction_ticks` (`game/extraction.rs`)
+are `&Game` methods folding the player's perks, `SpeciesDb`, `ItemDb` and
+`extraction_bench_tier`. A bevy system cannot call either — it has queries
+and resources, not a `Game` — so an `assembler_system`-shaped rig would have
+to re-derive the yield formula against the same tuning constants. That is the
+one crack the extraction spec's "one derivation" rule exists to prevent: a
+rig and a player's own hand quoting different numbers for the same body and
+the same tool, with the screen's preview agreeing with only one of them.
+
+So `run_teardown_rigs` joins `run_dig_crew`, `run_build_crew`,
+`run_repair_bays`, `run_sorties` and `run_routes` in `game/turn.rs`.
+`what_a_rig_pays_equals_what_extraction_yield_quotes_for_the_same_pair`
+(`tests/extraction.rs`) is the invariant as a test, and it fails when the
+payout is changed behind its back.
+
+**It sits after `self.schedule.run(...)`, unlike the other five.** It gates on
+`resources::PowerGrid`, and `power_grid_system` writes that *inside* the
+schedule. Run before it, the rig reads last tick's answer — and on the very
+first tick of a run that is `PowerGrid::default()`, where nothing is dark, so
+a rig with no supply standing takes a free tick of progress before the grid
+catches up. `assembler_system` never meets this because it is in the schedule,
+downstream of the grid. Any future `&mut Game` pass that asks `is_dark` has
+the same constraint.
+
+**A second consequence of not being a system: which `MachineStatus` to write.**
+`idle_machine_system` writes `Unpowered` over a dark machine and `Idle` over an
+unstaffed one, so the rig leaves both alone exactly as `assembler_system` does.
+But that system `continue`s on `worked` *before* its `Idle` write, so it never
+reaches a staffed, lit machine — which makes `Running`, `Clogged` and `Starved`
+the rig's alone to say, and means an `Unstaffed` written for an empty hopper
+would survive and print "its program is away" about a program standing right
+there. An empty hopper and a tool uninstalled after the load both read as
+`Starved`: the hopper is this machine's input buffer, and "nothing is feeding
+it" is what an assembler says about an empty one.

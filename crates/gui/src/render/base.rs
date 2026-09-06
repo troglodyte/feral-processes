@@ -824,6 +824,9 @@ pub(super) fn draw_playing_base(
             // Never underground: watching is base space's, and the Stack
             // view is a corridor projection with no camera to move.
             None,
+            // Nor is the anchor: both of its keys are refused underground,
+            // where `<` and `>` are the link's own pair instead.
+            None,
             painter,
             m,
         );
@@ -843,6 +846,25 @@ pub(super) fn draw_playing_base(
             watch.unwrap_or_else(|| game.base_pos().unwrap_or(status.position)),
         );
         let hostiles = entities.iter().filter(|e| e.is_hostile).count();
+        // Where the anchor's two keys are, said on the frame — see
+        // `hud::map_frame::PhaseHint` for why they are the crossing that
+        // needs saying. All three reads are `&self`, so they stay inline
+        // here rather than joining the `&mut self` calls hoisted above the
+        // borrow.
+        //
+        // `PhasedOut` is unconditional inside base space. `OnAnchor` wants
+        // the anchor underfoot **and** a Home on the far side of it: a dark
+        // anchor refuses `<` outright (`Game::enter_base`), and a fresh run
+        // starts standing on exactly that cell — so without the `has_home`
+        // half the very first frame of every run would advertise a key that
+        // does nothing but refuse.
+        let phase = if game.in_base() {
+            Some(hud::map_frame::PhaseHint::PhasedOut)
+        } else if game.has_home() && game.anchor_position() == Some(status.position) {
+            Some(hud::map_frame::PhaseHint::OnAnchor)
+        } else {
+            None
+        };
         hud::map_frame::draw_map_frame(
             regions.map_pane,
             terrain,
@@ -851,6 +873,7 @@ pub(super) fn draw_playing_base(
                 shielded: game.raid_defense_active(),
             },
             watch_label.as_deref(),
+            phase,
             painter,
             m,
         );
@@ -4136,7 +4159,7 @@ mod tests {
         let pane = Rect::new(0.0, 0.0, 1200.0, 600.0);
 
         let (_, shapes) = with_painter(|p| {
-            hud::map_frame::draw_map_frame(pane, row, threat, Some("Ivy"), p, &m);
+            hud::map_frame::draw_map_frame(pane, row, threat, Some("Ivy"), None, p, &m);
         });
         let text = crate::paint::painted_text(&shapes).join("");
         assert!(
@@ -4154,12 +4177,77 @@ mod tests {
         );
 
         let (_, shapes) = with_painter(|p| {
-            hud::map_frame::draw_map_frame(pane, row, threat, None, p, &m);
+            hud::map_frame::draw_map_frame(pane, row, threat, None, None, p, &m);
         });
         let text = crate::paint::painted_text(&shapes).join("");
         assert!(
             text.contains(&ground) && !text.contains("Esc"),
             "and takes it straight back when the watch ends: {text:?}"
+        );
+    }
+
+    /// The wiring for the anchor's keys, from either side of it and through
+    /// the real `draw_playing_base`.
+    ///
+    /// `hud::map_frame`'s own tests hand `draw_map_frame` a `PhaseHint`
+    /// already built, and every one of them would pass against a
+    /// `draw_playing_base` that never built one — this is the half that says
+    /// the party's locale actually reaches the frame.
+    ///
+    /// Walked in the order a run walks it: a dark anchor first, then a Home
+    /// founded under it, then inside and **off the exit cell**, which is the
+    /// case the hint exists for at all. A player standing on the way out does
+    /// not need to be told where it is.
+    #[test]
+    fn the_frame_says_how_to_cross_the_anchor_from_either_side() {
+        let m = ui_metrics(900.0);
+        let drawn = |app: &mut feral_processes_app_core::App| {
+            let mut fx = Fx::new();
+            let (_, shapes) = with_painter(|p| {
+                draw_playing_base(app, &mut fx, None, p, &m);
+            });
+            crate::paint::painted_text(&shapes).join("")
+        };
+
+        // A fresh run starts standing on the anchor with nothing behind it.
+        // `Game::enter_base` refuses a dark anchor, so there is no key to
+        // advertise — and this is the very first frame of every run.
+        let mut app = playing_app();
+        let dark = drawn(&mut app);
+        assert!(
+            !dark.contains("ANCHOR"),
+            "a dark anchor must advertise nothing — `<` can only refuse \
+             there: {dark:?}"
+        );
+
+        app.game
+            .as_mut()
+            .unwrap()
+            .place_structure("home", 0, 0)
+            .expect("a Home founds the base");
+        let lit = drawn(&mut app);
+        assert!(
+            lit.contains("< to phase up"),
+            "with a Home standing, the anchor underfoot names the key up: {lit:?}"
+        );
+
+        app.game
+            .as_mut()
+            .unwrap()
+            .enter_base()
+            .expect("the party steps inside");
+        app.game.as_mut().unwrap().move_player(1, 0);
+        assert_ne!(
+            app.game.as_ref().unwrap().base_pos(),
+            Some((0, 0)),
+            "the step off the exit cell must land, or this proves only the \
+             easy case"
+        );
+        let inside = drawn(&mut app);
+        assert!(
+            inside.contains("> at the Home to phase back"),
+            "base space names the key out and where it is used, from a cell \
+             that is not the exit: {inside:?}"
         );
     }
 

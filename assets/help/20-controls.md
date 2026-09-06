@@ -8,7 +8,8 @@ refusal.
 Moving and living:
 
 - hjkl or the arrow keys — move
-- . — wait a turn
+- . — wait a turn. Not bound inside your base: time out of phase is spent by walking it, and the
+  key does nothing there rather than refusing.
 - e — drain a Power Cell
 - r — recharge: restores Integrity and Power for you and the programs at your side. A program that
   is not with you is not repaired by it — base staff mend at a Repair Bay, and a squad away on a
@@ -40,8 +41,11 @@ Acting on the world:
   own tile wears a yellow ring for as long as they are. Costs no time either way.
 - m — Excavation plan: space anchors a box, space again marks it, Esc backs out. Marked rock is cut
   and floored, and drawing a plan costs no time.
-- < — phase up into the base, standing on the anchor
-- > — phase back down to the grid, at the exit
+- < — phase up into the base, standing on the anchor. The map's top border reads ANCHOR and names
+  the key whenever you stand on one with a Home behind it; a dark anchor says nothing, because
+  there is nothing on the other side to go to.
+- > — phase back down to the grid, at the exit. The border reads PHASED OUT and names this key for
+  as long as you are out of phase, wherever in the base you have walked to.
 
 Reading and housekeeping:
 

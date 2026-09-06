@@ -324,7 +324,23 @@ impl App {
                 GameKey::Down | GameKey::Char('j') => stepped(game, 0, 1),
                 GameKey::Left | GameKey::Char('h') => stepped(game, -1, 0),
                 GameKey::Right | GameKey::Char('l') => stepped(game, 1, 0),
-                GameKey::Char('.') => {
+                // Zone surface only on this path — the Stack binds its own
+                // `.` below, and base space binds none at all. Falling
+                // through the guard to `_ => false` leaves it a **dead key**:
+                // no turn, no refusal, nothing on the line.
+                //
+                // That is the deliberate exception to what every other
+                // locale-shy key on this screen does. `r`, `<`, `>` and `v`
+                // each hand the engine's own sentence to `App::refuse`,
+                // precisely because a key that appears to do nothing is what
+                // a bug report looks like from outside. Waiting is exempt
+                // because there is no engine refusal to hand over — the
+                // engine will happily tick in base space — so a sentence here
+                // would be app-core's own opinion about time, invented at the
+                // keyboard and with nothing behind it. Base space is time
+                // spent by walking it, and the key reads as absent because
+                // it is.
+                GameKey::Char('.') if !game.in_base() => {
                     game.wait();
                     true
                 }

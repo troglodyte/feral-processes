@@ -3632,7 +3632,13 @@ pub const SETTLEMENT_PATROL_AGGRO_RADIUS: i32 = 8;
 /// dominant depending on a pitch it cannot see.
 pub const SETTLEMENT_PATROL_RANGE: i32 = crate::settlements::placement::REGION_TILES / 2;
 
-/// How long a town waits before fielding a replacement member.
+/// How long a town waits, on average, before fielding one more member.
+///
+/// **A mean and not a countdown.** `Game::maybe_field_patrol` rolls its
+/// reciprocal once a tick — roll first, gate after, so a miss spends one
+/// draw and touches nothing else. A nest keeps its countdown on the `Nest`
+/// entity; `resources::Settlements` is the record that survives a save, and
+/// a timer in it would be a save field for a figure nobody can see.
 ///
 /// Far slower than `NEST_RESPAWN_TICKS` (10): wiping a patrol should buy
 /// real time, or the fight is scenery that respawns behind you.

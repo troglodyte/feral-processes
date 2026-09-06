@@ -1398,8 +1398,10 @@ pub enum Mode {
     /// `App::pending_swap_target` set.
     CompanionEquip,
     /// What one program remembers, reached with `R` from `Mode::Companion`.
-    /// The derived Morale figure at the head and one entry per thing it
-    /// holds, all out of `Game::memory_report` and `Game::morale`;
+    /// The derived Mood figure at the head — the word from
+    /// `views::morale_band` and the signed sum beside it, the same pair the
+    /// manifest's MEMORIES box draws — and one entry per thing it holds, all
+    /// out of `Game::memory_report` and `Game::morale`;
     /// `App::pending_memory_program` is the subject.
     ///
     /// **`R` and not the `M` the spec asked for**: `M` on the roster has

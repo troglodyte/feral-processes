@@ -18,6 +18,10 @@ pub(super) struct Section {
     pub(super) full_width: bool,
 }
 
+/// `Clone`/`PartialEq`/`Debug` so a test can state the rows a box must draw
+/// and compare them whole. A census that reached into `Section` field by
+/// field would pass a box that had silently gained a row.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum SectionRow {
     /// A label on the left, its value right-aligned against the box's inner
     /// edge.
@@ -34,7 +38,7 @@ pub(super) enum SectionRow {
 /// 19px) has room for, for the box set this constant originally protected —
 /// see `the_real_worst_case_pages_fit_the_tightest_window`. Which height
 /// actually binds is a property of the *current* box set, not a fixed fact
-/// about 720px: `MAX_BAND_ROWS`'s doc records a configuration (a fifth
+/// about 720px: `MAX_MOVE_ROWS`'s doc records a configuration (a fifth
 /// columned box at `MOVES` = 6) where 900/1000/1080px failed while 720px
 /// passed. Don't assume 720px is always the worst case — the sweep is what
 /// decides it, for whatever `worst_case_program`/`worst_case_player`
@@ -55,29 +59,37 @@ pub(super) const MAX_SECTION_ROWS: usize = 6;
 /// to the "+N more" note below, never crashes the page.
 pub(super) const MAX_AFFINITY_ROWS: usize = 2;
 
-/// The full-width band's own cap, separate from `MAX_SECTION_ROWS` because
-/// `MOVES` is the one box a mod can genuinely grow past what any shipped
-/// species needs, and `best_column_split`'s exact partition (see its doc)
-/// changed how much of that growth the layout can absorb before a
-/// columned box's overflow reaches the band — again, see
-/// `tests::the_real_worst_case_pages_fit_the_tightest_window` for the
-/// current clearance figures rather than a restated copy here. Kept
-/// deliberately below `MAX_SECTION_ROWS` even where the exact partition
-/// alone would clear today's shipped worst case: this is the only defence
-/// against a mod-maximal `MOVES` list regardless of packer, and the
-/// headroom has value on its own, at the owner's explicit call. A separate
-/// constant rather than lowering `MAX_SECTION_ROWS` itself: at 6 rows the
-/// ROUTINES box already spends its last line on a "+N more" note for a kit
-/// near `COMPANION_ROUTINE_SLOT_CAP`, and lowering the shared cap would take
-/// that from every box — nothing shipped has more than 2 moves, so this
-/// trims nothing that exists today, only a mod.
+/// The MOVES box's own cap, separate from `MAX_SECTION_ROWS` because `MOVES`
+/// is the one box a mod can genuinely grow past what any shipped species
+/// needs, and `best_column_split`'s exact partition (see its doc) changed how
+/// much of that growth the layout can absorb before a columned box's overflow
+/// reaches the footer — see
+/// `tests::the_real_worst_case_pages_fit_the_tightest_window` for the current
+/// clearance figures rather than a restated copy here. Kept deliberately
+/// below `MAX_SECTION_ROWS` even where the exact partition alone would clear
+/// today's shipped worst case: this is the only defence against a mod-maximal
+/// `MOVES` list regardless of packer, and the headroom has value on its own,
+/// at the owner's explicit call. A separate constant rather than lowering
+/// `MAX_SECTION_ROWS` itself: at 6 rows the ROUTINES box already spends its
+/// last line on a "+N more" note for a kit near
+/// `COMPANION_ROUTINE_SLOT_CAP`, and lowering the shared cap would take that
+/// from every box — nothing shipped has more than 2 moves, so this trims
+/// nothing that exists today, only a mod.
 ///
 /// **Lowered from 4 to 3 to pay for the need rows in WORK.** That is the
 /// trade this page always makes: the program page has the least clearance in
 /// the renderer, so a new reading is bought out of an existing cap rather
-/// than out of the frame. The band was the one place with a row nothing
-/// shipped uses.
-pub(super) const MAX_BAND_ROWS: usize = 3;
+/// than out of the frame. MOVES was the one place with a row nothing shipped
+/// uses.
+///
+/// **Was `MAX_MOVE_ROWS`, and it is not a band any more.** MOVES became a
+/// columned box to pay for MEMORIES: a full-width band and two columned boxes
+/// side by side occupy the same grid row, so demoting it bought a whole new
+/// box for nothing — the program page held its measured clearance exactly.
+/// The name moved with the shape rather than being left describing one the
+/// page no longer has. The **player** page keeps the renderer's only band,
+/// EQUIPMENT, which is capped by its own slot count and not by this.
+pub(super) const MAX_MOVE_ROWS: usize = 3;
 
 /// The NEEDS box's own cap, tighter than `MAX_SECTION_ROWS` for
 /// `MAX_AFFINITY_ROWS`' reason: the program page has the least clearance of
@@ -97,7 +109,7 @@ pub(super) fn section_rows(rows: Vec<SectionRow>) -> Vec<SectionRow> {
 
 /// `section_rows` at an arbitrary cap, for the boxes (AFFINITIES, MOVES)
 /// whose real worst case is narrower than `MAX_SECTION_ROWS` — see
-/// `MAX_AFFINITY_ROWS` and `MAX_BAND_ROWS`.
+/// `MAX_AFFINITY_ROWS` and `MAX_MOVE_ROWS`.
 pub(super) fn section_rows_capped(mut rows: Vec<SectionRow>, cap: usize) -> Vec<SectionRow> {
     debug_assert!(
         cap >= 1,
@@ -229,7 +241,7 @@ pub(super) fn manifest_layout(
 /// shorter" greedy this replaced. The greedy could land measurably further
 /// from balanced than optimal: with `AFFINITIES` making the program page a
 /// fifth columned box, it left 19-38px on the table (see the git history
-/// around `MAX_BAND_ROWS`), and on the player page — which has no mod-only
+/// around `MAX_MOVE_ROWS`), and on the player page — which has no mod-only
 /// box to trim, unlike the program page's `MOVES` — that gap was the whole
 /// reason `worst_case_player`'s corrected box order failed at 7 of 9 swept
 /// heights before this function existed.
@@ -307,6 +319,7 @@ fn section_height(section: &Section, m: &Metrics) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::render::manifest::MANIFEST_MEMORY_ROWS;
     use crate::text::ui_metrics;
 
     /// The same window heights `popup_layout`'s tests sweep — the layout's
@@ -334,7 +347,7 @@ mod tests {
     /// Decompile rows, Growth), 2 work facts in their own WORK box (Speed
     /// and Analysis, split out of SPECIES so it can hold that fifth row
     /// without hitting `MAX_SECTION_ROWS`), `COMPANION_ROUTINE_SLOT_CAP`
-    /// routines, and `MAX_BAND_ROWS` moves. POTENTIAL and AFFINITIES
+    /// routines, and `MAX_MOVE_ROWS` moves. POTENTIAL and AFFINITIES
     /// together are the ordinary case for a tamed Scrapper, not an edge
     /// case — the balance sweep models a mid-grade party as three of them,
     /// and `scrapper.ron` carries both a `Potential` roll and a non-neutral
@@ -345,7 +358,7 @@ mod tests {
     /// `section_rows_capped(_, MAX_AFFINITY_ROWS)`, so a five-category
     /// species renders 2 rows (one plus a "+4 more" note), the same as it
     /// renders here. The real worst case this fixture has to defend is
-    /// `MAX_AFFINITY_ROWS` + `MAX_BAND_ROWS` together, which is what made
+    /// `MAX_AFFINITY_ROWS` + `MAX_MOVE_ROWS` together, which is what made
     /// the band overflow the footer in the first place — restoring either
     /// to a pre-cap literal reintroduces a fixture state the renderer can
     /// no longer produce.
@@ -369,6 +382,12 @@ mod tests {
             // page has the least clearance in the renderer and a box of its
             // own did not fit at 1280x720.
             section("WORK", 4 + MAX_NEED_ROWS, false),
+            // The mood line plus `MANIFEST_MEMORY_ROWS` entries. Emitted for
+            // every program the player owns — which is every program whose
+            // page can also carry EQUIPMENT, ROUTINES and DEVELOPMENT, so
+            // this box belongs in the same worst case as those three and not
+            // in a variant of its own.
+            section("MEMORIES", 1 + MANIFEST_MEMORY_ROWS, false),
             // Rings, ceiling and talents. Emitted only for a developed
             // program, which is exactly what a worst case is.
             section("DEVELOPMENT", 3, false),
@@ -378,7 +397,11 @@ mod tests {
             // not an edge case.
             section("EQUIPMENT", 3, false),
             section("ROUTINES", 6, false),
-            section("MOVES", MAX_BAND_ROWS, true),
+            // Columned, not the full-width band it was until MEMORIES
+            // arrived — see `MAX_MOVE_ROWS`. The program page now has no band
+            // at all; `a_full_width_section_spans_both_columns_below_the_grid`
+            // still holds that path, which the player's EQUIPMENT uses.
+            section("MOVES", MAX_MOVE_ROWS, false),
         ]
     }
 
@@ -474,7 +497,7 @@ mod tests {
     /// single stat row is drawn — but which height actually binds depends on
     /// the current box set, not a fixed fact about 720px specifically. If
     /// this fails, the fix is content, not the assertion: lower
-    /// `MAX_SECTION_ROWS` or `MAX_BAND_ROWS`, or merge two of the player's
+    /// `MAX_SECTION_ROWS` or `MAX_MOVE_ROWS`, or merge two of the player's
     /// boxes.
     #[test]
     fn the_real_worst_case_pages_fit_the_tightest_window() {
@@ -684,18 +707,17 @@ mod tests {
         assert_eq!(last, "+4 more");
     }
 
-    /// A modded species naming more moves than `MAX_BAND_ROWS` must not push
-    /// the full-width band into the footer — it renders the cap plus an
-    /// honest count of what's hidden, same shape as the affinity truncation
-    /// above.
+    /// A modded species naming more moves than `MAX_MOVE_ROWS` must not push
+    /// the MOVES box into the footer — it renders the cap plus an honest
+    /// count of what's hidden, same shape as the affinity truncation above.
     #[test]
-    fn a_move_list_past_the_band_cap_is_capped_with_an_honest_count() {
-        let rows: Vec<SectionRow> = (0..MAX_BAND_ROWS + 3)
+    fn a_move_list_past_the_move_cap_is_capped_with_an_honest_count() {
+        let rows: Vec<SectionRow> = (0..MAX_MOVE_ROWS + 3)
             .map(|i| SectionRow::Stat(format!("Move {i}"), format!("pow {i}")))
             .collect();
-        let trimmed = section_rows_capped(rows, MAX_BAND_ROWS);
-        assert_eq!(trimmed.len(), MAX_BAND_ROWS);
-        let SectionRow::Note(last) = &trimmed[MAX_BAND_ROWS - 1] else {
+        let trimmed = section_rows_capped(rows, MAX_MOVE_ROWS);
+        assert_eq!(trimmed.len(), MAX_MOVE_ROWS);
+        let SectionRow::Note(last) = &trimmed[MAX_MOVE_ROWS - 1] else {
             panic!("the trailing row is a note");
         };
         assert_eq!(last, "+4 more");

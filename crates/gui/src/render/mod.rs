@@ -25,7 +25,7 @@ use feral_processes_engine::world::{Biome, Tile};
 use feral_processes_engine::{
     Assignee, BrokerReach, ContractRow, CraftRecipe, Entity, EntityView, Game, InventoryRow,
     LogEntry, MESSAGE_LOG_CAP, MemoryRow, MessageKind, PetInfo, ProgramSaleOption, RecipeChain,
-    RecipeStep, ResearchState, SettlementView, StockRow, StructureReport,
+    RecipeStep, ResearchState, SettlementView, StockRow, StructureReport, morale_band,
 };
 
 mod arena;

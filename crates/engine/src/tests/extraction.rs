@@ -2826,3 +2826,44 @@ fn the_kill_still_rolls_its_own_gear_after_phase_five() {
         "equipment_drops_for must keep answering for award_loot — phase 5 is additive"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Phase 5, task 3: the screen quotes the same numbers the pull uses.
+// ---------------------------------------------------------------------------
+
+/// The §3 invariant applied to the new derivation: what the screen quotes
+/// is what the pull rolls, because both call one function.
+#[test]
+fn the_preview_quotes_gear_chances_verbatim() {
+    let mut game = Game::new(4209, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species = species_with_gear(&game);
+    let tool_id = install_harness_puller(&mut game);
+    let tool = game
+        .world
+        .resource::<ToolDb>()
+        .get(tool_id.as_str())
+        .unwrap()
+        .clone();
+
+    let mut downed = program(50, Rarity::Ordinary, 3);
+    downed.species = species.id.clone();
+    let expected = game.gear_chances(&downed, &tool);
+    give_downed_program(&mut game, downed);
+
+    let options = game.extraction_options(0);
+    let option = options
+        .iter()
+        .find(|o| o.tool == tool_id)
+        .expect("the installed Gear tool should have a row");
+
+    match &option.preview {
+        crate::views::ExtractionPreview::Chances(rows) => {
+            assert_eq!(rows.len(), expected.len());
+            for ((name, chance), (item, expected_chance)) in rows.iter().zip(expected.iter()) {
+                assert_eq!(name, &game.item_name(item));
+                assert_eq!(chance, expected_chance);
+            }
+        }
+        other => panic!("a Gear tool should preview chances, got {other:?}"),
+    }
+}

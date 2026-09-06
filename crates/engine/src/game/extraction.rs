@@ -499,19 +499,30 @@ impl Game {
         self.installed_tools()
             .into_iter()
             .map(|tool| {
-                let preview = if tool.category == ToolCategory::Routines {
-                    let pool = self.routine_candidates(&program);
-                    if pool.is_empty() {
-                        crate::views::ExtractionPreview::NothingToLearn
-                    } else {
-                        crate::views::ExtractionPreview::Routine(
-                            pool.iter()
-                                .map(|id| self.ability_display_name(id))
-                                .collect(),
+                let preview = match tool.category {
+                    ToolCategory::Routines => {
+                        let pool = self.routine_candidates(&program);
+                        if pool.is_empty() {
+                            crate::views::ExtractionPreview::NothingToLearn
+                        } else {
+                            crate::views::ExtractionPreview::Routine(
+                                pool.iter()
+                                    .map(|id| self.ability_display_name(id))
+                                    .collect(),
+                            )
+                        }
+                    }
+                    ToolCategory::Gear => crate::views::ExtractionPreview::Chances(
+                        self.gear_chances(&program, &tool)
+                            .into_iter()
+                            .map(|(item, chance)| (self.item_name(&item).to_string(), chance))
+                            .collect(),
+                    ),
+                    ToolCategory::Materials | ToolCategory::Parts | ToolCategory::Cores => {
+                        crate::views::ExtractionPreview::Items(
+                            self.extraction_yield(&program, &tool),
                         )
                     }
-                } else {
-                    crate::views::ExtractionPreview::Items(self.extraction_yield(&program, &tool))
                 };
                 crate::views::ExtractionOptionView {
                     ticks: self.extraction_ticks(&tool),

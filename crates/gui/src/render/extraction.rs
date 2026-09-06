@@ -117,23 +117,53 @@ pub(super) fn extraction_options_rows(game: &Game, index: usize, selected: usize
         rows.push(text_row("No tool is installed."));
     }
     for (i, option) in options.iter().enumerate() {
-        let outcome = match &option.preview {
-            ExtractionPreview::Items(rows) if rows.is_empty() => "nothing usable".to_string(),
-            ExtractionPreview::Items(rows) => rows
-                .iter()
-                .map(|(item, qty)| format!("{qty} {}", game.item_name(item)))
-                .collect::<Vec<_>>()
-                .join(", "),
-            ExtractionPreview::Routine(names) => format!("a routine — {}", names.join(" / ")),
-            ExtractionPreview::NothingToLearn => "nothing left to teach".to_string(),
+        let head_prefix = format!("[{}] {}", menu_shortcut(i), option.name);
+        let ticks_suffix = format!("({} ticks)", option.ticks);
+        // A `Gear` tool's candidate list can run far longer than the other
+        // categories' — a boss species' whole droppable table, each row
+        // naming an item and quoting a chance — so it sheds onto
+        // `continuation_lines` instead of joining the row: the same shape
+        // the routine and fuse pickers give a program's own kit, and for
+        // the same reason (`push_extract_candidate`). Nothing clamps a row
+        // horizontally, so an unwrapped join would run off the popup in
+        // silence for the widest species.
+        let (head, continuations) = match &option.preview {
+            ExtractionPreview::Items(yields) if yields.is_empty() => {
+                (format!("{head_prefix}: nothing usable {ticks_suffix}"), Vec::new())
+            }
+            ExtractionPreview::Items(yields) => {
+                let outcome = yields
+                    .iter()
+                    .map(|(item, qty)| format!("{qty} {}", game.item_name(item)))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                (format!("{head_prefix}: {outcome} {ticks_suffix}"), Vec::new())
+            }
+            ExtractionPreview::Routine(names) => (
+                format!("{head_prefix}: a routine — {} {ticks_suffix}", names.join(" / ")),
+                Vec::new(),
+            ),
+            ExtractionPreview::NothingToLearn => (
+                format!("{head_prefix}: nothing left to teach {ticks_suffix}"),
+                Vec::new(),
+            ),
+            ExtractionPreview::Chances(chances) if chances.is_empty() => (
+                format!("{head_prefix}: no gear to strip {ticks_suffix}"),
+                Vec::new(),
+            ),
+            ExtractionPreview::Chances(chances) => {
+                let outcome = chances
+                    .iter()
+                    .map(|(name, chance)| format!("{name} {}%", (chance * 100.0).round() as u32))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                (format!("{head_prefix} {ticks_suffix}"), continuation_lines(&outcome))
+            }
         };
-        let label = format!(
-            "[{}] {}: {outcome} ({} ticks)",
-            menu_shortcut(i),
-            option.name,
-            option.ticks
-        );
-        rows.push(item_row(label, i == selected));
+        rows.push(item_row(head, i == selected));
+        for line in continuations {
+            rows.push(colored_item_row(line, false, TEXT_DIM));
+        }
     }
     rows.push(text_row(""));
     rows.push(text_row("Esc to go back"));
@@ -430,5 +460,59 @@ mod tests {
             .filter(|r| matches!(r, Row::Item { .. }))
             .count();
         assert_eq!(item_rows, game.downed_program_rows().len());
+    }
+
+    /// A `Gear` tool's row names the item and quotes a `%` — the renderer's
+    /// own new arm for `ExtractionPreview::Chances`, exercised through a
+    /// real installed `harness_puller` rather than a hand-built preview, so
+    /// the row and `Game::gear_chances` cannot quietly disagree.
+    #[test]
+    fn a_gear_row_names_the_item_and_quotes_a_percent() {
+        let probe = Game::new(9698, DifficultyMode::Forgiving, &assets_dir()).unwrap();
+        let (tool_db, _) = ToolDb::load_dir(&assets_dir().join("tools")).unwrap();
+        let tool = tool_db.get("harness_puller").unwrap().clone();
+        let species_id = probe
+            .species_defs()
+            .into_iter()
+            .find(|s| {
+                !probe
+                    .gear_chances(&program(&s.id, 999, Rarity::Ordinary), &tool)
+                    .is_empty()
+            })
+            .map(|s| s.id)
+            .expect("at least one shipped species should drop gear");
+        let expected = probe.gear_chances(&program(&species_id, 3, Rarity::Ordinary), &tool);
+        let expected_item_name = probe.item_name(&expected[0].0).to_string();
+
+        let held = vec![program(&species_id, 3, Rarity::Ordinary)];
+        let game = game_with_state(
+            9703,
+            held,
+            Some(vec![ToolId("harness_puller".to_string())]),
+            None,
+        );
+        let rows = extraction_options_rows(&game, 0, 0);
+        let head_index = rows
+            .iter()
+            .map(row_label_text)
+            .position(|text| text.contains(&tool.name))
+            .expect("the installed Gear tool should have a row");
+        // The chance list sheds onto continuation lines below the tool's own
+        // row (`continuation_lines`, the same shape the routine and fuse
+        // pickers use), so the item name and its `%` land somewhere in the
+        // span that follows the header rather than on the header itself.
+        let joined: String = rows[head_index..]
+            .iter()
+            .map(row_label_text)
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(
+            joined.contains('%'),
+            "a Gear tool's rows should quote a percent: {joined:?}"
+        );
+        assert!(
+            joined.contains(&expected_item_name),
+            "a Gear tool's rows should name its candidate item {expected_item_name:?}: {joined:?}"
+        );
     }
 }

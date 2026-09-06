@@ -33,7 +33,7 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
-## Unreleased
+## 0.13.114
 
 **A Teardown Rig strips downed programs while you are somewhere else.** Research
 Teardown, build one, post a program to it and keep it on the grid.

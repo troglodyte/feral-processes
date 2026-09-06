@@ -3591,6 +3591,75 @@ pub const SETTLEMENT_RAID_HAUL_FLOOR: u32 = 1;
 /// banking itself the punished behaviour. A rich base is bled, not gutted.
 pub const SETTLEMENT_RAID_HAUL_CAP: u32 = 40;
 
+/// How many members a town's patrol fields — `Game::maybe_field_patrol`.
+///
+/// Between `NEST_GUARDIAN_MIN` (2) and `NEST_GUARDIAN_MAX` (5): a patrol is
+/// an ordinary-encounter mechanic and should read as one, not as a boss.
+pub const SETTLEMENT_PATROL_SIZE: u32 = 3;
+
+/// The Chebyshev ring a patrol member is placed in, off the town's own tile.
+///
+/// **Band 0 is excluded by the minimum, not by a check** — a settlement tile
+/// admits nobody (`move_player`'s fourth arm), the same reason a relay
+/// landing searches from band 1. Close enough that the ground reads as the
+/// town's.
+pub const SETTLEMENT_PATROL_RING_MIN: i32 = 2;
+/// See `SETTLEMENT_PATROL_RING_MIN`.
+pub const SETTLEMENT_PATROL_RING_MAX: i32 = 6;
+
+/// Chebyshev distance from its town past which a patrol member gives up.
+///
+/// **Equal to `NEST_AGGRO_LEASH_RADIUS` today, and that equality is a
+/// coincidence the code must not rely on.** `pursuit_tick` builds one
+/// shared Dijkstra field for both tethers, sized off the *maximum* of the
+/// two leashes — raise this past the nest's without that `max` and patrols
+/// read as absent from the field and give up where they stand, which is a
+/// mechanic disappearing with no error anywhere.
+pub const SETTLEMENT_PATROL_LEASH_RADIUS: i32 = 15;
+
+/// How near the player a patrol member has to be before it notices them.
+///
+/// **Inside `EXAMINE_RANGE_TILES` (12) on purpose**, so the player can see
+/// and identify a patrol before it notices them. A threat only ever
+/// discovered by already being in a fight is not one the player can play
+/// around.
+pub const SETTLEMENT_PATROL_AGGRO_RADIUS: i32 = 8;
+
+/// How near the party a Hostile town has to be to bother fielding a patrol.
+///
+/// A fraction of region spacing rather than a flat number, for
+/// `SETTLEMENT_GARRISON_RADIUS`' measured reason — a flat length is dead or
+/// dominant depending on a pitch it cannot see.
+pub const SETTLEMENT_PATROL_RANGE: i32 = crate::settlements::placement::REGION_TILES / 2;
+
+/// How long a town waits before fielding a replacement member.
+///
+/// Far slower than `NEST_RESPAWN_TICKS` (10): wiping a patrol should buy
+/// real time, or the fight is scenery that respawns behind you.
+pub const SETTLEMENT_PATROL_RESPAWN_TICKS: u64 = 60;
+
+/// What killing one patrol member costs you with its town.
+///
+/// **Not a free retune.** The movers pay `+10` a contract, `+8` a Stack
+/// collapse, `+4` a nest cleared, `+1` per
+/// `SETTLEMENT_TRADE_CREDITS_PER_POINT` traded. At `-1` a full
+/// `SETTLEMENT_PATROL_SIZE` patrol wiped costs `-3`, less than clearing one
+/// nest on that town's doorstep — which is what keeps the ladder out of
+/// `Hostile` climbable while patrols are actively in the way. Past that,
+/// self-defence outruns every mover a Hostile player can still reach, since
+/// the market and the board are already shut, and the band stops being a
+/// state you can leave.
+///
+/// **`-1` is the only value that satisfies the inequality, which is tighter
+/// than the design spec claimed.** The spec put the danger at `-4`; at
+/// `SETTLEMENT_PATROL_SIZE` 3 the arithmetic is `3 * 2 = 6` against a
+/// cleared nest's `4`, so **`-2` already fails**. Measured by mutation, not
+/// reasoned about. Raising this needs `SETTLEMENT_PATROL_SIZE` to fall or
+/// `SETTLEMENT_NEST_CLEARED_STANDING` to rise with it.
+/// `wiping_a_patrol_costs_less_than_clearing_one_nest_pays` asserts the
+/// inequality directly.
+pub const SETTLEMENT_PATROL_KILL_STANDING: i32 = -1;
+
 /// How long a town waits between gifts — see `Game::request_program_gift`.
 ///
 /// The limiter, because aid is free: the price of a gift was reaching

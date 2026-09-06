@@ -54,6 +54,37 @@ pub struct Relation {
     /// program forever.
     #[serde(default)]
     pub gifts_taken: u32,
+    /// Whether this town has grown into a Mainframe.
+    ///
+    /// **One-way, and that is the whole discipline.** Written in exactly one
+    /// place — `Game::settlement_growth_tick` — and never cleared. Commerce
+    /// decays; if the growth condition were re-evaluated on every read, a
+    /// city would un-grow when its trade dried up, which the design
+    /// explicitly refuses. Latching here is what makes every reader a plain
+    /// `||` instead of a repeated inequality that could drift.
+    ///
+    /// An authored `SettlementKind::Mainframe` never sets this and never
+    /// needs to: `Game::settlement_kind` reads the def first.
+    #[serde(default)]
+    pub grown: bool,
+    /// How this town is doing — trade raises it, time lowers it, and
+    /// `Standing::Hostile` lowers it faster.
+    ///
+    /// **Signed, and 0 means "as it was found."** An unsigned counter would
+    /// band every authored Mainframe as Starved in a fresh world, before
+    /// anyone had traded a Credit with it. Bounds are
+    /// `growth::clamp_commerce`; the banding is `growth::vitality` and is
+    /// derived on every read, never stored.
+    #[serde(default)]
+    pub commerce: i32,
+    /// The last drift epoch folded into `commerce`.
+    ///
+    /// `static_epoch`'s shape: the decay is settled lazily against
+    /// `current_tick() / SETTLEMENT_COMMERCE_DECAY_TICKS` rather than
+    /// applied per tick, so a fast-forward cannot be outrun and no
+    /// arithmetic runs over every town every tick.
+    #[serde(default)]
+    pub commerce_epoch: u64,
 }
 
 impl Relation {

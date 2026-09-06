@@ -77,7 +77,8 @@ with the roster's stats without bound below the mitigation cap.
   once it only acts, rather than also inflating the player's own sheet, is
   the actual open question and no instrument in this repo can see it. This
   was open question 4 in
-  `docs/superpowers/plans/2026-08-19-combat-model-ac-and-weapon-damage.md`.
+  `docs/superpowers/plans/2026-08-19-combat-model-ac-and-weapon-damage.md`,
+  deleted with the rest of `plans/` on 2026-09-06; git history holds it.
 - **No Stack term.** `deep-lair` is the only underground scenario here and
   it is a walkover; the depth-4 and depth-5 fights that
   [the depth curve](2026-08-19-stack-depth-curve.md) found marginal were not

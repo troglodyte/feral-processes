@@ -1,8 +1,7 @@
 # The player icon editor
 
 **Date:** 2026-09-03
-**Status:** implemented (v0.13.87), kept in `specs/` pending the usual
-archive move
+**Status:** implemented (`v0.13.87`), archived 2026-09-06
 **Amended:** 2026-09-03 — the drawn grid halved to 8x8. See "The two grids"
 below; every statement in this document reflects the amendment.
 

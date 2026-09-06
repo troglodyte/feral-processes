@@ -1,7 +1,9 @@
 # The developer sprite editor
 
 **Date:** 2026-09-04
-**Status:** approved, not implemented
+**Status:** implemented. Unplayed. This spec stays in `specs/` rather than
+`archive/specs/` because `crates/app-core/src/app/sprite_forge.rs` and
+`docs/seams.md` pin this path; see INDEX's "Do not move these".
 
 A dev-only screen for drawing a one-cell sprite for any species, structure or
 map fixture, saving it where the loader already looks, and turning it back off

@@ -31,7 +31,7 @@ Three tiers, and which one you want depends on what you are doing:
 | subsystem | reference | seams |
 |---|---|---:|
 | the base, base space, labour, work orders, digging, building, needs | `references/base.md` | 76 |
-| combat, damage, XP, levels, talents, perks, balance, spawning | `references/combat.md` | 66 |
+| combat, damage, XP, levels, talents, perks, balance, spawning | `references/combat.md` | 69 |
 | items, gear copies, quality, crafting, the caravan, the economy | `references/items.md` | 33 |
 | the Stack (frames, descents, lairs, descriptions, first-person views) | `references/stack.md` | 22 |
 | saves, the log, refusals, screens, the Broker board, paths | `references/screens.md` | 21 |
@@ -41,7 +41,7 @@ Three tiers, and which one you want depends on what you are doing:
 | notifications | `references/notifications.md` | 5 |
 | species and data (classes, stat shapes, censuses) | `references/species.md` | 6 |
 | help pages and documentation | `references/help.md` | 3 |
-| the ground (terrain effects, Static weather) | `references/ground.md` | 3 |
+| the ground (terrain effects, Static weather, settlements and towns) | `references/ground.md` | 23 |
 
 ## Adding a seam
 

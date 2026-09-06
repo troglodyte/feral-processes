@@ -710,7 +710,9 @@ impl Game {
         defended
             .into_iter()
             .filter(|(kind, _, _)| {
-                structure_db.get(kind).is_some_and(|def| def.raid_defense > 0)
+                structure_db
+                    .get(kind)
+                    .is_some_and(|def| def.raid_defense > 0)
             })
             .min_by_key(|(_, _, tile)| *tile)
             .map(|(_, entity, _)| entity)

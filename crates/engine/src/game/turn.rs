@@ -1,6 +1,7 @@
 //! The turn loop: advancing the clock, moving, and the actions a player
 //! spends a turn on.
 
+use crate::components::TownPatrol;
 use crate::game::pursuit::pursuit_field;
 use crate::resources::SeenConditions;
 use crate::telemetry::Record;
@@ -171,6 +172,11 @@ impl Game {
         self.ensure_local_population();
         self.ensure_local_settlements();
         self.maybe_spawn_wild_creature();
+        // Beside the ambient roll and after `ensure_local_settlements`,
+        // which is what resolves the towns this reads: a patrol is a spawn
+        // like any other, keyed to a band and a distance rather than to a
+        // habitat and a density.
+        self.maybe_field_patrol();
         // Before the schedule, not after, so a body posted this tick makes
         // progress this tick rather than standing at its machine for one.
         // Beside `maybe_spawn_wild_creature` for the same reason that one is
@@ -261,7 +267,13 @@ impl Game {
         // one at a besieged nest is already `Pursuing` (`nest_respawn_tick`
         // via `nest_has_pursuers`) and should get its step the same tick it
         // appeared, not wait a full tick doing nothing.
-        self.nest_aggro_tick();
+        // Immediately before the shared pursuit step and after the nest's
+        // own respawn, for the reason that one is there: a patrol member
+        // that notices the player this tick should get its step now rather
+        // than stand still for one. This is also the only place a patrol
+        // stands down, so it runs on every tick the roll above misses.
+        self.patrol_aggro_tick();
+        self.pursuit_tick();
         if age_temporary {
             self.age_temporary_structures();
         }
@@ -344,7 +356,7 @@ impl Game {
     /// `gather_pack` pulls in anything else standing near it (including a
     /// packmate still mid-chase), so the swarm arrives together rather than
     /// one at a time.
-    pub(crate) fn nest_aggro_tick(&mut self) {
+    pub(crate) fn pursuit_tick(&mut self) {
         // Off the surface in *either* direction, not just underground: the
         // player's `Position` is pinned to the anchor tile in base space as
         // much as to the entrance tile in the Stack, so a guardian standing
@@ -360,21 +372,45 @@ impl Game {
             return;
         }
 
-        let pursuing: Vec<(Entity, Entity, Position)> = {
+        // One collection per tether, carrying each pursuer's own anchor and
+        // its own leash — everything below this point is written once and
+        // does not know which kind it is looking at. **Dropping an arm here
+        // does not stop that kind pursuing**, because the step loop queries
+        // `With<Pursuing>` alone; it stops that kind ever being *released*,
+        // so the symptom is a program that chases across the whole zone
+        // forever rather than anything that fails to move.
+        let mut pursuing: Vec<(Entity, Entity, Position, i32)> = {
             let mut query = self
                 .world
                 .query_filtered::<(Entity, &NestGuardian, &Position), With<Pursuing>>();
             query
                 .iter(&self.world)
-                .map(|(e, guardian, &pos)| (e, guardian.nest, pos))
+                .map(|(e, guardian, &pos)| (e, guardian.nest, pos, NEST_AGGRO_LEASH_RADIUS))
                 .collect()
         };
+        {
+            let mut query = self
+                .world
+                .query_filtered::<(Entity, &TownPatrol, &Position), With<Pursuing>>();
+            let patrols: Vec<(Entity, Entity, Position, i32)> = query
+                .iter(&self.world)
+                .map(|(e, patrol, &pos)| {
+                    (
+                        e,
+                        patrol.town,
+                        pos,
+                        crate::tuning::SETTLEMENT_PATROL_LEASH_RADIUS,
+                    )
+                })
+                .collect();
+            pursuing.extend(patrols);
+        }
         let leashed: Vec<Entity> = pursuing
             .iter()
-            .filter(|&&(_, nest, pos)| {
+            .filter(|&&(_, anchor, pos, leash)| {
                 self.world
-                    .get::<Position>(nest)
-                    .is_none_or(|&nest_pos| chebyshev(pos, nest_pos) > NEST_AGGRO_LEASH_RADIUS)
+                    .get::<Position>(anchor)
+                    .is_none_or(|&anchor_pos| chebyshev(pos, anchor_pos) > leash)
             })
             .map(|&(entity, ..)| entity)
             .collect();
@@ -397,7 +433,14 @@ impl Game {
             pursuit_field(
                 &mut map,
                 (player_pos.x, player_pos.y),
-                NEST_AGGRO_LEASH_RADIUS + NEST_PATH_SEARCH_MARGIN,
+                // Sized off the **maximum** of the two leashes, never the
+                // nest's alone. They are equal today; relying on that makes
+                // raising `SETTLEMENT_PATROL_LEASH_RADIUS` past the nest's
+                // produce patrols that read as absent from this field and
+                // give up where they stand — a mechanic that disappears
+                // with no error anywhere.
+                NEST_AGGRO_LEASH_RADIUS.max(crate::tuning::SETTLEMENT_PATROL_LEASH_RADIUS)
+                    + NEST_PATH_SEARCH_MARGIN,
             )
         };
 
@@ -667,7 +710,7 @@ impl Game {
         }
         self.tick();
         // Slow ground is the one step that costs more than a turn. A tick
-        // can start a fight — `nest_aggro_tick` is the precedent — so the
+        // can start a fight — `pursuit_tick` is the precedent — so the
         // rest of them are dropped the moment one does, rather than
         // resolving a world the player is no longer standing in while a
         // battle waits on the screen. Each of these ticks — and the one

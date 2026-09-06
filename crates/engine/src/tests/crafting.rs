@@ -1005,7 +1005,7 @@ fn the_finished_report_still_carries_the_full_tick_total() {
     );
 }
 
-/// A tick can start a fight — `nest_aggro_tick` is the precedent, and a
+/// A tick can start a fight — `pursuit_tick` is the precedent, and a
 /// compile loop inherits the obligation drag terrain already carries: the
 /// remaining ticks must not resolve behind a fight the player has not seen.
 #[test]

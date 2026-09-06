@@ -805,11 +805,20 @@ impl Game {
         self.award_player_xp(player, earned);
         self.award_loot(victim);
         let nest = self.world.get::<NestGuardian>(victim).map(|g| g.nest);
+        // Read beside the nest and for its reason — the tether is on the
+        // body that is about to be despawned. What it costs is *that town's*
+        // opinion alone and not `credit_nearby_settlements`': killing a
+        // town's guards is news to that town, and the neighbours have no
+        // view on it.
+        let patrol = self.world.get::<TownPatrol>(victim).map(|p| p.town);
         self.world.despawn(victim);
         if let Some(nest) = nest
             && let Some(mut n) = self.world.get_mut::<Nest>(nest)
         {
             n.pending_respawns.push(NEST_RESPAWN_TICKS);
+        }
+        if let Some(town) = patrol {
+            self.charge_for_a_patrol_kill(town);
         }
         if self.remove_member(group, index) {
             self.end_battle(player, Some(victim));

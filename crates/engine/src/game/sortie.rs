@@ -351,7 +351,7 @@ impl Game {
     /// `creature_label`, it logs, and it damages through `apply_damage`, and
     /// a bevy system would have to be a second copy of all three.
     pub(crate) fn run_sorties(&mut self) {
-        // `run_dig_crew`'s guard, and `nest_aggro_tick`'s obligation:
+        // `run_dig_crew`'s guard, and `pursuit_tick`'s obligation:
         // anything that can change the world from inside a tick inherits the
         // battle check. A squad's fight resolving mid-battle would spend the
         // player's own `GameRng` draws underneath the round they are looking

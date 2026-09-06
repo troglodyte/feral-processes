@@ -600,7 +600,7 @@ impl Game {
     /// ordering (refusals, then spend, then the log, then the tick cost).
     ///
     /// The tick loop breaks early on a game over or a battle opening
-    /// mid-spend (`nest_aggro_tick` is precedent for either), the same
+    /// mid-spend (`pursuit_tick` is precedent for either), the same
     /// shape a `Drag` step's own multi-tick loop takes — nothing here
     /// needs to unwind, since everything it could interrupt already
     /// landed before the first tick was spent.

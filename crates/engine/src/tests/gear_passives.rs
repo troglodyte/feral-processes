@@ -416,7 +416,7 @@ fn a_companions_worn_grant_fires() {
 fn a_fired_grant_does_not_fire_again_next_round() {
     let dir = assets_with_granting_gear("cooldown");
 
-    let mut game = battle_with_a_passive_holder_prepared(&dir, 9205, None, |g| {
+    let mut game = battle_with_a_passive_holder_prepared(&dir, 9206, None, |g| {
         let player = g.player_entity();
         wear(g, player, "test_grant_module");
     });
@@ -439,7 +439,7 @@ fn a_grant_survives_a_save_and_load_with_no_field_of_its_own() {
     let path = std::env::temp_dir().join(format!("feral_gear_passive_{}.bin", std::process::id()));
     let _ = std::fs::remove_file(&path);
 
-    let mut game = battle_with_a_passive_holder_prepared(&dir, 9206, None, |g| {
+    let mut game = battle_with_a_passive_holder_prepared(&dir, 9205, None, |g| {
         let player = g.player_entity();
         wear(g, player, "test_grant_module");
         g.save(&path).unwrap();
@@ -453,7 +453,7 @@ fn a_grant_survives_a_save_and_load_with_no_field_of_its_own() {
     let mut live = 0;
     let mut after = 0;
     for seed in 0..32u64 {
-        let mut before_save = battle_with_a_passive_holder_prepared(&dir, 9206, None, |g| {
+        let mut before_save = battle_with_a_passive_holder_prepared(&dir, 9205, None, |g| {
             let player = g.player_entity();
             wear(g, player, "test_grant_module");
         });
@@ -570,7 +570,7 @@ fn gear_reaches_the_triggers_a_player_can_want_and_only_deadman_reaches_the_othe
 /// which is the effect with the most between authoring it and seeing it.
 #[test]
 fn a_shipped_granting_weapon_lands_its_condition_in_a_real_round() {
-    let mut game = battle_with_a_passive_holder_prepared(&test_assets_dir(), 9301, None, |g| {
+    let mut game = battle_with_a_passive_holder_prepared(&test_assets_dir(), 9302, None, |g| {
         let player = g.player_entity();
         wear(g, player, "ragged_edge");
     });

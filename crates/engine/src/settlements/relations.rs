@@ -9,9 +9,10 @@
 //! perks module (`crates/engine/src/perks.rs`) is the shape being copied,
 //! and for its reason: a consequence is a hook into a particular formula
 //! with no shared shape to express as data. `refuses_service`,
-//! `preys_on_routes` and `allows_standing_route` are the ones shipped so
-//! far; town-sourced raids and hostile patrols are each a *new query*
-//! answered by the same exhaustive match, not a rewrite.
+//! `preys_on_routes`, `allows_standing_route`, `sends_raiders` and
+//! `fields_patrols` are the five shipped — each a *new query* answered by
+//! the same exhaustive match rather than a rewrite of the others, which is
+//! the extension shape this module exists to demonstrate.
 //! `every_standing_band_answers_whether_it_refuses_service` is the census
 //! shape — exhaustive on `Standing`, `cell_mark`'s rule, so a sixth band
 //! with no answer fails to compile rather than shipping as neutral; each
@@ -103,9 +104,8 @@ const _: () = assert!(
 /// retune that took the cap under the floor would not read as a bad number,
 /// it would crash a raid mid-run. A `const _` for the reason the two above
 /// give: closing this must fail the build.
-const _: () = assert!(
-    crate::tuning::SETTLEMENT_RAID_HAUL_FLOOR <= crate::tuning::SETTLEMENT_RAID_HAUL_CAP
-);
+const _: () =
+    assert!(crate::tuning::SETTLEMENT_RAID_HAUL_FLOOR <= crate::tuning::SETTLEMENT_RAID_HAUL_CAP);
 
 /// The one banding. Ordered from the bottom so the thresholds read as the
 /// ladder they are.
@@ -252,6 +252,25 @@ impl Standing {
         }
     }
 
+    /// Whether a town at this band puts armed programs on its own ground —
+    /// Phase 7b, and the fifth consequence named by the module doc.
+    ///
+    /// Exhaustive, `refuses_service`'s reason. `Hostile` alone, and a
+    /// boolean for `sends_raiders`' reason: no band in the middle fields
+    /// half a patrol. How many, how far and how angry are
+    /// `SETTLEMENT_PATROL_SIZE`, `SETTLEMENT_PATROL_RANGE` and
+    /// `SETTLEMENT_PATROL_AGGRO_RADIUS`.
+    ///
+    /// **Read every tick rather than cached at spawn**, which is what makes
+    /// a patrol stand down the moment its town stops being Hostile — the
+    /// way back out of the band made visible.
+    pub fn fields_patrols(self) -> bool {
+        match self {
+            Standing::Hostile => true,
+            Standing::Cold | Standing::Neutral | Standing::Warm | Standing::Allied => false,
+        }
+    }
+
     /// Whether a town at this band will host a **standing** route — a
     /// one-off dispatch needs only `!refuses_service`, so this is a
     /// stricter gate than access: the town has to actually favour the
@@ -350,6 +369,49 @@ mod tests {
             cut < crate::tuning::SETTLEMENT_RAID_HAUL_PERCENT,
             "a maxed garrison cuts {cut} of {} points and would delete the mechanic",
             crate::tuning::SETTLEMENT_RAID_HAUL_PERCENT
+        );
+    }
+
+    /// The same census for Phase 7b's patrols: every band answers, and only
+    /// the bottom one fields anyone. `sends_raiders`' sibling, and a boolean
+    /// for its reason — no band in the middle fields half a patrol.
+    #[test]
+    fn every_standing_band_answers_whether_it_fields_patrols() {
+        for band in [
+            Standing::Hostile,
+            Standing::Cold,
+            Standing::Neutral,
+            Standing::Warm,
+            Standing::Allied,
+        ] {
+            assert_eq!(
+                band.fields_patrols(),
+                band == Standing::Hostile,
+                "{} answers the wrong way",
+                band.label()
+            );
+        }
+    }
+
+    /// **The way out of `Hostile` must stay climbable while patrols are in
+    /// the way.** Killing a full patrol in self-defence costs less standing
+    /// than clearing one nest on that town's doorstep pays back. At a
+    /// steeper per-kill price self-defence outruns every mover a Hostile
+    /// player can still reach — the market and the board are shut — and the
+    /// band becomes a trap rather than a state.
+    ///
+    /// Asserted against the mover constants rather than written as a number,
+    /// so a retune of *either* side fails here instead of quietly sealing
+    /// the exit.
+    #[test]
+    fn wiping_a_patrol_costs_less_than_clearing_one_nest_pays() {
+        let wipe = crate::tuning::SETTLEMENT_PATROL_KILL_STANDING.abs()
+            * crate::tuning::SETTLEMENT_PATROL_SIZE as i32;
+        assert!(
+            wipe < crate::tuning::SETTLEMENT_NEST_CLEARED_STANDING,
+            "a wiped patrol costs {wipe} against a cleared nest's {}, so \
+             self-defence outruns the way back out",
+            crate::tuning::SETTLEMENT_NEST_CLEARED_STANDING
         );
     }
 

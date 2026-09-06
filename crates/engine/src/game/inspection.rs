@@ -1135,6 +1135,7 @@ impl Game {
                     max_tier,
                     is_boss,
                     nemesis: is_nemesis,
+                    patrol: self.patrol_owner(entity),
                     can_work,
                     can_trade,
                     issues_contracts,

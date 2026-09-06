@@ -462,8 +462,23 @@ pub struct CreatureSave {
     /// This is a shape change to `CreatureSave`, so it required bumping
     /// `SAVE_FORMAT_VERSION` — see that constant's docs.
     pub nest_position: Option<(i32, i32)>,
+    /// The town this creature is tethered to, if it's a `TownPatrol` —
+    /// identified by the town's tile for `nest_position`'s reason, and one
+    /// settlement per tile makes the key unambiguous. `None` for an ordinary
+    /// wild program or a tamed one.
+    ///
+    /// Resolved a step later than `nest_position` on load: settlement
+    /// entities are rebuilt from `SaveData::settlements` *after* the
+    /// creatures, so the tether is deferred the way a cronjob's target is.
+    ///
+    /// Additive behind `#[serde(default)]`, so **no `SAVE_FORMAT_VERSION`
+    /// bump** — an older save simply carries no patrols, which is what it
+    /// had.
+    #[serde(default)]
+    pub patrol_position: Option<(i32, i32)>,
     /// Whether this creature is currently `Pursuing` the player — see that
-    /// component's docs. Meaningless unless `nest_position` is also `Some`.
+    /// component's docs. Meaningless unless one of the two tethers above is
+    /// also `Some`.
     ///
     /// This is a shape change to `CreatureSave`, so it required bumping
     /// `SAVE_FORMAT_VERSION` — see that constant's docs.
@@ -1718,6 +1733,7 @@ mod tests {
             routines: Vec::new(),
             field_buffs: Vec::new(),
             nest_position: None,
+            patrol_position: None,
             pursuing: false,
             carrying: None,
             rarity: Rarity::Ordinary,

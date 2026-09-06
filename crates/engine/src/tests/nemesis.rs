@@ -128,14 +128,14 @@ fn a_successful_jack_out_marks_the_surviving_hostile_at_grudge_1() {
 
 /// The hole Finding 1 of the final review closed: `battle_flee` already
 /// strips `Pursuing` from every battle member on a successful jack-out (see
-/// its own comment naming `nest_aggro_tick`), but nothing did the same on a
+/// its own comment naming `pursuit_tick`), but nothing did the same on a
 /// Forgiving defeat. A player with no structures anywhere is not warped by
 /// `difficulty::death_handling_system` — `forgiving_death_stays_in_place_
 /// when_no_structures_exist` pins that — so they wake up exactly where they
 /// fell, adjacent to a `NestGuardian` that `mark_nemeses` just promoted and
 /// healed to full. Left `Pursuing`, that guardian would be re-engaged by
-/// `nest_aggro_tick` before the player's next input ever arrived —
-/// `nest_aggro_tick` runs inside the very same `tick()` call that
+/// `pursuit_tick` before the player's next input ever arrived —
+/// `pursuit_tick` runs inside the very same `tick()` call that
 /// `battle_resolve_round` makes after `death_handling_system`, both in
 /// `Game::tick_inner`'s schedule.
 ///
@@ -148,7 +148,7 @@ fn a_successful_jack_out_marks_the_surviving_hostile_at_grudge_1() {
 fn a_pursuing_guardian_that_wins_by_default_is_no_longer_pursuing() {
     let mut game = Game::new(70, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player_pos = *game.world.get::<Position>(game.player_entity()).unwrap();
-    // No `Nest` component needed — `nest_aggro_tick`'s leash check only asks
+    // No `Nest` component needed — `pursuit_tick`'s leash check only asks
     // for a `Position` on the entity `NestGuardian::nest` names, and this
     // fixture has no reason to stand up a whole nest to get one.
     let nest = game
@@ -186,7 +186,7 @@ fn a_pursuing_guardian_that_wins_by_default_is_no_longer_pursuing() {
     );
     assert!(
         !game.has_active_battle(),
-        "nest_aggro_tick ran inside the same tick() call battle_resolve_round \
+        "pursuit_tick ran inside the same tick() call battle_resolve_round \
          just made — a still-Pursuing guardian would have re-opened a battle \
          before the player ever got a turn"
     );

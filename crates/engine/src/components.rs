@@ -2305,12 +2305,42 @@ pub struct NestGuardian {
     pub nest: Entity,
 }
 
-/// Marks a `NestGuardian` roused by an attack on its own nest — driven at
-/// the player instead of wandering (`systems::wander_ai_system` excludes
-/// it; the drive itself is Task 4's `nest_aggro_tick`). Deliberately no
-/// target field: the player is the only thing anything in this game
-/// pursues. And deliberately no duration: the chase ends spatially or with
-/// the nest, never on a timer — a second pursuable target or a timed chase
+/// Tethers a wild program to the town that fielded it — Phase 7b's second
+/// tether, `NestGuardian`'s sibling.
+///
+/// **A second component rather than a `Tethered { anchor, kind }` unifying
+/// both.** Unifying buys one query and one save field; it costs a save
+/// field whose *meaning* is rewritten rather than added, edits across ~19
+/// files, and a `kind` match at every nest-specific site anyway —
+/// `despawn_nest` strips tethers, `nest_has_pursuers` asks a nest question,
+/// `combat_rewards` and `combat_round` look up the victim's nest. The
+/// branching moves; it does not leave.
+///
+/// The two differ in every respect except the tick: what provokes them
+/// (proximity here, an attack there), what frees them (the band being
+/// repaired here, the nest dying there), what a save keys them by, and what
+/// happens when the anchor dies — **a town cannot be destroyed**, so a
+/// patrol's leash never resolves to nothing, which is a case
+/// `NestGuardian`'s belt-and-braces check exists for and this does not need.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct TownPatrol {
+    pub town: Entity,
+}
+
+/// Marks a tethered program driven at the player instead of wandering —
+/// a `NestGuardian` roused by an attack on its nest, or a `TownPatrol`
+/// member that has noticed the player inside
+/// `SETTLEMENT_PATROL_AGGRO_RADIUS`.
+///
+/// **Must only ever be inserted alongside one of the two tethers.** An
+/// untethered `Pursuing` has no leash, so nothing in `pursuit_tick` can
+/// ever clear it and the program chases across the whole zone forever.
+///
+/// `systems::wander_ai_system` excludes it; the drive itself is
+/// `Game::pursuit_tick`. Deliberately no target field: the player is the
+/// only thing anything in this game pursues. And deliberately no duration:
+/// the chase ends spatially or with the tether, never on a timer — a second
+/// pursuable target or a timed chase
 /// is the signal to revisit this, not to bolt a field onto it.
 #[derive(Component, Clone, Copy, Debug)]
 pub struct Pursuing;

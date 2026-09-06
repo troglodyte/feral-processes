@@ -292,6 +292,7 @@ fn distant_programs(seed: u32, pick: impl FnOnce(&Game) -> Vec<String>) -> App {
             routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
             field_buffs: Vec::new(),
             nest_position: None,
+            patrol_position: None,
             pursuing: false,
             carrying: None,
             rarity: Default::default(),
@@ -368,6 +369,7 @@ pub(crate) fn place_wild_program_east(app: &mut App, east: i32) -> Entity {
         routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
         field_buffs: Vec::new(),
         nest_position: None,
+        patrol_position: None,
         pursuing: false,
         carrying: None,
         rarity: Default::default(),
@@ -477,7 +479,7 @@ pub(crate) fn place_settlement_far_from_player(
 
 /// `place_settlement_east_of_player`, plus a `Pursuing` nest guardian
 /// standing one tile *north* of the player — for the regression that
-/// `nest_aggro_tick` runs inside the same `tick()` `Game::move_player`'s
+/// `pursuit_tick` runs inside the same `tick()` `Game::move_player`'s
 /// settlement arm drives (`turn.rs:236`, right after `nest_respawn_tick`),
 /// so a provoked guardian already adjacent to the player can start a battle
 /// in the very tick that queues the settlement visit.
@@ -486,11 +488,11 @@ pub(crate) fn place_settlement_far_from_player(
 /// the player: `find_wild_creature_at` is the bump ladder's *first* arm and
 /// would intercept the press before `find_settlement_at` (the fourth) is
 /// ever reached if the guardian sat there instead. North also keeps it off
-/// `nest_aggro_tick`'s field walk entirely — it's already adjacent, so the
+/// `pursuit_tick`'s field walk entirely — it's already adjacent, so the
 /// first per-pursuer check (`chebyshev(pos, player_pos) <= 1`) fires before
 /// any step is taken, with no dependency on `pursuit_field`'s route.
 ///
-/// The nest sits on the guardian's own tile — `nest_aggro_tick`'s leash
+/// The nest sits on the guardian's own tile — `pursuit_tick`'s leash
 /// check only compares `chebyshev` distance between the two, so co-locating
 /// them costs nothing and needs no second tile cleared.
 pub(crate) fn place_settlement_and_a_pursuing_guardian(
@@ -560,6 +562,7 @@ pub(crate) fn place_settlement_and_a_pursuing_guardian(
         routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
         field_buffs: Vec::new(),
         nest_position: Some(guardian_pos),
+        patrol_position: None,
         pursuing: true,
         carrying: None,
         rarity: Default::default(),
@@ -685,6 +688,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         routines: routines.iter().map(|r| r.to_string()).collect(),
         field_buffs: Vec::new(),
         nest_position: None,
+        patrol_position: None,
         pursuing: false,
         carrying: None,
         rarity: Default::default(),
@@ -789,6 +793,7 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
         routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
         field_buffs: Vec::new(),
         nest_position: None,
+        patrol_position: None,
         pursuing: false,
         carrying: None,
         rarity: Default::default(),
@@ -1022,6 +1027,7 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
             routines: Vec::new(),
             field_buffs: Vec::new(),
             nest_position: None,
+            patrol_position: None,
             pursuing: false,
             carrying: None,
             rarity: Default::default(),
@@ -1111,6 +1117,7 @@ pub(crate) fn app_with_companions_and_cargo(
             routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
             field_buffs: Vec::new(),
             nest_position: None,
+            patrol_position: None,
             pursuing: false,
             carrying: None,
             rarity: Default::default(),
@@ -1403,6 +1410,7 @@ pub(crate) fn app_inside_a_small_base_with_programs(
             routines: Vec::new(),
             field_buffs: Vec::new(),
             nest_position: None,
+            patrol_position: None,
             pursuing: false,
             carrying: None,
             rarity: Default::default(),

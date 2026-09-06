@@ -266,3 +266,63 @@
   vacuous; `aid_reach_probe` is the `#[ignore]`d sweep,
   `wild_density_probe`'s shape. `SETTLEMENT_NOTICE_RADIUS` is still flat and
   still unmeasured.
+- **A Hostile town fields a patrol, and `components::TownPatrol` is a second
+  component rather than a `kind` field on a unified tether.** Unifying
+  `NestGuardian` and this into `Tethered { anchor, kind }` buys one query and
+  one save field; it costs a save field whose *meaning* is rewritten rather
+  than added, edits across ~19 files, and a `kind` match at every
+  nest-specific site anyway — `despawn_nest` strips tethers,
+  `nest_has_pursuers` asks a nest question, `combat_rewards` and
+  `combat_round` look up the victim's nest. The branching moves; it does not
+  leave. **A town cannot be destroyed**, so a patrol's leash never resolves
+  to nothing, which is the case `NestGuardian`'s belt-and-braces check
+  exists for and this does not need. The shared tick's own trap is in
+  `references/combat.md`.
+- **A patrol is provoked by *proximity* and stood down by the *band*, and
+  only the provocation half is guarded.** `Game::patrol_aggro_tick` reads
+  `Standing::fields_patrols` every tick rather than caching it at spawn,
+  which is what makes the way back out of `Hostile` visible: a repaired band
+  drops `Pursuing`, strips `TownPatrol`, and leaves ordinary untethered
+  wildlife. The stand-down runs even underground and in base space — a band
+  repaired down there must have lifted by the time the party climbs out —
+  while provocation carries `pursuit_tick`'s guard, because the player's
+  `Position` is pinned to the anchor and to the entrance tile and proximity
+  to it means nothing then. `SETTLEMENT_PATROL_AGGRO_RADIUS` sits **inside
+  `EXAMINE_RANGE_TILES`**, asserted against the constant: a threat only ever
+  discovered by already being in a fight is not one to play around.
+- **Fielding one is a roll with a mean, not a countdown, and the range is
+  measured to the *party*.** `maybe_field_patrol` rolls
+  `1.0 / SETTLEMENT_PATROL_RESPAWN_TICKS` first and gates after, so a miss
+  spends one draw and touches nothing; a nest keeps its countdown on the
+  `Nest` entity and a town has nowhere to keep one that would not be a save
+  field for a figure nobody can see. Range to the party is where this parts
+  company with `raiding_towns`, which measures from the anchor because a
+  raid is aimed at the stores. **Band 0 is excluded by
+  `SETTLEMENT_PATROL_RING_MIN`, not by a check** — a settlement tile admits
+  nobody — which is also why `patrol_stand` cannot use `scatter_open_tile`:
+  that one falls back to the tile it was handed, and here that is the one
+  tile the answer may never be.
+- **Killing a patrol member charges *that town alone, by key*, and
+  `SETTLEMENT_PATROL_KILL_STANDING` is not a free retune.** Never
+  `credit_nearby_settlements`: the neighbours have no view on whose guards
+  died. At `-1` a full patrol wiped costs `-3` against a cleared nest's
+  `+4`, which is what keeps the ladder out of `Hostile` climbable while
+  patrols are in the way — **`-2` already fails**, measured by mutating the
+  constant, and the design spec's claimed `-4` bound was wrong. A tame costs
+  nothing: `TownPatrol` joins `combat_rewards`' strip tuple rather than
+  being handled beside it.
+- **A patrol's mark is the bottom-right corner and spends none of the other
+  three channels.** `EntityView::patrol` carries the town's *name* and not a
+  flag — the mark raises the question whose it is — and `patrol_mark_rect`
+  takes the one corner nothing else claims (rarity bar on the top edge, con
+  earmark top-left, nemesis top-right, staffed mark bottom-left), in
+  `GlyphColor::Orange`, a settlement's own hue and the one variant no
+  species authors.
+- **A patrol's tether saves by the town's tile and loads a step *later* than
+  a nest's.** `CreatureSave::patrol_position` is additive behind
+  `#[serde(default)]`, so no `SAVE_FORMAT_VERSION` bump; but settlement
+  entities are rebuilt by `restore_settlements` **after** every creature, so
+  the tether is collected into `pending_patrols` and resolved after that
+  call — `pending_cronjobs`' treatment. A tile naming no town drops the
+  tether silently, `nest_position`'s rule. **A RON round trip cannot catch a
+  skipped field**, so the gate is a real save and a real load.

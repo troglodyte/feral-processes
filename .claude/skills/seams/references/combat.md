@@ -427,8 +427,22 @@
   the party four frames down, which is the whole of the Stack's Power
   scarcity. Its test asserts both halves in one function — the underground
   half alone passes against a bare `return`.
-- **`Pursuing` must only ever be inserted alongside `NestGuardian`** — an
-  untethered `Pursuing` has no leash and is never cleared.
+- **`Pursuing` must only ever be inserted alongside one of the two
+  tethers** — `NestGuardian` or `TownPatrol`. An untethered `Pursuing` has no
+  leash and is never cleared, so the program chases across the whole zone
+  forever.
+- **`pursuit_tick` drives both tethers off one field, and that field is
+  sized off the *maximum* of the two leashes.** They are equal today
+  (`NEST_AGGRO_LEASH_RADIUS`, `SETTLEMENT_PATROL_LEASH_RADIUS`, both 15);
+  raising the patrol's past the nest's without the `max` produces patrols
+  that read as absent from the field and give up where they stand — a
+  mechanic that disappears with no error anywhere. **And dropping an arm
+  from the two-arm collection does not stop that kind pursuing**, since the
+  step loop queries `With<Pursuing>` alone: it stops one ever being
+  *released*. The leash test is therefore the one that matters, and it must
+  be built on a town at `Hostile` — against a Neutral one
+  `patrol_aggro_tick`'s stand-down drops `Pursuing` for free and the test
+  passes with the arm deleted.
 - **`walkable()` alone does not decide where a `Pursuing` guardian may step**
   — `pursuit_field` excludes `Biome::Platform` separately.
 - **There is one Dijkstra walk on the surface, and the step rule is a

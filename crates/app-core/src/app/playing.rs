@@ -599,7 +599,7 @@ impl App {
         // app-core's `Mode` at all. The bump ladder's settlement arm
         // (`find_settlement_at`, the fourth arm) queues the visit and then
         // calls `self.tick()` itself, and `tick_inner` calls
-        // `nest_aggro_tick` right after `nest_respawn_tick` — so a
+        // `pursuit_tick` right after `nest_respawn_tick` — so a
         // `Pursuing` guardian already adjacent to the player can start a
         // battle *inside that same tick*. The battle wins the mode, but the
         // cue must still be drained: left in `PendingVisit` it would reopen

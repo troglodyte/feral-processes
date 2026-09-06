@@ -138,7 +138,7 @@ impl App {
             DevAction::AdvanceTicks => {
                 for _ in 0..DEV_CONSOLE_TICKS {
                     // A tick can now open a fight on its own —
-                    // `nest_aggro_tick` calls `start_battle` from inside
+                    // `pursuit_tick` calls `start_battle` from inside
                     // `tick_inner` — so this loop carries the same check
                     // `Game::rest` needed for the same reason. Without it a
                     // press would keep ticking the world through a battle

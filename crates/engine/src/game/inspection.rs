@@ -823,6 +823,12 @@ impl Game {
         key: crate::settlements::SettlementKey,
     ) -> crate::views::SettlementView {
         let standing = self.standing_band(key).label();
+        // Before the borrow below, with `standing` and for its reason: both
+        // are doors of their own onto other resources.
+        let kind = self
+            .settlement_kind(key)
+            .unwrap_or(crate::settlements::SettlementKind::Server)
+            .label();
         // Before the borrow below: the aid lines call three doors of their
         // own, one of which needs the world mutably.
         let aid = self.settlement_aid_lines(key);
@@ -835,7 +841,7 @@ impl Game {
             .def;
         crate::views::SettlementView {
             name: def.name.clone(),
-            kind: def.kind.label(),
+            kind,
             specialty: def.specialty.label(),
             temperament: def.temperament.label(),
             blurb: def.blurb.clone(),

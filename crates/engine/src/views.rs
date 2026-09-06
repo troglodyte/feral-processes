@@ -1914,10 +1914,13 @@ pub enum InspectTarget {
 /// rather than widening this one under a name that stops matching what it
 /// holds.
 ///
-/// Every label is a call onto the resolved def's own enum — `kind.label()`,
+/// Every label is a call onto the resolved def's own enum —
 /// `specialty.label()`, `temperament.label()` — rather than a `match`
 /// re-stated here, which is what keeps a new catalogue variant's label
-/// living in exactly one place.
+/// living in exactly one place. `kind` is the same call one door further
+/// out: `Game::settlement_kind().label()`, never `def.kind`, because the
+/// effective kind is the authored one folded with the run's growth latch
+/// — see `game/settlement_growth.rs`' module doc.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SettlementView {
     pub name: String,

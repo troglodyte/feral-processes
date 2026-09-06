@@ -945,7 +945,7 @@ impl Game {
                             visited: false,
                         },
                     );
-                self.spawn_settlement_at(key, def.kind, tile);
+                self.spawn_settlement_at(key, tile);
             }
         }
     }
@@ -999,10 +999,17 @@ impl Game {
     /// than re-deriving them is what makes a catalogue edited between
     /// sessions unable to move a town the party has already walked to.
     pub(crate) fn restore_settlements(&mut self, known: crate::resources::Settlements) {
-        for (key, settlement) in &known.0 {
-            self.spawn_settlement_at(*key, settlement.def.kind, settlement.tile);
-        }
+        // The record goes in **first**: `spawn_settlement_at` asks
+        // `Game::settlement_kind`, which reads this resource and
+        // `Standings`. Spawning first and inserting after would draw every
+        // town at its authored kind, which is the exact bug this door
+        // exists to close.
+        let sites: Vec<(crate::settlements::SettlementKey, (i32, i32))> =
+            known.0.iter().map(|(key, s)| (*key, s.tile)).collect();
         self.world.insert_resource(known);
+        for (key, tile) in sites {
+            self.spawn_settlement_at(key, tile);
+        }
     }
 
     /// The nearest tile to `from` a settlement could stand on, searched
@@ -1017,12 +1024,22 @@ impl Game {
             .find(|&(x, y)| self.world.resource_mut::<WorldMap>().tile(x, y).walkable)
     }
 
-    fn spawn_settlement_at(
-        &mut self,
-        key: crate::settlements::SettlementKey,
-        kind: crate::settlements::SettlementKind,
-        (x, y): (i32, i32),
-    ) {
+    /// Draws the map entity for a settlement whose record already exists.
+    ///
+    /// **Takes no kind.** It asks `Game::settlement_kind`, which is the only
+    /// place the authored kind and the run's latch are folded together. The
+    /// parameter used to be passed in by both callers, and the load path's
+    /// caller passed the authored one — a grown city drew `M` all run and
+    /// came back from a save drawing `s`. A door that cannot be handed the
+    /// wrong answer is the fix; a second correct call site is not.
+    ///
+    /// The record must be in `Settlements` **before** this is called, and
+    /// `Standings` must be too, or the latch reads as unset.
+    fn spawn_settlement_at(&mut self, key: crate::settlements::SettlementKey, (x, y): (i32, i32)) {
+        let ch = self
+            .settlement_kind(key)
+            .unwrap_or(crate::settlements::SettlementKind::Server)
+            .glyph();
         // `GlyphColor::Yellow` was `palette::WARN` and, worse, the authored
         // colour of the Scrapper — a settlement and a scrapper nest were the
         // same hue on the same map. `Orange` is the one variant no species
@@ -1036,7 +1053,7 @@ impl Game {
             crate::components::Settlement { key },
             Position { x, y },
             Glyph {
-                ch: kind.glyph(),
+                ch,
                 color: GlyphColor::Orange,
             },
         ));

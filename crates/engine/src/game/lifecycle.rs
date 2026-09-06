@@ -1302,6 +1302,16 @@ impl Game {
                 output: s.stock_output.iter().cloned().collect(),
                 capacity: def.capacity,
             });
+            // The def decides whether a rig stands here, not the save: a
+            // stored hopper on a structure whose `strips` a mod has since
+            // taken away is simply dropped, `durability`'s own rule two
+            // arms above.
+            if def.strips.is_some() {
+                entity.insert(crate::components::Hopper {
+                    queue: s.hopper.clone(),
+                    progress: s.hopper_progress,
+                });
+            }
             // Both halves mirror `Game::spawn_structure`'s list, which is the
             // hand-written copy this file has always been: a burning supplier
             // missing its `PowerFuel` reads as a base whose grid collapsed on
@@ -1735,11 +1745,12 @@ impl Game {
             Option<&Stock>,
             Option<&StandingJob>,
             Option<&crate::components::PowerFuel>,
+            Option<&crate::components::Hopper>,
         )>();
         // `Stock` is optional here only because test fixtures hand-spawn
         // bare `Structure`s; `place_structure` and `load` both give every
         // real one a buffer.
-        for (structure, pos, durability, tier, stock, standing, fuel) in
+        for (structure, pos, durability, tier, stock, standing, fuel, hopper) in
             structure_query.iter(&self.world)
         {
             let encode = |map: Option<&std::collections::BTreeMap<ItemId, u32>>| {
@@ -1753,6 +1764,8 @@ impl Game {
                 tier: tier.map(|t| t.0),
                 stock_input: encode(stock.map(|s| &s.input)),
                 stock_output: encode(stock.map(|s| &s.output)),
+                hopper: hopper.map(|h| h.queue.clone()).unwrap_or_default(),
+                hopper_progress: hopper.map(|h| h.progress).unwrap_or(0),
                 standing_work: standing.is_some_and(|j| j.work),
                 standing_guard: standing.is_some_and(|j| j.guard),
                 power_fuel: fuel

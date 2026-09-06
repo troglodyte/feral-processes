@@ -1079,6 +1079,12 @@ pub(super) fn spawn_machine_at(game: &mut Game, kind: &str, x: i32, y: i32) -> E
             level: work.level,
         });
     }
+    // `Game::spawn_structure`'s own list, and short of it a rig is a machine
+    // that refuses every deposit and strips nothing — silently, since
+    // `run_teardown_rigs` filters on the component's presence.
+    if def.strips.is_some() {
+        entity.insert(crate::components::Hopper::default());
+    }
     entity.id()
 }
 

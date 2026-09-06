@@ -559,6 +559,43 @@ impl GearCopies {
 #[derive(Component, Default, Clone)]
 pub struct DownedPrograms(pub Vec<DownedProgram>);
 
+/// One program waiting in a rig, and the tool the player chose for it.
+///
+/// A **named struct, never a tuple.** RON parses a `(` in a struct position
+/// as the start of named fields, so a `Vec<(DownedProgram, ToolId)>` could
+/// never be widened and could not be converted to a named struct with
+/// defaulted trailing fields either — `WorkOrder`'s own doc records the two
+/// shipped fields that had to be drained into named successors.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct HopperEntry {
+    pub program: DownedProgram,
+    pub tool: crate::tools::ToolId,
+}
+
+/// A Teardown Rig's private store of downed programs — see
+/// `StructureDef::strips`, `Game::load_teardown_rig` and
+/// `Game::run_teardown_rigs`.
+///
+/// **The whole instance boundary of phase 4.** A `DownedProgram` exists in
+/// exactly two places in the game: `DownedPrograms` on the player, and this.
+/// What leaves a rig is plain items in `Stock::output`, which is what lets
+/// hauling, depots, `collect::plan_adjacent_take` and work orders carry the
+/// yield with no instance rule at all — decision 2's seam, which
+/// `GearCopies`' doc above states and which spec §10.1 declines to spend.
+///
+/// A `Vec` rather than a keyed store, `DownedPrograms`' own reason: two
+/// equal-comparing programs are still two separate kills, and the queue is
+/// ordered work rather than a bag of interchangeable rows.
+///
+/// `progress` is ticks spent on the head entry alone. It resets when an
+/// entry completes, and it is saved: a rig eight ticks into a twenty-tick
+/// program must not restart that program because the player quit.
+#[derive(Component, Default, Clone, Debug)]
+pub struct Hopper {
+    pub queue: Vec<HopperEntry>,
+    pub progress: u64,
+}
+
 /// Player-only: tool ids installed in the player's tool slots, in slot
 /// order — position is what the extraction screen selects by, `Routines`'
 /// own reason for keeping its list ordered rather than keyed.

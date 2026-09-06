@@ -292,6 +292,8 @@ mod tests {
                 standing_work: false,
                 standing_guard: false,
                 power_fuel: tuning::POWER_UPKEEP_TICKS,
+                hopper: Vec::new(),
+                hopper_progress: 0,
             });
         }
         save::save_to_file(&path, &data).unwrap();

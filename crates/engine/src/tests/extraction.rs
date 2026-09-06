@@ -7,7 +7,7 @@
 //! `docs/superpowers/specs/2026-09-04-program-extraction-design.md`.
 
 use super::support::*;
-use crate::components::Tools;
+use crate::components::{Hopper, HopperEntry, Tools};
 use crate::items::DownedProgram;
 use crate::tools::{ToolCategory, ToolDb, ToolDef, ToolId};
 use crate::*;
@@ -3075,4 +3075,55 @@ fn a_gear_pull_never_quotes_research_currency() {
         !quoted.iter().any(|(item, _)| *item == rd),
         "research currency reached a gear quote: {quoted:?}"
     );
+}
+
+// Phase 4, task 2: `components::Hopper` on a built rig, and in the save.
+
+/// A rig spawned without a `Hopper` refuses every deposit and strips
+/// nothing, silently — `spawn_machine_at`'s own doc warns about exactly
+/// this class of short fixture.
+#[test]
+fn a_built_rig_carries_an_empty_hopper() {
+    let mut game = Game::new(4120, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let rig = spawn_machine_at(&mut game, "teardown_rig", 3, 3);
+    let hopper = game
+        .world
+        .get::<Hopper>(rig)
+        .expect("a rig that strips should carry a hopper");
+    assert!(hopper.queue.is_empty());
+    assert_eq!(hopper.progress, 0);
+}
+
+/// A RON round trip cannot see a `#[serde(skip)]`, so the hopper's
+/// persistence is asserted through a real save and load —
+/// `a_tool_loadout_survives_a_save_load_round_trip`'s own reason.
+#[test]
+fn a_loaded_hopper_survives_save_and_load() {
+    let mut game = Game::new(4121, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let rig = spawn_machine_at(&mut game, "teardown_rig", 3, 3);
+    let entry = HopperEntry {
+        program: program(70, Rarity::Ordinary, 4),
+        tool: ToolId("salvage_clamp".to_string()),
+    };
+    {
+        let mut hopper = game.world.get_mut::<Hopper>(rig).unwrap();
+        hopper.queue.push(entry.clone());
+        hopper.progress = 5;
+    }
+
+    let path =
+        std::env::temp_dir().join(format!("feral_hopper_roundtrip_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let hopper = loaded
+        .world
+        .iter_entities()
+        .find_map(|e| e.get::<Hopper>())
+        .expect("the rig should still stand, carrying its hopper");
+    assert_eq!(hopper.queue, vec![entry]);
+    assert_eq!(hopper.progress, 5);
 }

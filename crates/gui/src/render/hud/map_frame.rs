@@ -51,49 +51,6 @@ fn threat_pieces(t: Threat) -> Vec<Piece> {
     out
 }
 
-/// Which side of the anchor the party is standing on, when it is worth
-/// saying.
-///
-/// The anchor's two keys are the only crossing in the game with no glyph on
-/// the map to lead a player to them — the Stack's link wears a `>` on its
-/// own cell (`stack::cell_mark`), and base space's way out is a Home that
-/// looks like every other structure. The manual has carried both keys since
-/// it shipped; a player already standing on the door and reaching for a key
-/// is not reading the manual.
-///
-/// `PhasedOut` draws for as long as the party is in base space, wherever
-/// they are standing in it — not only on the exit cell. Someone who has
-/// walked to the far edge of their pocket is precisely the player who cannot
-/// find the way out, and a hint that appears only once they are already back
-/// on top of it is a hint for a player who does not need one.
-///
-/// `OnAnchor` is the mirror and is per-tile, because the surface anchor is
-/// one cell and the mount it takes is the ground readout's.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub(in crate::render) enum PhaseHint {
-    /// On the zone surface, standing on the anchor tile, with a Home on the
-    /// other side of it.
-    OnAnchor,
-    /// Out of phase, inside base space.
-    PhasedOut,
-}
-
-/// The phase segment: what this door is, and the one key that goes through
-/// it. Both halves in the vocabulary `Game::enter_base` and
-/// `Game::leave_base` refuse in — *anchor*, *the Home*, *phase* — so the
-/// hint and the refusal a mistimed press earns read as one voice.
-fn phase_pieces(hint: PhaseHint) -> Vec<Piece> {
-    let (name, key) = match hint {
-        PhaseHint::OnAnchor => ("ANCHOR", "< to phase up"),
-        PhaseHint::PhasedOut => ("PHASED OUT", "> at the Home to phase back"),
-    };
-    vec![
-        (name.to_string(), palette::EMPHASIS, true),
-        sep(),
-        (key.to_string(), palette::LABEL, false),
-    ]
-}
-
 /// The ground segment: the standing condition's name where one claims this
 /// biome, the biome's own name otherwise. Never both — a condition already
 /// pins the one biome it claims (`GroundCondition::for_biome`), and the
@@ -148,59 +105,41 @@ fn advance_of(pieces: &[Piece], painter: &Painter, m: &Metrics) -> f32 {
 ///
 /// `ground` is `None` underground — a Stack frame has no biome, the same
 /// reason `threat.hostiles` is always `0` down there.
-///
-/// `phase` is `None` unless the party is on one side of the anchor or the
-/// other; see [`PhaseHint`].
 pub(in crate::render) fn draw_map_frame(
     pane: Rect,
     ground: Option<TerrainRow>,
     threat: Threat,
     watching: Option<&str>,
-    phase: Option<PhaseHint>,
     painter: &Painter,
     m: &Metrics,
 ) {
     painter.rect_lines(pane.x, pane.y, pane.w, pane.h, 2.0, palette::PANE_BORDER);
 
     let pieces = threat_pieces(threat);
-    // **One mount, three claimants, and the order here is the whole of the
-    // precedence.** `map_pane`'s bottom border carries nothing — the
-    // compass, which briefly did, is a block *inside* the pane now
-    // (`hud::compass_block`), precisely because a border mount there makes
-    // the pane buy a band and re-lay its whole tile grid. So the three take
-    // turns on the top-left rather than each getting a border.
-    //
-    // Watch first: the ground readout is ambient and the player can spare it
-    // for the seconds they are looking elsewhere, while "you are looking
-    // somewhere else, and here is the way back" cannot be spared — a camera
-    // the player cannot find the release for is a stuck game.
-    //
-    // Phase second, and it displaces the ground rather than sharing the
-    // mount with it. A shared mount would make the hint the segment
-    // `fitting` drops first in a narrow window, which is the one window a
-    // player is least able to spare it in; and it would put the widest
-    // weather-and-ground pair *plus* the hint through the 1280x720 census
-    // below, where they do not all fit. Standing on a door is worth the
-    // biome's name for the turns you stand there, and in base space there is
-    // no `ground` to displace anyway — `Game::terrain_row` answers `None`
-    // out of phase.
-    let segments: Vec<Vec<Piece>> = if let Some(name) = watching {
-        vec![watch_pieces(name)]
-    } else if let Some(hint) = phase {
-        vec![phase_pieces(hint)]
+    if let Some(name) = watching {
+        // **The watch line takes the ground's mount rather than a border of
+        // its own.** `map_pane`'s bottom border carries nothing — the
+        // compass, which briefly did, is a block *inside* the pane now
+        // (`hud::compass_block`), precisely because a border mount there
+        // makes the pane buy a band and re-lay its whole tile grid. The
+        // ground
+        // readout is ambient and the player can spare it for the seconds
+        // they are looking elsewhere; "you are looking somewhere else, and
+        // here is the way back" cannot be spared, so it wins the mount
+        // outright rather than sharing it and being the segment `fitting`
+        // drops in a narrow window.
+        let avail = (pane.w - m.inset * 2.0 - advance_of(&pieces, painter, m)).max(0.0);
+        let shown = fitting(&[watch_pieces(name)], avail, painter, m);
+        draw_pieces(pane, Mount::TopLeft, &shown, painter, m);
     } else if let Some(row) = ground {
-        // Weather first, ground second — `fitting` keeps the longest
-        // prefix, so a narrow window drops the ground detail and keeps the
-        // news.
-        vec![weather_pieces(&row), ground_pieces(&row)]
-    } else {
-        Vec::new()
-    };
-    if !segments.is_empty() {
         // Measured, not estimated: the row has no wrap and no clip, so the
         // left mount's budget is sized against the right mount's *real*
         // width, not a character count of it.
         let avail = (pane.w - m.inset * 2.0 - advance_of(&pieces, painter, m)).max(0.0);
+        // Weather first, ground second — `fitting` keeps the longest
+        // prefix, so a narrow window drops the ground detail and keeps the
+        // news.
+        let segments = [weather_pieces(&row), ground_pieces(&row)];
         let shown = fitting(&segments, avail, painter, m);
         draw_pieces(pane, Mount::TopLeft, &shown, painter, m);
     }
@@ -302,7 +241,7 @@ mod tests {
             // segment plus one pixel and no more.
             let pane_w = m.inset * 2.0 + threat_w + weather_w + 1.0;
             let pane = Rect::new(0.0, 0.0, pane_w, 200.0);
-            draw_map_frame(pane, Some(row), threat, None, None, p, &m);
+            draw_map_frame(pane, Some(row), threat, None, p, &m);
         });
         let text = painted_text(&shapes).join("");
         assert!(
@@ -332,7 +271,6 @@ mod tests {
                     hostiles: 0,
                     shielded: false,
                 },
-                None,
                 None,
                 p,
                 &m,
@@ -417,7 +355,7 @@ mod tests {
 
             let char_w = p.measure_ui_advance("M", m.font_size);
             let regions = crate::render::hud::layout::regions(1280.0, 720.0, char_w, &m, false);
-            draw_map_frame(regions.map_pane, Some(row), threat, None, None, p, &m);
+            draw_map_frame(regions.map_pane, Some(row), threat, None, p, &m);
 
             (chosen_event, chosen_condition)
         });
@@ -432,136 +370,6 @@ mod tests {
             text.contains(chosen_condition),
             "the widest ground segment did not survive beside THREAT at \
              1280x720: {text:?}"
-        );
-    }
-
-    /// Both hints name a key, and the hint takes the ground readout's mount
-    /// outright rather than sharing it — with `watching` still winning over
-    /// both, which is the precedence `draw_map_frame`'s `if` chain encodes.
-    ///
-    /// The no-hint control is not decoration: without it, a `draw_map_frame`
-    /// that had simply stopped drawing the ground readout altogether would
-    /// pass every displacement assertion here.
-    #[test]
-    fn a_phase_hint_names_its_key_and_takes_the_grounds_mount() {
-        let m = ui_metrics(900.0);
-        let pane = Rect::new(0.0, 0.0, 1200.0, 600.0);
-        // No condition and no weather, so `Null Sector` is the whole of what
-        // the ground readout would draw and its absence is unambiguous.
-        let row = TerrainRow {
-            biome: "Null Sector",
-            condition: None,
-            event: None,
-        };
-        let threat = Threat {
-            hostiles: 0,
-            shielded: false,
-        };
-        let drawn = |watching: Option<&str>, phase: Option<PhaseHint>| {
-            let (_, shapes) = with_painter(|p| {
-                draw_map_frame(pane, Some(row), threat, watching, phase, p, &m);
-            });
-            painted_text(&shapes).join("")
-        };
-
-        let out = drawn(None, Some(PhaseHint::PhasedOut));
-        assert!(
-            out.contains('>') && out.contains("Home"),
-            "base space must say which key leaves and where from: {out:?}"
-        );
-        assert!(
-            !out.contains("Null Sector"),
-            "the ground readout gives up the mount rather than sharing it: \
-             {out:?}"
-        );
-
-        let up = drawn(None, Some(PhaseHint::OnAnchor));
-        assert!(
-            up.contains('<') && up.contains("ANCHOR"),
-            "the anchor tile must say which key goes up: {up:?}"
-        );
-
-        let plain = drawn(None, None);
-        assert!(
-            plain.contains("Null Sector"),
-            "the control: with no hint the ground readout has its mount back: \
-             {plain:?}"
-        );
-        assert!(
-            !plain.contains("phase"),
-            "and says nothing about phasing: {plain:?}"
-        );
-
-        let watched = drawn(Some("Ivy"), Some(PhaseHint::PhasedOut));
-        assert!(
-            watched.contains("Ivy") && !watched.contains("phase"),
-            "the watch line outranks the hint — a camera with no visible \
-             release is a stuck game, and the hint keeps for later: {watched:?}"
-        );
-    }
-
-    /// **Width census.** The wider of the two hints must survive beside the
-    /// widest `THREAT` readout at 1280x720, the smallest window the design is
-    /// stated against. A hint is one segment, so `fitting` keeps it whole or
-    /// drops it entirely — a hint too long for the pane is not a truncated
-    /// hint but no hint at all, which is the failure this catches.
-    ///
-    /// Both halves are found by measuring rather than assumed, so reworded
-    /// hint prose is re-measured instead of leaving this testing a string
-    /// that no longer draws.
-    #[test]
-    fn the_wider_phase_hint_fits_beside_the_widest_threat_at_1280x720() {
-        let m = ui_metrics(720.0);
-        let (chosen, shapes) = with_painter(|p| {
-            let chosen = [PhaseHint::OnAnchor, PhaseHint::PhasedOut]
-                .into_iter()
-                .max_by(|a, b| {
-                    advance_of(&phase_pieces(*a), p, &m).total_cmp(&advance_of(
-                        &phase_pieces(*b),
-                        p,
-                        &m,
-                    ))
-                })
-                .expect("both hints exist");
-            let threat = [true, false]
-                .into_iter()
-                .map(|shielded| Threat {
-                    hostiles: 99,
-                    shielded,
-                })
-                .max_by(|a, b| {
-                    advance_of(&threat_pieces(*a), p, &m).total_cmp(&advance_of(
-                        &threat_pieces(*b),
-                        p,
-                        &m,
-                    ))
-                })
-                .unwrap();
-
-            let char_w = p.measure_ui_advance("M", m.font_size);
-            let regions = crate::render::hud::layout::regions(1280.0, 720.0, char_w, &m, false);
-            // `ground` is `None`, which is what base space really hands it —
-            // and the hint displaces the ground on the surface anyway, so
-            // there is no wider case than this one to measure.
-            draw_map_frame(regions.map_pane, None, threat, None, Some(chosen), p, &m);
-
-            chosen
-        });
-
-        let text = painted_text(&shapes).join("");
-        let key_half = phase_pieces(chosen)
-            .last()
-            .expect("a hint ends with its key")
-            .0
-            .clone();
-        assert!(
-            text.contains(&key_half),
-            "the wider phase hint did not survive beside THREAT at 1280x720, \
-             so the player is told nothing at all: {text:?}"
-        );
-        assert!(
-            text.contains("THREAT"),
-            "the threat readout must still draw"
         );
     }
 }

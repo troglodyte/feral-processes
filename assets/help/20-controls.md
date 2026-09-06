@@ -41,11 +41,8 @@ Acting on the world:
   own tile wears a yellow ring for as long as they are. Costs no time either way.
 - m — Excavation plan: space anchors a box, space again marks it, Esc backs out. Marked rock is cut
   and floored, and drawing a plan costs no time.
-- < — phase up into the base, standing on the anchor. The map's top border reads ANCHOR and names
-  the key whenever you stand on one with a Home behind it; a dark anchor says nothing, because
-  there is nothing on the other side to go to.
-- > — phase back down to the grid, at the exit. The border reads PHASED OUT and names this key for
-  as long as you are out of phase, wherever in the base you have walked to.
+- < — phase up into the base, standing on the anchor
+- > — phase back down to the grid, at the exit
 
 Reading and housekeeping:
 

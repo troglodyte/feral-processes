@@ -290,6 +290,7 @@ fn every_notification_kind_is_fired_by_a_named_site() {
             NotificationKind::BaseFounding => "Game::place_structure, founding",
             NotificationKind::FirstDescent => "Game::descend_to",
             NotificationKind::FirstRaid => "Game::run_raid",
+            NotificationKind::FirstTownRaid => "Game::run_town_raid",
             NotificationKind::FirstWorkOrder => "Game::queue_work_order",
             NotificationKind::FirstStatic => "Game::move_player, the movement hook",
             NotificationKind::LowPower => "Game::note_low_power, once a tick",
@@ -320,6 +321,7 @@ fn tutorials_latch_and_milestones_do_not() {
             NotificationKind::BaseFounding
             | NotificationKind::FirstDescent
             | NotificationKind::FirstRaid
+            | NotificationKind::FirstTownRaid
             | NotificationKind::FirstWorkOrder
             | NotificationKind::FirstStatic
             | NotificationKind::LowPower

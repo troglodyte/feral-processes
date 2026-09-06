@@ -1044,6 +1044,16 @@ fn every_aid_line_the_engine_emits_is_one_the_census_measures() {
         set_standing(&mut game, key, standing);
         seen.extend(game.settlement_report(key).aid);
     }
+    // A Hostile town the raid radius cannot reach. The band walk above puts
+    // its town one tile off the anchor, so it only ever produces the
+    // *near* threat line; without a far one `THREAT_RAID_REACH` is measured
+    // by `AID_LINES` and reachable by nothing, which is exactly the state
+    // the second loop below exists to catch.
+    let far = SettlementKey { rx: 9, ry: 0 };
+    place_settlement(&mut game, far, ax + SETTLEMENT_RAID_RADIUS + 1, ay);
+    set_standing(&mut game, far, SETTLEMENT_HOSTILE_STANDING);
+    seen.extend(game.settlement_report(far).aid);
+
     // And the two the cooldown puts on the page.
     set_standing(&mut game, key, SETTLEMENT_ALLIED_STANDING);
     game.request_program_gift(key).expect("the gift");
@@ -1063,6 +1073,8 @@ fn every_aid_line_the_engine_emits_is_one_the_census_measures() {
         AID_GIFT_SOON,
         AID_GIFT_LATER,
         AID_RELAY,
+        THREAT_RAIDERS,
+        THREAT_RAID_REACH,
     ] {
         assert!(
             seen.iter().any(|l| l == wanted),
@@ -1362,4 +1374,40 @@ fn a_hostile_town_never_found_sends_nobody() {
         game.raiding_towns().is_empty(),
         "an unresolved town has no tile to measure from"
     );
+}
+
+#[test]
+fn a_hostile_neighbour_tells_the_page_it_sends_raiders() {
+    let mut game = game();
+    let key = SettlementKey { rx: 1, ry: 0 };
+    town_near_anchor(&mut game, key, 2, 0, SETTLEMENT_HOSTILE_STANDING);
+    let aid = game.settlement_report(key).aid;
+    assert!(aid.contains(&THREAT_RAIDERS.to_string()), "got {aid:?}");
+}
+
+/// The radius is a per-run coin flip, so a page that says "raiders come from
+/// here" about a town half the world away is a lie. The line is gated on the
+/// same `raiding_towns` the check reads, never on a restated radius.
+#[test]
+fn a_hostile_town_too_far_to_raid_says_only_that_it_would() {
+    let mut game = game();
+    let key = SettlementKey { rx: 1, ry: 0 };
+    town_near_anchor(
+        &mut game,
+        key,
+        SETTLEMENT_RAID_RADIUS + 1,
+        0,
+        SETTLEMENT_HOSTILE_STANDING,
+    );
+    let aid = game.settlement_report(key).aid;
+    assert!(!aid.contains(&THREAT_RAIDERS.to_string()), "got {aid:?}");
+    assert!(aid.contains(&THREAT_RAID_REACH.to_string()), "got {aid:?}");
+}
+
+#[test]
+fn a_neutral_town_still_says_nothing_about_raiders() {
+    let mut game = game();
+    let key = SettlementKey { rx: 1, ry: 0 };
+    town_near_anchor(&mut game, key, 2, 0, 0);
+    assert!(game.settlement_report(key).aid.is_empty());
 }

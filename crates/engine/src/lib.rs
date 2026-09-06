@@ -89,6 +89,7 @@ pub use game::route::{RouteDestination, RouteRefusal, RouteReport};
 /// a parallel copy of them. See `game::settlement_relations::AID_GARRISON`.
 pub use game::settlement_relations::{
     AID_GARRISON, AID_GIFT_LATER, AID_GIFT_READY, AID_GIFT_SOON, AID_LINES, AID_RELAY,
+    THREAT_RAID_REACH, THREAT_RAIDERS,
 };
 pub use game::sortie::{DispatchReach, SortieRefusal};
 pub use game::stack_view::ExamineDir;

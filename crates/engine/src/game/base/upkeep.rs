@@ -623,7 +623,7 @@ impl Game {
         // Before the outcome branches, `run_raid`'s placement: the lesson is
         // "something you did caused this", and a raid turned away is still a
         // raid that happened.
-        self.notify(crate::notifications::NotificationKind::FirstRaid);
+        self.notify(crate::notifications::NotificationKind::FirstTownRaid);
 
         let cut = self.total_raid_defense() * crate::tuning::SETTLEMENT_RAID_DEFENSE_PER_POINT;
         let percent = crate::tuning::SETTLEMENT_RAID_HAUL_PERCENT.saturating_sub(cut);

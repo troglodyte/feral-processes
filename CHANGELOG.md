@@ -33,6 +33,28 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.109
+
+**`.` no longer waits inside your base.** The key is bound on the zone
+surface and in the Stack; out of phase it does nothing at all — no turn
+spent, and no refusal either, because time in base space is time you spend
+by walking it.
+
+**The map's top border now names the anchor's two keys.** They were the one
+crossing in the game with nothing on screen leading to them: the Stack's
+link wears a `>` on its own cell, and base space's way out is a Home that
+looks like every other structure.
+
+**Out of phase the border reads PHASED OUT and names `>`** — for as long as
+you are in there and wherever you have walked to, not only once you are
+standing back on the way out.
+
+**On the surface it reads ANCHOR and names `<`** whenever you stand on one
+with a Home behind it. A dark anchor still says nothing, because there is
+nothing on the other side to go to yet.
+
+**None of this has been played.** It is green and unseen.
+
 ## 0.13.108
 
 **A tool that pulls gear off a downed program instead of a routine.** The

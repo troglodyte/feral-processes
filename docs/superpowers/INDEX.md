@@ -25,6 +25,7 @@ spec resolves to a release tag.
 
 | Spec | State | Evidence |
 | --- | --- | --- |
+| `2026-09-06-town-raids-and-hostile-patrols-design` | approved, **unbuilt** | `Standing::sends_raiders` and `TownPatrol` exist nowhere in `crates/`; two phases, 7a raids then 7b patrols |
 | `2026-09-02-combat-model-slice-2-design` | **built**, unplayed | a second swing for Strikers from level 8; `balance_sim` cannot gate it |
 | `2026-08-31-stack-wanderers-design` | approved, **unbuilt** | `FrameWanderers` exists nowhere in `crates/` |
 | `2026-08-24-rest-interruption-design` | never approved, **unbuilt** | `Game::rest_interrupted` does not exist |
@@ -41,7 +42,9 @@ spec resolves to a release tag.
 contradiction.** Both specs shipped everything they scoped; town-sourced
 raids, hostile patrols and a server growing into a mainframe were deferred *by
 decision* and are recorded as such in the two archived specs, not carried here
-as open rows. A future spec claims them.
+as open rows. Two of the three are now claimed by
+`2026-09-06-town-raids-and-hostile-patrols-design`, which is the open row
+above; a server growing into a mainframe is still unclaimed.
 
 `docs/content-gaps.md` holds built-but-unused engine mechanics, which is a
 different question and not this file's job. **`TODO.md` no longer exists** —

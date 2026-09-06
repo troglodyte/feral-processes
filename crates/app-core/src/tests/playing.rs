@@ -164,6 +164,50 @@ fn a_refused_crossing_reports_the_engines_own_reason() {
     );
 }
 
+/// `.` is a zone-surface and Stack verb, and does nothing at all in base
+/// space — no turn, no refusal, nothing on the line. A **dead key**, not a
+/// refused one, which is the deliberate exception to the rule the rest of
+/// this screen follows: `r`, `<`, `>` and `v` all hand the engine's own
+/// sentence to `App::refuse` rather than fall through. Base space is time
+/// you spend by walking it, and a key that stands still there is meant to
+/// read as not being a key at all.
+///
+/// The surface half is the control, and is not optional: a `.` arm that had
+/// been deleted outright rather than gated would pass the base assertions
+/// below without it.
+#[test]
+fn waiting_is_a_dead_key_in_base_space() {
+    let mut app = test_app(219);
+
+    let surface_tick = app.game.as_ref().unwrap().current_tick();
+    app.handle_key(GameKey::Char('.'));
+    assert_eq!(
+        app.game.as_ref().unwrap().current_tick(),
+        surface_tick + 1,
+        "the control: `.` on the zone surface still spends the turn"
+    );
+
+    stand_in_base(&mut app);
+    // Set *after* the fixture is in place, so what it proves is that the
+    // keypress left it standing — `App::after_world_action` clears this line
+    // on any real action, so a `.` that still ticked would wipe it.
+    app.status_line = Some("an earlier refusal".to_string());
+    let tick = app.game.as_ref().unwrap().current_tick();
+
+    app.handle_key(GameKey::Char('.'));
+
+    assert_eq!(
+        app.game.as_ref().unwrap().current_tick(),
+        tick,
+        "`.` must spend no turn in base space"
+    );
+    assert_eq!(
+        app.status_line.as_deref(),
+        Some("an earlier refusal"),
+        "and must say nothing of its own — a dead key, not a refusal"
+    );
+}
+
 /// `stepped` reads the clock rather than assuming, and slice 2 is what
 /// makes that pay: a movement key into base-space rock used to be refused
 /// for free and is a swing now (`Game::strike_rock`), so the same keypress

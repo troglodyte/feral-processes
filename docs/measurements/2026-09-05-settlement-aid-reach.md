@@ -95,3 +95,53 @@ nearest-town destination, 148 for second-nearest, 130 for third.
 - **`ROUTE_PREDATION_CHANCE` and `ROUTE_PREDATION_LOSS` remain unmeasured**,
   as do `SETTLEMENT_WARM_GARRISON` and `SETTLEMENT_ALLIED_GARRISON`. This run
   moved the reach of the aid ladder, not its magnitudes.
+
+## Follow-up, 2026-09-06 — the pitch halved and the ratios were re-run
+
+`SETTLEMENT_REGION_CHUNKS` went 8 to 4 on a play note that towns were too far
+to walk to, so a region is now **128 tiles** across rather than 256. The
+sweep above was re-run unchanged against the new geometry. Both radii are
+fractions of `REGION_TILES`, so both moved with it: garrison 128 to **64**,
+predation 64 to **32**.
+
+Chebyshev from the anchor to the nearest town, 2,000 worlds:
+
+| | p10 | p25 | p50 | p75 | p90 |
+|---|----:|----:|----:|----:|----:|
+| 256-tile regions | 71 | 105 | 147 | 190 | 227 |
+| **128-tile regions** | **42** | **55** | **71** | **88** | **102** |
+
+The walk roughly halved, which is what the change was for. The tail is the
+part that mattered: a quarter of worlds used to ask for a 190-tile hike
+before the player had met anybody.
+
+**The garrison ratio survived the retune and the predation ratio did not.**
+That is the finding, and it is not what the ratio-not-value rule predicted:
+
+| | 256 pitch | 128 pitch |
+|---|----:|----:|
+| worlds inside `SETTLEMENT_GARRISON_RADIUS` | 39.2% | **39.6%** |
+| third-nearest lanes inside `ROUTE_PREDATION_RADIUS` | 17.6% | **12.7%** |
+| second-nearest lanes | 8.2% | 3.3% |
+
+The cause is `REGION_EDGE_INSET`, which is a **flat 24 and did not scale**.
+It was 9% of a region's width on each side and is now 19%, so the usable span
+a town is jittered within fell from 208 tiles to 80 — placement is markedly
+more grid-like than it was, and a lane between two points on a regular grid
+passes through the gaps rather than past the towns. A radial measure like the
+garrison share cannot see this; a
+"does the line from A to B pass near C" measure sees it directly.
+
+So the gate in `settlement_aid_reach.rs` still passes — 12.7% against its
+`>= 0.10` — but on a thinner margin than the number it was written against,
+and the margin will keep thinning if the pitch is halved again without the
+inset following it. **Scaling `REGION_EDGE_INSET` off `REGION_TILES` is the
+open question this leaves**; it was not changed here, because the gate holds
+and a second unmeasured constant moving in the same commit is how the flat 40
+happened in the first place.
+
+One consequence worth naming for play rather than for the gate: two towns in
+adjacent regions can now stand as close as `2 * REGION_EDGE_INSET` — 48 tiles
+— which is about one map viewport. That floor was always 48; what the halved
+pitch changes is how often placement lands near it. "Never visible from the
+last one" is now a claim about the common case rather than about every case.

@@ -66,6 +66,11 @@ pub enum NotificationKind {
     FirstDescent,
     /// A GC Entropy Sweep opens on the base — `Game::run_raid`.
     FirstRaid,
+    /// Raiders out of a Hostile town reach the base — `Game::run_town_raid`.
+    /// Distinct from `FirstRaid`: the sweep is weather and this is a
+    /// consequence, and firing the sweep's copy here would teach the wrong
+    /// lesson.
+    FirstTownRaid,
     /// A work order is filed and accepted — `Game::queue_work_order`.
     FirstWorkOrder,
     /// The player's reserve first crosses under
@@ -157,11 +162,12 @@ impl NotificationKind {
     /// scroll to forgive. `Perk::all`'s shape and its reason: a walk over
     /// the whole enum is what makes a census non-vacuous, and the array
     /// length fails to compile when a variant is added without being listed.
-    pub fn all() -> [NotificationKind; 11] {
+    pub fn all() -> [NotificationKind; 12] {
         [
             NotificationKind::BaseFounding,
             NotificationKind::FirstDescent,
             NotificationKind::FirstRaid,
+            NotificationKind::FirstTownRaid,
             NotificationKind::FirstWorkOrder,
             NotificationKind::LowPower,
             NotificationKind::DownedProgram,
@@ -211,6 +217,18 @@ impl NotificationKind {
                        data, ...your structures, and it will keep coming.\n\nStaff posted at a \
                        machine defend it, and take damage doing so. There must be a way to defend \
                        against it.",
+                sprite: None,
+                glyph: '!',
+                color: GlyphColor::Red,
+                repeat: Repeat::OnceEver,
+            },
+            NotificationKind::FirstTownRaid => NotificationDef {
+                title: "They Know Where You Live",
+                body: "A settlement you have wronged has sent people for your stores. They do not \
+                       come to break your machines — they come to carry off what your base runs \
+                       on, and they will keep coming while the grudge stands.\n\nWhat you have \
+                       built to turn a sweep away turns them away too, and so does a neighbour \
+                       who likes you. Standing can be repaired.",
                 sprite: None,
                 glyph: '!',
                 color: GlyphColor::Red,
@@ -323,6 +341,7 @@ impl NotificationKind {
             NotificationKind::BaseFounding => "tutorial_base_founding",
             NotificationKind::FirstDescent => "tutorial_first_descent",
             NotificationKind::FirstRaid => "tutorial_first_raid",
+            NotificationKind::FirstTownRaid => "tutorial_first_town_raid",
             NotificationKind::FirstWorkOrder => "tutorial_first_work_order",
             NotificationKind::FirstStatic => "tutorial_first_static",
             // New, so no `profile.ron` holds either yet — but they latch, so

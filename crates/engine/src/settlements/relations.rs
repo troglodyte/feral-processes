@@ -85,6 +85,28 @@ pub enum Standing {
 /// assertion on a constant, which it is.
 const _: () = assert!(crate::tuning::SETTLEMENT_GARRISON_MAX < crate::tuning::RAID_DAMAGE);
 
+/// A garrison can never zero a **town** raid either, however many Allied
+/// neighbours the party collects — `SETTLEMENT_GARRISON_MAX`'s claim about
+/// the ambient sweep, restated for the haul share.
+///
+/// A `const _` and not a test for the reason the assertion above gives:
+/// closing this gap by retune must fail the *build*.
+const _: () = assert!(
+    crate::tuning::SETTLEMENT_GARRISON_MAX * crate::tuning::SETTLEMENT_RAID_DEFENSE_PER_POINT
+        < crate::tuning::SETTLEMENT_RAID_HAUL_PERCENT
+);
+
+/// The haul floor is never above the cap.
+///
+/// `run_town_raid` bounds the haul with `clamp`, which **panics** when its
+/// two arguments are the wrong way round rather than saturating — so a
+/// retune that took the cap under the floor would not read as a bad number,
+/// it would crash a raid mid-run. A `const _` for the reason the two above
+/// give: closing this must fail the build.
+const _: () = assert!(
+    crate::tuning::SETTLEMENT_RAID_HAUL_FLOOR <= crate::tuning::SETTLEMENT_RAID_HAUL_CAP
+);
+
 /// The one banding. Ordered from the bottom so the thresholds read as the
 /// ladder they are.
 pub fn band(standing: i32) -> Standing {
@@ -215,6 +237,21 @@ impl Standing {
         }
     }
 
+    /// Whether a town at this band sends raiders at the party's base —
+    /// Phase 7a, and the fourth consequence named by the module doc.
+    ///
+    /// Exhaustive, `refuses_service`'s reason. `Hostile` alone, and a
+    /// boolean rather than `garrison_defense`'s magnitude: no band in the
+    /// middle sends half a raider, so a ramp here would only be a second
+    /// spelling of "is this town Hostile". How often and how much are
+    /// `SETTLEMENT_RAID_CHANCE_PER_TICK` and `SETTLEMENT_RAID_HAUL_PERCENT`.
+    pub fn sends_raiders(self) -> bool {
+        match self {
+            Standing::Hostile => true,
+            Standing::Cold | Standing::Neutral | Standing::Warm | Standing::Allied => false,
+        }
+    }
+
     /// Whether a town at this band will host a **standing** route — a
     /// one-off dispatch needs only `!refuses_service`, so this is a
     /// stricter gate than access: the town has to actually favour the
@@ -275,6 +312,45 @@ mod tests {
                 band.label()
             );
         }
+    }
+
+    /// The same census for Phase 7a's town-sourced raids: every band
+    /// answers, and only the bottom one sends anyone. `preys_on_routes`'
+    /// shape rather than `garrison_defense`'s, because a magnitude here
+    /// would be a second spelling of "is this town Hostile" — the
+    /// frequency and the haul are tuning constants, not band answers.
+    #[test]
+    fn every_standing_band_answers_whether_it_sends_raiders() {
+        for band in [
+            Standing::Hostile,
+            Standing::Cold,
+            Standing::Neutral,
+            Standing::Warm,
+            Standing::Allied,
+        ] {
+            assert_eq!(
+                band.sends_raiders(),
+                band == Standing::Hostile,
+                "{} answers the wrong way",
+                band.label()
+            );
+        }
+    }
+
+    /// The runtime half of the `const _` beside `band`: a garrison alone,
+    /// however many Allied neighbours the party collects, never drives the
+    /// haul share to zero. Stated in both places on purpose — a reader of
+    /// either file finds the claim, and the build fails before the suite
+    /// does.
+    #[test]
+    fn a_garrison_alone_never_zeroes_a_town_raid() {
+        let cut = crate::tuning::SETTLEMENT_GARRISON_MAX
+            * crate::tuning::SETTLEMENT_RAID_DEFENSE_PER_POINT;
+        assert!(
+            cut < crate::tuning::SETTLEMENT_RAID_HAUL_PERCENT,
+            "a maxed garrison cuts {cut} of {} points and would delete the mechanic",
+            crate::tuning::SETTLEMENT_RAID_HAUL_PERCENT
+        );
     }
 
     /// A Hostile town does not host a standing route — it refuses service

@@ -11348,10 +11348,11 @@ a difference in degree rather than a fourth gate.
 `SETTLEMENT_GARRISON_RADIUS` shipped at a flat 40 and `ROUTE_PREDATION_RADIUS`
 at a flat 15. Neither number was measured against anything, and the thing
 they had to be measured against is `settlements::placement::REGION_TILES` —
-`SETTLEMENT_REGION_CHUNKS * CHUNK_SIZE`, 256 tiles, one town per region at
+`SETTLEMENT_REGION_CHUNKS * CHUNK_SIZE`, one town per region at
 `SETTLEMENT_REGION_PERCENT` occupancy, each inset 24 tiles from its region's
-border. Against that spacing the median distance from the anchor to the
-nearest town is **147 tiles**.
+border. When this was measured a region was 256 tiles across and the median
+distance from the anchor to the nearest town was **147 tiles**; the pitch was
+halved to 128 tiles on 2026-09-06 and the median is now **71**.
 
 So the radii found nothing. Over 2,000 sampled worlds a town stood within 40
 of the anchor in **1.6%** of them, and a town stood within 15 of a trade lane
@@ -11361,6 +11362,21 @@ garrison is too weak" from "there was no garrison", and neither can a
 playtest. Both are now `REGION_TILES / 2` and `REGION_TILES / 4`, reaching
 39% of worlds and 18% of third-nearest lanes. The full sweep is
 `docs/measurements/2026-09-05-settlement-aid-reach.md`.
+
+**The ratio is most of what survives a spacing retune, which is the reason to
+write one — but it is not all of it.** `SETTLEMENT_REGION_CHUNKS` was halved
+from 8 to 4 the next day to shorten the walk. The garrison share did not move
+(39.6% of worlds against 39.2%) where a flat 40 would have gone from dead to
+deader. The predation share **did** move, 17.6% of third-nearest lanes down to
+12.7%, because `REGION_EDGE_INSET` is a flat 24 that did not scale with the
+pitch: it went from 9% of a region's width to 19%, placement got more
+grid-like, and a straighter lane passes through the gaps instead of past a
+town. A radial gate cannot see that; a "does this line pass near that point"
+gate sees it immediately. The lesson is narrower than "use ratios" — **every**
+length in the derivation has to ride the pitch, and the one that did not is
+still flat today. Any new settlement radius — `SETTLEMENT_RAID_RADIUS` is the current
+one — is a fraction of `REGION_TILES` for this reason and is gated on the
+ratio in `crates/engine/src/tests/settlement_aid_reach.rs`, not on the value.
 
 **The garrison radius is now deliberately outside `SETTLEMENT_NOTICE_RADIUS`,
 inverting what shipped.** The old doc comment argued the ordering the other

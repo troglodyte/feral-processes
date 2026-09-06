@@ -487,6 +487,22 @@ impl Game {
             lines.push(AID_GARRISON.to_string());
         }
 
+        // The hostile mirror of the garrison line above, and a *call* to
+        // `raiding_towns` rather than a restated radius — the same rule, and
+        // the same reason: a page that keeps promising (or denying) an event
+        // after the check learns a new condition is a page that lies.
+        //
+        // Not reach-gated. `[G]` and `[T]` are gated because they are doors
+        // the player operates from one tile away; this is a fact about the
+        // town that is true from wherever the page was opened.
+        if band.sends_raiders() {
+            if self.raiding_towns().contains(&key) {
+                lines.push(THREAT_RAIDERS.to_string());
+            } else {
+                lines.push(THREAT_RAID_REACH.to_string());
+            }
+        }
+
         // The two verbs are **reach-gated, exactly as their doors are**.
         // This page opens from anywhere inside `EXAMINE_RANGE_TILES` — `x`
         // toward a town four tiles off lands here — while both doors ask
@@ -527,17 +543,32 @@ pub const AID_GIFT_SOON: &str = "They have nobody spare for you just yet.";
 pub const AID_GIFT_LATER: &str = "They have nobody spare for you for a good while yet.";
 /// See `AID_GARRISON`.
 pub const AID_RELAY: &str = "Their relay will carry you home.";
+/// See `AID_GARRISON`. The ladder's angry end: a Hostile town near enough to
+/// the anchor sends raiders — `Game::raiding_towns`.
+pub const THREAT_RAIDERS: &str = "Raiders out of here come for your stores.";
+/// See `AID_GARRISON`. A Hostile town too far from the anchor to send
+/// anybody. The distinction is worth a line of its own because
+/// `SETTLEMENT_RAID_RADIUS` is a per-run coin flip, and a page silent about
+/// distance reads as a page saying the band has no consequence at all.
+pub const THREAT_RAID_REACH: &str = "They are too far from your base to trouble it.";
 
 /// The census: every sentence above, for the layout gates to measure.
 /// A line written by `Game::settlement_aid_lines` and missing here is a line
 /// nothing measures, which is the failure this array exists to make
 /// impossible.
-pub const AID_LINES: [&str; 5] = [
+///
+/// **Named for the aid it began as; it measures the whole status block**,
+/// threat lines included. One census is the invariant — the gui width gate
+/// reads exactly one array, and a second list is the drift this comment's
+/// first paragraph exists to prevent.
+pub const AID_LINES: [&str; 7] = [
     AID_GARRISON,
     AID_GIFT_READY,
     AID_GIFT_SOON,
     AID_GIFT_LATER,
     AID_RELAY,
+    THREAT_RAIDERS,
+    THREAT_RAID_REACH,
 ];
 
 /// How long until a town will spare a program again, in the player's words.

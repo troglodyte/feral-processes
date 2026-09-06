@@ -3296,10 +3296,24 @@ pub const SIGNAL_NOISE_AMBUSH_MULT: f32 = 2.0;
 ///
 /// The map is unbounded, so density is the only thing that can be tuned:
 /// this and `SETTLEMENT_REGION_PERCENT` together say how far apart towns
-/// are. At 8 chunks a region is 256 tiles across, which is a long walk
-/// rather than a stroll — a settlement has to be worth arriving at, and one
-/// visible from the last one is not.
-pub const SETTLEMENT_REGION_CHUNKS: i32 = 8;
+/// are. At 4 chunks a region is 128 tiles across — the map viewport is
+/// about 45 x 25 tiles, so the nearest town is a median three screens off
+/// and a town is still never visible from the last one, which is the claim
+/// the spacing exists to make.
+///
+/// **Halved from 8 (256 tiles) after play read as too far to walk.** The
+/// measured median from the anchor to the nearest town went 147 tiles to
+/// 71, and the 90th percentile 227 to 102 — the tail is what was actually
+/// wrong, since a quarter of runs asked for a 200-tile hike before the
+/// player had met anyone. Every settlement radius is a fraction of
+/// `placement::REGION_TILES`, so this is close to a pure travel-time change:
+/// the share of worlds with a town inside `SETTLEMENT_GARRISON_RADIUS` is
+/// 39.6% at 4 chunks against 39.2% at 8. It is not *exactly* one, because
+/// `placement::REGION_EDGE_INSET` is flat and did not scale — see the
+/// 2026-09-06 follow-up in
+/// `docs/measurements/2026-09-05-settlement-aid-reach.md`, which records
+/// both sweeps and the predation share that fell with it.
+pub const SETTLEMENT_REGION_CHUNKS: i32 = 4;
 
 /// How likely a region is to hold a settlement at all, in percent.
 ///
@@ -3529,6 +3543,53 @@ pub const SETTLEMENT_GARRISON_MAX: u32 = 3;
 ///
 /// Measured — `docs/measurements/2026-09-05-settlement-aid-reach.md`.
 pub const SETTLEMENT_GARRISON_RADIUS: i32 = crate::settlements::placement::REGION_TILES / 2;
+
+/// How often a Hostile neighbour tries the party's stores — `Game::town_raid_check`.
+///
+/// **Half `RAID_CHANCE_PER_TICK`**, so an angry neighbour raises total raid
+/// pressure by half again rather than doubling it. The ambient sweep is
+/// weather; this is somebody's decision, and it should be the rarer of the
+/// two.
+pub const SETTLEMENT_RAID_CHANCE_PER_TICK: f64 = 0.006;
+
+/// How close a Hostile town has to be to the anchor to bother, in Chebyshev
+/// tiles.
+///
+/// **Equal to `SETTLEMENT_GARRISON_RADIUS` today, and deliberately its own
+/// constant.** The hostile half of the ladder must reach exactly as far as
+/// the friendly half or one band's consequence is geometrically rarer than
+/// the other's — but retuning aid must not silently retune hostility, so the
+/// equality is an argued coincidence rather than a shared symbol. See
+/// `docs/measurements/2026-09-05-settlement-aid-reach.md` for the 39%-of-
+/// worlds figure this inherits.
+pub const SETTLEMENT_RAID_RADIUS: i32 = crate::settlements::placement::REGION_TILES / 2;
+
+/// The share of the party's banked build currency a raid takes, in percent.
+pub const SETTLEMENT_RAID_HAUL_PERCENT: u32 = 10;
+
+/// How many percentage points each point of `Game::total_raid_defense` cuts
+/// off that share.
+///
+/// At 2, a maxed garrison (`SETTLEMENT_GARRISON_MAX`, 3) cuts 6 of the 10 —
+/// real relief, never immunity, which is the claim the `const _` in
+/// `settlements::relations` fails the *build* over. Two Shields plus a
+/// garrison do reach zero, because that is a thing the player built.
+pub const SETTLEMENT_RAID_DEFENSE_PER_POINT: u32 = 2;
+
+/// The least a raid that lands takes.
+///
+/// A percentage of a small bank rounds to zero, and a raid that takes
+/// nothing while still logging is the mechanic deleted rather than softened
+/// — `SETTLEMENT_GARRISON_MAX`'s failure, from the other side. Applied only
+/// after the share survives defense; see `Game::run_town_raid` for why that
+/// order is load-bearing.
+pub const SETTLEMENT_RAID_HAUL_FLOOR: u32 = 1;
+
+/// The most a raid takes, whatever the bank holds.
+///
+/// A percentage of a large bank scales without limit, which would make
+/// banking itself the punished behaviour. A rich base is bled, not gutted.
+pub const SETTLEMENT_RAID_HAUL_CAP: u32 = 40;
 
 /// How long a town waits between gifts — see `Game::request_program_gift`.
 ///

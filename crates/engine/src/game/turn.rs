@@ -234,6 +234,12 @@ impl Game {
         // in a sweep that is resolved the same tick it arrives.
         self.caravan_tick();
         self.raid_check();
+        // Immediately after the ambient sweep, so the two raid sources
+        // resolve in a fixed order and a tick that produces both reads as
+        // two events rather than an interleaving. After `caravan_tick` for
+        // the same reason `raid_check` is: a trader must not be caught
+        // standing in something resolved the tick it arrives.
+        self.town_raid_check();
         self.nest_respawn_tick();
         // Immediately after respawn: a guardian that just replaced a fallen
         // one at a besieged nest is already `Pursuing` (`nest_respawn_tick`

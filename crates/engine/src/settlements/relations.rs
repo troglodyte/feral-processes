@@ -96,6 +96,17 @@ const _: () = assert!(
         < crate::tuning::SETTLEMENT_RAID_HAUL_PERCENT
 );
 
+/// The haul floor is never above the cap.
+///
+/// `run_town_raid` bounds the haul with `clamp`, which **panics** when its
+/// two arguments are the wrong way round rather than saturating — so a
+/// retune that took the cap under the floor would not read as a bad number,
+/// it would crash a raid mid-run. A `const _` for the reason the two above
+/// give: closing this must fail the build.
+const _: () = assert!(
+    crate::tuning::SETTLEMENT_RAID_HAUL_FLOOR <= crate::tuning::SETTLEMENT_RAID_HAUL_CAP
+);
+
 /// The one banding. Ordered from the bottom so the thresholds read as the
 /// ladder they are.
 pub fn band(standing: i32) -> Standing {

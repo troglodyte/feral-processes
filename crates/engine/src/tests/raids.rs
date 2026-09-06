@@ -2212,7 +2212,6 @@ fn a_town_raid_names_the_town_that_sent_it() {
 /// ran it.
 #[test]
 fn a_town_raid_check_with_no_hostile_neighbour_costs_one_draw_and_no_more() {
-    use rand::Rng;
     let mut ran = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let mut untouched = Game::new(11, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     assert!(

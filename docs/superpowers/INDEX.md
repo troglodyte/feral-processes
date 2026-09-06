@@ -25,7 +25,7 @@ spec resolves to a release tag.
 
 | Spec | State | Evidence |
 | --- | --- | --- |
-| `2026-09-06-town-raids-and-hostile-patrols-design` | approved, **unbuilt** | `Standing::sends_raiders` and `TownPatrol` exist nowhere in `crates/`; two phases, 7a raids then 7b patrols |
+| `2026-09-06-town-raids-and-hostile-patrols-design` | 7a **built**, unplayed; 7b **unbuilt** | `Standing::sends_raiders`, `Game::raiding_towns` and `Game::town_raid_check` resolve in `crates/engine`; `TownPatrol` still exists nowhere |
 | `2026-09-02-combat-model-slice-2-design` | **built**, unplayed | a second swing for Strikers from level 8; `balance_sim` cannot gate it |
 | `2026-08-31-stack-wanderers-design` | approved, **unbuilt** | `FrameWanderers` exists nowhere in `crates/` |
 | `2026-08-24-rest-interruption-design` | never approved, **unbuilt** | `Game::rest_interrupted` does not exist |

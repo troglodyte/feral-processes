@@ -647,9 +647,10 @@ impl Game {
         let currency = self.currency();
         let money = self.item_name(&currency).to_string();
         let banked = self.banked(&currency);
-        let want = (banked * percent / 100)
-            .max(crate::tuning::SETTLEMENT_RAID_HAUL_FLOOR)
-            .min(crate::tuning::SETTLEMENT_RAID_HAUL_CAP);
+        let want = (banked * percent / 100).clamp(
+            crate::tuning::SETTLEMENT_RAID_HAUL_FLOOR,
+            crate::tuning::SETTLEMENT_RAID_HAUL_CAP,
+        );
         let player = self.player_entity();
         // `Inventory::take` is the third bound: it takes what is there and
         // reports it, so an empty store is an outcome rather than an

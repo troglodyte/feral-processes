@@ -33,6 +33,43 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.111
+
+**A town that hates you now sends people for your stores.** A settlement at
+`Hostile` standing, within half a region of your base, raids it on its own
+initiative — the first raid in the game with somebody behind it, where a GC
+Entropy Sweep is weather.
+
+**Raiders take rather than break.** They carry off a share of the banked
+salvage your base runs on and leave the machines standing, and the log line
+names the town that sent them. Bounded at both ends, so a thin bank still
+loses something and a rich one is bled rather than gutted.
+
+**Everything that turns a sweep away turns raiders away too.** Structures
+carrying raid defence and the garrison an allied neighbour stations both
+count, against one number — so the hostile and friendly ends of the standing
+ladder finally meet on the same axis. A maxed garrison alone softens a raid
+and can never stop one; a shield network can.
+
+**The town page says whether a hostile neighbour is near enough to trouble
+you.** The distance is a per-run coin flip, and a page silent about it reads
+as the band having no consequence at all.
+
+**Towns are half as far apart.** A settlement region is 128 tiles across
+rather than 256: measured over 2,000 worlds the median walk from your base to
+the nearest town falls from 147 tiles to 71, and the worst quarter from 227
+to 102. Every settlement radius is a fraction of the region, so they all
+moved with it and the odds of a neighbour close enough to garrison are
+unchanged.
+
+**A first-town-raid notification, separate from the sweep's.** The sweep is
+weather and this is a consequence; the same words would teach the wrong
+lesson.
+
+**None of this has been played.** It is green and unseen, and none of the
+numbers behind it are tuned — no instrument in this repo models raids, towns
+or loot.
+
 ## 0.13.110
 
 **A town can now actually turn on you.** `Hostile` sat fifty points below

@@ -33,6 +33,24 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.111
+
+**The key bar at the foot of the screen now names `<` and `>`.** They were
+the one crossing in the game with nothing on screen leading to them — the
+Stack's link wears a `>` on its own cell, and your base's way out is a Home
+that looks like every other structure.
+
+**One label for every locale**, so it reads `< > ascend/descend`: `<` is up
+and `>` is down whether you are stepping onto your base or into a stack.
+
+**`hjkl move` and `. wait` come off the bar to pay for it.** The arrow keys
+walk as well as `hjkl` does, so movement is the one verb you find without
+being told, and `.` does nothing inside your base at all. Dropping them
+bought room rather than costing it — `x examine` now survives at the
+smallest supported window, where it used to fall off the end.
+
+**None of this has been played.** It is green and unseen.
+
 ## 0.13.110
 
 **A town can now actually turn on you.** `Hostile` sat fifty points below

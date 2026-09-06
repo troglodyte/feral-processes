@@ -1,6 +1,8 @@
 # Program extraction
 
-**Status:** approved, unimplemented
+**Status:** phases 1, 2, 3 and 5 shipped; phase 4 (§10) approved,
+unimplemented. Git and `docs/superpowers/INDEX.md` are the authority on
+what landed — this line is a signpost, not a record.
 
 Kills stop paying materials directly. A defeated wild program is left as a
 carried, instanced **downed program**; carried **tools** extract materials,
@@ -304,10 +306,15 @@ Each is its own plan and its own release.
    level.
 3. **The base.** `extracts_programs` structure and its tier scaling; the
    routine category unified with `extract_routine`; sortie programs.
-4. **Automation.** The bulk work-order path: `Carrying`, `Stock`,
-   `collect::plan_adjacent_take` and work orders all become instance-aware.
-   Larger than 1-3 together, and deliberately last. Its cost is re-estimated
-   once 1-3 are real.
+4. **Automation.** The bulk path: a machine takes downed programs off your
+   hands and strips them while you are away. **Amended 2026-09-06, when
+   phase 4 was brainstormed: `Carrying`, `Stock`,
+   `collect::plan_adjacent_take` and work orders do *not* become
+   instance-aware, and work orders do not change at all.** This bullet
+   originally described making the whole production chain carry instances,
+   which is the one thing decision 2 exists to prevent. See §10, which is
+   the authority on this phase; this line is kept only so the amendment is
+   visible from the phase list.
 5. **The economy.** A gear-yielding extraction tool. **Amended 2026-09-05,
    when phase 5 was brainstormed: gear drops do *not* move behind
    extraction and `equipment_drops_for` does *not* retire.** The tool is
@@ -501,6 +508,293 @@ stacked with an armed buff pushes most candidates straight to the 1.0 clamp.
 Closing any gear door (9.2), the boss floor travelling with a downed
 program, `FIGHT_CONDITION_WEIGHT`, and a help page for extraction.
 
+## 10. Phase 4: the Teardown Rig
+
+Brainstormed 2026-09-06, and it changed the phase. §8's bullet described
+`Carrying`, `Stock`, `collect::plan_adjacent_take` and work orders all
+becoming instance-aware. None of that is what phase 4 does, and the bullet
+is amended above. Taken literally it would spend decision 2 — the seam
+`components.rs:477` states, that `Inventory` is *by definition* the
+plain-copy store, which is what lets recipes, `Stock`, `assembler_system`,
+hauling and banking read it with no instance rule. The loop the phase is
+actually for — fill the pack, come home, hand the kills over, go back out —
+does not need that seam spent.
+
+Six decisions, each against a named alternative that would otherwise look
+attractive on a fresh read.
+
+**10.1 A machine eats a queue; the chain never sees an instance.** The
+player loads a hopper on one structure; that machine strips programs over
+ticks and puts **plain items** into its `Stock::output`, where haulers,
+depots and `collect` already pick them up with no change whatever. Chosen
+against the §8 bullet's *instance-aware chain* — `Carrying` becoming
+item-or-program, `plan_adjacent_take` walking a second store, a work order
+naming an extraction — which is larger than phases 1-3 together, gives
+every existing reader of `Stock` and `Carrying` an instance case, and buys
+a kind of automation nobody asked for. Also chosen against a **standing
+order on the player's own store**, auto-extracting as turns pass: cheapest
+of the three, but it is a convenience key rather than automation, nothing
+about the base changes, and it makes the store cap less interesting rather
+than more.
+
+The consequence is the phase's load-bearing claim, and it is what every
+later reader should check a change against: **a `DownedProgram` exists in
+exactly two places, the player's pack and one machine's private hopper.**
+Anything that would put one anywhere else is out of phase 4 by
+construction.
+
+**10.2 Work orders do not change.** `producers_of` keys on
+`produced_item(def)`, a fixed item per machine. A rig's output varies by
+tool and by species, so it can declare none, and no work order can target
+it. That is correct rather than a gap: "hold 3 Core Fragments" must not
+make the base go and kill things. The phase keeps the name *automation* and
+loses *the work-order path*.
+
+**10.3 A new structure, not a fourth job on the Compiler.** The Compiler
+already assembles ICE Breakers off a posted worker, extracts routines from
+an owned program, and speeds and enriches manual teardown; a fourth errand
+is where a machine stops reading as one thing, and it forces a rationing
+rule between two jobs on one worker that has to be explained on a screen.
+Chosen against all three ways to ration that worker — *extraction
+pre-empts assembly* (a player dumps ten programs and quietly stalls their
+ICE Breaker line), *assembly first and extraction fills idle time* (a
+well-fed Compiler never touches the hopper, so the feature reads as broken
+on exactly the base that is running well), and *a second posted worker*
+(nothing today distinguishes two workers posted to one machine, so
+`TaskKind` or the posting door has to grow a way to say which errand).
+
+A separate structure dissolves the question instead of answering it, and
+costs one asset, one research node, and no new mechanic: staffing, power,
+upgrade, status and the output buffer are all existing machinery.
+
+**The Compiler keeps `extracts_programs`.** The rig carries it too.
+`standing_extraction_bench` already takes the max tier across every flagged
+structure — "a mod's second one standing at a higher tier is what this
+exists for" — so manual extraction simply gains a second possible bench.
+Moving the flag *off* the Compiler would silently downgrade manual
+extraction for any run in progress that has been upgrading one.
+
+**10.4 Only pool-yielding tools may be queued.** `Routines` grants
+knowledge and `Gear` grants a `GearCopy`; neither is a plain item, so
+neither can land in a `Stock::output`, and both would need a second,
+player-facing hand-back door to be worth anything. Both refuse at the
+deposit with a line and stay hand work. Chosen against **holding the
+result until the player next visits**, which is that second door in
+disguise and puts a `GearCopy` in a machine — the thing 10.1 forbids.
+
+**10.5 The rig steps in a `&mut Game` pass, not a bevy system.** This is
+forced rather than chosen. `Game::extraction_yield` and
+`Game::extraction_ticks` are `&Game` methods folding perks, `SpeciesDb`,
+`ItemDb` and `best_structure_tier`; a bevy system cannot call them and
+would have to re-derive the formula, which is exactly the crack §3's "one
+derivation" exists to prevent. `run_teardown_rigs` joins `turn.rs`'s
+existing `run_dig_crew` / `run_build_crew` / `run_repair_bays` /
+`run_sorties` / `run_routes` family, so the rig calls the same two
+functions the player's own extraction calls and an automated yield and a
+previewed one cannot differ.
+
+**10.6 Two verbs on the screen that already exists.** `Mode::
+DownedPrograms` is already a two-page shape — the list, then one program's
+tool-and-yield page. Loading is a second verb on the same pages rather than
+a screen of its own. Chosen against **a load screen on the rig**,
+`transfer.rs`'s two-sided shape, which shows the queue best and lets a
+program be pulled back out, but costs a new `Mode` (which ships as a blank
+screen until every draw arm is written), a second place the tool preview
+lives, and a height census of its own. Also chosen against **bulk-only**,
+which is one fewer key to document but costs the mixed case: a player who
+wants the Prismatic level-30 stripped by hand and the rest fed to the rig
+would have to extract that one first.
+
+### The machine
+
+`assets/structures/teardown_rig.ron` — the **Teardown Rig**, borrowing the
+vocabulary `Perk::Teardown` already established. Ordinary structure schema
+throughout: `build_cost`, `capacity` (its `Stock::output`), `power_draw`,
+`upgrade: Some((max_tier: 5, ...))`, and `extracts_programs: true` so it is
+a manual bench as well.
+
+One new schema field, mirroring `assembles: Option<AssembleDef>` rung for
+rung — decision 6's rule that a second shape for the same idea is a second
+thing to get wrong:
+
+```rust
+// crates/engine/src/structures.rs, beside `assembles`
+#[serde(default)]
+pub strips: Option<StripDef>,
+
+pub struct StripDef {
+    /// How many downed programs the hopper holds.
+    pub hopper: u32,
+}
+```
+
+The hopper size is authored per machine rather than living in `tuning.rs`,
+for `StructureDef::capacity`'s reason: it is how big *this* box is, and a
+modder's second rig should be able to differ.
+
+Unlocked by `assets/research/teardown.ron`, `requires: ["automation"]` —
+the node that already unlocks the Compiler.
+
+`build_cost`, `power_draw`, `capacity`, `hopper` and the research `cost`
+are guessed numbers, like every other structure's and every tool's
+`forge_cost`, and the asset says so in its own comment. They are the first
+thing a play session should push on, and none of them is load-bearing on
+anything above.
+
+Two plan-time censuses, flagged rather than discovered: a free glyph and
+colour for the rig, and whether `idle_machine_system` reaches a machine
+declaring `strips` and neither `work` nor `assembles`. A new gated branch
+shipping green and unreachable is a trap this repo has hit.
+
+### The store and the deposit
+
+```rust
+// crates/engine/src/components.rs
+pub struct Hopper {
+    pub queue: Vec<HopperEntry>,
+    /// Ticks spent on the head entry.
+    pub progress: u64,
+}
+pub struct HopperEntry { pub program: DownedProgram, pub tool: ToolId }
+```
+
+A named struct, never a tuple: `WorkOrder`'s own doc records that RON parses
+a `(` in a struct position as named fields, so a `Vec<(A, B)>` can never be
+widened, and two shipped fields (`PlayerSave::fused_gear`,
+`SaveData::buyback`) had to be drained into named successors already.
+
+One door, bulk-shaped so the per-row verb and the bulk verb share one set of
+refusals — `commit_caravan_basket`'s rule that every refusal lands before
+anything is spent:
+
+```
+Game::load_teardown_rig(indices: &[usize], tool: &ToolId) -> Result<(), String>
+```
+
+Refusals in order: the run is over or a battle is active; the party is not
+in base or no rig is adjacent; the tool is not installed; the tool's
+category is `Routines` or `Gear`; the hopper has no room at all; `indices`
+names no held program.
+
+**An over-ask is clamped, not refused** — `take_from_adjacent`'s own rule.
+A bulk load of ten into a hopper with six free slots takes six and leaves
+four in the pack, saying so in the line. Nothing is destroyed, decision 9.
+
+Adjacency rather than ownership, unlike `can_extract_routines`: this is a
+physical handover, and `take_from_adjacent` / `give_to_adjacent` are the
+rule for those.
+
+### The screen
+
+No new `Mode`. Both verbs land on `Mode::DownedPrograms`' existing two
+pages, and both are **uppercase**: lowercase letters are row selectors
+everywhere in this game, and a new action bound to one would make a single
+keypress both pick a row and fire it.
+
+- **On the tool page**, lowercase still extracts that program by hand,
+  unchanged. Uppercase on the same row queues that one program with that
+  tool instead.
+- **On the list page**, `L` opens the tool page in *bulk intent* — a flag
+  on the page, not a second page — where picking a tool row queues every
+  held program with it. The header says which intent is showing, because
+  the row keys mean different things under each.
+
+So the dump-and-go flow is four keys: walk to the rig, `D`, `L`, one tool
+key.
+
+Loading costs whatever turn `transfer_items` charges for a handover, and
+for its reason — handing cargo across is the same errand. It is not priced
+in `extraction_ticks`: the rig pays those, not the player, and charging
+both would make automation cost more than doing it by hand.
+
+The list page's rows are unchanged in count and shape, so
+`MAX_DOWNED_PROGRAMS`' existing no-scroll height census still covers it.
+Any hint line the bulk header adds is new height on a page that has none to
+spare, so it goes through that census rather than around it.
+
+### The step
+
+`Game::run_teardown_rigs`, per 10.5. Rigs are walked **in tile order** —
+bevy's query iteration order is not stable, and `assembler_system` and
+`run_repair_bays` both sort for this reason.
+
+Per rig, the gates mirror `assembler_system`'s, each writing `MachineStatus`
+on the transition alone (`set_machine_status`' rule that entering a state is
+news and staying in it is not):
+
+- dark on the Grid — skip, writing no status, `assembler_system`'s own
+  handling
+- no posted worker — `Unstaffed`
+- empty queue — nothing, since `Idle` belongs to `idle_machine_system`
+- otherwise `Running`
+
+Then `progress += 1`, and the head entry completes when `progress` reaches
+`Game::extraction_ticks(&tool)` — the same derivation the player's own
+extraction is priced by, so upgrading the rig speeds its own work through
+the bench term it supplies itself.
+
+**The completion gate is `output_room() >= the yield's total`, not `> 0`.**
+The assembler can use `> 0` because it makes one unit at a time; a program
+pays several, and clamping to the room available would destroy units. A rig
+that cannot hold the whole payout **holds the program** and reads `Clogged`.
+
+One log line per completed program, unlike the assembler, which logs no
+per-unit line. The reason they differ: an ICE Breaker is a known constant
+output, and each program's yield is unique, unrepeatable information the
+player has no other record of.
+
+The rig runs while the party is in a zone. `run_repair_bays` gates only on
+game over and an active battle, and that is the entire loop: fill the pack,
+come home, load the rig, go back out.
+
+### Save
+
+`Hopper` is additive on the structure entity, `#[serde(default)]`, and
+there is **no `SAVE_FORMAT_VERSION` bump** — §5's rule, and phases 1-3's
+practice. A RON round-trip cannot see a `#[serde(skip)]` field, so the
+hopper gets a real save-then-load test covering the queue and `progress`
+both.
+
+### Testing
+
+Censuses in `tests/assets.rs`, each failing the build:
+
+- `teardown_rig` resolves and its `strips.hopper` is non-zero
+- the research node's `unlocks_structures` resolves
+- anything declaring `strips` has a non-zero output `capacity`
+
+Engine tests:
+
+- every refusal path spends nothing — asserted **per refusal**, §7's rule,
+  since one test over one path passes against the others
+- the identity: what a rig produces for a `(program, tool)` pair equals
+  `extraction_yield`'s quote for the same pair. This is §3's invariant
+  applied to the third caller, and it fails loudly the day anyone
+  re-derives the formula inside the rig
+- a bulk load into a nearly-full hopper clamps, and the remainder is still
+  in the pack afterwards
+- no posted worker, no power, and a clogged output each advance nothing
+- the completion gate: a rig whose output cannot hold the whole yield holds
+  the program rather than dropping units
+- a `Routines` or `Gear` tool refuses at the deposit
+- a save-then-load preserves a loaded hopper, queue and `progress` both
+- a reachability census that the `strips` arm is actually reached
+
+app-core tests:
+
+- the bulk verb queues **every** held program, not the selected one
+- the per-row verb queues exactly one and leaves the rest in the pack
+- the new uppercase keys collide with no row selector on either page, and
+  a lowercase key on the tool page still extracts by hand
+
+### Not in phase 4
+
+Instance-aware `Carrying`, `Stock` and `plan_adjacent_take`, and any change
+to work orders — retired from the phase by 10.1 and 10.2, and recorded here
+so nobody rebuilds them later off the old bullet. A worker hauling programs
+to the rig: the player carries them. Pulling a program back out of a loaded
+hopper. And the tuning questions, which want a play session.
+
 ## Open, deliberately
 
 - Whether the fight axis (`FIGHT_CONDITION_WEIGHT`) is worth turning on.
@@ -515,8 +809,17 @@ program, `FIGHT_CONDITION_WEIGHT`, and a help page for extraction.
   *derived* from species and grade — the "derived, never stored" rule — so
   no save field is added now and none is needed then. Whatever replaces the
   cap keeps decision 9's refusal: a full pack refuses the drop and destroys
-  nothing already held.
-- Phase 4's real cost.
+  nothing already held. **Amended 2026-09-06: the cap stays a count, and
+  phase 4 is what you do about it.** The Teardown Rig is the pressure valve
+  the flat cap was uncomfortable without, so the move to a weight budget is
+  no longer the obvious next step — it wants a play session that finds the
+  count wanting even with a rig standing.
+- **Phase 4's real cost.** Answered 2026-09-06 by §10, and it is far below
+  the §8 bullet's estimate of "larger than 1-3 together": one structure
+  asset, one research node, one `StructureDef` field, one component, one
+  `&mut Game` pass joining an existing family, one engine door, and two
+  verbs on a screen that already exists. The saving is decision 10.1 — the
+  chain never sees an instance, so nothing outside the rig changes.
 - **Which gear doors close.** Confirmed 2026-09-05: none, for now. Phase 5
   ships a Gear tool alongside every existing door rather than in place of
   any (§9.2), which raises the gear rate on an extracted program by the

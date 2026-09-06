@@ -54,6 +54,18 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-09-06 — How many ticks a run actually reaches](2026-09-06-run-length.md)
+  — The anchor for `SETTLEMENT_GROWTH_DUE_MIN`/`_MAX`. Every shipped dev-save
+  template sits at tick **5344-6944**, which is a *floor* on a mature run and
+  not an estimate of one: templates are driven to their state by engine-side
+  doors, so they spend none of the ticks a player spends walking, resting and
+  reading screens. Growth's span is set at **3000-12000** against it — `_MIN`
+  below the maturity floor so the earliest towns grow ambiently, and still
+  1.7x `SETTLEMENT_BOARD_ROTATION_TICKS`, the longest *recurring* cadence
+  shipped; `_MAX` at twice the floor so the upper half of the span grows only
+  if the player trades it forward. Leaves open the one question that would
+  falsify it: how long a real session runs.
+
 - [2026-09-05 — Do the settlement aid radii reach anything?](2026-09-05-settlement-aid-reach.md)
   — Both were dead by geometry. Towns were derived one per 256-tile region at
   the time, so the median nearest town was **147 tiles** from the anchor

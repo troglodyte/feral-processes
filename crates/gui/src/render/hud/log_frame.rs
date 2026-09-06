@@ -244,14 +244,27 @@ fn divider() -> Vec<Piece> {
 /// dropped.
 ///
 /// **The order is priority, not the handoff's reading order, and the census
-/// is why.** `the_keybar_fits_the_log_pane` measured twelve segments fitting
-/// at 1280x720 and thirteen at 1920x1080 — the bar is near enough
-/// size-invariant, because `ui_metrics` ramps the face with the window. Under
-/// the handoff's own order that put `? help` and `q menu` past the cut, which
-/// strands every key this bar had to drop. So movement and the three screens
-/// that hold the rest come first, and the answer to the spec's open question
-/// is **no**: there is no slack for `t trade` or `s save` at any supported
-/// size, and they stay cut exactly as the handoff had them.
+/// is why.** `the_keybar_fits_the_log_pane` measures what survives at the
+/// smallest supported window; the bar is near enough size-invariant, because
+/// `ui_metrics` ramps the face with the window. Under the handoff's own order
+/// `? help` and `q menu` fell past the cut, which strands every key this bar
+/// had to drop. So the crossing pair and the three screens that hold the rest
+/// come first, and the answer to the spec's open question is **no**: there is
+/// no slack for `t trade` or `s save` at any supported size, and they stay cut
+/// exactly as the handoff had them.
+///
+/// **`hjkl move` and `. wait` are deliberately not here.** Arrow keys walk as
+/// well as `hjkl` does, so movement is the one verb a player finds without
+/// being told, and `.` does nothing in base space at all
+/// (`App::handle_playing_key`). The row they cost was spent on `<>` instead:
+/// that pair is the only crossing in the game with no glyph on the map
+/// leading to it — the Stack's link wears a `>` on its own cell, and base
+/// space's way out is a Home that looks like every other structure.
+///
+/// **One label for all three locales**, which is why it reads
+/// `ascend/descend` rather than naming the base: `<` is up and `>` is down
+/// whether the party is stepping onto their base or into a stack, and the
+/// keys carry that direction before they carry a role.
 ///
 /// `SPACE` (expand/collapse this pane, see `App::log_expanded`) is not a
 /// segment here for the same reason: at 60.5px of slack left over at
@@ -260,8 +273,7 @@ fn divider() -> Vec<Piece> {
 /// nothing else on the census requires. `?` is still where it is discovered.
 fn keybar_segments() -> Vec<Vec<Piece>> {
     vec![
-        keycap("hjkl", "move"),
-        keycap(".", "wait"),
+        keycap("< >", "ascend/descend"),
         divider(),
         keycap("b", "base"),
         keycap("i", "pack"),
@@ -431,12 +443,13 @@ mod tests {
     /// The smallest window the design is stated against.
     const SMALLEST: (f32, f32) = (1280.0, 720.0);
 
-    /// What the keybar may never drop, whatever the window. Movement,
-    /// because nothing else on the screen says how to walk; the two screens
-    /// that hold the rest of the verbs; and `?`, which is where every key
-    /// this bar had to cut now lives. A bar that drops `?` strands the
-    /// eighteen keys the four-line block used to name.
-    const ESSENTIAL: [&str; 6] = ["hjkl", "move", "b base", "i pack", "? help", "q menu"];
+    /// What the keybar may never drop, whatever the window. The pair that
+    /// crosses between the three locales, because it is the only one with
+    /// nothing on the map leading to it; the two screens that hold the rest
+    /// of the verbs; and `?`, which is where every key this bar had to cut
+    /// now lives. A bar that drops `?` strands the keys the four-line block
+    /// used to name — and `hjkl` is one of those now.
+    const ESSENTIAL: [&str; 5] = ["< > ascend/descend", "b base", "i pack", "? help", "q menu"];
 
     fn entry(kind: MessageKind, source: MessageSource) -> LogEntry {
         LogEntry {
@@ -1289,6 +1302,9 @@ mod tests {
         assert!(text.contains("a line"), "no log line: {text}");
         assert!(text.contains("Nothing to collect."), "no refusal: {text}");
         assert!(text.contains("LOG"), "no filter strip: {text}");
-        assert!(text.contains("move"), "no keybar: {text}");
+        // The bar's first segment, which `keybar_segments` orders first
+        // precisely so it is the one that never falls past the cut — so this
+        // is the token to look for whatever the pane's width.
+        assert!(text.contains("ascend/descend"), "no keybar: {text}");
     }
 }

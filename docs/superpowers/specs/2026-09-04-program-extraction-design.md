@@ -418,9 +418,12 @@ figure instead.
 Two deliberate divergences from `equipment_drops_for`:
 
 1. **`gear_chances` clamps to 1.0 inside.** Its source returns chances
-   unclamped on purpose, because its one caller clamps before rolling. This
-   one has two callers — the preview and the pull — and a value clamped
-   twice in two places is a crack they could differ through.
+   unclamped on purpose, because each of its *drop* callers clamps before
+   rolling. (Corrected 2026-09-05: that sentence said "its one caller" —
+   `equipment_drops_for` has three callers now, `award_loot`, the nest
+   cache and `gear_chances` itself.) This one has two callers — the preview
+   and the pull — and a value clamped twice in two places is a crack they
+   could differ through.
 2. **Grade and level do not enter.** `program.grade()` already sells
    materials in `extraction_yield`. Leaving it out of the chance is what
    makes "baseline is the authored chance" literally true rather than

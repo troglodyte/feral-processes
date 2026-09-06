@@ -154,7 +154,7 @@ pub(super) fn extraction_options_rows(game: &Game, index: usize, selected: usize
             ExtractionPreview::Chances(chances) => {
                 let outcome = chances
                     .iter()
-                    .map(|(name, chance)| format!("{name} {}%", (chance * 100.0).round() as u32))
+                    .map(|(name, chance)| format!("{name} {:.0}%", chance * 100.0))
                     .collect::<Vec<_>>()
                     .join(", ");
                 (format!("{head_prefix} {ticks_suffix}"), continuation_lines(&outcome))

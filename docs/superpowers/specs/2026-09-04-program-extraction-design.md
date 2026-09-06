@@ -418,8 +418,14 @@ bench would read identically to a fresh one), and against a **banded
 phrase** in the game's own vocabulary, which costs a banding table and hides
 any change that does not cross a boundary.
 
-**This is the first raw percentage on any screen in the game.** Noted as a
-precedent, not smuggled in.
+**Corrected 2026-09-05, during implementation.** This paragraph originally
+claimed a percentage would be the first on any screen in the game. It is
+not: `render/battle.rs` already prints decompile odds as `{:.0}%`, and
+`render/inventory.rs` prints a hit chance the same way. What is true is
+narrower — it is the first on an *extraction* screen, and it follows the
+formatting convention those two already set rather than inventing one. The
+reason for a number rather than a name list stands unchanged: an upgraded
+Compiler must not read identically to a fresh one.
 
 ### The act
 

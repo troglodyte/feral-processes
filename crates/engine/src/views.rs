@@ -2616,9 +2616,10 @@ pub enum ExtractionPreview {
     /// figure and the rolled one are one value rather than two. Tier
     /// scaling and any running `DropBoost` are already in these numbers.
     ///
-    /// **The first raw percentages on any screen in the game** (spec §9.6),
-    /// chosen over a name-only list because an upgraded Compiler must not
-    /// read identically to a fresh one.
+    /// The first raw percentages on an *extraction* screen (spec §9.6) —
+    /// `battle.rs` and `inventory.rs` already print odds elsewhere in the
+    /// game — chosen over a name-only list because an upgraded Compiler
+    /// must not read identically to a fresh one.
     Chances(Vec<(String, f32)>),
 }
 

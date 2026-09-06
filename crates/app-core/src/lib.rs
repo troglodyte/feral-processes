@@ -2162,6 +2162,17 @@ pub struct App {
     /// that row. Session state, not save state — cleared on Esc or on an
     /// extraction attempt of either outcome, never carried past the mode.
     pub pending_downed_program_index: Option<usize>,
+    /// Whether `Mode::DownedPrograms`' tool page is showing *bulk* intent —
+    /// entered with `L` from the list, where a tool row queues every held
+    /// program at the adjacent Teardown Rig instead of extracting one by
+    /// hand.
+    ///
+    /// A flag on the page rather than a second page: the rows are the same
+    /// rows and the preview is the same preview, and only what a row key
+    /// *means* changes — which is what the header says. Cleared on every
+    /// exit from the page, so a bulk load cannot leak into the next hand
+    /// extraction. Session state, `pending_downed_program_index`'s reason.
+    pub downed_programs_bulk: bool,
     /// What is on offer, snapshotted when the transfer picker opens — one
     /// row per item, carrying what the adjacent shelves hold of it and what
     /// the pack could put back.

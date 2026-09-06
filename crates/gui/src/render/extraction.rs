@@ -15,13 +15,14 @@ use feral_processes_engine::views::ExtractionPreview;
 pub(super) fn draw_downed_programs(
     game: &Game,
     pending_index: Option<usize>,
+    bulk: bool,
     selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
     match pending_index {
-        Some(index) => draw_extraction_options(game, index, selected, refusal, painter, m),
+        Some(index) => draw_extraction_options(game, index, bulk, selected, refusal, painter, m),
         None => draw_downed_program_list(game, selected, refusal, painter, m),
     }
 }
@@ -60,6 +61,14 @@ pub(super) fn downed_program_list_rows(game: &Game, selected: usize) -> Vec<Row>
         rows.push(tier_row(label, i == selected, 0, p.rarity));
     }
     rows.push(text_row(""));
+    // Only when a rig is actually standing beside the party: a key hint the
+    // player cannot act on reads as a broken binding, and adjacency is what
+    // `Game::load_teardown_rig` refuses on.
+    if !programs.is_empty() && game.adjacent_teardown_rig().is_some() {
+        rows.push(text_row(
+            "[L] hand the whole store to the Teardown Rig beside you",
+        ));
+    }
     rows.push(text_row("Esc to go back"));
     rows
 }
@@ -88,7 +97,12 @@ fn draw_downed_program_list(
 /// here. Phase 1 zipped the option list against `installed_tools()` to reach
 /// a display name; the name rides the row now, so the renderer holds one
 /// sequence rather than two that had to stay in step.
-pub(super) fn extraction_options_rows(game: &Game, index: usize, selected: usize) -> Vec<Row> {
+pub(super) fn extraction_options_rows(
+    game: &Game,
+    index: usize,
+    bulk: bool,
+    selected: usize,
+) -> Vec<Row> {
     let programs = game.downed_program_rows();
     let Some(program) = programs.get(index) else {
         return vec![text_row("That program is gone.")];
@@ -105,14 +119,37 @@ pub(super) fn extraction_options_rows(game: &Game, index: usize, selected: usize
         None => "No extraction bench standing.".to_string(),
     };
 
-    let mut rows = vec![
-        text_row(format!(
-            "Extracting the level {} {} (condition {}%).",
-            program.level, program.name, program.condition
-        )),
-        text_row(bench),
-        text_row(""),
-    ];
+    // **The header is the whole difference between the two intents**, since
+    // the rows, the shortcuts and the previews below are identical under
+    // both. A player who cannot tell them apart would hand the rig a program
+    // they meant to strip by hand, or the reverse.
+    let mut rows = if bulk {
+        vec![
+            text_row(format!(
+                "Loading the Teardown Rig with all {} held programs — pick the tool it uses.",
+                programs.len()
+            )),
+            // The figures below are one program's. Said out loud rather than
+            // recomputed per program: a bulk load can carry ten different
+            // levels and rarities, and a summed preview would quote a number
+            // that no single strip ever pays.
+            text_row(format!(
+                "Figures are for the level {} {}; each program pays its own.",
+                program.level, program.name
+            )),
+            text_row(bench),
+            text_row(""),
+        ]
+    } else {
+        vec![
+            text_row(format!(
+                "Extracting the level {} {} (condition {}%).",
+                program.level, program.name, program.condition
+            )),
+            text_row(bench),
+            text_row(""),
+        ]
+    };
     if options.is_empty() {
         rows.push(text_row("No tool is installed."));
     }
@@ -176,6 +213,14 @@ pub(super) fn extraction_options_rows(game: &Game, index: usize, selected: usize
         }
     }
     rows.push(text_row(""));
+    // `Q` is the per-row half of `L` on the list, and it is offered only
+    // under hand intent: under bulk every row already loads the rig, so a
+    // second key for it would say nothing.
+    if !bulk && !options.is_empty() && game.adjacent_teardown_rig().is_some() {
+        rows.push(text_row(
+            "[Q] hand this one to the Teardown Rig beside you",
+        ));
+    }
     rows.push(text_row("Esc to go back"));
     rows
 }
@@ -183,12 +228,13 @@ pub(super) fn extraction_options_rows(game: &Game, index: usize, selected: usize
 fn draw_extraction_options(
     game: &Game,
     index: usize,
+    bulk: bool,
     selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
-    let rows = extraction_options_rows(game, index, selected);
+    let rows = extraction_options_rows(game, index, bulk, selected);
     draw_popup(
         "Downed Programs",
         PopupSize::Large,
@@ -263,7 +309,7 @@ mod tests {
         seed: u32,
         held: Vec<DownedProgram>,
         tools: Option<Vec<ToolId>>,
-        bench: Option<(String, u32)>,
+        bench: Option<(String, u32, (i32, i32))>,
     ) -> Game {
         static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -279,12 +325,16 @@ mod tests {
         if let Some(tools) = tools {
             data.player.tools = tools;
         }
-        if let Some((kind, tier)) = bench {
-            // `extraction_bench_tier` asks only whether one is standing
-            // anywhere, so the tile it lands on is arbitrary.
+        // Base space, standing on `(0, 0)`. `extraction_bench_tier` does not
+        // care where the party is, but `Game::adjacent_teardown_rig` does —
+        // and the two rig key hints only draw when it answers `Some`, so a
+        // fixture on the surface would measure a page a rig owner never
+        // sees.
+        data.locale = feral_processes_engine::resources::Locale::Base { x: 0, y: 0 };
+        if let Some((kind, tier, position)) = bench {
             data.structures.push(save::StructureSave {
                 kind,
-                position: (0, 0),
+                position,
                 durability: None,
                 tier: Some(tier),
                 stock_input: Vec::new(),
@@ -316,7 +366,16 @@ mod tests {
         let species = widest_species_id(&probe);
         let rarity = widest_rarity();
         let held = vec![program(&species, 999, rarity); MAX_DOWNED_PROGRAMS];
-        game_holding_downed_programs(9700, held)
+        // A rig orthogonally east of the party, so the `[L]` hint row is in
+        // the count. It is the tallest case: the hint draws only when one is
+        // standing beside you, and a fixture without one would be a row short
+        // of what a rig owner's screen actually builds.
+        game_with_state(
+            9700,
+            held,
+            None,
+            Some(("teardown_rig".to_string(), 1, (1, 0))),
+        )
     }
 
     /// Every shipped tool id, catalogue order — cycled into the slots below
@@ -368,7 +427,11 @@ mod tests {
         let tools = (0..TOOL_SLOT_CAP as usize)
             .map(|i| shipped[i % shipped.len()].clone())
             .collect();
-        game_with_state(9702, held, Some(tools), widest_bench(&probe))
+        // Beside the party, so the `[Q]` hint row joins the count — and the
+        // widest bench *is* the Teardown Rig, so the long header line and
+        // the hint are the same structure standing.
+        let bench = widest_bench(&probe).map(|(kind, tier)| (kind, tier, (1, 0)));
+        game_with_state(9702, held, Some(tools), bench)
     }
 
     /// This page has no scroll (spec section 6), so its height is a layout
@@ -425,7 +488,7 @@ mod tests {
     #[test]
     fn the_tallest_extraction_options_page_fits_its_popup_at_1280x720() {
         let game = tallest_and_widest_options_game();
-        let rows = extraction_options_rows(&game, 0, 0).len();
+        let rows = extraction_options_rows(&game, 0, false, 0).len();
         let m = ui_metrics(720.0);
         let cap = popup_max_rows(720.0, PopupSize::Large, &m);
         assert!(
@@ -437,7 +500,7 @@ mod tests {
     #[test]
     fn no_extraction_options_row_overflows_the_popup_body_at_1280x720() {
         let game = tallest_and_widest_options_game();
-        let rows = extraction_options_rows(&game, 0, 0);
+        let rows = extraction_options_rows(&game, 0, false, 0);
         let m = ui_metrics(720.0);
         let body = popup_body_width(1280.0, PopupSize::Large, &m);
         crate::paint::with_painter(|p| {
@@ -451,6 +514,59 @@ mod tests {
                 );
             }
         });
+    }
+
+    /// The two height censuses above are only worth their fixtures if the
+    /// hint rows are really in them — a rig that failed to stand would make
+    /// both measure a page one row shorter than a rig owner's, silently.
+    #[test]
+    fn the_worst_case_fixtures_really_draw_the_rig_hints() {
+        let list = tallest_and_widest_list_game();
+        assert!(
+            list.adjacent_teardown_rig().is_some(),
+            "the list fixture must stand a rig beside the party"
+        );
+        assert!(
+            downed_program_list_rows(&list, 0)
+                .iter()
+                .any(|r| row_label_text(r).contains("[L]")),
+            "the list's worst case must include the [L] hint row"
+        );
+
+        let options = tallest_and_widest_options_game();
+        assert!(
+            extraction_options_rows(&options, 0, false, 0)
+                .iter()
+                .any(|r| row_label_text(r).contains("[Q]")),
+            "the tool page's worst case must include the [Q] hint row"
+        );
+    }
+
+    /// **The header is the only thing that tells the two intents apart**, so
+    /// a player who reads it wrong hands the rig a program they meant to
+    /// strip by hand. Asserted as a difference rather than against a literal
+    /// string, and with `[Q]` gone under bulk — every row already loads the
+    /// rig there, so a second key for it would say nothing.
+    #[test]
+    fn bulk_intent_says_so_in_the_header_and_drops_the_per_row_hint() {
+        let game = tallest_and_widest_options_game();
+        let hand = extraction_options_rows(&game, 0, false, 0);
+        let bulk = extraction_options_rows(&game, 0, true, 0);
+
+        assert_ne!(
+            row_label_text(&hand[0]),
+            row_label_text(&bulk[0]),
+            "the two intents must not open with the same line"
+        );
+        assert!(row_label_text(&bulk[0]).contains("Teardown Rig"));
+        assert!(
+            hand.iter().any(|r| row_label_text(r).contains("[Q]")),
+            "hand intent offers the per-row rig key"
+        );
+        assert!(
+            !bulk.iter().any(|r| row_label_text(r).contains("[Q]")),
+            "bulk intent does not — every row already loads the rig"
+        );
     }
 
     /// The list and the tool page must agree with what the engine actually
@@ -503,7 +619,7 @@ mod tests {
             Some(vec![ToolId("harness_puller".to_string())]),
             None,
         );
-        let rows = extraction_options_rows(&game, 0, 0);
+        let rows = extraction_options_rows(&game, 0, false, 0);
         let head_index = rows
             .iter()
             .map(row_label_text)

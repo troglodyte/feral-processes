@@ -813,6 +813,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     let manifest_origin = app.manifest_origin;
     let pending_field_routine = app.pending_field_routine;
     let pending_downed_program = app.pending_downed_program_index;
+    let downed_programs_bulk = app.downed_programs_bulk;
     let pending_structure = app.pending_structure.clone();
     let pending_item = app.pending_inventory_item.clone();
     let pending_inspect = app.pending_inspect.clone();
@@ -1137,7 +1138,15 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         }
         Mode::ItemDescribe => draw_gear_inspect(game, pending_inspect.clone(), refusal, painter, m),
         Mode::DownedPrograms => {
-            draw_downed_programs(game, pending_downed_program, selected, refusal, painter, m)
+            draw_downed_programs(
+                game,
+                pending_downed_program,
+                downed_programs_bulk,
+                selected,
+                refusal,
+                painter,
+                m,
+            )
         }
         Mode::Tools => draw_tools(game, selected, refusal, painter, m),
         Mode::Companion => draw_companion_menu(game, selected, refusal, painter, m),

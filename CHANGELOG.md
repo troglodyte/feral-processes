@@ -33,6 +33,19 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.112
+
+**The manual has a page on taking a program apart.** What a kill leaves and
+where it goes, the ten your store holds and what a full one turns away, the
+five tools and what each of them reaches for, what the screen quotes before
+you spend a body, and what a Compiler is worth standing against upgraded.
+
+**Research Data never comes out of a downed program, through any tool.**
+Research is earned by running a Research Node, and a body is not a shortcut
+past it. Nothing that ships could have paid it out, so no run you have
+played changes — the rule is there for what gets authored next, mods
+included.
+
 ## 0.13.111
 
 **The key bar at the foot of the screen now names `<` and `>`.** They were

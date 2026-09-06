@@ -7,7 +7,7 @@
 //! `docs/superpowers/specs/2026-09-04-program-extraction-design.md`.
 
 use super::support::*;
-use crate::components::Tools;
+use crate::components::{Hopper, HopperEntry, Tools};
 use crate::items::DownedProgram;
 use crate::tools::{ToolCategory, ToolDb, ToolDef, ToolId};
 use crate::*;
@@ -3076,3 +3076,391 @@ fn a_gear_pull_never_quotes_research_currency() {
         "research currency reached a gear quote: {quoted:?}"
     );
 }
+
+// Phase 4, task 2: `components::Hopper` on a built rig, and in the save.
+
+/// A rig spawned without a `Hopper` refuses every deposit and strips
+/// nothing, silently — `spawn_machine_at`'s own doc warns about exactly
+/// this class of short fixture.
+#[test]
+fn a_built_rig_carries_an_empty_hopper() {
+    let mut game = Game::new(4120, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let rig = spawn_machine_at(&mut game, "teardown_rig", 3, 3);
+    let hopper = game
+        .world
+        .get::<Hopper>(rig)
+        .expect("a rig that strips should carry a hopper");
+    assert!(hopper.queue.is_empty());
+    assert_eq!(hopper.progress, 0);
+}
+
+/// A RON round trip cannot see a `#[serde(skip)]`, so the hopper's
+/// persistence is asserted through a real save and load —
+/// `a_tool_loadout_survives_a_save_load_round_trip`'s own reason.
+#[test]
+fn a_loaded_hopper_survives_save_and_load() {
+    let mut game = Game::new(4121, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let rig = spawn_machine_at(&mut game, "teardown_rig", 3, 3);
+    let entry = HopperEntry {
+        program: program(70, Rarity::Ordinary, 4),
+        tool: ToolId("salvage_clamp".to_string()),
+    };
+    {
+        let mut hopper = game.world.get_mut::<Hopper>(rig).unwrap();
+        hopper.queue.push(entry.clone());
+        hopper.progress = 5;
+    }
+
+    let path =
+        std::env::temp_dir().join(format!("feral_hopper_roundtrip_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let hopper = loaded
+        .world
+        .iter_entities()
+        .find_map(|e| e.get::<Hopper>())
+        .expect("the rig should still stand, carrying its hopper");
+    assert_eq!(hopper.queue, vec![entry]);
+    assert_eq!(hopper.progress, 5);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4, task 3: `Game::load_teardown_rig`, the one door a downed program
+// leaves the pack for a machine through.
+// ---------------------------------------------------------------------------
+
+/// A fixture: a rig at (3,3), the player beside it, and `n` programs in the
+/// pack, one per level so a test can say which row it means.
+fn player_beside_a_rig_holding(n: usize) -> (Game, Entity) {
+    let mut game = Game::new(4130, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base_at(&mut game, 3, 4);
+    let rig = spawn_machine_at(&mut game, "teardown_rig", 3, 3);
+    let player = game.player_entity();
+    let mut held = game.world.get_mut::<DownedPrograms>(player).unwrap();
+    for level in 1..=n as u32 {
+        held.0.push(program(70, Rarity::Ordinary, level));
+    }
+    (game, rig)
+}
+
+fn clamp(id: &str) -> ToolId {
+    ToolId(id.to_string())
+}
+
+/// Pushes a tool straight into the player's slots. The loadout is written by
+/// hand throughout this file (`a_tool_loadout_survives_a_save_load_round_trip`
+/// and the phase-2 tests) rather than driven through `install_tool`, which
+/// would want a carrier item and a level's worth of slots first — neither of
+/// which any refusal here is about.
+fn install_tool_for_test(game: &mut Game, tool: &str) {
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Tools>(player)
+        .unwrap()
+        .0
+        .push(clamp(tool));
+}
+
+#[test]
+fn loading_a_rig_moves_the_named_programs_out_of_the_pack() {
+    let (mut game, rig) = player_beside_a_rig_holding(3);
+    game.load_teardown_rig(&[0, 2], &clamp("salvage_clamp"))
+        .unwrap();
+
+    let player = game.player_entity();
+    let left = &game.world.get::<DownedPrograms>(player).unwrap().0;
+    assert_eq!(left.len(), 1, "one program should still be in the pack");
+    assert_eq!(left[0].level, 2, "the one not named should be the one left");
+
+    let queue = &game.world.get::<Hopper>(rig).unwrap().queue;
+    assert_eq!(queue.len(), 2);
+    assert!(queue.iter().all(|e| e.tool == clamp("salvage_clamp")));
+    assert_eq!(
+        queue.iter().map(|e| e.program.level).collect::<Vec<_>>(),
+        vec![1, 3],
+        "the queue takes them in store order, which is the order the player sees"
+    );
+}
+
+/// An over-ask clamps rather than refusing — `take_from_adjacent`'s own
+/// rule — and the remainder is still in the pack. Nothing is destroyed
+/// (decision 9).
+#[test]
+fn a_bulk_load_past_the_hopper_clamps_and_leaves_the_rest_in_the_pack() {
+    let (mut game, rig) = player_beside_a_rig_holding(10);
+    let all: Vec<usize> = (0..10).collect();
+    game.load_teardown_rig(&all, &clamp("salvage_clamp"))
+        .unwrap();
+
+    let hopper_size = 6; // assets/structures/teardown_rig.ron
+    let queue_len = game.world.get::<Hopper>(rig).unwrap().queue.len();
+    assert_eq!(queue_len, hopper_size);
+
+    let player = game.player_entity();
+    let left = game.world.get::<DownedPrograms>(player).unwrap().0.len();
+    assert_eq!(left, 10 - hopper_size, "the remainder stays in the pack");
+}
+
+#[test]
+fn loading_with_no_rig_adjacent_refuses_and_spends_nothing() {
+    let mut game = Game::new(4131, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base_at(&mut game, 3, 4);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<DownedPrograms>(player)
+        .unwrap()
+        .0
+        .push(program(70, Rarity::Ordinary, 1));
+
+    assert!(
+        game.load_teardown_rig(&[0], &clamp("salvage_clamp"))
+            .is_err()
+    );
+    assert_eq!(game.world.get::<DownedPrograms>(player).unwrap().0.len(), 1);
+}
+
+#[test]
+fn loading_with_an_uninstalled_tool_refuses_and_spends_nothing() {
+    let (mut game, rig) = player_beside_a_rig_holding(1);
+    assert!(game.load_teardown_rig(&[0], &clamp("no_such_tool")).is_err());
+
+    let player = game.player_entity();
+    assert_eq!(game.world.get::<DownedPrograms>(player).unwrap().0.len(), 1);
+    assert!(game.world.get::<Hopper>(rig).unwrap().queue.is_empty());
+}
+
+/// A Routine Reader teaches knowledge and a Harness Puller pays a
+/// `GearCopy`; neither is a plain item, so neither can land in a
+/// `Stock::output` (spec 10.4). Both stay hand work.
+#[test]
+fn a_routines_tool_refuses_at_the_deposit_and_spends_nothing() {
+    let (mut game, rig) = player_beside_a_rig_holding(1);
+    install_tool_for_test(&mut game, "routine_reader");
+    assert!(
+        game.load_teardown_rig(&[0], &clamp("routine_reader"))
+            .is_err()
+    );
+
+    let player = game.player_entity();
+    assert_eq!(game.world.get::<DownedPrograms>(player).unwrap().0.len(), 1);
+    assert!(game.world.get::<Hopper>(rig).unwrap().queue.is_empty());
+}
+
+#[test]
+fn a_gear_tool_refuses_at_the_deposit_and_spends_nothing() {
+    let (mut game, rig) = player_beside_a_rig_holding(1);
+    install_tool_for_test(&mut game, "harness_puller");
+    assert!(
+        game.load_teardown_rig(&[0], &clamp("harness_puller"))
+            .is_err()
+    );
+
+    let player = game.player_entity();
+    assert_eq!(game.world.get::<DownedPrograms>(player).unwrap().0.len(), 1);
+    assert!(game.world.get::<Hopper>(rig).unwrap().queue.is_empty());
+}
+
+#[test]
+fn loading_a_full_hopper_refuses_and_spends_nothing() {
+    let (mut game, rig) = player_beside_a_rig_holding(10);
+    let all: Vec<usize> = (0..6).collect();
+    game.load_teardown_rig(&all, &clamp("salvage_clamp"))
+        .unwrap();
+
+    let player = game.player_entity();
+    let before = game.world.get::<DownedPrograms>(player).unwrap().0.len();
+    assert!(
+        game.load_teardown_rig(&[0], &clamp("salvage_clamp"))
+            .is_err()
+    );
+    assert_eq!(
+        game.world.get::<DownedPrograms>(player).unwrap().0.len(),
+        before
+    );
+    assert_eq!(game.world.get::<Hopper>(rig).unwrap().queue.len(), 6);
+}
+
+#[test]
+fn loading_during_a_battle_refuses_and_spends_nothing() {
+    let (mut game, rig) = player_beside_a_rig_holding(1);
+    let player = game.player_entity();
+    let wild = spawn_wild_on_player_tile(&mut game);
+    insert_battle(&mut game, player, vec![wild]);
+
+    assert!(
+        game.load_teardown_rig(&[0], &clamp("salvage_clamp"))
+            .is_err()
+    );
+    assert_eq!(game.world.get::<DownedPrograms>(player).unwrap().0.len(), 1);
+    assert!(game.world.get::<Hopper>(rig).unwrap().queue.is_empty());
+}
+
+#[test]
+fn loading_no_such_program_refuses_and_spends_nothing() {
+    let (mut game, rig) = player_beside_a_rig_holding(1);
+    assert!(game.load_teardown_rig(&[9], &clamp("salvage_clamp")).is_err());
+    assert!(game.world.get::<Hopper>(rig).unwrap().queue.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4, task 4: `Game::run_teardown_rigs`, the step that turns a loaded
+// hopper into plain items in the rig's own output buffer.
+// ---------------------------------------------------------------------------
+
+/// The step tests' shared fixture, **with no supply standing** — so the rig
+/// draws 3 against a grid of nothing and `power_grid_system` puts it in the
+/// dark. `a_staffed_rig_loaded_with_one_program` is this plus the grid, so
+/// the dark case is reached the way the game reaches it rather than by
+/// writing to `resources::PowerGrid` by hand.
+///
+/// `Task::required` is 1 because nothing here reads it: a rig's pace is
+/// `Game::extraction_ticks`, not a per-batch counter.
+fn a_dark_staffed_rig_loaded_with_one_program() -> (Game, Entity) {
+    let (mut game, rig) = player_beside_a_rig_holding(1);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: rig,
+        progress: 0,
+        required: 1,
+    });
+    game.load_teardown_rig(&[0], &clamp("salvage_clamp"))
+        .unwrap();
+    (game, rig)
+}
+
+fn a_staffed_rig_loaded_with_one_program() -> (Game, Entity) {
+    let (mut game, rig) = a_dark_staffed_rig_loaded_with_one_program();
+    stand_ample_grid_supply(&mut game);
+    (game, rig)
+}
+
+/// **The identity.** Spec section 3's one-derivation invariant, applied to
+/// the rig as a third caller. It fails loudly the day anyone re-derives the
+/// yield formula inside the step.
+#[test]
+fn what_a_rig_pays_equals_what_extraction_yield_quotes_for_the_same_pair() {
+    let (mut game, rig) = a_staffed_rig_loaded_with_one_program();
+    let entry = game.world.get::<Hopper>(rig).unwrap().queue[0].clone();
+    let tool = game
+        .installed_tools()
+        .into_iter()
+        .find(|d| d.id == entry.tool)
+        .unwrap();
+    let quoted = game.extraction_yield(&entry.program, &tool);
+    let ticks = game.extraction_ticks(&tool);
+    assert!(!quoted.is_empty(), "the fixture needs a payout to compare");
+
+    for _ in 0..ticks {
+        game.tick();
+    }
+
+    let output = &game.world.get::<Stock>(rig).unwrap().output;
+    for (item, qty) in &quoted {
+        assert_eq!(
+            output.get(item).copied().unwrap_or(0),
+            *qty,
+            "the rig paid a different figure than extraction_yield quoted for {item:?}"
+        );
+    }
+    assert!(game.world.get::<Hopper>(rig).unwrap().queue.is_empty());
+}
+
+#[test]
+fn an_unstaffed_rig_advances_nothing() {
+    let (mut game, rig) = player_beside_a_rig_holding(1);
+    stand_ample_grid_supply(&mut game);
+    game.load_teardown_rig(&[0], &clamp("salvage_clamp"))
+        .unwrap();
+    for _ in 0..50 {
+        game.tick();
+    }
+    assert_eq!(game.world.get::<Hopper>(rig).unwrap().queue.len(), 1);
+    assert_eq!(game.world.get::<Hopper>(rig).unwrap().progress, 0);
+    assert!(game.world.get::<Stock>(rig).unwrap().output.is_empty());
+}
+
+#[test]
+fn a_dark_rig_advances_nothing() {
+    let (mut game, rig) = a_dark_staffed_rig_loaded_with_one_program();
+    for _ in 0..50 {
+        game.tick();
+    }
+    assert_eq!(
+        game.world.get::<MachineStatus>(rig).unwrap(),
+        &MachineStatus::Unpowered,
+        "the fixture must actually be dark, or this passes for the wrong reason"
+    );
+    assert_eq!(game.world.get::<Hopper>(rig).unwrap().queue.len(), 1);
+    assert_eq!(game.world.get::<Hopper>(rig).unwrap().progress, 0);
+}
+
+/// **The completion gate is room for the whole payout, not room for one
+/// unit.** The assembler can use `> 0` because it makes one unit at a time;
+/// a program pays several, and clamping to the room available would destroy
+/// units. A rig that cannot hold the payout holds the program.
+#[test]
+fn a_rig_that_cannot_hold_the_whole_yield_holds_the_program() {
+    let (mut game, rig) = a_staffed_rig_loaded_with_one_program();
+    let entry = game.world.get::<Hopper>(rig).unwrap().queue[0].clone();
+    let tool = game
+        .installed_tools()
+        .into_iter()
+        .find(|d| d.id == entry.tool)
+        .unwrap();
+    let total: u32 = game
+        .extraction_yield(&entry.program, &tool)
+        .iter()
+        .map(|(_, q)| *q)
+        .sum();
+    assert!(total > 1, "the fixture needs a payout bigger than one unit");
+
+    let capacity = {
+        let mut stock = game.world.get_mut::<Stock>(rig).unwrap();
+        let capacity = stock.capacity;
+        stock
+            .output
+            .insert(ItemId::from("core_fragment"), capacity - 1);
+        capacity
+    };
+
+    for _ in 0..100 {
+        game.tick();
+    }
+    assert_eq!(
+        game.world.get::<Hopper>(rig).unwrap().queue.len(),
+        1,
+        "the program should still be waiting, not part-paid"
+    );
+    assert_eq!(
+        game.world
+            .get::<Stock>(rig)
+            .unwrap()
+            .output
+            .get(&ItemId::from("core_fragment"))
+            .copied(),
+        Some(capacity - 1),
+        "nothing should have been added"
+    );
+    assert_eq!(
+        game.world.get::<MachineStatus>(rig).unwrap(),
+        &MachineStatus::Clogged
+    );
+}
+
+/// The whole loop: the rig runs while the party is not standing there.
+#[test]
+fn a_rig_strips_while_the_party_is_in_a_zone() {
+    let (mut game, rig) = a_staffed_rig_loaded_with_one_program();
+    descend(&mut game);
+    for _ in 0..100 {
+        game.tick();
+    }
+    assert!(game.world.get::<Hopper>(rig).unwrap().queue.is_empty());
+    assert!(!game.world.get::<Stock>(rig).unwrap().output.is_empty());
+}
+

@@ -148,6 +148,33 @@ is skipped with a warning logged in-game rather than crashing startup.
     // wants a program and feeders touching it.
     assembles: Some((item: "patch_routine", ticks_per_unit: 8)),
 
+    // Optional; can be left out entirely (defaults to stripping nothing).
+    // If set, the structure is a Teardown Rig: the player standing beside it
+    // hands it downed programs out of their pack, and it strips them into
+    // its own output buffer over ticks while they are elsewhere. Like
+    // `assembles`, it needs a program posted to it via the cronjob menu and
+    // power on the grid.
+    //
+    // `hopper` is how many downed programs the queue holds before the rig
+    // refuses a deposit — a program count, not an item count. Authored per
+    // machine rather than in tuning, `capacity`'s reason: it is how big THIS
+    // box is, and a second rig should be able to differ.
+    //
+    // There is no tick figure here, and that's deliberate: what a program
+    // costs to strip is the same derivation the player's own extraction is
+    // priced by, folding the tool and the best bench tier standing. A rig
+    // and a hand can never quote different numbers.
+    //
+    // What lands in the output buffer is PLAIN ITEMS. The downed program
+    // itself never leaves the hopper, so haulers, depots and adjacent-take
+    // carry the yield with no special rule — which is the whole reason the
+    // hopper is private. A rig that cannot hold a whole payout holds the
+    // program instead and reports as clogged; nothing is destroyed.
+    //
+    // Like `assembles`, this changes the structure's category to Assembler:
+    // it is a machine that wants a program and pays items out.
+    strips: Some((hopper: 6)),
+
     // Optional; can be left out entirely (defaults to no regeneration).
     // If set, the structure restores `per_tick` Power to the player every
     // tick that they're standing within `radius` tiles of it — no assigned

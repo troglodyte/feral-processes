@@ -33,6 +33,33 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## Unreleased
+
+**A Teardown Rig strips downed programs while you are somewhere else.** Research
+Teardown, build one, post a program to it and keep it on the grid.
+
+**You load it from the store you already use.** `L` on the list hands it every
+program you are holding, `Q` on a tool page hands it just that one, and you pick
+the tool either way.
+
+**What it leaves is ordinary materials in its output buffer**, so haulers, depots
+and adjacent-take carry the yield with no rule of their own.
+
+**Its hopper holds six against the ten your pack does**, and an over-ask takes
+what fits and leaves the rest with you.
+
+**A rig that cannot hold a whole body's worth holds the program instead**, and
+reports as clogged rather than paying part of it.
+
+**The Routine Reader and the Harness Puller are refused at the door**; a routine
+and a gear copy are not materials a buffer can hold.
+
+**A Teardown Rig is an extraction bench too**, so building and upgrading one pays
+your own teardowns as well.
+
+**Modders get `strips` on a structure def** — one number, how many programs the
+hopper holds.
+
 ## 0.13.113
 
 **A town that hates you now sends people for your stores.** A settlement at

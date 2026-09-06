@@ -80,6 +80,24 @@ pub struct AssembleDef {
     pub ticks_per_unit: u32,
 }
 
+/// A structure's automated-teardown capability — see
+/// `StructureDef::strips` and `Game::run_teardown_rigs`.
+///
+/// Mirrors `AssembleDef` rung for rung, decision 6's rule that a second
+/// shape for the same idea is a second thing to get wrong. It carries no
+/// tick figure of its own: what a program costs to strip is
+/// `Game::extraction_ticks`, the same derivation the player's own
+/// extraction is priced by, so a rig and a hand cannot disagree.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StripDef {
+    /// How many downed programs the hopper holds before it refuses.
+    ///
+    /// Authored per machine rather than in `tuning.rs`, for
+    /// `StructureDef::capacity`'s reason: it is how big *this* box is, and
+    /// a modder's second rig should be able to differ.
+    pub hopper: u32,
+}
+
 /// A structure's power-regeneration capability — see
 /// `StructureDef::power_regen` and `systems::power_regen_system`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -272,6 +290,17 @@ pub struct StructureDef {
     /// written before this field existed still parse.
     #[serde(default)]
     pub assembles: Option<AssembleDef>,
+    /// If set, this structure takes downed programs the player hands it and
+    /// strips them into its output buffer over ticks, once a program is
+    /// assigned to it — see `Game::run_teardown_rigs` and spec §10.
+    ///
+    /// The instanced object never leaves this machine: what lands in
+    /// `Stock::output` is plain items, which is what lets hauling, depots
+    /// and `collect` carry the yield with no instance rule (decision 2).
+    /// `#[serde(default)]` so every existing structure file, including any
+    /// mod, keeps parsing as a machine that strips nothing.
+    #[serde(default)]
+    pub strips: Option<StripDef>,
     /// If set, this structure restores the player's Power every tick while
     /// they stand within `radius` tiles — no assigned worker and no input
     /// item, unlike `work`. `#[serde(default)]` so
@@ -528,7 +557,7 @@ impl StructureDef {
     /// outline, because every consumer treats a missing status as "not a
     /// machine" rather than as an error.
     pub fn runs_a_job(&self) -> bool {
-        self.work.is_some() || self.assembles.is_some()
+        self.work.is_some() || self.assembles.is_some() || self.strips.is_some()
     }
 
     /// Which group this structure lists under. Checked in this order because
@@ -546,6 +575,13 @@ impl StructureDef {
             return StructureCategory::Extractor;
         }
         if self.assembles.is_some() {
+            return StructureCategory::Assembler;
+        }
+        // A rig consumes something and pays items out, given a program —
+        // which is what `Assembler` means here. Deliberately not a seventh
+        // `StructureCategory`: the variant is a build-menu grouping, and a
+        // new one is a group every menu has to learn to draw.
+        if self.strips.is_some() {
             return StructureCategory::Assembler;
         }
         if self.trade.is_some() {

@@ -219,6 +219,22 @@ impl Game {
         // has just drained the reserve inside the schedule above, and
         // `Game::notify` is a `&mut Game` door no bevy system can reach.
         self.note_low_power();
+        // A `&mut Game` pass for `run_dig_crew`'s second reason: a rig prices
+        // its work through `Game::extraction_yield` and
+        // `Game::extraction_ticks`, `&Game` methods folding perks, species
+        // and the best standing bench tier that no bevy system can call — so
+        // a system would have to re-derive the yield formula, which is the
+        // one thing spec section 3 exists to prevent.
+        //
+        // **After the schedule and not beside the crews**, unlike every
+        // other base pass above: this one gates on `PowerGrid`, which
+        // `power_grid_system` writes *inside* the schedule. Run before it,
+        // the rig would read last tick's answer — and on the very first tick
+        // of a run that is the `Default`, where nothing is dark, so a rig
+        // with no supply standing would still take a free tick of progress.
+        // `assembler_system` never meets this because it is in the schedule,
+        // downstream of the grid. See `Game::run_teardown_rigs`.
+        self.run_teardown_rigs();
         // Immediately after the schedule, which is where `contract_system`
         // raised the progress this reads. Paying is `&mut Game` work — an
         // inventory write and an XP grant — so it cannot live in the system

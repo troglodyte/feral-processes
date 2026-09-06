@@ -33,6 +33,8 @@ pub(super) fn app_at_a_relay(seed: u32, item: &ItemId, qty: u32) -> App {
         standing_work: false,
         standing_guard: false,
         power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        hopper: Vec::new(),
+        hopper_progress: 0,
     });
     data.structures.push(save::StructureSave {
         kind: "depot".to_string(),
@@ -44,6 +46,8 @@ pub(super) fn app_at_a_relay(seed: u32, item: &ItemId, qty: u32) -> App {
         standing_work: false,
         standing_guard: false,
         power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        hopper: Vec::new(),
+        hopper_progress: 0,
     });
     // One tile clear of the Home, the Relay and the Depot — `deploy_relay`'s
     // own note in the engine suite.

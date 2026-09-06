@@ -289,6 +289,9 @@ impl Game {
                 level: work.level,
             });
         }
+        if def.strips.is_some() {
+            entity.insert(crate::components::Hopper::default());
+        }
         if let Some(temp) = &def.temporary {
             entity.insert(Temporary {
                 ticks_remaining: temp.max_ticks,

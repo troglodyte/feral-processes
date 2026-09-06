@@ -171,3 +171,119 @@ fn picking_a_tool_extracts_the_program_and_returns_to_the_list() {
         "a successful extraction is not a refusal"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Phase 4: the two verbs that hand a program to an adjacent Teardown Rig —
+// `L` from the list (every held program) and `Q` on a tool page (that one).
+// ---------------------------------------------------------------------------
+
+/// The three tests below share this: the party in base beside a rig, with
+/// `n` held programs and the screen already open on the list page.
+fn app_beside_a_rig_holding(n: u32) -> App {
+    let held = (1..=n)
+        .map(|level| program("scrapper", 70, Rarity::Ordinary, level))
+        .collect();
+    let mut app = app_beside_a_teardown_rig_holding(9100, held);
+    app.handle_key(GameKey::Char('i'));
+    app.handle_key(GameKey::Char('D'));
+    assert_eq!(app.mode, Mode::DownedPrograms);
+    app
+}
+
+/// `L` from the list opens the tool page in bulk intent, and a tool row
+/// there queues **every** held program rather than extracting the
+/// highlighted one by hand.
+#[test]
+fn the_bulk_verb_queues_every_held_program() {
+    let mut app = app_beside_a_rig_holding(3);
+    app.handle_key(GameKey::Char('L'));
+    assert!(app.downed_programs_bulk);
+    assert_eq!(
+        app.pending_downed_program_index,
+        Some(0),
+        "bulk intent still shows a tool page, and it is the first row's"
+    );
+
+    app.handle_key(GameKey::Char('1'));
+
+    let game = app.game.as_mut().unwrap();
+    assert!(
+        game.downed_program_rows().is_empty(),
+        "the pack should be empty"
+    );
+    assert!(
+        !app.downed_programs_bulk,
+        "bulk intent clears after the act"
+    );
+    assert_eq!(app.status_line, None, "a successful load is not a refusal");
+}
+
+/// `Q` on the tool page queues exactly the one program whose page it is.
+#[test]
+fn the_per_row_verb_queues_one_and_leaves_the_rest() {
+    let mut app = app_beside_a_rig_holding(3);
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.pending_downed_program_index, Some(0));
+
+    app.handle_key(GameKey::Char('Q'));
+
+    let game = app.game.as_mut().unwrap();
+    assert_eq!(game.downed_program_rows().len(), 2);
+    assert!(
+        app.pending_downed_program_index.is_none(),
+        "the tool page for a now-queued program is gone"
+    );
+}
+
+/// The gate the whole binding rests on: `App::selected_index` answers
+/// `None` for anything that is not lowercase or a digit, so an uppercase
+/// binding can never also pick a row. Asserted on the key each page does
+/// *not* bind — `Q` on the list and `L` on the tool page — because those
+/// are the two that would fall through to the row selector if the rule ever
+/// changed. Lowercase digits still extract by hand, paying the pack.
+#[test]
+fn the_new_uppercase_keys_pick_no_row_and_lowercase_still_extracts() {
+    let mut app = app_beside_a_rig_holding(3);
+
+    app.handle_key(GameKey::Char('Q'));
+    assert!(
+        app.pending_downed_program_index.is_none(),
+        "`Q` is unbound on the list page, and must not pick a row there"
+    );
+
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.pending_downed_program_index, Some(0));
+    app.handle_key(GameKey::Char('L'));
+    assert_eq!(
+        app.pending_downed_program_index,
+        Some(0),
+        "`L` is unbound on the tool page, and must not pick a tool row there"
+    );
+    assert!(!app.downed_programs_bulk);
+
+    // A hand extraction pays the player through `grant_loot`; a rig load
+    // pays the rig's own buffer and leaves the pack alone, so the pack
+    // growing is what says *which* verb spent the program.
+    let carried = |app: &App| -> u32 {
+        app.game
+            .as_ref()
+            .unwrap()
+            .player_status()
+            .inventory
+            .iter()
+            .map(|row| row.qty)
+            .sum()
+    };
+    let before = carried(&app);
+    app.handle_key(GameKey::Char('1'));
+
+    assert_eq!(
+        app.game.as_mut().unwrap().downed_program_rows().len(),
+        2,
+        "the digit row should spend exactly the one program it is on"
+    );
+    assert!(
+        carried(&app) > before,
+        "a hand extraction pays into the pack — a rig load would not"
+    );
+}

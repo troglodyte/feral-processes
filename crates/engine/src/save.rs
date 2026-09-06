@@ -900,6 +900,19 @@ pub struct StructureSave {
     pub stock_input: Vec<(ItemId, u32)>,
     #[serde(default)]
     pub stock_output: Vec<(ItemId, u32)>,
+    /// This rig's queue of downed programs and its progress on the head one
+    /// — see `components::Hopper`. Live player state: losing it would eat
+    /// every kill the player handed over and had not yet been paid for.
+    ///
+    /// Additive behind a default, so **no `SAVE_FORMAT_VERSION` bump** — a
+    /// save written before the rig existed loads with an empty hopper,
+    /// which is what it had. `HopperEntry` is stored directly rather than
+    /// through a parallel `*Save` type, `PlayerSave::downed_programs`'
+    /// reason: it has no legacy shape to reconcile.
+    #[serde(default)]
+    pub hopper: Vec<crate::components::HopperEntry>,
+    #[serde(default)]
+    pub hopper_progress: u64,
     /// The two halves of `components::StandingJob` — keep this machine
     /// worked, and keep this structure guarded, whether or not an order
     /// asks for it.

@@ -160,6 +160,49 @@ pub(crate) fn app_holding_downed_programs(
     app
 }
 
+/// `app_holding_downed_programs` plus a Teardown Rig standing beside the
+/// party, in base space — the two preconditions the rig verbs need.
+///
+/// The rig sits at base cell `(1, 0)`, orthogonally east of the `(0, 0)`
+/// the locale stands the party in, because `Game::adjacent_teardown_rig` is
+/// an adjacency question and not an ownership one. Built through the same
+/// save round trip for that fixture's reason: the engine exposes no way to
+/// hand-place a downed program from outside the crate, and staging the rig
+/// through the build flow would need the Teardown research first.
+pub(crate) fn app_beside_a_teardown_rig_holding(
+    seed: u32,
+    programs: Vec<feral_processes_engine::items::DownedProgram>,
+) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = scratch_path("teardown_rig", seed);
+    found_the_base(&mut app);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.player.downed_programs = programs;
+    data.locale = Locale::Base { x: 0, y: 0 };
+    data.structures.push(save::StructureSave {
+        kind: "teardown_rig".to_string(),
+        position: (1, 0),
+        durability: None,
+        tier: None,
+        stock_input: Vec::new(),
+        stock_output: Vec::new(),
+        standing_work: false,
+        standing_guard: false,
+        power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        hopper: Vec::new(),
+        hopper_progress: 0,
+    });
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    app
+}
+
 /// An app on `Mode::Inventory` with at least ten distinct cargo rows, so
 /// the fourth letter row (`DIGIT_ROWS` + 3 — lowercase `d`) resolves to a
 /// real row rather than `selected_index` falling out on an out-of-range
@@ -667,6 +710,8 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         standing_work: false,
         standing_guard: false,
         power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        hopper: Vec::new(),
+        hopper_progress: 0,
     });
     if underground {
         data.locale = Locale::Stack {
@@ -771,6 +816,8 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
             standing_work: false,
             standing_guard: false,
             power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+            hopper: Vec::new(),
+            hopper_progress: 0,
         });
     }
     // A trader is a deployed `Structure`, and every structure stands in base
@@ -1320,6 +1367,8 @@ pub(crate) fn app_inside_a_small_base_with_programs(
         standing_work: false,
         standing_guard: false,
         power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        hopper: Vec::new(),
+        hopper_progress: 0,
     });
     for _ in 0..programs {
         data.creatures.push(CreatureSave {
@@ -1443,6 +1492,8 @@ pub(crate) fn app_at_a_contract_broker(seed: u32, underground: bool) -> App {
         standing_work: false,
         standing_guard: false,
         power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        hopper: Vec::new(),
+        hopper_progress: 0,
     });
     data.locale = if underground {
         Locale::Stack {
@@ -1572,6 +1623,8 @@ pub(crate) fn app_beside_depots(seed: u32, depots: i32, filled: u32, pack: &[(&s
             standing_work: false,
             standing_guard: false,
             power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+            hopper: Vec::new(),
+            hopper_progress: 0,
         });
     }
     data.player.inventory = pack
@@ -1610,6 +1663,8 @@ pub(crate) fn app_beside_stocked_machines(seed: u32, stock: &[(&str, u32)]) -> A
             standing_work: false,
             standing_guard: false,
             power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+            hopper: Vec::new(),
+            hopper_progress: 0,
         });
     }
     data.locale = Locale::Base { x: 0, y: 0 };

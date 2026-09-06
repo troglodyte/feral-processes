@@ -817,6 +817,18 @@ pub struct EntityView {
     /// `difficulty_color` over both the power-ratio con read and the boss
     /// override; see `rarity`'s doc for what that costs.
     pub nemesis: bool,
+    /// The name of the town this (creature) entity patrols for — see
+    /// `components::TownPatrol`. `None` for everything else.
+    ///
+    /// **A fourth channel, and it touches none of the other three.** The
+    /// authored `color` still says what the program is, `difficulty` still
+    /// says how dangerous it is and `rarity` still says how rare — a patrol
+    /// mark may not spend any of them, which is the regression the HUD's
+    /// separate-readings rule exists to stop.
+    ///
+    /// The town's *name* and not a bool: the mark raises the question "whose
+    /// is it", and a flag draws the mark without answering it.
+    pub patrol: Option<String>,
     pub can_work: bool,
     /// Whether this (structure) entity is a trading post (see
     /// `StructureDef::trade`).

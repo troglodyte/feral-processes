@@ -11595,3 +11595,179 @@ every heading has both; `every_heading_reads_the_same_as_a_word_and_as_an
 _arrow` holds the half it cannot see, which is that the two agree about
 which point is which.
 
+
+### The second tether is a component, not a `kind` field, and one tick drives both
+
+`components::TownPatrol { town: Entity }` sits beside `NestGuardian
+{ nest: Entity }`, and `Game::pursuit_tick` (`game/turn.rs`, renamed from
+`nest_aggro_tick`) grows a two-arm collection carrying each pursuer's own
+anchor and its own leash. Everything below that point — the leash filter,
+the single `pursuit_field`, the adjacency check, the step loop,
+`gather_pack`, `start_battle` — is unchanged and still written once.
+
+**The alternative that was rejected is `Tethered { anchor, kind }`.** It
+buys one query and one save field. It costs a save field whose *meaning* is
+rewritten rather than added, edits across ~19 files, and a `kind` match at
+every nest-specific site anyway: `despawn_nest` strips tethers,
+`nest_has_pursuers` asks a nest question, `combat_rewards` and
+`combat_round` look up the victim's nest. The branching moves; it does not
+leave. And the two differ in every respect except the tick — what provokes
+them, what frees them, what a save keys them by, and what happens when the
+anchor dies. **A town cannot be destroyed**, so a patrol's leash never
+resolves to nothing, which is the case `NestGuardian`'s belt-and-braces
+check exists for and a patrol does not need.
+
+**Two traps live at the shared seam.** The field is built once and must be
+sized off the **maximum** of the two leashes. They are equal today
+(`NEST_AGGRO_LEASH_RADIUS` and `SETTLEMENT_PATROL_LEASH_RADIUS` are both
+15); relying on that makes raising the patrol's past the nest's produce
+patrols that read as absent from the field and give up where they stand — a
+mechanic that disappears with no error anywhere. And **dropping an arm from
+the collection does not stop that kind pursuing**, because the step loop
+queries `With<Pursuing>` alone; it stops one ever being *released*, so the
+symptom is a program that chases across the whole zone forever rather than
+anything that fails to move.
+
+That second trap is why the leash test is the one that matters, and why it
+had to be built on a town at `Hostile`. Against a Neutral town the
+stand-down below drops `Pursuing` for free, so the test would have passed
+with the arm deleted — the one thing it exists to catch.
+
+### A patrol is provoked by proximity and stood down by the band, and only one half is guarded
+
+The one behavioural difference from a nest, and the reason
+`Game::patrol_aggro_tick` (`game/settlement_patrol.rs`) exists rather than
+reusing `provoke_nest`: a nest guardian is roused by an attack, a patrol
+member by the party walking within `SETTLEMENT_PATROL_AGGRO_RADIUS`.
+
+That radius sits **inside `EXAMINE_RANGE_TILES`** on purpose, asserted
+against the constant rather than described in a comment. A threat only ever
+discovered by already being in a fight is not one the player can play
+around.
+
+**The band is re-read every tick rather than cached at spawn**, which is
+what makes the way back out of `Hostile` visible: the moment a town stops
+being Hostile, `Pursuing` is dropped, `TownPatrol` is stripped, and the
+members revert to ordinary untethered wildlife. `Pursuing` goes with the
+tether it was inserted alongside and never alone — an untethered `Pursuing`
+has no leash and nothing in `pursuit_tick` can ever clear it.
+
+**The stand-down half is deliberately outside the surface guard the
+provocation half carries.** `pursuit_tick`'s guard is about the player's
+`Position` being pinned to the anchor in base space and to the entrance tile
+in the Stack, so proximity to it means nothing while the party is out of
+phase — but a band repaired while the party is underground must have lifted
+by the time they climb out, and a patrol frozen mid-chase by the guard is
+still one the player has to walk back past.
+
+Both halves are one pass because both are answers to the same question —
+what is this town's opinion, *now* — and splitting them would ask it twice
+per member per tick.
+
+### A town's patrol is fielded by a roll with a mean, not by a countdown
+
+`Game::maybe_field_patrol` rolls first and gates after, the discipline every
+RNG gate on this branch follows: a miss spends exactly one draw and touches
+nothing else, so the seeded spawn tests move by a fixed amount rather than
+by whatever the world happens to hold.
+
+The chance is the **reciprocal** of `SETTLEMENT_PATROL_RESPAWN_TICKS`, so
+that constant is the mean wait for one member rather than an exact
+countdown. A nest keeps its countdown on the `Nest` entity;
+`resources::Settlements` is a record that survives a save, and a timer in it
+would be a save field for a figure nobody can see.
+
+**Range is measured to the party, which is where this parts company with
+`raiding_towns`.** A raid is aimed at the stores and is measured from the
+anchor; a patrol is ground the player walks into.
+
+A member is `spawn_wild_creature_scaled` plus `TownPatrol` — exactly a nest
+guardian minus the nest, which is what lets `pursuit_tick`,
+`wander_ai_system` and every combat path treat the two alike. `allow_boss:
+false`, because a patrol is an ordinary-encounter mechanic and a boss
+standing in one is a different fight; and no species of its own, because a
+patrol reads as the town's from its mark and its label rather than from
+content nobody else fields.
+
+**Band 0 is excluded by `SETTLEMENT_PATROL_RING_MIN`, not by a check**, the
+same way a relay landing searches from band 1: a settlement tile admits
+nobody. That is also why `patrol_stand` cannot use `scatter_open_tile` — it
+falls back to the tile it was handed, and here that is the one tile the
+answer may never be.
+
+### Killing a patrol member charges that town alone, by key
+
+`Game::charge_for_a_patrol_kill`, from `finish_member` where the victim's
+`NestGuardian` is already read — the same place, one component over, and
+before the despawn because the tether rides the body.
+
+**Never `credit_nearby_settlements`.** Killing a town's guards is news to
+that town; the neighbours have no view on it, and the radius mover would
+spread a penalty the player cannot see the source of. The charge goes
+through `Game::adjust_standing` like every other mover, so the clamp and the
+only-on-a-crossing announcement stay written once.
+
+**`SETTLEMENT_PATROL_KILL_STANDING = -1`, and the magnitude is the whole
+safety argument.** The movers pay `+10` a contract, `+8` a Stack collapse,
+`+4` a nest cleared, `+1` per `SETTLEMENT_TRADE_CREDITS_PER_POINT` traded. A
+full `SETTLEMENT_PATROL_SIZE` patrol wiped costs `-3` — less than clearing
+one nest on that town's doorstep — which is what keeps the ladder out of
+`Hostile` climbable while patrols are actively in the way. Past that,
+self-defence outruns every mover a Hostile player can still reach, since the
+market and the board are already shut, and the band stops being a state you
+can leave.
+
+**The design spec put the danger at `-4` and was wrong.** At
+`SETTLEMENT_PATROL_SIZE` 3 the arithmetic is `3 * 2 = 6` against a cleared
+nest's `4`, so `-2` already fails — found by mutating the constant and
+watching `wiping_a_patrol_costs_less_than_clearing_one_nest_pays` fail, not
+by reading. Raising it needs the patrol size to fall or
+`SETTLEMENT_NEST_CLEARED_STANDING` to rise with it.
+
+A tamed member costs nothing: `TownPatrol` joins the `(Hostile, WanderAi,
+NestGuardian, Pursuing)` tuple `combat_rewards` already strips on a capture,
+rather than being handled beside it. Taking a program into the roster is not
+killing it.
+
+### A patrol's mark is the fourth corner, and it spends none of the other three
+
+`EntityView::patrol: Option<String>` carries the town's *name* and not a
+flag: the mark raises the question "whose is it", and a boolean draws the
+mark without answering it.
+
+`render/base.rs::patrol_mark_rect` puts it in the **bottom-right** corner,
+the one corner of a tile nothing else claims — the rarity bar owns the top
+edge, the con earmark the top-left, a nemesis the top-right and the staffed
+mark the bottom-left. Sized and inset like `nemesis_mark_rect`, because what
+it says is a fact about the program and not about a job, and inset from both
+edges for `STAFFED_MARK_INSET`'s reason.
+
+It is drawn in `GlyphColor::Orange`, which is a settlement's own glyph
+colour and **the one variant no species authors** — so "this belongs to a
+town" reads without being told, and the authored hue the program already
+carries is not spent. That is the HUD's separate-readings rule holding for a
+fourth channel: identity, danger and rarity all still say what they said.
+
+### A patrol's tether is saved by the town's tile, and resolved a step later than a nest's
+
+`CreatureSave::patrol_position: Option<(i32, i32)>`, additive behind
+`#[serde(default)]`, so **no `SAVE_FORMAT_VERSION` bump** — an older save
+simply carries no patrols, which is what it had. By tile for
+`nest_position`'s reason, and one settlement per tile makes the key
+unambiguous.
+
+`pursuing: bool` is reused as-is; its doc widened from "meaningless unless
+`nest_position` is also `Some`" to "unless one of the two tethers is".
+
+**The load is deferred where a nest's is not.** Settlement entities are
+rebuilt by `restore_settlements` *after* every creature, so at the point the
+creature loop runs there is nothing for a tile to name. The tether is
+collected into `pending_patrols` and resolved after that call, the same
+treatment `pending_cronjobs` gets and for the same reason. A tile naming no
+town drops the tether silently rather than failing the load — the program
+comes back as ordinary wild, which is exactly what standing its town down
+would have left it as.
+
+**A RON round trip cannot catch a skipped field**, so the test is a real
+save and a real load, asserting both halves: the town the tether names, and
+the chase it was in the middle of.

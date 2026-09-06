@@ -1697,6 +1697,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             field_buffs: Vec::new(),
             // No NestSave anywhere in this data names this tile.
             nest_position: Some((999, 999)),
+            patrol_position: None,
             pursuing: true,
             carrying: None,
             rarity: Rarity::Ordinary,

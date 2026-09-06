@@ -262,6 +262,17 @@ impl Game {
         self.adjust_standing(key, SETTLEMENT_PATROL_KILL_STANDING);
     }
 
+    /// The name of the town `creature` patrols for, or `None` for anything
+    /// that is not a patrol member.
+    ///
+    /// Two hops, and both are needed: the tether names an entity, the entity
+    /// carries the key, and only `Settlements` knows what a key is called.
+    pub(crate) fn patrol_owner(&self, creature: Entity) -> Option<String> {
+        let town = self.world.get::<TownPatrol>(creature)?.town;
+        let key = self.world.get::<crate::components::Settlement>(town)?.key;
+        Some(self.settlement_name(key))
+    }
+
     /// Whether the town entity `town` is still angry enough to field one.
     ///
     /// An entity rather than a key, because that is what the tether stores;

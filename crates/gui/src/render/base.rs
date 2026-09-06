@@ -142,6 +142,32 @@ fn nemesis_mark_rect(px: f32, py: f32, tile_px: f32) -> Rect {
     )
 }
 
+/// Where a town's patrol wears its mark — the **bottom-right** corner, the
+/// one corner of a tile nothing else claims: the rarity bar owns the top
+/// edge, the con earmark the top-left, a nemesis the top-right and the
+/// staffed mark the bottom-left.
+///
+/// Sized and inset like `nemesis_mark_rect` rather than like the staffed
+/// mark, because what it says is a fact about the program and not about a
+/// job — and inset from both edges for `STAFFED_MARK_INSET`'s reason, so it
+/// cannot read as painting back in a line `outline_open` left off.
+///
+/// **A fourth channel that spends none of the other three.** The glyph's
+/// authored hue still says what the program is, the con read still says how
+/// dangerous, the rarity bar still says how rare.
+///
+/// A free function for `nemesis_mark_rect`'s reason: the geometry is
+/// unit-testable without a `Painter`.
+fn patrol_mark_rect(px: f32, py: f32, tile_px: f32) -> Rect {
+    let size = (tile_px - 1.0) * IDENTITY_MARK;
+    Rect::new(
+        px + tile_px - 1.0 - IDENTITY_MARK_INSET - size,
+        py + tile_px - 1.0 - IDENTITY_MARK_INSET - size,
+        size,
+        size,
+    )
+}
+
 /// The con read's earmark — a right triangle folded into the **top-left**
 /// corner, its right angle at the corner and its hypotenuse running down
 /// into the tile, so the reading is a shape and not a fifth coloured strip
@@ -1575,6 +1601,21 @@ fn draw_surface_map(
                     at_level(hud::palette::glyph(GlyphColor::Cyan), vig),
                 );
             }
+            // A town's patrol wears its own corner, in the town's own hue —
+            // `GlyphColor::Orange` is what a settlement's glyph draws in and
+            // the one variant no species authors, so "this belongs to a
+            // town" reads without being told and without spending the
+            // identity hue this program already has.
+            if actor.is_some_and(|ev| ev.patrol.is_some()) {
+                let mark = patrol_mark_rect(px, py, tile_px);
+                painter.rect(
+                    mark.x,
+                    mark.y,
+                    mark.w,
+                    mark.h,
+                    at_level(hud::palette::glyph(GlyphColor::Orange), vig),
+                );
+            }
             // The base-space mirror of that outline: an armed bump is a mode
             // with no other trace on the screen — the log said so once, at
             // the moment it was toggled, and a player who walked away and
@@ -1932,6 +1973,7 @@ mod tests {
             max_tier: None,
             is_boss: false,
             nemesis: false,
+            patrol: None,
             difficulty: None,
             can_work: false,
             can_trade: false,
@@ -4059,6 +4101,57 @@ mod tests {
              row (starts at {staffed_y})",
             nemesis.y + nemesis.h
         );
+    }
+
+    /// The fourth corner, and the census that keeps it the fourth: a patrol
+    /// member that is also rare, also a nemesis and standing on ground a
+    /// staffed mark claims must show every one of them without any being
+    /// spent to make room for another.
+    #[test]
+    fn the_patrol_mark_shares_no_pixels_with_any_other_mark_on_the_tile() {
+        let tile_px = 40.0_f32;
+        let (px, py) = (0.0, 0.0);
+        let patrol = patrol_mark_rect(px, py, tile_px);
+        let nemesis = nemesis_mark_rect(px, py, tile_px);
+        let staffed = staffed_mark_rect(px, py, tile_px, 0.0);
+        let [_, (con_right, _), (_, con_bottom)] = difficulty_mark_points(px, py, tile_px);
+
+        assert!(
+            patrol.y > nemesis.y + nemesis.h,
+            "the patrol mark reaches up into the nemesis mark's row"
+        );
+        assert!(
+            patrol.x > staffed.x + staffed.w,
+            "the patrol mark reaches left into the staffed mark's column"
+        );
+        assert!(
+            patrol.x > con_right && patrol.y > con_bottom,
+            "the patrol mark reaches into the con earmark's wedge"
+        );
+        assert!(
+            patrol.y > py + RARITY_BAR_PX,
+            "the patrol mark reaches up into the rarity bar"
+        );
+    }
+
+    /// `nemesis_mark_rect`'s rule, from the other two edges: flush against
+    /// one it would read as painting back in a wall `outline_open` left off.
+    #[test]
+    fn the_patrol_mark_stays_inside_the_tile_and_off_every_edge() {
+        let (px, py, tile_px) = (50.0_f32, 60.0_f32, 40.0_f32);
+        let mark = patrol_mark_rect(px, py, tile_px);
+
+        assert!(mark.x > px, "the mark touches the tile's left edge");
+        assert!(mark.y > py, "the mark touches the tile's top edge");
+        assert!(
+            mark.x + mark.w < px + tile_px - 1.0,
+            "the mark touches or crosses the tile's right edge"
+        );
+        assert!(
+            mark.y + mark.h < py + tile_px - 1.0,
+            "the mark touches or crosses the tile's bottom edge"
+        );
+        assert!(mark.w > 0.0 && mark.h > 0.0, "the mark must have real size");
     }
 
     /// **The whole camera feature is one value.** `draw_surface_map` takes

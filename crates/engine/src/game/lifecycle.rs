@@ -938,6 +938,10 @@ impl Game {
         }
 
         let mut pending_cronjobs: Vec<(Entity, save::CronjobSave)> = Vec::new();
+        // `(member, town tile, was pursuing)` — resolved after
+        // `restore_settlements`, which is what builds the entities a tile
+        // has to name.
+        let mut pending_patrols: Vec<(Entity, (i32, i32), bool)> = Vec::new();
         // Collected with their slot index and sorted below: creatures come
         // back in whatever order they were written, which is no longer the
         // roster order, and roster order is now mechanically meaningful.
@@ -1198,6 +1202,13 @@ impl Game {
                         entity.insert(Pursuing);
                     }
                 }
+                // Deferred rather than resolved here: settlement entities
+                // are rebuilt further down, after every creature, so there
+                // is nothing yet for a tile to name. `pending_cronjobs`'
+                // treatment, for the same reason.
+                if let Some(tile) = c.patrol_position {
+                    pending_patrols.push((entity.id(), tile, c.pursuing));
+                }
             }
         }
         game.world
@@ -1379,6 +1390,31 @@ impl Game {
         });
         game.world.insert_resource(data.populated_chunks);
         game.restore_settlements(data.settlements);
+        // After the towns exist, and the one place a patrol's tether is
+        // rebuilt. A tile naming no town — the settlement catalogue was
+        // edited between sessions — drops the tether silently rather than
+        // failing the load, `nest_position`'s rule: the program comes back
+        // as ordinary wild, which is exactly what standing its town down
+        // would have left it as. `Pursuing` goes with it and never alone.
+        let towns_by_tile: HashMap<(i32, i32), Entity> = {
+            let mut query = game
+                .world
+                .query::<(Entity, &crate::components::Settlement, &Position)>();
+            query
+                .iter(&game.world)
+                .map(|(entity, _, pos)| ((pos.x, pos.y), entity))
+                .collect()
+        };
+        for (member, tile, pursuing) in pending_patrols {
+            let Some(&town) = towns_by_tile.get(&tile) else {
+                continue;
+            };
+            let mut entity = game.world.entity_mut(member);
+            entity.insert(TownPatrol { town });
+            if pursuing {
+                entity.insert(Pursuing);
+            }
+        }
         game.world.insert_resource(data.standings);
         game.world.insert_resource(data.compass);
         game.world
@@ -1550,6 +1586,7 @@ impl Game {
             // wherever the count happened to run out.
             (
                 Option<&NestGuardian>,
+                Option<&TownPatrol>,
                 Option<&Pursuing>,
                 Option<&Carrying>,
                 Option<&Rarity>,
@@ -1592,6 +1629,7 @@ impl Game {
             field_buff,
             (
                 nest_guardian,
+                town_patrol,
                 pursuing,
                 carrying,
                 rarity,
@@ -1647,6 +1685,14 @@ impl Game {
                     .get::<Position>(g.nest)
                     .map(|nest_pos| (nest_pos.x, nest_pos.y))
             });
+            // The second tether, resolved the same way and for the same
+            // reason. A town cannot be destroyed, so unlike a nest this can
+            // only fail to resolve on a load — never on a save.
+            let patrol_position = town_patrol.and_then(|p| {
+                self.world
+                    .get::<Position>(p.town)
+                    .map(|town_pos| (town_pos.x, town_pos.y))
+            });
             creatures.push(save::CreatureSave {
                 species: creature.species.clone(),
                 position: (pos.x, pos.y),
@@ -1688,6 +1734,7 @@ impl Game {
                 routines: routines.map(|r| r.0.clone()).unwrap_or_default(),
                 field_buffs: field_buff.map(|f| f.active.clone()).unwrap_or_default(),
                 nest_position,
+                patrol_position,
                 pursuing: pursuing.is_some(),
                 boss: boss.is_some(),
                 carrying: carrying.map(|c| (c.item.clone(), c.qty)),

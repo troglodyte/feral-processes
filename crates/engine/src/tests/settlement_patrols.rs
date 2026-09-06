@@ -383,3 +383,127 @@ fn taming_a_patrol_member_costs_nothing() {
         "a tamed member must lose its tether with the rest of its wild disposition"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Across a save
+// ---------------------------------------------------------------------------
+
+/// **A RON round trip cannot see a skipped field**, so this is a real save
+/// and a real load. Both halves of the tether are asserted: the town it
+/// names, and the chase it was in the middle of.
+#[test]
+fn a_patrol_survives_a_save_and_load_still_tethered_and_still_pursuing() {
+    let path = std::env::temp_dir().join(format!("feral_patrol_{}.bin", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+
+    let mut game = game(9112);
+    let (key, town, tile) = town_near_player(&mut game, 4, SETTLEMENT_HOSTILE_STANDING);
+    let member = member_at_range(&mut game, town, 2);
+    game.patrol_aggro_tick();
+    assert!(
+        is_pursuing(&game, member),
+        "fixture assumes a chase to carry across the save"
+    );
+    game.save(&path).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let restored: Vec<(Entity, Entity)> = {
+        let mut query = loaded.world.query::<(Entity, &TownPatrol)>();
+        query
+            .iter(&loaded.world)
+            .map(|(entity, patrol)| (entity, patrol.town))
+            .collect()
+    };
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        restored.len(),
+        1,
+        "the one patrol member on disk must come back tethered"
+    );
+    let (restored_member, restored_town) = restored[0];
+    let settlement = loaded
+        .world
+        .get::<crate::components::Settlement>(restored_town)
+        .expect("the tether must name a rebuilt settlement, not a stale entity id");
+    assert_eq!(
+        settlement.key, key,
+        "the tether resolves by tile, so it must land on the same town"
+    );
+    assert_eq!(
+        *loaded
+            .world
+            .get::<Position>(restored_town)
+            .expect("a town stands somewhere"),
+        Position {
+            x: tile.0,
+            y: tile.1
+        }
+    );
+    assert!(
+        loaded
+            .world
+            .get::<crate::components::Pursuing>(restored_member)
+            .is_some(),
+        "a chase in flight must survive the save — `pursuing` is meaningless without a tether \
+         to hang it on, and this is the second tether it may hang on"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// What the map is told
+// ---------------------------------------------------------------------------
+
+/// The fourth channel, and the two things it must not do: name a town for
+/// something that is not a patrol member, and spend one of the three
+/// readings a tile already carries.
+#[test]
+fn a_patrol_members_view_names_its_town_and_spends_no_other_channel() {
+    let mut game = game(9113);
+    let (key, town, _) = town_near_player(&mut game, 4, SETTLEMENT_HOSTILE_STANDING);
+    game.field_patrol();
+    let member = patrol_of(&mut game, town)[0].0;
+    let colour = game
+        .world
+        .get::<crate::components::Glyph>(member)
+        .unwrap()
+        .color;
+
+    let views = game.view_entities(40, 40);
+    let view = views
+        .iter()
+        .find(|v| v.entity == member)
+        .expect("a patrol member is drawn on the surface map like any other hostile");
+
+    assert_eq!(
+        view.patrol.as_deref(),
+        Some(game.settlement_name(key).as_str()),
+        "the mark raises the question whose it is, so the view has to answer it"
+    );
+    assert_eq!(
+        view.color, colour,
+        "the authored hue still says what the program is"
+    );
+    assert!(
+        view.difficulty.is_some(),
+        "the con read still says how dangerous it is"
+    );
+}
+
+#[test]
+fn an_ordinary_wild_program_names_no_town() {
+    let mut game = game(9114);
+    let ppos = *game.world.get::<Position>(game.player_entity()).unwrap();
+    carve_open(&mut game, (ppos.x, ppos.y), 4);
+    let wild = game
+        .spawn_wild_creature("scrapper", ppos.x + 2, ppos.y)
+        .expect("the species ships");
+
+    let views = game.view_entities(40, 40);
+    let view = views.iter().find(|v| v.entity == wild).expect("drawn");
+
+    assert!(
+        view.patrol.is_none(),
+        "only a TownPatrol names a town, or the mark stops meaning anything"
+    );
+}

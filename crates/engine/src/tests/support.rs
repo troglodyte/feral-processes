@@ -118,6 +118,24 @@ pub(super) fn place_settlement(
     for e in squatters {
         game.world.despawn(e);
     }
+    // A key names one town, so a fixture that re-places one must take the
+    // old entity with it. `ensure_local_settlements` never spawns a second
+    // entity for a key it has already resolved; a fixture that left one
+    // behind would be building a world the game cannot produce, and a
+    // lookup by key would answer with whichever of the two bevy happened to
+    // iterate first.
+    let stale: Vec<Entity> = {
+        let mut q = game
+            .world
+            .query::<(Entity, &crate::components::Settlement)>();
+        q.iter(&game.world)
+            .filter(|(_, settlement)| settlement.key == key)
+            .map(|(e, _)| e)
+            .collect()
+    };
+    for e in stale {
+        game.world.despawn(e);
+    }
     let def = generic_settlement_def();
     game.world
         .resource_mut::<crate::resources::Settlements>()

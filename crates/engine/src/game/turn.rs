@@ -1,6 +1,7 @@
 //! The turn loop: advancing the clock, moving, and the actions a player
 //! spends a turn on.
 
+use crate::components::TownPatrol;
 use crate::game::pursuit::pursuit_field;
 use crate::resources::SeenConditions;
 use crate::telemetry::Record;
@@ -8,7 +9,6 @@ use crate::tuning::{
     NEST_AGGRO_LEASH_RADIUS, NEST_PATH_SEARCH_MARGIN, NEST_PURSUIT_STEPS_PER_TICK,
     RANDOM_ENCOUNTER_CHANCE, REST_AMBUSH_CHANCE,
 };
-use crate::components::TownPatrol;
 use crate::world::NEIGHBOURS;
 use crate::*;
 
@@ -172,6 +172,11 @@ impl Game {
         self.ensure_local_population();
         self.ensure_local_settlements();
         self.maybe_spawn_wild_creature();
+        // Beside the ambient roll and after `ensure_local_settlements`,
+        // which is what resolves the towns this reads: a patrol is a spawn
+        // like any other, keyed to a band and a distance rather than to a
+        // habitat and a density.
+        self.maybe_field_patrol();
         // Before the schedule, not after, so a body posted this tick makes
         // progress this tick rather than standing at its machine for one.
         // Beside `maybe_spawn_wild_creature` for the same reason that one is
@@ -246,6 +251,12 @@ impl Game {
         // one at a besieged nest is already `Pursuing` (`nest_respawn_tick`
         // via `nest_has_pursuers`) and should get its step the same tick it
         // appeared, not wait a full tick doing nothing.
+        // Immediately before the shared pursuit step and after the nest's
+        // own respawn, for the reason that one is there: a patrol member
+        // that notices the player this tick should get its step now rather
+        // than stand still for one. This is also the only place a patrol
+        // stands down, so it runs on every tick the roll above misses.
+        self.patrol_aggro_tick();
         self.pursuit_tick();
         if age_temporary {
             self.age_temporary_structures();

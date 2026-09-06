@@ -2343,20 +2343,26 @@ fn a_patrol_member_beyond_its_towns_leash_gives_up() {
     let mut game = Game::new(713, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let ppos = *game.world.get::<Position>(player).unwrap();
-    let search_box =
-        NEST_AGGRO_LEASH_RADIUS.max(crate::tuning::SETTLEMENT_PATROL_LEASH_RADIUS) + NEST_PATH_SEARCH_MARGIN;
+    let search_box = NEST_AGGRO_LEASH_RADIUS.max(crate::tuning::SETTLEMENT_PATROL_LEASH_RADIUS)
+        + NEST_PATH_SEARCH_MARGIN;
     carve_lane(&mut game, ppos, search_box);
 
     let town_pos = Position {
         x: ppos.x + 2,
         y: ppos.y,
     };
-    let town = place_settlement(
-        &mut game,
-        crate::settlements::SettlementKey { rx: 1, ry: 0 },
-        town_pos.x,
-        town_pos.y,
-    );
+    let key = crate::settlements::SettlementKey { rx: 1, ry: 0 };
+    let town = place_settlement(&mut game, key, town_pos.x, town_pos.y);
+    // **Hostile, or this test is vacuous.** A Neutral town stands its
+    // patrol down at the top of `patrol_aggro_tick`, which drops `Pursuing`
+    // too — so the assertion below would pass with the leash arm of the
+    // collection deleted, which is the one thing it exists to catch.
+    game.world
+        .resource_mut::<crate::resources::Standings>()
+        .0
+        .entry(key)
+        .or_default()
+        .standing = crate::tuning::SETTLEMENT_HOSTILE_STANDING;
     let start = Position {
         x: ppos.x + search_box - 2,
         y: ppos.y,
@@ -2394,12 +2400,17 @@ fn a_patrol_member_and_a_nest_guardian_pursue_in_the_same_tick() {
     // pursuer opens a battle and the tick returns before the other steps.
     let nest = spawn_bare_nest(&mut game, ppos.x + 6, ppos.y + 1);
     let guardian = spawn_pursuing_guardian(&mut game, nest, "scrapper", ppos.x + 6, ppos.y + 1);
-    let town = place_settlement(
-        &mut game,
-        crate::settlements::SettlementKey { rx: 1, ry: 0 },
-        ppos.x + 6,
-        ppos.y - 1,
-    );
+    let key = crate::settlements::SettlementKey { rx: 1, ry: 0 };
+    let town = place_settlement(&mut game, key, ppos.x + 6, ppos.y - 1);
+    // Hostile, because the band is re-read every tick: a patrol whose town
+    // is anything else stands down at the top of `patrol_aggro_tick` and
+    // this would be testing the stand-down instead of the shared field.
+    game.world
+        .resource_mut::<crate::resources::Standings>()
+        .0
+        .entry(key)
+        .or_default()
+        .standing = crate::tuning::SETTLEMENT_HOSTILE_STANDING;
     let member = spawn_pursuing_patrol(&mut game, town, "scrapper", ppos.x + 6, ppos.y - 1);
 
     let before_guardian = *game.world.get::<Position>(guardian).unwrap();

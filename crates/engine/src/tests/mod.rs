@@ -64,6 +64,7 @@ mod routines;
 mod settlement_aid_reach;
 mod settlement_boards;
 mod settlement_market;
+mod settlement_patrols;
 mod settlement_relations;
 mod settlements;
 mod sorties;

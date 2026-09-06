@@ -1804,7 +1804,7 @@ pub fn assembler_system(
 /// double digits, so a base founded near spawn (the common case) and a
 /// Recharger built near its Home left a player wandering the open grid
 /// topped up by a machine that is not there. Refused underground for the
-/// same reason `nest_aggro_tick` is: a reader of the player's `Position`
+/// same reason `pursuit_tick` is: a reader of the player's `Position`
 /// that never went through a locale guard but still claims something about
 /// where the party is standing.
 ///
@@ -2111,7 +2111,7 @@ mod tests {
     /// space (`Game::place_structure` requires `require_base`), so
     /// comparing the pinned `Position` on either of the other two locales
     /// tops the party up on numbers that mean nothing where they actually
-    /// are: the same trap `nest_aggro_tick` carries underground, and, on
+    /// are: the same trap `pursuit_tick` carries underground, and, on
     /// the surface, the exact bug `view_entities`'s own doc records already
     /// shipped once (a surface tile that numerically matched a base-space
     /// Market's cell made `[S]ell` appear on the inventory screen).

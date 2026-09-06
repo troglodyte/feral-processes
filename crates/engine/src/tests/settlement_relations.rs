@@ -1152,7 +1152,7 @@ fn a_trip_interrupted_by_a_fight_stops_paying_for_itself() {
     assert!(quote > 1, "the fixture's trip is too short to interrupt");
 
     // A guardian already in pursuit, standing on the landing tile's doorstep
-    // — `nest_aggro_tick` closes on the party from inside `tick`, which is
+    // — `pursuit_tick` closes on the party from inside `tick`, which is
     // exactly how a fight opens mid-journey in play.
     let town = game
         .world

@@ -439,7 +439,7 @@ fn drag_ground_takes_no_integrity() {
     assert_eq!(player_hp(&game), before);
 }
 
-/// A tick can start a fight — `nest_aggro_tick` is the precedent, and it is
+/// A tick can start a fight — `pursuit_tick` is the precedent, and it is
 /// why `rest`'s tick loop needed a battle check. Anything that ticks in a
 /// loop inherits that obligation: the remaining ticks would resolve a world
 /// the player is no longer standing in, while a fight waits on the screen.

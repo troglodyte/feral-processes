@@ -133,7 +133,7 @@ fn a_failed_jack_out_draws_a_parting_volley() {
 /// trying (and mathematically failing — see the fix's own history) to
 /// outrun it: `battle_flee`'s successful path clears `Pursuing` from every
 /// entity that was actually in the battle, before the `tick` that follows
-/// would otherwise let `nest_aggro_tick` re-engage the same, still-adjacent
+/// would otherwise let `pursuit_tick` re-engage the same, still-adjacent
 /// pack inside the same call. `NestGuardian` survives, so the guardian
 /// resumes ordinary tethered wandering exactly like a `despawn_nest`
 /// survivor — the nest re-provokes it the next time `attack_nest` lands.
@@ -199,7 +199,7 @@ fn a_successful_jack_out_does_not_shake_a_pursuer_outside_the_battle() {
     // (inside the 20-tile search box, but not adjacent — it must not reach
     // the player and start a second battle within this same tick) — so if
     // this loses `Pursuing`, that can only be this fix's own scoping, not
-    // the ordinary leash or out-of-field rules `nest_aggro_tick` already
+    // the ordinary leash or out-of-field rules `pursuit_tick` already
     // applies to every pursuer regardless of this fix.
     let elsewhere = spawn_pursuing_guardian(&mut game, nest, "scrapper", ppos.x + 10, ppos.y);
     insert_battle(&mut game, player, vec![in_battle]);

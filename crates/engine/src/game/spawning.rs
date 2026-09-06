@@ -810,7 +810,7 @@ impl Game {
     ///
     /// Deliberately *not* guarded by `Game::require_surface` or an
     /// `is_underground` check, unlike `power_regen_system` and
-    /// `nest_aggro_tick`. Those refuse because they would otherwise reach the
+    /// `pursuit_tick`. Those refuse because they would otherwise reach the
     /// party through a `Position` pinned to the entrance tile. This one makes
     /// no claim about the party at all — it stocks ground — and the surface
     /// is meant to keep living while they are below, which is the same rule

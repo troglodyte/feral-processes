@@ -1002,7 +1002,7 @@ fn zone_transition_reliably_populates_the_new_zone_regardless_of_seed() {
 /// Nest provocation: `Game::attack_nest` marking guardians `Pursuing`, and
 /// every path that removes a guardian from the world (a destroyed nest, a
 /// tamed capture) removing the marker with it. The tests below this point
-/// are about setting and clearing that marker in isolation; `nest_aggro_tick`
+/// are about setting and clearing that marker in isolation; `pursuit_tick`
 /// — the part that actually moves a `Pursuing` guardian and starts a fight —
 /// gets its own tests further down.
 fn guardians_of(game: &mut Game, nest: Entity) -> Vec<Entity> {
@@ -1084,7 +1084,7 @@ fn a_guardian_respawned_at_a_besieged_nest_is_already_pursuing() {
     // Open ground the whole way, and — unlike this test before Task 4's
     // review — the nest sits inside the player's pursuit field rather
     // than off at an arbitrary far corner of the map. A guardian
-    // `nest_aggro_tick` can never reach gives up on the spot (see the
+    // `pursuit_tick` can never reach gives up on the spot (see the
     // "absent from the field" rule), which would strip the survivor's
     // `Pursuing` within the first tick or two and defeat this test's
     // premise long before the respawn timer ever fires.
@@ -1200,15 +1200,15 @@ fn a_pursuing_guardian_does_not_also_wander() {
     let nest = spawn_bare_nest(&mut game, 140, 140);
     let guardian = spawn_pursuing_guardian(&mut game, nest, "scrapper", 141, 140);
 
-    // Freeze `nest_aggro_tick` itself with an unrelated active battle, so
+    // Freeze `pursuit_tick` itself with an unrelated active battle, so
     // `Pursuing` survives genuinely across every tick below rather than by
-    // a distance trick — `nest_aggro_tick` no longer leaves a far-off
+    // a distance trick — `pursuit_tick` no longer leaves a far-off
     // guardian frozen-but-still-`Pursuing` indefinitely (see the "absent
     // from the field" rule this task's review added: such a guardian now
     // gives up immediately instead), so a real battle is the only thing
     // left that can hold this state open long enough to prove
     // `wander_ai_system`'s own `Without<Pursuing>` filter is what's
-    // keeping the guardian still, not a side effect of `nest_aggro_tick`'s
+    // keeping the guardian still, not a side effect of `pursuit_tick`'s
     // own guard.
     let wild = spawn_wild_on_player_tile(&mut game);
     insert_battle(&mut game, player, vec![wild]);
@@ -1221,9 +1221,9 @@ fn a_pursuing_guardian_does_not_also_wander() {
 
     assert_eq!(
         before, after,
-        "wander_ai_system must exclude a Pursuing guardian even while nest_aggro_tick is \
+        "wander_ai_system must exclude a Pursuing guardian even while pursuit_tick is \
          separately frozen by the battle — otherwise the two systems could double-move it \
-         once nest_aggro_tick resumes"
+         once pursuit_tick resumes"
     );
     assert!(
         game.world.get::<Pursuing>(guardian).is_some(),
@@ -1297,7 +1297,7 @@ fn decompiling_a_pursuing_guardian_strips_the_marker() {
     );
 }
 
-/// The per-tick pursuit step (`Game::nest_aggro_tick`) that wires
+/// The per-tick pursuit step (`Game::pursuit_tick`) that wires
 /// `Pursuing` (provocation) to `pursuit_field` (routing) together — this
 /// is the half of nest aggression that actually moves a guardian and
 /// starts a fight.
@@ -1627,7 +1627,7 @@ fn pursuers_never_step_onto_the_base_platform() {
 }
 
 #[test]
-fn nest_aggro_tick_is_a_no_op_during_a_battle() {
+fn pursuit_tick_is_a_no_op_during_a_battle() {
     let mut game = Game::new(715, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let ppos = *game.world.get::<Position>(player).unwrap();
@@ -1668,12 +1668,12 @@ fn nest_aggro_tick_is_a_no_op_during_a_battle() {
     assert_eq!(
         *game.world.get::<Position>(guardian).unwrap(),
         before,
-        "nest_aggro_tick must not move a pursuer while a battle is already running"
+        "pursuit_tick must not move a pursuer while a battle is already running"
     );
 }
 
 #[test]
-fn nest_aggro_tick_is_a_no_op_while_underground() {
+fn pursuit_tick_is_a_no_op_while_underground() {
     let mut game = Game::new(716, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let ppos = *game.world.get::<Position>(player).unwrap();
@@ -1681,7 +1681,7 @@ fn nest_aggro_tick_is_a_no_op_while_underground() {
     // Adjacent to the surface entrance tile. `Position` stays pinned there
     // for as long as the party is underground (see CLAUDE.md's
     // load-bearing-seams note on `Locale::Stack`), so this pursuer would
-    // engage this very tick if `nest_aggro_tick` didn't know to leave that
+    // engage this very tick if `pursuit_tick` didn't know to leave that
     // surface `Position` alone while the party is four frames down.
     let nest = spawn_bare_nest(&mut game, ppos.x + 1, ppos.y);
     let guardian = spawn_pursuing_guardian(&mut game, nest, "scrapper", ppos.x + 1, ppos.y);
@@ -1696,7 +1696,7 @@ fn nest_aggro_tick_is_a_no_op_while_underground() {
 
     assert!(
         !game.has_active_battle(),
-        "nest_aggro_tick must not fight the player's surface Position while the party is \
+        "pursuit_tick must not fight the player's surface Position while the party is \
          underground"
     );
     assert_eq!(
@@ -1709,7 +1709,7 @@ fn nest_aggro_tick_is_a_no_op_while_underground() {
     );
 }
 
-/// Pins the deviation recorded in `nest_aggro_tick`'s "field-absence"
+/// Pins the deviation recorded in `pursuit_tick`'s "field-absence"
 /// branch (and the matching "Implementation note" in
 /// docs/superpowers/archive/specs/2026-08-03-nest-aggression-design.md): standing
 /// inside the base slab empties the pursuit field outright, for *any*
@@ -2304,5 +2304,117 @@ fn a_breach_clears_the_wild_but_leaves_a_nests_guardian_standing() {
     assert!(
         game.world.get::<Creature>(guardian).is_some(),
         "a breach cleared a nest's own guardian, leaving the nest bare"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7b — the second tether shares one pursuit tick
+// ---------------------------------------------------------------------------
+
+/// Carves a walkable lane east of the player so the shared field reaches.
+fn carve_lane(game: &mut Game, ppos: Position, reach: i32) {
+    let mut map = game.world.resource_mut::<WorldMap>();
+    for dx in -2..=reach {
+        for dy in -2..=2 {
+            map.set_override(
+                ppos.x + dx,
+                ppos.y + dy,
+                Tile {
+                    biome: Biome::OpenGrid,
+                    walkable: true,
+                    rock_shade: None,
+                },
+            );
+        }
+    }
+}
+
+/// **The test the two-arm collection exists for.** A patrol member past its
+/// town's leash must be released exactly as a nest guardian past its nest's
+/// is.
+///
+/// Dropping the `TownPatrol` arm does not stop a patrol pursuing — the step
+/// loop queries `With<Pursuing>` alone — it stops one ever being *released*,
+/// so the symptom is a program chasing across the whole zone forever. Built
+/// on `a_pursuer_beyond_the_leash_gives_up`'s premise checks, so a pass here
+/// cannot be the ordinary out-of-field rule in disguise.
+#[test]
+fn a_patrol_member_beyond_its_towns_leash_gives_up() {
+    let mut game = Game::new(713, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let ppos = *game.world.get::<Position>(player).unwrap();
+    let search_box =
+        NEST_AGGRO_LEASH_RADIUS.max(crate::tuning::SETTLEMENT_PATROL_LEASH_RADIUS) + NEST_PATH_SEARCH_MARGIN;
+    carve_lane(&mut game, ppos, search_box);
+
+    let town_pos = Position {
+        x: ppos.x + 2,
+        y: ppos.y,
+    };
+    let town = place_settlement(
+        &mut game,
+        crate::settlements::SettlementKey { rx: 1, ry: 0 },
+        town_pos.x,
+        town_pos.y,
+    );
+    let start = Position {
+        x: ppos.x + search_box - 2,
+        y: ppos.y,
+    };
+    let member = spawn_pursuing_patrol(&mut game, town, "scrapper", start.x, start.y);
+    assert!(
+        chebyshev(start, town_pos) > crate::tuning::SETTLEMENT_PATROL_LEASH_RADIUS,
+        "test premise: past the leash radius from the town"
+    );
+    assert!(
+        chebyshev(start, ppos) <= search_box,
+        "test premise: inside the player's own search box, so a pass here cannot be the \
+         ordinary out-of-field rule in disguise"
+    );
+
+    game.tick();
+
+    assert!(
+        game.world.get::<Pursuing>(member).is_none(),
+        "a patrol past its town's leash must be released, as a guardian past its nest's is"
+    );
+}
+
+/// Both tethers pursue in the same tick, off the one shared field — the
+/// property that fails if the collection keeps only one arm.
+#[test]
+fn a_patrol_member_and_a_nest_guardian_pursue_in_the_same_tick() {
+    let mut game = Game::new(713, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let ppos = *game.world.get::<Position>(player).unwrap();
+    carve_lane(&mut game, ppos, 12);
+
+    // Both anchors sit on the player's tile row, both chasers well inside
+    // their own leash, and neither adjacent to the player — an adjacent
+    // pursuer opens a battle and the tick returns before the other steps.
+    let nest = spawn_bare_nest(&mut game, ppos.x + 6, ppos.y + 1);
+    let guardian = spawn_pursuing_guardian(&mut game, nest, "scrapper", ppos.x + 6, ppos.y + 1);
+    let town = place_settlement(
+        &mut game,
+        crate::settlements::SettlementKey { rx: 1, ry: 0 },
+        ppos.x + 6,
+        ppos.y - 1,
+    );
+    let member = spawn_pursuing_patrol(&mut game, town, "scrapper", ppos.x + 6, ppos.y - 1);
+
+    let before_guardian = *game.world.get::<Position>(guardian).unwrap();
+    let before_member = *game.world.get::<Position>(member).unwrap();
+
+    game.tick();
+
+    let after_guardian = *game.world.get::<Position>(guardian).unwrap();
+    let after_member = *game.world.get::<Position>(member).unwrap();
+    assert!(
+        chebyshev(after_guardian, ppos) < chebyshev(before_guardian, ppos),
+        "the nest guardian closed on the player"
+    );
+    assert!(
+        chebyshev(after_member, ppos) < chebyshev(before_member, ppos),
+        "and so did the patrol member, off the same field, in the same tick"
     );
 }

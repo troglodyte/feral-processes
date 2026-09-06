@@ -667,7 +667,7 @@ fn a_descend_contract_reads_the_locale_and_never_a_surface_position() {
     // The regression that matters: a party standing a long way from origin
     // on the *surface* has descended nowhere. `Position` is pinned to the
     // entrance tile underground, so a depth taken from it is a surface
-    // coordinate — the trap `nest_aggro_tick` needs its guard for.
+    // coordinate — the trap `pursuit_tick` needs its guard for.
     {
         let player = game.player_entity();
         let mut pos = game.world.get_mut::<Position>(player).unwrap();

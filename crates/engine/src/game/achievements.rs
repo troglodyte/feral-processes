@@ -30,7 +30,7 @@ pub struct RunStanding<'w> {
     /// Read instead of `Position`, always: `Position` is pinned to the
     /// surface entrance tile while the party is underground, so a depth taken
     /// from it would be a surface coordinate. That is the trap
-    /// `nest_aggro_tick` needs its guard for.
+    /// `pursuit_tick` needs its guard for.
     locale: Res<'w, Locale>,
     difficulty: Res<'w, DifficultyMode>,
 }

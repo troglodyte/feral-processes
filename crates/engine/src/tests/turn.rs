@@ -147,7 +147,7 @@ fn rest_fully_heals_and_restores_power() {
 }
 
 /// No rest can be interrupted, because no rest advances the clock — there
-/// are no ticks for `nest_aggro_tick` to open a battle on.
+/// are no ticks for `pursuit_tick` to open a battle on.
 ///
 /// Kept pointed at the hardest case rather than retired with the tick loop:
 /// a provoked guardian standing on the party's own pinned tile, which is

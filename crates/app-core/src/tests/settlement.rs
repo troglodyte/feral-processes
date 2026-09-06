@@ -72,7 +72,7 @@ fn an_unrelated_action_after_esc_does_not_reopen_the_page() {
 
 /// Fix for the HIGH-severity review finding: `Game::move_player`'s
 /// settlement arm calls `self.tick()` before app-core ever sees the bump,
-/// and `tick_inner` calls `nest_aggro_tick` (`turn.rs:236`), which can call
+/// and `tick_inner` calls `pursuit_tick` (`turn.rs:236`), which can call
 /// `start_battle` for a `Pursuing` guardian within chebyshev 1 of the
 /// player (`turn.rs:382`). So a fight can begin *inside* the settlement
 /// bump's own tick, and it must win the mode over `Mode::Settlement`.
@@ -86,7 +86,7 @@ fn a_battle_starting_inside_the_settlement_bump_wins_the_mode() {
     assert_eq!(
         app.mode,
         Mode::Battle,
-        "nest_aggro_tick can start a battle inside the settlement bump's own tick — the \
+        "pursuit_tick can start a battle inside the settlement bump's own tick — the \
          battle must win"
     );
 }

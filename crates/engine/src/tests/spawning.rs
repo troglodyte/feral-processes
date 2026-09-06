@@ -1767,7 +1767,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
     // The saved `pursuing: true` on this creature must not survive on its
     // own — `Pursuing` is only ever inserted alongside `NestGuardian`
     // (`Game::load`). Without that guard, this would be an *unleashed*
-    // pursuer, not a frozen one: `nest_aggro_tick`'s driving pass
+    // pursuer, not a frozen one: `pursuit_tick`'s driving pass
     // (`game/turn.rs`) collects everything `With<Pursuing>` and moves it
     // toward the player regardless of `NestGuardian` — only the leash
     // check that runs before it needs the tether, to find a nest position

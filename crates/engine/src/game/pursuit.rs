@@ -1,5 +1,5 @@
 //! A bounded cost field for chasing something across the map, routed around
-//! obstacles rather than assumed open ground. `Game::nest_aggro_tick`
+//! obstacles rather than assumed open ground. `Game::pursuit_tick`
 //! (`game/turn.rs`) is the one caller: it walks each provoked nest guardian
 //! downhill along the field this module builds.
 //!

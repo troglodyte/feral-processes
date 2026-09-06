@@ -441,7 +441,7 @@ impl Game {
     /// everything a walk would have advanced still advances.
     ///
     /// **Breaks on a fight or a game over, `Game::wait`'s rule** — a tick
-    /// can start a fight (`nest_aggro_tick` is the precedent) and the rest
+    /// can start a fight (`pursuit_tick` is the precedent) and the rest
     /// of them must be dropped the moment one does, rather than resolving a
     /// world the party is no longer standing in while a battle waits on the
     /// screen. Travel is the fourth multi-tick loop in the engine and the

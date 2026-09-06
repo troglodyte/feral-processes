@@ -106,7 +106,7 @@ impl Game {
         let front = self.front_of_group(0);
         self.end_battle(player, front);
         // A successful jack-out shakes the pack that caught you: without
-        // this, `nest_aggro_tick` (inside the `tick` below) would find the
+        // this, `pursuit_tick` (inside the `tick` below) would find the
         // same guardians still adjacent and still `Pursuing`, and
         // re-engage before the player's next input ever arrived — under
         // permadeath, every attempt to leave would cost the XP setback
@@ -408,7 +408,7 @@ impl Game {
                 // exactly where it was, adjacent to whatever just beat
                 // them. A `NestGuardian` marked here is promoted and
                 // healed to its new max in the same breath — if it were
-                // still `Pursuing`, `nest_aggro_tick` (already the first
+                // still `Pursuing`, `pursuit_tick` (already the first
                 // thing to call `start_battle` from inside `tick_inner`,
                 // and running later in the very same tick via
                 // `death_handling_system`) would re-engage it before the

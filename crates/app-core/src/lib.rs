@@ -1770,7 +1770,7 @@ impl Mode {
             // Opened from the map by a bump or by `x`. `x` never layers over
             // a fight. A bump can: the settlement arm of the bump ladder
             // queues the visit and calls `self.tick()` itself, and
-            // `nest_aggro_tick` inside that tick can start a battle for a
+            // `pursuit_tick` inside that tick can start a battle for a
             // `Pursuing` guardian already adjacent to the player — but
             // `App::after_world_action` gives the battle the mode in that
             // case (see its own comment), so this screen is never actually

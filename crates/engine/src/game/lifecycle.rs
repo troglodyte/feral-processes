@@ -1463,6 +1463,221 @@ impl Game {
         Ok(game)
     }
 
+    /// One creature as the save format describes it, or `None` if `e` is not
+    /// a creature.
+    ///
+    /// **The single answer to "what is a creature in a file".** The bulk dump
+    /// in `save` below is the only caller today; the one this was lifted out
+    /// for is the commit step that snapshots a committed program onto a build
+    /// request, which needs exactly this shape for exactly one entity. A
+    /// second builder is the thing that separation exists to prevent — the
+    /// copy that drifts is the one nobody runs, and a build request's
+    /// snapshot is written once and read back a week of play later.
+    ///
+    /// Reads component by component rather than through a query, which is
+    /// what makes it addressable by entity at all. The four **role** fields
+    /// are the only ones that change shape in the move: `party_slot`,
+    /// `sortie_index` and `wielded` search the same three resources the loop
+    /// used to gather up front, and `staff` asks `program_role` directly
+    /// rather than scanning `base_staff()` and searching the result — the
+    /// same predicate, since `base_staff` is that question over every
+    /// `Tamed` entity, and O(1) instead of a roster scan per creature.
+    pub(crate) fn creature_save_for(&mut self, e: Entity) -> Option<save::CreatureSave> {
+        let species = self.world.get::<Creature>(e)?.species.clone();
+        let pos = *self.world.get::<Position>(e)?;
+        let stats = *self.world.get::<Stats>(e)?;
+        let potential = self
+            .world
+            .get::<Potential>(e)
+            .copied()
+            .unwrap_or(Potential::NEUTRAL);
+        // A dig job is deliberately not saved: `CronjobSave` resolves
+        // its target by position against the *structures* restored
+        // beside it, and a `DigSite` is not one. Nothing is lost by it —
+        // the mark is what the save carries, and `schedule_base_labour`
+        // posts a body back onto it on the first tick after the load.
+        // The most a reload can cost is one part-finished swing.
+        // `Construct` is filtered out beside `Excavate` and for the
+        // same reason: neither is a cronjob. A `BuildSite` is saved in
+        // its own right, carrying the bill of materials and everything
+        // already delivered to it, and `schedule_base_labour` posts a
+        // body back onto it on the first tick after the load. The most a
+        // reload can cost is one part-finished tick of construction.
+        //
+        // Copied out of the component before the target is looked up
+        // rather than held across it: `Task` is not `Clone`, and the
+        // resolution below is a second read of the same world.
+        let job = self
+            .world
+            .get::<Task>(e)
+            .filter(|t| !matches!(t.kind, TaskKind::Excavate | TaskKind::Construct))
+            .map(|t| (t.kind, t.target, t.progress, t.required));
+        let cronjob = job.and_then(|(kind, target, progress, required)| {
+            self.world
+                .get::<Position>(target)
+                .map(|target_pos| save::CronjobSave {
+                    target_position: (target_pos.x, target_pos.y),
+                    progress,
+                    required,
+                    kind: match kind {
+                        TaskKind::GatherResource => save::CronjobKind::GatherResource,
+                        TaskKind::Guard => save::CronjobKind::Guard,
+                        TaskKind::Excavate | TaskKind::Construct => {
+                            unreachable!("filtered out above")
+                        }
+                    },
+                })
+        });
+        // Same by-position resolution `cronjob` above uses: a
+        // `NestGuardian`'s target entity id isn't stable across the
+        // round trip, but a nest's tile is.
+        let nest_position = self
+            .world
+            .get::<NestGuardian>(e)
+            .map(|g| g.nest)
+            .and_then(|nest| self.world.get::<Position>(nest))
+            .map(|nest_pos| (nest_pos.x, nest_pos.y));
+        // The second tether, resolved the same way and for the same
+        // reason. A town cannot be destroyed, so unlike a nest this can
+        // only fail to resolve on a load — never on a save.
+        let patrol_position = self
+            .world
+            .get::<TownPatrol>(e)
+            .map(|p| p.town)
+            .and_then(|town| self.world.get::<Position>(town))
+            .map(|town_pos| (town_pos.x, town_pos.y));
+        Some(save::CreatureSave {
+            species,
+            position: (pos.x, pos.y),
+            hp: stats.hp,
+            max_hp: stats.max_hp,
+            atk: stats.atk,
+            mitigation: stats.mitigation,
+            tamed: self.world.get::<Tamed>(e).is_some(),
+            power: self
+                .world
+                .get::<PowerReserve>(e)
+                .map(|r| r.get())
+                .unwrap_or(POWER_MAX),
+            level: self
+                .world
+                .get::<Experience>(e)
+                .map(|x| x.level)
+                .unwrap_or(1),
+            xp: self.world.get::<Experience>(e).map(|x| x.xp).unwrap_or(0),
+            xp_to_next: self
+                .world
+                .get::<Experience>(e)
+                .map(|x| x.xp_to_next)
+                .unwrap_or_else(|| crate::progression::xp_for_level(1)),
+            cronjob,
+            party_slot: self
+                .world
+                .resource::<Party>()
+                .0
+                .iter()
+                .position(|&member| member == e)
+                .map(|i| i as u32),
+            sortie_index: self
+                .world
+                .resource::<crate::resources::Sorties>()
+                .0
+                .iter()
+                .position(|sortie| sortie.members.contains(&e))
+                .map(|i| i as u32),
+            wielded: self.wielded_program() == Some(e),
+            zone: self.world.get::<ZonePortal>(e).map(|z| z.0).unwrap_or(1),
+            custom_name: self.world.get::<CustomName>(e).map(|c| c.0.clone()),
+            hp_roll: potential.hp_roll,
+            atk_roll: potential.atk_roll,
+            def_roll: potential.def_roll,
+            growth_roll: potential.growth_roll,
+            fusions: self.world.get::<FusionCount>(e).map(|f| f.0).unwrap_or(0),
+            refactors: self.world.get::<Refactors>(e).map(|r| r.0).unwrap_or(0),
+            purchased_tiers: self
+                .world
+                .get::<PurchasedTiers>(e)
+                .map(|t| t.0)
+                .unwrap_or(0),
+            ring: self.world.get::<KernelRing>(e).map(|r| r.0).unwrap_or(0),
+            talents: self
+                .world
+                .get::<Talents>(e)
+                .map(|t| t.0.iter().map(|id| id.to_string()).collect())
+                .unwrap_or_default(),
+            bought_stats: self
+                .world
+                .get::<BoughtStats>(e)
+                .copied()
+                .unwrap_or_default(),
+            routines: self
+                .world
+                .get::<Routines>(e)
+                .map(|r| r.0.clone())
+                .unwrap_or_default(),
+            field_buffs: self
+                .world
+                .get::<FieldBuff>(e)
+                .map(|f| f.active.clone())
+                .unwrap_or_default(),
+            nest_position,
+            patrol_position,
+            pursuing: self.world.get::<Pursuing>(e).is_some(),
+            boss: self.world.get::<Boss>(e).is_some(),
+            carrying: self
+                .world
+                .get::<Carrying>(e)
+                .map(|c| (c.item.clone(), c.qty)),
+            rarity: self.world.get::<Rarity>(e).copied().unwrap_or_default(),
+            nemesis_grudges: self.world.get::<Nemesis>(e).map(|n| n.0).unwrap_or(0),
+            program_id: self.world.get::<ProgramId>(e).map(|p| p.0).unwrap_or(0),
+            disposition: self
+                .world
+                .get::<crate::disposition::Disposition>(e)
+                .copied(),
+            disgruntled: self
+                .world
+                .get::<crate::components::Disgruntled>(e)
+                .map(|d| d.grievance),
+            memories: self
+                .world
+                .get::<Memories>(e)
+                .map(|m| {
+                    m.0.iter()
+                        .map(|m| save::MemorySave {
+                            def: m.def.clone(),
+                            subject: m.subject.clone(),
+                            subject_name: m.subject_name.clone(),
+                            reinforced: m.reinforced,
+                            strikes: m.strikes,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            needs: self
+                .world
+                .get::<Needs>(e)
+                .map(|n| n.iter().map(|(id, v)| (id.clone(), v)).collect())
+                .unwrap_or_default(),
+            off_shift: self
+                .world
+                .get::<crate::components::OffShift>(e)
+                .map(|o| o.need.clone()),
+            downed: self.world.get::<crate::components::Downed>(e).is_some(),
+            equipment: self
+                .world
+                .get::<Equipment>(e)
+                .map(|eq| {
+                    EquipmentSlot::ALL
+                        .into_iter()
+                        .filter_map(|slot| Some((slot, worn_to_save(&eq.get(slot)?))))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            staff: self.program_role(e) == Some(ProgramRole::Staff),
+        })
+    }
+
     pub fn save(&mut self, path: &Path) -> std::io::Result<()> {
         let player = self.player_entity();
         let pos = *self.world.get::<Position>(player).unwrap();
@@ -1520,19 +1735,10 @@ impl Game {
             .map(|n| n.0.clone())
             .unwrap_or_default();
 
-        let party_entities = self.world.resource::<Party>().0.clone();
-        let wielded = self.wielded_program();
-        // Gathered here for `party_entities`' reason, and written per
-        // creature for the same one: entity ids are not stable across the
-        // round trip, so a member list on the sortie side could not be read
-        // back. `SortieSave` carries none.
-        let away: Vec<Vec<Entity>> = self
-            .world
-            .resource::<crate::resources::Sorties>()
-            .0
-            .iter()
-            .map(|s| s.members.clone())
-            .collect();
+        // Sortie membership is written per *creature*, not here: entity ids
+        // are not stable across the round trip, so a member list on the
+        // sortie side could not be read back. `SortieSave` carries none —
+        // `creature_save_for` answers it from `sortie_index`.
         let sorties: Vec<save::SortieSave> = self
             .world
             .resource::<crate::resources::Sorties>()
@@ -1573,217 +1779,25 @@ impl Game {
                 proceeds: r.proceeds,
             })
             .collect();
-        // Gathered up front rather than queried per creature: the creature
-        // query below is at bevy's 15-element ceiling already, and this is
-        // the same shape `party_entities` and `wielded` take for it.
-        let staff = self.base_staff();
-        let mut creatures = Vec::new();
-        let mut creature_query = self.world.query::<(
-            Entity,
-            &Creature,
-            &Position,
-            &Stats,
-            Option<&Tamed>,
-            Option<&Experience>,
-            Option<&Task>,
-            Option<&ZonePortal>,
-            Option<&CustomName>,
-            Option<&Potential>,
-            Option<&FusionCount>,
-            Option<&Routines>,
-            Option<&FieldBuff>,
-            // Nested because bevy's query tuples top out at 15 elements and
-            // this one is full. Grouped by what they describe — where the
-            // creature belongs and what it is holding — rather than split
-            // wherever the count happened to run out.
-            (
-                Option<&NestGuardian>,
-                Option<&TownPatrol>,
-                Option<&Pursuing>,
-                Option<&Carrying>,
-                Option<&Rarity>,
-                Option<&Refactors>,
-                Option<&PurchasedTiers>,
-                Option<&KernelRing>,
-                Option<&Talents>,
-                Option<&Equipment>,
-                Option<&Nemesis>,
-                Option<&PowerReserve>,
-                Option<&Boss>,
-                Option<&ProgramId>,
-                // Nested one level further because bevy's query tuples top
-                // out at 15 and this one is full again — grouped as "what
-                // this program is, remembers and needs".
-                (
-                    Option<&Memories>,
-                    Option<&Needs>,
-                    Option<&crate::components::OffShift>,
-                    Option<&crate::components::Downed>,
-                    Option<&crate::disposition::Disposition>,
-                    Option<&crate::components::Disgruntled>,
-                    Option<&BoughtStats>,
-                ),
-            ),
-        )>();
-        for (
-            entity,
-            creature,
-            pos,
-            stats,
-            tamed,
-            exp,
-            task,
-            spawn_zone,
-            custom_name,
-            potential,
-            fusions,
-            routines,
-            field_buff,
-            (
-                nest_guardian,
-                town_patrol,
-                pursuing,
-                carrying,
-                rarity,
-                refactors,
-                purchased_tiers,
-                ring,
-                talents,
-                equipment,
-                nemesis,
-                reserve,
-                boss,
-                program_id,
-                (memories, needs, off_shift, downed, disposition, disgruntled, bought_stats),
-            ),
-        ) in creature_query.iter(&self.world)
-        {
-            let potential = potential.copied().unwrap_or(Potential::NEUTRAL);
-            // A dig job is deliberately not saved: `CronjobSave` resolves
-            // its target by position against the *structures* restored
-            // beside it, and a `DigSite` is not one. Nothing is lost by it —
-            // the mark is what the save carries, and `schedule_base_labour`
-            // posts a body back onto it on the first tick after the load.
-            // The most a reload can cost is one part-finished swing.
-            // `Construct` is filtered out beside `Excavate` and for the
-            // same reason: neither is a cronjob. A `BuildSite` is saved in
-            // its own right, carrying the bill of materials and everything
-            // already delivered to it, and `schedule_base_labour` posts a
-            // body back onto it on the first tick after the load. The most a
-            // reload can cost is one part-finished tick of construction.
-            let cronjob = task
-                .filter(|t| !matches!(t.kind, TaskKind::Excavate | TaskKind::Construct))
-                .and_then(|t| {
-                    self.world
-                        .get::<Position>(t.target)
-                        .map(|target_pos| save::CronjobSave {
-                            target_position: (target_pos.x, target_pos.y),
-                            progress: t.progress,
-                            required: t.required,
-                            kind: match t.kind {
-                                TaskKind::GatherResource => save::CronjobKind::GatherResource,
-                                TaskKind::Guard => save::CronjobKind::Guard,
-                                TaskKind::Excavate | TaskKind::Construct => {
-                                    unreachable!("filtered out above")
-                                }
-                            },
-                        })
-                });
-            // Same by-position resolution `cronjob` above uses: a
-            // `NestGuardian`'s target entity id isn't stable across the
-            // round trip, but a nest's tile is.
-            let nest_position = nest_guardian.and_then(|g| {
-                self.world
-                    .get::<Position>(g.nest)
-                    .map(|nest_pos| (nest_pos.x, nest_pos.y))
-            });
-            // The second tether, resolved the same way and for the same
-            // reason. A town cannot be destroyed, so unlike a nest this can
-            // only fail to resolve on a load — never on a save.
-            let patrol_position = town_patrol.and_then(|p| {
-                self.world
-                    .get::<Position>(p.town)
-                    .map(|town_pos| (town_pos.x, town_pos.y))
-            });
-            creatures.push(save::CreatureSave {
-                species: creature.species.clone(),
-                position: (pos.x, pos.y),
-                hp: stats.hp,
-                max_hp: stats.max_hp,
-                atk: stats.atk,
-                mitigation: stats.mitigation,
-                tamed: tamed.is_some(),
-                power: reserve.map(|r| r.get()).unwrap_or(POWER_MAX),
-                level: exp.map(|e| e.level).unwrap_or(1),
-                xp: exp.map(|e| e.xp).unwrap_or(0),
-                xp_to_next: exp
-                    .map(|e| e.xp_to_next)
-                    .unwrap_or_else(|| crate::progression::xp_for_level(1)),
-                cronjob,
-                party_slot: party_entities
-                    .iter()
-                    .position(|&e| e == entity)
-                    .map(|i| i as u32),
-                sortie_index: away
-                    .iter()
-                    .position(|members| members.contains(&entity))
-                    .map(|i| i as u32),
-                wielded: wielded == Some(entity),
-                zone: spawn_zone.map(|z| z.0).unwrap_or(1),
-                custom_name: custom_name.map(|c| c.0.clone()),
-                hp_roll: potential.hp_roll,
-                atk_roll: potential.atk_roll,
-                def_roll: potential.def_roll,
-                growth_roll: potential.growth_roll,
-                fusions: fusions.map(|f| f.0).unwrap_or(0),
-                refactors: refactors.map(|r| r.0).unwrap_or(0),
-                purchased_tiers: purchased_tiers.map(|t| t.0).unwrap_or(0),
-                ring: ring.map(|r| r.0).unwrap_or(0),
-                talents: talents
-                    .map(|t| t.0.iter().map(|id| id.to_string()).collect())
-                    .unwrap_or_default(),
-                bought_stats: bought_stats.copied().unwrap_or_default(),
-                routines: routines.map(|r| r.0.clone()).unwrap_or_default(),
-                field_buffs: field_buff.map(|f| f.active.clone()).unwrap_or_default(),
-                nest_position,
-                patrol_position,
-                pursuing: pursuing.is_some(),
-                boss: boss.is_some(),
-                carrying: carrying.map(|c| (c.item.clone(), c.qty)),
-                rarity: rarity.copied().unwrap_or_default(),
-                nemesis_grudges: nemesis.map(|n| n.0).unwrap_or(0),
-                program_id: program_id.map(|p| p.0).unwrap_or(0),
-                disposition: disposition.copied(),
-                disgruntled: disgruntled.map(|d| d.grievance),
-                memories: memories
-                    .map(|m| {
-                        m.0.iter()
-                            .map(|m| save::MemorySave {
-                                def: m.def.clone(),
-                                subject: m.subject.clone(),
-                                subject_name: m.subject_name.clone(),
-                                reinforced: m.reinforced,
-                                strikes: m.strikes,
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                needs: needs
-                    .map(|n| n.iter().map(|(id, v)| (id.clone(), v)).collect())
-                    .unwrap_or_default(),
-                off_shift: off_shift.map(|o| o.need.clone()),
-                downed: downed.is_some(),
-                equipment: equipment
-                    .map(|eq| {
-                        EquipmentSlot::ALL
-                            .into_iter()
-                            .filter_map(|slot| Some((slot, worn_to_save(&eq.get(slot)?))))
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                staff: staff.contains(&entity),
-            });
-        }
+        // Ids first, then a pass: `creature_save_for` takes `&mut self`, and
+        // an open query iteration holds the world borrowed for as long as it
+        // runs.
+        //
+        // **Deliberately unsorted.** This is bevy's archetype order, which is
+        // what the hand-rolled loop this replaced emitted — and it is not the
+        // order the same roster comes back in after a `Game::load`, because a
+        // program's archetype at spawn is not its archetype after a load.
+        // Nothing is lost by that; `tests::save_roundtrip` pins the round
+        // trip as a multiset of lines and says why. Stabilising the emission
+        // order is a change to the save format, not to this loop.
+        let creature_ids: Vec<Entity> = {
+            let mut q = self.world.query_filtered::<Entity, With<Creature>>();
+            q.iter(&self.world).collect()
+        };
+        let creatures: Vec<save::CreatureSave> = creature_ids
+            .into_iter()
+            .filter_map(|e| self.creature_save_for(e))
+            .collect();
 
         let mut structures = Vec::new();
         let mut structure_query = self.world.query::<(

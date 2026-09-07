@@ -299,14 +299,19 @@ way deleting the Currency item does.
     // pass before the same combatant can spend this ability again. While it
     // is cooling the picker shows the row greyed with the rounds remaining,
     // and planning it is refused rather than silently wasting the round.
-    // When it's ready the picker prices the row with it — "2 rd" — because
-    // this is the *whole* cost of a Special: running one charges no need,
-    // for a companion, for the player, or for a wild carrier.
+    // When it's ready the picker prices the row with it — "2 rd". It is one
+    // of a Special's two prices, not the whole of it: `power_cost` below is
+    // charged as well, off the invoker's own reserve, and the picker greys
+    // the row for whichever test fails first. A wild carrier is the case
+    // where the cooldown really is the only price, because nothing on that
+    // side holds a reserve to charge.
     //
-    // So a battle ability leaving this at 0 is completely unthrottled, and
-    // the shipped set gives every one of them a cooldown between 1 and 5.
-    // The single exception is `decompile`, which is deliberately free — it
-    // already spends an ICE Breaker per attempt.
+    // So a battle ability leaving *both* at 0 is completely unthrottled, and
+    // a handful deliberately do: `decompile` is free on both axes because it
+    // already spends an ICE Breaker per attempt, and the entry tier of a few
+    // families is free on Power so the opening move of a fight is always
+    // available. Everything else pays on at least one axis, and most of the
+    // shipped set pays on both.
     //
     // Cooldowns are scoped to a single intrusion: they are cleared when the
     // battle ends and are never saved.

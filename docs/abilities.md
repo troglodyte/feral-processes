@@ -88,91 +88,98 @@ with nothing to scale.
 
 ## Everything
 
-| Ability | Name | Target | Effect | Pow | Dur | Rider | CD |
-|:---|:---|:---|:---|---:|---:|:---|---:|
-| `broadcast_storm` | Packet Shred Everyone | AllEnemies | Damage | 19–31 | - | - | 4 |
-| `kernel_shear` | Kernel Shear Group | WholeEnemyGroup | Damage | 16–28 | - | Bleed 75% 4r | 4 |
-| `segfault_v3` | Segfault Single v3.0 | OneEnemyGroupFront | Damage | 13–21 | - | - | 4 |
-| `kernel_panic` | Packet Shred Single | OneEnemyGroupFront | Damage | 12–20 | - | - | 3 |
-| `fork_bomb` | Fork Bomb Group | WholeEnemyGroup | Damage | 11–19 | - | Bleed 35% 2r | 3 |
-| `deadman` | Deadman Everyone | AllEnemies | Damage | 10–18 | - | - | 4 |
-| `segfault_v2` | Segfault Single v2.0 | OneEnemyGroupFront | Damage | 8–14 | - | - | 3 |
-| `packet_shred` | Packet Shred Group v2.0 | WholeEnemyGroup | Damage | 8–12 | - | - | 3 |
-| `core_dump` | Core Dump Single | OneEnemyGroupFront | Damage | 7–11 | - | - | 3 |
-| `stack_smash` | Fork Bomb Single | OneEnemyGroupFront | Damage | 7–11 | - | Bleed 60% 3r | 2 |
-| `pid_exhaustion` | Fork Bomb Everyone | AllEnemies | Damage | 6–10 | - | Bleed 20% 2r | 5 |
-| `pipeline_stall` | Pipeline Stall Single | OneEnemyGroupFront | Damage | 5–9 | - | Stun 40% 1r | 3 |
-| `branch_hazard` | Pipeline Stall Group | WholeEnemyGroup | Damage | 4–8 | - | Stun 30% 1r | 4 |
-| `bus_fault` | Pipeline Stall Everyone | AllEnemies | Damage | 4–8 | - | Stun 25% 1r | 5 |
-| `cascade_overflow` | Packet Shred Group v1.0 | WholeEnemyGroup | Damage | 4–8 | - | - | 2 |
-| `segfault_v1` | Segfault Single v1.0 | OneEnemyGroupFront | Damage | 4–8 | - | - | 2 |
-| `interrupt_request` | Interrupt Single | OneEnemyGroupFront | Damage | 4–6 | - | - | 4 |
-| `bit_rot_v3` | Bit Rot Single v3.0 | OneEnemyGroupFront | Debuff Bleed | 6 | 4 | - | 3 |
-| `bit_rot_v2` | Bit Rot Single v2.0 | OneEnemyGroupFront | Debuff Bleed | 4 | 3 | - | 2 |
-| `heap_corruption` | Bit Rot Group | WholeEnemyGroup | Debuff Bleed | 3 | 3 | - | 3 |
-| `bit_rot` | Bit Rot Everyone | AllEnemies | Debuff Bleed | 2 | 4 | - | 5 |
-| `clock_skew` | Clock Skew Single | OneEnemyGroupFront | Debuff Bleed | 2 | 2 | - | 4 |
-| `memory_leak` | Bit Rot Single v1.0 | OneEnemyGroupFront | Debuff Bleed | 2 | 3 | - | 1 |
-| `deadlock` | Hard Lock Single v1.0 | OneEnemyGroupFront | Debuff Stun | 0 | 1 | - | 2 |
-| `hard_fault` | Hard Fault Everyone | AllEnemies | Debuff Stun | 0 | 2 | - | 5 |
-| `hard_lock` | Hard Lock Single v2.0 | OneEnemyGroupFront | Debuff Stun | 0 | 2 | - | 4 |
-| `null_route` | Hard Lock Everyone | AllEnemies | Debuff Stun | 0 | 1 | - | 5 |
-| `race_condition` | Hard Lock Group | WholeEnemyGroup | Debuff Stun | 0 | 1 | - | 4 |
-| `parity_guard` | Parity Single | OneAlly | Buff Mitigation | 9 | 3 | - | 4 |
-| `bastion_shield_v3` | Bastion Single v3.0 | OneAlly | Buff Def | 7 | 4 | - | 2 |
-| `hyperthread` | Hyperthread Single v2.0 | OneAlly | Buff Atk | 6 | 4 | - | 3 |
-| `bastion_shield_v2` | Bastion Single v2.0 | OneAlly | Buff Def | 5 | 3 | - | 2 |
-| `bastion` | Bastion Party | WholeParty | Buff Def | 4 | 3 | - | 3 |
-| `overclock_array` | Hyperthread Party | WholeParty | Buff Atk | 3 | 3 | - | 3 |
-| `priority_boost` | Hyperthread Single v1.0 | OneAlly | Buff Atk | 3 | 3 | - | 1 |
-| `sandbox` | Bastion Single v1.0 | OneAlly | Buff Def | 3 | 3 | - | 1 |
-| `brownout` | Throttle Everyone | AllEnemies | Buff Atk | -3 | 3 | - | 5 |
-| `oxide_strip` | Etch Everyone | AllEnemies | Buff Def | -3 | 3 | - | 5 |
-| `etch` | Etch Group | WholeEnemyGroup | Buff Def | -4 | 3 | - | 3 |
-| `throttle` | Throttle Group | WholeEnemyGroup | Buff Atk | -4 | 3 | - | 3 |
-| `acid_wash` | Etch Single | OneEnemyGroupFront | Buff Def | -5 | 3 | - | 2 |
-| `clock_gate` | Throttle Single | OneEnemyGroupFront | Buff Atk | -5 | 3 | - | 2 |
-| `cold_boot` | Patch Single v3.0 | OneAlly | Heal | 38–62 | - | - | 5 |
-| `rollback_v3` | Rollback Single v3.0 | OneAlly | Heal | 26–44 | - | - | 4 |
-| `checksum_repair` | Patch Single v2.0 | OneAlly | Heal | 19–31 | - | - | 3 |
-| `rollback_v2` | Rollback Single v2.0 | OneAlly | Heal | 15–25 | - | - | 3 |
-| `redundancy_sync` | Patch Party v1.1 | WholeParty | Heal | 8–12 | - | - | 3 |
-| `rollback_v1` | Rollback Single v1.0 | OneAlly | Heal | 8–12 | - | - | 2 |
-| `hot_patch` | Patch Single v1.0 | OneAlly | Heal | 6–10 | - | - | 1 |
-| `hot_spare` | Hot Spare Single | OneAlly | Heal | 6–10 | - | - | 3 |
-| `mirror_restore` | Patch Party v1.0 | WholeParty | Heal | 6–10 | - | - | 2 |
-| `skim_v3` | Skim Single v3.0 | OneEnemyGroupFront | Drain | 10–18 | - | - | 4 |
-| `null_cache` | Null Cache Group | WholeEnemyGroup | Drain | 9–15 | - | - | 3 |
-| `siphon_cycles` | Leech Single | OneEnemyGroupFront | Drain | 8–12 | - | - | 2 |
-| `skim_v2` | Skim Single v2.0 | OneEnemyGroupFront | Drain | 7–11 | - | - | 3 |
-| `leech_array` | Leech Group | WholeEnemyGroup | Drain | 4–8 | - | - | 4 |
-| `skim_v1` | Skim Single v1.0 | OneEnemyGroupFront | Drain | 4–6 | - | - | 2 |
-| `cycle_harvest` | Leech Everyone | AllEnemies | Drain | 3–5 | - | - | 5 |
-| `skim_group` | Skim Group | WholeEnemyGroup | Drain | 3–5 | - | - | 3 |
-| `long_winter` | Long Winter Party | WholeParty | FieldBuff Mitigation | 25 | - | - | - |
-| `deep_scan` | Deep Scan Party | WholeParty | FieldBuff CaptureBoost | 20 | - | - | - |
-| `salvage_routine` | Salvage Routine Party | WholeParty | FieldBuff DropBoost | 20 | - | - | - |
-| `stealth_protocol` | Stealth Protocol Party | WholeParty | FieldBuff EncounterDamp | 20 | - | - | - |
-| `trace_analysis` | Trace Analysis Party | WholeParty | FieldBuff XpBoost | 20 | - | - | - |
-| `ablative_layer` | Ablative Layer Single | OneAlly | FieldBuff Mitigation | 10 | - | - | - |
-| `hardened_shell` | Hardened Shell Single | OneAlly | FieldBuff Def | 4 | - | - | - |
-| `hardened_shell_party` | Hardened Shell Party | WholeParty | FieldBuff Def | 4 | - | - | - |
-| `overclock` | Overclock Single | OneAlly | FieldBuff Atk | 4 | - | - | - |
-| `repair_loop` | Repair Loop Single | OneAlly | FieldBuff Regen | 2 | 300 | - | - |
-| `trickle_charge` | Trickle Charge Party | WholeParty | FieldBuff Trickle | 1 | 60 | - | - |
-| `flush_cache` | Flush Cache Party | WholeParty | Cleanse | 0 | - | - | 3 |
-| `invalidate_line` | Flush Cache Single | OneAlly | Cleanse | 0 | - | - | 2 |
-| `quarantine` | Quarantine Single | OneAlly | Cleanse | 0 | - | - | 4 |
-| `watchdog` | Watchdog Party | WholeParty | Cleanse | 0 | - | - | 4 |
-| `decompile` | Decompile Single | OneEnemyGroupFront | Decompile | 0 | - | - | - |
-| `buffer_overrun` | Buffer Overrun Party | WholeParty | Phase | 0 | - | - | - |
-| `wild_jump` | Wild Jump Party | WholeParty | Jump | 0 | - | - | - |
-| `symlink` | Symlink Party | WholeParty | Symlink | 0 | - | - | - |
+| Ability | Name | Target | Effect | Pow | Dur | Rider | CD | PWR |
+|:---|:---|:---|:---|---:|---:|:---|---:|---:|
+| `broadcast_storm` | Packet Shred Everyone | AllEnemies | Damage | 19–31 | - | - | 4 | 15 |
+| `kernel_shear` | Kernel Shear Group | WholeEnemyGroup | Damage | 16–28 | - | Bleed 75% 4r | 4 | 16 |
+| `segfault_v3` | Segfault Single v3.0 | OneEnemyGroupFront | Damage | 13–21 | - | - | 4 | 10 |
+| `kernel_panic` | Packet Shred Single | OneEnemyGroupFront | Damage | 12–20 | - | - | 3 | 10 |
+| `fork_bomb` | Fork Bomb Group | WholeEnemyGroup | Damage | 11–19 | - | Bleed 35% 2r | 3 | 12 |
+| `deadman` | Deadman Everyone | AllEnemies | Damage | 10–18 | - | - | 4 | - |
+| `segfault_v2` | Segfault Single v2.0 | OneEnemyGroupFront | Damage | 8–14 | - | - | 3 | 8 |
+| `packet_shred` | Packet Shred Group v2.0 | WholeEnemyGroup | Damage | 8–12 | - | - | 3 | 11 |
+| `core_dump` | Core Dump Single | OneEnemyGroupFront | Damage | 7–11 | - | - | 3 | - |
+| `stack_smash` | Fork Bomb Single | OneEnemyGroupFront | Damage | 7–11 | - | Bleed 60% 3r | 2 | 8 |
+| `pid_exhaustion` | Fork Bomb Everyone | AllEnemies | Damage | 6–10 | - | Bleed 20% 2r | 5 | 18 |
+| `pipeline_stall` | Pipeline Stall Single | OneEnemyGroupFront | Damage | 5–9 | - | Stun 40% 1r | 3 | 9 |
+| `branch_hazard` | Pipeline Stall Group | WholeEnemyGroup | Damage | 4–8 | - | Stun 30% 1r | 4 | 13 |
+| `bus_fault` | Pipeline Stall Everyone | AllEnemies | Damage | 4–8 | - | Stun 25% 1r | 5 | 18 |
+| `cascade_overflow` | Packet Shred Group v1.0 | WholeEnemyGroup | Damage | 4–8 | - | - | 2 | 8 |
+| `segfault_v1` | Segfault Single v1.0 | OneEnemyGroupFront | Damage | 4–8 | - | - | 2 | 6 |
+| `interrupt_request` | Interrupt Single | OneEnemyGroupFront | Damage | 4–6 | - | - | 4 | - |
+| `bit_rot_v3` | Bit Rot Single v3.0 | OneEnemyGroupFront | Debuff Bleed | 6 | 4 | - | 3 | 9 |
+| `bit_rot_v2` | Bit Rot Single v2.0 | OneEnemyGroupFront | Debuff Bleed | 4 | 3 | - | 2 | 7 |
+| `heap_corruption` | Bit Rot Group | WholeEnemyGroup | Debuff Bleed | 3 | 3 | - | 3 | 11 |
+| `bit_rot` | Bit Rot Everyone | AllEnemies | Debuff Bleed | 2 | 4 | - | 5 | 16 |
+| `clock_skew` | Clock Skew Single | OneEnemyGroupFront | Debuff Bleed | 2 | 2 | - | 4 | - |
+| `memory_leak` | Bit Rot Single v1.0 | OneEnemyGroupFront | Debuff Bleed | 2 | 3 | - | 1 | - |
+| `deadlock` | Hard Lock Single v1.0 | OneEnemyGroupFront | Debuff Stun | 0 | 1 | - | 2 | - |
+| `hard_fault` | Hard Fault Everyone | AllEnemies | Debuff Stun | 0 | 2 | - | 5 | 20 |
+| `hard_lock` | Hard Lock Single v2.0 | OneEnemyGroupFront | Debuff Stun | 0 | 2 | - | 4 | 10 |
+| `null_route` | Hard Lock Everyone | AllEnemies | Debuff Stun | 0 | 1 | - | 5 | 15 |
+| `race_condition` | Hard Lock Group | WholeEnemyGroup | Debuff Stun | 0 | 1 | - | 4 | 13 |
+| `parity_guard` | Parity Single | OneAlly | Buff Mitigation | 9 | 3 | - | 4 | - |
+| `bastion_shield_v3` | Bastion Single v3.0 | OneAlly | Buff Def | 7 | 4 | - | 2 | 9 |
+| `hyperthread` | Hyperthread Single v2.0 | OneAlly | Buff Atk | 6 | 4 | - | 3 | 8 |
+| `bastion_shield_v2` | Bastion Single v2.0 | OneAlly | Buff Def | 5 | 3 | - | 2 | 7 |
+| `bastion` | Bastion Party | WholeParty | Buff Def | 4 | 3 | - | 3 | 11 |
+| `overclock_array` | Hyperthread Party | WholeParty | Buff Atk | 3 | 3 | - | 3 | 10 |
+| `priority_boost` | Hyperthread Single v1.0 | OneAlly | Buff Atk | 3 | 3 | - | 1 | - |
+| `sandbox` | Bastion Single v1.0 | OneAlly | Buff Def | 3 | 3 | - | 1 | - |
+| `brownout` | Throttle Everyone | AllEnemies | Buff Atk | -3 | 3 | - | 5 | 16 |
+| `oxide_strip` | Etch Everyone | AllEnemies | Buff Def | -3 | 3 | - | 5 | 16 |
+| `etch` | Etch Group | WholeEnemyGroup | Buff Def | -4 | 3 | - | 3 | 10 |
+| `throttle` | Throttle Group | WholeEnemyGroup | Buff Atk | -4 | 3 | - | 3 | 10 |
+| `acid_wash` | Etch Single | OneEnemyGroupFront | Buff Def | -5 | 3 | - | 2 | 8 |
+| `clock_gate` | Throttle Single | OneEnemyGroupFront | Buff Atk | -5 | 3 | - | 2 | 8 |
+| `cold_boot` | Patch Single v3.0 | OneAlly | Heal | 38–62 | - | - | 5 | 15 |
+| `rollback_v3` | Rollback Single v3.0 | OneAlly | Heal | 26–44 | - | - | 4 | 10 |
+| `checksum_repair` | Patch Single v2.0 | OneAlly | Heal | 19–31 | - | - | 3 | 9 |
+| `rollback_v2` | Rollback Single v2.0 | OneAlly | Heal | 15–25 | - | - | 3 | 8 |
+| `redundancy_sync` | Patch Party v1.1 | WholeParty | Heal | 8–12 | - | - | 3 | 12 |
+| `rollback_v1` | Rollback Single v1.0 | OneAlly | Heal | 8–12 | - | - | 2 | 6 |
+| `hot_patch` | Patch Single v1.0 | OneAlly | Heal | 6–10 | - | - | 1 | - |
+| `hot_spare` | Hot Spare Single | OneAlly | Heal | 6–10 | - | - | 3 | - |
+| `mirror_restore` | Patch Party v1.0 | WholeParty | Heal | 6–10 | - | - | 2 | 10 |
+| `skim_v3` | Skim Single v3.0 | OneEnemyGroupFront | Drain | 10–18 | - | - | 4 | 10 |
+| `null_cache` | Null Cache Group | WholeEnemyGroup | Drain | 9–15 | - | - | 3 | 18 |
+| `siphon_cycles` | Leech Single | OneEnemyGroupFront | Drain | 8–12 | - | - | 2 | 9 |
+| `skim_v2` | Skim Single v2.0 | OneEnemyGroupFront | Drain | 7–11 | - | - | 3 | 8 |
+| `leech_array` | Leech Group | WholeEnemyGroup | Drain | 4–8 | - | - | 4 | 13 |
+| `skim_v1` | Skim Single v1.0 | OneEnemyGroupFront | Drain | 4–6 | - | - | 2 | 6 |
+| `cycle_harvest` | Leech Everyone | AllEnemies | Drain | 3–5 | - | - | 5 | 17 |
+| `skim_group` | Skim Group | WholeEnemyGroup | Drain | 3–5 | - | - | 3 | 8 |
+| `long_winter` | Long Winter Party | WholeParty | FieldBuff Mitigation | 25 | - | - | - | 40 |
+| `deep_scan` | Deep Scan Party | WholeParty | FieldBuff CaptureBoost | 20 | - | - | - | 18 |
+| `salvage_routine` | Salvage Routine Party | WholeParty | FieldBuff DropBoost | 20 | - | - | - | 18 |
+| `stealth_protocol` | Stealth Protocol Party | WholeParty | FieldBuff EncounterDamp | 20 | - | - | - | 18 |
+| `trace_analysis` | Trace Analysis Party | WholeParty | FieldBuff XpBoost | 20 | - | - | - | 18 |
+| `ablative_layer` | Ablative Layer Single | OneAlly | FieldBuff Mitigation | 10 | - | - | - | 20 |
+| `hardened_shell` | Hardened Shell Single | OneAlly | FieldBuff Def | 4 | - | - | - | 14 |
+| `hardened_shell_party` | Hardened Shell Party | WholeParty | FieldBuff Def | 4 | - | - | - | 32 |
+| `overclock` | Overclock Single | OneAlly | FieldBuff Atk | 4 | - | - | - | 14 |
+| `repair_loop` | Repair Loop Single | OneAlly | FieldBuff Regen | 2 | 300 | - | - | 18 |
+| `trickle_charge` | Trickle Charge Party | WholeParty | FieldBuff Trickle | 1 | 60 | - | - | 25 |
+| `flush_cache` | Flush Cache Party | WholeParty | Cleanse | 0 | - | - | 3 | 7 |
+| `invalidate_line` | Flush Cache Single | OneAlly | Cleanse | 0 | - | - | 2 | 4 |
+| `quarantine` | Quarantine Single | OneAlly | Cleanse | 0 | - | - | 4 | - |
+| `watchdog` | Watchdog Party | WholeParty | Cleanse | 0 | - | - | 4 | - |
+| `decompile` | Decompile Single | OneEnemyGroupFront | Decompile | 0 | - | - | - | - |
+| `buffer_overrun` | Buffer Overrun Party | WholeParty | Phase | 0 | - | - | - | 12 |
+| `wild_jump` | Wild Jump Party | WholeParty | Jump | 0 | - | - | - | 20 |
+| `symlink` | Symlink Party | WholeParty | Symlink | 0 | - | - | - | 25 |
 
-There is no cost column, because for everything above the CD *is* the cost:
-a battle routine charges no need at all, from the player, a companion or a
-wild carrier. The routines that do spend something are the field ones, in
-their own two tables further down.
+A routine costs two things at once, and both columns above are real. **CD** is
+rounds before the same combatant can run it again, cleared when the battle
+ends. **PWR** comes off the invoker's own reserve — a companion's Special
+spends the companion's Power, not yours — and only rest refills one. The
+picker greys a row that fails either test, with the reason on it.
+
+The exceptions are worth knowing because they are the whole of the pattern.
+A **passive** shows no PWR: it fires on a trigger rather than being run, and
+`cooldown` is its entire price. A **hostile** carrier is never charged, since
+nothing on the wild side holds a reserve at all. And the wielded program's
+proc is free by design — its 25% rate is what it pays instead.
 
 ## What a hit costs
 
@@ -212,11 +219,12 @@ rising from 3.00 at Group v1.0 to 6.25 at Everyone — better per round as well
 as wider — and the thing holding those tiers back is what it takes to learn
 them rather than what they cost to run.
 
-Nothing here is *cheap*, because nothing here is bought. Every one of these
-was priced in the player's Fatigue as well until 2026-08-08, including the
-ones a companion ran; a routine now costs only the rounds it spends locked
-away, so the question a player is answering has changed from "can I afford
-this" to "is this the round to spend it". What marks out the first thing a
+A routine is bought twice over: once in the rounds it spends locked away,
+and once out of the reserve of whoever ran it. Until 2026-08-08 the second
+half came off *the player's* meter even when a companion was the one acting,
+which rationed the party's own kit against a pool only the player had; it
+comes off the invoker now, which is what makes a levelled companion's Special
+its own to spend. What marks out the first thing a
 species grants is the bottom of the cooldown ladder: the routines that
 recharge in a single round — `memory_leak`, `priority_boost`, `sandbox`,
 `hot_patch` — are the weakest tier of their families, and three of the five
@@ -282,8 +290,9 @@ Winter is the field routine among them, which is why it sits at the top of
 the table above with a Power cost nothing else comes near.
 
 **Eight of them are passives.** They occupy a slot, appear in no menu, and
-fire on an event instead of a turn. Their cooldowns are their whole price;
-the cost column reads 0 because a passive is never run.
+fire on an event instead of a turn. Their cooldowns really are their whole
+price — the PWR column reads 0 because `Game::fire_passives` charges nothing,
+and a passive is the only kind of routine that is genuinely free to run.
 
 | Passive | Fires on | And then |
 |:---|:---|:---|
@@ -308,12 +317,13 @@ payout is worth.
 
 ## Movement routines
 
-The other 2 run outside battle too, and are the only routines in the game
-that still spend **Fatigue** — every other use of that meter went away when
-Specials moved onto cooldowns. Both are Stack-only: they read and write the
-party's frame coordinates, so they grey out with a reason on the open grid.
+The other 2 run outside battle too. They were the last routines still
+priced in the retired Fatigue meter, and are denominated in the same Power as
+everything else now — which is the only reason their numbers can be compared
+with the tables above at all. Both are Stack-only: they read and write the party's frame coordinates, so they grey
+out with a reason on the open grid.
 
-| Routine | Effect | Fatigue | What it does |
+| Routine | Effect | Power | What it does |
 |:---|:---|---:|:---|
 | Buffer Overrun Party | Phase | 12 | steps the party through one solid cell they are facing |
 | Wild Jump Party | Jump | 20 | moves the party to any cell of the frame, and kills them if it is solid |

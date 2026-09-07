@@ -15,6 +15,10 @@
 # The passives really do show 0 -- they fire on a trigger rather than being
 # run, and `Game::fire_passives` charges nothing. `status` is the rider on a
 # Damage effect, flattened to "kind chance duration".
+#
+# Before trusting a regenerated page, run `python3 docs/audit-gen.py` — it
+# diffs this table against the source it claims to transcribe. Nothing else
+# can see a table that has gone stale.
 A = [
  # id                   name                       target                effect       sub              pow  spr  dur  status             cd  cost
  ("ablative_layer",    "Ablative Layer Single",   "OneAlly",            "FieldBuff", "Mitigation",     10,   0,    0, "",                 0, 20),

@@ -125,4 +125,3 @@ until this page is regenerated -- edit the table at the top of
 [`docs/achievements-gen.py`](achievements-gen.py) and run
 `python3 docs/achievements-gen.py` from the repo root. The schema is documented
 in [`assets/achievements/README.md`](../assets/achievements/README.md).
-

@@ -121,7 +121,7 @@ there is no node you can reach two ways.
 | Runtime Patching | 2 | 60 | `self_exec` | `hot_patch` |
 | Symbolic Links | - | 22 | `self_exec` | `symlink` |
 | Adaptive Plating | 2 | 70 | `field_ops` | `hardened_shell`, `overclock`, `ablative_layer` |
-| Deep Analysis | 3 | 130 | `field_ops` | `deep_scan`, `trace_analysis`, `stealth_protocol`, `salvage_routine`; tool `core_tap`, `harness_puller` |
+| Deep Analysis | 3 | 130 | `field_ops` | `deep_scan`, `trace_analysis`, `stealth_protocol`, `salvage_routine`; tools `core_tap`, `harness_puller` |
 | Kernel Privileges | 3 | 135 | `runtime_patching` | `null_route` |
 | Address Translation | 3 | 140 | `deep_analysis` | `buffer_overrun`, `wild_jump` |
 | Mesh Plating | 3 | 120 | `adaptive_plating` | `hardened_shell_party` |

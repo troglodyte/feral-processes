@@ -4,6 +4,10 @@
 # parsed from it -- a RON reader in Python would be a second parser to keep in
 # step with the engine's, for a page nobody's build depends on. Update the table
 # when a species file moves, then rerun.
+#
+# Before trusting a regenerated page, run `python3 docs/audit-gen.py` — it
+# diffs this table against the source it claims to transcribe. Nothing else
+# can see a table that has gone stale.
 S = [
  # id            name         glyph hp  atk def spd int tame  grow  biomes                                          yield           boss nest abilities                                      affinities
  ("wintermute",  "Wintermute", "W", 200, 19, 17, 13, 18, .95, 2.0,  ["OpenGrid","Mainframe","NullSector","Deadlock"], None,            1, 0, ["broadcast_storm","null_route L4"],      None),

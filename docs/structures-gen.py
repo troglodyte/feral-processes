@@ -11,6 +11,10 @@
 # It is recorded here so the chain diagram can be drawn from data rather than
 # hand-arranged, and it is what `every_shipped_assembler_recipe_is_a_single_
 # ingredient` holds to one input apiece.
+#
+# Before trusting a regenerated page, run `python3 docs/audit-gen.py` — it
+# diffs this table against the source it claims to transcribe. Nothing else
+# can see a table that has gone stale.
 S = [
  # id               name             glyph color    build cost                                 kind        makes / does                    ticks cap  feeder          upgrade          draw supply
  ("home",           "Home",           "H", "Green",  [("core_fragment", 5)],                    "utility",  "anchors the base, radius 4 and up", None, None, None,          None,            0,   4),

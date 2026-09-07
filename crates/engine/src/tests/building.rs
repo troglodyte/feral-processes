@@ -2795,6 +2795,27 @@ fn a_shallow_program_does_not_qualify_for_a_deep_upgrade() {
     assert!(!eligible.iter().any(|p| p.entity == shallow));
 }
 
+/// The floor's edge, not just its interior: a program caught at *exactly*
+/// the tier being raised must qualify. This is the modal case in play — a
+/// roster at its own depth raising a structure at that same depth, a zone 1
+/// program building a Mk1 — and neither test above pins it: the shallow
+/// test above (zone 5 against tier 1) still passes if the floor were `>`
+/// instead of `>=`, and `a_shallow_program_does_not_qualify_for_a_deep_upgrade`
+/// (zone 2 against tier 3) only gets more excluded under `>`. Only equality
+/// tells `>=` and `>` apart.
+#[test]
+fn a_program_at_exactly_the_required_zone_qualifies() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let at_depth = tame_at_zone(&mut game, 3);
+
+    let eligible = game.programs_for_build(3);
+
+    assert!(
+        eligible.iter().any(|p| p.entity == at_depth),
+        "a program exactly at the required zone must qualify — the floor is >=, not >"
+    );
+}
+
 /// `HOME_STRUCTURE_ID` is exempt at every tier: a fresh run owns zero
 /// programs, and one is granted only as an achievements reward, so a Home
 /// that cost a program would be unfoundable. Everything else needs one.
@@ -2874,12 +2895,32 @@ fn a_program_carrying_goods_is_not_offered_to_a_build() {
 /// The program rule may never demand a depth the tier ceiling would not
 /// have let the player reach. If `upgrade_ceiling` ever loosens, this is
 /// what says so out loud instead of leaving an unsatisfiable upgrade.
+///
+/// This calls the real `upgrade_ceiling`, not a restated copy of its
+/// formula — a hardcoded `ceiling = zone` would still pass after
+/// `upgrade_ceiling` itself changed, which is exactly the silent drift this
+/// test exists to catch. `mining_node`'s `upgrade.max_tier` is 5
+/// (`assets/structures/mining_node.ron`), matching every other shipped
+/// upgradeable structure, so `upgrade_ceiling` reduces to `zone` for every
+/// zone in this loop — but it is `upgrade_ceiling` computing that, not the
+/// test asserting it.
 #[test]
 fn the_upgrade_ceiling_keeps_the_program_rule_satisfiable() {
     use crate::game::catalog::program_tier_required;
 
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let upgrade = game
+        .world
+        .resource::<StructureDb>()
+        .get("mining_node")
+        .unwrap()
+        .upgrade
+        .clone()
+        .unwrap();
+
     for zone in 1..=5u32 {
-        let ceiling = zone; // upgrade_ceiling = min(max_tier, ZoneLevel)
+        game.world.resource_mut::<ZoneLevel>().0 = zone;
+        let ceiling = game.upgrade_ceiling(&upgrade);
         assert!(
             program_tier_required(BuildGoal::Upgrade { to_tier: ceiling }) <= zone,
             "a Mk{ceiling} upgrade offered in zone {zone} must not need a deeper program"

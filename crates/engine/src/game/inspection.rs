@@ -823,6 +823,17 @@ impl Game {
         key: crate::settlements::SettlementKey,
     ) -> crate::views::SettlementView {
         let standing = self.standing_band(key).label();
+        // Before the borrow below, with `standing` and for its reason: both
+        // are doors of their own onto other resources.
+        let kind = self
+            .settlement_kind(key)
+            .unwrap_or(crate::settlements::SettlementKind::Server)
+            .label();
+        // Beside `kind` and for its reason: a door of its own onto
+        // `Standings`, so it is read before the `Settlements` borrow below
+        // rather than inside it. `None` for a Server — see
+        // `SettlementView::vitality`.
+        let vitality = self.settlement_vitality(key).map(|band| band.label());
         // Before the borrow below: the aid lines call three doors of their
         // own, one of which needs the world mutably.
         let aid = self.settlement_aid_lines(key);
@@ -835,11 +846,12 @@ impl Game {
             .def;
         crate::views::SettlementView {
             name: def.name.clone(),
-            kind: def.kind.label(),
+            kind,
             specialty: def.specialty.label(),
             temperament: def.temperament.label(),
             blurb: def.blurb.clone(),
             standing,
+            vitality,
             aid,
         }
     }

@@ -37,7 +37,7 @@
 use crate::game::caravan::Drawn;
 use crate::game::commerce;
 use crate::game::contracts::fold;
-use crate::settlements::{SettlementKey, SettlementKind, Specialty, Temperament};
+use crate::settlements::{SettlementKey, SettlementKind, Specialty, Temperament, Vitality};
 use crate::*;
 
 impl Game {
@@ -110,8 +110,9 @@ impl Game {
         let world_seed = self.world.resource::<world::WorldMap>().seed();
         let mut rng = StdRng::seed_from_u64(settlement_shelf_seed(world_seed, key, epoch));
         let weights = specialty_weights(def.specialty);
-        let rows = settlement_rows(def.kind);
-        let bonus_share = settlement_bonus_share(def.kind);
+        let rows = settlement_rows(self.settlement_kind(key), self.settlement_vitality(key));
+        let bonus_share =
+            settlement_bonus_share(self.settlement_kind(key), self.settlement_vitality(key));
         let drawn = self.draw_shelf(&mut rng, rows, weights, bonus_share);
 
         let kinds: Vec<views::CaravanOfferKind> = drawn
@@ -427,23 +428,30 @@ fn specialty_weights(specialty: Specialty) -> crate::caravans::CaravanWeights {
     weights
 }
 
-/// How many shelf rows `kind` draws — `tuning::SETTLEMENT_SERVER_ROWS` /
-/// `SETTLEMENT_MAINFRAME_ROWS`, `SettlementKind`'s own "a Server is a stop,
-/// a Mainframe is a destination" read onto the shelf.
-fn settlement_rows(kind: SettlementKind) -> u32 {
-    match kind {
-        SettlementKind::Server => crate::tuning::SETTLEMENT_SERVER_ROWS,
-        SettlementKind::Mainframe => crate::tuning::SETTLEMENT_MAINFRAME_ROWS,
+/// How many shelf rows this settlement draws.
+///
+/// A Server draws `tuning::SETTLEMENT_SERVER_ROWS` flat — it has nowhere to
+/// fall to, and its commerce is spoken for by the growth clock. A Mainframe,
+/// authored or grown, draws its `Vitality`'s answer, which floors at the
+/// Server's count: an `M` that drew fewer rows than an `s` would make the
+/// label a lie.
+///
+/// Takes the *effective* kind from `Game::settlement_kind` and never
+/// `def.kind` — see `game/settlement_growth.rs`' module doc.
+fn settlement_rows(kind: Option<SettlementKind>, vitality: Option<Vitality>) -> u32 {
+    match (kind, vitality) {
+        (Some(SettlementKind::Mainframe), Some(vitality)) => vitality.rows(),
+        _ => crate::tuning::SETTLEMENT_SERVER_ROWS,
     }
 }
 
-/// What share of `kind`'s gear rows are standout stock —
-/// `tuning::SETTLEMENT_SERVER_BONUS_SHARE` / `SETTLEMENT_MAINFRAME_BONUS_SHARE`,
-/// `bonus_row_count`'s `share` argument.
-fn settlement_bonus_share(kind: SettlementKind) -> u32 {
-    match kind {
-        SettlementKind::Server => crate::tuning::SETTLEMENT_SERVER_BONUS_SHARE,
-        SettlementKind::Mainframe => crate::tuning::SETTLEMENT_MAINFRAME_BONUS_SHARE,
+/// What share of this settlement's gear rows are standout stock —
+/// `bonus_row_count`'s `share` argument. `settlement_rows`' shape and its
+/// reason.
+fn settlement_bonus_share(kind: Option<SettlementKind>, vitality: Option<Vitality>) -> u32 {
+    match (kind, vitality) {
+        (Some(SettlementKind::Mainframe), Some(vitality)) => vitality.bonus_share(),
+        _ => crate::tuning::SETTLEMENT_SERVER_BONUS_SHARE,
     }
 }
 

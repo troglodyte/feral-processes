@@ -116,7 +116,7 @@ const DEF_SALT: u64 = 0x5E77_1E03;
 /// and neighbouring regions is precisely the comparison this has to get
 /// right. That is the measured failure `descriptions::Slot::tags`
 /// documents, reached here by `rock::block_seed`'s route.
-fn region_seed(seed: u32, key: SettlementKey) -> u64 {
+pub(super) fn region_seed(seed: u32, key: SettlementKey) -> u64 {
     fold(
         0xcbf2_9ce4_8422_2325,
         [seed as u64, key.rx as i64 as u64, key.ry as i64 as u64],
@@ -125,7 +125,11 @@ fn region_seed(seed: u32, key: SettlementKey) -> u64 {
 
 /// Continues the fold with one more word, so each question off a region
 /// gets its own answer without a second scheme.
-fn salted(base: u64, salt: u64) -> u64 {
+///
+/// `pub(super)` because growth is a fifth such question and asks it off the
+/// same base — a second fold for the growth clock would be exactly the
+/// colliding scheme this function exists to prevent.
+pub(super) fn salted(base: u64, salt: u64) -> u64 {
     fold(base, [salt])
 }
 

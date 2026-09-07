@@ -120,6 +120,7 @@ mod tests {
             temperament: "Open",
             blurb: String::new(),
             standing: "Neutral",
+            vitality: None,
             aid: Vec::new(),
         }
     }

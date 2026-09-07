@@ -1398,6 +1398,12 @@ impl Game {
         } else {
             crate::resources::StackMemory::default()
         });
+        // **Before `restore_settlements`, not after.** That call draws every
+        // known town's glyph through `Game::settlement_kind`, which reads
+        // `Relation::grown` out of this resource. Restored after, every
+        // grown city would come back from the save drawing the `s` its
+        // catalogue authored — correct all run, wrong on every load.
+        game.world.insert_resource(data.standings);
         game.world.insert_resource(data.populated_chunks);
         game.restore_settlements(data.settlements);
         // After the towns exist, and the one place a patrol's tether is
@@ -1425,7 +1431,6 @@ impl Game {
                 entity.insert(Pursuing);
             }
         }
-        game.world.insert_resource(data.standings);
         game.world.insert_resource(data.compass);
         game.world
             .insert_resource(crate::resources::Trace(data.trace));

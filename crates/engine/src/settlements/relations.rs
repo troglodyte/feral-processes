@@ -21,9 +21,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::tuning::{
-    SETTLEMENT_ALLIED_STANDING, SETTLEMENT_COLD_STANDING, SETTLEMENT_HOSTILE_STANDING,
-    SETTLEMENT_MAX_STANDING, SETTLEMENT_MIN_STANDING, SETTLEMENT_TRADE_CREDITS_PER_POINT,
-    SETTLEMENT_WARM_STANDING,
+    SETTLEMENT_ALLIED_STANDING, SETTLEMENT_COLD_STANDING, SETTLEMENT_COMMERCE_CREDITS_PER_POINT,
+    SETTLEMENT_HOSTILE_STANDING, SETTLEMENT_MAX_STANDING, SETTLEMENT_MIN_STANDING,
+    SETTLEMENT_TRADE_CREDITS_PER_POINT, SETTLEMENT_WARM_STANDING,
 };
 
 /// Everything one town remembers about the party.
@@ -54,6 +54,65 @@ pub struct Relation {
     /// program forever.
     #[serde(default)]
     pub gifts_taken: u32,
+    /// Whether this town has grown into a Mainframe.
+    ///
+    /// **One-way, and that is the whole discipline.** Written in exactly one
+    /// place — `Game::settlement_growth_tick` — and never cleared. Commerce
+    /// decays; if the growth condition were re-evaluated on every read, a
+    /// city would un-grow when its trade dried up, which the design
+    /// explicitly refuses. Latching here is what makes every reader a plain
+    /// `||` instead of a repeated inequality that could drift.
+    ///
+    /// An authored `SettlementKind::Mainframe` never sets this and never
+    /// needs to: `Game::settlement_kind` reads the def first.
+    #[serde(default)]
+    pub grown: bool,
+    /// How this town is doing — trade raises it, time lowers it, and
+    /// `Standing::Hostile` lowers it faster.
+    ///
+    /// **Signed, and 0 means "as it was found."** An unsigned counter would
+    /// band every authored Mainframe as Starved in a fresh world, before
+    /// anyone had traded a Credit with it. Bounds are
+    /// `growth::clamp_commerce`; the banding is `growth::vitality` and is
+    /// derived on every read, never stored.
+    #[serde(default)]
+    pub commerce: i32,
+    /// The last drift epoch folded into `commerce`.
+    ///
+    /// `static_epoch`'s shape: the decay is settled lazily against
+    /// `current_tick() / SETTLEMENT_COMMERCE_DECAY_TICKS` rather than
+    /// applied per tick, so a fast-forward cannot be outrun and no
+    /// arithmetic runs over every town every tick.
+    #[serde(default)]
+    pub commerce_epoch: u64,
+    /// The commerce remainder, `trade_credits`' companion and its reason:
+    /// without somewhere to keep what is left over, a player who trades in
+    /// ten small baskets feeds a town nothing while one who trades the same
+    /// volume in a single basket feeds it the lot. A rounding rule, not a
+    /// volume rule.
+    ///
+    /// **A second remainder rather than a share of `trade_credits`**,
+    /// because the two thresholds differ — commerce is bought cheaper —
+    /// so one counter could not spend against both without one axis
+    /// stealing the other's leftovers.
+    #[serde(default)]
+    pub commerce_credits: u32,
+    /// Whether the party has ever moved Credits through this town.
+    ///
+    /// Written in exactly one place — `Game::credit_trade_volume`, the door
+    /// every counter sale and route delivery already goes through — and
+    /// never cleared. It is what separates *visited then neglected* from
+    /// *never introduced*, which the drift alone cannot tell apart: see
+    /// `growth::vitality_floor`.
+    ///
+    /// **A latch and not a count, and not `commerce_credits`.** That
+    /// remainder is sub-threshold change that resets to zero the moment a
+    /// basket clears the threshold, so a town traded with heavily reads
+    /// zero there — it answers "what is still owed", never "has this ever
+    /// happened". A count would also be a second, weaker spelling of
+    /// `commerce` itself.
+    #[serde(default)]
+    pub traded: bool,
 }
 
 impl Relation {
@@ -63,6 +122,21 @@ impl Relation {
         self.trade_credits += credits;
         let points = self.trade_credits / SETTLEMENT_TRADE_CREDITS_PER_POINT;
         self.trade_credits -= points * SETTLEMENT_TRADE_CREDITS_PER_POINT;
+        points as i32
+    }
+
+    /// Folds `credits` of trade in and answers how many commerce points it
+    /// bought, keeping the remainder for the next basket. `credit_trade`'s
+    /// shape on the second axis, and a separate remainder because the two
+    /// thresholds differ — see `SETTLEMENT_COMMERCE_CREDITS_PER_POINT`.
+    ///
+    /// **Answers a delta; it does not write `commerce`.** The caller hands
+    /// the answer to `Game::adjust_commerce`, which is the one door and
+    /// therefore the one clamp — see `growth::clamp_commerce`.
+    pub(crate) fn credit_commerce(&mut self, credits: u32) -> i32 {
+        self.commerce_credits += credits;
+        let points = self.commerce_credits / SETTLEMENT_COMMERCE_CREDITS_PER_POINT;
+        self.commerce_credits -= points * SETTLEMENT_COMMERCE_CREDITS_PER_POINT;
         points as i32
     }
 }

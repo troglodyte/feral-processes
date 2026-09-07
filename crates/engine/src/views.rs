@@ -1914,10 +1914,13 @@ pub enum InspectTarget {
 /// rather than widening this one under a name that stops matching what it
 /// holds.
 ///
-/// Every label is a call onto the resolved def's own enum — `kind.label()`,
+/// Every label is a call onto the resolved def's own enum —
 /// `specialty.label()`, `temperament.label()` — rather than a `match`
 /// re-stated here, which is what keeps a new catalogue variant's label
-/// living in exactly one place.
+/// living in exactly one place. `kind` is the same call one door further
+/// out: `Game::settlement_kind().label()`, never `def.kind`, because the
+/// effective kind is the authored one folded with the run's growth latch
+/// — see `game/settlement_growth.rs`' module doc.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SettlementView {
     pub name: String,
@@ -1928,6 +1931,15 @@ pub struct SettlementView {
     /// How the town regards the party — `Standing::label()`, a call onto
     /// the band's own enum for `kind`/`specialty`/`temperament`'s reason.
     pub standing: &'static str,
+    /// How this city is doing — `growth::Vitality::label()`, on
+    /// `kind`/`specialty`/`temperament`'s precedent of calling onto the
+    /// band's own enum rather than wording it here.
+    ///
+    /// **`None` for a Server**, which has no band: a word that never
+    /// changes is worse than no word, and the row is dropped entirely
+    /// rather than drawn saying "Steady" forever. See
+    /// `Game::settlement_vitality`.
+    pub vitality: Option<&'static str>,
     /// One sentence per aid this town currently offers, already in the
     /// player's words — see `Game::settlement_aid_lines`. Empty when it
     /// offers none, and an empty list draws no rows and no header.

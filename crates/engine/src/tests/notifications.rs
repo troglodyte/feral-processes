@@ -299,6 +299,7 @@ fn every_notification_kind_is_fired_by_a_named_site() {
             NotificationKind::ContractClosed => "Game::complete_contract",
             NotificationKind::OnboardingComplete => "Game::complete_contract, the onboarding arm",
             NotificationKind::OnboardingMission => "Game::ensure_tutorial_held",
+            NotificationKind::SettlementGrown => "Game::announce_growth, on the latch's flip",
         }
     }
 
@@ -327,11 +328,14 @@ fn tutorials_latch_and_milestones_do_not() {
             | NotificationKind::LowPower
             | NotificationKind::DownedProgram => Repeat::OnceEver,
             // The chain runs on every new game, so a briefing latched across
-            // runs would leave a second playthrough's missions unexplained.
+            // runs would leave a second playthrough's missions unexplained —
+            // and a world holds more than one town, so a city announcing
+            // itself is news that can happen again inside one run.
             NotificationKind::Breach
             | NotificationKind::ContractClosed
             | NotificationKind::OnboardingComplete
-            | NotificationKind::OnboardingMission => Repeat::Always,
+            | NotificationKind::OnboardingMission
+            | NotificationKind::SettlementGrown => Repeat::Always,
         };
         assert_eq!(kind.def().repeat, expected, "{kind}");
     }

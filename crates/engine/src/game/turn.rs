@@ -128,6 +128,20 @@ impl Game {
         self.world.resource::<GameClock>().tick
     }
 
+    /// Sets the clock, for tests that would otherwise have to tick a
+    /// thousand turns to reach a scheduled event.
+    ///
+    /// Deliberately the only one of its kind: a run's other schedules are
+    /// reachable by ticking, and a second setter would be an invitation to
+    /// arrange a world no play can produce. The one test that has to prove
+    /// a real run reaches a growth date
+    /// (`a_real_run_grows_a_town_with_nobody_touching_it`) does not use
+    /// this.
+    #[cfg(test)]
+    pub(crate) fn set_tick_for_test(&mut self, tick: u64) {
+        self.world.resource_mut::<GameClock>().tick = tick;
+    }
+
     pub fn has_active_battle(&self) -> bool {
         self.world.get_resource::<BattleState>().is_some()
     }
@@ -177,6 +191,12 @@ impl Game {
         // like any other, keyed to a band and a distance rather than to a
         // habitat and a density.
         self.maybe_field_patrol();
+        // After `ensure_local_settlements`, for that call's own reason: this
+        // walks the towns that pass resolves, and a region materialized this
+        // tick must be evaluated silently by the resolver rather than
+        // announced by this. Beside the patrol roll because both are
+        // settlement work keyed to the map rather than to the base.
+        self.settlement_growth_tick();
         // Before the schedule, not after, so a body posted this tick makes
         // progress this tick rather than standing at its machine for one.
         // Beside `maybe_spawn_wild_creature` for the same reason that one is

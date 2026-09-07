@@ -3351,19 +3351,30 @@ pub const SETTLEMENT_MARKET_SALT: u64 = 0x5E77_1E5E_5EED_0004;
 /// A Server is a stop, not a destination (`SettlementKind`'s own doc), so
 /// its shelf is deliberately thin: a `CaravanDef`'s `rows` field is the
 /// same knob per shipped trader, and this is its Server-sized reading.
+///
+/// **Also the floor a Starved city falls to**, `growth::Vitality::rows` —
+/// which is what stops a neglected city ever reading worse than the town it
+/// grew out of.
 pub const SETTLEMENT_SERVER_ROWS: u32 = 6;
 
-/// A Mainframe's shelf rows — more than double a Server's, so a city reads
-/// as worth the walk rather than as a bigger version of the same stop.
+/// A **Thriving** city's shelf rows — more than double a Server's, so a
+/// city the party keeps in business reads as worth the walk rather than as
+/// a bigger version of the same stop.
+///
+/// The ceiling of `growth::Vitality::rows` and not the flat reading of a
+/// `Mainframe`: an untouched city draws `SETTLEMENT_STEADY_ROWS`, and this
+/// is what commerce at `SETTLEMENT_COMMERCE_THRIVING` buys.
 pub const SETTLEMENT_MAINFRAME_ROWS: u32 = 14;
 
 /// What share of a Server's gear rows are standout stock —
 /// `bonus_row_count`'s `share`, a `CaravanDef::bonus_share` reading sized
-/// for the smaller settlement.
+/// for the smaller settlement. Also a Starved city's share,
+/// `SETTLEMENT_SERVER_ROWS`' reason.
 pub const SETTLEMENT_SERVER_BONUS_SHARE: u32 = 15;
 
-/// A Mainframe's standout share — a city's gear is worth digging through in
-/// a way a Server's thin shelf cannot support.
+/// A **Thriving** city's standout share — a city's gear is worth digging
+/// through in a way a Server's thin shelf cannot support.
+/// `SETTLEMENT_MAINFRAME_ROWS`' companion, and a ceiling for its reason.
 pub const SETTLEMENT_MAINFRAME_BONUS_SHARE: u32 = 35;
 
 /// A grown-but-Steady city's shelf rows — `growth::Vitality::rows`.

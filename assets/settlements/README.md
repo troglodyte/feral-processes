@@ -37,7 +37,7 @@ half-authored is worse than one skipped loudly.
 | `id` | Unique. The pool is indexed in id order, so this also decides tie-breaks between files. Must not be empty. |
 | `name` | What the map and the settlement's own screen call it. Must not be blank. |
 | `blurb` | One or two sentences, shown on the settlement screen. |
-| `kind` | `Mainframe` (a city, drawn `M`) or `Server` (a town, drawn `s`), both drawn in `GlyphColor::Orange`. A Mainframe draws more shelf rows than a Server (14 vs. 6) and a higher share of standout stock among them (35% vs. 15%). |
+| `kind` | `Mainframe` (a city, drawn `M`) or `Server` (a town, drawn `s`), both drawn in `GlyphColor::Orange`. This is the kind a settlement *starts* as, not the kind it stays: a Server grows into a Mainframe on its own derived schedule, which trading with it brings forward, and nothing turns a city back into a town. A Server always draws 6 shelf rows with a 15% share of standout stock among them. A city draws between that and 14 rows at a 35% share, depending on how much business it is doing — 10 rows at 25% is the untouched middle, and the reading a freshly authored `Mainframe` starts at. |
 | `specialty` | `Gear`, `Materials`, `Routines` or `Programs`. Biases the shelf's weighted draw toward that one of its four buckets — the favoured bucket outweighs the other three roughly 3.5:1, not exclusively. |
 | `temperament` | `Open`, `Guarded` or `Mercantile`. Scales every price on the shelf: `Open` charges you 10% less and pays you 10% more, `Guarded` is the mirror, and `Mercantile` charges roughly the going rate but pays the least of the three when it buys from you. A discount never sells a craftable below what its own ingredients are worth — that floor holds at every temperament. |
 

@@ -11865,3 +11865,101 @@ would have left it as.
 **A RON round trip cannot catch a skipped field**, so the test is a real
 save and a real load, asserting both halves: the town the tether names, and
 the chase it was in the middle of.
+
+### A settlement's kind is read through `Game::settlement_kind`, never `def.kind`
+
+**A settlement's kind is read through `Game::settlement_kind`, never
+`SettlementDef::kind`.** Four sites read it — the shelf's row count, its
+standout share, the map glyph, and the town page's label — and once a run
+can grow a town the authored kind is only half the answer. The door folds
+the two halves (`def.kind == Mainframe || relation.grown`) so a later change
+to what "grown" means cannot leave four sites disagreeing about what a place
+is.
+
+**The load path is where a direct read is invisible.** A grown city drawn
+from `def.kind` is wrong nowhere the player can see it *this session*:
+`announce_growth` repaints the entity's `Glyph` in place, so the map reads
+`M` for the rest of the run. Then `restore_settlements` rebuilds every
+town's entity from the record on the next load, the authored kind comes back
+`Server`, and the city redraws as a town — a bug that only exists across a
+save boundary and so cannot be found by playing one session. That is why
+`spawn_settlement_at` takes **no kind parameter at all**. A door that cannot
+be handed the wrong answer is worth more than a comment telling callers
+which answer to hand it.
+
+**Two orderings fall out of that, and both are load-only.**
+`restore_settlements` inserts the `Settlements` resource *before* it spawns,
+because `spawn_settlement_at` now asks a `&self` question that reads it; and
+`lifecycle.rs` inserts `Standings` *before* calling `restore_settlements`,
+because the same question reads `Relation::grown`. Neither ordering matters
+on a fresh world — `ensure_local_settlements` writes the record before it
+spawns already — so both are the kind of dependency that compiles, passes
+every unit test that builds a `Game` from a seed, and fails only on a real
+save-and-load. The tests that hold them are round trips, not round-trip
+serializations: `a_grown_town_still_draws_its_mainframe_glyph_after_a_load`
+is the one that was written to fail *after* the door existed and before the
+load order was fixed, which is the whole point of doing it in that order.
+
+**Discovery is not an event.** `ensure_local_settlements` calls
+`latch_growth` before spawning, so a region walked into after its due date
+holds a city that was simply always a city, with no log line and no
+notification. Announcing there would name a place the party has never seen,
+and would fire on the first tick after entering any region — the flip is
+news, arriving somewhere is not, which is `set_machine_status`' rule one
+subject over.
+
+### A town's growth clock is derived and its vitality is banded; only the latch is stored
+
+**The clock is derived, the latch is stored, and that split is what makes
+growth one-way.** `growth::due_tick` folds a due tick out of the world seed
+and the region key on `placement.rs`'s machinery and under all three of its
+prohibitions — no `GameRng` (a draw does not survive a save/load and shifts
+every later roll), no `StdRng` sequence (not stable across a `rand`
+upgrade), and never `%` (`derive::index` reads the high bits; a `%` against
+a small span anti-correlates neighbouring regions). `Relation::grown` then
+records that the clock has passed, and is written in exactly one place,
+`Game::latch_growth`. Re-evaluating the inequality on every read would look
+equivalent and is not: commerce decays, so a city whose trade dried up would
+*un-grow*, which the design refuses outright. The stored bool is what turns
+every reader into a `||`.
+
+**`Relation::commerce` is signed, and zero means "as it was found."** An
+unsigned counter starting at zero would band every authored Mainframe as
+Starved in every fresh world, before anyone had traded a Credit with it —
+the author's own city would read as a ruin on sight. Signed, zero bands
+`Steady`, which is `SETTLEMENT_STEADY_ROWS`. That the constants keep this
+true is a `const _: () = assert!(...)` and not a test, `SETTLEMENT_GARRISON_MAX`'s
+precedent: a retune that closed it must fail the build, not one test in a
+suite somebody could mark ignored. The same block holds
+`SERVER <= STEADY <= MAINFRAME` on both rows and share (an `M` drawing fewer
+rows than an `s` would make the label a lie) and holds
+`COMMERCE_MAX * PULL_TICKS < GROWTH_DUE_MIN`, which is what stops trade
+founding a city at tick zero and makes the ambient half of the feature
+load-bearing rather than decorative.
+
+**A town the party has never traded with cannot band below `Steady`, and
+`Hostile` is the one carve-out.** `growth::vitality_floor` reads
+`Relation::traded` — a latch, not a count, because the point is whether
+there has been business at all, not how much. The drift settles over every
+materialized town from tick zero, so without the floor an authored Mainframe
+in a region nobody had walked into thinned from 10 shelf rows to 6 by
+roughly tick 12,001 with no player involvement, and first contact with a
+city could show a Server-sized shelf the player had never been offered the
+chance to prevent. The clock is allowed to move the world; it is not allowed
+to take something away from someone who was never in the room. `Hostile`
+lifts the floor because a party that has made a town hostile has *had*
+contact with it, and `SETTLEMENT_COMMERCE_HOSTILE_DECAY` would be inert for
+every untraded town otherwise. The floor is read live and is never a
+history, so repairing standing puts it back the tick that lands.
+
+**The drift is settled lazily against an epoch, not paid per tick.**
+`Relation::commerce_epoch` is the bookmark; `settle_commerce_drift` folds
+every elapsed `SETTLEMENT_COMMERCE_DECAY_TICKS` window in one delta through
+`Game::adjust_commerce`, which is `static_epoch`'s shape and its reason — a
+fast-forward cannot be outrun, and no arithmetic runs over every town on a
+tick where nothing changed. It owns the bookmark and nothing else, which is
+what keeps `adjust_commerce` the only place `commerce` itself is assigned.
+`Relation::commerce_credits` is a **second** remainder beside
+`trade_credits` rather than a share of it: the two thresholds differ —
+commerce is bought cheaper than standing — so one counter could not spend
+against both without one axis stealing the other's leftovers.

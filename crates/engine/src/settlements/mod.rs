@@ -14,6 +14,16 @@
 //! with the ground. It is the same rule `rock::RockDb::kind_at` follows for
 //! what a base-space coordinate is made of, and it only became possible
 //! once a breach stopped rebuilding the world.
+//!
+//! **What a settlement *is* is no longer only authored** — `growth.rs`. The
+//! rule above is about *where*, and it still holds without exception: no
+//! run moves a town, founds one or removes one. But a `Server` can become a
+//! `Mainframe`, and that is run state, kept in `Relation::grown` and in the
+//! save. The exception is deliberately narrow and one-way: the *clock* it
+//! grows on is derived from the world seed the same way its position is, so
+//! what the save holds is a latch saying the clock has passed, never a
+//! second opinion about the schedule. Every reader asks
+//! `Game::settlement_kind`, never `SettlementDef::kind`.
 
 pub mod catalogue;
 pub mod growth;
@@ -47,6 +57,16 @@ pub enum CompassTarget {
 /// Two rather than a scale, because the difference is meant to be legible
 /// at a glance on the map rather than compared: a `Server` is a stop, a
 /// `Mainframe` is a destination.
+///
+/// **One can become the other, and only in that direction.** A `Server`
+/// grows into a `Mainframe` on a derived clock (`growth::due_tick`) that
+/// trade pulls forward, and nothing turns a city back into a town — a city
+/// that is doing badly thins its shelf instead (`growth::Vitality`), which
+/// is why this stays two variants rather than becoming the scale it refused
+/// to be. That makes the authored `SettlementDef::kind` only half the
+/// answer: **`Game::settlement_kind` is the only door that says what a
+/// settlement is now**, and a reader that asks the def instead is correct
+/// until the first load after a town grows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SettlementKind {
     /// A city. Carries more shelf rows and higher tiers than a server.

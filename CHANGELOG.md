@@ -33,6 +33,54 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.117
+
+**A town can grow into a city while you are off doing something else.** Every
+Server on the map is due to become a Mainframe somewhere between tick 3,000
+and tick 12,000, on a date fixed by the world seed and the region it stands
+in — so it is the same date every time you load, and two towns in one world
+are not due together.
+
+**Trading with a town brings that day forward.** Every 150 Credits moved
+across its counter, in either direction, pulls its date 25 ticks earlier, up
+to a cap of 2,500. The cap is deliberately less than the earliest possible
+due date: no amount of money founds a city on its own, it only ever gets you
+one sooner.
+
+**A city you have stood in tells you when it happens**, once, and the map
+starts drawing it `M` on the spot rather than waiting for the next load. A
+place you have only heard of gets a line in the log and does not take the
+screen.
+
+**A city you neglect or anger thins out, and never stops being a city.** Its
+shelf runs between the 6 rows a town draws and the 14 a busy city does; left
+alone it drifts down a little every 600 ticks, and a city that is Hostile to
+you drifts three times as fast. Nothing turns a Mainframe back into a
+Server — the glyph, the name and the label are permanent.
+
+**A city you have never traded with holds where it is.** Neglect is
+something you have to have been present for, so the drift cannot take a city
+below its starting size until you have done business there at least once.
+Making one Hostile counts as having been present.
+
+**A city's page now says how it is doing** — Starved, Steady or Thriving, one
+row, and only for a city. A town has no such row, because a word that never
+changes says nothing.
+
+**Every city already standing in your save is now Steady, which is 10 shelf
+rows and a 25% share of standout stock.** They previously drew 14 and 35%
+flat; 14 and 35% is now what a city you keep in business works back up to.
+That is the one balance change here that touches saves you already have, and
+it moves in both directions from where you leave it.
+
+**Older saves load unmodified.** Every new field is additive, so there is no
+save-format bump and a save from `0.13.116` opens with every town at the
+neutral middle, which is where a fresh world starts them anyway.
+
+**Modders: `kind` in a settlement file is now the kind a place *starts* as.**
+Authoring `Server` no longer means it stays one, and authoring `Mainframe`
+means it begins at the middle of the range rather than at the top of it.
+
 ## 0.13.116
 
 **A program's manifest now says what it feels and what it remembers.** Every

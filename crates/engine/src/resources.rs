@@ -1590,16 +1590,24 @@ pub struct PopulatedChunks(pub BTreeSet<(i32, i32)>);
 #[derive(Resource, Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Settlements(pub BTreeMap<crate::settlements::SettlementKey, KnownSettlement>);
 
-/// What every town the party has dealt with thinks of them.
+/// What a town thinks of the party, and how the run has changed it.
 ///
 /// **A second map beside `Settlements` rather than a field on
 /// `KnownSettlement`**, and the split is the point: that record is the
 /// town's *identity* — which entry stands here, on which tile — and is
 /// written once at materialization and never again. This is the
-/// relationship, written all run long by one door
-/// (`Game::adjust_standing`). Keeping them apart is also what leaves room
-/// for a standing with a town the party has not walked to yet, which
-/// Phase 6's routes will need.
+/// relationship, written all run long. Keeping them apart is also what
+/// leaves room for a relation with a town the party has not walked to yet
+/// — which routes needed, and which settlement growth relies on outright:
+/// a town that has merely materialized nearby settles its commerce drift
+/// like any other, so an entry here does *not* mean the party has ever
+/// dealt with the place. `Relation::traded` is the flag that does.
+///
+/// **One door per axis, not one door for the map.** `Relation::standing` is
+/// written only by `Game::adjust_standing`, `Relation::commerce` only by
+/// `Game::adjust_commerce`, and `Relation::grown` only by
+/// `Game::latch_growth`. Each door owns its own clamp; what is refused is a
+/// write beside one of them, not a second axis.
 ///
 /// A `BTreeMap` for `Settlements`' own reason: it is serialized, and a hash
 /// map would make the save encoding differ between runs holding identical

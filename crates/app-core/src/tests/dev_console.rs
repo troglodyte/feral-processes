@@ -132,10 +132,7 @@ mod master_flag {
 
     /// Reads as "is this tool on, given its own value and the master's".
     fn on(specific: Option<&str>, master: Option<&str>) -> bool {
-        resolve_tool_flag(
-            specific.map(OsStr::new),
-            master.map(OsStr::new),
-        )
+        resolve_tool_flag(specific.map(OsStr::new), master.map(OsStr::new))
     }
 
     #[test]

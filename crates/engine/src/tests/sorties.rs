@@ -1418,18 +1418,14 @@ fn every_shipped_site_can_be_populated() {
 /// fight. `balance_sim` models no abilities and no base production, so it
 /// cannot gate this — the assertion lives here, over the real assets.
 ///
-/// It pins the **lever**, not the rate: what actually earns the lower yield
+/// It pins the **rate**, not the lever: what actually earns the lower yield
 /// is Power not recovering in the field and no rest out there, neither of
-/// which is a number this can read. What it catches is a retune that takes
-/// the multiplier to 1.0 or above, and the rounding corner where a cheap
-/// kill would pay the same either way.
+/// which is a number this can read. What it catches is the rounding corner
+/// where a cheap kill would pay the same either way. That the multiplier
+/// stays below 1.0 at all is `tuning`'s own `const _: () = assert!`, which
+/// fails the build rather than this test.
 #[test]
 fn a_sortie_kill_pays_less_than_fighting_it_yourself() {
-    assert!(
-        crate::tuning::SORTIE_XP_MULTIPLIER < 1.0,
-        "the whole point of the lever is that it is below 1"
-    );
-
     let mut game = Game::new(4902, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let species: Vec<String> = game
         .world

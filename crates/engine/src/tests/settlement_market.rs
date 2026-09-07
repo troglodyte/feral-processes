@@ -463,7 +463,10 @@ fn every_settlement_refusal_leaves_the_purse_and_the_pack_alone() {
     // Each entry is one refusal path, checked on its own — the assertion
     // after every one is what stops a later path being covered only by an
     // earlier path's early return.
-    let refusals: Vec<(&str, Box<dyn Fn(&mut Game) -> Result<String, String>>)> = vec![
+    /// One refusal path: what it is called, and the call that must refuse.
+    type RefusalPath<'a> = (&'a str, Box<dyn Fn(&mut Game) -> Result<String, String>>);
+
+    let refusals: Vec<RefusalPath> = vec![
         (
             "an empty basket",
             Box::new(move |g: &mut Game| g.commit_settlement_basket(key, vec![], vec![])),

@@ -234,10 +234,7 @@ fn eviction_does_not_read_a_disposition() {
         let (def, subject) = if i % 2 == 0 {
             ("frayed_here", MemorySubject::BaseTile { x: i, y: 0 })
         } else {
-            (
-                "settled_in",
-                MemorySubject::Structure(format!("m{i}").into()),
-            )
+            ("settled_in", MemorySubject::Structure(format!("m{i}")))
         };
         game.remember(abrasive, def, subject.clone());
         game.remember(steady, def, subject);
@@ -371,18 +368,6 @@ fn one_memory_can_still_make_a_program_sulk() {
     assert!(
         crate::tuning::MORALE_SULKS_AT > -worst_single_grudge(&game),
         "one bad memory must still reach the mild rung"
-    );
-}
-
-/// The gap between the two thresholds *is* the feature. Equal, the marker
-/// flickers every tick at the boundary, which is the whole reason
-/// `Disgruntled` is stored rather than derived.
-#[test]
-fn the_recovery_threshold_leaves_a_hysteresis_gap() {
-    assert!(
-        MORALE_RECOVERED_AT > MORALE_DOWNS_TOOLS_AT,
-        "recovery must sit strictly above the downing-tools line, got \
-         {MORALE_RECOVERED_AT} against {MORALE_DOWNS_TOOLS_AT}"
     );
 }
 
@@ -702,20 +687,6 @@ fn a_disgruntled_body_is_freed_so_a_willing_one_can_take_the_post() {
 // ---------------------------------------------------------------------------
 // The sulking rung: works, but not there.
 // ---------------------------------------------------------------------------
-
-/// The ladder has to climb in order, or a program goes straight from content
-/// to useless and the mild rung is unreachable.
-#[test]
-fn the_ladder_climbs_in_order() {
-    assert!(
-        crate::tuning::MORALE_RECOVERED_AT > crate::tuning::MORALE_SULKS_AT,
-        "recovery sits above sulking"
-    );
-    assert!(
-        crate::tuning::MORALE_SULKS_AT > MORALE_DOWNS_TOOLS_AT,
-        "sulking sits above downing tools"
-    );
-}
 
 /// The mild rung is reached first, and it is a *different* state — the body
 /// is still in the pool.

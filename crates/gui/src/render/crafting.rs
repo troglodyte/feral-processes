@@ -564,7 +564,7 @@ mod tests {
             let m = ui_metrics(900.0);
             let room = 1440.0 * 0.88 - m.pad * 2.0;
             for line in &lines {
-                let drawn = p.measure_ui_advance(&format!("  {line}"), m.font_size);
+                let drawn = p.measure_ui_advance(format!("  {line}"), m.font_size);
                 assert!(
                     drawn <= room,
                     "a wrapped step line still overflows by {:.0}px \
@@ -640,7 +640,7 @@ mod tests {
             let m = ui_metrics(900.0);
             let room = 1440.0 * 0.88 - m.pad * 2.0;
             for line in &lines {
-                let drawn = p.measure_ui_advance(&format!("  {line}"), m.font_size);
+                let drawn = p.measure_ui_advance(format!("  {line}"), m.font_size);
                 assert!(
                     drawn <= room,
                     "a wrapped line still overflows by {:.0}px \

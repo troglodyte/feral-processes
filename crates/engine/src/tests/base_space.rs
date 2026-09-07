@@ -2655,12 +2655,12 @@ fn a_crew_falls_back_to_the_player_s_pack() {
         "the crew never floored the cell"
     );
     assert!(
-        game.world
+        !game
+            .world
             .get::<Stock>(depot)
             .unwrap()
             .output
-            .get(&ItemId::from(ids::BLANK_SUBSTRATE))
-            .is_none(),
+            .contains_key(&ItemId::from(ids::BLANK_SUBSTRATE)),
         "the shelf is spent first — the pack is the fallback, not the other way round"
     );
     assert_eq!(

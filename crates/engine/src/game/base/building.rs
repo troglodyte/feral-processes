@@ -453,6 +453,21 @@ impl Game {
             .map(|(e, _)| e)
     }
 
+    /// Every `BuildSite`'s committed program, in query order.
+    ///
+    /// Exists for tests: a save-round-trip test that wants to know a
+    /// program survived the trip has no `Entity` to look it up by, since a
+    /// `BuildSite::program` is a value snapshot rather than a live
+    /// creature.
+    #[cfg(test)]
+    pub(crate) fn build_site_programs(&mut self) -> Vec<Option<save::CreatureSave>> {
+        let mut query = self.world.query::<&BuildSite>();
+        query
+            .iter(&self.world)
+            .map(|site| site.program.clone())
+            .collect()
+    }
+
     /// How many of `kind` the base has on order but has not raised yet.
     ///
     /// **`BuildGoal::New` only.** An upgrade site names the machine's own

@@ -966,6 +966,7 @@ impl Game {
                     announced_dry: false,
                     announced_stuck: false,
                     goal,
+                    program: b.program,
                 },
                 Position {
                     x: b.position.0,
@@ -2028,6 +2029,7 @@ impl Game {
                 delivered: site.delivered.clone(),
                 progress: site.progress,
                 goal: site.goal,
+                program: site.program.clone(),
             });
         }
 

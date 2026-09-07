@@ -627,3 +627,36 @@ fn a_snapshot_with_the_sentinel_id_mints_from_the_caller_counter() {
         "the counter the caller writes back to `NextProgramId` has moved twice",
     );
 }
+
+/// The committed program must survive a real file round trip. A RON
+/// round-trip test cannot catch a field that fails to serialise, so this
+/// goes through the disk.
+#[test]
+fn a_build_sites_program_survives_a_save_and_load() {
+    let dir = scratch_assets_dir("build_site_program_roundtrip");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("s.ron");
+
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let program = spawn_tamed(&mut game, 30, 6);
+    let snapshot = game.creature_save_for(program).expect("snapshot");
+
+    game.world.spawn((
+        BuildSite {
+            program: Some(snapshot.clone()),
+            ..BuildSite::new("fabricator".to_string(), vec![])
+        },
+        Position { x: 1, y: 1 },
+    ));
+
+    game.save(&path).expect("save");
+    let mut loaded = Game::load(&path, &test_assets_dir()).expect("load");
+
+    let sites = loaded.build_site_programs();
+    assert_eq!(sites.len(), 1, "the site came back");
+    assert_eq!(
+        sites[0].as_ref().map(|c| c.program_id),
+        Some(snapshot.program_id),
+        "and it is still holding the program it was given",
+    );
+}

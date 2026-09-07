@@ -310,7 +310,11 @@ pub struct RouteSave {
     pub proceeds: u32,
 }
 
-#[derive(Serialize, Deserialize)]
+/// `Clone` so a `BuildSite` (itself `Clone`) can hold one, and a build
+/// request's commit and refund can hand a copy on without taking ownership
+/// of the site's own field. `Debug` for the same reason — `BuildSite`
+/// derives it too.
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CreatureSave {
     pub species: SpeciesId,
     pub position: (i32, i32),
@@ -806,6 +810,15 @@ pub struct BuildSiteSave {
     /// filed loads every site as `New`, which is exactly what that run had.
     #[serde(default)]
     pub goal: crate::components::BuildGoal,
+    /// The tamed program this order is holding — see
+    /// `components::BuildSite::program`.
+    ///
+    /// Additive behind `#[serde(default)]`, so it costs no
+    /// `SAVE_FORMAT_VERSION` bump: a file written before builds cost
+    /// programs loads every site holding nothing, which is exactly what
+    /// that run had.
+    #[serde(default)]
+    pub program: Option<CreatureSave>,
 }
 
 /// A caravan mid-journey — see `components::Caravan`.
@@ -857,7 +870,11 @@ pub struct CaravanMemorySave {
 /// which is the opposite call from `CronjobKind` below — see that enum's
 /// doc comment there and `MemorySubject`'s own for why a mirror is right for
 /// one and wrong for the other.
-#[derive(Serialize, Deserialize)]
+/// `Clone`/`Debug` for the same reason `CreatureSave` (which carries a
+/// `Vec` of these) needs them: a `BuildSite`'s committed program is a
+/// value, not a reference, and a value that only ever moves cannot be
+/// handed to both the component and the save it is written into.
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct MemorySave {
     pub def: crate::memories::MemoryId,
     pub subject: crate::components::MemorySubject,
@@ -868,7 +885,7 @@ pub struct MemorySave {
 
 /// Mirrors `components::TaskKind` for persistence — kept separate so the
 /// engine-internal enum doesn't need to derive `Serialize`/`Deserialize`.
-#[derive(Serialize, Deserialize, Default, Clone, Copy)]
+#[derive(Serialize, Deserialize, Default, Clone, Copy, Debug)]
 pub enum CronjobKind {
     #[default]
     GatherResource,
@@ -880,8 +897,10 @@ pub enum CronjobKind {
 /// silently dropping the worker's progress.
 /// `Clone` so `Game::spawn_creature_from_save` can take its `CreatureSave`
 /// by reference and still hand the cronjob on to the deferred resolution
-/// pass that needs to own it. Nothing about the format changes with it.
-#[derive(Clone, Serialize, Deserialize)]
+/// pass that needs to own it. `Debug` because `CreatureSave` (which carries
+/// one of these) now needs it, `BuildSite`'s reason. Nothing about the
+/// format changes with either.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CronjobSave {
     pub target_position: (i32, i32),
     pub progress: u32,

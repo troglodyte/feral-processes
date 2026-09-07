@@ -945,6 +945,13 @@ impl Game {
                             visited: false,
                         },
                     );
+                // **Discovery is not an event.** Evaluated here, before the
+                // glyph is drawn, so a town found past its date was simply
+                // always a city — the clock has been running whether or not
+                // anyone was watching. Announcing a flip here would name a
+                // place the party has never seen, and would fire on the
+                // first tick after walking into any region.
+                self.latch_growth(key);
                 self.spawn_settlement_at(key, tile);
             }
         }

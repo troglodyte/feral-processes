@@ -5,7 +5,7 @@ use super::support::*;
 use crate::components::{
     ActiveFieldBuff, BuffSource, FieldBuff, FieldBuffKind, Perks, PowerReserve, Routines,
 };
-use crate::resources::Party;
+use crate::resources::{MessageLog, Party};
 use crate::tuning::{AFFINITY_MAX, AFFINITY_NEUTRAL, TALENT_START_LEVEL};
 use crate::*;
 
@@ -898,4 +898,305 @@ fn a_holders_own_reserve_decides_whether_its_routine_is_offered() {
     );
     game.run_field_routine(0, FieldRoutineTarget::Ally(player))
         .expect("the companion has the Power for it");
+}
+
+// ---------------------------------------------------------------------------
+// Heals outside battle. A `Heal` is the first effect that runs in *both*
+// places, which is why `AbilityDef::field_runnable` exists beside
+// `AbilityEffect::field_only` rather than widening it — see that method.
+// ---------------------------------------------------------------------------
+
+fn game_with_field_heal() -> Game {
+    let dir = modded_assets_dir(
+        "field_heal",
+        &[],
+        &[],
+        &[],
+        &[],
+        &[
+            ("test_field_patch.ron", FIELD_HEAL_ABILITY),
+            ("test_field_patch_party.ron", FIELD_HEAL_PARTY_ABILITY),
+            ("test_free_patch.ron", FREE_HEAL_ABILITY),
+        ],
+    );
+    Game::new(9111, DifficultyMode::Forgiving, &dir).unwrap()
+}
+
+/// What the fixture heal actually restores off `holder`, derived through the
+/// same two calls `run_field_routine` makes rather than a hardcoded 10: the
+/// band is scaled by the invoker's level and Heal affinity, and a fixture
+/// asserting the authored figure would pass only while the test player's
+/// class happened to be neutral.
+///
+/// `FIELD_HEAL_ABILITY` authors no `spread`, so the band is degenerate and
+/// the roll inside the invocation is deterministic — the test can name one
+/// number without touching the RNG.
+fn expected_heal(game: &Game, holder: Entity, power: i32) -> i32 {
+    let effect = AbilityEffect::Heal { power, spread: 0 };
+    let band = abilities::scaled_range(
+        battle::DamageRange::centred(power, 0),
+        game.ability_user_level(holder),
+        game.ability_affinity(holder, &effect),
+    );
+    assert_eq!(band.min, band.max, "the fixture band must be degenerate");
+    band.min
+}
+
+fn hurt(game: &mut Game, entity: Entity, by: i32) {
+    let mut stats = game.world.get_mut::<Stats>(entity).unwrap();
+    stats.hp = (stats.max_hp - by).max(1);
+}
+
+#[test]
+fn a_costed_heal_runs_outside_battle_and_restores_integrity() {
+    let mut game = game_with_field_heal();
+    let player = game.player_entity();
+    hurt(&mut game, player, 40);
+    game.world
+        .entity_mut(player)
+        .insert(Routines(vec!["test_field_patch".to_string()]));
+
+    let routines = game.field_routines();
+    let index = routines
+        .iter()
+        .position(|r| r.ability == "test_field_patch")
+        .expect("a priced heal is offered outside battle");
+    assert_eq!(routines[index].cost, "6 PWR");
+    assert_eq!(
+        routines[index].second_pick,
+        FieldRoutinePick::Ally,
+        "a OneAlly heal picks who it lands on, exactly as a OneAlly buff does"
+    );
+
+    let expected = expected_heal(&game, player, 10);
+    let hp_before = game.world.get::<Stats>(player).unwrap().hp;
+    let power_before = player_hunger(&game);
+
+    game.run_field_routine(index, FieldRoutineTarget::Ally(player))
+        .expect("a heal the holder can pay for should run");
+
+    assert_eq!(
+        game.world.get::<Stats>(player).unwrap().hp,
+        hp_before + expected
+    );
+    // The holder pays, and a successful run ticks — the same two rules the
+    // buff arm holds to, read through the one decay function.
+    assert_eq!(
+        player_hunger(&game),
+        power_before - 6.0 - crate::systems::power_drain_per_tick(1.0)
+    );
+}
+
+/// The throttle rule. A cooldown is counted in battle rounds and there is no
+/// round counter on the map, so Power is the only thing pacing a field
+/// invocation — and a routine costing none has nothing pacing it at all.
+#[test]
+fn a_free_heal_is_not_offered_in_the_field() {
+    let mut game = game_with_field_heal();
+    let player = game.player_entity();
+    game.world.entity_mut(player).insert(Routines(vec![
+        "test_free_patch".to_string(),
+        // Installed alongside, so the assertion below cannot pass by the
+        // list being empty for some reason that has nothing to do with the
+        // price — the two differ in `power_cost` and in nothing else.
+        "test_field_patch".to_string(),
+    ]));
+
+    let routines = game.field_routines();
+    assert!(
+        routines.iter().any(|r| r.ability == "test_field_patch"),
+        "the priced heal on the same holder is offered"
+    );
+    assert!(
+        routines.iter().all(|r| r.ability != "test_free_patch"),
+        "a heal costing no Power has no throttle outside battle and stays a Special"
+    );
+}
+
+/// The same rule as a census over the shipped roster, so an `assets/` edit
+/// dropping a `power_cost` cannot quietly hand the map an unlimited heal.
+/// `hot_patch` is the shipped case this excludes today.
+#[test]
+fn no_shipped_field_runnable_routine_runs_for_free() {
+    let game = Game::new(9112, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let runnable: Vec<&AbilityDef> = game
+        .world
+        .resource::<AbilityDb>()
+        .all()
+        .filter(|def| def.field_runnable())
+        .collect();
+    // Or the census below passes by matching nothing, which is exactly how
+    // a gate that has quietly closed on everything reads as green.
+    assert!(
+        runnable
+            .iter()
+            .any(|def| matches!(def.effect, AbilityEffect::Heal { .. })),
+        "the shipped roster must field-run at least one heal, or this proves nothing"
+    );
+    let free: Vec<&str> = runnable
+        .iter()
+        .filter(|def| abilities::routine_power_cost(def) <= 0.0)
+        .map(|def| def.id.as_str())
+        .collect();
+    assert!(
+        free.is_empty(),
+        "a field-runnable routine with no Power price is unthrottled on the map: {free:?}"
+    );
+}
+
+/// The predicate split itself. Widening `field_only` would have been the
+/// obvious change and is the wrong one: eight call sites read it as "never
+/// appears in battle", and `passive_field_mismatch` refuses a `triggers` on
+/// one while `field_only_dead_fields` warns about a `cooldown` — which every
+/// shipped heal has.
+#[test]
+fn a_field_runnable_heal_is_still_a_battle_special() {
+    let game = Game::new(9113, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let def = game
+        .world
+        .resource::<AbilityDb>()
+        .get("checksum_repair")
+        .expect("the shipped mid-tier single-target heal");
+    assert!(def.field_runnable(), "a priced heal reaches the field list");
+    assert!(
+        !def.effect.field_only(),
+        "and stays on the Special menu, which is what field_only gates"
+    );
+}
+
+#[test]
+fn healing_someone_already_at_full_integrity_is_refused_and_spends_nothing() {
+    let mut game = game_with_field_heal();
+    let player = game.player_entity();
+    game.world
+        .entity_mut(player)
+        .insert(Routines(vec!["test_field_patch".to_string()]));
+    let power_before = player_hunger(&game);
+
+    let result = game.run_field_routine(0, FieldRoutineTarget::Ally(player));
+
+    // On the message, not on `is_err`: with the heal absent from the list
+    // this index refuses as "No such routine", which is an Err for a reason
+    // that has nothing to do with the rule under test.
+    assert_eq!(
+        result,
+        Err("Nothing to repair on you.".to_string()),
+        "a heal on an undamaged target would spend Power for nothing"
+    );
+    assert_eq!(
+        player_hunger(&game),
+        power_before,
+        "a refused run spends nothing and costs no time"
+    );
+}
+
+/// `restore_hp` caps at `max_hp` and hands back what actually landed, so the
+/// log has to print that figure and not the rolled one — the rule the battle
+/// arm already holds to.
+#[test]
+fn a_field_heal_caps_at_full_and_logs_what_it_restored() {
+    let mut game = game_with_field_heal();
+    let player = game.player_entity();
+    hurt(&mut game, player, 1);
+    game.world
+        .entity_mut(player)
+        .insert(Routines(vec!["test_field_patch".to_string()]));
+    let max_hp = game.world.get::<Stats>(player).unwrap().max_hp;
+
+    game.run_field_routine(0, FieldRoutineTarget::Ally(player))
+        .expect("one point short of full is still hurt");
+
+    assert_eq!(game.world.get::<Stats>(player).unwrap().hp, max_hp);
+    let logged = game
+        .world
+        .resource::<MessageLog>()
+        .lines
+        .iter()
+        .any(|line| line.text.contains("for 1 HP"));
+    assert!(
+        logged,
+        "the line must quote the 1 point that landed, not the band that was rolled"
+    );
+}
+
+#[test]
+fn a_whole_party_field_heal_restores_every_hurt_member() {
+    let mut game = game_with_field_heal();
+    let player = game.player_entity();
+    let alive = spawn_tamed(&mut game, 40, 3);
+    let dead = spawn_tamed(&mut game, 40, 3);
+    hurt(&mut game, player, 30);
+    hurt(&mut game, alive, 20);
+    game.world.get_mut::<Stats>(dead).unwrap().hp = 0;
+    game.world.resource_mut::<Party>().0.extend([alive, dead]);
+    game.world
+        .entity_mut(player)
+        .insert(Routines(vec!["test_field_patch_party".to_string()]));
+
+    let routines = game.field_routines();
+    let index = routines
+        .iter()
+        .position(|r| r.ability == "test_field_patch_party")
+        .expect("a priced party heal is offered outside battle");
+    assert_eq!(routines[index].second_pick, FieldRoutinePick::None);
+
+    let player_before = game.world.get::<Stats>(player).unwrap().hp;
+    let alive_before = game.world.get::<Stats>(alive).unwrap().hp;
+
+    game.run_field_routine(index, FieldRoutineTarget::None)
+        .expect("a WholeParty heal needs no picked ally");
+
+    assert!(game.world.get::<Stats>(player).unwrap().hp > player_before);
+    assert!(game.world.get::<Stats>(alive).unwrap().hp > alive_before);
+    assert_eq!(
+        game.world.get::<Stats>(dead).unwrap().hp,
+        0,
+        "a downed program is not raised by a field heal, the same walk the buff arm makes"
+    );
+}
+
+#[test]
+fn a_whole_party_field_heal_with_nobody_hurt_is_refused() {
+    let mut game = game_with_field_heal();
+    let player = game.player_entity();
+    let companion = spawn_tamed(&mut game, 40, 3);
+    game.world.resource_mut::<Party>().0.push(companion);
+    game.world
+        .entity_mut(player)
+        .insert(Routines(vec!["test_field_patch_party".to_string()]));
+    let power_before = player_hunger(&game);
+
+    let result = game.run_field_routine(0, FieldRoutineTarget::None);
+
+    assert_eq!(
+        result,
+        Err("Nobody with you needs repairing.".to_string()),
+        "nobody in the party has anything to repair"
+    );
+    assert_eq!(player_hunger(&game), power_before);
+}
+
+/// The inspect page and the field list must not disagree about where a
+/// routine can be run — both read `AbilityDef::field_runnable`.
+#[test]
+fn the_inspect_page_says_a_priced_heal_runs_both_ways() {
+    let game = game_with_field_heal();
+    let player = game.player_entity();
+
+    let detail = game
+        .routine_detail(&"test_field_patch".to_string(), player)
+        .expect("the fixture heal is in the ability set");
+    assert!(
+        detail.when.contains("Special") && detail.when.contains("outside battle"),
+        "a priced heal is both a Special and a field routine: {}",
+        detail.when
+    );
+
+    let free = game
+        .routine_detail(&"test_free_patch".to_string(), player)
+        .expect("the free heal is in the ability set");
+    assert_eq!(
+        free.when, "Chosen as a Special in battle",
+        "an unpriced heal never reaches the field list, so the page must not offer it there"
+    );
 }

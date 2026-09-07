@@ -115,6 +115,12 @@ way deleting the Currency item does.
     //     this variant. Every shipped healing routine authors one; a mod
     //     that never mentions it heals a flat amount.
     //
+    //     **A Heal is the one effect that runs in both places.** Give it a
+    //     nonzero `power_cost` and an ally-facing `target` and it is offered
+    //     on the map's routine list as well as on the Special picker — see
+    //     "Heals outside battle" below for why those two conditions, and
+    //     what a field invocation costs.
+    //
     //   Buff(kind: Atk, power: 3, duration: 3)
     //     Temporary stat boost for `duration` battle rounds. `kind` is
     //     `Atk` (flat attack points) or `Mitigation` (**percentage
@@ -517,6 +523,27 @@ program.
 
 `exclusive` and a non-zero `wild_weight` together are refused at load: both
 claim to name the routine's only source, and they name different ones.
+
+## Heals outside battle
+
+Every other effect runs in exactly one place. `FieldBuff`, `Phase`, `Jump`
+and `Symlink` run only on the map; everything else runs only in a fight.
+A `Heal` runs in both, and two conditions decide whether a given one does:
+
+- **`power_cost` above 0.** A `cooldown` is counted in battle rounds, and
+  the map has no round to count — so Power is the only throttle a field
+  invocation has, and a heal costing nothing has none at all. `hot_patch` is
+  the shipped case: free, and its band scales with the invoker's level, so it
+  would be unlimited repair on the map at every level. It stays a Special.
+- **An ally-facing `target`** — `OneAlly` or `WholeParty`. The three
+  enemy-facing modes name a side that does not exist outside a battle.
+
+A field invocation charges its `power_cost` to **the holder**, exactly as the
+Special does, and spends a turn. The effect itself is the battle one, down to
+the roll: the same band, scaled by the invoker's own level and Heal affinity.
+It is refused, before the Power is taken, if everyone it would land on is
+already at full Integrity — on the map, declining costs nothing, so a routine
+that would restore nothing is not offered the chance to charge for it.
 
 ## Passives
 

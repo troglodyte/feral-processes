@@ -67,6 +67,17 @@ impl Game {
                 None if def.effect.field_only() => {
                     "Run outside battle from the routine list".to_string()
                 }
+                // The both-ways arm, read off the same predicate
+                // `Game::field_routines` filters on — a priced `Heal` is a
+                // Special *and* a field routine, and a page deriving that
+                // for itself could promise a row the list never shows. The
+                // unpriced ones fall through to the line below, which is the
+                // whole visible consequence of `field_runnable`'s price
+                // gate.
+                None if def.field_runnable() => {
+                    "Chosen as a Special in battle, or run outside battle from the routine list"
+                        .to_string()
+                }
                 None => "Chosen as a Special in battle".to_string(),
             },
             target: def.target.phrase().to_string(),

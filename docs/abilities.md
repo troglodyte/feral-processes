@@ -16,7 +16,7 @@ species grants nothing. The [research tree](research.md) teaches the rest.
 | abilities | 78 |
 | effect shapes | 11 |
 | target shapes | 5 |
-| field routines (run outside battle) | 13 |
+| routines that never run in battle | 13 |
 | of those, Stack-only movement | 2 |
 
 ## The naming scheme
@@ -237,6 +237,15 @@ and cost **Power**. Most of them have no duration at all: they run until the
 party rests, so they are bought at base as a loadout for a trip rather than
 timed against a fight. The two that restore a pool over time keep a turn
 count, because an unbounded one is unbounded healing or unbounded Power.
+
+They are no longer the only things the map's routine list offers. A **Heal**
+that charges Power runs out there too, on top of being a Special — the seven
+Patch and Rollback routines below the free `hot_patch`. A heal is priced in
+Power and nothing else out there, because a cooldown counts battle rounds and
+the map has no round to count; a heal costing nothing would therefore have no
+throttle at all, which is why the free one stays a Special. Everything else
+about it is the battle invocation's: the same band, scaled by the invoker's
+own level and Heal affinity, restoring what fits under the target's ceiling.
 
 | Routine | Effect | Power | Duration | Costs |
 |:---|:---|---:|---:|---:|

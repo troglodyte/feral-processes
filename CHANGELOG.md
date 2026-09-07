@@ -33,6 +33,12 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.124
+
+**The swap picker rates what you are already wearing.** Candidate weapons have carried a power rating since 0.13.69, but the heading naming the piece in the slot carried only a name and its stats — a column of figures with nothing to compare them against. The heading is now a row of the same shape as the rows below it, its rating in the same column.
+
+**A long worn name no longer pushes its stats off the edge of that heading.** The line was drawn unwrapped, and the widest copy the shipped assets can build ran some thirty cells past the popup body.
+
 ## 0.13.123
 
 **Decompile is welded into the slot it starts in.** It cannot be cleared to make room, it cannot be written onto a blank disk, and no program can be made to run it — the routine panel marks its row as fixed, so this is not something you find out by pressing it. It is how you take a program at all, and there is exactly one of it for the length of a run.

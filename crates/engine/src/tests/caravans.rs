@@ -39,7 +39,7 @@ fn a_malformed_file_is_skipped_with_one_warning() {
     let shipped = std::fs::read_dir(&*dir).unwrap().count();
     std::fs::write(&*dir.join("broken.ron"), "( id: \"nope\"").unwrap();
 
-    let (db, warnings) = CaravanDb::load_dir(&*dir).unwrap();
+    let (db, warnings) = CaravanDb::load_dir(&dir).unwrap();
 
     assert_eq!(warnings.len(), 1, "one bad file, one warning: {warnings:?}");
     assert_eq!(
@@ -75,7 +75,7 @@ fn a_def_with_no_rows_or_no_weights_is_refused() {
     )
     .unwrap();
 
-    let (db, warnings) = CaravanDb::load_dir(&*dir).unwrap();
+    let (db, warnings) = CaravanDb::load_dir(&dir).unwrap();
 
     assert_eq!(db.all().count(), 0, "none of the three is usable");
     assert_eq!(warnings.len(), 3, "each says why: {warnings:?}");
@@ -101,7 +101,7 @@ fn for_zone_keeps_only_the_window_and_sorts_by_id() {
         )
         .unwrap();
     }
-    let (db, warnings) = CaravanDb::load_dir(&*dir).unwrap();
+    let (db, warnings) = CaravanDb::load_dir(&dir).unwrap();
     assert!(warnings.is_empty(), "{warnings:?}");
 
     let ids = |zone| -> Vec<String> {
@@ -166,7 +166,7 @@ fn a_def_with_a_bonus_share_over_a_hundred_is_refused() {
     )
     .unwrap();
 
-    let (db, warnings) = CaravanDb::load_dir(&*dir).unwrap();
+    let (db, warnings) = CaravanDb::load_dir(&dir).unwrap();
 
     assert_eq!(warnings.len(), 1, "one bad file, one warning: {warnings:?}");
     assert!(db.get("greedy").is_none(), "101% was stocked anyway");
@@ -599,7 +599,7 @@ fn one_def(id: &str, rows: u32, weights: &str) -> CaravanDb {
         ),
     )
     .unwrap();
-    let (db, warnings) = CaravanDb::load_dir(&*dir).unwrap();
+    let (db, warnings) = CaravanDb::load_dir(&dir).unwrap();
     assert!(
         warnings.is_empty(),
         "the test def did not load: {warnings:?}"
@@ -1635,7 +1635,7 @@ fn only_trader(game: &mut Game, name: &str, body: &str) {
     let dir = scratch_assets_dir(name);
     std::fs::create_dir_all(&*dir).unwrap();
     std::fs::write(&*dir.join("solo.ron"), body).unwrap();
-    let (db, warnings) = CaravanDb::load_dir(&*dir).unwrap();
+    let (db, warnings) = CaravanDb::load_dir(&dir).unwrap();
     assert!(
         warnings.is_empty(),
         "the fixture's own def warned: {warnings:?}"

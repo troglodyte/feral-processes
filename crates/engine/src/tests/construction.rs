@@ -237,7 +237,8 @@ fn a_build_request_takes_the_body_off_a_work_order() {
     let body = builder(&mut game);
     place_now(&mut game, "mining_node", 0, 1).unwrap();
     let node = structure_at(&mut game, 0, 1).expect("a node stands there");
-    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50));
+    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50))
+        .unwrap();
     game.tick();
     assert_eq!(
         game.world.get::<Task>(body).map(|t| t.target),
@@ -469,7 +470,8 @@ fn a_request_no_program_can_reach_does_not_starve_the_base() {
     let body = builder(&mut game);
     place_now(&mut game, "mining_node", 0, 1).unwrap();
     let node = structure_at(&mut game, 0, 1).expect("a node stands there");
-    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50));
+    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50))
+        .unwrap();
     game.tick();
     assert_eq!(
         game.world.get::<Task>(body).map(|t| t.target),
@@ -524,7 +526,8 @@ fn a_request_walled_off_behind_its_own_standing_room_is_skipped_and_announced() 
     let body = builder(&mut game);
     place_now(&mut game, "mining_node", 0, 1).unwrap();
     let node = structure_at(&mut game, 0, 1).expect("a node stands there");
-    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50));
+    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50))
+        .unwrap();
     game.tick();
 
     let far = tuning::STARTING_POCKET_RADIUS + 6;
@@ -705,7 +708,8 @@ fn a_request_the_base_cannot_supply_does_not_deadlock_production() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .take(ItemId::from(ids::CORE_FRAGMENT), held);
-    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50));
+    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50))
+        .unwrap();
     game.place_structure("depot", 1, 0).unwrap();
 
     // Sampled across the window, never at its end. The moment the node makes

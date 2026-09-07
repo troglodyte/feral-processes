@@ -4219,6 +4219,14 @@ pub const SORTIE_PROVISION_PER_BATTLE: u32 = 1;
 /// earn it — Power not recovering in the field, and no rest out there.
 pub const SORTIE_XP_MULTIPLIER: f32 = 0.6;
 
+/// Below 1.0 is the whole point of the lever, so a retune that took it to
+/// 1.0 or above must fail the build rather than one test in a suite somebody
+/// could mark ignored — `CREATION_STAT_POINTS`' precedent. What a sortie
+/// kill actually pays over the real assets is still
+/// `a_sortie_kill_pays_less_than_fighting_it_yourself`, which this only
+/// takes the constant half off.
+const _: () = assert!(SORTIE_XP_MULTIPLIER < 1.0);
+
 /// Rounds one off-screen battle may run before it is called a draw.
 ///
 /// A backstop and not a mechanic: two sides that cannot finish each other
@@ -4364,102 +4372,6 @@ pub const CARAVAN_BONUS_RARITY_CHANCE: f64 = 0.6;
 /// gear reads as a rack of junk.
 pub const CARAVAN_BONUS_QUALITY_FLOOR: u8 = QUALITY_DEFAULT;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::resources::ZoneLevel;
-
-    /// The reference wearer must stay a *derivation* of the two axes above
-    /// it, not three hand-written numbers that drift the first time
-    /// `HP_PER_LEVEL` or `PLAYER_BASE_STATS` moves. Its whole value is that
-    /// it sits where players actually stand.
-    #[test]
-    fn the_power_reference_wearer_is_a_levelled_player() {
-        let levelled = crate::progression::stats_after_levels(
-            PLAYER_BASE_STATS,
-            POWER_REFERENCE_LEVEL - 1,
-            BASELINE_GROWTH_MULTIPLIER,
-        );
-        assert_eq!(levelled.max_hp, POWER_REFERENCE_MAX_HP);
-        assert_eq!(levelled.atk, POWER_REFERENCE_ATK);
-        assert_eq!(levelled.mitigation, POWER_REFERENCE_MITIGATION);
-        // `Stats::power` divides by `1 - mitigation/100`.
-        const { assert!(POWER_REFERENCE_MITIGATION < MAX_MITIGATION_PERCENT) };
-    }
-
-    /// Seeding and maintenance must agree about how crowded a zone should
-    /// be. The derivation is what makes them agree by construction, so the
-    /// property to pin is the round trip: scaling the seeded area back down
-    /// to one spawn box has to land on the target the ambient roll enforces.
-    ///
-    /// Integer division loses a fraction of a creature per box, so this
-    /// allows exactly that and no more — a derivation that drifted by a
-    /// whole creature per box would be a real disagreement.
-    #[test]
-    fn a_chunk_is_stocked_at_the_density_it_is_maintained_at() {
-        let chunk = crate::world::CHUNK_SIZE as f64;
-        let spawn_box = (2 * WILD_SPAWN_RADIUS_TILES + 1) as f64;
-        let boxes_covered = (chunk * chunk) / (spawn_box * spawn_box);
-        let per_box = chunk_wild_population() as f64 / boxes_covered;
-
-        assert!(
-            (per_box - WILD_LOCAL_DENSITY_TARGET as f64).abs() < 1.0,
-            "a chunk is stocked at {per_box:.2} per spawn box but the ambient \
-             roll maintains {WILD_LOCAL_DENSITY_TARGET}"
-        );
-    }
-
-    /// The zone curve was a bare `1 << (zone - 1)` before it was named, and
-    /// geometric until it was measured. Pinning the sequence keeps a retune
-    /// honest about what it costs, and pinning it as *linear* is the point:
-    /// the player's side of the fight grows by a constant per level, so a
-    /// geometric enemy curve is a race the player loses at some finite zone
-    /// no matter how the coefficients are set. `balance_sim`'s level sweeps
-    /// are projected against this.
-    #[test]
-    fn zone_stat_multiplier_rises_linearly_and_never_compounds() {
-        let curve: Vec<i32> = (1..=8).map(|z| ZoneLevel(z).stat_multiplier()).collect();
-        assert_eq!(curve, vec![1, 2, 3, 4, 5, 6, 7, 8]);
-
-        // The property, stated as a property rather than as a table: every
-        // step is the same size. A geometric curve passes the table above
-        // for its first two entries and fails here at the third.
-        let steps: Vec<i32> = curve.windows(2).map(|w| w[1] - w[0]).collect();
-        assert!(
-            steps.iter().all(|&s| s == ZONE_STAT_STEP),
-            "the zone curve compounds somewhere: {steps:?}"
-        );
-    }
-
-    /// `Game::max_group_size` clamps its distance exponent to
-    /// `MAX_GROUP_SIZE_STEPS` because the map is unbounded. That
-    /// clamp is only lossless while the clamped growth already exceeds
-    /// `MAX_GROUP_SIZE` — raise the cap without raising the step count and
-    /// distance would silently stop mattering short of it.
-    #[test]
-    fn clamping_the_distance_exponent_cannot_cost_group_size() {
-        assert!(
-            GROUP_SIZE_DISTANCE_GROWTH.pow(MAX_GROUP_SIZE_STEPS) > MAX_GROUP_SIZE,
-            "distance growth clamped at {MAX_GROUP_SIZE_STEPS} steps reaches only {}, \
-             which no longer covers MAX_GROUP_SIZE ({MAX_GROUP_SIZE})",
-            GROUP_SIZE_DISTANCE_GROWTH.pow(MAX_GROUP_SIZE_STEPS),
-        );
-    }
-
-    /// The zone group cap has to reach `MAX_GROUP_SIZE` somewhere, or the
-    /// hard ceiling is decoration. Under the old x3 growth that happened at
-    /// zone 6, inside the range `balance_sim` sweeps; a line gets there
-    /// later, which is the deliberate half of the trade — the early zones
-    /// gained their range by the tail giving up its runaway.
-    #[test]
-    fn zone_group_step_saturates_the_group_cap_in_a_reachable_zone() {
-        let zones_to_saturate = (1..=20)
-            .find(|z| 1 + ZONE_GROUP_STEP * (z - 1) >= MAX_GROUP_SIZE)
-            .expect("group growth should reach MAX_GROUP_SIZE within twenty zones");
-        assert_eq!(zones_to_saturate, 12);
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Dispositions
 // ---------------------------------------------------------------------------
@@ -4542,6 +4454,17 @@ pub const MORALE_DOWNS_TOOLS_AT: f32 = -50.0;
 /// program does not have to be *happy* to work again, only no longer in the
 /// hole.
 pub const MORALE_RECOVERED_AT: f32 = -6.0;
+
+/// The ladder climbs in order, and the gap between recovery and downing
+/// tools *is* the feature.
+///
+/// Equal, the marker flickers every tick at the boundary, which is the whole
+/// reason `Disgruntled` is stored rather than derived. Out of order, a
+/// program goes straight from content to useless and the mild sulking rung
+/// is unreachable. The hysteresis gap `MORALE_RECOVERED_AT >
+/// MORALE_DOWNS_TOOLS_AT` follows from the chain and is not asserted twice.
+const _: () = assert!(MORALE_RECOVERED_AT > MORALE_SULKS_AT);
+const _: () = assert!(MORALE_SULKS_AT > MORALE_DOWNS_TOOLS_AT);
 
 /// How many rows the base output page shows per section.
 ///
@@ -4769,3 +4692,99 @@ pub const RICH_IN_UNITS: u32 = 1;
 /// excludes an etched ability), so this only prices what selling a spare
 /// one back nets.
 pub const TOOL_CARRIER_VALUE: u32 = 2;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::resources::ZoneLevel;
+
+    /// The reference wearer must stay a *derivation* of the two axes above
+    /// it, not three hand-written numbers that drift the first time
+    /// `HP_PER_LEVEL` or `PLAYER_BASE_STATS` moves. Its whole value is that
+    /// it sits where players actually stand.
+    #[test]
+    fn the_power_reference_wearer_is_a_levelled_player() {
+        let levelled = crate::progression::stats_after_levels(
+            PLAYER_BASE_STATS,
+            POWER_REFERENCE_LEVEL - 1,
+            BASELINE_GROWTH_MULTIPLIER,
+        );
+        assert_eq!(levelled.max_hp, POWER_REFERENCE_MAX_HP);
+        assert_eq!(levelled.atk, POWER_REFERENCE_ATK);
+        assert_eq!(levelled.mitigation, POWER_REFERENCE_MITIGATION);
+        // `Stats::power` divides by `1 - mitigation/100`.
+        const { assert!(POWER_REFERENCE_MITIGATION < MAX_MITIGATION_PERCENT) };
+    }
+
+    /// Seeding and maintenance must agree about how crowded a zone should
+    /// be. The derivation is what makes them agree by construction, so the
+    /// property to pin is the round trip: scaling the seeded area back down
+    /// to one spawn box has to land on the target the ambient roll enforces.
+    ///
+    /// Integer division loses a fraction of a creature per box, so this
+    /// allows exactly that and no more — a derivation that drifted by a
+    /// whole creature per box would be a real disagreement.
+    #[test]
+    fn a_chunk_is_stocked_at_the_density_it_is_maintained_at() {
+        let chunk = crate::world::CHUNK_SIZE as f64;
+        let spawn_box = (2 * WILD_SPAWN_RADIUS_TILES + 1) as f64;
+        let boxes_covered = (chunk * chunk) / (spawn_box * spawn_box);
+        let per_box = chunk_wild_population() as f64 / boxes_covered;
+
+        assert!(
+            (per_box - WILD_LOCAL_DENSITY_TARGET as f64).abs() < 1.0,
+            "a chunk is stocked at {per_box:.2} per spawn box but the ambient \
+             roll maintains {WILD_LOCAL_DENSITY_TARGET}"
+        );
+    }
+
+    /// The zone curve was a bare `1 << (zone - 1)` before it was named, and
+    /// geometric until it was measured. Pinning the sequence keeps a retune
+    /// honest about what it costs, and pinning it as *linear* is the point:
+    /// the player's side of the fight grows by a constant per level, so a
+    /// geometric enemy curve is a race the player loses at some finite zone
+    /// no matter how the coefficients are set. `balance_sim`'s level sweeps
+    /// are projected against this.
+    #[test]
+    fn zone_stat_multiplier_rises_linearly_and_never_compounds() {
+        let curve: Vec<i32> = (1..=8).map(|z| ZoneLevel(z).stat_multiplier()).collect();
+        assert_eq!(curve, vec![1, 2, 3, 4, 5, 6, 7, 8]);
+
+        // The property, stated as a property rather than as a table: every
+        // step is the same size. A geometric curve passes the table above
+        // for its first two entries and fails here at the third.
+        let steps: Vec<i32> = curve.windows(2).map(|w| w[1] - w[0]).collect();
+        assert!(
+            steps.iter().all(|&s| s == ZONE_STAT_STEP),
+            "the zone curve compounds somewhere: {steps:?}"
+        );
+    }
+
+    /// `Game::max_group_size` clamps its distance exponent to
+    /// `MAX_GROUP_SIZE_STEPS` because the map is unbounded. That
+    /// clamp is only lossless while the clamped growth already exceeds
+    /// `MAX_GROUP_SIZE` — raise the cap without raising the step count and
+    /// distance would silently stop mattering short of it.
+    #[test]
+    fn clamping_the_distance_exponent_cannot_cost_group_size() {
+        assert!(
+            GROUP_SIZE_DISTANCE_GROWTH.pow(MAX_GROUP_SIZE_STEPS) > MAX_GROUP_SIZE,
+            "distance growth clamped at {MAX_GROUP_SIZE_STEPS} steps reaches only {}, \
+             which no longer covers MAX_GROUP_SIZE ({MAX_GROUP_SIZE})",
+            GROUP_SIZE_DISTANCE_GROWTH.pow(MAX_GROUP_SIZE_STEPS),
+        );
+    }
+
+    /// The zone group cap has to reach `MAX_GROUP_SIZE` somewhere, or the
+    /// hard ceiling is decoration. Under the old x3 growth that happened at
+    /// zone 6, inside the range `balance_sim` sweeps; a line gets there
+    /// later, which is the deliberate half of the trade — the early zones
+    /// gained their range by the tail giving up its runaway.
+    #[test]
+    fn zone_group_step_saturates_the_group_cap_in_a_reachable_zone() {
+        let zones_to_saturate = (1..=20)
+            .find(|z| 1 + ZONE_GROUP_STEP * (z - 1) >= MAX_GROUP_SIZE)
+            .expect("group growth should reach MAX_GROUP_SIZE within twenty zones");
+        assert_eq!(zones_to_saturate, 12);
+    }
+}

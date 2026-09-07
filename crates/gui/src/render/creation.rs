@@ -566,7 +566,7 @@ mod tests {
     /// on them is still affordable, so walking past them is a pass over
     /// their rows rather than one keystroke, and a table cannot say that.
     fn walk_past(app: &mut App, step: CreationStep) {
-        let mut spend_every_row = |app: &mut App| {
+        let spend_every_row = |app: &mut App| {
             for i in 0..app.creation_rows().len() {
                 app.menu_selected = i;
                 app.handle_key(GameKey::ShiftRight);
@@ -627,7 +627,7 @@ mod tests {
         const REFUSAL: &str = "Requires Zone 3 first.";
         let mut app = wizard_app();
         let mut steps = Vec::new();
-        for (i, step) in CreationStep::ALL.iter().enumerate() {
+        for step in CreationStep::ALL.iter() {
             assert_eq!(
                 app.creation_step(),
                 *step,
@@ -660,7 +660,7 @@ mod tests {
     #[test]
     fn every_creation_step_draws_its_rows() {
         let mut app = wizard_app();
-        for (i, step) in CreationStep::ALL.iter().enumerate() {
+        for step in CreationStep::ALL.iter() {
             let m = ui_metrics(900.0);
             let (_, shapes) =
                 crate::paint::with_painter(|p| draw_create_character(&app, None, p, &m));
@@ -713,7 +713,7 @@ mod tests {
         let mut app = wizard_app_with_maximal_profile("height");
         let m = ui_metrics(720.0);
         let mut tallest = 0usize;
-        for (i, step) in CreationStep::ALL.iter().enumerate() {
+        for step in CreationStep::ALL.iter() {
             let drawn = step_rows(&app, *step);
             tallest = tallest.max(drawn.len());
             let scrolls = super::super::popup::popup_scrolls(
@@ -767,7 +767,7 @@ mod tests {
             let m = ui_metrics(screen_h);
             let body = super::super::popup::popup_body_width(screen_w, PopupSize::Large, &m);
             crate::paint::with_painter(|p| {
-                for (i, step) in CreationStep::ALL.iter().enumerate() {
+                for step in CreationStep::ALL.iter() {
                     for row in step_rows(&app, *step) {
                         let label = super::super::popup::row_label_text(&row);
                         let width = p.measure_ui_advance(&label, m.font_size);

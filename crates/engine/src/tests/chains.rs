@@ -1164,7 +1164,10 @@ fn the_patch_routine_chain_runs_from_fragments_up_through_the_assembly_bay() {
         .find(|c| c.product == "Patch Routine")
         .expect("the Assembly Bay assembles one");
 
-    let shape: Vec<(Vec<(&str, u32)>, Option<&str>, &str)> = chain
+    /// One step flattened for comparison: its inputs, its tool, its output.
+    type StepShape<'a> = (Vec<(&'a str, u32)>, Option<&'a str>, &'a str);
+
+    let shape: Vec<StepShape> = chain
         .steps
         .iter()
         .map(|s| {

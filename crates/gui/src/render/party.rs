@@ -572,6 +572,94 @@ pub(super) fn draw_rename_menu(
     draw_popup("Rename", PopupSize::Small, &rows, refusal, painter, m);
 }
 
+/// Page one of the refactor flow: which program to upgrade.
+///
+/// The zone tag is already spelled into `PetInfo::name` by
+/// `Game::creature_label`, which is exactly the number this screen is about —
+/// so a player choosing between two programs can see which one is behind
+/// without opening a manifest for each.
+pub(super) fn draw_refactor(
+    game: &mut Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let zone = game.player_status().zone;
+    let programs = game.owned_pets();
+    let mut rows = vec![
+        text_row("Refactor which program? An upgrade is permanent and cannot be taken back off."),
+        text_row(format!("You are in zone {zone}.")),
+    ];
+    for (i, p) in programs.iter().enumerate() {
+        rows.push(with_icon(
+            tier_row(
+                format!(
+                    "[{}] {} Lv{}{}{}",
+                    menu_shortcut(i),
+                    p.name,
+                    p.level,
+                    fusion_tag(p.fusions),
+                    refactor_tag(p.refactors)
+                ),
+                i == selected,
+                p.fusions,
+                p.rarity,
+            ),
+            p.glyph,
+            glyph_color(p.color),
+        ));
+    }
+    draw_popup("Refactor", PopupSize::Large, &rows, refusal, painter, m);
+}
+
+/// Page two: what to spend on it.
+///
+/// The rows come from `Game::companion_upgrades`, which lists cargo only, so
+/// this page cannot offer something the engine would then refuse for want of
+/// the item. Every other refusal is about the program and lands in the status
+/// line instead.
+pub(super) fn draw_refactor_item(
+    game: &mut Game,
+    target: Option<Entity>,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let Some(target) = target else {
+        return;
+    };
+    let subject = game
+        .owned_pets()
+        .into_iter()
+        .find(|p| p.entity == target)
+        .map(|p| (p.name, p.refactors));
+    let offered = game.companion_upgrades();
+
+    let mut rows = Vec::new();
+    if let Some((name, refactors)) = &subject {
+        rows.push(text_row(format!("Refactoring {name}.")));
+        rows.push(text_row(format!(
+            "Upgrade slots: {refactors}/{MAX_COMPANION_REFACTORS} spent. A zone rebuild costs none."
+        )));
+    }
+    for (i, u) in offered.iter().enumerate() {
+        rows.push(item_row(
+            format!(
+                "[{}] {}{}  x{}",
+                menu_shortcut(i),
+                u.name,
+                if u.zone_bump { " (zone rebuild)" } else { "" },
+                u.qty
+            ),
+            i == selected,
+        ));
+        rows.push(text_row(format!("    {}", u.description)));
+    }
+    draw_popup("Refactor", PopupSize::Large, &rows, refusal, painter, m);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1236,92 +1324,4 @@ mod tests {
             );
         }
     }
-}
-
-/// Page one of the refactor flow: which program to upgrade.
-///
-/// The zone tag is already spelled into `PetInfo::name` by
-/// `Game::creature_label`, which is exactly the number this screen is about —
-/// so a player choosing between two programs can see which one is behind
-/// without opening a manifest for each.
-pub(super) fn draw_refactor(
-    game: &mut Game,
-    selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let zone = game.player_status().zone;
-    let programs = game.owned_pets();
-    let mut rows = vec![
-        text_row("Refactor which program? An upgrade is permanent and cannot be taken back off."),
-        text_row(format!("You are in zone {zone}.")),
-    ];
-    for (i, p) in programs.iter().enumerate() {
-        rows.push(with_icon(
-            tier_row(
-                format!(
-                    "[{}] {} Lv{}{}{}",
-                    menu_shortcut(i),
-                    p.name,
-                    p.level,
-                    fusion_tag(p.fusions),
-                    refactor_tag(p.refactors)
-                ),
-                i == selected,
-                p.fusions,
-                p.rarity,
-            ),
-            p.glyph,
-            glyph_color(p.color),
-        ));
-    }
-    draw_popup("Refactor", PopupSize::Large, &rows, refusal, painter, m);
-}
-
-/// Page two: what to spend on it.
-///
-/// The rows come from `Game::companion_upgrades`, which lists cargo only, so
-/// this page cannot offer something the engine would then refuse for want of
-/// the item. Every other refusal is about the program and lands in the status
-/// line instead.
-pub(super) fn draw_refactor_item(
-    game: &mut Game,
-    target: Option<Entity>,
-    selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let Some(target) = target else {
-        return;
-    };
-    let subject = game
-        .owned_pets()
-        .into_iter()
-        .find(|p| p.entity == target)
-        .map(|p| (p.name, p.refactors));
-    let offered = game.companion_upgrades();
-
-    let mut rows = Vec::new();
-    if let Some((name, refactors)) = &subject {
-        rows.push(text_row(format!("Refactoring {name}.")));
-        rows.push(text_row(format!(
-            "Upgrade slots: {refactors}/{MAX_COMPANION_REFACTORS} spent. A zone rebuild costs none."
-        )));
-    }
-    for (i, u) in offered.iter().enumerate() {
-        rows.push(item_row(
-            format!(
-                "[{}] {}{}  x{}",
-                menu_shortcut(i),
-                u.name,
-                if u.zone_bump { " (zone rebuild)" } else { "" },
-                u.qty
-            ),
-            i == selected,
-        ));
-        rows.push(text_row(format!("    {}", u.description)));
-    }
-    draw_popup("Refactor", PopupSize::Large, &rows, refusal, painter, m);
 }

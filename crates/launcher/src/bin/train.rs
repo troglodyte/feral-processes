@@ -577,6 +577,12 @@ fn parse_args() -> Result<Args, String> {
     Ok(args)
 }
 
+fn parse<T: std::str::FromStr>((flag, value): (String, String)) -> Result<T, String> {
+    value
+        .parse()
+        .map_err(|_| format!("{flag}: {value:?} is not a number"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -618,10 +624,4 @@ mod tests {
             log_path(dir, "pin3", Pass::Trained, "03-midgame-group")
         );
     }
-}
-
-fn parse<T: std::str::FromStr>((flag, value): (String, String)) -> Result<T, String> {
-    value
-        .parse()
-        .map_err(|_| format!("{flag}: {value:?} is not a number"))
 }

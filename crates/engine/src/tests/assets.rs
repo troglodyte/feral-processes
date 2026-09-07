@@ -3725,7 +3725,10 @@ fn the_teardown_rig_is_also_an_extraction_bench_and_the_compiler_still_is() {
         .get("teardown_rig")
         .expect("teardown_rig should be a shipped structure");
     assert!(rig.strips.is_some(), "the rig should strip programs");
-    assert!(rig.extracts_programs, "the rig should be a manual bench too");
+    assert!(
+        rig.extracts_programs,
+        "the rig should be a manual bench too"
+    );
 
     let compiler = structures
         .get("compiler")

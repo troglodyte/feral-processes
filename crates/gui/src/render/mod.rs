@@ -1137,17 +1137,15 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             )
         }
         Mode::ItemDescribe => draw_gear_inspect(game, pending_inspect.clone(), refusal, painter, m),
-        Mode::DownedPrograms => {
-            draw_downed_programs(
-                game,
-                pending_downed_program,
-                downed_programs_bulk,
-                selected,
-                refusal,
-                painter,
-                m,
-            )
-        }
+        Mode::DownedPrograms => draw_downed_programs(
+            game,
+            pending_downed_program,
+            downed_programs_bulk,
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
         Mode::Tools => draw_tools(game, selected, refusal, painter, m),
         Mode::Companion => draw_companion_menu(game, selected, refusal, painter, m),
         Mode::Fuse => draw_fuse_menu(game, selected, refusal, painter, m),

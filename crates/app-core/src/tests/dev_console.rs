@@ -118,3 +118,73 @@ fn the_tick_trigger_advances_the_world() {
         "burning {DEV_CONSOLE_TICKS} cycles should have moved Power: {before} -> {after}"
     );
 }
+
+/// The master switch's resolution, exercised as the pure decision it is.
+///
+/// `resolve_tool_flag` is split from `dev_tool_flag` precisely so these can
+/// run without `set_var` — the parallel suite shares one environment, and a
+/// test that wrote `FERAL_DEV` would decide the gate for whatever else was
+/// running at the time. The same split `launcher::paths::layout` makes for
+/// `FERAL_ASSETS_DIR`, for the same reason.
+mod master_flag {
+    use crate::app::dev_console::resolve_tool_flag;
+    use std::ffi::OsStr;
+
+    /// Reads as "is this tool on, given its own value and the master's".
+    fn on(specific: Option<&str>, master: Option<&str>) -> bool {
+        resolve_tool_flag(specific.map(OsStr::new), master.map(OsStr::new))
+    }
+
+    #[test]
+    fn a_player_build_sets_neither_and_gets_nothing() {
+        assert!(!on(None, None));
+    }
+
+    #[test]
+    fn the_master_flag_alone_opens_a_tool() {
+        assert!(
+            on(None, Some("1")),
+            "FERAL_DEV=1 is the whole point: one name for the everyday case"
+        );
+    }
+
+    #[test]
+    fn a_specific_flag_alone_still_opens_its_own_tool() {
+        assert!(
+            on(Some("1"), None),
+            "every script and doc that names a single flag must keep working"
+        );
+    }
+
+    #[test]
+    fn a_specific_zero_vetoes_the_master() {
+        assert!(
+            !on(Some("0"), Some("1")),
+            "FERAL_DEV=1 FERAL_DEV_ARENA=0 is how one tool is left out"
+        );
+    }
+
+    #[test]
+    fn a_master_zero_opens_nothing() {
+        assert!(!on(None, Some("0")));
+    }
+
+    /// Empty is unset, not off — the rule `dev_flag` has always had, and the
+    /// one `paths::layout` cites. So it falls through rather than vetoing.
+    #[test]
+    fn an_empty_specific_value_falls_through_to_the_master() {
+        assert!(on(Some(""), Some("1")));
+        assert!(!on(Some(""), Some("0")));
+        assert!(!on(Some(""), None));
+    }
+
+    /// The `!= "0"` half is a single-value exception, not a truthiness
+    /// parser: `dev_flag` has never accepted "false" as off and this must
+    /// not quietly start.
+    #[test]
+    fn any_other_value_reads_as_on() {
+        assert!(on(Some("true"), None));
+        assert!(on(None, Some("false")));
+        assert!(on(Some("00"), None));
+    }
+}

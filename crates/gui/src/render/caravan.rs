@@ -628,7 +628,6 @@ mod tests {
                             None => joined,
                         }
                     }
-                    _ => continue,
                 };
                 let drawn = p.measure_ui_advance(&line, m.font_size);
                 assert!(

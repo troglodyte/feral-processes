@@ -203,6 +203,51 @@ pub(super) fn draw_research_menu(
     draw_popup("Research", PopupSize::Large, &rows, refusal, painter, m);
 }
 
+/// The one confirm page both respecs draw, so the perk wipe and the talent
+/// wipe cannot describe themselves differently.
+///
+/// Every figure comes off `Game::respec_quote` — the same derivation the
+/// commit itself checks — so the page cannot promise a refund the engine
+/// then refuses.
+pub(super) fn draw_respec_confirm(
+    quote: &RespecQuote,
+    subject: &str,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let mut rows = vec![
+        text_row(format!("Refund every {subject}?")),
+        text_row(""),
+        text_row(format!("Giving up: {} bought.", quote.purchases)),
+        text_row(format!("Coming back: {} points.", quote.points_returned)),
+        text_row(format!(
+            "Cost: {} Credits, of {} held.",
+            quote.cost, quote.credits
+        )),
+    ];
+    // What was baked into stats comes back out with the points — the one
+    // consequence a player cannot see on the ladder they came from.
+    rows.push(Row::TextColored(
+        "Any stats these bought come back out too.".to_string(),
+        ORANGE,
+    ));
+    if let Some(why) = &quote.refusal {
+        rows.push(text_row(""));
+        rows.push(Row::TextColored(why.clone(), RED));
+    }
+    rows.push(text_row(""));
+    rows.push(text_row("[y] refund    [n] keep them    Esc to cancel"));
+    draw_popup(
+        "Confirm refund",
+        PopupSize::Small,
+        &rows,
+        refusal,
+        painter,
+        m,
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -477,49 +522,4 @@ mod tests {
             }
         });
     }
-}
-
-/// The one confirm page both respecs draw, so the perk wipe and the talent
-/// wipe cannot describe themselves differently.
-///
-/// Every figure comes off `Game::respec_quote` — the same derivation the
-/// commit itself checks — so the page cannot promise a refund the engine
-/// then refuses.
-pub(super) fn draw_respec_confirm(
-    quote: &RespecQuote,
-    subject: &str,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let mut rows = vec![
-        text_row(format!("Refund every {subject}?")),
-        text_row(""),
-        text_row(format!("Giving up: {} bought.", quote.purchases)),
-        text_row(format!("Coming back: {} points.", quote.points_returned)),
-        text_row(format!(
-            "Cost: {} Credits, of {} held.",
-            quote.cost, quote.credits
-        )),
-    ];
-    // What was baked into stats comes back out with the points — the one
-    // consequence a player cannot see on the ladder they came from.
-    rows.push(Row::TextColored(
-        "Any stats these bought come back out too.".to_string(),
-        ORANGE,
-    ));
-    if let Some(why) = &quote.refusal {
-        rows.push(text_row(""));
-        rows.push(Row::TextColored(why.clone(), RED));
-    }
-    rows.push(text_row(""));
-    rows.push(text_row("[y] refund    [n] keep them    Esc to cancel"));
-    draw_popup(
-        "Confirm refund",
-        PopupSize::Small,
-        &rows,
-        refusal,
-        painter,
-        m,
-    );
 }

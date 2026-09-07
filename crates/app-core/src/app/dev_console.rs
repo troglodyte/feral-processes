@@ -15,6 +15,7 @@
 //! screen is evidence about the game rather than about the console.
 
 use crate::{App, GameKey, Mode};
+use std::ffi::OsStr;
 
 /// Opens the console from the map. Backtick, by console convention, and it
 /// is otherwise unbound.
@@ -73,17 +74,62 @@ const DEV_ROWS: &[DevConsoleRow] = &[
     },
 ];
 
+/// The master switch, which opens every dev *tool* at once — this console,
+/// the arena and the sprite forge.
+///
+/// Deliberately not the whole `FERAL_DEV_*` family. `FERAL_DEV_LOG` creates
+/// and appends to a file nothing rotates, and `FERAL_DEV_REVEAL` changes
+/// what the map shows while you play; the three under this switch only add
+/// a screen. A master flag that also altered the session would make
+/// "turn the dev tools on" a decision you had to think about, which is the
+/// one thing it exists to avoid.
+const DEV_MASTER: &str = "FERAL_DEV";
+
+/// Whether one flag's value reads as on: non-empty and not `"0"`.
+///
+/// The single-value exception is not a truthiness parser — `"false"` reads
+/// as on, and always has. Anyone wanting a tool off writes `0` or unsets it.
+fn value_is_on(value: Option<&OsStr>) -> bool {
+    value.is_some_and(|v| !v.is_empty() && v != OsStr::new("0"))
+}
+
 /// Whether a dev flag is set: present, non-empty and not `"0"`.
 ///
 /// One answer to "is a dev flag set", shared with `dev_arena_enabled`. Two
-/// answers is exactly the drift this repo keeps catching.
+/// answers is exactly the drift this repo keeps catching. This is the bare
+/// read, with no master switch behind it — `FERAL_DEV_LOG` uses it.
 pub(crate) fn dev_flag(name: &str) -> bool {
-    std::env::var_os(name).is_some_and(|v| !v.is_empty() && v != "0")
+    value_is_on(std::env::var_os(name).as_deref())
 }
 
-/// Whether `FERAL_DEV_CONSOLE` was set when this `App` was built.
+/// Whether a dev *tool* is on: its own flag if that was set, and otherwise
+/// `FERAL_DEV`.
+///
+/// So `FERAL_DEV=1` opens all three, `FERAL_DEV=1 FERAL_DEV_ARENA=0` leaves
+/// the arena out, and a lone `FERAL_DEV_ARENA=1` means exactly what it
+/// always did — every script and doc naming a single flag keeps working.
+pub(crate) fn dev_tool_flag(name: &str) -> bool {
+    resolve_tool_flag(
+        std::env::var_os(name).as_deref(),
+        std::env::var_os(DEV_MASTER).as_deref(),
+    )
+}
+
+/// The decision behind `dev_tool_flag`, split from the two `var_os` reads
+/// so it is testable without writing an environment the parallel suite
+/// shares — the split `launcher::paths::layout` makes, for that reason.
+///
+/// An *empty* specific value is unset rather than off, matching
+/// `value_is_on`'s rule, so it falls through to the master rather than
+/// vetoing it.
+pub(crate) fn resolve_tool_flag(specific: Option<&OsStr>, master: Option<&OsStr>) -> bool {
+    value_is_on(specific.filter(|v| !v.is_empty()).or(master))
+}
+
+/// Whether `FERAL_DEV_CONSOLE` — or the master switch — was set when this
+/// `App` was built.
 pub(crate) fn dev_console_enabled() -> bool {
-    dev_flag("FERAL_DEV_CONSOLE")
+    dev_tool_flag("FERAL_DEV_CONSOLE")
 }
 
 impl App {

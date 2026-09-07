@@ -33,6 +33,16 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.118
+
+**`FERAL_DEV=1` opens every dev tool at once** — the console on `` ` ``, the
+arena row and the sprite forge — and a single flag still works on its own, so
+`FERAL_DEV=1 FERAL_DEV_ARENA=0` is how one is left out.
+
+**The battle log and the map reveal stay outside the master switch**, because
+`FERAL_DEV_LOG` writes a file nothing rotates and `FERAL_DEV_REVEAL` changes
+what the map shows you while you play.
+
 ## 0.13.117
 
 **A town can grow into a city while you are off doing something else.** Every

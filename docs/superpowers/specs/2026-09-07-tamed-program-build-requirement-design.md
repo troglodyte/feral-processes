@@ -77,6 +77,32 @@ Two engine functions, both new, both on `Game`:
   `zone_tier(e) >= tier`, keeping `owned_pets`' existing sort so the picker
   agrees with every other roster screen about order.
 
+### Depth is not the whole of eligibility
+
+A seam review turned up two constraints the rule above does not express, both
+of which change what the picker may offer.
+
+**A program's role is derived, and there is no "owned but idle" state.** Every
+program you own is fighting beside you, held as your weapon, away on a sortie,
+or base staff. A filter on `ZonePortal` alone therefore offers the weapon in
+your hand and a body halfway across a sortie. Four exclusions, each for its own
+reason: a **wielded** program is equipment; a **`Sortie`** program is away and
+cannot be reached; a **`Downed`** program is the roster slot a wipe is meant to
+cost; and a program **`Carrying`** goods destroys its load when freed, let alone
+when despawned.
+
+**A build order may never take the base to zero programs.** The build crew *is*
+the roster. Commit your last program and nothing fetches materials, nothing
+raises the site, and cancelling is the only exit — a soft-lock reached by a new
+route through the deadlock `build_is_workable` exists to prevent. Both filing
+doors refuse the last one:
+
+> Committing your last program would leave nobody to build the Fabricator.
+
+This assumes the player cannot raise a site unaided; implementation must confirm
+that against `run_build_crew` before the refusal lands, and drop it if the
+player can.
+
 Because every structure deploys at `StructureTier(1)`, the deploy requirement is
 uniformly "own any program". Depth only bites on upgrades. This is deliberate
 and was confirmed in design: the deploy picker is a *what are you willing to
@@ -109,6 +135,13 @@ on"*. If that path does not run through `cancel_build_request`, it is a second
 place a program can be destroyed with no refund, and the plan must route it
 through the same door rather than leave a silent hole.
 
+The program is **charged at filing**, and that is a deliberate exception to this
+seam's central rule — *"nothing is charged at filing"*, the thing every other
+build cost obeys. Materials stand on the cell until the raise and a cancel
+returns goods that still exist; a program does not exist any more, so its refund
+is a resurrection rather than a return. Both halves of that must be written down
+where the code is, or the next reader corrects it as a bug.
+
 Retiring the program at commit follows fusion's teardown verbatim
 (`party.rs:1004-1007`): retain it out of `Party`, then `world.despawn`. The plan
 must confirm the three loose ends fusion does not itself clean, because a
@@ -116,12 +149,33 @@ committed program can be in states a fusion sacrifice usually is not:
 
 - the **wielded** program (`CreatureSave::wielded`) — must be cleared on commit
   and restored on refund, or the run wields a despawned entity;
-- a **standing job** or in-flight `Task` in base space;
+- a **standing job** or in-flight `Task` in base space — a posted body evicted
+  mid-tick leaves a machine pointing at a dead entity, and an `OffShift` or
+  `idled_with` marker naming it outlives it into the save as a ghost;
 - a **cronjob** whose target is this program.
 
+These are a second line of defence rather than the guard: `programs_for_build`
+already excludes most of these states, but a frontend is not where a rule lives,
+and a second frontend calling the engine directly must not be able to destroy a
+carrier's load.
+
 Refunding goes back through `Game::roster_parts` — the one barrier into the
-roster — and restores the snapshot's original `ProgramId`, so memories keyed to
-that program survive the round trip rather than coming back to a stranger.
+roster, where `ProgramId` and the `Memories` store are minted. A program that
+comes back around it is short components and silently remembers nothing, and
+nothing fails to compile.
+
+The snapshot keeps its original `ProgramId`, which is load-bearing in **both**
+directions: a fresh id orphans this program's own memories *and* every other
+program's memories naming it as their subject. Memory intensity is derived from
+`GameClock` on every read rather than stored, so each entry's original timestamp
+must survive too — re-stamping on refund resets every decay curve and would make
+a refund *deepen* an old grudge.
+
+Three existing claims stop being true and must be corrected: `end_battle` is no
+longer the only legal removal point for a roster slot; `add_companion`'s refusal
+no longer names every way a slot is freed; and if a committed program is ever
+shown on a request, it is derived in `views::BuildOrderRow` — the one derivation
+of what a request looks like — and never stored beside the site for display.
 
 ## 3. Where the program is kept
 
@@ -290,7 +344,10 @@ comparison works.
   structure, that field is the shape it takes.
 - **Balance is unmeasured.** This adds a program sink beside fusion with no
   facing source. Whether the taming rate supports a base is a play question, and
-  `balance_sim` models no such thing.
+  `balance_sim` models no such thing. Base output scales with roster size, so
+  every build order is now also a tax on base throughput — nothing existing
+  measures that, and the work-order header reads from a `LabourDemand` cached
+  before the cut and says nothing at all at zero staff.
 - **No structure remembers what it ate.** Naming the program on the finished
   structure is flavour this spec does not spend budget on.
 

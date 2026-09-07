@@ -92,27 +92,31 @@ impl Game {
     /// every town on a tick where nothing has changed. The Hostile
     /// surcharge reads the **current** band, never a history — repairing
     /// standing stops the acceleration the tick it lands.
+    ///
+    /// **The drift is a delta paid through `adjust_commerce`, not a write.**
+    /// It owns `commerce_epoch` — the bookmark saying how far it has
+    /// settled — and nothing else, which is what keeps the door below the
+    /// only place `commerce` itself is assigned.
     pub(crate) fn settle_commerce_drift(&mut self, key: SettlementKey) {
         let epoch = self.current_tick() / crate::tuning::SETTLEMENT_COMMERCE_DECAY_TICKS;
         let hostile = self.standing_band(key) == Standing::Hostile;
-        let mut standings = self.world.resource_mut::<crate::resources::Standings>();
-        let relation = standings.0.entry(key).or_default();
-        if epoch <= relation.commerce_epoch {
-            return;
-        }
-        let elapsed = (epoch - relation.commerce_epoch).min(i32::MAX as u64) as i32;
+        let elapsed = {
+            let mut standings = self.world.resource_mut::<crate::resources::Standings>();
+            let relation = standings.0.entry(key).or_default();
+            if epoch <= relation.commerce_epoch {
+                return;
+            }
+            let elapsed = (epoch - relation.commerce_epoch).min(i32::MAX as u64) as i32;
+            relation.commerce_epoch = epoch;
+            elapsed
+        };
         let rate = crate::tuning::SETTLEMENT_COMMERCE_DECAY
             + if hostile {
                 crate::tuning::SETTLEMENT_COMMERCE_HOSTILE_DECAY
             } else {
                 0
             };
-        relation.commerce = growth::clamp_commerce(
-            relation
-                .commerce
-                .saturating_sub(rate.saturating_mul(elapsed)),
-        );
-        relation.commerce_epoch = epoch;
+        self.adjust_commerce(key, rate.saturating_mul(elapsed).saturating_neg());
     }
 
     /// Throws the latch if this Server is past its date. `true` if **this
@@ -147,8 +151,18 @@ impl Game {
         true
     }
 
-    /// The one door commerce is written through — `adjust_standing`'s shape
-    /// and its reason: one clamp is enough only because there is one writer.
+    /// **The one door `Relation::commerce` is assigned through** —
+    /// `adjust_standing`'s shape and its reason: one clamp is enough only
+    /// because there is one writer, and `growth::clamp_commerce` says the
+    /// same thing from the other end.
+    ///
+    /// Two movers reach it and both hand it a delta rather than a value:
+    /// `settle_commerce_drift`, which pays the decay of every elapsed
+    /// epoch, and `credit_trade_volume`, which pays what a basket bought.
+    /// Neither touches the field. A third mover that assigned `commerce`
+    /// beside this would compile clean and put a city at a row count the
+    /// constants never authored — the shape `BoughtStats` has already been
+    /// bitten by.
     pub(crate) fn adjust_commerce(&mut self, key: SettlementKey, delta: i32) {
         if delta == 0 {
             return;

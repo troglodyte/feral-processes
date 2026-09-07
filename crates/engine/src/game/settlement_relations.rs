@@ -62,20 +62,32 @@ impl Game {
     }
 
     /// Folds a basket's whole turnover into the town's trade record and
-    /// pays out whatever standing it bought — see `Relation::trade_credits`
-    /// for why the remainder is kept rather than rounded away.
+    /// pays out whatever standing **and** commerce it bought — see
+    /// `Relation::trade_credits` for why the remainders are kept rather
+    /// than rounded away.
+    ///
+    /// **Two readings of one volume, both through this door.** Goodwill and
+    /// prosperity are separate axes on purpose — commerce decays and
+    /// standing does not, and commerce is bought cheaper
+    /// (`SETTLEMENT_COMMERCE_CREDITS_PER_POINT` against
+    /// `SETTLEMENT_TRADE_CREDITS_PER_POINT`), because a town notices your
+    /// money before it likes you. Each axis is paid out through its own
+    /// door, `adjust_standing` and `adjust_commerce`, so the clamps and the
+    /// announcements stay written once.
     pub(crate) fn credit_trade_volume(&mut self, key: SettlementKey, credits: u32) {
         if credits == 0 {
             return;
         }
-        let points = self
-            .world
-            .resource_mut::<resources::Standings>()
-            .0
-            .entry(key)
-            .or_default()
-            .credit_trade(credits);
+        let (points, commerce) = {
+            let mut standings = self.world.resource_mut::<resources::Standings>();
+            let relation = standings.0.entry(key).or_default();
+            (
+                relation.credit_trade(credits),
+                relation.credit_commerce(credits),
+            )
+        };
         self.adjust_standing(key, points);
+        self.adjust_commerce(key, commerce);
     }
 
     /// Every town near enough to `tile` to have heard about it, moved by

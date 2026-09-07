@@ -21,9 +21,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::tuning::{
-    SETTLEMENT_ALLIED_STANDING, SETTLEMENT_COLD_STANDING, SETTLEMENT_HOSTILE_STANDING,
-    SETTLEMENT_MAX_STANDING, SETTLEMENT_MIN_STANDING, SETTLEMENT_TRADE_CREDITS_PER_POINT,
-    SETTLEMENT_WARM_STANDING,
+    SETTLEMENT_ALLIED_STANDING, SETTLEMENT_COLD_STANDING, SETTLEMENT_COMMERCE_CREDITS_PER_POINT,
+    SETTLEMENT_HOSTILE_STANDING, SETTLEMENT_MAX_STANDING, SETTLEMENT_MIN_STANDING,
+    SETTLEMENT_TRADE_CREDITS_PER_POINT, SETTLEMENT_WARM_STANDING,
 };
 
 /// Everything one town remembers about the party.
@@ -85,6 +85,18 @@ pub struct Relation {
     /// arithmetic runs over every town every tick.
     #[serde(default)]
     pub commerce_epoch: u64,
+    /// The commerce remainder, `trade_credits`' companion and its reason:
+    /// without somewhere to keep what is left over, a player who trades in
+    /// ten small baskets feeds a town nothing while one who trades the same
+    /// volume in a single basket feeds it the lot. A rounding rule, not a
+    /// volume rule.
+    ///
+    /// **A second remainder rather than a share of `trade_credits`**,
+    /// because the two thresholds differ — commerce is bought cheaper —
+    /// so one counter could not spend against both without one axis
+    /// stealing the other's leftovers.
+    #[serde(default)]
+    pub commerce_credits: u32,
 }
 
 impl Relation {
@@ -94,6 +106,21 @@ impl Relation {
         self.trade_credits += credits;
         let points = self.trade_credits / SETTLEMENT_TRADE_CREDITS_PER_POINT;
         self.trade_credits -= points * SETTLEMENT_TRADE_CREDITS_PER_POINT;
+        points as i32
+    }
+
+    /// Folds `credits` of trade in and answers how many commerce points it
+    /// bought, keeping the remainder for the next basket. `credit_trade`'s
+    /// shape on the second axis, and a separate remainder because the two
+    /// thresholds differ — see `SETTLEMENT_COMMERCE_CREDITS_PER_POINT`.
+    ///
+    /// **Answers a delta; it does not write `commerce`.** The caller hands
+    /// the answer to `Game::adjust_commerce`, which is the one door and
+    /// therefore the one clamp — see `growth::clamp_commerce`.
+    pub(crate) fn credit_commerce(&mut self, credits: u32) -> i32 {
+        self.commerce_credits += credits;
+        let points = self.commerce_credits / SETTLEMENT_COMMERCE_CREDITS_PER_POINT;
+        self.commerce_credits -= points * SETTLEMENT_COMMERCE_CREDITS_PER_POINT;
         points as i32
     }
 }

@@ -43,6 +43,7 @@ fn the_growth_fields_survive_a_save_and_load() {
         relation.grown = true;
         relation.commerce = 37;
         relation.commerce_epoch = 5;
+        relation.commerce_credits = 61;
     }
     game.save(&path).unwrap();
 
@@ -59,6 +60,10 @@ fn the_growth_fields_survive_a_save_and_load() {
     assert_eq!(
         relation.commerce_epoch, 5,
         "the epoch did not survive the save"
+    );
+    assert_eq!(
+        relation.commerce_credits, 61,
+        "the remainder did not survive the save"
     );
 }
 
@@ -525,4 +530,43 @@ fn the_commerce_door_clamps_at_both_ends() {
         commerce_of(&game, key),
         crate::tuning::SETTLEMENT_COMMERCE_MIN
     );
+}
+
+/// Trade is the accelerant, and `credit_trade_volume` is the one door every
+/// counter sale and route delivery already goes through. Wiring the shelf
+/// and leaving this unwired would ship a pull nothing can reach.
+#[test]
+fn trading_with_a_town_raises_its_commerce() {
+    let mut game = game(4242);
+    let key = a_known_key(&game);
+    let before = commerce_of(&game, key);
+    game.credit_trade_volume(
+        key,
+        crate::tuning::SETTLEMENT_COMMERCE_CREDITS_PER_POINT * 3,
+    );
+    let after = commerce_of(&game, key);
+    assert_eq!(
+        after - before,
+        3,
+        "three points' worth of trade bought {}",
+        after - before
+    );
+}
+
+/// A basket under the threshold buys nothing yet, and the remainder is not
+/// lost -- `Relation::credit_trade`'s rule, restated on the commerce axis.
+/// Without it, ten small baskets earn nothing while one large basket of the
+/// same volume earns the lot.
+#[test]
+fn small_baskets_and_one_large_basket_buy_the_same_commerce() {
+    let per = crate::tuning::SETTLEMENT_COMMERCE_CREDITS_PER_POINT;
+    let mut split = game(4242);
+    let mut whole = game(4242);
+    let key = a_known_key(&split);
+    for _ in 0..10 {
+        split.credit_trade_volume(key, per / 10);
+    }
+    whole.credit_trade_volume(key, per);
+    assert_eq!(commerce_of(&split, key), commerce_of(&whole, key));
+    assert_eq!(commerce_of(&whole, key), 1);
 }

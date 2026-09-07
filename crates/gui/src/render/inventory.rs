@@ -266,20 +266,6 @@ pub(super) fn equipped_row(
     )
 }
 
-/// `Weapon: Arc Lance Lv3 T1 (+16 ATK)`, or `Weapon: (empty)` — the labelled
-/// form, for the swap picker's heading, where the label is `Wearing` and so
-/// is not a slot's name at all.
-///
-/// A row in an equipment panel takes `worn_summary` instead and puts the slot
-/// in its category column; see `equipped_row`.
-fn equipped_summary(
-    label: &str,
-    equipped: Option<feral_processes_engine::components::EquippedItem>,
-    game: &Game,
-) -> String {
-    format!("{label}: {}", worn_summary(equipped, game))
-}
-
 /// `Arc Lance Lv3 T1 (+16 ATK)`, or `(empty)`.
 ///
 /// The figure comes from `Game::copy_bonus` and is formatted by
@@ -290,11 +276,28 @@ fn worn_summary(
     equipped: Option<feral_processes_engine::components::EquippedItem>,
     game: &Game,
 ) -> String {
-    let Some((equipped, mods)) =
-        equipped.and_then(|e| game.copy_bonus(&e.copy, e.level).map(|mods| (e, mods)))
-    else {
-        return "(empty)".to_string();
-    };
+    match worn_parts(equipped, game) {
+        Some((name, stats)) => format!("{name} ({stats})"),
+        None => "(empty)".to_string(),
+    }
+}
+
+/// `("Arc Lance Lv3 T1", "+16 ATK")` — the two halves `worn_summary` joins,
+/// as the segments a *heading* is allowed to break between.
+///
+/// Split out for `SwapRow::stats`' reason, one line further up the screen: the
+/// picker's heading is a row of the same shape as the ones under it, and six
+/// stat axes behind a 71-cell name do not fit a 114.65-cell popup body. The
+/// name and the stats answer different questions, so the stats are what sheds
+/// — exactly the treatment the rows below already get. Joined here rather than
+/// in two places so the panel's row and the picker's heading cannot come to
+/// disagree about the shape of a worn copy.
+fn worn_parts(
+    equipped: Option<feral_processes_engine::components::EquippedItem>,
+    game: &Game,
+) -> Option<(String, String)> {
+    let (equipped, mods) =
+        equipped.and_then(|e| game.copy_bonus(&e.copy, e.level).map(|mods| (e, mods)))?;
     let mut notes = Vec::new();
     if equipped.level > 1 {
         notes.push(format!("Lv{}", equipped.level));
@@ -307,11 +310,10 @@ fn worn_summary(
     } else {
         format!(" {}", notes.join(" "))
     };
-    format!(
-        "{}{note} ({})",
-        game.copy_name(&equipped.copy),
-        stat_summary(game, mods)
-    )
+    Some((
+        format!("{}{note}", game.copy_name(&equipped.copy)),
+        stat_summary(game, mods),
+    ))
 }
 
 /// What one swap row rates, through the same `PowerCell` the inventory
@@ -342,12 +344,70 @@ fn swap_power(game: &Game, choice: &SwapChoice) -> PowerCell {
 /// the head is the one part of a row `wrapped_row_lines` never breaks, so
 /// what goes in it has to be measured, and only this crate can measure text.
 fn swap_head(game: &Game, index: usize, row: &SwapRow) -> String {
-    format!(
-        "[{}] {}  {}",
-        menu_shortcut(index),
-        swap_power(game, &row.choice).text(),
-        row.label
+    swap_line(
+        &row_lead(menu_shortcut(index), None),
+        swap_power(game, &row.choice),
+        &row.label,
     )
+}
+
+/// One line of this screen, from the three pieces every line of it carries:
+/// what precedes the rating column, the rating, then the name.
+///
+/// The heading and the rows share it rather than each `format!`ing their own,
+/// which is `row_lead`'s rule one level up: two lines that build the same
+/// columns independently are two lines that can end up half a character apart,
+/// and the entire point of the rating column is that the figures form a
+/// straight edge you can read down.
+fn swap_line(lead: &str, power: PowerCell, label: &str) -> String {
+    format!("{lead}{}  {label}", power.text())
+}
+
+/// The heading's lead: the width a row spends on its key, spent on nothing.
+///
+/// Measured off `row_lead` rather than written as four spaces, so the heading
+/// cannot be left behind by a change to the shape of a row's key.
+fn heading_lead() -> String {
+    " ".repeat(row_lead(menu_shortcut(0), None).chars().count())
+}
+
+/// The picker's heading — what is worn right now, **rated in the column the
+/// candidates are rated in**.
+///
+/// The screen exists to answer "is this better than what I have on", and the
+/// rating was the one column the worn piece did not fill: every row offered a
+/// figure, and the line they were being compared against offered a name and
+/// six per-axis deltas. A delta says *better*; it does not say *how good*, so
+/// there was nothing on screen to compare the figures with.
+///
+/// Through `PowerCell::of_copy`, which is `Game::copy_power` — the same door
+/// the rows use, so the heading and the row for a spare copy of the very same
+/// item quote one arithmetic. An empty slot rates `Blank`, not an em dash,
+/// `equipped_row`'s call: there is no item on the line to have no combat axis.
+///
+/// Wrapped for the rows' reason. Joined onto one line the worst worn copy the
+/// shipped assets can build ran well past the popup body, and a `Row::Text`
+/// is clipped vertically only — so the stats, and with them the figures the
+/// heading is read for, were simply lost off the right edge.
+fn worn_heading_lines(
+    game: &Game,
+    worn: Option<feral_processes_engine::components::EquippedItem>,
+) -> Vec<String> {
+    let power = worn
+        .as_ref()
+        .map(|e| PowerCell::of_copy(game, &e.copy))
+        .unwrap_or(PowerCell::Blank);
+    let lead = heading_lead();
+    match worn_parts(worn, game) {
+        // The stats are a *tag* for `SwapRow::stats`' reason: it is the half
+        // that sheds when the name is long, and the half a continuation can
+        // carry on its own without leaving a line that names nothing.
+        Some((name, stats)) => wrapped_row_lines(
+            swap_line(&lead, power, &format!("Wearing: {name}")),
+            &[format!(" ({stats})")],
+        ),
+        None => vec![swap_line(&lead, power, "Wearing: (empty)")],
+    }
 }
 
 /// The replacement picker for one equipment slot.
@@ -378,10 +438,11 @@ pub(super) fn draw_equip_swap(
     };
     let wearer = target.unwrap_or_else(|| game.player_entity());
     let worn = game.worn(wearer, slot);
-    let mut rows = vec![
-        Row::TextColored(equipped_summary("Wearing", worn, game), CYAN),
-        text_row(""),
-    ];
+    let mut rows: Vec<Row> = worn_heading_lines(game, worn)
+        .into_iter()
+        .map(|line| Row::TextColored(line, CYAN))
+        .collect();
+    rows.push(text_row(""));
     for (i, row) in equip_swap_rows(game, wearer, slot).iter().enumerate() {
         // Wrapped, not joined: the name column alone runs 57 cells, and six
         // stat axes plus their six deltas do not fit the same line — so both
@@ -667,8 +728,8 @@ pub(super) fn draw_inventory_item_action(
 mod tests {
     use super::super::popup::popup_body_width;
     use super::{
-        equipped_row, equipped_summary, gear_inspect_rows, inventory_help_rows,
-        inventory_row_lines, swap_head, swap_power,
+        equipped_row, gear_inspect_rows, heading_lead, inventory_help_rows, inventory_row_lines,
+        swap_head, swap_line, swap_power, worn_heading_lines, worn_summary,
     };
     use crate::paint::{painted_runs_in, with_painter};
     use crate::render::popup::PowerCell;
@@ -714,7 +775,7 @@ mod tests {
             .expect("wearing it");
         let real = game.copy_bonus(&worn.copy, worn.level).expect("priced");
 
-        let summary = equipped_summary("Weapon", Some(worn), &game);
+        let summary = worn_summary(Some(worn), &game);
         assert!(
             summary.contains(&format!("+{} ATK", real.atk)),
             "the panel disagrees with what the player is wearing ({} ATK): {summary}",
@@ -1350,6 +1411,149 @@ mod tests {
             "the rating belongs between the shortcut and the name, where the \
              pack already puts it: {head:?}"
         );
+    }
+
+    /// **The line the candidates are compared against carries the figure
+    /// they are compared by.**
+    ///
+    /// `a_swap_row_rates_the_copy_it_offers` put a rating on every row; the
+    /// heading naming what is *already on* still had none, so the screen
+    /// offered a column of figures and nothing to read them against. A player
+    /// could see that three spares rate 41, 44 and 52 and still not know
+    /// whether any of them beat the weapon in their hand.
+    ///
+    /// Two assertions, and the second is the one that makes it a comparison:
+    /// the figure has to be the worn copy's own `Game::copy_power`, and it has
+    /// to sit in the same column the rows put theirs in — a rating the eye
+    /// cannot run down beside the others is a fact on screen, not a
+    /// comparison.
+    #[test]
+    fn the_worn_piece_is_rated_in_the_column_the_candidates_are() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let mut game = Game::new(47, DifficultyMode::Forgiving, assets).expect("shipped assets");
+
+        let path = std::env::temp_dir().join("feral_processes_gui_swap_heading.sav");
+        game.save(&path).unwrap();
+        let mut data = save::load_from_file(&path).unwrap();
+        data.player.weapon = Some("kinetic_edge".into());
+        save::save_to_file(&path, &data).unwrap();
+        let game = Game::load(&path, assets).unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        let worn = game
+            .worn(game.player_entity(), EquipmentSlot::Weapon)
+            .expect("wearing it");
+        let rating = game
+            .copy_power(&worn.copy)
+            .expect("a weapon has a combat axis to rate")
+            .total;
+
+        let lines = worn_heading_lines(&game, Some(worn.clone()));
+        let heading = lines.first().expect("the heading always has a first line");
+        assert!(
+            heading.contains("Wearing"),
+            "the heading stopped saying what it is naming: {heading:?}"
+        );
+        assert!(
+            heading.contains(&game.copy_name(&worn.copy)),
+            "the heading stopped naming the worn copy: {heading:?}"
+        );
+
+        // The rating column, taken by offset rather than by searching for the
+        // digits: two figures that merely both appear somewhere on their lines
+        // do not form a column, and searching would pass on a heading that
+        // printed the number in prose at the end.
+        let lead = heading_lead().chars().count();
+        let width = PowerCell::Rated(rating).text().chars().count();
+        let cell = |line: &str| line.chars().skip(lead).take(width).collect::<String>();
+        assert_eq!(
+            cell(heading).trim(),
+            rating.to_string(),
+            "the worn piece is unrated where every candidate is rated: {heading:?}"
+        );
+
+        // The same offset a row puts its own rating at. `swap_head` and the
+        // heading share `swap_line`, and this is what says they still do.
+        let candidate = GearCopy::plain("monofilament_whip".into());
+        let candidate_rating = game
+            .copy_power(&candidate)
+            .expect("a weapon has a combat axis to rate")
+            .total;
+        let row = SwapRow {
+            choice: SwapChoice::Equip(candidate),
+            label: "Monofilament Whip".to_string(),
+            stats: String::new(),
+            delta: String::new(),
+            fusion_tier: 0,
+            rarity: Rarity::Ordinary,
+        };
+        assert_eq!(
+            cell(&swap_head(&game, 0, &row)).trim(),
+            candidate_rating.to_string(),
+            "the heading's rating and a row's no longer share a column"
+        );
+    }
+
+    /// An empty slot has nothing to rate, and that is a blank rather than an
+    /// em dash — `equipped_row`'s call, for its reason. A dash would say the
+    /// slot's contents had been rated and found to have no combat axis.
+    #[test]
+    fn an_empty_slot_heading_rates_nothing_rather_than_rating_dash() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(48, DifficultyMode::Forgiving, assets).expect("shipped assets");
+
+        // The whole line, `an_equipped_row_draws_its_slot_in_the_worn_copys_quality`'s
+        // form: the key's width and the rating's spent on nothing, then the
+        // slot said to be empty. Written out rather than probed, because what
+        // is being asserted is the *absence* of a mark in a column, and a
+        // predicate over that column cannot see a stray one beside it.
+        assert_eq!(worn_heading_lines(&game, None), ["          Wearing: (empty)"]);
+    }
+
+    /// The heading wraps, and this is the width that says it has to.
+    ///
+    /// `the_widest_swap_row_still_fits_its_popup`'s measurement, one line up
+    /// the screen: the heading is a `Row::Text` and `draw_row` clips
+    /// vertically only, so a heading past the body's right edge loses its
+    /// stats in silence — on the one screen whose job is to compare stats.
+    /// The worst worn copy the shipped assets can build is the same worst
+    /// case the rows are measured against, plus the `Lv`/fusion note a worn
+    /// copy carries and the `Wearing: ` that labels the line.
+    #[test]
+    fn the_widest_wearing_heading_fits_its_popup() {
+        // The 71-cell name `SWAP_NAME_COLUMN` is cut for, the deepest level a
+        // worn copy remembers, and a maxed fusion note.
+        let head = swap_line(
+            &heading_lead(),
+            PowerCell::Rated(9999),
+            "Wearing: Overclocked Overdriven Singularity Matrix of Quiet Handshakes +6 (130%) \
+             Lv10 maxed",
+        );
+        let lines = wrapped_row_lines(
+            head,
+            &[" (206–310 DMG +103 ATK +103 MIT +69 ACC +103 DECOMP)".to_string()],
+        );
+        assert_eq!(
+            lines.len(),
+            2,
+            "the worst case has to shed its stats, or this measures the easy \
+             case: {lines:#?}"
+        );
+
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            // `PopupSize::Large`'s body, matching `draw_popup`'s 0.88 width.
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            for line in &lines {
+                let drawn = p.measure_ui_advance(format!("  {line}"), m.font_size);
+                assert!(
+                    drawn <= room,
+                    "the swap picker's heading overflows by {:.0}px \
+                     ({drawn:.0} into {room:.0}):\n{line}",
+                    drawn - room
+                );
+            }
+        });
     }
 
     /// The unequip row is not an item, and says so with a blank rather than

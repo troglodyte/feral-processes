@@ -217,9 +217,7 @@ pub(super) fn extraction_options_rows(
     // under hand intent: under bulk every row already loads the rig, so a
     // second key for it would say nothing.
     if !bulk && !options.is_empty() && game.adjacent_teardown_rig().is_some() {
-        rows.push(text_row(
-            "[Q] hand this one to the Teardown Rig beside you",
-        ));
+        rows.push(text_row("[Q] hand this one to the Teardown Rig beside you"));
     }
     rows.push(text_row("Esc to go back"));
     rows

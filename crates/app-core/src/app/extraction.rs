@@ -104,7 +104,10 @@ impl App {
                         .map(|g| g.downed_program_rows().len())
                         .unwrap_or(0))
                         .collect();
-                    self.game.as_mut().unwrap().load_teardown_rig(&all, &tool_id)
+                    self.game
+                        .as_mut()
+                        .unwrap()
+                        .load_teardown_rig(&all, &tool_id)
                 } else {
                     self.game
                         .as_mut()

@@ -3226,7 +3226,10 @@ fn loading_with_no_rig_adjacent_refuses_and_spends_nothing() {
 #[test]
 fn loading_with_an_uninstalled_tool_refuses_and_spends_nothing() {
     let (mut game, rig) = player_beside_a_rig_holding(1);
-    assert!(game.load_teardown_rig(&[0], &clamp("no_such_tool")).is_err());
+    assert!(
+        game.load_teardown_rig(&[0], &clamp("no_such_tool"))
+            .is_err()
+    );
 
     let player = game.player_entity();
     assert_eq!(game.world.get::<DownedPrograms>(player).unwrap().0.len(), 1);
@@ -3302,7 +3305,10 @@ fn loading_during_a_battle_refuses_and_spends_nothing() {
 #[test]
 fn loading_no_such_program_refuses_and_spends_nothing() {
     let (mut game, rig) = player_beside_a_rig_holding(1);
-    assert!(game.load_teardown_rig(&[9], &clamp("salvage_clamp")).is_err());
+    assert!(
+        game.load_teardown_rig(&[9], &clamp("salvage_clamp"))
+            .is_err()
+    );
     assert!(game.world.get::<Hopper>(rig).unwrap().queue.is_empty());
 }
 
@@ -3463,4 +3469,3 @@ fn a_rig_strips_while_the_party_is_in_a_zone() {
     assert!(game.world.get::<Hopper>(rig).unwrap().queue.is_empty());
     assert!(!game.world.get::<Stock>(rig).unwrap().output.is_empty());
 }
-

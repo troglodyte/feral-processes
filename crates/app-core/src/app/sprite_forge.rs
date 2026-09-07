@@ -56,12 +56,13 @@ const ANCHOR_GLYPH_COLOR: GlyphColor = GlyphColor::Gray;
 /// `is_player`."
 const PLAYER_GLYPH: char = '@';
 
-/// Whether `FERAL_DEV_SPRITES` was set when this `App` was built. Same
-/// predicate as `dev_arena_enabled` and `dev_console_enabled` — one answer
-/// to "is a dev flag set" is the rule `dev_console::dev_flag`'s doc comment
-/// records, and two answers is drift this repo has already caught.
+/// Whether `FERAL_DEV_SPRITES` — or the `FERAL_DEV` master switch — was set
+/// when this `App` was built. Same predicate as `dev_arena_enabled` and
+/// `dev_console_enabled` — one answer to "is a dev tool on" is the rule
+/// `dev_console::dev_tool_flag`'s doc comment records, and two answers is
+/// drift this repo has already caught.
 pub(crate) fn dev_sprite_forge_flag() -> bool {
-    super::dev_console::dev_flag("FERAL_DEV_SPRITES")
+    super::dev_console::dev_tool_flag("FERAL_DEV_SPRITES")
 }
 
 /// Whether a subject in `App::sprite_subjects` has art, and if so whether

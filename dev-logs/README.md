@@ -22,8 +22,13 @@ wc -l dev-logs/battles.jsonl
 
 Unset — which is every ordinary run and every player's build — nothing is
 collected, nothing is written, and no file is created. The flag is read
-**once**, at startup, through the same `dev_flag` predicate `FERAL_DEV_ARENA`
-and `FERAL_DEV_CONSOLE` use.
+**once**, at startup, through the same `dev_flag` predicate every
+`FERAL_DEV_*` flag reads.
+
+`FERAL_DEV=1`, the master switch that opens the console, the arena and the
+sprite forge together, deliberately does **not** turn this on. Those three
+add a screen and nothing else; this creates a file that nothing rotates, so
+it stays something you ask for by name.
 
 The log itself is gitignored — it is a measurement, not source; this README
 is the schema and stays checked in. Nothing rotates the file, so a long

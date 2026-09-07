@@ -206,15 +206,17 @@ fn player_source_label(source: &PlayerSource) -> String {
     }
 }
 
-/// Whether `FERAL_DEV_ARENA` is set — the switch that puts the arena row on
-/// the main menu. Same predicate as the engine's `FERAL_DEV_REVEAL`
-/// (`game/stack_view.rs`): present, non-empty and not `"0"`. Two answers to
-/// "is a dev flag set" is exactly the drift this repo keeps catching.
+/// Whether `FERAL_DEV_ARENA` — or the `FERAL_DEV` master switch — is set,
+/// the switch that puts the arena row on the main menu. Same predicate as
+/// the engine's `FERAL_DEV_REVEAL` (`game/stack_view.rs`): present,
+/// non-empty and not `"0"`. Two answers to "is a dev flag set" is exactly
+/// the drift this repo keeps catching. `FERAL_DEV=1 FERAL_DEV_ARENA=0`
+/// leaves the row off.
 ///
 /// Read once, in `App::new`, into a field — so a test can open the gate
 /// without touching an environment the parallel suite shares.
 pub(crate) fn dev_arena_enabled() -> bool {
-    super::dev_console::dev_flag("FERAL_DEV_ARENA")
+    super::dev_console::dev_tool_flag("FERAL_DEV_ARENA")
 }
 
 impl App {

@@ -11963,3 +11963,42 @@ what keeps `adjust_commerce` the only place `commerce` itself is assigned.
 `trade_credits` rather than a share of it: the two thresholds differ —
 commerce is bought cheaper than standing — so one counter could not spend
 against both without one axis stealing the other's leftovers.
+
+
+### `FERAL_DEV` opens the tools, and the two flags that change a session are deliberately outside it
+
+**The master switch covers the three flags that only add a screen.**
+`FERAL_DEV=1` turns on the dev console, the arena row and the sprite forge,
+because those are the ones whose whole effect is a page you can open — a run
+with all three on is still the run you would have had. `FERAL_DEV_LOG` and
+`FERAL_DEV_REVEAL` are not under it and must not be: the log creates and
+appends to `dev-logs/battles.jsonl`, which nothing rotates, and the reveal
+draws the whole frame on the map rather than what the party has walked. A
+master flag that also did those would make "turn the dev tools on" a
+decision you had to think about, which is the one thing it exists to avoid.
+
+**A specific flag wins when it is set, so `0` vetoes the master.**
+`dev_tool_flag` reads `FERAL_DEV_X` first and falls through to `FERAL_DEV`
+only when that is absent or empty, which is what makes
+`FERAL_DEV=1 FERAL_DEV_ARENA=0` mean "the tools, but not the arena row". The
+fall-through half is why every script and doc that names a single flag —
+`arena.sh`, `dev-logs/README.md`, half the specs — keeps working untouched:
+with `FERAL_DEV` unset the behaviour is what it always was. *Empty* is unset
+rather than off, matching `value_is_on`'s rule, so an empty specific value
+falls through instead of vetoing.
+
+**`resolve_tool_flag` is pure because the suite shares one environment.**
+app-core's tests run in parallel against one process, which is already why
+`enable_dev_console_for_test` sets a field instead of calling `set_var`; a
+test that wrote `FERAL_DEV` would decide the gate for whatever else happened
+to be running. So the two `var_os` reads live in `dev_tool_flag` and the
+decision lives in a function over two `Option<&OsStr>` values —
+`launcher::paths::layout`'s split, for `launcher::paths::layout`'s reason.
+
+**The engine keeps its own copy of the rule, and that is the price of the
+crate boundary.** `FERAL_DEV_REVEAL` is read in `game/stack_view.rs`, and
+the engine does not depend on app-core, so it cannot call `dev_flag`. Its
+`LazyLock` is the one duplicate of the predicate in the workspace. Folding
+it under the master would put `FERAL_DEV`'s name and rule in two crates that
+cannot see each other, which is the drift this repo keeps catching — and it
+would also mean the switch that reveals the map came on with the tools.

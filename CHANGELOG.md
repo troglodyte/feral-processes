@@ -33,6 +33,16 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.121
+
+**The base staff now keep a Recharger Node and a Line Driver fuelled.** A supplier with no Power Cell within reach is a want of its own, and a program walks one over from a shelf — where before, the only way a supplier got fed was you hand-stocking a Depot on the tile beside it and remembering to top it up.
+
+**It is fetched before the node runs dry, not after.** The want opens the moment the last spare within reach is spent, which leaves a whole hundred-tick window for the trip, so the Grid should not go down at all while the base is holding cells.
+
+**Feeding a supplier outranks every work order, and nothing else.** A pending build still comes first; on a base short of hands this means a machine stands idle while the lights stay on, which is the trade — a dry supplier takes the whole Grid down with it.
+
+**A supplier spends the cell in its own hopper before the buffer beside it**, so a node a program has just stocked stops drawing down a shelf the rest of the base is spending from too.
+
 ## 0.13.120
 
 **Ground that costs you Integrity now says so.** A step onto Null Sector or Backplane took a bite out of you in silence — the crossing line fires only when the biome *changes*, so every step after the first one inside a patch was damage with nothing to explain it, and a death by ground read as dying at random.

@@ -552,6 +552,37 @@ pub(crate) fn assembly_recipe<'a>(
     Some(recipe.cost.as_slice())
 }
 
+/// Everything a machine wants hauled **into** it: an assembler's ingredient
+/// list, or a burning supplier's fuel.
+///
+/// `assembly_recipe` above answers the first and stays the answer for every
+/// caller that means "what does this bench craft" — the catalog, the work
+/// order walk, the inspect panel. This is the wider question, and it has
+/// exactly one caller: `game::base::hauling`, which does not care *why* a
+/// buffer wants an item, only that something has to walk it over. Widening
+/// the shared one instead would have put a Recharger Node in the recipe
+/// chains and made a supplier look like a bench everywhere it is listed.
+///
+/// **Owned rather than borrowed**, which is the whole cost of the widening:
+/// an assembler's recipe is a slice living in the `ItemDb`, while a
+/// supplier's is one pair synthesised here and belonging to nobody. A `Vec`
+/// per machine per tick is nothing beside the Dijkstra field the same system
+/// builds per worker.
+///
+/// A structure could in principle declare both; none does, and the assembler
+/// arm winning is arbitrary rather than load-bearing.
+pub(crate) fn intake_recipe(
+    def: &crate::structures::StructureDef,
+    items: &ItemDb,
+) -> Option<Vec<(ItemId, u32)>> {
+    if let Some(recipe) = assembly_recipe(def, items) {
+        return Some(recipe.to_vec());
+    }
+    def.power_upkeep
+        .clone()
+        .map(|fuel| vec![(fuel, crate::tuning::POWER_UPKEEP_CELLS_PER_WINDOW)])
+}
+
 /// What a structure puts into its *own* output buffer, or `None` for one
 /// that produces nothing. An extractor's `work.produces` and an assembler's
 /// `assembles.item` are the only two ways anything reaches an `output`, so
@@ -679,6 +710,11 @@ pub fn power_grid_system(world: &mut World) {
 /// Spends one tick of every burning supplier's charge and buys the next Power
 /// Cell for any that just ran out — see `structures::StructureDef::power_upkeep`.
 ///
+/// A cell is bought out of the supplier's own input hopper first and off the
+/// four buffers touching it second. The hopper is what a program fetching
+/// for it fills (`intake_recipe`, `Game::fuel_wants`); the neighbours are the
+/// hand-stocked arrangement the feature shipped with, and both still work.
+///
 /// **Runs inside `power_grid_system`, ahead of the ledger**, rather than as a
 /// system of its own. `ledger` counts a burner's `power_supply` only while its
 /// `components::PowerFuel` has charge, so a refuel landing after the ledger
@@ -736,13 +772,30 @@ fn burn_grid_upkeep(world: &mut World) {
         if !spent {
             continue;
         }
-        let plan = crate::game::base::collect::plan_adjacent_take(tile, 1, &by_tile, |feeder| {
-            world
-                .get::<Stock>(feeder)
-                .and_then(|s| s.output.get(&cell).copied())
-                .unwrap_or(0)
-        });
-        let mut bought = 0;
+        let want = crate::tuning::POWER_UPKEEP_CELLS_PER_WINDOW;
+        // **Its own hopper first.** That is where `haul_step_system` puts a
+        // cell fetched for it — see `systems::intake_recipe` — and a burner
+        // that could not spend its own input would have been walked
+        // something it can never use. Preferred rather than merely accepted,
+        // so a supplier a program has just stocked stops drawing down a
+        // shelf the rest of the base is spending from too.
+        let mut bought = world
+            .get_mut::<Stock>(burner)
+            .map(|mut stock| {
+                crate::game::base::hauling::take_from_input(&mut stock, &cell, want)
+            })
+            .unwrap_or(0);
+        let plan = crate::game::base::collect::plan_adjacent_take(
+            tile,
+            want - bought,
+            &by_tile,
+            |feeder| {
+                world
+                    .get::<Stock>(feeder)
+                    .and_then(|s| s.output.get(&cell).copied())
+                    .unwrap_or(0)
+            },
+        );
         for (feeder, want) in plan {
             let Some(mut stock) = world.get_mut::<Stock>(feeder) else {
                 continue;

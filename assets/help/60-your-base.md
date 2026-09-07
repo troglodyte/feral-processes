@@ -59,8 +59,11 @@ real expense. This is the Grid and it is not your Power — the two are separate
 to share a word.
 
 The base staffs itself. Any program you own that is not out fighting with you is staff, and the
-scheduler decides the whole assignment every tick by priority: work orders first, then standing
-jobs, then digging. A work order is an item and a quantity and nothing else — say what you want and
+scheduler decides the whole assignment every tick by priority: pending builds first, then keeping a
+Recharger Node or a Line Driver fuelled, then work orders, then standing jobs, then digging. Those
+two burn a Power Cell to stay on the Grid, and a program will walk one over from a shelf ahead of
+almost anything else — on a base short of hands, that means a machine stands idle while the lights
+stay on. A work order is an item and a quantity and nothing else — say what you want and
 the base works out which machines make it, who stands on each, and what has to be fetched. Cancelling
 one unwinds nothing.
 

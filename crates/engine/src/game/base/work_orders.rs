@@ -813,6 +813,15 @@ impl Game {
         // every still-wanted posting exactly where it is and the idle pool
         // is what gets handed out first.
         let mut wanted: Vec<(Entity, TaskKind)> = self.build_wants();
+        // **Keeping a burning supplier fed sits second: below a build
+        // request, above every work order.** A supplier with no cell within
+        // reach runs the base's grid down, and it has no program of its own
+        // to fetch one — so on a base short of bodies, production waits and
+        // the lights stay on. The errand is one round trip and the want
+        // vanishes the moment the hopper is stocked, so what it borrows it
+        // gives straight back. See `fuel_wants` for the two gates that stop
+        // it borrowing a body it can never spend.
+        wanted.extend(self.fuel_wants());
         wanted.extend(
             self.settle_orders()
                 .into_iter()
@@ -1092,14 +1101,33 @@ impl Game {
             let mut query = self.world.query::<&DigSite>();
             query.iter(&self.world).any(|dig| dig.marked)
         };
-        let queue_is_empty = self.world.resource::<resources::WorkOrders>().0.is_empty()
-            && !wanted.iter().any(|&(_, kind)| kind == TaskKind::Construct)
-            && !any_dig_marked;
         let posted: Vec<(Entity, TaskKind)> = on_shift
             .iter()
             .filter_map(|&e| self.world.get::<Task>(e))
             .map(|t| (t.target, t.kind))
             .collect();
+        // **A body parked on a burner is an instruction too**, and the same
+        // correction the dry-floor-job term above carries. A satisfied fuel
+        // want simply vanishes from `wanted` — nothing announces it — and
+        // `wanted.iter().all(posted.contains)` is vacuously true against an
+        // empty list whatever `posted` still holds. Read off the orders
+        // alone, the guard would fire on exactly the tick the hopper filled
+        // and leave the body standing at a stocked Recharger Node for the
+        // rest of the run. Asked of `posted` rather than of `wanted`,
+        // because the want it has to see is precisely the one that has just
+        // stopped existing.
+        let a_burner_holds_a_body = posted.iter().any(|&(target, kind)| {
+            kind == TaskKind::GatherResource
+                && self
+                    .world
+                    .get::<Structure>(target)
+                    .and_then(|s| self.world.resource::<StructureDb>().get(&s.kind))
+                    .is_some_and(|def| def.power_upkeep.is_some())
+        });
+        let queue_is_empty = self.world.resource::<resources::WorkOrders>().0.is_empty()
+            && !wanted.iter().any(|&(_, kind)| kind == TaskKind::Construct)
+            && !any_dig_marked
+            && !a_burner_holds_a_body;
         if queue_is_empty && wanted.iter().all(|post| posted.contains(post)) {
             return;
         }
@@ -1366,6 +1394,95 @@ impl Game {
                 at.x, at.y
             ));
         }
+    }
+
+    /// Every deployed burning supplier that has no fuel within reach while
+    /// the base is holding some, as a want per supplier, in tile order.
+    ///
+    /// **The reach question is `haul_step_system`'s own**, character for
+    /// character: a cell in the supplier's own hopper or in any of the four
+    /// output buffers touching it, `batch_within_reach` against
+    /// `tuning::POWER_UPKEEP_CELLS_PER_WINDOW`. That is what makes a want
+    /// filed here a want the walker will actually resolve — and what makes
+    /// the hand-stocked arrangement the feature shipped with produce no want
+    /// at all, since the supplier can already reach that shelf itself.
+    ///
+    /// **It fires before the supplier is dry, not after.** A cell buys
+    /// `tuning::POWER_UPKEEP_TICKS`, so the want opens the moment the last
+    /// spare within reach is spent and the round trip has a whole window to
+    /// finish in. Waiting for `MachineStatus::Dry` would take the grid down
+    /// for the length of a walk to the depot every window, forever.
+    ///
+    /// **Gated on the base actually holding the fuel**, which is
+    /// `hauling::nearest_store_holding`'s question asked without the walk.
+    /// This is `build_wants`' stock gate and it is here for that reason: a
+    /// want nothing can supply still costs a body out of the truncation
+    /// below, and on a one-program base that body is the one producing the
+    /// cells.
+    fn fuel_wants(&self) -> Vec<(Entity, TaskKind)> {
+        // Every deployed structure carrying a buffer, which is every one of
+        // them — collected once because this asks three questions of the
+        // same list: which are burners, which are shelves, and what is on
+        // each of a burner's four neighbours.
+        let cells: Vec<(Entity, (i32, i32), String)> = self
+            .world
+            .iter_entities()
+            .filter_map(|e| {
+                let kind = e.get::<Structure>()?.kind.clone();
+                let pos = e.get::<Position>()?;
+                e.contains::<Stock>()
+                    .then_some((e.id(), (pos.x, pos.y), kind))
+            })
+            .collect();
+        let by_tile: std::collections::HashMap<(i32, i32), Entity> =
+            cells.iter().map(|&(e, tile, _)| (tile, e)).collect();
+        let db = self.world.resource::<StructureDb>();
+        let shelves: Vec<Entity> = cells
+            .iter()
+            .filter(|(_, _, kind)| db.get(kind).is_some_and(|d| d.stores))
+            .map(|(e, ..)| *e)
+            .collect();
+        let shelved = |item: &ItemId| -> u32 {
+            shelves
+                .iter()
+                .filter_map(|&shelf| self.world.get::<Stock>(shelf))
+                .map(|stock| stock.output.get(item).copied().unwrap_or(0))
+                .sum()
+        };
+
+        let mut wants: Vec<((i32, i32), Entity)> = Vec::new();
+        for (burner, (x, y), kind) in &cells {
+            let Some(fuel) = db.get(kind).and_then(|d| d.power_upkeep.clone()) else {
+                continue;
+            };
+            let held = self
+                .world
+                .get::<Stock>(*burner)
+                .and_then(|s| s.input.get(&fuel).copied())
+                .unwrap_or(0);
+            let beside: u32 = ORTHOGONAL
+                .into_iter()
+                .filter_map(|(dx, dy)| by_tile.get(&(x + dx, y + dy)).copied())
+                .filter_map(|feeder| self.world.get::<Stock>(feeder))
+                .map(|stock| stock.output.get(&fuel).copied().unwrap_or(0))
+                .sum();
+            let per_window = crate::tuning::POWER_UPKEEP_CELLS_PER_WINDOW;
+            if batch_within_reach(held, beside, 0, per_window) {
+                continue;
+            }
+            if shelved(&fuel) < per_window {
+                continue;
+            }
+            wants.push(((*x, *y), *burner));
+        }
+        // `assembler_system`'s reason: `iter_entities` order is not stable,
+        // and two suppliers competing for the last body have to resolve the
+        // same way every run.
+        wants.sort_unstable();
+        wants
+            .into_iter()
+            .map(|(_, burner)| (burner, TaskKind::GatherResource))
+            .collect()
     }
 
     /// Every marked dig site, in a stable tile order — the lowest-priority

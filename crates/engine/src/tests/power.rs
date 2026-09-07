@@ -1171,3 +1171,50 @@ fn a_typo_d_fuel_id_never_burns_and_never_supplies_beside_real_power_cells() {
         "a supplier that can never pay contributes nothing to the grid"
     );
 }
+
+/// A supplier pays out of its **own hopper** before it reaches for the
+/// buffer beside it, and that is the half of the feature the walking half
+/// depends on: `haul_step_system` puts a fetched cell in `Stock::input`, and
+/// a burner that could not spend its own input would have been handed
+/// something it can never use.
+///
+/// The hopper is preferred rather than merely accepted, so a supplier a
+/// program has just stocked stops drawing down a shelf the rest of the base
+/// is also spending from.
+#[test]
+fn a_supplier_burns_the_cell_in_its_own_hopper_before_the_shelf_beside_it() {
+    let mut game = base_with_home(4110);
+    let (recharger, depot) = recharger_beside_a_depot(&mut game, 3);
+    let lit = grid_supply(&game);
+    game.world
+        .get_mut::<Stock>(recharger)
+        .expect("a deployed structure carries a buffer")
+        .input
+        .insert(ItemId::from(ids::POWER_CELL), 1);
+
+    for _ in 0..crate::tuning::POWER_UPKEEP_TICKS {
+        game.tick();
+    }
+
+    assert_eq!(
+        grid_supply(&game),
+        lit,
+        "the hopper's cell keeps it on the grid"
+    );
+    assert_eq!(
+        game.world
+            .get::<Stock>(recharger)
+            .unwrap()
+            .input
+            .get(&ItemId::from(ids::POWER_CELL))
+            .copied()
+            .unwrap_or(0),
+        0,
+        "and it is the cell that was spent"
+    );
+    assert_eq!(
+        shelved(&game, depot, ids::POWER_CELL),
+        3,
+        "the shelf beside it is left alone while the hopper can pay"
+    );
+}

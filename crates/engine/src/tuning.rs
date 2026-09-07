@@ -2352,12 +2352,25 @@ pub const DEFAULT_OUTPUT_CAPACITY: u32 = 20;
 /// sustained three suppliers and grid capacity *was* the production rate —
 /// the argument being that upkeep the base can outrun is the same as free.
 /// It is now close to free by that standard, and knowingly: the cost that
-/// survives is **placement**, not throughput. A supplier still refuels only
-/// from an orthogonally adjacent output buffer, so a Recharger Node parked
-/// away from a feeder goes dark no matter how many cells the base is sitting
-/// on — which is the failure this window is long enough to let the player
-/// notice and walk over to fix.
+/// survives is **placement**, not throughput — though it survives more
+/// weakly than it did. A supplier parked away from any feeder used to go
+/// dark no matter how many cells the base was sitting on, and this window
+/// was sized to be long enough for the player to notice and walk over to fix
+/// it. The base staff now fetch one instead (`Game::fuel_wants`), so what a
+/// bad placement costs is a body's round trip rather than the grid — and the
+/// window is what makes that trip comfortably long enough to make.
 pub const POWER_UPKEEP_TICKS: u32 = 100;
+
+/// How many Power Cells a `power_upkeep` supplier spends to buy one window
+/// of `POWER_UPKEEP_TICKS`.
+///
+/// Named rather than written `1` at each site because it is read in three
+/// places that must agree: `systems::burn_grid_upkeep` spends it,
+/// `systems::intake_recipe` reports it as the supplier's batch size so a
+/// hauler fetches the right amount, and `Game::fuel_wants` asks whether one
+/// is within reach. A supplier that burnt two and was fetched one would
+/// simply never stay lit.
+pub const POWER_UPKEEP_CELLS_PER_WINDOW: u32 = 1;
 
 /// How many units a posted program carries to a depot in one trip.
 ///

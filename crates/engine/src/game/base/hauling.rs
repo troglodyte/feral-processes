@@ -15,7 +15,7 @@ use crate::game::base::collect::ORTHOGONAL;
 use crate::game::base::work_orders;
 use crate::game::pursuit::walk_field;
 use crate::items::ItemId;
-use crate::systems::{assembly_recipe, produced_item};
+use crate::systems::{intake_recipe, produced_item};
 use crate::tuning::haul_walk_radius;
 use crate::world::NEIGHBOURS;
 use crate::*;
@@ -45,15 +45,37 @@ pub(crate) fn take_haul_load(stock: &mut Stock) -> Option<Carrying> {
 /// remove-or-decrement is how a buffer ends up holding a zero entry that
 /// every reader then has to know to skip.
 pub(crate) fn take_from(stock: &mut Stock, item: &ItemId, qty: u32) -> u32 {
-    let held = stock.output.get(item).copied().unwrap_or(0);
+    take_from_buffer(&mut stock.output, item, qty)
+}
+
+/// `take_from`'s twin on the **input** hopper, for the one taker that reaches
+/// into one from outside: `systems::burn_grid_upkeep` spends the Power Cell
+/// a program fetched for a supplier, and that cell was delivered through
+/// `Errand::Load` like any other ingredient.
+///
+/// The asymmetry is deliberate and is `Errand::Load`'s own: `Stock::output`
+/// is the buffer a neighbour may pull from, and a machine's input belongs to
+/// the machine. This is that machine spending it.
+pub(crate) fn take_from_input(stock: &mut Stock, item: &ItemId, qty: u32) -> u32 {
+    take_from_buffer(&mut stock.input, item, qty)
+}
+
+/// The remove-or-decrement both of the above are, written once. A buffer
+/// that held a zero entry would be one every reader had to know to skip.
+fn take_from_buffer(
+    buffer: &mut std::collections::BTreeMap<ItemId, u32>,
+    item: &ItemId,
+    qty: u32,
+) -> u32 {
+    let held = buffer.get(item).copied().unwrap_or(0);
     let taken = qty.min(held);
     if taken == 0 {
         return 0;
     }
     if held == taken {
-        stock.output.remove(item);
+        buffer.remove(item);
     } else {
-        stock.output.insert(item.clone(), held - taken);
+        buffer.insert(item.clone(), held - taken);
     }
     taken
 }
@@ -77,10 +99,14 @@ pub(crate) fn at_station(worker: Position, structure: Position) -> bool {
     touching(worker, structure)
 }
 
-/// A deployed assembler and the ingredient list it runs, as
+/// A deployed machine and everything it wants hauled in, as
 /// `haul_step_system` needs to see them: enough to answer whether the
 /// machine beside a producer will ever pull its output.
-type Consumer<'a> = (Position, &'a [(ItemId, u32)]);
+///
+/// An assembler and its ingredients, or a burning supplier and its fuel —
+/// `systems::intake_recipe` is the one question, and it owns its answer for
+/// that function's reason.
+type Consumer = (Position, Vec<(ItemId, u32)>);
 
 /// Whether a machine at `machine` producing `item` has an **attached
 /// building** — an orthogonal neighbour whose own recipe names that item.
@@ -511,9 +537,13 @@ fn input_room(stock: &Stock, recipe: &[(ItemId, u32)], item: &ItemId) -> u32 {
         .saturating_sub(stock.input.get(item).copied().unwrap_or(0))
 }
 
-/// The first ingredient `machine` cannot assemble a batch of out of its own
-/// input or the machines touching it — the one an errand to a shelf would be
-/// for. `None` when everything it needs is already within reach.
+/// The first thing on `machine`'s intake it cannot cover a batch of out of
+/// its own input or the machines touching it — the one an errand to a shelf
+/// would be for. `None` when everything it needs is already within reach.
+///
+/// A batch is an assembler's recipe quantity or a supplier's
+/// `tuning::POWER_UPKEEP_CELLS_PER_WINDOW`, whichever `intake_recipe`
+/// reported; nothing here knows which it is holding.
 ///
 /// The store term is deliberately **zero**: this is the question of whether
 /// the local chain can cover it, and the shelf is the answer being
@@ -655,9 +685,16 @@ pub(crate) fn haul_step_system(
         .iter()
         .filter_map(|(e, p, _, s)| {
             let def = db.get(&s.kind)?;
-            let recipe = assembly_recipe(def, &items)?;
-            let wanted =
-                needed.contains(produced_item(def)?) || standing.get(e).is_ok_and(|job| job.work);
+            let recipe = intake_recipe(def, &items)?;
+            // **A burning supplier is always a consumer.** There is no order
+            // that names its fuel and no program to post to it, so the two
+            // reasons an assembler counts cannot apply — and it is off the
+            // grid without the cell either way. Left out, a Conduit standing
+            // beside a Recharger Node would have its cells hauled off to a
+            // depot for somebody to walk back.
+            let wanted = def.power_upkeep.is_some()
+                || produced_item(def).is_some_and(|item| needed.contains(item))
+                || standing.get(e).is_ok_and(|job| job.work);
             wanted.then_some((*p, recipe))
         })
         .collect();
@@ -701,7 +738,8 @@ pub(crate) fn haul_step_system(
                 .get(machine)
                 .ok()
                 .and_then(|(_, _, _, s)| db.get(&s.kind))
-                .and_then(|def| assembly_recipe(def, &items));
+                .and_then(|def| intake_recipe(def, &items));
+            let recipe = recipe.as_deref();
             match &carrying {
                 Some(load) => {
                     // A load the machine's own recipe has room for is an

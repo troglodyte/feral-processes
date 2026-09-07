@@ -2345,6 +2345,64 @@ the walk cap was ever sized for is a job the crew declines. That is the
 trade, and it is why the filter is a filter and `post_reach` is still the
 authority.
 
+### A fuel want is the one thing filed above the work orders, and it is gated twice to earn that
+
+**`Game::fuel_wants` sits second in `schedule_base_labour`'s list**, between
+the build requests and `settle_orders`. The entry above says in as many words
+that anything inserted above the dig wants silently starves production, and
+that is exactly what this does on a base with fewer bodies than posts: a
+Recharger Node with no Power Cell within reach takes a program off a machine
+until it has one. That is the intended trade — a supplier with no fuel takes
+the base's whole Grid down with it, and unlike every other want in the list it
+has no program of its own to fetch with — but it is only safe because the
+errand *terminates*. One round trip stocks the hopper, the want stops
+existing, and the body goes back. A fuel want that could not be satisfied
+would be the dig-plan failure one subsystem over, with the base's own grid on
+the other end of it.
+
+So it is gated twice, and both gates are about termination rather than
+tidiness. **The reach gate** is `work_orders::batch_within_reach` against the
+supplier's own input hopper plus the four output buffers touching it —
+`haul_step_system`'s question character for character, which is what makes a
+want filed here a want the walker actually resolves. It is also what leaves
+the hand-stocked arrangement the feature shipped with producing no want at
+all: a supplier standing beside a stocked Depot can already reach it.
+**The store gate** is `hauling::nearest_store_holding`'s question asked
+without the walk — does any shelf hold the fuel — and it is `build_wants`'
+stock gate for `build_wants`' reason: a want nothing can supply still costs a
+body out of the truncation, and on a one-program base that body is the one
+producing the cells.
+
+**The want opens before the supplier is dry, not after.** A cell buys
+`tuning::POWER_UPKEEP_TICKS` — a hundred of them — so the want opens the tick
+the last spare within reach is spent, and the round trip has a whole window to
+finish in. Gated on `MachineStatus::Dry` instead it would be correct and
+useless: the grid would go down for the length of a walk to the depot once
+every window, for the rest of the run.
+
+**The cell rides in through the ordinary haul errand, not a new one.**
+`systems::intake_recipe` reports a burner's `power_upkeep` as a one-item
+recipe, so `missing_ingredient`, `Errand::Collect` and `Errand::Load` all work
+on a supplier unchanged — and `systems::burn_grid_upkeep` learnt to spend the
+supplier's own `Stock::input` before reaching for a neighbour's output. Those
+two halves are one change: a fetched cell lands in the hopper, and a burner
+that could not spend its own input would have been walked something it can
+never use. `intake_recipe` is deliberately **not** a widening of
+`assembly_recipe` — that one answers "what does this bench craft" for the
+catalog, the order walk and the inspect panel, and a Recharger Node in the
+recipe chains is a supplier drawn as a bench everywhere it is listed.
+
+**The empty-queue guard had to learn about it.** `schedule_base_labour`
+returns early when the base has no instructions and every want is already
+posted, and `wanted.iter().all(posted.contains)` is vacuously true against an
+*empty* `wanted`. A satisfied fuel want vanishes from the list with nothing
+announcing it, so read off the work orders alone the guard fires on exactly
+the tick the hopper fills and leaves the body standing at a stocked Recharger
+Node for the rest of the run. The term is asked of `posted` rather than of
+`wanted`, because the want it has to see is the one that has just stopped
+existing — the same correction the dry-floor-job term above carries, one
+subsystem over.
+
 ### Mining does not go through `battle::resolve_attack`
 
 **Rock is hit, not rolled against.** `Game::strike_rock` takes

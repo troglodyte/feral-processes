@@ -1059,3 +1059,198 @@ fn a_worker_short_an_ingredient_fetches_it_from_the_depot() {
         "and taken out of the depot on the way"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Keeping a burning supplier fed. A structure declaring
+// `StructureDef::power_upkeep` wants one Power Cell within reach at all times
+// and has no program of its own to fetch one, so the scheduler files a want
+// for it — above every work order and below only a build request. See
+// `Game::fuel_wants`.
+// ---------------------------------------------------------------------------
+
+/// A Recharger Node with nothing touching it, and a Depot four tiles off
+/// holding `cells` Power Cells. Far enough apart that the node's own
+/// four-tile reach cannot see the shelf, so only a program walking closes
+/// the gap.
+fn recharger_and_a_distant_depot(game: &mut Game, cells: u32) -> (Entity, Entity) {
+    let recharger = deploy(game, "recharger_node", 1, 0);
+    let depot = deploy(game, "depot", 4, 0);
+    if cells > 0 {
+        fill_output(game, depot, ids::POWER_CELL, cells);
+    }
+    (recharger, depot)
+}
+
+/// What is in a structure's *input* hopper — where a fetched load lands, as
+/// against `node_output`'s shelf.
+fn hopper(game: &Game, structure: Entity, item: &str) -> u32 {
+    game.world
+        .get::<Stock>(structure)
+        .and_then(|s| s.input.get(&ItemId::from(item)).copied())
+        .unwrap_or(0)
+}
+
+/// The structure a program is currently posted to, whatever the kind.
+fn posted_to(game: &Game, worker: Entity) -> Option<Entity> {
+    game.world.get::<Task>(worker).map(|t| t.target)
+}
+
+/// A standing order big enough that no fixture fill can satisfy it, so the
+/// machine below stays a want for the whole of a test.
+fn order_core_fragments(game: &mut Game) {
+    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 500))
+        .unwrap();
+}
+
+#[test]
+fn a_burner_with_no_cell_within_reach_is_fetched_one_off_the_shelf() {
+    let mut game = base(9101);
+    let (recharger, depot) = recharger_and_a_distant_depot(&mut game, 4);
+    let worker = hauler(&mut game);
+    park_at_post(&mut game, worker, recharger);
+
+    tick_until(&mut game, 80, |g| {
+        hopper(g, recharger, ids::POWER_CELL) > 0
+    });
+
+    assert!(
+        hopper(&game, recharger, ids::POWER_CELL) > 0,
+        "a supplier with nothing to burn and cells on a shelf should have \
+         had one carried to it"
+    );
+    assert!(
+        node_output(&game, depot, ids::POWER_CELL) < 4,
+        "and taken off the shelf on the way"
+    );
+}
+
+#[test]
+fn feeding_a_burner_outranks_a_queued_work_order() {
+    let mut game = base(9102);
+    let node = deploy(&mut game, "mining_node", 0, 1);
+    let (recharger, _) = recharger_and_a_distant_depot(&mut game, 4);
+    order_core_fragments(&mut game);
+    let worker = hauler(&mut game);
+    park_at_post(&mut game, worker, node);
+
+    game.tick();
+
+    assert_eq!(
+        posted_to(&game, worker),
+        Some(recharger),
+        "with one body and both wants standing, the fuel want is filed \
+         above the order"
+    );
+}
+
+#[test]
+fn a_burner_with_a_stocked_buffer_beside_it_is_no_want_at_all() {
+    let mut game = base(9103);
+    let node = deploy(&mut game, "mining_node", 0, 1);
+    let recharger = deploy(&mut game, "recharger_node", 1, 0);
+    // Touching the node, which is the hand-stocked arrangement the feature
+    // shipped with: the supplier reaches this shelf itself.
+    let beside = deploy(&mut game, "depot", 2, 0);
+    fill_output(&mut game, beside, ids::POWER_CELL, 4);
+    order_core_fragments(&mut game);
+    let worker = hauler(&mut game);
+    park_at_post(&mut game, worker, node);
+
+    game.tick();
+
+    assert_eq!(
+        posted_to(&game, worker),
+        Some(node),
+        "a supplier that can already reach a cell wants nobody, so the \
+         order keeps the body"
+    );
+    assert_eq!(
+        hopper(&game, recharger, ids::POWER_CELL),
+        0,
+        "and nothing is carried to it"
+    );
+}
+
+#[test]
+fn a_burner_is_no_want_when_no_shelf_holds_its_fuel() {
+    let mut game = base(9104);
+    let node = deploy(&mut game, "mining_node", 0, 1);
+    // A Depot, but an empty one: the want is gated on the base actually
+    // holding the fuel, or a body walks to a shelf that cannot pay it.
+    recharger_and_a_distant_depot(&mut game, 0);
+    order_core_fragments(&mut game);
+    let worker = hauler(&mut game);
+    park_at_post(&mut game, worker, node);
+
+    game.tick();
+
+    assert_eq!(
+        posted_to(&game, worker),
+        Some(node),
+        "nothing in store to fetch is nothing to want a body for"
+    );
+}
+
+#[test]
+fn a_fed_burner_gives_the_body_back() {
+    let mut game = base(9105);
+    let node = deploy(&mut game, "mining_node", 0, 1);
+    let (recharger, _) = recharger_and_a_distant_depot(&mut game, 4);
+    order_core_fragments(&mut game);
+    let worker = hauler(&mut game);
+    park_at_post(&mut game, worker, recharger);
+
+    game.tick();
+    assert_eq!(
+        posted_to(&game, worker),
+        Some(recharger),
+        "the fixture has to actually hand the body over, or the release \
+         below is asserting nothing"
+    );
+
+    tick_until(&mut game, 80, |g| {
+        hopper(g, recharger, ids::POWER_CELL) > 0
+    });
+    // One more beat for the scheduler to see the satisfied want.
+    game.tick();
+
+    assert_eq!(
+        posted_to(&game, worker),
+        Some(node),
+        "a stocked supplier stops wanting a body, and the order takes it \
+         back — a fuel want that latched would starve production for the \
+         rest of the run"
+    );
+}
+
+/// The same release with **nothing else on the base to do**, which is the
+/// case the empty-queue guard in `schedule_base_labour` gets wrong if it is
+/// not told about fuel wants: a satisfied want simply vanishes from the
+/// list, and `all(posted.contains)` is vacuously true against an empty one.
+/// Left to it, the body stands at a stocked Recharger Node for the rest of
+/// the run.
+#[test]
+fn a_fed_burner_gives_the_body_back_on_a_base_with_no_orders_at_all() {
+    let mut game = base(9106);
+    let (recharger, _) = recharger_and_a_distant_depot(&mut game, 4);
+    let worker = hauler(&mut game);
+    park_at_post(&mut game, worker, recharger);
+
+    game.tick();
+    assert_eq!(
+        posted_to(&game, worker),
+        Some(recharger),
+        "an empty queue is no reason not to keep the grid lit"
+    );
+
+    tick_until(&mut game, 80, |g| {
+        hopper(g, recharger, ids::POWER_CELL) > 0
+    });
+    game.tick();
+
+    assert_eq!(
+        posted_to(&game, worker),
+        None,
+        "with the hopper stocked and nothing else wanted, the body is free"
+    );
+}

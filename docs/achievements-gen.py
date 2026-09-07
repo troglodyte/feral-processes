@@ -9,6 +9,10 @@
 # The three ceilings are from crates/engine/src/tuning.rs and are code, not
 # data -- they are what `the_full_ladder_stays_under_its_ceiling` asserts the
 # table below against.
+#
+# Before trusting a regenerated page, run `python3 docs/audit-gen.py` — it
+# diffs this table against the source it claims to transcribe. Nothing else
+# can see a table that has gone stale.
 CEIL_STAT, CEIL_PERK, CEIL_PROGRAM = 8, 5, 1
 
 A = [

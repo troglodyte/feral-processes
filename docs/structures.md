@@ -1,7 +1,7 @@
 # Structures
 
 Every shipped structure in feral-processes, charted from its own file in
-`assets/structures/`. 27 of them.
+`assets/structures/`. 31 of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
 `assets/structures/*.ron` on 2026-08-27 and will drift the moment one of those
@@ -16,22 +16,23 @@ base itself.
 
 | | |
 |---|---|
-| structures | 27 |
-| producers (make something from nothing, on a timer) | 4 |
+| structures | 31 |
+| producers (make something from nothing, on a timer) | 5 |
 | assemblers (consume a neighbour's output) | 11 |
-| utility | 12 |
-| upgradeable | 5, all to Mk5 |
-| built from something other than salvage | 5 — Disk Press, Assembly Bay, Refactor Bench, Patch Node, Zone Portal |
+| utility | 15 |
+| upgradeable | 9, all to Mk5 |
+| built from something other than salvage | 9 — Cache Tap, Disk Press, Assembly Bay, Refactor Bench, Patch Node, Line Driver, Teardown Rig, Dispatch Relay, Zone Portal |
 
 ## Everything that can be built
 
 |  | Structure | Build cost | Cap | Draw | Supply | Makes / does |
 |:---|:---|:---|---:|---:|---:|:---|
-| `H` | Home | 5 `core_fragment` | - | - | 4 | anchors the base, radius 4 and up |
+| `H` | Home | - | - | - | 4 | anchors the base, radius 4 and up |
 | `$` | Mining Node | 12 `core_fragment` | - | 1 | - | `core_fragment` |
 | `T` | Log Scraper | 14 `core_fragment` | - | 1 | - | `raw_trace` |
 | `R` | Research Node | 10 `core_fragment` | - | 1 | - | `research_data` |
 | `+` | Power Conduit | 14 `core_fragment` | - | 1 | - | `power_cell` |
+| `C` | Cache Tap | 20 `core_fragment`, 2 `blank_substrate` | - | 2 | - | `cache_grain` |
 | `&` | Compiler | 16 `core_fragment` | 20 | 3 | - | `ice_breaker` |
 | `L` | Lathe | 18 `core_fragment` | 20 | 2 | - | `blank_substrate` |
 | `B` | Refinery | 18 `core_fragment` | 20 | 2 | - | `bytecode_block` |
@@ -46,14 +47,17 @@ base itself.
 | `$` | iso Market | 16 `core_fragment` | - | - | - | buys and sells, 1 Credit a unit |
 | `!` | Contract Broker | 5 `core_fragment` | - | - | - | posts contracts, takes deliveries |
 | `=` | Data Cache | 10 `core_fragment` | - | - | - | +5 roster slots while standing |
-| `D` | Depot | 12 `core_fragment` | 100 | - | - | programs stock it and fetch from it |
+| `D` | Depot | 12 `core_fragment` | 200 | - | - | programs stock it and fetch from it |
 | `^` | Shield | 16 `core_fragment` | - | - | - | -2 sweep damage, base-wide |
 | `/` | Patch Node | 18 `core_fragment`, 4 `power_cell` | - | - | - | +1 Durability per tier / 20 ticks |
 | `z` | Recharger Node | 10 `core_fragment` | - | - | 4 | +1 Power a tick, base-wide |
+| `E` | Line Driver | 30 `core_fragment`, 6 `cache_grain` | - | - | 6 | +6 Grid supply, burns a Power Cell |
 | `b` | Log Analyzer Bay | 12 `core_fragment` | - | 2 | - | restores staff Coherence |
 | `s` | Sandbox | 10 `core_fragment` | - | 1 | - | restores staff Slack |
 | `r` | Repair Bay | 16 `core_fragment` | - | 2 | - | +1 Integrity a tick to a downed program |
-| `O` | Zone Portal | 10 `portal_fragment` | - | - | - | breaches to the next sector |
+| `V` | Teardown Rig | 20 `core_fragment`, 6 `bytecode_block` | 20 | 3 | - | strips downed programs; extraction bench |
+| `K` | Dispatch Relay | 22 `core_fragment`, 3 `charge_coil` | - | - | - | sends squads out on sorties |
+| `O` | Zone Portal | 24 `portal_fragment`, 4 `patch_routine`, 3 `hardened_shell`, 4 `routine_disk` | - | - | - | breaches to the next sector |
 
 Two glyph collisions are worth knowing before you read a map: the Mining Node
 and the iso Market both draw as `$`, and the Recharger Node draws as `z`, the
@@ -89,6 +93,7 @@ standalone taps (no machine downstream):
   T Log Scraper   -> raw_trace every 10 ticks
   R Research Node -> research_data every 14 ticks
   + Power Conduit -> power_cell every 6 ticks
+  C Cache Tap     -> cache_grain every 14 ticks
 ```
 
 Every one of the eleven assembler recipes is a **single ingredient**, and that
@@ -136,6 +141,7 @@ Transcriber     12  ##############....................
 Winding Node    12  ##############....................
 Annealing Node  12  ##############....................
 Research Node   14  ################..................
+Cache Tap       14  ################..................
 Disk Press      20  #######################...........
 Assembly Bay    20  #######################...........
 Refactor Bench  20  #######################...........
@@ -166,8 +172,12 @@ four lines in the pane every tick.
 | Mining Node | 10 `core_fragment` | Mk5 |
 | Log Scraper | 10 `core_fragment` | Mk5 |
 | Research Node | 10 `core_fragment` | Mk5 |
+| Cache Tap | 12 `core_fragment` | Mk5 |
 | Compiler | 12 `core_fragment` | Mk5 |
+| Armory | 12 `core_fragment` | Mk5 |
+| Fabricator | 12 `core_fragment` | Mk5 |
 | Patch Node | 12 `core_fragment` | Mk5 |
+| Teardown Rig | 12 `core_fragment` | Mk5 |
 
 A tier is bounded twice and the two bounds mean different things. The def's
 `max_tier` is permanent; the zone is not, and reaching sector *N* is what
@@ -176,9 +186,7 @@ structure sitting at its zone ceiling still lists in the upgrade menu rather
 than being filtered out, because a player who has never breached would
 otherwise never learn upgrading exists.
 
-Note which five they are. Three of the four producers upgrade and the fourth,
-the Power Conduit, does not; one assembler upgrades out of nine, and it is the
-Compiler. Upgrading is a lever on the taps, not on the lines.
+Note which they are: 4 of the 5 producers, 3 of the 11 assemblers, and 2 of the 15 utilities. The one producer that does not is the Power Conduit. So upgrading is overwhelmingly a lever on the *taps* — nearly every producer takes it, while the assemblers that do (Compiler, Armory, Fabricator) are the exception rather than the rule, and not one of the four intermediate benches is among them. You raise what comes out of the ground, not what the lines do with it.
 
 ---
 

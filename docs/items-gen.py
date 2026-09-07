@@ -9,6 +9,10 @@
 # with no bench (hand-made anywhere) but never benched with no recipe.
 # `recipe` is empty for the six items whose recipe is granted by a research
 # node rather than declared on the item -- see docs/research.md.
+#
+# Before trusting a regenerated page, run `python3 docs/audit-gen.py` — it
+# diffs this table against the source it claims to transcribe. Nothing else
+# can see a table that has gone stale.
 I = [
  # id                    name                        val  role        slot      stats                    recipe                                               bench          drops                              cache pot
  ("ablative_plating",    "Ablative Plating",          25, "",         "Armor",  "def+4",                 "",                                                  "",            "rootkit 30%",                     0, 0),

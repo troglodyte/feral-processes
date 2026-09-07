@@ -11,35 +11,43 @@
 # It is recorded here so the chain diagram can be drawn from data rather than
 # hand-arranged, and it is what `every_shipped_assembler_recipe_is_a_single_
 # ingredient` holds to one input apiece.
+#
+# Before trusting a regenerated page, run `python3 docs/audit-gen.py` — it
+# diffs this table against the source it claims to transcribe. Nothing else
+# can see a table that has gone stale.
 S = [
  # id               name             glyph color    build cost                                 kind        makes / does                    ticks cap  feeder          upgrade          draw supply
- ("home",           "Home",           "H", "Green",  [("core_fragment", 5)],                    "utility",  "anchors the base, radius 4 and up", None, None, None,          None,            0,   4),
+ ("home",           "Home",           "H", "Green",  [],                                        "utility",  "anchors the base, radius 4 and up", None, None, None,          None,            0,   4),
  ("mining_node",    "Mining Node",    "$", "Brown",  [("core_fragment", 12)],                   "producer", "core_fragment",                    10, None, None,          10,              1,   0),
  ("log_scraper",    "Log Scraper",    "T", "Cyan",   [("core_fragment", 14)],                   "producer", "raw_trace",                        10, None, None,          10,              1,   0),
  ("research_node",  "Research Node",  "R", "Cyan",   [("core_fragment", 10)],                   "producer", "research_data",                    14, None, None,          10,              1,   0),
  ("power_conduit",  "Power Conduit",  "+", "Yellow", [("core_fragment", 14)],                   "producer", "power_cell",                        6, None, None,          None,            1,   0),
+ ("cache_tap",      "Cache Tap",      "C", "Cyan",   [("core_fragment", 20), ("blank_substrate", 2)], "producer", "cache_grain",              14, None, None,          12,              2,   0),
  ("compiler",       "Compiler",       "&", "Green",  [("core_fragment", 16)],                   "assembler","ice_breaker",                       8,   20, "mining_node", 12,              3,   0),
  ("lathe",          "Lathe",          "L", "Brown",  [("core_fragment", 18)],                   "assembler","blank_substrate",                  12,   20, "mining_node", None,            2,   0),
  ("refinery",       "Refinery",       "B", "Orange", [("core_fragment", 18)],                   "assembler","bytecode_block",                   12,   20, "mining_node", None,            2,   0),
  ("transcriber",    "Transcriber",    "S", "Cyan",   [("core_fragment", 18)],                   "assembler","logic_wafer",                      12,   20, "mining_node", None,            2,   0),
  ("winding_node",   "Winding Node",   "W", "Blue",   [("core_fragment", 18)],                   "assembler","charge_coil",                      12,   20, "mining_node", None,            2,   0),
  ("disk_press",     "Disk Press",     "P", "Magenta",[("core_fragment", 20), ("blank_substrate", 4)], "assembler","routine_disk",              20,   10, "lathe",       None,            2,   0),
- ("armory",         "Armory",         "%", "Blue",   [("core_fragment", 18)],                   "assembler","hardened_shell",                   30,   15, "refinery",    None,            3,   0),
- ("fabricator",     "Fabricator",     "*", "White",  [("core_fragment", 18)],                   "assembler","trace_sniffer",                    30,   15, "transcriber", None,            3,   0),
+ ("armory",         "Armory",         "%", "Blue",   [("core_fragment", 18)],                   "assembler","hardened_shell",                   30,   15, "refinery",    12,              3,   0),
+ ("fabricator",     "Fabricator",     "*", "White",  [("core_fragment", 18)],                   "assembler","trace_sniffer",                    30,   15, "transcriber", 12,              3,   0),
  ("assembly_bay",   "Assembly Bay",   "Y", "Magenta",[("core_fragment", 20), ("charge_coil", 4)],"assembler","patch_routine",                   20,   10, "winding_node",None,            3,   0),
  ("annealing_node", "Annealing Node", "A", "Cyan",   [("core_fragment", 16)],                   "assembler","annealed_core",                    12,   20, "mining_node", None,            2,   0),
  ("refactor_bench", "Refactor Bench", "X", "Orange", [("core_fragment", 22), ("annealed_core", 4)],"assembler","recompile_kernel",              20,   10, "annealing_node",None,          3,   0),
  ("market",         "iso Market",     "$", "Yellow", [("core_fragment", 16)],                   "utility",  "buys and sells, 1 Credit a unit", None, None, None,          None,            0,   0),
  ("contract_broker","Contract Broker","!", "Yellow", [("core_fragment", 5)] ,                   "utility",  "posts contracts, takes deliveries",None, None, None,         None,            0,   0),
  ("data_cache",     "Data Cache",     "=", "Gray",   [("core_fragment", 10)],                   "utility",  "+5 roster slots while standing",  None, None, None,          None,            0,   0),
- ("depot",          "Depot",          "D", "Cyan",   [("core_fragment", 12)],                   "utility",  "programs stock it and fetch from it",None, 100, None,        None,            0,   0),
+ ("depot",          "Depot",          "D", "Cyan",   [("core_fragment", 12)],                   "utility",  "programs stock it and fetch from it",None, 200, None,        None,            0,   0),
  ("shield",         "Shield",         "^", "Blue",   [("core_fragment", 16)],                   "utility",  "-2 sweep damage, base-wide",      None, None, None,          None,            0,   0),
  ("patch_node",     "Patch Node",     "/", "Green",  [("core_fragment", 18), ("power_cell", 4)],"utility",  "+1 Durability per tier / 20 ticks",None, None, None,         12,              0,   0),
  ("recharger_node", "Recharger Node", "z", "Orange", [("core_fragment", 10)],                   "utility",  "+1 Power a tick, base-wide",     None, None, None,          None,            0,   4),
+ ("line_driver",    "Line Driver",    "E", "Yellow", [("core_fragment", 30), ("cache_grain", 6)], "utility",  "+6 Grid supply, burns a Power Cell", None, None, None,   None,            0,   6),
  ("defrag_bay",     "Log Analyzer Bay", "b", "Cyan",   [("core_fragment", 12)],                   "utility",  "restores staff Coherence",       None, None, None,          None,            2,   0),
  ("sandbox",        "Sandbox",        "s", "Green",  [("core_fragment", 10)],                   "utility",  "restores staff Slack",           None, None, None,          None,            1,   0),
  ("repair_bay",     "Repair Bay",     "r", "Green",  [("core_fragment", 16)],                   "utility",  "+1 Integrity a tick to a downed program",None, None, None,   None,            2,   0),
- ("portal",         "Zone Portal",    "O", "Magenta",[("portal_fragment", 10)],                 "utility",  "breaches to the next sector",     None, None, None,          None,            0,   0),
+ ("teardown_rig",   "Teardown Rig",   "V", "Orange", [("core_fragment", 20), ("bytecode_block", 6)], "utility", "strips downed programs; extraction bench", None, 20, None, 12,           3,   0),
+ ("relay",          "Dispatch Relay", "K", "Magenta",[("core_fragment", 22), ("charge_coil", 3)], "utility",  "sends squads out on sorties",  None, None, None,          None,            0,   0),
+ ("portal",         "Zone Portal",    "O", "Magenta",[("portal_fragment", 24), ("patch_routine", 4), ("hardened_shell", 3), ("routine_disk", 4)], "utility", "breaches to the next sector", None, None, None, None,   0,   0),
 ]
 K = "id name glyph color cost kind does ticks cap feeder upgrade draw supply".split()
 R = [dict(zip(K, r)) for r in S]
@@ -64,10 +72,24 @@ BEYOND_SALVAGE = [r for r in R if any(i != SALVAGE for i, _ in r["cost"])]
 
 kinds = {k: [r for r in R if r["kind"] == k] for k in ("producer", "assembler", "utility")}
 upgradeable = [r for r in R if r["upgrade"]]
+# Derived rather than stated, because the prose below used to say "three of
+# the four producers" and a fifth producer landing made it quietly wrong --
+# the counts around it were computed and the sentence was not.
+up_by_kind = {
+    k: [r for r in rows if r["upgrade"]] for k, rows in
+    {k: [r for r in R if r["kind"] == k] for k in ("producer", "assembler", "utility")}.items()
+}
+holdouts = {
+    k: [r["name"] for r in R if r["kind"] == k and not r["upgrade"]]
+    for k in ("producer", "assembler", "utility")
+}
 
 
 def cost_text(cost):
-    return ", ".join(f"{n} `{i}`" for i, n in cost)
+    # An empty list is the Home's: it is the anchor the run starts standing on
+    # rather than something built, and its file says so with `build_cost: []`.
+    # Rendered as the same dash every other empty cell uses, not a blank.
+    return ", ".join(f"{n} `{i}`" for i, n in cost) if cost else "-"
 
 
 def table(header, rows, align):
@@ -226,9 +248,7 @@ structure sitting at its zone ceiling still lists in the upgrade menu rather
 than being filtered out, because a player who has never breached would
 otherwise never learn upgrading exists.
 
-Note which five they are. Three of the four producers upgrade and the fourth,
-the Power Conduit, does not; one assembler upgrades out of nine, and it is the
-Compiler. Upgrading is a lever on the taps, not on the lines.
+Note which they are: {len(up_by_kind["producer"])} of the {len(kinds["producer"])} producers, {len(up_by_kind["assembler"])} of the {len(kinds["assembler"])} assemblers, and {len(up_by_kind["utility"])} of the {len(kinds["utility"])} utilities. The one producer that does not is the {holdouts["producer"][0]}. So upgrading is overwhelmingly a lever on the *taps* — nearly every producer takes it, while the assemblers that do ({", ".join(r["name"] for r in up_by_kind["assembler"])}) are the exception rather than the rule, and not one of the four intermediate benches is among them. You raise what comes out of the ground, not what the lines do with it.
 
 ---
 

@@ -195,6 +195,24 @@ impl AbilityTarget {
             AbilityTarget::AllEnemies => "every hostile",
         }
     }
+
+    /// Whether this lands on the player's own side. The one thing a routine
+    /// run *outside* a battle can do, since there is no enemy side out
+    /// there to reach — read by `AbilityDef::field_runnable` and by
+    /// `Game::field_recipients`, which resolves exactly these two variants
+    /// and treats the rest as unreachable.
+    ///
+    /// **Exhaustive on purpose**, `phrase`'s rule above: a sixth targeting
+    /// mode must be answered here rather than defaulting into whichever
+    /// side a `_` arm happened to name.
+    pub fn is_ally_facing(self) -> bool {
+        match self {
+            AbilityTarget::OneAlly | AbilityTarget::WholeParty => true,
+            AbilityTarget::OneEnemyGroupFront
+            | AbilityTarget::WholeEnemyGroup
+            | AbilityTarget::AllEnemies => false,
+        }
+    }
 }
 
 /// The category an ability's magnitude belongs to, for affinity purposes —
@@ -824,6 +842,52 @@ impl AbilityDef {
             return None;
         }
         (self.cooldown != 0).then_some("cooldown")
+    }
+
+    /// Whether `Game::field_routines` offers this routine outside battle.
+    ///
+    /// **Wider than `AbilityEffect::field_only`, and deliberately a second
+    /// predicate rather than a widening of it.** That one answers "never
+    /// appears in a battle" — eight readers depend on that meaning, and two
+    /// load-time checks hang off it: `passive_field_mismatch` refuses a
+    /// `triggers` on a field-only effect, and `field_only_dead_fields` warns
+    /// about a `cooldown`, which every shipped `Heal` carries. A `Heal` is
+    /// the first effect that runs in *both* places, so the two questions
+    /// stopped having one answer.
+    ///
+    /// **A method on `AbilityDef` rather than on `AbilityEffect`, because
+    /// two thirds of the rule are not in the effect.** `is_passive` reads
+    /// `triggers` and the price gate reads `power_cost`; an effect-level
+    /// predicate could hold neither, and the two callers — this list and
+    /// `Game::routine_detail`'s "when" line, which tells the player where a
+    /// routine can be run — would each derive the rest for themselves. That
+    /// is the drift `routine_power_cost` exists to prevent between a refusal
+    /// and a charge, in a second place: an inspect page promising a row the
+    /// list never shows.
+    ///
+    /// **A `Heal` has to be priced to reach the field.** A `cooldown` is
+    /// counted in battle rounds and there is no round counter on the map, so
+    /// Power is the only thing pacing a field invocation — and a routine
+    /// costing none has nothing pacing it at all. `hot_patch` is the shipped
+    /// case: `power_cost: 0.0`, and its band scales with the invoker's
+    /// level, so "it only heals 6-10" does not stay true. Field-only effects
+    /// are exempt because they are not offered anywhere else; a free one is
+    /// unrunnable in battle, not unthrottled.
+    ///
+    /// A passive is excluded here as well as at the call site, on
+    /// `is_field_routine_target`'s rule: `Game::fire_passives` is what runs
+    /// one, and a passive heal (`hot_spare`) in this list would be a row that
+    /// charges for what it was going to do free.
+    pub fn field_runnable(&self) -> bool {
+        if self.is_passive() {
+            return false;
+        }
+        if self.effect.field_only() {
+            return true;
+        }
+        matches!(self.effect, AbilityEffect::Heal { .. })
+            && self.target.is_ally_facing()
+            && crate::abilities::routine_power_cost(self) > 0.0
     }
 
     /// Whether this routine fires on a trigger rather than being chosen.

@@ -52,7 +52,10 @@ impl Game {
                 .unwrap_or(PowerReserve::new(POWER_MIN));
             for id in &installed.0 {
                 let Some(def) = db.get(id) else { continue };
-                if !def.effect.field_only() || def.is_passive() {
+                // `field_runnable`, not `field_only`: a priced `Heal` runs
+                // here as well as on the Special menu, and that method owns
+                // the whole rule — the passive exclusion included.
+                if !def.field_runnable() {
                     continue;
                 }
                 let cost = routine_power_cost(def);
@@ -79,8 +82,13 @@ impl Game {
                         // `AbilityDb::load_dir`'s field_buff_target_mismatch
                         // check already refuses a Run-scoped FieldBuff any
                         // target but WholeParty, so OneAlly can only appear
-                        // here on a Creature-scoped one.
-                        AbilityEffect::FieldBuff { .. } if def.target == AbilityTarget::OneAlly => {
+                        // here on a Creature-scoped one. A `Heal` reads its
+                        // `target` the same way and takes no such check —
+                        // every `AbilityTarget` a heal can carry that is not
+                        // OneAlly lands on the party without a pick.
+                        AbilityEffect::FieldBuff { .. } | AbilityEffect::Heal { .. }
+                            if def.target == AbilityTarget::OneAlly =>
+                        {
                             FieldRoutinePick::Ally
                         }
                         AbilityEffect::Jump => FieldRoutinePick::Cell,
@@ -105,8 +113,9 @@ impl Game {
     ///
     /// `routine_index` is the same index space `run_field_routine` takes —
     /// the routine about to be run, which is what decides each row's
-    /// `running` tag. An index naming no `FieldBuff` (either Stack movement
-    /// routine, or nothing at all) still lists the full roster, untagged:
+    /// `running` tag. An index naming no `FieldBuff` (a heal, either Stack
+    /// movement routine, or nothing at all) still lists the full roster,
+    /// untagged:
     /// the roster is a fact about the party and only the tag is a fact about
     /// the pair.
     pub fn field_routine_targets(&mut self, routine_index: usize) -> Vec<FieldRoutineTargetView> {
@@ -245,6 +254,9 @@ impl Game {
             AbilityEffect::Phase => return self.run_phase(holder, &def, pick),
             AbilityEffect::Jump => return self.run_jump(holder, &def, pick),
             AbilityEffect::Symlink => return self.run_symlink(holder, &def, pick),
+            AbilityEffect::Heal { .. } => {
+                return self.run_field_heal(holder, &holder_label, &def, pick);
+            }
             _ => {}
         }
 
@@ -268,31 +280,7 @@ impl Game {
             // when a companion is the one holding (and paying to run) the
             // routine.
             FieldScope::Run => vec![player],
-            FieldScope::Creature => match def.target {
-                AbilityTarget::OneAlly => {
-                    let FieldRoutineTarget::Ally(target) = pick else {
-                        return Err(format!("Choose who to run {} on.", def.name));
-                    };
-                    if !self.is_field_routine_target(target) {
-                        return Err(
-                            "That program isn't in your active party — bring it along first."
-                                .into(),
-                        );
-                    }
-                    if !self.creature_alive(target) {
-                        return Err("That program isn't there anymore.".into());
-                    }
-                    vec![target]
-                }
-                AbilityTarget::WholeParty => std::iter::once(player)
-                    .chain(self.world.resource::<Party>().0.clone())
-                    .filter(|&e| self.creature_alive(e))
-                    .collect(),
-                _ => unreachable!(
-                    "AbilityDb::load_dir's field_buff_target_mismatch check refuses a \
-                     Creature-scoped FieldBuff targeting anything but OneAlly or WholeParty"
-                ),
-            },
+            FieldScope::Creature => self.field_recipients(&def, pick)?,
         };
 
         // The holder is the invoker: level and affinity are read off whoever
@@ -329,6 +317,113 @@ impl Game {
             );
         }
         self.log(format!("{holder_label} runs {}.", def.name));
+        self.tick();
+        Ok(())
+    }
+
+    /// Who an ally-facing field invocation lands on: the picked ally for a
+    /// `OneAlly` routine, or every living party member for a `WholeParty`
+    /// one.
+    ///
+    /// **One walk for both arms that need it** — the `Creature`-scoped
+    /// `FieldBuff` branch above and `run_field_heal` below. Two copies would
+    /// be two chances to disagree about what a target means outside battle,
+    /// and the refusals are the load-bearing half: a picker handing the
+    /// engine a benched program is a buff that ticks nowhere and, now, a
+    /// heal charged against a body the party never sees.
+    ///
+    /// The `_` arm is genuinely unreachable from either caller and stays a
+    /// panic rather than a refusal, because both callers are gated: a
+    /// `FieldBuff` by `AbilityDb::load_dir`'s `field_buff_target_mismatch`,
+    /// and a `Heal` by `AbilityDef::field_runnable`, which will not offer
+    /// one whose `target` is not `is_ally_facing`. A third caller must bring
+    /// its own gate or turn this into a refusal.
+    fn field_recipients(
+        &mut self,
+        def: &AbilityDef,
+        pick: FieldRoutineTarget,
+    ) -> Result<Vec<Entity>, String> {
+        let player = self.player_entity();
+        match def.target {
+            AbilityTarget::OneAlly => {
+                let FieldRoutineTarget::Ally(target) = pick else {
+                    return Err(format!("Choose who to run {} on.", def.name));
+                };
+                if !self.is_field_routine_target(target) {
+                    return Err(
+                        "That program isn't in your active party — bring it along first.".into(),
+                    );
+                }
+                if !self.creature_alive(target) {
+                    return Err("That program isn't there anymore.".into());
+                }
+                Ok(vec![target])
+            }
+            AbilityTarget::WholeParty => Ok(std::iter::once(player)
+                .chain(self.world.resource::<Party>().0.clone())
+                .filter(|&e| self.creature_alive(e))
+                .collect()),
+            _ => unreachable!(
+                "a field routine reaching here is either a FieldBuff, which \
+                 AbilityDb::load_dir's field_buff_target_mismatch check holds to OneAlly \
+                 or WholeParty, or a Heal, which AbilityDef::field_runnable holds to an \
+                 ally-facing target"
+            ),
+        }
+    }
+
+    /// Spends `def`'s Power off `invoker` and patches whoever it lands on.
+    ///
+    /// **The effect itself is `Game::use_ability`'s, not a second copy of
+    /// it.** That function already owns what a `Heal` does — the band
+    /// centred on the authored `power`, `abilities::scaled_range` against
+    /// the *invoker's* level and affinity, one draw per recipient, and a log
+    /// line quoting what `restore_hp` actually returned rather than what was
+    /// rolled. Re-implementing any of that here is the drift the seam about
+    /// Integrity-moving routines exists to prevent; what belongs to this
+    /// path is the price, the refusals and the tick.
+    ///
+    /// **Undamaged recipients are dropped, and an invocation left with none is
+    /// refused before the Power is spent.** A heal on a full bar restores
+    /// nothing, so charging for one would be a row the player can pay for
+    /// and get nothing from — the same objection `field_routines` already
+    /// answers for a reserve too short to cover the cost, applied to the
+    /// other end. In battle this filter would be wrong (a wasted turn is a
+    /// real tactical choice and the round has to advance either way); out
+    /// here nothing is spent by declining, so there is nothing to preserve.
+    ///
+    /// The order is `run_field_routine`'s throughout: every refusal lands
+    /// above the charge, the charge above the effect, and `tick` only on the
+    /// path that succeeded.
+    fn run_field_heal(
+        &mut self,
+        invoker: Entity,
+        invoker_label: &str,
+        def: &AbilityDef,
+        pick: FieldRoutineTarget,
+    ) -> Result<(), String> {
+        let offered = self.field_recipients(def, pick)?;
+        let hurt: Vec<Entity> = offered
+            .iter()
+            .copied()
+            .filter(|&e| self.world.get::<Stats>(e).is_some_and(|s| s.hp < s.max_hp))
+            .collect();
+        if hurt.is_empty() {
+            // Worded off what was *offered*, not off the target mode: a
+            // WholeParty routine run by a lone player is a party of one, and
+            // "nobody in the party" would be a strange way to say "you are
+            // fine".
+            return Err(match offered.as_slice() {
+                // `target_label`'s object form, so one sentence serves both
+                // the player and a companion — "Nothing to repair on you"
+                // and "on Rex" need no verb agreement between them.
+                [only] => format!("Nothing to repair on {}.", self.target_label(*only)),
+                _ => "Nobody with you needs repairing.".to_string(),
+            });
+        }
+
+        self.spend_power(invoker, routine_power_cost(def));
+        self.use_ability(def, invoker, invoker_label, &hurt);
         self.tick();
         Ok(())
     }

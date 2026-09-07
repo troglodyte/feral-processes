@@ -2927,19 +2927,85 @@ regression that matters is a fourth arrival path quietly skipping the
 tail, so `a_jump_fires_the_arrival_tail` asserts *behaviour* (a cache
 emptied by a jump) rather than that a function was called.
 
-### `Game::run_field_routine` is Stack-only for two of the three effects it runs, and `require_surface` is not what does it
+### `Game::run_field_routine` is Stack-only for two of the effects it runs, and `require_surface` is not what does it
 
-**`Game::run_field_routine` is Stack-only for two of the three effects it
+**`Game::run_field_routine` is Stack-only for two of the effects it
 runs, and `require_surface` is not what does it.** That guard exists for
 actions reaching zone-map state through a `Position` pinned to the
 entrance tile; `Phase` and `Jump` have the opposite problem, reading and
 writing `Locale::Stack`'s own coordinates, so what they need is the
 *presence* of that locale and the refusal is `Game::stack_pos` returning
-`None`. `AbilityEffect::field_only` is the one predicate saying which
-effects reach this path at all, read by `field_routines`,
-`battle_special_options`, `wild_routine_ready` and `use_ability`'s
-`unreachable!` — that arm is only unreachable because the other three
-agree with it.
+`None`. `AbilityEffect::field_only` says which effects reach *only* this
+path, read by `battle_special_options`, `wild_routine_ready` and
+`use_ability`'s `unreachable!` — that arm is only unreachable because the
+others agree with it. Which effects reach this path *at all* is the wider
+`AbilityDef::field_runnable`, and the section below is why those are two
+questions.
+
+### `field_only` means never-in-battle and `field_runnable` means offered on the map, and a Heal is what made them two questions
+
+**`field_only` means never-in-battle and `field_runnable` means offered on
+the map, and a Heal is what made them two questions.** One predicate
+answered both until 2026-09-07, because until then no effect ran in both
+places: `FieldBuff`, `Phase`, `Jump` and `Symlink` are map-only, and
+everything else is battle-only. Letting a healing routine be run outside a
+fight broke that coincidence, and the obvious change — widening
+`field_only` to admit `Heal` — is the one to refuse.
+
+**Widening it does not add a door, it closes four and breaks the load.**
+Eight call sites read `field_only`, and four are battle-side filters that
+would have deleted heals from the fights they are in:
+`battle_special_options` (the Special menu), `wild_routine_ready` (a wild
+carrier's pick), `wieldable_routines`, and `sortie.rs`'s
+`swing_for_the_squad`. Two more are load-time checks, and both would have
+fired on the shipped roster: `passive_field_mismatch` **refuses** a
+`triggers` on a field-only effect, which is exactly `hot_spare`; and
+`field_only_dead_fields` **warns** on a `cooldown`, which all nine shipped
+heals carry. A widening whose first effect is nine warnings, a refused
+asset and no heal on any Special menu is a widening that was answering a
+different question.
+
+**The new predicate is on `AbilityDef`, not on `AbilityEffect`, and that
+is forced rather than chosen.** Two thirds of the rule are not in the
+effect: `is_passive` reads `triggers` and the price gate reads
+`power_cost`. On the effect it could hold neither, so the two callers —
+`field_routines`' filter and `Game::routine_detail`'s `when` line, which
+tells the player *where* a routine can be run — would each carry the rest
+themselves, and an inspect page would eventually promise a row the list
+does not show. That is `routine_power_cost`'s drift between a refusal and
+a charge, one level up.
+
+**A `Heal` needs a nonzero `power_cost` to reach the map, and that is a
+throttle rule rather than a tidiness one.** A `cooldown` is counted in
+battle rounds and there is no round counter outside a battle, so Power is
+the only thing pacing a field invocation. `hot_patch` costs nothing and its
+band runs through `scaled_range`, so it grows with the invoker's level:
+offered on the map it is unlimited repair at every level, and the free
+rest it undercuts is the only other way to mend without one. The gate is
+not applied to field-only effects, because a free one of those is
+unrunnable in a battle rather than unthrottled in it. Census:
+`no_shipped_field_runnable_routine_runs_for_free`.
+
+**It needs an ally-facing `target` too, and that is what keeps a
+`unreachable!` unreachable.** `Game::field_recipients` resolves `OneAlly`
+and `WholeParty` and panics on the other three, which is safe for a
+`FieldBuff` because `AbilityDb::load_dir`'s `field_buff_target_mismatch`
+refuses them at load. A `Heal` takes no such load check — a mod may
+legitimately author `Heal(target: AllEnemies)` for a hostile carrier — so
+the gate has to be here instead, and `AbilityTarget::is_ally_facing` is
+exhaustive on `cell_mark`'s rule so a sixth targeting mode has to answer
+it rather than defaulting into a side.
+
+**What a field heal does is `use_ability`'s, not a second copy.** Same
+band centred on the authored `power`, same `scaled_range` against the
+*invoker's* level and Heal affinity, one draw per recipient, and the log
+line quoting what `restore_hp` returned rather than what was rolled — the
+rule the Integrity-band seam already states. `run_field_heal` owns the
+price, the refusals and the tick, and nothing else. The one thing it adds
+is that an invocation landing only on full bars is refused above the charge:
+in a battle a wasted turn is a real tactical choice and the round advances
+either way, but out here declining costs nothing, so there is nothing to
+preserve by letting the reserve be spent on zero.
 
 ### A lethal Wild Jump never writes `Locale`
 

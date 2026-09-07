@@ -33,6 +33,16 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.122
+
+**A patch routine now runs out on the map, not only in a fight.** Anything that restores Integrity and costs Power — Patch Single v2.0 and v3.0, Patch Party v1.0 and v1.1, and all three Rollback tiers — is offered from the routine list under `a`, on top of still being a Special. It charges the same Power to whoever runs it, spends a turn, and repairs exactly what it would have repaired mid-fight, scaled to that program's own level and Healing affinity.
+
+**It refuses when everyone it would land on is already whole**, before the Power is taken. In a fight a wasted turn is a real choice and the round advances anyway; out here declining costs nothing, so there is no reason to let you spend a reserve on nothing.
+
+**Patch Single v1.0 stays a Special, because it is free.** A cooldown counts battle rounds and there are no rounds out on the map, so Power is the only thing pacing a field routine — and one that costs nothing has nothing pacing it at all. Powering down still mends the party completely; patching in the field is for being a long way out with no charge left to burn.
+
+**Several reference pages were quoting numbers the game stopped using, and now they cannot.** The Zone Portal was listed at 10 Portal Fragments when it costs 24 and three crafted items besides; the Overseer's attack was overstated by half; every ordinary program's second routine was listed as unlocking at level 6 when it arrives at 4; and the Backplane was still going by its old name throughout the roster page, which quietly rendered its whole column as though nothing lived there. Six of the seven generated pages are now diffed against the assets they describe, field by field, and the check that does it ships alongside them.
+
 ## 0.13.121
 
 **The base staff now keep a Recharger Node and a Line Driver fuelled.** A supplier with no Power Cell within reach is a want of its own, and a program walks one over from a shelf — where before, the only way a supplier got fed was you hand-stocking a Depot on the tile beside it and remembering to top it up.

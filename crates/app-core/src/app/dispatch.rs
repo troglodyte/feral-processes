@@ -182,7 +182,7 @@ impl App {
                             // one place that reads it, so without this the
                             // town page opens later, on some unrelated
                             // action, for a town already walked away from.
-                            self.after_world_action(true, false);
+                            self.after_world_action(true, false, 0);
                         }
                     }
                     _ => self.refuse("Highlight a destination to travel to."),

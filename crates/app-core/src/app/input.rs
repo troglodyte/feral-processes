@@ -492,7 +492,7 @@ impl App {
     /// the time either runs.
     fn finish_compile(&mut self) {
         self.mode = Mode::Playing;
-        self.after_world_action(true, false);
+        self.after_world_action(true, false, 0);
     }
 
     /// How many lines are on screen right now.

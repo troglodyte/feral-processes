@@ -32,8 +32,17 @@ fn movement_keys_queue_exactly_one_step_or_battle_start_sound() {
         "a movement key should queue exactly one sound, got {sounds:?}"
     );
     assert!(
-        matches!(sounds[0], SoundEvent::Step | SoundEvent::BattleStart),
-        "a movement key should queue Step or BattleStart, got {:?}",
+        // `Hit` is the third legal answer: a step onto ground carrying an
+        // attrition condition sounds like taking damage rather than like
+        // walking — see `a_step_that_attrits_sounds_like_taking_a_hit`. It
+        // cannot arise at this seed's starting zone, which is gated out of
+        // conditions entirely, but naming it here keeps this test a
+        // statement about the cue set rather than a tripwire on the zone.
+        matches!(
+            sounds[0],
+            SoundEvent::Step | SoundEvent::BattleStart | SoundEvent::Hit
+        ),
+        "a movement key should queue Step, BattleStart or Hit, got {:?}",
         sounds[0]
     );
     assert!(
@@ -401,5 +410,44 @@ fn tab_is_inert_on_the_map_screen() {
         app.game.as_ref().unwrap().current_tick(),
         before_tick,
         "Tab must spend no tick — nothing reads it yet"
+    );
+}
+
+/// Ground that costs Integrity has to *sound* like it. The bite is
+/// otherwise indistinguishable from the step that caused it: same key, same
+/// footstep, and the HP bar is the only tell.
+///
+/// The battle `Hit` cue rather than one of its own, deliberately — this is
+/// taking damage, and a player who has fought already knows what it means.
+///
+/// Driven through `after_world_action` rather than by walking until the
+/// ground happens to bite: what decides the cue is the figure the engine
+/// hands back, and a walk that has to dodge ambushes to reach an attriting
+/// tile would be testing worldgen. The engine's
+/// `move_player_reports_exactly_what_the_ground_took` pins the other end of
+/// that figure.
+#[test]
+fn a_step_that_attrits_sounds_like_taking_a_hit() {
+    let mut app = test_app(202);
+    app.take_sounds();
+
+    app.after_world_action(true, true, 3);
+    assert_eq!(
+        app.take_sounds(),
+        vec![SoundEvent::Hit],
+        "a step the ground took Integrity off should sound like a hit"
+    );
+
+    app.after_world_action(true, true, 0);
+    assert_eq!(
+        app.take_sounds(),
+        vec![SoundEvent::Step],
+        "clean ground still sounds like walking"
+    );
+
+    app.after_world_action(true, false, 3);
+    assert!(
+        app.take_sounds().is_empty(),
+        "an action that was not a step queues no movement cue, bite or not"
     );
 }

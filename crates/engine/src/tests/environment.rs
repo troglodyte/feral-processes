@@ -177,6 +177,7 @@ use crate::resources::{MessageLog, Party, ZoneLevel};
 use crate::tests::support::{
     descend, enlist, spawn_tamed, spawn_wild_on_player_tile, stand_in_base, test_assets_dir,
 };
+use crate::tuning::CONDITION_CELL_TILES;
 use crate::world::{Tile, WorldMap};
 use crate::{DifficultyMode, Game};
 
@@ -234,8 +235,37 @@ fn clock(game: &Game) -> u64 {
 fn game_about_to_step(onto: Biome) -> Game {
     let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     game.world.resource_mut::<ZoneLevel>().0 = 2;
+    stand_on_claimed_ground(&mut game, onto);
     step_from_onto(&mut game, Biome::OpenGrid, onto, true);
     game
+}
+
+/// Moves the player to a cell `onto`'s condition actually claims, so the
+/// fixtures below measure a condition rather than the three-in-four chance
+/// of landing on clear ground.
+///
+/// **Overriding the biome is no longer enough.** A condition claims cells,
+/// not biomes (`Game::condition_at`), so a test that writes `Backplane` under
+/// the player and steps east has a one-in-four chance of measuring anything
+/// at all — and a suite that flakes three runs in four reads as the feature
+/// being broken. Aligned to the cell so the tile stepped *onto* shares the
+/// player's cell; a neutral biome is left where it stands, having no
+/// condition to find.
+fn stand_on_claimed_ground(game: &mut Game, onto: Biome) {
+    if GroundCondition::for_biome(onto).is_none() {
+        return;
+    }
+    let player = game.player_entity();
+    let from = *game.world.get::<Position>(player).unwrap();
+    let claimed = (0..256)
+        .map(|n| {
+            from.x.div_euclid(CONDITION_CELL_TILES) * CONDITION_CELL_TILES
+                + n * CONDITION_CELL_TILES
+        })
+        .find(|&x| game.condition_at(onto, x + 1, from.y).is_some())
+        .expect("some cell east of the player carries the condition");
+    let mut pos = game.world.get_mut::<Position>(player).unwrap();
+    pos.x = claimed;
 }
 
 #[test]
@@ -1480,4 +1510,181 @@ fn terrain_row_is_none_in_base() {
         game.terrain_row().is_none(),
         "the base pocket has no biome for the border to read"
     );
+}
+
+// ------------------------------------------------- what the map actually is
+
+/// The census that was missing, and the whole of why a run could end in
+/// "Your connection is forcibly cut" with nothing in the log to explain it.
+///
+/// `GroundCondition::for_biome`'s doc has always promised that unclaimed
+/// ground is the common case. That was a statement about the *catalogue* —
+/// three of nine biomes are claimed there — and nobody ever checked it
+/// against the map `WorldMap::classify` produces, where Null Sector and
+/// Backplane together are about three quarters of walkable ground. While a
+/// condition claimed its biome entire, three steps in four attrited.
+///
+/// Measured against real worldgen rather than a fixture, because a fixture
+/// is exactly what could not have caught this: every unit test of the
+/// catalogue passed the whole time.
+#[test]
+fn unclaimed_ground_is_the_common_case() {
+    for seed in [7u32, 16, 4242] {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        game.world.resource_mut::<ZoneLevel>().0 = 2;
+        let (mut biting, mut walkable) = (0u32, 0u32);
+        for y in -96..96i32 {
+            for x in -96..96i32 {
+                let tile = game.world.resource_mut::<WorldMap>().tile(x, y);
+                if !tile.walkable {
+                    continue;
+                }
+                walkable += 1;
+                if game
+                    .condition_at(tile.biome, x, y)
+                    .is_some_and(|c| c.def().effect.attrition_percent > 0.0)
+                {
+                    biting += 1;
+                }
+            }
+        }
+        let share = biting as f64 / walkable as f64;
+        assert!(
+            share < 0.30,
+            "seed {seed}: {:.1}% of walkable ground attrits. `for_biome`'s \
+             promise has to hold of the map, not just of the catalogue \
+             — see tuning::CONDITION_CLEAR_WEIGHT",
+            share * 100.0
+        );
+    }
+}
+
+/// A patch has to be big enough to see and route around, or the damage is a
+/// tax with no decision attached to it. Every tile of one cell answers the
+/// same way.
+#[test]
+fn a_condition_claims_whole_cells_rather_than_single_tiles() {
+    let game = fresh_game(9);
+    for (cx, cy) in [(0, 0), (3, -2), (-1, 5)] {
+        let (bx, by) = (cx * CONDITION_CELL_TILES, cy * CONDITION_CELL_TILES);
+        let first = game.condition_at(Biome::Backplane, bx, by);
+        for dx in 0..CONDITION_CELL_TILES {
+            for dy in 0..CONDITION_CELL_TILES {
+                assert_eq!(
+                    game.condition_at(Biome::Backplane, bx + dx, by + dy),
+                    first,
+                    "cell ({cx}, {cy}) disagrees with itself at (+{dx}, +{dy})"
+                );
+            }
+        }
+    }
+}
+
+/// `div_euclid`, not `/`. Truncating division mirrors around zero, fusing
+/// the cells either side of the origin into one of double width — and the
+/// origin is where a run starts, so that double cell is the ground the
+/// player learns the game on.
+#[test]
+fn a_condition_cell_is_the_same_width_either_side_of_zero() {
+    let game = fresh_game(9);
+    let answer = |x: i32| game.condition_at(Biome::NullSector, x, 0);
+    let boundaries: Vec<i32> = (-47..48).filter(|&x| answer(x) != answer(x - 1)).collect();
+    assert!(
+        !boundaries.is_empty(),
+        "the sampled span has to contain at least one edge to be a test"
+    );
+    for x in boundaries {
+        assert_eq!(
+            x.rem_euclid(CONDITION_CELL_TILES),
+            0,
+            "a cell edge fell at x={x}, which is not a multiple of \
+             CONDITION_CELL_TILES — truncating division has crept back in"
+        );
+    }
+}
+
+// ------------------------------------------------------- the bite says so
+
+/// Every other thing in the game that lowers the player's HP narrates it.
+/// This one did not, and that is what made a death by ground read as
+/// random: the crossing line fires only when the biome *changes*, so the
+/// second and every later step inside a patch cost Integrity in silence.
+#[test]
+fn an_attriting_step_says_what_took_the_hit() {
+    let mut game = game_about_to_step(Biome::Backplane);
+    let epoch = clear_epoch(&game, Biome::Backplane);
+    set_tick(&mut game, epoch * STATIC_EPOCH_TICKS + 1);
+    let before = game.world.resource::<MessageLog>().lines.len();
+
+    let bite = game.move_player(1, 0);
+
+    assert!(bite > 0, "the fixture has to actually attrit");
+    let said: Vec<&str> = game
+        .world
+        .resource::<MessageLog>()
+        .lines
+        .iter()
+        .skip(before)
+        .map(|l| l.text.as_str())
+        .collect();
+    assert!(
+        said.iter()
+            .any(|line| line.contains("Thermal Load") && line.contains(&bite.to_string())),
+        "the step took {bite} and said {said:?}"
+    );
+}
+
+/// The other half: ground that costs nothing must stay as quiet as it ever
+/// was. A line on every step would bury the log the feature exists to make
+/// readable.
+#[test]
+fn a_step_onto_clean_ground_announces_no_bite() {
+    let mut game = game_about_to_step(Biome::OpenGrid);
+    let before = game.world.resource::<MessageLog>().lines.len();
+
+    let bite = game.move_player(1, 0);
+
+    assert_eq!(bite, 0, "Open Grid carries no condition");
+    let said: Vec<&str> = game
+        .world
+        .resource::<MessageLog>()
+        .lines
+        .iter()
+        .skip(before)
+        .map(|l| l.text.as_str())
+        .collect();
+    assert!(
+        !said
+            .iter()
+            .any(|line| line.contains("takes") && line.contains("off you")),
+        "clean ground narrated a bite: {said:?}"
+    );
+}
+
+/// What `move_player` reports and what the party actually lost are the same
+/// number. app-core picks the harsher movement cue off this, so a figure
+/// that drifted from the damage would make the sound and the HP bar disagree.
+#[test]
+fn move_player_reports_exactly_what_the_ground_took() {
+    let mut game = game_about_to_step(Biome::Backplane);
+    let before = player_hp(&game);
+
+    let bite = game.move_player(1, 0);
+
+    assert!(bite > 0);
+    assert_eq!(before - player_hp(&game), bite);
+}
+
+/// A shove at a wall arrives as a movement key and spends a turn, but
+/// covers no ground and costs no Integrity — so it must report `0` and
+/// sound like walking. Recomputing "does the tile under the party bite?"
+/// after the fact is exactly the version that gets this wrong.
+#[test]
+fn a_bounced_step_reports_no_bite() {
+    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.resource_mut::<ZoneLevel>().0 = 2;
+    stand_on_claimed_ground(&mut game, Biome::Backplane);
+    step_from_onto(&mut game, Biome::Backplane, Biome::Backplane, false);
+
+    assert_eq!(game.move_player(1, 0), 0, "a wall is not travel");
 }

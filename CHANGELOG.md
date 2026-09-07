@@ -33,6 +33,14 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.120
+
+**Ground that costs you Integrity now says so.** A step onto Null Sector or Backplane took a bite out of you in silence — the crossing line fires only when the biome *changes*, so every step after the first one inside a patch was damage with nothing to explain it, and a death by ground read as dying at random.
+
+**An attriting step sounds like taking a hit** rather than like walking, which is the same cue a swing that lands in battle plays.
+
+**A condition claims patches of a sector rather than the whole sector.** Null Sector and Backplane together are about three quarters of the walkable map, so a condition that claimed its biome outright made attrition the default state of the world: three steps in four cost Integrity, and death from full arrived in about thirty of them at any level. It is a fifth of the map now, in blotches large enough to see coming and walk around. An existing save picks this up the moment it loads — a condition is derived from the world seed and the zone, never stored.
+
 ## 0.13.119
 
 **The status bar carries the base's grid at all times, as `[GRID] draw/supply`.** It turns amber the moment the base cannot cover its own draw, and it rides the fixed left block rather than the elastic centre, so a crowded base drops a stock pile to make room and never drops the grid.

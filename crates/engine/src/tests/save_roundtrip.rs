@@ -19,6 +19,7 @@ use crate::components::{
     Memory, MemorySubject, Needs, NestGuardian, OffShift, Potential, PowerReserve, PurchasedTiers,
     Pursuing, Refactors, Talents, TownPatrol, ZonePortal,
 };
+use crate::game::lifecycle::CreatureRestore;
 use crate::*;
 
 /// The five shapes a creature takes on disk, one entity each.
@@ -492,5 +493,137 @@ fn a_load_then_save_writes_the_same_lines() {
         sorted(&first),
         sorted(&second),
         "a load-then-save must reproduce every line of the save it read"
+    );
+}
+
+/// Snapshot a live program, delete it, and hand the snapshot straight back
+/// to the loader: what comes out must be the same program.
+///
+/// This is the refund path with the build order taken out of the middle of
+/// it — `Game::creature_save_for` and `Game::spawn_creature_from_save` are a
+/// pair, and a cancelled build order runs them back to back. The round-trip
+/// gate above only ever exercises them through a *file*, which is a slower
+/// loop and a coarser assertion: it compares two dumps, so a field the
+/// loader mangles and the builder re-derives the same way passes it.
+///
+/// The assertions that carry weight here are about **identity**, not shape:
+///
+/// - A program that comes back under a fresh `ProgramId` orphans its own
+///   memories *and* every other program's memories naming it as their
+///   subject, so the refund would quietly cost the base its whole social
+///   record of one companion.
+/// - A memory re-stamped on the way back has its decay curve reset.
+///   Intensity is derived from `GameClock` on every read and never stored
+///   (`components::Memory`), so a fresh timestamp makes a refund *deepen* an
+///   old grudge rather than preserve it.
+#[test]
+fn a_snapshot_respawns_as_the_same_program() {
+    let mut game = Game::new(20260910, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let original = spawn_tamed(&mut game, 30, 6);
+    let mut memories = Memories::default();
+    memories.0.push(Memory {
+        def: crate::memories::MemoryId::from("a_memory"),
+        subject: MemorySubject::BaseTile { x: 2, y: 9 },
+        subject_name: Some("the mill".to_string()),
+        reinforced: 12,
+        strikes: 3,
+    });
+    game.world
+        .entity_mut(original)
+        .insert((ZonePortal(4), memories));
+    game.rename_companion(original, Some("Bellwether".to_string()))
+        .expect("naming a program");
+
+    // Read off the live program before it is deleted: the point of the test
+    // is that the restored one answers these the same way, and comparing
+    // against hand-written literals would only pin the fixture.
+    let player = game.player_entity();
+    let label = game.creature_label(original);
+    let program_id = game.world.get::<ProgramId>(original).unwrap().0;
+    assert_ne!(program_id, 0, "the fixture minted a real id");
+
+    let snapshot = game.creature_save_for(original).expect("snapshot");
+    game.world.despawn(original);
+
+    let mut restore = CreatureRestore::new(player, 99, HashMap::new());
+    let restored = game
+        .spawn_creature_from_save(&snapshot, &mut restore)
+        .expect("the snapshot names a species the game still ships");
+
+    assert_eq!(
+        game.creature_label(restored),
+        label,
+        "the name it answers to"
+    );
+    assert_eq!(game.zone_tier(restored), 4, "the tier it is scaled to");
+    assert_eq!(
+        game.world.get::<ProgramId>(restored).map(|p| p.0),
+        Some(program_id),
+        "a restored program keeps its own name, so its memories still find it",
+    );
+    assert_eq!(
+        restore.next_program_id, 99,
+        "an id the snapshot already carries is never reissued",
+    );
+    assert_eq!(
+        game.world.get::<Tamed>(restored).map(|t| t.owner),
+        Some(player),
+        "a restored program is still the player's",
+    );
+    let remembered = game
+        .world
+        .get::<Memories>(restored)
+        .expect("a restored program still has somewhere to remember");
+    assert_eq!(remembered.0.len(), 1, "the memory came back");
+    assert_eq!(
+        remembered.0[0].reinforced, 12,
+        "a memory keeps its original timestamp, or its decay curve resets",
+    );
+    assert_eq!(remembered.0[0].strikes, 3, "and its strike count");
+    assert_eq!(
+        remembered.0[0].subject,
+        MemorySubject::BaseTile { x: 2, y: 9 },
+        "and what it is about",
+    );
+}
+
+/// The one case that *does* mint: the `0` sentinel a file written before
+/// program ids existed carries for everybody on the roster.
+///
+/// The counter belongs to the caller and not to the restore, which is the
+/// whole reason it lives on `CreatureRestore` — minting is a property of a
+/// pass over the *whole* creature array, since two sentinels in one file
+/// must not both come back as the same program. A counter reset per call
+/// would pass the test above and fail this one.
+#[test]
+fn a_snapshot_with_the_sentinel_id_mints_from_the_caller_counter() {
+    let mut game = Game::new(20260911, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let original = spawn_tamed(&mut game, 30, 6);
+    let player = game.player_entity();
+    let mut snapshot = game.creature_save_for(original).expect("snapshot");
+    game.world.despawn(original);
+    snapshot.program_id = 0;
+
+    let mut restore = CreatureRestore::new(player, 77, HashMap::new());
+    let first = game
+        .spawn_creature_from_save(&snapshot, &mut restore)
+        .expect("respawn");
+    let second = game
+        .spawn_creature_from_save(&snapshot, &mut restore)
+        .expect("respawn again");
+
+    assert_eq!(
+        game.world.get::<ProgramId>(first).map(|p| p.0),
+        Some(77),
+        "the sentinel takes the caller's next id",
+    );
+    assert_eq!(
+        game.world.get::<ProgramId>(second).map(|p| p.0),
+        Some(78),
+        "and the second sentinel takes the one after it, not the same one",
+    );
+    assert_eq!(
+        restore.next_program_id, 79,
+        "the counter the caller writes back to `NextProgramId` has moved twice",
     );
 }

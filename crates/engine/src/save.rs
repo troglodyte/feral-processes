@@ -878,7 +878,10 @@ pub enum CronjobKind {
 /// An in-progress work assignment (a "cronjob") a tamed creature is running
 /// against a structure, persisted so it survives save/load instead of
 /// silently dropping the worker's progress.
-#[derive(Serialize, Deserialize)]
+/// `Clone` so `Game::spawn_creature_from_save` can take its `CreatureSave`
+/// by reference and still hand the cronjob on to the deferred resolution
+/// pass that needs to own it. Nothing about the format changes with it.
+#[derive(Clone, Serialize, Deserialize)]
 pub struct CronjobSave {
     pub target_position: (i32, i32),
     pub progress: u32,

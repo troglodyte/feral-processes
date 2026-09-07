@@ -6,6 +6,10 @@ the other holds whatever you took at creation, and a program arrives with its in
 so installing something new eventually means displacing something old, and a program's innate
 routine, once displaced, is gone.
 
+Decompile is the exception, and the slot panel marks it. It is welded where it is: it cannot be
+cleared to make room, it cannot be written onto a blank disk, and no program can be made to run it.
+It is how you take a program at all, and there is exactly one of it for the length of a run.
+
 Routines reach you five ways.
 
 - At creation. The starter routine you picked when you made your character is both installed in

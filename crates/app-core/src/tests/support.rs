@@ -921,6 +921,54 @@ pub(crate) fn stand_in_base_at(app: &mut App, x: i32, y: i32) {
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
 }
 
+/// Teaches the player `routines` on an existing fixture, through the save
+/// the way `stand_in_base_at` does.
+///
+/// A new game knows nothing at all — the creation wizard's starter pick is
+/// what normally fills `KnownRoutines` first, and `Game::new` takes
+/// `CharacterChoice::default()` — so a test about the etch screen has to
+/// say what the player knows before it can open it.
+pub(crate) fn teach_player_routines(app: &mut App, routines: &[&str]) {
+    static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+    let assets_dir = test_assets_dir();
+    let path = std::env::temp_dir().join(format!("feral_processes_appcore_known_{unique}.sav"));
+    let _cleanup = RemoveOnDrop(&path);
+    let game = app.game.as_mut().expect("a fixture with a game");
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.known_routines = routines.iter().map(|r| r.to_string()).collect();
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+}
+
+/// Empties the player's routine slots on an existing fixture, through the
+/// save the way `stand_in_base_at` does.
+///
+/// A round trip rather than `Game::uninstall_routine`, because `decompile`
+/// is welded into slot 0 and that verb refuses it — the empty kit is
+/// reachable only as save state now (an older save whose owner popped it
+/// out, which is also what `stack_market`'s fixture builds).
+pub(crate) fn clear_player_routines(app: &mut App) {
+    static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+    let assets_dir = test_assets_dir();
+    let path = std::env::temp_dir().join(format!("feral_processes_appcore_kit_{unique}.sav"));
+    let _cleanup = RemoveOnDrop(&path);
+    let game = app.game.as_mut().expect("a fixture with a game");
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.player.routines.clear();
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+}
+
 /// A game where the player has `routines` installed (in place of the
 /// default `decompile`) and `hunger` set to a chosen level, so a field-routine
 /// test can pin affordability on either side of a routine's `power_cost`

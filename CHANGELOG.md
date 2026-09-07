@@ -33,6 +33,14 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.123
+
+**Decompile is welded into the slot it starts in.** It cannot be cleared to make room, it cannot be written onto a blank disk, and no program can be made to run it — the routine panel marks its row as fixed, so this is not something you find out by pressing it. It is how you take a program at all, and there is exactly one of it for the length of a run.
+
+**A new run now knows no routine until it learns one.** Decompile used to sit in your known set purely so that popping it out could be undone; with the pop-out closed, the only thing that entry still did was offer the run's one unduplicable routine on the etch screen. The routine you pick at creation is the first thing you know, and the party menu's "Etch a routine disk" row stays hidden until you know something worth writing.
+
+**A save made before this keeps whatever it has.** A run whose owner had already popped decompile out still has the empty slot, and any decompile disk left in cargo is now inert.
+
 ## 0.13.122
 
 **A patch routine now runs out on the map, not only in a fight.** Anything that restores Integrity and costs Power — Patch Single v2.0 and v3.0, Patch Party v1.0 and v1.1, and all three Rollback tiers — is offered from the routine list under `a`, on top of still being a Special. It charges the same Power to whoever runs it, spends a turn, and repairs exactly what it would have repaired mid-fight, scaled to that program's own level and Healing affinity.

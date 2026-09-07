@@ -662,28 +662,108 @@ fn a_new_game_starts_with_decompile_installed_in_the_players_first_slot() {
     );
 }
 
-/// Regression for I4, restated for the disk model: `decompile` is
-/// one-of-a-kind — no species, research node, drop or listing grants it
-/// again. Popping it out to free the one starting slot must therefore not
-/// end taming for the save, which is why a new game already knows it.
+/// `decompile` is one-of-a-kind — no species, research node, drop or
+/// listing grants it again — and the way that is kept true is that it never
+/// leaves the slot it is born in. The pop-out used to be legal and was made
+/// recoverable by pre-seeding `KnownRoutines`; both halves are gone.
 #[test]
-fn the_player_starts_knowing_decompile_so_popping_it_out_is_recoverable() {
+fn decompile_cannot_be_popped_out_of_the_players_slot() {
     let mut game = Game::new(55, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    assert!(
-        game.knows_routine(crate::abilities::DECOMPILE_ABILITY_ID),
-        "decompile is knowledge the player starts with"
-    );
-
-    game.uninstall_routine(player, 0).unwrap();
-    give_disks(&mut game, 1);
-    game.etch_disk(crate::abilities::DECOMPILE_ABILITY_ID)
-        .expect("decompile must be re-writable onto a fresh blank");
-    game.install_disk(player, crate::abilities::DECOMPILE_ABILITY_ID)
-        .expect("and the disk that comes out must go back into the slot");
     assert_eq!(
         game.routine_view(player)[0].ability.as_deref(),
-        Some(crate::abilities::DECOMPILE_ABILITY_ID)
+        Some(crate::abilities::DECOMPILE_ABILITY_ID),
+        "slot 0 is where a new game puts it"
+    );
+
+    let refusal = game
+        .uninstall_routine(player, 0)
+        .expect_err("decompile is fixed — clearing its slot must be refused");
+    assert!(
+        refusal.contains(&game.ability_display_name(crate::abilities::DECOMPILE_ABILITY_ID)),
+        "the refusal has to name the routine it is about; got {refusal:?}"
+    );
+    assert_eq!(
+        game.routine_view(player)[0].ability.as_deref(),
+        Some(crate::abilities::DECOMPILE_ABILITY_ID),
+        "and the slot is untouched"
+    );
+}
+
+/// The other half of fixing it in place: nothing may mint a second copy.
+/// A new game does not know it, so the etch would already fail for want of
+/// knowledge — this hands the knowledge over first, standing in for a save
+/// written by a build that seeded `KnownRoutines` with it, so what is
+/// proved is the permanence rule and not the absence of a `KnownRoutines`
+/// entry.
+#[test]
+fn decompile_cannot_be_etched_onto_a_blank_even_when_known() {
+    let mut game = Game::new(56, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    teach_routine(&mut game, crate::abilities::DECOMPILE_ABILITY_ID);
+    give_disks(&mut game, 1);
+
+    game.etch_disk(crate::abilities::DECOMPILE_ABILITY_ID)
+        .expect_err("decompile must not be writable onto a blank");
+    assert_eq!(
+        game.blank_disks_held(),
+        1,
+        "and a refused etch spends nothing"
+    );
+    assert_eq!(
+        game.etched_disks_of(crate::abilities::DECOMPILE_ABILITY_ID),
+        0
+    );
+}
+
+/// The picker that feeds `etch_disk` must not offer the row either — a menu
+/// entry that always refuses is worse than one never drawn. Same
+/// stand-in for an older save's `KnownRoutines` as above; this is the
+/// belt-and-braces filter `etchable_routines` carries beside `exclusive`.
+#[test]
+fn the_etch_picker_never_offers_decompile() {
+    let mut game = Game::new(57, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    teach_routine(&mut game, crate::abilities::DECOMPILE_ABILITY_ID);
+    teach_routine(&mut game, "sandbox");
+
+    let offered = game.etchable_routines();
+    assert!(
+        offered.iter().any(|r| r.ability == "sandbox"),
+        "an ordinary known routine is still on the list"
+    );
+    assert!(
+        !offered
+            .iter()
+            .any(|r| r.ability == crate::abilities::DECOMPILE_ABILITY_ID),
+        "but decompile is not, however it got into KnownRoutines"
+    );
+}
+
+/// And the install door is shut too, so an etched decompile disk left in an
+/// older save's cargo cannot put a second copy in a slot — the player's own
+/// spare slot or a program's.
+#[test]
+fn a_decompile_disk_cannot_be_installed_on_anyone() {
+    let mut game = Game::new(59, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let companion = spawn_tamed(&mut game, 50, 5);
+    enlist(&mut game, companion);
+    give_etched_disks(&mut game, crate::abilities::DECOMPILE_ABILITY_ID, 2);
+
+    game.install_disk(player, crate::abilities::DECOMPILE_ABILITY_ID)
+        .expect_err("the player already runs it and may not run a second");
+    game.install_disk(companion, crate::abilities::DECOMPILE_ABILITY_ID)
+        .expect_err("and a program may not run it at all");
+    assert!(
+        game.world.get::<Routines>(companion).is_none_or(|r| {
+            !r.0.iter()
+                .any(|id| id == crate::abilities::DECOMPILE_ABILITY_ID)
+        }),
+        "nothing was written"
+    );
+    assert_eq!(
+        game.etched_disks_of(crate::abilities::DECOMPILE_ABILITY_ID),
+        2,
+        "and a refused install spends nothing"
     );
 }
 
@@ -704,8 +784,9 @@ fn known_routines_survive_a_save_load_round_trip() {
         "a learned routine is world state, not a held item"
     );
     assert!(
-        loaded.knows_routine(crate::abilities::DECOMPILE_ABILITY_ID),
-        "and so is the one the run started with"
+        !loaded.knows_routine(crate::abilities::DECOMPILE_ABILITY_ID),
+        "and decompile is not knowledge at all — it is fixed in its slot, so \
+         nothing needs the entry that used to make popping it out recoverable"
     );
 }
 
@@ -778,7 +859,12 @@ fn a_second_decompiler_in_the_same_round_is_refused_rather_than_panicking() {
     enlist(&mut game, companion);
     set_level(&mut game, companion, 4); // two slots, one free
     set_inventory(&mut game, &[(ids::ICE_BREAKER, 1)]);
-    install_routine_for_test(&mut game, companion, crate::abilities::DECOMPILE_ABILITY_ID);
+    // Written straight into the slot: `decompile` is fixed to the player,
+    // so no door — etch, install, species kit — puts it on a program any
+    // more. What is guarded here is the round-wide catalyst pool, which two
+    // planners can still race for in a save written before that rule, and
+    // which must refuse rather than panic whoever loses.
+    game.write_routine(companion, crate::abilities::DECOMPILE_ABILITY_ID);
 
     // Two members of one species, built by hand rather than through
     // `start_battle`: the pack ceiling at the player's own tile caps a
@@ -882,10 +968,15 @@ fn a_second_decompiler_in_the_same_round_is_refused_rather_than_panicking() {
     );
 }
 
+/// An empty kit hides the Special row entirely. Decompile is welded into
+/// slot 0, so this is no longer a state the player can reach by clearing it
+/// — it is what a save written before that rule can still carry, and the
+/// row has to stay hidden for it.
 #[test]
-fn popping_decompile_out_leaves_the_player_with_no_special() {
+fn an_empty_kit_leaves_the_player_with_no_special() {
     let mut game = Game::new(54, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    game.uninstall_routine(game.player_entity(), 0).unwrap();
+    let player = game.player_entity();
+    clear_routines(&mut game, player);
     start_battle_with_a_wild_program(&mut game);
     assert!(
         game.battle_action_options(0)
@@ -1104,7 +1195,7 @@ fn a_starter_routine_does_not_displace_decompile() {
 
 /// `CharacterChoice::default()`'s `routine: None` is today's game — no
 /// second routine, the slot `PLAYER_ROUTINE_SLOT_BASE` leaves free stays
-/// free, and nothing is known beyond `decompile`.
+/// free, and nothing is known at all.
 #[test]
 fn no_starter_choice_leaves_the_slot_empty() {
     let game = Game::new(9003, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

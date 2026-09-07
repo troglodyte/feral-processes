@@ -1235,6 +1235,7 @@ mod tests {
                 ability: None,
                 name: "(empty)".to_string(),
                 description: String::new(),
+                fixed: false,
             }],
             equipment,
             subject: ManifestSubject::Program(Box::new(program)),
@@ -2256,6 +2257,7 @@ mod tests {
             ability: None,
             name: "(empty)".to_string(),
             description: String::new(),
+            fixed: false,
         }];
 
         // `full_width` too, and not just the titles: EQUIPMENT is a band on

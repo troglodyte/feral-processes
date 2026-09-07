@@ -1931,6 +1931,15 @@ pub struct SettlementView {
     /// How the town regards the party — `Standing::label()`, a call onto
     /// the band's own enum for `kind`/`specialty`/`temperament`'s reason.
     pub standing: &'static str,
+    /// How this city is doing — `growth::Vitality::label()`, on
+    /// `kind`/`specialty`/`temperament`'s precedent of calling onto the
+    /// band's own enum rather than wording it here.
+    ///
+    /// **`None` for a Server**, which has no band: a word that never
+    /// changes is worse than no word, and the row is dropped entirely
+    /// rather than drawn saying "Steady" forever. See
+    /// `Game::settlement_vitality`.
+    pub vitality: Option<&'static str>,
     /// One sentence per aid this town currently offers, already in the
     /// player's words — see `Game::settlement_aid_lines`. Empty when it
     /// offers none, and an empty list draws no rows and no header.

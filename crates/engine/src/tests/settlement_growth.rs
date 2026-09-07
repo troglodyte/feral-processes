@@ -1009,3 +1009,60 @@ fn a_real_run_shows_the_growth_screen_for_a_town_the_party_walked_to() {
         "a real run grew a town the party had walked to and never took the screen: {titles:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The town page
+// ---------------------------------------------------------------------------
+
+/// The band has to leave the engine, or the shelf thinning is the only
+/// signal the player ever gets — and a shelf is a length, which nothing on
+/// screen gives them anything to compare against.
+///
+/// **Not vacuous.** The same key is read at two bands and both are asserted
+/// by name, so a `vitality` hard-wired to one word (or to `None`) fails
+/// here rather than passing on whichever half happened to be checked.
+#[test]
+fn a_citys_report_carries_its_band_and_a_towns_carries_none() {
+    let mut game = game(4242);
+    let city = a_known_mainframe(&game);
+    // **Reachable without a hand on it.** Before anything below sets a flag
+    // or a number, a fresh run's authored city already reports a band — so
+    // the row is one a player sees the first time they open a town page,
+    // not one only a driven test can produce.
+    assert_eq!(
+        game.settlement_report(city).vitality,
+        Some(growth::Vitality::Steady.label()),
+        "an untouched city on a fresh run reports no band at all"
+    );
+    // Traded, so the untraded floor is out of the way and the drift's own
+    // band is what reaches the page — see `growth::vitality_floor`.
+    {
+        let mut standings = game.world.resource_mut::<crate::resources::Standings>();
+        let relation = standings.0.entry(city).or_default();
+        relation.traded = true;
+        relation.commerce = crate::tuning::SETTLEMENT_COMMERCE_MIN;
+    }
+    assert_eq!(
+        game.settlement_report(city).vitality,
+        Some(growth::Vitality::Starved.label()),
+        "a starved city's report does not say so"
+    );
+    game.world
+        .resource_mut::<crate::resources::Standings>()
+        .0
+        .entry(city)
+        .or_default()
+        .commerce = crate::tuning::SETTLEMENT_COMMERCE_MAX;
+    assert_eq!(
+        game.settlement_report(city).vitality,
+        Some(growth::Vitality::Thriving.label()),
+        "a thriving city's report does not say so"
+    );
+
+    let town = a_known_server(&game);
+    assert_eq!(
+        game.settlement_report(town).vitality,
+        None,
+        "a Server reports a band it does not have"
+    );
+}

@@ -2707,3 +2707,38 @@ pub(crate) fn take_everything_adjacent(game: &mut Game) -> Vec<(ItemId, u32)> {
         .collect();
     game.transfer_items(&all, &[]).0
 }
+
+/// A costed `Heal` — the shape that reaches the field routine list once
+/// `AbilityDef::field_runnable` accepts a priced heal. A degenerate band
+/// (`spread` unauthored, so 0) so a test can assert an exact restore
+/// without reading the RNG.
+pub(super) const FIELD_HEAL_ABILITY: &str = r#"(
+    id: "test_field_patch",
+    name: "Test Field Patch",
+    description: "d",
+    target: OneAlly,
+    power_cost: 6.0,
+    effect: Heal(power: 10),
+)"#;
+
+/// The same heal aimed at everyone, for the wide arm of the field path.
+pub(super) const FIELD_HEAL_PARTY_ABILITY: &str = r#"(
+    id: "test_field_patch_party",
+    name: "Test Field Patch Party",
+    description: "d",
+    target: WholeParty,
+    power_cost: 7.0,
+    effect: Heal(power: 10),
+)"#;
+
+/// A `Heal` costing nothing — what stays a battle Special, because outside
+/// a battle there is no round counter to enforce its cooldown and Power is
+/// the only throttle left. See `AbilityDef::field_runnable`.
+pub(super) const FREE_HEAL_ABILITY: &str = r#"(
+    id: "test_free_patch",
+    name: "Test Free Patch",
+    description: "d",
+    target: OneAlly,
+    cooldown: 1,
+    effect: Heal(power: 10),
+)"#;

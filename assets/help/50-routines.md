@@ -31,7 +31,7 @@ three and four groups the later zones field are what an Everyone routine answers
 Field routines are the ones you call outside a fight, with a on the map — an expedition loadout you
 buy at home and carry with you rather than something you time against a fight you cannot predict.
 
-- Every field routine except Repair Loop and Trickle Charge runs until you rest. Nothing else ends
+- Every buff on that list except Repair Loop and Trickle Charge runs until you rest. Nothing else ends
   one but a Forgiving reboot, or running another of the same kind over it.
 - Repair Loop and Trickle Charge keep a tick counter, because they are the two that pay out
   per tick, and unbounded Integrity or unbounded Power would answer scarcity the game is built on.
@@ -39,6 +39,14 @@ buy at home and carry with you rather than something you time against a fight yo
   drops, better decompile odds, and fewer wandering encounters.
 - Buffer Overrun and Wild Jump are Stack-only. They read and write coordinates that exist only
   underground, so they refuse on the surface.
+
+A patch routine that costs Power is on that list too, and it is the one kind of routine you can
+call in a fight and out of one. Out here it charges the same Power, spends a turn, and repairs the
+same amount it would have in the fight — and it refuses outright if everyone it would land on is
+already whole, so you cannot spend a reserve on nothing. Patch Single v1.0 is the exception: it
+costs nothing, and a routine with no price has nothing pacing it once there are no rounds to count,
+so it stays a Special. Powering down still mends you completely, so the reason to patch in the field
+is that you are out there with no charge to burn and a long way still to go.
 
 An item's buff is not a routine's. A Patch Routine runs on its own clock whatever it arms, because
 it is spent when you use it where a routine can simply be run again — which is why a consumable's

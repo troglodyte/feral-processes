@@ -1,7 +1,7 @@
 # Research tree
 
 Every shipped research node in feral-processes, charted from its own file in
-`assets/research/`. 23 of them.
+`assets/research/`. 26 of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
 `assets/research/*.ron` on 2026-08-17 and will drift the moment one of those
@@ -14,13 +14,13 @@ it is the one progression track you cannot fight your way along.
 
 | | |
 |---|---|
-| nodes | 23 |
+| nodes | 26 |
 | roots (need nothing) | 3 — Automation, Isometric Commerce, Power Grid |
 | deepest chain | 6 nodes |
-| total Research Data | 1400 |
+| total Research Data | 1497 |
 | cheapest / dearest node | 8 / 140 |
-| zone bands | from turn one (10), zone 2 (6), zone 3 (7) |
-| unlocks | 13 structures, 16 routines, 6 gear recipes |
+| zone bands | from turn one (11), zone 2 (8), zone 3 (7) |
+| unlocks | 17 structures, 16 routines, 6 gear recipes |
 
 ## What the zone gates
 
@@ -32,8 +32,8 @@ ever opening a portal.
 
 | Available | Nodes | Research Data | Which |
 |:---|---:|---:|:---|
-| from turn one | 10 | 180 | Automation, Power Grid, Isometric Commerce, Self-Execution, Fortification, Field Operations, Symbolic Links, Reactive Armor, Weapon Fabrication, Routine Fabrication |
-| zone 2 | 6 | 350 | Firewall Plating, Overclock Cores, Neural Interfacing, Runtime Patching, Adaptive Plating, Program Refactoring |
+| from turn one | 11 | 192 | Automation, Power Grid, Teardown, Isometric Commerce, Self-Execution, Fortification, Field Operations, Symbolic Links, Reactive Armor, Weapon Fabrication, Routine Fabrication |
+| zone 2 | 8 | 435 | Cache Coherence, Dispatch Protocol, Firewall Plating, Overclock Cores, Neural Interfacing, Runtime Patching, Adaptive Plating, Program Refactoring |
 | zone 3 | 7 | 870 | Ablative Lattice, Monofilament Edge, Mesh Plating, Cortex Hacking, Deep Analysis, Kernel Privileges, Address Translation |
 
 The gate and the tap compound without either knowing about the other.
@@ -75,19 +75,22 @@ Automation (8)
 |       |-- Symbolic Links (22)
 |       `-- Runtime Patching (60)
 |           `-- Kernel Privileges (135)
-`-- Program Refactoring (75)
+|-- Program Refactoring (75)
+`-- Teardown (12)
 
 Isometric Commerce (14)
 
 Power Grid (10)
-`-- Fortification (18)
+|-- Fortification (18)
+|-- Cache Coherence (40)
+`-- Dispatch Protocol (45)
 ```
 
 Three roots, and they are three different games. **Automation** is the trunk:
 everything that makes a base do work hangs off it, and it is also the cheapest
 node in the tree at 8, so the opening move is barely a
-decision. **Power Grid** is a two-node stub: the current a base runs on,
-and the pair of buildings that keep it standing.
+decision. **Power Grid** is the base's second trunk: the current a base runs on, and the
+3 branches that spend it (Fortification, Cache Coherence, Dispatch Protocol).
 **Isometric Commerce** is a leaf — 14 Research Data buys
 the iso Market and leads nowhere, which makes it the one node you take purely
 because you want the thing rather than the branch.
@@ -105,10 +108,13 @@ there is no node you can reach two ways.
 | Automation | - | 8 | - | `compiler` |
 | Isometric Commerce | - | 14 | - | `market` |
 | Power Grid | - | 10 | - | `power_conduit` |
+| Cache Coherence | 2 | 40 | `power_grid` | `cache_tap`, `line_driver` |
+| Dispatch Protocol | 2 | 45 | `power_grid` | `relay` |
 | Fortification | - | 18 | `power_grid` | `shield`, `patch_node` |
 | Program Refactoring | 2 | 75 | `automation` | `annealing_node`, `refactor_bench`; tool `component_stripper` |
 | Reactive Armor | - | 24 | `automation` | `armory` |
 | Routine Fabrication | - | 26 | `automation` | `log_scraper`, `lathe`, `transcriber`, `disk_press` |
+| Teardown | - | 12 | `automation` | `teardown_rig` |
 | Weapon Fabrication | - | 24 | `automation` | `fabricator` |
 | Firewall Plating | 2 | 45 | `armor_bench` | recipe `firewall_plating` at the armory — 6 `portal_fragment` |
 | Neural Interfacing | 2 | 55 | `weapon_bench` | recipe `neural_amplifier` at the fabricator — 6 `portal_fragment` |
@@ -121,7 +127,7 @@ there is no node you can reach two ways.
 | Runtime Patching | 2 | 60 | `self_exec` | `hot_patch` |
 | Symbolic Links | - | 22 | `self_exec` | `symlink` |
 | Adaptive Plating | 2 | 70 | `field_ops` | `hardened_shell`, `overclock`, `ablative_layer` |
-| Deep Analysis | 3 | 130 | `field_ops` | `deep_scan`, `trace_analysis`, `stealth_protocol`, `salvage_routine`; tool `core_tap`, `harness_puller` |
+| Deep Analysis | 3 | 130 | `field_ops` | `deep_scan`, `trace_analysis`, `stealth_protocol`, `salvage_routine`; tools `core_tap`, `harness_puller` |
 | Kernel Privileges | 3 | 135 | `runtime_patching` | `null_route` |
 | Address Translation | 3 | 140 | `deep_analysis` | `buffer_overrun`, `wild_jump` |
 | Mesh Plating | 3 | 120 | `adaptive_plating` | `hardened_shell_party` |
@@ -141,11 +147,14 @@ CUMULATIVE COST FROM A STANDING START
 Automation              8  #.......................................
 Power Grid             10  #.......................................
 Isometric Commerce     14  ##......................................
+Teardown               20  ##......................................
 Fortification          28  ###.....................................
 Reactive Armor         32  ####....................................
 Weapon Fabrication     32  ####....................................
 Routine Fabrication    34  ####....................................
 Self-Execution         48  ######..................................
+Cache Coherence        50  ######..................................
+Dispatch Protocol      55  #######.................................
 Field Operations       68  ########................................
 Symbolic Links         70  ########................................
 Firewall Plating       77  #########...............................

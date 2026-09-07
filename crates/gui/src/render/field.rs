@@ -203,8 +203,9 @@ pub(super) fn draw_battle_buffs(
     draw_buff_list(&rows, x + m.pad, cy, painter, m);
 }
 
-/// Which installed field routine to run — a `FieldBuff` ability on you or a
-/// program you own, run outside battle. Reached with `a` from
+/// Which installed field routine to run — a `FieldBuff`, a Stack movement
+/// routine or a priced `Heal` on you or a program you own, run outside
+/// battle. `AbilityDef::field_runnable` is what decides membership. Reached with `a` from
 /// `Mode::Playing`; rows come straight from `Game::field_routines`, same
 /// contract the battle action bar holds to.
 pub(super) fn draw_field_routine(

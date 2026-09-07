@@ -29,7 +29,7 @@ shows up green or red on your map. Every table below is in POW order.
 |  | Species | HP | ATK | DEF | SPD | INT | POW | Tame | Growth |
 |:---|:---|---:|---:|---:|---:|---:|---:|---:|---:|
 | `W` | Wintermute **·boss** | 200 | 19 | 17 | 13 | 18 | 236 | 0.95 | x2.00 |
-| `B` | Overseer **·boss** | 180 | 17 | 15 | 12 | 16 | 212 | 0.90 | x2.00 |
+| `B` | Overseer **·boss** | 180 | 11 | 15 | 14 | 16 | 206 | 0.83 | x2.00 |
 | `S` | Sentinel | 136 | 6 | 12 | 7 | 8 | 154 | 0.65 | x1.50 |
 | `k` | Rootkit | 132 | 12 | 3 | 9 | 13 | 147 | 0.75 | x1.50 |
 | `v` | Virus | 122 | 10 | 8 | 12 | 12 | 140 | 0.60 | x1.50 |
@@ -59,7 +59,7 @@ BASE DEF
 18 |+ - - - + - - - + - - - + - - - + - - - +
 17 ||       |       |       |       |     W |
 16 ||       |       |       |       |       |
-15 |+ - - - + - - - + - - - + - - - + B - - +
+15 |+ - - - + - - - + - - B + - - - + - - - +
 14 ||       |       |       |       |       |
 13 ||       |       |       |       |       |
 12 |+ - - - + - S - + - - - + - - - + - - - +
@@ -120,7 +120,7 @@ Glitch      38  ████████····················
 BASE ATK                             (max 19)
 
 Wintermute  19  ████████████████████████████████████████████
-Overseer    17  ███████████████████████████████████████·····
+Overseer    11  █████████████████████████···················
 Sentinel     6  ██████████████······························
 Rootkit     12  ████████████████████████████················
 Virus       10  ███████████████████████·····················
@@ -163,9 +163,9 @@ Glitch       1  ███···························�
 ```
 BASE SPEED
 
-14  Sprite
+14  Overseer, Sprite
 13  Wintermute, Cipher, Trojan
-12  Overseer, Virus, Proxy, SubProcess
+12  Virus, Proxy, SubProcess
 11  Glitch   <- the player rolls from here
 10  ZeroDay, Scrapper
  9  Rootkit, Worm
@@ -193,7 +193,7 @@ exact position.
 
 ```
 GROWTH
-x2.00  |                                      B  W
+x2.00  |                                   B     W
 x1.50  |                        v Sz   k c
 x1.25  |              m  x rt p
 x1.00  |  og s    d C
@@ -212,7 +212,7 @@ Four walkable biomes host spawns. `DataVoid` and `BlackIce` are barrier terrain
 and `Platform` is base floor — no shipped species lists any of the three, which
 is exactly what keeps a player's base free of wild spawns.
 
-|  | Species | OpenGrid | Mainframe | NullSector | Deadlock | Yield |
+|  | Species | OpenGrid | Backplane | NullSector | Deadlock | Yield |
 |:---|:---|:---|:---|:---|:---|:---|
 | `W` | Wintermute | # | # | # | # | - |
 | `B` | Overseer | # | # | # | # | - |
@@ -239,23 +239,23 @@ only source of `power_cell` in the roster.
 
 |  | Species | Flags | Abilities | Affinities |
 |:---|:---|:---|:---|:---|
-| `W` | Wintermute | BOSS | `broadcast_storm`, `null_route L4` | baseline |
-| `B` | Overseer | BOSS | `broadcast_storm`, `overclock_array L5` | baseline |
-| `S` | Sentinel | - | `overclock_array L2`, `bastion_shield_v3 L6` | buff 1.3 / damage 0.85 |
-| `k` | Rootkit | - | `skim_group L2`, `skim_v3 L6` | drain 1.3 / buff 0.85 |
-| `v` | Virus | - | `redundancy_sync L2`, `rollback_v3 L6` | heal 1.3 / damage 0.85 |
-| `c` | Cipher | - | `deadlock L2`, `bit_rot_v3 L6` | debuff 1.3 / heal 0.85 |
-| `z` | ZeroDay | - | `cascade_overflow L2`, `segfault_v3 L6` | damage 1.3 / heal 0.85 |
-| `r` | Crawler | NEST | `overclock_array L2`, `bastion_shield_v2 L6` | buff 1.3 / damage 0.85 |
-| `m` | Worm | NEST | `skim_group L2`, `skim_v2 L6` | drain 1.3 / buff 0.85 |
-| `p` | Proxy | - | `redundancy_sync L2`, `rollback_v2 L6` | heal 1.3 / damage 0.85 |
-| `t` | Trojan | NEST | `deadlock L2`, `bit_rot_v2 L6` | debuff 1.3 / heal 0.85 |
-| `x` | Scrapper | NEST | `cascade_overflow L2`, `segfault_v2 L6` | damage 1.3 / heal 0.85 |
-| `C` | Construct | - | `overclock_array L2`, `sandbox L6` | buff 1.3 / damage 0.85 |
-| `o` | Drone | - | `skim_group L2`, `skim_v1 L6` | drain 1.3 / buff 0.85 |
-| `d` | SubProcess | - | `redundancy_sync L2`, `rollback_v1 L6` | heal 1.3 / damage 0.85 |
-| `s` | Sprite | - | `deadlock L2`, `memory_leak L6` | debuff 1.3 / heal 0.85 |
-| `g` | Glitch | - | `cascade_overflow L2`, `segfault_v1 L6` | damage 1.3 / heal 0.85 |
+| `W` | Wintermute | BOSS | `broadcast_storm`, `null_route L3` | baseline |
+| `B` | Overseer | BOSS | `broadcast_storm`, `overclock_array L4` | baseline |
+| `S` | Sentinel | - | `overclock_array L2`, `bastion_shield_v3 L4` | buff 1.3 / damage 0.85 |
+| `k` | Rootkit | - | `skim_group L2`, `skim_v3 L4` | drain 1.3 / buff 0.85 |
+| `v` | Virus | - | `redundancy_sync L2`, `rollback_v3 L4` | heal 1.3 / damage 0.85 |
+| `c` | Cipher | - | `deadlock L2`, `bit_rot_v3 L4` | debuff 1.3 / heal 0.85 |
+| `z` | ZeroDay | - | `cascade_overflow L2`, `segfault_v3 L4` | damage 1.3 / heal 0.85 |
+| `r` | Crawler | NEST | `overclock_array L2`, `bastion_shield_v2 L4` | buff 1.3 / damage 0.85 |
+| `m` | Worm | NEST | `skim_group L2`, `skim_v2 L4` | drain 1.3 / buff 0.85 |
+| `p` | Proxy | - | `redundancy_sync L2`, `rollback_v2 L4` | heal 1.3 / damage 0.85 |
+| `t` | Trojan | NEST | `deadlock L2`, `bit_rot_v2 L4` | debuff 1.3 / heal 0.85 |
+| `x` | Scrapper | NEST | `cascade_overflow L2`, `segfault_v2 L4` | damage 1.3 / heal 0.85 |
+| `C` | Construct | - | `overclock_array L2`, `sandbox L4` | buff 1.3 / damage 0.85 |
+| `o` | Drone | - | `skim_group L2`, `skim_v1 L4` | drain 1.3 / buff 0.85 |
+| `d` | SubProcess | - | `redundancy_sync L2`, `rollback_v1 L4` | heal 1.3 / damage 0.85 |
+| `s` | Sprite | - | `deadlock L2`, `memory_leak L4` | debuff 1.3 / heal 0.85 |
+| `g` | Glitch | - | `cascade_overflow L2`, `segfault_v1 L4` | damage 1.3 / heal 0.85 |
 
 Every non-boss species raises exactly one affinity axis to 1.3 and damps
 exactly one to 0.85, and **the raised axis is what names its class** — damage
@@ -275,9 +275,7 @@ a Medic mends that structure by 2 Durability every 20 ticks. A Striker and a
 Saboteur do nothing at a post, which is the asymmetry the three pet slots make
 expensive — every program at a machine is one absent from the party.
 
-Every ordinary species grants two abilities: a class utility at level 2 that
-all three members of its class share, and a tier rung at level 6 that it holds
-alone. Nothing unlocks at level 1, which is what keeps `priority_boost` — the
+Every ordinary species grants two abilities: a class utility at level 2 that all three members of its class share, and a tier rung at level 4 that it holds alone. Nothing unlocks at level 1, which is what keeps `priority_boost` — the
 fallback for a species that has taught a companion nothing yet — reachable at
 all, since extracting it from such a companion is the only way to get it.
 

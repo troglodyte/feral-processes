@@ -5,6 +5,10 @@
 # moddable seam: the name and cost columns come from assets/perks/*.ron, and
 # the magnitude column comes from crates/engine/src/tuning.rs, which is
 # deliberately not data. Update both halves when either moves, then rerun.
+#
+# Before trusting a regenerated page, run `python3 docs/audit-gen.py` — it
+# diffs this table against the source it claims to transcribe. Nothing else
+# can see a table that has gone stale.
 AFFINITY_MAX = 2.0
 AFF_SCALED, AFF_UNSCALED = 0.05, 0.15
 POINTS_PER_LEVEL = 1

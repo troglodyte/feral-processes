@@ -101,13 +101,15 @@
   deliberately does **not** call `remember_view` — each caller does that
   first. `a_jump_fires_the_arrival_tail` asserts behaviour, not that a
   function was called.
-- **`Game::run_field_routine` is Stack-only for two of four effects, and
-  `require_surface` is not what does it** — `Phase` and `Jump` read and write
-  `Locale::Stack`'s own coordinates, so the refusal is `Game::stack_pos`
+- **`Game::run_field_routine` is Stack-only for two of the effects it runs,
+  and `require_surface` is not what does it** — `Phase` and `Jump` read and
+  write `Locale::Stack`'s own coordinates, so the refusal is `Game::stack_pos`
   returning `None`. `Symlink` deliberately makes no `movement_routine_pos`
-  call at all; it is the way out and runs on both sides of the ground. `AbilityEffect::field_only` is the one predicate, and
-  `use_ability`'s `unreachable!` is only unreachable because three callers
-  agree with it.
+  call at all; it is the way out and runs on both sides of the ground.
+  `AbilityEffect::field_only` says which effects reach *only* this path, and
+  `use_ability`'s `unreachable!` is only unreachable because its callers agree
+  with it; which effects reach this path **at all** is the wider
+  `AbilityDef::field_runnable` — see the combat reference.
 - **`Trace` is a resource because `descend_to`/`ascend_to` rebuild the
   `Locale::Stack` variant.** Both frame transitions *construct* a fresh
   variant, so a field there is zeroed on every descent, which is exactly when

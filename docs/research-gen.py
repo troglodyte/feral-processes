@@ -11,6 +11,10 @@
 # player must have reached before it can be bought at all. The bands below
 # must stay monotone in `req` -- a node gated below its own prerequisite is a
 # gate that can never fire. See assets/research/README.md.
+#
+# Before trusting a regenerated page, run `python3 docs/audit-gen.py` — it
+# diffs this table against the source it claims to transcribe. Nothing else
+# can see a table that has gone stale.
 N = [
  # id                    name                  zone cost requires             unlocks (kind, [ids])                                        tools
  ("automation",          "Automation",           0,   8, [],                  ("structures", ["compiler"])),
@@ -20,14 +24,17 @@ N = [
  ("weapon_bench",        "Weapon Fabrication",   0,  24, ["automation"],      ("structures", ["fabricator"])),
  ("routine_fabrication", "Routine Fabrication",  0,  26, ["automation"],      ("structures", ["log_scraper", "lathe", "transcriber", "disk_press"])),
  ("program_refactoring", "Program Refactoring",  2,  75, ["automation"],      ("structures", ["annealing_node", "refactor_bench"]), ["component_stripper"]),
+ ("teardown",            "Teardown",             0,  12, ["automation"],      ("structures", ["teardown_rig"])),
  ("fortification",       "Fortification",        0,  18, ["power_grid"],      ("structures", ["shield", "patch_node"])),
+ ("cache_coherence",     "Cache Coherence",      2,  40, ["power_grid"],      ("structures", ["cache_tap", "line_driver"])),
+ ("dispatch",            "Dispatch Protocol",    2,  45, ["power_grid"],      ("structures", ["relay"])),
  ("self_exec",           "Self-Execution",       0,  14, ["routine_fabrication"], ("abilities", ["priority_boost"])),
  ("field_ops",           "Field Operations",     0,  20, ["self_exec"],       ("abilities", ["repair_loop", "trickle_charge"])),
  ("symbolic_links",      "Symbolic Links",       0,  22, ["self_exec"],       ("abilities", ["symlink"])),
  ("runtime_patching",    "Runtime Patching",     2,  60, ["self_exec"],       ("abilities", ["hot_patch"])),
  ("adaptive_plating",    "Adaptive Plating",     2,  70, ["field_ops"],       ("abilities", ["hardened_shell", "overclock", "ablative_layer"])),
  ("mesh_plating",        "Mesh Plating",         3, 120, ["adaptive_plating"], ("abilities", ["hardened_shell_party"])),
- ("deep_analysis",       "Deep Analysis",        3, 130, ["field_ops"],       ("abilities", ["deep_scan", "trace_analysis", "stealth_protocol", "salvage_routine"]), ["core_tap"]),
+ ("deep_analysis",       "Deep Analysis",        3, 130, ["field_ops"],       ("abilities", ["deep_scan", "trace_analysis", "stealth_protocol", "salvage_routine"]), ["core_tap", "harness_puller"]),
  ("address_translation", "Address Translation",  3, 140, ["deep_analysis"],   ("abilities", ["buffer_overrun", "wild_jump"])),
  ("kernel_privileges",   "Kernel Privileges",    3, 135, ["runtime_patching"], ("abilities", ["null_route"])),
  ("firewall",            "Firewall Plating",     2,  45, ["armor_bench"],     ("recipe", ["firewall_plating", "armory", "6"])),
@@ -134,8 +141,12 @@ def unlock_text(r):
         main = ", ".join(f"`{i}`" for i in ids)
     # Appended rather than folded into `kind`: a node's tool grant sits
     # beside its main payload, and three of them have both.
-    tools = "; ".join(f"tool `{t}`" for t in r["tools"])
-    return f"{main}; {tools}" if tools else main
+    # One "tool" label for the whole list, not one per entry: `deep_analysis`
+    # grants two and read "tool `core_tap`; tool `harness_puller`", which is
+    # the only row in the tree that ever exercised this.
+    tools = ", ".join(f"`{t}`" for t in r["tools"])
+    label = "tool" if len(r["tools"]) == 1 else "tools"
+    return f"{main}; {label} {tools}" if tools else main
 
 
 counts = {k: sum(1 for r in R if r["unlocks"][0] == k) for k in ("structures", "abilities", "recipe")}
@@ -218,8 +229,8 @@ rules are asserted against the loaded tree in the engine's test suite.
 Three roots, and they are three different games. **Automation** is the trunk:
 everything that makes a base do work hangs off it, and it is also the cheapest
 node in the tree at {BY["automation"]["cost"]}, so the opening move is barely a
-decision. **Power Grid** is a two-node stub: the current a base runs on,
-and the pair of buildings that keep it standing.
+decision. **Power Grid** is the base's second trunk: the current a base runs on, and the
+{len(kids["power_grid"])} branches that spend it ({", ".join(c["name"] for c in kids["power_grid"])}).
 **Isometric Commerce** is a leaf — {BY["commerce"]["cost"]} Research Data buys
 the iso Market and leads nowhere, which makes it the one node you take purely
 because you want the thing rather than the branch.

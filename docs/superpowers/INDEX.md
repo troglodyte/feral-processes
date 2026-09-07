@@ -12,12 +12,19 @@ exceptions.** Every archived spec shipped; the ones left in `specs/` are open,
 parked, partial or superseded, and each says which in its own header. Sorting
 the directory *is* the answer, so no sweep is needed next time.
 
-**The two exceptions are built and stay in `specs/` anyway**, because source
+**The three exceptions are built and stay in `specs/` anyway**, because source
 doc comments pin their paths and moving them would edit `crates/`:
-`2026-09-04-program-extraction-design` (seventeen `//!` and `///` citations)
-and `2026-09-04-dev-sprite-editor-design` (`sprite_forge.rs` and
-`docs/seams.md`). Both say so in their own headers. They are the only two, and
-a third should not be created without moving the citations with it.
+`2026-09-04-program-extraction-design` (seventeen `//!` and `///` citations),
+`2026-09-04-dev-sprite-editor-design` (`sprite_forge.rs` and `docs/seams.md`)
+and `2026-09-06-settlement-growth-design` (`tests/settlement_growth.rs:3`).
+
+The third is a **debt, not a precedent.** The rule above said a third should
+not be created without moving the citations with it, and that is still the
+rule; it was created anyway because the citation was noticed during the
+landing itself, and editing a source file mid-deploy is how unreviewed changes
+ride into a release. It is one `//!` line. Moving it and archiving the spec is
+a two-minute follow-up, and until someone does it this file is carrying an
+exception it argued against.
 
 The archive habit worth keeping is archiving **on landing**, not by a later
 sweep — `2026-09-02-base-instrumentation-design` and the two settlement specs
@@ -50,8 +57,8 @@ decision* have since resolved: town-sourced raids and hostile patrols were
 claimed by `2026-09-06-town-raids-and-hostile-patrols-design` and both shipped
 (`v0.13.113` and `v0.13.115`), and **a server growing into a mainframe is now
 claimed by `2026-09-06-settlement-growth-design`** — the last settlement
-deferral, and the one currently being built. **Nothing on the settlements path
-is unclaimed any more.**
+deferral, shipped in `v0.13.117`. **Nothing on the settlements path is
+unclaimed any more, and nothing on it is unbuilt.**
 
 Program extraction is likewise finished: five phases, nothing unbuilt. What
 both leave behind is tuning — thirteen guessed constants in the hostility
@@ -66,9 +73,10 @@ historical, and git history is where its 62 lines live.
 
 ## Do not move these
 
-Cited from source doc comments, so their paths are load-bearing. Two live in
-`specs/` despite being built — `2026-09-04-program-extraction-design` and
-`2026-09-04-dev-sprite-editor-design`, the invariant's two exceptions above.
+Cited from source doc comments, so their paths are load-bearing. Three live in
+`specs/` despite being built — `2026-09-04-program-extraction-design`,
+`2026-09-04-dev-sprite-editor-design` and
+`2026-09-06-settlement-growth-design`, the invariant's three exceptions above.
 The other nine are already in `archive/specs/`:
 `2026-07-31-the-stack`, `2026-08-03-nest-aggression`,
 `2026-08-05-stack-movement-routines`, `2026-08-06-easter-eggs`,
@@ -84,8 +92,11 @@ The other nine are already in `archive/specs/`:
 Forty-six were deleted on 2026-08-13; forty-six more accumulated and
 forty-three of those were deleted on 2026-09-02; eighteen more accumulated and
 all eighteen went on 2026-09-06, every one of them naming work that had
-shipped or been superseded. `plans/` is empty and the directory is gone until
-the next plan is written. They are write-once scaffolding superseded by the
+shipped or been superseded. A nineteenth was written the same day for
+settlement growth and deleted at its landing, which is the convention working
+as intended rather than a fourth purge: a plan lives exactly as long as the
+work it directs. `plans/` is empty and the directory is gone until the next
+plan is written. They are write-once scaffolding superseded by the
 code they produced, nothing outside the directory cites one, and git history
 holds them: `git log --diff-filter=D -- 'docs/superpowers/plans/*'` finds the
 deletions and `git show <commit>^:<path>` reads any of them back.

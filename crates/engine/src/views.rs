@@ -1542,6 +1542,11 @@ pub struct RoutineSlotView {
     pub name: String,
     /// The ability's own authored description; empty for a free slot.
     pub description: String,
+    /// Whether this slot's routine is welded in — `Game::
+    /// routine_is_permanent`, resolved here so the screen can say so on the
+    /// row rather than let the player find out by pressing it. False for a
+    /// free slot.
+    pub fixed: bool,
 }
 
 /// One row of the "whose routines?" picker — you and every program you own.

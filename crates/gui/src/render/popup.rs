@@ -1561,6 +1561,7 @@ mod tests {
                             ability: Some(id(i)),
                             name: name(i),
                             description: text(i),
+                            fixed: false,
                         })
                         .collect::<Vec<_>>(),
                     selected,

@@ -231,15 +231,12 @@ impl Game {
         world.insert_resource(Party::default());
         world.insert_resource(WieldedProgram::default());
         world.insert_resource(Research::default());
-        // Decompile is knowledge the player starts with, not something the
-        // tree teaches — nothing grants it a second time. Without this,
-        // popping it out of the one starting slot to make room would end
-        // taming for the run, since re-installing checks `KnownRoutines`
-        // like any other write. The disk it costs to put back is the
-        // ordinary price; being unable to at all is not.
-        world.insert_resource(KnownRoutines(
-            [abilities::DECOMPILE_ABILITY_ID.to_string()].into(),
-        ));
+        // Empty, decompile included. It used to be seeded here so that
+        // popping decompile out of its starting slot could be undone by
+        // etching a fresh disk — but `Game::routine_is_permanent` closed the
+        // pop-out, and the entry's only remaining effect would be to offer
+        // the run's one unduplicable routine on the etch picker.
+        world.init_resource::<KnownRoutines>();
         // Empty, not the starter tool: the starter is granted straight into
         // the slot below, and knowledge is not what put it there — see
         // `resources::KnownTools`'s doc.

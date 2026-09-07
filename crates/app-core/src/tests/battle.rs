@@ -19,14 +19,18 @@ fn battling_app() -> App {
     battling_app_with(|_| {})
 }
 
-/// Same seed search as `battling_app`, but `setup` runs on the fresh game
+/// Same seed search as `battling_app`, but `setup` runs on the fresh app
 /// before anything walks toward battle — the only window some engine calls
 /// (like `uninstall_routine`) allow, since they refuse once a battle is
 /// active.
-fn battling_app_with(setup: impl Fn(&mut Game)) -> App {
+///
+/// Takes the whole `App` rather than its `Game` so a setup may go through a
+/// save round trip (`clear_player_routines`), which replaces the `Game`
+/// outright and cannot be done through a `&mut Game`.
+fn battling_app_with(setup: impl Fn(&mut App)) -> App {
     for seed in 0..200u32 {
         let mut app = test_app(seed);
-        setup(app.game.as_mut().unwrap());
+        setup(&mut app);
         let game = app.game.as_mut().unwrap();
         let player = game.player_status().position;
         let target = game
@@ -480,7 +484,8 @@ fn a_special_is_only_built_once_both_the_ability_and_a_target_are_known() {
 /// thrown away once committed.
 #[test]
 fn an_unavailable_routine_is_refused_instead_of_opening_the_target_picker() {
-    let mut app = battling_app_with(|game| {
+    let mut app = battling_app_with(|app| {
+        let game = app.game.as_mut().unwrap();
         // Decompile's catalyst. Gone, the row reads "no taming catalyst",
         // which is the cheapest of the three reasons to set up.
         let _ = game.erase_item(
@@ -735,20 +740,16 @@ fn completing_every_slot_resolves_the_round_without_a_narration_page() {
 }
 
 /// The player's Special row is hidden entirely once nothing is installed —
-/// a fresh game pre-installs decompile, so this pops it back out first. If
+/// a fresh game pre-installs decompile, so this empties the kit first. If
 /// the row silently reappeared, pressing `s` would plan a Special against an
 /// empty ability list and silently cost the player their round.
+///
+/// Emptied through the save (`clear_player_routines`) rather than by popping
+/// decompile out: it is welded into its slot, so an empty player kit is now
+/// only reachable as the state an older save can carry.
 #[test]
 fn pressing_special_with_nothing_installed_does_nothing() {
-    let mut app = battling_app_with(|game| {
-        let player = game
-            .view_entities(12, 12)
-            .into_iter()
-            .find(|e| e.is_player)
-            .expect("the player is always in view of itself")
-            .entity;
-        game.uninstall_routine(player, 0).unwrap();
-    });
+    let mut app = battling_app_with(clear_player_routines);
     assert!(
         app.game
             .as_ref()
@@ -756,7 +757,7 @@ fn pressing_special_with_nothing_installed_does_nothing() {
             .battle_action_options(0)
             .into_iter()
             .all(|o| o.kind != ActionKind::Special),
-        "a fresh game has nothing installed, so the row should be hidden"
+        "an empty kit should hide the row"
     );
 
     app.handle_key(GameKey::Char('s'));

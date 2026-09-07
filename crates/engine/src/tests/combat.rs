@@ -786,9 +786,10 @@ fn a_buff_aimed_at_a_companion_does_not_outlive_the_battle() {
 fn the_player_is_offered_no_special_before_installing_a_routine() {
     let mut game = Game::new(37, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
-    // The player starts with decompile installed; pop it out so the fixture
-    // actually has nothing installed, which is the state under test.
-    game.uninstall_routine(player, 0).unwrap();
+    // The player starts with decompile welded into slot 0, so the state
+    // under test — nothing installed at all — is written rather than
+    // reached through a verb that refuses it.
+    clear_routines(&mut game, player);
     let enemy = spawn_wild_on_player_tile(&mut game);
     insert_battle(&mut game, player, vec![enemy]);
 
@@ -805,9 +806,12 @@ fn installing_a_researched_routine_makes_the_players_special_available() {
     let mut game = Game::new(38, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     unlock_research_chain(&mut game, "self_exec");
     let player = game.player_entity();
-    // Only one slot at level 1, and decompile already occupies it — free it
-    // before installing the routine under test.
-    game.uninstall_routine(player, 0).unwrap();
+    // Exactly one routine installed, which is what the `detail` assertion
+    // below is about — a lone ability reads as its own name. Decompile is
+    // welded into slot 0, so that state is written rather than reached
+    // through a verb; the label rule it proves is the row's, and a
+    // companion carrying one routine meets it every fight.
+    clear_routines(&mut game, player);
     give_disks(&mut game, 1);
     fit_routine(&mut game, player, "priority_boost");
     let enemy = spawn_wild_on_player_tile(&mut game);

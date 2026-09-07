@@ -55,8 +55,15 @@ pub(super) fn routine_slot_rows(slots: &[RoutineSlotView], selected: usize) -> V
         "Pick a filled slot to clear it — the disk is already spent — or an empty one to install.",
     )];
     for (i, s) in slots.iter().enumerate() {
+        // A fixed slot is tagged rather than left to refuse when pressed:
+        // the header a line above promises a filled slot can be cleared, and
+        // the one routine that cannot is the one the player has run since
+        // they booted. Not the `★` the install picker spends on exclusive
+        // disks — that mark means "you get one of these", and this means
+        // "this row is not a choice".
+        let tag = if s.fixed { "  (fixed)" } else { "" };
         rows.push(item_row(
-            format!("[{}] {}", menu_shortcut(i), s.name),
+            format!("[{}] {}{}", menu_shortcut(i), s.name, tag),
             i == selected,
         ));
         if !s.description.is_empty() {

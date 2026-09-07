@@ -1998,6 +1998,16 @@ pub(super) fn install_routine_for_test(game: &mut Game, entity: Entity, ability:
         .unwrap_or_else(|e| panic!("installing {ability}: {e}"));
 }
 
+/// Empties `entity`'s routine slots outright.
+///
+/// A direct write, not `Game::uninstall_routine`: `decompile` is welded into
+/// the player's slot 0 and that verb refuses it, so an empty player kit is
+/// reachable only as state — what a save written before that rule can carry,
+/// and what `battle_action_options` hides its Special row for.
+pub(super) fn clear_routines(game: &mut Game, entity: Entity) {
+    game.world.entity_mut(entity).insert(Routines(Vec::new()));
+}
+
 /// `count` routine ids a test can park in a kit to fill it — catalogue
 /// order, skipping `avoid` and anything one-of-a-kind (`decompile` is
 /// refused a second home by design).

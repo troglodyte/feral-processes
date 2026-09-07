@@ -486,9 +486,6 @@ fn researching_self_execution_grants_the_player_priority_boost() {
     let mut game = Game::new(32, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     unlock_research_chain(&mut game, "self_exec");
 
-    // The only slot at level 1 already holds decompile; free it for the
-    // routine this test is actually about.
-    game.uninstall_routine(game.player_entity(), 0).unwrap();
     give_disks(&mut game, 1);
     let player = game.player_entity();
     fit_routine(&mut game, player, "priority_boost");
@@ -498,7 +495,14 @@ fn researching_self_execution_grants_the_player_priority_boost() {
         .into_iter()
         .map(|a| a.id)
         .collect();
-    assert_eq!(ids, vec!["priority_boost".to_string()]);
+    assert_eq!(
+        ids,
+        vec![
+            crate::abilities::DECOMPILE_ABILITY_ID.to_string(),
+            "priority_boost".to_string(),
+        ],
+        "the researched routine lands beside the decompile every player runs"
+    );
 }
 
 /// Two nodes may legitimately name the same ability — a mod branching the
@@ -534,9 +538,6 @@ fn an_ability_granted_by_two_nodes_is_learned_once() {
         "the second node teaches nothing the first didn't"
     );
 
-    // The only slot at level 1 already holds decompile; free it for the
-    // routine this test is actually about.
-    game.uninstall_routine(game.player_entity(), 0).unwrap();
     give_disks(&mut game, 2);
     let player = game.player_entity();
     fit_routine(&mut game, player, "priority_boost");
@@ -547,7 +548,10 @@ fn an_ability_granted_by_two_nodes_is_learned_once() {
         .collect();
     assert_eq!(
         ids,
-        vec!["priority_boost".to_string()],
+        vec![
+            crate::abilities::DECOMPILE_ABILITY_ID.to_string(),
+            "priority_boost".to_string(),
+        ],
         "installing fills one slot, however many nodes granted it"
     );
     assert_eq!(
@@ -566,12 +570,9 @@ fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
     let mut game = Game::new(35, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     unlock_research_chain(&mut game, "runtime_patching");
     let player = game.player_entity();
-    // A level-1 player has only one routine slot (see
-    // `tuning::PLAYER_ROUTINE_SLOT_BASE`), so both grants need a slot to land in.
-    // Levelling up doesn't evict decompile from the first, so it's popped
-    // out explicitly to make room.
+    // Both grants need a slot to land in beside the decompile a new game
+    // installs, and `PLAYER_ROUTINE_SLOT_BASE` buys only two.
     set_level(&mut game, player, 10);
-    game.uninstall_routine(player, 0).unwrap();
     give_disks(&mut game, 2);
     fit_routine(&mut game, player, "priority_boost");
     fit_routine(&mut game, player, "hot_patch");
@@ -634,9 +635,6 @@ fn a_player_special_spends_its_authored_power_cost() {
         let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         unlock_research_chain(&mut game, "kernel_privileges");
         let player = game.player_entity();
-        // The only slot at level 1 already holds decompile; free it for the
-        // routine this test is actually about.
-        game.uninstall_routine(player, 0).unwrap();
         give_disks(&mut game, 1);
         fit_routine(&mut game, player, "null_route");
         let enemy = spawn_wild_on_player_tile(&mut game);
@@ -652,7 +650,6 @@ fn a_player_special_spends_its_authored_power_cost() {
 
     let mut probe = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     unlock_research_chain(&mut probe, "kernel_privileges");
-    probe.uninstall_routine(probe.player_entity(), 0).unwrap();
     give_disks(&mut probe, 1);
     let probe_player = probe.player_entity();
     fit_routine(&mut probe, probe_player, "null_route");
@@ -688,12 +685,9 @@ fn a_save_round_trip_preserves_the_players_abilities() {
     let mut game = Game::new(40, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     unlock_research_chain(&mut game, "runtime_patching");
     let player = game.player_entity();
-    // A level-1 player has only one routine slot (see
-    // `tuning::PLAYER_ROUTINE_SLOT_BASE`), so both grants need a slot to land in.
-    // Levelling up doesn't evict decompile from the first, so it's popped
-    // out explicitly to make room.
+    // Both grants need a slot to land in beside the decompile a new game
+    // installs, and `PLAYER_ROUTINE_SLOT_BASE` buys only two.
     set_level(&mut game, player, 10);
-    game.uninstall_routine(player, 0).unwrap();
     give_disks(&mut game, 2);
     fit_routine(&mut game, player, "priority_boost");
     fit_routine(&mut game, player, "hot_patch");
@@ -702,7 +696,7 @@ fn a_save_round_trip_preserves_the_players_abilities() {
         .into_iter()
         .map(|a| a.id)
         .collect();
-    assert_eq!(before.len(), 2, "priority_boost and hot_patch");
+    assert_eq!(before.len(), 3, "decompile, priority_boost and hot_patch");
 
     let path = std::env::temp_dir().join(format!(
         "feral_player_routines_save_{}.bin",

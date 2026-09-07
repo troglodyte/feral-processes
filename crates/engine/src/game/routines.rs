@@ -135,12 +135,14 @@ impl Game {
                         ability: Some(def.id.clone()),
                         name: def.name.clone(),
                         description: def.description.clone(),
+                        fixed: self.routine_is_permanent(&def.id),
                     },
                     None => RoutineSlotView {
                         index,
                         ability: None,
                         name: "(empty)".to_string(),
                         description: String::new(),
+                        fixed: false,
                     },
                 },
             )
@@ -215,17 +217,43 @@ impl Game {
             .is_some_and(|def| def.exclusive)
     }
 
+    /// Whether `ability` is **fixed** — welded to the slot it is born in.
+    /// It can't be etched onto a blank, can't be installed off one, and
+    /// can't be popped back out of the slot it occupies.
+    ///
+    /// `decompile` is the whole of the set and the reason it exists: it is
+    /// the player's capture mechanism, granted once by `spawn_player` and by
+    /// nothing else in the game. Letting it be cleared meant the pop-out had
+    /// to be made recoverable, which meant seeding `KnownRoutines` with it,
+    /// which meant it appeared in the etch picker as a routine you could
+    /// stamp onto disks forever — three consequences all paying for a
+    /// gesture nobody wants.
+    ///
+    /// Keyed to `abilities::DECOMPILE_ABILITY_ID` rather than an
+    /// asset-authored flag beside `exclusive`, because permanence is not a
+    /// property a file may claim: `AbilityEffect::Decompile`, the constant
+    /// itself and the hardcoded `spawn_player` grant are already engine
+    /// facts, and a schema flag would let a mod mint a second routine nobody
+    /// can ever remove.
+    pub fn routine_is_permanent(&self, ability: &str) -> bool {
+        ability == crate::abilities::DECOMPILE_ABILITY_ID
+    }
+
     /// Every routine the player knows, name-sorted so the etch picker's
     /// numbering is stable between sessions. Knowing one is half of an
     /// etch; the other half is `blank_disks_held`.
     ///
-    /// Exclusive routines are filtered out explicitly, even though nothing
-    /// is supposed to put one in `KnownRoutines` in the first place. That
-    /// is deliberate belt-and-braces: `etch_disk` refuses them anyway, so
-    /// without this a leak — a save written by a modded build, a future
-    /// grant that forgets the rule — would show up as a picker row that
-    /// always fails rather than as a routine quietly missing. Two cheap
-    /// checks, and the loud failure mode is the one on the outside.
+    /// Exclusive and permanent routines are filtered out explicitly, even
+    /// though nothing is supposed to put either in `KnownRoutines` in the
+    /// first place. That is deliberate belt-and-braces: `etch_disk` refuses
+    /// them anyway, so without this a leak would show up as a picker row
+    /// that always fails rather than as a routine quietly missing. Two
+    /// cheap checks, and the loud failure mode is the one on the outside.
+    ///
+    /// For `decompile` the leak is not hypothetical. Builds up to 0.13.x
+    /// seeded `KnownRoutines` with it so a pop-out could be undone, so
+    /// **every save written before this rule carries the entry**, and this
+    /// filter is the only thing keeping it off the picker there.
     pub fn etchable_routines(&self) -> Vec<KnownRoutineView> {
         let db = self.world.resource::<AbilityDb>();
         let mut rows: Vec<KnownRoutineView> = self
@@ -234,7 +262,7 @@ impl Game {
             .0
             .iter()
             .filter_map(|id| db.get(id))
-            .filter(|def| !def.exclusive)
+            .filter(|def| !def.exclusive && !self.routine_is_permanent(&def.id))
             .map(|def| KnownRoutineView {
                 ability: def.id.clone(),
                 name: def.name.clone(),
@@ -337,6 +365,16 @@ impl Game {
                 "{name} can't be written to a blank. That one only comes already etched."
             ));
         }
+        // Beside the exclusive branch and for the same reason: a permanent
+        // routine is never known either, so the check below would refuse it
+        // with "you don't know that routine" — true, and no help at all to a
+        // player looking at the one routine they have run since they booted.
+        if self.routine_is_permanent(ability) {
+            let name = self.ability_display_name(ability);
+            return Err(format!(
+                "{name} is welded into its slot. There's no writing a second copy of it."
+            ));
+        }
         if !self.knows_routine(ability) {
             return Err("You don't know that routine.".into());
         }
@@ -383,6 +421,16 @@ impl Game {
         }
         if !self.owns_routine_holder(entity) {
             return Err("You don't control that program.".into());
+        }
+        // Ahead of the duplicate check: the player already runs the only
+        // permanent routine there is, so without this the sentence they get
+        // for their own spare slot would be "you already run it" — which
+        // reads as a slot problem they could solve by finding another one.
+        if self.routine_is_permanent(ability) {
+            let name = self.ability_display_name(ability);
+            return Err(format!(
+                "{name} runs where it was compiled. It doesn't move."
+            ));
         }
         let installed = self
             .world
@@ -441,6 +489,10 @@ impl Game {
     /// Frees `slot`. The disk that filled it was spent at install and is not
     /// recoverable, so this hands back nothing — what the player keeps is the
     /// knowledge, which they never lost.
+    ///
+    /// A permanent routine refuses. The check reads the ability *in the
+    /// slot* rather than taking one as an argument, because a slot index is
+    /// all the screen has to offer — see `App::handle_routines_key`.
     pub fn uninstall_routine(&mut self, entity: Entity, slot: usize) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -455,6 +507,12 @@ impl Game {
             .ok_or_else(|| "That can't hold routines.".to_string())?;
         if slot >= installed.len() {
             return Err("That slot is empty.".to_string());
+        }
+        if self.routine_is_permanent(&installed[slot]) {
+            let name = self.ability_display_name(&installed[slot]);
+            return Err(format!(
+                "{name} is welded into that slot. It doesn't come out."
+            ));
         }
         installed.remove(slot);
         self.world.entity_mut(entity).insert(Routines(installed));

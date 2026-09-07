@@ -6690,6 +6690,31 @@ the caller do the map lookup it was doing anyway; it would also have meant
 every caller could get the same answer without going through the gate, which
 is the property the whole arrangement exists for.
 
+**A condition claims cells, not biomes — and that gate lives behind this
+one.** `GroundCondition::for_biome` answers which condition a biome *may*
+carry; `Game::condition_at` answers whether a given cell actually carries it,
+folding the world seed, the zone and the cell through `derive::index` the way
+`static_in_epoch` folds an epoch. Weather is a condition in time; this is the
+same derivation in space, which is why it copies that function's shape rather
+than inventing one.
+
+It exists because `for_biome`'s promise — "unclaimed is the common case" —
+was only ever true of the catalogue. Three biomes out of nine are claimed
+there, but Null Sector and Backplane alone are about three quarters of
+walkable ground, so a condition claiming its biome entire made attrition the
+default state of the map: three steps in four cost Integrity, silently,
+because the crossing line fires only when the biome *changes*. Deaths by
+ground were indistinguishable from dying at random. The census that holds it
+now is `tests::environment::unclaimed_ground_is_the_common_case`, and it
+measures real worldgen rather than a fixture — a fixture is precisely what
+could not have caught this, since every unit test of the catalogue passed the
+whole time.
+
+**Not a change to `WorldMap::classify`.** Biomes are derived from the seed,
+so retuning their thresholds would redraw the map under every existing save.
+A condition layered on top of an untouched biome map moves nothing a player
+has already walked.
+
 **The gate itself split into a second function mid-build, for the same
 reason.** Weather's readout needs to know, on the tick an epoch boundary is
 crossed, whether the player's *current* biome takes weather at all —

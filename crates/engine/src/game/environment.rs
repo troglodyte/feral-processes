@@ -10,7 +10,10 @@ use crate::derive;
 use crate::environment::{EnvironmentEffect, GroundCondition, StaticEvent};
 use crate::game::contracts::fold;
 use crate::resources::ZoneLevel;
-use crate::tuning::{STATIC_CLEAR_WEIGHT, STATIC_EPOCH_TICKS};
+use crate::tuning::{
+    CONDITION_CELL_TILES, CONDITION_CLAIM_WEIGHT, CONDITION_CLEAR_WEIGHT, STATIC_CLEAR_WEIGHT,
+    STATIC_EPOCH_TICKS,
+};
 use crate::world::{Biome, WorldMap};
 
 /// What the ground at `(x, y)` is, and what it does to whoever stands on it.
@@ -93,7 +96,7 @@ impl Game {
                 effect: EnvironmentEffect::NONE,
             };
         };
-        let condition = GroundCondition::for_biome(biome);
+        let condition = self.condition_at(biome, x, y);
         let ground = condition
             .map(|c| c.def().effect)
             .unwrap_or(EnvironmentEffect::NONE);
@@ -111,6 +114,63 @@ impl Game {
             event,
             effect,
         }
+    }
+
+    /// Whether the condition that *could* claim `biome`
+    /// (`GroundCondition::for_biome`) actually claims the cell `(x, y)` sits
+    /// in.
+    ///
+    /// **The second half of `for_biome`'s promise, and the half that was
+    /// missing.** The catalogue answers which condition a biome may carry;
+    /// this answers whether this particular ground carries it. Without it a
+    /// condition claimed its biome entire, and since Null Sector and
+    /// Backplane are together about three quarters of walkable ground, "most
+    /// of the map reads as scenery rather than as a tax on walking" was false
+    /// by a wide margin — see `CONDITION_CLEAR_WEIGHT`.
+    ///
+    /// Deliberately **not** a change to `WorldMap::classify`. Biomes are
+    /// derived from the seed, so retuning their thresholds would redraw the
+    /// map under every existing save; a condition layered on top of an
+    /// untouched biome map moves nothing a player has already walked.
+    ///
+    /// `static_in_epoch`'s shape, one axis over: that one asks what is live
+    /// in a biome *now* and folds an epoch, this asks what is true of a
+    /// biome *here* and folds a cell. Weather is a condition in time; this
+    /// is the same derivation in space. It draws no `GameRng` for that
+    /// function's reason — a draw would not survive a save/load and would
+    /// shift every later roll in the run — and stores nothing, so there is
+    /// no save field and no migration.
+    ///
+    /// **Behind `terrain_at`'s gate, not beside it.** The seam rule this
+    /// module is built on is that `terrain_at` is the one door onto what
+    /// ground does to you, and that it takes a coordinate so no caller can
+    /// get the answer without passing the zone-1 and `Platform` checks. This
+    /// takes a biome as well, which looks like exactly the shortcut that rule
+    /// forbids — it is not, because it answers only *which* condition claims
+    /// a cell and never what standing there costs. `terrain_at` calls it
+    /// after `environment_biome_at` has already refused zone 1 and the base
+    /// slab, so the gate is still the single one and this sits inside it. A
+    /// caller wanting the folded `EnvironmentEffect` still has exactly one
+    /// way to get it.
+    ///
+    /// `div_euclid`, not `/`: truncating division mirrors around zero and
+    /// would fuse the cells either side of the origin into one of double
+    /// width, which `a_condition_cell_is_the_same_width_either_side_of_zero`
+    /// is what catches.
+    pub(crate) fn condition_at(&self, biome: Biome, x: i32, y: i32) -> Option<GroundCondition> {
+        let candidate = GroundCondition::for_biome(biome)?;
+        let seed = self.world.resource::<WorldMap>().seed();
+        let zone = self.world.resource::<ZoneLevel>().0;
+        let cell = (
+            x.div_euclid(CONDITION_CELL_TILES),
+            y.div_euclid(CONDITION_CELL_TILES),
+        );
+        let total = (CONDITION_CLEAR_WEIGHT + CONDITION_CLAIM_WEIGHT) as usize;
+        let roll = derive::index(condition_seed(seed, zone, biome, cell), total);
+        // Clear is walked first, `static_in_epoch`'s order, so raising the
+        // claim weight only ever eats into the clear band rather than
+        // reshuffling which cells were already claimed.
+        (roll >= CONDITION_CLEAR_WEIGHT as usize).then_some(candidate)
     }
 
     /// What the map pane's border reads. `None` underground or in base
@@ -216,6 +276,34 @@ fn biome_ord(biome: Biome) -> u64 {
 /// so a word folded in whole would leave a following word's low output bits
 /// a fixed function of it and never reach bit 63, which is the bit
 /// `derive::index` actually reads.
+/// `static_seed`'s spatial twin — the world seed, the zone, the biome and the
+/// condition cell, folded a byte at a time for that function's stated reason:
+/// one XOR-then-multiply round only carries a difference about the prime's
+/// own width upward, so a word folded in whole would leave the following
+/// word's low output bits a fixed function of it and never reach bit 63,
+/// which is the bit `derive::index` reads.
+///
+/// The cell coordinates go in as `u64` two's-complement bytes, so a negative
+/// cell folds as distinctly as a positive one rather than saturating.
+///
+/// Zone is folded, so the same tile carries different ground in a deeper
+/// sector. That is the point rather than a side effect: a breach is supposed
+/// to hand you the same map made harsher, and ground that stayed claimed
+/// exactly where it was would make every zone's route identical.
+fn condition_seed(seed: u32, zone: u32, biome: Biome, cell: (i32, i32)) -> u64 {
+    let mut h = 0xcbf2_9ce4_8422_2325_u64;
+    for word in [
+        seed as u64,
+        zone as u64,
+        biome_ord(biome),
+        cell.0 as i64 as u64,
+        cell.1 as i64 as u64,
+    ] {
+        h = fold(h, &word.to_le_bytes());
+    }
+    h
+}
+
 fn static_seed(seed: u32, zone: u32, biome: Biome, epoch: u64) -> u64 {
     let mut h = 0xcbf2_9ce4_8422_2325_u64;
     for word in [seed as u64, zone as u64, biome_ord(biome), epoch] {

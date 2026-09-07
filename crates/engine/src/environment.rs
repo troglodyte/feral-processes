@@ -140,9 +140,22 @@ impl GroundCondition {
         ]
     }
 
-    /// The condition claiming `biome`, or `None` for neutral ground.
-    /// Unclaimed is the common case — that is what makes most of the map
-    /// read as scenery rather than as a tax on walking.
+    /// Which condition *may* claim `biome`, or `None` for ground no
+    /// condition ever touches.
+    ///
+    /// **Half the answer.** Whether a given tile actually carries this is
+    /// `Game::condition_at`'s call, folded per condition cell. The split
+    /// exists because this half is a catalogue — a pure match, knowing
+    /// nothing of the world seed or the zone — and the other half needs
+    /// both.
+    ///
+    /// This doc used to say "unclaimed is the common case", and meant it
+    /// about the map. It was only ever true of the catalogue: three biomes
+    /// out of nine are claimed here, but Null Sector and Backplane alone are
+    /// about three quarters of walkable ground, so a condition that claimed
+    /// its biome entire made attrition the default state of the map. The
+    /// claim now lives with the gate that can keep it —
+    /// `tuning::CONDITION_CLEAR_WEIGHT`.
     pub fn for_biome(biome: Biome) -> Option<GroundCondition> {
         match biome {
             Biome::NullSector => Some(GroundCondition::DanglingReads),

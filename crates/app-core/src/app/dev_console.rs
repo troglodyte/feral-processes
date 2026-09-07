@@ -150,6 +150,6 @@ impl App {
                 }
             }
         }
-        self.after_world_action(true, false);
+        self.after_world_action(true, false, 0);
     }
 }

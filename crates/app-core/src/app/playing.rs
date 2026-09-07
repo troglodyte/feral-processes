@@ -5,8 +5,14 @@ use crate::*;
 
 /// One step, reported honestly: `true` only when the world actually moved.
 ///
-/// `Game::move_player` returns nothing, and on the zone surface assuming an
-/// action was fine — every step there spends a turn, a bounce off a wall
+/// `bite` is an out-parameter rather than a second return value because the
+/// four movement arms of the match this feeds all have to answer `bool` like
+/// every other arm on that screen. It receives what the ground took off the
+/// party on this step — `0` for clean ground, and for a shove at a wall,
+/// which spends a turn without costing Integrity.
+///
+/// `Game::move_player`'s own return says whether an action happened only
+/// indirectly, and on the zone surface assuming an action was fine — every step there spends a turn, a bounce off a wall
 /// included. Base space did not work that way when it shipped: a step into
 /// solid rock was refused outright and cost nothing, so reporting it as an
 /// action would have cleared the status line explaining an earlier refusal
@@ -21,9 +27,9 @@ use crate::*;
 /// `Game::tick` runs and `tick` then returns without advancing — but
 /// `App::after_world_action` still has to see an action, or the run would
 /// never reach the death screen.
-fn stepped(game: &mut Game, dx: i32, dy: i32) -> bool {
+fn stepped(game: &mut Game, dx: i32, dy: i32, bite: &mut i32) -> bool {
     let before = game.current_tick();
-    game.move_player(dx, dy);
+    *bite = game.move_player(dx, dy);
     game.current_tick() > before || game.is_game_over().is_some()
 }
 
@@ -317,13 +323,18 @@ impl App {
         // the rows and the Depot room, handed out past the `self.game`
         // borrow together.
         let mut opening: Option<(Vec<TransferRow>, Option<u32>)> = None;
+        // What the ground took off the party, for the cue
+        // `after_world_action` picks. Declared out here because the four
+        // movement arms below sit inside a `self.game` borrow and have to
+        // keep answering `bool`.
+        let mut ground_bite = 0;
         let acted = {
             let Some(game) = &mut self.game else { return };
             match key {
-                GameKey::Up | GameKey::Char('k') => stepped(game, 0, -1),
-                GameKey::Down | GameKey::Char('j') => stepped(game, 0, 1),
-                GameKey::Left | GameKey::Char('h') => stepped(game, -1, 0),
-                GameKey::Right | GameKey::Char('l') => stepped(game, 1, 0),
+                GameKey::Up | GameKey::Char('k') => stepped(game, 0, -1, &mut ground_bite),
+                GameKey::Down | GameKey::Char('j') => stepped(game, 0, 1, &mut ground_bite),
+                GameKey::Left | GameKey::Char('h') => stepped(game, -1, 0, &mut ground_bite),
+                GameKey::Right | GameKey::Char('l') => stepped(game, 1, 0, &mut ground_bite),
                 // Zone surface only on this path — the Stack binds its own
                 // `.` below, and base space binds none at all. Falling
                 // through the guard to `_ => false` leaves it a **dead key**:
@@ -455,7 +466,7 @@ impl App {
         if let Some((offer, room)) = opening {
             self.open_transfer(offer, room);
         }
-        self.after_world_action(acted, is_move_key);
+        self.after_world_action(acted, is_move_key, ground_bite);
     }
 
     /// Movement for a party that has a facing. Up walks forward along it;
@@ -569,7 +580,11 @@ impl App {
         if let Some(reason) = refusal {
             self.refuse(reason);
         }
-        self.after_world_action(acted, is_move_key);
+        self.after_world_action(
+            acted,
+            is_move_key,
+            0, /* the Stack has no ambient ground; its corruption tiles narrate their own damage */
+        );
     }
 
     /// The bookkeeping that follows any action that advanced the world,
@@ -581,7 +596,15 @@ impl App {
     /// The battle transition especially: Phase 2 puts random encounters
     /// underground, and a second copy of this is exactly the kind of thing
     /// that gets updated on one side only.
-    pub(crate) fn after_world_action(&mut self, acted: bool, is_move_key: bool) {
+    /// `ground_bite` is what ambient ground took off the party on this step
+    /// — `0` for every caller that wasn't a surface step, which is all of
+    /// them but one. It picks the movement cue and nothing else: a step that
+    /// costs Integrity has to *sound* like taking a hit rather than like
+    /// walking, because the damage is otherwise indistinguishable from the
+    /// step that caused it. The Stack's corruption tiles are deliberately
+    /// not routed through here — they come down a different path and have
+    /// always narrated their own damage.
+    pub(crate) fn after_world_action(&mut self, acted: bool, is_move_key: bool, ground_bite: i32) {
         if !acted {
             return;
         }
@@ -615,6 +638,12 @@ impl App {
         if is_move_key {
             self.pending_sounds.push(if entered_battle {
                 SoundEvent::BattleStart
+            } else if ground_bite > 0 {
+                // The battle cue, not one of its own: this *is* taking
+                // damage, and a player who has fought already knows what it
+                // means. A separate clip would be a second thing to learn
+                // for a sensation the game has a word for.
+                SoundEvent::Hit
             } else {
                 SoundEvent::Step
             });

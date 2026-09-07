@@ -3225,6 +3225,42 @@ pub const MAX_ENVIRONMENT_MIN_DAMAGE: i32 = 4;
 /// ambush-multiplying source could fold in without instantly saturating.
 pub const MAX_STATIC_AMBUSH_MULT: f32 = 2.5;
 
+/// The side of one condition cell, in tiles — the grain at which a
+/// `GroundCondition` claims ground or leaves it clear.
+///
+/// A cell rather than a tile because a patch has to be something the player
+/// can *see* and route around: at tile granularity attrition reads as noise
+/// that follows you everywhere, and there is nothing to learn. Sixteen puts
+/// one or two blotches inside a typical biome crossing (straight-line runs
+/// through Null Sector and Backplane measure median 9 tiles, p90 18), which
+/// is big enough to recognise and small enough that a crossing is a route
+/// choice rather than a wall.
+pub const CONDITION_CELL_TILES: i32 = 16;
+
+/// Weight of "nothing claims this cell" against `CONDITION_CLAIM_WEIGHT`,
+/// in the roll `Game::condition_at` reduces.
+///
+/// **This is the constant that makes `GroundCondition::for_biome`'s promise
+/// true.** That doc has always said unclaimed is the common case; it was a
+/// statement about the catalogue, and nothing ever checked it against the
+/// map worldgen actually produces. Null Sector and Backplane together are
+/// about three quarters of walkable ground (`WorldMap::classify`, Perlin at
+/// 0.03-0.05), so while a condition claimed its whole biome, three steps in
+/// four attrited — and silently, since the bite pushed no line. At 3:1 the
+/// claimed share of those biomes falls to a quarter, putting roughly a fifth
+/// of walkable ground under a condition and the rest back to scenery.
+/// `tests::environment::unclaimed_ground_is_the_common_case` is the census
+/// that holds it.
+pub const CONDITION_CLEAR_WEIGHT: u32 = 3;
+
+/// Weight of "this cell carries its biome's condition", against
+/// `CONDITION_CLEAR_WEIGHT`. Shared by all three conditions rather than
+/// authored per-def like `StaticDef::weight`: at most one condition can ever
+/// claim a biome (`for_biome` is a match), so the pool is always a single
+/// entry and a per-condition weight would be a knob with nothing to balance
+/// against.
+pub const CONDITION_CLAIM_WEIGHT: u32 = 1;
+
 /// `GroundCondition::DanglingReads`'s attrition, folded with any live
 /// weather claiming Null Sector.
 pub const DANGLING_READS_ATTRITION: f32 = 0.02;

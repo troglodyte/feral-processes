@@ -220,7 +220,7 @@ impl App {
                     // Without this the map is drawn over a live battle
                     // until the player's next world action, and a
                     // notification can take the screen mid-fight.
-                    self.after_world_action(true, false);
+                    self.after_world_action(true, false, 0);
                 }
             }
             _ => {}

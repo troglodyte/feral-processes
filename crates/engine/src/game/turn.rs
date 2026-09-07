@@ -584,9 +584,22 @@ impl Game {
     /// app-core and this is only the backstop. Walking a pinned `Position`
     /// would drag the player across the zone map without their ever leaving
     /// the Stack.
-    pub fn move_player(&mut self, dx: i32, dy: i32) {
+    /// Returns **what the ground took off the party on this step**, `0` for a
+    /// step onto clean ground and for every branch that isn't a step at all —
+    /// a refusal, a bump into a creature or a door, a shove at a wall.
+    ///
+    /// Reported rather than remembered, and rather than left for the caller
+    /// to recompute: app-core plays a harsher cue for an attriting step (see
+    /// `app::playing::stepped`), and the only honest source for that is what
+    /// actually landed. Asking "does the tile under the party bite?" after
+    /// the fact would lie about a shove at a wall, which arrives here as a
+    /// movement key, spends a turn, and costs no Integrity —
+    /// `a_step_that_bounces_off_a_wall_costs_no_integrity` pins that.
+    /// Remembering it in a `Resource` instead would shift query iteration
+    /// order across the whole engine to carry one `i32` one function up.
+    pub fn move_player(&mut self, dx: i32, dy: i32) -> i32 {
         if self.is_game_over().is_some() || self.has_active_battle() || self.is_underground() {
-            return;
+            return 0;
         }
         // Base space is its own coordinate space with its own walkability,
         // and the player's `Position` stays pinned to the anchor tile
@@ -594,7 +607,10 @@ impl Game {
         // means nothing in there.
         if self.in_base() {
             self.move_in_base(dx, dy);
-            return;
+            // The base slab is the one safe floor and carries no condition
+            // (`environment_biome_at` refuses `Platform` outright), so there
+            // is never a bite in here to report.
+            return 0;
         }
         let player = self.player_entity();
         // Any attempt to move ends a job you were working (see
@@ -608,19 +624,19 @@ impl Game {
             let pack = self.gather_pack(target);
             self.start_battle(pack);
             self.tick();
-            return;
+            return 0;
         }
         if let Some(nest) = self.find_nest_at(nx, ny) {
             self.attack_nest(nest);
             self.tick();
-            return;
+            return 0;
         }
         if self.find_surface_link_at(nx, ny).is_some() {
             // The entrance survives, unlike a zone portal — it is a place
             // you come back to, not a one-way door.
             self.enter_stack(nx, ny);
             self.tick();
-            return;
+            return 0;
         }
         if let Some(key) = self.find_settlement_at(nx, ny) {
             // The fourth arm of the same ladder, and the one that admits
@@ -644,7 +660,7 @@ impl Game {
                 known.visited = true;
             }
             self.tick();
-            return;
+            return 0;
         }
         // **No structure is consulted here.** Every `Structure` stands in
         // base space — `Structure` is the space tag, and there is exactly
@@ -667,6 +683,7 @@ impl Game {
             .biome;
         let walkable = self.world.resource_mut::<WorldMap>().tile(nx, ny).walkable;
         let mut drag_ticks = 0;
+        let mut bite = 0;
         if walkable {
             let mut p = self.world.get_mut::<Position>(player).unwrap();
             p.x = nx;
@@ -682,7 +699,27 @@ impl Game {
             // and every other incoming-damage rule apply for free.
             let terrain = self.terrain_at(nx, ny);
             let max_hp = self.world.get::<Stats>(player).map_or(0, |s| s.max_hp);
-            self.apply_damage(player, terrain.effect.bite(max_hp));
+            bite = self.apply_damage(player, terrain.effect.bite(max_hp));
+            // **The bite says so.** It used to be the only thing in the game
+            // that lowered the player's HP in silence: the crossing line
+            // below fires only when the biome *changes*, so every step taken
+            // inside one patch cost Integrity and pushed nothing at all.
+            // Stack corruption — the same shape of per-step terrain damage —
+            // has always announced itself, and the asymmetry is what read as
+            // dying at random. The landed figure and not the rolled one, for
+            // `apply_damage`'s own reason: mitigation is in play here, and a
+            // line printing the request claims damage nobody took.
+            if bite > 0 {
+                let source = terrain
+                    .condition
+                    .map(|c| c.def().name)
+                    .or_else(|| terrain.event.map(|e| e.def().name))
+                    .unwrap_or("The ground");
+                self.log_kind(
+                    MessageKind::Outcome,
+                    format!("{source} takes {bite} off you."),
+                );
+            }
             drag_ticks = terrain.effect.extra_ticks;
             // Fired here, where the effect actually lands, and not from
             // `note_static_turnover`'s epoch boundary — that fires for
@@ -744,6 +781,7 @@ impl Game {
             }
             self.tick();
         }
+        bite
     }
 
     /// Announces weather arriving or clearing under the player, if the tick

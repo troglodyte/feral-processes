@@ -25,12 +25,14 @@
 #
 # SO A ROW CENSUS IS NOT A CLEAN BILL OF HEALTH, and this script refuses to
 # call it one. A kind with no `fields` entry below reports ROWS ONLY, which
-# means the ids line up and the columns were never looked at. Three kinds have
-# been diffed cell by cell -- abilities, research, structures -- and the other
-# four have not. Adding a `fields` extractor is how that list grows, and every
-# one written so far found real rot the row census could not see: a `cost`
-# column of zeros, a lost `harness_puller`, a Zone Portal priced at 10 when it
-# costs 24 and three crafted items.
+# means the ids line up and the columns were never looked at. Six of the seven
+# have been diffed cell by cell; `items` has not, and is nine rows short as
+# well. Adding a `fields` extractor is how that list grows, and all but one
+# written so far found real rot the row census could not see: an abilities
+# `cost` column of zeros, a lost `harness_puller`, a Zone Portal priced at 10
+# when it costs 24 and three crafted items, a whole `Mainframe` -> `Backplane`
+# rename the roster never took, and the Overseer's attack overstated by half.
+# `achievements` was the only one already clean.
 #
 # EXPECT FALSE POSITIVES WHEN YOU WRITE ONE, and encode them rather than
 # living with them, or the script's silence stops meaning anything. Four kinds
@@ -117,6 +119,65 @@ def rust_enum(relpath, enum_name):
 
     source.directory = None
     return source
+
+
+def perks_source():
+    """Perk ids, paired with the `assets/perks/*.ron` that defines each.
+
+    **Two sources, deliberately.** `crates/engine/src/perks.rs`'s enum is the
+    authority on which perks *exist* -- a variant is code, and a page listing
+    one that was deleted is wrong however tidy the assets are. The name and
+    cost are data, in a file that names its variant with `id: Attacker`. So a
+    variant with no file surfaces here as a missing file rather than as a
+    silently unchecked row. `groups.ron` carries no `id` and is not a perk;
+    it is the grouping config, and `perks.rs` says so where it skips it.
+    """
+    variants = rust_enum("crates/engine/src/perks.rs", "Perk")()
+    files = {}
+    for path in (ROOT / "assets" / "perks").glob("*.ron"):
+        m = re.search(r"^\s*id:\s*([A-Za-z0-9]+)\s*,", path.read_text(), re.M)
+        if m:
+            files[m.group(1)] = path
+    return {v: files.get(v) for v in variants}
+
+
+perks_source.directory = None
+
+
+def perks_fields(path):
+    """A perk's `name` and `cost`, which are the two columns that are data.
+
+    `effect` and `hook` are prose -- "a direct Stats write at purchase" is not
+    in any file -- and are not checked. `const` is checked separately by
+    `perk_constants_agree_with_tuning` below, because it is a *quotation* of
+    `tuning.rs` rather than a field of anything.
+    """
+    text = path.read_text()
+    return {
+        "name": re.search(r'\bname:\s*"([^"]*)"', text).group(1),
+        "cost": int(re.search(r"^\s*cost:\s*([0-9]+)", text, re.M).group(1)),
+    }
+
+
+def perk_constants_agree_with_tuning(table):
+    """The `const` column quotes `tuning.rs` as `NAME = value`, so a retune
+    silently makes this page lie -- the exact failure that left abilities'
+    cost column reading 0. Rows naming a constant without a value (the two
+    affinity rates, which the page explains in prose instead) are checked for
+    existence only."""
+    tuning = (ROOT / "crates" / "engine" / "src" / "tuning.rs").read_text()
+    problems = []
+    for ident, row in sorted(table.items()):
+        name, _, quoted = (x.strip() for x in row["const"].partition("="))
+        m = re.search(rf"^pub const {re.escape(name)}\s*:\s*\w+\s*=\s*([^;]+);", tuning, re.M)
+        if not m:
+            problems.append(f"{ident}.const: tuning.rs declares no {name}")
+        elif quoted and float(m.group(1)) != float(quoted):
+            problems.append(
+                f"{ident}.const: table says {name} = {quoted}, "
+                f"tuning.rs says {m.group(1).strip()}"
+            )
+    return problems
 
 
 def abilities_fields(path):
@@ -301,13 +362,118 @@ def research_fields(path):
     }
 
 
+def achievements_fields(path):
+    """One achievement's columns as `achievements-gen.py`'s table spells them.
+
+    `when` is not checked: it is a hand-written English phrase, not the file's
+    `description`. And `n` is a *count* rather than the reward's payload --
+    `StartingProgram("scrapper")` carries a species id, and the table records
+    1 there and keeps the id in its own `PAYLOAD` side-table, because `n` is
+    what gets summed against the profile ceilings.
+    """
+    text = path.read_text()
+    trigger = re.search(r"\btrigger:\s*([A-Za-z]+)\((.*?)\),\s*$", text, re.M)
+    reward = re.search(r"\breward:\s*([A-Za-z]+)\((.*?)\),\s*$", text, re.M)
+    kind, raw = trigger.group(1), trigger.group(2).strip()
+    if raw == "None":
+        arg = None
+    elif raw.startswith("Some("):
+        arg = raw[len('Some("') : -2]
+    else:
+        arg = int(raw)
+    pay = reward.group(2).strip()
+    return {
+        "name": re.search(r'\bname:\s*"([^"]*)"', text).group(1),
+        "trig": kind,
+        "arg": arg,
+        "reward": reward.group(1),
+        "n": 1 if pay.startswith('"') else int(pay),
+    }
+
+
+def roster_fields(path):
+    """One species' columns as `roster-gen.py`'s table spells them.
+
+    Two are rendered rather than transcribed. `ab` writes each entry as
+    `"<id> L<level>"`, dropping the suffix for an ability a species has from
+    level 1 (a boss's opener). `aff` writes the affinity tuple as
+    `"damage 1.3 / heal 0.85"` in the order the file authors it, and is None
+    for a species that declares none.
+    """
+    text = "\n".join(
+        line
+        for line in path.read_text().split("\n")
+        if not line.strip().startswith("//")
+    )
+
+    def num(key):
+        m = re.search(rf"\b{key}:\s*(-?[0-9.]+)", text)
+        if not m:
+            return None
+        value = float(m.group(1))
+        return int(value) if value == int(value) else value
+
+    abilities = []
+    block = re.search(r"\babilities:\s*\[(.*?)\]", text, re.S)
+    if block:
+        for entry in re.finditer(
+            r'\(id:\s*"([^"]*)"(?:,\s*level:\s*([0-9]+))?\)', block.group(1)
+        ):
+            abilities.append(
+                f"{entry.group(1)} L{entry.group(2)}" if entry.group(2) else entry.group(1)
+            )
+
+    # The table writes the *boosted* axis first regardless of the order the
+    # file authors the tuple in, so this sorts by value rather than reading
+    # them out in file order.
+    affinities = re.search(r"\baffinities:\s*\((.*?)\)", text, re.S)
+    aff = (
+        " / ".join(
+            f"{k} {v:g}"
+            for k, v in sorted(
+                (
+                    (m.group(1), float(m.group(2)))
+                    for m in re.finditer(r"([a-z]+):\s*([0-9.]+)", affinities.group(1))
+                ),
+                key=lambda kv: -kv[1],
+            )
+        )
+        if affinities
+        else None
+    )
+
+    yield_of = re.search(r'work_resource:\s*Some\("([^"]*)"\)', text)
+    return {
+        "name": re.search(r'\bname:\s*"([^"]*)"', text).group(1),
+        "g": re.search(r"\bglyph:\s*'(.)'", text).group(1),
+        "hp": num("base_hp"),
+        "atk": num("base_atk"),
+        "def": num("base_mitigation"),
+        "spd": num("base_speed"),
+        "int": num("base_int"),
+        # Floats, not ints: `growth_multiplier: 2.0` must not compare as `2`
+        # against a table that writes `2.0`, and an omitted one is the 1.0
+        # every unmodified species runs at.
+        "tame": float(num("taming_difficulty")),
+        "grow": float(num("growth_multiplier") or 1.0),
+        "bio": re.search(r"\bhabitats:\s*\[([^\]]*)\]", text).group(1).replace(" ", "").split(","),
+        "yield": yield_of.group(1) if yield_of else None,
+        "boss": 1 if re.search(r"\bis_boss:\s*true", text) else 0,
+        "nest": 1 if re.search(r"\bcan_nest:\s*true", text) else 0,
+        "ab": abilities,
+        "aff": aff,
+    }
+
+
 # `table` is the name of the tuple list at the top of the script -- they are
 # not consistently named, and guessing wrong reads as a missing table rather
 # than a typo. `fields` is optional: absent means row-census only, and the
 # report says so rather than calling it clean.
 KINDS = {
     "abilities": dict(table="A", source=ron_dir("abilities"), fields=abilities_fields),
-    "achievements": dict(table="A", source=ron_dir("achievements")),
+    "achievements": dict(
+        table="A", source=ron_dir("achievements"), fields=achievements_fields
+    ),
     "items": dict(table="I", source=ron_dir("items")),
     # `optional_tail`: how many trailing cells a row may legitimately omit.
     # `research-gen.py` says so in a comment above its own table -- a node
@@ -322,13 +488,12 @@ KINDS = {
         defaults={"tools": []},
         fields=research_fields,
     ),
-    "roster": dict(table="S", source=ron_dir("species")),
+    "roster": dict(table="S", source=ron_dir("species"), fields=roster_fields),
     "structures": dict(
         table="S", source=ron_dir("structures"), fields=structures_fields
     ),
-    "perks": dict(
-        table="P", source=rust_enum("crates/engine/src/perks.rs", "Perk")
-    ),
+    "perks": dict(table="P", source=perks_source, fields=perks_fields,
+                  extra=perk_constants_agree_with_tuning),
 }
 
 
@@ -386,6 +551,10 @@ def audit(script, spec):
                         f"{ident}.{key}: table={table[ident][key]!r} "
                         f"source={value!r}"
                     )
+
+    if spec.get("extra"):
+        checked_columns = True
+        problems.extend(spec["extra"](table))
 
     if problems:
         print(f"!! {script:14} {len(table):3} rows")

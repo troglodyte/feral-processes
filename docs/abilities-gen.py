@@ -18,10 +18,10 @@
 A = [
  # id                   name                       target                effect       sub              pow  spr  dur  status             cd  cost
  ("ablative_layer",    "Ablative Layer Single",   "OneAlly",            "FieldBuff", "Mitigation",     10,   0,    0, "",                 0, 20),
- ("acid_wash",         "Etch Single",             "OneEnemyGroupFront", "Buff",      "Def",            -5,   0,    3, "",                 2, 8),
- ("bastion",           "Bastion Party",           "WholeParty",         "Buff",      "Def",             4,   0,    3, "",                 3, 11),
- ("bastion_shield_v2", "Bastion Single v2.0",     "OneAlly",            "Buff",      "Def",             5,   0,    3, "",                 2, 7),
- ("bastion_shield_v3", "Bastion Single v3.0",     "OneAlly",            "Buff",      "Def",             7,   0,    4, "",                 2, 9),
+ ("acid_wash",         "Etch Single",             "OneEnemyGroupFront", "Buff",      "Mitigation",    -15,   0,    3, "",                 2, 8),
+ ("bastion",           "Bastion Party",           "WholeParty",         "Buff",      "Mitigation",     12,   0,    3, "",                 3, 11),
+ ("bastion_shield_v2", "Bastion Single v2.0",     "OneAlly",            "Buff",      "Mitigation",     15,   0,    3, "",                 2, 7),
+ ("bastion_shield_v3", "Bastion Single v3.0",     "OneAlly",            "Buff",      "Mitigation",     20,   0,    4, "",                 2, 9),
  ("bit_rot",           "Bit Rot Everyone",        "AllEnemies",         "Debuff",    "Bleed",           2,   0,    4, "",                 5, 16),
  ("bit_rot_v2",        "Bit Rot Single v2.0",     "OneEnemyGroupFront", "Debuff",    "Bleed",           4,   0,    3, "",                 2, 7),
  ("bit_rot_v3",        "Bit Rot Single v3.0",     "OneEnemyGroupFront", "Debuff",    "Bleed",           6,   0,    4, "",                 3, 9),
@@ -30,6 +30,7 @@ A = [
  ("brownout",          "Throttle Everyone",       "AllEnemies",         "Buff",      "Atk",            -3,   0,    3, "",                 5, 16),
  ("buffer_overrun",    "Buffer Overrun Party",    "WholeParty",         "Phase",     "",                0,   0,    0, "",                 0, 12),
  ("bus_fault",         "Pipeline Stall Everyone", "AllEnemies",         "Damage",    "",                6,   2,    0, "Stun 25% 1r",      5, 18),
+ ("bus_snoop",         "Snoop Everyone",          "AllEnemies",         "Drain",     "",                9,   2,    0, "",                 5, 20),
  ("cascade_overflow",  "Packet Shred Group v1.0", "WholeEnemyGroup",    "Damage",    "",                6,   2,    0, "",                 2, 8),
  ("checksum_repair",   "Patch Single v2.0",       "OneAlly",            "Heal",      "",               25,   6,    0, "",                 3, 9),
  ("clock_gate",        "Throttle Single",         "OneEnemyGroupFront", "Buff",      "Atk",            -5,   0,    3, "",                 2, 8),
@@ -41,13 +42,13 @@ A = [
  ("deadman",          "Deadman Everyone",        "AllEnemies",         "Damage",    "",               14,   4,    0, "",                 4, 0),
  ("decompile",         "Decompile Single",        "OneEnemyGroupFront", "Decompile", "",                0,   0,    0, "",                 0, 0),
  ("deep_scan",         "Deep Scan Party",         "WholeParty",         "FieldBuff", "CaptureBoost",   20,   0,    0, "",                 0, 18),
- ("etch",              "Etch Group",              "WholeEnemyGroup",    "Buff",      "Def",            -4,   0,    3, "",                 3, 10),
+ ("etch",              "Etch Group",              "WholeEnemyGroup",    "Buff",      "Mitigation",    -12,   0,    3, "",                 3, 10),
  ("flush_cache",       "Flush Cache Party",       "WholeParty",         "Cleanse",   "",                0,   0,    0, "",                 3, 7),
  ("fork_bomb",         "Fork Bomb Group",         "WholeEnemyGroup",    "Damage",    "",               15,   4,    0, "Bleed 35% 2r",     3, 12),
  ("hard_fault",       "Hard Fault Everyone",     "AllEnemies",         "Debuff",    "Stun",            0,   0,    2, "",                 5, 20),
  ("hard_lock",         "Hard Lock Single v2.0",   "OneEnemyGroupFront", "Debuff",    "Stun",            0,   0,    2, "",                 4, 10),
- ("hardened_shell",    "Hardened Shell Single",   "OneAlly",            "FieldBuff", "Def",             4,   0,    0, "",                 0, 14),
- ("hardened_shell_party", "Hardened Shell Party", "WholeParty",         "FieldBuff", "Def",             4,   0,    0, "",                 0, 32),
+ ("hardened_shell",    "Hardened Shell Single",   "OneAlly",            "FieldBuff", "Mitigation",     12,   0,    0, "",                 0, 14),
+ ("hardened_shell_party", "Hardened Shell Party", "WholeParty",         "FieldBuff", "Mitigation",     12,   0,    0, "",                 0, 32),
  ("heap_corruption",   "Bit Rot Group",           "WholeEnemyGroup",    "Debuff",    "Bleed",           3,   0,    3, "",                 3, 11),
  ("hot_patch",         "Patch Single v1.0",       "OneAlly",            "Heal",      "",                8,   2,    0, "",                 1, 0),
  ("hot_spare",        "Hot Spare Single",        "OneAlly",            "Heal",      "",                8,   2,    0, "",                 3, 0),
@@ -64,7 +65,7 @@ A = [
  ("null_route",        "Hard Lock Everyone",      "AllEnemies",         "Debuff",    "Stun",            0,   0,    1, "",                 5, 15),
  ("overclock",         "Overclock Single",        "OneAlly",            "FieldBuff", "Atk",             4,   0,    0, "",                 0, 14),
  ("overclock_array",   "Hyperthread Party",       "WholeParty",         "Buff",      "Atk",             3,   0,    3, "",                 3, 10),
- ("oxide_strip",       "Etch Everyone",           "AllEnemies",         "Buff",      "Def",            -3,   0,    3, "",                 5, 16),
+ ("oxide_strip",       "Etch Everyone",           "AllEnemies",         "Buff",      "Mitigation",     -9,   0,    3, "",                 5, 16),
  ("packet_shred",      "Packet Shred Group v2.0", "WholeEnemyGroup",    "Damage",    "",               10,   2,    0, "",                 3, 11),
  ("parity_guard",     "Parity Single",           "OneAlly",            "Buff",      "Mitigation",      9,   0,    3, "",                 4, 0),
  ("pid_exhaustion",    "Fork Bomb Everyone",      "AllEnemies",         "Damage",    "",                8,   2,    0, "Bleed 20% 2r",     5, 18),
@@ -77,12 +78,18 @@ A = [
  ("rollback_v1",       "Rollback Single v1.0",    "OneAlly",            "Heal",      "",               10,   2,    0, "",                 2, 6),
  ("rollback_v2",       "Rollback Single v2.0",    "OneAlly",            "Heal",      "",               20,   5,    0, "",                 3, 8),
  ("rollback_v3",       "Rollback Single v3.0",    "OneAlly",            "Heal",      "",               35,   9,    0, "",                 4, 10),
+ ("row_hammer_everyone","Row Hammer Everyone",    "AllEnemies",         "Damage",    "",                5,   1,    0, "",                 4, 15),
+ ("row_hammer_group",  "Row Hammer Group",        "WholeEnemyGroup",    "Damage",    "",                6,   1,    0, "",                 3, 10),
+ ("row_hammer_single", "Row Hammer Single",       "OneEnemyGroupFront", "Damage",    "",                7,   1,    0, "",                 2, 7),
  ("salvage_routine",   "Salvage Routine Party",   "WholeParty",         "FieldBuff", "DropBoost",      20,   0,    0, "",                 0, 18),
- ("sandbox",           "Bastion Single v1.0",     "OneAlly",            "Buff",      "Def",             3,   0,    3, "",                 1, 0),
+ ("sandbox",           "Bastion Single v1.0",     "OneAlly",            "Buff",      "Mitigation",      9,   0,    3, "",                 1, 0),
+ ("segfault_everyone", "Segfault Everyone",       "AllEnemies",         "Damage",    "",               28,  12,    0, "",                 5, 18),
+ ("segfault_group",    "Segfault Group",          "WholeEnemyGroup",    "Damage",    "",               14,   8,    0, "",                 3, 11),
  ("segfault_v1",       "Segfault Single v1.0",    "OneEnemyGroupFront", "Damage",    "",                6,   2,    0, "",                 2, 6),
  ("segfault_v2",       "Segfault Single v2.0",    "OneEnemyGroupFront", "Damage",    "",               11,   3,    0, "",                 3, 8),
  ("segfault_v3",       "Segfault Single v3.0",    "OneEnemyGroupFront", "Damage",    "",               17,   4,    0, "",                 4, 10),
  ("siphon_cycles",     "Leech Single",            "OneEnemyGroupFront", "Drain",     "",               10,   2,    0, "",                 2, 9),
+ ("skim_everyone",     "Skim Everyone",           "AllEnemies",         "Drain",     "",                3,   1,    0, "",                 4, 15),
  ("skim_group",        "Skim Group",              "WholeEnemyGroup",    "Drain",     "",                4,   1,    0, "",                 3, 8),
  ("skim_v1",           "Skim Single v1.0",        "OneEnemyGroupFront", "Drain",     "",                5,   1,    0, "",                 2, 6),
  ("skim_v2",           "Skim Single v2.0",        "OneEnemyGroupFront", "Drain",     "",                9,   2,    0, "",                 3, 8),
@@ -285,24 +292,36 @@ proc is free by design — its 25% rate is what it pays instead.
 Read this one carefully, because it measures power per round and **not** total
 damage dealt: a routine at the top of the chart that reaches one program is
 worth far less per run than one halfway down that reaches five. Packet Shred
-Everyone leads on both counts at once, which is exactly why it is a boss
-routine and not something a player is ever taught.
+Everyone leads on both counts at once, which is why no research node teaches
+it and no wild carrier rolls it — it is the two bosses' innate, and the only
+way to meet it is to be on the wrong end of it.
+
+Segfault Everyone is the one directly behind it on both axes and *is*
+learnable, which is what the family is for: 16-40 against Packet Shred
+Everyone's 19-31, bought with a fifth round of cooldown, three more Power and
+all but one point of aim. A better ceiling and a worse floor at the same
+reach — the widening band is Segfault's whole identity, and it is what keeps
+the family from being a second copy of a ladder that already exists.
 
 Within a family the rate is where reaching wider gets paid for, and it falls
 as the scope grows: Pipeline Stall runs 2.33, 1.50, 1.20 across its three
 tiers, and Fork Bomb drops from 5.00 at Group to 1.60 at Everyone. You buy
-reach with efficiency. Packet Shred is the one family that doesn't pay,
-rising from 3.00 at Group v1.0 to 6.25 at Everyone — better per round as well
-as wider — and the thing holding those tiers back is what it takes to learn
-them rather than what they cost to run.
+reach with efficiency. Two families don't, and they buy their way out of it
+differently. Packet Shred rises from 3.00 at Group v1.0 to 6.25 at Everyone —
+better per round as well as wider — and what holds those tiers back is what it
+takes to learn them rather than what they cost to run, the top one being a
+boss's innate and nothing else's. Segfault climbs the same way, 3.00 to 5.60
+across five tiers, and is learnable at every rung; what it pays instead is the
+band. Its floor gets worse as its ceiling gets better, so the rate this chart
+measures is a mean the routine will often miss on the low side.
 
 A routine is bought twice over: once in the rounds it spends locked away,
 and once out of the reserve of whoever ran it. Until 2026-08-08 the second
 half came off *the player's* meter even when a companion was the one acting,
 which rationed the party's own kit against a pool only the player had; it
 comes off the invoker now, which is what makes a levelled companion's Special
-its own to spend. What marks out the first thing a
-species grants is the bottom of the cooldown ladder: the routines that
+its own to spend. What marks out the first thing a species grants is the
+bottom of the cooldown ladder: the routines that
 recharge in a single round — `memory_leak`, `priority_boost`, `sandbox`,
 `hot_patch` — are the weakest tier of their families, and three of the five
 class utilities are one or two rounds behind them. So the opening move of a
@@ -353,10 +372,12 @@ point: a slot is a commitment.
 That split is also what makes the exclusive pool possible. An **exclusive**
 routine is one nobody can learn and therefore nobody can etch — its disk
 only ever arrives already written, off a boss's drop table or a Stack
-trader's rare shelf row. Six ship: Kernel Shear, Null Cache and Deadman off
-Wintermute; Hard Fault, Long Winter and Watchdog off the Overseer. Long
-Winter is the field routine among them, which is why it sits at the top of
-the table above with a Power cost nothing else comes near.
+trader's rare shelf row. Seven ship: Kernel Shear, Null Cache and Deadman off
+Wintermute; Hard Fault, Long Winter, Watchdog and Snoop off the Overseer. The
+two bosses' tables roll independently, so the Overseer holding a fourth costs
+the other three nothing. Long Winter is the field routine among them, which is
+why it sits at the top of the table above with a Power cost nothing else comes
+near.
 
 **Eight of them are passives.** They occupy a slot, appear in no menu, and
 fire on an event instead of a turn. Their cooldowns really are their whole

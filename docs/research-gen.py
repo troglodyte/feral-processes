@@ -24,7 +24,10 @@ N = [
  ("weapon_bench",        "Weapon Fabrication",   0,  24, ["automation"],      ("structures", ["fabricator"])),
  ("routine_fabrication", "Routine Fabrication",  0,  26, ["automation"],      ("structures", ["log_scraper", "lathe", "transcriber", "disk_press"])),
  ("program_refactoring", "Program Refactoring",  2,  75, ["automation"],      ("structures", ["annealing_node", "refactor_bench"]), ["component_stripper"]),
+ ("teardown",            "Teardown",             0,  12, ["automation"],      ("structures", ["teardown_rig"])),
  ("fortification",       "Fortification",        0,  18, ["power_grid"],      ("structures", ["shield", "patch_node"])),
+ ("cache_coherence",     "Cache Coherence",      2,  40, ["power_grid"],      ("structures", ["cache_tap", "line_driver"])),
+ ("dispatch",            "Dispatch Protocol",    2,  45, ["power_grid"],      ("structures", ["relay"])),
  ("self_exec",           "Self-Execution",       0,  14, ["routine_fabrication"], ("abilities", ["priority_boost"])),
  ("field_ops",           "Field Operations",     0,  20, ["self_exec"],       ("abilities", ["repair_loop", "trickle_charge"])),
  ("symbolic_links",      "Symbolic Links",       0,  22, ["self_exec"],       ("abilities", ["symlink"])),
@@ -226,8 +229,8 @@ rules are asserted against the loaded tree in the engine's test suite.
 Three roots, and they are three different games. **Automation** is the trunk:
 everything that makes a base do work hangs off it, and it is also the cheapest
 node in the tree at {BY["automation"]["cost"]}, so the opening move is barely a
-decision. **Power Grid** is a two-node stub: the current a base runs on,
-and the pair of buildings that keep it standing.
+decision. **Power Grid** is the base's second trunk: the current a base runs on, and the
+{len(kids["power_grid"])} branches that spend it ({", ".join(c["name"] for c in kids["power_grid"])}).
 **Isometric Commerce** is a leaf — {BY["commerce"]["cost"]} Research Data buys
 the iso Market and leads nowhere, which makes it the one node you take purely
 because you want the thing rather than the branch.

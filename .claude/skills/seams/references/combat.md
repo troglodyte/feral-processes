@@ -226,6 +226,35 @@
   path; honouring it in `use_ability` stops back-row hostiles running what
   they run today.
 
+- **`field_only` means never-in-battle; `field_runnable` means offered on the
+  map.** One predicate answered both until a `Heal` became the first effect
+  that runs in both places. **The trap is widening `field_only` instead**: it
+  is read by four battle-side filters (`battle_special_options`,
+  `wild_routine_ready`, `wieldable_routines`, `sortie.rs`'s
+  `swing_for_the_squad`) that all mean "never in a fight", so widening deletes
+  heals from every Special menu — and it breaks the load, because
+  `passive_field_mismatch` **refuses** a `triggers` on a field-only effect
+  (`hot_spare`) and `field_only_dead_fields` **warns** on a `cooldown` (all
+  nine shipped heals). `field_runnable` is on `AbilityDef` rather than
+  `AbilityEffect` because two thirds of the rule are not in the effect —
+  `is_passive` reads `triggers`, the price gate reads `power_cost` — and
+  because `Game::routine_detail`'s "when" line reads it too, so the inspect
+  page cannot promise a row the list will not show. **A `Heal` reaches the map
+  only if it is priced and ally-facing.** A cooldown counts battle rounds and
+  the map has none, so Power is the only throttle out there and a free heal
+  has none — `hot_patch` is free and `scaled_range` grows its band with the
+  invoker's level, so it would be unlimited repair at every level;
+  `no_shipped_field_runnable_routine_runs_for_free` is the census. The
+  ally-facing half is what keeps `Game::field_recipients`' `unreachable!`
+  unreachable: a `FieldBuff` is held to two targets by
+  `field_buff_target_mismatch` at load, a `Heal` is not, so
+  `AbilityTarget::is_ally_facing` is the gate and is exhaustive on
+  `cell_mark`'s rule. **What a field heal does is `use_ability`'s, not a copy**
+  — same band, same invoker scaling, same "log what `restore_hp` returned"
+  rule; `run_field_heal` owns the price, the refusals and the tick alone. Its
+  one addition is that an invocation landing only on full bars is refused above
+  the charge: in a fight a wasted turn is a real choice and the round advances
+  anyway, but out here declining is free.
 - **Every routine that moves Integrity rolls a band, and the census is what
   keeps it that way.** `spread` on `Damage`/`Drain`/`Heal`, rolled through
   `battle::DamageRange` — one draw whatever the width, so authoring a spread

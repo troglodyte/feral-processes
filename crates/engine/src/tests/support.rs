@@ -1495,6 +1495,15 @@ pub(super) fn spawn_tamed(game: &mut Game, hp: i32, atk: i32) -> Entity {
     entity
 }
 
+/// `spawn_tamed` with a `ZonePortal` set, so a test can pin the depth a
+/// program was caught at without reaching into the ECS itself — e.g. which
+/// side of `programs_for_build`'s `>=` floor it lands on.
+pub(super) fn tame_at_zone(game: &mut Game, zone: u32) -> Entity {
+    let entity = spawn_tamed(game, 10, 3);
+    game.world.entity_mut(entity).insert(ZonePortal(zone));
+    entity
+}
+
 /// `spawn_tamed` at a chosen tile and carrying a `Glyph`, so `view_entities`
 /// can see it.
 ///

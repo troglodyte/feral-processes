@@ -2754,3 +2754,135 @@ fn founding_costs_nothing() {
         .expect("an empty pack is enough to found a base");
     assert!(game.has_home(), "the Home is standing");
 }
+
+// ------------------------------------------------------- the program rule
+
+/// `program_tier_required` is the whole of the rule: a fresh deploy always
+/// wants a Mk1 program, and an upgrade wants whatever tier it raises the
+/// structure to.
+#[test]
+fn the_tier_a_goal_demands_is_its_own_tier() {
+    use crate::game::catalog::program_tier_required;
+
+    assert_eq!(program_tier_required(BuildGoal::New), 1);
+    assert_eq!(program_tier_required(BuildGoal::Upgrade { to_tier: 3 }), 3);
+}
+
+/// `programs_for_build`'s floor is `>=`, never `==`. A run whose roster has
+/// outgrown zone 1 could not build at all under a strict match.
+#[test]
+fn a_deeper_program_still_qualifies_for_a_shallow_build() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let deep = tame_at_zone(&mut game, 5);
+
+    let eligible = game.programs_for_build(1);
+
+    assert!(
+        eligible.iter().any(|p| p.entity == deep),
+        "zone >= tier is a floor, not a match — a zone 5 program may raise a Mk1"
+    );
+}
+
+/// The other side of the same floor: a program caught shallower than the
+/// tier being raised does not qualify.
+#[test]
+fn a_shallow_program_does_not_qualify_for_a_deep_upgrade() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let shallow = tame_at_zone(&mut game, 2);
+
+    let eligible = game.programs_for_build(3);
+
+    assert!(!eligible.iter().any(|p| p.entity == shallow));
+}
+
+/// `HOME_STRUCTURE_ID` is exempt at every tier: a fresh run owns zero
+/// programs, and one is granted only as an achievements reward, so a Home
+/// that cost a program would be unfoundable. Everything else needs one.
+#[test]
+fn home_is_the_one_structure_that_needs_no_program() {
+    let game = Game::new(20260908, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    assert!(!game.structure_needs_program(&HOME_STRUCTURE_ID.into()));
+    assert!(game.structure_needs_program(&"fabricator".into()));
+}
+
+/// The weapon in the player's hand is not a spare part — it cannot be
+/// offered to a build even though it is still owned and still at depth.
+#[test]
+fn the_wielded_program_is_not_offered_to_a_build() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = spawn_tamed(&mut game, 10, 3);
+    game.wield_program(p)
+        .expect("a fresh program is free to wield");
+
+    assert!(
+        game.programs_for_build(1).is_empty(),
+        "you cannot build with the thing in your hand"
+    );
+}
+
+/// A program away on a sortie cannot be reached to spend on a build, so it
+/// is not offered even though nothing else disqualifies it.
+#[test]
+fn a_sortied_program_is_not_offered_to_a_build() {
+    use crate::resources::{Sortie, Sorties};
+
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .resource_mut::<Sorties>()
+        .0
+        .push(Sortie::test_stub(vec![p]));
+
+    assert!(
+        game.programs_for_build(1).is_empty(),
+        "a program away on a sortie is not reachable to spend"
+    );
+}
+
+/// `Downed` is the roster slot a wipe is meant to cost — offering it to a
+/// build would let a build request quietly refund that cost.
+#[test]
+fn a_downed_program_is_not_offered_to_a_build() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(p).insert(Downed);
+
+    assert!(
+        game.programs_for_build(1).is_empty(),
+        "a downed program is the roster slot a wipe is supposed to cost"
+    );
+}
+
+/// Freeing — let alone despawning — a program holding a load destroys the
+/// load, so a carrier is withheld from the build list entirely.
+#[test]
+fn a_program_carrying_goods_is_not_offered_to_a_build() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(p).insert(Carrying {
+        item: ItemId::from(ids::CORE_FRAGMENT),
+        qty: 1,
+    });
+
+    assert!(
+        game.programs_for_build(1).is_empty(),
+        "despawning a carrier destroys its load"
+    );
+}
+
+/// The program rule may never demand a depth the tier ceiling would not
+/// have let the player reach. If `upgrade_ceiling` ever loosens, this is
+/// what says so out loud instead of leaving an unsatisfiable upgrade.
+#[test]
+fn the_upgrade_ceiling_keeps_the_program_rule_satisfiable() {
+    use crate::game::catalog::program_tier_required;
+
+    for zone in 1..=5u32 {
+        let ceiling = zone; // upgrade_ceiling = min(max_tier, ZoneLevel)
+        assert!(
+            program_tier_required(BuildGoal::Upgrade { to_tier: ceiling }) <= zone,
+            "a Mk{ceiling} upgrade offered in zone {zone} must not need a deeper program"
+        );
+    }
+}

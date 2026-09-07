@@ -507,6 +507,44 @@ impl Game {
             .collect()
     }
 
+    /// Every owned program that could be spent on a build of `tier`, in
+    /// `owned_pets` order so the picker agrees with every other roster
+    /// screen.
+    ///
+    /// `>=` and never `==`: a run whose roster has outgrown zone 1 must
+    /// still be able to raise a Mk1, or deep play locks itself out of
+    /// building.
+    ///
+    /// **Depth is not the whole filter.** A program's role is derived and
+    /// there is no "owned but idle" state, so an unfiltered list offers the
+    /// weapon in the player's hand and a body that is halfway across a
+    /// sortie. Each exclusion below is for its own reason, and none is
+    /// cosmetic: a carrier's goods are destroyed by freeing it, let alone
+    /// despawning it; a sortied program is away and cannot be reached; a
+    /// `Downed` one is the roster slot a wipe is supposed to cost.
+    ///
+    /// **The only derivation of this list.** The renderer draws what
+    /// app-core counts and filters nothing itself.
+    pub fn programs_for_build(&mut self, tier: u32) -> Vec<PetInfo> {
+        self.owned_pets()
+            .into_iter()
+            .filter(|p| self.zone_tier(p.entity) >= tier)
+            .filter(|p| !p.wielded)
+            .filter(|p| {
+                !self
+                    .world
+                    .resource::<crate::resources::Sorties>()
+                    .contains(p.entity)
+            })
+            .filter(|p| {
+                self.world
+                    .get::<crate::components::Downed>(p.entity)
+                    .is_none()
+            })
+            .filter(|p| self.world.get::<Carrying>(p.entity).is_none())
+            .collect()
+    }
+
     /// You, then every program you own — everyone the manifest screen can
     /// page through. Same membership and order as `owned_pets` with the
     /// player prepended, so the two can't disagree about what you have.

@@ -824,7 +824,7 @@ fn a_supplier_with_nothing_to_burn_goes_dark_when_its_charge_runs_out() {
 }
 
 #[test]
-fn a_dry_supplier_is_announced_starved_exactly_once() {
+fn a_dry_supplier_is_announced_out_of_fuel_exactly_once() {
     let mut game = base_with_home(4103);
     recharger_beside_a_depot(&mut game, 0);
 
@@ -835,9 +835,69 @@ fn a_dry_supplier_is_announced_starved_exactly_once() {
     // `Game::message_log` is the raw log, uncondensed, so this really is a
     // count of lines pushed rather than of rows a screen would draw.
     assert_eq!(
-        log_hits(&game, "Recharger Node is starved"),
+        log_hits(&game, "Recharger Node is out of fuel"),
         1,
         "entering the state is news; staying in it is not"
+    );
+    // The half that would otherwise rot silently. A supplier has no input
+    // buffer and no program, so "nothing is feeding it" names two things it
+    // does not have and sends the player looking for both.
+    assert_eq!(
+        log_hits(&game, "is starved"),
+        0,
+        "a dry supplier is not starved — see MachineStatus::Dry"
+    );
+}
+
+/// The status the sheet and the roster read, not just the line the log
+/// pushed. `draw_structure_manifest` renders nothing but `MachineStatus`, so
+/// this is the whole of what `i` on a dry Recharger Node can say.
+#[test]
+fn a_dry_supplier_reports_dry_rather_than_starved() {
+    let mut game = base_with_home(4104);
+    let (recharger, _) = recharger_beside_a_depot(&mut game, 0);
+
+    for _ in 0..crate::tuning::POWER_UPKEEP_TICKS {
+        game.tick();
+    }
+
+    assert_eq!(
+        status_of(&game, recharger),
+        Some(MachineStatus::Dry),
+        "the sheet has no other way to know the difference"
+    );
+}
+
+/// The other edge of the same door. A supplier that finds fuel again comes
+/// back to `Running`, which is what makes the log's once-on-transition rule
+/// safe to lean on: without this the state would latch and a refuelled node
+/// would keep reading dry forever.
+#[test]
+fn a_refuelled_supplier_leaves_the_dry_state() {
+    let mut game = base_with_home(4105);
+    let (recharger, depot) = recharger_beside_a_depot(&mut game, 0);
+
+    for _ in 0..crate::tuning::POWER_UPKEEP_TICKS {
+        game.tick();
+    }
+    assert_eq!(status_of(&game, recharger), Some(MachineStatus::Dry));
+
+    game.world
+        .get_mut::<Stock>(depot)
+        .expect("the fixture's depot has a buffer")
+        .output
+        .insert(ItemId::from(ids::POWER_CELL), 1);
+    game.tick();
+
+    assert_eq!(
+        status_of(&game, recharger),
+        Some(MachineStatus::Running),
+        "a cell landed beside it and it bought one"
+    );
+    assert_eq!(
+        log_hits(&game, "Recharger Node resumes"),
+        1,
+        "coming back is news too, and exactly once"
     );
 }
 
@@ -1100,8 +1160,8 @@ fn a_typo_d_fuel_id_never_burns_and_never_supplies_beside_real_power_cells() {
     );
     assert_eq!(
         status_of(&game, supplier),
-        Some(MachineStatus::Starved),
-        "it reads exactly as any other dry supplier — the input it needs \
+        Some(MachineStatus::Dry),
+        "it reads exactly as any other dry supplier — the fuel it asks for \
          just never exists on the buffer beside it"
     );
     let db = game.world.resource::<StructureDb>();

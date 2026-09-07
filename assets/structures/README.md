@@ -267,12 +267,16 @@ is skipped with a warning logged in-game rather than crashing startup.
     // that item out of an orthogonally adjacent structure's output buffer
     // every POWER_UPKEEP_TICKS, and while it cannot pay it does NOTHING —
     // zero `power_supply` on the Grid, and zero `power_regen` trickle to the
-    // player if it sets that too. It reports "starved" on the map exactly
-    // the way a machine with no input does, and the base's machines lose the
-    // power cut as though the supplier had been demolished. So a burning
-    // supplier wants a Depot or a Power Conduit beside it, and the Grid
-    // becomes a production rate the base has to keep up rather than a
-    // capacity bought once.
+    // player if it sets that too. It reports "out of fuel" and wears
+    // `palette::OFFLINE` red on the map (its own `MachineStatus::Dry`, not
+    // the `Starved` an input-short machine wears), and the base's machines
+    // lose the power cut as though the supplier had been demolished.
+    //
+    // ORTHOGONALLY ADJACENT is the whole cost. Nothing hauls fuel to a
+    // burner and it never reads its own buffer, so a supplier parked away
+    // from a feeder goes dark however many units the base is sitting on. A
+    // burning supplier wants a Depot or a Power Conduit on one of its four
+    // neighbouring tiles, and a row of them wants a feeder per node.
     //
     // Only worth setting on a structure that supplies or regenerates
     // something: upkeep on one that does neither costs the player a unit to

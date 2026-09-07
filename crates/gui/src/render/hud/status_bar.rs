@@ -2,7 +2,13 @@
 //! world behind it.
 //!
 //! Three zones. The **left** says who and where you are — identity, zone,
-//! position, tick. The **centre** is what the base is holding, which is the
+//! position, tick — and then the base's grid, which is the one fact here
+//! that is not about the player's own body. It rides the left block rather
+//! than the centre **because the left block is measured first**: the centre
+//! is the elastic zone and drops piles from the end when the window is
+//! narrow, and a readout that vanishes exactly when the screen is crowded is
+//! not a readout. The stock strip loses a pile to make room; the grid never
+//! does. The **centre** is what the base is holding, which is the
 //! stock strip this bar absorbed rather than reimplemented: `stock::fits` is
 //! still the one answer to how many piles fit, and it is simply handed a
 //! narrower budget than the whole window. The **right** carries the attention
@@ -40,6 +46,14 @@ pub(in crate::render) struct StatusBarState<'a> {
     pub position: (i32, i32),
     pub tick: u64,
     pub stock: &'a [StockRow],
+    /// `Game::base_power`, as `(draw, supply)` — the base's grid, in the
+    /// order the `B` roster's own header states it.
+    ///
+    /// Handed in rather than derived here, `attention`'s reason: the caller
+    /// holds the `Game` and this module is pure drawing. It is the *same*
+    /// call the roster header makes, which is what stops the two readouts
+    /// disagreeing about whether the base is short.
+    pub power: (u32, u32),
     /// `Game::attention`, called once by the caller and shared with the
     /// info column. This never derives its own.
     pub attention: &'a [AttentionRow],
@@ -49,6 +63,7 @@ pub(in crate::render) struct StatusBarState<'a> {
 /// what will actually be drawn rather than an estimate of it.
 fn identity_runs(state: &StatusBarState) -> Vec<(String, Color, bool)> {
     let (x, y) = state.position;
+    let (draw, supply) = state.power;
     vec![
         ("feral".to_string(), palette::EMPHASIS, true),
         ("-processes".to_string(), palette::LABEL, false),
@@ -60,7 +75,31 @@ fn identity_runs(state: &StatusBarState) -> Vec<(String, Color, bool)> {
         (SEP.to_string(), palette::FAINT, false),
         ("tick ".to_string(), palette::FIELD_LABEL, false),
         (state.tick.to_string(), palette::BODY, false),
+        (SEP.to_string(), palette::FAINT, false),
+        ("[GRID] ".to_string(), palette::FIELD_LABEL, false),
+        (format!("{draw}/{supply}"), grid_color(state.power), false),
     ]
+}
+
+/// The grid figure's colour: `palette::ATTENTION` while the base cannot cover
+/// its own draw, otherwise the ordinary body grey.
+///
+/// **ATTENTION, not THREAT.** A short grid is the palette's own definition of
+/// the amber — "the player must act", the same role an idle structure and an
+/// unspent perk point wear — and br red stays reserved for hostility. The one
+/// red on this screen is `palette::OFFLINE`, worn by the dry supplier that
+/// caused the shortfall, on the map rather than on this bar.
+///
+/// `>` and not `>=`: a base exactly at capacity has nothing dark, which is
+/// what `game::base::power::ledger` cuts on and what
+/// `a_base_exactly_at_capacity_has_nothing_dark` pins. Colouring it would be
+/// this row inventing a second definition of short.
+fn grid_color((draw, supply): (u32, u32)) -> Color {
+    if draw > supply {
+        palette::ATTENTION
+    } else {
+        palette::BODY
+    }
 }
 
 /// The plain text of the identity block — what gets measured.
@@ -274,15 +313,41 @@ mod tests {
     }
 
     /// The identity block at its widest plausible values, so the census is
-    /// not passing on a short one.
+    /// not passing on a short one. The grid figure is part of that block and
+    /// so is given wide numbers too — a two-digit-over-two-digit grid is the
+    /// realistic case, and the census may not be measured on it.
     fn wide_state(stock: &[StockRow]) -> StatusBarState<'_> {
         StatusBarState {
             zone: 16,
             position: (-9999, -9999),
             tick: 9_999_999,
             stock,
+            power: (188, 188),
             attention: &[],
         }
+    }
+
+    /// A bar reading one grid figure and nothing else of interest.
+    fn grid_state(power: (u32, u32)) -> StatusBarState<'static> {
+        StatusBarState {
+            zone: 3,
+            position: (0, 0),
+            tick: 4210,
+            stock: &[],
+            power,
+            attention: &[],
+        }
+    }
+
+    /// The plain text of the grid segment's value run.
+    fn grid_piece(state: &StatusBarState) -> (String, Color) {
+        let runs = identity_runs(state);
+        let at = runs
+            .iter()
+            .position(|(t, _, _)| t == "[GRID] ")
+            .expect("the identity block carries a grid segment");
+        let (text, color, _) = runs[at + 1].clone();
+        (text, color)
     }
 
     /// The one thing this row must never do. It is a single line with no
@@ -342,6 +407,52 @@ mod tests {
         });
     }
 
+    /// Both halves in one test, `a_threat_badge_is_red`'s rule: either alone
+    /// passes against a segment drawing one constant colour.
+    ///
+    /// The boundary is the third case and the one worth having. A base
+    /// exactly at capacity has nothing dark — `ledger` cuts on `budget >=
+    /// draw` — so drawing it as short would be this row inventing a second
+    /// definition of the word.
+    #[test]
+    fn the_grid_figure_reddens_only_when_the_base_is_short() {
+        let (text, color) = grid_piece(&grid_state((7, 4)));
+        assert_eq!(text, "7/4");
+        assert_eq!(
+            color,
+            palette::ATTENTION,
+            "a short grid is what ATTENTION means"
+        );
+
+        let (_, healthy) = grid_piece(&grid_state((4, 8)));
+        assert_eq!(healthy, palette::BODY, "a covered grid is an ordinary fact");
+
+        let (_, exact) = grid_piece(&grid_state((8, 8)));
+        assert_eq!(
+            exact, healthy,
+            "a base exactly at capacity has nothing dark and is not short"
+        );
+    }
+
+    /// The grid is a *base* figure and the bar draws on every screen, so it
+    /// reads the same in the Stack as it does standing in the base. The one
+    /// way to get this wrong is to gate the segment on locale and leave the
+    /// player learning their grid collapsed only after they walk home.
+    #[test]
+    fn the_grid_segment_is_never_absent() {
+        for power in [(0, 0), (7, 4), (188, 188)] {
+            let state = grid_state(power);
+            let text: String = identity_runs(&state)
+                .iter()
+                .map(|(t, _, _)| t.as_str())
+                .collect();
+            assert!(
+                text.contains("[GRID] "),
+                "no grid segment at {power:?}: {text:?}"
+            );
+        }
+    }
+
     /// Guards against an early return copied from `draw_stock_strip`, which
     /// returns after writing its empty-base line and would take the whole
     /// identity block with it.
@@ -358,6 +469,14 @@ mod tests {
         assert!(text.contains("ZONE"), "zone missing from {text:?}");
         assert!(text.contains("16"), "zone number missing from {text:?}");
         assert!(text.contains("tick"), "tick missing from {text:?}");
+        // Through the real draw path, not just `identity_runs`: the segment
+        // is only useful if it survives to the painter on the screen the
+        // stock strip has nothing to say on.
+        assert!(text.contains("[GRID]"), "grid missing from {text:?}");
+        assert!(
+            text.contains("188/188"),
+            "grid figure missing from {text:?}"
+        );
     }
 
     /// The calm state is a real state and is drawn, not an empty gap.

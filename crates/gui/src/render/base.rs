@@ -959,6 +959,7 @@ pub(super) fn draw_playing_base(
             position: game.base_pos().unwrap_or(status.position),
             tick: game.current_tick(),
             stock: &stock_rows,
+            power: game.base_power(),
             attention: &attention,
         },
         painter,
@@ -1921,13 +1922,21 @@ fn machine_color(status: MachineStatus) -> Color {
         // are asking for you — which is what `palette::ATTENTION` means, and
         // is the same colour `Game::attention` puts in the status bar for
         // them. `Unpowered` joins them because a dark machine never resolves
-        // itself either, only a Recharger Node fixes it.
+        // itself either; what fixes it is more supply on the grid, which is
+        // not always another Recharger Node — a base whose Rechargers are all
+        // `Dry` already has the capacity and needs fuel next to them.
         //
-        // Not red. Red is `palette::THREAT`, reserved for hostility and
-        // inbound harm, and a clogged Mining Node is neither.
+        // Not `palette::THREAT`. Br red is reserved for hostility and inbound
+        // harm, and a clogged Mining Node is neither.
         MachineStatus::Clogged | MachineStatus::Stranded | MachineStatus::Unpowered => {
             hud::palette::ATTENTION
         }
+        // The one machine state that gets a red, and it is `palette::OFFLINE`
+        // rather than THREAT — see that constant for why a second red exists.
+        // A dry supplier is the *cause* of every dark machine on the map, so
+        // it is the tile worth walking to, and it reads hotter than the
+        // effects it produced.
+        MachineStatus::Dry => hud::palette::OFFLINE,
         MachineStatus::Idle => hud::palette::FAINT,
     }
 }
@@ -2216,6 +2225,11 @@ mod tests {
             );
         }
         assert_eq!(machine_color(MachineStatus::Running), hud::palette::HEALTHY);
+        // The one machine state that wears a red, and it is the *other* red.
+        // A dry supplier has taken its whole supply off the grid and is
+        // darkening machines elsewhere on the map, which is past what the
+        // amber says — but it is still not hostility.
+        assert_eq!(machine_color(MachineStatus::Dry), hud::palette::OFFLINE);
         // Walked rather than listed: a status added without a colour of its
         // own is exactly the one that would inherit red by accident.
         for status in MachineStatus::ALL {
@@ -2225,6 +2239,21 @@ mod tests {
                 "{status:?} is not hostility, and THREAT is reserved for it"
             );
         }
+    }
+
+    /// Two reds on one map is only worth having if they are two reds. This
+    /// is the `a_plan_cannot_be_read_as_a_machine_asking_for_you` measurement
+    /// pointed at the pair it was written for: a retune that drifts OFFLINE
+    /// toward THREAT turns "this node stopped" and "this thing will kill
+    /// you" into one piece of news.
+    #[test]
+    fn the_two_reds_do_not_read_as_one() {
+        let dist = |a: Color, b: Color| (a.r - b.r).abs() + (a.g - b.g).abs() + (a.b - b.b).abs();
+        let apart = dist(hud::palette::OFFLINE, hud::palette::THREAT);
+        assert!(
+            apart > 0.30,
+            "OFFLINE and THREAT sit {apart} apart; they read as one colour"
+        );
     }
 
     /// A plan is the player having acted; the attention yellow is the base

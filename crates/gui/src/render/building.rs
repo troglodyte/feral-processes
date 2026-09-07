@@ -936,7 +936,14 @@ fn stall_line(s: &StructureReport) -> Option<&'static str> {
         MachineStatus::Clogged => Some("clogged — collect from it with c"),
         MachineStatus::Unstaffed => Some("no one at it — its program is away"),
         MachineStatus::Stranded => Some("cut off — its program can't reach it"),
-        MachineStatus::Unpowered => Some("dark — the grid is short, build a Recharger Node"),
+        // Says the fact and stops. It used to end "build a Recharger Node",
+        // which is the wrong move on the base most likely to be reading this
+        // line: one whose Rechargers are all standing there `Dry`. A fifth
+        // would go dry beside them. The grid figure on the status bar is
+        // where the player reads how short, and a dry supplier says so in its
+        // own words.
+        MachineStatus::Unpowered => Some("dark — the grid is short"),
+        MachineStatus::Dry => Some("out of fuel — no Power Cells beside it"),
         MachineStatus::Running | MachineStatus::Idle => None,
     }
 }
@@ -1536,14 +1543,44 @@ mod tests {
         }
     }
 
-    /// `Unpowered` is the only status whose fix is a build rather than
-    /// waiting or walking over — the stall line is the one place that says
-    /// so, since the grid header it points at can't name a machine.
+    /// The two grid stalls, and the difference between them is the whole
+    /// point of the pair.
+    ///
+    /// This line used to end "build a Recharger Node", on the reading that
+    /// `Unpowered` is the one status whose fix is a build. That advice is
+    /// wrong on the base most likely to be reading it: one whose Rechargers
+    /// are all standing there `Dry`, where a fifth would go dry beside them.
+    /// The line now states the fact and stops, and the *cause* says what to
+    /// do about itself.
+    ///
+    /// Asserted as an absence as well as an equality, because the equality
+    /// alone passes against any rewrite at all — including one that puts the
+    /// build advice back in different words.
     #[test]
-    fn a_dark_machines_row_names_the_recharger() {
-        assert_eq!(
-            stall_line(&structure_report(MachineStatus::Unpowered)),
-            Some("dark — the grid is short, build a Recharger Node")
+    fn a_dark_machine_says_the_grid_is_short_without_prescribing_a_build() {
+        let dark = stall_line(&structure_report(MachineStatus::Unpowered));
+        assert_eq!(dark, Some("dark — the grid is short"));
+        assert!(
+            !dark.unwrap().contains("build"),
+            "a base whose Rechargers are all dry does not need a fifth one"
+        );
+    }
+
+    /// The cause, and the line the inspector's sheet draws when `i` finds a
+    /// dry Recharger Node — `draw_structure_manifest` calls this builder
+    /// rather than restating it, so the roster and the sheet cannot drift.
+    ///
+    /// It names the fix, which is what splitting `Dry` off `Starved` bought:
+    /// a supplier has no input buffer and no program, so "nothing is feeding
+    /// it" sent the player looking for two things that do not exist on it.
+    #[test]
+    fn a_dry_supplier_says_it_is_out_of_fuel_and_where_fuel_goes() {
+        let dry = stall_line(&structure_report(MachineStatus::Dry));
+        assert_eq!(dry, Some("out of fuel — no Power Cells beside it"));
+        assert_ne!(
+            dry,
+            stall_line(&structure_report(MachineStatus::Starved)),
+            "sharing the sentence is what made this unreadable"
         );
     }
 

@@ -629,6 +629,20 @@ pub(crate) fn set_machine_status(
         // "grid", never "Power": `Power` is already the creature meter in the
         // status column (`PowerReserve`), and the two are different resources.
         MachineStatus::Unpowered => format!("The {name} is dark — the grid can't power it."),
+        // Names the fix, which is what splitting this off `Starved` bought:
+        // "nothing is feeding it" sends the player hunting for an upstream
+        // machine and a program to post, and a supplier has neither. What it
+        // needs is a stocked buffer on one of its four orthogonal
+        // neighbours — see `game::base::power::is_fuelled`.
+        //
+        // **Once, on the edge, and then silent.** This door only logs on
+        // transition, so a base left dry says this a single time rather than
+        // once a tick forever. The standing signal is the status bar's
+        // `[GRID]` readout and the supplier's own red glyph, neither of which
+        // costs the log a line.
+        MachineStatus::Dry => {
+            format!("The {name} is out of fuel — no Power Cells beside it.")
+        }
     });
 }
 
@@ -679,9 +693,12 @@ pub fn power_grid_system(world: &mut World) {
 ///
 /// A supplier that cannot pay is announced through `set_machine_status`, the
 /// one place a stall is announced and one that logs only on transition — so a
-/// base left dry says so once rather than every tick. `Starved` is exactly
-/// the existing meaning ("the input it needs is not there") and no variant is
-/// added for this.
+/// base left dry says so once rather than every tick. It is announced as
+/// `MachineStatus::Dry`, which **used to be `Starved`** on the argument that
+/// "the thing it consumes is not there" is one shape. That was right about
+/// the concept and wrong about the sentence: `Starved` sends the player after
+/// an upstream machine and a program, and a supplier has neither — see the
+/// variant's own doc comment.
 fn burn_grid_upkeep(world: &mut World) {
     let by_tile = crate::game::base::collect::feeders_by_tile(
         world
@@ -770,7 +787,7 @@ fn burn_grid_upkeep(world: &mut World) {
         let next = if bought > 0 {
             MachineStatus::Running
         } else {
-            MachineStatus::Starved
+            MachineStatus::Dry
         };
         // Copied out, decided, and written back: `set_machine_status` needs
         // the status and the log at once, and an exclusive system cannot hold

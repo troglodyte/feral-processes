@@ -10080,14 +10080,23 @@ was one of the three places to fix that — the other two being hand-crafting's
 cost and the portal's bill, which shipped alongside as Tasks A and C of the
 same change.
 
-**The rate is picked so the loop closes on one Power Conduit, and the closure
-is the whole design.** A Conduit at Mk1 in zone 1 turns out one Power Cell
-every 6 ticks — 166 per 1,000 — while a burning supplier eats one every
-`POWER_UPKEEP_TICKS = 20`, which is 50 per 1,000. So one Conduit sustains
-three Rechargers (+12 grid) while drawing 1 itself and occupying one posted
-program: the thing that feeds the grid is on the grid it feeds. A shorter
-window and a Conduit cannot carry even one supplier; a much longer one and a
-single stocked Depot outlives any session, which is the same as free.
+**The rate closed the loop on one Power Conduit, and then the cost moved.**
+As shipped, a Conduit at Mk1 in zone 1 turned out one Power Cell every 6
+ticks — 166 per 1,000 — while a burning supplier ate one every
+`POWER_UPKEEP_TICKS = 20`, which is 50 per 1,000: one Conduit sustained three
+Rechargers, and the thing that fed the grid was on the grid it fed. The
+window is now **100**, so one Conduit covers sixteen suppliers and throughput
+is close to free by this paragraph's own standard.
+
+**That is deliberate, and what survives is placement.** A supplier refuels
+only from an *orthogonally adjacent* output buffer — nothing hauls fuel to a
+burner, and a burner never reads its own — so a Recharger Node parked away
+from a feeder goes dark no matter how many cells the base is sitting on. That
+failure is what the long window is long enough to let the player notice and
+walk over and fix, where the short one just read as a base that kept
+flickering. The observation that forced it: a run with four Rechargers in a
+row at `y = 4`, twenty-one Power Cells in a Depot four tiles away, and every
+node dry — with nothing on screen saying so.
 
 **The Home does not burn, and that is the bootstrap rather than an
 oversight.** Its free 4 covers a Power Conduit (draw 1) + a Mining Node (1) +
@@ -10097,14 +10106,36 @@ is not difficulty but a dead run. `every_burning_supplier_supplies_something_
 and_the_home_burns_nothing` asserts the absence, because an absence is
 precisely what nothing fails on.
 
-**`Starved` rather than a new `MachineStatus` variant.** `Starved` already
-means "the input it needs is not there", which is exactly true of a supplier
-with no Power Cell in reach, and `MachineStatus`' matches are exhaustive by
-design — a new variant costs every reader a case for a state that reads
-identically to one that exists. The announcement goes through
-`systems::set_machine_status`, the one place a stall is announced and one
-that logs only on transition, so a base left dry says so once rather than
-fifty times a minute.
+**`MachineStatus::Dry`, which was `Starved` for one release, and the reason
+the reuse failed is worth keeping.** The original argument was sound about
+the concept: `Starved` means "the thing it consumes is not there", which is
+exactly true of a supplier with no Power Cell in reach, and a variant costs
+every exhaustive match a case for a state that reads identically. What it
+missed is that the states do not read identically to the *player* — only to
+the code. `Starved`'s sentence is "nothing is feeding it", which sends
+someone hunting for an upstream machine and a program to post, and a
+Recharger Node has neither. The fix for a dry supplier is a stocked buffer on
+one of its four neighbouring tiles, which is not advice `Starved` can give.
+**Share the concept, not the string.**
+
+The split bought three readouts, not one: the log line, `building::stall_line`
+(which the `B` roster and the `i` sheet both call), and
+`base::machine_color`, where `Dry` is the one machine state wearing a red —
+`palette::OFFLINE`, not the reserved `THREAT`. `Unpowered` stays amber on
+purpose: a dry supplier is the *cause* and every dark machine is an effect,
+so reddening the effects would paint half the base and point at none of it.
+
+Precedence is written into the variant rather than discovered: `Unpowered`
+above `Dry`, `Dry` above the rest. Nothing today both draws and burns, so the
+two cannot collide yet — which is exactly when the rule is cheap to state.
+
+The announcement still goes through `systems::set_machine_status`, the one
+place a stall is announced and one that logs only on transition, so a base
+left dry says so once rather than fifty times a minute. **The standing signal
+is not the log**: it is the status bar's `[GRID] draw/supply` segment and the
+supplier's own red glyph, neither of which costs a line. A periodic
+re-announcement was designed and dropped for exactly that reason — a timer
+re-saying a thing already on screen every frame is the definition of noise.
 
 **The component is inserted by both writers of a structure's component list,
 and absence reads as dry.** A Recharger Node runs no job — no `work`, no

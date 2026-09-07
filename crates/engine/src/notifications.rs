@@ -130,6 +130,13 @@ pub enum NotificationKind {
     /// `Game::notify_filled`, which is what lets one arm be read for eleven
     /// subjects rather than eleven arms each repeating a mission's own name.
     OnboardingMission,
+    /// A town the party knew as a Server has become a Mainframe —
+    /// `Game::announce_growth`.
+    ///
+    /// A milestone rather than a tutorial: it teaches nothing, and it can
+    /// happen more than once in a run because a world holds more than one
+    /// town. `Repeat::Always`.
+    SettlementGrown,
 }
 
 /// One notification's authored copy.
@@ -162,7 +169,7 @@ impl NotificationKind {
     /// scroll to forgive. `Perk::all`'s shape and its reason: a walk over
     /// the whole enum is what makes a census non-vacuous, and the array
     /// length fails to compile when a variant is added without being listed.
-    pub fn all() -> [NotificationKind; 12] {
+    pub fn all() -> [NotificationKind; 13] {
         [
             NotificationKind::BaseFounding,
             NotificationKind::FirstDescent,
@@ -176,6 +183,7 @@ impl NotificationKind {
             NotificationKind::ContractClosed,
             NotificationKind::OnboardingComplete,
             NotificationKind::OnboardingMission,
+            NotificationKind::SettlementGrown,
         ]
     }
 
@@ -323,6 +331,21 @@ impl NotificationKind {
                 color: GlyphColor::Green,
                 repeat: Repeat::Always,
             },
+            NotificationKind::SettlementGrown => NotificationDef {
+                title: "It Grew",
+                body: "A place you knew as a stop has become a destination. Its shelves run \
+                       deeper now, and what it keeps on them is worth the walk in a way it was \
+                       not before.\n\nTowns grow on their own, in their own time. They grow \
+                       sooner where somebody has been spending.",
+                sprite: None,
+                // Asked of the kind rather than written as `'M'`, so the
+                // screen cannot end up naming a character the map has
+                // stopped drawing. `Orange` is the hue `spawn_settlement_at`
+                // paints every town in, and its comment there is the reason.
+                glyph: crate::settlements::SettlementKind::Mainframe.glyph(),
+                color: GlyphColor::Orange,
+                repeat: Repeat::Always,
+            },
         }
     }
 
@@ -354,6 +377,7 @@ impl NotificationKind {
             // nothing is ever latched under it.
             NotificationKind::OnboardingComplete => "onboarding_complete",
             NotificationKind::OnboardingMission => "onboarding_mission",
+            NotificationKind::SettlementGrown => "milestone_settlement_grown",
         }
     }
 }

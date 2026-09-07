@@ -91,7 +91,60 @@ impl Game {
             .collect();
         for key in keys {
             self.settle_commerce_drift(key);
-            self.latch_growth(key);
+            if self.latch_growth(key) {
+                self.announce_growth(key);
+            }
+        }
+    }
+
+    /// Repaints the map and tells the player, exactly once.
+    ///
+    /// Called only on `latch_growth`'s `true` — the flip, not the state.
+    /// `settlement_growth_tick` runs every tick and the latch is already set
+    /// on the second one, so announcing on the state would write this line
+    /// for the rest of the run.
+    ///
+    /// **The repaint is not optional.** The glyph is baked into the entity
+    /// at materialization, so without this the map keeps drawing the town
+    /// the city used to be until the next load rebuilds it — and
+    /// `restore_settlements` asking `settlement_kind` is exactly what makes
+    /// that divergence survive to the next session rather than announce
+    /// itself.
+    fn announce_growth(&mut self, key: SettlementKey) {
+        let glyph = SettlementKind::Mainframe.glyph();
+        let entity = {
+            let mut query = self
+                .world
+                .query::<(bevy_ecs::entity::Entity, &crate::components::Settlement)>();
+            query
+                .iter(&self.world)
+                .find(|(_, settlement)| settlement.key == key)
+                .map(|(entity, _)| entity)
+        };
+        if let Some(entity) = entity
+            && let Some(mut drawn) = self.world.get_mut::<crate::components::Glyph>(entity)
+        {
+            drawn.ch = glyph;
+        }
+        let name = self.settlement_name(key);
+        self.log_kind(
+            crate::resources::MessageKind::Info,
+            format!("{name} has grown. It is a Mainframe now."),
+        );
+        // Only for a town the party has actually stood in. A notification
+        // takes the screen, and a place they have never reached has not
+        // earned that — `KnownSettlement::visited` is the same flag the
+        // compass uses to decide whether a town has a name worth showing.
+        // The line above is written either way: the log is a record, and a
+        // record of a place they have heard of is not an interruption.
+        let visited = self
+            .world
+            .resource::<crate::resources::Settlements>()
+            .0
+            .get(&key)
+            .is_some_and(|known| known.visited);
+        if visited {
+            self.notify(crate::notifications::NotificationKind::SettlementGrown);
         }
     }
 

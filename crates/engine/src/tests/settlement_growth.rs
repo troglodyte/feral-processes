@@ -783,3 +783,229 @@ fn a_basket_too_small_to_buy_a_point_still_counts_as_contact() {
         "a town dealt with once still held the untraded floor"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The moment itself: the repaint, the line and the notification
+// ---------------------------------------------------------------------------
+
+/// Puts `key` one tick past a date it can reach now, so a single
+/// `settlement_growth_tick` throws its latch. Commerce at the ceiling pulls
+/// the date forward rather than the test ticking three thousand turns.
+fn stand_a_server_on_its_date(game: &mut crate::Game, key: SettlementKey) {
+    game.world
+        .resource_mut::<crate::resources::Standings>()
+        .0
+        .entry(key)
+        .or_default()
+        .commerce = crate::tuning::SETTLEMENT_COMMERCE_MAX;
+    let due = growth::due_tick(world_seed(game), key);
+    game.set_tick_for_test(due);
+}
+
+/// The glyph is baked into the entity at materialization, so a flip that
+/// does not repaint it leaves the map saying `s` about a city until the
+/// next load. Nothing else in this feature would notice.
+#[test]
+fn growing_repaints_the_map_glyph_in_place() {
+    let mut game = game(4242);
+    let key = a_known_server(&game);
+    let glyph_of = |game: &mut crate::Game| {
+        let mut query = game
+            .world
+            .query::<(&crate::components::Settlement, &crate::components::Glyph)>();
+        query
+            .iter(&game.world)
+            .find(|(settlement, _)| settlement.key == key)
+            .map(|(_, drawn)| drawn.ch)
+            .expect("the town has an entity on the map")
+    };
+    assert_eq!(
+        glyph_of(&mut game),
+        crate::settlements::SettlementKind::Server.glyph(),
+        "test premise: it is still drawn as a town"
+    );
+
+    stand_a_server_on_its_date(&mut game, key);
+    game.settlement_growth_tick();
+
+    assert_eq!(
+        glyph_of(&mut game),
+        crate::settlements::SettlementKind::Mainframe.glyph(),
+        "the map still draws the town it used to be"
+    );
+}
+
+/// A change the player can read, naming the town it happened to.
+#[test]
+fn growing_writes_a_line_naming_the_town() {
+    let mut game = game(4242);
+    let key = a_known_server(&game);
+    let name = game.settlement_name(key);
+    stand_a_server_on_its_date(&mut game, key);
+    game.settlement_growth_tick();
+    assert!(
+        game.message_history(500)
+            .iter()
+            .any(|entry| entry.text.contains(&name)),
+        "no line named {name}"
+    );
+}
+
+/// It fires once. `settlement_growth_tick` runs every tick and the latch is
+/// already set on the second one -- a missing "did this call flip it" check
+/// would write the line every tick for the rest of the run.
+///
+/// **Counted by summing `repeats`, not by counting entries.**
+/// `message_history` condenses a line repeated inside its lookback window
+/// into one entry, so twenty copies of this line land as a single row and
+/// an assertion on `len()` would pass with the bug in place.
+#[test]
+fn growing_announces_once_and_not_every_tick_after() {
+    let written = |game: &crate::Game, name: &str| -> usize {
+        game.message_history(500)
+            .iter()
+            .filter(|entry| entry.text.contains(name))
+            .map(|entry| entry.repeats)
+            .sum()
+    };
+    let mut game = game(4242);
+    let key = a_known_server(&game);
+    let name = game.settlement_name(key);
+    stand_a_server_on_its_date(&mut game, key);
+    game.settlement_growth_tick();
+    assert_eq!(
+        written(&game, &name),
+        1,
+        "test premise: the flip wrote the line exactly once"
+    );
+    for _ in 0..20 {
+        game.settlement_growth_tick();
+    }
+    assert_eq!(
+        written(&game, &name),
+        1,
+        "the growth line is still being written"
+    );
+}
+
+/// The notification is gated on the party having actually stood there. A
+/// notification takes the screen, and a city on the far side of the map
+/// that the player has never reached interrupting them is the failure this
+/// gate exists to prevent -- and it is invisible without a test, because the
+/// log line fires either way.
+///
+/// The opening briefing is drained first: `Game::new` hands out the
+/// onboarding chain's first mission and notifies for it, so an
+/// undrained queue answers `Some` whatever growth does.
+#[test]
+fn only_a_visited_towns_growth_takes_the_screen() {
+    let grow = |visited: bool| {
+        let mut game = game(4242);
+        let key = a_known_server(&game);
+        game.world
+            .resource_mut::<crate::resources::Settlements>()
+            .0
+            .get_mut(&key)
+            .expect("the key came from this resource")
+            .visited = visited;
+        while game.take_notification().is_some() {}
+        stand_a_server_on_its_date(&mut game, key);
+        game.settlement_growth_tick();
+        assert_eq!(
+            game.settlement_kind(key),
+            Some(crate::settlements::SettlementKind::Mainframe),
+            "test premise: it grew"
+        );
+        game.take_notification().is_some()
+    };
+    assert!(
+        grow(true),
+        "a visited town's growth never reached the screen"
+    );
+    assert!(
+        !grow(false),
+        "a town the party has never stood in interrupted them"
+    );
+}
+
+/// **Reachability, for the announcement.** `a_real_run_grows_a_town...`
+/// proves a town grows in play; this proves the player is told. Nothing
+/// here sets a clock, a latch or the `visited` flag by hand: the party
+/// walks onto the town through `move_player` -- the one arm that records
+/// having been there -- and then the real tick loop runs until the town
+/// grows underneath them.
+///
+/// Without this the gate could ship dead. A notification that only ever
+/// fires when a test writes `visited = true` is a screen no player reaches,
+/// and the log line firing either way would hide it.
+#[test]
+fn a_real_run_shows_the_growth_screen_for_a_town_the_party_walked_to() {
+    let mut game = game(4242);
+    let key = a_known_server(&game);
+    let tile = game
+        .world
+        .resource::<crate::resources::Settlements>()
+        .0
+        .get(&key)
+        .expect("the key came from this resource")
+        .tile;
+
+    // Stand the party one step off the town and walk the last tile, so the
+    // visit itself goes through the shipped verb rather than a field write.
+    // Which neighbour is walkable is the map's business, so try all four.
+    let player = game.player_entity();
+    let mut walked = false;
+    for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+        {
+            let mut pos = game
+                .world
+                .get_mut::<crate::components::Position>(player)
+                .expect("the player stands somewhere");
+            pos.x = tile.0 - dx;
+            pos.y = tile.1 - dy;
+        }
+        game.move_player(dx, dy);
+        if game.world.resource::<crate::resources::Settlements>().0[&key].visited {
+            walked = true;
+            break;
+        }
+    }
+    assert!(walked, "the party could not reach {:?} from any side", tile);
+    while game.take_notification().is_some() {}
+
+    let ceiling = crate::tuning::SETTLEMENT_GROWTH_DUE_MAX
+        + (-crate::tuning::SETTLEMENT_COMMERCE_MIN) as u64
+            * crate::tuning::SETTLEMENT_COMMERCE_PULL_TICKS;
+    while game.current_tick() < ceiling
+        && game.settlement_kind(key) != Some(crate::settlements::SettlementKind::Mainframe)
+    {
+        game.tick();
+        assert!(
+            game.is_game_over().is_none(),
+            "the run ended before the town did"
+        );
+    }
+    assert_eq!(
+        game.settlement_kind(key),
+        Some(crate::settlements::SettlementKind::Mainframe),
+        "the town never grew inside the authored span"
+    );
+
+    let name = game.settlement_name(key);
+    assert!(
+        game.message_history(500)
+            .iter()
+            .any(|entry| entry.text.contains(&name)),
+        "a real run grew {name} and wrote no line about it"
+    );
+    let titles: Vec<String> = std::iter::from_fn(|| game.take_notification())
+        .map(|shown| shown.title)
+        .collect();
+    assert!(
+        titles.iter().any(|title| title
+            == crate::notifications::NotificationKind::SettlementGrown
+                .def()
+                .title),
+        "a real run grew a town the party had walked to and never took the screen: {titles:?}"
+    );
+}

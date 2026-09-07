@@ -2341,15 +2341,23 @@ pub const DEFAULT_OUTPUT_CAPACITY: u32 = 20;
 /// How many ticks one Power Cell keeps a `power_upkeep` supplier lit — see
 /// `StructureDef::power_upkeep` and `systems::power_grid_system`.
 ///
-/// The number is chosen so the loop closes on one Power Conduit. A Conduit
-/// at Mk1 in zone 1 turns out a cell every 6 ticks — 166 per 1,000 — while a
-/// burning supplier eats one every 20, which is 50 per 1,000. So a single
-/// Conduit sustains three Recharger Nodes (+12 grid) while drawing 1 itself
-/// and occupying one posted program: grid capacity becomes a production rate
-/// the base has to keep up, rather than a purchase made once. Shorter and
-/// the Conduit cannot feed even one supplier; much longer and a stocked
-/// Depot's worth of cells outlives any session, which is the same as free.
-pub const POWER_UPKEEP_TICKS: u32 = 20;
+/// **A cell is a long window, deliberately.** A Conduit at Mk1 in zone 1
+/// turns out a cell every 6 ticks — 166 per 1,000 — while a burning supplier
+/// eats one every 100, which is 10 per 1,000. One posted Conduit therefore
+/// covers sixteen suppliers, and the fuel loop is a thing the player sets up
+/// once and then stops thinking about rather than a rate the base has to
+/// keep pace with.
+///
+/// That is a retune away from what this number first meant. At 20 a Conduit
+/// sustained three suppliers and grid capacity *was* the production rate —
+/// the argument being that upkeep the base can outrun is the same as free.
+/// It is now close to free by that standard, and knowingly: the cost that
+/// survives is **placement**, not throughput. A supplier still refuels only
+/// from an orthogonally adjacent output buffer, so a Recharger Node parked
+/// away from a feeder goes dark no matter how many cells the base is sitting
+/// on — which is the failure this window is long enough to let the player
+/// notice and walk over to fix.
+pub const POWER_UPKEEP_TICKS: u32 = 100;
 
 /// How many units a posted program carries to a depot in one trip.
 ///

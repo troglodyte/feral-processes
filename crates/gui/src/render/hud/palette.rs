@@ -49,6 +49,22 @@ const fn rgb(hex: u32) -> Color {
 pub(crate) const ATTENTION: Color = rgb(0xe3b341);
 /// br red — **hostility and inbound harm**. Reserved; never an ordinary error.
 pub(crate) const THREAT: Color = rgb(0xf26d6d);
+/// red — **this has stopped and will not start again on its own.** A supplier
+/// that ran out of Power Cells with none beside it to buy.
+///
+/// A second red, rather than reaching for [`THREAT`], and the distance
+/// between the two is asserted below. THREAT's reservation is the design and
+/// a dry Recharger Node is not hostility — but it is also past what
+/// [`ATTENTION`] says. ATTENTION is "the player must act", and a base can run
+/// a long time with an idle node or an unspent perk point; a dry supplier has
+/// taken its whole `power_supply` off the grid and is darkening machines
+/// somewhere else on the map while it sits there.
+///
+/// **The cause, not the effect.** A machine that went dark for want of grid
+/// stays ATTENTION: reddening every consequence of one dry node would paint
+/// half the base and point at none of it. This colour marks the tile to walk
+/// to.
+pub(crate) const OFFLINE: Color = rgb(0xd93025);
 /// green — a healthy bar fill, and the calm `ALL NOMINAL` state.
 pub(crate) const HEALTHY: Color = rgb(0x4fa65b);
 /// yellow — a caution that resolves itself. A machine short of input, a

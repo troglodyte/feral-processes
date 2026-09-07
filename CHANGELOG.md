@@ -33,6 +33,18 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.119
+
+**The status bar carries the base's grid at all times, as `[GRID] draw/supply`.** It turns amber the moment the base cannot cover its own draw, and it rides the fixed left block rather than the elastic centre, so a crowded base drops a stock pile to make room and never drops the grid.
+
+**A supplier that has run out of Power Cells now says so in its own words.** "Out of fuel — no Power Cells beside it", where it used to borrow a machine's "starved — nothing is feeding it" and send you looking for an upstream node and a program that a Recharger Node does not have. It reads that way in the log, in the `B` roster and on the `i` sheet.
+
+**A dry supplier turns red on the map.** The one machine state that wears one — it is the cause every dark machine on the base is an effect of, so it is the tile worth walking to.
+
+**A dark machine no longer tells you to build a Recharger Node.** That is the wrong move on the base most likely to be reading it: one whose Rechargers are all standing there dry, where a fifth would go dry beside them.
+
+**A Power Cell now runs a supplier for 100 ticks rather than 20.** Keeping the grid fed stops being a production rate you have to keep pace with; what it costs now is putting a stocked buffer where a supplier can actually reach it, which is an orthogonally adjacent tile and nothing further.
+
 ## 0.13.118
 
 **`FERAL_DEV=1` opens every dev tool at once** — the console on `` ` ``, the
@@ -42,6 +54,7 @@ arena row and the sprite forge — and a single flag still works on its own, so
 **The battle log and the map reveal stay outside the master switch**, because
 `FERAL_DEV_LOG` writes a file nothing rotates and `FERAL_DEV_REVEAL` changes
 what the map shows you while you play.
+
 
 ## 0.13.117
 

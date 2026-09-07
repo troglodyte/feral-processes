@@ -833,13 +833,37 @@ pub enum MachineStatus {
     /// only guard on the same fact via `resources::PowerGrid`, and write no
     /// status of their own.
     Unpowered,
+    /// A supplier that burns `StructureDef::power_upkeep` ran its charge to
+    /// zero and could not buy another cell — no orthogonally adjacent output
+    /// buffer had one. It supplies nothing to the grid until fuel appears
+    /// beside it.
+    ///
+    /// **Split out of `Starved`, which it was for one release.** The two
+    /// really are one shape — "the thing it consumes is not there" — and the
+    /// reuse was argued for on exactly that. What it missed is that the
+    /// *sentence* differs: `Starved` sends the player to look for an upstream
+    /// machine and a program to feed it, and a Recharger Node has neither. A
+    /// dry supplier is fixed by standing a stocked buffer next to it, which
+    /// is not advice `Starved` can give. Sharing the concept was right;
+    /// sharing the status made three readouts say the wrong thing.
+    ///
+    /// **Below `Unpowered`, above the rest.** No structure today both draws
+    /// and burns — a Recharger Node has no `power_draw` — so the two cannot
+    /// collide yet, and the rule is written here rather than discovered by
+    /// whichever structure first does both. `Unpowered` keeps the top for its
+    /// own reason: while a machine is dark, nothing else the player fixes
+    /// makes it run, and that includes feeding it.
+    ///
+    /// Written by `systems::burn_grid_upkeep` and by nothing else, which is
+    /// already the single writer of a burner's stall.
+    Dry,
 }
 
 impl MachineStatus {
     /// Every status, for `GlyphColor::ALL`'s reason: the renderer's colour
     /// table is exhaustive, but the census holding the palette's reserved
     /// colours off machine states is not, unless it walks this.
-    pub const ALL: [MachineStatus; 7] = [
+    pub const ALL: [MachineStatus; 8] = [
         MachineStatus::Running,
         MachineStatus::Starved,
         MachineStatus::Clogged,
@@ -847,6 +871,7 @@ impl MachineStatus {
         MachineStatus::Stranded,
         MachineStatus::Idle,
         MachineStatus::Unpowered,
+        MachineStatus::Dry,
     ];
 
     /// The name a `telemetry::Record::MachineStall` carries.
@@ -864,6 +889,7 @@ impl MachineStatus {
             MachineStatus::Stranded => "stranded",
             MachineStatus::Idle => "idle",
             MachineStatus::Unpowered => "unpowered",
+            MachineStatus::Dry => "dry",
         }
     }
 }
@@ -2582,6 +2608,61 @@ mod inventory_tests {
             8,
             "Research Data is banked, not carried"
         );
+    }
+}
+
+#[cfg(test)]
+mod machine_status_tests {
+    use super::*;
+
+    /// `MachineStatus::ALL` is hand-written, and a hand-written list of an
+    /// enum's variants is the kind that ships one short: the census in
+    /// `render/base.rs` that keeps reserved colours off machine states walks
+    /// it, so a variant missing here is a variant the census silently stops
+    /// covering.
+    ///
+    /// The closure is the guard. It is exhaustive over the enum, so adding a
+    /// variant stops this file compiling until someone comes here — and once
+    /// they are here the length assertion below is what tells them `ALL`
+    /// needs the same variant. Neither half works alone: the match alone
+    /// passes if you add an arm and forget the list, and the length alone
+    /// passes if you add a variant and never look.
+    #[test]
+    fn all_lists_every_machine_status() {
+        let arms = |s: MachineStatus| match s {
+            MachineStatus::Running => 0,
+            MachineStatus::Starved => 1,
+            MachineStatus::Clogged => 2,
+            MachineStatus::Unstaffed => 3,
+            MachineStatus::Stranded => 4,
+            MachineStatus::Idle => 5,
+            MachineStatus::Unpowered => 6,
+            MachineStatus::Dry => 7,
+        };
+        assert_eq!(
+            MachineStatus::ALL.len(),
+            8,
+            "the match above has 8 arms; ALL must list all 8"
+        );
+        let mut seen: Vec<usize> = MachineStatus::ALL.iter().map(|s| arms(*s)).collect();
+        seen.sort_unstable();
+        assert_eq!(
+            seen,
+            (0..8).collect::<Vec<_>>(),
+            "ALL repeats one status and omits another"
+        );
+    }
+
+    /// The wire name a `telemetry::Record::MachineStall` carries. An analysis
+    /// script greps these, so two statuses sharing one string silently merges
+    /// two different stalls in every run ever recorded.
+    #[test]
+    fn every_status_has_its_own_wire_name() {
+        let mut names: Vec<&str> = MachineStatus::ALL.iter().map(|s| s.as_str()).collect();
+        names.sort_unstable();
+        let count = names.len();
+        names.dedup();
+        assert_eq!(names.len(), count, "two statuses share a wire name");
     }
 }
 

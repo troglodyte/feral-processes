@@ -81,6 +81,12 @@ impl Game {
         let (points, commerce) = {
             let mut standings = self.world.resource_mut::<resources::Standings>();
             let relation = standings.0.entry(key).or_default();
+            // **The one place `Relation::traded` is written.** It rides here
+            // rather than beside a market screen because this is already the
+            // door for "the party moved Credits through this town" — a
+            // second site would be a second answer to a question the shelf
+            // reads as one.
+            relation.traded = true;
             (
                 relation.credit_trade(credits),
                 relation.credit_commerce(credits),

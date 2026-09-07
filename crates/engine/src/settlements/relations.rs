@@ -97,6 +97,22 @@ pub struct Relation {
     /// stealing the other's leftovers.
     #[serde(default)]
     pub commerce_credits: u32,
+    /// Whether the party has ever moved Credits through this town.
+    ///
+    /// Written in exactly one place — `Game::credit_trade_volume`, the door
+    /// every counter sale and route delivery already goes through — and
+    /// never cleared. It is what separates *visited then neglected* from
+    /// *never introduced*, which the drift alone cannot tell apart: see
+    /// `growth::vitality_floor`.
+    ///
+    /// **A latch and not a count, and not `commerce_credits`.** That
+    /// remainder is sub-threshold change that resets to zero the moment a
+    /// basket clears the threshold, so a town traded with heavily reads
+    /// zero there — it answers "what is still owed", never "has this ever
+    /// happened". A count would also be a second, weaker spelling of
+    /// `commerce` itself.
+    #[serde(default)]
+    pub traded: bool,
 }
 
 impl Relation {

@@ -25,7 +25,7 @@ use crate::tuning::{
     SETTLEMENT_STEADY_BONUS_SHARE, SETTLEMENT_STEADY_ROWS,
 };
 
-use super::SettlementKey;
+use super::{SettlementKey, Standing};
 
 /// The tick this region's Server is due to become a Mainframe on the clock
 /// alone, before any trade pulls it forward.
@@ -81,6 +81,37 @@ pub fn vitality(commerce: i32) -> Vitality {
         Vitality::Steady
     } else {
         Vitality::Thriving
+    }
+}
+
+/// The band a city can never read *below*, given what the party has and
+/// has not done with it.
+///
+/// **First contact is never worse than the authored baseline.** The drift
+/// runs on every town, materialized or not, from tick zero — so an authored
+/// Mainframe in a region nobody has walked into starves on schedule and a
+/// player's first ever sight of a city can be a Server-sized shelf they had
+/// no opportunity to prevent. The clock is allowed to move the world; it is
+/// not allowed to take something away from a player who was never offered
+/// the chance to keep it. A town never traded with therefore holds at
+/// `Steady`, which is where commerce 0 bands and so exactly what its author
+/// wrote.
+///
+/// **`Hostile` lifts the floor**, and that is the whole carve-out: a party
+/// that has made a town hostile has *had* contact with it, and
+/// `SETTLEMENT_COMMERCE_HOSTILE_DECAY` would be inert for every untraded
+/// town if the floor outranked it. So the floor is about opportunity, not
+/// about trade — the band is read live, never as a history, so repairing
+/// standing puts the floor back the moment it lands.
+///
+/// Returns a *band* rather than a bool so the caller is a `max` and the
+/// arithmetic stays in one place; `Starved` is the bottom of the ladder and
+/// therefore means "no floor".
+pub fn vitality_floor(traded: bool, standing: Standing) -> Vitality {
+    if traded || standing == Standing::Hostile {
+        Vitality::Starved
+    } else {
+        Vitality::Steady
     }
 }
 
@@ -263,6 +294,74 @@ mod tests {
         assert_eq!(clamp_commerce(i32::MIN), SETTLEMENT_COMMERCE_MIN);
         assert_eq!(clamp_commerce(0), 0);
         assert_eq!(clamp_commerce(clamp_commerce(999)), SETTLEMENT_COMMERCE_MAX);
+    }
+
+    /// The census for the floor: every standing band answers, an untraded
+    /// town holds at `Steady` everywhere except `Hostile`, and a town the
+    /// party has traded with is never floored at any band.
+    ///
+    /// Exhaustive over the ladder, `relations.rs`' census shape: a sixth
+    /// band would have to answer here too rather than inheriting a default
+    /// nobody chose.
+    #[test]
+    fn every_standing_band_answers_what_floor_an_untraded_town_holds() {
+        for standing in [
+            Standing::Hostile,
+            Standing::Cold,
+            Standing::Neutral,
+            Standing::Warm,
+            Standing::Allied,
+        ] {
+            assert_eq!(
+                vitality_floor(false, standing),
+                if standing == Standing::Hostile {
+                    Vitality::Starved
+                } else {
+                    Vitality::Steady
+                },
+                "an untraded {} town floors wrong",
+                standing.label()
+            );
+            assert_eq!(
+                vitality_floor(true, standing),
+                Vitality::Starved,
+                "a {} town the party has traded with is being floored",
+                standing.label()
+            );
+        }
+    }
+
+    /// The floor is a `max` against the banding, so it can only ever raise
+    /// a reading — a Thriving city is not dragged down to Steady by having
+    /// nobody trade with it, which would be the floor working backwards.
+    #[test]
+    fn the_floor_never_lowers_a_band() {
+        for commerce in [
+            SETTLEMENT_COMMERCE_MIN,
+            SETTLEMENT_COMMERCE_STARVED,
+            0,
+            SETTLEMENT_COMMERCE_THRIVING,
+            SETTLEMENT_COMMERCE_MAX,
+        ] {
+            let band = vitality(commerce);
+            for traded in [false, true] {
+                let floored = band.max(vitality_floor(traded, Standing::Neutral));
+                assert!(
+                    floored >= band,
+                    "commerce {commerce} traded {traded} read down from \
+                     {band:?} to {floored:?}"
+                );
+            }
+        }
+    }
+
+    /// The floor's value is not a fourth number: it is exactly where an
+    /// untouched authored Mainframe already sits, so a retune of the
+    /// thresholds moves both together and the floor cannot drift away from
+    /// the baseline it is defending.
+    #[test]
+    fn the_untraded_floor_is_where_an_untouched_city_bands() {
+        assert_eq!(vitality_floor(false, Standing::Neutral), vitality(0));
     }
 
     /// Negative commerce pushes the date *later*, which is how a neglected

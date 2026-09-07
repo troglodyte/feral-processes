@@ -44,6 +44,7 @@ Settled in brainstorming on 2026-09-06; recorded so they are not relitigated.
 | What a starved city loses | **Options, not status.** A dwindled Mainframe still draws `M` and still says "Mainframe"; its shelf thins. |
 | What starves it | **Both**: neglect sets the drift, Hostile standing accelerates it. |
 | The dwindle's floor | A Server's six rows. A starved city is never *worse* than a town. |
+| What a city the party has never dealt with can fall to | **Nothing below Steady**, unless it is Hostile. Amended 2026-09-06, mid-implementation; see "First contact, and the floor under it". |
 | Whether a Server dwindles | **No.** It has nowhere to fall, and its commerce is doing the growth job. |
 | `SETTLEMENT_RAID_RADIUS` vs `_GARRISON_RADIUS` | **Stay equal.** See "The radius call, closed" below. |
 
@@ -98,9 +99,16 @@ the same volume in a single basket feeds it the lot, which makes the mover a
 rounding rule rather than a volume rule. Commerce needs its own remainder rather
 than sharing that one, because the two thresholds differ.
 
-Four additive fields behind `#[serde(default)]`, so **no `SAVE_FORMAT_VERSION`
+And a fifth the implementation surfaced later: `traded: bool`, a latch set the
+first time the party moves Credits through a town and never cleared. It is not a
+second commerce counter and it cannot be `commerce_credits`, which is a
+remainder that resets to zero every time a basket clears the threshold — it
+answers what is still owed, never whether anything ever happened. What it is
+for is "First contact, and the floor under it" in §3.
+
+Five additive fields behind `#[serde(default)]`, so **no `SAVE_FORMAT_VERSION`
 bump**. A RON round-trip test cannot catch a skipped field, so this needs a real
-save → load → assert test on all three, not a round-trip.
+save → load → assert test on all of them, not a round-trip.
 
 Commerce is **signed and defaults to 0**, and that is the load-bearing choice.
 An unsigned counter starting at zero would band every authored Mainframe —
@@ -207,6 +215,68 @@ counter sales both already call. One more line there, `credit_trade`'s
 remainder-not-total shape reused so ten small baskets and one large basket feed
 commerce identically.
 
+### First contact, and the floor under it
+
+Everything above treats a starved city as a thing the player let happen. In a
+real run on seed 4242 it is not. `Kernel Reach` — an authored Mainframe, in a
+region the party never walks into — drifts to commerce −40 and thins from ten
+shelf rows to six at tick 12100, with nobody having traded a Credit, angered
+anyone, or been anywhere near it. The clock runs on the world, not on the
+player, which is the ambient half working exactly as §2 designed it; the shelf
+is the part that goes wrong. A player's first ever sight of a city labelled
+*Mainframe* can be a Server-sized shelf, and the run that produced it offered
+them no moment at which they could have chosen otherwise.
+
+The spec never drew the line it needed here. "Neglect" is a word about
+something the player did — stopped going, stopped spending — and it silently
+covered a second case it was never argued for: a town that was never
+introduced. The two look identical to the drift and they are not the same thing
+at all.
+
+**A city the party has never traded with cannot band below `Steady`.** The
+drift still runs underneath it: commerce keeps falling, the number is real, and
+the first basket through the door hands the town back to the arithmetic with no
+hole to climb out of first. What the floor removes is not the world moving, it
+is the world having already moved *against* a player who had not yet been
+offered a say. `Steady` is the right height because it is not a fourth number —
+it is where commerce 0 bands, which is where every authored Mainframe starts and
+therefore precisely what its author wrote. Retune the thresholds and the floor
+moves with them.
+
+**`Hostile` lifts the floor**, and that carve-out is what keeps the rule about
+opportunity rather than about spending. A party that has driven a town to
+`Hostile` has had contact with it — has been noticed, has made a choice, and can
+climb back out. `SETTLEMENT_COMMERCE_HOSTILE_DECAY` exists to make that
+consequence bite, and a floor that outranked it would leave the acceleration
+inert on every town the party never happened to shop at, which is most of them.
+The band is read live, so repairing standing puts the floor back the same tick
+it lands — the same rule the drift's own Hostile surcharge already follows, and
+for the same reason.
+
+The floor is applied where the band is read, in `Game::settlement_vitality`, and
+nowhere else. That is what makes it a property of the reading rather than of the
+stored number, and it is the same discipline `relations::band` and
+`growth::vitality` are already built on: derive on read, and a retune re-bands
+every existing save.
+
+Three alternatives were weighed and dropped:
+
+- **Leave it.** The honest version of "the world has a history and you arrived
+  late." Rejected because the history is invisible: there is no ruin, no log
+  line, nothing on the town page saying what this place used to be. The player
+  does not read a thinned shelf as a story; they read it as the size of a city,
+  and the label above it as wrong.
+- **Start the decay epoch at first contact.** Tempting, and it makes the drift
+  mean "since you met" rather than "since the world began". Rejected because it
+  puts a clock in a save that has to be initialised somewhere, and because it
+  breaks the ambient half in the other direction: a town found at tick 30,000
+  would be as fresh as one found at tick 300, which makes the world's own
+  history stop existing rather than merely stop punishing.
+- **Defer to a playtest.** Rejected because the failure is not a matter of
+  degree. No tuning of `SETTLEMENT_COMMERCE_DECAY` makes "thinned before the
+  player could act" into a good first impression; it only moves which run it
+  happens in.
+
 ## 4. Where the code goes
 
 - **`settlements/growth.rs`** (new). The due-tick fold, the commerce bands, and
@@ -300,6 +370,17 @@ these by retune must fail the **build** and not merely the suite:
   and the test still passing is the failure mode here.
 - **Hostile decays faster than Neutral**, over the same elapsed epochs.
 - **Repairing standing out of Hostile restores the slower rate.**
+- **An untraded city holds its authored shelf through a real run**, driven by
+  the actual tick loop rather than by writing `commerce` — this is the finding
+  in "First contact, and the floor under it", and a unit test cannot reproduce
+  it because the drift that caused it is a property of the run. It must carry
+  far enough that the *unfloored* band is genuinely `Starved` and assert that,
+  or it observes an absence that was never at risk.
+- **A traded-then-neglected city still thins to the Server floor.** The half the
+  floor could gut, and without it the amendment reads as green while having
+  deleted the dwindle.
+- **A Hostile city thins with nobody ever having traded there**, and gets its
+  floor back when its standing is repaired.
 - **The RNG stream does not move.** The workspace suite is the assertion; this
   is noted so a reviewer knows it was considered rather than discovered.
 

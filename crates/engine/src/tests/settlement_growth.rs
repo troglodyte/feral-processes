@@ -44,6 +44,7 @@ fn the_growth_fields_survive_a_save_and_load() {
         relation.commerce = 37;
         relation.commerce_epoch = 5;
         relation.commerce_credits = 61;
+        relation.traded = true;
     }
     game.save(&path).unwrap();
 
@@ -64,6 +65,11 @@ fn the_growth_fields_survive_a_save_and_load() {
     assert_eq!(
         relation.commerce_credits, 61,
         "the remainder did not survive the save"
+    );
+    assert!(
+        relation.traded,
+        "the trade latch did not survive the save -- every loaded town would \
+         read as never introduced and hold the first-contact floor forever"
     );
 }
 
@@ -569,4 +575,211 @@ fn small_baskets_and_one_large_basket_buy_the_same_commerce() {
     whole.credit_trade_volume(key, per);
     assert_eq!(commerce_of(&split, key), commerce_of(&whole, key));
     assert_eq!(commerce_of(&whole, key), 1);
+}
+
+/// The first authored `Mainframe` this seed materialized, sorted so a
+/// re-run picks the same one -- `Settlements` is a `HashMap` and its
+/// iteration order is not stable.
+fn a_known_mainframe(game: &crate::Game) -> SettlementKey {
+    let mut keys: Vec<_> = game
+        .world
+        .resource::<crate::resources::Settlements>()
+        .0
+        .iter()
+        .filter(|(_, known)| known.def.kind == crate::settlements::SettlementKind::Mainframe)
+        .map(|(key, _)| *key)
+        .collect();
+    keys.sort_by_key(|key| (key.rx, key.ry));
+    *keys
+        .first()
+        .expect("test premise: this seed materializes at least one authored Mainframe")
+}
+
+/// **First contact is never worse than the authored baseline.** A fresh
+/// run, the real tick loop, nobody trading and nobody setting a clock or a
+/// flag -- and the authored Mainframe on this seed's map still draws the
+/// ten rows its author wrote, all the way past the tick its drift used to
+/// thin it at.
+///
+/// This is the test the whole amendment exists for. Before it, `Kernel
+/// Reach` fell from 10 rows to 6 at tick 12100 in exactly this run, so a
+/// player's first ever sight of a city could be a Server-sized shelf they
+/// had no opportunity to prevent.
+///
+/// **Not vacuous.** The drift is not suppressed -- the run is carried until
+/// the town's *unfloored* band is actually `Starved`, and that is asserted,
+/// so the floor is observed holding against a band that would otherwise
+/// have thinned the shelf rather than against a drift that never arrived.
+#[test]
+fn an_untraded_city_holds_its_authored_shelf_through_a_real_run() {
+    let mut game = game(4242);
+    let key = a_known_mainframe(&game);
+    let baseline = game.settlement_shelf(key, 0).len();
+    assert_eq!(
+        baseline as u32,
+        crate::tuning::SETTLEMENT_STEADY_ROWS,
+        "test premise: an untouched authored Mainframe opens Steady"
+    );
+
+    // Past the tick the drift used to thin this town at, with room to spare.
+    let ceiling = crate::tuning::SETTLEMENT_GROWTH_DUE_MAX + 2000;
+    while game.current_tick() < ceiling {
+        game.tick();
+        assert!(
+            game.is_game_over().is_none(),
+            "the run ended before the drift did"
+        );
+        assert_eq!(
+            game.settlement_shelf(key, 0).len(),
+            baseline,
+            "a city nobody has traded with thinned at tick {}, commerce {}",
+            game.current_tick(),
+            commerce_of(&game, key)
+        );
+    }
+
+    let commerce = commerce_of(&game, key);
+    assert_eq!(
+        growth::vitality(commerce),
+        growth::Vitality::Starved,
+        "test premise: the drift never reached the band the floor is holding \
+         against -- commerce {commerce}, so this proves nothing"
+    );
+}
+
+/// The other half, and the one the floor could gut. A town the party
+/// **has** traded with and then neglected still thins to the Server floor.
+/// Without this the amendment would read as green while having deleted the
+/// dwindle.
+///
+/// The basket is an exact multiple of `SETTLEMENT_COMMERCE_CREDITS_PER_POINT`,
+/// which leaves `Relation::commerce_credits` at zero -- the reason that
+/// remainder cannot be the "has ever traded" signal, asserted here rather
+/// than argued in a comment.
+#[test]
+fn a_traded_then_neglected_city_still_thins_to_the_server_floor() {
+    let mut game = game(4242);
+    let key = a_known_mainframe(&game);
+    let baseline = game.settlement_shelf(key, 0).len();
+    game.credit_trade_volume(
+        key,
+        crate::tuning::SETTLEMENT_COMMERCE_CREDITS_PER_POINT * 2,
+    );
+    assert_eq!(
+        game.world
+            .resource::<crate::resources::Standings>()
+            .0
+            .get(&key)
+            .map_or(1, |relation| relation.commerce_credits),
+        0,
+        "test premise: the remainder reset, so it cannot be the signal"
+    );
+
+    // Far enough for the drift to claw back what the basket bought and
+    // carry on down to Starved.
+    let ceiling = crate::tuning::SETTLEMENT_GROWTH_DUE_MAX + 4000;
+    let mut thinned_at = None;
+    while game.current_tick() < ceiling {
+        game.tick();
+        if game.settlement_shelf(key, 0).len() < baseline {
+            thinned_at = Some(game.current_tick());
+            break;
+        }
+    }
+    let tick = thinned_at.expect("a traded-then-neglected city never thinned at all");
+    assert_eq!(
+        game.settlement_shelf(key, 0).len() as u32,
+        crate::tuning::SETTLEMENT_SERVER_ROWS,
+        "it thinned at tick {tick} but not to the Server floor"
+    );
+}
+
+/// The carve-out. A player who has made a town Hostile has had contact with
+/// it, and the spec gives Hostile standing its own accelerated decay -- a
+/// floor that survived hostility would render that acceleration inert for
+/// every town the party never traded with.
+#[test]
+fn a_hostile_city_thins_even_with_nobody_ever_trading_there() {
+    let mut game = game(4242);
+    let key = a_known_mainframe(&game);
+    let baseline = game.settlement_shelf(key, 0).len();
+    game.adjust_standing(key, crate::tuning::SETTLEMENT_MIN_STANDING);
+    assert_eq!(
+        game.standing_band(key),
+        crate::settlements::Standing::Hostile,
+        "test premise: it is actually Hostile"
+    );
+    game.set_tick_for_test(crate::tuning::SETTLEMENT_COMMERCE_DECAY_TICKS * 20);
+    game.settlement_growth_tick();
+    assert_eq!(
+        growth::vitality(commerce_of(&game, key)),
+        growth::Vitality::Starved,
+        "test premise: the accelerated drift reached Starved"
+    );
+    assert!(
+        game.settlement_shelf(key, 0).len() < baseline,
+        "a Hostile city held the untraded floor: still {baseline} rows"
+    );
+}
+
+/// And the way back: repairing standing out of `Hostile` puts the floor
+/// back for a town still never traded with. The carve-out reads the
+/// *current* band, never a history -- `settle_commerce_drift`'s own rule,
+/// restated on the floor.
+#[test]
+fn repairing_standing_restores_an_untraded_citys_floor() {
+    let mut game = game(4242);
+    let key = a_known_mainframe(&game);
+    let baseline = game.settlement_shelf(key, 0).len();
+    game.adjust_standing(key, crate::tuning::SETTLEMENT_MIN_STANDING);
+    game.set_tick_for_test(crate::tuning::SETTLEMENT_COMMERCE_DECAY_TICKS * 20);
+    game.settlement_growth_tick();
+    assert!(
+        game.settlement_shelf(key, 0).len() < baseline,
+        "test premise: it thinned while Hostile"
+    );
+    game.adjust_standing(key, crate::tuning::SETTLEMENT_MAX_STANDING * 2);
+    assert_ne!(
+        game.standing_band(key),
+        crate::settlements::Standing::Hostile
+    );
+    assert_eq!(
+        game.settlement_shelf(key, 0).len(),
+        baseline,
+        "the floor did not come back when the town stopped being Hostile"
+    );
+}
+
+/// Contact is contact. A basket too small to buy a single point of
+/// commerce still counts as having dealt with the town, because the floor
+/// is about whether the player was ever offered the chance to keep the
+/// city — not about how much they spent. Written against the door rather
+/// than the field, so it fails if the latch moves off `credit_trade_volume`.
+#[test]
+fn a_basket_too_small_to_buy_a_point_still_counts_as_contact() {
+    let mut game = game(4242);
+    let key = a_known_mainframe(&game);
+    game.credit_trade_volume(key, 1);
+    let relation = *game
+        .world
+        .resource::<crate::resources::Standings>()
+        .0
+        .get(&key)
+        .expect("the door opened a record");
+    assert_eq!(relation.commerce, 0, "test premise: it bought no commerce");
+    assert!(
+        relation.traded,
+        "a Credit through the door did not count as contact"
+    );
+    game.world
+        .resource_mut::<crate::resources::Standings>()
+        .0
+        .get_mut(&key)
+        .unwrap()
+        .commerce = crate::tuning::SETTLEMENT_COMMERCE_MIN;
+    assert_eq!(
+        game.settlement_shelf(key, 0).len() as u32,
+        crate::tuning::SETTLEMENT_SERVER_ROWS,
+        "a town dealt with once still held the untraded floor"
+    );
 }

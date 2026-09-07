@@ -50,17 +50,27 @@ impl Game {
     /// A Server answers `None` rather than `Steady`: it has no band, and a
     /// band it never falls out of would put a word on its page that never
     /// changes. See `Vitality::rows`' note on why a Server never asks.
+    ///
+    /// **The floor is applied here and nowhere else**, which is what makes
+    /// it a property of the band rather than of the number: `commerce`
+    /// keeps drifting under a floored city exactly as it does under any
+    /// other, so trading with a town it has been holding up does not first
+    /// have to climb back out of a hole the player never dug. See
+    /// `growth::vitality_floor` for why an untraded town holds at `Steady`
+    /// and why `Hostile` lifts that.
     pub(crate) fn settlement_vitality(&self, key: SettlementKey) -> Option<Vitality> {
         if self.settlement_kind(key)? != SettlementKind::Mainframe {
             return None;
         }
-        let commerce = self
+        let relation = self
             .world
             .resource::<crate::resources::Standings>()
             .0
             .get(&key)
-            .map_or(0, |relation| relation.commerce);
-        Some(growth::vitality(commerce))
+            .copied()
+            .unwrap_or_default();
+        let floor = growth::vitality_floor(relation.traded, self.standing_band(key));
+        Some(growth::vitality(relation.commerce).max(floor))
     }
 
     /// Settles every known town's commerce drift, then latches any Server

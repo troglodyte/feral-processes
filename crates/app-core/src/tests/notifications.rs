@@ -138,7 +138,7 @@ fn founding_the_base_opens_the_tutorial() {
     app.game
         .as_mut()
         .unwrap()
-        .place_structure("home", 0, 0)
+        .place_structure("home", 0, 0, None)
         .unwrap();
     app.handle_key(GameKey::Char('.'));
     assert_eq!(app.mode, Mode::Notification);

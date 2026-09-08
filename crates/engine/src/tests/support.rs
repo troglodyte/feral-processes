@@ -746,9 +746,67 @@ pub(super) fn grant_research_data(game: &mut Game, n: u32) {
 /// by hand, so there is no site left behind and `raise_pending_builds` finds
 /// nothing to do.
 pub(super) fn place_now(game: &mut Game, kind: &str, dx: i32, dy: i32) -> Result<(), String> {
-    game.place_structure(kind, dx, dy)?;
+    file_build(game, kind, dx, dy)?;
     raise_pending_builds(game);
     Ok(())
+}
+
+/// Files a build request through the real `Game::place_structure`, taming a
+/// program on the spot to pay for it, and leaves the site standing.
+///
+/// **What a fixture wants now that a deploy costs a program.** A test about
+/// the crew, the cell or the bill should not have to stage a roster to get a
+/// request filed — and the alternative, spelling the two lines out at every
+/// one of the several dozen call sites, is several dozen chances to stage it
+/// differently. A test about the *cost* calls `place_structure` directly and
+/// says what it is spending.
+///
+/// The exempt structures — the Home — are passed `None`, which is what
+/// `structure_needs_program` answers and what a frontend would do.
+pub(super) fn file_build(game: &mut Game, kind: &str, dx: i32, dy: i32) -> Result<(), String> {
+    let program = build_program(game, &kind.to_string(), 1);
+    game.place_structure(kind, dx, dy, program)
+}
+
+/// Files an upgrade through the real `Game::upgrade_structure`, taming a
+/// program deep enough to pay for it, and leaves the site standing.
+/// `file_build`'s counterpart, for the same reason.
+pub(super) fn file_upgrade(game: &mut Game, structure: Entity) -> Result<(), String> {
+    let kind = game
+        .world
+        .get::<Structure>(structure)
+        .map(|s| s.kind.clone())
+        .unwrap_or_default();
+    let next = game
+        .world
+        .get::<StructureTier>(structure)
+        .map(|t| t.0)
+        .unwrap_or(1)
+        + 1;
+    let program = build_program(game, &kind, next);
+    game.upgrade_structure(structure, program)
+}
+
+/// A tamed program deep enough to pay for a build of `tier`, or `None` if
+/// `kind` is exempt.
+///
+/// It also parks a **spare** in the battle party when the roster would
+/// otherwise be down to the one program being spent, because
+/// `place_structure` refuses to take a base to zero programs. In the party
+/// rather than on the staff deliberately: `base_staff` skips a party member,
+/// so a fixture whose whole point is that there is nobody to build still has
+/// nobody. The spare is added only when it is needed, so a fixture that
+/// already staffed its base is left exactly as it staged itself.
+fn build_program(game: &mut Game, kind: &StructureId, tier: u32) -> Option<Entity> {
+    if !game.structure_needs_program(kind) {
+        return None;
+    }
+    let spend = tame_at_zone(game, tier);
+    if game.owned_pets().len() < 2 {
+        let spare = tame_at_zone(game, tier);
+        game.world.resource_mut::<Party>().0.push(spare);
+    }
+    Some(spend)
 }
 
 /// Files an upgrade through the real `Game::upgrade_structure` and then
@@ -759,7 +817,7 @@ pub(super) fn place_now(game: &mut Game, kind: &str, dx: i32, dy: i32) -> Result
 /// get one. A test about the request itself — the refusals, the site, the
 /// crew — calls `Game::upgrade_structure` directly and leaves the site alone.
 pub(super) fn upgrade_now(game: &mut Game, structure: Entity) -> Result<(), String> {
-    game.upgrade_structure(structure)?;
+    file_upgrade(game, structure)?;
     raise_pending_builds(game);
     Ok(())
 }
@@ -1492,6 +1550,15 @@ pub(super) fn spawn_tamed(game: &mut Game, hp: i32, atk: i32) -> Entity {
         .entity_mut(entity)
         .insert(crate::disposition::Disposition::Steady);
     game.install_innate_routines(entity);
+    entity
+}
+
+/// `spawn_tamed` with a `ZonePortal` set, so a test can pin the depth a
+/// program was caught at without reaching into the ECS itself — e.g. which
+/// side of `programs_for_build`'s `>=` floor it lands on.
+pub(super) fn tame_at_zone(game: &mut Game, zone: u32) -> Entity {
+    let entity = spawn_tamed(game, 10, 3);
+    game.world.entity_mut(entity).insert(ZonePortal(zone));
     entity
 }
 

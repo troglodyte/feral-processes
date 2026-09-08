@@ -116,7 +116,7 @@ fn upgrading_a_structure_is_a_base_action() {
             give(game, &ItemId::from(ids::CORE_FRAGMENT), 50);
             node
         },
-        |game, node| game.upgrade_structure(node),
+        file_upgrade,
     );
 }
 
@@ -1000,7 +1000,7 @@ fn every_deployment_after_the_first_home_is_a_base_action() {
     place_now(&mut game, "home", 1, 0).expect("the founding deploy is permitted from outside");
 
     let refused = game
-        .place_structure("mining_node", 1, 0)
+        .place_structure("mining_node", 1, 0, None)
         .expect_err("a machine is a base action");
 
     assert!(
@@ -1095,7 +1095,7 @@ fn deploying_off_the_pocket_floor_is_refused() {
     );
 
     let refused = game
-        .place_structure("mining_node", 1, 0)
+        .place_structure("mining_node", 1, 0, None)
         .expect_err("one step past the edge is unmined rock");
 
     assert!(

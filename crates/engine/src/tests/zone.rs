@@ -899,8 +899,7 @@ fn portal_build_cost_ramps_with_current_zone_level() {
             inv.add(item.clone(), qty.saturating_sub(1));
         }
     }
-    game.place_structure("portal", 1, 0)
-        .expect("a request is filed whatever is in the pack");
+    file_build(&mut game, "portal", 1, 0).expect("a request is filed whatever is in the pack");
     let site = game.build_site_at(1, 0).expect("the request stands there");
     assert_eq!(
         game.world

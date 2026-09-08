@@ -53,7 +53,7 @@ fn deploying_files_a_request_rather_than_standing_a_structure_up() {
     let mut game = base(1101);
     let before = count_item(&game, ids::CORE_FRAGMENT);
 
-    game.place_structure("mining_node", 1, 0).unwrap();
+    file_build(&mut game, "mining_node", 1, 0).unwrap();
 
     assert!(
         structure_at(&mut game, 1, 0).is_none(),
@@ -88,7 +88,7 @@ fn the_crew_fetches_the_materials_and_raises_the_structure() {
     let mut game = base(1102);
     builder(&mut game);
 
-    game.place_structure("mining_node", 1, 0).unwrap();
+    file_build(&mut game, "mining_node", 1, 0).unwrap();
     let site = site_at(&mut game, 1, 0);
     let cost: u32 = game.world.get::<BuildSite>(site).unwrap().total_materials();
     let held_before = count_item(&game, ids::CORE_FRAGMENT);
@@ -131,7 +131,7 @@ fn a_builder_draws_from_a_base_shelf_with_the_party_away() {
     let mut game = base(1103);
     builder(&mut game);
     place_now(&mut game, "depot", 0, 1).unwrap();
-    game.place_structure("mining_node", 1, 0).unwrap();
+    file_build(&mut game, "mining_node", 1, 0).unwrap();
     let site = site_at(&mut game, 1, 0);
     let cost: u32 = game.world.get::<BuildSite>(site).unwrap().total_materials();
 
@@ -188,7 +188,7 @@ fn a_bill_bigger_than_one_carry_takes_several_trips() {
     let mut game = base(1104);
     builder(&mut game);
     unlock_research_chain(&mut game, "armor_bench");
-    game.place_structure("armory", 1, 0).unwrap();
+    file_build(&mut game, "armory", 1, 0).unwrap();
     let site = site_at(&mut game, 1, 0);
     let total = game.world.get::<BuildSite>(site).unwrap().total_materials();
     assert!(
@@ -246,7 +246,7 @@ fn a_build_request_takes_the_body_off_a_work_order() {
         "the one body works the order first"
     );
 
-    game.place_structure("depot", 1, 0).unwrap();
+    file_build(&mut game, "depot", 1, 0).unwrap();
     let site = site_at(&mut game, 1, 0);
     game.tick();
 
@@ -271,7 +271,7 @@ fn cancelling_returns_what_was_already_carried_to_the_site() {
     builder(&mut game);
     place_now(&mut game, "depot", 0, 1).unwrap();
     let depot = structure_at(&mut game, 0, 1).expect("a Depot stands there");
-    game.place_structure("mining_node", 1, 0).unwrap();
+    file_build(&mut game, "mining_node", 1, 0).unwrap();
     let site = site_at(&mut game, 1, 0);
 
     // Let the crew carry at least one load to the cell.
@@ -328,7 +328,7 @@ fn cancelling_returns_what_was_already_carried_to_the_site() {
 fn a_part_supplied_request_survives_a_reload() {
     let mut game = base(1107);
     builder(&mut game);
-    game.place_structure("mining_node", 1, 0).unwrap();
+    file_build(&mut game, "mining_node", 1, 0).unwrap();
     let site = site_at(&mut game, 1, 0);
     let mut delivered = 0;
     for _ in 0..400 {
@@ -382,8 +382,7 @@ fn a_home_is_still_placed_by_the_player_and_charged_on_the_spot() {
     let mut game = Game::new(1108, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let before = count_item(&game, ids::CORE_FRAGMENT);
 
-    game.place_structure("home", 0, 0)
-        .expect("a Home costs nothing and founds the base");
+    file_build(&mut game, "home", 0, 0).expect("a Home costs nothing and founds the base");
 
     stand_in_base(&mut game);
     assert!(
@@ -403,10 +402,10 @@ fn a_home_is_still_placed_by_the_player_and_charged_on_the_spot() {
 #[test]
 fn a_cell_already_on_order_refuses_a_second_request() {
     let mut game = base(1109);
-    game.place_structure("mining_node", 1, 0).unwrap();
+    file_build(&mut game, "mining_node", 1, 0).unwrap();
 
     let err = game
-        .place_structure("depot", 1, 0)
+        .place_structure("depot", 1, 0, None)
         .expect_err("the cell is already spoken for");
     assert!(
         err.contains("already set to build"),
@@ -438,11 +437,11 @@ fn requests_count_against_the_deployment_ceiling() {
 
     // File exactly the ceiling, each on its own cell.
     for i in 0..cap as i32 {
-        game.place_structure(&capped.id, 1, i - 1)
+        file_build(&mut game, &capped.id, 1, i - 1)
             .unwrap_or_else(|e| panic!("request {i} should be filed: {e}"));
     }
     let err = game
-        .place_structure(&capped.id, -1, 0)
+        .place_structure(&capped.id, -1, 0, None)
         .expect_err("one past the ceiling, even though nothing has been raised");
     assert!(
         err.contains("as many as this grid will hold"),
@@ -489,8 +488,7 @@ fn a_request_no_program_can_reach_does_not_starve_the_base() {
     game.world
         .resource_mut::<crate::base_grid::BaseGrid>()
         .lay_floor(px + far, py + far);
-    game.place_structure("depot", far, far)
-        .expect("filing is not gated on reachability");
+    file_build(&mut game, "depot", far, far).expect("filing is not gated on reachability");
 
     for _ in 0..20 {
         game.tick();
@@ -540,7 +538,7 @@ fn a_request_walled_off_behind_its_own_standing_room_is_skipped_and_announced() 
         // never runs.
         grid.lay_floor(px + far + 1, py + far);
     }
-    game.place_structure("depot", far, far).unwrap();
+    file_build(&mut game, "depot", far, far).unwrap();
 
     for _ in 0..20 {
         game.tick();
@@ -586,7 +584,7 @@ fn the_dry_report_is_said_again_after_the_base_restocks_and_runs_out() {
         .get_mut::<Inventory>(player)
         .unwrap()
         .take(ItemId::from(ids::CORE_FRAGMENT), held);
-    game.place_structure("armory", 1, 0).unwrap();
+    file_build(&mut game, "armory", 1, 0).unwrap();
     let site = site_at(&mut game, 1, 0);
 
     // **Counted through `repeats`, not by counting entries.**
@@ -642,8 +640,8 @@ fn the_dry_report_is_said_again_after_the_base_restocks_and_runs_out() {
 #[test]
 fn the_build_order_report_lists_every_request_in_a_stable_tile_order() {
     let mut game = base(1115);
-    game.place_structure("depot", 1, 0).unwrap();
-    game.place_structure("mining_node", -1, 0).unwrap();
+    file_build(&mut game, "depot", 1, 0).unwrap();
+    file_build(&mut game, "mining_node", -1, 0).unwrap();
 
     let report = game.build_order_report();
     assert_eq!(report.len(), 2, "both requests are listed");
@@ -710,7 +708,7 @@ fn a_request_the_base_cannot_supply_does_not_deadlock_production() {
         .take(ItemId::from(ids::CORE_FRAGMENT), held);
     game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 50))
         .unwrap();
-    game.place_structure("depot", 1, 0).unwrap();
+    file_build(&mut game, "depot", 1, 0).unwrap();
 
     // Sampled across the window, never at its end. The moment the node makes
     // a unit the site stops being dry, so one body alternates between the two
@@ -744,7 +742,7 @@ fn a_request_the_base_cannot_supply_does_not_deadlock_production() {
 #[test]
 fn examining_a_site_says_what_is_going_up_and_what_it_is_short_of() {
     let mut game = base(1111);
-    game.place_structure("mining_node", 1, 0).unwrap();
+    file_build(&mut game, "mining_node", 1, 0).unwrap();
     let site = site_at(&mut game, 1, 0);
 
     let blurb = game
@@ -786,7 +784,7 @@ fn filing_an_upgrade_charges_nothing_and_leaves_the_tier_alone() {
     let (mut game, node) = base_with_a_node(1120);
     let before = count_item(&game, ids::CORE_FRAGMENT);
 
-    game.upgrade_structure(node).unwrap();
+    file_upgrade(&mut game, node).unwrap();
 
     assert_eq!(
         count_item(&game, ids::CORE_FRAGMENT),
@@ -822,7 +820,7 @@ fn filing_an_upgrade_charges_nothing_and_leaves_the_tier_alone() {
 fn the_crew_fetches_the_bill_and_the_tier_lands() {
     let (mut game, node) = base_with_a_node(1121);
     builder(&mut game);
-    game.upgrade_structure(node).unwrap();
+    file_upgrade(&mut game, node).unwrap();
     let (x, y) = {
         let p = game.world.get::<Position>(node).unwrap();
         (p.x, p.y)
@@ -858,7 +856,7 @@ fn an_upgrade_leaves_a_level_less_node_level_less() {
     let (mut game, node) = base_with_a_node(1122);
     game.world.get_mut::<ResourceNode>(node).unwrap().level = None;
     builder(&mut game);
-    game.upgrade_structure(node).unwrap();
+    file_upgrade(&mut game, node).unwrap();
 
     for _ in 0..2000 {
         if game.world.get::<StructureTier>(node).map(|t| t.0) == Some(2) {
@@ -896,10 +894,9 @@ fn a_pending_upgrade_does_not_consume_a_max_deployed_slot() {
         BuildSite::upgrade("line_driver".to_string(), vec![], 2),
         pos,
     ));
-    game.place_structure("line_driver", -1, 0)
-        .expect("the second is inside the ceiling");
+    file_build(&mut game, "line_driver", -1, 0).expect("the second is inside the ceiling");
 
-    game.place_structure("line_driver", 0, 1)
+    file_build(&mut game, "line_driver", 0, 1)
         .expect("and so is the third — the pending upgrade is not a fourth Line Driver");
 }
 
@@ -910,10 +907,10 @@ fn a_pending_upgrade_does_not_consume_a_max_deployed_slot() {
 #[test]
 fn a_second_upgrade_request_on_the_same_structure_is_refused() {
     let (mut game, node) = base_with_a_node(1124);
-    game.upgrade_structure(node).unwrap();
+    file_upgrade(&mut game, node).unwrap();
 
     let err = game
-        .upgrade_structure(node)
+        .upgrade_structure(node, None)
         .expect_err("one request at a time");
 
     assert!(
@@ -943,7 +940,7 @@ fn a_machine_keeps_producing_while_its_upgrade_stands() {
         game.tick();
     }
     let node_pos = *game.world.get::<Position>(node).unwrap();
-    game.upgrade_structure(node).unwrap();
+    file_upgrade(&mut game, node).unwrap();
     let produced_before = game
         .world
         .get::<Stock>(node)
@@ -981,7 +978,7 @@ fn cancelling_an_upgrade_request_gives_the_delivered_units_back() {
     builder(&mut game);
     place_now(&mut game, "depot", 0, 1).unwrap();
     let depot = structure_at(&mut game, 0, 1).expect("a Depot stands there");
-    game.upgrade_structure(node).unwrap();
+    file_upgrade(&mut game, node).unwrap();
     let site = site_at(&mut game, 1, 0);
 
     let mut delivered = 0;
@@ -1045,6 +1042,7 @@ fn a_part_supplied_upgrade_request_survives_a_reload() {
             announced_dry: false,
             announced_stuck: false,
             goal: crate::components::BuildGoal::Upgrade { to_tier: 3 },
+            program: None,
         },
         Position { x: px + 1, y: py },
     ));
@@ -1084,7 +1082,7 @@ fn a_swept_machine_refunds_its_pending_upgrade() {
     builder(&mut game);
     place_now(&mut game, "depot", 0, 1).unwrap();
     let depot = structure_at(&mut game, 0, 1).expect("a Depot stands there");
-    game.upgrade_structure(node).unwrap();
+    file_upgrade(&mut game, node).unwrap();
     let site = site_at(&mut game, 1, 0);
     let node_pos = *game.world.get::<Position>(node).unwrap();
 
@@ -1133,7 +1131,7 @@ fn a_swept_machine_refunds_its_pending_upgrade() {
 fn demolishing_a_machine_refunds_its_pending_upgrade() {
     let (mut game, node) = base_with_a_node(1129);
     builder(&mut game);
-    game.upgrade_structure(node).unwrap();
+    file_upgrade(&mut game, node).unwrap();
     let site = site_at(&mut game, 1, 0);
     let node_pos = *game.world.get::<Position>(node).unwrap();
 
@@ -1169,7 +1167,7 @@ fn demolishing_a_machine_refunds_its_pending_upgrade() {
 #[test]
 fn demolishing_the_home_clears_a_pending_upgrade_elsewhere() {
     let (mut game, node) = base_with_a_node(1130);
-    game.upgrade_structure(node).unwrap();
+    file_upgrade(&mut game, node).unwrap();
     let node_pos = *game.world.get::<Position>(node).unwrap();
     let home = find_structure_by_kind(&mut game, "home").expect("the fixture founds one");
 
@@ -1198,7 +1196,7 @@ fn a_builder_on_an_upgrade_wears_the_job_mark_itself() {
         ch: 'd',
         color: GlyphColor::Cyan,
     });
-    game.upgrade_structure(node).unwrap();
+    file_upgrade(&mut game, node).unwrap();
     let node_pos = *game.world.get::<Position>(node).unwrap();
 
     let mut seen_marked = 0;
@@ -1234,7 +1232,7 @@ fn a_builder_on_an_upgrade_wears_the_job_mark_itself() {
 #[test]
 fn a_machine_being_upgraded_draws_as_itself_and_says_what_is_coming() {
     let (mut game, node) = base_with_a_node(1132);
-    game.upgrade_structure(node).unwrap();
+    file_upgrade(&mut game, node).unwrap();
     let node_pos = *game.world.get::<Position>(node).unwrap();
 
     let views = game.view_entities(20, 20);
@@ -1291,7 +1289,7 @@ fn a_builder_is_drawn_on_the_map_for_the_whole_job() {
         color: GlyphColor::Cyan,
     });
 
-    game.place_structure("mining_node", 1, 0).unwrap();
+    file_build(&mut game, "mining_node", 1, 0).unwrap();
 
     let mut posted_ticks = 0;
     for _ in 0..400 {
@@ -1367,7 +1365,7 @@ fn the_first_broker_is_free_and_the_next_one_is_not() {
         "the run's first Broker is quoted free"
     );
 
-    game.place_structure("contract_broker", 1, 0).unwrap();
+    file_build(&mut game, "contract_broker", 1, 0).unwrap();
     let site = site_at(&mut game, 1, 0);
     assert!(
         game.world.get::<BuildSite>(site).unwrap().cost.is_empty(),
@@ -1396,7 +1394,7 @@ fn cancelling_the_free_request_gives_the_freebie_back() {
     let mut game = base(1151);
     let def = broker(&game);
 
-    game.place_structure("contract_broker", 1, 0).unwrap();
+    file_build(&mut game, "contract_broker", 1, 0).unwrap();
     let site = site_at(&mut game, 1, 0);
     game.cancel_build_request(site).unwrap();
 
@@ -1415,14 +1413,14 @@ fn a_second_request_alongside_the_free_one_pays_full_price() {
     let mut game = base(1152);
     let def = broker(&game);
 
-    game.place_structure("contract_broker", 1, 0).unwrap();
+    file_build(&mut game, "contract_broker", 1, 0).unwrap();
     assert_eq!(
         game.structure_build_cost(&def),
         def.build_cost,
         "one free request is already outstanding, so the next is priced"
     );
 
-    game.place_structure("contract_broker", 0, 1).unwrap();
+    file_build(&mut game, "contract_broker", 0, 1).unwrap();
     let second = site_at(&mut game, 0, 1);
     assert_eq!(
         game.world.get::<BuildSite>(second).unwrap().cost,
@@ -1441,7 +1439,7 @@ fn the_spent_freebie_survives_a_save_and_load() {
     builder(&mut game);
     let def = broker(&game);
 
-    game.place_structure("contract_broker", 1, 0).unwrap();
+    file_build(&mut game, "contract_broker", 1, 0).unwrap();
     for _ in 0..400 {
         if structure_at(&mut game, 1, 0).is_some() {
             break;
@@ -1671,7 +1669,7 @@ fn a_founding_home_cannot_be_half_paid_by_a_split_bill() {
     let mut short = Game::new(9608, DifficultyMode::Forgiving, &assets).unwrap();
     set_inventory(&mut short, &[(ids::CORE_FRAGMENT, 4)]);
     assert!(
-        short.place_structure("home", 0, 0).is_err(),
+        short.place_structure("home", 0, 0, None).is_err(),
         "four fragments does not cover a bill of five, however the bill is written"
     );
     assert_eq!(
@@ -1682,7 +1680,7 @@ fn a_founding_home_cannot_be_half_paid_by_a_split_bill() {
 
     let mut paid = Game::new(9609, DifficultyMode::Forgiving, &assets).unwrap();
     set_inventory(&mut paid, &[(ids::CORE_FRAGMENT, 5)]);
-    paid.place_structure("home", 0, 0)
+    paid.place_structure("home", 0, 0, None)
         .expect("five fragments is the whole bill");
     assert_eq!(
         count_item(&paid, ids::CORE_FRAGMENT),
@@ -1702,7 +1700,7 @@ fn a_filed_portal_request_keeps_the_price_it_was_filed_at_across_a_zone_change()
     let mut game = base(9605);
     let def = portal(&game);
 
-    game.place_structure("portal", 1, 0).unwrap();
+    file_build(&mut game, "portal", 1, 0).unwrap();
     let site = site_at(&mut game, 1, 0);
     let filed_cost = game.world.get::<BuildSite>(site).unwrap().cost.clone();
     assert_eq!(

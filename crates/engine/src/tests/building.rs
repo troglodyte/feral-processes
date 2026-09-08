@@ -55,7 +55,7 @@ fn a_cut_corner_is_not_buildable() {
     let r = STARTING_POCKET_RADIUS;
 
     let err = game
-        .place_structure("armory", r, r)
+        .place_structure("armory", r, r, None)
         .expect_err("the corner cell is off the floor and shouldn't be buildable");
     assert!(err.contains("no floor there"), "unexpected error: {err}");
 
@@ -181,7 +181,7 @@ fn place_structure_rejects_a_second_home() {
     place_home(&mut game);
 
     let err = game
-        .place_structure("home", 1, 0)
+        .place_structure("home", 1, 0, None)
         .expect_err("a second Home shouldn't be buildable while one already exists");
     assert!(err.contains("already deployed"), "unexpected error: {err}");
 }
@@ -203,7 +203,7 @@ fn place_structure_rejects_building_off_the_pockets_floor() {
     // The pocket's east edge, so the next placement lands one cell into rock.
     stand_in_base_at(&mut game, STARTING_POCKET_RADIUS, 0);
     let err = game
-        .place_structure("armory", 1, 0)
+        .place_structure("armory", 1, 0, None)
         .expect_err("a cell with no floor under it shouldn't be buildable");
     assert!(err.contains("no floor there"), "unexpected error: {err}");
 
@@ -235,7 +235,7 @@ fn a_request_the_base_cannot_afford_is_filed_and_the_crew_says_what_it_is_short_
     spawn_tamed(&mut game, 10, 3);
 
     let held = count_item(&game, ids::CORE_FRAGMENT);
-    game.place_structure("armory", 1, 0)
+    file_build(&mut game, "armory", 1, 0)
         .expect("a request is filed whether or not the base can afford it yet");
 
     assert_eq!(
@@ -940,8 +940,7 @@ fn upgrading_refuses_past_max_tier() {
     // A base that cannot afford the bill is deliberately *not* refused here:
     // upgrading files a request now, and a request the base cannot afford yet
     // is the whole point of a queue — the crew says so from the site instead.
-    game.upgrade_structure(node)
-        .expect("filing costs nothing and checks no store");
+    file_upgrade(&mut game, node).expect("filing costs nothing and checks no store");
     let site = game
         .build_site_at(
             game.world.get::<Position>(node).unwrap().x,
@@ -968,7 +967,7 @@ fn upgrading_refuses_past_max_tier() {
         upgrade_now(&mut game, node).unwrap();
     }
     let err = game
-        .upgrade_structure(node)
+        .upgrade_structure(node, None)
         .expect_err("a maxed node can't be upgraded further");
     assert!(err.contains("fully upgraded"), "unexpected error: {err}");
 }
@@ -984,7 +983,7 @@ fn upgrading_is_refused_until_you_have_breached_to_the_matching_zone() {
         .add(ItemId::from(ids::CORE_FRAGMENT), 1000);
 
     let err = game
-        .upgrade_structure(node)
+        .upgrade_structure(node, None)
         .expect_err("zone 1 caps every structure at Mk1");
     assert!(
         err.contains("zone 2"),
@@ -1013,7 +1012,7 @@ fn breaching_raises_the_upgrade_ceiling_one_tier() {
     assert_eq!(game.world.get::<StructureTier>(node).unwrap().0, 2);
 
     let err = game
-        .upgrade_structure(node)
+        .upgrade_structure(node, None)
         .expect_err("zone 2 stops at Mk2");
     assert!(err.contains("zone 3"), "unexpected error: {err}");
 }
@@ -1043,7 +1042,7 @@ fn the_defs_max_tier_still_wins_in_a_deep_zone() {
         upgrade_now(&mut game, node).unwrap();
     }
     let err = game
-        .upgrade_structure(node)
+        .upgrade_structure(node, None)
         .expect_err("a zone past the def's ceiling doesn't raise it");
     assert!(
         err.contains("fully upgraded"),
@@ -1058,7 +1057,7 @@ fn a_structure_without_an_upgrade_def_cannot_be_upgraded() {
     place_home(&mut game);
     let home = find_structure_by_kind(&mut game, "home").unwrap();
     let err = game
-        .upgrade_structure(home)
+        .upgrade_structure(home, None)
         .expect_err("Home declares no upgrade path");
     assert!(err.contains("can't be upgraded"), "unexpected error: {err}");
 }
@@ -2002,7 +2001,7 @@ fn a_capped_structure_refuses_the_one_past_its_limit_and_costs_nothing() {
     let before = count_item(&game, ids::CORE_FRAGMENT);
     let (dx, dy) = spots.next().unwrap();
     let err = game
-        .place_structure("line_driver", dx, dy)
+        .place_structure("line_driver", dx, dy, None)
         .expect_err("one past the limit must be refused");
 
     assert!(
@@ -2049,7 +2048,7 @@ fn a_cache_tap_waits_for_the_second_zone_and_its_research() {
     grant_research_data(&mut game, 1000);
 
     let unresearched = game
-        .place_structure("cache_tap", 1, 0)
+        .place_structure("cache_tap", 1, 0, None)
         .expect_err("the Tap waits on Cache Coherence");
     assert!(unresearched.contains("researched"), "{unresearched}");
 
@@ -2125,7 +2124,7 @@ fn a_line_driver_is_refused_without_the_zone_two_material() {
     // nothing in the base or the pack holds a unit of the material it is
     // denominated in, and `BuildSite::outstanding` keeps saying so. That is
     // what stops the grid growing until the run has a Tap running.
-    game.place_structure("line_driver", 1, 0)
+    file_build(&mut game, "line_driver", 1, 0)
         .expect("a request is filed regardless of what is in stock");
     let site = game.build_site_at(1, 0).expect("the request stands there");
     let outstanding = game
@@ -2702,7 +2701,7 @@ fn founding_stands_the_anchor_where_the_party_is() {
     let mut game = Game::new(3601, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_player_at(&mut game, 7, -3);
 
-    game.place_structure("home", 0, 0)
+    game.place_structure("home", 0, 0, None)
         .expect("founding is the one build made from the open grid");
 
     assert_eq!(
@@ -2732,7 +2731,7 @@ fn founding_on_a_stack_link_is_refused() {
     stand_player_at(&mut game, link.x, link.y);
 
     let err = game
-        .place_structure("home", 0, 0)
+        .place_structure("home", 0, 0, None)
         .expect_err("the anchor cannot share a tile with a link");
     assert!(err.contains("link"), "unexpected refusal: {err}");
     assert!(
@@ -2750,7 +2749,1136 @@ fn founding_costs_nothing() {
     let player = game.player_entity();
     game.world.entity_mut(player).insert(Inventory::default());
 
-    game.place_structure("home", 0, 0)
+    game.place_structure("home", 0, 0, None)
         .expect("an empty pack is enough to found a base");
     assert!(game.has_home(), "the Home is standing");
+}
+
+// ------------------------------------------------------- the program rule
+
+/// `program_tier_required` is the whole of the rule: a fresh deploy always
+/// wants a Mk1 program, and an upgrade wants whatever tier it raises the
+/// structure to.
+#[test]
+fn the_tier_a_goal_demands_is_its_own_tier() {
+    use crate::game::catalog::program_tier_required;
+
+    assert_eq!(program_tier_required(BuildGoal::New), 1);
+    assert_eq!(program_tier_required(BuildGoal::Upgrade { to_tier: 3 }), 3);
+}
+
+/// `programs_for_build`'s floor is `>=`, never `==`. A run whose roster has
+/// outgrown zone 1 could not build at all under a strict match.
+#[test]
+fn a_deeper_program_still_qualifies_for_a_shallow_build() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let deep = tame_at_zone(&mut game, 5);
+    // The spare is the roster floor's, not this test's: `programs_for_build`
+    // offers nothing at all to a base holding one program, whatever its
+    // depth, so a one-program fixture would pass this assertion's inverse
+    // for a reason that has nothing to do with `>=`. Every fixture in this
+    // run of tests carries one for that reason.
+    tame_at_zone(&mut game, 5);
+
+    let eligible = game.programs_for_build(1);
+
+    assert!(
+        eligible.iter().any(|p| p.entity == deep),
+        "zone >= tier is a floor, not a match — a zone 5 program may raise a Mk1"
+    );
+}
+
+/// The other side of the same floor: a program caught shallower than the
+/// tier being raised does not qualify.
+#[test]
+fn a_shallow_program_does_not_qualify_for_a_deep_upgrade() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let shallow = tame_at_zone(&mut game, 2);
+    // Deep enough, and there so the list is non-empty for a reason that is
+    // about depth: without it the roster floor would empty this list on its
+    // own and the assertion below would hold whatever `>=` did.
+    let deep = tame_at_zone(&mut game, 3);
+
+    let eligible = game.programs_for_build(3);
+
+    assert!(!eligible.iter().any(|p| p.entity == shallow));
+    assert!(
+        eligible.iter().any(|p| p.entity == deep),
+        "the deep one is still offered, so the list is not simply empty"
+    );
+}
+
+/// The floor's edge, not just its interior: a program caught at *exactly*
+/// the tier being raised must qualify. This is the modal case in play — a
+/// roster at its own depth raising a structure at that same depth, a zone 1
+/// program building a Mk1 — and neither test above pins it: the shallow
+/// test above (zone 5 against tier 1) still passes if the floor were `>`
+/// instead of `>=`, and `a_shallow_program_does_not_qualify_for_a_deep_upgrade`
+/// (zone 2 against tier 3) only gets more excluded under `>`. Only equality
+/// tells `>=` and `>` apart.
+#[test]
+fn a_program_at_exactly_the_required_zone_qualifies() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let at_depth = tame_at_zone(&mut game, 3);
+    tame_at_zone(&mut game, 3); // the roster floor's spare — see above
+
+    let eligible = game.programs_for_build(3);
+
+    assert!(
+        eligible.iter().any(|p| p.entity == at_depth),
+        "a program exactly at the required zone must qualify — the floor is >=, not >"
+    );
+}
+
+/// `HOME_STRUCTURE_ID` is exempt at every tier: a fresh run owns zero
+/// programs, and one is granted only as an achievements reward, so a Home
+/// that cost a program would be unfoundable. Everything else needs one.
+#[test]
+fn home_is_the_one_structure_that_needs_no_program() {
+    let game = Game::new(20260908, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    assert!(!game.structure_needs_program(&HOME_STRUCTURE_ID.into()));
+    assert!(game.structure_needs_program(&"fabricator".into()));
+}
+
+/// The weapon in the player's hand is not a spare part — it cannot be
+/// offered to a build even though it is still owned and still at depth.
+///
+/// **Two programs, and the assertion names both.** `programs_for_build`
+/// offers nothing whatsoever to a base holding one program — the roster
+/// floor, folded in so no frontend can light a menu the engine will refuse
+/// — so a one-program fixture would satisfy `is_empty()` without the wield
+/// having anything to do with it. The spare is what makes the list
+/// non-empty for the right reason, and asserting it is *present* is what
+/// keeps this test from passing on a `programs_for_build` that returned
+/// nothing at all. Every exclusion test below carries the same pair.
+#[test]
+fn the_wielded_program_is_not_offered_to_a_build() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = spawn_tamed(&mut game, 10, 3);
+    let spare = spawn_tamed(&mut game, 10, 3);
+    game.wield_program(p)
+        .expect("a fresh program is free to wield");
+
+    let eligible = game.programs_for_build(1);
+    assert!(
+        !eligible.iter().any(|e| e.entity == p),
+        "you cannot build with the thing in your hand"
+    );
+    assert!(
+        eligible.iter().any(|e| e.entity == spare),
+        "and the spare beside it is still offered, so the list is not simply empty"
+    );
+}
+
+/// A program away on a sortie cannot be reached to spend on a build, so it
+/// is not offered even though nothing else disqualifies it.
+#[test]
+fn a_sortied_program_is_not_offered_to_a_build() {
+    use crate::resources::{Sortie, Sorties};
+
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = spawn_tamed(&mut game, 10, 3);
+    let spare = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .resource_mut::<Sorties>()
+        .0
+        .push(Sortie::test_stub(vec![p]));
+
+    let eligible = game.programs_for_build(1);
+    assert!(
+        !eligible.iter().any(|e| e.entity == p),
+        "a program away on a sortie is not reachable to spend"
+    );
+    assert!(
+        eligible.iter().any(|e| e.entity == spare),
+        "and the one at home still is, so the list is not simply empty"
+    );
+}
+
+/// `Downed` is the roster slot a wipe is meant to cost — offering it to a
+/// build would let a build request quietly refund that cost.
+#[test]
+fn a_downed_program_is_not_offered_to_a_build() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = spawn_tamed(&mut game, 10, 3);
+    let spare = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(p).insert(Downed);
+
+    let eligible = game.programs_for_build(1);
+    assert!(
+        !eligible.iter().any(|e| e.entity == p),
+        "a downed program is the roster slot a wipe is supposed to cost"
+    );
+    assert!(
+        eligible.iter().any(|e| e.entity == spare),
+        "and the one still standing is offered, so the list is not simply empty"
+    );
+}
+
+/// Freeing — let alone despawning — a program holding a load destroys the
+/// load, so a carrier is withheld from the build list entirely.
+#[test]
+fn a_program_carrying_goods_is_not_offered_to_a_build() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = spawn_tamed(&mut game, 10, 3);
+    let spare = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(p).insert(Carrying {
+        item: ItemId::from(ids::CORE_FRAGMENT),
+        qty: 1,
+    });
+
+    let eligible = game.programs_for_build(1);
+    assert!(
+        !eligible.iter().any(|e| e.entity == p),
+        "despawning a carrier destroys its load"
+    );
+    assert!(
+        eligible.iter().any(|e| e.entity == spare),
+        "and the empty-handed one is offered, so the list is not simply empty"
+    );
+}
+
+/// The program rule may never demand a depth the tier ceiling would not
+/// have let the player reach. If `upgrade_ceiling` ever loosens, this is
+/// what says so out loud instead of leaving an unsatisfiable upgrade.
+///
+/// This calls the real `upgrade_ceiling`, not a restated copy of its
+/// formula — a hardcoded `ceiling = zone` would still pass after
+/// `upgrade_ceiling` itself changed, which is exactly the silent drift this
+/// test exists to catch. `mining_node`'s `upgrade.max_tier` is 5
+/// (`assets/structures/mining_node.ron`), matching every other shipped
+/// upgradeable structure, so `upgrade_ceiling` reduces to `zone` for every
+/// zone in this loop — but it is `upgrade_ceiling` computing that, not the
+/// test asserting it.
+#[test]
+fn the_upgrade_ceiling_keeps_the_program_rule_satisfiable() {
+    use crate::game::catalog::program_tier_required;
+
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let upgrade = game
+        .world
+        .resource::<StructureDb>()
+        .get("mining_node")
+        .unwrap()
+        .upgrade
+        .clone()
+        .unwrap();
+
+    for zone in 1..=5u32 {
+        game.world.resource_mut::<ZoneLevel>().0 = zone;
+        let ceiling = game.upgrade_ceiling(&upgrade);
+        assert!(
+            program_tier_required(BuildGoal::Upgrade { to_tier: ceiling }) <= zone,
+            "a Mk{ceiling} upgrade offered in zone {zone} must not need a deeper program"
+        );
+    }
+}
+
+// --------------------------------------------- committing and refunding
+
+/// The commit is a retirement, not a loan: the entity is gone from the world
+/// and off the roster the moment the order is filed. What comes back is the
+/// snapshot, and only if the order is called off.
+#[test]
+fn committing_a_program_takes_it_off_the_roster() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    let before = game.owned_pets().len();
+
+    let snapshot = game.commit_program(p).expect("committed");
+
+    assert_eq!(game.owned_pets().len(), before - 1);
+    assert!(
+        game.world.get_entity(p).is_err(),
+        "the entity is consumed, not parked"
+    );
+    assert!(snapshot.tamed, "the snapshot records what it was");
+}
+
+/// `Party` is a resource holding raw `Entity` values and it outlives the
+/// entity, so a slot left pointing at a despawned program is a dangling
+/// reference every battle, every roster draw and every save then reads.
+#[test]
+fn committing_a_party_member_clears_its_slot() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    enlist(&mut game, p);
+    assert!(game.world.resource::<Party>().0.contains(&p));
+
+    game.commit_program(p).expect("committed");
+
+    assert!(
+        !game.world.resource::<Party>().0.contains(&p),
+        "no slot points at a dead entity"
+    );
+}
+
+/// The wield clears itself, and this is the lock on that.
+///
+/// `commit_program` deliberately contains **no** explicit clear:
+/// `wielded_program` filters `resources::WieldedProgram` through an
+/// existence check so every despawning path inherits the immunity, and its
+/// doc asks that no caller add one. That makes this a test of the pair
+/// rather than of a line — it fails if that filter is ever dropped, which is
+/// the moment a commit would start leaving the run swinging a despawned
+/// entity. Deleting anything inside `commit_program` will not fail it, and
+/// that is the correct answer, not a vacuous one.
+#[test]
+fn committing_the_wielded_program_unwields_it() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    game.wield_program(p).expect("wielded");
+
+    game.commit_program(p).expect("committed");
+
+    assert!(
+        game.wielded_program().is_none(),
+        "the run does not wield a despawned entity"
+    );
+}
+
+/// The refund is a resurrection rather than a return, so "whole" is the
+/// whole of the test: the name it answered to, and — load-bearing in both
+/// directions — the `ProgramId` its own memories and every other program's
+/// memories of it are keyed to.
+#[test]
+fn a_refunded_program_comes_back_whole() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    game.rename_companion(p, Some("Bellwether".to_string()))
+        .expect("named");
+    let label = game.creature_label(p);
+    let id = game.world.get::<ProgramId>(p).unwrap().0;
+
+    let snapshot = game.commit_program(p).expect("committed");
+    let back = game.refund_program(&snapshot).expect("refunded");
+
+    assert_eq!(game.creature_label(back), label);
+    assert_eq!(
+        game.world.get::<ProgramId>(back).unwrap().0,
+        id,
+        "a fresh id would orphan its memories and everyone else's memories of it"
+    );
+    assert_eq!(game.owned_pets().len(), 1, "back on the roster");
+}
+
+/// Spec test 8's other half. The snapshot is taken before the commit clears
+/// the wield, so it records the roles as they were — and a cancelled order
+/// that quietly disarmed the player would be a second cost the cancel never
+/// advertised.
+#[test]
+fn a_refunded_program_is_taken_back_in_hand() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    game.wield_program(p).expect("wielded");
+
+    let snapshot = game.commit_program(p).expect("committed");
+    let back = game.refund_program(&snapshot).expect("refunded");
+
+    assert_eq!(
+        game.wielded_program(),
+        Some(back),
+        "the weapon a cancelled order took comes back to the hand"
+    );
+}
+
+/// A weapon taken up while the order stood is not displaced by the refund:
+/// the program comes back as staff rather than knocking the live wield out
+/// of the player's hand.
+#[test]
+fn a_refunded_program_does_not_snatch_back_an_occupied_hand() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    game.wield_program(p).expect("wielded");
+    let snapshot = game.commit_program(p).expect("committed");
+    let other = tame_at_zone(&mut game, 1);
+    game.wield_program(other).expect("a second weapon in hand");
+
+    let back = game.refund_program(&snapshot).expect("refunded");
+
+    assert_eq!(
+        game.wielded_program(),
+        Some(other),
+        "the hand that is already full keeps what is in it"
+    );
+    assert_eq!(game.program_role(back), Some(ProgramRole::Staff));
+}
+
+/// The same rule, but the hand was filled by a weapon rather than a second
+/// program: `wield_program` is the only place that unequips a weapon to make
+/// room, and `refund_program` must defer to it too, or the run ends up
+/// holding both a weapon and a wielded program at once — the pairing
+/// `views.rs` documents as mutually exclusive.
+#[test]
+fn a_refunded_program_does_not_snatch_a_weapon_out_of_the_hand() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    game.wield_program(p).expect("wielded");
+    let snapshot = game.commit_program(p).expect("committed");
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
+    game.equip(player, &gear(&ItemId::from(ids::OVERCLOCK_CORE), 0))
+        .expect("a weapon takes the empty hand");
+
+    let back = game.refund_program(&snapshot).expect("refunded");
+
+    assert_eq!(
+        game.wielded_program(),
+        None,
+        "the weapon in hand is not knocked out to make room"
+    );
+    assert!(
+        game.player_status().weapon.is_some(),
+        "the equipped weapon is still worn"
+    );
+    assert_eq!(game.program_role(back), Some(ProgramRole::Staff));
+}
+
+/// The party half of the same rule: a slot the order emptied is given back.
+#[test]
+fn a_refunded_party_member_returns_to_its_slot() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let lead = tame_at_zone(&mut game, 1);
+    let p = tame_at_zone(&mut game, 1);
+    enlist(&mut game, lead);
+    enlist(&mut game, p);
+
+    let snapshot = game.commit_program(p).expect("committed");
+    let back = game.refund_program(&snapshot).expect("refunded");
+
+    assert_eq!(
+        game.world.resource::<Party>().0,
+        vec![lead, back],
+        "it falls back in behind the member that was ahead of it"
+    );
+}
+
+/// Spec test 9. `Party` is capped at `MAX_PARTY_SIZE` and `add_companion`
+/// refuses past it; a refund that pushed straight into the vec would be the
+/// one door that overfills the party, and `BattleState::planned` indexes it
+/// positionally.
+#[test]
+fn a_refunded_party_member_does_not_overfill_a_full_party() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    enlist(&mut game, p);
+    let snapshot = game.commit_program(p).expect("committed");
+    for _ in 0..crate::tuning::MAX_PARTY_SIZE {
+        let filler = tame_at_zone(&mut game, 1);
+        enlist(&mut game, filler);
+    }
+
+    let back = game.refund_program(&snapshot).expect("refunded");
+
+    assert_eq!(
+        game.world.resource::<Party>().0.len(),
+        crate::tuning::MAX_PARTY_SIZE,
+        "the cap holds"
+    );
+    assert_eq!(
+        game.program_role(back),
+        Some(ProgramRole::Staff),
+        "it comes back as staff rather than as a sixth slot"
+    );
+}
+
+/// Freeing a carrier drops its load and despawning it destroys it outright.
+/// `programs_for_build` already withholds one, but a rule that lives only in
+/// a picker is a rule a second frontend skips — so the engine door refuses
+/// too, and refuses **before** anything moves.
+#[test]
+fn committing_a_carrying_program_is_refused() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    game.world.entity_mut(p).insert(Carrying {
+        item: ItemId::from(ids::CORE_FRAGMENT),
+        qty: 3,
+    });
+
+    assert!(
+        game.commit_program(p).is_none(),
+        "a carrier is not spendable"
+    );
+    assert!(
+        game.world.get_entity(p).is_ok(),
+        "and a refusal costs nothing"
+    );
+}
+
+/// A sortied program is away and cannot be reached, and `Sorties` is the
+/// third resource holding a raw `Entity` — committing one would leave a
+/// squad counting down around a corpse.
+#[test]
+fn committing_a_sortied_program_is_refused() {
+    use crate::resources::{Sortie, Sorties};
+
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    game.world
+        .resource_mut::<Sorties>()
+        .0
+        .push(Sortie::test_stub(vec![p]));
+
+    assert!(game.commit_program(p).is_none());
+    assert!(game.world.get_entity(p).is_ok());
+}
+
+/// `Downed` is the roster slot a wipe is meant to cost. Spending one on a
+/// build and cancelling would hand it back whole, which is a repair with no
+/// Repair Bay.
+#[test]
+fn committing_a_downed_program_is_refused() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    game.world.entity_mut(p).insert(Downed);
+
+    assert!(game.commit_program(p).is_none());
+    assert!(game.world.get_entity(p).is_ok());
+}
+
+/// Ownership is the outermost guard: a wild creature standing in the base is
+/// an `Entity` like any other, and nothing about the argument type says it
+/// is yours.
+#[test]
+fn committing_something_you_do_not_own_is_refused() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_on_player_tile(&mut game);
+
+    assert!(game.commit_program(wild).is_none());
+    assert!(game.world.get_entity(wild).is_ok());
+}
+
+/// The `NextProgramId` write-back. `spawn_creature_from_save` mints into its
+/// context and never into the resource — `Game::load` writes it back itself
+/// — so a refund that dropped its scratch context would hand out the same id
+/// twice the next time one was minted.
+///
+/// The two halves are the whole point: a real snapshot must *not* advance the
+/// counter, and a sentinel one must.
+#[test]
+fn a_refund_neither_reissues_nor_loses_a_program_id() {
+    use crate::resources::NextProgramId;
+
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    let snapshot = game.commit_program(p).expect("committed");
+    let counter = game.world.resource::<NextProgramId>().0;
+
+    let back = game.refund_program(&snapshot).expect("refunded");
+
+    assert_eq!(
+        game.world.resource::<NextProgramId>().0,
+        counter,
+        "a snapshot carrying its own name mints nothing"
+    );
+    assert_eq!(
+        game.world.get::<ProgramId>(back).unwrap().0,
+        snapshot.program_id
+    );
+
+    // The sentinel arm — what a save written before ids existed carries.
+    let mut sentinel = snapshot.clone();
+    sentinel.program_id = 0;
+    let minted = game.refund_program(&sentinel).expect("refunded");
+
+    assert_eq!(game.world.get::<ProgramId>(minted).unwrap().0, counter);
+    assert_eq!(
+        game.world.resource::<NextProgramId>().0,
+        counter + 1,
+        "the id it minted is written back, not dropped with the scratch context"
+    );
+}
+
+/// A committed program's post goes with the entity, and the base notices on
+/// its own: occupancy is read off the live `Task` components
+/// (`displace_task_holder`), never cached on the structure, so nothing is
+/// left pointing at the despawned worker.
+#[test]
+fn committing_a_posted_program_leaves_no_task_behind() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    let target = game.player_entity();
+    game.world.entity_mut(p).insert(Task {
+        kind: TaskKind::Guard,
+        target,
+        progress: 1,
+        required: 4,
+    });
+
+    game.commit_program(p).expect("committed");
+
+    let mut tasks = game.world.query::<(Entity, &Task)>();
+    assert_eq!(
+        tasks.iter(&game.world).count(),
+        0,
+        "the posting died with the body"
+    );
+}
+
+/// A refund does not re-post the program it gives back. `schedule_base_labour`
+/// hands out work on the next tick, and re-inserting the snapshot's cronjob
+/// into a live base could put two bodies on one machine — the exact thing
+/// `displace_task_holder` exists to prevent.
+#[test]
+fn a_refunded_program_comes_back_unposted() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    let target = game.player_entity();
+    game.world.entity_mut(p).insert(Task {
+        kind: TaskKind::Guard,
+        target,
+        progress: 1,
+        required: 4,
+    });
+    let snapshot = game.commit_program(p).expect("committed");
+    assert!(
+        snapshot.cronjob.is_some(),
+        "the fixture really did record a posting"
+    );
+
+    let back = game.refund_program(&snapshot).expect("refunded");
+
+    assert!(
+        game.world.get::<Task>(back).is_none(),
+        "the scheduler posts it again; the refund does not"
+    );
+}
+
+// ------------------------------------- the two filing doors take a program
+
+/// A base with a Home, the party inside it, and `programs` tamed programs on
+/// the roster — the whole staging a build order now needs.
+///
+/// Seeded at zone 1 by default; a test about depth tames its own at the
+/// depth it wants.
+fn a_base_with_programs(seed: u32, programs: usize) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    for _ in 0..programs {
+        tame_at_zone(&mut game, 1);
+    }
+    game
+}
+
+/// The `BuildSite` standing at the party's cell plus `(dx, dy)`, if one is.
+fn filed_at(game: &mut Game, dx: i32, dy: i32) -> Option<Entity> {
+    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    game.build_site_at(px + dx, py + dy)
+}
+
+/// The headline of the whole feature: a deploy with no program named is
+/// refused, and the sentence says what is missing rather than leaving the
+/// player to guess which of the build screen's rules bit them.
+#[test]
+fn deploying_without_a_program_is_refused_and_says_why() {
+    let mut game = a_base_with_programs(20260907, 2);
+
+    let err = game
+        .place_structure("mining_node", 1, 0, None)
+        .expect_err("a deploy costs a tamed program");
+
+    assert!(
+        err.contains("tamed program"),
+        "the refusal names what is missing: {err}"
+    );
+    assert!(
+        filed_at(&mut game, 1, 0).is_none(),
+        "and a refused deploy files nothing"
+    );
+}
+
+/// The other half: a program named is a program *spent*. It leaves the
+/// roster and the order is holding it — asserted on both sides, because a
+/// site that took the program without recording it would look identical
+/// from the roster alone and would refund nothing on a cancel.
+#[test]
+fn deploying_with_a_program_files_the_order_and_spends_it() {
+    let mut game = a_base_with_programs(20260907, 1);
+    let spend = tame_at_zone(&mut game, 1);
+
+    game.place_structure("mining_node", 1, 0, Some(spend))
+        .expect("a program deep enough, with a body left behind");
+
+    assert_eq!(
+        game.owned_pets().len(),
+        1,
+        "the committed program left the roster and the spare stayed"
+    );
+    assert!(
+        game.owned_pets().iter().all(|p| p.entity != spend),
+        "and it is the one that was named that went"
+    );
+    let filed = game.build_site_programs();
+    assert_eq!(filed.len(), 1, "one order stands");
+    assert!(
+        filed[0].is_some(),
+        "and the order is holding the program it was paid with"
+    );
+}
+
+/// The Home is exempt, and `structure_needs_program` is what exempts it — a
+/// fresh run owns zero programs, so a Home that cost one could never be
+/// founded and the run could never open a base at all.
+#[test]
+fn founding_a_home_needs_no_program() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    game.place_structure(HOME_STRUCTURE_ID, 0, 0, None)
+        .expect("the Home is exempt at every tier");
+
+    assert!(game.has_home(), "and it is standing");
+}
+
+/// **A build order may never take the base to zero programs.** Nothing would
+/// be left to fetch the materials or raise the site, so the order could
+/// never finish — `build_is_workable`'s deadlock reached from the other
+/// side. The refusal is about the roster, not about the program named: the
+/// one offered here is perfectly eligible.
+#[test]
+fn a_one_program_base_may_not_spend_its_only_body() {
+    let mut game = a_base_with_programs(20260907, 0);
+    let only = tame_at_zone(&mut game, 1);
+
+    let err = game
+        .place_structure("mining_node", 1, 0, Some(only))
+        .expect_err("the last program may not be spent");
+
+    assert!(err.contains("last program"), "{err}");
+    assert_eq!(
+        game.owned_pets().len(),
+        1,
+        "and it is still on the roster — a refusal moves nothing"
+    );
+    assert!(
+        filed_at(&mut game, 1, 0).is_none(),
+        "and no order was filed"
+    );
+}
+
+/// An upgrade demands the tier it *reaches*, not the tier the machine is at,
+/// and the refusal names the depth so the player knows how deep to go.
+#[test]
+fn a_mk3_upgrade_refuses_a_zone_2_program() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let node = deploy_upgradeable_node(&mut game);
+    set_zone(&mut game, 3);
+    stock_upgrade_materials(&mut game, 60);
+    upgrade_now(&mut game, node).expect("a Mk2 to upgrade from");
+    assert_eq!(game.world.get::<StructureTier>(node).unwrap().0, 2);
+
+    let shallow = tame_at_zone(&mut game, 2);
+    let held = game.owned_pets().len();
+
+    let err = game
+        .upgrade_structure(node, Some(shallow))
+        .expect_err("a Mk3 wants a zone 3 program");
+
+    assert!(
+        err.contains("zone 3"),
+        "the refusal names the depth needed: {err}"
+    );
+    assert_eq!(
+        game.owned_pets().len(),
+        held,
+        "a refused upgrade spends nothing"
+    );
+}
+
+/// The floor is `>=`, not `==`, on this door too: a program caught deeper
+/// than the tier being raised is spent without complaint.
+#[test]
+fn a_deeper_program_may_pay_for_a_shallow_upgrade() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let node = deploy_upgradeable_node(&mut game);
+    set_zone(&mut game, 2);
+    tame_at_zone(&mut game, 1);
+    let deep = tame_at_zone(&mut game, 7);
+
+    game.upgrade_structure(node, Some(deep))
+        .expect("zone 7 clears a Mk2's zone 2 floor");
+
+    assert!(
+        game.owned_pets().iter().all(|p| p.entity != deep),
+        "and the deep one is what was spent"
+    );
+}
+
+/// An upgrade with no program named is refused the same way a deploy is, and
+/// the sentence names the mark being bought so the two doors do not read as
+/// the same failure.
+#[test]
+fn upgrading_without_a_program_is_refused_and_says_why() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let node = deploy_upgradeable_node(&mut game);
+    set_zone(&mut game, 2);
+    tame_at_zone(&mut game, 1);
+    tame_at_zone(&mut game, 1);
+
+    let err = game
+        .upgrade_structure(node, None)
+        .expect_err("an upgrade costs a tamed program");
+
+    assert!(err.contains("tamed program"), "{err}");
+    assert!(
+        err.contains("Mk2"),
+        "and it names the mark being bought: {err}"
+    );
+    let pos = *game.world.get::<Position>(node).unwrap();
+    assert!(
+        game.build_site_at(pos.x, pos.y).is_none(),
+        "and nothing was filed"
+    );
+}
+
+/// The upgrade site carries the program it was paid with, exactly as a
+/// deploy's does — the two goals are one rule, and a cancel has to be able
+/// to hand either one back.
+#[test]
+fn an_upgrade_order_holds_the_program_it_was_paid_with() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let node = deploy_upgradeable_node(&mut game);
+    set_zone(&mut game, 2);
+    tame_at_zone(&mut game, 1);
+    let spend = tame_at_zone(&mut game, 2);
+
+    game.upgrade_structure(node, Some(spend))
+        .expect("a zone 2 program pays for a Mk2");
+
+    assert!(
+        game.build_site_programs().iter().any(|p| p.is_some()),
+        "the upgrade order is holding it"
+    );
+    assert!(
+        game.owned_pets().iter().all(|p| p.entity != spend),
+        "and it left the roster"
+    );
+}
+
+/// **`commit_program` returning `None` is a refusal, not an absence.** A
+/// downed program is deep enough, owned, and not the last body — every
+/// question above the commit says yes — and the commit still refuses it,
+/// because a downed slot is what a wipe is supposed to cost. Filing the
+/// order anyway would raise a structure for nothing.
+#[test]
+fn a_program_the_commit_refuses_files_no_order() {
+    let mut game = a_base_with_programs(20260907, 2);
+    let downed = tame_at_zone(&mut game, 1);
+    game.world.entity_mut(downed).insert(Downed);
+    let held = game.owned_pets().len();
+
+    let err = game
+        .place_structure("mining_node", 1, 0, Some(downed))
+        .expect_err("a downed program cannot be committed");
+
+    assert!(
+        err.contains("downed"),
+        "the refusal says which state it is in: {err}"
+    );
+    assert!(
+        filed_at(&mut game, 1, 0).is_none(),
+        "and no free structure was filed on a refused commit"
+    );
+    assert_eq!(game.owned_pets().len(), held, "the roster is untouched");
+}
+
+/// **The refusal order is load-bearing.** A player standing where nothing
+/// can be built is told about the place, not about a program they were never
+/// going to spend — so the world's refusals all resolve before the program
+/// block is reached, and passing no program at all does not change which
+/// sentence comes back.
+#[test]
+fn a_bad_cell_is_reported_before_the_program_cost() {
+    let mut game = a_base_with_programs(20260908, 2);
+    // One step past the pocket's east edge, which is unmined rock.
+    stand_in_base_at(&mut game, STARTING_POCKET_RADIUS, 0);
+
+    let err = game
+        .place_structure("mining_node", 1, 0, None)
+        .expect_err("there is no floor out there");
+
+    assert!(
+        err.contains("no floor there"),
+        "the place comes first, ahead of the program: {err}"
+    );
+}
+
+/// The same ordering on the upgrade door: a machine already on order reads
+/// as the standing request, not as a missing program, because that is the
+/// errand the player can actually act on.
+#[test]
+fn a_standing_upgrade_request_is_reported_before_the_program_cost() {
+    let mut game = Game::new(20260908, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let node = deploy_upgradeable_node(&mut game);
+    set_zone(&mut game, 2);
+    tame_at_zone(&mut game, 1);
+    let spend = tame_at_zone(&mut game, 2);
+    game.upgrade_structure(node, Some(spend))
+        .expect("the first request is filed");
+
+    let err = game
+        .upgrade_structure(node, None)
+        .expect_err("one request at a time");
+
+    assert!(
+        err.contains("already on order"),
+        "the standing request comes first, ahead of the program: {err}"
+    );
+}
+
+/// A committed program is **gone**, not merely marked. The proof that a
+/// pending order's program cannot be spent a second time is that the entity
+/// it names no longer exists — so offering it to a second order is refused
+/// at `commit_program`'s ownership guard rather than by any count of
+/// outstanding requests.
+///
+/// This is the answer to the question `count_build_requests` raises. That
+/// figure counts `BuildGoal::New` only, so a pending upgrade does not eat a
+/// `max_deployed` slot; anything counting *committed programs* would have to
+/// count both goals instead. Nothing does, and nothing needs to: the commit
+/// despawns the body, so the roster is the count and it is right for both
+/// goals by construction.
+#[test]
+fn a_program_already_committed_to_an_order_cannot_pay_for_a_second_one() {
+    let mut game = Game::new(20260909, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let node = deploy_upgradeable_node(&mut game);
+    set_zone(&mut game, 2);
+    tame_at_zone(&mut game, 2);
+    tame_at_zone(&mut game, 2);
+    let spend = tame_at_zone(&mut game, 2);
+    game.upgrade_structure(node, Some(spend))
+        .expect("the upgrade order takes it");
+
+    let err = game
+        .place_structure("mining_node", 2, 0, Some(spend))
+        .expect_err("the same program may not pay twice");
+
+    assert!(
+        err.contains("can't be committed"),
+        "it is refused for being already spent, not for being absent: {err}"
+    );
+    assert!(
+        filed_at(&mut game, 2, 0).is_none(),
+        "and no second order was filed"
+    );
+}
+
+/// The deploy line names the program it took. A commit that said nothing
+/// would leave the player working out which of their roster went by counting
+/// the manifest afterwards.
+#[test]
+fn the_deploy_line_names_the_program_it_committed() {
+    let mut game = a_base_with_programs(20260909, 1);
+    let spend = tame_at_zone(&mut game, 1);
+    let who = game.creature_label(spend);
+
+    game.place_structure("mining_node", 1, 0, Some(spend))
+        .expect("filed");
+
+    assert!(
+        game.message_history(50)
+            .iter()
+            .any(|e| e.text.contains(&who) && e.text.contains("Mining Node")),
+        "the log names both the structure and the program: {:?}",
+        game.message_history(50)
+            .iter()
+            .map(|e| e.text.clone())
+            .collect::<Vec<_>>()
+    );
+}
+
+// ------------------------------ the two destruction doors give it back
+
+/// The refund half of the mechanic, and the door the player reaches for.
+/// The commit is a *retirement*, so an order the player changes their mind
+/// about would destroy a program outright without this — a rob rather than
+/// a refund, and one that reads as the picker having eaten the roster.
+#[test]
+fn calling_off_an_order_gives_the_program_back() {
+    let mut game = a_base_with_programs(20260907, 1);
+    let spend = tame_at_zone(&mut game, 1);
+    game.rename_companion(spend, Some("Bellwether".to_string()))
+        .expect("named");
+
+    game.place_structure("mining_node", 1, 0, Some(spend))
+        .expect("filed");
+    assert_eq!(game.owned_pets().len(), 1, "the order is holding it");
+
+    let site = filed_at(&mut game, 1, 0).expect("a site");
+    game.cancel_build_request(site).expect("cancelled");
+
+    let back = game.owned_pets();
+    assert_eq!(back.len(), 2, "the committed program is back on the roster");
+    assert!(
+        back.iter().any(|p| p.name.contains("Bellwether")),
+        "and it is the one that was named that came back: {:?}",
+        back.iter().map(|p| p.name.clone()).collect::<Vec<_>>()
+    );
+}
+
+/// The cancel says so, in the base log. A program that reappeared on the
+/// roster with nothing said would leave the player counting the manifest to
+/// find out whether the cancel had cost them anything — the same reason the
+/// deploy line names what it took.
+#[test]
+fn the_cancel_line_names_the_program_it_gave_back() {
+    let mut game = a_base_with_programs(20260907, 1);
+    let spend = tame_at_zone(&mut game, 1);
+    let who = game.creature_label(spend);
+    game.place_structure("mining_node", 1, 0, Some(spend))
+        .expect("filed");
+
+    let site = filed_at(&mut game, 1, 0).expect("a site");
+    game.cancel_build_request(site).expect("cancelled");
+
+    assert!(
+        game.message_history(50)
+            .iter()
+            .any(|e| e.text.contains(&who) && e.text.contains("comes back")),
+        "the log names the program the cancel handed back: {:?}",
+        game.message_history(50)
+            .iter()
+            .map(|e| e.text.clone())
+            .collect::<Vec<_>>()
+    );
+}
+
+/// The second door, called directly. `clear_pending_build_at` warns in its
+/// own doc that nothing fails to compile when only one of the two is wired,
+/// and this is the assertion that makes that true of the program as well as
+/// of the materials.
+#[test]
+fn a_site_wiped_with_its_cell_gives_the_program_back_too() {
+    let mut game = a_base_with_programs(20260907, 1);
+    let spend = tame_at_zone(&mut game, 1);
+    game.place_structure("mining_node", 1, 0, Some(spend))
+        .expect("filed");
+    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+
+    game.clear_pending_build_at(px + 1, py);
+
+    assert_eq!(
+        game.owned_pets().len(),
+        2,
+        "the second door refunds like the first"
+    );
+}
+
+/// And the door as a player actually reaches it: demolishing the machine an
+/// upgrade was filed against takes the request with it, so the program the
+/// request was paid with has to come back the same way a cancel's does.
+/// Reached through `remove_structure` rather than by calling the helper,
+/// because a consequence gated behind a path nothing walks is green and
+/// unreachable at once.
+#[test]
+fn demolishing_a_machine_under_upgrade_gives_its_program_back() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let node = deploy_upgradeable_node(&mut game);
+    set_zone(&mut game, 2);
+    tame_at_zone(&mut game, 1);
+    let spend = tame_at_zone(&mut game, 2);
+    game.upgrade_structure(node, Some(spend))
+        .expect("a zone 2 program pays for a Mk2");
+    let held = game.owned_pets().len();
+
+    game.remove_structure(node).expect("demolished");
+
+    assert_eq!(
+        game.owned_pets().len(),
+        held + 1,
+        "the cell going out from under the order hands the program back"
+    );
+}
+
+/// The other end of the lifecycle, and the reason `consume_site` needs no
+/// change: a build that *finishes* has spent the program. The site despawns
+/// and the snapshot goes with it, and demolishing the machine afterwards
+/// refunds materials — never a program, which would make a deploy-and-scrap
+/// loop free.
+#[test]
+fn a_finished_structure_never_gives_the_program_back() {
+    let mut game = a_base_with_programs(20260907, 0);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 500);
+    // Tough enough to outlast the ambient GC Entropy Sweeps these ticks run
+    // through — `tests::construction::builder`'s reason.
+    spawn_tamed(&mut game, 500, 3);
+    let spend = tame_at_zone(&mut game, 1);
+
+    game.place_structure("mining_node", 1, 0, Some(spend))
+        .expect("filed");
+    assert_eq!(game.owned_pets().len(), 1, "the order is holding it");
+
+    for _ in 0..400 {
+        if filed_at(&mut game, 1, 0).is_none() {
+            break;
+        }
+        game.tick();
+    }
+    let built = find_structure_by_kind(&mut game, "mining_node").expect("the crew raises it");
+    assert_eq!(game.owned_pets().len(), 1, "spent at completion");
+
+    game.remove_structure(built).expect("demolished");
+
+    assert_eq!(
+        game.owned_pets().len(),
+        1,
+        "deconstruction returns materials, not programs"
+    );
+}
+
+/// The one way a refund can fail, and it must not fail quietly.
+///
+/// A snapshot naming a species whose `.ron` has been deleted between
+/// sessions cannot be respawned — `refund_program` answers `None` rather
+/// than panicking, because deleting a species file is a supported thing to
+/// do to an install. What is not supported is a program going off the roster
+/// with no line anywhere accounting for it, which would read as the cancel
+/// having eaten it.
+#[test]
+fn a_program_that_cannot_be_restored_is_said_rather_than_lost_quietly() {
+    let mut game = a_base_with_programs(20260907, 1);
+    let spend = tame_at_zone(&mut game, 1);
+    game.rename_companion(spend, Some("Bellwether".to_string()))
+        .expect("named");
+    game.place_structure("mining_node", 1, 0, Some(spend))
+        .expect("filed");
+    let site = filed_at(&mut game, 1, 0).expect("a site");
+    // The install loses the species out from under the standing order.
+    game.world
+        .get_mut::<BuildSite>(site)
+        .unwrap()
+        .program
+        .as_mut()
+        .unwrap()
+        .species = "a_species_this_install_never_shipped".to_string();
+
+    game.cancel_build_request(site)
+        .expect("a cancel does not take the run down over it");
+
+    assert_eq!(
+        game.owned_pets().len(),
+        1,
+        "there is nothing left to rebuild it from"
+    );
+    assert!(
+        game.message_history(50)
+            .iter()
+            .any(|e| e.text.contains("Bellwether") && e.text.contains("does not come back")),
+        "and the log says so, by name: {:?}",
+        game.message_history(50)
+            .iter()
+            .map(|e| e.text.clone())
+            .collect::<Vec<_>>()
+    );
 }

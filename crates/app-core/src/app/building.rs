@@ -257,10 +257,101 @@ impl App {
             self.mode = Mode::Playing;
             return;
         };
-        if let Some(game) = &mut self.game {
-            let outcome = game.place_structure(&id, dx, dy);
-            self.report(outcome);
+        // Home is the one structure that costs no program — see
+        // `structure_needs_program`'s doc — and the one a fresh run has to
+        // be able to found with zero programs owned, so it keeps this direct
+        // path rather than detouring through the picker below.
+        //
+        // Derived through `StructureDef::category()` rather than a literal
+        // `id == "home"` comparison: the engine's own `HOME_STRUCTURE_ID` is
+        // private to that crate, but a hand-copied `"home"` string is worse
+        // than unreachable — it silently stops meaning "Home" the moment
+        // `assets/structures/home.ron`'s id ever changes, and the failure
+        // mode is a fresh run (zero programs owned) unable to found a base
+        // at all, because Home would now route into a picker with nothing
+        // in it. `category()` reads `crate::HOME_STRUCTURE_ID` on the
+        // engine's own side of that seam, so a rename can't desync the two.
+        let is_home = self.game.as_ref().is_some_and(|game| {
+            game.buildable_structure_defs()
+                .into_iter()
+                .find(|def| def.id == id)
+                .is_some_and(|def| def.category() == StructureCategory::Home)
+        });
+        if is_home {
+            if let Some(game) = &mut self.game {
+                let outcome = game.place_structure(&id, dx, dy, None);
+                self.report(outcome);
+            }
+            self.mode = Mode::Playing;
+            return;
         }
+        self.pending_build = Some(PendingBuild::Deploy {
+            structure: id,
+            dx,
+            dy,
+        });
+        self.mode = Mode::BuildProgram;
+    }
+
+    /// Confirms the order `App::pending_build` describes by spending the
+    /// picked program on it — `Mode::BuildProgram`, reached from
+    /// `Mode::BuildDirection` (a deploy) or `Mode::Upgrade` (an upgrade).
+    ///
+    /// **Nothing is spent until this resolves.** `place_structure` and
+    /// `upgrade_structure` are the one place either commit actually happens,
+    /// so Esc here can simply drop `pending_build` — there is nothing to
+    /// undo, because nothing has happened yet.
+    pub(crate) fn handle_build_program_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.pending_build = None;
+            self.close_screen();
+            return;
+        }
+        let Some(pending) = self.pending_build.clone() else {
+            self.mode = Mode::Playing;
+            return;
+        };
+        // The engine's own derivation (`program_tier_required`, re-exported
+        // for exactly this call — see its doc in `feral_processes_engine`),
+        // not a restated copy of it: the tier handed to `programs_for_build`
+        // here is the same value `Game::commit_for_build` will demand at
+        // confirm, so the two can't drift into offering a program that is
+        // the wrong *depth*, or hiding one that would have worked.
+        //
+        // Depth is not the only rule a commit can fail, and this line is a
+        // claim about depth alone. The roster floor — a build order may
+        // never take the base to zero programs — used to live in
+        // `commit_for_build` only, so a one-program base was offered that
+        // program here and refused after the confirm.
+        // `Game::programs_for_build` now folds the floor in, which is why
+        // that list and not `owned_pets` is the only thing this handler may
+        // index.
+        let goal = match &pending {
+            PendingBuild::Deploy { .. } => BuildGoal::New,
+            PendingBuild::Upgrade { to_tier, .. } => BuildGoal::Upgrade { to_tier: *to_tier },
+        };
+        let tier = program_tier_required(goal);
+        // Listed and dropped before `selected_index` borrows `self` again —
+        // `handle_upgrade_key`'s shape, an owned `Vec` rather than a
+        // `&mut Game` held across the row pick.
+        let Some(candidates) = self.game.as_mut().map(|g| g.programs_for_build(tier)) else {
+            return;
+        };
+        let Some(idx) = self.selected_index(key, candidates.len()) else {
+            return;
+        };
+        let chosen = candidates[idx].entity;
+        let Some(game) = &mut self.game else { return };
+        let outcome = match pending {
+            PendingBuild::Deploy { structure, dx, dy } => {
+                game.place_structure(&structure, dx, dy, Some(chosen))
+            }
+            PendingBuild::Upgrade { structure, .. } => {
+                game.upgrade_structure(structure, Some(chosen))
+            }
+        };
+        self.report(outcome);
+        self.pending_build = None;
         self.mode = Mode::Playing;
     }
 
@@ -360,11 +451,19 @@ impl App {
         }
         let structures = self.upgradeable_structures();
         if let Some(idx) = self.selected_index(key, structures.len()) {
-            let picked = structures[idx].entity;
-            let Some(game) = &mut self.game else { return };
-            let outcome = game.upgrade_structure(picked);
-            self.report(outcome);
-            self.mode = Mode::Playing;
+            // `upgradeable_structures` only ever offers a row whose
+            // `EntityView::tier` is `Some` — see its own filter — so the
+            // structure named here is always one tier short of `next` below,
+            // `Game::upgrade_structure`'s own `let next = tier + 1;` for the
+            // very row this picks.
+            let Some(tier) = structures[idx].tier else {
+                return;
+            };
+            self.pending_build = Some(PendingBuild::Upgrade {
+                structure: structures[idx].entity,
+                to_tier: tier + 1,
+            });
+            self.mode = Mode::BuildProgram;
         }
     }
 

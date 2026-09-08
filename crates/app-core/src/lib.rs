@@ -38,12 +38,13 @@ use feral_processes_engine::battle::SpecialTargeting;
 use feral_processes_engine::battle::{
     ActionKind, BattleAction, PartyCommandKind, SpecialTarget, TargetSpec,
 };
-use feral_processes_engine::components::Rarity;
+use feral_processes_engine::components::{BuildGoal, Rarity};
 use feral_processes_engine::help::{self, HelpDb, HelpPage};
 use feral_processes_engine::icon::Canvas;
 use feral_processes_engine::items::{EquipmentSlot, EquipmentStats, GearCopy, ItemId};
 use feral_processes_engine::settlements::SettlementKey;
 use feral_processes_engine::sorties::SortieId;
+use feral_processes_engine::structures::StructureCategory;
 use feral_processes_engine::tuning::{
     ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, MAX_ACTIVE_CONTRACTS, MAX_FUSIONS,
 };
@@ -54,6 +55,7 @@ use feral_processes_engine::{
     LogEntry, LogLine, MESSAGE_LOG_CAP, MessageSource, OrderPriority, ProgramSaleOption,
     RouteDestination, RouteRefusal, RouteReport, SlotShift, SortieRefusal, SortieReport, SortieRow,
     StockRow, SwingOutcome, TransferRow, WorkOrder, WorkOrderReport, WorkProfile, condense,
+    program_tier_required,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -1224,6 +1226,17 @@ pub enum Mode {
     BattleResult,
     Build,
     BuildDirection,
+    /// Picking which owned program pays for the order assembled in
+    /// `App::pending_build` — see `Game::programs_for_build`. Reached from
+    /// `Mode::BuildDirection` for a deploy or from `Mode::Upgrade` for an
+    /// upgrade, and never for a Home: a fresh run owns zero programs, so a
+    /// Home that needed one to found would be unfoundable, and
+    /// `handle_build_direction_key` still calls `place_structure(.., None)`
+    /// straight for it. Nothing is spent reaching this screen — the commit
+    /// happens inside the engine, on confirm, and Esc discards
+    /// `pending_build` without ever calling `place_structure` or
+    /// `upgrade_structure`.
+    BuildProgram,
     /// The dev keypad, opened with `DEV_CONSOLE_KEY` when
     /// `FERAL_DEV_CONSOLE` is set. Never reachable in a player's build.
     DevConsole,
@@ -1746,6 +1759,7 @@ impl Mode {
             | Mode::DevConsole
             | Mode::Build
             | Mode::BuildDirection
+            | Mode::BuildProgram
             // Opened from the map with `c`, so it never layers over a
             // fight — and the engine refuses a transfer mid-battle anyway.
             | Mode::Transfer
@@ -1894,6 +1908,29 @@ pub enum TradeChoice {
     BuyBack(GearCopy),
 }
 
+/// The order being assembled, held between the direction step (a deploy) or
+/// the roster pick (an upgrade) and the program picker (`Mode::BuildProgram`)
+/// that confirms it — see `App::pending_build`.
+///
+/// Home is never held here: it takes the old direct path straight from
+/// `handle_build_direction_key`, so this enum only ever describes an order
+/// that costs a program.
+#[derive(Clone)]
+pub enum PendingBuild {
+    /// A new structure, at the offset from the party picked in
+    /// `Mode::BuildDirection`. `structure` is a def id, `Game::place_structure`'s
+    /// own currency for "which kind" — the same string `App::pending_structure`
+    /// carries while the direction is still being asked.
+    Deploy { structure: String, dx: i32, dy: i32 },
+    /// An existing structure, and the tier its crew would raise it to.
+    /// `to_tier` is carried rather than re-derived from the structure's
+    /// current `EntityView::tier` at confirm time, because the structure
+    /// picked in `Mode::Upgrade` is the only place that tier was read off —
+    /// re-reading it here would trust the structure to still exist and still
+    /// report the same tier it did when the row was chosen.
+    Upgrade { structure: Entity, to_tier: u32 },
+}
+
 pub const MIN_ZOOM: u16 = 1;
 pub const MAX_ZOOM: u16 = 4;
 
@@ -1985,6 +2022,11 @@ pub struct App {
     /// because that screen names it: the build menu's row is off screen by
     /// then, so a renderer without this can only draw an anonymous compass.
     pub pending_structure: Option<String>,
+    /// The order awaiting a program pick on `Mode::BuildProgram` — see
+    /// `PendingBuild`. `None` on every other screen, and cleared the moment
+    /// the picker resolves it, Esc included: nothing about this is a "last
+    /// build" memory, it exists only while that one screen is up.
+    pub pending_build: Option<PendingBuild>,
     /// Which structure `Mode::StructureAssign` is setting standing orders on
     /// — the row that was highlighted on the roster.
     pending_post_structure: Option<Entity>,

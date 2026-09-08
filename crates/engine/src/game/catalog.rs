@@ -868,6 +868,15 @@ impl Game {
         merge_equal_items(priced)
     }
 
+    /// Whether raising or upgrading the structure named `id` costs a tamed
+    /// program at all. False only for `HOME_STRUCTURE_ID`, and exempt at
+    /// every tier: a fresh run owns zero programs and the first is granted
+    /// only as an achievements reward, so a Home that cost one would be
+    /// unfoundable.
+    pub(crate) fn structure_needs_program(&self, id: &StructureId) -> bool {
+        id.as_str() != HOME_STRUCTURE_ID
+    }
+
     pub fn species_defs(&self) -> Vec<SpeciesDef> {
         self.world.resource::<SpeciesDb>().all().cloned().collect()
     }
@@ -934,6 +943,20 @@ fn charges_for_itself(affix: &crate::affixes::AffixDef) -> bool {
     ]
     .iter()
     .any(|v| *v < 0)
+}
+
+/// The `StructureTier` a build request will produce, and so the depth of
+/// program it demands.
+///
+/// One number decides the whole rule. `upgrade_ceiling` already clamps a
+/// tier to `ZoneLevel`, so a requirement this returns is always one the
+/// player could have met — the two rules agree by construction, and
+/// `the_upgrade_ceiling_keeps_the_program_rule_satisfiable` says so.
+pub fn program_tier_required(goal: BuildGoal) -> u32 {
+    match goal {
+        BuildGoal::New => 1,
+        BuildGoal::Upgrade { to_tier } => to_tier,
+    }
 }
 
 /// An affix's authored delta times how many of it a copy carries — what

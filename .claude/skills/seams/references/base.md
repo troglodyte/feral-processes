@@ -76,6 +76,27 @@
   site is despawned at completion — which is what makes
   `cancel_build_request` a refund of goods that still exist, and makes
   `BuildSiteSave::delivered` the load-bearing save field.
+- **A build order commits one tamed program at filing, and that is the one
+  exception to "nothing is charged at filing."** `commit_program`
+  (`game/party.rs`) retires the program the moment the picker confirms —
+  `Party::retain`, then `world.despawn` — and `BuildSite::program` carries
+  the `CreatureSave` snapshot rather than an `Entity`, `HopperEntry`'s
+  reason for carrying a `DownedProgram` the same way. Materials survive a
+  cancel because they are still standing on the cell; the program does not
+  exist any more, so getting it back is `refund_program` respawning it off
+  the snapshot — a resurrection, not a return — with its original
+  `ProgramId` intact, or every memory naming it orphans. **The trap: both
+  destruction doors must call `return_build_holdings`.**
+  `cancel_build_request` (the player calling it off) and
+  `clear_pending_build_at` (`damage_structure`'s destroyed branch and
+  `remove_structure`, Home cascade included — the cell going out from under
+  the request) both have to route through it, or the door left out silently
+  despawns a committed program with no line anywhere accounting for it, and
+  nothing fails to compile. The last-program guard checks the **whole
+  roster**, not `programs_for_build(tier)` — a base can pass it holding one
+  staff program and one partied one, spend the staff program, and be left
+  with nobody to post to the site, so zero owned is the line rather than
+  zero eligible.
 - **Build wants are *prepended* in `schedule_base_labour`, the mirror of
   dig wants being appended** — the priority is the position in that list,
   since `truncate(staff.len())` cuts from the end. **The trap is the
@@ -116,12 +137,16 @@
 - **`views::BuildOrderRow` is the one derivation of what a request looks
   like**, read by the map, the examine line and `build_order_report` alike,
   and every figure in it is a *call* — `BuildSite::required_ticks` is
-  derived from the stored cost and never stored beside it. **Two things a
-  widening must not break**: "one builder at a time" is the scheduler naming
-  a site once and not a count on the component, so a second builder costs no
-  save bump; and `TaskKind::Construct` is the first kind whose holder may be
-  *carrying*, so `schedule_base_labour`'s never-free-a-`Carrying`-holder
-  rule is load-bearing for it.
+  derived from the stored cost and never stored beside it. If the program
+  committed to a request is ever shown on a screen, it goes through the same
+  derivation — `BuildSite::program` is data for the refund, not a display
+  record, and a copy of its name stored on the row is the same trap a stored
+  `required_ticks` would be. **Two things a widening must not break**: "one
+  builder at a time" is the scheduler naming a site once and not a count on
+  the component, so a second builder costs no save bump; and
+  `TaskKind::Construct` is the first kind whose holder may be *carrying*, so
+  `schedule_base_labour`'s never-free-a-`Carrying`-holder rule is
+  load-bearing for it.
 - **A slab wide enough eats the Stack on-ramp's draw box, and the failure is
   the whole zone rather than one link.** `spawn_surface_links` shares an
   attempt budget across all three links, so an unplaceable on-ramp yields

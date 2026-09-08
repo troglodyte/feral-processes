@@ -153,6 +153,91 @@ fn spawn_player(world: &mut World, start: (i32, i32)) -> Entity {
         .id()
 }
 
+/// The state a run of `Game::spawn_creature_from_save` carries **across**
+/// creatures, rather than within one.
+///
+/// `Game::load` used to hold all of this as locals threaded through one long
+/// loop body, which is why extracting that body needed somewhere to put it.
+/// It is one struct rather than six parameters because the list is not
+/// finished: every tether resolved *after* the creature array — a settlement,
+/// a structure, a sortie — lands here as another deferred vec, and a
+/// six-argument function would have become a nine-argument one.
+///
+/// Everything in it is one of two things:
+///
+/// - **Deferred work.** `party_slots`, `sortie_members`, `pending_cronjobs`
+///   and `pending_patrols` all name an entity a creature is tethered to that
+///   does not exist yet — the party has to be sorted by slot once every
+///   member is spawned, and a cronjob target, a town and a sortie record are
+///   all rebuilt further down `Game::load`. A creature cannot resolve any of
+///   them on its own, so it writes down what it wants and the caller does it.
+/// - **Shared reference data.** `player` (every restored program is tamed to
+///   the same owner), `nest_positions` (built before the creature array so a
+///   wild guardian has a live nest to point at) and `next_program_id`.
+///
+/// `next_program_id` is the one that must not become a local. Minting is a
+/// property of a pass over the *whole* array: two creatures carrying the `0`
+/// sentinel have to come back as two different programs, and a counter reset
+/// per call would give them the same name. The caller writes the final value
+/// back to `resources::NextProgramId`.
+///
+/// **Not here: the wield.** `Game::load` resolves `WieldedProgram` itself
+/// from the returned entity, because "at most one, first wins" is a decision
+/// about the file as a whole and the restore has no business making it.
+pub(crate) struct CreatureRestore {
+    /// Who every restored program is tamed to.
+    pub(crate) player: Entity,
+    /// The next unused program id — bumped only by the `0` sentinel, never
+    /// by a snapshot that already carries a name.
+    pub(crate) next_program_id: u32,
+    /// Nest tile -> nest entity, for a wild guardian's `nest_position`.
+    /// Empty is a legitimate value: a caller restoring a tamed program alone
+    /// never reaches the branch that reads it.
+    pub(crate) nest_positions: HashMap<(i32, i32), Entity>,
+    /// `(slot, member)`, collected with the slot index and sorted by the
+    /// caller: creatures come back in whatever order they were written,
+    /// which is no longer the roster order, and roster order is
+    /// mechanically meaningful.
+    pub(crate) party_slots: Vec<(u32, Entity)>,
+    /// `(sortie index, member)`. Membership comes back from the creature
+    /// side, `party_slots`' reason: entity ids are not stable across a save,
+    /// so `SortieSave` carries no member list to read.
+    pub(crate) sortie_members: Vec<(u32, Entity)>,
+    /// `(worker, cronjob)` — a cronjob names its target by tile, and the
+    /// structures a tile has to name are rebuilt after the creature array.
+    pub(crate) pending_cronjobs: Vec<(Entity, save::CronjobSave)>,
+    /// `(member, town tile, was pursuing)` — resolved after
+    /// `restore_settlements`, which is what builds the entities a tile has
+    /// to name.
+    pub(crate) pending_patrols: Vec<(Entity, (i32, i32), bool)>,
+}
+
+impl CreatureRestore {
+    /// A restore with no deferred work recorded yet.
+    ///
+    /// `nest_positions` is taken up front rather than left to be filled in
+    /// afterwards so that the whole of the *input* side is settled at
+    /// construction and only the deferred vecs are read back out. A caller
+    /// with no nests to offer — anything restoring a single tamed program,
+    /// which is every path but `Game::load` — passes an empty map and gets
+    /// the same behaviour a save with no nests in it gets.
+    pub(crate) fn new(
+        player: Entity,
+        next_program_id: u32,
+        nest_positions: HashMap<(i32, i32), Entity>,
+    ) -> Self {
+        Self {
+            player,
+            next_program_id,
+            nest_positions,
+            party_slots: Vec::new(),
+            sortie_members: Vec::new(),
+            pending_cronjobs: Vec::new(),
+            pending_patrols: Vec::new(),
+        }
+    }
+}
+
 impl Game {
     pub fn new(seed: u32, difficulty: DifficultyMode, assets_dir: &Path) -> std::io::Result<Self> {
         Self::new_with(seed, difficulty, assets_dir, &CharacterChoice::default())
@@ -881,6 +966,7 @@ impl Game {
                     announced_dry: false,
                     announced_stuck: false,
                     goal,
+                    program: b.program,
                 },
                 Position {
                     x: b.position.0,
@@ -934,30 +1020,23 @@ impl Game {
             ));
         }
 
-        let mut pending_cronjobs: Vec<(Entity, save::CronjobSave)> = Vec::new();
-        // `(member, town tile, was pursuing)` — resolved after
-        // `restore_settlements`, which is what builds the entities a tile
-        // has to name.
-        let mut pending_patrols: Vec<(Entity, (i32, i32), bool)> = Vec::new();
-        // Collected with their slot index and sorted below: creatures come
-        // back in whatever order they were written, which is no longer the
-        // roster order, and roster order is now mechanically meaningful.
-        let mut party_slots: Vec<(u32, Entity)> = Vec::new();
-        // Membership comes back from the creature side, `party_slots`'
-        // reason: entity ids are not stable across a save, so `SortieSave`
-        // carries no member list to read.
-        let mut sortie_members: Vec<(u32, Entity)> = Vec::new();
         // At most one creature may claim the weapon hand. Taken defensively
         // — the first wins and any others are ignored — rather than trusting
         // the file, the same way `party_slots` is truncated below.
         let mut wielded: Option<Entity> = None;
-        // Computed before the loop below, which moves `data.creatures`. The
+        // Computed before the loop below because the loop *spends* it:
+        // `CreatureRestore` is seeded with this number and every
+        // `spawn_creature_from_save` call takes the next id from that seed,
+        // so a maximum taken afterwards would arrive too late to have named
+        // anything. It is a scan of the whole array and not of one row for
+        // the same reason — the seed has to clear every id in the file
+        // before the first creature is spawned. The
         // saved counter alone is not enough: a hand-edited or
         // savetool-packed file can carry ids it never saw, and reissuing one
         // makes two programs answer to the same name. The `.max(1)` is not
         // redundant with the sentinel — an empty roster gives 1 on its own,
         // but a legacy file's `next_program_id` of 0 would otherwise win.
-        let mut next_program_id = data
+        let next_program_id = data
             .next_program_id
             .max(
                 data.creatures
@@ -968,246 +1047,38 @@ impl Game {
                     + 1,
             )
             .max(1);
-        for c in data.creatures {
-            let Some(species) = game.world.resource::<SpeciesDb>().get(&c.species).cloned() else {
+        // The per-creature state the loop below used to thread through its
+        // own iterations, lifted into `CreatureRestore` so the body could
+        // become a function. See that struct's doc for what is in it, and
+        // for why the wield is not.
+        let mut restore = CreatureRestore::new(player, next_program_id, nest_positions);
+        for c in &data.creatures {
+            // `None` is the `continue` this loop used to spell inline: a file
+            // naming a species whose `.ron` has been deleted since it was
+            // written loads without that creature rather than failing
+            // outright.
+            let Some(creature_id) = game.spawn_creature_from_save(c, &mut restore) else {
                 continue;
             };
-            let (routines, dropped_routines) =
-                recognized_routines(&c.routines, game.world.resource::<AbilityDb>());
-            if !dropped_routines.is_empty() {
-                game.log(format!(
-                    "{} carried {} — no longer available, and the slot is now empty.",
-                    species.name,
-                    dropped_routines.join(", ")
-                ));
-            }
-            let party_slot = c.party_slot;
-            let sortie_index = c.sortie_index;
-            let mut entity = game.world.spawn((
-                Creature {
-                    species: species.id.clone(),
-                },
-                Position {
-                    x: c.position.0,
-                    y: c.position.1,
-                },
-                Glyph {
-                    ch: species.glyph,
-                    color: species.color,
-                },
-                Stats {
-                    hp: c.hp,
-                    max_hp: c.max_hp,
-                    atk: c.atk,
-                    mitigation: c.mitigation,
-                },
-                Potential {
-                    hp_roll: c.hp_roll,
-                    atk_roll: c.atk_roll,
-                    def_roll: c.def_roll,
-                    growth_roll: c.growth_roll,
-                },
-                ZonePortal(c.zone),
-                StatusEffects::default(),
-                FusionCount(c.fusions),
-                Refactors(c.refactors),
-                PurchasedTiers(c.purchased_tiers),
-                Routines(routines),
-                // The tag only. `Stats` above are the recorded numbers and
-                // already carry this tier's multiplier from the spawn that
-                // rolled it — re-applying `stat_mult` here would compound
-                // the bonus on every reload. See `Rarity`'s doc.
-                c.rarity,
-            ));
-            // Only when non-zero, the same idiom `Nemesis` and `Equipment`
-            // use below: absent must keep meaning "no ring open", since
-            // `Game::companion_level_cap` reads it as `map_or(0, ..)`.
-            if c.ring > 0 {
-                entity.insert(KernelRing(c.ring));
-            }
-            // The receipt only. `Stats` above are the recorded numbers and
-            // already carry every `Stat` node this list names — re-applying
-            // here would compound the bonus on every reload, the same trap
-            // `c.rarity` above documents.
-            if !c.talents.is_empty() {
-                entity.insert(Talents(
-                    c.talents
-                        .iter()
-                        .map(|id| crate::talents::TalentId::from(id.as_str()))
-                        .collect(),
-                ));
-            }
-            // A receipt, like `Talents` above: what those nodes already added
-            // to the recorded `Stats`, kept so `Game::respec_talents` can take
-            // exactly that much back out.
-            if c.bought_stats != crate::components::BoughtStats::default() {
-                entity.insert(c.bought_stats);
-            }
-            if let Some(name) = c.custom_name.clone() {
-                entity.insert(CustomName(name));
-            }
-            // Inserted only when the count is nonzero, the same idiom
-            // `Equipment`/`FieldBuff` use below: an absent component must
-            // keep meaning "not a nemesis", since `mark_nemeses`' cap counts
-            // live holders by querying `With<Nemesis>` rather than tracking
-            // them anywhere. `Stats` above already carry every promotion this
-            // grudge count earned — nothing here may touch them, or a
-            // reload would compound `promote_rarity`'s multiplier on top of
-            // itself. See the `c.rarity` comment a few lines above for the
-            // same trap on the tag it promoted.
-            if c.nemesis_grudges > 0 {
-                entity.insert(Nemesis(c.nemesis_grudges));
-            }
-            // Inserted only when set, so an absent component keeps meaning
-            // "not a boss" — `is_boss_creature`'s species fallback still
-            // answers for an apex species loaded from a file written before
-            // this field existed. `Stats` above already carry
-            // `BOSS_STAT_MULT` from the spawn that rolled it; nothing here
-            // may re-apply it, the same trap `c.rarity` documents.
-            if c.boss {
-                entity.insert(Boss);
-            }
-            // Inserted only when something is worn, so an absent component
-            // keeps meaning "wears nothing" — the invariant `Game::equip`
-            // relies on when it grows one on demand. A v27 dump defaults
-            // this to empty and lands here.
-            if !c.equipment.is_empty() {
-                let mut worn = Equipment::default();
-                for (slot, saved) in c.equipment.clone() {
-                    *worn.slot_mut(slot) = worn_from_save(
-                        Some(saved.item),
-                        saved.level,
-                        saved.fusion_tier,
-                        saved.rarity,
-                        saved.affix,
-                        saved.affixes,
-                        saved.quality,
-                    );
-                }
-                entity.insert(worn);
-            }
-            // Only the player is spawned holding a `FieldBuff` — see that
-            // component's docs — so a creature with none recorded stays
-            // without one, the same as a freshly tamed program.
-            if !c.field_buffs.is_empty() {
-                entity.insert(FieldBuff {
-                    active: c.field_buffs,
-                });
-            }
-            if c.tamed {
-                let creature_id = entity.id();
-                // Minted here for a file written before ids existed, which
-                // carries the sentinel for everyone. An id already in the
-                // file is that program's name and is never reissued.
-                let program_id = if c.program_id == 0 {
-                    next_program_id += 1;
-                    next_program_id - 1
-                } else {
-                    c.program_id
-                };
-                // Owned programs only, beside the id: the store's absence is
-                // what "not on the roster" means, so a wild creature's
-                // `memories` is written empty and read back nowhere, exactly
-                // as its `power` is. An entry naming a def no file defines is
-                // restored rather than purged — see `components::Memory`.
-                let memories = Memories(
-                    c.memories
-                        .iter()
-                        .map(|m| Memory {
-                            def: m.def.clone(),
-                            subject: m.subject.clone(),
-                            subject_name: m.subject_name.clone(),
-                            reinforced: m.reinforced,
-                            strikes: m.strikes,
-                        })
-                        .collect(),
-                );
-                // A file written before needs existed carries no key and
-                // loads empty; `needs_drain_system` seeds it full on the first
-                // tick, which is the one seeding site.
-                let mut needs = Needs::default();
-                for (id, value) in &c.needs {
-                    needs.set(id, *value);
-                }
-                if let Some(need) = c.off_shift.clone() {
-                    entity.insert(crate::components::OffShift { need });
-                }
-                if c.downed {
-                    entity.insert(crate::components::Downed);
-                }
-                if let Some(grievance) = c.disgruntled {
-                    entity.insert(crate::components::Disgruntled { grievance });
-                }
-                entity.insert((
-                    ProgramId(program_id),
-                    memories,
-                    needs,
-                    // The one seeding site for a file written before
-                    // dispositions existed, `Needs::seed_missing`'s role.
-                    // Derived from the id rather than defaulted to `Steady`,
-                    // so an existing roster gains the personalities it would
-                    // have had instead of a base full of neutral programs.
-                    c.disposition
-                        .unwrap_or_else(|| crate::disposition::Disposition::seed(program_id)),
-                    Tamed { owner: player },
-                    PowerReserve::new(c.power),
-                    Experience {
-                        level: c.level,
-                        xp: c.xp,
-                        // Derived, like the player's above — both load paths
-                        // or the stale value survives on half the roster.
-                        xp_to_next: crate::progression::xp_for_level(c.level),
-                    },
-                ));
-                if c.wielded && wielded.is_none() {
-                    wielded = Some(creature_id);
-                }
-                // Unlike a cronjob target, a load names no entity, so it
-                // needs none of the deferred `pending_cronjobs` treatment.
-                if let Some((item, qty)) = c.carrying.clone() {
-                    entity.insert(Carrying { item, qty });
-                }
-                if let Some(index) = sortie_index {
-                    sortie_members.push((index, creature_id));
-                }
-                if let Some(slot) = party_slot {
-                    party_slots.push((slot, creature_id));
-                } else if let Some(cronjob) = c.cronjob {
-                    pending_cronjobs.push((creature_id, cronjob));
-                }
-                // Nothing restores a staff marker, and `c.staff` is read
-                // nowhere: the role is derived from the party and the wield,
-                // both of which this load path already rebuilds. That also
-                // retires the absorption rule this branch used to carry —
-                // a save written before work orders existed came back with
-                // no flag on disk and had to be rescued by its `Task`, and
-                // now everything outside the party is staff regardless.
-                // `Experience::xp_to_next` is the same shape: still written,
-                // never read back, and so **no `SAVE_FORMAT_VERSION` bump**.
-            } else {
-                entity.insert((Hostile, WanderAi::default()));
-                // A nest_position resolving to nothing (the nest's species
-                // is gone, or the save predates nests) is dropped silently
-                // rather than failing the load — the creature just comes
-                // back as an ordinary wild program.
-                if let Some(nest) = c
-                    .nest_position
-                    .and_then(|p| nest_positions.get(&p).copied())
-                {
-                    entity.insert(NestGuardian { nest });
-                    if c.pursuing {
-                        entity.insert(Pursuing);
-                    }
-                }
-                // Deferred rather than resolved here: settlement entities
-                // are rebuilt further down, after every creature, so there
-                // is nothing yet for a tile to name. `pending_cronjobs`'
-                // treatment, for the same reason.
-                if let Some(tile) = c.patrol_position {
-                    pending_patrols.push((entity.id(), tile, c.pursuing));
-                }
+            // Resolved out here rather than inside the restore, because "at
+            // most one may claim the weapon hand and the first in the file
+            // wins" is a decision about the array and not about one row.
+            // `c.tamed` is part of it: the lifted body only ever reached
+            // this test inside its tamed branch, so a hand-edited file
+            // marking a *wild* creature as wielded was ignored before and
+            // has to stay ignored.
+            if c.tamed && c.wielded && wielded.is_none() {
+                wielded = Some(creature_id);
             }
         }
+        let CreatureRestore {
+            next_program_id,
+            mut party_slots,
+            sortie_members,
+            pending_cronjobs,
+            pending_patrols,
+            ..
+        } = restore;
         game.world
             .insert_resource(crate::resources::NextProgramId(next_program_id));
         party_slots.sort_by_key(|&(slot, _)| slot);
@@ -1463,6 +1334,513 @@ impl Game {
         Ok(game)
     }
 
+    /// One row of the save format's `creatures` array back into the world —
+    /// and **the single answer to "how a creature comes back"**.
+    ///
+    /// `Game::load` runs it once per row. A cancelled build order runs it
+    /// once, to hand back the tamed program the order was holding. There is
+    /// deliberately no second copy: a refund that rebuilt a program from its
+    /// own hand-written component list would drift from the loader one field
+    /// at a time, and the drift would surface as a program that reloads from
+    /// a file correctly and comes back subtly wrong from a cancel — a
+    /// difference nothing in the game would ever show the player directly.
+    ///
+    /// **The mirror of `Game::creature_save_for`**, and the two are meant to
+    /// be read together: a field added to `CreatureSave` needs a write there
+    /// and a read here, and `tests::save_roundtrip` is the gate on both.
+    ///
+    /// `None` means the file names a species this install no longer ships —
+    /// a `.ron` deleted between sessions. The caller drops that row rather
+    /// than failing the whole load, which is what makes deleting a species
+    /// file supported instead of save-breaking.
+    ///
+    /// **This mints the same component set `Game::roster_parts` does** —
+    /// `Tamed`, `Experience`, `PowerReserve`, `ProgramId`, `Memories`,
+    /// `Needs` and a `Disposition` — and pointedly does not call it. The two
+    /// are opposites despite the shared list: `roster_parts` mints a *fresh*
+    /// program, drawing the next id from `resources::NextProgramId` and
+    /// handing back defaults, whereas everything here comes off the file and
+    /// re-minting any of it is the bug this function exists to avoid. So the
+    /// two have to be kept in step by hand: a new component that belongs to
+    /// every owned program has to be added in both places, or a program will
+    /// have it from the moment it is tamed and quietly lose it on the next
+    /// reload.
+    ///
+    /// Two things it must not do. Both compile, and both stay invisible long
+    /// past the point where anyone would connect them to a load:
+    ///
+    /// - **Reissue a `ProgramId`.** An id in the file is that program's
+    ///   name. A fresh one orphans the program's own memories *and* every
+    ///   other program's memories naming it as their subject. Only the `0`
+    ///   sentinel — what a file written before ids existed carries for
+    ///   everybody on the roster — draws from `ctx.next_program_id`.
+    /// - **Re-stamp a memory.** Intensity is derived from `GameClock` on
+    ///   every read and never stored (see `components::Memory`), so a fresh
+    ///   `reinforced` tick resets the decay curve and makes a restore
+    ///   *deepen* an old grudge rather than preserve it.
+    pub(crate) fn spawn_creature_from_save(
+        &mut self,
+        c: &save::CreatureSave,
+        ctx: &mut CreatureRestore,
+    ) -> Option<Entity> {
+        // The one `None` this returns, and the reason the return is an
+        // `Option` at all: a file naming a species whose `.ron` is gone.
+        let species = self
+            .world
+            .resource::<SpeciesDb>()
+            .get(&c.species)
+            .cloned()?;
+        let (routines, dropped_routines) =
+            recognized_routines(&c.routines, self.world.resource::<AbilityDb>());
+        if !dropped_routines.is_empty() {
+            self.log(format!(
+                "{} carried {} — no longer available, and the slot is now empty.",
+                species.name,
+                dropped_routines.join(", ")
+            ));
+        }
+        let party_slot = c.party_slot;
+        let sortie_index = c.sortie_index;
+        let mut entity = self.world.spawn((
+            Creature {
+                species: species.id.clone(),
+            },
+            Position {
+                x: c.position.0,
+                y: c.position.1,
+            },
+            Glyph {
+                ch: species.glyph,
+                color: species.color,
+            },
+            Stats {
+                hp: c.hp,
+                max_hp: c.max_hp,
+                atk: c.atk,
+                mitigation: c.mitigation,
+            },
+            Potential {
+                hp_roll: c.hp_roll,
+                atk_roll: c.atk_roll,
+                def_roll: c.def_roll,
+                growth_roll: c.growth_roll,
+            },
+            ZonePortal(c.zone),
+            StatusEffects::default(),
+            FusionCount(c.fusions),
+            Refactors(c.refactors),
+            PurchasedTiers(c.purchased_tiers),
+            Routines(routines),
+            // The tag only. `Stats` above are the recorded numbers and
+            // already carry this tier's multiplier from the spawn that
+            // rolled it — re-applying `stat_mult` here would compound
+            // the bonus on every reload. See `Rarity`'s doc.
+            c.rarity,
+        ));
+        // Only when non-zero, the same idiom `Nemesis` and `Equipment`
+        // use below: absent must keep meaning "no ring open", since
+        // `Game::companion_level_cap` reads it as `map_or(0, ..)`.
+        if c.ring > 0 {
+            entity.insert(KernelRing(c.ring));
+        }
+        // The receipt only. `Stats` above are the recorded numbers and
+        // already carry every `Stat` node this list names — re-applying
+        // here would compound the bonus on every reload, the same trap
+        // `c.rarity` above documents.
+        if !c.talents.is_empty() {
+            entity.insert(Talents(
+                c.talents
+                    .iter()
+                    .map(|id| crate::talents::TalentId::from(id.as_str()))
+                    .collect(),
+            ));
+        }
+        // A receipt, like `Talents` above: what those nodes already added
+        // to the recorded `Stats`, kept so `Game::respec_talents` can take
+        // exactly that much back out.
+        if c.bought_stats != crate::components::BoughtStats::default() {
+            entity.insert(c.bought_stats);
+        }
+        if let Some(name) = c.custom_name.clone() {
+            entity.insert(CustomName(name));
+        }
+        // Inserted only when the count is nonzero, the same idiom
+        // `Equipment`/`FieldBuff` use below: an absent component must
+        // keep meaning "not a nemesis", since `mark_nemeses`' cap counts
+        // live holders by querying `With<Nemesis>` rather than tracking
+        // them anywhere. `Stats` above already carry every promotion this
+        // grudge count earned — nothing here may touch them, or a
+        // reload would compound `promote_rarity`'s multiplier on top of
+        // itself. See the `c.rarity` comment a few lines above for the
+        // same trap on the tag it promoted.
+        if c.nemesis_grudges > 0 {
+            entity.insert(Nemesis(c.nemesis_grudges));
+        }
+        // Inserted only when set, so an absent component keeps meaning
+        // "not a boss" — `is_boss_creature`'s species fallback still
+        // answers for an apex species loaded from a file written before
+        // this field existed. `Stats` above already carry
+        // `BOSS_STAT_MULT` from the spawn that rolled it; nothing here
+        // may re-apply it, the same trap `c.rarity` documents.
+        if c.boss {
+            entity.insert(Boss);
+        }
+        // Inserted only when something is worn, so an absent component
+        // keeps meaning "wears nothing" — the invariant `Game::equip`
+        // relies on when it grows one on demand. A v27 dump defaults
+        // this to empty and lands here.
+        if !c.equipment.is_empty() {
+            let mut worn = Equipment::default();
+            for (slot, saved) in c.equipment.clone() {
+                *worn.slot_mut(slot) = worn_from_save(
+                    Some(saved.item),
+                    saved.level,
+                    saved.fusion_tier,
+                    saved.rarity,
+                    saved.affix,
+                    saved.affixes,
+                    saved.quality,
+                );
+            }
+            entity.insert(worn);
+        }
+        // Only the player is spawned holding a `FieldBuff` — see that
+        // component's docs — so a creature with none recorded stays
+        // without one, the same as a freshly tamed program.
+        if !c.field_buffs.is_empty() {
+            entity.insert(FieldBuff {
+                active: c.field_buffs.clone(),
+            });
+        }
+        if c.tamed {
+            let creature_id = entity.id();
+            // Minted here for a file written before ids existed, which
+            // carries the sentinel for everyone. An id already in the
+            // file is that program's name and is never reissued.
+            let program_id = if c.program_id == 0 {
+                ctx.next_program_id += 1;
+                ctx.next_program_id - 1
+            } else {
+                c.program_id
+            };
+            // Owned programs only, beside the id: the store's absence is
+            // what "not on the roster" means, so a wild creature's
+            // `memories` is written empty and read back nowhere, exactly
+            // as its `power` is. An entry naming a def no file defines is
+            // restored rather than purged — see `components::Memory`.
+            let memories = Memories(
+                c.memories
+                    .iter()
+                    .map(|m| Memory {
+                        def: m.def.clone(),
+                        subject: m.subject.clone(),
+                        subject_name: m.subject_name.clone(),
+                        reinforced: m.reinforced,
+                        strikes: m.strikes,
+                    })
+                    .collect(),
+            );
+            // A file written before needs existed carries no key and
+            // loads empty; `needs_drain_system` seeds it full on the first
+            // tick, which is the one seeding site.
+            let mut needs = Needs::default();
+            for (id, value) in &c.needs {
+                needs.set(id, *value);
+            }
+            if let Some(need) = c.off_shift.clone() {
+                entity.insert(crate::components::OffShift { need });
+            }
+            if c.downed {
+                entity.insert(crate::components::Downed);
+            }
+            if let Some(grievance) = c.disgruntled {
+                entity.insert(crate::components::Disgruntled { grievance });
+            }
+            entity.insert((
+                ProgramId(program_id),
+                memories,
+                needs,
+                // The one seeding site for a file written before
+                // dispositions existed, `Needs::seed_missing`'s role.
+                // Derived from the id rather than defaulted to `Steady`,
+                // so an existing roster gains the personalities it would
+                // have had instead of a base full of neutral programs.
+                c.disposition
+                    .unwrap_or_else(|| crate::disposition::Disposition::seed(program_id)),
+                Tamed { owner: ctx.player },
+                PowerReserve::new(c.power),
+                Experience {
+                    level: c.level,
+                    xp: c.xp,
+                    // Derived, like the player's in `Game::load` — both
+                    // load paths, or the stale value survives on half the
+                    // roster.
+                    xp_to_next: crate::progression::xp_for_level(c.level),
+                },
+            ));
+            // Unlike a cronjob target, a load names no entity, so it
+            // needs none of the deferred `pending_cronjobs` treatment.
+            if let Some((item, qty)) = c.carrying.clone() {
+                entity.insert(Carrying { item, qty });
+            }
+            if let Some(index) = sortie_index {
+                ctx.sortie_members.push((index, creature_id));
+            }
+            if let Some(slot) = party_slot {
+                ctx.party_slots.push((slot, creature_id));
+            } else if let Some(cronjob) = c.cronjob.clone() {
+                ctx.pending_cronjobs.push((creature_id, cronjob));
+            }
+            // Nothing restores a staff marker, and `c.staff` is read
+            // nowhere: the role is derived from the party and the wield,
+            // both of which this load path already rebuilds. That also
+            // retires the absorption rule this branch used to carry —
+            // a save written before work orders existed came back with
+            // no flag on disk and had to be rescued by its `Task`, and
+            // now everything outside the party is staff regardless.
+            // `Experience::xp_to_next` is the same shape: still written,
+            // never read back, and so **no `SAVE_FORMAT_VERSION` bump**.
+        } else {
+            entity.insert((Hostile, WanderAi::default()));
+            // A nest_position resolving to nothing (the nest's species
+            // is gone, or the save predates nests) is dropped silently
+            // rather than failing the load — the creature just comes
+            // back as an ordinary wild program.
+            if let Some(nest) = c
+                .nest_position
+                .and_then(|p| ctx.nest_positions.get(&p).copied())
+            {
+                entity.insert(NestGuardian { nest });
+                if c.pursuing {
+                    entity.insert(Pursuing);
+                }
+            }
+            // Deferred rather than resolved here: settlement entities
+            // are rebuilt further down `Game::load`, after every creature,
+            // so there is nothing yet for a tile to name.
+            // `pending_cronjobs`' treatment, for the same reason.
+            if let Some(tile) = c.patrol_position {
+                ctx.pending_patrols.push((entity.id(), tile, c.pursuing));
+            }
+        }
+        Some(entity.id())
+    }
+
+    /// One creature as the save format describes it, or `None` if `e` is not
+    /// a creature.
+    ///
+    /// **The single answer to "what is a creature in a file".** The bulk dump
+    /// in `save` below is the only caller today; the one this was lifted out
+    /// for is the commit step that snapshots a committed program onto a build
+    /// request, which needs exactly this shape for exactly one entity. A
+    /// second builder is the thing that separation exists to prevent — the
+    /// copy that drifts is the one nobody runs, and a build request's
+    /// snapshot is written once and read back a week of play later.
+    ///
+    /// Reads component by component rather than through a query, which is
+    /// what makes it addressable by entity at all. The four **role** fields
+    /// are the only ones that change shape in the move: `party_slot`,
+    /// `sortie_index` and `wielded` search the same three resources the loop
+    /// used to gather up front, and `staff` asks `program_role` directly
+    /// rather than scanning `base_staff()` and searching the result — the
+    /// same predicate, since `base_staff` is that question over every
+    /// `Tamed` entity, and O(1) instead of a roster scan per creature.
+    pub(crate) fn creature_save_for(&mut self, e: Entity) -> Option<save::CreatureSave> {
+        let species = self.world.get::<Creature>(e)?.species.clone();
+        let pos = *self.world.get::<Position>(e)?;
+        let stats = *self.world.get::<Stats>(e)?;
+        let potential = self
+            .world
+            .get::<Potential>(e)
+            .copied()
+            .unwrap_or(Potential::NEUTRAL);
+        // A dig job is deliberately not saved: `CronjobSave` resolves
+        // its target by position against the *structures* restored
+        // beside it, and a `DigSite` is not one. Nothing is lost by it —
+        // the mark is what the save carries, and `schedule_base_labour`
+        // posts a body back onto it on the first tick after the load.
+        // The most a reload can cost is one part-finished swing.
+        // `Construct` is filtered out beside `Excavate` and for the
+        // same reason: neither is a cronjob. A `BuildSite` is saved in
+        // its own right, carrying the bill of materials and everything
+        // already delivered to it, and `schedule_base_labour` posts a
+        // body back onto it on the first tick after the load. The most a
+        // reload can cost is one part-finished tick of construction.
+        //
+        // Copied out of the component before the target is looked up
+        // rather than held across it: `Task` is not `Clone`, and the
+        // resolution below is a second read of the same world.
+        let job = self
+            .world
+            .get::<Task>(e)
+            .filter(|t| !matches!(t.kind, TaskKind::Excavate | TaskKind::Construct))
+            .map(|t| (t.kind, t.target, t.progress, t.required));
+        let cronjob = job.and_then(|(kind, target, progress, required)| {
+            self.world
+                .get::<Position>(target)
+                .map(|target_pos| save::CronjobSave {
+                    target_position: (target_pos.x, target_pos.y),
+                    progress,
+                    required,
+                    kind: match kind {
+                        TaskKind::GatherResource => save::CronjobKind::GatherResource,
+                        TaskKind::Guard => save::CronjobKind::Guard,
+                        TaskKind::Excavate | TaskKind::Construct => {
+                            unreachable!("filtered out above")
+                        }
+                    },
+                })
+        });
+        // Same by-position resolution `cronjob` above uses: a
+        // `NestGuardian`'s target entity id isn't stable across the
+        // round trip, but a nest's tile is.
+        let nest_position = self
+            .world
+            .get::<NestGuardian>(e)
+            .map(|g| g.nest)
+            .and_then(|nest| self.world.get::<Position>(nest))
+            .map(|nest_pos| (nest_pos.x, nest_pos.y));
+        // The second tether, resolved the same way and for the same
+        // reason. A town cannot be destroyed, so unlike a nest this can
+        // only fail to resolve on a load — never on a save.
+        let patrol_position = self
+            .world
+            .get::<TownPatrol>(e)
+            .map(|p| p.town)
+            .and_then(|town| self.world.get::<Position>(town))
+            .map(|town_pos| (town_pos.x, town_pos.y));
+        Some(save::CreatureSave {
+            species,
+            position: (pos.x, pos.y),
+            hp: stats.hp,
+            max_hp: stats.max_hp,
+            atk: stats.atk,
+            mitigation: stats.mitigation,
+            tamed: self.world.get::<Tamed>(e).is_some(),
+            power: self
+                .world
+                .get::<PowerReserve>(e)
+                .map(|r| r.get())
+                .unwrap_or(POWER_MAX),
+            level: self
+                .world
+                .get::<Experience>(e)
+                .map(|x| x.level)
+                .unwrap_or(1),
+            xp: self.world.get::<Experience>(e).map(|x| x.xp).unwrap_or(0),
+            xp_to_next: self
+                .world
+                .get::<Experience>(e)
+                .map(|x| x.xp_to_next)
+                .unwrap_or_else(|| crate::progression::xp_for_level(1)),
+            cronjob,
+            party_slot: self
+                .world
+                .resource::<Party>()
+                .0
+                .iter()
+                .position(|&member| member == e)
+                .map(|i| i as u32),
+            sortie_index: self
+                .world
+                .resource::<crate::resources::Sorties>()
+                .0
+                .iter()
+                .position(|sortie| sortie.members.contains(&e))
+                .map(|i| i as u32),
+            wielded: self.wielded_program() == Some(e),
+            zone: self.world.get::<ZonePortal>(e).map(|z| z.0).unwrap_or(1),
+            custom_name: self.world.get::<CustomName>(e).map(|c| c.0.clone()),
+            hp_roll: potential.hp_roll,
+            atk_roll: potential.atk_roll,
+            def_roll: potential.def_roll,
+            growth_roll: potential.growth_roll,
+            fusions: self.world.get::<FusionCount>(e).map(|f| f.0).unwrap_or(0),
+            refactors: self.world.get::<Refactors>(e).map(|r| r.0).unwrap_or(0),
+            purchased_tiers: self
+                .world
+                .get::<PurchasedTiers>(e)
+                .map(|t| t.0)
+                .unwrap_or(0),
+            ring: self.world.get::<KernelRing>(e).map(|r| r.0).unwrap_or(0),
+            talents: self
+                .world
+                .get::<Talents>(e)
+                .map(|t| t.0.iter().map(|id| id.to_string()).collect())
+                .unwrap_or_default(),
+            bought_stats: self
+                .world
+                .get::<BoughtStats>(e)
+                .copied()
+                .unwrap_or_default(),
+            routines: self
+                .world
+                .get::<Routines>(e)
+                .map(|r| r.0.clone())
+                .unwrap_or_default(),
+            field_buffs: self
+                .world
+                .get::<FieldBuff>(e)
+                .map(|f| f.active.clone())
+                .unwrap_or_default(),
+            nest_position,
+            patrol_position,
+            pursuing: self.world.get::<Pursuing>(e).is_some(),
+            boss: self.world.get::<Boss>(e).is_some(),
+            carrying: self
+                .world
+                .get::<Carrying>(e)
+                .map(|c| (c.item.clone(), c.qty)),
+            rarity: self.world.get::<Rarity>(e).copied().unwrap_or_default(),
+            nemesis_grudges: self.world.get::<Nemesis>(e).map(|n| n.0).unwrap_or(0),
+            program_id: self.world.get::<ProgramId>(e).map(|p| p.0).unwrap_or(0),
+            disposition: self
+                .world
+                .get::<crate::disposition::Disposition>(e)
+                .copied(),
+            disgruntled: self
+                .world
+                .get::<crate::components::Disgruntled>(e)
+                .map(|d| d.grievance),
+            memories: self
+                .world
+                .get::<Memories>(e)
+                .map(|m| {
+                    m.0.iter()
+                        .map(|m| save::MemorySave {
+                            def: m.def.clone(),
+                            subject: m.subject.clone(),
+                            subject_name: m.subject_name.clone(),
+                            reinforced: m.reinforced,
+                            strikes: m.strikes,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            needs: self
+                .world
+                .get::<Needs>(e)
+                .map(|n| n.iter().map(|(id, v)| (id.clone(), v)).collect())
+                .unwrap_or_default(),
+            off_shift: self
+                .world
+                .get::<crate::components::OffShift>(e)
+                .map(|o| o.need.clone()),
+            downed: self.world.get::<crate::components::Downed>(e).is_some(),
+            equipment: self
+                .world
+                .get::<Equipment>(e)
+                .map(|eq| {
+                    EquipmentSlot::ALL
+                        .into_iter()
+                        .filter_map(|slot| Some((slot, worn_to_save(&eq.get(slot)?))))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            staff: self.program_role(e) == Some(ProgramRole::Staff),
+        })
+    }
+
     pub fn save(&mut self, path: &Path) -> std::io::Result<()> {
         let player = self.player_entity();
         let pos = *self.world.get::<Position>(player).unwrap();
@@ -1520,19 +1898,10 @@ impl Game {
             .map(|n| n.0.clone())
             .unwrap_or_default();
 
-        let party_entities = self.world.resource::<Party>().0.clone();
-        let wielded = self.wielded_program();
-        // Gathered here for `party_entities`' reason, and written per
-        // creature for the same one: entity ids are not stable across the
-        // round trip, so a member list on the sortie side could not be read
-        // back. `SortieSave` carries none.
-        let away: Vec<Vec<Entity>> = self
-            .world
-            .resource::<crate::resources::Sorties>()
-            .0
-            .iter()
-            .map(|s| s.members.clone())
-            .collect();
+        // Sortie membership is written per *creature*, not here: entity ids
+        // are not stable across the round trip, so a member list on the
+        // sortie side could not be read back. `SortieSave` carries none —
+        // `creature_save_for` answers it from `sortie_index`.
         let sorties: Vec<save::SortieSave> = self
             .world
             .resource::<crate::resources::Sorties>()
@@ -1573,217 +1942,25 @@ impl Game {
                 proceeds: r.proceeds,
             })
             .collect();
-        // Gathered up front rather than queried per creature: the creature
-        // query below is at bevy's 15-element ceiling already, and this is
-        // the same shape `party_entities` and `wielded` take for it.
-        let staff = self.base_staff();
-        let mut creatures = Vec::new();
-        let mut creature_query = self.world.query::<(
-            Entity,
-            &Creature,
-            &Position,
-            &Stats,
-            Option<&Tamed>,
-            Option<&Experience>,
-            Option<&Task>,
-            Option<&ZonePortal>,
-            Option<&CustomName>,
-            Option<&Potential>,
-            Option<&FusionCount>,
-            Option<&Routines>,
-            Option<&FieldBuff>,
-            // Nested because bevy's query tuples top out at 15 elements and
-            // this one is full. Grouped by what they describe — where the
-            // creature belongs and what it is holding — rather than split
-            // wherever the count happened to run out.
-            (
-                Option<&NestGuardian>,
-                Option<&TownPatrol>,
-                Option<&Pursuing>,
-                Option<&Carrying>,
-                Option<&Rarity>,
-                Option<&Refactors>,
-                Option<&PurchasedTiers>,
-                Option<&KernelRing>,
-                Option<&Talents>,
-                Option<&Equipment>,
-                Option<&Nemesis>,
-                Option<&PowerReserve>,
-                Option<&Boss>,
-                Option<&ProgramId>,
-                // Nested one level further because bevy's query tuples top
-                // out at 15 and this one is full again — grouped as "what
-                // this program is, remembers and needs".
-                (
-                    Option<&Memories>,
-                    Option<&Needs>,
-                    Option<&crate::components::OffShift>,
-                    Option<&crate::components::Downed>,
-                    Option<&crate::disposition::Disposition>,
-                    Option<&crate::components::Disgruntled>,
-                    Option<&BoughtStats>,
-                ),
-            ),
-        )>();
-        for (
-            entity,
-            creature,
-            pos,
-            stats,
-            tamed,
-            exp,
-            task,
-            spawn_zone,
-            custom_name,
-            potential,
-            fusions,
-            routines,
-            field_buff,
-            (
-                nest_guardian,
-                town_patrol,
-                pursuing,
-                carrying,
-                rarity,
-                refactors,
-                purchased_tiers,
-                ring,
-                talents,
-                equipment,
-                nemesis,
-                reserve,
-                boss,
-                program_id,
-                (memories, needs, off_shift, downed, disposition, disgruntled, bought_stats),
-            ),
-        ) in creature_query.iter(&self.world)
-        {
-            let potential = potential.copied().unwrap_or(Potential::NEUTRAL);
-            // A dig job is deliberately not saved: `CronjobSave` resolves
-            // its target by position against the *structures* restored
-            // beside it, and a `DigSite` is not one. Nothing is lost by it —
-            // the mark is what the save carries, and `schedule_base_labour`
-            // posts a body back onto it on the first tick after the load.
-            // The most a reload can cost is one part-finished swing.
-            // `Construct` is filtered out beside `Excavate` and for the
-            // same reason: neither is a cronjob. A `BuildSite` is saved in
-            // its own right, carrying the bill of materials and everything
-            // already delivered to it, and `schedule_base_labour` posts a
-            // body back onto it on the first tick after the load. The most a
-            // reload can cost is one part-finished tick of construction.
-            let cronjob = task
-                .filter(|t| !matches!(t.kind, TaskKind::Excavate | TaskKind::Construct))
-                .and_then(|t| {
-                    self.world
-                        .get::<Position>(t.target)
-                        .map(|target_pos| save::CronjobSave {
-                            target_position: (target_pos.x, target_pos.y),
-                            progress: t.progress,
-                            required: t.required,
-                            kind: match t.kind {
-                                TaskKind::GatherResource => save::CronjobKind::GatherResource,
-                                TaskKind::Guard => save::CronjobKind::Guard,
-                                TaskKind::Excavate | TaskKind::Construct => {
-                                    unreachable!("filtered out above")
-                                }
-                            },
-                        })
-                });
-            // Same by-position resolution `cronjob` above uses: a
-            // `NestGuardian`'s target entity id isn't stable across the
-            // round trip, but a nest's tile is.
-            let nest_position = nest_guardian.and_then(|g| {
-                self.world
-                    .get::<Position>(g.nest)
-                    .map(|nest_pos| (nest_pos.x, nest_pos.y))
-            });
-            // The second tether, resolved the same way and for the same
-            // reason. A town cannot be destroyed, so unlike a nest this can
-            // only fail to resolve on a load — never on a save.
-            let patrol_position = town_patrol.and_then(|p| {
-                self.world
-                    .get::<Position>(p.town)
-                    .map(|town_pos| (town_pos.x, town_pos.y))
-            });
-            creatures.push(save::CreatureSave {
-                species: creature.species.clone(),
-                position: (pos.x, pos.y),
-                hp: stats.hp,
-                max_hp: stats.max_hp,
-                atk: stats.atk,
-                mitigation: stats.mitigation,
-                tamed: tamed.is_some(),
-                power: reserve.map(|r| r.get()).unwrap_or(POWER_MAX),
-                level: exp.map(|e| e.level).unwrap_or(1),
-                xp: exp.map(|e| e.xp).unwrap_or(0),
-                xp_to_next: exp
-                    .map(|e| e.xp_to_next)
-                    .unwrap_or_else(|| crate::progression::xp_for_level(1)),
-                cronjob,
-                party_slot: party_entities
-                    .iter()
-                    .position(|&e| e == entity)
-                    .map(|i| i as u32),
-                sortie_index: away
-                    .iter()
-                    .position(|members| members.contains(&entity))
-                    .map(|i| i as u32),
-                wielded: wielded == Some(entity),
-                zone: spawn_zone.map(|z| z.0).unwrap_or(1),
-                custom_name: custom_name.map(|c| c.0.clone()),
-                hp_roll: potential.hp_roll,
-                atk_roll: potential.atk_roll,
-                def_roll: potential.def_roll,
-                growth_roll: potential.growth_roll,
-                fusions: fusions.map(|f| f.0).unwrap_or(0),
-                refactors: refactors.map(|r| r.0).unwrap_or(0),
-                purchased_tiers: purchased_tiers.map(|t| t.0).unwrap_or(0),
-                ring: ring.map(|r| r.0).unwrap_or(0),
-                talents: talents
-                    .map(|t| t.0.iter().map(|id| id.to_string()).collect())
-                    .unwrap_or_default(),
-                bought_stats: bought_stats.copied().unwrap_or_default(),
-                routines: routines.map(|r| r.0.clone()).unwrap_or_default(),
-                field_buffs: field_buff.map(|f| f.active.clone()).unwrap_or_default(),
-                nest_position,
-                patrol_position,
-                pursuing: pursuing.is_some(),
-                boss: boss.is_some(),
-                carrying: carrying.map(|c| (c.item.clone(), c.qty)),
-                rarity: rarity.copied().unwrap_or_default(),
-                nemesis_grudges: nemesis.map(|n| n.0).unwrap_or(0),
-                program_id: program_id.map(|p| p.0).unwrap_or(0),
-                disposition: disposition.copied(),
-                disgruntled: disgruntled.map(|d| d.grievance),
-                memories: memories
-                    .map(|m| {
-                        m.0.iter()
-                            .map(|m| save::MemorySave {
-                                def: m.def.clone(),
-                                subject: m.subject.clone(),
-                                subject_name: m.subject_name.clone(),
-                                reinforced: m.reinforced,
-                                strikes: m.strikes,
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                needs: needs
-                    .map(|n| n.iter().map(|(id, v)| (id.clone(), v)).collect())
-                    .unwrap_or_default(),
-                off_shift: off_shift.map(|o| o.need.clone()),
-                downed: downed.is_some(),
-                equipment: equipment
-                    .map(|eq| {
-                        EquipmentSlot::ALL
-                            .into_iter()
-                            .filter_map(|slot| Some((slot, worn_to_save(&eq.get(slot)?))))
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                staff: staff.contains(&entity),
-            });
-        }
+        // Ids first, then a pass: `creature_save_for` takes `&mut self`, and
+        // an open query iteration holds the world borrowed for as long as it
+        // runs.
+        //
+        // **Deliberately unsorted.** This is bevy's archetype order, which is
+        // what the hand-rolled loop this replaced emitted — and it is not the
+        // order the same roster comes back in after a `Game::load`, because a
+        // program's archetype at spawn is not its archetype after a load.
+        // Nothing is lost by that; `tests::save_roundtrip` pins the round
+        // trip as a multiset of lines and says why. Stabilising the emission
+        // order is a change to the save format, not to this loop.
+        let creature_ids: Vec<Entity> = {
+            let mut q = self.world.query_filtered::<Entity, With<Creature>>();
+            q.iter(&self.world).collect()
+        };
+        let creatures: Vec<save::CreatureSave> = creature_ids
+            .into_iter()
+            .filter_map(|e| self.creature_save_for(e))
+            .collect();
 
         let mut structures = Vec::new();
         let mut structure_query = self.world.query::<(
@@ -1858,6 +2035,7 @@ impl Game {
                 delivered: site.delivered.clone(),
                 progress: site.progress,
                 goal: site.goal,
+                program: site.program.clone(),
             });
         }
 

@@ -734,6 +734,111 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
     app
 }
 
+/// The upgrade-picker counterpart to `app_owning_a_program_and_a_compiler`:
+/// a base with a Compiler and exactly **one** tamed program, caught at
+/// `program_zone`, with the run itself breached to `breach_zone` first
+/// (`Game::warp_to_zone` — the real breach `tests::achievements`'s
+/// `breach_and_tick` drives, not a stand-in for it).
+///
+/// `app_owning_a_program_and_a_compiler`'s own program sits at zone 1 and
+/// its base is never breached past zone 1 — fine for testing that the
+/// picker opens and computes `to_tier`, but a Mk2 upgrade confirmed against
+/// that fixture is refused by `upgrade_ceiling` (zone 1 caps every
+/// structure at Mk1) before the program-depth or last-program rules ever
+/// run. This fixture exists for a test that needs to drive a confirm past
+/// the ceiling and into those rules — see
+/// `the_upgrade_pickers_confirm_surfaces_the_engines_refusal`.
+///
+/// Built the same way `app_owning_a_program_and_a_compiler_deep` is (a save
+/// edited by hand, then reloaded — "the engine exposes no way to hand-place
+/// a structure from outside the crate", `app_at_a_contract_broker`'s
+/// reason), because a hand-placed Compiler costs no program to stand up,
+/// where `Game::place_structure` would spend the one program this fixture
+/// needs to keep.
+pub(crate) fn app_owning_one_deep_program_and_a_compiler(
+    seed: u32,
+    breach_zone: u32,
+    program_zone: u32,
+) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = scratch_path("deep_compiler", seed);
+    found_the_base(&mut app);
+    let game = app.game.as_mut().unwrap();
+    game.warp_to_zone(breach_zone).unwrap();
+    let species = game.species_defs()[0].id.clone();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    data.creatures.push(CreatureSave {
+        sortie_index: None,
+        boss: false,
+        species,
+        position: (px + 1, py),
+        hp: 10,
+        max_hp: 10,
+        atk: 3,
+        mitigation: 1,
+        tamed: true,
+        power: 100.0,
+        level: 1,
+        xp: 0,
+        xp_to_next: 20,
+        cronjob: None,
+        party_slot: None,
+        wielded: false,
+        zone: program_zone,
+        custom_name: None,
+        hp_roll: 1.0,
+        atk_roll: 1.0,
+        def_roll: 1.0,
+        growth_roll: 1.0,
+        fusions: 0,
+        refactors: 0,
+        purchased_tiers: 0,
+        ring: 0,
+        talents: Vec::new(),
+        bought_stats: Default::default(),
+        routines: Vec::new(),
+        field_buffs: Vec::new(),
+        nest_position: None,
+        patrol_position: None,
+        pursuing: false,
+        carrying: None,
+        rarity: Default::default(),
+        nemesis_grudges: 0,
+        equipment: Vec::new(),
+        program_id: 0,
+        disposition: None,
+        disgruntled: None,
+        memories: Vec::new(),
+        needs: Default::default(),
+        off_shift: None,
+        staff: false,
+        downed: false,
+    });
+    data.structures.push(save::StructureSave {
+        kind: "compiler".to_string(),
+        // Base space, two cells east of the Home the fixture just founded.
+        position: (2, 0),
+        durability: None,
+        tier: None,
+        stock_input: Vec::new(),
+        stock_output: Vec::new(),
+        standing_work: false,
+        standing_guard: false,
+        power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        hopper: Vec::new(),
+        hopper_progress: 0,
+    });
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Game::load(&path, &assets_dir).ok();
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    app
+}
+
 /// A game where the player stands next to a Black Market — the shipped
 /// trader that buys programs as well as items — holding exactly
 /// `inventory`, and owning one tamed program so the trader's program rows
@@ -854,7 +959,7 @@ pub(crate) fn found_the_base(app: &mut App) {
     app.game
         .as_mut()
         .expect("a fixture with a game")
-        .place_structure("home", 0, 0)
+        .place_structure("home", 0, 0, None)
         .expect("a fresh run can afford its first Home, and founds from the open grid");
     // Founding fires the base tutorial, which would take the screen on this
     // fixture's next keypress and leave every downstream assertion reading
@@ -1693,6 +1798,96 @@ pub(crate) fn app_beside_depots(seed: u32, depots: i32, filled: u32, pack: &[(&s
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
     app.mode = Mode::Playing;
     app
+}
+
+/// A founded base — Home only, nothing else standing — with `programs`
+/// tamed programs added to the roster, each caught at zone 1.
+///
+/// Not `app_inside_a_small_base_with_programs`: that fixture always adds a
+/// mining node on cell `(1, 0)`, which is exactly the cell the build-program
+/// picker's own tests place a fresh structure on. This one leaves the pocket
+/// empty around the Home so a deploy test has somewhere to land.
+pub(crate) fn app_in_base_with_programs(seed: u32, programs: usize) -> App {
+    let mut app = test_app(seed);
+    found_the_base(&mut app);
+    stand_in_base(&mut app);
+    for _ in 0..programs {
+        tame_program_at_zone(&mut app, 1);
+    }
+    app
+}
+
+/// `app_in_base_with_programs` with no programs — a base a deploy or an
+/// upgrade can be offered but never afford, for a test about the refusal
+/// rather than the spend.
+pub(crate) fn app_in_base(seed: u32) -> App {
+    app_in_base_with_programs(seed, 0)
+}
+
+/// Adds one tamed program to `app`'s roster, caught at `zone` — the one
+/// thing about a program `programs_for_build`'s `>=` floor cares about that
+/// no public `Game` method can set. Through the save round trip for the same
+/// reason `distant_programs` is: the engine's `World` is private, and
+/// `components::ZonePortal` is written only by `spawn_creature_from_save`.
+pub(crate) fn tame_program_at_zone(app: &mut App, zone: u32) {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("tame_at_zone", zone);
+    let game = app.game.as_mut().unwrap();
+    let species = game.species_defs()[0].id.clone();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    data.creatures.push(CreatureSave {
+        sortie_index: None,
+        boss: false,
+        species,
+        position: (px, py),
+        hp: 10,
+        max_hp: 10,
+        atk: 3,
+        mitigation: 2,
+        tamed: true,
+        power: 100.0,
+        level: 1,
+        xp: 0,
+        xp_to_next: 10,
+        cronjob: None,
+        party_slot: None,
+        wielded: false,
+        zone,
+        custom_name: None,
+        hp_roll: 1.0,
+        atk_roll: 1.0,
+        def_roll: 1.0,
+        growth_roll: 1.0,
+        fusions: 0,
+        refactors: 0,
+        purchased_tiers: 0,
+        ring: 0,
+        talents: Vec::new(),
+        bought_stats: Default::default(),
+        routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
+        field_buffs: Vec::new(),
+        nest_position: None,
+        patrol_position: None,
+        pursuing: false,
+        carrying: None,
+        rarity: Default::default(),
+        nemesis_grudges: 0,
+        equipment: Vec::new(),
+        program_id: 0,
+        disposition: None,
+        disgruntled: None,
+        memories: Vec::new(),
+        needs: Default::default(),
+        off_shift: None,
+        staff: false,
+        downed: false,
+    });
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
 }
 
 pub(crate) fn app_beside_stocked_machines(seed: u32, stock: &[(&str, u32)]) -> App {

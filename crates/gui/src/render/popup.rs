@@ -1476,7 +1476,11 @@ mod tests {
                 },
             })
             .collect();
-        build_menu_rows(&entries, selected)
+        // Deployable, which is the ordinary case and the one with the *most*
+        // scrollable rows: the greyed form adds a pinned header line and
+        // changes no item row's presence, so the layout invariants below are
+        // strictest here.
+        build_menu_rows(&entries, selected, None)
     }
 
     /// The body is cut at the *last* `Row::Item` and everything after it is

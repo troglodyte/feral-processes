@@ -79,6 +79,13 @@ use components::{
 };
 pub use game::base::work_orders::{OrderPriority, WorkOrder};
 pub use game::caravan::CaravanReach;
+/// The depth-rule derivation itself, re-exported so app-core's build-program
+/// picker can filter on the same tier the engine will demand at commit —
+/// see `Game::commit_for_build`'s doc for why this is one derivation and not
+/// a picker-side copy of it. `catalog` is `pub(crate)` and `game` is
+/// private, so this one line is the only door onto it from outside the
+/// crate.
+pub use game::catalog::program_tier_required;
 pub use game::contracts::{BrokerReach, ContractRefusal};
 pub use game::creation::{CharacterChoice, CreationCatalogue, DEFAULT_PLAYER_SPRITE};
 pub use game::environment::TerrainRow;

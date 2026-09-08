@@ -2056,6 +2056,19 @@ pub struct BuildSite {
     /// What raising this one does — stand a new structure up, or advance
     /// the one already on this cell a tier. See `BuildGoal`.
     pub goal: BuildGoal,
+    /// The tamed program committed to this order, retired from the roster
+    /// the moment the request was filed.
+    ///
+    /// A value and never an `Entity`: entity ids are not stable across a
+    /// save round trip, which is why `HopperEntry` carries a
+    /// `DownedProgram` rather than a reference to one. A whole
+    /// `CreatureSave` rather than a narrower record because a refund owes
+    /// the player back the program they had — gear, name, refactors and all
+    /// — and a second description of a creature is one that drifts.
+    ///
+    /// `None` only for a Home, the one exempt structure, and for the
+    /// hand-spawned sites in test fixtures.
+    pub program: Option<crate::save::CreatureSave>,
 }
 
 impl BuildSite {
@@ -2079,6 +2092,7 @@ impl BuildSite {
             announced_dry: false,
             announced_stuck: false,
             goal,
+            program: None,
         }
     }
 

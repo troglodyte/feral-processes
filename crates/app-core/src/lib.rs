@@ -38,12 +38,13 @@ use feral_processes_engine::battle::SpecialTargeting;
 use feral_processes_engine::battle::{
     ActionKind, BattleAction, PartyCommandKind, SpecialTarget, TargetSpec,
 };
-use feral_processes_engine::components::Rarity;
+use feral_processes_engine::components::{BuildGoal, Rarity};
 use feral_processes_engine::help::{self, HelpDb, HelpPage};
 use feral_processes_engine::icon::Canvas;
 use feral_processes_engine::items::{EquipmentSlot, EquipmentStats, GearCopy, ItemId};
 use feral_processes_engine::settlements::SettlementKey;
 use feral_processes_engine::sorties::SortieId;
+use feral_processes_engine::structures::StructureCategory;
 use feral_processes_engine::tuning::{
     ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, MAX_ACTIVE_CONTRACTS, MAX_FUSIONS,
 };
@@ -54,6 +55,7 @@ use feral_processes_engine::{
     LogEntry, LogLine, MESSAGE_LOG_CAP, MessageSource, OrderPriority, ProgramSaleOption,
     RouteDestination, RouteRefusal, RouteReport, SlotShift, SortieRefusal, SortieReport, SortieRow,
     StockRow, SwingOutcome, TransferRow, WorkOrder, WorkOrderReport, WorkProfile, condense,
+    program_tier_required,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the

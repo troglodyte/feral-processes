@@ -148,6 +148,13 @@ structure named by no research file is buildable from turn one; the
 [research tree](research.md) gates the machines that automate a base, not the
 base itself.
 
+**`Build cost` below is materials only.** Every deploy and every upgrade
+tier also spends one tamed program, permanently — the deeper the tier, the
+deeper the program it demands (a zone-5 program can raise anything, a zone-1
+program only a fresh Mk1). This is not a `.ron` field and so does not appear
+as a column: it is the same requirement, `ZonePortal >= tier`, for every
+structure but Home, which is exempt at every tier.
+
 | | |
 |---|---|
 | structures | {len(R)} |

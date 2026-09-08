@@ -351,10 +351,16 @@ impl Game {
                  or deeper."
             ));
         }
-        // A base whose whole crew is one program cannot spend it: nothing
-        // would be left to fetch the materials or raise the site, and the
-        // order could never finish. `build_is_workable`'s deadlock, reached
-        // from the other side.
+        // This guarantees `owned_pets().len()` never reaches zero — not that
+        // a crew is standing by to raise the site. `owned_pets()` counts
+        // every owned program regardless of role (staff, partied, sortied or
+        // wielded — see `role_of` in party.rs), so a base can pass this check
+        // with one staff program and one partied one, spend the staff
+        // program, and be left with nobody `run_build_crew` will post to
+        // the site. Zero specifically is the line because it is
+        // unrecoverable: a program in the party can still be taken out and
+        // returned to staff, but nothing brings back the one just spent on
+        // this order.
         //
         // The whole roster and not `programs_for_build(tier)`: the rule is
         // that a build order may never take the base to zero programs, and

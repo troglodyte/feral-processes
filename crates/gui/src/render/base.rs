@@ -3408,8 +3408,23 @@ mod tests {
             // leaves this fixture asking about the *drawing* rather than
             // about what a build costs.
             let (px, py) = game.base_pos().expect("the party stepped inside");
-            let path =
-                std::env::temp_dir().join(format!("fp_gui_base_site_{}.sav", std::process::id()));
+            // A per-call counter, not pid alone: unlike the neighbouring
+            // `fp_gui_attention_census_`/`fp_gui_settlement_glyph_` fixtures,
+            // this helper is reached from several `#[test]` functions
+            // (`a_pending_build_site_draws_a_slab_an_edge_and_a_caret`,
+            // `the_caret_over_a_build_site_bounces`,
+            // `the_caret_bounces_around_the_middle_of_its_slab`), which cargo
+            // runs concurrently in one process. Pid alone gave every thread
+            // the same path, so one thread's `remove_file` could land
+            // between another's write and its read. See
+            // `app-core/src/tests/support.rs::scratch_path` for the same
+            // trap and the same fix.
+            static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+            let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "fp_gui_base_site_{}_{unique}.sav",
+                std::process::id()
+            ));
             game.save(&path).unwrap();
             let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
             data.build_sites

@@ -868,9 +868,13 @@ impl AbilityDef {
     /// **A `Heal` has to be priced to reach the field.** A `cooldown` is
     /// counted in battle rounds and there is no round counter on the map, so
     /// Power is the only thing pacing a field invocation — and a routine
-    /// costing none has nothing pacing it at all. `hot_patch` is the shipped
-    /// case: `power_cost: 0.0`, and its band scales with the invoker's
-    /// level, so "it only heals 6-10" does not stay true. Field-only effects
+    /// costing none has nothing pacing it at all. `hot_patch` was the shipped
+    /// case this held back: `power_cost` unauthored, and a band that scales
+    /// with the invoker's level, so "it only heals 6-10" did not stay true.
+    /// It has been priced since, and this arm is what put it on the map. The
+    /// gate stays because it is the only thing standing between an `assets/`
+    /// edit and unlimited repair — see
+    /// `no_shipped_field_runnable_routine_runs_for_free`. Field-only effects
     /// are exempt because they are not offered anywhere else; a free one is
     /// unrunnable in battle, not unthrottled.
     ///

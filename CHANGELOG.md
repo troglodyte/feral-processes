@@ -33,6 +33,10 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.128
+
+**No routine is free to run any more** — Patch Single v1.0, Bastion Single v1.0, Bit Rot Single v1.0, Hyperthread Single v1.0 and Hard Lock Single v1.0 had inherited a Power cost of nothing when the field was renamed, and are now priced off their own ladders; Decompile pays a token 1, since it is the one routine with no cooldown to throttle it. Pricing Patch Single v1.0 is also what puts it on the map's routine list, where a heal has to be priced to be offered at all.
+
 ## 0.13.127
 
 **Reaching a sector's level cap now announces itself** — the notice says the XP still banks into Perk Points, and that a breach is what lifts the ceiling, tiers up what your structures can become, and may open research closed to you here.

@@ -5,4 +5,5 @@
     target: OneAlly,
     effect: Heal(power: 8, spread: 2),
     cooldown: 1,
+    power_cost: 5.0,
 )

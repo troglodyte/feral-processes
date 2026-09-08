@@ -1015,7 +1015,12 @@ fn a_free_heal_is_not_offered_in_the_field() {
 
 /// The same rule as a census over the shipped roster, so an `assets/` edit
 /// dropping a `power_cost` cannot quietly hand the map an unlimited heal.
-/// `hot_patch` is the shipped case this excludes today.
+///
+/// It excludes nothing shipped today — `every_runnable_routine_is_priced_in_power`
+/// closed the last free routine — so `hot_patch`, the case this gate was
+/// written against and held back for three weeks, is asserted *present*
+/// instead. Both directions in one function: pricing it is what let it
+/// through, and the gate still refuses a heal that loses its price.
 #[test]
 fn no_shipped_field_runnable_routine_runs_for_free() {
     let game = Game::new(9112, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -1041,6 +1046,11 @@ fn no_shipped_field_runnable_routine_runs_for_free() {
     assert!(
         free.is_empty(),
         "a field-runnable routine with no Power price is unthrottled on the map: {free:?}"
+    );
+    assert!(
+        runnable.iter().any(|def| def.id == "hot_patch"),
+        "a priced ally-facing heal reaches the map, and hot_patch is the one \
+         this gate was written against"
     );
 }
 

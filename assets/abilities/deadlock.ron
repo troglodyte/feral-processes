@@ -5,4 +5,5 @@
     target: OneEnemyGroupFront,
     effect: Debuff(kind: Stun, power: 0, duration: 1),
     cooldown: 2,
+    power_cost: 6.0,
 )

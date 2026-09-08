@@ -118,8 +118,8 @@ with nothing to scale.
 | `heap_corruption` | Bit Rot Group | WholeEnemyGroup | Debuff Bleed | 3 | 3 | - | 3 | 11 |
 | `bit_rot` | Bit Rot Everyone | AllEnemies | Debuff Bleed | 2 | 4 | - | 5 | 16 |
 | `clock_skew` | Clock Skew Single | OneEnemyGroupFront | Debuff Bleed | 2 | 2 | - | 4 | - |
-| `memory_leak` | Bit Rot Single v1.0 | OneEnemyGroupFront | Debuff Bleed | 2 | 3 | - | 1 | - |
-| `deadlock` | Hard Lock Single v1.0 | OneEnemyGroupFront | Debuff Stun | 0 | 1 | - | 2 | - |
+| `memory_leak` | Bit Rot Single v1.0 | OneEnemyGroupFront | Debuff Bleed | 2 | 3 | - | 1 | 5 |
+| `deadlock` | Hard Lock Single v1.0 | OneEnemyGroupFront | Debuff Stun | 0 | 1 | - | 2 | 6 |
 | `hard_fault` | Hard Fault Everyone | AllEnemies | Debuff Stun | 0 | 2 | - | 5 | 20 |
 | `hard_lock` | Hard Lock Single v2.0 | OneEnemyGroupFront | Debuff Stun | 0 | 2 | - | 4 | 10 |
 | `null_route` | Hard Lock Everyone | AllEnemies | Debuff Stun | 0 | 1 | - | 5 | 15 |
@@ -128,10 +128,10 @@ with nothing to scale.
 | `bastion_shield_v2` | Bastion Single v2.0 | OneAlly | Buff Mitigation | 15 | 3 | - | 2 | 7 |
 | `bastion` | Bastion Party | WholeParty | Buff Mitigation | 12 | 3 | - | 3 | 11 |
 | `parity_guard` | Parity Single | OneAlly | Buff Mitigation | 9 | 3 | - | 4 | - |
-| `sandbox` | Bastion Single v1.0 | OneAlly | Buff Mitigation | 9 | 3 | - | 1 | - |
+| `sandbox` | Bastion Single v1.0 | OneAlly | Buff Mitigation | 9 | 3 | - | 1 | 5 |
 | `hyperthread` | Hyperthread Single v2.0 | OneAlly | Buff Atk | 6 | 4 | - | 3 | 8 |
 | `overclock_array` | Hyperthread Party | WholeParty | Buff Atk | 3 | 3 | - | 3 | 10 |
-| `priority_boost` | Hyperthread Single v1.0 | OneAlly | Buff Atk | 3 | 3 | - | 1 | - |
+| `priority_boost` | Hyperthread Single v1.0 | OneAlly | Buff Atk | 3 | 3 | - | 1 | 5 |
 | `brownout` | Throttle Everyone | AllEnemies | Buff Atk | -3 | 3 | - | 5 | 16 |
 | `throttle` | Throttle Group | WholeEnemyGroup | Buff Atk | -4 | 3 | - | 3 | 10 |
 | `clock_gate` | Throttle Single | OneEnemyGroupFront | Buff Atk | -5 | 3 | - | 2 | 8 |
@@ -144,7 +144,7 @@ with nothing to scale.
 | `rollback_v2` | Rollback Single v2.0 | OneAlly | Heal | 15–25 | - | - | 3 | 8 |
 | `redundancy_sync` | Patch Party v1.1 | WholeParty | Heal | 8–12 | - | - | 3 | 12 |
 | `rollback_v1` | Rollback Single v1.0 | OneAlly | Heal | 8–12 | - | - | 2 | 6 |
-| `hot_patch` | Patch Single v1.0 | OneAlly | Heal | 6–10 | - | - | 1 | - |
+| `hot_patch` | Patch Single v1.0 | OneAlly | Heal | 6–10 | - | - | 1 | 5 |
 | `hot_spare` | Hot Spare Single | OneAlly | Heal | 6–10 | - | - | 3 | - |
 | `mirror_restore` | Patch Party v1.0 | WholeParty | Heal | 6–10 | - | - | 2 | 10 |
 | `skim_v3` | Skim Single v3.0 | OneEnemyGroupFront | Drain | 10–18 | - | - | 4 | 10 |
@@ -172,7 +172,7 @@ with nothing to scale.
 | `invalidate_line` | Flush Cache Single | OneAlly | Cleanse | 0 | - | - | 2 | 4 |
 | `quarantine` | Quarantine Single | OneAlly | Cleanse | 0 | - | - | 4 | - |
 | `watchdog` | Watchdog Party | WholeParty | Cleanse | 0 | - | - | 4 | - |
-| `decompile` | Decompile Single | OneEnemyGroupFront | Decompile | 0 | - | - | - | - |
+| `decompile` | Decompile Single | OneEnemyGroupFront | Decompile | 0 | - | - | - | 1 |
 | `buffer_overrun` | Buffer Overrun Party | WholeParty | Phase | 0 | - | - | - | 12 |
 | `wild_jump` | Wild Jump Party | WholeParty | Jump | 0 | - | - | - | 20 |
 | `symlink` | Symlink Party | WholeParty | Symlink | 0 | - | - | - | 25 |
@@ -272,11 +272,11 @@ timed against a fight. The two that restore a pool over time keep a turn
 count, because an unbounded one is unbounded healing or unbounded Power.
 
 They are no longer the only things the map's routine list offers. A **Heal**
-that charges Power runs out there too, on top of being a Special — the seven
-Patch and Rollback routines below the free `hot_patch`. A heal is priced in
-Power and nothing else out there, because a cooldown counts battle rounds and
-the map has no round to count; a heal costing nothing would therefore have no
-throttle at all, which is why the free one stays a Special. Everything else
+that charges Power runs out there too, on top of being a Special — all eight
+Patch and Rollback routines, `hot_patch` included since it was priced. A heal
+is priced in Power and nothing else out there, because a cooldown counts
+battle rounds and the map has no round to count; a heal costing nothing would
+therefore have no throttle at all, and would stay a Special. Everything else
 about it is the battle invocation's: the same band, scaled by the invoker's
 own level and Heal affinity, restoring what fits under the target's ceiling.
 

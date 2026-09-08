@@ -601,9 +601,8 @@ relying on one, and correct all three places if it has moved.
 - **`ability_unavailable` is the one gate, `spend_power` the one charge**,
   both priced through `abilities::routine_power_cost` so a refusal and a
   charge cannot quote different numbers.
-- **Every routine was already priced; the field just reached nothing.** The
-  2026-08-17 flip from `fatigue_cost` to `power_cost` renamed 55 keys and
-  hoisted 10, with no value authored.
+- **Every routine that can be *run* is priced in Power; only a passive is
+  exempt**, because a passive is never invoked.
 - **A field buff's lifetime is decided by its kind *and* its source**, and
   `ActiveFieldBuff::runs_until_rest` is the one predicate.
 - **`Trickle` is the one restore kind that does not scale with its

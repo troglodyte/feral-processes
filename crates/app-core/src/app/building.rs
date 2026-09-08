@@ -258,7 +258,12 @@ impl App {
             return;
         };
         if let Some(game) = &mut self.game {
-            let outcome = game.place_structure(&id, dx, dy);
+            // `None` until the picker screen exists to choose one. The
+            // engine refuses the deploy and `report` puts its sentence on
+            // the banner, which is the right thing for a frontend that
+            // cannot yet name a program — the alternative, picking one here,
+            // would spend a program the player never chose.
+            let outcome = game.place_structure(&id, dx, dy, None);
             self.report(outcome);
         }
         self.mode = Mode::Playing;
@@ -362,7 +367,9 @@ impl App {
         if let Some(idx) = self.selected_index(key, structures.len()) {
             let picked = structures[idx].entity;
             let Some(game) = &mut self.game else { return };
-            let outcome = game.upgrade_structure(picked);
+            // `None`, `handle_build_direction_key`'s reason: no picker
+            // yet, so the engine's refusal is what the player is shown.
+            let outcome = game.upgrade_structure(picked, None);
             self.report(outcome);
             self.mode = Mode::Playing;
         }

@@ -3394,16 +3394,40 @@ mod tests {
     ) -> Vec<bevy_egui::egui::epaint::ClippedShape> {
         let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets())
             .expect("the shipped assets must load");
-        game.place_structure("home", 0, 0)
+        game.place_structure("home", 0, 0, None)
             .expect("a Home founds it");
         game.enter_base().expect("the party steps inside");
         if request {
-            // No materials are given, and none are needed: filing charges
-            // nothing. That is not incidental to this fixture — it is why a
-            // renderer test can reach a build site at all without the engine
-            // exposing its `World`.
-            game.place_structure("mining_node", 1, 0)
-                .expect("a request is filed beside the party");
+            // **Staged through the save rather than filed through
+            // `place_structure`.** Filing a request costs a tamed program
+            // now, and a fresh run owns none — so a renderer fixture that
+            // called the real door would have to stage a roster, a depth and
+            // a spare body before it could draw one orange glyph. The save
+            // is the crate's existing way past a private `World` (see
+            // `a_settlement_draws_its_glyph_on_the_surface_map`), and it
+            // leaves this fixture asking about the *drawing* rather than
+            // about what a build costs.
+            let (px, py) = game.base_pos().expect("the party stepped inside");
+            let path =
+                std::env::temp_dir().join(format!("fp_gui_base_site_{}.sav", std::process::id()));
+            game.save(&path).unwrap();
+            let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
+            data.build_sites
+                .push(feral_processes_engine::save::BuildSiteSave {
+                    position: (px + 1, py),
+                    structure: "mining_node".to_string(),
+                    cost: vec![(
+                        feral_processes_engine::items::ItemId::from("core_fragment"),
+                        5,
+                    )],
+                    delivered: Vec::new(),
+                    progress: 0,
+                    goal: feral_processes_engine::components::BuildGoal::New,
+                    program: None,
+                });
+            feral_processes_engine::save::save_to_file(&path, &data).unwrap();
+            game = Game::load(&path, &test_assets()).unwrap();
+            let _ = std::fs::remove_file(&path);
         }
 
         let mut fx = Fx::new();
@@ -3438,7 +3462,7 @@ mod tests {
     fn drawn_base_with_sprites(sprites: SpriteTable, steps: usize) -> (usize, Vec<String>) {
         let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets())
             .expect("the shipped assets must load");
-        game.place_structure("home", 0, 0)
+        game.place_structure("home", 0, 0, None)
             .expect("a Home founds it");
         game.enter_base().expect("the party steps inside");
         for _ in 0..steps {
@@ -3517,7 +3541,7 @@ mod tests {
         };
         let mut game = Game::new_with(9, DifficultyMode::Forgiving, &test_assets(), &choice)
             .expect("the shipped assets must load");
-        game.place_structure("home", 0, 0)
+        game.place_structure("home", 0, 0, None)
             .expect("a Home founds it");
         game.enter_base()
             .expect("the party steps inside, standing on the Home");
@@ -3577,7 +3601,7 @@ mod tests {
         };
         let mut game = Game::new_with(9, DifficultyMode::Forgiving, &test_assets(), &choice)
             .expect("the shipped assets must load");
-        game.place_structure("home", 0, 0)
+        game.place_structure("home", 0, 0, None)
             .expect("a Home founds it");
         game.enter_base()
             .expect("the party steps inside, standing on the Home");

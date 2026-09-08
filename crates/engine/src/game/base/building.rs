@@ -8,7 +8,24 @@ use crate::tuning::STRUCTURE_REMOVAL_REFUND_PERCENT;
 use crate::*;
 
 impl Game {
-    pub fn place_structure(&mut self, structure_id: &str, dx: i32, dy: i32) -> Result<(), String> {
+    /// Files a request to raise `structure_id` on the cell `(dx, dy)` from
+    /// the party, spending `program` — a tamed program you own — to pay for
+    /// it. The founding Home is the exception at both ends: it is stood up
+    /// on the spot rather than filed, and it costs no program.
+    ///
+    /// **`program` is a trailing parameter rather than a second door.** A
+    /// `place_structure_with_program` beside this one would be two ways into
+    /// one rule, and the one nobody remembers to update is the one that
+    /// raises a structure for free. Every caller states what it is spending,
+    /// and `None` is a statement too — `structure_needs_program` is what
+    /// decides whether it is a legal one.
+    pub fn place_structure(
+        &mut self,
+        structure_id: &str,
+        dx: i32,
+        dy: i32,
+        program: Option<Entity>,
+    ) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't deploy right now.".into());
         }
@@ -142,6 +159,34 @@ impl Game {
         // in the same task.
         let build_cost = self.structure_build_cost(&def);
 
+        // **The program is committed here, and here is deliberate at both
+        // ends.**
+        //
+        // *Below* every refusal about the world — researched, floored,
+        // unoccupied, under `max_deployed` — because a player standing in
+        // the wrong place must be told about the place, not about a program
+        // they were never going to spend.
+        //
+        // *Above* the founding branch rather than beside the site spawn
+        // below it, so `structure_needs_program` is what exempts the Home
+        // rather than an early `return` that happens to sit in front of the
+        // check. The two positions are the same for every other structure —
+        // nothing between here and the spawn runs for them — and this one
+        // is the one where the exemption is a rule instead of an accident.
+        //
+        // Resolved in the engine and not at the picker: the picker is a
+        // frontend, and a rule only a frontend enforces is one a second
+        // frontend skips.
+        //
+        // The label is read **before** the call, because a successful commit
+        // despawns the body and there is nothing left to ask for a name
+        // afterwards.
+        let offered_label = program.map(|p| self.creature_label(p));
+        let committed = self.commit_for_build(program, &def, BuildGoal::New)?;
+        // Only names a program that was actually spent: an exempt structure
+        // may be handed one and still commit nothing.
+        let committed_who = offered_label.filter(|_| committed.is_some());
+
         // **The Home is stood up by hand; everything else is a request.**
         // Founding is the one build with nobody to ask: base space does not
         // exist yet, so there is no roster standing in it and no shelf to
@@ -205,8 +250,16 @@ impl Game {
         // The cost is resolved **now** and carried on the site, so a
         // zone-portal request filed in one zone is not silently repriced by
         // breaching into the next while the crew is already hauling to it.
+        //
+        // The committed program rides the site from the moment it is
+        // spawned rather than being inserted a line later: a site that
+        // exists for even one statement without the program it was paid for
+        // is a site a panic or an early return could leave standing for
+        // free.
+        let mut site = BuildSite::new(def.id.clone(), build_cost);
+        site.program = committed;
         self.world.spawn((
-            BuildSite::new(def.id.clone(), build_cost),
+            site,
             Position { x, y },
             // A glyph, unlike a `DigSite` — which is what puts a build site
             // on the map and under the examine ray for free, through
@@ -219,12 +272,120 @@ impl Game {
                 color: GlyphColor::Orange,
             },
         ));
-        self.log_base(format!(
-            "You mark out a {} here. Your crew will raise it.",
-            def.name
-        ));
+        // Two sentences rather than one with an optional clause: the only
+        // order that commits nothing is the Home, which never reaches this
+        // line, so the `None` arm exists for a modded exempt structure and
+        // says the truth about it rather than naming a program that was
+        // never spent.
+        self.log_base(match committed_who {
+            Some(who) => format!(
+                "You mark out a {} here, and commit {who} to it. Your crew will raise it.",
+                def.name
+            ),
+            None => format!("You mark out a {} here. Your crew will raise it.", def.name),
+        });
         self.tick();
         Ok(())
+    }
+
+    /// The whole program cost of a build order, answered once for both
+    /// filing doors: whether one is owed at all, whether the one offered is
+    /// deep enough, whether the base can spare it, and the commit itself.
+    ///
+    /// **One copy, not one per door.** `place_structure` and
+    /// `upgrade_structure` ask the same four questions in the same order and
+    /// differ only in the tier they demand and the noun they put in the
+    /// sentence. A second copy of the ladder beside the first is how a
+    /// deploy and an upgrade come to disagree about what a program costs —
+    /// `count_build_requests`' argument about a `&self` twin, applied to the
+    /// cost instead of the count.
+    ///
+    /// **The order inside the ladder is the contract.** Missing first, so a
+    /// player who passed nothing is told to pick one rather than being told
+    /// a depth about a program they do not have; then depth, so a player who
+    /// passed something too shallow is told how deep to go; then the
+    /// last-program rule, which is about the base rather than about the
+    /// program offered and would otherwise mask both. The commit is last
+    /// because it is the only step that moves anything: every refusal above
+    /// it leaves the roster exactly as it found it.
+    ///
+    /// **`Ok(None)` is not a refusal.** It means this structure owes no
+    /// program at all — the Home, and whatever a mod exempts alongside it —
+    /// and the caller files the order without one. A refusal is an `Err`.
+    ///
+    /// `>=` and never `==` on the depth, `programs_for_build`'s rule: a run
+    /// whose roster has outgrown zone 1 must still be able to raise a Mk1.
+    fn commit_for_build(
+        &mut self,
+        program: Option<Entity>,
+        def: &StructureDef,
+        goal: BuildGoal,
+    ) -> Result<Option<save::CreatureSave>, String> {
+        if !self.structure_needs_program(&def.id) {
+            return Ok(None);
+        }
+        let tier = crate::game::catalog::program_tier_required(goal);
+        // What the order will produce, in the player's own words, so all
+        // four sentences below name the same thing. A deploy is a machine; an
+        // upgrade is a mark of one.
+        let subject = match goal {
+            BuildGoal::New => def.name.clone(),
+            BuildGoal::Upgrade { to_tier } => format!("Mk{to_tier} {}", def.name),
+        };
+        let Some(chosen) = program else {
+            return Err(match goal {
+                BuildGoal::New => format!(
+                    "Deploying a {} costs a tamed program. Pick one first.",
+                    def.name
+                ),
+                BuildGoal::Upgrade { to_tier } => format!(
+                    "Upgrading the {} to Mk{to_tier} costs a tamed program. Pick one first.",
+                    def.name
+                ),
+            });
+        };
+        let depth = self.zone_tier(chosen);
+        if depth < tier {
+            return Err(format!(
+                "That program is from zone {depth}. A {subject} needs one from zone {tier} \
+                 or deeper."
+            ));
+        }
+        // A base whose whole crew is one program cannot spend it: nothing
+        // would be left to fetch the materials or raise the site, and the
+        // order could never finish. `build_is_workable`'s deadlock, reached
+        // from the other side.
+        //
+        // The whole roster and not `programs_for_build(tier)`: the rule is
+        // that a build order may never take the base to zero programs, and
+        // eligibility for this particular tier has nothing to do with
+        // whether the base is left empty.
+        if self.owned_pets().len() <= 1 {
+            return Err(match goal {
+                BuildGoal::New => format!(
+                    "Committing your last program would leave nobody to build the {}.",
+                    def.name
+                ),
+                BuildGoal::Upgrade { .. } => format!(
+                    "Committing your last program would leave nobody to upgrade the {}.",
+                    def.name
+                ),
+            });
+        }
+        // **`None` here is a refusal, not an absence.** `commit_program`
+        // returns it for a program that is wild, away on a sortie, downed or
+        // carrying a load, and nothing has moved when it does. Filing the
+        // order anyway would stand a structure up for nothing, and no
+        // compiler would say so — which is why this is a `?` and not an
+        // `unwrap_or(None)`.
+        let Some(snapshot) = self.commit_program(chosen) else {
+            return Err(
+                "That program can't be committed to a build — it's out on a sortie, downed, \
+                 or carrying a load."
+                    .into(),
+            );
+        };
+        Ok(Some(snapshot))
     }
 
     /// Spawns the finished structure `def` on base-space `(x, y)` and
@@ -580,7 +741,19 @@ impl Game {
     /// The machine **keeps running** while its request stands: standing it
     /// down would bring back the deadlock class build orders closed, on a
     /// base that files three upgrades at once.
-    pub fn upgrade_structure(&mut self, structure: Entity) -> Result<(), String> {
+    ///
+    /// **`program` is a tamed program you own, and it is spent.** A trailing
+    /// parameter rather than an `upgrade_structure_with_program` beside this
+    /// one, `place_structure`'s reason: two doors into one rule leave one
+    /// that raises a tier for free. The tier reached is the depth demanded —
+    /// a Mk3 wants a zone-3 program — and `upgrade_ceiling` has already
+    /// clamped that against `ZoneLevel`, so the demand is always one the
+    /// player could have met.
+    pub fn upgrade_structure(
+        &mut self,
+        structure: Entity,
+        program: Option<Entity>,
+    ) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
@@ -598,7 +771,7 @@ impl Game {
             .get(&kind)
             .cloned()
             .ok_or_else(|| "Unknown structure".to_string())?;
-        let Some(upgrade) = def.upgrade else {
+        let Some(upgrade) = def.upgrade.as_ref() else {
             return Err(format!("{} can't be upgraded.", def.name));
         };
         let tier = self
@@ -612,7 +785,7 @@ impl Game {
         // Checked after the permanent ceiling, so a maxed-out structure in a
         // shallow zone reads as finished rather than as waiting on a breach
         // it would never benefit from.
-        if tier >= self.upgrade_ceiling(&upgrade) {
+        if tier >= self.upgrade_ceiling(upgrade) {
             return Err(format!(
                 "{} can't go past Mk{tier} until you breach to zone {}.",
                 def.name,
@@ -634,6 +807,19 @@ impl Game {
             ));
         }
         let next = tier + 1;
+        // Last of the refusals and immediately before the site is spawned,
+        // `place_structure`'s ladder: every question about the machine and
+        // the cell it stands on is answered first, so a player whose crew is
+        // already on order for this very upgrade is told about that order
+        // rather than about a program they were never going to spend.
+        //
+        // The label is read before the commit, which despawns the body.
+        let offered_label = program.map(|p| self.creature_label(p));
+        let committed =
+            self.commit_for_build(program, &def, BuildGoal::Upgrade { to_tier: next })?;
+        // `place_structure`'s rule: an exempt structure may be handed a
+        // program and still commit nothing, and the line must not name one.
+        let committed_who = offered_label.filter(|_| committed.is_some());
         // Resolved now and carried on the site, `BuildSite::cost`'s reason:
         // a request filed against one price may not be silently repriced by
         // an edited def while the crew is already hauling to it.
@@ -643,12 +829,20 @@ impl Game {
             .map(|(item, qty)| (item.clone(), qty * next))
             .collect();
 
-        self.world
-            .spawn((BuildSite::upgrade(kind.clone(), cost, next), pos));
-        self.log_base(format!(
-            "You put the {} in for an upgrade to Mk{next} — your crew will fetch what it needs.",
-            def.name
-        ));
+        let mut site = BuildSite::upgrade(kind.clone(), cost, next);
+        site.program = committed;
+        self.world.spawn((site, pos));
+        self.log_base(match committed_who {
+            Some(who) => format!(
+                "You put the {} in for an upgrade to Mk{next} and commit {who} to it — \
+                 your crew will fetch what it needs.",
+                def.name
+            ),
+            None => format!(
+                "You put the {} in for an upgrade to Mk{next} — your crew will fetch what it needs.",
+                def.name
+            ),
+        });
         self.tick();
         Ok(())
     }

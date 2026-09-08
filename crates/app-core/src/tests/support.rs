@@ -854,7 +854,7 @@ pub(crate) fn found_the_base(app: &mut App) {
     app.game
         .as_mut()
         .expect("a fixture with a game")
-        .place_structure("home", 0, 0)
+        .place_structure("home", 0, 0, None)
         .expect("a fresh run can afford its first Home, and founds from the open grid");
     // Founding fires the base tutorial, which would take the screen on this
     // fixture's next keypress and leave every downstream assertion reading

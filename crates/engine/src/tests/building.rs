@@ -55,7 +55,7 @@ fn a_cut_corner_is_not_buildable() {
     let r = STARTING_POCKET_RADIUS;
 
     let err = game
-        .place_structure("armory", r, r)
+        .place_structure("armory", r, r, None)
         .expect_err("the corner cell is off the floor and shouldn't be buildable");
     assert!(err.contains("no floor there"), "unexpected error: {err}");
 
@@ -181,7 +181,7 @@ fn place_structure_rejects_a_second_home() {
     place_home(&mut game);
 
     let err = game
-        .place_structure("home", 1, 0)
+        .place_structure("home", 1, 0, None)
         .expect_err("a second Home shouldn't be buildable while one already exists");
     assert!(err.contains("already deployed"), "unexpected error: {err}");
 }
@@ -203,7 +203,7 @@ fn place_structure_rejects_building_off_the_pockets_floor() {
     // The pocket's east edge, so the next placement lands one cell into rock.
     stand_in_base_at(&mut game, STARTING_POCKET_RADIUS, 0);
     let err = game
-        .place_structure("armory", 1, 0)
+        .place_structure("armory", 1, 0, None)
         .expect_err("a cell with no floor under it shouldn't be buildable");
     assert!(err.contains("no floor there"), "unexpected error: {err}");
 
@@ -235,7 +235,7 @@ fn a_request_the_base_cannot_afford_is_filed_and_the_crew_says_what_it_is_short_
     spawn_tamed(&mut game, 10, 3);
 
     let held = count_item(&game, ids::CORE_FRAGMENT);
-    game.place_structure("armory", 1, 0)
+    file_build(&mut game, "armory", 1, 0)
         .expect("a request is filed whether or not the base can afford it yet");
 
     assert_eq!(
@@ -940,8 +940,7 @@ fn upgrading_refuses_past_max_tier() {
     // A base that cannot afford the bill is deliberately *not* refused here:
     // upgrading files a request now, and a request the base cannot afford yet
     // is the whole point of a queue — the crew says so from the site instead.
-    game.upgrade_structure(node)
-        .expect("filing costs nothing and checks no store");
+    file_upgrade(&mut game, node).expect("filing costs nothing and checks no store");
     let site = game
         .build_site_at(
             game.world.get::<Position>(node).unwrap().x,
@@ -968,7 +967,7 @@ fn upgrading_refuses_past_max_tier() {
         upgrade_now(&mut game, node).unwrap();
     }
     let err = game
-        .upgrade_structure(node)
+        .upgrade_structure(node, None)
         .expect_err("a maxed node can't be upgraded further");
     assert!(err.contains("fully upgraded"), "unexpected error: {err}");
 }
@@ -984,7 +983,7 @@ fn upgrading_is_refused_until_you_have_breached_to_the_matching_zone() {
         .add(ItemId::from(ids::CORE_FRAGMENT), 1000);
 
     let err = game
-        .upgrade_structure(node)
+        .upgrade_structure(node, None)
         .expect_err("zone 1 caps every structure at Mk1");
     assert!(
         err.contains("zone 2"),
@@ -1013,7 +1012,7 @@ fn breaching_raises_the_upgrade_ceiling_one_tier() {
     assert_eq!(game.world.get::<StructureTier>(node).unwrap().0, 2);
 
     let err = game
-        .upgrade_structure(node)
+        .upgrade_structure(node, None)
         .expect_err("zone 2 stops at Mk2");
     assert!(err.contains("zone 3"), "unexpected error: {err}");
 }
@@ -1043,7 +1042,7 @@ fn the_defs_max_tier_still_wins_in_a_deep_zone() {
         upgrade_now(&mut game, node).unwrap();
     }
     let err = game
-        .upgrade_structure(node)
+        .upgrade_structure(node, None)
         .expect_err("a zone past the def's ceiling doesn't raise it");
     assert!(
         err.contains("fully upgraded"),
@@ -1058,7 +1057,7 @@ fn a_structure_without_an_upgrade_def_cannot_be_upgraded() {
     place_home(&mut game);
     let home = find_structure_by_kind(&mut game, "home").unwrap();
     let err = game
-        .upgrade_structure(home)
+        .upgrade_structure(home, None)
         .expect_err("Home declares no upgrade path");
     assert!(err.contains("can't be upgraded"), "unexpected error: {err}");
 }
@@ -2002,7 +2001,7 @@ fn a_capped_structure_refuses_the_one_past_its_limit_and_costs_nothing() {
     let before = count_item(&game, ids::CORE_FRAGMENT);
     let (dx, dy) = spots.next().unwrap();
     let err = game
-        .place_structure("line_driver", dx, dy)
+        .place_structure("line_driver", dx, dy, None)
         .expect_err("one past the limit must be refused");
 
     assert!(
@@ -2049,7 +2048,7 @@ fn a_cache_tap_waits_for_the_second_zone_and_its_research() {
     grant_research_data(&mut game, 1000);
 
     let unresearched = game
-        .place_structure("cache_tap", 1, 0)
+        .place_structure("cache_tap", 1, 0, None)
         .expect_err("the Tap waits on Cache Coherence");
     assert!(unresearched.contains("researched"), "{unresearched}");
 
@@ -2125,7 +2124,7 @@ fn a_line_driver_is_refused_without_the_zone_two_material() {
     // nothing in the base or the pack holds a unit of the material it is
     // denominated in, and `BuildSite::outstanding` keeps saying so. That is
     // what stops the grid growing until the run has a Tap running.
-    game.place_structure("line_driver", 1, 0)
+    file_build(&mut game, "line_driver", 1, 0)
         .expect("a request is filed regardless of what is in stock");
     let site = game.build_site_at(1, 0).expect("the request stands there");
     let outstanding = game
@@ -2702,7 +2701,7 @@ fn founding_stands_the_anchor_where_the_party_is() {
     let mut game = Game::new(3601, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_player_at(&mut game, 7, -3);
 
-    game.place_structure("home", 0, 0)
+    game.place_structure("home", 0, 0, None)
         .expect("founding is the one build made from the open grid");
 
     assert_eq!(
@@ -2732,7 +2731,7 @@ fn founding_on_a_stack_link_is_refused() {
     stand_player_at(&mut game, link.x, link.y);
 
     let err = game
-        .place_structure("home", 0, 0)
+        .place_structure("home", 0, 0, None)
         .expect_err("the anchor cannot share a tile with a link");
     assert!(err.contains("link"), "unexpected refusal: {err}");
     assert!(
@@ -2750,7 +2749,7 @@ fn founding_costs_nothing() {
     let player = game.player_entity();
     game.world.entity_mut(player).insert(Inventory::default());
 
-    game.place_structure("home", 0, 0)
+    game.place_structure("home", 0, 0, None)
         .expect("an empty pack is enough to found a base");
     assert!(game.has_home(), "the Home is standing");
 }
@@ -3298,5 +3297,354 @@ fn a_refunded_program_comes_back_unposted() {
     assert!(
         game.world.get::<Task>(back).is_none(),
         "the scheduler posts it again; the refund does not"
+    );
+}
+
+// ------------------------------------- the two filing doors take a program
+
+/// A base with a Home, the party inside it, and `programs` tamed programs on
+/// the roster — the whole staging a build order now needs.
+///
+/// Seeded at zone 1 by default; a test about depth tames its own at the
+/// depth it wants.
+fn a_base_with_programs(seed: u32, programs: usize) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    for _ in 0..programs {
+        tame_at_zone(&mut game, 1);
+    }
+    game
+}
+
+/// The `BuildSite` standing at the party's cell plus `(dx, dy)`, if one is.
+fn filed_at(game: &mut Game, dx: i32, dy: i32) -> Option<Entity> {
+    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+    game.build_site_at(px + dx, py + dy)
+}
+
+/// The headline of the whole feature: a deploy with no program named is
+/// refused, and the sentence says what is missing rather than leaving the
+/// player to guess which of the build screen's rules bit them.
+#[test]
+fn deploying_without_a_program_is_refused_and_says_why() {
+    let mut game = a_base_with_programs(20260907, 2);
+
+    let err = game
+        .place_structure("mining_node", 1, 0, None)
+        .expect_err("a deploy costs a tamed program");
+
+    assert!(
+        err.contains("tamed program"),
+        "the refusal names what is missing: {err}"
+    );
+    assert!(
+        filed_at(&mut game, 1, 0).is_none(),
+        "and a refused deploy files nothing"
+    );
+}
+
+/// The other half: a program named is a program *spent*. It leaves the
+/// roster and the order is holding it — asserted on both sides, because a
+/// site that took the program without recording it would look identical
+/// from the roster alone and would refund nothing on a cancel.
+#[test]
+fn deploying_with_a_program_files_the_order_and_spends_it() {
+    let mut game = a_base_with_programs(20260907, 1);
+    let spend = tame_at_zone(&mut game, 1);
+
+    game.place_structure("mining_node", 1, 0, Some(spend))
+        .expect("a program deep enough, with a body left behind");
+
+    assert_eq!(
+        game.owned_pets().len(),
+        1,
+        "the committed program left the roster and the spare stayed"
+    );
+    assert!(
+        game.owned_pets().iter().all(|p| p.entity != spend),
+        "and it is the one that was named that went"
+    );
+    let filed = game.build_site_programs();
+    assert_eq!(filed.len(), 1, "one order stands");
+    assert!(
+        filed[0].is_some(),
+        "and the order is holding the program it was paid with"
+    );
+}
+
+/// The Home is exempt, and `structure_needs_program` is what exempts it — a
+/// fresh run owns zero programs, so a Home that cost one could never be
+/// founded and the run could never open a base at all.
+#[test]
+fn founding_a_home_needs_no_program() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    game.place_structure(HOME_STRUCTURE_ID, 0, 0, None)
+        .expect("the Home is exempt at every tier");
+
+    assert!(game.has_home(), "and it is standing");
+}
+
+/// **A build order may never take the base to zero programs.** Nothing would
+/// be left to fetch the materials or raise the site, so the order could
+/// never finish — `build_is_workable`'s deadlock reached from the other
+/// side. The refusal is about the roster, not about the program named: the
+/// one offered here is perfectly eligible.
+#[test]
+fn a_one_program_base_may_not_spend_its_only_body() {
+    let mut game = a_base_with_programs(20260907, 0);
+    let only = tame_at_zone(&mut game, 1);
+
+    let err = game
+        .place_structure("mining_node", 1, 0, Some(only))
+        .expect_err("the last program may not be spent");
+
+    assert!(err.contains("last program"), "{err}");
+    assert_eq!(
+        game.owned_pets().len(),
+        1,
+        "and it is still on the roster — a refusal moves nothing"
+    );
+    assert!(
+        filed_at(&mut game, 1, 0).is_none(),
+        "and no order was filed"
+    );
+}
+
+/// An upgrade demands the tier it *reaches*, not the tier the machine is at,
+/// and the refusal names the depth so the player knows how deep to go.
+#[test]
+fn a_mk3_upgrade_refuses_a_zone_2_program() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let node = deploy_upgradeable_node(&mut game);
+    set_zone(&mut game, 3);
+    stock_upgrade_materials(&mut game, 60);
+    upgrade_now(&mut game, node).expect("a Mk2 to upgrade from");
+    assert_eq!(game.world.get::<StructureTier>(node).unwrap().0, 2);
+
+    let shallow = tame_at_zone(&mut game, 2);
+    let held = game.owned_pets().len();
+
+    let err = game
+        .upgrade_structure(node, Some(shallow))
+        .expect_err("a Mk3 wants a zone 3 program");
+
+    assert!(
+        err.contains("zone 3"),
+        "the refusal names the depth needed: {err}"
+    );
+    assert_eq!(
+        game.owned_pets().len(),
+        held,
+        "a refused upgrade spends nothing"
+    );
+}
+
+/// The floor is `>=`, not `==`, on this door too: a program caught deeper
+/// than the tier being raised is spent without complaint.
+#[test]
+fn a_deeper_program_may_pay_for_a_shallow_upgrade() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let node = deploy_upgradeable_node(&mut game);
+    set_zone(&mut game, 2);
+    tame_at_zone(&mut game, 1);
+    let deep = tame_at_zone(&mut game, 7);
+
+    game.upgrade_structure(node, Some(deep))
+        .expect("zone 7 clears a Mk2's zone 2 floor");
+
+    assert!(
+        game.owned_pets().iter().all(|p| p.entity != deep),
+        "and the deep one is what was spent"
+    );
+}
+
+/// An upgrade with no program named is refused the same way a deploy is, and
+/// the sentence names the mark being bought so the two doors do not read as
+/// the same failure.
+#[test]
+fn upgrading_without_a_program_is_refused_and_says_why() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let node = deploy_upgradeable_node(&mut game);
+    set_zone(&mut game, 2);
+    tame_at_zone(&mut game, 1);
+    tame_at_zone(&mut game, 1);
+
+    let err = game
+        .upgrade_structure(node, None)
+        .expect_err("an upgrade costs a tamed program");
+
+    assert!(err.contains("tamed program"), "{err}");
+    assert!(
+        err.contains("Mk2"),
+        "and it names the mark being bought: {err}"
+    );
+    let pos = *game.world.get::<Position>(node).unwrap();
+    assert!(
+        game.build_site_at(pos.x, pos.y).is_none(),
+        "and nothing was filed"
+    );
+}
+
+/// The upgrade site carries the program it was paid with, exactly as a
+/// deploy's does — the two goals are one rule, and a cancel has to be able
+/// to hand either one back.
+#[test]
+fn an_upgrade_order_holds_the_program_it_was_paid_with() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let node = deploy_upgradeable_node(&mut game);
+    set_zone(&mut game, 2);
+    tame_at_zone(&mut game, 1);
+    let spend = tame_at_zone(&mut game, 2);
+
+    game.upgrade_structure(node, Some(spend))
+        .expect("a zone 2 program pays for a Mk2");
+
+    assert!(
+        game.build_site_programs().iter().any(|p| p.is_some()),
+        "the upgrade order is holding it"
+    );
+    assert!(
+        game.owned_pets().iter().all(|p| p.entity != spend),
+        "and it left the roster"
+    );
+}
+
+/// **`commit_program` returning `None` is a refusal, not an absence.** A
+/// downed program is deep enough, owned, and not the last body — every
+/// question above the commit says yes — and the commit still refuses it,
+/// because a downed slot is what a wipe is supposed to cost. Filing the
+/// order anyway would raise a structure for nothing.
+#[test]
+fn a_program_the_commit_refuses_files_no_order() {
+    let mut game = a_base_with_programs(20260907, 2);
+    let downed = tame_at_zone(&mut game, 1);
+    game.world.entity_mut(downed).insert(Downed);
+    let held = game.owned_pets().len();
+
+    let err = game
+        .place_structure("mining_node", 1, 0, Some(downed))
+        .expect_err("a downed program cannot be committed");
+
+    assert!(
+        err.contains("downed"),
+        "the refusal says which state it is in: {err}"
+    );
+    assert!(
+        filed_at(&mut game, 1, 0).is_none(),
+        "and no free structure was filed on a refused commit"
+    );
+    assert_eq!(game.owned_pets().len(), held, "the roster is untouched");
+}
+
+/// **The refusal order is load-bearing.** A player standing where nothing
+/// can be built is told about the place, not about a program they were never
+/// going to spend — so the world's refusals all resolve before the program
+/// block is reached, and passing no program at all does not change which
+/// sentence comes back.
+#[test]
+fn a_bad_cell_is_reported_before_the_program_cost() {
+    let mut game = a_base_with_programs(20260908, 2);
+    // One step past the pocket's east edge, which is unmined rock.
+    stand_in_base_at(&mut game, STARTING_POCKET_RADIUS, 0);
+
+    let err = game
+        .place_structure("mining_node", 1, 0, None)
+        .expect_err("there is no floor out there");
+
+    assert!(
+        err.contains("no floor there"),
+        "the place comes first, ahead of the program: {err}"
+    );
+}
+
+/// The same ordering on the upgrade door: a machine already on order reads
+/// as the standing request, not as a missing program, because that is the
+/// errand the player can actually act on.
+#[test]
+fn a_standing_upgrade_request_is_reported_before_the_program_cost() {
+    let mut game = Game::new(20260908, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let node = deploy_upgradeable_node(&mut game);
+    set_zone(&mut game, 2);
+    tame_at_zone(&mut game, 1);
+    let spend = tame_at_zone(&mut game, 2);
+    game.upgrade_structure(node, Some(spend))
+        .expect("the first request is filed");
+
+    let err = game
+        .upgrade_structure(node, None)
+        .expect_err("one request at a time");
+
+    assert!(
+        err.contains("already on order"),
+        "the standing request comes first, ahead of the program: {err}"
+    );
+}
+
+/// A committed program is **gone**, not merely marked. The proof that a
+/// pending order's program cannot be spent a second time is that the entity
+/// it names no longer exists — so offering it to a second order is refused
+/// at `commit_program`'s ownership guard rather than by any count of
+/// outstanding requests.
+///
+/// This is the answer to the question `count_build_requests` raises. That
+/// figure counts `BuildGoal::New` only, so a pending upgrade does not eat a
+/// `max_deployed` slot; anything counting *committed programs* would have to
+/// count both goals instead. Nothing does, and nothing needs to: the commit
+/// despawns the body, so the roster is the count and it is right for both
+/// goals by construction.
+#[test]
+fn a_program_already_committed_to_an_order_cannot_pay_for_a_second_one() {
+    let mut game = Game::new(20260909, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let node = deploy_upgradeable_node(&mut game);
+    set_zone(&mut game, 2);
+    tame_at_zone(&mut game, 2);
+    tame_at_zone(&mut game, 2);
+    let spend = tame_at_zone(&mut game, 2);
+    game.upgrade_structure(node, Some(spend))
+        .expect("the upgrade order takes it");
+
+    let err = game
+        .place_structure("mining_node", 2, 0, Some(spend))
+        .expect_err("the same program may not pay twice");
+
+    assert!(
+        err.contains("can't be committed"),
+        "it is refused for being already spent, not for being absent: {err}"
+    );
+    assert!(
+        filed_at(&mut game, 2, 0).is_none(),
+        "and no second order was filed"
+    );
+}
+
+/// The deploy line names the program it took. A commit that said nothing
+/// would leave the player working out which of their roster went by counting
+/// the manifest afterwards.
+#[test]
+fn the_deploy_line_names_the_program_it_committed() {
+    let mut game = a_base_with_programs(20260909, 1);
+    let spend = tame_at_zone(&mut game, 1);
+    let who = game.creature_label(spend);
+
+    game.place_structure("mining_node", 1, 0, Some(spend))
+        .expect("filed");
+
+    assert!(
+        game.message_history(50)
+            .iter()
+            .any(|e| e.text.contains(&who) && e.text.contains("Mining Node")),
+        "the log names both the structure and the program: {:?}",
+        game.message_history(50)
+            .iter()
+            .map(|e| e.text.clone())
+            .collect::<Vec<_>>()
     );
 }

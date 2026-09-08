@@ -770,7 +770,7 @@ mod tests {
         let mut game = Game::load(&path, &assets).unwrap();
         let _ = std::fs::remove_file(&path);
 
-        game.place_structure("home", 1, 0)
+        game.place_structure("home", 1, 0, None)
             .expect("the fixture stocked the Home's cost");
         game.enter_base()
             .expect("a fresh run starts the player on the anchor");

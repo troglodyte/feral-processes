@@ -851,3 +851,187 @@ fn the_priority_band_does_not_outlive_its_order() {
         "and a fresh order opens ordinary"
     );
 }
+
+/// Row 0 of the build menu is always Home (`StructureCategory::Home` sorts
+/// ahead of every other category, see `StructureDef::category`), and this
+/// fixture has already founded one — picking it again would hit the
+/// "already deployed" refusal on the old direct path rather than the
+/// picker this task adds. Row 1, `mining_node`, is the first structure that
+/// actually costs a program, and `selected_index` labels rows `1`-`9`
+/// before it starts spending letters (`DIGIT_ROWS`), so row 1 is key `'2'`,
+/// not `'b'`.
+fn deploy_second_structure(app: &mut App) {
+    app.mode = Mode::Build;
+    app.handle_key(GameKey::Char('2'));
+    app.handle_key(GameKey::Right);
+}
+
+#[test]
+fn choosing_a_direction_asks_which_program_to_spend() {
+    let mut app = app_in_base_with_programs(870, 2);
+    deploy_second_structure(&mut app);
+    assert_eq!(
+        app.mode,
+        Mode::BuildProgram,
+        "the picker is the confirm step"
+    );
+    assert!(
+        app.game
+            .as_mut()
+            .unwrap()
+            .adjacent_build_site(1, 0)
+            .is_none(),
+        "nothing is filed until a program is picked"
+    );
+}
+
+#[test]
+fn picking_a_program_files_the_order() {
+    let mut app = app_in_base_with_programs(871, 2);
+    deploy_second_structure(&mut app);
+    app.handle_key(GameKey::Char('1')); // first program
+    assert_eq!(app.mode, Mode::Playing);
+    assert!(
+        app.game
+            .as_mut()
+            .unwrap()
+            .adjacent_build_site(1, 0)
+            .is_some(),
+        "the order is filed once a program is picked"
+    );
+}
+
+#[test]
+fn escaping_the_picker_files_nothing_and_spends_nothing() {
+    let mut app = app_in_base_with_programs(872, 2);
+    deploy_second_structure(&mut app);
+    assert_eq!(
+        app.mode,
+        Mode::BuildProgram,
+        "precondition: the picker is actually up before Esc is asked to leave it"
+    );
+    app.handle_key(GameKey::Esc);
+    assert!(app.pending_build.is_none());
+    assert!(
+        app.game
+            .as_mut()
+            .unwrap()
+            .adjacent_build_site(1, 0)
+            .is_none(),
+        "escaping files nothing"
+    );
+    // R6: a one-program base can never file an order at all — Task 6's
+    // refusal against leaving the base at zero — so the count that matters
+    // here is 2, not 1: nothing was spent picking a direction, only picking
+    // a program spends.
+    assert_eq!(
+        app.game.as_mut().unwrap().owned_pets().len(),
+        2,
+        "nothing is spent until the picker confirms"
+    );
+}
+
+#[test]
+fn the_picker_lists_only_programs_deep_enough() {
+    let mut app = app_in_base(873); // no programs yet
+    tame_program_at_zone(&mut app, 1);
+    tame_program_at_zone(&mut app, 3);
+    let game = app.game.as_mut().unwrap();
+    assert_eq!(game.programs_for_build(3).len(), 1, "only the deep one");
+}
+
+/// A refusal that can only be reached *through* the picker — the base's
+/// only program is exactly what `programs_for_build(1)` offers, since that
+/// derivation has nothing to say about how many programs are left over —
+/// but committing it would leave the base staffed by nobody, which
+/// `Game::place_structure` refuses. Proves `App::report` is wired to the
+/// picker's confirm rather than the outcome being dropped on the floor: the
+/// "Things to get right" bullet that a refusal after confirm must surface,
+/// not fail silently.
+#[test]
+fn the_pickers_confirm_surfaces_the_engines_refusal() {
+    let mut app = app_in_base_with_programs(874, 1);
+    deploy_second_structure(&mut app);
+    assert_eq!(app.mode, Mode::BuildProgram);
+
+    app.handle_key(GameKey::Char('1')); // the base's only program
+    assert_eq!(
+        app.mode,
+        Mode::Playing,
+        "the picker always resolves back to the map, refused or not"
+    );
+    let status = app.status_line.clone().unwrap_or_default();
+    assert!(
+        status.contains("last program"),
+        "the engine's refusal must reach the player, got: {status:?}"
+    );
+    assert!(
+        app.game
+            .as_mut()
+            .unwrap()
+            .adjacent_build_site(1, 0)
+            .is_none(),
+        "a refused order files nothing"
+    );
+    assert_eq!(
+        app.game.as_mut().unwrap().owned_pets().len(),
+        1,
+        "and a refusal spends nothing"
+    );
+}
+
+/// `Mode::Upgrade`'s counterpart to `deploy_second_structure` — picks the
+/// one upgradeable structure the fixture offers, the Compiler, through the
+/// base menu rather than by hand-setting `app.mode`, since that menu path
+/// is also what proves `Mode::Upgrade` is still reachable at all.
+fn open_upgrade_picker(app: &mut App) {
+    open_via_menu(app, 'b', "Upgrade a structure");
+    assert_eq!(app.mode, Mode::Upgrade);
+    app.handle_key(GameKey::Char('1')); // the only row: the Compiler
+}
+
+#[test]
+fn upgrading_a_structure_asks_which_program_to_spend() {
+    let mut app = app_owning_a_program_and_a_compiler(875, &[]);
+    stand_in_base(&mut app);
+    // A second program: R6's zero-program refusal is `deploy`'s test to
+    // make, not this one's — this test is about the mode transition and
+    // `to_tier`, and a refusal on confirm would leave the mode this test
+    // asserts on ambiguous between "reached the picker" and "the picker's
+    // own pick did nothing".
+    tame_program_at_zone(&mut app, 1);
+
+    open_upgrade_picker(&mut app);
+    assert_eq!(
+        app.mode,
+        Mode::BuildProgram,
+        "the picker is the confirm step"
+    );
+    match app.pending_build {
+        Some(PendingBuild::Upgrade { to_tier, .. }) => {
+            assert_eq!(to_tier, 2, "Mk1 upgrades to Mk2 — current tier + 1")
+        }
+        _ => panic!("expected an Upgrade order pending confirmation"),
+    }
+}
+
+#[test]
+fn escaping_the_upgrade_picker_files_nothing_and_spends_nothing() {
+    let mut app = app_owning_a_program_and_a_compiler(876, &[]);
+    stand_in_base(&mut app);
+    tame_program_at_zone(&mut app, 1);
+
+    open_upgrade_picker(&mut app);
+    assert_eq!(
+        app.mode,
+        Mode::BuildProgram,
+        "precondition: the picker is actually up before Esc is asked to leave it"
+    );
+    app.handle_key(GameKey::Esc);
+    assert!(app.pending_build.is_none());
+    assert_eq!(
+        app.game.as_mut().unwrap().owned_pets().len(),
+        2,
+        "nothing is spent until the picker confirms"
+    );
+}

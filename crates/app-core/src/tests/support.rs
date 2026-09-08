@@ -1695,6 +1695,96 @@ pub(crate) fn app_beside_depots(seed: u32, depots: i32, filled: u32, pack: &[(&s
     app
 }
 
+/// A founded base — Home only, nothing else standing — with `programs`
+/// tamed programs added to the roster, each caught at zone 1.
+///
+/// Not `app_inside_a_small_base_with_programs`: that fixture always adds a
+/// mining node on cell `(1, 0)`, which is exactly the cell the build-program
+/// picker's own tests place a fresh structure on. This one leaves the pocket
+/// empty around the Home so a deploy test has somewhere to land.
+pub(crate) fn app_in_base_with_programs(seed: u32, programs: usize) -> App {
+    let mut app = test_app(seed);
+    found_the_base(&mut app);
+    stand_in_base(&mut app);
+    for _ in 0..programs {
+        tame_program_at_zone(&mut app, 1);
+    }
+    app
+}
+
+/// `app_in_base_with_programs` with no programs — a base a deploy or an
+/// upgrade can be offered but never afford, for a test about the refusal
+/// rather than the spend.
+pub(crate) fn app_in_base(seed: u32) -> App {
+    app_in_base_with_programs(seed, 0)
+}
+
+/// Adds one tamed program to `app`'s roster, caught at `zone` — the one
+/// thing about a program `programs_for_build`'s `>=` floor cares about that
+/// no public `Game` method can set. Through the save round trip for the same
+/// reason `distant_programs` is: the engine's `World` is private, and
+/// `components::ZonePortal` is written only by `spawn_creature_from_save`.
+pub(crate) fn tame_program_at_zone(app: &mut App, zone: u32) {
+    let assets_dir = test_assets_dir();
+    let path = scratch_path("tame_at_zone", zone);
+    let game = app.game.as_mut().unwrap();
+    let species = game.species_defs()[0].id.clone();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    data.creatures.push(CreatureSave {
+        sortie_index: None,
+        boss: false,
+        species,
+        position: (px, py),
+        hp: 10,
+        max_hp: 10,
+        atk: 3,
+        mitigation: 2,
+        tamed: true,
+        power: 100.0,
+        level: 1,
+        xp: 0,
+        xp_to_next: 10,
+        cronjob: None,
+        party_slot: None,
+        wielded: false,
+        zone,
+        custom_name: None,
+        hp_roll: 1.0,
+        atk_roll: 1.0,
+        def_roll: 1.0,
+        growth_roll: 1.0,
+        fusions: 0,
+        refactors: 0,
+        purchased_tiers: 0,
+        ring: 0,
+        talents: Vec::new(),
+        bought_stats: Default::default(),
+        routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
+        field_buffs: Vec::new(),
+        nest_position: None,
+        patrol_position: None,
+        pursuing: false,
+        carrying: None,
+        rarity: Default::default(),
+        nemesis_grudges: 0,
+        equipment: Vec::new(),
+        program_id: 0,
+        disposition: None,
+        disgruntled: None,
+        memories: Vec::new(),
+        needs: Default::default(),
+        off_shift: None,
+        staff: false,
+        downed: false,
+    });
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    let _ = std::fs::remove_file(&path);
+}
+
 pub(crate) fn app_beside_stocked_machines(seed: u32, stock: &[(&str, u32)]) -> App {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);

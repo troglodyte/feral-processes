@@ -257,15 +257,72 @@ impl App {
             self.mode = Mode::Playing;
             return;
         };
-        if let Some(game) = &mut self.game {
-            // `None` until the picker screen exists to choose one. The
-            // engine refuses the deploy and `report` puts its sentence on
-            // the banner, which is the right thing for a frontend that
-            // cannot yet name a program — the alternative, picking one here,
-            // would spend a program the player never chose.
-            let outcome = game.place_structure(&id, dx, dy, None);
-            self.report(outcome);
+        // Home is the one structure that costs no program — see
+        // `structure_needs_program`'s doc — and the one a fresh run has to
+        // be able to found with zero programs owned, so it keeps this direct
+        // path rather than detouring through the picker below. `"home"`
+        // rather than the engine's own `HOME_STRUCTURE_ID`: that constant is
+        // private to the engine crate, and `Game::place_structure` already
+        // takes the id as a plain string.
+        if id == "home" {
+            if let Some(game) = &mut self.game {
+                let outcome = game.place_structure(&id, dx, dy, None);
+                self.report(outcome);
+            }
+            self.mode = Mode::Playing;
+            return;
         }
+        self.pending_build = Some(PendingBuild::Deploy {
+            structure: id,
+            dx,
+            dy,
+        });
+        self.mode = Mode::BuildProgram;
+    }
+
+    /// Confirms the order `App::pending_build` describes by spending the
+    /// picked program on it — `Mode::BuildProgram`, reached from
+    /// `Mode::BuildDirection` (a deploy) or `Mode::Upgrade` (an upgrade).
+    ///
+    /// **Nothing is spent until this resolves.** `place_structure` and
+    /// `upgrade_structure` are the one place either commit actually happens,
+    /// so Esc here can simply drop `pending_build` — there is nothing to
+    /// undo, because nothing has happened yet.
+    pub(crate) fn handle_build_program_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.pending_build = None;
+            self.close_screen();
+            return;
+        }
+        let Some(pending) = self.pending_build.clone() else {
+            self.mode = Mode::Playing;
+            return;
+        };
+        let tier = match &pending {
+            PendingBuild::Deploy { .. } => 1,
+            PendingBuild::Upgrade { to_tier, .. } => *to_tier,
+        };
+        // Listed and dropped before `selected_index` borrows `self` again —
+        // `handle_upgrade_key`'s shape, an owned `Vec` rather than a
+        // `&mut Game` held across the row pick.
+        let Some(candidates) = self.game.as_mut().map(|g| g.programs_for_build(tier)) else {
+            return;
+        };
+        let Some(idx) = self.selected_index(key, candidates.len()) else {
+            return;
+        };
+        let chosen = candidates[idx].entity;
+        let Some(game) = &mut self.game else { return };
+        let outcome = match pending {
+            PendingBuild::Deploy { structure, dx, dy } => {
+                game.place_structure(&structure, dx, dy, Some(chosen))
+            }
+            PendingBuild::Upgrade { structure, .. } => {
+                game.upgrade_structure(structure, Some(chosen))
+            }
+        };
+        self.report(outcome);
+        self.pending_build = None;
         self.mode = Mode::Playing;
     }
 
@@ -365,13 +422,19 @@ impl App {
         }
         let structures = self.upgradeable_structures();
         if let Some(idx) = self.selected_index(key, structures.len()) {
-            let picked = structures[idx].entity;
-            let Some(game) = &mut self.game else { return };
-            // `None`, `handle_build_direction_key`'s reason: no picker
-            // yet, so the engine's refusal is what the player is shown.
-            let outcome = game.upgrade_structure(picked, None);
-            self.report(outcome);
-            self.mode = Mode::Playing;
+            // `upgradeable_structures` only ever offers a row whose
+            // `EntityView::tier` is `Some` — see its own filter — so the
+            // structure named here is always one tier short of `next` below,
+            // `Game::upgrade_structure`'s own `let next = tier + 1;` for the
+            // very row this picks.
+            let Some(tier) = structures[idx].tier else {
+                return;
+            };
+            self.pending_build = Some(PendingBuild::Upgrade {
+                structure: structures[idx].entity,
+                to_tier: tier + 1,
+            });
+            self.mode = Mode::BuildProgram;
         }
     }
 

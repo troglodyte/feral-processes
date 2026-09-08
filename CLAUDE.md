@@ -494,6 +494,18 @@ relying on one, and correct all three places if it has moved.
 - **Neither shipped amenity has an upgrade path, deliberately.** A
   `StructureTier` buys an amenity nothing — `per_tick` is not scaled by it —
   so a priced upgrade row would change no number the player could find.
+- **`fray`'s two branches write different memories, and neither writes below
+  `Game::base_is_established`** — `frayed_here` where the base had an answer,
+  `ran_down` where it had none, and the lines stay unconditional.
+- **A tantrum's non-lethal clamp is applied before `Game::apply_damage`,
+  never inside it**, and it is the whole of "a tantrum never kills."
+- **`Game::run_tantrums` sits between `update_disgruntled` and
+  `admit_the_badly_hurt`**, and that ordering is what gets the Repair Bay
+  with no new code.
+- **`Grievance` is appended to, never inserted into** — `Ord` is the ladder,
+  the variant name is the save, and `has_downed_tools` reads `>=`.
+- **`EffectKind::Brawl` draws identically to `Hit` and exists only to carry
+  sound**, at most one cue a frame.
 - **A Forgiving death benches a program and `Game::bench_or_dissolve` is the
   one door**, `dissolve_tamed_program`'s own argument one level up: the
   `DifficultyMode` branch is written once, not at each of the two death

@@ -12630,3 +12630,195 @@ Units still leave a buffer through `hauling::take_from` alone: the shortfall
 is routed through `take_from_adjacent` rather than drained here, which keeps
 that the one door and inherits its `(x, y)` sort, so a bill drawn across two
 shelves holding the same item drains them in the same order every run.
+
+### `fray`'s two branches write different memories, and neither writes below the grace gate
+
+`Game::fray` is the one edge where an unmet need latches, and it has always
+said two different sentences: an amenity exists and this body cannot route to
+it, versus nothing in the base services this need at all. Until 0.13.131 only
+the first wrote a memory. The reasoning was sound as far as it went — a base
+with no amenity has done nothing to be *held against it*, the player may not
+have researched one, may not have the materials, and has never been told they
+want one, so a `BaseTile` grudge there is a program resenting a tile for a
+building that was never an option. Measured against a real save that grudge
+was worth -27 on its own, most of the way to a standdown, with no lever
+anywhere to answer it.
+
+The consequence, invisible until the morale ladder grew a fourth rung, is that
+the **common** case moved morale not at all. A base that never builds an
+amenity has programs going off-shift forever at no cost to their mood, so
+needs could never reach the acting-out ladder and were decorative there.
+
+The fix separates the two things that had been welded together. The withheld
+thing was always the *blame*, never the feeling. `ran_down` is
+`MemorySubject::Nothing`: it holds no tile, no machine and no colleague
+responsible, so the rule stands and the meter still moves. It is milder than
+`frayed_here` (-6 against -7) because a base that never built the amenity is a
+lesser failing than one that built it and walled it off.
+
+**A second gate covers both branches**, `Game::base_is_established` — at least
+`BASE_ESTABLISHED_STAFF` (8) staff **and** at least
+`BASE_ESTABLISHED_STRUCTURES` (8) structures. Development, not time. A
+tick-based grace was the obvious shape and is the wrong one: it punishes a
+player who founds late in a run and forgives one who founds early and then
+neglects the place for an hour. How far the base has actually been built is
+the honest measure of "has this player had a fair chance to build amenities
+yet", and **both** halves are needed — twelve programs in a bare base has not
+had the chance, and a sprawling base with four bodies in it is not a pressure
+cooker.
+
+Extending it to `frayed_here` is a small change to shipped behaviour and buys
+one sentence instead of two: *while a base is still getting started, needs do
+not count against it.* An exception for the unreachable case would be
+defensible — you built the thing and walled it off — but it is a second rule
+to state, remember and test.
+
+The **lines stay unconditional**. Only the memory writes are gated: the player
+must still be told the need is unmet at a young base, because that line is the
+errand.
+
+A predicate wired `||` instead of `&&` passes any test that only ever starves
+both halves at once, which is why there is a test per half
+(`a_base_short_of_staff_earns_no_need_grudges` and its mirror) plus
+`an_established_base_earns_need_grudges` as the control — a gate nothing can
+pass is a deleted feature.
+
+### A tantrum's non-lethal clamp is applied before `apply_damage`, never inside it
+
+`Game::apply_damage` is the only code path that damages a creature and it
+floors HP at 0 — and reaching 0 *is* a kill, announced, with all the
+consequences a kill has. Nothing inside it refuses a lethal blow, and nothing
+should: the fumble ladder, a raid and a battle all want the floor to mean what
+it means.
+
+So "nobody dies in a tantrum" cannot be a property of the damage path. It is
+one expression at the call site, `game/throw.rs`'s established idiom:
+
+```rust
+let damage = raw.min(stats.hp - 1).max(0);
+```
+
+applied to the **input**, before the call. That is the whole guarantee, and
+`a_tantrum_never_kills` fails the moment it is removed. Anyone who later moves
+the tantrum's damage calculation — extracts it, shares it with something else,
+folds it into a helper — without carrying the clamp with it turns a bad mood
+into a way to lose companions, and no type signature changes.
+
+It also does the work at the long end of the tick range that the tuning cannot.
+`TANTRUM_DAMAGE_FRACTION` is a quarter because four blows — the *shortest*
+brawl — must already carry a body under `BAY_ADMISSION_HP_FRACTION`. Eight
+blows at a quarter each would be 200% of max HP; the clamp is what turns that
+into both parties standing on 1 Integrity rather than a corpse. Heavy is the
+point; the clamp is what keeps heavy from being fatal.
+
+A blow the clamp takes to zero is not thrown at all — no `apply_damage` call
+and no `EffectKind::Brawl` cue — which is what makes `dealt` and `taken` counts
+of what *landed*, and what lets a side that never landed anything be told from
+one that landed a little. That is the reachable path behind
+`a_one_sided_brawl_omits_the_reply_line`: a body on its last point of Integrity
+is a body every blow aimed at it is clamped to nothing.
+
+### The tantrum step sits between `update_disgruntled` and `admit_the_badly_hurt`
+
+`Game::run_tantrums` is called from `schedule_base_labour`, after the gate that
+decides who is on the `LashingOut` rung and **before** the gate that takes a
+badly hurt body off the line. That ordering is the whole of "the loser is swept
+into a Repair Bay", and it is worth stating because it looks like an
+implementation detail and is not.
+
+`admit_the_badly_hurt` already runs there, already inserts `Downed` on any
+staff program below `BAY_ADMISSION_HP_FRACTION`, and is already the one writer
+of that decision. Placing the tantrum between the two means a blow landed this
+beat is answered this beat, through that writer, with no new code and no second
+notion of "hurt enough to stop". Moved below it, a beaten program waits a beat
+before the bay notices; moved into its own system, the bay decision acquires a
+second author.
+
+**Within `run_tantrums` the three steps are also ordered, and for a different
+reason.** Advance every open fight, close what has finished, and only then open
+new ones — so a brawl that starts this beat throws its first blow on the next
+one. The alert therefore always precedes any damage in the log, and a fight is
+never opened and advanced in the same pass, which keeps `ticks_left` an honest
+count of exchanges rather than one that is sometimes short by one.
+
+**The roll sits inside the per-candidate loop**, so a base with nobody on the
+rung draws nothing at all from `GameRng`. A feature that draws
+unconditionally shifts the seeded stream for everything downstream of it, which
+surfaces much later as unrelated tests flaking —
+`a_tantrum_draws_no_rng_when_nobody_is_lashing_out` is the guard, modelled on
+`Game::run_routes`' predation test.
+
+`resources::Brawls` is not saved. A brawl lasts four to eight beats and damage
+is applied as it goes, so a save mid-fight loses nothing but the summary lines;
+keying it by `ProgramId` and re-resolving after the roster is restored, the way
+a patrol's tether defers, is correct and buys a four-beat window that is not
+worth a save field. **The cooldown lives on the same resource rather than being
+derived from the aggressor's own `vented` memory**, which would be free and
+would survive a save — but would make an install with `assets/memories/`
+deleted brawl with no bound at all, and an empty catalogue is a supported
+install.
+
+### `Grievance` is appended to, never inserted into
+
+Three separate things make appending cheap and inserting expensive, and none of
+them fails to compile.
+
+`Ord` derives from declaration order, and that ordering *is* the ladder —
+`update_disgruntled`'s ratchet compares `now > held` to decide whether severity
+has climbed. Insert a variant in the middle and the ratchet silently reorders.
+
+`SaveData::disgruntled` is `Option<Grievance>` in field-named RON, encoding the
+**variant name**, which is what makes appending cost no `SAVE_FORMAT_VERSION`
+bump at all.
+
+And the exit side is a single `morale >= MORALE_RECOVERED_AT` comparison in
+`update_disgruntled`, so the whole ladder keeps **one** hysteresis gap rather
+than growing one per rung. A new rung is an arm in `morale::reached` and
+nothing else.
+
+**`Game::has_downed_tools` reads `>=` and not `==`.** `LashingOut` is strictly
+worse than `DownedTools`, not a second axis: a program that has started
+fighting has certainly stopped working. Read as equality — which is how it
+shipped for two rungs — a body would be handed jobs again on the way *past* the
+rung that took them away, and the symptom is a program alternating between
+fighting and working with nothing in the ladder to explain it.
+
+`MORALE_LASHES_OUT_AT` is held to the same rule its neighbour is: past what one
+shipped memory can be felt as (-44.8, `mauled_by` at its cap in `Abrasive`
+hands) and inside what two can. A rung nothing can reach is a deleted feature;
+a rung one bad afternoon reaches is a base that brawls constantly.
+
+And **catharsis is load-bearing rather than flavour**. `Disgruntled` ratchets
+and never eases, so without something pushing back a program past -75 would
+fight every time the roll came up for the rest of the run. `vented` is the push
+back — short-lived and capped low so relief takes the edge off without becoming
+a way to *farm* morale by starting fights — and `TANTRUM_COOLDOWN_TICKS` bounds
+the rate while it does.
+
+### `EffectKind::Brawl` draws identically to `Hit` and exists only to carry sound
+
+The red flash was already free: `EffectKind::Hit` exists, `Game::push_effect`
+reads `Position` off any entity rather than off a `Structure`, and gui already
+paints it `FLASH_RED` in base space. What is not free is *sound* — there is no
+bridge from a base beat to a sound cue, and raids flash silently.
+
+So the variant is identical to `Hit` in all three of `fx.rs`'s tables —
+`spark_burst`, `effect_duration` and `effect_color` — and differs only in that
+`crates/gui/src/lib.rs` fires `SoundEvent::Hit` when one is in the frame's
+drained effects. Teaching gui to sound every base-space `Hit` instead would be
+less code and would also give raids audio they have never had, which is a
+change to a shipped feature nobody asked for.
+
+Two details in the gui half are easy to get wrong. The check must run
+**before** `Fx::begin_frame` consumes the effects vector, and `take_sounds` is
+drained earlier in the frame, so the cue cannot go through `pending_sounds` and
+calls `sounds.play` directly. And it plays **at most once a frame** however
+many `Brawl` effects are in the vector — several base beats can land in one
+rendered frame, and one cue per blow is a machine-gun. It plays whether or not
+`Fx` is enabled: sound is not a visual effect.
+
+`MessageKind::Tantrum` is the same argument on the log. Reusing `Raid` would
+buy the log-pane border flash from `fx.rs::observe_log` for free and file a
+scuffle between two staff as a GC Entropy Sweep — a lie to the player, and a
+lie to `retain_outcomes_since_battle`, whose keep-list includes `Raid`. A
+tantrum is base news and is pruned like base news.

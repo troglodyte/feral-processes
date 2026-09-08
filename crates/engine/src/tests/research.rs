@@ -415,9 +415,7 @@ fn a_research_gated_structure_is_hidden_from_the_build_menu_until_researched() {
         .collect();
     assert!(!hidden.contains(&"fabricator".to_string()));
 
-    grant_research_data(&mut game, 40);
-    game.unlock_research("automation").unwrap();
-    game.unlock_research("weapon_bench").unwrap();
+    unlock_research_chain(&mut game, "weapon_bench");
 
     let shown: Vec<String> = game
         .buildable_structure_defs()
@@ -460,6 +458,7 @@ fn nothing_is_researched_at_the_start_of_a_game() {
 fn unlocking_research_consumes_exactly_its_cost() {
     let mut game = Game::new(62, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     grant_research_data(&mut game, 20);
+    stock_research_materials(&mut game, &["automation".to_string()]);
     game.unlock_research("automation").unwrap();
     assert!(game.is_researched("automation"));
     assert_eq!(
@@ -484,7 +483,7 @@ fn unlocking_research_fails_while_a_prerequisite_is_missing() {
     grant_research_data(&mut game, 500);
     let err = game.unlock_research("weapon_bench").unwrap_err();
     assert!(
-        err.contains("Automation"),
+        err.contains("Routine Fabrication"),
         "the error should name the missing prereq: {err}"
     );
     assert!(!game.is_researched("weapon_bench"));
@@ -506,8 +505,8 @@ fn a_locked_node_reports_which_prerequisites_are_missing() {
     assert_eq!(
         node.state,
         ResearchState::Locked {
-            missing: vec!["Automation".to_string()],
-            // Weapon Fabrication is a bootstrap node, so the prereq is the
+            missing: vec!["Routine Fabrication".to_string()],
+            // Weapon Fabrication is a zone-1 node, so the prereq is the
             // only thing in its way — the contrast that makes
             // `a_node_can_report_both_a_missing_prereq_and_its_zone` mean
             // something.
@@ -535,6 +534,7 @@ fn a_prerequisite_free_node_is_available_immediately() {
 fn researching_the_same_node_twice_is_rejected() {
     let mut game = Game::new(67, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     grant_research_data(&mut game, 40);
+    stock_research_materials(&mut game, &["automation".to_string()]);
     game.unlock_research("automation").unwrap();
     let err = game.unlock_research("automation").unwrap_err();
     assert!(err.contains("already"), "got: {err}");
@@ -550,6 +550,7 @@ fn unknown_research_is_rejected() {
 fn research_nodes_lists_available_before_locked_before_unlocked() {
     let mut game = Game::new(69, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     grant_research_data(&mut game, 40);
+    stock_research_materials(&mut game, &["automation".to_string()]);
     game.unlock_research("automation").unwrap();
     let ranks: Vec<u8> = game
         .research_nodes()
@@ -642,6 +643,7 @@ fn research_prereqs_of(game: &mut Game, id: &str) {
             .expect("a resolved prereq")
             .cost;
         grant_research_data(game, cost);
+        stock_research_materials(game, &[prereq.clone()]);
         game.unlock_research(&prereq)
             .unwrap_or_else(|e| panic!("prereq {prereq} should be buyable: {e}"));
     }
@@ -838,4 +840,233 @@ fn the_research_node_is_a_cronjob_worked_research_data_source() {
         .expect("research_node.ron should load");
     let work = def.work.expect("the Research Node must be workable");
     assert_eq!(work.produces, ItemId::from(ids::RESEARCH_DATA));
+}
+
+// --- Material bills ------------------------------------------------------
+//
+// `ResearchDef::materials` — the goods a node consumes beside its Research
+// Data. These use a scratch node rather than a shipped one so what is being
+// asserted is the *mechanism*, and a retune of the shipped bills cannot make
+// them fail for a reason that isn't a bug.
+
+/// A node priced in goods the player carries from turn one, so a fixture
+/// never has to build the chain that makes them.
+const BILLED_NODE: &str = r#"(
+    id: "billed",
+    name: "Billed Node",
+    description: "A node with a material bill.",
+    cost: 5,
+    materials: [("core_fragment", 6), ("power_cell", 2)],
+)"#;
+
+fn billed_assets(tag: &str) -> ScratchAssets {
+    assets_dir_with_extra_research(tag, "billed.ron", BILLED_NODE)
+}
+
+/// What every material line of every `Stock` on the base is holding, so a
+/// refusal test can assert the shelves are byte-identical rather than merely
+/// that the pack is.
+/// Stands a Depot beside the party's base cell with `qty` of `item` on its
+/// shelf, through `Game::spawn_structure` — the one place a structure's
+/// component list is written, so this cannot ship a Depot without the
+/// `Stock` that makes it one. A real `place_now` would need laid floor and a
+/// Home, neither of which is what these tests are about.
+fn shelf_beside_the_party(game: &mut Game, item: &str, qty: u32) -> Entity {
+    let def = game
+        .structure_defs()
+        .into_iter()
+        .find(|d| d.id == "depot")
+        .expect("the shipped catalogue has a Depot");
+    let depot = game.spawn_structure(&def, 1, 0, None);
+    game.world
+        .get_mut::<Stock>(depot)
+        .unwrap()
+        .output
+        .insert(ItemId::from(item), qty);
+    depot
+}
+
+fn all_shelf_stock(game: &Game) -> Vec<(ItemId, u32)> {
+    let mut held: std::collections::BTreeMap<ItemId, u32> = std::collections::BTreeMap::new();
+    for e in game.world.iter_entities() {
+        if let Some(stock) = e.get::<Stock>() {
+            for (item, qty) in stock.output.iter() {
+                *held.entry(item.clone()).or_default() += qty;
+            }
+        }
+    }
+    held.into_iter().collect()
+}
+
+#[test]
+fn researching_spends_its_material_bill_from_the_pack() {
+    let assets = billed_assets("research_bill_pack");
+    let mut game = Game::new(901, DifficultyMode::Forgiving, &assets).unwrap();
+    set_inventory(&mut game, &[("core_fragment", 10), ("power_cell", 3)]);
+    grant_research_data(&mut game, 5);
+
+    game.unlock_research("billed").unwrap();
+
+    assert!(game.is_researched("billed"));
+    assert_eq!(
+        held(&game, &ItemId::from(ids::CORE_FRAGMENT)),
+        4,
+        "six of the ten fragments are the bill"
+    );
+    assert_eq!(
+        held(&game, &ItemId::from("power_cell")),
+        1,
+        "and two of the three cells"
+    );
+    assert_eq!(
+        research_data_held(&game),
+        0,
+        "the Research Data is still charged on top of the goods, not instead of them"
+    );
+}
+
+/// The shelf half. A bill the pack cannot cover alone is still payable
+/// standing at the base, because the goods a node asks for are exactly the
+/// goods the base has been stacking — see `Game::research_material_held`.
+#[test]
+fn researching_pulls_the_shortfall_off_an_adjacent_shelf() {
+    let assets = billed_assets("research_bill_shelf");
+    let mut game = Game::new(902, DifficultyMode::Forgiving, &assets).unwrap();
+    stand_in_base(&mut game);
+    let depot = shelf_beside_the_party(&mut game, ids::CORE_FRAGMENT, 6);
+    set_inventory(&mut game, &[("core_fragment", 0), ("power_cell", 2)]);
+    grant_research_data(&mut game, 5);
+
+    game.unlock_research("billed").unwrap();
+
+    assert!(game.is_researched("billed"));
+    assert_eq!(
+        node_output(&game, depot, ids::CORE_FRAGMENT),
+        0,
+        "the whole six came off the shelf"
+    );
+    assert_eq!(
+        held(&game, &ItemId::from(ids::CORE_FRAGMENT)),
+        0,
+        "and none of it was left standing in the pack afterwards"
+    );
+}
+
+/// Every refusal lands before anything is spent — `Game::extract_program`'s
+/// rule, asserted per refusal rather than by one path standing for all of
+/// them.
+#[test]
+fn a_node_short_of_materials_spends_nothing() {
+    let assets = billed_assets("research_bill_refuse");
+    let mut game = Game::new(903, DifficultyMode::Forgiving, &assets).unwrap();
+    stand_in_base(&mut game);
+    shelf_beside_the_party(&mut game, ids::CORE_FRAGMENT, 4);
+    set_inventory(&mut game, &[("core_fragment", 6), ("power_cell", 1)]);
+    grant_research_data(&mut game, 5);
+    let shelves = all_shelf_stock(&game);
+
+    let refusal = game.unlock_research("billed").unwrap_err();
+
+    assert!(
+        refusal.contains("Power Cell"),
+        "the refusal names what is short, by the item's own name: {refusal}"
+    );
+    assert!(!game.is_researched("billed"));
+    assert_eq!(
+        held(&game, &ItemId::from(ids::CORE_FRAGMENT)),
+        6,
+        "the line the pack *could* pay must not be spent against a bill that fails"
+    );
+    assert_eq!(held(&game, &ItemId::from("power_cell")), 1);
+    assert_eq!(
+        research_data_held(&game),
+        5,
+        "and the Research Data is untouched"
+    );
+    assert_eq!(all_shelf_stock(&game), shelves, "nothing left a shelf");
+}
+
+/// The other order: Research Data short, materials in hand. Its own test
+/// because the two checks are two separate returns, and one of them passing
+/// says nothing about the other.
+#[test]
+fn a_node_short_of_research_data_spends_no_materials() {
+    let assets = billed_assets("research_bill_no_data");
+    let mut game = Game::new(904, DifficultyMode::Forgiving, &assets).unwrap();
+    set_inventory(&mut game, &[("core_fragment", 6), ("power_cell", 2)]);
+
+    let refusal = game.unlock_research("billed").unwrap_err();
+
+    assert!(refusal.contains("Research Data"), "{refusal}");
+    assert_eq!(held(&game, &ItemId::from(ids::CORE_FRAGMENT)), 6);
+    assert_eq!(held(&game, &ItemId::from("power_cell")), 2);
+}
+
+/// A node that authored no bill is the pre-materials game, which is what
+/// `#[serde(default)]` on the field buys and what a mod's untouched tree
+/// still gets.
+#[test]
+fn a_node_with_no_material_bill_costs_only_research_data() {
+    let assets = assets_dir_with_extra_research(
+        "research_no_bill",
+        "unbilled.ron",
+        r#"(
+    id: "unbilled",
+    name: "Unbilled Node",
+    description: "A node priced in Research Data alone.",
+    cost: 5,
+)"#,
+    );
+    let mut game = Game::new(905, DifficultyMode::Forgiving, &assets).unwrap();
+    set_inventory(&mut game, &[("core_fragment", 0)]);
+    grant_research_data(&mut game, 5);
+
+    game.unlock_research("unbilled").unwrap();
+
+    assert!(game.is_researched("unbilled"));
+}
+
+/// The screen's figure and the refusal share one definition of "have", so a
+/// row the menu draws as affordable cannot then be refused — and the figure
+/// counts the shelves, or a node payable at the player's own Depot would be
+/// greyed out in front of them.
+#[test]
+fn the_menu_counts_the_shelves_when_it_says_a_node_is_affordable() {
+    let assets = billed_assets("research_bill_view");
+    let mut game = Game::new(906, DifficultyMode::Forgiving, &assets).unwrap();
+    stand_in_base(&mut game);
+    set_inventory(&mut game, &[("core_fragment", 0), ("power_cell", 2)]);
+    grant_research_data(&mut game, 5);
+
+    let unaffordable = game
+        .research_nodes()
+        .into_iter()
+        .find(|n| n.id == "billed")
+        .unwrap();
+    assert!(
+        !unaffordable.affordable,
+        "six fragments short is not affordable however much Research Data is banked"
+    );
+    assert_eq!(
+        unaffordable
+            .materials
+            .iter()
+            .map(|m| (m.name.as_str(), m.need, m.have))
+            .collect::<Vec<_>>(),
+        vec![("Core Fragment", 6, 0), ("Power Cell", 2, 2)],
+        "the bill is reported line by line, named and counted"
+    );
+
+    shelf_beside_the_party(&mut game, ids::CORE_FRAGMENT, 6);
+
+    let affordable = game
+        .research_nodes()
+        .into_iter()
+        .find(|n| n.id == "billed")
+        .unwrap();
+    assert!(
+        affordable.affordable,
+        "the same six sitting on the shelf beside the party is a bill they can pay"
+    );
+    assert!(game.unlock_research("billed").is_ok());
 }

@@ -29,9 +29,11 @@ forward as you clear the ones in front. A routine whose name ends in Everyone st
 here, because a fight where three groups take turns being the front one is a fight decided by how
 much of the field you can touch per turn.
 
-The research that teaches the widest of them sits behind zone 3 itself and a good deal of Research
-Data, so a Research Node running through zone 2 is the thing that makes zone 3 survivable rather
-than something you set up after arriving.
+The research that teaches the widest of them sits behind zone 3 itself, a good deal of Research
+Data, and a stack of Routine Disks and Logic Wafers your benches have to have made — so a base
+running through zone 2 is the thing that makes zone 3 survivable rather than something you set up
+after arriving. The Research Data crosses the breach; the goods do not, which is the other reason
+to spend the tree before you step rather than after.
 
 Two more things worth doing before the step, both of them about what does not survive it:
 

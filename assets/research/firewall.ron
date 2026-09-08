@@ -3,6 +3,7 @@
     name: "Firewall Plating",
     description: "Compile Firewall Plating at an Armory.",
     cost: 45,
+    materials: [("hardened_shell", 4), ("bytecode_block", 14)],
     min_zone: 2,
     requires: ["armor_bench"],
     unlocks_recipes: [(

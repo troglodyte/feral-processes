@@ -1,8 +1,13 @@
 (
     id: "weapon_bench",
     name: "Weapon Fabrication",
-    description: "A bench for weapon and module work. Unlocks the Fabricator.",
+    description: "A bench for weapon and module work. Unlocks the Fabricator, which builds modules out of Logic Wafers.",
     cost: 24,
-    requires: ["automation"],
+    materials: [("logic_wafer", 6), ("bytecode_block", 8)],
+    // The Fabricator eats Logic Wafers, which are transcribed from Raw
+    // Trace — the Transcriber and the Log Scraper, both behind Routine
+    // Fabrication. Without it the bench is a dead end the player has no way
+    // to see coming.
+    requires: ["routine_fabrication"],
     unlocks_structures: ["fabricator"],
 )

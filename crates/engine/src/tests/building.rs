@@ -2054,6 +2054,7 @@ fn a_cache_tap_waits_for_the_second_zone_and_its_research() {
 
     // Prereqs are checked ahead of the zone gate, so the Grid has to be in
     // hand for the refusal under test to be the zone rather than the tree.
+    stock_research_materials(&mut game, &["power_grid".to_string()]);
     game.unlock_research("power_grid")
         .expect("the Grid is a zone-1 node");
     let too_early = game
@@ -2062,6 +2063,7 @@ fn a_cache_tap_waits_for_the_second_zone_and_its_research() {
     assert!(too_early.contains("Zone 2"), "{too_early}");
 
     set_zone(&mut game, 2);
+    stock_research_materials(&mut game, &["cache_coherence".to_string()]);
     game.unlock_research("cache_coherence")
         .expect("a breached run may learn it");
     place_now(&mut game, "cache_tap", 1, 0).expect("and then stand a Tap up");

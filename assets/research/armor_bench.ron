@@ -3,6 +3,7 @@
     name: "Reactive Armor",
     description: "A bench for plating work. Unlocks the Armory.",
     cost: 24,
+    materials: [("bytecode_block", 12), ("charge_coil", 4)],
     requires: ["automation"],
     unlocks_structures: ["armory"],
 )

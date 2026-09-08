@@ -33,6 +33,17 @@ pub struct ResearchDef {
     pub description: String,
     /// Research Data spent to unlock this node.
     pub cost: u32,
+    /// Goods consumed alongside `cost`, on top of it rather than instead of
+    /// it. Authored per node rather than derived from `cost` so a bill can be
+    /// denominated in what the node's own branch produces — plating research
+    /// wants plate — and so a mod's tree gets the same say.
+    ///
+    /// What a node may legally name is bounded by its own `requires`
+    /// closure: see `research_materials_are_reachable_from_their_own
+    /// _prerequisites` in `tests/assets.rs`, which is the whole of the rule
+    /// that a bill can never ask for something the tree has not unlocked yet.
+    #[serde(default)]
+    pub materials: Vec<(ItemId, u32)>,
     /// The zone the player must have reached before this node can be bought,
     /// compared against `resources::ZoneLevel`. 0 — the default, and what an
     /// absent field means — is ungated, available from turn one. Not an

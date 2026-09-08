@@ -3,5 +3,6 @@
     name: "Power Grid",
     description: "Routed power. Unlocks the Power Conduit.",
     cost: 10,
+    materials: [("core_fragment", 30)],
     unlocks_structures: ["power_conduit"],
 )

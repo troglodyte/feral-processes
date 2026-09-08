@@ -12443,3 +12443,94 @@ program page has the least clearance in the renderer: with
 **1**, not 2. So a two-move species now spends its second line on a "+1 more"
 note — a real cost, taken at the owner's call over the alternative of folding
 both rolls onto one row to keep MOVES at 2.
+
+### A research bill may only name what that node's own prerequisites can make
+
+Research was a purchase: `ResearchDef::cost` in Research Data and nothing
+else. One program posted on a Research Node paid for the whole tree given
+enough wall-clock, which made research a timer rather than a reason to run a
+base. `ResearchDef::materials` is the second, authored half of the price.
+
+**Why authored and not derived.** A bill computed from `cost` by rank is one
+line of Rust and needs no asset authoring, and it cannot possibly name an
+unreachable item. It was rejected because every node then asks for the same
+goods, which reads at the keyboard as one repeated tax rather than as a
+tree with branches; and a mod replacing the tree gets no say at all. Authored
+per node, a bill can be denominated in what the node's *own branch* produces
+— the armour branch pays in Hardened Shell, the routine branch in Routine
+Disks and Logic Wafers — which is the whole of what the field buys.
+
+**What authoring costs, and the census that pays for it.** The risk an
+authored bill carries is naming something the player cannot get yet, and the
+symptom is the worst kind: a node that is listed, unlocked, affordable in
+Research Data, and refuses for goods with no route to them.
+`every_research_material_is_reachable_through_that_nodes_own_prerequisites`
+is the whole rule. For each node it walks the transitive `requires` closure,
+takes the structures no research file gates plus those the closure unlocks,
+and grows the fixpoint of what that set produces and crafts. Every material
+must be in it.
+
+Two decisions inside the census are load-bearing:
+
+- **`min_zone` grants nothing.** A zone number says the player breached, not
+  that they took any particular node — Cache Grain is behind
+  `cache_coherence`, and breaching 1→2 demands none of it (the portal's
+  `zone_build_cost` line is `(2, "cache_grain", 10)`, which applies from
+  sector 2 onward). A bill leaning on the zone would be an unstated
+  prerequisite, which is exactly the failure the census exists to catch. The
+  cost is that Cache Grain is unusable as a research material anywhere in the
+  shipped tree, since nothing downstream of `cache_coherence` exists. That
+  was accepted: the branch terminals are better content than a second
+  appearance of the upgrade material.
+- **`work` is a source and `assembles` is not.** A `work.produces` structure
+  makes its item out of nothing on a timer. An assembler runs its product's
+  own `craftable.cost`, so it is already covered by the craft fixpoint, and
+  counting it as a source is how the Fabricator reads as a Trace Sniffer
+  supply with no Logic Wafer in sight. Modelling it the wrong way was tried
+  first and the census passed against a bill that could not be paid.
+
+**What the census found.** `weapon_bench` unlocked the Fabricator, which
+assembles Trace Sniffers out of Logic Wafers, which need the Transcriber and
+Raw Trace — the Log Scraper — both behind `routine_fabrication`, which
+`weapon_bench` did not require. The bench was a dead end unless the player
+happened to take `routine_fabrication` first, and nothing said so. It now
+requires it. The player loses nothing: 26 Research Data they always had to
+spend before the bench could produce a unit.
+
+**The second census is not redundant.** The reachability test passes
+vacuously against a tree with no bills at all, so a `materials` line deleted
+by hand would read as that node being free rather than as a regression.
+`every_shipped_research_node_costs_materials` is what says the tree has a
+price.
+
+### A research bill is paid from the pack, topped up off the adjacent shelves
+
+Research is a player cost, so `CLAUDE.md`'s rule applies — *a cost the player
+incurs is paid from their pack* — and `Game::unlock_research` spends
+`Inventory`. But the goods a bill names are exactly the goods the base has
+been stacking on its shelves, and making the player run the Transfer screen
+first would be a keystroke tax on every node with no decision in it.
+
+So the shelves top the pack up rather than being a second store spent from.
+`Game::research_material_held` is the one definition of "have" — pack plus
+`adjacent_stock_count` — read by the refusal and by the figure
+`research_nodes` puts on the screen, so a row the menu draws as affordable
+cannot then be refused. The reach is `adjacent_stock`'s, the same orthogonal
+neighbours `transfer_offer` reads, so the Transfer screen and the research
+screen cannot disagree about what "the shelves" means. Off the base
+`adjacent_stock_count` answers 0 and the pack half stands alone, which is why
+the Research row is still `Locality::Anywhere` and needed no new gate.
+
+**The ordering is `commit_caravan_basket`'s rule and it is not free.** The
+obvious shape — walk the bill, take each line as you reach it — strands goods
+on the pack when line three refuses. So the whole bill is checked against
+pack-plus-shelves first and refused whole; only then does
+`take_from_adjacent` move a unit, and only then does `Inventory::take` spend
+one. That second pass is the cost of the rule, and the refusal tests assert
+`Inventory` **and** every `Stock` are byte-identical, per refusal rather than
+one path standing for the others.
+
+Units still leave a buffer through `hauling::take_from` alone: the shortfall
+is routed through `take_from_adjacent` rather than drained here, which keeps
+that the one door and inherits its `(x, y)` sort, so a bill drawn across two
+shelves holding the same item drains them in the same order every run.

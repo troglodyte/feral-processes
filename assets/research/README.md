@@ -24,6 +24,12 @@ Core Fragments.
     // Research Data spent to unlock this node.
     cost: 18,
 
+    // Optional; defaults to none. Goods consumed alongside `cost`, as
+    // (item id, quantity) pairs. Paid from the player's pack, topped up
+    // from the shelves of any container standing beside them, and refused
+    // whole — nothing is spent unless the entire bill can be paid.
+    materials: [("logic_wafer", 6), ("bytecode_block", 8)],
+
     // Optional; defaults to 0, meaning available from turn one. The zone the
     // player must have reached before this node can be researched. Below it
     // the node is still listed, and says which zone it is waiting on.
@@ -105,6 +111,18 @@ Core Fragments.
   Portal in `unlocks_structures` must leave `min_zone` at 0, or the run
   softlocks: the structure that opens the next zone would be waiting on the
   zone it opens. Researching the portal is fine; gating it is not.
+- **A node may only ask for materials its own prerequisites can make.** The
+  legal set is worked out from `requires` alone: structures no research file
+  gates, plus those the node's prerequisites unlock, plus everything that set
+  can craft. `min_zone` grants nothing — a zone number says the player
+  breached, not that they took any particular node — so leaning on it makes a
+  silent, unstated prerequisite, which is the failure the census
+  `every_research_material_is_reachable_through_that_nodes_own_prerequisites`
+  exists to catch. A node whose bill names something out of reach fails the
+  build.
+- A structure with a `work` block makes its product out of nothing on a timer
+  and so counts as a source; one with `assembles` does not, because it runs
+  its product's own `craftable.cost` and is already covered by that recipe.
 - The ICE Breaker and Power Cell recipes are always available and are not
   defined here.
 - Nodes are listed cheapest first, ties broken by id, so the menu numbering

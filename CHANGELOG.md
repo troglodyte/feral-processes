@@ -33,6 +33,10 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.129
+
+**Research costs goods now, not just Research Data** — every node in the tree carries a material bill authored in its own `.ron`, ramping from raw Core Fragments at the roots to Trace Sniffers, Hardened Shell and Routine Disks at the deep end; the bill is paid from your pack, topped up off the shelves of anything you are standing beside, and refused whole rather than part-spent, so a Research Node running unattended is no longer the whole of the tree. A census holds every bill to what that node's own prerequisites can make, which is what found Weapon Fabrication unlocking a Fabricator it had no way to feed — it requires Routine Fabrication now.
+
 ## 0.13.128
 
 **No routine is free to run any more** — Patch Single v1.0, Bastion Single v1.0, Bit Rot Single v1.0, Hyperthread Single v1.0 and Hard Lock Single v1.0 had inherited a Power cost of nothing when the field was renamed, and are now priced off their own ladders; Decompile pays a token 1, since it is the one routine with no cooldown to throttle it. Pricing Patch Single v1.0 is also what puts it on the map's routine list, where a heal has to be priced to be offered at all.

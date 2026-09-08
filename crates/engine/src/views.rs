@@ -28,9 +28,13 @@ pub struct ResearchStatus {
     pub description: String,
     pub cost: u32,
     pub state: ResearchState,
-    /// Whether the player can pay `cost` right now. Independent of `state`:
-    /// a node can be `Available` but unaffordable, or affordable but
-    /// `Locked`.
+    /// The goods this node consumes beside its Research Data, each with
+    /// what the party can reach of it right now. Empty for a node that
+    /// authored none.
+    pub materials: Vec<ResearchMaterial>,
+    /// Whether the player can pay `cost` **and** every line of `materials`
+    /// right now. Independent of `state`: a node can be `Available` but
+    /// unaffordable, or affordable but `Locked`.
     pub affordable: bool,
     /// Whether this node sits on a path the tree recommends — see
     /// `ResearchDb::recommended_ids`. Independent of `state` for the same
@@ -43,6 +47,25 @@ pub struct ResearchStatus {
     /// unread (rather than absent from non-test builds) still warns.
     #[cfg(test)]
     pub(crate) unlocks_abilities: Vec<crate::abilities::AbilityId>,
+}
+
+/// One line of a research node's material bill — see
+/// `ResearchDef::materials`.
+///
+/// `name` is resolved in the engine through `Game::item_name`, for
+/// `Game::copy_name`'s reason: a renderer building the name is how a bill
+/// and the refusal that quotes it come to word the same shortfall
+/// differently.
+///
+/// `have` counts the pack **and** the adjacent shelves, because that is
+/// exactly what `Game::unlock_research` will spend from — a figure counting
+/// only the pack would grey out a node the player can in fact buy while
+/// standing at their own Depot.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResearchMaterial {
+    pub name: String,
+    pub need: u32,
+    pub have: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

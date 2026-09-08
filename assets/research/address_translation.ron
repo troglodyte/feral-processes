@@ -3,6 +3,7 @@
     name: "Address Translation",
     description: "Write to the substrate's own page tables instead of walking around them. Teaches Buffer Overrun Party and Wild Jump Party — a step through one wall, and a jump to any address in the frame that kills you if nothing is mapped there.",
     cost: 140,
+    materials: [("routine_disk", 18), ("logic_wafer", 18), ("bytecode_block", 16)],
     min_zone: 3,
     requires: ["deep_analysis"],
     unlocks_abilities: ["buffer_overrun", "wild_jump"],

@@ -120,6 +120,24 @@ impl Game {
         found.into_iter().map(|(_, _, e)| e).collect()
     }
 
+    /// How many units of `item` the adjacent shelves are holding, across
+    /// every one of them.
+    ///
+    /// The read half of `take_from_adjacent`, and it exists so a caller can
+    /// find out whether a basket is affordable *before* moving a unit —
+    /// `Game::unlock_research`'s need, and `commit_caravan_basket`'s rule
+    /// that every refusal lands before anything is spent. `output` alone,
+    /// the same half `transfer_offer` offers and `hauling::take_from`
+    /// drains: a machine's `input` hopper is its own and is not on any
+    /// shelf.
+    pub(crate) fn adjacent_stock_count(&self, item: &ItemId) -> u32 {
+        self.adjacent_stock()
+            .into_iter()
+            .filter_map(|e| self.world.get::<Stock>(e))
+            .filter_map(|stock| stock.output.get(item).copied())
+            .sum()
+    }
+
     /// Moves an exact basket off the adjacent structures and reports what
     /// actually landed, keyed and ordered by `ItemId`.
     ///

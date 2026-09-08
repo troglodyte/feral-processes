@@ -180,6 +180,7 @@ fn seed_the_roster(game: &mut Game) -> Roster {
         OffShift { need },
         Disgruntled {
             grievance: Grievance::Sulking,
+            stranded: false,
         },
         Downed,
     ));
@@ -341,6 +342,7 @@ fn a_rich_program_writes_every_field_it_was_given() {
         disgruntled: _,
         staff: _,
         downed: _,
+        disgruntled_stranded: _,
     } = saved;
 
     assert_eq!(saved.species, species, "species");

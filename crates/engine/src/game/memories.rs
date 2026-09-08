@@ -11,7 +11,7 @@ use crate::components::{
 use crate::memories::{MemoryDb, MemoryId};
 use crate::resources::{BattleState, GameClock, Party};
 use crate::tuning::{MEMORY_CAP_PER_PROGRAM, MEMORY_FORGET_THRESHOLD, MEMORY_POSTING_PERIOD};
-use bevy_ecs::prelude::{Entity, Mut};
+use bevy_ecs::prelude::{Entity, Mut, With};
 
 /// What one `Game::remember` did.
 ///
@@ -311,6 +311,56 @@ impl crate::Game {
                 if clogged { "jammed_here" } else { "settled_in" },
                 MemorySubject::Structure(machine),
             );
+        }
+    }
+
+    /// Writes the fondness a program takes away from standing at an amenity,
+    /// for every body currently on a respite errand and in reach of one.
+    ///
+    /// **`note_postings`' shape, and for its argument.** A break has no edge
+    /// to fire on — nothing tells the first tick standing at the Sandbox from
+    /// the thousandth — so this fires on `MEMORY_POSTING_PERIOD` and `strikes`
+    /// measures time spent. A per-tick write would saturate `strike_cap` in
+    /// three ticks, make `strikes` mean nothing, and make `remember`'s tail
+    /// eviction eager for exactly the programs taking the most breaks.
+    ///
+    /// **This is the mechanism, not the flavour.** Morale is derived from the
+    /// store and has no reserve to refill, so the errand's whole payload is
+    /// this memory — which is why it is written through `Game::remember` like
+    /// every other and folded back by `Game::morale` with no second meter.
+    ///
+    /// The subject is the structure's **kind**, `settled_in`'s rule: a
+    /// rebuilt Sandbox is the same Sandbox to a program that unwound at one.
+    /// A body carrying no `Memories` is a no-op at `remember`, so nothing
+    /// here needs a roster check.
+    pub(crate) fn note_respites(&mut self) {
+        let now = self.world.resource::<GameClock>().tick;
+        if !now.is_multiple_of(MEMORY_POSTING_PERIOD) {
+            return;
+        }
+        let amenities = self.amenities();
+        // Collected before anything is written, `note_postings`' reason:
+        // `remember` takes `&mut self`.
+        let resting: Vec<(Entity, Position)> = self
+            .world
+            .query_filtered::<(Entity, &Position), With<crate::components::Disgruntled>>()
+            .iter(&self.world)
+            .map(|(e, p)| (e, *p))
+            .collect();
+        for (worker, here) in resting {
+            if !self.on_respite(worker, &amenities) {
+                continue;
+            }
+            let Some((site, kind, radius)) = amenities.nearest_any(here) else {
+                continue;
+            };
+            // Walking toward it is worth nothing; **arriving** is the whole
+            // of it. A body still crossing the base has not stopped working
+            // yet in any sense the meter should read.
+            if !crate::game::base::offshift::in_reach(here, site, radius) {
+                continue;
+            }
+            self.remember(worker, "unwound_at", MemorySubject::Structure(kind));
         }
     }
 

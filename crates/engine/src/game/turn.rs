@@ -241,6 +241,13 @@ impl Game {
         // — but on a period rather than on an edge: a stranding *has* one and
         // a posting does not. See `MEMORY_POSTING_PERIOD`.
         self.note_postings();
+        // Beside `note_postings` and on the same period, because it is the
+        // same kind of memory: a stretch of standing somewhere rather than an
+        // edge. **After** it, so a body that is both posted and disgruntled
+        // is filed under the machine it served before the amenity it fled to
+        // — the order only matters at `MEMORY_CAP_PER_PROGRAM`, where
+        // `remember`'s tail eviction drops the weakest.
+        self.note_respites();
         // Beside `note_strandings` and for its reason: `needs_tick_system`
         // has just drained the reserve inside the schedule above, and
         // `Game::notify` is a `&mut Game` door no bevy system can reach.

@@ -247,6 +247,7 @@ fn hp(game: &Game, who: Entity) -> i32 {
 fn lash_out(game: &mut Game, who: Entity) {
     game.world.entity_mut(who).insert(Disgruntled {
         grievance: Grievance::LashingOut,
+        stranded: false,
     });
 }
 

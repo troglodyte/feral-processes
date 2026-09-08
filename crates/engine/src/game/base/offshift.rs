@@ -29,6 +29,14 @@ pub(crate) struct Amenities {
     /// `need -> (tile, rate, radius)`, each list sorted by tile so a tie
     /// resolves the same way every run.
     by_need: BTreeMap<NeedId, Vec<(Position, f32, i32)>>,
+    /// Every amenity once, whatever it services — the morale errand's index,
+    /// where `by_need` is the needs errand's.
+    ///
+    /// A separate list rather than a fold over `by_need` at the read: a
+    /// structure servicing two needs appears in that map twice, and the
+    /// morale errand walks to a *building*, not to a service. Deduped by
+    /// tile and sorted by it, `by_need`'s reason exactly.
+    sites: Vec<(Position, StructureId, i32)>,
 }
 
 impl Amenities {
@@ -38,6 +46,11 @@ impl Amenities {
         db: &StructureDb,
     ) -> Self {
         let mut by_need: BTreeMap<NeedId, Vec<(Position, f32, i32)>> = BTreeMap::new();
+        // Keyed by tile so a structure servicing two needs lands here once,
+        // holding the **widest** reach it offers: the morale errand asks
+        // "am I at this building", and the narrowest of two radii would put
+        // a body in reach of the amenity for one question and not the other.
+        let mut sites: BTreeMap<(i32, i32), (Position, StructureId, i32)> = BTreeMap::new();
         for (kind, pos) in structures {
             let Some(def) = db.get(kind) else {
                 continue;
@@ -53,6 +66,10 @@ impl Amenities {
                     .entry(service.need.clone())
                     .or_default()
                     .push((*pos, rate, service.radius));
+                sites
+                    .entry((pos.x, pos.y))
+                    .and_modify(|(_, _, reach)| *reach = (*reach).max(service.radius))
+                    .or_insert((*pos, kind.clone(), service.radius));
             }
         }
         // **A total order, not bevy's iteration order.** `min_by_key` returns
@@ -61,7 +78,31 @@ impl Amenities {
         for sites in by_need.values_mut() {
             sites.sort_by_key(|(p, _, _)| (p.x, p.y));
         }
-        Self { by_need }
+        // A `BTreeMap` keyed by tile is already in that order.
+        Self {
+            by_need,
+            sites: sites.into_values().collect(),
+        }
+    }
+
+    /// Whether the base has anywhere to unwind at all — the morale errand's
+    /// half of the gate, `has`'s counterpart. A base with no amenity offers
+    /// no errand, which is what keeps `Game::refuses_post` reachable.
+    pub(crate) fn any(&self) -> bool {
+        !self.sites.is_empty()
+    }
+
+    /// The amenity a program at `from` would take a break at, whatever it
+    /// services, with the kind it will come away fond of and its reach.
+    ///
+    /// `nearest`'s total order — the list is sorted by tile and `min_by_key`
+    /// takes the first of several equal minima, so two equidistant amenities
+    /// resolve the same way whichever order they were built in.
+    pub(crate) fn nearest_any(&self, from: Position) -> Option<(Position, StructureId, i32)> {
+        self.sites
+            .iter()
+            .min_by_key(|(p, _, _)| ((p.x - from.x).abs().max((p.y - from.y).abs()), p.x, p.y))
+            .cloned()
     }
 
     /// Whether anything in the base services this need **at all**. The second
@@ -152,12 +193,42 @@ impl Game {
 
     /// The examine line's tail: what `who` has walked off to do, or `None`
     /// for a program that is on shift.
+    ///
+    /// Two errands, and the need outranks the mood exactly as the drift's
+    /// arms do. A need names itself through the def's own `servicing` string;
+    /// a respite has no def behind it, so the verb is fixed here beside
+    /// `"recovering"` and `"in party"` rather than being authored.
     pub fn program_errand_label(&self, who: Entity) -> Option<String> {
-        let need = self.world.get::<OffShift>(who)?;
-        self.world
-            .resource::<NeedDb>()
-            .get(&need.need)
-            .map(|def| def.servicing.clone())
+        if let Some(need) = self.world.get::<OffShift>(who) {
+            return self
+                .world
+                .resource::<NeedDb>()
+                .get(&need.need)
+                .map(|def| def.servicing.clone());
+        }
+        // The same three clauses `on_respite` reads, with the amenity half
+        // asked of the world directly — this is a `&self` screen door and
+        // cannot build the beat's index.
+        let taking_one = self
+            .world
+            .get::<crate::components::Disgruntled>(who)
+            .is_some_and(|d| !d.stranded);
+        (taking_one && self.base_has_an_amenity()).then(|| "Taking a break".to_string())
+    }
+
+    /// Whether anything in the base services a need at all — `Amenities::any`
+    /// for a caller that has only `&self`.
+    ///
+    /// Short-circuits on the first one, and is deliberately **not** a cached
+    /// figure: a cache would be a new `Resource` and another query-iteration-
+    /// order shift, which is the same call `Amenities` itself makes.
+    pub(crate) fn base_has_an_amenity(&self) -> bool {
+        let db = self.world.resource::<StructureDb>();
+        self.world.iter_entities().any(|e| {
+            e.get::<Structure>()
+                .and_then(|s| db.get(&s.kind))
+                .is_some_and(|def| def.services.iter().any(|s| s.rate().is_some()))
+        })
     }
 
     /// Builds this pass's amenity index off the world's own structures.

@@ -640,6 +640,16 @@ pub struct CreatureSave {
     /// behind `#[serde(default)]`, so no `SAVE_FORMAT_VERSION` bump.
     #[serde(default)]
     pub disgruntled: Option<crate::components::Grievance>,
+    /// Whether this program has given its respite errand up as unwalkable —
+    /// see `components::Disgruntled`.
+    ///
+    /// Saved for the marker's own reason: the latch is what stops a stranded
+    /// body spending a fresh Dijkstra every beat, so a reload that dropped it
+    /// would restart that cost for the rest of the run. Meaningful only
+    /// alongside `disgruntled`. Additive behind `#[serde(default)]`, so no
+    /// `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub disgruntled_stranded: bool,
     /// Whether this program was on the base staff — see `ProgramRole`. Only
     /// meaningful when `tamed` is true.
     ///
@@ -1837,6 +1847,7 @@ mod tests {
             program_id: 1,
             disposition: None,
             disgruntled: None,
+            disgruntled_stranded: false,
             memories: Vec::new(),
             needs: Default::default(),
             off_shift: None,

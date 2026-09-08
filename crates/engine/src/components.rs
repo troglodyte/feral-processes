@@ -1634,6 +1634,21 @@ pub struct OffShift {
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Disgruntled {
     pub grievance: Grievance,
+    /// Whether the respite errand has been given up as unwalkable — the
+    /// no-route latch, and `Needs::stalled_announced`'s job on this meter.
+    ///
+    /// **Reachability is never asked as its own question**, exactly as it is
+    /// not for `OffShift`: `Game::step_respite` discovers it and sets this,
+    /// which is what stops the leave-pool → failed step → rejoin-pool → leave
+    /// flicker on every beat. One Dijkstra per newly disgruntled body, then
+    /// nothing until the mood recovers and the marker goes away with the
+    /// latch on it.
+    ///
+    /// A latched body is back in the posting pool, which is where
+    /// `Game::refuses_post` governs it — so a base with nowhere to unwind
+    /// still has the grudge-against-a-machine rung, rather than that rung
+    /// quietly becoming unreachable.
+    pub stranded: bool,
 }
 
 /// How far a program has gone. Ordered least to worst; see `Disgruntled`.

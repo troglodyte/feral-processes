@@ -165,6 +165,7 @@ fn game_with_programs(fixture: &str, seed: u32, programs: &[(bool, &str)]) -> Ga
         program_id: 0,
         disposition: None,
         disgruntled: None,
+        disgruntled_stranded: false,
         memories: Vec::new(),
         needs: Default::default(),
         off_shift: None,

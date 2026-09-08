@@ -385,6 +385,19 @@ pub struct CreatureSave {
     pub atk_roll: f32,
     pub def_roll: f32,
     pub growth_roll: f32,
+    /// This individual's two build rolls — see `components::Potential`.
+    /// Persisted for `growth_roll`'s reason: the figure is read at exactly
+    /// one moment, the tick a build this program was spent on finishes, and
+    /// a program that reloaded neutral would build a different machine than
+    /// the one the picker quoted.
+    ///
+    /// `#[serde(default = "neutral_roll")]` rather than a bare
+    /// `#[serde(default)]`, which on an `f32` is `0.0` — silently the worst
+    /// builder in the game, for every program in every pre-feature save.
+    #[serde(default = "neutral_roll")]
+    pub assembly_roll: f32,
+    #[serde(default = "neutral_roll")]
+    pub extraction_roll: f32,
     /// How many fusions deep this creature's lineage is — see
     /// `components::FusionCount`. Persisted so the `MAX_FUSIONS` ceiling
     /// survives a save/load instead of resetting to 0 and handing the
@@ -651,6 +664,31 @@ pub struct CreatureSave {
     /// the feature not working.
     #[serde(default)]
     pub downed: bool,
+}
+
+/// `serde`'s default for an individual roll — the neutral 1.0, because a
+/// bare `#[serde(default)]` on an `f32` is `0.0` and would load every
+/// program in a pre-feature save as permanently the worst builder in the
+/// game.
+fn neutral_roll() -> f32 {
+    1.0
+}
+
+impl CreatureSave {
+    /// The individual rolls this record carries, as the component. The one
+    /// walk from a save to a `Potential`: `Game::load` restores through it
+    /// and `build_quality_of` reads a committed program's through it, and a
+    /// second copy is the one that drifts.
+    pub(crate) fn potential(&self) -> crate::components::Potential {
+        crate::components::Potential {
+            hp_roll: self.hp_roll,
+            atk_roll: self.atk_roll,
+            def_roll: self.def_roll,
+            growth_roll: self.growth_roll,
+            assembly_roll: self.assembly_roll,
+            extraction_roll: self.extraction_roll,
+        }
+    }
 }
 
 /// A worn item on disk. Deliberately **not** `components::EquippedItem`,
@@ -1746,6 +1784,8 @@ mod tests {
             atk_roll: 1.0,
             def_roll: 1.0,
             growth_roll: 1.0,
+            assembly_roll: 1.0,
+            extraction_roll: 1.0,
             fusions: 0,
             refactors: 0,
             purchased_tiers: 0,

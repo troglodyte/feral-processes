@@ -1691,6 +1691,8 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             atk_roll: 1.0,
             def_roll: 1.0,
             growth_roll: 1.0,
+            assembly_roll: 1.0,
+            extraction_roll: 1.0,
             fusions: 0,
             refactors: 0,
             purchased_tiers: 0,

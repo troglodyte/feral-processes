@@ -315,6 +315,8 @@ fn a_rich_program_writes_every_field_it_was_given() {
         atk_roll: _,
         def_roll: _,
         growth_roll: _,
+        assembly_roll: _,
+        extraction_roll: _,
         fusions: _,
         refactors: _,
         purchased_tiers: _,
@@ -363,6 +365,8 @@ fn a_rich_program_writes_every_field_it_was_given() {
     assert_eq!(saved.atk_roll, 1.22, "atk_roll");
     assert_eq!(saved.def_roll, 1.33, "def_roll");
     assert_eq!(saved.growth_roll, 1.44, "growth_roll");
+    assert_eq!(saved.assembly_roll, 1.55, "assembly_roll");
+    assert_eq!(saved.extraction_roll, 1.66, "extraction_roll");
     assert_eq!(saved.fusions, 2, "fusions");
     assert_eq!(saved.refactors, 3, "refactors");
     assert_eq!(saved.purchased_tiers, 4, "purchased_tiers");
@@ -792,4 +796,60 @@ fn a_reloaded_order_still_gives_its_program_back_on_a_cancel() {
         Some(ids::OVERCLOCK_CORE.to_string()),
         "still wearing what it went in wearing"
     );
+}
+
+/// The two build rolls are additive behind `#[serde(default = "neutral_roll")]`,
+/// so they cost no `SAVE_FORMAT_VERSION` bump. A bare `#[serde(default)]` on
+/// an `f32` is `0.0`, which would load every program in every pre-feature
+/// save as permanently the worst builder in the game — silently, since
+/// nothing on the screen would say so until a machine came out slow.
+#[test]
+fn a_save_written_without_the_build_rolls_loads_them_neutral() {
+    let mut game = Game::new(4211, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 20, 3);
+    game.world.entity_mut(pet).insert(Potential {
+        hp_roll: 1.1,
+        atk_roll: 1.1,
+        def_roll: 1.1,
+        growth_roll: 1.1,
+        assembly_roll: 1.18,
+        extraction_roll: 0.82,
+    });
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_legacy_build_rolls_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+
+    let text = std::fs::read_to_string(&path).unwrap();
+    let stripped: String = text
+        .lines()
+        .filter(|l| {
+            let t = l.trim_start();
+            !t.starts_with("assembly_roll:") && !t.starts_with("extraction_roll:")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        !stripped.contains("assembly_roll") && !stripped.contains("extraction_roll"),
+        "the fixture must actually remove the keys or the test proves nothing"
+    );
+    assert!(
+        text.contains("assembly_roll"),
+        "and they must have been there to remove"
+    );
+    std::fs::write(&path, stripped).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).expect("a pre-feature save still loads");
+    let _ = std::fs::remove_file(&path);
+
+    let mut seen = 0;
+    let mut q = loaded.world.query::<&Potential>();
+    for p in q.iter(&loaded.world) {
+        assert_eq!(p.assembly_roll, 1.0, "assembly_roll defaulted wrong");
+        assert_eq!(p.extraction_roll, 1.0, "extraction_roll defaulted wrong");
+        seen += 1;
+    }
+    assert!(seen > 0, "the save carried no creature to check");
 }

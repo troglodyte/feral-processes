@@ -1721,3 +1721,34 @@ fn a_filed_portal_request_keeps_the_price_it_was_filed_at_across_a_zone_change()
         "the fixture is worthless unless zone 2 would actually quote a different price"
     );
 }
+
+/// A cancelled request gives the program back whole, build rolls included.
+///
+/// The refund goes through `CreatureSave` — the snapshot taken when the
+/// request was filed — so a field the save drops is a program that comes
+/// back a different builder than the one that went in.
+#[test]
+fn a_cancelled_order_gives_back_a_program_with_its_build_rolls() {
+    let mut game = base(1108);
+    builder(&mut game);
+    file_build_with_rolls(&mut game, "mining_node", 1, 0, 1.17, 0.83);
+    let site = site_at(&mut game, 1, 0);
+
+    game.cancel_build_request(site).unwrap();
+
+    let restored = game
+        .owned_pets()
+        .into_iter()
+        .filter_map(|p| {
+            game.world
+                .get::<crate::components::Potential>(p.entity)
+                .copied()
+        })
+        .find(|p| (p.assembly_roll - 1.17).abs() < 1e-5)
+        .expect("the refunded program is back on the roster");
+    assert!(
+        (restored.extraction_roll - 0.83).abs() < 1e-5,
+        "the other roll came back wrong: {}",
+        restored.extraction_roll
+    );
+}

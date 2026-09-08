@@ -809,6 +809,40 @@ fn build_program(game: &mut Game, kind: &StructureId, tier: u32) -> Option<Entit
     Some(spend)
 }
 
+/// Overwrites just the two build rolls on `program`, leaving the four
+/// combat rolls exactly as they were — the axis every build-quality fixture
+/// varies, and the one `quality_percent` deliberately cannot see.
+pub(super) fn set_build_rolls(game: &mut Game, program: Entity, assembly: f32, extraction: f32) {
+    let mut p = game
+        .world
+        .get::<crate::components::Potential>(program)
+        .copied()
+        .unwrap_or(crate::components::Potential::NEUTRAL);
+    p.assembly_roll = assembly;
+    p.extraction_roll = extraction;
+    game.world.entity_mut(program).insert(p);
+}
+
+/// `file_build`, paid for with a program of known build rolls, returning the
+/// program it spent. The fixture half of everything about build quality: the
+/// figure is taken off the program at the moment the request is filed, so
+/// the rolls have to be on it before `place_structure` is called.
+pub(super) fn file_build_with_rolls(
+    game: &mut Game,
+    kind: &str,
+    dx: i32,
+    dy: i32,
+    assembly: f32,
+    extraction: f32,
+) -> Entity {
+    let program =
+        build_program(game, &kind.to_string(), 1).expect("this kind is paid for with a program");
+    set_build_rolls(game, program, assembly, extraction);
+    game.place_structure(kind, dx, dy, Some(program))
+        .expect("the fixture files a legal build");
+    program
+}
+
 /// Files an upgrade through the real `Game::upgrade_structure` and then
 /// raises it, for a test that only wants a Mk2 machine rather than a crew.
 ///

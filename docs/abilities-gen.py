@@ -42,9 +42,9 @@ A = [
  ("cold_boot",         "Patch Single v3.0",       "OneAlly",            "Heal",      "",               50,  12,    0, "",                 5, 15),
  ("core_dump",        "Core Dump Single",        "OneEnemyGroupFront", "Damage",    "",                9,   2,    0, "",                 3, 0),
  ("cycle_harvest",     "Leech Everyone",          "AllEnemies",         "Drain",     "",                4,   1,    0, "",                 5, 17),
- ("deadlock",          "Hard Lock Single v1.0",   "OneEnemyGroupFront", "Debuff",    "Stun",            0,   0,    1, "",                 2, 0),
+ ("deadlock",          "Hard Lock Single v1.0",   "OneEnemyGroupFront", "Debuff",    "Stun",            0,   0,    1, "",                 2, 6),
  ("deadman",          "Deadman Everyone",        "AllEnemies",         "Damage",    "",               14,   4,    0, "",                 4, 0),
- ("decompile",         "Decompile Single",        "OneEnemyGroupFront", "Decompile", "",                0,   0,    0, "",                 0, 0),
+ ("decompile",         "Decompile Single",        "OneEnemyGroupFront", "Decompile", "",                0,   0,    0, "",                 0, 1),
  ("deep_scan",         "Deep Scan Party",         "WholeParty",         "FieldBuff", "CaptureBoost",   20,   0,    0, "",                 0, 18),
  ("etch",              "Etch Group",              "WholeEnemyGroup",    "Buff",      "Mitigation",    -12,   0,    3, "",                 3, 10),
  ("flush_cache",       "Flush Cache Party",       "WholeParty",         "Cleanse",   "",                0,   0,    0, "",                 3, 7),
@@ -54,7 +54,7 @@ A = [
  ("hardened_shell",    "Hardened Shell Single",   "OneAlly",            "FieldBuff", "Mitigation",     12,   0,    0, "",                 0, 14),
  ("hardened_shell_party", "Hardened Shell Party", "WholeParty",         "FieldBuff", "Mitigation",     12,   0,    0, "",                 0, 32),
  ("heap_corruption",   "Bit Rot Group",           "WholeEnemyGroup",    "Debuff",    "Bleed",           3,   0,    3, "",                 3, 11),
- ("hot_patch",         "Patch Single v1.0",       "OneAlly",            "Heal",      "",                8,   2,    0, "",                 1, 0),
+ ("hot_patch",         "Patch Single v1.0",       "OneAlly",            "Heal",      "",                8,   2,    0, "",                 1, 5),
  ("hot_spare",        "Hot Spare Single",        "OneAlly",            "Heal",      "",                8,   2,    0, "",                 3, 0),
  ("hyperthread",       "Hyperthread Single v2.0", "OneAlly",            "Buff",      "Atk",             6,   0,    4, "",                 3, 8),
  ("interrupt_request","Interrupt Single",        "OneEnemyGroupFront", "Damage",    "",                5,   1,    0, "",                 4, 0),
@@ -63,7 +63,7 @@ A = [
  ("kernel_shear",     "Kernel Shear Group",      "WholeEnemyGroup",    "Damage",    "",               22,   6,    0, "Bleed 75% 4r",     4, 16),
  ("leech_array",       "Leech Group",             "WholeEnemyGroup",    "Drain",     "",                6,   2,    0, "",                 4, 13),
  ("long_winter",      "Long Winter Party",       "WholeParty",         "FieldBuff", "Mitigation",     25,   0,    0, "",                 0, 40),
- ("memory_leak",       "Bit Rot Single v1.0",     "OneEnemyGroupFront", "Debuff",    "Bleed",           2,   0,    3, "",                 1, 0),
+ ("memory_leak",       "Bit Rot Single v1.0",     "OneEnemyGroupFront", "Debuff",    "Bleed",           2,   0,    3, "",                 1, 5),
  ("mirror_restore",    "Patch Party v1.0",        "WholeParty",         "Heal",      "",                8,   2,    0, "",                 2, 10),
  ("null_cache",       "Null Cache Group",        "WholeEnemyGroup",    "Drain",     "",               12,   3,    0, "",                 3, 18),
  ("null_route",        "Hard Lock Everyone",      "AllEnemies",         "Debuff",    "Stun",            0,   0,    1, "",                 5, 15),
@@ -74,7 +74,7 @@ A = [
  ("parity_guard",     "Parity Single",           "OneAlly",            "Buff",      "Mitigation",      9,   0,    3, "",                 4, 0),
  ("pid_exhaustion",    "Fork Bomb Everyone",      "AllEnemies",         "Damage",    "",                8,   2,    0, "Bleed 20% 2r",     5, 18),
  ("pipeline_stall",    "Pipeline Stall Single",   "OneEnemyGroupFront", "Damage",    "",                7,   2,    0, "Stun 40% 1r",      3, 9),
- ("priority_boost",    "Hyperthread Single v1.0", "OneAlly",            "Buff",      "Atk",             3,   0,    3, "",                 1, 0),
+ ("priority_boost",    "Hyperthread Single v1.0", "OneAlly",            "Buff",      "Atk",             3,   0,    3, "",                 1, 5),
  ("quarantine",       "Quarantine Single",       "OneAlly",            "Cleanse",   "",                0,   0,    0, "",                 4, 0),
  ("race_condition",    "Hard Lock Group",         "WholeEnemyGroup",    "Debuff",    "Stun",            0,   0,    1, "",                 4, 13),
  ("redundancy_sync",   "Patch Party v1.1",        "WholeParty",         "Heal",      "",               10,   2,    0, "",                 3, 12),
@@ -86,7 +86,7 @@ A = [
  ("row_hammer_group",  "Row Hammer Group",        "WholeEnemyGroup",    "Damage",    "",                6,   1,    0, "",                 3, 10),
  ("row_hammer_single", "Row Hammer Single",       "OneEnemyGroupFront", "Damage",    "",                7,   1,    0, "",                 2, 7),
  ("salvage_routine",   "Salvage Routine Party",   "WholeParty",         "FieldBuff", "DropBoost",      20,   0,    0, "",                 0, 18),
- ("sandbox",           "Bastion Single v1.0",     "OneAlly",            "Buff",      "Mitigation",      9,   0,    3, "",                 1, 0),
+ ("sandbox",           "Bastion Single v1.0",     "OneAlly",            "Buff",      "Mitigation",      9,   0,    3, "",                 1, 5),
  ("segfault_everyone", "Segfault Everyone",       "AllEnemies",         "Damage",    "",               28,  12,    0, "",                 5, 18),
  ("segfault_group",    "Segfault Group",          "WholeEnemyGroup",    "Damage",    "",               14,   8,    0, "",                 3, 11),
  ("segfault_v1",       "Segfault Single v1.0",    "OneEnemyGroupFront", "Damage",    "",                6,   2,    0, "",                 2, 6),
@@ -347,11 +347,11 @@ timed against a fight. The two that restore a pool over time keep a turn
 count, because an unbounded one is unbounded healing or unbounded Power.
 
 They are no longer the only things the map's routine list offers. A **Heal**
-that charges Power runs out there too, on top of being a Special — the seven
-Patch and Rollback routines below the free `hot_patch`. A heal is priced in
-Power and nothing else out there, because a cooldown counts battle rounds and
-the map has no round to count; a heal costing nothing would therefore have no
-throttle at all, which is why the free one stays a Special. Everything else
+that charges Power runs out there too, on top of being a Special — all eight
+Patch and Rollback routines, `hot_patch` included since it was priced. A heal
+is priced in Power and nothing else out there, because a cooldown counts
+battle rounds and the map has no round to count; a heal costing nothing would
+therefore have no throttle at all, and would stay a Special. Everything else
 about it is the battle invocation's: the same band, scaled by the invoker's
 own level and Heal affinity, restoring what fits under the target's ceiling.
 

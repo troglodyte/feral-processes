@@ -537,9 +537,12 @@ A `Heal` runs in both, and two conditions decide whether a given one does:
 
 - **`power_cost` above 0.** A `cooldown` is counted in battle rounds, and
   the map has no round to count — so Power is the only throttle a field
-  invocation has, and a heal costing nothing has none at all. `hot_patch` is
-  the shipped case: free, and its band scales with the invoker's level, so it
-  would be unlimited repair on the map at every level. It stays a Special.
+  invocation has, and a heal costing nothing has none at all. Every shipped
+  routine is priced, so this excludes nothing in the base game; a heal your
+  mod leaves free stays a Special and never reaches the map, which is the
+  refusal rather than a bug. The reason it is worth a rule of its own: a
+  heal's band scales with the invoker's level, so a free one is not a small
+  repair on the map forever — it is unlimited repair at every level.
 - **An ally-facing `target`** — `OneAlly` or `WholeParty`. The three
   enemy-facing modes name a side that does not exist outside a battle.
 

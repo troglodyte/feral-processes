@@ -5,8 +5,12 @@
     target: OneEnemyGroupFront,
     effect: Decompile,
     cooldown: 0,
-    // Zero, deliberately: taming is already priced in its ICE Breaker
-    // catalyst, and pricing routine calls in Power is not the place to start
-    // charging for it a second time.
-    power_cost: 0.0,
+    // A token, not a price. Taming is really paid for in the ICE Breaker
+    // catalyst the call spends, so charging Power for it a second time is not
+    // where taming should get harder. But this is the one routine with a
+    // cooldown of 0 — spammable by design, so a failed capture roll doesn't
+    // change the core loop — which leaves a reserve as the only thing that
+    // ever says no to it. One point is enough for that and cheap enough to
+    // be affordable whenever a catalyst is.
+    power_cost: 1.0,
 )

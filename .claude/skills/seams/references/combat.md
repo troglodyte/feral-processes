@@ -25,11 +25,25 @@
   makes hostiles safe without a branch. The charge sits at the
   `BattleAction::Special` site, **not** in `use_ability` — the wielded proc
   and hostile invocations share that function and stay free.
-- **Every routine was already priced; the field just reached nothing.** The
+- **Every routine that can be run is priced in Power; only a passive is
+  exempt.** The default is **0.0, not 5.0** — free-by-default is the only safe
+  default once a field's audience widens to every ability, and a mod that
+  means to charge says so. The trap is what that costs *shipped* content: the
   2026-08-17 flip from `fatigue_cost` to `power_cost` renamed 55 keys and
-  hoisted 10, with no value authored. The default is **0.0, not 5.0**:
-  free-by-default is the only safe default once a field's audience widens to
-  every ability.
+  hoisted 10 with no value authored, and a rename cannot carry a value that
+  was never there — five ladders had authored no cost at all, so their v1.0
+  rungs sat at `0.0` for three weeks while every rung above them stayed
+  priced. A `0.0` default makes "priced at nothing" and "never saw this
+  field" the same state. Being free is worse than being cheap because a
+  cooldown carries a battle and cannot carry the map: there are no rounds out
+  there, so Power is a field invocation's *whole* price, which is why
+  `AbilityDef::field_runnable` refuses an unpriced heal rather than offering
+  one. `every_runnable_routine_is_priced_in_power` holds the shipped files to
+  it with **no exceptions list** — the one carve-out is structural, a passive
+  being skipped because it is never invoked. Price a new v1.0 rung off its
+  own ladder's v2.0, and never reach for an exception: `decompile` pays a
+  token 1.0 rather than being excepted, because it is the one routine with no
+  cooldown and a reserve is all that ever refuses it.
 - **A field buff's lifetime is decided by its kind *and* its source**, and
   `ActiveFieldBuff::runs_until_rest` is the one predicate. A routine-armed
   buff of a read-on-demand kind has no turn count: rest, a Forgiving reboot

@@ -893,6 +893,42 @@ fn every_battle_ability_family_is_contiguous_from_single_upward() {
     }
 }
 
+/// **Nothing you can choose to run is free.** A routine is priced in two
+/// things — a cooldown, which says "not again yet", and a Power cost, which
+/// says "not any more" — and a routine that authors no cost has only half of
+/// that. On the map it has neither: there are no rounds out there for a
+/// cooldown to count, so Power is the *whole* price of a field invocation.
+///
+/// **No exceptions list, deliberately.** Five files reached this state by
+/// authoring no `power_cost` key at all rather than by anyone deciding they
+/// should be free — the tail of the 2026-08-17 flip off `fatigue_cost`, which
+/// renamed the key everywhere it appeared and could not touch the five
+/// ladders where it appeared nowhere. A `0.0` default makes "the author
+/// priced this at nothing" and "the author never saw this field" the same
+/// state, and the only thing that can tell them apart is a census that
+/// refuses both.
+///
+/// **Passives are excluded because they are not run.** `power_cost` is what
+/// invoking costs the invoker, and a passive is never invoked: it fires on
+/// its trigger, takes no turn, and is throttled by its cooldown alone. That
+/// is the same split `every_everyone_scope_routine_pays_the_everyone_tier_price`
+/// makes, for the same reason.
+#[test]
+fn every_runnable_routine_is_priced_in_power() {
+    let game = Game::new(3309, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
+        if def.is_passive() {
+            continue;
+        }
+        assert!(
+            crate::abilities::routine_power_cost(def) > 0.0,
+            "{:?} can be run and costs no Power; a routine with no price has \
+             only its cooldown throttling it, and on the map it has nothing",
+            def.id
+        );
+    }
+}
+
 /// `AbilityDef::validate` refuses a non-finite cost at load, and that check
 /// has to survive the rename off `fatigue_cost` rather than be lost with it.
 /// Asserted over the real files, since a negative cost would *pay* the invoker
@@ -914,24 +950,30 @@ fn every_shipped_power_cost_is_finite_and_non_negative() {
 /// were already in the files, priced back when `fatigue_cost` meant exactly
 /// what `power_cost` means now. Three abilities from three different bands
 /// pin that nothing moved in translation.
+///
+/// What the rename could not carry over was a value nobody had written. Five
+/// ladders authored no `fatigue_cost` at all, so there was no key to rename
+/// and they inherited the new field's `0.0` — free to run, in a game where
+/// Power is a routine's whole price outside battle. They were priced on
+/// 2026-09-08 and `every_runnable_routine_is_priced_in_power` is what keeps
+/// the sixth from appearing; `deadlock` stands for the five here, so a
+/// silent revert to the default is caught by a number as well as by a rule.
 #[test]
 fn the_flip_to_power_cost_carried_the_authored_numbers_over_unchanged() {
     let game = Game::new(3308, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let db = game.world.resource::<crate::abilities::AbilityDb>();
     for (id, expected) in [
-        // Taming stays free — it already spends an ICE Breaker.
-        ("decompile", 0.0),
         ("wild_jump", 20.0),
         ("trickle_charge", 25.0),
+        ("deadlock", 6.0),
+        // Taming is really paid for in the ICE Breaker the call spends. The
+        // token is here because `decompile` is the one routine with no
+        // cooldown, so a reserve is all that ever refuses it.
+        ("decompile", 1.0),
     ] {
         let def = db.get(id).unwrap_or_else(|| panic!("{id} ships"));
         assert_eq!(def.power_cost, expected, "{id}");
     }
-    // The five uncosted files inherit the 0.0 default and keep behaving
-    // exactly as they did. `priority_boost` matters most: it is the fallback
-    // every companion has when its species grants nothing, and a companion
-    // whose only routine is unaffordable has nothing to pick but an attack.
-    assert_eq!(db.get("priority_boost").unwrap().power_cost, 0.0);
 }
 
 /// Reaching every hostile on the field is the top of the scope ladder, and

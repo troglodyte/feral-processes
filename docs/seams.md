@@ -6298,10 +6298,13 @@ and a regen tied to standing near a structure claims precisely that. The
 test asserts both halves in one function, because the underground half alone
 passes against a bare `return` at the top of the system.
 
-### Every routine in the game was already priced; the field just reached nothing
+### Every routine that can be run is priced in Power; only a passive is exempt
 
-**Every routine in the game was already priced; the field just reached
-nothing.** `AbilityDef::fatigue_cost` was documented in three places as
+**Every routine that can be run is priced in Power; only a passive is
+exempt.** The rule arrived in two halves, eighteen months apart in the
+files and three weeks apart in the calendar.
+
+The first half was a plumbing fix. `AbilityDef::fatigue_cost` was documented in three places as
 reaching only `Phase` and `Jump`. That was true about what the *engine read*
 and false about what the *assets contained*: 55 files authored a cost nothing
 consumed, priced back when the field meant exactly what `power_cost` means
@@ -6311,14 +6314,58 @@ made a change that looked like 71 files of content work into a mechanical
 flip, verified by diffing the sorted multiset of all 65 numbers rather than
 by eye.
 
-The default moved from 5.0 to **0.0**, and that is load-bearing. The old
-default was the price of commanding a companion, a mechanic that stopped
-charging on 2026-08-08, and it survived only because the field reached two
-routines. Free-by-default is the only safe default once a field's audience
-widens to every ability in the game; a mod that means to charge says so. It
-is also what keeps the five uncosted shipped files behaving exactly as they
-did — `priority_boost` above all, the fallback every companion has when its
-species grants nothing.
+The default moved from 5.0 to **0.0**, and that is still load-bearing for a
+mod. The old default was the price of commanding a companion, a mechanic that
+stopped charging on 2026-08-08, and it survived only because the field
+reached two routines. Free-by-default is the only safe default once a field's
+audience widens to every ability in the game; a mod that means to charge says
+so.
+
+The second half is what that default cost the shipped content. A rename can
+only carry a value that exists, and five ladders had authored no
+`fatigue_cost` at all — so there was no key to rename, and their v1.0 rungs
+inherited the new `0.0` while every v2.0 and v3.0 above them stayed priced.
+`hot_patch`, `sandbox`, `memory_leak`, `priority_boost` and `deadlock` were
+free to run for three weeks, and nothing said so: a `0.0` default makes "the
+author priced this at nothing" and "the author never saw this field"
+indistinguishable, which is exactly the ambiguity the old nonzero default was
+retired for creating in the other direction.
+
+Being free is worse than being cheap, because Power is not half of a
+routine's price everywhere. In a battle a cooldown does most of the work. On
+the map there are no rounds to count, so Power is the *whole* price — which
+is why `AbilityDef::field_runnable` refuses an unpriced heal outright rather
+than offering it. `hot_patch` was the shipped case that predicate was written
+against, and it heals from a band that scales with the invoker's level, so
+"it only restores 6-10" stops being true long before the run ends. The
+predicate held the line, but the shape of that fix is telling: the engine had
+grown a rule to work around a number nobody had authored.
+
+They were priced on 2026-09-08 off their own ladders' v2.0 rungs — 5.0 for
+the four soft ones, 6.0 for `deadlock`, whose Hard Lock family is dearer at
+every scope. `decompile` went to **1.0** rather than staying at zero: taming
+is really paid for in the ICE Breaker catalyst the call spends, but it is
+also the one routine with a cooldown of 0, spammable by design so a failed
+capture roll cannot change the core loop — which leaves a reserve as the only
+thing that ever refuses it. A token is not a price; it is the floor that
+keeps "runnable and free" an empty set.
+
+`every_runnable_routine_is_priced_in_power` is that emptiness, asserted over
+the shipped files with **no exceptions list**. An exceptions list would be a
+second place to write down what the earlier default already said badly. The
+one carve-out is structural rather than enumerated: a **passive** is skipped,
+because `power_cost` is what invoking costs the invoker and a passive is
+never invoked — it fires on its trigger, takes no turn, and its cooldown is
+its whole price. That is the same split
+`every_everyone_scope_routine_pays_the_everyone_tier_price` makes.
+
+Pricing `hot_patch` also opened `field_runnable`, which is the rule working
+rather than a side effect to absorb: a priced ally-facing heal reaches the
+map's routine list, and it now sits there beside `rollback_v1` at a
+comparable price. The consequence worth naming is `priority_boost` — the
+fallback every companion carries when its species grants nothing. At 5.0 a
+drained companion falls back to a basic attack, which is the pressure Power
+exists to apply and was previously the one place it never reached.
 
 ### `Trickle` is the one restore kind that does not scale with its invoker
 

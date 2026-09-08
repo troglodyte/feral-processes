@@ -511,6 +511,15 @@ relying on one, and correct all three places if it has moved.
   one arrival path for a program downed in the Stack.
 - **`Downed` joins the `on_shift` filter without the `Carrying` escape**,
   and is freed in the diff **unconditionally, ahead of every keep rule**.
+- **A structure remembers how well it was built, and absent means neutral.**
+  `components::BuildQuality`, written only by `Game::spawn_structure` and
+  `raise_one_tick`'s upgrade arm, restored from the save and never
+  re-derived from the def.
+- **The build term goes inside `work_ticks_at_speed`, not at its callers** —
+  `class_scale`'s own argument — and the picker's preview is a *call* into
+  that function through `Game::build_candidates` rather than a percentage.
+- **`Potential`'s two build rolls are deliberately independent of the four
+  combat rolls, and `quality_percent` still folds only the four.**
 
 ### Instrumentation
 

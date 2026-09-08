@@ -18,17 +18,52 @@ badly enough that a program has nowhere else to go.
 
 ## Decisions
 
-1. **Mood is the single trigger, and needs already feed it.** The obvious
-   design has two gates — an unmet need *and* bad morale — but `frayed_here`
-   already writes a `BaseTile` grudge when a program runs out of what it
-   needs, and `Game::morale` is the unrestricted sum of every memory. A base
-   with nothing servicing a need therefore *already* drives morale down. A
-   second, parallel need check would be a second meter answering the question
-   the ladder exists to answer, which is the shape `update_disgruntled`'s own
+1. **Mood is the single trigger, and needs are made to feed it.** The
+   obvious design has two gates — an unmet need *and* bad morale — but a
+   second, parallel need check is a second meter answering the question the
+   ladder exists to answer, which is the shape `update_disgruntled`'s own
    doc comment argues against ("`morale` and not `opinion_of`" — a claim
-   about the body, not about one machine). Needs feed mood; mood is the gate.
+   about the body, not about one machine). So needs reach the rung through
+   morale, and nowhere else.
 
-2. **It is a fourth `Grievance`, not a new axis.** `Grievance::LashingOut`,
+   **That path is currently broken, and decision 2 fixes it.** `Game::fray`
+   writes the `frayed_here` grudge only on its `unreachable` branch — an
+   amenity exists and this body cannot route to it. On the other branch,
+   where the base has no amenity for the need at all, it says the line and
+   writes nothing, deliberately: "a complaint with an errand attached; only
+   the blame is withheld." The consequence is that the *common* case — a base
+   that never built the amenity — moves morale not at all, and its programs
+   would never come near this rung. Needs would be decorative here.
+
+2. **`fray`'s quiet branch gets a memory of its own, and it blames nothing.**
+   A new `ran_down`, `subject: Nothing`. The withheld-blame rule was never
+   about whether the program *felt* it; it was about not making the program
+   resent a tile the player has not had a chance to fix. A `Nothing`-subject
+   memory holds no tile, no machine and no colleague responsible, so the rule
+   stands and the meter still moves. This closes a gap that exists today
+   independently of tantrums: a base that never builds an amenity currently
+   has programs going off-shift forever at no cost to their mood at all.
+
+3. **A base gets a grace period, and it is measured in development, not
+   time.** Neither need-memory is written, and no tantrum may open, until the
+   base has **at least `BASE_ESTABLISHED_STAFF` (8) staff and at least
+   `BASE_ESTABLISHED_STRUCTURES` (8) structures** — `Game::base_is_established`,
+   one predicate, both gates.
+
+   A tick-based grace was the obvious shape and is the wrong one: it punishes
+   a player who founds late in a run and forgives one who founds early and
+   then neglects the place for an hour. Development is the honest measure of
+   "has this player had a fair chance to build amenities yet," and **both**
+   halves are needed — twelve programs in a bare base has not had the chance,
+   and a sprawling base with four bodies in it is not a pressure cooker.
+
+   It covers `frayed_here` as well as `ran_down`, which is a small change to
+   shipped behaviour and buys one sentence instead of two: *while a base is
+   still getting started, needs do not count against it.* An exception for
+   the unreachable case would be defensible — you built the thing and walled
+   it off — but it is a second rule to state, remember and test.
+
+4. **It is a fourth `Grievance`, not a new axis.** `Grievance::LashingOut`,
    appended after `DownedTools`. Appending is what makes this cheap in three
    separate ways: `Ord` derives from declaration order, so the ratchet in
    `update_disgruntled` sorts the new rung worst without touching the
@@ -38,7 +73,7 @@ badly enough that a program has nowhere else to go.
    the whole ladder keeps **one** hysteresis gap rather than growing one per
    rung.
 
-3. **The rung must be unreachable by one memory and reachable by two.** This
+5. **The rung must be unreachable by one memory and reachable by two.** This
    is `MORALE_DOWNS_TOOLS_AT`'s own rule one step further down, and it is the
    only thing keeping the number honest. The worst single grudge the game
    ships is `mauled_by` felt by an `Abrasive` program, at valence x
@@ -51,7 +86,7 @@ badly enough that a program has nowhere else to go.
    reach is a deleted feature; a rung one bad afternoon reaches is a base
    that brawls constantly.
 
-4. **The victim is the one it likes least, and reach decides who is eligible
+6. **The victim is the one it likes least, and reach decides who is eligible
    at all.** Candidates are base staff within `TANTRUM_REACH_TILES`, not
    `Downed`, not already brawling. Among them the pick is the lowest
    `opinion_of(aggressor, MemorySubject::Program(id))`, falling through to
@@ -65,7 +100,7 @@ badly enough that a program has nowhere else to go.
    "walk to your enemy" arm would be a second walk with its own interruption
    rules, bought for nothing the player could see.
 
-5. **Damage is clamped before `apply_damage`, never inside it.**
+7. **Damage is clamped before `apply_damage`, never inside it.**
    `Game::apply_damage` is the one damaging path in the game and it floors HP
    at 0 — and reaching 0 *is* a kill, announced. Nothing in it refuses a
    lethal blow. The established idiom for guaranteed non-lethal damage is
@@ -74,7 +109,7 @@ badly enough that a program has nowhere else to go.
    who later moves the tantrum's damage calculation without carrying the
    clamp with it turns a bad mood into a way to lose companions.
 
-6. **The Repair Bay needs no new code.** `admit_the_badly_hurt` already runs
+8. **The Repair Bay needs no new code.** `admit_the_badly_hurt` already runs
    inside `schedule_base_labour`, and already inserts `Downed` on any staff
    program below `BAY_ADMISSION_HP_FRACTION`. Placing the tantrum step
    *between* `update_disgruntled` and `admit_the_badly_hurt` means a blow
@@ -83,7 +118,7 @@ badly enough that a program has nowhere else to go.
    *shortest* brawl crosses 20% — see Tuning, where that bound is what sets
    the constant, and is asserted rather than multiplied out.
 
-7. **A brawl is not saved.** `resources::Brawls` is a plain resource with no
+9. **A brawl is not saved.** `resources::Brawls` is a plain resource with no
    save field. A brawl lasts four to eight ticks; damage is applied as it
    goes, so a save mid-fight loses nothing but the summary lines. The
    alternative — keying it by `ProgramId` and re-resolving after the roster
@@ -91,7 +126,7 @@ badly enough that a program has nowhere else to go.
    four-tick window. It is not worth a save field and a deferred-restore
    step.
 
-8. **Catharsis is load-bearing, not flavour.** `Disgruntled` ratchets and
+10. **Catharsis is load-bearing, not flavour.** `Disgruntled` ratchets and
    never eases: once a program is on the `LashingOut` rung it stays there
    until morale climbs all the way back to `MORALE_RECOVERED_AT`. Without
    something pushing back, a program past -75 fights every time the roll
@@ -101,14 +136,14 @@ badly enough that a program has nowhere else to go.
    moves the right way, and `TANTRUM_COOLDOWN_TICKS` bounds the rate while it
    does.
 
-9. **The grudge is the first negative `Program`-subject memory the game
+11. **The grudge is the first negative `Program`-subject memory the game
    ships.** The two that exist (`idled_with`, `bonded_in_battle`) are both
    positive, so `MemorySubject::Program` has never yet been read as
    "something I hold against a specific colleague." The plumbing is already
    right for it: `Game::remember` resolves the subject's display name at the
    *write*, so a grudge still names the program after that program is gone.
 
-10. **A new `EffectKind`, so raids stay silent.** The red flash itself is
+12. **A new `EffectKind`, so raids stay silent.** The red flash itself is
     free — `EffectKind::Hit` already exists, `push_effect` reads `Position`
     off any entity rather than off a `Structure`, and gui already paints it
     `FLASH_RED` in base space. What is *not* free is sound: there is no
@@ -118,7 +153,7 @@ badly enough that a program has nowhere else to go.
     instead would be less code and would also give raids audio they have
     never had, which is a change to a shipped feature nobody asked for.
 
-11. **`MessageKind::Tantrum` rather than reusing `Raid`.** Reusing `Raid`
+13. **`MessageKind::Tantrum` rather than reusing `Raid`.** Reusing `Raid`
     buys the log-pane border flash from `fx.rs::observe_log` for free, and
     files a scuffle between two staff as a GC Entropy Sweep — which is both a
     lie to the player and a lie to `retain_outcomes_since_battle`, whose
@@ -127,7 +162,7 @@ badly enough that a program has nowhere else to go.
 
 ## Schema
 
-Two new files under `assets/memories/`, and no schema change — both use
+Three new files under `assets/memories/`, and no schema change — all use
 fields `MemoryDef` already has.
 
 `vented.ron`, the aggressor's relief:
@@ -157,6 +192,26 @@ fields `MemoryDef` already has.
     strike_cap: 4,
 )
 ```
+
+`ran_down.ron`, the need nothing in the base answered:
+
+```ron
+(
+    id: "ran_down",
+    name: "Ran down",
+    blurb: "Needed something this place had never had.",
+    valence: -6.0,
+    half_life: 4000,
+    subject: Nothing,
+    strike_cap: 4,
+)
+```
+
+`ran_down` is milder than `frayed_here` (-6 against -7) on purpose: a base
+that never built the amenity is a lesser failing than one that built it and
+walled it off. It is `Nothing`-subject, which is what lets it exist at all
+without breaking the rule that a program may not resent a tile the player has
+not had a chance to fix.
 
 `vented` is short-lived and capped low on purpose: relief is meant to take the
 edge off, not to be a way of *farming* morale by starting fights.
@@ -201,6 +256,8 @@ lives.
 
 | Constant | Value | Held by |
 |---|---|---|
+| `BASE_ESTABLISHED_STAFF` | 8 | grace tests, both gates |
+| `BASE_ESTABLISHED_STRUCTURES` | 8 | grace tests, both gates |
 | `MORALE_LASHES_OUT_AT` | -75.0 | reachable by two memories, not one |
 | `TANTRUM_CHANCE_PER_TICK` | 0.02 | — |
 | `TANTRUM_REACH_TILES` | 3 | — |
@@ -240,6 +297,9 @@ point; the clamp is what keeps heavy from being fatal.
 Inside `schedule_base_labour`, after `update_disgruntled` and before
 `admit_the_badly_hurt`:
 
+0. **Nothing below happens at all unless `base_is_established()`.** One
+   check at the top, and the same predicate `fray` consults before writing
+   either need-memory.
 1. **Advance every open brawl.** For each, both parties swing; each blow is
    `(TANTRUM_DAMAGE_FRACTION * max_hp).min(hp - 1).max(0)` through
    `apply_damage`, accumulated into `dealt`/`taken`, with a
@@ -299,6 +359,17 @@ the first exchange.
   consumes nothing from `GameRng` when nothing is on the rung, so this
   feature cannot shift the seeded stream. `Game::run_routes`' predation test
   is the pattern.
+- **`ran_down` is written on `fray`'s quiet branch**, and `frayed_here` is
+  still the only thing written on the unreachable one. A test per branch,
+  since one test over either passes against a function that writes the same
+  memory both times.
+- **Neither need-memory is written below the grace thresholds**, and both are
+  above them. Driven at `BASE_ESTABLISHED_STAFF - 1` staff with plenty of
+  structures, and at plenty of staff with `BASE_ESTABLISHED_STRUCTURES - 1`
+  structures — one test per half, because a predicate wired with `||` instead
+  of `&&` passes a test that only ever starves both halves at once.
+- **No tantrum opens below the grace thresholds**, even for a program already
+  deep enough on the ladder.
 - The cooldown holds: a program that has just finished a brawl cannot open
   another before `TANTRUM_COOLDOWN_TICKS`.
 - A `Downed` program is neither an aggressor nor a victim.

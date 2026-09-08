@@ -1135,4 +1135,207 @@ impl Game {
         }
         Ok(())
     }
+
+    /// Retires `e` from the roster and hands back what it was, so an order
+    /// that is called off can give it home again.
+    ///
+    /// The second spending door beside `fuse_companions`, and it follows
+    /// that function's teardown — retain out of `Party`, then
+    /// `world.despawn` — with the loose ends a fusion sacrifice does not
+    /// normally have closed first. A program offered to a build can be in
+    /// states a fusion input is not.
+    ///
+    /// **The snapshot comes first, before anything moves.** Three of
+    /// `CreatureSave`'s fields are *roles*, read off `Party`,
+    /// `WieldedProgram` and `Sorties` at the moment of the call (see
+    /// `creature_save_for`). A teardown that ran before the snapshot would
+    /// record a program that was in no party and wielded nothing, and
+    /// `refund_program` would hand back a stranger.
+    ///
+    /// **`None` is a refusal, and nothing has moved.** The caller must
+    /// treat it as an error and not file the order: a site spawned with
+    /// `program: None` after a refused commit is a structure raised for
+    /// free, and nothing fails to compile. `Home` is the only order that
+    /// legitimately carries `None`, and it never calls this.
+    ///
+    /// **The refusals are a second line of defence, not the guard.**
+    /// `owned_pets` already answers ownership and `programs_for_build`
+    /// already withholds a sortied, downed or carrying program from the
+    /// picker. All four are restated here because a rule that lives only in
+    /// a frontend is a rule the second frontend skips, and the cheapest of
+    /// these mistakes destroys a carrier's load outright.
+    ///
+    /// One state is *handled* rather than refused: the **party slot**.
+    /// `Party` is a raw `Vec<Entity>` that outlives its members and is read
+    /// by every battle round, every roster draw and every save, so a slot
+    /// left pointing at a despawned program is a dangling reference in all
+    /// three.
+    ///
+    /// The **wield** needs nothing done to it, and the omission is the
+    /// design rather than an oversight: `wielded_program` filters
+    /// `resources::WieldedProgram` through an existence check exactly so
+    /// that every despawning path — sale, extraction, fusion, death, and now
+    /// this one — is immune without knowing the feature exists, and its doc
+    /// asks in as many words that no caller tidy that into an explicit
+    /// clear. A stale id cannot alias a live program either, since an
+    /// `Entity` carries a generation. The one raw read of the resource,
+    /// `Roles`, compares it against creatures coming out of a live query,
+    /// which a despawned entity is never in. `refund_program` puts the
+    /// weapon back in the hand off the snapshot, so the round trip is
+    /// lossless regardless.
+    ///
+    /// A **posting** needs nothing done to it either. Occupancy is read off the
+    /// live `Task` components rather than cached on the structure (see
+    /// `displace_task_holder`), and `Task`, `OffShift` and `Carrying` all
+    /// live on the body, so the despawn takes the whole posting with it and
+    /// no machine is left naming a dead worker. What outlives the program is
+    /// other programs' `idled_with` memories, and those name it by
+    /// `ProgramId` — which is exactly why `refund_program` must not mint a
+    /// new one.
+    ///
+    /// No log line: the caller announces the commit, naming the structure
+    /// and the program in one sentence, and a "you lower it" line from here
+    /// would narrate a program that no longer exists.
+    pub(crate) fn commit_program(&mut self, e: Entity) -> Option<save::CreatureSave> {
+        // Ownership is the outermost guard: nothing about an `Entity`
+        // argument says the thing is yours, and a wild creature standing in
+        // the base is one of these too.
+        if self.world.get::<Tamed>(e).map(|t| t.owner) != Some(self.player_entity()) {
+            return None;
+        }
+        // Away, and unreachable — and `Sorties` is the third resource
+        // holding a raw `Entity`: committing one leaves a squad counting
+        // down around a body that is not there.
+        if self
+            .world
+            .resource::<crate::resources::Sorties>()
+            .contains(e)
+        {
+            return None;
+        }
+        // The roster slot a wipe is meant to cost. Spending a downed
+        // program and cancelling the order would hand it back whole, which
+        // is a repair with no Repair Bay.
+        if self.world.get::<crate::components::Downed>(e).is_some() {
+            return None;
+        }
+        // The load is destroyed by freeing the carrier, let alone by
+        // despawning it, and nothing in the base has a claim on it to
+        // return it to.
+        if self.world.get::<Carrying>(e).is_some() {
+            return None;
+        }
+        let snapshot = self.creature_save_for(e)?;
+        self.world.resource_mut::<Party>().0.retain(|&x| x != e);
+        self.world.despawn(e);
+        Some(snapshot)
+    }
+
+    /// Puts a committed program back on the roster as it left, and in the
+    /// role it left from.
+    ///
+    /// Through `spawn_creature_from_save`, and so through the same component
+    /// set `roster_parts` mints — the one barrier every door into the roster
+    /// passes. A program that came back around it would be short components
+    /// and silently remember nothing, and nothing would fail to compile.
+    ///
+    /// The snapshot's own `ProgramId` is kept rather than reissued, which is
+    /// load-bearing in both directions: a fresh id orphans this program's
+    /// memories *and* every other program's memories naming it as their
+    /// subject. Memory timestamps survive for the same reason
+    /// `spawn_creature_from_save` states — intensity is derived from
+    /// `GameClock` on every read, so re-stamping would make a refund
+    /// *deepen* an old grudge.
+    ///
+    /// **`None` means the snapshot names a species this install no longer
+    /// ships** — a `.ron` deleted between sessions, the one failure
+    /// `spawn_creature_from_save` has. It is returned rather than unwrapped
+    /// because deleting a species file is a supported thing to do: a cancel
+    /// that panicked would take the run down over an order the player was
+    /// calling off anyway.
+    ///
+    /// **The roles are restored, not just the entity.** The snapshot was
+    /// taken before the commit retired the program, so it records what it
+    /// was doing — and a cancelled order that quietly disarmed the player or
+    /// emptied a battle slot would be a second cost the cancel never
+    /// advertised. Both are conditional on the world still having room,
+    /// because time passed while the order stood: the hand may be full and
+    /// the party may have filled up behind it. Neither may be forced —
+    /// `BattleState::planned` indexes `Party` positionally, so an overfilled
+    /// party is a sixth slot nothing plans for.
+    pub(crate) fn refund_program(&mut self, c: &save::CreatureSave) -> Option<Entity> {
+        let player = self.player_entity();
+        // Seeded from the live counter and written back below, rather than
+        // asserting `c.program_id != 0` on the way in. `spawn_creature_from_save`
+        // mints into its context and never into the resource — `Game::load`
+        // does that write itself — so a scratch context that was built at
+        // zero and dropped would both hand out a colliding id *and* lose the
+        // one it minted. A committed program always carries a real id and so
+        // never mints at all; seeding is what keeps that from being the only
+        // reason this is safe.
+        let next_program_id = self.world.resource::<crate::resources::NextProgramId>().0;
+        let mut ctx = crate::game::lifecycle::CreatureRestore::new(
+            player,
+            next_program_id,
+            // No nests to offer: that map is read only on the wild arm, and
+            // a committed program is tamed by construction.
+            std::collections::HashMap::new(),
+        );
+        let back = self.spawn_creature_from_save(c, &mut ctx)?;
+        // Destructured rather than read field by field, `Game::load`'s
+        // shape one step stricter: every field is named and **no `..`**, so
+        // a new piece of deferred work on `CreatureRestore` stops this
+        // function compiling until a refund decides what it owes it, rather
+        // than being silently dropped on the floor. The two inputs are
+        // discarded by name for the same reason.
+        let crate::game::lifecycle::CreatureRestore {
+            player: _,
+            nest_positions: _,
+            next_program_id,
+            party_slots,
+            sortie_members,
+            pending_cronjobs,
+            pending_patrols,
+        } = ctx;
+        self.world
+            .insert_resource(crate::resources::NextProgramId(next_program_id));
+        // A sortied program is refused at the commit door, so a snapshot
+        // riding a build request can never carry one. Asserted rather than
+        // applied: a non-empty list here means the commit guard has gone,
+        // and quietly rebuilding a squad around a resurrected member would
+        // hide that.
+        debug_assert!(
+            sortie_members.is_empty(),
+            "a sortied program is never committed, so a refund never restores one"
+        );
+        // Wild-only — `spawn_creature_from_save` fills this on its untamed
+        // arm, and `commit_program` refuses anything the player does not own.
+        debug_assert!(pending_patrols.is_empty(), "a refunded program is tamed");
+        // Deliberately dropped, and not for want of a structure to resolve
+        // it against. `schedule_base_labour` posts staff again on the next
+        // tick, and re-inserting the snapshot's `Task` into a base that has
+        // moved on could put two bodies on one machine — the invariant
+        // `displace_task_holder` exists to hold. The most a refund costs is
+        // one part-finished tick of work, which is what a reload already
+        // costs.
+        drop(pending_cronjobs);
+        // The wield first, and the two arms are exclusive by construction:
+        // `wield_program` stands a member down, so a snapshot is never both
+        // wielded and holding a slot.
+        if c.wielded && self.wielded_program().is_none() {
+            self.world.insert_resource(WieldedProgram(Some(back)));
+        // `first` and not a loop: one snapshot spawns one creature, so this
+        // carries at most one slot.
+        } else if let Some(&(slot, member)) = party_slots.first() {
+            let party = &self.world.resource::<Party>().0;
+            if party.len() < MAX_PARTY_SIZE {
+                // At the recorded index where the party still has one, so a
+                // program that led the line comes back leading it — and
+                // clamped to the end where the line has since shortened.
+                let at = (slot as usize).min(party.len());
+                self.world.resource_mut::<Party>().0.insert(at, member);
+            }
+        }
+        Some(back)
+    }
 }

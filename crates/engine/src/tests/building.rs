@@ -2927,3 +2927,343 @@ fn the_upgrade_ceiling_keeps_the_program_rule_satisfiable() {
         );
     }
 }
+
+// --------------------------------------------- committing and refunding
+
+/// The commit is a retirement, not a loan: the entity is gone from the world
+/// and off the roster the moment the order is filed. What comes back is the
+/// snapshot, and only if the order is called off.
+#[test]
+fn committing_a_program_takes_it_off_the_roster() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    let before = game.owned_pets().len();
+
+    let snapshot = game.commit_program(p).expect("committed");
+
+    assert_eq!(game.owned_pets().len(), before - 1);
+    assert!(
+        game.world.get_entity(p).is_err(),
+        "the entity is consumed, not parked"
+    );
+    assert!(snapshot.tamed, "the snapshot records what it was");
+}
+
+/// `Party` is a resource holding raw `Entity` values and it outlives the
+/// entity, so a slot left pointing at a despawned program is a dangling
+/// reference every battle, every roster draw and every save then reads.
+#[test]
+fn committing_a_party_member_clears_its_slot() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    enlist(&mut game, p);
+    assert!(game.world.resource::<Party>().0.contains(&p));
+
+    game.commit_program(p).expect("committed");
+
+    assert!(
+        !game.world.resource::<Party>().0.contains(&p),
+        "no slot points at a dead entity"
+    );
+}
+
+/// The wield clears itself, and this is the lock on that.
+///
+/// `commit_program` deliberately contains **no** explicit clear:
+/// `wielded_program` filters `resources::WieldedProgram` through an
+/// existence check so every despawning path inherits the immunity, and its
+/// doc asks that no caller add one. That makes this a test of the pair
+/// rather than of a line — it fails if that filter is ever dropped, which is
+/// the moment a commit would start leaving the run swinging a despawned
+/// entity. Deleting anything inside `commit_program` will not fail it, and
+/// that is the correct answer, not a vacuous one.
+#[test]
+fn committing_the_wielded_program_unwields_it() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    game.wield_program(p).expect("wielded");
+
+    game.commit_program(p).expect("committed");
+
+    assert!(
+        game.wielded_program().is_none(),
+        "the run does not wield a despawned entity"
+    );
+}
+
+/// The refund is a resurrection rather than a return, so "whole" is the
+/// whole of the test: the name it answered to, and — load-bearing in both
+/// directions — the `ProgramId` its own memories and every other program's
+/// memories of it are keyed to.
+#[test]
+fn a_refunded_program_comes_back_whole() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    game.rename_companion(p, Some("Bellwether".to_string()))
+        .expect("named");
+    let label = game.creature_label(p);
+    let id = game.world.get::<ProgramId>(p).unwrap().0;
+
+    let snapshot = game.commit_program(p).expect("committed");
+    let back = game.refund_program(&snapshot).expect("refunded");
+
+    assert_eq!(game.creature_label(back), label);
+    assert_eq!(
+        game.world.get::<ProgramId>(back).unwrap().0,
+        id,
+        "a fresh id would orphan its memories and everyone else's memories of it"
+    );
+    assert_eq!(game.owned_pets().len(), 1, "back on the roster");
+}
+
+/// Spec test 8's other half. The snapshot is taken before the commit clears
+/// the wield, so it records the roles as they were — and a cancelled order
+/// that quietly disarmed the player would be a second cost the cancel never
+/// advertised.
+#[test]
+fn a_refunded_program_is_taken_back_in_hand() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    game.wield_program(p).expect("wielded");
+
+    let snapshot = game.commit_program(p).expect("committed");
+    let back = game.refund_program(&snapshot).expect("refunded");
+
+    assert_eq!(
+        game.wielded_program(),
+        Some(back),
+        "the weapon a cancelled order took comes back to the hand"
+    );
+}
+
+/// A weapon taken up while the order stood is not displaced by the refund:
+/// the program comes back as staff rather than knocking the live wield out
+/// of the player's hand.
+#[test]
+fn a_refunded_program_does_not_snatch_back_an_occupied_hand() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    game.wield_program(p).expect("wielded");
+    let snapshot = game.commit_program(p).expect("committed");
+    let other = tame_at_zone(&mut game, 1);
+    game.wield_program(other).expect("a second weapon in hand");
+
+    let back = game.refund_program(&snapshot).expect("refunded");
+
+    assert_eq!(
+        game.wielded_program(),
+        Some(other),
+        "the hand that is already full keeps what is in it"
+    );
+    assert_eq!(game.program_role(back), Some(ProgramRole::Staff));
+}
+
+/// The party half of the same rule: a slot the order emptied is given back.
+#[test]
+fn a_refunded_party_member_returns_to_its_slot() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let lead = tame_at_zone(&mut game, 1);
+    let p = tame_at_zone(&mut game, 1);
+    enlist(&mut game, lead);
+    enlist(&mut game, p);
+
+    let snapshot = game.commit_program(p).expect("committed");
+    let back = game.refund_program(&snapshot).expect("refunded");
+
+    assert_eq!(
+        game.world.resource::<Party>().0,
+        vec![lead, back],
+        "it falls back in behind the member that was ahead of it"
+    );
+}
+
+/// Spec test 9. `Party` is capped at `MAX_PARTY_SIZE` and `add_companion`
+/// refuses past it; a refund that pushed straight into the vec would be the
+/// one door that overfills the party, and `BattleState::planned` indexes it
+/// positionally.
+#[test]
+fn a_refunded_party_member_does_not_overfill_a_full_party() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    enlist(&mut game, p);
+    let snapshot = game.commit_program(p).expect("committed");
+    for _ in 0..crate::tuning::MAX_PARTY_SIZE {
+        let filler = tame_at_zone(&mut game, 1);
+        enlist(&mut game, filler);
+    }
+
+    let back = game.refund_program(&snapshot).expect("refunded");
+
+    assert_eq!(
+        game.world.resource::<Party>().0.len(),
+        crate::tuning::MAX_PARTY_SIZE,
+        "the cap holds"
+    );
+    assert_eq!(
+        game.program_role(back),
+        Some(ProgramRole::Staff),
+        "it comes back as staff rather than as a sixth slot"
+    );
+}
+
+/// Freeing a carrier drops its load and despawning it destroys it outright.
+/// `programs_for_build` already withholds one, but a rule that lives only in
+/// a picker is a rule a second frontend skips — so the engine door refuses
+/// too, and refuses **before** anything moves.
+#[test]
+fn committing_a_carrying_program_is_refused() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    game.world.entity_mut(p).insert(Carrying {
+        item: ItemId::from(ids::CORE_FRAGMENT),
+        qty: 3,
+    });
+
+    assert!(
+        game.commit_program(p).is_none(),
+        "a carrier is not spendable"
+    );
+    assert!(
+        game.world.get_entity(p).is_ok(),
+        "and a refusal costs nothing"
+    );
+}
+
+/// A sortied program is away and cannot be reached, and `Sorties` is the
+/// third resource holding a raw `Entity` — committing one would leave a
+/// squad counting down around a corpse.
+#[test]
+fn committing_a_sortied_program_is_refused() {
+    use crate::resources::{Sortie, Sorties};
+
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    game.world
+        .resource_mut::<Sorties>()
+        .0
+        .push(Sortie::test_stub(vec![p]));
+
+    assert!(game.commit_program(p).is_none());
+    assert!(game.world.get_entity(p).is_ok());
+}
+
+/// `Downed` is the roster slot a wipe is meant to cost. Spending one on a
+/// build and cancelling would hand it back whole, which is a repair with no
+/// Repair Bay.
+#[test]
+fn committing_a_downed_program_is_refused() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    game.world.entity_mut(p).insert(Downed);
+
+    assert!(game.commit_program(p).is_none());
+    assert!(game.world.get_entity(p).is_ok());
+}
+
+/// Ownership is the outermost guard: a wild creature standing in the base is
+/// an `Entity` like any other, and nothing about the argument type says it
+/// is yours.
+#[test]
+fn committing_something_you_do_not_own_is_refused() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_on_player_tile(&mut game);
+
+    assert!(game.commit_program(wild).is_none());
+    assert!(game.world.get_entity(wild).is_ok());
+}
+
+/// The `NextProgramId` write-back. `spawn_creature_from_save` mints into its
+/// context and never into the resource — `Game::load` writes it back itself
+/// — so a refund that dropped its scratch context would hand out the same id
+/// twice the next time one was minted.
+///
+/// The two halves are the whole point: a real snapshot must *not* advance the
+/// counter, and a sentinel one must.
+#[test]
+fn a_refund_neither_reissues_nor_loses_a_program_id() {
+    use crate::resources::NextProgramId;
+
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    let snapshot = game.commit_program(p).expect("committed");
+    let counter = game.world.resource::<NextProgramId>().0;
+
+    let back = game.refund_program(&snapshot).expect("refunded");
+
+    assert_eq!(
+        game.world.resource::<NextProgramId>().0,
+        counter,
+        "a snapshot carrying its own name mints nothing"
+    );
+    assert_eq!(
+        game.world.get::<ProgramId>(back).unwrap().0,
+        snapshot.program_id
+    );
+
+    // The sentinel arm — what a save written before ids existed carries.
+    let mut sentinel = snapshot.clone();
+    sentinel.program_id = 0;
+    let minted = game.refund_program(&sentinel).expect("refunded");
+
+    assert_eq!(game.world.get::<ProgramId>(minted).unwrap().0, counter);
+    assert_eq!(
+        game.world.resource::<NextProgramId>().0,
+        counter + 1,
+        "the id it minted is written back, not dropped with the scratch context"
+    );
+}
+
+/// A committed program's post goes with the entity, and the base notices on
+/// its own: occupancy is read off the live `Task` components
+/// (`displace_task_holder`), never cached on the structure, so nothing is
+/// left pointing at the despawned worker.
+#[test]
+fn committing_a_posted_program_leaves_no_task_behind() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    let target = game.player_entity();
+    game.world.entity_mut(p).insert(Task {
+        kind: TaskKind::Guard,
+        target,
+        progress: 1,
+        required: 4,
+    });
+
+    game.commit_program(p).expect("committed");
+
+    let mut tasks = game.world.query::<(Entity, &Task)>();
+    assert_eq!(
+        tasks.iter(&game.world).count(),
+        0,
+        "the posting died with the body"
+    );
+}
+
+/// A refund does not re-post the program it gives back. `schedule_base_labour`
+/// hands out work on the next tick, and re-inserting the snapshot's cronjob
+/// into a live base could put two bodies on one machine — the exact thing
+/// `displace_task_holder` exists to prevent.
+#[test]
+fn a_refunded_program_comes_back_unposted() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    let target = game.player_entity();
+    game.world.entity_mut(p).insert(Task {
+        kind: TaskKind::Guard,
+        target,
+        progress: 1,
+        required: 4,
+    });
+    let snapshot = game.commit_program(p).expect("committed");
+    assert!(
+        snapshot.cronjob.is_some(),
+        "the fixture really did record a posting"
+    );
+
+    let back = game.refund_program(&snapshot).expect("refunded");
+
+    assert!(
+        game.world.get::<Task>(back).is_none(),
+        "the scheduler posts it again; the refund does not"
+    );
+}

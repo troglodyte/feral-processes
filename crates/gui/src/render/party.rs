@@ -295,7 +295,13 @@ fn role_heading(role: ProgramRole) -> &'static str {
 ///
 /// Split out of `draw_companion_menu` so the grouping is measurable without
 /// a window; the drawing half needs a `Game` and this half does not.
-fn companion_page_rows(pets: &[PetInfo], selected: usize) -> Vec<Row> {
+///
+/// `pub(super)` because the build-program picker draws the same list: that
+/// screen spends a program off this roster, so it has to show the same stat
+/// line, the same tier colours and the same CRITICAL warning the roster
+/// does. A second row format for the one keypress that *deletes* a program
+/// would be the place the two drifted.
+pub(super) fn companion_page_rows(pets: &[PetInfo], selected: usize) -> Vec<Row> {
     let mut rows = Vec::new();
     let mut run: Option<ProgramRole> = None;
     for (i, p) in pets.iter().enumerate() {

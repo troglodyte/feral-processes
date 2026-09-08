@@ -87,9 +87,10 @@ use battle::{
     draw_battle_target_menu,
 };
 use building::{
-    draw_base_output, draw_base_staff, draw_build_direction, draw_build_menu, draw_remove_confirm,
-    draw_remove_menu, draw_staffing_menu, draw_structure_menu, draw_structures, draw_upgrade_menu,
-    draw_work_order_pick, draw_work_order_quantity, draw_work_orders,
+    build_commit, draw_base_output, draw_base_staff, draw_build_direction, draw_build_menu,
+    draw_build_program, draw_remove_confirm, draw_remove_menu, draw_staffing_menu,
+    draw_structure_menu, draw_structures, draw_upgrade_menu, draw_work_order_pick,
+    draw_work_order_quantity, draw_work_orders,
 };
 use caravan::{CaravanBasket, draw_caravan};
 use contracts::draw_contracts;
@@ -961,6 +962,14 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::RouteCargo => app.route_cargo_basket(),
         _ => None,
     };
+    // What the program picker is about to spend a program on. Read here for
+    // `scanned`'s reason — an upgrade's structure is named off
+    // `App::upgradeable_structures`, which takes `&mut self` and so cannot
+    // run once `game` below holds `&mut app.game`.
+    let build_commit = match app.mode {
+        Mode::BuildProgram => build_commit(app),
+        _ => None,
+    };
     // Read before `game` takes the whole of `app`, as the rows above are:
     // the figure is derived from more than one field, so the borrow cannot
     // be split at the call.
@@ -976,6 +985,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::BuildDirection => {
             draw_build_direction(game, pending_structure.as_deref(), refusal, painter, m)
         }
+        Mode::BuildProgram => draw_build_program(game, build_commit, selected, refusal, painter, m),
         Mode::Transfer => draw_transfer(
             game,
             &transfer_entries,
@@ -1367,7 +1377,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 101] = [
+    const ALL_MODES: [Mode; 102] = [
         Mode::MainMenu,
         Mode::CreateCharacter,
         Mode::LoadGame,
@@ -1384,6 +1394,7 @@ mod tests {
         Mode::BattleResult,
         Mode::Build,
         Mode::BuildDirection,
+        Mode::BuildProgram,
         Mode::DevConsole,
         Mode::Craft,
         Mode::CraftQuantity,
@@ -1642,6 +1653,52 @@ mod tests {
         assert!(
             refusal < first_row,
             "the refusal was drawn below the first option instead of over it"
+        );
+    }
+
+    /// **The empty program picker, painted.** A fresh run owns no programs,
+    /// so a build order that reached this screen would land on a box with no
+    /// rows — `App::selected_index` returns `None` for a zero-length list —
+    /// with Esc as the only exit and, before this, nothing on screen saying
+    /// why. The engine's own sentence for that case is unreachable from this
+    /// frontend: app-core passes `None` to `place_structure` only for Home,
+    /// and Home is exempt.
+    ///
+    /// Painted rather than asserted on the rows, because that is the half a
+    /// row test cannot see: the sentence goes out through `draw_popup`'s
+    /// refusal argument, and this says it arrives on the surface. The title
+    /// is checked in the same breath — a `Mode` missing from the draw match
+    /// falls into `_ => {}` and ships a blank screen that compiles clean.
+    #[test]
+    fn an_empty_program_picker_says_why_it_is_empty() {
+        let mut app = census_app();
+        let mut fx = Fx::new();
+        app.mode = Mode::BuildProgram;
+        app.pending_build = Some(feral_processes_app_core::PendingBuild::Deploy {
+            structure: "mining_node".to_string(),
+            dx: 1,
+            dy: 0,
+        });
+        app.status_line = None;
+        let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p));
+        let drawn = crate::paint::painted_text(&shapes);
+
+        let says = |want: &str| drawn.iter().any(|t| t.contains(want));
+        assert!(
+            says("Commit a program"),
+            "the picker drew no title: {drawn:?}"
+        );
+        assert!(
+            says("Mining Node"),
+            "the prompt names the structure the order is for: {drawn:?}"
+        );
+        assert!(
+            says("permanently"),
+            "and says what committing a program costs: {drawn:?}"
+        );
+        assert!(
+            says("No program on your roster is free to spend on this."),
+            "an empty picker is silent about why it is empty: {drawn:?}"
         );
     }
 

@@ -33,6 +33,12 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.132
+
+**Storage is now something a run earns rather than something it has** — the
+Depot holds 50 instead of 200, and five research nodes stand up five more
+rungs behind it, each holding twice the one below and gated a sector deeper.
+
 ## 0.13.131
 
 **A program with nothing left now rounds on a colleague** — past refusing to

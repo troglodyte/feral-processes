@@ -33,6 +33,21 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.133
+
+**A program in a bad mood now takes itself somewhere to sit.** Instead of
+wandering the base at random until its grudges faded, one far enough down
+the ladder walks to the nearest amenity — a Sandbox, a Log Analyzer Bay,
+anything with a `services:` list — stands there, and comes away fond of the
+place, which is what carries its morale back up. A mild sulk leaves the
+labour pool while it does, so building the first amenity is what turns a bad
+mood from a posting restriction into an absence; a base with none keeps its
+programs on the line, working through it at machines they do not resent.
+
+Two older scheduling bugs turned up alongside it: a body that went off
+shift, downed tools or broke off for repairs while the base's only
+instruction was a *standing* job kept that posting for the rest of the run.
+
 ## 0.13.132
 
 **Storage is now something a run earns rather than something it has** — the

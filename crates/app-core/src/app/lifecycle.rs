@@ -37,6 +37,7 @@ impl App {
         // the app.
         let creation_catalogue = CreationCatalogue::load(&assets_dir).unwrap_or_default();
         Self {
+            depot_filter: None,
             mode: Mode::MainMenu,
             game: None,
             status_line: profile_warning,

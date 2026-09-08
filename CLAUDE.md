@@ -333,6 +333,9 @@ relying on one, and correct all three places if it has moved.
 - **The opening ring needs an explicit radius**, `OPENING_RING_TILES`.
 - **`Stock`'s `output` is public and its `input` is private**, and that
   asymmetry is the whole of a chain's directionality.
+- **A Depot's filter is the *denied* set and `Game::depot_accepts` is the one
+  door**, read by the player's own put and the crew's haul alike, an absent
+  `components::DepotFilter` meaning the shelf takes anything.
 - **Taking and putting are one screen, one basket and one commit** —
   `Mode::Transfer`, opened with `c`.
 - **The put side is one budget and the take side is per row, and the screen
@@ -1163,7 +1166,7 @@ relying on one, and correct all three places if it has moved.
 ## Build & test
 
 ```sh
-cargo test --workspace     # 4473 tests
+cargo test --workspace     # 5061 tests
 cargo run                  # the game; `default-run` in crates/launcher
 cargo clippy --workspace
 cargo fmt

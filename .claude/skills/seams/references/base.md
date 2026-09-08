@@ -352,6 +352,36 @@
   exception: it is the machine's own worker loading its own hopper.
   `game/base/collect.rs::ORTHOGONAL` is the one reach rule both the player and the
   pull phase read.
+- **A Depot's filter is the *denied* set and `Game::depot_accepts` is the one
+  door** — `components::DepotFilter`, edited from `Mode::DepotFilter` (`[F]`
+  out of the transfer picker). Denied and not allowed so the empty case is
+  the default the whole feature is inert under: every Depot in every existing
+  save takes anything, and `denied_items` is additive behind
+  `#[serde(default)]` with **no `SAVE_FORMAT_VERSION` bump**. The component
+  is inserted on the first denial and **removed again** when the last is
+  lifted, so "takes anything" has exactly one representation — `StandingJob`'s
+  absence rule, one arm up in the same restore loop — and on the *entity*
+  rather than a tile-keyed resource, the deliberate opposite of
+  `BuybackLedger`: a Depot rebuilt on a demolished one's footprint must not
+  inherit a rule nobody set. **A refusal reads exactly as a full shelf**,
+  which is why the feature is two `filter` calls: `give_to_adjacent` gains a
+  `continue` beside its `room == 0` one, and `haul_step_system` narrows its
+  `depots` list at the two points that know the item. **Three traps.**
+  `take_haul_load` takes the first key *some Depot will accept*, not the head
+  entry — guarding the call instead deadlocks a two-product buffer behind an
+  item nobody wants. `TransferRow::can_put` is now a quantity as well as a
+  permission, and **only the permission (`may_put`) creates the row**, or a
+  full or filtered Depot silently deletes the line naming what you carry. And
+  `c` opens the picker on an **empty** offer when a Depot stands there, since
+  `[F]` is only reachable from inside it and a just-built Depot is exactly
+  the one worth setting up. Nothing on the take side asks — a filter says
+  what may come **in**, and `DepotFilterRow::held` is drawn beside the denied
+  mark so the two do not read as a contradiction. **`return_to_depots` is
+  the third door in and is exempt on purpose**: a refund is goods the base
+  already owned, and `return_material`'s ladder ends in units left in the
+  dust when the player is not in base space — a filter honoured there would
+  let a closed shelf destroy materials while the player was away.
+  `a_refund_ignores_the_filter` pins it, because it reads like an oversight.
 - **Taking and putting are one screen, one basket and one commit** —
   `Mode::Transfer`, opened with `c`. `game/base/transfer.rs` holds the union
   offer (`transfer_offer`), the room (`transfer_room`), the two refusals

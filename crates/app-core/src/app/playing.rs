@@ -369,7 +369,14 @@ impl App {
                 // other.
                 GameKey::Char('c') => {
                     let offer = game.transfer_offer();
-                    if offer.is_empty() {
+                    // An empty offer is still worth a screen when a Depot
+                    // is standing here: `[F]` is reached from inside the
+                    // picker, and a Depot built five seconds ago with an
+                    // empty pack beside it is exactly when the player wants
+                    // to set it up. Without this the one Depot that most
+                    // needs configuring is the one that cannot be.
+                    let configurable = !game.adjacent_depot_entities().is_empty();
+                    if offer.is_empty() && !configurable {
                         // Straight back through the engine, which speaks
                         // its own refusal and spends no turn. A
                         // `status_line` copy of that sentence here would be

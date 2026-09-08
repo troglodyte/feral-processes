@@ -8134,10 +8134,15 @@ and on a banked item, the pack figure read 0 while the player was carrying
 twelve. So `carried` is what the `Inventory` holds, always, and `can_put` is
 what may be moved out of it — 0 in both of those cases — and `put_available`
 clamps against the second. `on_shelves` needs no second figure because it is
-both at once. **Only `can_put` creates a row from the pack side**: filling the
-screen with every carried item beside a Mining Node would bury the one row
-that can actually move, so a pack item with nowhere to go is listed only when
-it is also on a shelf.
+both at once. **The permission is what creates a row from the pack side, not
+the quantity**: filling the screen with every carried item beside a Mining
+Node would bury the one row that can actually move, so a pack item with
+nowhere at all to go is listed only when it is also on a shelf — but a Depot
+that is full, or one whose filter refuses this item, still leaves a row,
+because there the player is looking at the thing they are trying to put and
+needs to be told why it will not go. That is one `may_put` local beside
+`can_put` in `transfer_offer`, and folding the two back together is how a full
+Depot silently deletes the row that names what you are carrying.
 
 **The trade currency gets no row on either side, and it is its own filter.**
 Credits are carried in the same `Inventory` as cargo and are not
@@ -8213,6 +8218,97 @@ nothing on the page shows. `projected` clamps to `0..=u32::MAX` rather than
 saturating by accident — `edit_row` cannot reach either end, but `i64 as u32`
 **wraps**, and a column reading four billion units is the failure that would
 result from a slip.
+
+### A Depot's filter is the denied set, and one door reads it
+
+A Depot took everything, so a base with two of them had two of the same
+shelf. The filter makes one Depot a sorted store: `components::DepotFilter`
+holds a `BTreeSet<ItemId>` of what that building refuses, edited from
+`Mode::DepotFilter` — `[F]` out of the transfer picker, an arrow per row,
+`[A]`/`[D]` for the whole list and `Tab` between the up-to-four Depots that
+can be orthogonally adjacent.
+
+**Denied and not allowed, and that is the whole of the migration story.** The
+stored set is what a reader asks, so its empty case is the default the whole
+feature has to be inert under: every Depot in every existing save, and every
+Depot built after this, takes anything. An allowed set would have meant a
+fresh Depot refusing the catalogue until configured, plus a backfill pass over
+`StructureSave` to tell "a save from before filters" from "a Depot the player
+closed". `denied_items: Vec<ItemId>` is additive behind `#[serde(default)]`,
+so **no `SAVE_FORMAT_VERSION` bump**.
+
+**"Takes anything" has exactly one representation.** The component is inserted
+lazily on the first denial and removed again when the last one is lifted —
+`StandingJob`'s absence rule, one arm up in the same restore loop — so no
+reader has to know that an empty set and no set mean the same thing, and
+`depot_accepts` is a single `is_none_or`.
+
+**On the entity rather than in a resource keyed by tile.** This is the
+deliberate opposite of `resources::BuybackLedger`, which outlives its
+building on purpose: a trader's shelf is stock the player part-owns, while a
+filter is an instruction to *this* Depot. A Depot raised on a demolished one's
+footprint must not inherit a rule nobody set on it.
+
+**A refusal reads as a full shelf everywhere, and that is what made the
+feature two `filter` calls.** `give_to_adjacent` already walked the adjacent
+Depots skipping any with `output_room() == 0`; the filter is one more
+`continue` beside it. `haul_step_system` already had a `depots` list filtered
+to those with room, a `nearest_depot` over it, and a return path for a load
+with nowhere to land; the filter narrows the list at the two points that know
+which item is in play. Nothing new is stored on the worker, no errand learned
+a state, and `with_no_depot_a_clogged_machine_just_stays_clogged` has a twin
+reached the other way — a base whose every shelf refuses this product behaves
+exactly like a base with no shelf.
+
+**The departure predicate is inside the pick, not around it.**
+`take_haul_load` used to take `stock.output.keys().next()`; it now takes the
+first key some Depot will accept. Guarding the call instead would leave a
+buffer holding two products clogged forever behind a head entry nobody wants,
+which is a deadlock with no message.
+
+**`TransferRow::can_put` became a quantity as well as a permission, and the
+row survived that.** Room is now per item — a Depot refusing this one is not
+room for it however empty it stands — so `can_put` is clamped by
+`deposit_room_for`. Gating row creation on `can_put > 0`, which is what the
+code did, then deleted the row for a *full* Depot as well, taking with it the
+one line that says what the player is holding. Hence `may_put` beside it.
+
+**The shared put budget is the coarse half, deliberately.** `basket_room` is
+one number across every row and cannot express a per-item answer; the exact
+figure lives on the row. What the budget can do is stop counting a Depot that
+will take nothing in the pack at all (`depots_for_put`), which is the case
+where a blind sum promised twice the room that existed. It falls back to every
+adjacent Depot when the pack holds nothing puttable, so a player who opened
+the screen only to take still reads the real room rather than a zero that
+means "you are carrying nothing". A bipartite arrangement can still
+over-promise in principle; the fill clamps and reports what actually landed,
+which is where that has always been settled.
+
+**`c` opens the picker on an empty offer when a Depot is standing there.**
+`[F]` is reached from inside the picker, so without this arm the one Depot
+that most wants configuring — just built, nothing on it, nothing in your pack
+— is the one that cannot be. The refusal is now "neither cargo to move nor a
+shelf to set up", which is the honest reading of what the key does.
+
+**Esc re-snapshots the picker rather than restoring it.** The filter the
+player has just changed is what `can_put` is derived from, so the basket they
+were holding was built against ceilings that no longer apply. Zeroing it costs
+nothing — no tick has passed, nothing has been spent — and the alternative is
+a screen quoting a put the commit would clamp.
+
+**Nothing on the take side asks.** A filter says what may come in; denying
+something already on the shelf leaves it there, and the screen draws that
+Depot's `held` beside the denied mark so the two do not read as a
+contradiction.
+
+**`stock::return_to_depots` is the third door into a Depot and is
+deliberately exempt.** It is a refund — a cancelled build order, a route's
+proceeds — of goods the base already owned, and `return_material`'s fallback
+ladder ends in a log line saying units were left in the dust when the player
+is not in base space to take them into the pack. A filter honoured there
+would let a closed shelf **destroy** materials while the player was away,
+which is not what sorting your storage means. `a_refund_ignores_the_filter`
+is the pin, and it exists because this reads like an oversight.
 
 ### `Game::copy_power` is the one door to a rating, and every term in it is a call
 

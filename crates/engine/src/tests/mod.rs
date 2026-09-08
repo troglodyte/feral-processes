@@ -30,6 +30,7 @@ mod construction;
 mod contracts;
 mod crafting;
 mod creation;
+mod depot_filter;
 mod descriptions;
 mod disposition;
 mod easter_eggs;

@@ -1000,6 +1000,20 @@ pub struct StructureSave {
     pub standing_work: bool,
     #[serde(default)]
     pub standing_guard: bool,
+    /// What this Depot has been told to refuse — see
+    /// `components::DepotFilter`.
+    ///
+    /// The **denied** set, so the overwhelmingly common case is an empty
+    /// list and a save written before filters existed loads as a Depot that
+    /// takes anything, which is what it was. Additive behind a default, so
+    /// no `SAVE_FORMAT_VERSION` bump.
+    ///
+    /// Flat on `StructureSave` beside the two `standing_*` bools rather
+    /// than as a nested component, for their reason: a defaulted `Vec` is
+    /// free where a new struct is a shape change the field-named RON that
+    /// `dev-saves/` templates are written in cannot absorb.
+    #[serde(default)]
+    pub denied_items: Vec<ItemId>,
     /// Ticks of charge left on a supplier that burns Power Cells to stay on
     /// the grid — see `components::PowerFuel`. Live state rather than
     /// something the next tick recomputes: losing it would refuel every

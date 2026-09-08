@@ -105,8 +105,14 @@ fn body_rows(
         text_row("Up/Down pick a row; digits and Backspace type an amount"),
         text_row("Left takes out, Right puts in; Shift for the end, Ctrl halves the gap"),
         text_row("[A] take everything  [N] clear  Enter to transfer  Esc to leave"),
-        text_row(""),
     ]);
+    // Offered exactly when it works. `room` is `Some` only when a Depot is
+    // beside the party, which is the same question `App::open_depot_filter`
+    // refuses on — so the hint cannot advertise a key that answers back.
+    if room.is_some() {
+        body.push(text_row("[F] set what a Depot beside you will accept"));
+    }
+    body.push(text_row(""));
     let cols = Columns::of(game, entries);
     body.push(text_row(cols.header()));
     for (i, (item, amount, carried, on_shelves)) in entries.iter().enumerate() {

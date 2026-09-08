@@ -205,6 +205,7 @@ impl App {
             Mode::CreateCharacter => self.handle_creation_key(key),
             Mode::Playing => self.handle_playing_key(key),
             Mode::Transfer => self.handle_basket_key(key),
+            Mode::DepotFilter => self.handle_depot_filter_key(key),
             Mode::BaseMenu => self.handle_base_menu_key(key),
             Mode::PartyMenu => self.handle_party_menu_key(key),
             Mode::Battle => self.handle_battle_key(key),

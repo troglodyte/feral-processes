@@ -1248,3 +1248,115 @@ fn a_fed_burner_gives_the_body_back_on_a_base_with_no_orders_at_all() {
         "with the hopper stocked and nothing else wanted, the body is free"
     );
 }
+
+/// The crew's half of `components::DepotFilter`: a shelf that refuses the
+/// load is no more a destination than a full one, and the walk simply
+/// carries on to the next.
+///
+/// The mirror of `a_worker_delivers_to_the_nearer_of_two_depots` with one
+/// thing changed, so a filter that was quietly ignored fails here as the
+/// load landing where the distance sort alone would have put it.
+#[test]
+fn a_worker_walks_past_a_depot_that_refuses_its_load() {
+    let mut game = base(4);
+    let node = deploy(&mut game, "mining_node", 0, 1);
+    let far = deploy(&mut game, "depot", 4, 1);
+    let near = deploy(&mut game, "depot", 2, 1);
+    game.set_depot_filter(near, &ItemId::from(ids::CORE_FRAGMENT), false);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    fill_to_capacity(&mut game, node, ids::CORE_FRAGMENT);
+
+    tick_until(&mut game, 300, |g| {
+        node_output(g, near, ids::CORE_FRAGMENT) > 0 || node_output(g, far, ids::CORE_FRAGMENT) > 0
+    });
+
+    assert_eq!(
+        node_output(&game, far, ids::CORE_FRAGMENT),
+        tuning::HAUL_CARRY_CAPACITY,
+        "the nearer shelf refuses it, so the load belongs in the far one"
+    );
+    assert_eq!(
+        node_output(&game, near, ids::CORE_FRAGMENT),
+        0,
+        "and nothing may be forced onto the shelf that said no"
+    );
+}
+
+/// `with_no_depot_a_clogged_machine_just_stays_clogged`, reached the other
+/// way: a Depot that will not take what this machine makes is no reason to
+/// set off, so nobody picks up a load they would only have to carry back.
+#[test]
+fn a_depot_that_refuses_the_load_is_no_reason_to_set_off() {
+    let mut game = base(13);
+    let node = deploy(&mut game, "mining_node", 1, 0);
+    let shelf = deploy(&mut game, "depot", 4, 0);
+    game.set_depot_filter(shelf, &ItemId::from(ids::CORE_FRAGMENT), false);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+
+    let cap = capacity_of(&game, node);
+    fill_output(&mut game, node, ids::CORE_FRAGMENT, cap);
+    let post = *game.world.get::<Position>(worker).unwrap();
+
+    for _ in 0..60 {
+        game.tick();
+    }
+
+    assert!(
+        game.world.get::<Carrying>(worker).is_none(),
+        "with nowhere that will take it there is no errand to start"
+    );
+    assert_eq!(
+        node_output(&game, node, ids::CORE_FRAGMENT),
+        cap,
+        "the buffer is untouched"
+    );
+    let now = *game.world.get::<Position>(worker).unwrap();
+    assert_eq!((post.x, post.y), (now.x, now.y), "and nobody goes anywhere");
+}
+
+/// A filter closed while the worker is already walking, which is the only
+/// way to reach the return path: a shelf that refuses the load is not a
+/// destination in the first place, so denying it beforehand would just stop
+/// the errand starting.
+#[test]
+fn a_load_refused_mid_walk_goes_back_and_re_clogs_the_machine() {
+    let mut game = base(8);
+    let node = deploy(&mut game, "mining_node", 1, 0);
+    let shelf = deploy(&mut game, "depot", 4, 0);
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+
+    let node_cap = capacity_of(&game, node);
+    fill_output(&mut game, node, ids::CORE_FRAGMENT, node_cap);
+
+    tick_until(&mut game, 200, |g| {
+        g.world.get::<Carrying>(worker).is_some()
+    });
+    assert!(game.world.get::<Carrying>(worker).is_some(), "precondition");
+
+    game.set_depot_filter(shelf, &ItemId::from(ids::CORE_FRAGMENT), false);
+
+    tick_until(&mut game, 300, |g| {
+        g.world.get::<Carrying>(worker).is_none()
+    });
+
+    assert!(
+        game.world.get::<Carrying>(worker).is_none(),
+        "the load must go back into the machine rather than ride forever"
+    );
+    assert_eq!(
+        node_output(&game, node, ids::CORE_FRAGMENT),
+        node_cap,
+        "the base stalls loudly instead of the goods vanishing"
+    );
+    assert_eq!(
+        node_output(&game, shelf, ids::CORE_FRAGMENT),
+        0,
+        "and the shelf that said no is still empty"
+    );
+}

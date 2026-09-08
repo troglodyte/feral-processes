@@ -69,6 +69,8 @@ mod stack_market;
 mod stock;
 mod structure_manifest;
 mod talents;
+#[cfg(test)]
+mod test_support;
 mod tools;
 mod trade;
 mod transfer;
@@ -1699,6 +1701,51 @@ mod tests {
         assert!(
             says("No program on your roster is free to spend on this."),
             "an empty picker is silent about why it is empty: {drawn:?}"
+        );
+    }
+
+    /// **The upgrade arm, painted.** `building::build_commit`'s
+    /// `PendingBuild::Upgrade` branch resolves its label off
+    /// `App::upgradeable_structures().find(|s| s.entity == structure)` — a
+    /// re-scan, not a stored name — and before this test nothing in this
+    /// crate drove it through the real `draw` path: every pure test in
+    /// `building.rs` builds a `BuildCommit` straight from a literal label,
+    /// which cannot catch that `.find` missing and falling back to the
+    /// generic `"structure"` noun (`building::UNNAMED_BUILD_TARGET`). A
+    /// prior review round named this gap alongside the empty-picker one
+    /// above.
+    ///
+    /// `app_in_base_with_a_compiler` (`render/test_support.rs`) gives this a
+    /// real, scan-reachable Compiler to upgrade: `App::upgradeable_structures`
+    /// finds the same `Entity` this test then hands `PendingBuild::Upgrade`,
+    /// so the prompt painted here is the one a genuine upgrade order would
+    /// show, not a fabricated stand-in the `.find` could never have matched.
+    #[test]
+    fn an_upgrade_prompt_names_the_real_structure_it_would_spend_a_program_on() {
+        let mut app = test_support::app_in_base_with_a_compiler(4002);
+        let mut fx = Fx::new();
+        let structure = app
+            .upgradeable_structures()
+            .into_iter()
+            .find(|s| s.label == "Compiler")
+            .expect("the fixture placed a Compiler within scan range")
+            .entity;
+        app.mode = Mode::BuildProgram;
+        app.pending_build = Some(feral_processes_app_core::PendingBuild::Upgrade {
+            structure,
+            to_tier: 2,
+        });
+        app.status_line = None;
+        let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p));
+        let drawn = crate::paint::painted_text(&shapes);
+        let says = |want: &str| drawn.iter().any(|t| t.contains(want));
+        assert!(
+            says("Upgrading the Compiler to Mk2"),
+            "the real structure's own name, not the generic fallback: {drawn:?}"
+        );
+        assert!(
+            !says("Upgrading the structure to Mk2"),
+            "a `.find` that missed its target would fall back to the generic noun: {drawn:?}"
         );
     }
 

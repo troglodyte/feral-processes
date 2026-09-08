@@ -2447,6 +2447,44 @@ mod build_program_tests {
             "the picker the row leads to asks for exactly what the row said"
         );
     }
+
+    /// **The only test in this file that drives `draw_build_program`
+    /// itself, rather than `build_program_rows` in isolation.** Every other
+    /// test above pins the row *content* against hand-built `PetInfo`
+    /// fixtures; none of them touch the three lines inside
+    /// `draw_build_program` that turn a real `Game` into that list —
+    /// `game.programs_for_build(tier)`, handed to `build_program_rows` as
+    /// `&candidates`. A prior review round found that gap: mutate
+    /// `&candidates` to `&[]`, or substitute `game.owned_pets()` for
+    /// `game.programs_for_build(tier)`, and every test in this crate still
+    /// passed — the one painted test that reaches this screen
+    /// (`an_empty_program_picker_says_why_it_is_empty`, `render/mod.rs`)
+    /// uses a fresh run with zero programs, so both mutations are
+    /// indistinguishable from the correct code on that fixture.
+    ///
+    /// `game_with_a_free_and_a_wielded_program` (`render/test_support.rs`)
+    /// closes it: one program `programs_for_build` keeps, one it drops
+    /// because it's wielded. `&candidates -> &[]` paints neither name.
+    /// `owned_pets()` in place of `programs_for_build` paints both. Only the
+    /// real call, passed through untouched, paints exactly the free one.
+    #[test]
+    fn draw_build_program_only_lists_what_the_engine_will_accept() {
+        let mut game = crate::render::test_support::game_with_a_free_and_a_wielded_program(4001);
+        let m = crate::text::ui_metrics(900.0);
+        let (_, shapes) = crate::paint::with_painter(|p| {
+            draw_build_program(&mut game, Some(deploy("Fabricator")), 0, None, p, &m);
+        });
+        let drawn = crate::paint::painted_text(&shapes);
+        let says = |want: &str| drawn.iter().any(|t| t.contains(want));
+        assert!(
+            says("Free Sparkgrub"),
+            "programs_for_build(1) keeps this one: {drawn:?}"
+        );
+        assert!(
+            !says("Wielded Sparkgrub"),
+            "programs_for_build(1) drops a wielded program — owned_pets() would not: {drawn:?}"
+        );
+    }
 }
 
 #[cfg(test)]

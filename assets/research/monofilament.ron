@@ -3,6 +3,7 @@
     name: "Monofilament Edge",
     description: "Compile Monofilament Whips at a Fabricator.",
     cost: 110,
+    materials: [("trace_sniffer", 5), ("logic_wafer", 12)],
     min_zone: 3,
     requires: ["overclock"],
     unlocks_recipes: [(

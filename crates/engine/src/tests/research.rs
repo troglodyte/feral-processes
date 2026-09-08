@@ -415,9 +415,7 @@ fn a_research_gated_structure_is_hidden_from_the_build_menu_until_researched() {
         .collect();
     assert!(!hidden.contains(&"fabricator".to_string()));
 
-    grant_research_data(&mut game, 40);
-    game.unlock_research("automation").unwrap();
-    game.unlock_research("weapon_bench").unwrap();
+    unlock_research_chain(&mut game, "weapon_bench");
 
     let shown: Vec<String> = game
         .buildable_structure_defs()
@@ -460,6 +458,7 @@ fn nothing_is_researched_at_the_start_of_a_game() {
 fn unlocking_research_consumes_exactly_its_cost() {
     let mut game = Game::new(62, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     grant_research_data(&mut game, 20);
+    stock_research_materials(&mut game, &["automation".to_string()]);
     game.unlock_research("automation").unwrap();
     assert!(game.is_researched("automation"));
     assert_eq!(
@@ -484,7 +483,7 @@ fn unlocking_research_fails_while_a_prerequisite_is_missing() {
     grant_research_data(&mut game, 500);
     let err = game.unlock_research("weapon_bench").unwrap_err();
     assert!(
-        err.contains("Automation"),
+        err.contains("Routine Fabrication"),
         "the error should name the missing prereq: {err}"
     );
     assert!(!game.is_researched("weapon_bench"));
@@ -506,8 +505,8 @@ fn a_locked_node_reports_which_prerequisites_are_missing() {
     assert_eq!(
         node.state,
         ResearchState::Locked {
-            missing: vec!["Automation".to_string()],
-            // Weapon Fabrication is a bootstrap node, so the prereq is the
+            missing: vec!["Routine Fabrication".to_string()],
+            // Weapon Fabrication is a zone-1 node, so the prereq is the
             // only thing in its way — the contrast that makes
             // `a_node_can_report_both_a_missing_prereq_and_its_zone` mean
             // something.
@@ -535,6 +534,7 @@ fn a_prerequisite_free_node_is_available_immediately() {
 fn researching_the_same_node_twice_is_rejected() {
     let mut game = Game::new(67, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     grant_research_data(&mut game, 40);
+    stock_research_materials(&mut game, &["automation".to_string()]);
     game.unlock_research("automation").unwrap();
     let err = game.unlock_research("automation").unwrap_err();
     assert!(err.contains("already"), "got: {err}");
@@ -550,6 +550,7 @@ fn unknown_research_is_rejected() {
 fn research_nodes_lists_available_before_locked_before_unlocked() {
     let mut game = Game::new(69, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     grant_research_data(&mut game, 40);
+    stock_research_materials(&mut game, &["automation".to_string()]);
     game.unlock_research("automation").unwrap();
     let ranks: Vec<u8> = game
         .research_nodes()
@@ -642,6 +643,7 @@ fn research_prereqs_of(game: &mut Game, id: &str) {
             .expect("a resolved prereq")
             .cost;
         grant_research_data(game, cost);
+        stock_research_materials(game, &[prereq.clone()]);
         game.unlock_research(&prereq)
             .unwrap_or_else(|e| panic!("prereq {prereq} should be buyable: {e}"));
     }

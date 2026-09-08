@@ -3813,3 +3813,122 @@ fn the_teardown_node_unlocks_the_rig() {
         "the teardown node should unlock the rig"
     );
 }
+
+/// Every material a research node asks for must be something the base can
+/// already be making by the time that node is reachable — the whole of
+/// "don't require items that can't be unlocked first", and a census because
+/// nothing in `ResearchDef` says a bill has to be payable.
+///
+/// The set is built from the node's own `requires` closure and nothing else:
+/// structures no research gates at all, plus the structures its
+/// prerequisites unlock, then the fixpoint of what that set can produce and
+/// craft. `min_zone` is deliberately **not** a source of goods — a zone
+/// number says the player breached, not that they took any particular node,
+/// so a bill leaning on it would be an unstated prerequisite, which is
+/// exactly the failure this exists to catch.
+///
+/// A `work.produces` structure makes its item out of nothing on a timer and
+/// so seeds the set; an `assembles` structure does not, because a machine
+/// runs its product's own `craftable.cost` and is therefore already covered
+/// by the craft fixpoint. Treating it as a source is how the Fabricator
+/// reads as a Trace Sniffer supply with no Logic Wafer in sight.
+#[test]
+fn every_research_material_is_reachable_through_that_nodes_own_prerequisites() {
+    let game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let research = game.world.resource::<crate::research::ResearchDb>();
+    let structures = game.structure_defs();
+    let items = game.item_defs();
+
+    let gated: std::collections::HashSet<&str> = research
+        .all()
+        .flat_map(|d| d.unlocks_structures.iter().map(|s| s.as_str()))
+        .collect();
+
+    let mut checked = 0;
+    for def in research.all() {
+        // The transitive `requires` closure, guarded on `seen` so a modded
+        // cycle terminates — `ResearchDb::recommended_ids`' reason.
+        let mut prereqs: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut stack: Vec<String> = def.requires.clone();
+        while let Some(id) = stack.pop() {
+            if !prereqs.insert(id.clone()) {
+                continue;
+            }
+            if let Some(d) = research.get(&id) {
+                stack.extend(d.requires.clone());
+            }
+        }
+
+        let available: std::collections::HashSet<&str> = structures
+            .iter()
+            .map(|s| s.id.as_str())
+            .filter(|id| {
+                !gated.contains(id)
+                    || prereqs.iter().any(|p| {
+                        research
+                            .get(p)
+                            .is_some_and(|d| d.unlocks_structures.iter().any(|s| s == id))
+                    })
+            })
+            .collect();
+
+        let mut makeable: std::collections::HashSet<ItemId> = structures
+            .iter()
+            .filter(|s| available.contains(s.id.as_str()))
+            .filter_map(|s| s.work.as_ref().map(|w| w.produces.clone()))
+            .collect();
+        loop {
+            let grown: Vec<ItemId> = items
+                .iter()
+                .filter(|item| !makeable.contains(&item.id))
+                .filter_map(|item| item.craftable.as_ref().map(|c| (&item.id, c)))
+                .filter(|(_, c)| {
+                    c.requires_structure
+                        .as_ref()
+                        .is_none_or(|s| available.contains(s.as_str()))
+                        && c.cost.iter().all(|(i, _)| makeable.contains(i))
+                })
+                .map(|(id, _)| id.clone())
+                .collect();
+            if grown.is_empty() {
+                break;
+            }
+            makeable.extend(grown);
+        }
+
+        for (item, _) in &def.materials {
+            assert!(
+                makeable.contains(item),
+                "research {:?} asks for {:?}, which nothing its own prerequisites unlock can make — \
+                 the player would have to guess which other node to take first",
+                def.id,
+                item.as_str()
+            );
+            checked += 1;
+        }
+    }
+    assert!(
+        checked >= 40,
+        "expected the shipped tree's material bills; {checked} lines is a tree that has \
+         quietly gone back to costing Research Data alone"
+    );
+}
+
+/// The other half: the shipped tree actually *has* bills. The census above
+/// passes vacuously against a tree with none, so a node whose `materials`
+/// line was deleted by hand would read as free rather than as a regression.
+#[test]
+fn every_shipped_research_node_costs_materials() {
+    let game = Game::new(84, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let bare: Vec<&str> = game
+        .world
+        .resource::<crate::research::ResearchDb>()
+        .all()
+        .filter(|d| d.materials.is_empty())
+        .map(|d| d.id.as_str())
+        .collect();
+    assert!(
+        bare.is_empty(),
+        "research is a production run, not a purchase — these nodes cost Research Data alone: {bare:?}"
+    );
+}

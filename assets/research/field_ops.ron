@@ -3,6 +3,7 @@
     name: "Field Operations",
     description: "Routines that keep running while you are away from the base. Teaches Repair Loop and Trickle Charge — write them onto Routine Disks to run them.",
     cost: 20,
+    materials: [("routine_disk", 6), ("logic_wafer", 6)],
     requires: ["self_exec"],
     unlocks_abilities: ["repair_loop", "trickle_charge"],
 )

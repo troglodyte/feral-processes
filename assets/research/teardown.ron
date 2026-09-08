@@ -3,6 +3,7 @@
     name: "Teardown",
     description: "A rig that strips downed programs without you standing over it. Unlocks the Teardown Rig.",
     cost: 12,
+    materials: [("bytecode_block", 8)],
     requires: ["automation"],
     unlocks_structures: ["teardown_rig"],
 )

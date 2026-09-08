@@ -1222,6 +1222,10 @@ impl Game {
                     level: work.level,
                 });
             }
+            // Inserted unconditionally: a Home reloaded at 1.0 carries a
+            // component it did not have before, which changes nothing
+            // because 1.0 is the neutral the absent case already means.
+            entity.insert(crate::components::BuildQuality(s.build_quality));
             if def.upgrade.is_some() {
                 let tier = s.tier.unwrap_or(1);
                 entity.insert(StructureTier(tier));
@@ -1969,11 +1973,12 @@ impl Game {
             Option<&StandingJob>,
             Option<&crate::components::PowerFuel>,
             Option<&crate::components::Hopper>,
+            Option<&crate::components::BuildQuality>,
         )>();
         // `Stock` is optional here only because test fixtures hand-spawn
         // bare `Structure`s; `place_structure` and `load` both give every
         // real one a buffer.
-        for (structure, pos, durability, tier, stock, standing, fuel, hopper) in
+        for (structure, pos, durability, tier, stock, standing, fuel, hopper, quality) in
             structure_query.iter(&self.world)
         {
             let encode = |map: Option<&std::collections::BTreeMap<ItemId, u32>>| {
@@ -1994,6 +1999,7 @@ impl Game {
                 power_fuel: fuel
                     .map(|f| f.ticks_left)
                     .unwrap_or(crate::tuning::POWER_UPKEEP_TICKS),
+                build_quality: quality.map_or(1.0, |q| q.0),
             });
         }
 

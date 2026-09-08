@@ -843,6 +843,45 @@ pub(super) fn file_build_with_rolls(
     program
 }
 
+/// The first structure of `kind` standing anywhere — for a test that has
+/// just reloaded and cannot hold on to an `Entity` across the round trip.
+pub(super) fn first_structure(game: &mut Game, kind: &str) -> Entity {
+    let mut q = game.world.query::<(Entity, &Structure)>();
+    q.iter(&game.world)
+        .find(|(_, s)| s.kind == kind)
+        .map(|(e, _)| e)
+        .unwrap_or_else(|| panic!("no {kind} stands in the base"))
+}
+
+/// A base with one Mining Node raised by a crew, built by a program of the
+/// given build rolls — a real machine carrying a real `BuildQuality`, which
+/// a hand-spawned one deliberately does not.
+pub(super) fn base_with_a_built_node(game_seed: u32, assembly: f32, extraction: f32) -> Game {
+    let mut game = Game::new(game_seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 500);
+    stand_in_base(&mut game);
+    spawn_tamed(&mut game, 500, 3);
+    file_build_with_rolls(&mut game, "mining_node", 1, 0, assembly, extraction);
+    for _ in 0..400 {
+        if first_structure_opt(&mut game, "mining_node").is_some() {
+            break;
+        }
+        game.tick();
+    }
+    game
+}
+
+fn first_structure_opt(game: &mut Game, kind: &str) -> Option<Entity> {
+    let mut q = game.world.query::<(Entity, &Structure)>();
+    q.iter(&game.world)
+        .find(|(_, s)| s.kind == kind)
+        .map(|(e, _)| e)
+}
+
 /// Files an upgrade through the real `Game::upgrade_structure` and then
 /// raises it, for a test that only wants a Mk2 machine rather than a crew.
 ///

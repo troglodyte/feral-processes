@@ -853,3 +853,71 @@ fn a_save_written_without_the_build_rolls_loads_them_neutral() {
     }
     assert!(seen > 0, "the save carried no creature to check");
 }
+
+/// A machine remembers how well it was built — through a real file round
+/// trip, not a RON one, because a `#[serde(skip)]` leaves a RON round trip
+/// green while the save on disk carries nothing.
+#[test]
+fn a_machines_build_quality_survives_a_save() {
+    let mut game = crate::tests::support::base_with_a_built_node(4212, 1.0, 0.82);
+    let node = crate::tests::support::first_structure(&mut game, "mining_node");
+    let before = game.work_ticks_for(node, crate::tuning::DEFAULT_BASE_SPEED);
+    assert!(
+        before > 10,
+        "the fixture built a machine at the shipped rate"
+    );
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_build_quality_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let reloaded = crate::tests::support::first_structure(&mut loaded, "mining_node");
+    assert_eq!(
+        loaded.work_ticks_for(reloaded, crate::tuning::DEFAULT_BASE_SPEED),
+        before,
+        "the reloaded machine runs at a different rate than the one that was saved"
+    );
+}
+
+/// The structure half of the missing-key rule: a pre-feature save loads
+/// every machine at its shipped rate, not at zero.
+#[test]
+fn a_save_written_without_build_quality_loads_it_neutral() {
+    let mut game = crate::tests::support::base_with_a_built_node(4213, 1.0, 0.82);
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_legacy_build_quality_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        text.contains("build_quality"),
+        "the key must have been there to remove"
+    );
+    let stripped: String = text
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("build_quality:"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        !stripped.contains("build_quality"),
+        "the fixture must actually remove the key or the test proves nothing"
+    );
+    std::fs::write(&path, stripped).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).expect("a pre-feature save still loads");
+    let _ = std::fs::remove_file(&path);
+
+    let node = crate::tests::support::first_structure(&mut loaded, "mining_node");
+    assert_eq!(
+        loaded.work_ticks_for(node, crate::tuning::DEFAULT_BASE_SPEED),
+        10,
+        "a machine with no stored figure must cycle at its def's shipped rate"
+    );
+}

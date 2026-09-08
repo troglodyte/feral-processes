@@ -1012,6 +1012,24 @@ pub struct StructureSave {
     /// `SAVE_FORMAT_VERSION` bump.
     #[serde(default = "default_power_fuel")]
     pub power_fuel: u32,
+    /// How well the program spent on this machine's build put it together —
+    /// see `components::BuildQuality`.
+    ///
+    /// **Restored from the save, never re-derived on load.** `Game::load`
+    /// deliberately rebuilds some structure components from the def
+    /// (`Stock::capacity` is the stated example, and `ResourceNode::level`
+    /// already needed carving out of it), but the program that raised this
+    /// machine is gone and there is nothing on the def to re-derive from —
+    /// so re-deriving means silently resetting every machine in the base to
+    /// neutral. Additive behind a default, so no `SAVE_FORMAT_VERSION` bump.
+    #[serde(default = "default_build_quality")]
+    pub build_quality: f32,
+}
+
+/// `serde`'s default for a machine's build quality — the neutral 1.0, which
+/// is what the component's absence already means.
+fn default_build_quality() -> f32 {
+    1.0
 }
 
 /// `serde`'s default for a supplier's remaining charge — a full one, so a

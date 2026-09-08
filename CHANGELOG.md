@@ -33,6 +33,10 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.130
+
+**A Depot can be told what it will accept** — `[F]` from the transfer screen opens one shelf's allow/deny list, an arrow per row, `[A]`/`[D]` for the whole catalogue and Tab between the Depots touching you, so two Depots with opposite lists sort the base between them; a refused load is carried to the next Depot instead, and back to the machine it came from if none will take it. A filter says only what may come **in** — what is already on the shelf stays there and can still be taken, and a refund the base is handing back is exempt, so a closed shelf can never destroy materials while you are out in the field.
+
 ## 0.13.129
 
 **Research costs goods now, not just Research Data** — every node in the tree carries a material bill authored in its own `.ron`, ramping from raw Core Fragments at the roots to Trace Sniffers, Hardened Shell and Routine Disks at the deep end; the bill is paid from your pack, topped up off the shelves of anything you are standing beside, and refused whole rather than part-spent, so a Research Node running unattended is no longer the whole of the tree. A census holds every bill to what that node's own prerequisites can make, which is what found Weapon Fabrication unlocking a Fabricator it had no way to feed — it requires Routine Fabrication now.

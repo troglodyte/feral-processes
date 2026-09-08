@@ -394,6 +394,27 @@ pub struct StandingJob {
     pub guard: bool,
 }
 
+/// What a Depot refuses to take in — see `Game::depot_accepts`.
+///
+/// The **denied** set, so an absent or empty component is a Depot that
+/// accepts everything: that is what every Depot standing before this
+/// shipped had, and what a newly built one has. Storing the allowed set
+/// instead would make a fresh Depot refuse the whole catalogue until it
+/// was configured.
+///
+/// On the structure entity for `StandingJob`'s reason rather than in a
+/// resource keyed by tile: a filter is an instruction to *this* building,
+/// and a Depot rebuilt on a demolished one's footprint must not inherit a
+/// rule nobody set on it.
+///
+/// It says what may come **in**. A denied item already on the shelf stays
+/// there until somebody takes it out — nothing ejects stock — and the take
+/// side of every door reads the shelf without asking this at all.
+#[derive(Component, Clone, Debug, Default, PartialEq, Eq)]
+pub struct DepotFilter {
+    pub denied: std::collections::BTreeSet<ItemId>,
+}
+
 /// An item sitting in an `Equipment` slot: *which copy* went on, and the
 /// gear level its stat bonus was scaled for when it did.
 ///

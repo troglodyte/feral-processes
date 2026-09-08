@@ -130,6 +130,13 @@ impl App {
                 }
             }
             GameKey::Char('N') => self.basket_amounts.iter_mut().for_each(|n| *n = 0),
+            // The third screen action, and the only one that leaves: what a
+            // Depot beside you will take in at all. It is offered from here
+            // because this is the screen that already knows the player is
+            // standing next to one — and it discards the basket on the way
+            // out, since a filter is exactly what `can_put` is derived
+            // from. See `App::open_depot_filter`.
+            GameKey::Char('F') => self.open_depot_filter(),
             // The magnitude accumulates in the row's **current sign**, and a
             // row sitting at zero types a take. `saturating_*` because a
             // held digit key must reach the clamp rather than overflow.

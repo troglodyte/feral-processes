@@ -339,6 +339,7 @@ mod tests {
                 stock_output: Vec::new(),
                 standing_work: false,
                 standing_guard: false,
+                denied_items: Vec::new(),
                 power_fuel: tuning::POWER_UPKEEP_TICKS,
                 build_quality: 1.0,
                 hopper: Vec::new(),

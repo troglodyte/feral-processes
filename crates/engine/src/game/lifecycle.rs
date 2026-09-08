@@ -1212,6 +1212,15 @@ impl Game {
                     guard: s.standing_guard,
                 });
             }
+            // Absent rather than empty for `StandingJob`'s reason one arm
+            // up: "this Depot takes anything" has exactly one
+            // representation, and `Game::set_depot_filter` keeps it that
+            // way on the live side.
+            if !s.denied_items.is_empty() {
+                entity.insert(crate::components::DepotFilter {
+                    denied: s.denied_items.iter().cloned().collect(),
+                });
+            }
             // Rebuilt from the def rather than from the save: with the
             // deposit pool gone, a node carries nothing per-instance that a
             // `.ron` file doesn't already say. What the node *produced* is
@@ -1974,11 +1983,12 @@ impl Game {
             Option<&crate::components::PowerFuel>,
             Option<&crate::components::Hopper>,
             Option<&crate::components::BuildQuality>,
+            Option<&crate::components::DepotFilter>,
         )>();
         // `Stock` is optional here only because test fixtures hand-spawn
         // bare `Structure`s; `place_structure` and `load` both give every
         // real one a buffer.
-        for (structure, pos, durability, tier, stock, standing, fuel, hopper, quality) in
+        for (structure, pos, durability, tier, stock, standing, fuel, hopper, quality, filter) in
             structure_query.iter(&self.world)
         {
             let encode = |map: Option<&std::collections::BTreeMap<ItemId, u32>>| {
@@ -1996,6 +2006,9 @@ impl Game {
                 hopper_progress: hopper.map(|h| h.progress).unwrap_or(0),
                 standing_work: standing.is_some_and(|j| j.work),
                 standing_guard: standing.is_some_and(|j| j.guard),
+                denied_items: filter
+                    .map(|f| f.denied.iter().cloned().collect())
+                    .unwrap_or_default(),
                 power_fuel: fuel
                     .map(|f| f.ticks_left)
                     .unwrap_or(crate::tuning::POWER_UPKEEP_TICKS),

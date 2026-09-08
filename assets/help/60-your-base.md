@@ -80,6 +80,13 @@ The rest of what a base does:
   Enter to take exactly what you have set; [A] fills every row to its maximum, so taking the lot is
   still two keys. What you leave stays where the base's own chains
   can pull it, and leaving with Esc costs nothing.
+- From that window, [F] opens what a Depot beside you will accept. Every item in the game gets a row;
+  Left denies it and Right allows it, [A] and [D] write the whole list at once, and Tab walks to the
+  next Depot when there is more than one touching you. A Depot refuses nothing until you say so.
+  What is denied simply never lands there — your crew carries it to the next Depot instead, and back
+  to the machine it came from if none will take it, so two Depots with opposite lists sort the base
+  between them. Denying something already on the shelf leaves it there; a filter says what may come
+  in, never what has to leave.
 - A structure upgrades to whichever is lower, its own maximum tier or the zone you are in — so a
   structure at its ceiling in zone 1 stays listed and starts moving again after a breach. An upgrade
   is a request like any other build: nothing is charged when you ask for it, your crew fetches the

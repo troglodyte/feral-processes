@@ -27,10 +27,17 @@ use crate::*;
 /// in a `BTreeMap` precisely so choices like this are stable run to run, and
 /// picking deterministically is what lets a load be a single `(item, qty)`
 /// pair rather than a map.
-pub(crate) fn take_haul_load(stock: &mut Stock) -> Option<Carrying> {
+pub(crate) fn take_haul_load(
+    stock: &mut Stock,
+    somewhere_takes: impl Fn(&ItemId) -> bool,
+) -> Option<Carrying> {
     // Cloned out before the map is touched: the borrow behind `.keys()` is
     // still live otherwise.
-    let item = stock.output.keys().next().cloned()?;
+    //
+    // **The predicate is inside the pick, not around it.** A buffer holding
+    // two products with only the second one welcome anywhere would
+    // otherwise sit clogged forever behind a head entry nobody will take.
+    let item = stock.output.keys().find(|i| somewhere_takes(i)).cloned()?;
     let qty = take_from(stock, &item, tuning::HAUL_CARRY_CAPACITY);
     (qty > 0).then_some(Carrying { item, qty })
 }
@@ -454,18 +461,27 @@ pub struct HaulLookups<'w> {
 }
 
 /// Everything `haul_step_system` asks before letting a load leave a machine:
-/// has this one backed up, and does the base have any reason to run the
-/// building beside it — an order somewhere in the queue naming what it makes,
-/// or a standing job on it.
+/// has this one backed up, does the base have any reason to run the building
+/// beside it — an order somewhere in the queue naming what it makes, or a
+/// standing job on it — and is there a shelf that will take what it is
+/// holding.
 ///
 /// Bundled for the reason `HaulLookups` is, and the grouping is as real: the
-/// three together are the whole of the departure decision, and nothing else
-/// in the system reads any of them.
+/// four together are the whole of the departure decision. `filters` is the
+/// one that is read twice, because where a load may land is the same
+/// question asked again once the worker is carrying it — see
+/// `Game::depot_accepts`, which is this rule's other reader.
+///
+/// A separate query rather than a fifth column on `HaulStructure`: the
+/// structure query is taken mutably to move stock, and every `get_mut`
+/// pattern in the system would have to widen for a component only the
+/// deposit legs read.
 #[derive(SystemParam)]
 pub struct HaulDeparture<'w, 's> {
     statuses: Query<'w, 's, &'static MachineStatus>,
     standing: Query<'w, 's, &'static StandingJob>,
     orders: Res<'w, resources::WorkOrders>,
+    filters: Query<'w, 's, &'static crate::components::DepotFilter>,
 }
 
 /// The structure side of `haul_step_system`, named so the helpers that read
@@ -645,7 +661,16 @@ pub(crate) fn haul_step_system(
         statuses,
         standing,
         orders,
+        filters,
     } = departure;
+    // The crew's half of the Depot filter rule. A refusal reads exactly as
+    // a full shelf everywhere below, which is what lets the whole feature
+    // be two `filter` calls rather than a state a worker has to carry.
+    let accepts = |depot: Entity, item: &ItemId| {
+        filters
+            .get(depot)
+            .map_or(true, |f| !f.denied.contains(item))
+    };
     let HaulLookups {
         structures: db,
         items,
@@ -760,13 +785,19 @@ pub(crate) fn haul_step_system(
                     if room > 0 {
                         Errand::Load { machine, room }
                     } else {
+                        let taking: Vec<(Entity, Position)> = depots
+                            .iter()
+                            .copied()
+                            .filter(|(e, _)| accepts(*e, &load.item))
+                            .collect();
                         Errand::Deposit(
-                            nearest_depot(&depots, worker_pos)
+                            nearest_depot(&taking, worker_pos)
                                 .map(|(e, _)| e)
-                                // Every depot full, or none built: the load
-                                // goes back where it came from and re-clogs
-                                // the machine. The base stalls loudly rather
-                                // than the goods vanishing.
+                                // Every depot full, refusing this item, or
+                                // none built: the load goes back where it
+                                // came from and re-clogs the machine. The
+                                // base stalls loudly rather than the goods
+                                // vanishing.
                                 .unwrap_or(machine),
                         )
                     }
@@ -920,7 +951,8 @@ pub(crate) fn haul_step_system(
                 //
                 // With nowhere to take a load there is no errand at all,
                 // which is what leaves a depot-less base behaving exactly as
-                // it did.
+                // it did — and a base whose every shelf refuses this
+                // product behaving exactly like a depot-less one.
                 Errand::Tend(machine) => {
                     if depots.is_empty() {
                         continue;
@@ -937,7 +969,9 @@ pub(crate) fn haul_step_system(
                     let Ok((_, _, mut stock, _)) = structures.get_mut(machine) else {
                         continue;
                     };
-                    if let Some(load) = take_haul_load(&mut stock) {
+                    if let Some(load) = take_haul_load(&mut stock, |item| {
+                        depots.iter().any(|(e, _)| accepts(*e, item))
+                    }) {
                         commands.entity(worker).insert(load);
                     }
                 }

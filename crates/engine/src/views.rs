@@ -2645,8 +2645,10 @@ pub struct MemoryRow {
 /// reason the two screens became one.
 ///
 /// **`carried` is a holding and `can_put` is a permission**, and they part
-/// company in exactly two cases: no Depot beside the party, and a banked
-/// item, both of which may still be taken. The screen draws `carried` — a
+/// company in three cases: no Depot beside the party, a banked item, and a
+/// quantity larger than the room left in the Depots whose
+/// `components::DepotFilter` will take it — all three of which may still be
+/// taken. The screen draws `carried` — a
 /// column headed `you` that reads 0 while the pack holds twelve is a lie the
 /// player cannot check — and `App::put_available` clamps against `can_put`.
 /// `on_shelves` needs no second figure because it is both at once.
@@ -2656,6 +2658,35 @@ pub struct TransferRow {
     pub on_shelves: u32,
     pub carried: u32,
     pub can_put: u32,
+}
+
+/// One Depot's filter as its screen draws it — see
+/// `Game::depot_filter_view`.
+///
+/// `tile` is base space, and it is the header: with up to four Depots
+/// orthogonally adjacent the player has to be told which one they are
+/// editing. `room` is that Depot's own `Stock::output_room`, not the
+/// transfer picker's shared budget, for the same reason.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DepotFilterView {
+    pub tile: (i32, i32),
+    pub room: u32,
+    pub rows: Vec<DepotFilterRow>,
+}
+
+/// One item's standing at one Depot.
+///
+/// `held` is what that Depot is holding of it right now, drawn because a
+/// filter says only what may come **in**: denying something already on the
+/// shelf leaves it there, and a row reading "denied" beside a count of
+/// twelve is the screen telling the truth rather than contradicting
+/// itself.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DepotFilterRow {
+    pub item: ItemId,
+    pub name: String,
+    pub held: u32,
+    pub allowed: bool,
 }
 
 /// The player's class, as their own manifest reads it back — see

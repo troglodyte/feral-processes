@@ -39,6 +39,7 @@ mod compass;
 mod contracts;
 mod crafting;
 mod creation;
+mod depot_filter;
 mod dispatch;
 mod extraction;
 mod field;
@@ -97,6 +98,7 @@ use building::{
 use caravan::{CaravanBasket, draw_caravan};
 use contracts::draw_contracts;
 use crafting::{draw_compiling, draw_craft_menu, draw_craft_quantity, draw_recipes};
+use depot_filter::draw_depot_filter;
 use dispatch::{draw_dispatch, draw_route_cargo, draw_sortie_squad};
 use extraction::draw_downed_programs;
 use field::{draw_field_routine, draw_field_routine_ally};
@@ -877,6 +879,13 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     // rest of the `App`. The screen projects the holdings against the amount
     // rather than drawing the two ceilings: `App::put_available` is what the
     // *keys* clamp against and never something the player reads.
+    // Cloned out for `transfer_entries`' reason: the screen reads `App`,
+    // and `game` below borrows `&mut app.game`. It is one Depot's rows, so
+    // the clone is the item catalogue once per frame rather than per row.
+    let depot_filter = match app.mode {
+        Mode::DepotFilter => app.depot_filter.clone(),
+        _ => None,
+    };
     let transfer_entries: Vec<(ItemId, i64, u32, u32)> = match app.mode {
         Mode::Transfer => app
             .basket_rows
@@ -997,6 +1006,9 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
+        Mode::DepotFilter => {
+            draw_depot_filter(depot_filter.as_ref(), selected, refusal, painter, m)
+        }
         Mode::Craft => draw_craft_menu(game, selected, refusal, painter, m),
         Mode::CraftQuantity => draw_craft_quantity(
             game,
@@ -1381,13 +1393,14 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 102] = [
+    const ALL_MODES: [Mode; 103] = [
         Mode::MainMenu,
         Mode::CreateCharacter,
         Mode::LoadGame,
         Mode::SaveAction,
         Mode::Playing,
         Mode::Transfer,
+        Mode::DepotFilter,
         Mode::BaseMenu,
         Mode::PartyMenu,
         Mode::Battle,

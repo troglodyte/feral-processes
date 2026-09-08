@@ -31,7 +31,7 @@ Acting on the world:
 - c — move cargo between you and the structures beside you: one window with a row per item, where
   the columns read you, container — so Left takes off a machine's shelf toward you and
   Right puts your own cargo into an adjacent Depot. [A] takes the lot; Shift goes to the end of a
-  row and Ctrl halves the gap
+  row and Ctrl halves the gap; [F] sets what a Depot beside you will accept
 - t — trade
 - a — call a routine
 - x — examine a direction

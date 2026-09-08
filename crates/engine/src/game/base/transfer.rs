@@ -30,7 +30,8 @@ impl Game {
     ///
     /// `carried` is what the pack holds, whatever may be done with it.
     /// `can_put` is 0 unless there is a Depot beside the party to put the
-    /// item into and the item is not `banked` — a bank is not cargo — and
+    /// item into, the item is not `banked` — a bank is not cargo — and some
+    /// adjacent Depot has room for it that its filter has not closed, and
     /// **only a row with a `can_put` of its own is created from the pack
     /// side**, so an item that can go nowhere is listed only when it is also
     /// sitting on a shelf. A banked item may still have `on_shelves`, since a
@@ -70,8 +71,17 @@ impl Game {
                 if *qty == 0 || *item == currency {
                     continue;
                 }
-                let can_put = if puttable && !self.is_banked(item) {
-                    *qty
+                // The permission and the quantity are two questions, and
+                // only the permission decides whether the row exists. A
+                // Depot that is full — or one whose filter refuses this
+                // item — still leaves the player something to look at and a
+                // `[F]` to press; a pack full of cargo standing beside a
+                // Mining Node, with no shelf to put anything on at all,
+                // would otherwise open a screen of rows that move in
+                // neither direction.
+                let may_put = puttable && !self.is_banked(item);
+                let can_put = if may_put {
+                    (*qty).min(self.deposit_room_for(item))
                 } else {
                     0
                 };
@@ -80,11 +90,7 @@ impl Game {
                         row.carried = *qty;
                         row.can_put = can_put;
                     }
-                    // A row of its own only for something that can actually
-                    // be put: a pack full of cargo standing beside a Mining
-                    // Node would otherwise open a screen of rows that move in
-                    // neither direction.
-                    None if can_put > 0 => {
+                    None if may_put => {
                         rows.insert(
                             item.clone(),
                             TransferRow {

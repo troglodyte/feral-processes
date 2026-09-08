@@ -11,6 +11,7 @@ mod caravan;
 mod contracts;
 mod crafting;
 mod creation;
+mod depot_filter;
 mod dev_console;
 mod develop;
 mod dispatch;

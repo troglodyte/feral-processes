@@ -12,6 +12,7 @@ pub(crate) mod caravan;
 pub(crate) mod contracts;
 mod crafting;
 pub(crate) mod creation;
+pub(crate) mod depot_filter;
 pub(crate) mod dev_console;
 pub(crate) mod dispatch;
 mod excavate;

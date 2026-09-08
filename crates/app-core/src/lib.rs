@@ -13,6 +13,7 @@ pub use app::arena::{ArenaRow, ArenaRowKind, DevTemplates};
 pub use app::building::{BaseStaffRow, StaffAction, StaffRow, Staffing, WorkOrderRow};
 pub use app::canvas_editor::{CanvasFocus, CanvasView};
 pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
+pub use app::depot_filter::DepotFilterScreen;
 pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
 pub use app::dispatch::{RouteCargoBasket, SortieSquadRow};
 pub use app::group_menu::GroupMenuRow;
@@ -50,11 +51,12 @@ use feral_processes_engine::tuning::{
 };
 use feral_processes_engine::{
     AchievementRow, BattleView, BrokerReach, CaravanReach, CharacterChoice, ContractRefusal,
-    ContractRow, CreationCatalogue, DifficultyMode, DispatchReach, Entity, EntityView,
-    FieldRoutinePick, FieldRoutineTarget, FieldRoutineTargetView, Game, HandCraftProgress,
-    LogEntry, LogLine, MESSAGE_LOG_CAP, MessageSource, OrderPriority, ProgramSaleOption,
-    RouteDestination, RouteRefusal, RouteReport, SlotShift, SortieRefusal, SortieReport, SortieRow,
-    StockRow, SwingOutcome, TransferRow, WorkOrder, WorkOrderReport, WorkProfile, condense,
+    ContractRow, CreationCatalogue, DepotFilterView, DifficultyMode, DispatchReach, Entity,
+    EntityView, FieldRoutinePick, FieldRoutineTarget, FieldRoutineTargetView, Game,
+    HandCraftProgress, LogEntry, LogLine, MESSAGE_LOG_CAP, MessageSource, OrderPriority,
+    ProgramSaleOption, RouteDestination, RouteRefusal, RouteReport, SlotShift, SortieRefusal,
+    SortieReport, SortieRow, StockRow, SwingOutcome, TransferRow, WorkOrder, WorkOrderReport,
+    WorkProfile, condense,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -1184,6 +1186,14 @@ pub enum Mode {
     /// through `App::scroll`, so it still drives `menu_selected` and the
     /// popup's window still follows it — the page scrolls for free.
     Transfer,
+    /// One Depot's allow/deny list, opened with `[F]` from the transfer
+    /// picker — see `App::depot_filter`.
+    ///
+    /// A screen of its own rather than a section of the picker: the picker
+    /// is a basket of quantities committed in one action, and this is a
+    /// standing instruction to a building that takes effect the moment it
+    /// is set. Nothing here is spent, so there is nothing to commit.
+    DepotFilter,
     /// The base menu, opened with `b`. Lists every base errand that is
     /// currently possible and dispatches to its screen — see
     /// `App::base_menu_rows`.
@@ -1762,6 +1772,9 @@ impl Mode {
             // Opened from the map with `c`, so it never layers over a
             // fight — and the engine refuses a transfer mid-battle anyway.
             | Mode::Transfer
+            // And the filter screen is opened from the picker, so it is
+            // one further step from a fight than the picker is.
+            | Mode::DepotFilter
             | Mode::Craft
             | Mode::CraftQuantity
             // A blocking screen entered from the map, same as `Craft`
@@ -2245,6 +2258,13 @@ pub struct App {
     /// the base is full when it has no shelf at all. Never infer the `None`
     /// from a zero.
     pub basket_room: Option<u32>,
+    /// The Depot whose allow/deny list `Mode::DepotFilter` is editing, and
+    /// what it last read of it — `None` whenever that screen is shut.
+    ///
+    /// Unlike the basket above this is not pending state: every keypress
+    /// writes through to the engine and re-reads, so what is here is a
+    /// cache of the answer rather than an edit waiting to be committed.
+    pub depot_filter: Option<DepotFilterScreen>,
     /// How many of each caravan row the basket is holding, **index-aligned**
     /// with the drawn list: the wagon's offers first, then the cargo it will
     /// take, exactly as `caravan_row` resolves them.

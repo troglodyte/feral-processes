@@ -49,6 +49,7 @@ fn app_at_a_caravan(seed: u32) -> Option<App> {
         standing_work: false,
         standing_guard: false,
         power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        build_quality: 1.0,
         hopper: Vec::new(),
         hopper_progress: 0,
     });

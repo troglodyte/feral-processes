@@ -657,6 +657,12 @@ pub struct PetInfo {
     /// (shouldn't happen for anything spawned going forward, but possible
     /// for an old save predating this component).
     pub quality: Option<String>,
+    /// This individual's Assembly rung — see `components::Potential::
+    /// roll_label`. `None` for a creature with no `Potential`, `quality`'s
+    /// own rule.
+    pub assembly: Option<String>,
+    /// The same for Extraction.
+    pub extraction: Option<String>,
     /// How many fusions deep this program's lineage is, 0 to `MAX_FUSIONS`
     /// — see `components::FusionCount`. At `MAX_FUSIONS` it can no longer
     /// be fused.

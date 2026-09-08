@@ -418,6 +418,18 @@ impl Game {
         ))
     }
 
+    /// The `Poor`..`Excellent` rung each of `entity`'s two build rolls sits
+    /// on, or `None` for a creature with no `Potential` —
+    /// `potential_quality_label`'s rule, and returned as a pair because the
+    /// two are read together everywhere they are read at all.
+    pub(crate) fn build_roll_labels(&self, entity: Entity) -> Option<(String, String)> {
+        let potential = self.world.get::<Potential>(entity)?;
+        Some((
+            Potential::roll_label(potential.assembly_roll).to_string(),
+            Potential::roll_label(potential.extraction_roll).to_string(),
+        ))
+    }
+
     /// Snapshot of every current party member (see `resources::Party`), in
     /// party-slot order.
     pub(crate) fn party_info(&self) -> Vec<CompanionInfo> {
@@ -495,6 +507,8 @@ impl Game {
                     role: self.program_role(entity)?,
                     activity: self.program_activity(entity),
                     quality: self.potential_quality_label(entity),
+                    assembly: self.build_roll_labels(entity).map(|(a, _)| a),
+                    extraction: self.build_roll_labels(entity).map(|(_, e)| e),
                     fusions: self.fusion_count(entity),
                     refactors: self.refactor_count(entity),
                     ring: self.world.get::<KernelRing>(entity).map_or(0, |r| r.0),

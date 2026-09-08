@@ -263,6 +263,17 @@ fn companion_row_lines(shortcut: char, p: &PetInfo) -> Vec<String> {
             ""
         }
         .to_string(),
+        // Appended after the existing five, so they are the first to shed —
+        // and two separate tags rather than one, so `wrapped_row_lines` can
+        // put one on a continuation without dragging the other with it.
+        p.assembly
+            .as_ref()
+            .map(|a| format!(" [Assembly: {a}]"))
+            .unwrap_or_default(),
+        p.extraction
+            .as_ref()
+            .map(|e| format!(" [Extraction: {e}]"))
+            .unwrap_or_default(),
     ];
     wrapped_row_lines(head, &tags)
 }
@@ -799,7 +810,7 @@ mod tests {
 
     /// The widest roster row the game can put on screen, as `(lines, why)`.
     ///
-    /// Enumerated rather than reasoned about: several of the six optional
+    /// Enumerated rather than reasoned about: several of the seven optional
     /// tags exclude each other (a party member's activity is "in party", a
     /// wielded program is stood down from the party), and picking the worst
     /// case by argument is how a census ends up measuring a row nobody can
@@ -830,6 +841,11 @@ mod tests {
             p.party_slot = slot;
             p.activity = activity.to_string();
             p.quality = Some(quality.clone());
+            // The widest of the five rungs `Potential::roll_label` speaks,
+            // on both axes at once — they are independent draws, so a
+            // program really can be the worst at both.
+            p.assembly = Some("Below Average".to_string());
+            p.extraction = Some("Below Average".to_string());
             p.fusions = MAX_FUSIONS;
             p.wielded = activity == "equipped as weapon";
             // Four digits apiece: a refactored, fused, geared program's bar
@@ -848,6 +864,31 @@ mod tests {
             out.push((companion_row_lines('a', &p), why.to_string()));
         }
         out
+    }
+
+    /// Both build rolls reach the roster row, and a program with no
+    /// `Potential` at all draws exactly the line it drew before — the two
+    /// tags are `Option`s for `quality`'s reason.
+    #[test]
+    fn a_roster_row_names_both_build_rolls() {
+        let mut p = pet("Testmon", "");
+        let without = companion_row_lines('a', &p).join(" ");
+        assert!(
+            !without.contains("Assembly") && !without.contains("Extraction"),
+            "a program with no Potential drew a build tag: {without}"
+        );
+
+        p.assembly = Some("Excellent".to_string());
+        p.extraction = Some("Poor".to_string());
+        let with = companion_row_lines('a', &p).join(" ");
+        assert!(
+            with.contains("[Assembly: Excellent]"),
+            "the assembly rung is missing: {with}"
+        );
+        assert!(
+            with.contains("[Extraction: Poor]"),
+            "the extraction rung is missing: {with}"
+        );
     }
 
     /// Nothing clamps a popup row horizontally (see `continuation_lines`), so
@@ -893,7 +934,13 @@ mod tests {
         for (lines, why) in widest_roster_rows() {
             assert!(lines.len() > 1, "{why} is the case that needs wrapping");
             let joined = lines.join(" ");
-            for tag in ["Below Average (100%)", "fused 3/3 - maxed", "CRITICAL"] {
+            for tag in [
+                "Below Average (100%)",
+                "fused 3/3 - maxed",
+                "CRITICAL",
+                "[Assembly: Below Average]",
+                "[Extraction: Below Average]",
+            ] {
                 assert!(joined.contains(tag), "{why} lost {tag:?}:\n{lines:#?}");
             }
         }

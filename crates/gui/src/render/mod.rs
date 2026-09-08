@@ -451,7 +451,9 @@ fn message_color(kind: MessageKind) -> Color {
         // thing distinguishing that line from the filing and cancellation
         // lines it shares its wording with.
         MessageKind::LevelUp | MessageKind::Heal | MessageKind::Complete => GREEN,
-        MessageKind::Raid | MessageKind::EnemySpecial => ORANGE,
+        // A tantrum takes the alert hue a sweep does: both are the base
+        // coming apart while the player is looking somewhere else.
+        MessageKind::Raid | MessageKind::EnemySpecial | MessageKind::Tantrum => ORANGE,
         // Red is the "no" colour the status line has always used, and the
         // two never share a pane: a refusal is silent during a fight (see
         // `Game::note_refusal`), and `retain_outcomes_since_battle` drops

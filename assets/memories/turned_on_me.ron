@@ -2,13 +2,17 @@
 // memory the game ships** — `idled_with` and `bonded_in_battle` are both
 // fond, so a reader will assume the subject implies fondness and it does not.
 //
+// The blurb is short because the memories page has no scroll and a row is
+// name + subject + blurb on one line — `no_memory_row_overflows_its_popup`
+// is the gate, and the spec's longer wording overflowed it by 79px.
+//
 // It outlasts `vented` (a 5000 half-life against 2000, at a higher cap),
 // which is why a base that answers a bad mood with nothing gets worse rather
 // than better.
 (
     id: "turned_on_me",
     name: "Turned on me",
-    blurb: "It came at me, and nothing had been asked of either of us.",
+    blurb: "It came at me over nothing at all.",
     valence: -7.0,
     half_life: 5000,
     subject: Program,

@@ -1,0 +1,10 @@
+(
+    id: "segmentation",
+    name: "Segmentation",
+    description: "Cut the shelf into regions and let the cache fabric hold them apart. Unlocks the Depot Mk3.",
+    cost: 120,
+    materials: [("cache_grain", 6), ("bytecode_block", 24)],
+    min_zone: 3,
+    requires: ["paging", "cache_coherence"],
+    unlocks_structures: ["depot_mk3"],
+)

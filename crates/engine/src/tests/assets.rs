@@ -3941,3 +3941,73 @@ fn every_shipped_research_node_costs_materials() {
         "research is a production run, not a purchase — these nodes cost Research Data alone: {bare:?}"
     );
 }
+
+/// The storage ladder: one Depot per sector, each holding twice what the
+/// rung below it does, and every rung past the first standing behind
+/// research.
+///
+/// A census rather than a formula because nothing in `StructureDef` knows
+/// there is a ladder at all — the rungs are six independent files, and the
+/// doubling is a content decision that reads as arbitrary the moment one
+/// file is edited on its own. `Game::structure_unlocked` returns true for a
+/// structure no research file names, so a rung whose node lost its
+/// `unlocks_structures` line would ship buildable from turn one with nothing
+/// failing to compile and nothing else failing to load.
+#[test]
+fn the_depot_ladder_doubles_and_every_rung_past_the_first_is_researched() {
+    let game = Game::new(4114, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let structures = game.structure_defs();
+    let research = game.world.resource::<ResearchDb>();
+
+    let rungs = [
+        ("depot", 50),
+        ("depot_mk2", 100),
+        ("depot_mk3", 200),
+        ("depot_mk4", 400),
+        ("depot_mk5", 800),
+        ("depot_mk6", 1600),
+    ];
+
+    for (i, (id, capacity)) in rungs.iter().enumerate() {
+        let def = structures
+            .iter()
+            .find(|d| d.id == *id)
+            .unwrap_or_else(|| panic!("{id} should be a shipped structure"));
+        assert_eq!(
+            def.capacity, *capacity,
+            "{id} holds {} rather than the {capacity} its rung of the ladder is worth",
+            def.capacity
+        );
+        assert!(
+            def.stores,
+            "{id} is a Depot and must be somewhere a hauler may empty into"
+        );
+
+        let gates: Vec<&str> = research
+            .all()
+            .filter(|node| node.unlocks_structures.iter().any(|s| s == id))
+            .map(|node| node.id.as_str())
+            .collect();
+        if i == 0 {
+            assert!(
+                gates.is_empty(),
+                "the first Depot carries a base through its opening hours and must stay \
+                 unresearched; {gates:?} gate it"
+            );
+        } else {
+            assert_eq!(
+                gates.len(),
+                1,
+                "{id} should stand behind exactly one research node, not {gates:?}"
+            );
+            let node = research.get(gates[0]).expect("just enumerated");
+            assert_eq!(
+                node.min_zone as usize,
+                i + 1,
+                "{} gates {id} at sector {}, but the ladder is one rung a sector",
+                node.id,
+                node.min_zone
+            );
+        }
+    }
+}

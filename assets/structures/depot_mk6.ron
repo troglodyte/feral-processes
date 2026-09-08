@@ -1,0 +1,12 @@
+(
+    id: "depot_mk6",
+    name: "Depot Mk6",
+    description: "Sixteen hundred units, and the deepest shelf anything in the sector knows how to compile. What a base of this size runs out of is bodies to carry things to it.",
+    glyph: 'D',
+    sprite: Some("depot"),
+    color: Cyan,
+    build_cost: [("core_fragment", 260), ("cache_grain", 36)],
+    work: None,
+    capacity: 1600,
+    stores: true,
+)

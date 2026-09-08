@@ -2422,7 +2422,7 @@ fn view_entities_carries_a_structures_resolved_sprite_name() {
         .get("refinery")
         .cloned()
         .expect("refinery ships with the game");
-    let entity = game.spawn_structure(&refinery, origin.x, origin.y);
+    let entity = game.spawn_structure(&refinery, origin.x, origin.y, None);
 
     let view = game
         .view_entities(5, 5)

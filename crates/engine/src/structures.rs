@@ -841,3 +841,15 @@ mod tests {
         assert_eq!(nonsense(0.6).rate(), Some(0.6));
     }
 }
+
+/// The cycle this structure ships, or `None` for one that runs no cycle at
+/// all. The `(work, assembles)` split `Game::work_ticks_for` already made,
+/// named once so the picker's preview and the real rate cannot disagree
+/// about which structures even have a rate.
+pub(crate) fn cycle_ticks(def: &StructureDef) -> Option<u32> {
+    match (&def.work, &def.assembles) {
+        (Some(work), _) => Some(work.ticks_per_unit),
+        (None, Some(assembles)) => Some(assembles.ticks_per_unit),
+        (None, None) => None,
+    }
+}

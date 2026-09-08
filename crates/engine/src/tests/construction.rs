@@ -1752,3 +1752,198 @@ fn a_cancelled_order_gives_back_a_program_with_its_build_rolls() {
         restored.extraction_roll
     );
 }
+
+// --- What a program is worth to the machine it becomes -------------------
+
+/// A helper for the build-quality tests: raise `kind` on `(1, 0)` with a
+/// program of the given rolls and return the machine.
+fn machine_built_by(seed: u32, kind: &str, assembly: f32, extraction: f32) -> (Game, Entity) {
+    let mut game = base(seed);
+    builder(&mut game);
+    file_build_with_rolls(&mut game, kind, 1, 0, assembly, extraction);
+    for _ in 0..400 {
+        if structure_at(&mut game, 1, 0).is_some() {
+            break;
+        }
+        game.tick();
+    }
+    let machine = structure_at(&mut game, 1, 0).expect("the crew finished the build");
+    (game, machine)
+}
+
+fn def_of(game: &Game, kind: &str) -> crate::structures::StructureDef {
+    game.world
+        .resource::<StructureDb>()
+        .get(kind)
+        .cloned()
+        .expect("a shipped structure")
+}
+
+/// Which of the two rolls a build reads is decided by the structure, not by
+/// the program: a node extracts, a bench assembles.
+#[test]
+fn build_quality_reads_extraction_for_a_node_and_assembly_for_a_bench() {
+    let game = base(1150);
+    let potential = Potential {
+        assembly_roll: 1.18,
+        extraction_roll: 0.82,
+        ..Potential::NEUTRAL
+    };
+
+    let node = crate::game::base::building::build_quality(
+        &def_of(&game, "mining_node"),
+        potential,
+        Rarity::Ordinary,
+    );
+    let bench = crate::game::base::building::build_quality(
+        &def_of(&game, "assembly_bay"),
+        potential,
+        Rarity::Ordinary,
+    );
+
+    assert!(node < 1.0, "the node read the assembly roll: {node}");
+    assert!(bench > 1.0, "the bench read the extraction roll: {bench}");
+}
+
+/// Rarity insures a build; it does not rescue one.
+#[test]
+fn rarity_lifts_a_build_by_exactly_one_rung_per_rung() {
+    let game = base(1151);
+    let def = def_of(&game, "assembly_bay");
+    let poor = Potential {
+        assembly_roll: crate::tuning::MIN_INDIVIDUAL_ROLL,
+        ..Potential::NEUTRAL
+    };
+
+    let ordinary = crate::game::base::building::build_quality(&def, poor, Rarity::ALL[0]);
+    let one_up = crate::game::base::building::build_quality(&def, poor, Rarity::ALL[1]);
+    assert!(
+        (one_up - ordinary - crate::tuning::BUILD_QUALITY_PER_RARITY_RUNG).abs() < 1e-5,
+        "a rung is not worth exactly one rung: {ordinary} -> {one_up}"
+    );
+
+    let best = *Rarity::ALL.last().unwrap();
+    let rescued = crate::game::base::building::build_quality(&def, poor, best);
+    assert!(
+        rescued < 1.0,
+        "the rarest program with the worst roll still built better than shipped: {rescued}"
+    );
+}
+
+/// Fourteen shipped structures run no cycle at all, and `cycle_ticks` is
+/// where that is said once.
+#[test]
+fn a_structure_with_no_cycle_has_no_shipped_ticks() {
+    let game = base(1152);
+    assert_eq!(
+        crate::structures::cycle_ticks(&def_of(&game, "mining_node")),
+        Some(10)
+    );
+    assert_eq!(
+        crate::structures::cycle_ticks(&def_of(&game, "assembly_bay")),
+        Some(20)
+    );
+    assert_eq!(
+        crate::structures::cycle_ticks(&def_of(&game, "depot")),
+        None
+    );
+}
+
+/// The headline, and it is two-sided: a good builder leaves a machine faster
+/// than the def ships, and a bad one leaves it slower. A one-sided test
+/// passes against a bonus-only implementation.
+#[test]
+fn an_excellent_builder_leaves_a_faster_machine_than_a_poor_one() {
+    let shipped = 10; // mining_node's `ticks_per_unit`
+    let (mut good, good_machine) = machine_built_by(1153, "mining_node", 1.0, 1.2);
+    let (mut bad, bad_machine) = machine_built_by(1153, "mining_node", 1.0, 0.8);
+
+    let fast = good.work_ticks_for(good_machine, crate::tuning::DEFAULT_BASE_SPEED);
+    let slow = bad.work_ticks_for(bad_machine, crate::tuning::DEFAULT_BASE_SPEED);
+
+    assert!(fast < slow, "{fast} is not quicker than {slow}");
+    assert!(fast < shipped, "the good build was no faster than shipped");
+    assert!(slow > shipped, "the bad build was no slower than shipped");
+}
+
+/// Absent means neutral, and that is what every hand-spawned fixture relies
+/// on.
+#[test]
+fn a_machine_with_no_build_quality_cycles_at_its_shipped_rate() {
+    let mut game = base(1154);
+    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    let node = structure_at(&mut game, 1, 0).expect("a node stands there");
+    game.world
+        .entity_mut(node)
+        .remove::<crate::components::BuildQuality>();
+
+    assert_eq!(
+        game.work_ticks_for(node, crate::tuning::DEFAULT_BASE_SPEED),
+        10,
+        "a machine carrying no figure must cycle at exactly its def's rate"
+    );
+}
+
+/// The Home costs no program, so there is nothing for it to carry — and the
+/// assertion is on the component's *absence*, since a fixture writing
+/// `BuildQuality(1.0)` would pass a value check while breaking the rule the
+/// doc comment states.
+#[test]
+fn the_home_stands_up_carrying_no_build_quality() {
+    let mut game = base(1155);
+    let home = structure_at(&mut game, 0, 0)
+        .or_else(|| {
+            let mut q = game.world.query::<(Entity, &Structure)>();
+            q.iter(&game.world)
+                .find(|(_, s)| s.kind == "home")
+                .map(|(e, _)| e)
+        })
+        .expect("the fixture founded a Home");
+
+    assert!(
+        game.world
+            .get::<crate::components::BuildQuality>(home)
+            .is_none(),
+        "the Home carries a figure nobody built it with"
+    );
+}
+
+/// An upgrade overwrites the figure — not the average of the two, and not
+/// whichever was better. The machine in front of you is the one this program
+/// just finished.
+#[test]
+fn an_upgrade_overwrites_the_figure_with_the_new_programs() {
+    let (mut game, node) = machine_built_by(1156, "mining_node", 1.0, 1.2);
+    let raised = game.work_ticks_for(node, crate::tuning::DEFAULT_BASE_SPEED);
+    set_zone(&mut game, 2);
+    give(&mut game, &ItemId::from("cache_grain"), 40);
+
+    let program = tame_at_zone(&mut game, 2);
+    set_build_rolls(&mut game, program, 1.0, 0.8);
+    game.upgrade_structure(node, Some(program)).unwrap();
+    for _ in 0..600 {
+        if game
+            .world
+            .get::<crate::components::BuildQuality>(node)
+            .is_some_and(|q| q.0 < 1.0)
+        {
+            break;
+        }
+        game.tick();
+    }
+
+    let after = game.work_ticks_for(node, crate::tuning::DEFAULT_BASE_SPEED);
+    assert!(
+        after > raised,
+        "the Poor upgrade did not replace the Excellent build: {raised} -> {after}"
+    );
+    let figure = game
+        .world
+        .get::<crate::components::BuildQuality>(node)
+        .expect("the upgraded machine carries a figure")
+        .0;
+    assert!(
+        (figure - 0.8).abs() < 1e-5,
+        "the figure is an average or the better of the two, not the new one: {figure}"
+    );
+}

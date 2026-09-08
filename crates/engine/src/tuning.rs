@@ -2220,6 +2220,29 @@ pub const MINING_SUCCESS_PER_INT: f64 = 0.02;
 /// machine still beats re-running the roster.
 pub const WORK_TICKS_PER_SPEED: f64 = 0.05;
 
+/// What one rung of `components::Rarity` adds to the build quality a program
+/// leaves in the machine it was spent on — see
+/// `game::base::building::build_quality`.
+///
+/// A fifth of `GRADE_PER_RARITY_RUNG` on purpose. Rarity is an axis the
+/// player does not choose: a Prismatic program is what the spawner handed
+/// them, so this insures a build rather than deciding one. A Prismatic with
+/// a Poor roll still leaves a machine slower than shipped, which is the
+/// property `rarity_lifts_a_build_by_exactly_one_rung_per_rung` pins.
+pub const BUILD_QUALITY_PER_RARITY_RUNG: f32 = 0.03;
+
+/// How hard a build quality either side of neutral pulls on a work cycle,
+/// as a fraction of the deviation — see `systems::work_ticks_at_speed`.
+///
+/// Deliberately half of what a point of `WORK_TICKS_PER_SPEED` is worth over
+/// the same range, because the two **multiply**: the builder's figure and
+/// the posted worker's speed both scale one cycle. At the roll range's edges
+/// (`MIN_INDIVIDUAL_ROLL`..`MAX_INDIVIDUAL_ROLL`, 0.8 to 1.2) a build lands
+/// a cycle at 1.10x to 0.90x its shipped rate — visible on one screen next
+/// to the machine's own tier, and small enough that upgrading still beats
+/// re-rolling who built it.
+pub const BUILD_QUALITY_TICK_WEIGHT: f64 = 0.5;
+
 /// Extra units a worked node pays per zone below the current one, on top of
 /// its upgrade tier — see `systems::node_payout`.
 ///

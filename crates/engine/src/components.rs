@@ -1480,6 +1480,19 @@ impl Potential {
     }
 }
 
+/// How well the program spent on this machine's build put it together —
+/// `game::base::building::build_quality`'s answer, baked in the tick the
+/// structure was raised and never moving again except on an upgrade, which
+/// overwrites it with the new program's.
+///
+/// **Absent means 1.0.** Three things rely on that and none of them writes
+/// one: the Home, which costs no program at all; every hand-spawned test
+/// fixture; and every structure in a pre-feature save, whose
+/// `StructureSave::build_quality` defaults neutral. So no reader may treat
+/// the component's absence as an error.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct BuildQuality(pub f32);
+
 /// The stable identity of one program the player owns, minted at
 /// `Game::roster_parts` — the single barrier all four doors into the roster
 /// pass through.

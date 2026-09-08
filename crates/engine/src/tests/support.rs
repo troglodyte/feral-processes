@@ -911,7 +911,7 @@ pub(super) fn raise_pending_builds(game: &mut Game) {
         // as the feature being broken.
         match goal {
             BuildGoal::New => {
-                game.spawn_structure(&def, pos.x, pos.y);
+                game.spawn_structure(&def, pos.x, pos.y, None);
             }
             BuildGoal::Upgrade { to_tier } => {
                 let machine = {

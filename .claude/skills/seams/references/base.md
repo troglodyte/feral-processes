@@ -806,6 +806,45 @@
   unconditional** — the player must still be told, because the line is the
   errand. A predicate wired `||` passes any test that starves both halves at
   once, so there is one test per half plus a control.
+- **A bad mood is an errand, and `unwound_at` is the mechanism rather than
+  the flavour.** Morale is a derived fold with no reserve to refill, so
+  "recuperate at an amenity" has to be expressible as a *memory* or not at
+  all: `Game::note_respites` writes a `Structure` fondness on
+  `MEMORY_POSTING_PERIOD` while a disgruntled body stands in reach, and
+  `Game::morale` folds it back. `note_postings`' stretch-not-edge argument
+  transfers whole, and **arriving is what counts** — `in_reach` gates the
+  write, so walking toward the amenity is worth zero. Reverses the module
+  doc's own former claim that morale recovers by time alone; see
+  `docs/seams.md`.
+- **The errand is gated on there being one, and that is what keeps the ladder
+  at two rungs.** `Game::on_respite` requires `Amenities::any()`, so a base
+  with no amenity keeps its *sulking* programs in the posting pool — which is
+  where `refuses_post` governs them. Ungated, every disgruntled body leaves
+  the pool and that rung ships green and unreachable. **The two morale
+  exclusions are therefore not one question**: `has_downed_tools` is
+  unconditional (a program at -50 does not work, amenity or no), `on_respite`
+  is not, and writing them as one clause puts a body at -50 back on the line —
+  written, and caught by the disposition suite rather than by this feature's
+  own tests.
+- **No grudge on the stranded branch**, the one asymmetry with `Game::fray`.
+  A failed walk deepening the mood that sent the body out is a loop with no
+  floor, on a meter whose ladder already ratchets. The log line stays (the
+  line is the errand), `Disgruntled::stranded` latches so the Dijkstra is not
+  re-run every beat (`step_off_shift`'s rule), and the body rejoins the
+  posting pool rather than standing stalled — this errand's whole difference
+  from that one. The latch is **carried across the ratchet** in
+  `update_disgruntled`, or a severity climb silently restarts the walk.
+- **`Game::is_on_shift` is the one predicate for "may be handed a job", and
+  the scheduler asks it twice for one reason.** The `on_shift` filter and the
+  free loop used to state the rule separately, each spelling out the uneven
+  `Carrying` escape (kept by `OffShift`, `has_downed_tools` and a respite;
+  refused by `Downed`, which is going to the Bay regardless). Relatedly, the
+  pass's "nothing to do" early return sits **above** the free loop, so it has
+  to test whether a posted body is off the line — read off `staff`, never
+  `on_shift`, since the bodies it must see are the ones that filter dropped.
+  Without it, a body that went off shift while the base's only instruction was
+  a *standing* job (not a `WorkOrder`, so `queue_is_empty` stays true) kept
+  that posting for the rest of the run.
 - **A tantrum's non-lethal clamp is applied before `apply_damage`, never
   inside it.** `apply_damage` floors HP at 0 and reaching 0 *is* a kill; the
   guarantee is one expression at the call site, `game/throw.rs`'s idiom

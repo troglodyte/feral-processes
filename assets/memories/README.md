@@ -139,9 +139,10 @@ but not what makes a program remember.
 | `jammed_here` | − | `Structure` | a stretch of service at a machine that is backed up |
 | `cutting_rock` | − | `Activity` | a stretch of service on the dig crew |
 | `swept_here` | − | `Structure` | a GC Entropy Sweep hitting the machine you are posted at |
+| `unwound_at` | + | `Structure` | a stretch spent standing at an amenity, in a mood bad enough to have gone there |
 
 They are chosen to cover both valences and every subject kind, not because
-these thirteen are the interesting content. `Nothing`, `Program`, `Species`
+these fourteen are the interesting content. `Nothing`, `Program`, `Species`
 and `BaseTile` are written by the fight-and-staffing triggers; `Structure`
 and `Activity` by the four about a program's working life.
 
@@ -163,9 +164,23 @@ saying because the other two are both fond — the subject does not imply
 fondness. It outlasts the `vented` its aggressor came away with, which is why
 a base that answers a bad mood with nothing gets worse rather than better.
 
-**The four work kinds divide on one axis, and it is not valence.**
+**`unwound_at` is the one memory a program forms by an errand it took
+itself, and it is a mechanism rather than flavour.** Morale is the signed sum
+of this whole store and has no reserve to refill, so "a program in a bad mood
+goes somewhere to recuperate" has to mean "it comes away fonder of the place
+it went". A program on the acting-out ladder walks to the nearest amenity and
+this is written for as long as it stands there — which is what carries the
+meter back up. Editing its `valence` or `strike_cap` retunes how much a break
+is worth: at full strength it is `valence * strike_cap`, and the ladder's own
+thresholds are in `crates/engine/src/tuning.rs` as `MORALE_SULKS_AT` and
+`MORALE_RECOVERED_AT`. Set it high enough to clear the gap between those two
+and a bad base costs nothing; set it to zero and there is no way back off the
+ladder but time.
+
+**The work kinds divide on one axis, and it is not valence.**
 `swept_here` is an **edge** — a sweep is an event, and it is remembered the
-moment it lands. The other three are **stretches of service**: nothing
+moment it lands. The other four are **stretches of service** (or, for
+`unwound_at`, of deliberately not serving): nothing
 distinguishes the first tick at a machine from the thousandth, so they are
 written on a period, and a memory reaching its `strike_cap` means a real
 stretch of the run rather than a moment of it. That is why a `half_life`

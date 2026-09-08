@@ -290,13 +290,27 @@ impl Game {
                         ResearchState::Locked { missing, min_zone }
                     }
                 };
+                let materials: Vec<ResearchMaterial> = def
+                    .materials
+                    .iter()
+                    .map(|(item, need)| ResearchMaterial {
+                        name: self.item_name(item).to_string(),
+                        need: *need,
+                        have: self.research_material_held(item),
+                    })
+                    .collect();
                 ResearchStatus {
                     id: def.id.clone(),
                     name: def.name.clone(),
                     description: def.description.clone(),
                     cost: def.cost,
                     state,
-                    affordable: held >= def.cost,
+                    // Folded here rather than left to the screen, so the one
+                    // row colour rule covers both halves of the price and a
+                    // node drawn as affordable cannot then be refused for
+                    // goods.
+                    affordable: held >= def.cost && materials.iter().all(|m| m.have >= m.need),
+                    materials,
                     recommended: recommended.contains(&def.id),
                     #[cfg(test)]
                     unlocks_abilities: def.unlocks_abilities.clone(),
@@ -328,6 +342,23 @@ impl Game {
     /// has already been unlocked and is never re-validated, so a save written
     /// before this gate existed keeps every node it paid for whatever zone
     /// the party is standing in.
+    /// How many units of `item` a research purchase could reach: the pack
+    /// plus the adjacent shelves.
+    ///
+    /// The one definition of "have" for a material bill, shared by the
+    /// refusal in `unlock_research` and the figure `research_nodes` puts on
+    /// the screen, so a node the menu draws as affordable cannot then be
+    /// refused. Off the base `adjacent_stock_count` answers 0 and this is
+    /// the pack alone, which is why the Research row needs no locality gate
+    /// of its own.
+    pub(crate) fn research_material_held(&self, item: &ItemId) -> u32 {
+        let carried = self
+            .world
+            .get::<Inventory>(self.player_entity())
+            .map_or(0, |inv| inv.count(item));
+        carried + self.adjacent_stock_count(item)
+    }
+
     pub fn unlock_research(&mut self, id: &str) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -357,6 +388,44 @@ impl Game {
             .count(&research_currency);
         if held < def.cost {
             return Err(format!("Not enough Research Data ({held}/{}).", def.cost));
+        }
+        // Every material line is checked against pack **plus** shelves
+        // before a single unit moves — `commit_caravan_basket`'s rule, and
+        // the reason the shortfall walk below is a second pass rather than a
+        // take-as-you-go loop that would strand goods on a refusal.
+        for (item, need) in &def.materials {
+            let have = self.research_material_held(item);
+            if have < *need {
+                return Err(format!(
+                    "Not enough {} ({have}/{need}).",
+                    self.item_name(item)
+                ));
+            }
+        }
+        // Only now, with the whole bill known payable, does anything move.
+        // The shelves top the pack up rather than being spent from directly:
+        // `take_from_adjacent` is the one player-side mover off a buffer, and
+        // routing through it keeps `hauling::take_from` the only way a unit
+        // leaves a `Stock`.
+        let shortfall: Vec<(ItemId, u32)> = def
+            .materials
+            .iter()
+            .filter_map(|(item, need)| {
+                let carried = self
+                    .world
+                    .get::<Inventory>(player)
+                    .map_or(0, |inv| inv.count(item));
+                (carried < *need).then(|| (item.clone(), need - carried))
+            })
+            .collect();
+        if !shortfall.is_empty() {
+            self.take_from_adjacent(&shortfall);
+        }
+        for (item, need) in &def.materials {
+            self.world
+                .get_mut::<Inventory>(player)
+                .unwrap()
+                .take(item.clone(), *need);
         }
         self.world
             .get_mut::<Inventory>(player)

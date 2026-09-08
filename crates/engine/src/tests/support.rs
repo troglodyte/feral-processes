@@ -675,6 +675,17 @@ pub(super) fn assets_dir_with_extra_item(tag: &str, name: &str, body: &str) -> S
     dir
 }
 
+/// A scratch install carrying one extra research node, for a bill no shipped
+/// node can stand in for — a test about `ResearchDef::materials` wants to say
+/// exactly what the price is without pinning itself to content that is
+/// retuned.
+pub(super) fn assets_dir_with_extra_research(tag: &str, name: &str, body: &str) -> ScratchAssets {
+    let dir = scratch_assets_dir(tag);
+    copy_shipped_assets(&dir, &[]);
+    std::fs::write(dir.join("research").join(name), body).unwrap();
+    dir
+}
+
 pub(super) fn assets_dir_with_extra_structure(tag: &str, name: &str, body: &str) -> ScratchAssets {
     let dir = scratch_assets_dir(tag);
     copy_shipped_assets(&dir, &[]);
@@ -1110,6 +1121,10 @@ pub(super) fn unlock_research_chain(game: &mut Game, id: &str) {
     grant_research_data(game, 1000);
     let mut chain = Vec::new();
     order(game, id, &mut chain);
+    // The material half of the same shortcut: a node's bill is a production
+    // run, and a fixture that only wanted a bench researched should no more
+    // have to mine for it than it has to post a program on a Research Node.
+    stock_research_materials(game, &chain);
     let needed = chain
         .iter()
         .filter_map(|node| game.world.resource::<ResearchDb>().get(node))
@@ -1122,6 +1137,24 @@ pub(super) fn unlock_research_chain(game: &mut Game, id: &str) {
         if !game.is_researched(&node) {
             game.unlock_research(&node).unwrap();
         }
+    }
+}
+
+/// Puts every material the named research nodes ask for into the player's
+/// pack, in the quantities the bills name.
+///
+/// Derived from the `ResearchDef`s rather than listed here, `stock_upgrade
+/// _materials`' reason: a retuned bill joins this the moment its `.ron` file
+/// does, and a fixture about a bench is not a fixture about what research
+/// costs.
+pub(super) fn stock_research_materials(game: &mut Game, nodes: &[String]) {
+    let wanted: Vec<(ItemId, u32)> = nodes
+        .iter()
+        .filter_map(|id| game.world.resource::<ResearchDb>().get(id))
+        .flat_map(|def| def.materials.clone())
+        .collect();
+    for (item, qty) in wanted {
+        give(game, &item, qty);
     }
 }
 

@@ -260,6 +260,31 @@ pub(crate) fn chain_break(game: &Game, item: &ItemId) -> Option<String> {
     first_break
 }
 
+/// Whether the base has been built far enough that its programs' unmet needs
+/// are allowed to count against it.
+///
+/// **At least `BASE_ESTABLISHED_STAFF` staff *and* at least
+/// `BASE_ESTABLISHED_STRUCTURES` structures**, `&&` and not `||`: twelve
+/// programs standing in a bare base have not had a fair chance at an amenity,
+/// and a sprawling base with four bodies in it is not a pressure cooker.
+///
+/// Named for what it says about the base rather than for tantrums, because
+/// it gates the need-memories too — while a base is still getting started,
+/// needs do not count against it. The sentence is one rule, and an exception
+/// for the unreachable case would be a second one to state, remember and
+/// test.
+impl Game {
+    pub(crate) fn base_is_established(&self) -> bool {
+        self.base_staff().len() >= crate::tuning::BASE_ESTABLISHED_STAFF
+            && self
+                .world
+                .iter_entities()
+                .filter(|e| e.contains::<Structure>())
+                .count()
+                >= crate::tuning::BASE_ESTABLISHED_STRUCTURES
+    }
+}
+
 /// Every deployed structure by the tile it stands on. Built once per walk
 /// rather than scanned per neighbour, which is the shape `assembler_system`
 /// already uses to answer the same adjacency question.

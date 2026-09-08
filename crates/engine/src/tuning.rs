@@ -4546,6 +4546,35 @@ pub const MORALE_RECOVERED_AT: f32 = -6.0;
 const _: () = assert!(MORALE_RECOVERED_AT > MORALE_SULKS_AT);
 const _: () = assert!(MORALE_SULKS_AT > MORALE_DOWNS_TOOLS_AT);
 
+// ---------------------------------------------------------------------------
+// Staff tantrums
+// ---------------------------------------------------------------------------
+// The rung past refusal, and the grace period that keeps a young base out of
+// the whole feature. **Every figure here is unmeasured**, for the reason the
+// `// Acting out` comment above already gives: morale is a signed sum of
+// decayed intensities with no natural scale, and nothing in `balance_sim`
+// models base production. They are chosen against the shipped valences and
+// against `BAY_ADMISSION_HP_FRACTION`, and they are the first thing to
+// revisit after a base has been watched.
+
+/// How many staff a base needs before a program's unmet needs are allowed to
+/// count against it. One half of `Game::base_is_established`.
+///
+/// **Development, not time.** A tick-based grace punishes a player who founds
+/// late in a run and forgives one who founds early and then neglects the
+/// place for an hour; how far the base has actually been built is the honest
+/// measure of "has this player had a fair chance to build amenities yet."
+/// Unmeasured, and chosen as that fair-chance line rather than fitted.
+pub const BASE_ESTABLISHED_STAFF: usize = 8;
+
+/// How many structures a base needs before the same. The other half, and the
+/// two are `&&`: twelve programs in a bare base has not had the chance, and a
+/// sprawling base with four bodies in it is not a pressure cooker. Held by
+/// `a_base_short_of_staff_earns_no_need_grudges` and its mirror, one test per
+/// half, because a predicate wired `||` passes a test that only ever starves
+/// both halves at once.
+pub const BASE_ESTABLISHED_STRUCTURES: usize = 8;
+
 /// How many rows the base output page shows per section.
 ///
 /// The page has no scroll, so this is a layout constraint rather than a

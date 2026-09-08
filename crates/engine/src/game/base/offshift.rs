@@ -383,22 +383,30 @@ impl Game {
     /// sentences**, because they leave the player different errands: that is
     /// `NoPost::BoxedIn`-versus-`NoRoute`'s rule one level up.
     ///
-    /// **Only `unreachable` earns the grudge, and that asymmetry is the
-    /// point.** A base with no amenity at all has done nothing to be held
-    /// against it: the player may not have researched one, may not have the
-    /// materials, and has never been told they want one, so a memory formed
-    /// there is a program resenting the base for a building that was never
-    /// an option. Measured against a real save it was worth -27 on its own,
-    /// most of the way to a standdown, with no lever anywhere for the player
-    /// to answer it. The base earns the grudge when it *had* an answer and
-    /// could not deliver it — a Bay walled off, or destroyed — which is a
-    /// complaint with an errand attached. The sentence is still said on both
-    /// branches, so nothing is hidden; only the blame is withheld.
-    ///
-    /// The grudge is `MemorySubject::BaseTile` at the program's **own**
-    /// `Position`, `note_strandings`' subject and for its reason: "worn thin
+    /// **The two branches write different memories, and the asymmetry is
+    /// about blame rather than about feeling.** The unreachable branch earns
+    /// `frayed_here`, `MemorySubject::BaseTile` at the program's **own**
+    /// `Position` — `note_strandings`' subject and for its reason: "worn thin
     /// here" is a claim about where the body is standing, and it is what
-    /// `drift_idle_staff` reads back.
+    /// `drift_idle_staff` reads back. The base earns that when it *had* an
+    /// answer and could not deliver it — a Bay walled off, or destroyed —
+    /// which is a complaint with an errand attached.
+    ///
+    /// The quiet branch earns `ran_down`, `MemorySubject::Nothing`. A base
+    /// with no amenity at all has done nothing to be *held against it*: the
+    /// player may not have researched one, may not have the materials, and
+    /// has never been told they want one, so a memory naming a tile there is
+    /// a program resenting the base for a building that was never an option
+    /// — measured against a real save that was worth -27 on its own, most of
+    /// the way to a standdown, with no lever anywhere to answer it. A
+    /// `Nothing` subject holds nothing responsible, so the rule stands and
+    /// the meter still moves. **What is withheld is the blame, not the
+    /// memory**, and that distinction is what makes needs reach the morale
+    /// ladder at all instead of being decorative there.
+    ///
+    /// **Neither is written before `base_is_established`.** While a base is
+    /// still getting started, needs do not count against it. The lines are
+    /// said either way, because the line is the errand.
     pub(crate) fn fray(&mut self, worker: Entity, need: &NeedId, unreachable: bool) {
         let Some(mut store) = self.world.get_mut::<Needs>(worker) else {
             return;
@@ -423,12 +431,25 @@ impl Game {
                 "{who} is out of {what} and there's nothing in the base that restores it."
             ));
         }
-        if let (true, Some(at)) = (unreachable, at) {
-            self.remember(
-                worker,
-                "frayed_here",
-                crate::components::MemorySubject::BaseTile { x: at.x, y: at.y },
-            );
+        if !self.base_is_established() {
+            return;
+        }
+        match (unreachable, at) {
+            (true, Some(at)) => {
+                self.remember(
+                    worker,
+                    "frayed_here",
+                    crate::components::MemorySubject::BaseTile { x: at.x, y: at.y },
+                );
+            }
+            (false, _) => {
+                self.remember(
+                    worker,
+                    "ran_down",
+                    crate::components::MemorySubject::Nothing,
+                );
+            }
+            (true, None) => {}
         }
     }
 

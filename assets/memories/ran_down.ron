@@ -1,0 +1,16 @@
+// Ran out of something this base never had an answer to. Distinct from
+// `frayed_here`, and milder (-6 against -7): a base that never built the
+// amenity is a lesser failing than one that built it and walled it off.
+//
+// `Nothing` as a subject on purpose. It holds no tile, no machine and no
+// colleague responsible, which is what lets the meter move at all without
+// making a program resent something the player has not had a chance to fix.
+(
+    id: "ran_down",
+    name: "Ran down",
+    blurb: "Needed something this place had never had.",
+    valence: -6.0,
+    half_life: 4000,
+    subject: Nothing,
+    strike_cap: 4,
+)

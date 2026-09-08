@@ -78,6 +78,7 @@ mod stack_movement;
 mod stock;
 mod talents;
 mod taming;
+mod tantrums;
 mod taunt;
 mod telemetry;
 mod throw;

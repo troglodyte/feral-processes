@@ -507,6 +507,30 @@ impl Game {
             .collect()
     }
 
+    /// Whether spending a program on a build order right now would take the
+    /// base to zero programs — **the one derivation of the roster floor**,
+    /// called by `programs_for_build` above every list a frontend draws and
+    /// by `commit_for_build` as its own second line of defence.
+    ///
+    /// This guarantees `owned_pets().len()` never reaches zero — not that a
+    /// crew is standing by to raise the site. `owned_pets()` counts every
+    /// owned program regardless of role (staff, partied, sortied or wielded
+    /// — see `role_of`), so a base can pass this check with one staff
+    /// program and one partied one, spend the staff program, and be left
+    /// with nobody `run_build_crew` will post to the site. Zero specifically
+    /// is the line because it is unrecoverable: a program in the party can
+    /// still be taken out and returned to staff, but nothing brings back the
+    /// one just spent on this order.
+    ///
+    /// The whole roster and not `programs_for_build(tier)`: the rule is that
+    /// a build order may never take the base to zero programs, and
+    /// eligibility for a particular tier has nothing to do with whether the
+    /// base is left empty. Asking the eligible list instead would also be
+    /// circular — that list asks this.
+    pub fn build_would_empty_the_roster(&mut self) -> bool {
+        self.owned_pets().len() <= 1
+    }
+
     /// Every owned program that could be spent on a build of `tier`, in
     /// `owned_pets` order so the picker agrees with every other roster
     /// screen.
@@ -523,9 +547,27 @@ impl Game {
     /// despawning it; a sortied program is away and cannot be reached; a
     /// `Downed` one is the roster slot a wipe is supposed to cost.
     ///
+    /// **The roster floor is part of the filter, not a separate gate.** A
+    /// base holding exactly one program can spend none of it (see
+    /// `build_would_empty_the_roster`), so this returns nothing at all
+    /// there. That is `commit_for_build`'s rule, and it lives here as well
+    /// because this is the list every frontend gate is asked — a menu greyed
+    /// off a list that still offered the last program would light up, list
+    /// it undimmed, and only refuse after the player confirmed. A run sits
+    /// in exactly that state from its first tamed program until its second,
+    /// so it is the likeliest first meeting with this screen.
+    ///
+    /// It is a whole-list answer and not a `filter`: the rule is about the
+    /// base, not about any one program, and dropping *the last one* by
+    /// predicate would let a two-program roster spend down to zero one
+    /// order at a time.
+    ///
     /// **The only derivation of this list.** The renderer draws what
     /// app-core counts and filters nothing itself.
     pub fn programs_for_build(&mut self, tier: u32) -> Vec<PetInfo> {
+        if self.build_would_empty_the_roster() {
+            return Vec::new();
+        }
         self.owned_pets()
             .into_iter()
             .filter(|p| self.zone_tier(p.entity) >= tier)

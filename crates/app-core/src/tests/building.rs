@@ -974,21 +974,54 @@ fn the_picker_lists_only_programs_deep_enough() {
     assert_eq!(game.programs_for_build(3).len(), 1, "only the deep one");
 }
 
-/// A refusal that can only be reached *through* the picker — the base's
-/// only program is exactly what `programs_for_build(1)` offers, since that
-/// derivation has nothing to say about how many programs are left over —
-/// but committing it would leave the base staffed by nobody, which
-/// `Game::place_structure` refuses. Proves `App::report` is wired to the
-/// picker's confirm rather than the outcome being dropped on the floor: the
-/// "Things to get right" bullet that a refusal after confirm must surface,
-/// not fail silently.
+/// Proves `App::report` is wired to the picker's confirm rather than the
+/// outcome being dropped on the floor: the "Things to get right" bullet
+/// that a refusal after confirm must surface, not fail silently.
+///
+/// **Re-pointed at the occupied-cell refusal.** This test used to reach the
+/// last-program rule: one program on the roster, offered by
+/// `programs_for_build(1)` because that derivation had nothing to say about
+/// how many were left over, and refused only once the player confirmed. The
+/// R27 fix folded the roster floor into `programs_for_build` precisely so
+/// that no longer happens, which leaves a one-program base with an *empty*
+/// picker — a row key selects nothing, the mode never resolves, and the
+/// test would be asserting on a screen the player cannot get past rather
+/// than on a refusal.
+///
+/// So it files a real order first and then tries to deploy onto the same
+/// cell. That is still an engine `Err` raised at exactly the moment this
+/// test is about — after the program is picked, inside `place_structure` —
+/// and it is now the reachable one: with the floor and the depth both
+/// filtered before the list is drawn, every remaining `commit_for_build`
+/// refusal is defence in depth for callers that never drew a picker (the
+/// engine's own `a_one_program_base_may_not_spend_its_only_body` and the
+/// `committing_a_*_program_is_refused` tests hold those directly).
+///
+/// Three programs, because the first order spends one and a base that then
+/// held only one would open the second picker empty.
 #[test]
 fn the_pickers_confirm_surfaces_the_engines_refusal() {
-    let mut app = app_in_base_with_programs(874, 1);
+    let mut app = app_in_base_with_programs(874, 3);
     deploy_second_structure(&mut app);
     assert_eq!(app.mode, Mode::BuildProgram);
+    app.handle_key(GameKey::Char('1')); // files the order, spends one
+    assert_eq!(app.mode, Mode::Playing);
+    assert!(
+        app.game
+            .as_mut()
+            .unwrap()
+            .adjacent_build_site(1, 0)
+            .is_some(),
+        "precondition: a request now stands on the cell the next deploy wants"
+    );
 
-    app.handle_key(GameKey::Char('1')); // the base's only program
+    deploy_second_structure(&mut app);
+    assert_eq!(
+        app.mode,
+        Mode::BuildProgram,
+        "precondition: the picker is up, so the refusal below is one the confirm raised"
+    );
+    app.handle_key(GameKey::Char('1'));
     assert_eq!(
         app.mode,
         Mode::Playing,
@@ -996,21 +1029,13 @@ fn the_pickers_confirm_surfaces_the_engines_refusal() {
     );
     let status = app.status_line.clone().unwrap_or_default();
     assert!(
-        status.contains("last program"),
+        status.contains("already set to build something there"),
         "the engine's refusal must reach the player, got: {status:?}"
-    );
-    assert!(
-        app.game
-            .as_mut()
-            .unwrap()
-            .adjacent_build_site(1, 0)
-            .is_none(),
-        "a refused order files nothing"
     );
     assert_eq!(
         app.game.as_mut().unwrap().owned_pets().len(),
-        1,
-        "and a refusal spends nothing"
+        2,
+        "and a refusal spends nothing — only the first order's program went"
     );
 }
 
@@ -1099,15 +1124,35 @@ fn escaping_the_upgrade_picker_files_nothing_and_spends_nothing() {
 /// stays at zone 1 caps every structure at Mk1, which is what left the last
 /// review unable to drive a real upgrade confirm at all (see
 /// `a_structure_at_its_zone_ceiling_is_still_listed_with_the_ceiling_shown`).
-/// And it needs exactly **one** owned program, at zone 2, so committing it
-/// is refused by the same "last program" rule the deploy test exercises —
-/// the whole `Upgrade` arm runs (candidates listed, row picked, entity
-/// passed to `upgrade_structure`, the `Err` routed through `self.report`)
-/// without needing a structure to actually finish upgrading.
+/// **Re-pointed alongside the deploy version above**, and for that test's
+/// reason: it used to hold exactly one program so committing it hit the
+/// "last program" rule, and R27 has since folded that rule into
+/// `programs_for_build`, so a one-program base now opens this picker with
+/// no rows at all and a row key confirms nothing. The refusal it reaches
+/// instead is `upgrade_structure`'s standing-request check — still an
+/// engine `Err`, still raised only after the program is picked, and still
+/// the one thing this test is about: that the whole `Upgrade` arm runs
+/// (candidates listed, row picked, entity passed to `upgrade_structure`,
+/// the `Err` routed through `self.report`) without needing a structure to
+/// actually finish upgrading.
+///
+/// Three programs at zone 2, because the first order spends one and a base
+/// left holding one would open the second picker empty for the very rule
+/// this test can no longer use.
 #[test]
 fn the_upgrade_pickers_confirm_surfaces_the_engines_refusal() {
     let mut app = app_owning_one_deep_program_and_a_compiler(877, 2, 2);
     stand_in_base(&mut app);
+    tame_program_at_zone(&mut app, 2);
+    tame_program_at_zone(&mut app, 2);
+
+    open_upgrade_picker(&mut app);
+    app.handle_key(GameKey::Char('1')); // files the upgrade order, spends one
+    // The filed order's own tick pops a notification on this fixture, which
+    // would otherwise take the screen and leave every assertion below
+    // reading `Mode::Notification` for a reason this test never named.
+    dismiss_notifications(&mut app);
+    assert_eq!(app.mode, Mode::Playing, "precondition: the order was filed");
 
     open_upgrade_picker(&mut app);
     assert_eq!(
@@ -1116,7 +1161,7 @@ fn the_upgrade_pickers_confirm_surfaces_the_engines_refusal() {
         "precondition: the picker is up"
     );
 
-    app.handle_key(GameKey::Char('1')); // the base's only program
+    app.handle_key(GameKey::Char('1'));
     assert_eq!(
         app.mode,
         Mode::Playing,
@@ -1124,7 +1169,7 @@ fn the_upgrade_pickers_confirm_surfaces_the_engines_refusal() {
     );
     let status = app.status_line.clone().unwrap_or_default();
     assert!(
-        status.contains("last program"),
+        status.contains("already on order"),
         "the engine's refusal must reach the player, got: {status:?}"
     );
     let compiler_tier = app
@@ -1139,8 +1184,8 @@ fn the_upgrade_pickers_confirm_surfaces_the_engines_refusal() {
     );
     assert_eq!(
         app.game.as_mut().unwrap().owned_pets().len(),
-        1,
-        "and a refusal spends nothing"
+        2,
+        "and a refusal spends nothing — only the first order's program went"
     );
 }
 

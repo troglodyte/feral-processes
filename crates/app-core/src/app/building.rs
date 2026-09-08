@@ -315,8 +315,17 @@ impl App {
         // for exactly this call — see its doc in `feral_processes_engine`),
         // not a restated copy of it: the tier handed to `programs_for_build`
         // here is the same value `Game::commit_for_build` will demand at
-        // confirm, so the two can't drift into offering a program the
-        // engine then refuses, or hiding one that would have worked.
+        // confirm, so the two can't drift into offering a program that is
+        // the wrong *depth*, or hiding one that would have worked.
+        //
+        // Depth is not the only rule a commit can fail, and this line is a
+        // claim about depth alone. The roster floor — a build order may
+        // never take the base to zero programs — used to live in
+        // `commit_for_build` only, so a one-program base was offered that
+        // program here and refused after the confirm.
+        // `Game::programs_for_build` now folds the floor in, which is why
+        // that list and not `owned_pets` is the only thing this handler may
+        // index.
         let goal = match &pending {
             PendingBuild::Deploy { .. } => BuildGoal::New,
             PendingBuild::Upgrade { to_tier, .. } => BuildGoal::Upgrade { to_tier: *to_tier },

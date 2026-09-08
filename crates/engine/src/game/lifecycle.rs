@@ -1024,7 +1024,13 @@ impl Game {
         // — the first wins and any others are ignored — rather than trusting
         // the file, the same way `party_slots` is truncated below.
         let mut wielded: Option<Entity> = None;
-        // Computed before the loop below, which moves `data.creatures`. The
+        // Computed before the loop below because the loop *spends* it:
+        // `CreatureRestore` is seeded with this number and every
+        // `spawn_creature_from_save` call takes the next id from that seed,
+        // so a maximum taken afterwards would arrive too late to have named
+        // anything. It is a scan of the whole array and not of one row for
+        // the same reason — the seed has to clear every id in the file
+        // before the first creature is spawned. The
         // saved counter alone is not enough: a hand-edited or
         // savetool-packed file can carry ids it never saw, and reissuing one
         // makes two programs answer to the same name. The `.max(1)` is not

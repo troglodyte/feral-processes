@@ -87,8 +87,35 @@ fn new_game(seed: u32) -> Game {
 /// what makes a test built on this fixture able to catch the picker reading
 /// the wrong one.
 pub(super) fn game_with_a_free_and_a_wielded_program(seed: u32) -> Game {
+    game_with_programs(
+        "build_program_candidates",
+        seed,
+        &[(false, "Free Sparkgrub"), (true, "Wielded Sparkgrub")],
+    )
+}
+
+/// A `Game` carrying exactly **one** tamed program at zone 1, free by every
+/// other rule — the state a run sits in from its first tamed program until
+/// its second, and the one the roster floor is about.
+///
+/// `Game::programs_for_build` offers nothing at all here (see that
+/// function), so a screen built on this fixture is a screen a player who has
+/// just tamed their first program actually sees.
+pub(super) fn game_with_a_single_program(seed: u32) -> Game {
+    game_with_programs("last_program", seed, &[(false, "Lone Sparkgrub")])
+}
+
+/// The save-round-trip body both fixtures above share: write the fresh game
+/// out, push one `CreatureSave` per `(wielded, name)` pair, load it back.
+///
+/// One builder rather than two, because the interesting difference between
+/// the fixtures is the *roster* and nothing else — a second hand-written
+/// 45-field `CreatureSave` literal beside the first would drift from it on
+/// the next save field, and a fixture short a field reads as the feature
+/// being broken (`tests/support.rs`'s `spawn_tamed` records the same rule).
+fn game_with_programs(fixture: &str, seed: u32, programs: &[(bool, &str)]) -> Game {
     let mut game = new_game(seed);
-    let path = scratch_path("build_program_candidates", seed);
+    let path = scratch_path(fixture, seed);
     let _cleanup = RemoveOnDrop(&path);
     let species = game.species_defs()[0].id.clone();
     game.save(&path).unwrap();
@@ -142,8 +169,9 @@ pub(super) fn game_with_a_free_and_a_wielded_program(seed: u32) -> Game {
         staff: false,
         downed: false,
     };
-    data.creatures.push(program(false, "Free Sparkgrub"));
-    data.creatures.push(program(true, "Wielded Sparkgrub"));
+    for &(wielded, name) in programs {
+        data.creatures.push(program(wielded, name));
+    }
     save::save_to_file(&path, &data).unwrap();
     Game::load(&path, &test_assets_dir()).unwrap()
 }

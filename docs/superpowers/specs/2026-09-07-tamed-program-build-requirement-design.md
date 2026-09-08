@@ -99,6 +99,14 @@ doors refuse the last one:
 
 > Committing your last program would leave nobody to build the Fabricator.
 
+**Amended by controller ruling R27.** The rule lives in one derivation —
+`programs_for_build` — and the filing doors keep their own check as a second
+line of defence for callers that never drew a list. A frontend gate reading
+`programs_for_build` therefore greys before the confirm rather than lighting a
+menu the engine will refuse, and the greyed screen prints the floor's own
+clause rather than "none of yours is free to spend", which is false to a base
+holding exactly one free program.
+
 This assumes the player cannot raise a site unaided; implementation must confirm
 that against `run_build_crew` before the refusal lands, and drop it if the
 player can.

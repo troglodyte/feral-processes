@@ -351,22 +351,19 @@ impl Game {
                  or deeper."
             ));
         }
-        // This guarantees `owned_pets().len()` never reaches zero — not that
-        // a crew is standing by to raise the site. `owned_pets()` counts
-        // every owned program regardless of role (staff, partied, sortied or
-        // wielded — see `role_of` in party.rs), so a base can pass this check
-        // with one staff program and one partied one, spend the staff
-        // program, and be left with nobody `run_build_crew` will post to
-        // the site. Zero specifically is the line because it is
-        // unrecoverable: a program in the party can still be taken out and
-        // returned to staff, but nothing brings back the one just spent on
-        // this order.
+        // **Defence in depth, not the gate.** `programs_for_build` folds
+        // this same predicate in, so a frontend that draws its list can no
+        // longer offer the last program at all and a player should never
+        // reach this arm through the picker. It stays because this function
+        // is the only thing standing between *any* caller — a test, a script,
+        // a future screen that assembles a commit some other way — and a
+        // base spending itself to zero, and because its sentence names the
+        // structure the order was for, which a menu-level line cannot.
         //
-        // The whole roster and not `programs_for_build(tier)`: the rule is
-        // that a build order may never take the base to zero programs, and
-        // eligibility for this particular tier has nothing to do with
-        // whether the base is left empty.
-        if self.owned_pets().len() <= 1 {
+        // See `Game::build_would_empty_the_roster` for why zero is the line
+        // and why the rule reads the whole roster rather than the eligible
+        // list.
+        if self.build_would_empty_the_roster() {
             return Err(match goal {
                 BuildGoal::New => format!(
                     "Committing your last program would leave nobody to build the {}.",

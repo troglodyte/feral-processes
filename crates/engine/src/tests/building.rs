@@ -2773,6 +2773,12 @@ fn the_tier_a_goal_demands_is_its_own_tier() {
 fn a_deeper_program_still_qualifies_for_a_shallow_build() {
     let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let deep = tame_at_zone(&mut game, 5);
+    // The spare is the roster floor's, not this test's: `programs_for_build`
+    // offers nothing at all to a base holding one program, whatever its
+    // depth, so a one-program fixture would pass this assertion's inverse
+    // for a reason that has nothing to do with `>=`. Every fixture in this
+    // run of tests carries one for that reason.
+    tame_at_zone(&mut game, 5);
 
     let eligible = game.programs_for_build(1);
 
@@ -2788,10 +2794,18 @@ fn a_deeper_program_still_qualifies_for_a_shallow_build() {
 fn a_shallow_program_does_not_qualify_for_a_deep_upgrade() {
     let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let shallow = tame_at_zone(&mut game, 2);
+    // Deep enough, and there so the list is non-empty for a reason that is
+    // about depth: without it the roster floor would empty this list on its
+    // own and the assertion below would hold whatever `>=` did.
+    let deep = tame_at_zone(&mut game, 3);
 
     let eligible = game.programs_for_build(3);
 
     assert!(!eligible.iter().any(|p| p.entity == shallow));
+    assert!(
+        eligible.iter().any(|p| p.entity == deep),
+        "the deep one is still offered, so the list is not simply empty"
+    );
 }
 
 /// The floor's edge, not just its interior: a program caught at *exactly*
@@ -2806,6 +2820,7 @@ fn a_shallow_program_does_not_qualify_for_a_deep_upgrade() {
 fn a_program_at_exactly_the_required_zone_qualifies() {
     let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let at_depth = tame_at_zone(&mut game, 3);
+    tame_at_zone(&mut game, 3); // the roster floor's spare — see above
 
     let eligible = game.programs_for_build(3);
 
@@ -2828,16 +2843,31 @@ fn home_is_the_one_structure_that_needs_no_program() {
 
 /// The weapon in the player's hand is not a spare part — it cannot be
 /// offered to a build even though it is still owned and still at depth.
+///
+/// **Two programs, and the assertion names both.** `programs_for_build`
+/// offers nothing whatsoever to a base holding one program — the roster
+/// floor, folded in so no frontend can light a menu the engine will refuse
+/// — so a one-program fixture would satisfy `is_empty()` without the wield
+/// having anything to do with it. The spare is what makes the list
+/// non-empty for the right reason, and asserting it is *present* is what
+/// keeps this test from passing on a `programs_for_build` that returned
+/// nothing at all. Every exclusion test below carries the same pair.
 #[test]
 fn the_wielded_program_is_not_offered_to_a_build() {
     let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let p = spawn_tamed(&mut game, 10, 3);
+    let spare = spawn_tamed(&mut game, 10, 3);
     game.wield_program(p)
         .expect("a fresh program is free to wield");
 
+    let eligible = game.programs_for_build(1);
     assert!(
-        game.programs_for_build(1).is_empty(),
+        !eligible.iter().any(|e| e.entity == p),
         "you cannot build with the thing in your hand"
+    );
+    assert!(
+        eligible.iter().any(|e| e.entity == spare),
+        "and the spare beside it is still offered, so the list is not simply empty"
     );
 }
 
@@ -2849,14 +2879,20 @@ fn a_sortied_program_is_not_offered_to_a_build() {
 
     let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let p = spawn_tamed(&mut game, 10, 3);
+    let spare = spawn_tamed(&mut game, 10, 3);
     game.world
         .resource_mut::<Sorties>()
         .0
         .push(Sortie::test_stub(vec![p]));
 
+    let eligible = game.programs_for_build(1);
     assert!(
-        game.programs_for_build(1).is_empty(),
+        !eligible.iter().any(|e| e.entity == p),
         "a program away on a sortie is not reachable to spend"
+    );
+    assert!(
+        eligible.iter().any(|e| e.entity == spare),
+        "and the one at home still is, so the list is not simply empty"
     );
 }
 
@@ -2866,11 +2902,17 @@ fn a_sortied_program_is_not_offered_to_a_build() {
 fn a_downed_program_is_not_offered_to_a_build() {
     let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let p = spawn_tamed(&mut game, 10, 3);
+    let spare = spawn_tamed(&mut game, 10, 3);
     game.world.entity_mut(p).insert(Downed);
 
+    let eligible = game.programs_for_build(1);
     assert!(
-        game.programs_for_build(1).is_empty(),
+        !eligible.iter().any(|e| e.entity == p),
         "a downed program is the roster slot a wipe is supposed to cost"
+    );
+    assert!(
+        eligible.iter().any(|e| e.entity == spare),
+        "and the one still standing is offered, so the list is not simply empty"
     );
 }
 
@@ -2880,14 +2922,20 @@ fn a_downed_program_is_not_offered_to_a_build() {
 fn a_program_carrying_goods_is_not_offered_to_a_build() {
     let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let p = spawn_tamed(&mut game, 10, 3);
+    let spare = spawn_tamed(&mut game, 10, 3);
     game.world.entity_mut(p).insert(Carrying {
         item: ItemId::from(ids::CORE_FRAGMENT),
         qty: 1,
     });
 
+    let eligible = game.programs_for_build(1);
     assert!(
-        game.programs_for_build(1).is_empty(),
+        !eligible.iter().any(|e| e.entity == p),
         "despawning a carrier destroys its load"
+    );
+    assert!(
+        eligible.iter().any(|e| e.entity == spare),
+        "and the empty-handed one is offered, so the list is not simply empty"
     );
 }
 

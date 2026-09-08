@@ -48,13 +48,20 @@ fn category_heading(category: StructureCategory) -> Option<&'static str> {
 /// changes, so an ungrouped list would simply repeat headings rather than
 /// mislabel anything.
 ///
-/// **`can_deploy` greys rather than hides.** Every structure here but Home
+/// **`shortfall` greys rather than hides.** Every structure here but Home
 /// costs the same thing — one program of zone 1 or deeper, which is every
-/// program — so a roster with none free stops all of them at once. That
+/// program — so a roster that cannot pay stops all of them at once. That
 /// makes it one line at the top of the screen and not a tag repeated down
 /// every row, and the rows stay listed and stay pickable: a structure that
 /// vanished from the catalogue would read as a bug, and the picker the pick
 /// lands on says the same thing at more length.
+///
+/// **The sentence arrives rather than being chosen here**, because there
+/// are two of them and only a `Game` can tell which — `DEPLOY_NEEDS_A_PROGRAM`
+/// when nothing on the roster is free, `DEPLOY_NEEDS_A_SECOND_PROGRAM` when
+/// the roster floor is what fired. `Some`/`None` and not a `bool` beside a
+/// string, so a caller cannot pass a sentence and leave the rows lit, or
+/// grey the rows and print nothing.
 ///
 /// **Home never greys.** It is the one structure the engine waives the cost
 /// for (`Game::structure_needs_program`), and it is the one a fresh run —
@@ -67,14 +74,14 @@ fn category_heading(category: StructureCategory) -> Option<&'static str> {
 pub(super) fn build_menu_rows(
     entries: &[BuildEntry],
     selected: usize,
-    can_deploy: bool,
+    shortfall: Option<&str>,
 ) -> Vec<Row> {
     let mut rows = vec![text_row("Esc to cancel; Up/Down + Enter also work")];
-    if !can_deploy {
+    if let Some(line) = shortfall {
         // ORANGE and a `Row::Text`, so it is pinned above the scrolling list
         // it is about rather than paging away from it — and so it never
         // joins the `Row::Item` span a keypress is resolved against.
-        rows.push(Row::TextColored(DEPLOY_NEEDS_A_PROGRAM.to_string(), ORANGE));
+        rows.push(Row::TextColored(line.to_string(), ORANGE));
     }
     let mut current: Option<StructureCategory> = None;
     for (i, entry) in entries.iter().enumerate() {
@@ -86,7 +93,7 @@ pub(super) fn build_menu_rows(
             }
         }
         let label = format!("[{}] {}", menu_shortcut(i), entry.label);
-        let affordable = can_deploy || entry.category == StructureCategory::Home;
+        let affordable = shortfall.is_none() || entry.category == StructureCategory::Home;
         rows.push(match affordable {
             true => item_row(label, i == selected),
             // `spent_item_row` rather than a hidden row: still selectable,
@@ -129,10 +136,20 @@ pub(super) fn draw_build_menu(
     // derivation of what qualifies — the same call the picker draws and
     // `App::handle_build_program_key` indexes. A menu greyed off a different
     // count would promise a deploy the picker then has nothing to pay for.
-    let can_deploy = !game
+    //
+    // **Which sentence is a second question with a second answer.** The list
+    // being empty is what greys the menu; `floored_by_the_last_program` is
+    // what says whether the roster floor is why, and the two cases have to
+    // read differently — a base holding one free program told "none of
+    // yours is free to spend" is being told something it can see is false.
+    let shortfall = game
         .programs_for_build(program_tier_required(BuildGoal::New))
-        .is_empty();
-    let rows = build_menu_rows(&entries, selected, can_deploy);
+        .is_empty()
+        .then(|| match floored_by_the_last_program(game) {
+            true => DEPLOY_NEEDS_A_SECOND_PROGRAM,
+            false => DEPLOY_NEEDS_A_PROGRAM,
+        });
+    let rows = build_menu_rows(&entries, selected, shortfall);
     draw_popup("Deploy", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -242,8 +259,79 @@ pub(super) fn draw_build_direction(
 /// **It names the Home exemption because the greying does.** This line is
 /// most often read on the very first screen of a new run, where the player
 /// owns nothing and the row they are about to pick is the one row still lit.
+///
+/// **It is not the only reason the menu greys.** A base down to its last
+/// program is stopped by the roster floor rather than by anything about
+/// that program — see `LAST_PROGRAM_CLAUSE` and the three lines built on
+/// it, one of which replaces this one when the floor is what fired.
 pub(super) const DEPLOY_NEEDS_A_PROGRAM: &str =
     "Deploying costs a tamed program. None of yours is free to spend — only Home is exempt.";
+
+/// The frontend's wording for the roster floor: a base may not spend its
+/// way to zero programs, because the build crew *is* the roster.
+///
+/// **The engine's own sentence, not a fourth phrasing of the idea.**
+/// `Game::commit_for_build` refuses with "Committing your last program
+/// would leave nobody to build the {structure}." — it can name the
+/// structure because it was handed the order. A menu line stands above a
+/// whole list of structures and has none to name, so it stops at the clause
+/// they share. A player who meets the floor at the menu and again at the
+/// confirm reads the same words twice, which is what makes the second
+/// screen read as the same rule rather than as a new one.
+///
+/// The three lines below are this clause plus whatever their own screen
+/// has to add; `the_three_last_program_lines_share_the_engines_clause`
+/// holds them to it. Kept as a `&str` and not a `format!` so that test can
+/// compare them without a `Game`.
+pub(super) const LAST_PROGRAM_CLAUSE: &str =
+    "Committing your last program would leave nobody to build";
+
+/// What the deploy menu says when the roster floor — and not depth, and not
+/// availability — is what stops every row on it.
+///
+/// It keeps `DEPLOY_NEEDS_A_PROGRAM`'s Home tail for that line's reason: the
+/// greying spares Home, so the sentence explaining the greying has to say
+/// so. It drops that line's "None of yours is free to spend", which would be
+/// read by a player looking at a roster with exactly one perfectly free
+/// program on it — the state every run sits in from its first tamed program
+/// until its second, and so the likeliest first reading of this screen.
+pub(super) const DEPLOY_NEEDS_A_SECOND_PROGRAM: &str =
+    "Committing your last program would leave nobody to build — only Home is exempt.";
+
+/// The upgrade menu's twin of `DEPLOY_NEEDS_A_SECOND_PROGRAM`.
+///
+/// One line for the screen rather than a tag down every row, `build_menu_rows`'
+/// argument: the floor is a fact about the base, so it stops every row at
+/// once and repeating it per row would say nothing extra. It is also why
+/// this line is needed at all — an upgrade row's existing tag ("needs a
+/// zone 3 program") is a *depth*, and a row greyed by the floor while
+/// wearing that tag tells a player with a zone 5 program that their program
+/// is too shallow.
+///
+/// No Home tail: Home has no upgrade, so nothing on this screen is exempt.
+pub(super) const UPGRADE_NEEDS_A_SECOND_PROGRAM: &str =
+    "Committing your last program would leave nobody to build — every upgrade costs one.";
+
+/// Whether a screen with nothing to offer is short because of the **roster
+/// floor** — the one reason that is not about any program on the roster —
+/// and so which of the two sentences it prints. The single place that
+/// decision is made; all three build screens ask it.
+///
+/// **Two questions and not one.** `Game::build_would_empty_the_roster` is
+/// the engine's own rule and is `true` for a roster of none as much as for a
+/// roster of one, because the engine has no reason to tell those apart: it
+/// refuses either way, and a caller naming a program it does not own is
+/// refused for that instead. A *sentence* has every reason to tell them
+/// apart — "committing your last program" is a plain falsehood to a fresh
+/// run that owns nothing, and that run is reading this line on the very
+/// first screen of the game. So the second question is asked here.
+///
+/// It is a plain roster fact and not a second copy of the floor: this
+/// function cannot say a build is allowed, only which true sentence to
+/// print about one the engine has already stopped.
+pub(super) fn floored_by_the_last_program(game: &mut Game) -> bool {
+    game.build_would_empty_the_roster() && !game.owned_pets().is_empty()
+}
 
 /// What the picker says when nothing on the roster qualifies, which is a
 /// first-class state of this screen and not an edge of it.
@@ -255,19 +343,29 @@ pub(super) const DEPLOY_NEEDS_A_PROGRAM: &str =
 /// `place_structure` with `None` only for Home, and Home is exempt, so that
 /// refusal is unreachable from this frontend. This is what fills the gap.
 ///
-/// Two sentences because there are two reasons and only one of them is
-/// depth. Tier 1 is a deploy, and every tamed program is from zone 1 or
-/// deeper — so blaming depth there would be plainly false to a player
-/// looking at a roster full of programs, and what is actually missing is a
-/// program that is *free* (not wielded, downed, away on a sortie or
-/// carrying). Tier 2 and up is an upgrade, where the roster really can be
-/// full of programs that are simply too shallow.
+/// Three sentences because there are three reasons, and `last_program`
+/// answers first because it is the only one of them that is true *whatever*
+/// the tier. A base holding one zone 5 program and asked for a zone 4
+/// upgrade is stopped by the floor, and "nothing on your roster is from
+/// zone 4 or deeper" would be a plainly false thing to tell a player
+/// looking at that roster.
+///
+/// Of the remaining two only one is depth. Tier 1 is a deploy, and every
+/// tamed program is from zone 1 or deeper — so blaming depth there would be
+/// plainly false too, and what is actually missing is a program that is
+/// *free* (not wielded, downed, away on a sortie or carrying). Tier 2 and up
+/// is an upgrade, where the roster really can be full of programs that are
+/// simply too shallow.
 ///
 /// It says nothing about Home, unlike `DEPLOY_NEEDS_A_PROGRAM`: this screen
 /// is never reached for a Home at all, because
 /// `App::handle_build_direction_key` places one straight without a picker.
-pub(super) fn no_candidates_refusal(tier: u32) -> String {
-    if tier <= 1 {
+/// That is also why the floor line here is the bare `LAST_PROGRAM_CLAUSE`
+/// and not the deploy menu's Home-tailed version.
+pub(super) fn no_candidates_refusal(tier: u32, last_program: bool) -> String {
+    if last_program {
+        format!("{LAST_PROGRAM_CLAUSE}.")
+    } else if tier <= 1 {
         "No program on your roster is free to spend on this.".to_string()
     } else {
         format!("Nothing on your roster is from zone {tier} or deeper.")
@@ -295,8 +393,21 @@ impl BuildCommit {
     /// How deep a program this order demands — **the engine's own rule,
     /// called rather than restated.** `App::handle_build_program_key` hands
     /// `Game::programs_for_build` the number this same function returns, so
-    /// the list on screen and the list a keypress indexes cannot drift into
-    /// offering a program the engine would then refuse.
+    /// the list on screen and the list a keypress indexes ask for the same
+    /// depth and cannot drift apart.
+    ///
+    /// **That is a claim about depth, and only about depth.** It says
+    /// nothing about the other rules a commit can fail, and for a while the
+    /// picker did offer a program `commit_for_build` then refused: the
+    /// roster floor lived in that function alone, so a base holding exactly
+    /// one program — the state every run sits in from its first tamed
+    /// program until its second — lit the menu, listed that program
+    /// undimmed, and refused only after the confirm.
+    /// `Game::programs_for_build` now folds the floor in, so the picker
+    /// offers nothing there; `commit_for_build` keeps its own check as
+    /// defence in depth for callers that never drew a list, and its more
+    /// specific sentence can still be reached by a program too shallow for
+    /// the tier.
     pub(super) fn tier(&self) -> u32 {
         program_tier_required(match self.to_tier {
             Some(to_tier) => BuildGoal::Upgrade { to_tier },
@@ -442,8 +553,16 @@ pub(super) fn draw_build_program(
 ) {
     let tier = commit.as_ref().map_or(1, BuildCommit::tier);
     let candidates = game.programs_for_build(tier);
+    // Asked before the list is handed away: the empty list is the same
+    // empty list whichever rule emptied it, and only
+    // `floored_by_the_last_program` tells a roster that has nothing
+    // suitable from one that has exactly one program and may spend none of
+    // it. See `no_candidates_refusal`.
+    let last_program = floored_by_the_last_program(game);
     let rows = build_program_rows(commit.as_ref(), &candidates, selected);
-    let nothing_qualifies = candidates.is_empty().then(|| no_candidates_refusal(tier));
+    let nothing_qualifies = candidates
+        .is_empty()
+        .then(|| no_candidates_refusal(tier, last_program));
     draw_popup(
         "Commit a program",
         PopupSize::Large,
@@ -1079,6 +1198,19 @@ pub(super) fn draw_upgrade_menu(
     let mut rows = vec![text_row(
         "Upgrade which structure? Your crew fetches the parts and does the work. (Esc to cancel; Up/Down + Enter also work)",
     )];
+    // The roster floor stops every row at once, so it is said once, above
+    // the list — `build_menu_rows`' shape, and see
+    // `UPGRADE_NEEDS_A_SECOND_PROGRAM` for why the per-row dimming cannot
+    // carry this on its own: a row's own tag names a *depth*, and the floor
+    // is not about depth. `Row::Text` and ORANGE for the deploy line's
+    // reasons — pinned above the scroll, and never inside the `Row::Item`
+    // span a keypress resolves against.
+    if floored_by_the_last_program(game) {
+        rows.push(Row::TextColored(
+            UPGRADE_NEEDS_A_SECOND_PROGRAM.to_string(),
+            ORANGE,
+        ));
+    }
     if structures.is_empty() {
         rows.push(text_row("(no upgradeable structures nearby)"));
     }
@@ -1609,10 +1741,17 @@ mod tests {
             description: synthetic_description(),
             category: StructureCategory::Utility,
         });
-        // Both forms: the greyed one carries a line the deployable one does
-        // not, and an unwrapped sentence runs off the edge just as silently.
-        for can_deploy in [true, false] {
-            for row in build_menu_rows(&entries, 0, can_deploy) {
+        // All three forms: each greyed one carries a line the deployable one
+        // does not, and an unwrapped sentence runs off the edge just as
+        // silently. Both shortfall sentences, because they are different
+        // lengths and only the longer of the two can be the one that
+        // overflows.
+        for shortfall in [
+            None,
+            Some(DEPLOY_NEEDS_A_PROGRAM),
+            Some(DEPLOY_NEEDS_A_SECOND_PROGRAM),
+        ] {
+            for row in build_menu_rows(&entries, 0, shortfall) {
                 let text = row_text(&row);
                 assert!(
                     text.chars().count() <= ROW_WRAP_COLUMNS,
@@ -1631,8 +1770,13 @@ mod tests {
     #[test]
     fn every_deploy_description_stays_inside_the_scrollable_body() {
         let entries = shipped_entries();
-        for (selected, can_deploy) in [(0, true), (entries.len() - 1, true), (0, false)] {
-            let rows = build_menu_rows(&entries, selected, can_deploy);
+        for (selected, shortfall) in [
+            (0, None),
+            (entries.len() - 1, None),
+            (0, Some(DEPLOY_NEEDS_A_PROGRAM)),
+            (0, Some(DEPLOY_NEEDS_A_SECOND_PROGRAM)),
+        ] {
+            let rows = build_menu_rows(&entries, selected, shortfall);
             let last_item = rows
                 .iter()
                 .rposition(|r| matches!(r, Row::Item { .. }))
@@ -1715,8 +1859,9 @@ mod tests {
             description: synthetic_description(),
             category: StructureCategory::Utility,
         });
-        let menu = build_menu_rows(&entries, 0, true);
-        let greyed = build_menu_rows(&entries, 0, false);
+        let menu = build_menu_rows(&entries, 0, None);
+        let greyed = build_menu_rows(&entries, 0, Some(DEPLOY_NEEDS_A_PROGRAM));
+        let floored = build_menu_rows(&entries, 0, Some(DEPLOY_NEEDS_A_SECOND_PROGRAM));
         let prompt = build_direction_rows(
             "Fabricator",
             &widest_shipped_description(),
@@ -1727,7 +1872,12 @@ mod tests {
             // 0.88 is `PopupSize::Large`'s width fraction, against the
             // 1440x900 geometry `ui_metrics` is calibrated for.
             let room = 1440.0 * 0.88 - m.pad * 2.0;
-            for row in menu.iter().chain(greyed.iter()).chain(prompt.iter()) {
+            for row in menu
+                .iter()
+                .chain(greyed.iter())
+                .chain(floored.iter())
+                .chain(prompt.iter())
+            {
                 let text = match row {
                     Row::Text(t) | Row::TextColored(t, _) => t.clone(),
                     // `draw_row`'s own prefix on an item row.
@@ -1827,13 +1977,13 @@ mod tests {
     fn a_roster_with_no_free_program_greys_the_deploy_menu() {
         let entries = shipped_entries();
 
-        let open = build_menu_rows(&entries, 0, true);
+        let open = build_menu_rows(&entries, 0, None);
         assert!(
             !open.iter().any(|r| row_text(r) == DEPLOY_NEEDS_A_PROGRAM),
             "a menu that can be used says nothing about a cost it can meet"
         );
 
-        let shut = build_menu_rows(&entries, 0, false);
+        let shut = build_menu_rows(&entries, 0, Some(DEPLOY_NEEDS_A_PROGRAM));
         assert_eq!(
             shut.iter()
                 .filter(|r| row_text(r) == DEPLOY_NEEDS_A_PROGRAM)
@@ -1885,7 +2035,19 @@ mod tests {
             .position(|e| e.category == StructureCategory::Home)
             .expect("the shipped assets define a Home");
         assert_eq!(
-            entry_colors(&build_menu_rows(&entries, 0, false))[home],
+            entry_colors(&build_menu_rows(&entries, 0, Some(DEPLOY_NEEDS_A_PROGRAM)))[home],
+            TEXT
+        );
+        // And under the *other* shortfall too: the roster floor greys the
+        // same rows for a different reason, and Home is exempt from the
+        // program cost outright (`Game::structure_needs_program`), so a run
+        // whose one program cannot be spent must still be able to found one.
+        assert_eq!(
+            entry_colors(&build_menu_rows(
+                &entries,
+                0,
+                Some(DEPLOY_NEEDS_A_SECOND_PROGRAM)
+            ))[home],
             TEXT
         );
     }
@@ -2339,24 +2501,74 @@ mod build_program_tests {
     /// rows and Esc as the only exit — and, without this, nothing at all
     /// saying why.
     ///
-    /// Two sentences because there are two reasons and only one of them is
-    /// depth. A deploy asks for tier 1, and every tamed program is from zone
-    /// 1 or deeper, so blaming depth there would be plainly false to a
+    /// Three sentences because there are three reasons and only one of them
+    /// is depth. A deploy asks for tier 1, and every tamed program is from
+    /// zone 1 or deeper, so blaming depth there would be plainly false to a
     /// player looking at a roster full of programs.
+    ///
+    /// The roster floor answers ahead of both, and this pins that order: it
+    /// is the one reason that holds at *every* tier, so a base with one
+    /// zone 5 program asked for a zone 4 upgrade must not be told its
+    /// roster is too shallow.
     #[test]
     fn an_empty_picker_says_why_and_a_deploy_never_blames_depth() {
         assert_eq!(
-            no_candidates_refusal(1),
+            no_candidates_refusal(1, false),
             "No program on your roster is free to spend on this.",
             "at tier 1 the roster is deep enough by construction; being free is the question"
         );
         assert_eq!(
-            no_candidates_refusal(4),
+            no_candidates_refusal(4, false),
             "Nothing on your roster is from zone 4 or deeper."
         );
+        assert_eq!(
+            no_candidates_refusal(4, true),
+            "Committing your last program would leave nobody to build.",
+            "the floor answers first: a lone zone 5 program is not too shallow for a zone 4 \
+             upgrade, and saying so would be plainly false"
+        );
+        assert_eq!(
+            no_candidates_refusal(1, true),
+            no_candidates_refusal(4, true),
+            "the floor is about the base, so the tier cannot change what it says"
+        );
+        for last_program in [true, false] {
+            assert!(
+                !no_candidates_refusal(1, last_program).contains("Home"),
+                "the picker is never reached for a Home, so it has no exemption to explain"
+            );
+        }
+    }
+
+    /// The three lines the frontend prints for the roster floor all quote
+    /// `LAST_PROGRAM_CLAUSE`, which is `Game::commit_for_build`'s own
+    /// wording with the structure name — the one thing a menu cannot know —
+    /// taken off the end.
+    ///
+    /// Held here because the alternative is what this branch has already
+    /// had to undo twice: three screens each inventing their own phrasing
+    /// of one rule, so a player who meets the floor at the menu and again at
+    /// the confirm reads two different sentences and has to work out whether
+    /// they are the same refusal.
+    #[test]
+    fn the_three_last_program_lines_share_the_engines_clause() {
+        for line in [
+            DEPLOY_NEEDS_A_SECOND_PROGRAM,
+            UPGRADE_NEEDS_A_SECOND_PROGRAM,
+            &no_candidates_refusal(1, true),
+        ] {
+            assert!(
+                line.starts_with(LAST_PROGRAM_CLAUSE),
+                "{line:?} does not open with the engine's own clause"
+            );
+        }
         assert!(
-            !no_candidates_refusal(1).contains("Home"),
-            "the picker is never reached for a Home, so it has no exemption to explain"
+            DEPLOY_NEEDS_A_SECOND_PROGRAM.contains("Home"),
+            "the deploy menu greys everything but Home, so its line has to say so"
+        );
+        assert!(
+            !UPGRADE_NEEDS_A_SECOND_PROGRAM.contains("Home"),
+            "Home has no upgrade, so nothing on that screen is exempt"
         );
     }
 
@@ -2483,6 +2695,91 @@ mod build_program_tests {
         assert!(
             !says("Wielded Sparkgrub"),
             "programs_for_build(1) drops a wielded program — owned_pets() would not: {drawn:?}"
+        );
+    }
+
+    /// **The one-program base, end to end**, on all three screens that ask
+    /// the roster whether a build can be paid for.
+    ///
+    /// This is the state every run sits in from its first tamed program
+    /// until its second, so for most players it is the *first* time these
+    /// screens are read with anything on the roster at all. Before R27 the
+    /// roster floor lived only in `Game::commit_for_build`: both menus lit,
+    /// the picker listed that program undimmed, and the refusal arrived
+    /// after the player had already confirmed spending it.
+    ///
+    /// Driven through the real `draw_*` calls rather than the pure row
+    /// builders, `draw_build_program_only_lists_what_the_engine_will_accept`'s
+    /// reason: the row builders take the shortfall and the candidate list as
+    /// arguments, so every one of them is satisfied by a caller that asks
+    /// the wrong question. What is on trial here is the question.
+    ///
+    /// And it asserts the *sentence*, not just the greying. Once
+    /// `programs_for_build` returns nothing, the old line —
+    /// `DEPLOY_NEEDS_A_PROGRAM`, "none of yours is free to spend" — would be
+    /// shown to a player looking at one perfectly free program, which is a
+    /// screen contradicting itself.
+    #[test]
+    fn a_one_program_base_greys_every_build_screen_and_says_which_rule_stopped_it() {
+        let mut game = crate::render::test_support::game_with_a_single_program(4002);
+        let m = crate::text::ui_metrics(900.0);
+
+        assert!(
+            floored_by_the_last_program(&mut game),
+            "precondition: one owned program is the roster floor, not an empty roster"
+        );
+
+        // The deploy menu: one line for the screen, and every non-Home row
+        // dimmed.
+        let (_, shapes) = crate::paint::with_painter(|p| {
+            draw_build_menu(&mut game, 0, None, p, &m);
+        });
+        let drawn = crate::paint::painted_text(&shapes);
+        let says = |drawn: &[String], want: &str| drawn.iter().any(|t| t.contains(want));
+        assert!(
+            says(&drawn, DEPLOY_NEEDS_A_SECOND_PROGRAM),
+            "the deploy menu has to name the rule that stopped it: {drawn:?}"
+        );
+        assert!(
+            !says(&drawn, "None of yours is free to spend"),
+            "and must not tell a player with one free program that none of theirs is free"
+        );
+        let dimmed = crate::paint::painted_runs_in(&shapes, TEXT_DIM, false);
+        assert!(
+            dimmed.iter().any(|t| t.contains("Mining Node")),
+            "an unaffordable structure row is greyed, not hidden: {dimmed:?}"
+        );
+
+        // The upgrade menu: the same one line, and the row dimmed with it.
+        let structures = [view(1, 5, 5)];
+        let (_, shapes) = crate::paint::with_painter(|p| {
+            draw_upgrade_menu(&mut game, &structures, 0, None, p, &m);
+        });
+        let drawn = crate::paint::painted_text(&shapes);
+        assert!(
+            says(&drawn, UPGRADE_NEEDS_A_SECOND_PROGRAM),
+            "the upgrade menu has to name it too — its per-row tag names a depth, \
+             and depth is not what stopped this: {drawn:?}"
+        );
+        let dimmed = crate::paint::painted_runs_in(&shapes, TEXT_DIM, false);
+        assert!(
+            dimmed.iter().any(|t| t.contains("Mining Node")),
+            "and the row it would lead to is greyed: {dimmed:?}"
+        );
+
+        // The picker the greyed rows still lead to: nothing offered, and the
+        // same rule named a third time.
+        let (_, shapes) = crate::paint::with_painter(|p| {
+            draw_build_program(&mut game, Some(deploy("Mining Node")), 0, None, p, &m);
+        });
+        let drawn = crate::paint::painted_text(&shapes);
+        assert!(
+            !says(&drawn, "Lone Sparkgrub"),
+            "the picker must not offer the one program the engine will refuse: {drawn:?}"
+        );
+        assert!(
+            says(&drawn, LAST_PROGRAM_CLAUSE),
+            "and it says why it is empty: {drawn:?}"
         );
     }
 }

@@ -9,9 +9,17 @@
 //!
 //! So the census below asserts a *value* on every field, and the values are
 //! all different from each other on purpose — two fields holding the same
-//! number cannot catch being crossed. It is hand-written, and that is the
-//! trade: **a new `CreatureSave` field is covered only if somebody adds it
-//! here**, so extend the census when you extend the struct.
+//! number cannot catch being crossed.
+//!
+//! The values are hand-written; **which fields exist is not**. The census
+//! opens with an exhaustive destructure of `save::CreatureSave` carrying no
+//! rest pattern, so a field added to the struct stops this file compiling
+//! until somebody writes the assertion for it. Without that line the trade
+//! was "covered only if somebody remembers", and what rides on the answer
+//! grew: `creature_save_for` and `spawn_creature_from_save` are no longer
+//! only the save path — they are also how a committed program's snapshot is
+//! taken and given back, so a field nobody covered is a refunded program
+//! that returns short its gear or its memories.
 
 use super::support::*;
 use crate::components::{
@@ -273,6 +281,63 @@ fn a_rich_program_writes_every_field_it_was_given() {
 
     let creatures = creatures_on_disk(&mut game, "creature_save_census");
     let saved = named(&creatures, "Sable");
+
+    // **The completeness guard — do not tidy this into a `..`.** Every
+    // binding is discarded and every assertion below still reads through
+    // `saved`, so this pattern proves exactly one thing: that the list of
+    // fields it names is the whole struct. Add a field to
+    // `save::CreatureSave` and this stops compiling, which is the only
+    // mechanism that makes somebody write the assertion for it. A rest
+    // pattern here would compile forever and cover nothing — and the field
+    // it silently dropped would be missing from a refunded program as well
+    // as from a save (see this module's header).
+    let save::CreatureSave {
+        species: _,
+        position: _,
+        hp: _,
+        max_hp: _,
+        atk: _,
+        mitigation: _,
+        tamed: _,
+        power: _,
+        level: _,
+        xp: _,
+        xp_to_next: _,
+        cronjob: _,
+        party_slot: _,
+        sortie_index: _,
+        wielded: _,
+        zone: _,
+        custom_name: _,
+        hp_roll: _,
+        atk_roll: _,
+        def_roll: _,
+        growth_roll: _,
+        fusions: _,
+        refactors: _,
+        purchased_tiers: _,
+        ring: _,
+        talents: _,
+        bought_stats: _,
+        routines: _,
+        field_buffs: _,
+        nest_position: _,
+        patrol_position: _,
+        pursuing: _,
+        carrying: _,
+        rarity: _,
+        boss: _,
+        equipment: _,
+        nemesis_grudges: _,
+        disposition: _,
+        program_id: _,
+        memories: _,
+        needs: _,
+        off_shift: _,
+        disgruntled: _,
+        staff: _,
+        downed: _,
+    } = saved;
 
     assert_eq!(saved.species, species, "species");
     assert_eq!(saved.position, (position.x, position.y), "position");

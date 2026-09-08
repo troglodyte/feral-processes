@@ -39,7 +39,7 @@ first, separated by a rule.
 
 **Home is exempt, at every tier.** A fresh run owns no programs at all, so a founding that cost one would be unfoundable, and an upgrade to your own Home never asks either.
 
-**The picker only offers what you can actually spend.** The program in your hand, one away on a sortie, one already down, and one carrying goods are all left off the list — and a build order can never take you to zero: committing your last program is refused outright, naming what it would have left nobody to build.
+**The picker only offers what you can actually spend.** The program in your hand, one away on a sortie, one already down, and one carrying goods are all left off the list — and a build order can never take you to zero, so a base down to its last program has both build menus greyed and says which rule stopped it rather than refusing after you commit.
 
 **Calling off an order gives the program back whole** — same name, level, gear and memories — and so does an upgrade order whose machine is destroyed out from under it, by a raid or by your own hand. Only a finished build spends the program for good; deconstructing what your crew already raised returns materials, never programs.
 

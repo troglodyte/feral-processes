@@ -10,6 +10,13 @@ const ITEM: &str = "core_fragment";
 /// The two items the multi-row fixtures stock, in `ItemId` order — which is
 /// the order the rows come back in, so the tests can index them.
 const ITEMS: [(&str, u32); 2] = [(ITEM, 6), ("power_cell", 2)];
+/// What the room-agnostic Depot fixtures put on the shelf. Small on purpose:
+/// these tests are about the pack and the arrows, so the Depot's remaining
+/// room must never be the binding clamp —
+/// `digits_type_into_the_rows_current_sign` pins a give against a pack of 40
+/// and would read as a clamp bug the moment `depot_capacity() - SHELF` fell
+/// under it.
+const SHELF: u32 = 5;
 
 fn item(id: &str) -> feral_processes_engine::items::ItemId {
     feral_processes_engine::items::ItemId::from(id)
@@ -46,9 +53,24 @@ fn picker_with_shelf(seed: u32, shelf: u32) -> App {
     app
 }
 
+/// The shipped Depot's `capacity`, read from the asset rather than restated
+/// here. It is a content number in `assets/structures/depot.ron` and the
+/// storage ladder moves it; these tests are arithmetic about the *room* a
+/// Depot has left, so a ballast written as a literal made a retune of that
+/// number read as six broken screens.
+fn depot_capacity() -> u32 {
+    feral_processes_engine::structures::StructureDb::load_dir(&test_assets_dir().join("structures"))
+        .expect("assets/structures should load")
+        .0
+        .get("depot")
+        .expect("the Depot is a shipped structure")
+        .capacity
+}
+
 /// The picker beside one Depot holding `filled` of `ITEM`, with `pack` in
-/// the player's hands. A Depot's `capacity` is 200, so `filled` is what
-/// decides the room.
+/// the player's hands. `filled` against `depot_capacity` is what decides the
+/// room, so a test about room states itself as the capacity minus what it
+/// wants left.
 fn depot_picker(seed: u32, filled: u32, pack: &[(&str, u32)]) -> App {
     let mut app = app_beside_depots(seed, 1, filled, pack);
     app.handle_key(GameKey::Char('c'));
@@ -126,7 +148,7 @@ fn c_with_nothing_on_either_side_opens_no_window() {
 /// Right pushes from you into it. This test is the pin.
 #[test]
 fn left_takes_out_and_right_puts_in() {
-    let mut app = depot_picker(973, 100, &[(ITEM, 5)]);
+    let mut app = depot_picker(973, SHELF, &[(ITEM, 5)]);
     let row = row_of(&app, ITEM);
     app.menu_selected = row;
 
@@ -161,7 +183,7 @@ fn the_arrows_saturate_at_both_ends() {
 /// full nor empty.
 #[test]
 fn shift_is_a_target_and_ctrl_is_a_step_that_terminates() {
-    let mut app = depot_picker(975, 199, &[("power_cell", 8)]);
+    let mut app = depot_picker(975, depot_capacity() - 1, &[("power_cell", 8)]);
     let row = row_of(&app, "power_cell");
     app.menu_selected = row;
 
@@ -197,7 +219,7 @@ fn shift_is_a_target_and_ctrl_is_a_step_that_terminates() {
 /// reached the budget.
 #[test]
 fn the_put_budget_is_shared_but_never_counts_the_row_being_edited() {
-    let mut app = depot_picker(977, 197, &[(ITEM, 5), ("power_cell", 5)]);
+    let mut app = depot_picker(977, depot_capacity() - 3, &[(ITEM, 5), ("power_cell", 5)]);
     let first = row_of(&app, ITEM);
     let second = row_of(&app, "power_cell");
 
@@ -222,16 +244,24 @@ fn the_put_budget_is_shared_but_never_counts_the_row_being_edited() {
 /// machine that is not a Depot.
 #[test]
 fn a_full_depot_closes_every_put_and_touches_no_take() {
-    let mut app = depot_picker(978, 200, &[("power_cell", 5)]);
+    let mut app = depot_picker(978, depot_capacity(), &[("power_cell", 5)]);
     let shelf = row_of(&app, ITEM);
     let pack = row_of(&app, "power_cell");
 
-    assert_eq!(app.take_available(shelf), 200, "the shelf is untouched");
+    assert_eq!(
+        app.take_available(shelf),
+        depot_capacity(),
+        "the shelf is untouched"
+    );
     assert_eq!(app.put_available(pack), 0);
 
     app.menu_selected = shelf;
     app.handle_key(GameKey::ShiftLeft);
-    assert_eq!(app.basket_amounts[shelf], 200, "take everything on it");
+    assert_eq!(
+        app.basket_amounts[shelf],
+        depot_capacity() as i64,
+        "take everything on it"
+    );
     assert_eq!(
         app.put_available(pack),
         0,
@@ -246,7 +276,7 @@ fn basket_room_tells_no_depot_apart_from_a_full_one() {
     let app = picker(979);
     assert_eq!(app.basket_room, None, "a Mining Node has no room");
 
-    let app = depot_picker(980, 200, &[(ITEM, 1)]);
+    let app = depot_picker(980, depot_capacity(), &[(ITEM, 1)]);
     assert_eq!(app.basket_room, Some(0), "a Depot with nothing left");
 }
 
@@ -255,7 +285,7 @@ fn basket_room_tells_no_depot_apart_from_a_full_one() {
 /// accumulates in that row's current sign, and clamps as it is typed.
 #[test]
 fn digits_type_into_the_rows_current_sign() {
-    let mut app = depot_picker(981, 100, &[(ITEM, 40)]);
+    let mut app = depot_picker(981, SHELF, &[(ITEM, 40)]);
     let row = row_of(&app, ITEM);
     app.menu_selected = row;
 
@@ -304,7 +334,7 @@ fn holding_a_digit_key_cannot_overflow() {
 /// `[N]` puts them all back to nothing.
 #[test]
 fn take_everything_overwrites_a_pending_give() {
-    let mut app = depot_picker(983, 100, &[("power_cell", 5)]);
+    let mut app = depot_picker(983, SHELF, &[("power_cell", 5)]);
     let pack = row_of(&app, "power_cell");
     let shelf = row_of(&app, ITEM);
     app.menu_selected = pack;
@@ -313,7 +343,7 @@ fn take_everything_overwrites_a_pending_give() {
 
     app.handle_key(GameKey::Char('A'));
     assert_eq!(app.basket_amounts[pack], 0, "nothing of it on the shelf");
-    assert_eq!(app.basket_amounts[shelf], 100);
+    assert_eq!(app.basket_amounts[shelf], SHELF as i64);
 
     app.handle_key(GameKey::Char('N'));
     assert!(app.basket_amounts.iter().all(|n| *n == 0));
@@ -355,7 +385,7 @@ fn up_and_down_move_the_row_cursor_and_wrap() {
 /// Enter commits both halves in one action, and leaves.
 #[test]
 fn enter_moves_both_halves_and_spends_one_turn() {
-    let mut app = depot_picker(986, 100, &[("power_cell", 5)]);
+    let mut app = depot_picker(986, SHELF, &[("power_cell", 5)]);
     let shelf = row_of(&app, ITEM);
     let pack = row_of(&app, "power_cell");
     let before = app.game.as_ref().unwrap().current_tick();
@@ -371,7 +401,11 @@ fn enter_moves_both_halves_and_spends_one_turn() {
     assert_eq!(game.current_tick(), before + 1, "one commit, one turn");
     let offer = game.transfer_offer();
     let shelf_now = offer.iter().find(|r| r.item == item(ITEM)).unwrap();
-    assert_eq!(shelf_now.on_shelves, 96, "only what was asked for left");
+    assert_eq!(
+        shelf_now.on_shelves,
+        SHELF - 4,
+        "only what was asked for left"
+    );
     let put = offer.iter().find(|r| r.item == item("power_cell")).unwrap();
     assert_eq!(put.on_shelves, 5, "and the pack's cargo is in the Depot");
     assert_eq!(put.carried, 0);
@@ -413,7 +447,7 @@ fn esc_moves_nothing_and_spends_no_turn() {
 #[test]
 fn both_exits_leave_nothing_stale() {
     for leave in [GameKey::Enter, GameKey::Esc] {
-        let mut app = depot_picker(989, 100, &[(ITEM, 2)]);
+        let mut app = depot_picker(989, SHELF, &[(ITEM, 2)]);
         app.handle_key(GameKey::Char('2'));
         app.handle_key(leave);
 

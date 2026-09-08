@@ -1360,3 +1360,47 @@ fn a_load_refused_mid_walk_goes_back_and_re_clogs_the_machine() {
         "and the shelf that said no is still empty"
     );
 }
+
+/// A later rung of the storage ladder is a depot in every sense, and nothing
+/// on the way there names an id.
+///
+/// The whole ladder — `depot_mk2` through `depot_mk6` — is six `.ron` files
+/// and five research nodes with no Rust behind them, which holds only
+/// because every reader in the base pipeline filters on
+/// `StructureDef::stores` rather than on `"depot"`. A single hardcoded id
+/// anywhere in hauling would leave a researched Mk2 standing there while a
+/// clogged machine reports `Clogged` beside it, which reads as the research
+/// having done nothing.
+///
+/// The rung is unlocked by writing `Research` directly: what the research
+/// screen charges for `paging` is that screen's subject, and paying it here
+/// would pin this test to a Research Data price.
+#[test]
+fn a_researched_depot_rung_takes_a_haul_like_the_first_one() {
+    let mut game = base(7);
+    game.world
+        .resource_mut::<crate::resources::Research>()
+        .0
+        .insert("paging".to_string());
+    let node = deploy(&mut game, "mining_node", 1, 0);
+    let depot = deploy(&mut game, "depot_mk2", 4, 0);
+    assert_eq!(
+        game.world.get::<Stock>(depot).unwrap().capacity,
+        100,
+        "the Mk2 is the rung that holds a hundred"
+    );
+    let worker = hauler(&mut game);
+    game.assign_cronjob(worker, node).unwrap();
+    park_at_post(&mut game, worker, node);
+    let cap = capacity_of(&game, node);
+    fill_output(&mut game, node, ids::CORE_FRAGMENT, cap);
+
+    tick_until(&mut game, 200, |g| {
+        node_output(g, depot, ids::CORE_FRAGMENT) > 0
+    });
+
+    assert!(
+        node_output(&game, depot, ids::CORE_FRAGMENT) >= tuning::HAUL_CARRY_CAPACITY,
+        "a Mk2 is somewhere a hauler empties into, exactly as the first Depot is"
+    );
+}

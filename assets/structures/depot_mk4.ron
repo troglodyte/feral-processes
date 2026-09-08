@@ -1,0 +1,12 @@
+(
+    id: "depot_mk4",
+    name: "Depot Mk4",
+    description: "Four hundred units. Past here a Depot is no longer a buffer between two machines — it is what the base is holding, and a sortie can be provisioned straight out of it.",
+    glyph: 'D',
+    sprite: Some("depot"),
+    color: Cyan,
+    build_cost: [("core_fragment", 95), ("cache_grain", 10)],
+    work: None,
+    capacity: 400,
+    stores: true,
+)

@@ -1,0 +1,12 @@
+(
+    id: "depot_mk2",
+    name: "Depot Mk2",
+    description: "Twice the shelf of a plain Depot: a hundred units, so a base keeps producing through a night you spend somewhere else. Takes and gives exactly as the first one does, filter included.",
+    glyph: 'D',
+    sprite: Some("depot"),
+    color: Cyan,
+    build_cost: [("core_fragment", 30)],
+    work: None,
+    capacity: 100,
+    stores: true,
+)

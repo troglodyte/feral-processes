@@ -1,0 +1,10 @@
+(
+    id: "shard_mapping",
+    name: "Shard Mapping",
+    description: "Spread one shelf across the whole fabric and keep a map of where everything landed. Unlocks the Depot Mk5.",
+    cost: 360,
+    materials: [("cache_grain", 26), ("bytecode_block", 40)],
+    min_zone: 5,
+    requires: ["virtual_memory"],
+    unlocks_structures: ["depot_mk5"],
+)

@@ -1874,6 +1874,8 @@ impl Game {
                         atk_roll: p.atk_roll,
                         def_roll: p.def_roll,
                         growth_roll: p.growth_roll,
+                        assembly_roll: p.assembly_roll,
+                        extraction_roll: p.extraction_roll,
                         percent: p.quality_percent(),
                         label: p.quality_label().to_string(),
                     }),

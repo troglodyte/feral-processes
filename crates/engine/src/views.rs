@@ -2298,6 +2298,11 @@ pub struct ManifestPotential {
     pub atk_roll: f32,
     pub def_roll: f32,
     pub growth_roll: f32,
+    /// The two build rolls — see `components::Potential`. Listed after the
+    /// four combat rolls and before `percent`, which deliberately folds only
+    /// the first four.
+    pub assembly_roll: f32,
+    pub extraction_roll: f32,
     /// `Potential::quality_percent`.
     pub percent: u32,
     /// `Potential::quality_label`.

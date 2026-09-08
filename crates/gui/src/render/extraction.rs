@@ -340,6 +340,7 @@ mod tests {
                 standing_work: false,
                 standing_guard: false,
                 power_fuel: tuning::POWER_UPKEEP_TICKS,
+                build_quality: 1.0,
                 hopper: Vec::new(),
                 hopper_progress: 0,
             });

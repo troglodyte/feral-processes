@@ -1507,7 +1507,10 @@ mod tests {
         // slot said to be empty. Written out rather than probed, because what
         // is being asserted is the *absence* of a mark in a column, and a
         // predicate over that column cannot see a stray one beside it.
-        assert_eq!(worn_heading_lines(&game, None), ["          Wearing: (empty)"]);
+        assert_eq!(
+            worn_heading_lines(&game, None),
+            ["          Wearing: (empty)"]
+        );
     }
 
     /// The heading wraps, and this is the width that says it has to.

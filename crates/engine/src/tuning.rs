@@ -4546,6 +4546,115 @@ pub const MORALE_RECOVERED_AT: f32 = -6.0;
 const _: () = assert!(MORALE_RECOVERED_AT > MORALE_SULKS_AT);
 const _: () = assert!(MORALE_SULKS_AT > MORALE_DOWNS_TOOLS_AT);
 
+// ---------------------------------------------------------------------------
+// Staff tantrums
+// ---------------------------------------------------------------------------
+// The rung past refusal, and the grace period that keeps a young base out of
+// the whole feature. **Every figure here is unmeasured**, for the reason the
+// `// Acting out` comment above already gives: morale is a signed sum of
+// decayed intensities with no natural scale, and nothing in `balance_sim`
+// models base production. They are chosen against the shipped valences and
+// against `BAY_ADMISSION_HP_FRACTION`, and they are the first thing to
+// revisit after a base has been watched.
+
+/// How many staff a base needs before a program's unmet needs are allowed to
+/// count against it. One half of `Game::base_is_established`.
+///
+/// **Development, not time.** A tick-based grace punishes a player who founds
+/// late in a run and forgives one who founds early and then neglects the
+/// place for an hour; how far the base has actually been built is the honest
+/// measure of "has this player had a fair chance to build amenities yet."
+/// Unmeasured, and chosen as that fair-chance line rather than fitted.
+pub const BASE_ESTABLISHED_STAFF: usize = 8;
+
+/// How many structures a base needs before the same. The other half, and the
+/// two are `&&`: twelve programs in a bare base has not had the chance, and a
+/// sprawling base with four bodies in it is not a pressure cooker. Held by
+/// `a_base_short_of_staff_earns_no_need_grudges` and its mirror, one test per
+/// half, because a predicate wired `||` passes a test that only ever starves
+/// both halves at once.
+pub const BASE_ESTABLISHED_STRUCTURES: usize = 8;
+
+/// Morale at or below which a program stops standing still about it and
+/// rounds on a colleague.
+///
+/// **Past what one memory can reach, inside what a pattern of two can** —
+/// `MORALE_DOWNS_TOOLS_AT`'s own rule one rung further down, and the only
+/// thing keeping this number honest. A grudge is felt as valence x
+/// `strike_cap` x `DISPOSITION_MEMORY_SWING`, so the worst single memory the
+/// game ships (`mauled_by`, -8 at a cap of 4, felt by an `Abrasive` program)
+/// reaches -44.8; -75 sits well past it and inside the pair. Held by
+/// `no_single_memory_can_make_a_program_lash_out` and
+/// `two_bad_memories_can_still_make_a_program_lash_out` against the real
+/// `assets/memories/`.
+///
+/// A rung nothing can reach is a deleted feature; a rung one bad afternoon
+/// reaches is a base that brawls constantly.
+pub const MORALE_LASHES_OUT_AT: f32 = -75.0;
+
+/// The ladder climbs in order — held by `the_ladder_climbs_in_order`, and
+/// here as well because a retune that inverts two rungs makes the milder one
+/// unreachable rather than failing to compile.
+const _: () = assert!(MORALE_DOWNS_TOOLS_AT > MORALE_LASHES_OUT_AT);
+
+/// The chance, per base beat, that a program already on the `LashingOut`
+/// rung with somebody in reach actually starts a fight.
+///
+/// A rate rather than a countdown, so a base that has one miserable program
+/// in it does not brawl on a metronome. Unmeasured.
+pub const TANTRUM_CHANCE_PER_TICK: f64 = 0.02;
+
+/// How far a program will look for somebody to round on, chebyshev.
+///
+/// **No target in reach means no tantrum**, and that is what keeps this
+/// feature free of pathing: a program on this rung has already left the
+/// posting half of `schedule_base_labour` and is drifting through
+/// `drift_idle_staff`, so it wanders into range of somebody on its own. A
+/// "walk to your enemy" arm would be a second walk with its own interruption
+/// rules, bought for nothing the player could see.
+pub const TANTRUM_REACH_TILES: i32 = 3;
+
+/// The shortest and longest a fight runs, in base beats.
+///
+/// The short end is the one with a constraint on it — see
+/// `TANTRUM_DAMAGE_FRACTION`.
+pub const TANTRUM_TICKS_MIN: u32 = 4;
+pub const TANTRUM_TICKS_MAX: u32 = 8;
+
+const _: () = assert!(TANTRUM_TICKS_MIN < TANTRUM_TICKS_MAX);
+
+/// What one blow is worth, as a fraction of the target's `max_hp`, **before**
+/// mitigation and before the non-lethal clamp.
+///
+/// **A quarter rather than the single-digit fraction a "scuffle" suggests,
+/// and the constraint binds at the *short* end of the tick range.** A
+/// four-beat brawl is the shortest one that can happen, so four blows from
+/// full health must already carry a body under
+/// `BAY_ADMISSION_HP_FRACTION` — that is the whole of "whoever comes out
+/// worst is swept into a Repair Bay", and it is what this number is sized
+/// for.
+///
+/// Two things make the arithmetic softer than it looks and both push the same
+/// way: `Game::apply_damage` runs `mitigate_incoming_damage`, so the landed
+/// figure is lower than the fraction says; and a brawl rarely starts from
+/// full health. So the number is pinned by
+/// `a_short_brawl_still_fills_the_bay` driving a real fight against real
+/// mitigation and **not** by the multiplication above — if a retune moves
+/// mitigation, that test is what notices.
+///
+/// At the long end the `.min(hp - 1)` clamp does the rest: eight blows at a
+/// quarter each would be 200% of max HP, so a long brawl simply leaves both
+/// parties on 1 Integrity. Heavy is the point; the clamp is what keeps heavy
+/// from being fatal.
+pub const TANTRUM_DAMAGE_FRACTION: f32 = 0.25;
+
+/// How long after coming out of a fight a program may not start another.
+///
+/// Bounds the *rate* while `vented` moves the meter back the other way. One
+/// vent does not clear a -75 hole and is not meant to, so without this a
+/// badly-run base would brawl on every roll. Unmeasured.
+pub const TANTRUM_COOLDOWN_TICKS: u64 = 400;
+
 /// How many rows the base output page shows per section.
 ///
 /// The page has no scroll, so this is a layout constraint rather than a

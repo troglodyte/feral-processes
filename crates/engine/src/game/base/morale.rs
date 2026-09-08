@@ -16,7 +16,9 @@
 use crate::Game;
 use crate::components::TaskKind;
 use crate::components::{Disgruntled, Grievance};
-use crate::tuning::{MORALE_DOWNS_TOOLS_AT, MORALE_RECOVERED_AT, MORALE_SULKS_AT};
+use crate::tuning::{
+    MORALE_DOWNS_TOOLS_AT, MORALE_LASHES_OUT_AT, MORALE_RECOVERED_AT, MORALE_SULKS_AT,
+};
 use bevy_ecs::prelude::Entity;
 
 impl Game {
@@ -84,10 +86,15 @@ impl Game {
     /// A sulking program is still in the pool: it works, just not
     /// everywhere. Reading the marker's presence instead of its severity is
     /// what would collapse the ladder back to one rung.
+    ///
+    /// **`>=` and not `==`.** `LashingOut` is strictly worse than
+    /// `DownedTools` rather than a second axis, so a program that has started
+    /// fighting has certainly stopped working — read as equality it would be
+    /// handed jobs again on the way past the rung that took them away.
     pub(crate) fn has_downed_tools(&self, who: Entity) -> bool {
         self.world
             .get::<Disgruntled>(who)
-            .is_some_and(|d| d.grievance == Grievance::DownedTools)
+            .is_some_and(|d| d.grievance >= Grievance::DownedTools)
     }
 
     /// Whether `worker` refuses to be posted to `post`.
@@ -145,8 +152,12 @@ impl Game {
 /// The entry side of the gate only — the exit is a single comparison against
 /// `MORALE_RECOVERED_AT`, which is what keeps the whole ladder to one
 /// hysteresis gap rather than one per rung.
-fn reached(morale: f32) -> Option<Grievance> {
-    if morale <= MORALE_DOWNS_TOOLS_AT {
+pub(crate) fn reached(morale: f32) -> Option<Grievance> {
+    // Worst-first, so the arms below are only reached by a program that has
+    // not already cleared a deeper line.
+    if morale <= MORALE_LASHES_OUT_AT {
+        Some(Grievance::LashingOut)
+    } else if morale <= MORALE_DOWNS_TOOLS_AT {
         Some(Grievance::DownedTools)
     } else if morale <= MORALE_SULKS_AT {
         Some(Grievance::Sulking)

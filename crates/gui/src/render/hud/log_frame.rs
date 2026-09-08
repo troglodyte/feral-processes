@@ -102,7 +102,10 @@ pub(in crate::render) struct LogPane<'a> {
 fn channel_tag(entry: &LogEntry) -> (&'static str, Color) {
     match entry.kind {
         MessageKind::Loot => ("GAIN", palette::CH_GAIN),
-        MessageKind::Raid => ("ALERT", palette::CH_DEFEND),
+        // A tantrum is the second thing the player must not miss, and it is
+        // the same channel: the base is coming apart while they are looking
+        // somewhere else.
+        MessageKind::Raid | MessageKind::Tantrum => ("ALERT", palette::CH_DEFEND),
         MessageKind::Info
         | MessageKind::LevelUp
         | MessageKind::Round

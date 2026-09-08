@@ -832,3 +832,116 @@ fn a_sulking_program_still_works_somewhere_it_does_not_resent() {
         "it holds no grudge against this machine, so it keeps working it"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The fourth rung: a program with nothing left rounds on somebody.
+// ---------------------------------------------------------------------------
+
+use crate::tuning::{MORALE_LASHES_OUT_AT, MORALE_SULKS_AT};
+
+/// The ladder climbs in order, driven rather than asserted on the constants:
+/// one program taken down through all three rungs must pass them in
+/// severity order and never step back up, which is the ratchet as well as
+/// the ordering.
+#[test]
+fn the_ladder_climbs_in_order() {
+    assert!(
+        Grievance::Sulking < Grievance::DownedTools
+            && Grievance::DownedTools < Grievance::LashingOut,
+        "`Ord` derives from declaration order and is what the ratchet compares"
+    );
+
+    let mut game = Game::new(60, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    let mut seen = Vec::new();
+    for rung in [MORALE_SULKS_AT, MORALE_DOWNS_TOOLS_AT, MORALE_LASHES_OUT_AT] {
+        sour_to(&mut game, worker, rung);
+        game.update_disgruntled(&[worker]);
+        seen.push(
+            game.world
+                .get::<Disgruntled>(worker)
+                .map(|d| d.grievance)
+                .expect("past a rung, the marker is held"),
+        );
+    }
+
+    assert_eq!(
+        seen,
+        vec![
+            Grievance::Sulking,
+            Grievance::DownedTools,
+            Grievance::LashingOut
+        ],
+        "morale at each threshold in turn reaches each rung in turn"
+    );
+}
+
+/// **One bad memory may not make a program start a fight.** The rung above's
+/// rule one step further down, and the only thing keeping
+/// `MORALE_LASHES_OUT_AT` honest — a rung one bad afternoon reaches is a base
+/// that brawls constantly.
+#[test]
+fn no_single_memory_can_make_a_program_lash_out() {
+    let game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worst = worst_single_grudge(&game);
+    assert!(
+        MORALE_LASHES_OUT_AT < -worst,
+        "one memory reaching {worst} must not clear the lashing-out line at \
+         {MORALE_LASHES_OUT_AT}"
+    );
+}
+
+/// And the control: a rung nothing can reach is a deleted feature.
+#[test]
+fn two_bad_memories_can_still_make_a_program_lash_out() {
+    let game = Game::new(62, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut worst: Vec<f32> = game
+        .world
+        .resource::<crate::memories::MemoryDb>()
+        .all()
+        .map(|def| {
+            crate::disposition::Disposition::Abrasive
+                .felt(def.valence * def.strike_cap as f32)
+                .abs()
+        })
+        .filter(|v| *v > 0.0)
+        .collect();
+    worst.sort_by(|a, b| b.partial_cmp(a).unwrap());
+    let pair = worst[0] + worst[1];
+    assert!(
+        MORALE_LASHES_OUT_AT > -pair,
+        "the two worst grudges together reach {pair}, which must still clear \
+         the line at {MORALE_LASHES_OUT_AT}"
+    );
+}
+
+/// The entry side of the gate, read directly: past the line is the fourth
+/// rung and not the third.
+#[test]
+fn reached_returns_lashing_out_past_its_line() {
+    assert_eq!(
+        crate::game::base::morale::reached(MORALE_LASHES_OUT_AT - 1.0),
+        Some(Grievance::LashingOut)
+    );
+    assert_eq!(
+        crate::game::base::morale::reached(MORALE_LASHES_OUT_AT + 1.0),
+        Some(Grievance::DownedTools),
+        "just short of it, the ladder is still one rung down"
+    );
+}
+
+/// A program that has started fighting has certainly stopped working. Read
+/// as equality rather than `>=`, `has_downed_tools` hands a body jobs again
+/// on the way *past* the rung that took them away.
+#[test]
+fn a_lashing_out_program_has_still_downed_its_tools() {
+    let mut game = Game::new(63, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    sour_to(&mut game, worker, MORALE_LASHES_OUT_AT);
+    game.update_disgruntled(&[worker]);
+    assert_eq!(
+        game.world.get::<Disgruntled>(worker).map(|d| d.grievance),
+        Some(Grievance::LashingOut)
+    );
+    assert!(game.has_downed_tools(worker));
+}

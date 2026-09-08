@@ -260,6 +260,31 @@ pub(crate) fn chain_break(game: &Game, item: &ItemId) -> Option<String> {
     first_break
 }
 
+/// Whether the base has been built far enough that its programs' unmet needs
+/// are allowed to count against it.
+///
+/// **At least `BASE_ESTABLISHED_STAFF` staff *and* at least
+/// `BASE_ESTABLISHED_STRUCTURES` structures**, `&&` and not `||`: twelve
+/// programs standing in a bare base have not had a fair chance at an amenity,
+/// and a sprawling base with four bodies in it is not a pressure cooker.
+///
+/// Named for what it says about the base rather than for tantrums, because
+/// it gates the need-memories too — while a base is still getting started,
+/// needs do not count against it. The sentence is one rule, and an exception
+/// for the unreachable case would be a second one to state, remember and
+/// test.
+impl Game {
+    pub(crate) fn base_is_established(&self) -> bool {
+        self.base_staff().len() >= crate::tuning::BASE_ESTABLISHED_STAFF
+            && self
+                .world
+                .iter_entities()
+                .filter(|e| e.contains::<Structure>())
+                .count()
+                >= crate::tuning::BASE_ESTABLISHED_STRUCTURES
+    }
+}
+
 /// Every deployed structure by the tile it stands on. Built once per walk
 /// rather than scanned per neighbour, which is the shape `assembler_system`
 /// already uses to answer the same adjacency question.
@@ -866,6 +891,11 @@ impl Game {
         // that downs tools this tick must not also be handed a job this
         // tick.
         self.update_disgruntled(&staff);
+        // Between the rung and the bay, and **that ordering is what gets the
+        // Repair Bay for free**: a blow landed this beat is answered by
+        // `admit_the_badly_hurt` below, through the one writer that already
+        // owns the decision to take a body off the line.
+        self.run_tantrums(&staff);
         // The third gate on this line, and it sits with the other two for
         // their reason: a body that breaks off for repairs this tick must
         // not also be handed a job this tick. It inserts `Downed`, which

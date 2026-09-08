@@ -409,6 +409,39 @@ fn set_tick(game: &mut Game, tick: u64) {
 }
 
 /// Runs one beat of the drift with the gate already applied.
+/// Pads the base out past `Game::base_is_established`'s two thresholds, so a
+/// need grudge is allowed to be written at all.
+///
+/// The bodies it adds come up with full reserves and so never fray
+/// themselves, and the Depots it stands service nothing — neither changes
+/// what the test around it is measuring.
+fn establish(game: &mut Game) {
+    use crate::structures::{StructureDb, StructureId};
+    let def = game
+        .world
+        .resource::<StructureDb>()
+        .get(&StructureId::from("depot"))
+        .expect("a Depot ships")
+        .clone();
+    let mut standing = game
+        .world
+        .iter_entities()
+        .filter(|e| e.contains::<crate::components::Structure>())
+        .count();
+    let mut tile = 0;
+    while standing < crate::tuning::BASE_ESTABLISHED_STRUCTURES {
+        game.spawn_structure(&def, -20 - tile, 20, None);
+        tile += 1;
+        standing += 1;
+    }
+    while game.base_staff().len() < crate::tuning::BASE_ESTABLISHED_STAFF {
+        let filler = spawn_tamed(game, 10, 3);
+        let mut pos = game.world.get_mut::<Position>(filler).unwrap();
+        pos.x = -20;
+        pos.y = -20;
+    }
+}
+
 fn drift(game: &mut Game, staff: &[Entity]) {
     let amenities = game.amenities();
     let bays = game.repair_bays();
@@ -692,19 +725,17 @@ fn frayed_entries(game: &Game, who: Entity) -> Vec<MemorySubject> {
 }
 
 /// Nothing in the base answers the need: said **once**, however many beats
-/// run — and **no grudge**, which is the half of this that is a design
-/// decision rather than a latch.
+/// run — and **never `frayed_here`**, which is the half of this that is a
+/// design decision rather than a latch.
 ///
 /// A base with no Defrag Bay standing has no answer to Coherence, and the
 /// player may not have researched one, may not have the materials, and has
-/// never been told they want one. A program that holds *the base* to account
-/// for that is blaming it for a building that was never an option, and the
-/// grudge it writes is a real one — enough on its own to drag a whole base
-/// toward sulking with nothing the player could have done differently.
+/// never been told they want one. A program that holds a *tile of the base*
+/// to account for that is blaming it for a building that was never an
+/// option. What this branch writes instead is `ran_down`, which blames
+/// nothing — see `Game::fray` and `tests::tantrums`. This fixture is a young
+/// base, so the grace period keeps even that off it.
 ///
-/// The base earns a grudge when it had an answer and failed to deliver it,
-/// which is the `unreachable` branch and is what
-/// `an_unreachable_amenity_says_something_different_from_no_amenity` holds.
 /// The line is still said either way: the player is still told.
 #[test]
 fn a_need_nothing_services_is_announced_but_earns_no_grudge() {
@@ -736,6 +767,9 @@ fn a_need_nothing_services_is_announced_but_earns_no_grudge() {
 fn an_unreachable_amenity_says_something_different_from_no_amenity() {
     let mut game = Game::new(81, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let staff = a_base_with_an_amenity(&mut game, 1);
+    // Past the grace period, or the grudge half of this is gated off and the
+    // test proves only that the *line* differs.
+    establish(&mut game);
     let bay = find_structure_by_kind(&mut game, "defrag_bay").unwrap();
     let site = *game.world.get::<Position>(bay).unwrap();
     {

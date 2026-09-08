@@ -581,6 +581,21 @@ fn frame(
         ),
         None => (Vec::new(), Vec::new(), None),
     };
+    // **Before `begin_frame` consumes the vector**, and **at most one cue a
+    // frame** however many blows are in it: several base beats can land in
+    // one frame and one cue per blow is a machine-gun. Played whether or not
+    // `Fx` is enabled — sound is not a visual effect — and directly rather
+    // than through `pending_sounds`, which was drained above.
+    if effects
+        .iter()
+        .any(|e| e.kind == feral_processes_engine::EffectKind::Brawl)
+    {
+        sounds.play(
+            &mut commands,
+            feral_processes_app_core::SoundEvent::Hit,
+            fe.volume,
+        );
+    }
     fe.fx.begin_frame(now, effects, transits, in_battle);
     fe.fx.observe_log(last_log.as_ref());
 

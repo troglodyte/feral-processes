@@ -794,6 +794,57 @@
 - **Neither shipped amenity has an upgrade path, deliberately.** A
   `StructureTier` buys an amenity nothing — `per_tick` is not scaled by it —
   so a priced upgrade row would change no number the player could find.
+- **`fray`'s two branches write different memories, and neither writes
+  below the grace gate.** `frayed_here` (`BaseTile`) on the unreachable
+  branch, `ran_down` (`Nothing`) on the quiet one — the withheld thing was
+  always the *blame*, not the feeling, and until 0.13.131 the common case (a
+  base that never built the amenity) moved morale not at all, which made
+  needs decorative on the acting-out ladder. `Game::base_is_established`
+  gates both: `BASE_ESTABLISHED_STAFF` **and** `BASE_ESTABLISHED_STRUCTURES`,
+  development rather than ticks, because a tick grace punishes founding late
+  and forgives founding early and neglecting the place. **The lines stay
+  unconditional** — the player must still be told, because the line is the
+  errand. A predicate wired `||` passes any test that starves both halves at
+  once, so there is one test per half plus a control.
+- **A tantrum's non-lethal clamp is applied before `apply_damage`, never
+  inside it.** `apply_damage` floors HP at 0 and reaching 0 *is* a kill; the
+  guarantee is one expression at the call site, `game/throw.rs`'s idiom
+  `raw.min(hp - 1).max(0)` on the **input**. Moving the damage calculation
+  without carrying the clamp turns a bad mood into a way to lose companions
+  and changes no signature. A blow the clamp takes to zero is not thrown at
+  all, which is what makes `dealt`/`taken` counts of what *landed* and what
+  makes a one-sided brawl reachable.
+- **The tantrum step sits between `update_disgruntled` and
+  `admit_the_badly_hurt`**, and that ordering is the whole of "the loser is
+  swept into a Repair Bay" — the bay's one writer already runs there and
+  already knows what "hurt enough to stop" means. Inside `run_tantrums` the
+  three steps are advance, close, **then** open, so a fight opened this beat
+  throws its first blow next beat: the alert always precedes the damage and
+  `ticks_left` is an honest count. **The roll is inside the per-candidate
+  loop**, so a base with nobody on the rung draws no `GameRng` at all —
+  `run_routes`' predation rule. `Brawls` is not saved, and the cooldown lives
+  on it rather than being derived from the aggressor's `vented` memory, which
+  would be free but would leave an empty catalogue brawling unbounded.
+- **`Grievance` is appended to, never inserted into.** `Ord` derives from
+  declaration order and *is* the ladder the ratchet compares;
+  `SaveData::disgruntled` encodes the variant **name**, so appending costs no
+  format bump; and the exit side stays one `MORALE_RECOVERED_AT` comparison,
+  so the ladder keeps **one** hysteresis gap however many rungs it grows.
+  **`has_downed_tools` reads `>=`, not `==`** — `LashingOut` is strictly
+  worse than `DownedTools`, so equality hands a body jobs again on the way
+  past the rung that took them away. `vented` is catharsis and is
+  load-bearing: `Disgruntled` never eases, so without it a program past -75
+  fights on every roll for the rest of the run.
+- **`EffectKind::Brawl` draws identically to `Hit` and exists only to carry
+  sound.** Identical in all three `fx.rs` tables; the difference is
+  `SoundEvent::Hit` in `crates/gui/src/lib.rs`. Sounding every base-space
+  `Hit` instead would be less code and would give raids audio they have never
+  had. In gui: check **before** `Fx::begin_frame` consumes the vector, call
+  `sounds.play` directly (`take_sounds` is drained earlier), and play **at
+  most one cue a frame** however many blows are in it. `MessageKind::Tantrum`
+  is the same argument on the log — reusing `Raid` would file a staff scuffle
+  as a GC Entropy Sweep and put it in `retain_outcomes_since_battle`'s
+  keep-list.
 
 - **A Forgiving death benches a program and `Game::bench_or_dissolve` is the
   one door**, `dissolve_tamed_program`'s own argument one level up: the

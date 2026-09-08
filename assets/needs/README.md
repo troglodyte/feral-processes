@@ -71,8 +71,11 @@ services: [
 
 See `assets/structures/README.md` for that half of the schema. A need with no
 structure servicing it anywhere in the base is a need a program can only run
-down: it says so once in the log and holds a grudge about the corner it was
-standing in. A shipped need without a shipped amenity fails the build.
+down: it says so once in the log, and — once the base has grown past its
+grace threshold — the program comes away worn by it, though nothing in
+particular is held responsible. An amenity that exists and cannot be walked
+to earns a grudge against the corner the program was standing in instead. A
+shipped need without a shipped amenity fails the build.
 
 ## The magnitudes
 

@@ -1648,6 +1648,18 @@ pub enum Grievance {
     /// Takes no posting at all. Leaves the `on_shift` filter, which covers
     /// the posting, the standdown and the `LabourDemand` shortfall at once.
     DownedTools,
+    /// Rounds on whoever is in reach and hits them — `game::base::tantrum`.
+    ///
+    /// **Appended, never inserted.** `Ord` derives from declaration order and
+    /// is what `update_disgruntled`'s ratchet compares, and
+    /// `SaveData::disgruntled` is field-named RON encoding the variant
+    /// *name*. Inserting reorders the ladder silently and costs a save
+    /// format bump for nothing.
+    ///
+    /// It is strictly worse than `DownedTools` and not a separate axis, so
+    /// `Game::has_downed_tools` reads `>=` rather than `==`: a program on
+    /// this rung has already stopped working.
+    LashingOut,
 }
 
 /// A program that is a Repair Bay's business rather than the base's: off the

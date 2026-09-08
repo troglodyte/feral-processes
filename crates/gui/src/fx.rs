@@ -347,7 +347,9 @@ fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
 /// How many sparks a burst throws and how far they reach, in tiles.
 fn spark_burst(kind: EffectKind) -> (u32, f32) {
     match kind {
-        EffectKind::Hit => (HIT_SPARKS, HIT_SPARK_REACH),
+        // A brawl is a hit in all three of these tables. The variant exists
+        // to carry *sound*, never a different look.
+        EffectKind::Hit | EffectKind::Brawl => (HIT_SPARKS, HIT_SPARK_REACH),
         EffectKind::Destroyed => (DESTROYED_SPARKS, DESTROYED_SPARK_REACH),
         EffectKind::Deflected => (0, 0.0),
     }
@@ -428,14 +430,14 @@ fn walk_progress(elapsed: f64, cells: usize) -> Option<(usize, f32)> {
 
 fn effect_duration(kind: EffectKind) -> f64 {
     match kind {
-        EffectKind::Hit | EffectKind::Deflected => HIT_FLASH_SECONDS,
+        EffectKind::Hit | EffectKind::Deflected | EffectKind::Brawl => HIT_FLASH_SECONDS,
         EffectKind::Destroyed => DESTROYED_FLASH_SECONDS,
     }
 }
 
 fn effect_color(kind: EffectKind) -> Color {
     match kind {
-        EffectKind::Hit => FLASH_RED,
+        EffectKind::Hit | EffectKind::Brawl => FLASH_RED,
         EffectKind::Deflected => FLASH_CYAN,
         EffectKind::Destroyed => FLASH_WHITE,
     }
@@ -831,12 +833,15 @@ impl Fx {
         }
     }
 
-    /// Watches for a newly logged raid line and starts the log pane's
-    /// flash. Compares the last line rather than counting lines, since
+    /// Watches for a newly logged raid or tantrum line and starts the log
+    /// pane's flash. Compares the last line rather than counting lines, since
     /// `message_log` only ever returns a window of recent ones.
     pub fn observe_log(&mut self, last_line: Option<&LogLine>) {
         let changed = last_line != self.last_log_line.as_ref();
-        if changed && self.enabled && last_line.is_some_and(|l| l.kind == MessageKind::Raid) {
+        if changed
+            && self.enabled
+            && last_line.is_some_and(|l| matches!(l.kind, MessageKind::Raid | MessageKind::Tantrum))
+        {
             self.log_flash_until = self.now + LOG_FLASH_SECONDS;
         }
         if changed {
@@ -947,9 +952,44 @@ mod tests {
         );
     }
 
+    /// Both alert kinds start the log pane's border flash. A tantrum is the
+    /// second thing the base says that the player must not miss, and
+    /// `MessageKind::Tantrum` exists precisely so it does not have to
+    /// masquerade as a sweep to get it.
+    #[test]
+    fn a_tantrum_line_flashes_the_log_pane() {
+        fn line(kind: MessageKind) -> LogLine {
+            LogLine {
+                kind,
+                source: feral_processes_engine::MessageSource::Base,
+                text: format!("{kind:?}"),
+                outcome: None,
+            }
+        }
+
+        for kind in [MessageKind::Raid, MessageKind::Tantrum] {
+            let mut fx = Fx::new();
+            fx.begin_frame(1.0, Vec::new(), Vec::new(), false);
+            fx.observe_log(Some(&line(kind)));
+            assert!(
+                fx.log_flash_until > fx.now,
+                "{kind:?} must start the pane's flash"
+            );
+        }
+
+        let mut fx = Fx::new();
+        fx.begin_frame(1.0, Vec::new(), Vec::new(), false);
+        fx.observe_log(Some(&line(MessageKind::Info)));
+        assert!(
+            fx.log_flash_until <= fx.now,
+            "and ordinary chatter must not"
+        );
+    }
+
     #[test]
     fn a_raid_flash_is_drawn_from_the_palette() {
         assert_eq!(effect_color(EffectKind::Hit), palette::THREAT);
+        assert_eq!(effect_color(EffectKind::Brawl), palette::THREAT);
         assert_ne!(effect_color(EffectKind::Deflected), palette::THREAT);
         assert_ne!(effect_color(EffectKind::Destroyed), palette::THREAT);
         assert_eq!(effect_color(EffectKind::Destroyed), palette::EMPHASIS);

@@ -131,21 +131,37 @@ but not what makes a program remember.
 | `hard_won` | + | `Nothing` | winning a fight the party was outmatched in |
 | `mauled_by` | − | `Species` | taking a single hit worth a large share of maximum Integrity |
 | `stranded_at` | − | `BaseTile` | being posted somewhere nothing can reach |
-| `frayed_here` | − | `BaseTile` | running a need down with nothing in the base that could restore it, or nothing that could be walked to |
+| `frayed_here` | − | `BaseTile` | running a need down beside an amenity that could restore it and cannot be walked to |
+| `ran_down` | − | `Nothing` | running a need down with nothing in the base that services it at all |
+| `vented` | + | `Nothing` | coming out of a tantrum you started |
+| `turned_on_me` | − | `Program` | being the one a tantrum was aimed at, about whoever aimed it |
 | `settled_in` | + | `Structure` | a stretch of service at a machine that is running |
 | `jammed_here` | − | `Structure` | a stretch of service at a machine that is backed up |
 | `cutting_rock` | − | `Activity` | a stretch of service on the dig crew |
 | `swept_here` | − | `Structure` | a GC Entropy Sweep hitting the machine you are posted at |
 
 They are chosen to cover both valences and every subject kind, not because
-these ten are the interesting content. `Nothing`, `Program`, `Species` and
-`BaseTile` are written by the fight-and-staffing triggers; `Structure`
+these thirteen are the interesting content. `Nothing`, `Program`, `Species`
+and `BaseTile` are written by the fight-and-staffing triggers; `Structure`
 and `Activity` by the four about a program's working life.
 
 `frayed_here` shares `stranded_at`'s subject and sign and is deliberately a
 separate kind: a hauler nothing can reach and a program worn down with
 nowhere to go are different complaints, and the base tells you so in
 different sentences. See `assets/needs/README.md`.
+
+**`frayed_here` and `ran_down` are the two halves of one edge, and the
+subjects are the difference.** The base earns a grudge against a *tile* when
+it had an answer and could not deliver it — a Bay walled off, or destroyed.
+When it never had one at all, the program still feels it but nothing is held
+responsible, which is what `Nothing` buys: the player may not have researched
+the building, may not have the materials, and has never been told they want
+one. Neither is written until the base has grown past a grace threshold.
+
+**`turned_on_me` is the one negative `Program` memory**, and it is worth
+saying because the other two are both fond — the subject does not imply
+fondness. It outlasts the `vented` its aggressor came away with, which is why
+a base that answers a bad mood with nothing gets worse rather than better.
 
 **The four work kinds divide on one axis, and it is not valence.**
 `swept_here` is an **edge** — a sweep is an event, and it is remembered the

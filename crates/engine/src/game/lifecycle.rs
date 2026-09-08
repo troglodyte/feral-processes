@@ -310,6 +310,9 @@ impl Game {
         world.insert_resource(MessageLog::default());
         world.insert_resource(BattleTimeline::default());
         world.insert_resource(EffectQueue::default());
+        // Not a save field: a brawl lasts four to eight ticks and damage is
+        // applied as it goes, so a save mid-fight loses only the summary.
+        world.init_resource::<crate::resources::Brawls>();
         world.insert_resource(TransitQueue::default());
         world.insert_resource(GameOver::default());
         world.insert_resource(difficulty);
@@ -584,6 +587,9 @@ impl Game {
         world.insert_resource(MessageLog::default());
         world.insert_resource(BattleTimeline::default());
         world.insert_resource(EffectQueue::default());
+        // Not a save field: a brawl lasts four to eight ticks and damage is
+        // applied as it goes, so a save mid-fight loses only the summary.
+        world.init_resource::<crate::resources::Brawls>();
         world.insert_resource(TransitQueue::default());
         world.insert_resource(GameOver::default());
         world.insert_resource(data.difficulty);

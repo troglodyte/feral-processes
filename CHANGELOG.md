@@ -33,6 +33,25 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## Unreleased
+
+**A program with nothing left now rounds on a colleague** — past refusing to
+work there is a fourth rung, where a miserable base program picks whoever it
+likes least within three tiles and brawls with them for four to eight beats.
+Nobody dies; whoever comes out worst breaks off for repairs, the one that
+started it comes away calmer, and the one that got hit remembers exactly who
+did it. There is no key and no screen — the only way to see one is to run a
+base badly enough that a program has nowhere else to go.
+
+**An unmet need now moves a program's mood even when the base never had the
+building** — the complaint blames nothing and names no tile, which is what
+lets it count at all, so a base that never builds an amenity is no longer free
+of the consequences of not building one.
+
+**While a base is still getting started, needs do not count against it** — it
+takes eight staff and eight structures before either grudge is written or any
+tantrum can open. The lines are still said, because the line is the errand.
+
 ## 0.13.130
 
 **A Depot can be told what it will accept** — `[F]` from the transfer screen opens one shelf's allow/deny list, an arrow per row, `[A]`/`[D]` for the whole catalogue and Tab between the Depots touching you, so two Depots with opposite lists sort the base between them; a refused load is carried to the next Depot instead, and back to the machine it came from if none will take it. A filter says only what may come **in** — what is already on the shelf stays there and can still be taken, and a refund the base is handing back is exempt, so a closed shelf can never destroy materials while you are out in the field.

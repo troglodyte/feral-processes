@@ -3,7 +3,7 @@
 use super::popup::*;
 use super::*;
 use feral_processes_engine::perks::{Perk, PerkDef};
-use feral_processes_engine::{ResearchStatus, RespecQuote, RespecSubject};
+use feral_processes_engine::{ResearchMaterial, ResearchStatus, RespecQuote, RespecSubject};
 
 /// The perk picker's rows. A perk's description is a *dim item row* rather
 /// than a `Row::Text`, and the help line sits in the header rather than under
@@ -167,6 +167,48 @@ fn row_color(node: &ResearchStatus) -> Color {
     }
 }
 
+/// A node's material bill as one line under its row — see
+/// `ResearchDef::materials`.
+///
+/// **One line for the whole bill, not a row per material.** `popup_layout`
+/// pages this screen by `Row::Item` span, so a row per line would cost the
+/// tree a third of a page for its deepest three-material nodes; the bill is
+/// read as a whole anyway, since a node is payable only when every line is.
+///
+/// Colour is the screen's *only* affordability signal — `row_color` reads
+/// `state` and never `affordable` — so the line takes the amber a node
+/// locked by a prerequisite takes. That is the same meaning at a different
+/// scale rather than a second one on the axis: a wall you clear yourself,
+/// here, by running the base, as against a breach you cannot.
+///
+/// A `Row::Item` and not a `Row::Text`, `description_rows`' reason: anything
+/// after the last `Row::Item` is pinned to the foot of the box, torn off the
+/// node it belongs to.
+fn material_rows(materials: &[ResearchMaterial]) -> Vec<Row> {
+    if materials.is_empty() {
+        return Vec::new();
+    }
+    let short = materials.iter().any(|m| m.have < m.need);
+    let line = materials
+        .iter()
+        .map(|m| format!("{} {}/{}", m.name, m.have, m.need))
+        .collect::<Vec<_>>()
+        .join("  ");
+    wrap_text(
+        &line,
+        DESCRIBE_WRAP_COLUMNS - DESCRIPTION_INDENT.chars().count(),
+    )
+    .into_iter()
+    .map(|l| {
+        colored_item_row(
+            format!("{DESCRIPTION_INDENT}{l}"),
+            false,
+            if short { LOCKED_BY_PREREQ } else { TEXT_DIM },
+        )
+    })
+    .collect()
+}
+
 /// The research picker's rows, in the shape `perks_menu_rows` documents and
 /// for the same reason: nothing may follow the last `Row::Item`.
 pub(super) fn research_menu_rows(held: u32, nodes: &[ResearchStatus], selected: usize) -> Vec<Row> {
@@ -184,6 +226,7 @@ pub(super) fn research_menu_rows(held: u32, nodes: &[ResearchStatus], selected: 
             node.cost
         );
         rows.push(colored_item_row(label, i == selected, row_color(node)));
+        rows.extend(material_rows(&node.materials));
         rows.extend(description_rows(&node.description));
     }
     rows
@@ -307,6 +350,7 @@ mod tests {
             description: String::new(),
             cost: 10,
             state,
+            materials: Vec::new(),
             affordable: true,
             recommended,
         };

@@ -1719,6 +1719,18 @@ mod tests {
                         .map(|i| ResearchStatus {
                             id: format!("node_{i}"),
                             name: format!("Node {i}"),
+                            // The deepest shipped bills run to three lines,
+                            // so the fixture carries three: the bill is a
+                            // row of its own under every node and this is
+                            // the screen's worst case for height.
+                            materials: ["Routine Disk", "Logic Wafer", "Bytecode Block"]
+                                .into_iter()
+                                .map(|name| feral_processes_engine::ResearchMaterial {
+                                    name: name.to_string(),
+                                    need: 18,
+                                    have: 0,
+                                })
+                                .collect(),
                             description: format!(
                                 "What node {i} unlocks, at the length the \
                                  shipped nodes run to: a sentence naming what \

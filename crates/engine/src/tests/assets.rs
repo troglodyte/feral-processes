@@ -2380,6 +2380,13 @@ const MEMORY_TRIGGERS: &[(&str, crate::memories::MemorySubjectKind)] = {
         ("settled_in", K::Structure),
         ("jammed_here", K::Structure),
         ("cutting_rock", K::Activity),
+        // `Game::close_brawl`, off the tantrum step in
+        // `schedule_base_labour`. One per side of the fight: the aggressor's
+        // relief, which is what keeps the ratcheted rung from meaning
+        // "fights forever", and the victim's grudge, which names the
+        // aggressor and outlasts it.
+        ("vented", K::Nothing),
+        ("turned_on_me", K::Program),
     ]
 };
 

@@ -4597,6 +4597,64 @@ pub const MORALE_LASHES_OUT_AT: f32 = -75.0;
 /// unreachable rather than failing to compile.
 const _: () = assert!(MORALE_DOWNS_TOOLS_AT > MORALE_LASHES_OUT_AT);
 
+/// The chance, per base beat, that a program already on the `LashingOut`
+/// rung with somebody in reach actually starts a fight.
+///
+/// A rate rather than a countdown, so a base that has one miserable program
+/// in it does not brawl on a metronome. Unmeasured.
+pub const TANTRUM_CHANCE_PER_TICK: f64 = 0.02;
+
+/// How far a program will look for somebody to round on, chebyshev.
+///
+/// **No target in reach means no tantrum**, and that is what keeps this
+/// feature free of pathing: a program on this rung has already left the
+/// posting half of `schedule_base_labour` and is drifting through
+/// `drift_idle_staff`, so it wanders into range of somebody on its own. A
+/// "walk to your enemy" arm would be a second walk with its own interruption
+/// rules, bought for nothing the player could see.
+pub const TANTRUM_REACH_TILES: i32 = 3;
+
+/// The shortest and longest a fight runs, in base beats.
+///
+/// The short end is the one with a constraint on it — see
+/// `TANTRUM_DAMAGE_FRACTION`.
+pub const TANTRUM_TICKS_MIN: u32 = 4;
+pub const TANTRUM_TICKS_MAX: u32 = 8;
+
+const _: () = assert!(TANTRUM_TICKS_MIN < TANTRUM_TICKS_MAX);
+
+/// What one blow is worth, as a fraction of the target's `max_hp`, **before**
+/// mitigation and before the non-lethal clamp.
+///
+/// **A quarter rather than the single-digit fraction a "scuffle" suggests,
+/// and the constraint binds at the *short* end of the tick range.** A
+/// four-beat brawl is the shortest one that can happen, so four blows from
+/// full health must already carry a body under
+/// `BAY_ADMISSION_HP_FRACTION` — that is the whole of "whoever comes out
+/// worst is swept into a Repair Bay", and it is what this number is sized
+/// for.
+///
+/// Two things make the arithmetic softer than it looks and both push the same
+/// way: `Game::apply_damage` runs `mitigate_incoming_damage`, so the landed
+/// figure is lower than the fraction says; and a brawl rarely starts from
+/// full health. So the number is pinned by
+/// `a_short_brawl_still_fills_the_bay` driving a real fight against real
+/// mitigation and **not** by the multiplication above — if a retune moves
+/// mitigation, that test is what notices.
+///
+/// At the long end the `.min(hp - 1)` clamp does the rest: eight blows at a
+/// quarter each would be 200% of max HP, so a long brawl simply leaves both
+/// parties on 1 Integrity. Heavy is the point; the clamp is what keeps heavy
+/// from being fatal.
+pub const TANTRUM_DAMAGE_FRACTION: f32 = 0.25;
+
+/// How long after coming out of a fight a program may not start another.
+///
+/// Bounds the *rate* while `vented` moves the meter back the other way. One
+/// vent does not clear a -75 hole and is not meant to, so without this a
+/// badly-run base would brawl on every roll. Unmeasured.
+pub const TANTRUM_COOLDOWN_TICKS: u64 = 400;
+
 /// How many rows the base output page shows per section.
 ///
 /// The page has no scroll, so this is a layout constraint rather than a

@@ -160,6 +160,14 @@ pub enum MessageKind {
     /// news about a keypress, not a result, and has no business following
     /// the player out of a fight.
     Refusal,
+    /// One base program has rounded on another — `game::base::tantrum`.
+    ///
+    /// **Its own kind rather than `Raid`.** Reusing `Raid` would buy the
+    /// log-pane border flash for free and file a scuffle between two staff as
+    /// a GC Entropy Sweep, which is a lie to the player and a lie to
+    /// `retain_outcomes_since_battle`, whose keep-list includes `Raid`. A
+    /// tantrum is base news and is pruned like base news.
+    Tantrum,
 }
 
 /// Which of the two things the player is doing produced a line: running the
@@ -491,6 +499,45 @@ pub enum EffectKind {
     Hit,
     Deflected,
     Destroyed,
+    /// A blow landed in a staff tantrum. **Draws identically to `Hit`** — the
+    /// same sparks, the same duration, the same red — and exists only so gui
+    /// can fire a sound cue for it. Teaching gui to sound every base-space
+    /// `Hit` instead would be less code and would also give raids audio they
+    /// have never had, which is a change to a shipped feature nobody asked
+    /// for.
+    Brawl,
+}
+
+/// One open fight between two base programs.
+///
+/// Holds `Entity` rather than `ProgramId` precisely because it is **not
+/// saved**: a brawl lasts four to eight ticks and damage is applied as it
+/// goes, so a save mid-fight loses nothing but the summary lines, and entity
+/// ids are stable for the whole lifetime this record has.
+#[derive(Clone, Copy, Debug)]
+pub struct Brawl {
+    pub aggressor: Entity,
+    pub victim: Entity,
+    pub ticks_left: u32,
+    /// Cumulative, aggressor -> victim, after mitigation.
+    pub dealt: i32,
+    /// Cumulative, victim -> aggressor.
+    pub taken: i32,
+}
+
+/// Every fight currently open in base space, and who is too recently out of
+/// one to start another.
+///
+/// Deliberately not serialized, `EffectQueue`'s reason. The cooldown is
+/// stored here rather than derived from the aggressor's own `vented` memory
+/// — which would be free and would survive a save — because that would make
+/// an install with `assets/memories/` deleted brawl without any bound at
+/// all, and an empty catalogue is a supported install.
+#[derive(Resource, Default)]
+pub struct Brawls {
+    pub open: Vec<Brawl>,
+    /// The tick each program last came out of a fight.
+    pub cooled_at: std::collections::HashMap<Entity, u64>,
 }
 
 /// A transient "something happened here" cue, in world coordinates so a

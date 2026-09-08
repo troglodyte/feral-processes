@@ -1,0 +1,19 @@
+// The relief of having put it into something that could take it. Written on
+// the aggressor's side of a brawl, and it is load-bearing rather than
+// flavour: `Disgruntled` ratchets and never eases, so without something
+// pushing back a program past `MORALE_LASHES_OUT_AT` would fight every time
+// the roll came up for the rest of the run.
+//
+// Short-lived and capped low on purpose. One vent does not clear that hole
+// and is not meant to — a badly-run base does descend into repeated fighting
+// — but the meter moves the right way, and it must never be worth *farming*
+// morale by starting fights.
+(
+    id: "vented",
+    name: "Let it out",
+    blurb: "Put it into something that could take it.",
+    valence: 5.0,
+    half_life: 2000,
+    subject: Nothing,
+    strike_cap: 3,
+)

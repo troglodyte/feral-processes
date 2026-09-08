@@ -891,6 +891,11 @@ impl Game {
         // that downs tools this tick must not also be handed a job this
         // tick.
         self.update_disgruntled(&staff);
+        // Between the rung and the bay, and **that ordering is what gets the
+        // Repair Bay for free**: a blow landed this beat is answered by
+        // `admit_the_badly_hurt` below, through the one writer that already
+        // owns the decision to take a body off the line.
+        self.run_tantrums(&staff);
         // The third gate on this line, and it sits with the other two for
         // their reason: a body that breaks off for repairs this tick must
         // not also be handed a job this tick. It inserts `Downed`, which

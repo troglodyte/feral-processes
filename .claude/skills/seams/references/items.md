@@ -388,3 +388,46 @@
   `forge_cost`, which also puts it under `CREATION_SHELF_MAX_VALUE`, so a new
   character was offered a carrier for a tool no research had taught yet. A
   minted item joins every pool that filters by *value* rather than by name.
+
+- **A research bill may only name what that node's own prerequisites can
+  make.** `ResearchDef::materials` is authored per node — derived from `cost`
+  it would make every node ask for the same goods and deny a mod any say —
+  and the risk authoring carries is a node that is listed, unlocked and
+  affordable in Research Data, then refuses for goods with no route to them.
+  `every_research_material_is_reachable_through_that_nodes_own
+  _prerequisites` is the whole rule: the transitive `requires` closure, the
+  structures no research gates plus those the closure unlocks, then the
+  fixpoint of what that set produces and crafts. **`min_zone` grants
+  nothing** — a zone number says the player breached, not that they took any
+  node, and breaching 1→2 demands no Cache Grain (the portal's line is
+  `(2, "cache_grain", 10)`, from sector 2 onward), so a bill leaning on the
+  zone is an unstated prerequisite. **`work` is a source and `assembles` is
+  not**: an assembler runs its product's own `craftable.cost` and is already
+  covered by the craft fixpoint, and counting it as a source is how the
+  Fabricator reads as a Trace Sniffer supply with no Logic Wafer in sight —
+  modelled that way first, the census passed against a bill that could not be
+  paid. It is what found `weapon_bench` unlocking a Fabricator it could not
+  feed, which is why that node requires `routine_fabrication` now. The
+  reachability test passes **vacuously against a tree with no bills**, so
+  `every_shipped_research_node_costs_materials` is the second half — a
+  `materials` line deleted by hand must fail the build rather than read as
+  that node being free.
+- **A research bill is paid from the pack, topped up off the adjacent
+  shelves.** Research is a player cost, so `unlock_research` spends
+  `Inventory`; the shelves top the pack up rather than being a second store,
+  because the goods a bill names are the goods the base is already stacking
+  and a Transfer trip per node is a keystroke tax with no decision in it.
+  `Game::research_material_held` is the one definition of "have" — pack plus
+  `adjacent_stock_count` — read by the refusal *and* by the figure
+  `research_nodes` puts on the screen, so a row drawn as affordable cannot
+  then be refused; the reach is `adjacent_stock`'s, so this screen and the
+  Transfer screen cannot disagree about what the shelves are, and off the
+  base it answers 0, which is why the Research row is still
+  `Locality::Anywhere`. **The trap is the obvious shape**: taking each line
+  as the walk reaches it strands goods on the pack when line three refuses,
+  so the whole bill is checked against pack-plus-shelves first and refused
+  whole — `commit_caravan_basket`'s rule — and the tests assert `Inventory`
+  **and** every `Stock` byte-identical, per refusal. The shortfall is routed
+  through `take_from_adjacent` rather than drained here, keeping
+  `hauling::take_from` the one way a unit leaves a buffer and inheriting its
+  `(x, y)` sort.

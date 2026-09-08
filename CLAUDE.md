@@ -794,6 +794,11 @@ relying on one, and correct all three places if it has moved.
   `ZONE_MATERIALS` in `tests/assets.rs` plus
   `every_zone_gated_gear_recipe_asks_for_a_zone_material` and
   `every_upgrade_path_asks_for_a_zone_material` are the whole rule.
+- **A research node's material bill may only name what that node's own
+  prerequisites can make**, `min_zone` granting nothing and `assembles`
+  being no source.
+- **A research bill is paid from the pack, topped up off the adjacent
+  shelves**, and the whole bill is refused before a unit moves.
 - **A carried copy of gear is one value, `items::GearCopy`**, and
   `Inventory` is by definition the *plain-copy* store.
 - **`Game::copy_bonus` is the one expression for what gear is worth, and the

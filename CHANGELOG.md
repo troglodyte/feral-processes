@@ -33,6 +33,10 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.127
+
+**Reaching a sector's level cap now announces itself** — the notice says the XP still banks into Perk Points, and that a breach is what lifts the ceiling, tiers up what your structures can become, and may open research closed to you here.
+
 ## 0.13.126
 
 **A program now carries two build aptitudes, and the machine it is spent on runs at what it was worth.** Assembly decides how well it puts a bench or a rig together; Extraction decides how well it puts up a node. The one it does not have is the one that machine does not care about.

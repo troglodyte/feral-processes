@@ -20,7 +20,7 @@ pub(crate) mod deposit;
 pub(crate) mod depot_filter;
 pub(crate) mod entropy;
 pub(crate) mod hauling;
-mod morale;
+pub(crate) mod morale;
 pub(crate) mod offshift;
 pub(crate) mod power;
 pub(crate) mod repair;

@@ -4575,6 +4575,28 @@ pub const BASE_ESTABLISHED_STAFF: usize = 8;
 /// both halves at once.
 pub const BASE_ESTABLISHED_STRUCTURES: usize = 8;
 
+/// Morale at or below which a program stops standing still about it and
+/// rounds on a colleague.
+///
+/// **Past what one memory can reach, inside what a pattern of two can** —
+/// `MORALE_DOWNS_TOOLS_AT`'s own rule one rung further down, and the only
+/// thing keeping this number honest. A grudge is felt as valence x
+/// `strike_cap` x `DISPOSITION_MEMORY_SWING`, so the worst single memory the
+/// game ships (`mauled_by`, -8 at a cap of 4, felt by an `Abrasive` program)
+/// reaches -44.8; -75 sits well past it and inside the pair. Held by
+/// `no_single_memory_can_make_a_program_lash_out` and
+/// `two_bad_memories_can_still_make_a_program_lash_out` against the real
+/// `assets/memories/`.
+///
+/// A rung nothing can reach is a deleted feature; a rung one bad afternoon
+/// reaches is a base that brawls constantly.
+pub const MORALE_LASHES_OUT_AT: f32 = -75.0;
+
+/// The ladder climbs in order — held by `the_ladder_climbs_in_order`, and
+/// here as well because a retune that inverts two rungs makes the milder one
+/// unreachable rather than failing to compile.
+const _: () = assert!(MORALE_DOWNS_TOOLS_AT > MORALE_LASHES_OUT_AT);
+
 /// How many rows the base output page shows per section.
 ///
 /// The page has no scroll, so this is a layout constraint rather than a

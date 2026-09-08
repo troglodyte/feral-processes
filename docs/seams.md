@@ -8557,6 +8557,98 @@ bump. And `TaskKind::Construct` is the first task kind whose holder may be
 already covers it and has to, because freeing the body drops the `Carrying`
 with the `Task` and those units have already left the shelf they came off.
 
+### `BuildSite::program` is charged at filing, and that is the one exception to this seam's own rule
+
+**Why the program attaches to `BuildSite` and not to the structure.** A
+structure does not exist for the whole interval this feature has to cover —
+from the moment the picker confirms to the moment the crew finishes or the
+player calls it off — and for an upgrade there is no *new* structure at all,
+only a tier bump on one already standing. The `BuildSite` is the one entity
+guaranteed to exist for exactly that interval and no longer:
+`Game::spawn_structure` still writes a structure's own component list —
+`roster_parts`'s argument applied to the other roster — and a `program`
+field there would sit unused for a `New` deploy's whole request and never
+exist at all for an upgrade's. `BuildGoal`'s own argument, restated: one
+component with a field beats two records of the same fact drifting apart,
+and this feature only had to answer the version of that question the
+materials already settled.
+
+**The exception, and why it has to be written down.** This seam's central
+rule, argued above, is that **nothing is charged at filing**: `place_structure`
+and `upgrade_structure` spawn a request and take payment from the base only
+as materials are actually walked to the cell, so a request the base cannot
+yet afford is not refused, it is queued. The program breaks that rule on
+purpose. `commit_program` retires it — `Party::retain`, then `world.despawn`
+— the instant the picker confirms, before a single unit of material has
+moved. Read the materials rule and stop there, and this looks like a bug:
+two costs on one request, charged at two different moments, and the obvious
+"fix" is to defer the program too, the way everything else about a
+`BuildSite` is deferred.
+
+It cannot be deferred, because a program is not a stock count. A unit of
+Cache Grain that has not yet been fetched is still sitting on a Depot
+shelf somewhere in the base — `cancel_build_request` hands back *goods that
+still exist*, never having left the world. A program that has not yet been
+"fetched" is not sitting anywhere: there is no shelf a tamed program waits
+on between being owned and being spent, and no way to notionally reserve one
+against a future commit without it going on doing everything a party member
+or staff program does in the meantime — fighting, posting, being sold, being
+fused away, wielding the player's own hand. Filing the commit at the moment
+of intent rather than at the moment of use is what keeps
+`programs_for_build`'s exclusions (wielded, sortied, downed, carrying)
+meaningful: they answer "is this program reachable to spend *right now*",
+and an answer that has to stay true across an unbounded queue wait is not an
+answer, it is a promise the base cannot keep. So the program is despawned
+immediately and `BuildSite::program` carries its `CreatureSave` — the same
+reason `HopperEntry` carries a `DownedProgram` rather than a reference —
+and getting it back is not un-deferring a charge, it is `refund_program`
+respawning the snapshot: a resurrection, never a return.
+
+**Why both destruction doors must refund.** A `BuildSite` dies two ways that
+are not the player finishing it. Any site — deploy or upgrade — dies when the
+player calls the order off, through `cancel_build_request`. An **upgrade**
+site can also die a second way, because it rides a machine that already
+stands: `damage_structure`'s destroyed branch on a raid, or `remove_structure`
+(the Home cascade included), can take the machine out from under its own
+pending order. A fresh deploy's site has no machine yet to be raided or
+demolished, so `cancel_build_request` is its only exit. Materials already
+established the pattern for the upgrade case: `clear_pending_build_at` and
+`cancel_build_request` both route through the shared `return_build_holdings`,
+because wiring only one leaves the other stranding delivered goods on a cell
+nothing occupies, and nothing fails to compile when it does. The program
+rides the same door for the same reason, with a sharper failure mode: a stranded pile
+of Cache Grain is merely lost, but a program with no refund is a
+player-owned entity destroyed with no log line, no `end_battle`, no sale
+confirmation — nothing the player did on purpose. `return_build_holdings` is
+one function precisely so the two doors cannot disagree about this: return
+the materials, then — if `build.program` is `Some` — refund the program
+through `refund_program` and log whichever of the two things happened (it
+comes back, or the install no longer ships its species and there is nothing
+left to restore it from).
+
+**A known gap this leaves standing.** `raise_one_tick` deliberately leaves a
+`BuildSite` in place, rather than despawning it, when the structure's `.ron`
+has gone missing or an upgrade's target tier has dropped below what
+`upgrade_ceiling` now permits (`construction.rs:488`, `:516`) — the materials
+are still on the cell and a mod restored between sessions should still
+finish the job. A committed program then sits on an unbuildable site
+indefinitely. It is recoverable: the player can cancel and the program comes
+back whole, same as any other cancel. But nothing on any screen tells them
+the order is stuck rather than merely slow, so the recovery has to be found
+rather than offered. This is a known gap and not an oversight — recorded
+here so the next reader does not "fix" it by inventing an alert for it in
+isolation, without noticing the same gap already exists for materials on a
+stuck site.
+
+**What a screen may show without becoming a third store.** If the committed
+program is ever shown on a request — the build-order screen, the examine
+line — it goes through `views::BuildOrderRow`, the one derivation of what a
+request looks like, exactly as `outstanding` and `required_ticks` do today.
+`BuildSite::program` is data for the refund, not a display record, and a
+second copy of the program's name sitting on the row is the same trap a
+stored `required_ticks` would be — a screen that can only ever describe what
+the crew already knows, until a retune makes the two disagree.
+
 ### What a program needs is a catalogue, and only one thing about it is stored
 
 `assets/needs/` is `assets/memories/`'s seam again: a `.ron` per need
@@ -8703,15 +8795,30 @@ site added later inherits the behaviour instead of having to remember it.
 On the Forgiving arm the program keeps `Tamed`, is detached from play, has its
 HP set to 1 and gains `components::Downed`. **It keeps its roster slot**, which
 is what makes a wipe cost something under Forgiving rather than being free —
-the programs come back, but `pet_capacity` is spent on them while they are down,
-and the two things that free the slot are selling the program or extracting a
-routine from it. `add_companion`'s refusal names both, so a player with a full
-roster, every program benched and no Bay standing has an errand rather than a
-dead end.
+the programs come back, but `pet_capacity` is spent on them while they are down.
+The two things that free *this* slot are still selling the program or
+extracting a routine from it, and only those two: `commit_program` refuses
+anything `Downed`, so a benched program can never be spent on a build order,
+and `add_companion`'s refusal keeps naming an exhaustive pair for the state it
+answers. What that sentence no longer describes is the *roster as a whole* —
+committing a program to a build is a third door a program leaves through for
+good, alongside selling and extracting, sitting outside the pair
+`add_companion` names because it answers a different question than "how do I
+un-bench this one": it is "how do I spend a program at all," and any owned
+program not wielded, sortied, down or carrying may walk through it.
 
-`end_battle` is the only legal removal point: `BattleState::planned` indexes
-`Party` positionally and nothing may leave mid-battle. The bench is not an
-exception to that rule and must not become one.
+`end_battle` is no longer the only legal removal point for a roster slot.
+`commit_program` (`game/party.rs`) is a second: it does its own
+`Party::retain` and `world.despawn`, and is safe under the same rule
+`end_battle` was written to guard — nothing may leave mid-battle — because
+it is reachable only from the base build menu, never from `BattleState`, so
+`BattleState::planned`'s positional indexing is never live while it runs.
+Cancelling an unbuilt order is a new way a slot is *taken* rather than
+freed: `refund_program` inserts the returned program back into `Party` at
+its old index when the party still has room, the mirror image of
+`add_companion` pushing a new member on — and, like that door, the party
+slot is never forced. A party that filled up while the order stood gets the
+program back as staff instead of a sixth member.
 
 ### `RecoveryDef` is `i32`, and the name it could not have is already taken
 

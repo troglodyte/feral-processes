@@ -144,15 +144,25 @@ where the code is, or the next reader corrects it as a bug.
 
 Retiring the program at commit follows fusion's teardown verbatim
 (`party.rs:1004-1007`): retain it out of `Party`, then `world.despawn`. The plan
-must confirm the three loose ends fusion does not itself clean, because a
+must confirm the loose ends fusion does not itself clean, because a
 committed program can be in states a fusion sacrifice usually is not:
 
-- the **wielded** program (`CreatureSave::wielded`) — must be cleared on commit
-  and restored on refund, or the run wields a despawned entity;
+- the **wielded** program (`CreatureSave::wielded`) — needs no explicit clear
+  on commit, only a restore on refund. `wielded_program`
+  (`combat_round.rs:1331`) already filters `resources::WieldedProgram`
+  through an existence check, so every despawning path — sale, extraction,
+  fusion, death, and now this one — is immune without knowing the feature
+  exists, and its own doc comment says in as many words not to "tidy this
+  up" into an explicit clear at a despawning site. Implementation confirmed
+  this by writing the clear as briefed, watching a mutation test survive its
+  removal, and deleting it;
 - a **standing job** or in-flight `Task` in base space — a posted body evicted
   mid-tick leaves a machine pointing at a dead entity, and an `OffShift` or
-  `idled_with` marker naming it outlives it into the save as a ghost;
-- a **cronjob** whose target is this program.
+  `idled_with` marker naming it outlives it into the save as a ghost.
+
+`Task::target` is always an `Entity` naming a structure or a build site, never
+a program, so a third loose end considered here — a cronjob whose target is
+the committed program itself — has no referent and is dropped.
 
 These are a second line of defence rather than the guard: `programs_for_build`
 already excludes most of these states, but a frontend is not where a rule lives,
@@ -321,7 +331,9 @@ Engine:
    equipment, custom name and refactor count intact.
 7. Completing the build leaves nothing to return; `remove_structure` afterwards
    refunds materials and no program.
-8. Committing the wielded program clears `wielded`; the refund restores it.
+8. Committing the wielded program leaves `wielded_program` reading `None`
+   with no explicit clear in `commit_program` — the existence filter does the
+   work; the refund restores it.
 9. Committing a party member removes it from `Party`; the refund does not
    silently re-add it to a full party.
 10. Save → load → cancel returns the program (file round trip, not RON).

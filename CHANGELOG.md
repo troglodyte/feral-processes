@@ -33,6 +33,16 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.125
+
+**Deploying a structure now costs a tamed program, spent for good the moment your crew finishes it.** A picker closes out every build order and every upgrade, asking you to commit one program off your roster — deploying takes any of them, and upgrading a structure a tier takes one from at least that deep a zone, so a zone-5 program can raise anything while a zone-1 program only manages a fresh Mk1.
+
+**Home is exempt, at every tier.** A fresh run owns no programs at all, so a founding that cost one would be unfoundable, and an upgrade to your own Home never asks either.
+
+**The picker only offers what you can actually spend.** The program in your hand, one away on a sortie, one already down, and one carrying goods are all left off the list — and a build order can never take you to zero: committing your last program is refused outright, naming what it would have left nobody to build.
+
+**Calling off an order gives the program back whole** — same name, level, gear and memories — and so does an upgrade order whose machine is destroyed out from under it, by a raid or by your own hand. Only a finished build spends the program for good; deconstructing what your crew already raised returns materials, never programs.
+
 ## 0.13.124
 
 **The swap picker rates what you are already wearing.** Candidate weapons have carried a power rating since 0.13.69, but the heading naming the piece in the slot carried only a name and its stats — a column of figures with nothing to compare them against. The heading is now a row of the same shape as the rows below it, its rating in the same column.

@@ -919,35 +919,15 @@ impl Game {
         // here to the truncation reasons about who can actually be given a
         // job.
         //
-        // **Except one still holding a `Carrying`**, which stays on shift
-        // until it delivers. That is the existing never-free-a-`Carrying`-
-        // holder rule rather than a second one: freeing a loaded body
-        // destroys the goods, and `DigErrand::Return` is the precedent for
-        // walking a load home before giving the post up.
-        //
-        // **A downed program joins that filter without the `Carrying`
-        // escape**, and the asymmetry is the point rather than an oversight:
-        // the escape exists because freeing a loaded body destroys the
-        // goods, and an off-shift body may legitimately be mid-delivery. A
-        // body that just died in a fight is not carrying anything the base
-        // is waiting on — and if it somehow is, it is going to the Bay
-        // regardless.
+        // **Who may be handed a job is one predicate**, `Game::is_on_shift`,
+        // because the three exclusions do not treat the `Carrying` escape
+        // alike and a reader has to see that at a glance rather than
+        // reconstruct it from four chained closures. That function carries
+        // the argument.
         let on_shift: Vec<Entity> = staff
             .iter()
             .copied()
-            .filter(|&w| self.world.get::<components::Downed>(w).is_none())
-            .filter(|&w| {
-                self.world.get::<components::OffShift>(w).is_none()
-                    || self.world.get::<Carrying>(w).is_some()
-            })
-            // **A disgruntled program keeps the `Carrying` escape**, unlike a
-            // downed one. The escape exists because freeing a loaded body
-            // destroys the goods, and that is just as true of a body that has
-            // stopped caring as of one that is off servicing a need — it is
-            // still standing in the base holding something the line is
-            // waiting on. Only `Downed` overrides it, because a body going to
-            // the Bay is going regardless.
-            .filter(|&w| !self.has_downed_tools(w) || self.world.get::<Carrying>(w).is_some())
+            .filter(|&w| self.is_on_shift(w, &amenities))
             .collect();
         // Posts already covered by somebody the scheduler may not move —
         // in practice the player's own `work_structure` task, since every
@@ -1158,7 +1138,22 @@ impl Game {
             && !wanted.iter().any(|&(_, kind)| kind == TaskKind::Construct)
             && !any_dig_marked
             && !a_burner_holds_a_body;
-        if queue_is_empty && wanted.iter().all(|post| posted.contains(post)) {
+        // **A body standing at a post it is no longer allowed to hold is
+        // work to do**, even when the queue is empty and every want is
+        // already covered. Without this term the pass returns above the free
+        // loop, and a program that went off shift, downed tools or took a
+        // respite while the only instruction in the base was a *standing*
+        // job — which is not a `WorkOrder` and so leaves `queue_is_empty`
+        // true — would keep that posting for the rest of the run. Read off
+        // `staff` and not `on_shift`, because the bodies it has to see are
+        // precisely the ones that filter just dropped.
+        let a_posted_body_is_off_the_line = staff
+            .iter()
+            .any(|&w| self.world.get::<Task>(w).is_some() && !self.is_on_shift(w, &amenities));
+        if queue_is_empty
+            && !a_posted_body_is_off_the_line
+            && wanted.iter().all(|post| posted.contains(post))
+        {
             return;
         }
 
@@ -1194,24 +1189,17 @@ impl Game {
             // A body that has left its post for an errand of its own is
             // freed and **not** added to `idle`: it is walking somewhere, and
             // the post it vacated stays in `remaining` for whoever is left.
-            // A loaded one is not here at all — it is on `on_shift` until it
-            // delivers.
-            // A downed program is freed unconditionally, on the same terms
-            // as the `on_shift` filter above and ahead of every rule that
-            // could keep it posted: it is not in the pool, so leaving it
-            // standing at a machine would post a body the assignment never
-            // named.
-            if self.world.get::<components::Downed>(worker).is_some() {
-                self.world
-                    .entity_mut(worker)
-                    .remove::<Task>()
-                    .remove::<Carrying>();
-                continue;
-            }
-            if (self.world.get::<components::OffShift>(worker).is_some()
-                || self.has_downed_tools(worker))
-                && self.world.get::<Carrying>(worker).is_none()
-            {
+            // A loaded one is not here at all — `is_on_shift` keeps it until
+            // it delivers.
+            //
+            // **The same predicate the filter above used**, so the two cannot
+            // disagree about who is in the pool. A downed program is freed by
+            // it unconditionally and ahead of every rule that could keep it
+            // posted — it is not in the pool, so leaving it standing at a
+            // machine would post a body the assignment never named — and the
+            // `Carrying` escape it deliberately does not get lives in that
+            // function rather than being restated here.
+            if !self.is_on_shift(worker, &amenities) {
                 self.world
                     .entity_mut(worker)
                     .remove::<Task>()
@@ -1896,6 +1884,23 @@ impl Game {
                 }
                 continue;
             }
+            // **Below the errand and above the wander.** A need is a hard
+            // floor under a reserve and outranks a mood, exactly as the Bay
+            // outranks the need; and a body with nowhere in particular to be
+            // is the wander's, not this arm's. `Err` is the one place a route
+            // is judged, and it latches for `step_off_shift`'s reason — but
+            // it puts the body back in the *posting* pool rather than leaving
+            // it stalled, which is this errand's whole difference from that
+            // one.
+            if self.on_respite(worker, amenities) {
+                if self.step_respite(worker, amenities).is_err() {
+                    self.strand_respite(worker);
+                }
+                if let Some(p) = self.world.get::<Position>(worker) {
+                    held.insert((p.x, p.y));
+                }
+                continue;
+            }
             let here = self.world.get::<Position>(worker).copied();
             let tile = match here.filter(|_| on_floor) {
                 Some(p) => match wander_step(p, index, step) {
@@ -1959,6 +1964,13 @@ impl Game {
     /// `drift_idle_staff` for the tests, which need one beat at a time
     /// rather than a whole scheduler pass.
     #[cfg(test)]
+    /// The beat's amenity index, for a test that wants to ask
+    /// `on_respite`/`is_on_shift` the same question the scheduler does.
+    #[cfg(test)]
+    pub(crate) fn amenities_for_test(&mut self) -> offshift::Amenities {
+        self.amenities()
+    }
+
     pub(crate) fn drift_idle_staff_for_test(
         &mut self,
         staff: &[Entity],

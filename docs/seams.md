@@ -12822,3 +12822,93 @@ buy the log-pane border flash from `fx.rs::observe_log` for free and file a
 scuffle between two staff as a GC Entropy Sweep — a lie to the player, and a
 lie to `retain_outcomes_since_battle`, whose keep-list includes `Raid`. A
 tantrum is base news and is pruned like base news.
+
+### A bad mood is an errand now, and the memory is the mechanism rather than the flavour
+
+`crates/engine/src/game/base/morale.rs` used to open by stating the opposite
+of what it now does: "morale has no amenity to walk to, so what recovers it is
+the grudges decaying and better memories landing on top — which is to say
+**time and a base worth working in**, not an errand." That was a real
+position, not an oversight. It is reversed here, and the argument for the
+reversal is worth keeping because the old one is still half right.
+
+What was wrong with it is what it left the player holding. A program that
+downed tools wandered the base at random until `MEMORY_HALF_LIFE_MULTIPLIER`
+did its work, and there was nothing to *do* about it — no building to raise,
+no tile to clear, no lever at all. `fray`'s quiet branch had already been
+fixed once for the same shape of fault (0.13.131), where a need nothing
+answered moved the meter not at all and made needs decorative on the
+acting-out ladder. This is the other end of the same complaint: the meter
+moved, and nothing the player could build moved it back.
+
+**Morale has no reserve, so the errand cannot refill one.** That is the whole
+of why this is not a straight copy of `OffShift`. `Game::morale` is a signed
+fold over `Memories`, derived on every read and never stored — so "standing
+here recuperates you" has to be expressible as a memory or it cannot be
+expressed at all. `assets/memories/unwound_at.ron` is that memory:
+`Structure`-subjected (a rebuilt Sandbox is the same Sandbox, `settled_in`'s
+rule), written by `Game::note_respites` on `MEMORY_POSTING_PERIOD` for as long
+as the body stands in reach, and folded back by the same `Game::morale` every
+other memory reaches. There is no second meter, no field on `Disgruntled`
+counting anything down, and nothing new in the save but the latch.
+
+**A stretch, not an edge**, and `note_postings`' argument transfers unchanged:
+nothing distinguishes the first tick standing at the Sandbox from the
+thousandth, a per-tick write would saturate `strike_cap` in three ticks and
+make `strikes` mean nothing, and it would make `remember`'s tail eviction
+eager for exactly the programs taking the most breaks. Arriving is what
+counts — a body still crossing the base has not stopped working in any sense
+the meter should read — so `in_reach` gates the write and walking toward the
+amenity is worth zero.
+
+**The errand is gated on there being one, and that gate is what keeps the
+ladder at two rungs.** `Grievance::Sulking` was always "still works, just not
+at a machine it holds a grudge against", enforced by `Game::refuses_post` over
+the posting pool. The feature as asked for — a *dip* pulls a body off a post —
+takes every disgruntled body out of that pool, and `refuses_post` then has
+nobody left to apply to: a shipped consequence, green under its tests, and
+unreachable. `Game::on_respite` requires `Amenities::any()`, so a base with no
+amenity keeps its sulking programs on the line where that rung still governs
+them. The rung's meaning sharpens rather than dying: a base that gives its
+programs nowhere to unwind gets programs that will not work at machines they
+resent.
+
+**The two morale exclusions are therefore not one question**, and collapsing
+them is a live trap rather than a hypothetical — it was written, and the
+disposition suite caught it. `has_downed_tools` is unconditional: a program at
+`MORALE_LASHES_OUT_AT` does not work, and whether the base has anywhere to
+unwind has nothing to do with that. `on_respite` is conditional. Written as
+one clause, a program at -50 in a base with no amenity goes straight back on
+the line.
+
+**No grudge on the stranded branch**, and this is the one asymmetry with
+`Game::fray`. A need that goes unanswered earns `frayed_here` because the base
+failed at something it could have done. Doing the same here would make every
+failed walk deepen the mood that sent the body out and make the next walk more
+certain — a loop with no floor under it, on a meter whose whole ladder is
+already a ratchet. The log line stays, because the line is the errand:
+`components::Disgruntled::stranded` latches so the walk is not re-attempted
+every beat, `step_off_shift`'s rule, and the body rejoins the posting pool
+rather than standing stalled — which is this errand's whole difference from
+that one.
+
+**Sizing.** `unwound_at` is +3 at `strike_cap: 3`, so a full break is worth +9
+against a gap of 2 between `MORALE_SULKS_AT` (-8) and `MORALE_RECOVERED_AT`
+(-6). A mildly sulking program clears in two periods; a program at -50 does
+not come close, which is the point — this is a break, not a cure, and a badly
+run base is still a badly run base. The `half_life` of 2500 is short for
+`vented`'s reason: the fondness fades once the body goes back to work, so the
+errand has to be taken again rather than banked.
+
+**Two older bugs surfaced building it, and both were in the scheduler rather
+than in this feature.** `schedule_base_labour` stated "who may be handed a
+job" twice — once as the `on_shift` filter and once as the free loop's
+condition — with the uneven `Carrying` escape spelled out separately in each.
+They are one predicate now, `Game::is_on_shift`, because two copies of a rule
+whose exceptions are not uniform is the shape that drifts. And the pass's
+"nothing to do" early return sat **above** the free loop, so a body that went
+off shift, downed tools or took a respite while the base's only instruction
+was a *standing* job — which is not a `WorkOrder`, so `queue_is_empty` stays
+true — kept that posting for the rest of the run. The fix reads `staff` rather
+than `on_shift`, because the bodies it has to see are precisely the ones that
+filter just dropped.

@@ -1568,7 +1568,10 @@ impl Game {
                 entity.insert(crate::components::Downed);
             }
             if let Some(grievance) = c.disgruntled {
-                entity.insert(crate::components::Disgruntled { grievance });
+                entity.insert(crate::components::Disgruntled {
+                    grievance,
+                    stranded: c.disgruntled_stranded,
+                });
             }
             entity.insert((
                 ProgramId(program_id),
@@ -1818,6 +1821,10 @@ impl Game {
                 .world
                 .get::<crate::components::Disgruntled>(e)
                 .map(|d| d.grievance),
+            disgruntled_stranded: self
+                .world
+                .get::<crate::components::Disgruntled>(e)
+                .is_some_and(|d| d.stranded),
             memories: self
                 .world
                 .get::<Memories>(e)

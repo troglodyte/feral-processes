@@ -60,6 +60,7 @@ mod raids;
 mod refactor;
 mod research;
 mod respec;
+mod respite;
 mod routes;
 mod routines;
 mod save_roundtrip;

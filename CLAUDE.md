@@ -497,6 +497,19 @@ relying on one, and correct all three places if it has moved.
 - **`fray`'s two branches write different memories, and neither writes below
   `Game::base_is_established`** — `frayed_here` where the base had an answer,
   `ran_down` where it had none, and the lines stay unconditional.
+- **A bad mood is an errand, and `unwound_at` is what it buys** — morale has
+  no reserve to refill, so `Game::note_respites` writes a `Structure`
+  fondness on a period while a disgruntled body stands in reach of an
+  amenity.
+- **The errand is gated on there being one, and that is what keeps
+  `Game::refuses_post` reachable** — a base with no amenity keeps its
+  *sulking* programs in the posting pool, while `has_downed_tools` leaves it
+  unconditionally.
+- **No grudge is written when a respite is stranded**, `Game::fray`'s one
+  asymmetry, and `Disgruntled::stranded` latches instead.
+- **`Game::is_on_shift` is the one predicate for "may be handed a job"**,
+  read by `schedule_base_labour`'s filter, its free loop and its "nothing to
+  do" early return alike.
 - **A tantrum's non-lethal clamp is applied before `Game::apply_damage`,
   never inside it**, and it is the whole of "a tantrum never kills."
 - **`Game::run_tantrums` sits between `update_disgruntled` and

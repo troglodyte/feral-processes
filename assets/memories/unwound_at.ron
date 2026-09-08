@@ -1,0 +1,31 @@
+// The one fondness a program forms about a *place to stop working*, and the
+// only memory that is written by an errand the program took itself.
+//
+// It is the mechanism rather than the flavour. Morale is derived from this
+// store and has no reserve to refill, so "recuperate at an amenity" has to
+// mean "come away fonder of it" — `Game::note_respites` writes this on a
+// period while the body stands there, and `Game::morale` folds it back
+// through the door every other memory already uses.
+//
+// Sized against the ladder deliberately. At full strength it is worth
+// `valence * strike_cap` = +9, which lifts a mildly sulking program
+// (`MORALE_SULKS_AT` is -8) back over `MORALE_RECOVERED_AT` at -6 in a
+// handful of periods, and does not come close to pulling a program at -50
+// out on its own. A bad base is still a bad base; this is a break, not a
+// cure.
+//
+// Short-lived for `vented`'s reason: the fondness fades once the program
+// goes back to work, so the errand has to be taken again rather than banked.
+//
+// The blurb is short because the memories page has no scroll and a row is
+// name + subject + blurb on one line — `no_memory_row_overflows_its_popup` is
+// the gate, and the first wording overflowed it by 36px.
+(
+    id: "unwound_at",
+    name: "Unwound at",
+    blurb: "Somewhere to stop when there was nothing left.",
+    valence: 3.0,
+    half_life: 2500,
+    subject: Structure,
+    strike_cap: 3,
+)

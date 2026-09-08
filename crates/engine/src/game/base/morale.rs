@@ -2,9 +2,17 @@
 //!
 //! `OffShift`'s gate on a different meter, and deliberately built to its
 //! shape rather than to a new one. A need runs down and something in the base
-//! services it; morale has no amenity to walk to, so what recovers it is the
-//! grudges decaying and better memories landing on top — which is to say
-//! **time and a base worth working in**, not an errand.
+//! services it; morale has no reserve to refill, so the errand buys a
+//! **memory** instead — `Game::note_respites` writes a fondness for the
+//! amenity the body took its break at, and `Game::morale` folds it back
+//! through the one door every other memory already goes through. There is no
+//! second meter and nothing new is stored about the route.
+//!
+//! **The errand is gated on there being one.** A base with no amenity, or one
+//! walled off from where the body stands, keeps its disgruntled programs in
+//! the posting pool — which is where `Game::refuses_post` governs them. That
+//! is what stops the mild rung quietly becoming unreachable when the severe
+//! one takes everybody out of the pool anyway.
 //!
 //! **The one thing that must not lapse here is the hysteresis.** In below
 //! `MORALE_DOWNS_TOOLS_AT`, out at `MORALE_RECOVERED_AT`, and the gap between
@@ -14,8 +22,12 @@
 //! stored rather than derived.
 
 use crate::Game;
+use crate::base_grid::BaseGrid;
 use crate::components::TaskKind;
-use crate::components::{Disgruntled, Grievance};
+use crate::components::{Carrying, Disgruntled, Downed, Grievance, OffShift, Position};
+use crate::game::base::hauling::{NoPost, step_to_post};
+use crate::game::base::offshift::{Amenities, in_reach};
+use crate::resources::Locale;
 use crate::tuning::{
     MORALE_DOWNS_TOOLS_AT, MORALE_LASHES_OUT_AT, MORALE_RECOVERED_AT, MORALE_SULKS_AT,
 };
@@ -42,7 +54,7 @@ impl Game {
     pub(crate) fn update_disgruntled(&mut self, staff: &[Entity]) {
         for &worker in staff {
             let morale = self.morale(worker);
-            let marked = self.world.get::<Disgruntled>(worker).map(|d| d.grievance);
+            let marked = self.world.get::<Disgruntled>(worker).copied();
             // Asymmetric on purpose, and the asymmetry *is* the hysteresis:
             // the entry test is only asked of a body still working, and the
             // exit test only of one that has already stopped. A single
@@ -53,7 +65,7 @@ impl Game {
                     if morale >= MORALE_RECOVERED_AT {
                         self.world.entity_mut(worker).remove::<Disgruntled>();
                     } else if let Some(now) = reached(morale)
-                        && now > held
+                        && now > held.grievance
                     {
                         // **Ratchets, never eases.** Severity only ever
                         // climbs while the marker is held; a body comes back
@@ -62,16 +74,22 @@ impl Game {
                         // the two rungs its own flicker — post, unpost, post
                         // — restarting a cronjob's progress every other tick,
                         // which is the anti-thrash rule this gate sits above.
-                        self.world
-                            .entity_mut(worker)
-                            .insert(Disgruntled { grievance: now });
+                        // **The latch is carried across the ratchet.** The
+                        // severity climbing is not news about the route, and
+                        // a fresh `stranded: false` here would restart the
+                        // per-beat Dijkstra the latch exists to stop.
+                        self.world.entity_mut(worker).insert(Disgruntled {
+                            grievance: now,
+                            stranded: held.stranded,
+                        });
                     }
                 }
                 None => {
                     if let Some(grievance) = reached(morale) {
-                        self.world
-                            .entity_mut(worker)
-                            .insert(Disgruntled { grievance });
+                        self.world.entity_mut(worker).insert(Disgruntled {
+                            grievance,
+                            stranded: false,
+                        });
                     }
                 }
             }
@@ -163,5 +181,131 @@ pub(crate) fn reached(morale: f32) -> Option<Grievance> {
         Some(Grievance::Sulking)
     } else {
         None
+    }
+}
+
+impl Game {
+    /// Whether `who` is away from the line taking a break at an amenity.
+    ///
+    /// **The gate, stated once so it cannot drift.** All three must hold:
+    ///
+    /// 1. the body is `Disgruntled` at any rung — the mild one included,
+    ///    which is what "a dip pulls a body off a post" means,
+    /// 2. the errand has not been given up as unwalkable (`stranded`),
+    /// 3. the base has somewhere to unwind at all.
+    ///
+    /// Failing it leaves the body **in the posting pool**, not stalled: that
+    /// is the whole difference from `update_off_shift`'s gate, where failing
+    /// *is* acting out. A program in a bad mood at a base with nowhere to go
+    /// still works, and `refuses_post` decides where.
+    pub(crate) fn on_respite(&self, who: Entity, amenities: &Amenities) -> bool {
+        amenities.any()
+            && self
+                .world
+                .get::<Disgruntled>(who)
+                .is_some_and(|d| !d.stranded)
+    }
+
+    /// Whether the scheduler may hand `who` a job this beat — the posting
+    /// half's filter, as one predicate rather than four chained closures.
+    ///
+    /// Written once because the `Carrying` escape is not uniform across the
+    /// exclusions and a reader has to be able to see that at a glance: an
+    /// off-shift body, a body that has downed tools and a body on respite all
+    /// keep it, because freeing one holding a load destroys the goods and it
+    /// is still standing in the base with something the line is waiting on. A
+    /// `Downed` body does not, because it is going to the Bay regardless.
+    ///
+    /// **The two morale exclusions are not the same question, and that is the
+    /// whole of the ladder keeping two rungs.** `has_downed_tools` is
+    /// unconditional: a program at -50 does not work, and whether the base
+    /// has anywhere to unwind has nothing to do with it. `on_respite` is
+    /// gated on there being an errand to take, so a *sulking* program at a
+    /// base with no amenity stays in the pool — which is where
+    /// `refuses_post`, the mild rung's own consequence, governs it. Collapse
+    /// them and that rung has nobody left to apply to.
+    pub(crate) fn is_on_shift(&self, who: Entity, amenities: &Amenities) -> bool {
+        if self.world.get::<Downed>(who).is_some() {
+            return false;
+        }
+        if self.world.get::<Carrying>(who).is_some() {
+            return true;
+        }
+        self.world.get::<OffShift>(who).is_none()
+            && !self.has_downed_tools(who)
+            && !self.on_respite(who, amenities)
+    }
+
+    /// One step toward somewhere to stop, or the walk's verdict when there is
+    /// no route.
+    ///
+    /// `step_off_shift`'s twin, and deliberately its shape: **this is the one
+    /// place a route is judged**, an `Err` latches, and a body already in
+    /// reach stands still rather than being offered a tile that would walk it
+    /// straight back out again.
+    pub(crate) fn step_respite(
+        &mut self,
+        worker: Entity,
+        amenities: &Amenities,
+    ) -> Result<(), NoPost> {
+        let here = self
+            .world
+            .get::<Position>(worker)
+            .copied()
+            .ok_or(NoPost::NoRoute)?;
+        let (site, _, radius) = amenities.nearest_any(here).ok_or(NoPost::NoRoute)?;
+        if in_reach(here, site, radius) {
+            return Ok(());
+        }
+        let blocked = self.structure_tiles();
+        let pocket_radius = self.world.resource::<BaseGrid>().radius();
+        let Some(tile) = step_to_post(
+            self.world.resource::<BaseGrid>(),
+            here,
+            site,
+            &blocked,
+            pocket_radius,
+        )?
+        else {
+            // The field admits nowhere better than where it stands. It waits,
+            // exactly as a hauler and an off-shift body do.
+            return Ok(());
+        };
+        // The party's cell is the one rejection `step_to_post` cannot make
+        // for itself: `Locale` is where the party stands in base space, and
+        // the player's `Position` is pinned to the anchor out on the surface.
+        if let Locale::Base { x, y } = *self.world.resource::<Locale>()
+            && (x, y) == (tile.x, tile.y)
+        {
+            return Ok(());
+        }
+        if let Some(mut pos) = self.world.get_mut::<Position>(worker) {
+            *pos = tile;
+        }
+        Ok(())
+    }
+
+    /// Gives the errand up: the amenity exists and this body cannot walk to
+    /// it, so it goes back in the posting pool and the walk is not attempted
+    /// again until the mood recovers and takes the marker with it.
+    ///
+    /// **No memory is written here**, and that is the one asymmetry with
+    /// `Game::fray`. A need that goes unanswered earns a grudge because the
+    /// base failed at something it could have done; deepening the mood of a
+    /// body that is already low enough to have gone looking would be a loop
+    /// with no floor under it — every failed walk making the next one more
+    /// certain. The player is told, because the line is the errand.
+    pub(crate) fn strand_respite(&mut self, worker: Entity) {
+        let Some(mut marker) = self.world.get_mut::<Disgruntled>(worker) else {
+            return;
+        };
+        if marker.stranded {
+            return;
+        }
+        marker.stranded = true;
+        let who = self.creature_label(worker);
+        self.log_base(format!(
+            "{who} can't find a way to anywhere in this base worth stopping at."
+        ));
     }
 }

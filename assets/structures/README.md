@@ -205,6 +205,15 @@ is skipped with a warning logged in-game rather than crashing startup.
     // error — the same rule that makes deleting that directory a supported
     // way to play. A need that ships *with* no structure servicing it is the
     // one thing refused, by a census over this repo's own assets.
+    //
+    // **Declaring this at all makes the structure somewhere programs go to
+    // feel better**, which is a second job and not tied to the need named
+    // here. A program far enough down the acting-out ladder walks to the
+    // nearest structure with a `services:` list — any of them — stands
+    // there, and comes away fond of it; that fondness is what carries its
+    // morale back up. See `assets/needs/README.md`. A structure that
+    // services two needs is still one place to go, and it is reached at the
+    // *widest* of the radii it declares.
     services: [
         (need: "coherence", per_tick: 0.6, radius: 0),
     ],

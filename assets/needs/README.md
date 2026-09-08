@@ -77,6 +77,23 @@ particular is held responsible. An amenity that exists and cannot be walked
 to earns a grudge against the corner the program was standing in instead. A
 shipped need without a shipped amenity fails the build.
 
+## Amenities do a second job
+
+A structure with a `services:` list is also somewhere a program in a **bad
+mood** will take itself, whatever it services and whether or not that
+program's own reserve is low. Morale — the signed sum of what a program
+remembers — has no reserve to refill, so a program far enough down the
+acting-out ladder walks to the nearest amenity, stands there, and comes away
+holding an `unwound_at` fondness for it, which is what carries the meter back
+up. See `assets/memories/README.md`.
+
+Two consequences worth knowing before you add or remove one. A base with no
+amenity at all offers no such errand, so its programs stay on the line and
+work through a bad mood at machines they do not resent. And a base with one
+loses a *sulking* program from the labour pool until it feels better —
+building the first amenity is what turns a mood from a posting restriction
+into an absence.
+
 ## The magnitudes
 
 `drain_per_tick`, `working_multiplier` and the two thresholds are content and

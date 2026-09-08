@@ -340,11 +340,89 @@ Both rolls show everywhere `quality_label` already does.
 | `views::ManifestPotential` | Two fields, plus their labels |
 | The inspect / manifest page | Two rows beside the existing quality tier |
 | `companion_row_lines` (`gui/src/render/party.rs:243`) | The roster row gains the relevant tag |
-| The build picker (`Mode::BuildProgram`) | Each row shows the roll *that build will read* |
+| The build picker (`Mode::BuildProgram`) | Each row shows **what this program does to this machine**, resolved |
 
 The picker showing only the applicable roll is the point: at a Mining Node the
 rows rank by Extraction, at a Lathe by Assembly, so the screen answers the
 question the player is actually asking rather than making them do the lookup.
+
+### The picker states the effect, not the aptitude
+
+A row reading `Assembly: Excellent` makes the player do the conversion — they
+would have to know the roll range, the rarity lift and the tick weight to turn
+that word into anything they can act on. The row states the consequence
+instead:
+
+```
+[a] Scrapper 3 Lv7  Assembly: Excellent    Lathe cycle 20 -> 18 ticks
+[b] Cipher 2  Lv4   Assembly: Poor         Lathe cycle 20 -> 22 ticks
+[c] Construct 2 Lv9 Assembly: Average      Lathe cycle 20 -> 20 ticks
+```
+
+Two rules govern that figure, and both are load-bearing.
+
+**It is a call, not a copy.** `Game::extraction_yield` is this repo's precedent
+and its argument applies verbatim: it is *the one derivation of what a tool
+draws out of a downed program, shared by the act and the screen's preview*, so
+a quoted figure and a granted figure cannot differ. The picker's preview must
+reach the real `systems::work_ticks_at_speed` through `Game::build_quality_of`
+— never a percentage re-derived in a view or a renderer from
+`BUILD_QUALITY_TICK_WEIGHT`. A second expression of this formula is the copy
+that drifts, and the symptom is a screen that promises a faster machine than
+the base delivers.
+
+**It is ticks, not a percentage, and that is the whole reason it is correct.**
+`work_ticks_at_speed` rounds to whole ticks and floors at one. On a short cycle
+the rounding eats the effect outright: a 5-tick machine at `build_scale` 0.91
+computes 4.55, rounds to 5, and is *not one tick faster*. A row advertising
+`-9%` there would be quoting a change that does not happen — precisely the
+quoted-versus-granted failure the previous rule exists to prevent, arriving
+through arithmetic rather than through a duplicated formula. Showing both tick
+figures makes the rounding visible instead of hiding it, and a row honestly
+reading `5 -> 5 ticks` tells the player something true about small machines
+that no percentage could.
+
+The preview holds the worker at `DEFAULT_BASE_SPEED`, because no program is
+posted yet at the moment of the build. The figure is therefore the machine's
+rate as built, not a promise about whoever ends up standing at it, and the
+screen should not imply otherwise.
+
+**Three states, not a number and a zero.** `PowerCell`
+(`gui/src/render/popup.rs:85`) is the shape to follow — `Rated(n)` is a rating,
+`Unrated` an em dash (*no answer*, not a bad answer), `Blank` a row that is not
+an item.
+
+But `PowerCell` is a `pub(super)` **renderer** type, and this one cannot be,
+which splits the work across the two crates along a line this repo already
+draws:
+
+```rust
+// engine, crates/engine/src/views.rs — what the answer IS
+pub enum BuildEffect {
+    /// This machine runs a cycle: its shipped rate, and its rate as this
+    /// program would build it. Both are real figures out of
+    /// `systems::work_ticks_at_speed`, never a percentage.
+    Cycle { shipped: u32, built: u32 },
+    /// This structure runs no cycle, so quality cannot reach it (§4).
+    NoCycle,
+}
+```
+
+The variant is the engine's because resolving it requires `build_quality_of`,
+the structure's def and the tick formula — none of which gui may reach for, and
+all of which the call-not-a-copy rule above puts in exactly one place. Drawing
+it is gui's: the em dash for `NoCycle`, and a fixed-width column for the quote
+so a long figure grows its own row rather than losing a digit, which is what
+`POWER_COLUMN_WIDTH` exists for on the row beside it.
+
+This is the same division CLAUDE.md states for read-only screens — *any per-row
+transform must live in the engine*, because a figure folded in the renderer is
+a figure app-core cannot count, rank or test.
+
+Collapsing `NoCycle` into `Cycle { shipped: n, built: n }` would draw a Depot
+as though quality applied and happened to change nothing, which is the reading
+§4 spends a paragraph refusing — and it would collide with test 14, where
+`n -> n` is the *true* answer for a short-cycle machine.
 
 **And for the fourteen structures that run no cycle it must say so outright** —
 one line on the picker, not an omitted column. Those builds ignore quality
@@ -353,12 +431,21 @@ nothing; a screen that says *this build does not care which you spend* turns
 the same fact into the tactic it is. Rows do not grey: every program is
 equally valid here, which is exactly the message.
 
-**Two width constraints apply, and both are testable headlessly.** The picker
-reuses `companion_row_lines`, which is also the roster row, so a tag added
-there lands on both. Popup body width has bitten this repo before — the swap
-row's quality figure put the joined form 35.6px past a 1243.2px body and was
-lost in silence. `paint::with_painter` measures real text, so both are pinned
-by test rather than by eye.
+**Width is the real risk on this screen, and it is testable headlessly.** The
+picker reuses `companion_row_lines`, which is also the roster row, so anything
+added there lands on both — and the picker row now carries two additions, an
+aptitude tag *and* a two-figure cycle quote, on top of a row that already
+spends its width on name, level, HP, ATK, MIT, PWR, gear and rarity. Popup body
+width has bitten this repo before: the swap row's quality figure put the joined
+form 35.6px past a 1243.2px body and was lost in silence.
+
+That precedent also says *how* to add it. The category tag on a swap row is a
+**column on the row, not a substring of it** — `Row::Item::tag` carries the
+token and its lead, and `draw_row` lays the row out as three `ui_runs` pieces
+so no row moves. The cycle quote wants the same treatment rather than being
+appended to the head, because `wrapped_row_lines` never breaks the head and an
+over-long head is lost rather than wrapped. `paint::with_painter` measures real
+text, so this is pinned by test rather than by eye.
 
 No new key. The picker's rows are selectors and lowercase letters are row
 selectors, per the standing rule.
@@ -416,8 +503,19 @@ Engine:
 App-core / gui:
 
 12. The picker ranks by the roll the pending structure will actually read.
-13. The roster row and the picker row both fit their width with the new tag —
-    measured through `paint::with_painter`, not asserted on a length.
+13. **The quoted figure equals the granted one.** Read the picker's
+    `BuildEffect` for a program, file the build with that same program, run it
+    to completion, and assert the finished machine's real cycle length equals
+    the `built` figure the row advertised. This is the test the whole §6
+    call-not-a-copy rule exists for, and it must be asserted end to end rather
+    than by comparing two expressions.
+14. A machine short enough that rounding eats the effect quotes `n -> n` and
+    genuinely cycles at `n` — the case a percentage would have got wrong.
+15. A Depot's rows report `BuildEffect::NoCycle`, and the screen says so rather
+    than drawing an unchanged number.
+16. The roster row and the picker row both fit their width with the aptitude
+    tag and the cycle quote — measured through `paint::with_painter`, not
+    asserted on a length.
 
 Each must fail with the change removed. Test 10 in particular is vacuous if
 written against a save this build wrote, since `Game::save` always writes the

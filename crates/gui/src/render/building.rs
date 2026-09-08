@@ -1,14 +1,15 @@
 //! The build, staffing, demolition, upgrade and symlink pickers.
 
 use super::manifest::base_job_label;
-use super::party::companion_page_rows;
+use super::party::companion_rows;
 use super::popup::*;
 use super::*;
 use feral_processes_app_core::{BaseStaffRow, PendingBuild, ProgramRole, WorkOrderRow};
 use feral_processes_engine::components::BuildGoal;
+use feral_processes_engine::structures::StructureId;
 use feral_processes_engine::{
-    BaseOutputReport, BaseOutputRow, LabourDemand, OrderPriority, OrderState, WorkProfile,
-    program_tier_required,
+    BaseOutputReport, BaseOutputRow, BuildCandidate, BuildEffect, LabourDemand, OrderPriority,
+    OrderState, WorkProfile, program_tier_required,
 };
 
 /// One buildable structure as the build menu needs it: everything that
@@ -387,6 +388,14 @@ pub(super) struct BuildCommit {
     /// The tier the order would produce: `None` for a deploy, `Some(n)` for
     /// the tier an upgrade would raise the structure to.
     pub to_tier: Option<u32>,
+    /// What `Game::build_candidates` is asked about, from
+    /// `App::pending_build_kind` — the def id for a deploy, the standing
+    /// structure's own kind for an upgrade.
+    ///
+    /// Carried here rather than fetched by the renderer because
+    /// `draw_build_program` takes `&mut Game` after `build_commit(app)` has
+    /// been hoisted, so there is no `App` left to ask.
+    pub structure: StructureId,
 }
 
 impl BuildCommit {
@@ -408,6 +417,15 @@ impl BuildCommit {
     /// defence in depth for callers that never drew a list, and its more
     /// specific sentence can still be reached by a program too shallow for
     /// the tier.
+    /// The goal this order carries, derived from `to_tier` rather than
+    /// stored beside it — `None` is a deploy, `Some(t)` an upgrade to `t`.
+    pub(super) fn goal(&self) -> BuildGoal {
+        match self.to_tier {
+            Some(to_tier) => BuildGoal::Upgrade { to_tier },
+            None => BuildGoal::New,
+        }
+    }
+
     pub(super) fn tier(&self) -> u32 {
         program_tier_required(match self.to_tier {
             Some(to_tier) => BuildGoal::Upgrade { to_tier },
@@ -477,6 +495,7 @@ pub(super) fn build_commit(app: &mut App) -> Option<BuildCommit> {
     Some(BuildCommit {
         label: label.unwrap_or_else(|| UNNAMED_BUILD_TARGET.to_string()),
         to_tier,
+        structure: app.pending_build_kind()?,
     })
 }
 
@@ -490,24 +509,35 @@ const UNNAMED_BUILD_TARGET: &str = "structure";
 const PROGRAM_PICKER_PROMPT: &str =
     "Which program pays for it? (Esc to cancel; Up/Down + Enter also work)";
 
+/// What the picker says, once and above the list, about a build that runs no
+/// work cycle at all.
+///
+/// A fact about the whole screen belongs above the list rather than repeated
+/// on every row, and the rows deliberately do **not** grey: every program is
+/// equally valid here, which is exactly the message.
+const NO_CYCLE_NOTE: &str =
+    "This build does not run a work cycle, so it does not care which program you spend.";
+
 /// The program picker's rows: the warning, then one entry per program the
 /// order could be paid with.
 ///
 /// **`candidates` is drawn exactly as it arrives.** It is
-/// `Game::programs_for_build`'s list, which is the one derivation of what
-/// qualifies, and `App::handle_build_program_key` indexes that same call —
-/// so a row filtered out or reordered here would make `[c]` spend the
-/// program the player read on row `d`.
+/// `Game::build_candidates`'s list, which is the one derivation of what
+/// qualifies *and of the order it is in*, and `App::handle_build_program_key`
+/// indexes that same call — so a row filtered out or reordered here would
+/// make `[c]` spend the program the player read on row `d`.
 ///
-/// The rows themselves are the party screen's, through
-/// `companion_page_rows`: this keypress deletes a program from the roster,
-/// so the decision wants the same stat line, tier colour and CRITICAL mark
-/// the roster shows, not a bare list of names. Its role headings come along
-/// with it and earn their place here — "Base staff" over a program is the
-/// warning that spending it also empties a job.
+/// The rows themselves are the party screen's, through `companion_rows`:
+/// this keypress deletes a program from the roster, so the decision wants
+/// the same stat line, tier colour and CRITICAL mark the roster shows, not a
+/// bare list of names. The roster's **role headings do not come along**: this
+/// list is sorted by the roll the build reads, so it interleaves roles and a
+/// heading fired on the change would repeat and mean nothing. The warning
+/// they carried — spending a program also empties its job — stays on the row
+/// as `PetInfo::activity`.
 pub(super) fn build_program_rows(
     commit: Option<&BuildCommit>,
-    candidates: &[PetInfo],
+    candidates: &[BuildCandidate],
     selected: usize,
 ) -> Vec<Row> {
     let mut rows: Vec<Row> = Vec::new();
@@ -523,7 +553,31 @@ pub(super) fn build_program_rows(
         );
     }
     rows.push(text_row(PROGRAM_PICKER_PROMPT));
-    rows.extend(companion_page_rows(candidates, selected));
+    if !candidates.is_empty() && candidates.iter().all(|c| c.effect == BuildEffect::NoCycle) {
+        rows.extend(
+            wrap_text(NO_CYCLE_NOTE, DESCRIBE_WRAP_COLUMNS)
+                .into_iter()
+                .map(text_row),
+        );
+    }
+    for (i, c) in candidates.iter().enumerate() {
+        let mut extra = vec![format!(" [{}: {}]", c.aptitude, c.label)];
+        // Two whole tick figures rather than a percentage — see
+        // `views::BuildEffect`. A `NoCycle` build carries no tag at all; the
+        // sentence above the list has already said why.
+        if let BuildEffect::Cycle { shipped, built } = c.effect {
+            extra.push(format!(
+                " [{} cycle {shipped} -> {built} ticks]",
+                commit.map_or("machine", |c| c.label.as_str())
+            ));
+        }
+        rows.extend(companion_rows(
+            &c.pet,
+            menu_shortcut(i),
+            i == selected,
+            &extra,
+        ));
+    }
     rows
 }
 
@@ -552,7 +606,13 @@ pub(super) fn draw_build_program(
     m: &Metrics,
 ) {
     let tier = commit.as_ref().map_or(1, BuildCommit::tier);
-    let candidates = game.programs_for_build(tier);
+    let candidates = match &commit {
+        Some(commit) => game.build_candidates(&commit.structure, commit.goal()),
+        // With no pending order there is nothing to be for, so there is
+        // nothing to quote — the box is still drawn, empty, rather than
+        // leaving the player on a blank screen.
+        None => Vec::new(),
+    };
     // Asked before the list is handed away: the empty list is the same
     // empty list whichever rule emptied it, and only
     // `floored_by_the_last_program` tells a roster that has nothing
@@ -2390,6 +2450,7 @@ mod build_program_tests {
         BuildCommit {
             label: label.to_string(),
             to_tier: None,
+            structure: "fabricator".to_string(),
         }
     }
 
@@ -2397,7 +2458,28 @@ mod build_program_tests {
         BuildCommit {
             label: label.to_string(),
             to_tier: Some(to_tier),
+            structure: "mining_node".to_string(),
         }
+    }
+
+    /// A candidate whose machine really does have a rate to change.
+    fn candidate(name: &str, effect: BuildEffect) -> BuildCandidate {
+        BuildCandidate {
+            pet: test_pet(name, "w|a|m"),
+            aptitude: "Assembly",
+            label: "Excellent",
+            effect,
+        }
+    }
+
+    fn cycling(name: &str) -> BuildCandidate {
+        candidate(
+            name,
+            BuildEffect::Cycle {
+                shipped: 20,
+                built: 18,
+            },
+        )
     }
 
     /// The tier is the engine's own answer, not a restated copy: this is the
@@ -2415,11 +2497,7 @@ mod build_program_tests {
     /// would be inviting it.
     #[test]
     fn the_picker_names_the_structure_and_says_the_cost_is_permanent() {
-        let rows = build_program_rows(
-            Some(&deploy("Fabricator")),
-            &[test_pet("Sparkgrub", "w|a|m")],
-            0,
-        );
+        let rows = build_program_rows(Some(&deploy("Fabricator")), &[cycling("Sparkgrub")], 0);
         let text = rows.iter().map(row_text).collect::<Vec<_>>().join(" ");
         assert!(text.contains("Fabricator"), "{text}");
         assert!(text.contains("permanently"), "{text}");
@@ -2453,7 +2531,7 @@ mod build_program_tests {
     /// screen shows.
     #[test]
     fn the_picker_draws_each_candidate_as_the_roster_draws_it() {
-        let pets = [test_pet("Sparkgrub", "w|a|m"), test_pet("Nibbler", "w|-|-")];
+        let pets = [cycling("Sparkgrub"), cycling("Nibbler")];
         let rows = build_program_rows(Some(&deploy("Fabricator")), &pets, 0);
         let text = rows.iter().map(row_text).collect::<Vec<_>>().join("\n");
         assert!(text.contains("HP 22/28"), "the roster's stat line: {text}");
@@ -2468,9 +2546,9 @@ mod build_program_tests {
     /// player read.
     #[test]
     fn every_candidate_gets_a_row_in_the_order_it_arrived() {
-        let pets: Vec<PetInfo> = ["Sparkgrub", "Nibbler", "Grinder"]
+        let pets: Vec<BuildCandidate> = ["Sparkgrub", "Nibbler", "Grinder"]
             .into_iter()
-            .map(|n| test_pet(n, "w|a|m"))
+            .map(cycling)
             .collect();
         let rows = build_program_rows(Some(&deploy("Fabricator")), &pets, 0);
         let heads: Vec<&str> = rows
@@ -2487,12 +2565,165 @@ mod build_program_tests {
         for (i, pet) in pets.iter().enumerate() {
             let want = format!("[{}]", menu_shortcut(i));
             assert!(
-                heads[i].starts_with(&want) && heads[i].contains(&pet.name),
+                heads[i].starts_with(&want) && heads[i].contains(&pet.pet.name),
                 "row {i} is {:?}, not {want} {}",
                 heads[i],
-                pet.name
+                pet.pet.name
             );
         }
+    }
+
+    /// The quote is two whole tick figures and no percent sign — see
+    /// `views::BuildEffect` for why a percentage would be wrong on a short
+    /// cycle.
+    #[test]
+    fn a_picker_row_quotes_the_cycle_in_ticks() {
+        let rows = build_program_rows(Some(&deploy("Fabricator")), &[cycling("Sparkgrub")], 0);
+        let text = rows.iter().map(row_text).collect::<Vec<_>>().join("\n");
+        assert!(
+            text.contains("cycle 20 -> 18 ticks"),
+            "both figures are not quoted: {text}"
+        );
+        assert!(
+            text.contains("[Assembly: Excellent]"),
+            "the aptitude tag is missing: {text}"
+        );
+        // The stat line's own `MIT 5%` is not the quote, so the assertion is
+        // on the tag: a percentage *of the change* is the reading
+        // `BuildEffect` exists to refuse.
+        let quote = text
+            .split("[Fabricator cycle")
+            .nth(1)
+            .expect("the cycle tag is drawn");
+        assert!(
+            !quote.split(']').next().unwrap_or_default().contains('%'),
+            "the cycle quote is a percentage: {quote}"
+        );
+    }
+
+    /// A build with no cycle says so once, above the list, and no row
+    /// carries a cycle tag — `Cycle { shipped: n, built: n }` is the right
+    /// answer for a cycle too short to move and the wrong one here.
+    #[test]
+    fn a_no_cycle_build_says_so_once_above_the_list() {
+        let candidates: Vec<BuildCandidate> = ["Sparkgrub", "Nibbler", "Grinder"]
+            .into_iter()
+            .map(|n| candidate(n, BuildEffect::NoCycle))
+            .collect();
+        let rows = build_program_rows(Some(&deploy("Depot")), &candidates, 0);
+
+        let joined = rows.iter().map(row_text).collect::<Vec<_>>().join(" ");
+        assert_eq!(
+            joined.matches("does not run a work cycle").count(),
+            1,
+            "the sentence is repeated or missing: {joined}"
+        );
+        // Pinned, not scrolled: `popup_layout` puts `Row::Text` in the
+        // header, and a fact about the whole screen must not page away from
+        // the list it is about.
+        let note = rows
+            .iter()
+            .position(|r| row_text(r).contains("does not run a work cycle"))
+            .expect("the sentence is drawn");
+        let first_item = rows
+            .iter()
+            .position(|r| matches!(r, Row::Item { .. }))
+            .expect("the rows are drawn");
+        assert!(note < first_item, "the sentence is below the list");
+        assert!(
+            matches!(rows[note], Row::Text(_)),
+            "the sentence would scroll with the list"
+        );
+
+        for row in rows.iter().filter(|r| matches!(r, Row::Item { .. })) {
+            assert!(
+                !row_text(row).contains("cycle"),
+                "a row quoted a cycle a Depot does not have: {}",
+                row_text(row)
+            );
+        }
+    }
+
+    /// The role headings did not survive the sort, so what each program is
+    /// doing has to still be on its row — that is what keeps "spending it
+    /// also empties a job" on the screen.
+    #[test]
+    fn the_picker_still_says_what_each_program_is_doing() {
+        let mut posted = cycling("Sparkgrub");
+        posted.pet.activity = "working Mining Node".to_string();
+        let mut idle = cycling("Nibbler");
+        idle.pet.activity = "idle".to_string();
+
+        let rows = build_program_rows(Some(&deploy("Fabricator")), &[posted, idle], 0);
+        let text = rows.iter().map(row_text).collect::<Vec<_>>().join("\n");
+        assert!(
+            text.contains("working Mining Node"),
+            "the post is not on the row: {text}"
+        );
+        assert!(text.contains("idle"), "{text}");
+        for heading in ["Base staff", "In your party"] {
+            assert!(
+                !text.contains(heading),
+                "a role heading survived the sort: {text}"
+            );
+        }
+    }
+
+    /// The pixel counterpart of `no_program_picker_row_runs_past_the_popup_body`,
+    /// in `no_deploy_row_overflows_its_popup_in_pixels`' shape — the worst
+    /// case now carries the aptitude tag, the cycle quote, an overlong
+    /// structure name and an overlong program name.
+    #[test]
+    fn no_picker_row_overflows_its_popup_in_pixels() {
+        let candidates: Vec<BuildCandidate> = (0..6)
+            .map(|i| {
+                let mut c = candidate(
+                    &format!("Overclocked Overlong Program {i} 10"),
+                    BuildEffect::Cycle {
+                        shipped: 9999,
+                        built: 9999,
+                    },
+                );
+                c.aptitude = "Extraction";
+                c.label = "Below Average";
+                c.pet.quality = Some("Below Average (100%)".to_string());
+                c.pet.assembly = Some("Below Average".to_string());
+                c.pet.extraction = Some("Below Average".to_string());
+                c.pet.activity = "guarding Contract Broker".to_string();
+                c.pet.fusions = MAX_FUSIONS;
+                c.pet.hp = 1;
+                c.pet.max_hp = 1234;
+                c.pet.atk = 1234;
+                c.pet.power = 1234;
+                c
+            })
+            .collect();
+        let commits = [
+            deploy("Recompiled Kernel Substrate Assembly Bay"),
+            upgrade("Recompiled Kernel Substrate Assembly Bay", 9),
+        ];
+        crate::paint::with_painter(|p| {
+            let m = crate::text::ui_metrics(900.0);
+            // 0.88 is `PopupSize::Large`'s width fraction, against the
+            // 1440x900 geometry `ui_metrics` is calibrated for.
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            for commit in &commits {
+                for row in build_program_rows(Some(commit), &candidates, 0) {
+                    let text = match &row {
+                        Row::Text(t) | Row::TextColored(t, _) => t.clone(),
+                        // `draw_row`'s own prefix on an item row.
+                        Row::Item { text, .. } => format!("     {text}"),
+                    };
+                    let drawn = p.measure_ui_advance(&text, m.font_size);
+                    assert!(
+                        drawn <= room,
+                        "a picker row overflows its popup by {:.0}px \
+                         ({drawn:.0} into {room:.0}):\n{text}",
+                        drawn - room
+                    );
+                }
+            }
+        });
     }
 
     /// The empty picker is a **first-class state**, not an edge.
@@ -2578,8 +2809,8 @@ mod build_program_tests {
     /// with, in the screen that inherits its shape.
     #[test]
     fn no_program_picker_row_runs_past_the_popup_body() {
-        let pets: Vec<PetInfo> = (0..12)
-            .map(|i| test_pet(&format!("Overlong Program Name {i}"), "w|a|m"))
+        let pets: Vec<BuildCandidate> = (0..12)
+            .map(|i| cycling(&format!("Overlong Program Name {i}")))
             .collect();
         let commits = [
             deploy("Recompiled Kernel Substrate Assembly Bay"),
@@ -2603,9 +2834,7 @@ mod build_program_tests {
     /// box. Nothing may follow the last item row.
     #[test]
     fn every_picker_row_stays_inside_the_scrollable_body() {
-        let pets: Vec<PetInfo> = (0..6)
-            .map(|i| test_pet(&format!("Program {i}"), "w|a|m"))
-            .collect();
+        let pets: Vec<BuildCandidate> = (0..6).map(|i| cycling(&format!("Program {i}"))).collect();
         for selected in [0, pets.len() - 1] {
             let rows = build_program_rows(Some(&deploy("Fabricator")), &pets, selected);
             let last = rows
@@ -2627,9 +2856,7 @@ mod build_program_tests {
     /// warning.
     #[test]
     fn the_warning_is_pinned_above_the_candidates() {
-        let pets: Vec<PetInfo> = (0..40)
-            .map(|i| test_pet(&format!("Program {i}"), "w|a|m"))
-            .collect();
+        let pets: Vec<BuildCandidate> = (0..40).map(|i| cycling(&format!("Program {i}"))).collect();
         let rows = build_program_rows(Some(&deploy("Fabricator")), &pets, 39);
         let first_item = rows
             .iter()

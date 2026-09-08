@@ -1855,6 +1855,18 @@ pub(crate) fn app_in_base(seed: u32) -> App {
 /// reason `distant_programs` is: the engine's `World` is private, and
 /// `components::ZonePortal` is written only by `spawn_creature_from_save`.
 pub(crate) fn tame_program_at_zone(app: &mut App, zone: u32) {
+    tame_program_at_zone_with_build_rolls(app, zone, 1.0, 1.0)
+}
+
+/// The same, with the two build rolls set — the other thing about a program
+/// no public `Game` method can write, and the axis `Game::build_candidates`
+/// sorts on.
+pub(crate) fn tame_program_at_zone_with_build_rolls(
+    app: &mut App,
+    zone: u32,
+    assembly: f32,
+    extraction: f32,
+) {
     let assets_dir = test_assets_dir();
     let path = scratch_path("tame_at_zone", zone);
     let game = app.game.as_mut().unwrap();
@@ -1886,8 +1898,8 @@ pub(crate) fn tame_program_at_zone(app: &mut App, zone: u32) {
         atk_roll: 1.0,
         def_roll: 1.0,
         growth_roll: 1.0,
-        assembly_roll: 1.0,
-        extraction_roll: 1.0,
+        assembly_roll: assembly,
+        extraction_roll: extraction,
         fusions: 0,
         refactors: 0,
         purchased_tiers: 0,

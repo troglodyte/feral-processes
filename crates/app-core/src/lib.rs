@@ -55,7 +55,6 @@ use feral_processes_engine::{
     LogEntry, LogLine, MESSAGE_LOG_CAP, MessageSource, OrderPriority, ProgramSaleOption,
     RouteDestination, RouteRefusal, RouteReport, SlotShift, SortieRefusal, SortieReport, SortieRow,
     StockRow, SwingOutcome, TransferRow, WorkOrder, WorkOrderReport, WorkProfile, condense,
-    program_tier_required,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the

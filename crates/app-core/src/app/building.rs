@@ -311,36 +311,33 @@ impl App {
             self.mode = Mode::Playing;
             return;
         };
-        // The engine's own derivation (`program_tier_required`, re-exported
-        // for exactly this call — see its doc in `feral_processes_engine`),
-        // not a restated copy of it: the tier handed to `programs_for_build`
-        // here is the same value `Game::commit_for_build` will demand at
-        // confirm, so the two can't drift into offering a program that is
-        // the wrong *depth*, or hiding one that would have worked.
-        //
-        // Depth is not the only rule a commit can fail, and this line is a
-        // claim about depth alone. The roster floor — a build order may
-        // never take the base to zero programs — used to live in
-        // `commit_for_build` only, so a one-program base was offered that
-        // program here and refused after the confirm.
-        // `Game::programs_for_build` now folds the floor in, which is why
-        // that list and not `owned_pets` is the only thing this handler may
-        // index.
+        // The tier this order demands, the roster floor, and now the order
+        // the rows are drawn in all live inside `Game::build_candidates` —
+        // the one derivation of both what qualifies and what is shown. This
+        // handler restates none of them; it indexes the same call gui draws.
         let goal = match &pending {
             PendingBuild::Deploy { .. } => BuildGoal::New,
             PendingBuild::Upgrade { to_tier, .. } => BuildGoal::Upgrade { to_tier: *to_tier },
         };
-        let tier = program_tier_required(goal);
+        let Some(kind) = self.pending_build_kind() else {
+            return;
+        };
         // Listed and dropped before `selected_index` borrows `self` again —
         // `handle_upgrade_key`'s shape, an owned `Vec` rather than a
         // `&mut Game` held across the row pick.
-        let Some(candidates) = self.game.as_mut().map(|g| g.programs_for_build(tier)) else {
+        //
+        // **`build_candidates` and not `programs_for_build`, and the reason
+        // is the order.** That call sorts the list best-first by the roll
+        // this particular build reads, and gui draws the same call — so
+        // indexing the unsorted list here would spend the program the player
+        // read on a different row.
+        let Some(candidates) = self.game.as_mut().map(|g| g.build_candidates(&kind, goal)) else {
             return;
         };
         let Some(idx) = self.selected_index(key, candidates.len()) else {
             return;
         };
-        let chosen = candidates[idx].entity;
+        let chosen = candidates[idx].pet.entity;
         let Some(game) = &mut self.game else { return };
         let outcome = match pending {
             PendingBuild::Deploy { structure, dx, dy } => {
@@ -353,6 +350,24 @@ impl App {
         self.report(outcome);
         self.pending_build = None;
         self.mode = Mode::Playing;
+    }
+
+    /// Which structure the pending order is for — the def id for a deploy,
+    /// and the standing structure's own kind for an upgrade.
+    ///
+    /// One resolution, because both this handler and gui's `build_commit`
+    /// need it: a second walk is where the screen and the keypress would ask
+    /// `build_candidates` about different structures, and so quote one
+    /// machine's cycle while sorting by the other's roll.
+    pub fn pending_build_kind(
+        &mut self,
+    ) -> Option<feral_processes_engine::structures::StructureId> {
+        match self.pending_build.clone()? {
+            PendingBuild::Deploy { structure, .. } => Some(structure),
+            PendingBuild::Upgrade { structure, .. } => {
+                self.game.as_ref()?.structure_kind(structure)
+            }
+        }
     }
 
     /// Picks a nearby workable structure for the player to work themselves —

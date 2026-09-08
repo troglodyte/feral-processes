@@ -137,6 +137,23 @@ pub enum NotificationKind {
     /// happen more than once in a run because a world holds more than one
     /// town. `Repeat::Always`.
     SettlementGrown,
+    /// A level lands the player exactly on `Game::level_cap` —
+    /// `Game::award_player_xp`, the `gain.levels > 0` branch.
+    ///
+    /// **`Always`, and it needs no guard against repeating inside one
+    /// sector.** `progression::add_xp` returns before levelling once
+    /// `level >= cap`, so the branch this fires from is unreachable until a
+    /// breach raises the ceiling — the once-per-sector behaviour is the
+    /// trigger's shape, not a check. Fired on *reaching* the cap rather
+    /// than on the first XP banked at it, so the advice arrives before a
+    /// kill has been spent learning it the hard way.
+    ///
+    /// Templated: the ceiling is a different number in every sector, so the
+    /// copy cannot name one. What it must not name either is what the next
+    /// sector opens — research gates at `min_zone` 2 and 3 and nowhere
+    /// above, so a body promising new research would be false at seven of
+    /// the ten ceilings. Hence "may".
+    LevelCapReached,
 }
 
 /// One notification's authored copy.
@@ -169,7 +186,7 @@ impl NotificationKind {
     /// scroll to forgive. `Perk::all`'s shape and its reason: a walk over
     /// the whole enum is what makes a census non-vacuous, and the array
     /// length fails to compile when a variant is added without being listed.
-    pub fn all() -> [NotificationKind; 13] {
+    pub fn all() -> [NotificationKind; 14] {
         [
             NotificationKind::BaseFounding,
             NotificationKind::FirstDescent,
@@ -184,6 +201,7 @@ impl NotificationKind {
             NotificationKind::OnboardingComplete,
             NotificationKind::OnboardingMission,
             NotificationKind::SettlementGrown,
+            NotificationKind::LevelCapReached,
         ]
     }
 
@@ -346,6 +364,18 @@ impl NotificationKind {
                 color: GlyphColor::Orange,
                 repeat: Repeat::Always,
             },
+            NotificationKind::LevelCapReached => NotificationDef {
+                title: "Ceiling Reached",
+                body: "Level {level} is as far as sector {zone} goes. Kills still pay: the XP \
+                       banks and converts straight into Perk Points, so your build keeps \
+                       moving.\n\nBreaching is what raises the ceiling. A new sector lifts the \
+                       cap, tiers up what your structures can become, and may open research \
+                       that is closed to you here.",
+                sprite: None,
+                glyph: '^',
+                color: GlyphColor::Yellow,
+                repeat: Repeat::Always,
+            },
         }
     }
 
@@ -378,6 +408,7 @@ impl NotificationKind {
             NotificationKind::OnboardingComplete => "onboarding_complete",
             NotificationKind::OnboardingMission => "onboarding_mission",
             NotificationKind::SettlementGrown => "milestone_settlement_grown",
+            NotificationKind::LevelCapReached => "milestone_level_cap",
         }
     }
 }

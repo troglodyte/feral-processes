@@ -300,6 +300,9 @@ fn every_notification_kind_is_fired_by_a_named_site() {
             NotificationKind::OnboardingComplete => "Game::complete_contract, the onboarding arm",
             NotificationKind::OnboardingMission => "Game::ensure_tutorial_held",
             NotificationKind::SettlementGrown => "Game::announce_growth, on the latch's flip",
+            NotificationKind::LevelCapReached => {
+                "Game::award_player_xp, the level that lands on the cap"
+            }
         }
     }
 
@@ -331,11 +334,14 @@ fn tutorials_latch_and_milestones_do_not() {
             // runs would leave a second playthrough's missions unexplained —
             // and a world holds more than one town, so a city announcing
             // itself is news that can happen again inside one run.
+            // ...and the level cap is a different number in every sector,
+            // so reaching one is news again at each of them.
             NotificationKind::Breach
             | NotificationKind::ContractClosed
             | NotificationKind::OnboardingComplete
             | NotificationKind::OnboardingMission
-            | NotificationKind::SettlementGrown => Repeat::Always,
+            | NotificationKind::SettlementGrown
+            | NotificationKind::LevelCapReached => Repeat::Always,
         };
         assert_eq!(kind.def().repeat, expected, "{kind}");
     }
@@ -574,5 +580,71 @@ fn benching_a_program_with_a_bay_standing_says_nothing() {
         game.notifications_pending(),
         0,
         "the program walks itself to the Bay — there is nothing to ask for"
+    );
+}
+
+/// Reaching the sector's ceiling says so, and says it again at the next one.
+///
+/// `Repeat::Always` rather than a tutorial latch: the ceiling is a different
+/// number in every sector, so "you are capped" becomes news again at each of
+/// them. It cannot repeat *within* a sector, and no check enforces that —
+/// `progression::add_xp` returns before levelling once `level >= cap`, so the
+/// `gain.levels > 0` branch this fires from is unreachable until a breach
+/// raises the ceiling. That is why the third leg below asserts silence rather
+/// than a guard.
+#[test]
+fn reaching_the_level_cap_announces_itself_once_per_sector() {
+    let mut game = fresh();
+    let player = game.player_entity();
+    let cap = game.level_cap();
+
+    // A level that lands short of the ceiling is not what this announces.
+    set_level(&mut game, player, cap - 2);
+    drain(&mut game);
+    game.award_player_xp(player, crate::progression::xp_for_level(cap - 2));
+    assert_eq!(
+        game.world.get::<Experience>(player).unwrap().level,
+        cap - 1,
+        "exactly one level, still short of the ceiling"
+    );
+    assert_eq!(
+        game.notifications_pending(),
+        0,
+        "levelling below the cap is not news"
+    );
+
+    // The level that lands on it is.
+    game.award_player_xp(player, crate::progression::xp_for_level(cap - 1));
+    assert_eq!(game.world.get::<Experience>(player).unwrap().level, cap);
+    assert_eq!(
+        game.take_notification().map(|n| n.title),
+        Some("Ceiling Reached".to_string()),
+        "the level that lands on the cap says so"
+    );
+
+    // Nothing more this sector: further XP banks instead of levelling, so the
+    // branch it fires from is never reached again.
+    game.award_player_xp(player, crate::progression::xp_for_level(cap) * 4);
+    assert_eq!(
+        game.notifications_pending(),
+        0,
+        "XP at the cap banks, and banking is not a second announcement"
+    );
+
+    // A breach raises the ceiling, and the next one announces itself too.
+    game.enter_next_zone();
+    drain(&mut game);
+    let raised = game.level_cap();
+    assert!(
+        raised > cap,
+        "a breach has to raise the ceiling for this leg"
+    );
+    set_level(&mut game, player, raised - 1);
+    game.award_player_xp(player, crate::progression::xp_for_level(raised - 1));
+    assert_eq!(game.world.get::<Experience>(player).unwrap().level, raised);
+    assert_eq!(
+        game.take_notification().map(|n| n.title),
+        Some("Ceiling Reached".to_string()),
+        "Always, so the second sector's ceiling is news again"
     );
 }

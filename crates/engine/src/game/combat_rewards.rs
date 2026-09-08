@@ -912,6 +912,22 @@ impl Game {
                 tally.decompiler = DECOMPILER_SKILL_PER_LEVEL * gain.levels as i32;
                 decompiler.skill += tally.decompiler;
             }
+            // Landing *on* the ceiling is news, and it needs no "was this
+            // already announced?" guard: `add_xp` stops levelling at the cap,
+            // so this branch cannot be reached again until a breach raises
+            // it. Fired here rather than off the overflow below, because the
+            // advice is worth more before a kill has been spent learning it.
+            if new_level == level_cap {
+                let zone = self.world.resource::<ZoneLevel>().0;
+                self.notify_filled(
+                    crate::notifications::NotificationKind::LevelCapReached,
+                    &[
+                        ("level", &new_level.to_string()),
+                        ("zone", &zone.to_string()),
+                    ],
+                    None,
+                );
+            }
         }
         // The level itself is announced where it happens and the totals wait
         // for `settle_rewards`: `add_xp` full-heals on a level, so a player

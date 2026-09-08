@@ -12289,3 +12289,110 @@ the engine does not depend on app-core, so it cannot call `dev_flag`. Its
 it under the master would put `FERAL_DEV`'s name and rule in two crates that
 cannot see each other, which is the drift this repo keeps catching — and it
 would also mean the switch that reveals the map came on with the tools.
+
+### A structure remembers how well it was built, and absent means neutral
+
+**`components::BuildQuality` is written at exactly two sites and read at
+one.** `Game::spawn_structure` takes it as a fourth argument and inserts it
+only when the caller passes `Some`; the `BuildGoal::Upgrade` arm of
+`raise_one_tick` overwrites it beside the `StructureTier` insert. Nothing
+else writes one, and `Game::work_ticks_for` — through `cycle_ticks_for` — is
+the only reader.
+
+**The absence is the neutral, and three things depend on that.** The Home
+costs no program and so has nothing to carry. Every hand-spawned test fixture
+(`spawn_structure_at`, and the several dozen tests behind it) carries none
+either, and a machine cycling at anything but its def's `ticks_per_unit`
+would have moved numbers all over the suite. And a pre-feature save carries
+no `build_quality` key at all. So the read is `map_or(1.0, |q| q.0)` and no
+reader may treat an absent component as an error. `the_home_stands_up_
+carrying_no_build_quality` asserts the *absence* rather than the value for
+that reason: a fixture writing `BuildQuality(1.0)` would pass a value check
+while breaking the rule.
+
+**The save restores it and must never re-derive it.** `Game::load`
+deliberately rebuilds several structure components off the def rather than
+off the file — `Stock::capacity` is the stated example, and
+`ResourceNode::level` already needed carving out of that rule because
+`WorkDef::level` only carries the tier-1 baseline. The program that raised
+this machine is gone by the time the save is written; there is nothing on the
+def to re-derive from, so "re-derive on load" here means silently resetting
+every machine in the base to neutral on the first reload. That is the failure
+the field's doc comment names and that
+`a_machines_build_quality_survives_a_save` catches — through a **file** round
+trip, not a RON one, because a `#[serde(skip)]` leaves a RON round trip
+green.
+
+**The upgrade arm overwrites; it does not average and does not keep the
+better.** The machine in front of the player is the one this program just
+finished, and either of the other two rules would make a build's second-best
+outcome unreachable — a base could only ever improve, so a bad builder would
+cost nothing and the picker's quote would be a lie about the downside.
+
+### The build term goes inside `work_ticks_at_speed`, not at its callers
+
+**The fourth argument is the raw quality, not a finished scale.** That is
+`class_scale`'s own argument one parameter over: a scale computed at the
+caller is a second expression of the formula, and there are two callers (the
+live rate and the picker's preview). `build_scale = 1.0 - (quality - 1.0) *
+BUILD_QUALITY_TICK_WEIGHT` lives inside the function, and the existing
+`.max(1.0)` floor covers it with no change.
+
+**The two figures are whose, and they multiply.** `speed` is the *posted
+worker's* and changes every time somebody is reassigned; `build_quality` is
+the *builder's*, baked in the tick the machine was raised and never moving
+again. `BUILD_QUALITY_TICK_WEIGHT` is deliberately half of what a point of
+`WORK_TICKS_PER_SPEED` is worth over the same range precisely because they
+multiply — at both extremes at once a cycle would swing far enough that a
+machine's own `ticks_per_unit` stopped meaning anything.
+
+**The picker's preview is a call into that function, not a percentage.**
+`views::BuildEffect::Cycle { shipped, built }` carries two whole tick figures
+out of `Game::cycle_ticks_for`, and `Game::build_candidates` is where both
+are taken. A percentage re-derived in a view is wrong on a short cycle:
+`work_ticks_at_speed` rounds to whole ticks and floors at one, so a two-tick
+machine quotes "10% faster" and then runs at exactly two ticks. That is what
+`a_cycle_too_short_for_the_effect_quotes_the_same_number_twice` pins, and it
+is why `NoCycle` is a variant rather than `Cycle { shipped: n, built: n }` —
+equal numbers are the *right* answer for a cycle too short to move and the
+wrong one for a Depot, which has no rate at all.
+
+**Which roll a build reads is a two-armed choice, deliberately not three.**
+`build_quality` reads `extraction_roll` when the def has `work` and
+`assembly_roll` otherwise. A third arm for "runs no cycle" would be a
+distinction the player cannot act on and would put a program on a picker with
+no answer to give; the picker says so in one sentence above the list instead.
+
+### `Potential`'s two build rolls are independent of the four combat rolls
+
+**`quality_percent` still folds only the four, and that is the feature.** An
+Excellent fighter that builds badly is the tension the whole thing exists
+for — a program that was good at everything would make the build picker a
+list sorted the same way the roster already is, and spending the best program
+on a machine would cost nothing worth thinking about.
+`quality_percent_still_ignores_the_build_rolls` is what holds it.
+
+**One ladder, not two.** `Potential::roll_label` maps a single roll onto the
+five rungs `quality_label` speaks, and `quality_label` is now a call to it
+over the average of the four combat rolls. Two copies of a five-arm match
+would drift, and the symptom — a build roll reading "Excellent" while the
+overall tier at the same number read "Above Average" — is unfalsifiable
+without opening both.
+
+**Adding the two draws to `roll_potential` shifted the seeded RNG stream, and
+ten tests were re-baselined for it.** That is a known event, not a bug (see
+the memory entry *"An RNG-stream shift exposes seed-luck tests"*); each was
+moved by its **seed** or its fixture, never by its assertion. Two needed more
+than a seed: `jacking_out_records_a_loss` now fields three sprites rather
+than one, because the parting counter-strike can clear a lone one and a flee
+that clears the pack really is a win; and
+`a_drag_step_stops_ticking_the_moment_a_battle_opens` got its own seed
+through a new `game_about_to_step_seeded`, since the fixture it shares is
+used by eight tests that were passing.
+
+**The manifest rows cost a MOVES row, and the trade was measured.** The
+program page has the least clearance in the renderer: with
+`MAX_POTENTIAL_ROWS` at 7 it clears the 10px floor only at `MAX_MOVE_ROWS` of
+**1**, not 2. So a two-move species now spends its second line on a "+1 more"
+note — a real cost, taken at the owner's call over the alternative of folding
+both rolls onto one row to keep MOVES at 2.

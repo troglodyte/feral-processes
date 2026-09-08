@@ -33,6 +33,20 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.126
+
+**A program now carries two build aptitudes, and the machine it is spent on runs at what it was worth.** Assembly decides how well it puts a bench or a rig together; Extraction decides how well it puts up a node. The one it does not have is the one that machine does not care about.
+
+**A good builder leaves a machine faster than the def ships and a bad one leaves it slower** — both directions, and permanently: the figure is baked in the tick your crew finishes and never moves again, except on an upgrade, which replaces it with the new program's.
+
+**The build picker quotes the machine you would get, in ticks, before you commit.** Each row names the aptitude that build reads, the rung the program sits on, and the cycle it would leave you — "Fabricator cycle 20 -> 18 ticks". A structure that runs no work cycle says so once, above the list, and stops pretending the choice matters.
+
+**The picker is sorted best-first by the roll that build actually reads**, so the same roster comes out in a different order for a node than for a bench.
+
+**Neither aptitude touches how a program fights, and the overall Potential figure still folds only the four combat rolls.** An Excellent fighter can be the worst builder you own, and the manifest and the roster now name both rungs so you can tell before you spend it. The program page paid for those two rows out of the MOVES box, which now shows one move and a "+1 more".
+
+**A pre-feature save loads every program and every machine at neutral**, so nothing already built gets slower and no save needed a format bump.
+
 ## 0.13.125
 
 **Deploying a structure now costs a tamed program, spent for good the moment your crew finishes it.** A picker closes out every build order and every upgrade, asking you to commit one program off your roster — deploying takes any of them, and upgrading a structure a tier takes one from at least that deep a zone, so a zone-5 program can raise anything while a zone-1 program only manages a fresh Mk1.

@@ -1947,3 +1947,170 @@ fn an_upgrade_overwrites_the_figure_with_the_new_programs() {
         "the figure is an average or the better of the two, not the new one: {figure}"
     );
 }
+
+// --- The picker's quote --------------------------------------------------
+
+/// A roster of three programs whose assembly and extraction rolls rank them
+/// in opposite orders — a fixture where both rolls rank the same way proves
+/// nothing about which one a build reads.
+fn roster_ranked_opposite(seed: u32) -> Game {
+    let mut game = base(seed);
+    // Spawned in neither order, so a list that was never sorted fails both
+    // assertions rather than passing one of them by accident.
+    for (assembly, extraction) in [(1.00, 1.00), (0.82, 1.18), (1.18, 0.82)] {
+        let program = spawn_tamed(&mut game, 500, 3);
+        set_build_rolls(&mut game, program, assembly, extraction);
+    }
+    game
+}
+
+fn assembly_rolls(candidates: &[crate::views::BuildCandidate], game: &Game) -> Vec<f32> {
+    candidates
+        .iter()
+        .map(|c| {
+            game.world
+                .get::<Potential>(c.pet.entity)
+                .unwrap()
+                .assembly_roll
+        })
+        .collect()
+}
+
+/// Best first, by the roll this build actually reads.
+#[test]
+fn the_picker_orders_candidates_by_the_roll_this_build_reads() {
+    let mut game = roster_ranked_opposite(1160);
+
+    let bench = game.build_candidates(&"assembly_bay".to_string(), BuildGoal::New);
+    let node = game.build_candidates(&"mining_node".to_string(), BuildGoal::New);
+    assert_eq!(bench.len(), 3, "every program qualifies for a tier-1 build");
+    assert_eq!(node.len(), 3);
+
+    let bench_order = assembly_rolls(&bench, &game);
+    let node_order = assembly_rolls(&node, &game);
+    assert!(
+        bench_order.windows(2).all(|w| w[0] >= w[1]),
+        "the bench's list is not sorted by assembly: {bench_order:?}"
+    );
+    assert!(
+        node_order.windows(2).all(|w| w[0] <= w[1]),
+        "the node's list did not read the extraction roll: {node_order:?}"
+    );
+    assert_eq!(bench[0].aptitude, "Assembly");
+    assert_eq!(node[0].aptitude, "Extraction");
+    assert_eq!(bench[0].label, "Excellent");
+}
+
+/// The quote is a *call* into the real cycle formula, end to end: the
+/// number the picker showed is the number the finished machine runs at.
+#[test]
+fn the_quoted_cycle_is_the_one_the_finished_machine_runs() {
+    let mut game = base(1161);
+    builder(&mut game);
+    let program = spawn_tamed(&mut game, 500, 3);
+    set_build_rolls(&mut game, program, 1.0, 1.16);
+
+    let quoted = game
+        .build_candidates(&"mining_node".to_string(), BuildGoal::New)
+        .into_iter()
+        .find(|c| c.pet.entity == program)
+        .expect("the program the fixture is about is on the list");
+    let built = match quoted.effect {
+        crate::views::BuildEffect::Cycle { built, .. } => built,
+        crate::views::BuildEffect::NoCycle => panic!("a Mining Node runs a cycle"),
+    };
+
+    game.place_structure("mining_node", 1, 0, Some(program))
+        .unwrap();
+    for _ in 0..400 {
+        if structure_at(&mut game, 1, 0).is_some() {
+            break;
+        }
+        game.tick();
+    }
+    let machine = structure_at(&mut game, 1, 0).expect("the crew finished it");
+
+    assert_eq!(
+        game.work_ticks_for(machine, crate::tuning::DEFAULT_BASE_SPEED),
+        built,
+        "the quote and the machine disagree"
+    );
+}
+
+/// A cycle short enough that rounding eats the change quotes the same number
+/// twice — and the raised machine really does run at it. This is the case a
+/// percentage would have got wrong.
+#[test]
+fn a_cycle_too_short_for_the_effect_quotes_the_same_number_twice() {
+    // Nothing shipped cycles under six ticks, and the effect only vanishes
+    // under five.
+    let assets = assets_dir_with_extra_structure(
+        "short_cycle",
+        "tick_tap.ron",
+        r#"(
+    id: "tick_tap",
+    name: "Tick Tap",
+    description: "A machine whose cycle is too short for a build to move.",
+    glyph: '$',
+    color: Brown,
+    build_cost: [("core_fragment", 4)],
+    work: Some((produces: "core_fragment", ticks_per_unit: 2, level: Some(1))),
+)"#,
+    );
+    let mut game = Game::new(1162, DifficultyMode::Forgiving, &assets).unwrap();
+    place_home(&mut game);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 500);
+    stand_in_base(&mut game);
+    builder(&mut game);
+    let program = spawn_tamed(&mut game, 500, 3);
+    set_build_rolls(&mut game, program, 1.0, crate::tuning::MAX_INDIVIDUAL_ROLL);
+
+    let quoted = game
+        .build_candidates(&"tick_tap".to_string(), BuildGoal::New)
+        .into_iter()
+        .find(|c| c.pet.entity == program)
+        .expect("the program is on the list");
+    let crate::views::BuildEffect::Cycle { shipped, built } = quoted.effect else {
+        panic!("a Tick Tap runs a cycle");
+    };
+    assert_eq!(
+        shipped, built,
+        "a two-tick cycle cannot move, so the quote must say so"
+    );
+
+    game.place_structure("tick_tap", 1, 0, Some(program))
+        .unwrap();
+    for _ in 0..400 {
+        if structure_at(&mut game, 1, 0).is_some() {
+            break;
+        }
+        game.tick();
+    }
+    let machine = structure_at(&mut game, 1, 0).expect("the crew finished it");
+    assert_eq!(
+        game.work_ticks_for(machine, crate::tuning::DEFAULT_BASE_SPEED),
+        built,
+        "the machine did move after all, so the quote was wrong"
+    );
+}
+
+/// A structure that runs no cycle at all reports the variant, not a pair of
+/// equal numbers — `Cycle { shipped: n, built: n }` is the *right* answer
+/// for a cycle too short to move and the wrong one here.
+#[test]
+fn a_depot_reports_no_cycle_at_all() {
+    let mut game = roster_ranked_opposite(1163);
+    let candidates = game.build_candidates(&"depot".to_string(), BuildGoal::New);
+
+    assert!(!candidates.is_empty(), "the fixture staged a roster");
+    for c in &candidates {
+        assert_eq!(
+            c.effect,
+            crate::views::BuildEffect::NoCycle,
+            "a Depot has no rate to change"
+        );
+    }
+}

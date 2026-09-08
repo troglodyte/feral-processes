@@ -587,6 +587,68 @@ impl Game {
             .collect()
     }
 
+    /// The build picker's rows for an order of `kind` under `goal`: every
+    /// program `programs_for_build` qualifies, decorated with what spending
+    /// it would do, **ordered best-first by the roll this build reads**.
+    ///
+    /// The one derivation of both what qualifies and what is drawn —
+    /// app-core indexes this list and gui draws it, so a row reordered in
+    /// either would spend the program the player read on another row. The
+    /// role headings `companion_page_rows` emits deliberately do not survive
+    /// the sort: a sorted list interleaves roles, so a heading fired on the
+    /// change would repeat and mean nothing. What each program is doing
+    /// stays on the row as `PetInfo::activity`.
+    ///
+    /// The preview holds the worker at `DEFAULT_BASE_SPEED` because nobody
+    /// is posted to a machine that does not exist yet — so the figure is the
+    /// machine's rate **as built**, not a promise about whoever ends up
+    /// standing at it.
+    pub fn build_candidates(&mut self, kind: &StructureId, goal: BuildGoal) -> Vec<BuildCandidate> {
+        let Some(def) = self.world.resource::<StructureDb>().get(kind).cloned() else {
+            return Vec::new();
+        };
+        let tier = crate::game::catalog::program_tier_required(goal);
+        let extracts = def.work.is_some();
+        let shipped = self.cycle_ticks_for(&def, 1.0, crate::tuning::DEFAULT_BASE_SPEED);
+
+        let mut rows: Vec<(f32, BuildCandidate)> = self
+            .programs_for_build(tier)
+            .into_iter()
+            .map(|pet| {
+                let potential = self
+                    .world
+                    .get::<Potential>(pet.entity)
+                    .copied()
+                    .unwrap_or(Potential::NEUTRAL);
+                let roll = if extracts {
+                    potential.extraction_roll
+                } else {
+                    potential.assembly_roll
+                };
+                let quality = self.build_quality_for(&def, pet.entity);
+                let effect = match (
+                    shipped,
+                    self.cycle_ticks_for(&def, quality, crate::tuning::DEFAULT_BASE_SPEED),
+                ) {
+                    (Some(shipped), Some(built)) => BuildEffect::Cycle { shipped, built },
+                    _ => BuildEffect::NoCycle,
+                };
+                (
+                    roll,
+                    BuildCandidate {
+                        pet,
+                        aptitude: if extracts { "Extraction" } else { "Assembly" },
+                        label: Potential::roll_label(roll),
+                        effect,
+                    },
+                )
+            })
+            .collect();
+        // Stable, so a tie keeps `programs_for_build`'s role order.
+        rows.sort_by(|a, b| b.0.total_cmp(&a.0));
+        rows.into_iter().map(|(_, row)| row).collect()
+    }
+
     /// You, then every program you own — everyone the manifest screen can
     /// page through. Same membership and order as `owned_pets` with the
     /// player prepended, so the two can't disagree about what you have.

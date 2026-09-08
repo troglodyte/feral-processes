@@ -593,6 +593,33 @@ pub struct WieldedView {
     pub bonus: (i32, i32),
 }
 
+/// What spending one program on one build does to the machine it raises —
+/// the engine's answer, drawn by gui.
+///
+/// **Never a percentage.** `systems::work_ticks_at_speed` rounds to whole
+/// ticks and floors at one, so on a short cycle a real percentage quotes a
+/// change that does not happen; the two figures below are what the machine
+/// actually runs at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuildEffect {
+    /// The machine's shipped rate, and its rate as this program would build
+    /// it. Both out of `systems::work_ticks_at_speed`.
+    Cycle { shipped: u32, built: u32 },
+    /// This structure runs no cycle, so build quality cannot reach it.
+    NoCycle,
+}
+
+/// One row of the build picker: a program, the aptitude this particular
+/// build reads, and what spending it would do.
+pub struct BuildCandidate {
+    pub pet: PetInfo,
+    /// "Assembly" or "Extraction" — which roll this build reads.
+    pub aptitude: &'static str,
+    /// `components::Potential::roll_label` of that roll.
+    pub label: &'static str,
+    pub effect: BuildEffect,
+}
+
 pub struct PetInfo {
     pub entity: Entity,
     /// The same glyph and colour this program is drawn with on the map, so a

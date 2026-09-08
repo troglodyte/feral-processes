@@ -516,6 +516,12 @@ impl Game {
     /// until the structure is raised. They go back through the same
     /// `return_material` a stray load does: Depots first, the pack second.
     ///
+    /// **The program the order was paid with comes back too**, on the same
+    /// terms and through the same `return_build_holdings` the cell-wipe door
+    /// uses. Without that a deploy the player thinks better of would destroy
+    /// a program outright — a rob rather than a refund, and the reason
+    /// `commit_program` takes a snapshot before it despawns anything.
+    ///
     /// The posted builder's `Task` is left alone rather than cleared here.
     /// `run_build_crew` finds the site gone on the next tick, puts back
     /// whatever it was still carrying and gives the post up itself — one
@@ -529,9 +535,7 @@ impl Game {
             return Err("That build request is already gone.".into());
         };
         let name = self.structure_name(&build.structure);
-        for (item, qty) in &build.delivered {
-            self.return_material(item, *qty);
-        }
+        self.return_build_holdings(&build);
         self.world.despawn(site);
         self.log_base(format!("You call off the {name}."));
         self.tick();
@@ -860,7 +864,9 @@ impl Game {
     /// branch and `remove_structure`, the Home cascade included. Wired into
     /// one alone, the other strands goods on a cell nothing occupies, and
     /// nothing fails to compile when only one is done. The refund goes
-    /// through `return_material`, the same door `cancel_build_request` uses.
+    /// through `return_build_holdings`, the same door `cancel_build_request`
+    /// uses — which is where the program committed to the order comes back
+    /// from too, and it is a roster slot rather than a pile of goods.
     pub(crate) fn clear_pending_build_at(&mut self, x: i32, y: i32) {
         let Some(site) = self.build_site_at(x, y) else {
             return;
@@ -868,10 +874,67 @@ impl Game {
         let Some(build) = self.world.get::<BuildSite>(site).cloned() else {
             return;
         };
+        self.return_build_holdings(&build);
+        self.world.despawn(site);
+    }
+
+    /// Hands back whatever a dying build request was holding — the materials
+    /// already carried to the cell and, if the order was paid with one, the
+    /// program committed to it.
+    ///
+    /// **Both destruction paths call this.** `cancel_build_request` is the
+    /// player calling the job off; `clear_pending_build_at` is the cell going
+    /// out from under it, which is `remove_structure` and `damage_structure`'s
+    /// destroyed branch. Wired into one alone, the other quietly eats a
+    /// program, and nothing fails to compile — the same warning
+    /// `clear_pending_build_at`'s own doc carries about the materials, now
+    /// with a roster slot riding on it.
+    ///
+    /// **It reads the caller's clone, never the live component.** Both doors
+    /// take a whole `BuildSite` by `.cloned()` and then despawn the site, and
+    /// that clone now deep-copies a `CreatureSave`. Reaching back through
+    /// `site` here instead would work right up until a caller reordered its
+    /// despawn, at which point a committed program would be silently
+    /// destroyed rather than fail to compile.
+    ///
+    /// **A finished build never reaches this.** `consume_site` despawns the
+    /// site and the snapshot goes with it, which is exactly what "spent"
+    /// means: the structure is standing, and the program paid for it.
+    ///
+    /// The refund is announced because it is a thing the player owns coming
+    /// back — the counterpart to the deploy line that named what it took.
+    /// The failure is announced for the same reason and more loudly: a
+    /// snapshot naming a species whose `.ron` has been deleted between
+    /// sessions cannot be respawned (see `refund_program`), and that is a
+    /// supported thing to do to an install rather than a panic. Saying
+    /// nothing would leave a program simply missing from the roster with no
+    /// line anywhere accounting for it.
+    fn return_build_holdings(&mut self, build: &BuildSite) {
         for (item, qty) in &build.delivered {
             self.return_material(item, *qty);
         }
-        self.world.despawn(site);
+        let Some(program) = &build.program else {
+            return;
+        };
+        match self.refund_program(program) {
+            Some(back) => {
+                let name = self.creature_label(back);
+                self.log_base(format!("{name} comes back off the job."));
+            }
+            None => {
+                // Named off the snapshot, because there is no entity to
+                // label: `creature_name`'s own fallback order minus the
+                // species lookup, which is the thing that just failed.
+                let name = program
+                    .custom_name
+                    .clone()
+                    .unwrap_or_else(|| program.species.clone());
+                self.log_base(format!(
+                    "{name} does not come back off the job — this install no longer \
+                     carries its kind, and there is nothing left to restore it from."
+                ));
+            }
+        }
     }
 
     /// Demolishes `structure`, refunding `STRUCTURE_REMOVAL_REFUND_PERCENT`

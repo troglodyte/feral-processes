@@ -3648,3 +3648,189 @@ fn the_deploy_line_names_the_program_it_committed() {
             .collect::<Vec<_>>()
     );
 }
+
+// ------------------------------ the two destruction doors give it back
+
+/// The refund half of the mechanic, and the door the player reaches for.
+/// The commit is a *retirement*, so an order the player changes their mind
+/// about would destroy a program outright without this — a rob rather than
+/// a refund, and one that reads as the picker having eaten the roster.
+#[test]
+fn calling_off_an_order_gives_the_program_back() {
+    let mut game = a_base_with_programs(20260907, 1);
+    let spend = tame_at_zone(&mut game, 1);
+    game.rename_companion(spend, Some("Bellwether".to_string()))
+        .expect("named");
+
+    game.place_structure("mining_node", 1, 0, Some(spend))
+        .expect("filed");
+    assert_eq!(game.owned_pets().len(), 1, "the order is holding it");
+
+    let site = filed_at(&mut game, 1, 0).expect("a site");
+    game.cancel_build_request(site).expect("cancelled");
+
+    let back = game.owned_pets();
+    assert_eq!(back.len(), 2, "the committed program is back on the roster");
+    assert!(
+        back.iter().any(|p| p.name.contains("Bellwether")),
+        "and it is the one that was named that came back: {:?}",
+        back.iter().map(|p| p.name.clone()).collect::<Vec<_>>()
+    );
+}
+
+/// The cancel says so, in the base log. A program that reappeared on the
+/// roster with nothing said would leave the player counting the manifest to
+/// find out whether the cancel had cost them anything — the same reason the
+/// deploy line names what it took.
+#[test]
+fn the_cancel_line_names_the_program_it_gave_back() {
+    let mut game = a_base_with_programs(20260907, 1);
+    let spend = tame_at_zone(&mut game, 1);
+    let who = game.creature_label(spend);
+    game.place_structure("mining_node", 1, 0, Some(spend))
+        .expect("filed");
+
+    let site = filed_at(&mut game, 1, 0).expect("a site");
+    game.cancel_build_request(site).expect("cancelled");
+
+    assert!(
+        game.message_history(50)
+            .iter()
+            .any(|e| e.text.contains(&who) && e.text.contains("comes back")),
+        "the log names the program the cancel handed back: {:?}",
+        game.message_history(50)
+            .iter()
+            .map(|e| e.text.clone())
+            .collect::<Vec<_>>()
+    );
+}
+
+/// The second door, called directly. `clear_pending_build_at` warns in its
+/// own doc that nothing fails to compile when only one of the two is wired,
+/// and this is the assertion that makes that true of the program as well as
+/// of the materials.
+#[test]
+fn a_site_wiped_with_its_cell_gives_the_program_back_too() {
+    let mut game = a_base_with_programs(20260907, 1);
+    let spend = tame_at_zone(&mut game, 1);
+    game.place_structure("mining_node", 1, 0, Some(spend))
+        .expect("filed");
+    let (px, py) = game.base_pos().expect("the fixture stands in the base");
+
+    game.clear_pending_build_at(px + 1, py);
+
+    assert_eq!(
+        game.owned_pets().len(),
+        2,
+        "the second door refunds like the first"
+    );
+}
+
+/// And the door as a player actually reaches it: demolishing the machine an
+/// upgrade was filed against takes the request with it, so the program the
+/// request was paid with has to come back the same way a cancel's does.
+/// Reached through `remove_structure` rather than by calling the helper,
+/// because a consequence gated behind a path nothing walks is green and
+/// unreachable at once.
+#[test]
+fn demolishing_a_machine_under_upgrade_gives_its_program_back() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let node = deploy_upgradeable_node(&mut game);
+    set_zone(&mut game, 2);
+    tame_at_zone(&mut game, 1);
+    let spend = tame_at_zone(&mut game, 2);
+    game.upgrade_structure(node, Some(spend))
+        .expect("a zone 2 program pays for a Mk2");
+    let held = game.owned_pets().len();
+
+    game.remove_structure(node).expect("demolished");
+
+    assert_eq!(
+        game.owned_pets().len(),
+        held + 1,
+        "the cell going out from under the order hands the program back"
+    );
+}
+
+/// The other end of the lifecycle, and the reason `consume_site` needs no
+/// change: a build that *finishes* has spent the program. The site despawns
+/// and the snapshot goes with it, and demolishing the machine afterwards
+/// refunds materials — never a program, which would make a deploy-and-scrap
+/// loop free.
+#[test]
+fn a_finished_structure_never_gives_the_program_back() {
+    let mut game = a_base_with_programs(20260907, 0);
+    give(&mut game, &ItemId::from(ids::CORE_FRAGMENT), 500);
+    // Tough enough to outlast the ambient GC Entropy Sweeps these ticks run
+    // through — `tests::construction::builder`'s reason.
+    spawn_tamed(&mut game, 500, 3);
+    let spend = tame_at_zone(&mut game, 1);
+
+    game.place_structure("mining_node", 1, 0, Some(spend))
+        .expect("filed");
+    assert_eq!(game.owned_pets().len(), 1, "the order is holding it");
+
+    for _ in 0..400 {
+        if filed_at(&mut game, 1, 0).is_none() {
+            break;
+        }
+        game.tick();
+    }
+    let built = find_structure_by_kind(&mut game, "mining_node").expect("the crew raises it");
+    assert_eq!(game.owned_pets().len(), 1, "spent at completion");
+
+    game.remove_structure(built).expect("demolished");
+
+    assert_eq!(
+        game.owned_pets().len(),
+        1,
+        "deconstruction returns materials, not programs"
+    );
+}
+
+/// The one way a refund can fail, and it must not fail quietly.
+///
+/// A snapshot naming a species whose `.ron` has been deleted between
+/// sessions cannot be respawned — `refund_program` answers `None` rather
+/// than panicking, because deleting a species file is a supported thing to
+/// do to an install. What is not supported is a program going off the roster
+/// with no line anywhere accounting for it, which would read as the cancel
+/// having eaten it.
+#[test]
+fn a_program_that_cannot_be_restored_is_said_rather_than_lost_quietly() {
+    let mut game = a_base_with_programs(20260907, 1);
+    let spend = tame_at_zone(&mut game, 1);
+    game.rename_companion(spend, Some("Bellwether".to_string()))
+        .expect("named");
+    game.place_structure("mining_node", 1, 0, Some(spend))
+        .expect("filed");
+    let site = filed_at(&mut game, 1, 0).expect("a site");
+    // The install loses the species out from under the standing order.
+    game.world
+        .get_mut::<BuildSite>(site)
+        .unwrap()
+        .program
+        .as_mut()
+        .unwrap()
+        .species = "a_species_this_install_never_shipped".to_string();
+
+    game.cancel_build_request(site)
+        .expect("a cancel does not take the run down over it");
+
+    assert_eq!(
+        game.owned_pets().len(),
+        1,
+        "there is nothing left to rebuild it from"
+    );
+    assert!(
+        game.message_history(50)
+            .iter()
+            .any(|e| e.text.contains("Bellwether") && e.text.contains("does not come back")),
+        "and the log says so, by name: {:?}",
+        game.message_history(50)
+            .iter()
+            .map(|e| e.text.clone())
+            .collect::<Vec<_>>()
+    );
+}

@@ -660,3 +660,69 @@ fn a_build_sites_program_survives_a_save_and_load() {
         "and it is still holding the program it was given",
     );
 }
+
+/// **Spec test 10 — the whole journey, through the disk.**
+///
+/// `refund_program` has only ever been handed a snapshot taken moments
+/// earlier in the same process, which proves nothing about the field that
+/// carries it between sessions. So this one files a real order, writes it to
+/// a real file, reads it back into a fresh `Game` and *then* calls the order
+/// off — and the program that comes back has to be the one that went in,
+/// down to the `ProgramId` its memories are keyed to.
+///
+/// A RON round trip cannot substitute: `#[serde(skip)]` on
+/// `BuildSite::program` would leave one of those green (see
+/// `SAVE_FORMAT_VERSION`'s docs), and every assertion below would then be
+/// made against a snapshot that never left memory.
+#[test]
+fn a_reloaded_order_still_gives_its_program_back_on_a_cancel() {
+    let dir = scratch_assets_dir("cancel_after_reload");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("s.ron");
+
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    // The spare: an order may never take the base to zero programs.
+    tame_at_zone(&mut game, 1);
+    let spend = tame_at_zone(&mut game, 1);
+    set_level(&mut game, spend, 6);
+    wear(&mut game, spend, ids::OVERCLOCK_CORE);
+    game.rename_companion(spend, Some("Bellwether".to_string()))
+        .expect("named");
+    let program_id = game.world.get::<ProgramId>(spend).unwrap().0;
+    assert_ne!(program_id, 0, "the fixture minted a real id");
+
+    game.place_structure("mining_node", 1, 0, Some(spend))
+        .expect("filed");
+    game.save(&path).expect("save");
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).expect("load");
+    let (px, py) = loaded
+        .base_pos()
+        .expect("the party reloads inside the base");
+    let site = loaded
+        .build_site_at(px + 1, py)
+        .expect("the order came back off the disk");
+    loaded.cancel_build_request(site).expect("cancelled");
+
+    let back = loaded
+        .owned_pets()
+        .into_iter()
+        .find(|p| p.name.contains("Bellwether"))
+        .expect("the committed program is back on the roster after a reload");
+    assert_eq!(
+        loaded.world.get::<ProgramId>(back.entity).unwrap().0,
+        program_id,
+        "the same program by name, not a fresh one wearing its stats"
+    );
+    assert_eq!(back.level, 6, "and at the level it was committed at");
+    assert_eq!(
+        loaded
+            .world
+            .get::<Equipment>(back.entity)
+            .and_then(|e| e.weapon.as_ref().map(|w| w.copy.item.to_string())),
+        Some(ids::OVERCLOCK_CORE.to_string()),
+        "still wearing what it went in wearing"
+    );
+}

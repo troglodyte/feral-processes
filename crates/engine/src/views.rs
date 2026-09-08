@@ -593,6 +593,33 @@ pub struct WieldedView {
     pub bonus: (i32, i32),
 }
 
+/// What spending one program on one build does to the machine it raises —
+/// the engine's answer, drawn by gui.
+///
+/// **Never a percentage.** `systems::work_ticks_at_speed` rounds to whole
+/// ticks and floors at one, so on a short cycle a real percentage quotes a
+/// change that does not happen; the two figures below are what the machine
+/// actually runs at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuildEffect {
+    /// The machine's shipped rate, and its rate as this program would build
+    /// it. Both out of `systems::work_ticks_at_speed`.
+    Cycle { shipped: u32, built: u32 },
+    /// This structure runs no cycle, so build quality cannot reach it.
+    NoCycle,
+}
+
+/// One row of the build picker: a program, the aptitude this particular
+/// build reads, and what spending it would do.
+pub struct BuildCandidate {
+    pub pet: PetInfo,
+    /// "Assembly" or "Extraction" — which roll this build reads.
+    pub aptitude: &'static str,
+    /// `components::Potential::roll_label` of that roll.
+    pub label: &'static str,
+    pub effect: BuildEffect,
+}
+
 pub struct PetInfo {
     pub entity: Entity,
     /// The same glyph and colour this program is drawn with on the map, so a
@@ -630,6 +657,12 @@ pub struct PetInfo {
     /// (shouldn't happen for anything spawned going forward, but possible
     /// for an old save predating this component).
     pub quality: Option<String>,
+    /// This individual's Assembly rung — see `components::Potential::
+    /// roll_label`. `None` for a creature with no `Potential`, `quality`'s
+    /// own rule.
+    pub assembly: Option<String>,
+    /// The same for Extraction.
+    pub extraction: Option<String>,
     /// How many fusions deep this program's lineage is, 0 to `MAX_FUSIONS`
     /// — see `components::FusionCount`. At `MAX_FUSIONS` it can no longer
     /// be fused.
@@ -2271,6 +2304,11 @@ pub struct ManifestPotential {
     pub atk_roll: f32,
     pub def_roll: f32,
     pub growth_roll: f32,
+    /// The two build rolls — see `components::Potential`. Listed after the
+    /// four combat rolls and before `percent`, which deliberately folds only
+    /// the first four.
+    pub assembly_roll: f32,
+    pub extraction_roll: f32,
     /// `Potential::quality_percent`.
     pub percent: u32,
     /// `Potential::quality_label`.

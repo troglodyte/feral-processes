@@ -930,6 +930,8 @@ fn individual_growth_roll_scales_stat_gains_independently_of_species_growth_mult
                 atk_roll: 1.0,
                 def_roll: 1.0,
                 growth_roll: MIN_INDIVIDUAL_ROLL,
+                assembly_roll: 1.0,
+                extraction_roll: 1.0,
             },
             Tamed { owner: player },
             PowerReserve::default(),
@@ -958,6 +960,8 @@ fn individual_growth_roll_scales_stat_gains_independently_of_species_growth_mult
                 atk_roll: 1.0,
                 def_roll: 1.0,
                 growth_roll: MAX_INDIVIDUAL_ROLL,
+                assembly_roll: 1.0,
+                extraction_roll: 1.0,
             },
             Tamed { owner: player },
             PowerReserve::default(),
@@ -1180,7 +1184,7 @@ fn killing_a_guardian_respawns_a_replacement_after_exactly_the_respawn_delay() {
 
 #[test]
 fn taming_a_guardian_also_queues_a_respawn() {
-    let mut game = Game::new(605, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(606, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let nest = game
         .world
@@ -1687,6 +1691,8 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             atk_roll: 1.0,
             def_roll: 1.0,
             growth_roll: 1.0,
+            assembly_roll: 1.0,
+            extraction_roll: 1.0,
             fusions: 0,
             refactors: 0,
             purchased_tiers: 0,
@@ -3299,4 +3305,41 @@ fn the_ambient_spawner_ramps_with_distance() {
              not reading the ramp"
         );
     }
+}
+
+#[test]
+fn rolled_potential_puts_both_build_rolls_in_range() {
+    let mut game = Game::new(701, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let rolls: Vec<(f32, f32)> = (0..64)
+        .map(|_| {
+            let p = game.roll_potential();
+            (p.assembly_roll, p.extraction_roll)
+        })
+        .collect();
+
+    for (a, e) in &rolls {
+        assert!(
+            (MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL).contains(a),
+            "assembly roll {a} is out of range"
+        );
+        assert!(
+            (MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL).contains(e),
+            "extraction roll {e} is out of range"
+        );
+    }
+
+    // A field wired to a constant passes a range check, so vary is the
+    // assertion that matters — and the two axes must not be one draw shared.
+    assert!(
+        rolls.iter().any(|(a, _)| *a != rolls[0].0),
+        "every assembly roll came out identical"
+    );
+    assert!(
+        rolls.iter().any(|(_, e)| *e != rolls[0].1),
+        "every extraction roll came out identical"
+    );
+    assert!(
+        rolls.iter().any(|(a, e)| a != e),
+        "the two build rolls are the same draw"
+    );
 }

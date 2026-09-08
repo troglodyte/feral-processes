@@ -128,6 +128,8 @@ fn seed_the_roster(game: &mut Game) -> Roster {
             atk_roll: 1.22,
             def_roll: 1.33,
             growth_roll: 1.44,
+            assembly_roll: 1.55,
+            extraction_roll: 1.66,
         },
         FusionCount(2),
         Refactors(3),
@@ -313,6 +315,8 @@ fn a_rich_program_writes_every_field_it_was_given() {
         atk_roll: _,
         def_roll: _,
         growth_roll: _,
+        assembly_roll: _,
+        extraction_roll: _,
         fusions: _,
         refactors: _,
         purchased_tiers: _,
@@ -361,6 +365,8 @@ fn a_rich_program_writes_every_field_it_was_given() {
     assert_eq!(saved.atk_roll, 1.22, "atk_roll");
     assert_eq!(saved.def_roll, 1.33, "def_roll");
     assert_eq!(saved.growth_roll, 1.44, "growth_roll");
+    assert_eq!(saved.assembly_roll, 1.55, "assembly_roll");
+    assert_eq!(saved.extraction_roll, 1.66, "extraction_roll");
     assert_eq!(saved.fusions, 2, "fusions");
     assert_eq!(saved.refactors, 3, "refactors");
     assert_eq!(saved.purchased_tiers, 4, "purchased_tiers");
@@ -789,5 +795,129 @@ fn a_reloaded_order_still_gives_its_program_back_on_a_cancel() {
             .and_then(|e| e.weapon.as_ref().map(|w| w.copy.item.to_string())),
         Some(ids::OVERCLOCK_CORE.to_string()),
         "still wearing what it went in wearing"
+    );
+}
+
+/// The two build rolls are additive behind `#[serde(default = "neutral_roll")]`,
+/// so they cost no `SAVE_FORMAT_VERSION` bump. A bare `#[serde(default)]` on
+/// an `f32` is `0.0`, which would load every program in every pre-feature
+/// save as permanently the worst builder in the game — silently, since
+/// nothing on the screen would say so until a machine came out slow.
+#[test]
+fn a_save_written_without_the_build_rolls_loads_them_neutral() {
+    let mut game = Game::new(4211, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 20, 3);
+    game.world.entity_mut(pet).insert(Potential {
+        hp_roll: 1.1,
+        atk_roll: 1.1,
+        def_roll: 1.1,
+        growth_roll: 1.1,
+        assembly_roll: 1.18,
+        extraction_roll: 0.82,
+    });
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_legacy_build_rolls_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+
+    let text = std::fs::read_to_string(&path).unwrap();
+    let stripped: String = text
+        .lines()
+        .filter(|l| {
+            let t = l.trim_start();
+            !t.starts_with("assembly_roll:") && !t.starts_with("extraction_roll:")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        !stripped.contains("assembly_roll") && !stripped.contains("extraction_roll"),
+        "the fixture must actually remove the keys or the test proves nothing"
+    );
+    assert!(
+        text.contains("assembly_roll"),
+        "and they must have been there to remove"
+    );
+    std::fs::write(&path, stripped).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).expect("a pre-feature save still loads");
+    let _ = std::fs::remove_file(&path);
+
+    let mut seen = 0;
+    let mut q = loaded.world.query::<&Potential>();
+    for p in q.iter(&loaded.world) {
+        assert_eq!(p.assembly_roll, 1.0, "assembly_roll defaulted wrong");
+        assert_eq!(p.extraction_roll, 1.0, "extraction_roll defaulted wrong");
+        seen += 1;
+    }
+    assert!(seen > 0, "the save carried no creature to check");
+}
+
+/// A machine remembers how well it was built — through a real file round
+/// trip, not a RON one, because a `#[serde(skip)]` leaves a RON round trip
+/// green while the save on disk carries nothing.
+#[test]
+fn a_machines_build_quality_survives_a_save() {
+    let mut game = crate::tests::support::base_with_a_built_node(4212, 1.0, 0.82);
+    let node = crate::tests::support::first_structure(&mut game, "mining_node");
+    let before = game.work_ticks_for(node, crate::tuning::DEFAULT_BASE_SPEED);
+    assert!(
+        before > 10,
+        "the fixture built a machine at the shipped rate"
+    );
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_build_quality_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let reloaded = crate::tests::support::first_structure(&mut loaded, "mining_node");
+    assert_eq!(
+        loaded.work_ticks_for(reloaded, crate::tuning::DEFAULT_BASE_SPEED),
+        before,
+        "the reloaded machine runs at a different rate than the one that was saved"
+    );
+}
+
+/// The structure half of the missing-key rule: a pre-feature save loads
+/// every machine at its shipped rate, not at zero.
+#[test]
+fn a_save_written_without_build_quality_loads_it_neutral() {
+    let mut game = crate::tests::support::base_with_a_built_node(4213, 1.0, 0.82);
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_legacy_build_quality_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        text.contains("build_quality"),
+        "the key must have been there to remove"
+    );
+    let stripped: String = text
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("build_quality:"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        !stripped.contains("build_quality"),
+        "the fixture must actually remove the key or the test proves nothing"
+    );
+    std::fs::write(&path, stripped).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).expect("a pre-feature save still loads");
+    let _ = std::fs::remove_file(&path);
+
+    let node = crate::tests::support::first_structure(&mut loaded, "mining_node");
+    assert_eq!(
+        loaded.work_ticks_for(node, crate::tuning::DEFAULT_BASE_SPEED),
+        10,
+        "a machine with no stored figure must cycle at its def's shipped rate"
     );
 }

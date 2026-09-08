@@ -809,6 +809,79 @@ fn build_program(game: &mut Game, kind: &StructureId, tier: u32) -> Option<Entit
     Some(spend)
 }
 
+/// Overwrites just the two build rolls on `program`, leaving the four
+/// combat rolls exactly as they were — the axis every build-quality fixture
+/// varies, and the one `quality_percent` deliberately cannot see.
+pub(super) fn set_build_rolls(game: &mut Game, program: Entity, assembly: f32, extraction: f32) {
+    let mut p = game
+        .world
+        .get::<crate::components::Potential>(program)
+        .copied()
+        .unwrap_or(crate::components::Potential::NEUTRAL);
+    p.assembly_roll = assembly;
+    p.extraction_roll = extraction;
+    game.world.entity_mut(program).insert(p);
+}
+
+/// `file_build`, paid for with a program of known build rolls, returning the
+/// program it spent. The fixture half of everything about build quality: the
+/// figure is taken off the program at the moment the request is filed, so
+/// the rolls have to be on it before `place_structure` is called.
+pub(super) fn file_build_with_rolls(
+    game: &mut Game,
+    kind: &str,
+    dx: i32,
+    dy: i32,
+    assembly: f32,
+    extraction: f32,
+) -> Entity {
+    let program =
+        build_program(game, &kind.to_string(), 1).expect("this kind is paid for with a program");
+    set_build_rolls(game, program, assembly, extraction);
+    game.place_structure(kind, dx, dy, Some(program))
+        .expect("the fixture files a legal build");
+    program
+}
+
+/// The first structure of `kind` standing anywhere — for a test that has
+/// just reloaded and cannot hold on to an `Entity` across the round trip.
+pub(super) fn first_structure(game: &mut Game, kind: &str) -> Entity {
+    let mut q = game.world.query::<(Entity, &Structure)>();
+    q.iter(&game.world)
+        .find(|(_, s)| s.kind == kind)
+        .map(|(e, _)| e)
+        .unwrap_or_else(|| panic!("no {kind} stands in the base"))
+}
+
+/// A base with one Mining Node raised by a crew, built by a program of the
+/// given build rolls — a real machine carrying a real `BuildQuality`, which
+/// a hand-spawned one deliberately does not.
+pub(super) fn base_with_a_built_node(game_seed: u32, assembly: f32, extraction: f32) -> Game {
+    let mut game = Game::new(game_seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    place_home(&mut game);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 500);
+    stand_in_base(&mut game);
+    spawn_tamed(&mut game, 500, 3);
+    file_build_with_rolls(&mut game, "mining_node", 1, 0, assembly, extraction);
+    for _ in 0..400 {
+        if first_structure_opt(&mut game, "mining_node").is_some() {
+            break;
+        }
+        game.tick();
+    }
+    game
+}
+
+fn first_structure_opt(game: &mut Game, kind: &str) -> Option<Entity> {
+    let mut q = game.world.query::<(Entity, &Structure)>();
+    q.iter(&game.world)
+        .find(|(_, s)| s.kind == kind)
+        .map(|(e, _)| e)
+}
+
 /// Files an upgrade through the real `Game::upgrade_structure` and then
 /// raises it, for a test that only wants a Mk2 machine rather than a crew.
 ///
@@ -877,7 +950,7 @@ pub(super) fn raise_pending_builds(game: &mut Game) {
         // as the feature being broken.
         match goal {
             BuildGoal::New => {
-                game.spawn_structure(&def, pos.x, pos.y);
+                game.spawn_structure(&def, pos.x, pos.y, None);
             }
             BuildGoal::Upgrade { to_tier } => {
                 let machine = {

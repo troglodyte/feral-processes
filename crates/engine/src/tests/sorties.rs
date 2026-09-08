@@ -598,7 +598,7 @@ fn a_party_member_cannot_be_dispatched() {
 /// first battle.
 #[test]
 fn a_wounded_program_is_refused() {
-    let (mut game, site, staff) = a_base_ready_to_dispatch(4611, 4, 500);
+    let (mut game, site, staff) = a_base_ready_to_dispatch(4614, 4, 500);
     let max_hp = game
         .world
         .get::<crate::components::Stats>(staff[0])

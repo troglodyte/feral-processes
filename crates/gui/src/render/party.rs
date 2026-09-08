@@ -240,7 +240,7 @@ fn strength(intensity: f32) -> String {
 /// off the right edge, taking the activity and CRITICAL with it. Those are
 /// the two tags the list is most often being read for, which is why the fix
 /// wraps rather than chopping: a chop deletes exactly them.
-fn companion_row_lines(shortcut: char, p: &PetInfo) -> Vec<String> {
+fn companion_row_lines(shortcut: char, p: &PetInfo, extra: &[String]) -> Vec<String> {
     let slot = p
         .party_slot
         .map(|s| format!("#{} ", s + 1))
@@ -263,7 +263,19 @@ fn companion_row_lines(shortcut: char, p: &PetInfo) -> Vec<String> {
             ""
         }
         .to_string(),
+        // Appended after the existing five, so they are the first to shed —
+        // and two separate tags rather than one, so `wrapped_row_lines` can
+        // put one on a continuation without dragging the other with it.
+        p.assembly
+            .as_ref()
+            .map(|a| format!(" [Assembly: {a}]"))
+            .unwrap_or_default(),
+        p.extraction
+            .as_ref()
+            .map(|e| format!(" [Extraction: {e}]"))
+            .unwrap_or_default(),
     ];
+    let tags: Vec<String> = tags.into_iter().chain(extra.iter().cloned()).collect();
     wrapped_row_lines(head, &tags)
 }
 
@@ -309,38 +321,58 @@ pub(super) fn companion_page_rows(pets: &[PetInfo], selected: usize) -> Vec<Row>
             rows.push(Row::TextColored(role_heading(p.role).to_string(), TEXT));
             run = Some(p.role);
         }
-        // No row colour of its own: `fusion_row` already loses to CRITICAL
-        // below, and a third meaning on that axis makes all three unreadable.
-        let critical = hp_critical(p.hp, p.max_hp);
-        // CRITICAL outranks both the fusion colour and the rare tier: one is
-        // a state to act on this turn, the others are permanent properties
-        // to read at leisure. `tier_color` settles those two against each
-        // other, so this only has to know about the loud one.
-        let colored = |text: String, selected: bool| {
-            if critical {
-                critical_item_row(text, selected)
-            } else {
-                tier_row(text, selected, p.fusions, p.rarity)
-            }
-        };
-        let mut lines = companion_row_lines(menu_shortcut(i), p).into_iter();
-        let head = lines
-            .next()
-            .expect("companion_row_lines always emits the identity row");
-        rows.push(with_icon(
-            colored(head, i == selected),
-            p.glyph,
-            glyph_color(p.color),
-        ));
-        // A continuation carries this row's own tail rather than a second
-        // kind of information, so it keeps the row's colour instead of the
-        // dim the fuse picker gives a candidate's routines. Only the head is
-        // ever `selected`: the highlight belongs on the line carrying the
-        // shortcut, and the popup's scroll anchor is the first selected
-        // `Item`, so these cannot disturb it.
-        for line in lines {
-            rows.push(colored(line, false));
+        rows.extend(companion_rows(p, menu_shortcut(i), i == selected, &[]));
+    }
+    rows
+}
+
+/// One program's rows in the roster's own format — the identity line and its
+/// shed continuations — with `extra` tags appended after the roster's own.
+///
+/// Split out of `companion_page_rows` for the build picker, which draws the
+/// same rows but **no headings**: that list is sorted best-first by the roll
+/// the build reads, so it interleaves roles and a heading emitted on the
+/// change would fire repeatedly and mean nothing. What the headings carried —
+/// "spending this also empties a job" — stays on the row as `PetInfo::
+/// activity`, which is one of the tags already.
+pub(super) fn companion_rows(
+    p: &PetInfo,
+    shortcut: char,
+    selected: bool,
+    extra: &[String],
+) -> Vec<Row> {
+    let mut rows = Vec::new();
+    // No row colour of its own: `fusion_row` already loses to CRITICAL
+    // below, and a third meaning on that axis makes all three unreadable.
+    let critical = hp_critical(p.hp, p.max_hp);
+    // CRITICAL outranks both the fusion colour and the rare tier: one is
+    // a state to act on this turn, the others are permanent properties
+    // to read at leisure. `tier_color` settles those two against each
+    // other, so this only has to know about the loud one.
+    let colored = |text: String, selected: bool| {
+        if critical {
+            critical_item_row(text, selected)
+        } else {
+            tier_row(text, selected, p.fusions, p.rarity)
         }
+    };
+    let mut lines = companion_row_lines(shortcut, p, extra).into_iter();
+    let head = lines
+        .next()
+        .expect("companion_row_lines always emits the identity row");
+    rows.push(with_icon(
+        colored(head, selected),
+        p.glyph,
+        glyph_color(p.color),
+    ));
+    // A continuation carries this row's own tail rather than a second
+    // kind of information, so it keeps the row's colour instead of the
+    // dim the fuse picker gives a candidate's routines. Only the head is
+    // ever `selected`: the highlight belongs on the line carrying the
+    // shortcut, and the popup's scroll anchor is the first selected
+    // `Item`, so these cannot disturb it.
+    for line in lines {
+        rows.push(colored(line, false));
     }
     rows
 }
@@ -799,7 +831,7 @@ mod tests {
 
     /// The widest roster row the game can put on screen, as `(lines, why)`.
     ///
-    /// Enumerated rather than reasoned about: several of the six optional
+    /// Enumerated rather than reasoned about: several of the seven optional
     /// tags exclude each other (a party member's activity is "in party", a
     /// wielded program is stood down from the party), and picking the worst
     /// case by argument is how a census ends up measuring a row nobody can
@@ -830,6 +862,11 @@ mod tests {
             p.party_slot = slot;
             p.activity = activity.to_string();
             p.quality = Some(quality.clone());
+            // The widest of the five rungs `Potential::roll_label` speaks,
+            // on both axes at once — they are independent draws, so a
+            // program really can be the worst at both.
+            p.assembly = Some("Below Average".to_string());
+            p.extraction = Some("Below Average".to_string());
             p.fusions = MAX_FUSIONS;
             p.wielded = activity == "equipped as weapon";
             // Four digits apiece: a refactored, fused, geared program's bar
@@ -845,9 +882,34 @@ mod tests {
             // guess.
             p.atk = 1234;
             p.mitigation = feral_processes_engine::tuning::MAX_MITIGATION_PERCENT;
-            out.push((companion_row_lines('a', &p), why.to_string()));
+            out.push((companion_row_lines('a', &p, &[]), why.to_string()));
         }
         out
+    }
+
+    /// Both build rolls reach the roster row, and a program with no
+    /// `Potential` at all draws exactly the line it drew before — the two
+    /// tags are `Option`s for `quality`'s reason.
+    #[test]
+    fn a_roster_row_names_both_build_rolls() {
+        let mut p = pet("Testmon", "");
+        let without = companion_row_lines('a', &p, &[]).join(" ");
+        assert!(
+            !without.contains("Assembly") && !without.contains("Extraction"),
+            "a program with no Potential drew a build tag: {without}"
+        );
+
+        p.assembly = Some("Excellent".to_string());
+        p.extraction = Some("Poor".to_string());
+        let with = companion_row_lines('a', &p, &[]).join(" ");
+        assert!(
+            with.contains("[Assembly: Excellent]"),
+            "the assembly rung is missing: {with}"
+        );
+        assert!(
+            with.contains("[Extraction: Poor]"),
+            "the extraction rung is missing: {with}"
+        );
     }
 
     /// Nothing clamps a popup row horizontally (see `continuation_lines`), so
@@ -893,7 +955,13 @@ mod tests {
         for (lines, why) in widest_roster_rows() {
             assert!(lines.len() > 1, "{why} is the case that needs wrapping");
             let joined = lines.join(" ");
-            for tag in ["Below Average (100%)", "fused 3/3 - maxed", "CRITICAL"] {
+            for tag in [
+                "Below Average (100%)",
+                "fused 3/3 - maxed",
+                "CRITICAL",
+                "[Assembly: Below Average]",
+                "[Extraction: Below Average]",
+            ] {
                 assert!(joined.contains(tag), "{why} lost {tag:?}:\n{lines:#?}");
             }
         }
@@ -913,14 +981,14 @@ mod tests {
         let mut p = pet("Kestrel", "w|a|m");
         p.atk = 8;
         p.mitigation = 5;
-        let head = companion_row_lines('a', &p).remove(0);
+        let head = companion_row_lines('a', &p, &[]).remove(0);
         assert!(head.contains("ATK 8"), "{head}");
         assert!(head.contains("MIT 5%"), "{head}");
     }
 
     #[test]
     fn a_roster_row_carries_the_loadout_cell() {
-        let head = |p: &PetInfo| companion_row_lines('a', p).remove(0);
+        let head = |p: &PetInfo| companion_row_lines('a', p, &[]).remove(0);
         assert!(head(&pet("Kestrel", "w|a|m")).contains("w|a|m"));
         let bare = head(&pet("Nine", ".|.|."));
         assert!(bare.contains(".|.|."), "{bare}");
@@ -934,7 +1002,7 @@ mod tests {
     fn an_ordinary_roster_row_stays_on_one_line() {
         let mut p = pet("Kestrel", "w|a|m");
         p.quality = Some("Average (54%)".to_string());
-        assert_eq!(companion_row_lines('a', &p).len(), 1);
+        assert_eq!(companion_row_lines('a', &p, &[]).len(), 1);
     }
 
     /// The cell sits ahead of the tags that come and go — quality, fusion,
@@ -945,7 +1013,7 @@ mod tests {
         let mut p = pet("Kestrel", "w|.|.");
         p.quality = Some("Excellent (94%)".to_string());
         p.wielded = true;
-        let row = companion_row_lines('a', &p).join(" ");
+        let row = companion_row_lines('a', &p, &[]).join(" ");
         let cell = row.find("w|.|.").expect("the cell is drawn");
         assert!(cell < row.find("Excellent").unwrap(), "{row}");
         assert!(cell < row.find("WEP").unwrap(), "{row}");

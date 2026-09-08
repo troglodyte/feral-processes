@@ -631,13 +631,18 @@ fn program_sections(sections: &mut Vec<Section>, game: &Game, p: &ProgramManifes
     if let Some(q) = &p.potential {
         sections.push(Section {
             title: "POTENTIAL",
-            rows: section_rows(vec![
-                stat("HP roll", roll_readout(q.hp_roll)),
-                stat("Attack roll", roll_readout(q.atk_roll)),
-                stat("Defense roll", roll_readout(q.def_roll)),
-                stat("Growth roll", roll_readout(q.growth_roll)),
-                stat("Overall", format!("{} ({}%)", q.label, q.percent)),
-            ]),
+            rows: section_rows_capped(
+                vec![
+                    stat("HP roll", roll_readout(q.hp_roll)),
+                    stat("Attack roll", roll_readout(q.atk_roll)),
+                    stat("Defense roll", roll_readout(q.def_roll)),
+                    stat("Growth roll", roll_readout(q.growth_roll)),
+                    stat("Assembly roll", roll_readout(q.assembly_roll)),
+                    stat("Extraction roll", roll_readout(q.extraction_roll)),
+                    stat("Overall", format!("{} ({}%)", q.label, q.percent)),
+                ],
+                MAX_POTENTIAL_ROWS,
+            ),
             full_width: false,
         });
     }
@@ -2331,6 +2336,76 @@ mod tests {
         assert!(
             !footer(false).contains("[w] watch"),
             "and must not be offered where it would be refused"
+        );
+    }
+
+    /// The POTENTIAL box names both build rolls in full, on their own rows,
+    /// and trims nothing to do it.
+    ///
+    /// The "+N more" assertion is the point: `section_rows_capped` is what
+    /// this box switched to, and a cap set one short would silently swallow
+    /// a roll and read as "that's all of them".
+    #[test]
+    fn the_potential_box_lists_both_build_rolls() {
+        let mut program = plain_program(10, 10);
+        program.potential = Some(feral_processes_engine::views::ManifestPotential {
+            hp_roll: 1.11,
+            atk_roll: 1.06,
+            def_roll: 0.94,
+            growth_roll: 1.16,
+            assembly_roll: 1.19,
+            extraction_roll: 0.81,
+            percent: 71,
+            label: "Above Average".to_string(),
+        });
+
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(
+            11,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            assets,
+        )
+        .expect("shipped assets load");
+        let mut sections = Vec::new();
+        program_sections(&mut sections, &game, &program);
+        let potential = sections
+            .iter()
+            .find(|s| s.title == "POTENTIAL")
+            .expect("the box is emitted");
+
+        let labels: Vec<&str> = potential
+            .rows
+            .iter()
+            .filter_map(|r| match r {
+                SectionRow::Stat(label, _) => Some(label.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            labels.contains(&"Assembly roll") && labels.contains(&"Extraction roll"),
+            "the build rolls are not named: {labels:?}"
+        );
+
+        let values: Vec<&str> = potential
+            .rows
+            .iter()
+            .filter_map(|r| match r {
+                SectionRow::Stat(_, value) => Some(value.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            values.iter().any(|v| v.starts_with("1.19"))
+                && values.iter().any(|v| v.starts_with("0.81")),
+            "the two rolls carry the wrong figures: {values:?}"
+        );
+
+        assert!(
+            !potential
+                .rows
+                .iter()
+                .any(|r| matches!(r, SectionRow::Note(n) if n.contains("more"))),
+            "a roll was silently trimmed off the box"
         );
     }
 }

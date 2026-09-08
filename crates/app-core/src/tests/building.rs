@@ -1234,3 +1234,76 @@ fn upgrade_confirm_only_lists_programs_at_the_engines_own_depth() {
          so a second key press has nothing to select and confirms nothing"
     );
 }
+
+/// `pending_build_kind` answers with the machine standing there, not with a
+/// deploy's def id — the two orders name their structure from different
+/// places, and the picker asks `build_candidates` about the answer.
+#[test]
+fn an_upgrade_picker_asks_about_the_structure_standing_there() {
+    let mut app = app_owning_one_deep_program_and_a_compiler(879, 2, 2);
+    stand_in_base(&mut app);
+    tame_program_at_zone(&mut app, 2);
+
+    open_upgrade_picker(&mut app);
+    assert_eq!(
+        app.mode,
+        Mode::BuildProgram,
+        "precondition: the picker is up"
+    );
+
+    assert_eq!(
+        app.pending_build_kind().as_deref(),
+        Some("compiler"),
+        "an upgrade must name the machine it is standing in front of"
+    );
+}
+
+/// The handler indexes the *sorted* list gui draws, so the shortcut spends
+/// the program on the row the player actually read.
+///
+/// The roster is staged so `owned_pets`' order and `build_candidates`' order
+/// differ: `build_candidates` sorts best-first by the roll a Compiler
+/// upgrade reads (assembly, since a Compiler assembles), and the fixture
+/// gives the *second* program the better roll.
+#[test]
+fn the_picker_spends_the_program_on_the_row_the_player_read() {
+    // The fixture's own program builds badly and the added one builds well,
+    // so `build_candidates`' order is the reverse of `owned_pets`'.
+    let mut app = app_owning_one_deep_program_and_a_compiler(880, 2, 2);
+    stand_in_base(&mut app);
+    tame_program_at_zone_with_build_rolls(&mut app, 2, 1.18, 1.0);
+
+    let (owned_first, top) = {
+        let game = app.game.as_mut().unwrap();
+        let pets = game.owned_pets();
+        assert_eq!(pets.len(), 2, "the fixture stages exactly two programs");
+        let kind = "compiler".to_string();
+        (
+            pets[0].entity,
+            game.build_candidates(&kind, BuildGoal::Upgrade { to_tier: 2 })[0]
+                .pet
+                .entity,
+        )
+    };
+    assert_ne!(
+        top, owned_first,
+        "precondition: the sorted list and owned_pets' order must actually differ, \
+         or the test passes against a handler indexing either one"
+    );
+
+    open_upgrade_picker(&mut app);
+    app.handle_key(GameKey::Char('1'));
+
+    let survivors: Vec<_> = app
+        .game
+        .as_mut()
+        .unwrap()
+        .owned_pets()
+        .into_iter()
+        .map(|p| p.entity)
+        .collect();
+    assert!(
+        !survivors.contains(&top),
+        "row 1 named the better builder, so that is the program that must have been spent"
+    );
+}

@@ -459,7 +459,7 @@ fn a_fired_passive_goes_on_cooldown() {
         let probe = Game::new(9009, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         passive_id(&probe, PassiveTrigger::AllyDropped)
     };
-    let mut game = battle_with_a_passive_holder(9009, &passive);
+    let mut game = battle_with_a_passive_holder(9010, &passive);
     let player = game.player_entity();
     let doomed = game.owned_pets()[0].entity;
 

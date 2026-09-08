@@ -475,10 +475,14 @@ impl Game {
         if !done {
             return;
         }
-        let Some((kind, goal)) = self
+        // The committed program is read here, **before** `consume_site`
+        // gives it back or spends it: the figure it leaves in the machine is
+        // taken off the snapshot the request has been holding since it was
+        // filed.
+        let Some((kind, goal, program)) = self
             .world
             .get::<BuildSite>(site)
-            .map(|b| (b.structure.clone(), b.goal))
+            .map(|b| (b.structure.clone(), b.goal, b.program.clone()))
         else {
             return;
         };
@@ -497,7 +501,10 @@ impl Game {
             BuildGoal::New => {
                 self.consume_site(site);
                 self.world.entity_mut(worker).remove::<Task>();
-                self.spawn_structure(&def, target.x, target.y);
+                let quality = program
+                    .as_ref()
+                    .map(|p| crate::game::base::building::build_quality_of(&def, p));
+                self.spawn_structure(&def, target.x, target.y, quality);
                 self.log_base(format!("Your crew finishes the {}.", def.name));
             }
             BuildGoal::Upgrade { to_tier } => {
@@ -530,6 +537,15 @@ impl Game {
                 self.world
                     .entity_mut(machine)
                     .insert(StructureTier(to_tier));
+                // **Overwritten**, not averaged and not kept at the better of
+                // the two: the machine you are standing in front of is the
+                // one this program just finished, and an upgrade is a build.
+                if let Some(program) = &program {
+                    let quality = crate::game::base::building::build_quality_of(&def, program);
+                    self.world
+                        .entity_mut(machine)
+                        .insert(crate::components::BuildQuality(quality));
+                }
                 // A node that opted into chance-based yield tracks its tier
                 // as its level; one that always succeeds (level None) stays
                 // that way.

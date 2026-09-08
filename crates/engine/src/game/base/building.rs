@@ -222,7 +222,7 @@ impl Game {
                     inv.take(item.clone(), *qty);
                 }
             }
-            self.spawn_structure(&def, x, y);
+            self.spawn_structure(&def, x, y, None);
             // The Home is what opens base space, and it opens it exactly
             // where it stands: the pocket is laid around the origin the Home
             // was just put on.
@@ -407,7 +407,18 @@ impl Game {
     /// unoccupied, under `max_deployed` — belongs to whoever decided to
     /// build, and by the time a crew finishes a request those were answered
     /// when it was filed.
-    pub(crate) fn spawn_structure(&mut self, def: &StructureDef, x: i32, y: i32) -> Entity {
+    ///
+    /// `quality` is what the program spent on this build was worth to it —
+    /// `build_quality_of`'s answer. `None` writes **no component at all**,
+    /// which is the neutral every reader already means: the Home, which
+    /// costs no program, and every hand-spawned fixture.
+    pub(crate) fn spawn_structure(
+        &mut self,
+        def: &StructureDef,
+        x: i32,
+        y: i32,
+        quality: Option<f32>,
+    ) -> Entity {
         // The freebie is spent **here**, where a structure actually stands,
         // rather than at the deploy that asked for one. Both callers claim
         // it identically for free that way, and a request the player files
@@ -463,6 +474,9 @@ impl Game {
         }
         if def.upgrade.is_some() {
             entity.insert(StructureTier(1));
+        }
+        if let Some(quality) = quality {
+            entity.insert(crate::components::BuildQuality(quality));
         }
         entity.id()
     }
@@ -1069,21 +1083,69 @@ impl Game {
     /// the comparison legible: the player has no species and so works at
     /// the baseline, and a posted program is faster or slower than that by
     /// its own `base_speed`.
-    fn work_ticks_for(&mut self, structure: Entity, worker_speed: i32) -> u32 {
+    pub(crate) fn work_ticks_for(&mut self, structure: Entity, worker_speed: i32) -> u32 {
         let kind = self.world.get::<Structure>(structure).unwrap().kind.clone();
-        let db = self.world.resource::<StructureDb>();
-        let base = match db.get(&kind) {
-            None => 5,
-            Some(def) => match (&def.work, &def.assembles) {
-                (Some(work), _) => work.ticks_per_unit,
-                (None, Some(assembles)) => assembles.ticks_per_unit,
-                (None, None) => 5,
-            },
-        };
-        crate::systems::work_ticks_at_speed(
-            base,
+        let quality = self
+            .world
+            .get::<crate::components::BuildQuality>(structure)
+            .map_or(1.0, |q| q.0);
+        let def = self.world.resource::<StructureDb>().get(&kind).cloned();
+        match def {
+            None => crate::systems::work_ticks_at_speed(
+                5,
+                worker_speed,
+                crate::classes::work_tick_scale(self.player_class()),
+                quality as f64,
+            ),
+            Some(def) => self
+                .cycle_ticks_for(&def, quality, worker_speed)
+                // A def that runs no cycle still answers here: the five-tick
+                // fallback is what a hand-spawned test node has always got.
+                .unwrap_or_else(|| {
+                    crate::systems::work_ticks_at_speed(
+                        5,
+                        worker_speed,
+                        crate::classes::work_tick_scale(self.player_class()),
+                        quality as f64,
+                    )
+                }),
+        }
+    }
+
+    /// One cycle of `def` for a worker of `worker_speed`, at `quality`.
+    /// `None` for a structure that runs no cycle at all.
+    ///
+    /// The single derivation the live rate and the build picker's preview
+    /// both call. A percentage re-derived in a view would quote a change
+    /// that does not happen: `work_ticks_at_speed` rounds to whole ticks and
+    /// floors at one.
+    pub(crate) fn cycle_ticks_for(
+        &self,
+        def: &StructureDef,
+        quality: f32,
+        worker_speed: i32,
+    ) -> Option<u32> {
+        Some(crate::systems::work_ticks_at_speed(
+            crate::structures::cycle_ticks(def)?,
             worker_speed,
             crate::classes::work_tick_scale(self.player_class()),
+            quality as f64,
+        ))
+    }
+
+    /// `build_quality` for a live roster entity — the build picker's half,
+    /// where no `CreatureSave` has been taken yet.
+    pub(crate) fn build_quality_for(&self, def: &StructureDef, program: Entity) -> f32 {
+        build_quality(
+            def,
+            self.world
+                .get::<Potential>(program)
+                .copied()
+                .unwrap_or(Potential::NEUTRAL),
+            self.world
+                .get::<Rarity>(program)
+                .copied()
+                .unwrap_or(Rarity::Ordinary),
         )
     }
 
@@ -1297,4 +1359,28 @@ impl Game {
             required: 0,
         });
     }
+}
+
+/// What one program is worth to the machine it is spent on — the one
+/// formula, with three entry points above it and no second copy of either
+/// the roll selection or the rarity lift.
+///
+/// **Which roll is read is a two-armed choice on purpose.** A structure with
+/// `work` extracts and reads `extraction_roll`; everything else assembles —
+/// or does nothing measurable — and reads `assembly_roll`. A third arm for
+/// "neither" would be a distinction the player cannot act on, and would put
+/// a program on a build picker with no answer to give.
+pub(crate) fn build_quality(def: &StructureDef, potential: Potential, rarity: Rarity) -> f32 {
+    let roll = if def.work.is_some() {
+        potential.extraction_roll
+    } else {
+        potential.assembly_roll
+    };
+    roll + rarity.rank() as f32 * crate::tuning::BUILD_QUALITY_PER_RARITY_RUNG
+}
+
+/// The same for the snapshot a filed request is holding — a committed
+/// program is a `CreatureSave`, not an entity.
+pub(crate) fn build_quality_of(def: &StructureDef, program: &crate::save::CreatureSave) -> f32 {
+    build_quality(def, program.potential(), program.rarity)
 }

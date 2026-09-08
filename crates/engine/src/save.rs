@@ -385,6 +385,19 @@ pub struct CreatureSave {
     pub atk_roll: f32,
     pub def_roll: f32,
     pub growth_roll: f32,
+    /// This individual's two build rolls — see `components::Potential`.
+    /// Persisted for `growth_roll`'s reason: the figure is read at exactly
+    /// one moment, the tick a build this program was spent on finishes, and
+    /// a program that reloaded neutral would build a different machine than
+    /// the one the picker quoted.
+    ///
+    /// `#[serde(default = "neutral_roll")]` rather than a bare
+    /// `#[serde(default)]`, which on an `f32` is `0.0` — silently the worst
+    /// builder in the game, for every program in every pre-feature save.
+    #[serde(default = "neutral_roll")]
+    pub assembly_roll: f32,
+    #[serde(default = "neutral_roll")]
+    pub extraction_roll: f32,
     /// How many fusions deep this creature's lineage is — see
     /// `components::FusionCount`. Persisted so the `MAX_FUSIONS` ceiling
     /// survives a save/load instead of resetting to 0 and handing the
@@ -651,6 +664,31 @@ pub struct CreatureSave {
     /// the feature not working.
     #[serde(default)]
     pub downed: bool,
+}
+
+/// `serde`'s default for an individual roll — the neutral 1.0, because a
+/// bare `#[serde(default)]` on an `f32` is `0.0` and would load every
+/// program in a pre-feature save as permanently the worst builder in the
+/// game.
+fn neutral_roll() -> f32 {
+    1.0
+}
+
+impl CreatureSave {
+    /// The individual rolls this record carries, as the component. The one
+    /// walk from a save to a `Potential`: `Game::load` restores through it
+    /// and `build_quality_of` reads a committed program's through it, and a
+    /// second copy is the one that drifts.
+    pub(crate) fn potential(&self) -> crate::components::Potential {
+        crate::components::Potential {
+            hp_roll: self.hp_roll,
+            atk_roll: self.atk_roll,
+            def_roll: self.def_roll,
+            growth_roll: self.growth_roll,
+            assembly_roll: self.assembly_roll,
+            extraction_roll: self.extraction_roll,
+        }
+    }
 }
 
 /// A worn item on disk. Deliberately **not** `components::EquippedItem`,
@@ -974,6 +1012,24 @@ pub struct StructureSave {
     /// `SAVE_FORMAT_VERSION` bump.
     #[serde(default = "default_power_fuel")]
     pub power_fuel: u32,
+    /// How well the program spent on this machine's build put it together —
+    /// see `components::BuildQuality`.
+    ///
+    /// **Restored from the save, never re-derived on load.** `Game::load`
+    /// deliberately rebuilds some structure components from the def
+    /// (`Stock::capacity` is the stated example, and `ResourceNode::level`
+    /// already needed carving out of it), but the program that raised this
+    /// machine is gone and there is nothing on the def to re-derive from —
+    /// so re-deriving means silently resetting every machine in the base to
+    /// neutral. Additive behind a default, so no `SAVE_FORMAT_VERSION` bump.
+    #[serde(default = "default_build_quality")]
+    pub build_quality: f32,
+}
+
+/// `serde`'s default for a machine's build quality — the neutral 1.0, which
+/// is what the component's absence already means.
+fn default_build_quality() -> f32 {
+    1.0
 }
 
 /// `serde`'s default for a supplier's remaining charge — a full one, so a
@@ -1746,6 +1802,8 @@ mod tests {
             atk_roll: 1.0,
             def_roll: 1.0,
             growth_roll: 1.0,
+            assembly_roll: 1.0,
+            extraction_roll: 1.0,
             fusions: 0,
             refactors: 0,
             purchased_tiers: 0,

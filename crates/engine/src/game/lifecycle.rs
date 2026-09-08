@@ -1222,6 +1222,10 @@ impl Game {
                     level: work.level,
                 });
             }
+            // Inserted unconditionally: a Home reloaded at 1.0 carries a
+            // component it did not have before, which changes nothing
+            // because 1.0 is the neutral the absent case already means.
+            entity.insert(crate::components::BuildQuality(s.build_quality));
             if def.upgrade.is_some() {
                 let tier = s.tier.unwrap_or(1);
                 entity.insert(StructureTier(tier));
@@ -1419,12 +1423,7 @@ impl Game {
                 atk: c.atk,
                 mitigation: c.mitigation,
             },
-            Potential {
-                hp_roll: c.hp_roll,
-                atk_roll: c.atk_roll,
-                def_roll: c.def_roll,
-                growth_roll: c.growth_roll,
-            },
+            c.potential(),
             ZonePortal(c.zone),
             StatusEffects::default(),
             FusionCount(c.fusions),
@@ -1755,6 +1754,8 @@ impl Game {
             atk_roll: potential.atk_roll,
             def_roll: potential.def_roll,
             growth_roll: potential.growth_roll,
+            assembly_roll: potential.assembly_roll,
+            extraction_roll: potential.extraction_roll,
             fusions: self.world.get::<FusionCount>(e).map(|f| f.0).unwrap_or(0),
             refactors: self.world.get::<Refactors>(e).map(|r| r.0).unwrap_or(0),
             purchased_tiers: self
@@ -1972,11 +1973,12 @@ impl Game {
             Option<&StandingJob>,
             Option<&crate::components::PowerFuel>,
             Option<&crate::components::Hopper>,
+            Option<&crate::components::BuildQuality>,
         )>();
         // `Stock` is optional here only because test fixtures hand-spawn
         // bare `Structure`s; `place_structure` and `load` both give every
         // real one a buffer.
-        for (structure, pos, durability, tier, stock, standing, fuel, hopper) in
+        for (structure, pos, durability, tier, stock, standing, fuel, hopper, quality) in
             structure_query.iter(&self.world)
         {
             let encode = |map: Option<&std::collections::BTreeMap<ItemId, u32>>| {
@@ -1997,6 +1999,7 @@ impl Game {
                 power_fuel: fuel
                     .map(|f| f.ticks_left)
                     .unwrap_or(crate::tuning::POWER_UPKEEP_TICKS),
+                build_quality: quality.map_or(1.0, |q| q.0),
             });
         }
 

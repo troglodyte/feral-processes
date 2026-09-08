@@ -21,10 +21,10 @@ use crate::resources::{
 use crate::species::{AffinityClass, SpeciesDb};
 use crate::structures::StructureDb;
 use crate::tuning::{
-    DEFAULT_BASE_INT, DEFAULT_BASE_SPEED, LEECH_YIELD_BONUS, MEMORY_MORALE_MAX_SHIFT,
-    MEMORY_MORALE_PER_POINT, MINING_SUCCESS_BASE, MINING_SUCCESS_PER_INT, MINING_SUCCESS_PER_LEVEL,
-    NEST_TETHER_RADIUS, NODE_PAYOUT_ZONE_BONUS, WANDER_COOLDOWN_MAX_TICKS,
-    WANDER_COOLDOWN_MIN_TICKS, WORK_TICKS_PER_SPEED,
+    BUILD_QUALITY_TICK_WEIGHT, DEFAULT_BASE_INT, DEFAULT_BASE_SPEED, LEECH_YIELD_BONUS,
+    MEMORY_MORALE_MAX_SHIFT, MEMORY_MORALE_PER_POINT, MINING_SUCCESS_BASE, MINING_SUCCESS_PER_INT,
+    MINING_SUCCESS_PER_LEVEL, NEST_TETHER_RADIUS, NODE_PAYOUT_ZONE_BONUS,
+    WANDER_COOLDOWN_MAX_TICKS, WANDER_COOLDOWN_MIN_TICKS, WORK_TICKS_PER_SPEED,
 };
 use crate::tuning::{
     HUNGER_DECAY_PER_TICK, NEED_STRAIN_MAX_SHIFT, NEED_STRAIN_PER_POINT, WORK_XP_LEVEL_CAP,
@@ -305,11 +305,27 @@ pub(crate) fn morale_shift(morale: f32) -> f64 {
 /// meaning what it says, and what puts pressure on the posting in both
 /// directions: a quick program beats working the node yourself, and a slow
 /// one is worse than rolling your sleeves up.
-pub(crate) fn work_ticks_at_speed(base_ticks: u32, speed: i32, class_scale: f64) -> u32 {
+/// `build_quality` is the **builder's**, baked into the machine the tick it
+/// was raised (`components::BuildQuality`) and never moving again — where
+/// `speed` is the *posted worker's* and changes every time somebody is
+/// reassigned. The two multiply, which is why the term is weighted at
+/// `BUILD_QUALITY_TICK_WEIGHT` rather than at `WORK_TICKS_PER_SPEED`'s
+/// worth. It arrives raw rather than as a finished scale for `class_scale`'s
+/// reason: a scale computed at the caller is a second expression of the
+/// formula, and there are two callers.
+pub(crate) fn work_ticks_at_speed(
+    base_ticks: u32,
+    speed: i32,
+    class_scale: f64,
+    build_quality: f64,
+) -> u32 {
     let scale = 1.0 + (DEFAULT_BASE_SPEED - speed) as f64 * WORK_TICKS_PER_SPEED;
+    let build_scale = 1.0 - (build_quality - 1.0) * BUILD_QUALITY_TICK_WEIGHT;
     // Floored at one cycle per tick however fast the species: a modded
     // `base_speed: 200` scales straight past zero into negative.
-    (base_ticks as f64 * scale * class_scale).round().max(1.0) as u32
+    (base_ticks as f64 * scale * class_scale * build_scale)
+        .round()
+        .max(1.0) as u32
 }
 
 /// What the *worker* brings to a gather cycle, as opposed to what the node
@@ -781,9 +797,7 @@ fn burn_grid_upkeep(world: &mut World) {
         // shelf the rest of the base is spending from too.
         let mut bought = world
             .get_mut::<Stock>(burner)
-            .map(|mut stock| {
-                crate::game::base::hauling::take_from_input(&mut stock, &cell, want)
-            })
+            .map(|mut stock| crate::game::base::hauling::take_from_input(&mut stock, &cell, want))
             .unwrap_or(0);
         let plan = crate::game::base::collect::plan_adjacent_take(
             tile,
@@ -2546,7 +2560,7 @@ mod tests {
         // number rather than merely land near it.
         for base in [1, 3, 6, 8, 10, 12, 20, 30] {
             assert_eq!(
-                work_ticks_at_speed(base, DEFAULT_BASE_SPEED, 1.0),
+                work_ticks_at_speed(base, DEFAULT_BASE_SPEED, 1.0, 1.0),
                 base,
                 "a worker at the roster baseline must cost exactly the def's rate"
             );
@@ -2557,10 +2571,10 @@ mod tests {
     fn a_faster_species_needs_fewer_ticks_and_a_slower_one_more() {
         // The shipped extremes — construct 6, sprite 14 — against a Mining
         // Node's 10 and a Fabricator's 30.
-        assert_eq!(work_ticks_at_speed(10, 14, 1.0), 8);
-        assert_eq!(work_ticks_at_speed(10, 6, 1.0), 12);
-        assert_eq!(work_ticks_at_speed(30, 14, 1.0), 24);
-        assert_eq!(work_ticks_at_speed(30, 6, 1.0), 36);
+        assert_eq!(work_ticks_at_speed(10, 14, 1.0, 1.0), 8);
+        assert_eq!(work_ticks_at_speed(10, 6, 1.0, 1.0), 12);
+        assert_eq!(work_ticks_at_speed(30, 14, 1.0, 1.0), 24);
+        assert_eq!(work_ticks_at_speed(30, 6, 1.0, 1.0), 36);
     }
 
     #[test]
@@ -2568,8 +2582,35 @@ mod tests {
         // A `base_speed: 200` mod scales the multiplier straight past zero and
         // negative. Without the floor that is a machine producing on every tick
         // forever, which is also what a `required: 0` would do.
-        assert_eq!(work_ticks_at_speed(10, 200, 1.0), 1);
-        assert_eq!(work_ticks_at_speed(1, 14, 1.0), 1);
+        assert_eq!(work_ticks_at_speed(10, 200, 1.0, 1.0), 1);
+        assert_eq!(work_ticks_at_speed(1, 14, 1.0, 1.0), 1);
+    }
+
+    /// The builder's figure pulls the same way the posted worker's speed
+    /// does, at `BUILD_QUALITY_TICK_WEIGHT` — half as hard, because the two
+    /// multiply and a cycle that could swing on both at once would leave the
+    /// machine's own `ticks_per_unit` meaning very little.
+    #[test]
+    fn a_build_quality_scales_a_cycle_the_way_speed_does_but_half_as_hard() {
+        // The spec's worked table: a 20-tick machine at 0.90x, built by a
+        // program at the top of the roll range.
+        assert_eq!(work_ticks_at_speed(20, DEFAULT_BASE_SPEED, 1.0, 1.2), 18);
+        assert_eq!(work_ticks_at_speed(20, DEFAULT_BASE_SPEED, 1.0, 1.0), 20);
+        assert_eq!(work_ticks_at_speed(20, DEFAULT_BASE_SPEED, 1.0, 0.8), 22);
+        // Half of what speed is worth over the same deviation: a point of
+        // `WORK_TICKS_PER_SPEED` either side moves a 20-tick cycle by one,
+        // and 0.2 of build quality moves it by two rather than four.
+        assert!(
+            work_ticks_at_speed(20, DEFAULT_BASE_SPEED, 1.0, 1.2)
+                < work_ticks_at_speed(20, DEFAULT_BASE_SPEED, 1.0, 1.0)
+        );
+        assert!(
+            work_ticks_at_speed(20, DEFAULT_BASE_SPEED, 1.0, 0.8)
+                > work_ticks_at_speed(20, DEFAULT_BASE_SPEED, 1.0, 1.0)
+        );
+        // The floor covers the new term too: the best build the game can
+        // roll on the quickest species must still cost a whole tick.
+        assert_eq!(work_ticks_at_speed(1, 14, 1.0, 1.32), 1);
     }
 
     #[test]

@@ -714,6 +714,8 @@ fn a_second_grudge_does_not_rename() {
         atk_roll: 0.3,
         def_roll: 0.25,
         growth_roll: 0.4,
+        assembly_roll: 1.0,
+        extraction_roll: 1.0,
     };
     let would_be_second_name = game
         .world
@@ -750,12 +752,16 @@ fn two_nemeses_of_one_species_with_different_potential_get_different_names() {
         atk_roll: 0.9,
         def_roll: 1.0,
         growth_roll: 1.1,
+        assembly_roll: 1.0,
+        extraction_roll: 1.0,
     };
     let potential_b = Potential {
         hp_roll: 1.2,
         atk_roll: 1.05,
         def_roll: 0.95,
         growth_roll: 0.85,
+        assembly_roll: 1.0,
+        extraction_roll: 1.0,
     };
     let name_for = |potential: Potential| {
         let mut game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

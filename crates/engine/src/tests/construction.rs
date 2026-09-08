@@ -1721,3 +1721,396 @@ fn a_filed_portal_request_keeps_the_price_it_was_filed_at_across_a_zone_change()
         "the fixture is worthless unless zone 2 would actually quote a different price"
     );
 }
+
+/// A cancelled request gives the program back whole, build rolls included.
+///
+/// The refund goes through `CreatureSave` — the snapshot taken when the
+/// request was filed — so a field the save drops is a program that comes
+/// back a different builder than the one that went in.
+#[test]
+fn a_cancelled_order_gives_back_a_program_with_its_build_rolls() {
+    let mut game = base(1108);
+    builder(&mut game);
+    file_build_with_rolls(&mut game, "mining_node", 1, 0, 1.17, 0.83);
+    let site = site_at(&mut game, 1, 0);
+
+    game.cancel_build_request(site).unwrap();
+
+    let restored = game
+        .owned_pets()
+        .into_iter()
+        .filter_map(|p| {
+            game.world
+                .get::<crate::components::Potential>(p.entity)
+                .copied()
+        })
+        .find(|p| (p.assembly_roll - 1.17).abs() < 1e-5)
+        .expect("the refunded program is back on the roster");
+    assert!(
+        (restored.extraction_roll - 0.83).abs() < 1e-5,
+        "the other roll came back wrong: {}",
+        restored.extraction_roll
+    );
+}
+
+// --- What a program is worth to the machine it becomes -------------------
+
+/// A helper for the build-quality tests: raise `kind` on `(1, 0)` with a
+/// program of the given rolls and return the machine.
+fn machine_built_by(seed: u32, kind: &str, assembly: f32, extraction: f32) -> (Game, Entity) {
+    let mut game = base(seed);
+    builder(&mut game);
+    file_build_with_rolls(&mut game, kind, 1, 0, assembly, extraction);
+    for _ in 0..400 {
+        if structure_at(&mut game, 1, 0).is_some() {
+            break;
+        }
+        game.tick();
+    }
+    let machine = structure_at(&mut game, 1, 0).expect("the crew finished the build");
+    (game, machine)
+}
+
+fn def_of(game: &Game, kind: &str) -> crate::structures::StructureDef {
+    game.world
+        .resource::<StructureDb>()
+        .get(kind)
+        .cloned()
+        .expect("a shipped structure")
+}
+
+/// Which of the two rolls a build reads is decided by the structure, not by
+/// the program: a node extracts, a bench assembles.
+#[test]
+fn build_quality_reads_extraction_for_a_node_and_assembly_for_a_bench() {
+    let game = base(1150);
+    let potential = Potential {
+        assembly_roll: 1.18,
+        extraction_roll: 0.82,
+        ..Potential::NEUTRAL
+    };
+
+    let node = crate::game::base::building::build_quality(
+        &def_of(&game, "mining_node"),
+        potential,
+        Rarity::Ordinary,
+    );
+    let bench = crate::game::base::building::build_quality(
+        &def_of(&game, "assembly_bay"),
+        potential,
+        Rarity::Ordinary,
+    );
+
+    assert!(node < 1.0, "the node read the assembly roll: {node}");
+    assert!(bench > 1.0, "the bench read the extraction roll: {bench}");
+}
+
+/// Rarity insures a build; it does not rescue one.
+#[test]
+fn rarity_lifts_a_build_by_exactly_one_rung_per_rung() {
+    let game = base(1151);
+    let def = def_of(&game, "assembly_bay");
+    let poor = Potential {
+        assembly_roll: crate::tuning::MIN_INDIVIDUAL_ROLL,
+        ..Potential::NEUTRAL
+    };
+
+    let ordinary = crate::game::base::building::build_quality(&def, poor, Rarity::ALL[0]);
+    let one_up = crate::game::base::building::build_quality(&def, poor, Rarity::ALL[1]);
+    assert!(
+        (one_up - ordinary - crate::tuning::BUILD_QUALITY_PER_RARITY_RUNG).abs() < 1e-5,
+        "a rung is not worth exactly one rung: {ordinary} -> {one_up}"
+    );
+
+    let best = *Rarity::ALL.last().unwrap();
+    let rescued = crate::game::base::building::build_quality(&def, poor, best);
+    assert!(
+        rescued < 1.0,
+        "the rarest program with the worst roll still built better than shipped: {rescued}"
+    );
+}
+
+/// Fourteen shipped structures run no cycle at all, and `cycle_ticks` is
+/// where that is said once.
+#[test]
+fn a_structure_with_no_cycle_has_no_shipped_ticks() {
+    let game = base(1152);
+    assert_eq!(
+        crate::structures::cycle_ticks(&def_of(&game, "mining_node")),
+        Some(10)
+    );
+    assert_eq!(
+        crate::structures::cycle_ticks(&def_of(&game, "assembly_bay")),
+        Some(20)
+    );
+    assert_eq!(
+        crate::structures::cycle_ticks(&def_of(&game, "depot")),
+        None
+    );
+}
+
+/// The headline, and it is two-sided: a good builder leaves a machine faster
+/// than the def ships, and a bad one leaves it slower. A one-sided test
+/// passes against a bonus-only implementation.
+#[test]
+fn an_excellent_builder_leaves_a_faster_machine_than_a_poor_one() {
+    let shipped = 10; // mining_node's `ticks_per_unit`
+    let (mut good, good_machine) = machine_built_by(1153, "mining_node", 1.0, 1.2);
+    let (mut bad, bad_machine) = machine_built_by(1153, "mining_node", 1.0, 0.8);
+
+    let fast = good.work_ticks_for(good_machine, crate::tuning::DEFAULT_BASE_SPEED);
+    let slow = bad.work_ticks_for(bad_machine, crate::tuning::DEFAULT_BASE_SPEED);
+
+    assert!(fast < slow, "{fast} is not quicker than {slow}");
+    assert!(fast < shipped, "the good build was no faster than shipped");
+    assert!(slow > shipped, "the bad build was no slower than shipped");
+}
+
+/// Absent means neutral, and that is what every hand-spawned fixture relies
+/// on.
+#[test]
+fn a_machine_with_no_build_quality_cycles_at_its_shipped_rate() {
+    let mut game = base(1154);
+    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    let node = structure_at(&mut game, 1, 0).expect("a node stands there");
+    game.world
+        .entity_mut(node)
+        .remove::<crate::components::BuildQuality>();
+
+    assert_eq!(
+        game.work_ticks_for(node, crate::tuning::DEFAULT_BASE_SPEED),
+        10,
+        "a machine carrying no figure must cycle at exactly its def's rate"
+    );
+}
+
+/// The Home costs no program, so there is nothing for it to carry — and the
+/// assertion is on the component's *absence*, since a fixture writing
+/// `BuildQuality(1.0)` would pass a value check while breaking the rule the
+/// doc comment states.
+#[test]
+fn the_home_stands_up_carrying_no_build_quality() {
+    let mut game = base(1155);
+    let home = structure_at(&mut game, 0, 0)
+        .or_else(|| {
+            let mut q = game.world.query::<(Entity, &Structure)>();
+            q.iter(&game.world)
+                .find(|(_, s)| s.kind == "home")
+                .map(|(e, _)| e)
+        })
+        .expect("the fixture founded a Home");
+
+    assert!(
+        game.world
+            .get::<crate::components::BuildQuality>(home)
+            .is_none(),
+        "the Home carries a figure nobody built it with"
+    );
+}
+
+/// An upgrade overwrites the figure — not the average of the two, and not
+/// whichever was better. The machine in front of you is the one this program
+/// just finished.
+#[test]
+fn an_upgrade_overwrites_the_figure_with_the_new_programs() {
+    let (mut game, node) = machine_built_by(1156, "mining_node", 1.0, 1.2);
+    let raised = game.work_ticks_for(node, crate::tuning::DEFAULT_BASE_SPEED);
+    set_zone(&mut game, 2);
+    give(&mut game, &ItemId::from("cache_grain"), 40);
+
+    let program = tame_at_zone(&mut game, 2);
+    set_build_rolls(&mut game, program, 1.0, 0.8);
+    game.upgrade_structure(node, Some(program)).unwrap();
+    for _ in 0..600 {
+        if game
+            .world
+            .get::<crate::components::BuildQuality>(node)
+            .is_some_and(|q| q.0 < 1.0)
+        {
+            break;
+        }
+        game.tick();
+    }
+
+    let after = game.work_ticks_for(node, crate::tuning::DEFAULT_BASE_SPEED);
+    assert!(
+        after > raised,
+        "the Poor upgrade did not replace the Excellent build: {raised} -> {after}"
+    );
+    let figure = game
+        .world
+        .get::<crate::components::BuildQuality>(node)
+        .expect("the upgraded machine carries a figure")
+        .0;
+    assert!(
+        (figure - 0.8).abs() < 1e-5,
+        "the figure is an average or the better of the two, not the new one: {figure}"
+    );
+}
+
+// --- The picker's quote --------------------------------------------------
+
+/// A roster of three programs whose assembly and extraction rolls rank them
+/// in opposite orders — a fixture where both rolls rank the same way proves
+/// nothing about which one a build reads.
+fn roster_ranked_opposite(seed: u32) -> Game {
+    let mut game = base(seed);
+    // Spawned in neither order, so a list that was never sorted fails both
+    // assertions rather than passing one of them by accident.
+    for (assembly, extraction) in [(1.00, 1.00), (0.82, 1.18), (1.18, 0.82)] {
+        let program = spawn_tamed(&mut game, 500, 3);
+        set_build_rolls(&mut game, program, assembly, extraction);
+    }
+    game
+}
+
+fn assembly_rolls(candidates: &[crate::views::BuildCandidate], game: &Game) -> Vec<f32> {
+    candidates
+        .iter()
+        .map(|c| {
+            game.world
+                .get::<Potential>(c.pet.entity)
+                .unwrap()
+                .assembly_roll
+        })
+        .collect()
+}
+
+/// Best first, by the roll this build actually reads.
+#[test]
+fn the_picker_orders_candidates_by_the_roll_this_build_reads() {
+    let mut game = roster_ranked_opposite(1160);
+
+    let bench = game.build_candidates(&"assembly_bay".to_string(), BuildGoal::New);
+    let node = game.build_candidates(&"mining_node".to_string(), BuildGoal::New);
+    assert_eq!(bench.len(), 3, "every program qualifies for a tier-1 build");
+    assert_eq!(node.len(), 3);
+
+    let bench_order = assembly_rolls(&bench, &game);
+    let node_order = assembly_rolls(&node, &game);
+    assert!(
+        bench_order.windows(2).all(|w| w[0] >= w[1]),
+        "the bench's list is not sorted by assembly: {bench_order:?}"
+    );
+    assert!(
+        node_order.windows(2).all(|w| w[0] <= w[1]),
+        "the node's list did not read the extraction roll: {node_order:?}"
+    );
+    assert_eq!(bench[0].aptitude, "Assembly");
+    assert_eq!(node[0].aptitude, "Extraction");
+    assert_eq!(bench[0].label, "Excellent");
+}
+
+/// The quote is a *call* into the real cycle formula, end to end: the
+/// number the picker showed is the number the finished machine runs at.
+#[test]
+fn the_quoted_cycle_is_the_one_the_finished_machine_runs() {
+    let mut game = base(1161);
+    builder(&mut game);
+    let program = spawn_tamed(&mut game, 500, 3);
+    set_build_rolls(&mut game, program, 1.0, 1.16);
+
+    let quoted = game
+        .build_candidates(&"mining_node".to_string(), BuildGoal::New)
+        .into_iter()
+        .find(|c| c.pet.entity == program)
+        .expect("the program the fixture is about is on the list");
+    let built = match quoted.effect {
+        crate::views::BuildEffect::Cycle { built, .. } => built,
+        crate::views::BuildEffect::NoCycle => panic!("a Mining Node runs a cycle"),
+    };
+
+    game.place_structure("mining_node", 1, 0, Some(program))
+        .unwrap();
+    for _ in 0..400 {
+        if structure_at(&mut game, 1, 0).is_some() {
+            break;
+        }
+        game.tick();
+    }
+    let machine = structure_at(&mut game, 1, 0).expect("the crew finished it");
+
+    assert_eq!(
+        game.work_ticks_for(machine, crate::tuning::DEFAULT_BASE_SPEED),
+        built,
+        "the quote and the machine disagree"
+    );
+}
+
+/// A cycle short enough that rounding eats the change quotes the same number
+/// twice — and the raised machine really does run at it. This is the case a
+/// percentage would have got wrong.
+#[test]
+fn a_cycle_too_short_for_the_effect_quotes_the_same_number_twice() {
+    // Nothing shipped cycles under six ticks, and the effect only vanishes
+    // under five.
+    let assets = assets_dir_with_extra_structure(
+        "short_cycle",
+        "tick_tap.ron",
+        r#"(
+    id: "tick_tap",
+    name: "Tick Tap",
+    description: "A machine whose cycle is too short for a build to move.",
+    glyph: '$',
+    color: Brown,
+    build_cost: [("core_fragment", 4)],
+    work: Some((produces: "core_fragment", ticks_per_unit: 2, level: Some(1))),
+)"#,
+    );
+    let mut game = Game::new(1162, DifficultyMode::Forgiving, &assets).unwrap();
+    place_home(&mut game);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 500);
+    stand_in_base(&mut game);
+    builder(&mut game);
+    let program = spawn_tamed(&mut game, 500, 3);
+    set_build_rolls(&mut game, program, 1.0, crate::tuning::MAX_INDIVIDUAL_ROLL);
+
+    let quoted = game
+        .build_candidates(&"tick_tap".to_string(), BuildGoal::New)
+        .into_iter()
+        .find(|c| c.pet.entity == program)
+        .expect("the program is on the list");
+    let crate::views::BuildEffect::Cycle { shipped, built } = quoted.effect else {
+        panic!("a Tick Tap runs a cycle");
+    };
+    assert_eq!(
+        shipped, built,
+        "a two-tick cycle cannot move, so the quote must say so"
+    );
+
+    game.place_structure("tick_tap", 1, 0, Some(program))
+        .unwrap();
+    for _ in 0..400 {
+        if structure_at(&mut game, 1, 0).is_some() {
+            break;
+        }
+        game.tick();
+    }
+    let machine = structure_at(&mut game, 1, 0).expect("the crew finished it");
+    assert_eq!(
+        game.work_ticks_for(machine, crate::tuning::DEFAULT_BASE_SPEED),
+        built,
+        "the machine did move after all, so the quote was wrong"
+    );
+}
+
+/// A structure that runs no cycle at all reports the variant, not a pair of
+/// equal numbers — `Cycle { shipped: n, built: n }` is the *right* answer
+/// for a cycle too short to move and the wrong one here.
+#[test]
+fn a_depot_reports_no_cycle_at_all() {
+    let mut game = roster_ranked_opposite(1163);
+    let candidates = game.build_candidates(&"depot".to_string(), BuildGoal::New);
+
+    assert!(!candidates.is_empty(), "the fixture staged a roster");
+    for c in &candidates {
+        assert_eq!(
+            c.effect,
+            crate::views::BuildEffect::NoCycle,
+            "a Depot has no rate to change"
+        );
+    }
+}

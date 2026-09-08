@@ -835,6 +835,8 @@ fn manifest_reports_a_tamed_program_with_all_four_potential_rolls() {
         atk_roll: 1.05,
         def_roll: 0.95,
         growth_roll: 1.15,
+        assembly_roll: 1.0,
+        extraction_roll: 1.0,
     });
 
     let view = game.manifest(pet).expect("a tamed program has a manifest");
@@ -2420,7 +2422,7 @@ fn view_entities_carries_a_structures_resolved_sprite_name() {
         .get("refinery")
         .cloned()
         .expect("refinery ships with the game");
-    let entity = game.spawn_structure(&refinery, origin.x, origin.y);
+    let entity = game.spawn_structure(&refinery, origin.x, origin.y, None);
 
     let view = game
         .view_entities(5, 5)

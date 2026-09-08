@@ -574,7 +574,7 @@ fn the_player_and_a_companion_share_one_ceiling() {
 /// status tick), so it is worth pinning independently of any of them.
 #[test]
 fn every_member_of_a_group_pays_its_own_xp_when_it_dies() {
-    let mut game = Game::new(88, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(96, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     game.world.resource_mut::<ZoneLevel>().0 = 6;
     let spawn = *game.world.resource::<ZoneSpawnPoint>();
     // Deep, so the per-group ceiling this fixture lives under is 46 rather

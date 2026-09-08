@@ -89,7 +89,15 @@ pub(super) const MAX_AFFINITY_ROWS: usize = 2;
 /// The name moved with the shape rather than being left describing one the
 /// page no longer has. The **player** page keeps the renderer's only band,
 /// EQUIPMENT, which is capped by its own slot count and not by this.
-pub(super) const MAX_MOVE_ROWS: usize = 3;
+/// **Lowered again, from 3 to 1, to pay for POTENTIAL's two build rolls.**
+/// That is the same trade one paragraph up, made a second time and at a real
+/// cost this time: a species with two moves now spends its second line on a
+/// "+1 more" note, where the WORK trade cost nothing shipped. Measured
+/// rather than guessed — `MAX_POTENTIAL_ROWS` at 7 clears the 10px floor at
+/// **1** and does not at 2, and the alternative on the table was folding the
+/// two build rolls onto one line to keep MOVES at 2. The owner took the cost
+/// on MOVES so both rolls could be named in full on their own rows.
+pub(super) const MAX_MOVE_ROWS: usize = 1;
 
 /// The NEEDS box's own cap, tighter than `MAX_SECTION_ROWS` for
 /// `MAX_AFFINITY_ROWS`' reason: the program page has the least clearance of
@@ -100,6 +108,18 @@ pub(super) const MAX_MOVE_ROWS: usize = 3;
 /// escapes the frame — `tests::the_real_worst_case_pages_fit_the_tightest_window`
 /// is what measures which values still fit.
 pub(super) const MAX_NEED_ROWS: usize = 2;
+
+/// POTENTIAL's own cap, and the one per-box constant here that is **wider**
+/// than `MAX_SECTION_ROWS` rather than narrower. Seven because the box lists
+/// one row per roll plus the overall tier, and `components::Potential`'s two
+/// build rolls are the sixth and seventh.
+///
+/// Held here rather than by raising `MAX_SECTION_ROWS`, which would hand the
+/// extra row to every box — and the ROUTINES box's sixth line is already
+/// spent on its "+N more" note, so raising the shared cap would change what
+/// a full kit shows for a box that does not need the room. What paid for it
+/// is `MAX_MOVE_ROWS`; see that constant.
+pub(super) const MAX_POTENTIAL_ROWS: usize = 7;
 
 /// Trims `rows` to `MAX_SECTION_ROWS`, spending the last line on a count of
 /// what was dropped. A silent truncation would read as "that's all of them".
@@ -369,7 +389,7 @@ mod tests {
             // `sections_for` — drifting from what the renderer emits is a
             // failure this project has already shipped once.
             section("COMBAT", 4, false),
-            section("POTENTIAL", 5, false),
+            section("POTENTIAL", MAX_POTENTIAL_ROWS, false),
             section("AFFINITIES", MAX_AFFINITY_ROWS, false),
             section("SPECIES", 5, false),
             // Speed, Analysis, Base job, and the post — a tameable program

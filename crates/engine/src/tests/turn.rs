@@ -288,7 +288,7 @@ fn resting_repairs_the_party_and_leaves_base_staff_to_the_repair_bay() {
 /// had not seen in an hour.
 #[test]
 fn a_field_rest_does_not_reach_back_and_repair_base_staff() {
-    let mut game = Game::new(76, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(77, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let staff = spawn_tamed(&mut game, 10, 3);
     game.world.get_mut::<Stats>(staff).unwrap().hp = 1;

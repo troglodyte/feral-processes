@@ -687,6 +687,8 @@ mod tests {
             },
             activity: "Research Node".to_string(),
             quality: None,
+            assembly: None,
+            extraction: None,
             fusions: 0,
             refactors: 0,
             ring: 0,

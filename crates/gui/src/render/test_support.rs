@@ -145,6 +145,8 @@ fn game_with_programs(fixture: &str, seed: u32, programs: &[(bool, &str)]) -> Ga
         atk_roll: 1.0,
         def_roll: 1.0,
         growth_roll: 1.0,
+        assembly_roll: 1.0,
+        extraction_roll: 1.0,
         fusions: 0,
         refactors: 0,
         purchased_tiers: 0,
@@ -232,6 +234,7 @@ pub(super) fn app_in_base_with_a_compiler(seed: u32) -> App {
         standing_work: false,
         standing_guard: false,
         power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        build_quality: 1.0,
         hopper: Vec::new(),
         hopper_progress: 0,
     });

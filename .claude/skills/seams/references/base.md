@@ -908,3 +908,35 @@
   by `the_tallest_base_output_page_fits_its_popup`: 21 rows at 600px less ten
   of chrome. Both sections carry all four figures — dropping the hand column
   under MINED hides exactly the units the instrument exists to count.
+- **A structure remembers how well it was built, and absent means neutral.**
+  `components::BuildQuality`, written only by `Game::spawn_structure`'s
+  fourth argument and by `raise_one_tick`'s upgrade arm (which **overwrites**
+  — not the average, not the better), read only through
+  `Game::cycle_ticks_for`. **The trap is the absence**: the Home costs no
+  program, every hand-spawned fixture carries none, and a pre-feature save
+  has no key — so the read is `map_or(1.0, …)` and a reader that treats
+  absence as an error breaks the whole existing suite. **The second trap is
+  the load**: `Game::load` rebuilds several structure components off the def
+  rather than the file (`Stock::capacity`, and `ResourceNode::level` already
+  needed carving out), but the program that raised this machine is gone —
+  re-deriving means silently resetting every machine to neutral on reload.
+  Caught by a **file** round trip, never a RON one.
+- **The build term goes inside `work_ticks_at_speed`, not at its callers.**
+  `class_scale`'s own argument: the fourth parameter is the raw quality and
+  the scale is computed in the function, because there are two callers — the
+  live rate and the picker's preview. `speed` is the *posted worker's* and
+  `build_quality` is the *builder's*, and they **multiply**, which is why
+  `BUILD_QUALITY_TICK_WEIGHT` is half of what `WORK_TICKS_PER_SPEED` is worth
+  over the same range. **The trap is quoting a percentage**: the function
+  rounds to whole ticks and floors at one, so on a short cycle a percentage
+  promises a change that does not happen — `views::BuildEffect` carries two
+  whole tick figures out of the same call instead, and `NoCycle` is a
+  separate variant because `Cycle { shipped: n, built: n }` is the *right*
+  answer for a two-tick machine and the wrong one for a Depot.
+- **`Potential`'s two build rolls are deliberately independent of the four
+  combat rolls, and `quality_percent` still folds only the four.** An
+  Excellent fighter that builds badly is the tension the feature exists for.
+  `Potential::roll_label` is the one five-rung ladder both they and
+  `quality_label` speak. **The trap is the RNG stream**: `roll_potential`
+  going from four draws to six moved every seeded spawn, and ten tests were
+  re-baselined by seed or fixture, never by assertion.

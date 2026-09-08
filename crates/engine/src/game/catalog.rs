@@ -831,6 +831,13 @@ impl Game {
     /// a pending request counts against the freebie alongside a standing
     /// structure, exactly as `max_deployed` counts them together and for the
     /// same reason.
+    /// Which kind of structure stands on `entity` — for a caller holding an
+    /// `Entity` where the build picker needs a def, which is what an upgrade
+    /// order is.
+    pub fn structure_kind(&self, entity: Entity) -> Option<StructureId> {
+        self.world.get::<Structure>(entity).map(|s| s.kind.clone())
+    }
+
     pub fn structure_build_cost(&self, def: &StructureDef) -> Vec<(ItemId, u32)> {
         if def.first_free
             && !self

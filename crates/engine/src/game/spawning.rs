@@ -568,7 +568,7 @@ impl Game {
     }
 
     /// Rolls a fresh `Potential` for a newly created creature — see
-    /// `spawn_wild_creature`/`fuse_companions`. Each of the four fields is
+    /// `spawn_wild_creature`/`fuse_companions`. Each of the six fields is
     /// independently uniform in `MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL`
     /// — the "same species, different stats" mechanic.
     pub(crate) fn roll_potential(&mut self) -> Potential {
@@ -584,6 +584,12 @@ impl Game {
                 .0
                 .random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
             growth_roll: rng
+                .0
+                .random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
+            assembly_roll: rng
+                .0
+                .random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
+            extraction_roll: rng
                 .0
                 .random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
         }

@@ -3058,6 +3058,39 @@ fn a_refunded_program_does_not_snatch_back_an_occupied_hand() {
     assert_eq!(game.program_role(back), Some(ProgramRole::Staff));
 }
 
+/// The same rule, but the hand was filled by a weapon rather than a second
+/// program: `wield_program` is the only place that unequips a weapon to make
+/// room, and `refund_program` must defer to it too, or the run ends up
+/// holding both a weapon and a wielded program at once — the pairing
+/// `views.rs` documents as mutually exclusive.
+#[test]
+fn a_refunded_program_does_not_snatch_a_weapon_out_of_the_hand() {
+    let mut game = Game::new(20260907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let p = tame_at_zone(&mut game, 1);
+    game.wield_program(p).expect("wielded");
+    let snapshot = game.commit_program(p).expect("committed");
+    let player = game.player_entity();
+    game.world
+        .get_mut::<Inventory>(player)
+        .unwrap()
+        .add(ItemId::from(ids::OVERCLOCK_CORE), 1);
+    game.equip(player, &gear(&ItemId::from(ids::OVERCLOCK_CORE), 0))
+        .expect("a weapon takes the empty hand");
+
+    let back = game.refund_program(&snapshot).expect("refunded");
+
+    assert_eq!(
+        game.wielded_program(),
+        None,
+        "the weapon in hand is not knocked out to make room"
+    );
+    assert!(
+        game.player_status().weapon.is_some(),
+        "the equipped weapon is still worn"
+    );
+    assert_eq!(game.program_role(back), Some(ProgramRole::Staff));
+}
+
 /// The party half of the same rule: a slot the order emptied is given back.
 #[test]
 fn a_refunded_party_member_returns_to_its_slot() {

@@ -1181,8 +1181,11 @@ impl Game {
     /// `Entity` carries a generation. The one raw read of the resource,
     /// `Roles`, compares it against creatures coming out of a live query,
     /// which a despawned entity is never in. `refund_program` puts the
-    /// weapon back in the hand off the snapshot, so the round trip is
-    /// lossless regardless.
+    /// program back in the hand off the snapshot, but only if the hand is
+    /// still empty of a weapon — a weapon equipped while the order stood is
+    /// not knocked out to make room, so the round trip is lossless only when
+    /// nothing else has claimed the hand in the meantime; otherwise the
+    /// program comes back as staff.
     ///
     /// A **posting** needs nothing done to it either. Occupancy is read off the
     /// live `Task` components rather than cached on the structure (see
@@ -1259,7 +1262,8 @@ impl Game {
     /// was doing — and a cancelled order that quietly disarmed the player or
     /// emptied a battle slot would be a second cost the cancel never
     /// advertised. Both are conditional on the world still having room,
-    /// because time passed while the order stood: the hand may be full and
+    /// because time passed while the order stood: the hand may be full —
+    /// with another program or with a weapon equipped in the meantime — and
     /// the party may have filled up behind it. Neither may be forced —
     /// `BattleState::planned` indexes `Party` positionally, so an overfilled
     /// party is a sixth slot nothing plans for.
@@ -1322,7 +1326,23 @@ impl Game {
         // The wield first, and the two arms are exclusive by construction:
         // `wield_program` stands a member down, so a snapshot is never both
         // wielded and holding a slot.
-        if c.wielded && self.wielded_program().is_none() {
+        //
+        // Restoring it also needs the player's hand to be empty of a
+        // *weapon*, not just of another program: `wield_program` unequips
+        // one before it takes the resource, which is the only place that
+        // holds `views.rs`'s "wielded and weapon are mutually exclusive"
+        // invariant up — `equip` has no reciprocal guard against a live
+        // wield. Skipping this check lets a weapon equipped while the order
+        // stood survive the refund undisturbed, and the program comes back
+        // in the same hand: both read at once, which the status panel
+        // documents as impossible.
+        if c.wielded
+            && self.wielded_program().is_none()
+            && self
+                .world
+                .get::<Equipment>(player)
+                .is_none_or(|e| e.weapon.is_none())
+        {
             self.world.insert_resource(WieldedProgram(Some(back)));
         // `first` and not a loop: one snapshot spawns one creature, so this
         // carries at most one slot.

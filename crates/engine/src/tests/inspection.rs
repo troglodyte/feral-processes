@@ -835,6 +835,8 @@ fn manifest_reports_a_tamed_program_with_all_four_potential_rolls() {
         atk_roll: 1.05,
         def_roll: 0.95,
         growth_roll: 1.15,
+        assembly_roll: 1.0,
+        extraction_roll: 1.0,
     });
 
     let view = game.manifest(pet).expect("a tamed program has a manifest");

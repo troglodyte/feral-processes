@@ -1424,6 +1424,8 @@ impl Game {
                 atk_roll: c.atk_roll,
                 def_roll: c.def_roll,
                 growth_roll: c.growth_roll,
+                assembly_roll: 1.0,
+                extraction_roll: 1.0,
             },
             ZonePortal(c.zone),
             StatusEffects::default(),

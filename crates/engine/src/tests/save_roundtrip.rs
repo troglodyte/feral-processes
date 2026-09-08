@@ -128,6 +128,8 @@ fn seed_the_roster(game: &mut Game) -> Roster {
             atk_roll: 1.22,
             def_roll: 1.33,
             growth_roll: 1.44,
+            assembly_roll: 1.55,
+            extraction_roll: 1.66,
         },
         FusionCount(2),
         Refactors(3),

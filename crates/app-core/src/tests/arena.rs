@@ -344,8 +344,11 @@ fn jacking_out_records_a_loss() {
     // Matching the headless path, where a fled fight leaves the pack
     // standing and `Watch::finish` reads the opponents. An abandon that
     // counted as neither would be a third notion of an outcome.
+    //
+    // Three opponents rather than one: the parting counter-strike can kill a
+    // lone sprite outright, and a flee that clears the pack really is a win.
     for scenario_seed in 0..10 {
-        let mut app = app_fighting(24, scenario(20, 1, &[("sprite", 1)], scenario_seed));
+        let mut app = app_fighting(24, scenario(20, 1, &[("sprite", 3)], scenario_seed));
 
         press(&mut app, GameKey::Char('j'));
 

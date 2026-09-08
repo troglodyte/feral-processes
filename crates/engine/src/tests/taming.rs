@@ -13,7 +13,7 @@ const SEED_THAT_FAILS: u64 = 1;
 
 #[test]
 fn successful_decompile_removes_wander_ai_so_the_tamed_creature_stops_roaming() {
-    let mut game = Game::new(19, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(20, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let species = game
         .species_defs()

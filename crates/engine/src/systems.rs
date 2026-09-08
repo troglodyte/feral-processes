@@ -781,9 +781,7 @@ fn burn_grid_upkeep(world: &mut World) {
         // shelf the rest of the base is spending from too.
         let mut bought = world
             .get_mut::<Stock>(burner)
-            .map(|mut stock| {
-                crate::game::base::hauling::take_from_input(&mut stock, &cell, want)
-            })
+            .map(|mut stock| crate::game::base::hauling::take_from_input(&mut stock, &cell, want))
             .unwrap_or(0);
         let plan = crate::game::base::collect::plan_adjacent_take(
             tile,

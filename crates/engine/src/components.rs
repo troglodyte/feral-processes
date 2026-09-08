@@ -1403,6 +1403,17 @@ pub struct Potential {
     pub atk_roll: f32,
     pub def_roll: f32,
     pub growth_roll: f32,
+    /// How well this individual assembles a machine that compiles things —
+    /// read at exactly one moment, the tick a build it was spent on
+    /// finishes, and never applied to the program itself. Deliberately
+    /// independent of the four combat rolls above and excluded from
+    /// `quality_percent`: an Excellent fighter that builds badly is the
+    /// tension the feature exists for.
+    pub assembly_roll: f32,
+    /// The same for a machine that extracts from the ground. Which of the
+    /// two a build reads is decided once, in
+    /// `game::base::building::build_quality`.
+    pub extraction_roll: f32,
 }
 
 impl Potential {
@@ -1414,12 +1425,16 @@ impl Potential {
         atk_roll: 1.0,
         def_roll: 1.0,
         growth_roll: 1.0,
+        assembly_roll: 1.0,
+        extraction_roll: 1.0,
     };
 
     /// A single 0-100 "how good is this individual" percentile: averages
-    /// all four rolls and maps `MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL`
-    /// onto 0-100. Purely a display aggregate — each roll still applies
-    /// independently to its own stat/growth.
+    /// the four *combat* rolls and maps
+    /// `MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL` onto 0-100. Purely a
+    /// display aggregate — each roll still applies independently to its own
+    /// stat/growth. The two build rolls are deliberately not folded in:
+    /// they say nothing about how this individual fights.
     pub fn quality_percent(&self) -> u32 {
         let avg = (self.hp_roll + self.atk_roll + self.def_roll + self.growth_roll) / 4.0;
         let pct = (avg - MIN_INDIVIDUAL_ROLL) / (MAX_INDIVIDUAL_ROLL - MIN_INDIVIDUAL_ROLL) * 100.0;
@@ -1429,7 +1444,18 @@ impl Potential {
     /// A coarse, human-readable tier for `quality_percent` — shown next to
     /// a creature in the pets and inspect screens.
     pub fn quality_label(&self) -> &'static str {
-        match self.quality_percent() {
+        Self::roll_label((self.hp_roll + self.atk_roll + self.def_roll + self.growth_roll) / 4.0)
+    }
+
+    /// The rung one individual roll sits on, over the same five-name ladder
+    /// `quality_label` speaks and the same
+    /// `MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL` → 0-100 mapping
+    /// `quality_percent` uses. One ladder, so a build roll and an overall
+    /// tier can never disagree about what "Excellent" means.
+    pub fn roll_label(roll: f32) -> &'static str {
+        let pct =
+            (roll - MIN_INDIVIDUAL_ROLL) / (MAX_INDIVIDUAL_ROLL - MIN_INDIVIDUAL_ROLL) * 100.0;
+        match pct.round().clamp(0.0, 100.0) as u32 {
             0..=19 => "Poor",
             20..=39 => "Below Average",
             40..=59 => "Average",
@@ -1448,6 +1474,8 @@ impl Potential {
             atk_roll: (a.atk_roll + b.atk_roll) / 2.0,
             def_roll: (a.def_roll + b.def_roll) / 2.0,
             growth_roll: (a.growth_roll + b.growth_roll) / 2.0,
+            assembly_roll: (a.assembly_roll + b.assembly_roll) / 2.0,
+            extraction_roll: (a.extraction_roll + b.extraction_roll) / 2.0,
         }
     }
 }
@@ -2527,50 +2555,78 @@ mod rarity_tests {
 #[cfg(test)]
 mod potential_tests {
     use super::Potential;
+    use crate::tuning::{MAX_INDIVIDUAL_ROLL, MIN_INDIVIDUAL_ROLL};
+
+    /// All six rolls at `r`.
+    fn flat(r: f32) -> Potential {
+        Potential {
+            hp_roll: r,
+            atk_roll: r,
+            def_roll: r,
+            growth_roll: r,
+            assembly_roll: r,
+            extraction_roll: r,
+        }
+    }
 
     #[test]
     fn quality_percent_maps_the_roll_range_onto_0_to_100() {
-        let worst = Potential {
-            hp_roll: 0.8,
-            atk_roll: 0.8,
-            def_roll: 0.8,
-            growth_roll: 0.8,
-        };
-        let neutral = Potential::NEUTRAL;
-        let best = Potential {
-            hp_roll: 1.2,
-            atk_roll: 1.2,
-            def_roll: 1.2,
-            growth_roll: 1.2,
-        };
-        assert_eq!(worst.quality_percent(), 0);
-        assert_eq!(neutral.quality_percent(), 50);
-        assert_eq!(best.quality_percent(), 100);
+        assert_eq!(flat(0.8).quality_percent(), 0);
+        assert_eq!(Potential::NEUTRAL.quality_percent(), 50);
+        assert_eq!(flat(1.2).quality_percent(), 100);
     }
 
     #[test]
     fn quality_label_buckets_the_percent_into_a_coarse_tier() {
-        assert_eq!(
-            Potential {
-                hp_roll: 0.8,
-                atk_roll: 0.8,
-                def_roll: 0.8,
-                growth_roll: 0.8,
-            }
-            .quality_label(),
-            "Poor"
-        );
+        assert_eq!(flat(0.8).quality_label(), "Poor");
         assert_eq!(Potential::NEUTRAL.quality_label(), "Average");
+        assert_eq!(flat(1.2).quality_label(), "Excellent");
+    }
+
+    #[test]
+    fn roll_label_walks_the_same_five_rungs_quality_label_does() {
+        assert_eq!(Potential::roll_label(MIN_INDIVIDUAL_ROLL), "Poor");
+        assert_eq!(Potential::roll_label(MAX_INDIVIDUAL_ROLL), "Excellent");
+        // One ladder: a flat `Potential` reports whatever its own roll does.
+        for step in 0..=10 {
+            let r = MIN_INDIVIDUAL_ROLL
+                + (MAX_INDIVIDUAL_ROLL - MIN_INDIVIDUAL_ROLL) * (step as f32 / 10.0);
+            assert_eq!(
+                flat(r).quality_label(),
+                Potential::roll_label(r),
+                "the two ladders disagree at {r}"
+            );
+        }
+    }
+
+    #[test]
+    fn neutral_is_neutral_on_every_axis() {
+        let n = Potential::NEUTRAL;
         assert_eq!(
-            Potential {
-                hp_roll: 1.2,
-                atk_roll: 1.2,
-                def_roll: 1.2,
-                growth_roll: 1.2,
-            }
-            .quality_label(),
-            "Excellent"
+            (
+                n.hp_roll,
+                n.atk_roll,
+                n.def_roll,
+                n.growth_roll,
+                n.assembly_roll,
+                n.extraction_roll
+            ),
+            (1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
         );
+    }
+
+    #[test]
+    fn quality_percent_still_ignores_the_build_rolls() {
+        let fighter_who_cannot_build = Potential {
+            hp_roll: MAX_INDIVIDUAL_ROLL,
+            atk_roll: MAX_INDIVIDUAL_ROLL,
+            def_roll: MAX_INDIVIDUAL_ROLL,
+            growth_roll: MAX_INDIVIDUAL_ROLL,
+            assembly_roll: MIN_INDIVIDUAL_ROLL,
+            extraction_roll: MIN_INDIVIDUAL_ROLL,
+        };
+        assert_eq!(fighter_who_cannot_build.quality_percent(), 100);
+        assert_eq!(fighter_who_cannot_build.quality_label(), "Excellent");
     }
 
     #[test]
@@ -2580,18 +2636,59 @@ mod potential_tests {
             atk_roll: 1.0,
             def_roll: 1.2,
             growth_roll: 0.9,
+            assembly_roll: 1.1,
+            extraction_roll: 0.85,
         };
         let b = Potential {
             hp_roll: 1.2,
             atk_roll: 1.0,
             def_roll: 0.8,
             growth_roll: 1.1,
+            assembly_roll: 0.9,
+            extraction_roll: 1.15,
         };
         let fused = Potential::averaged(a, b);
         assert_eq!(fused.hp_roll, 1.0);
         assert_eq!(fused.atk_roll, 1.0);
         assert_eq!(fused.def_roll, 1.0);
         assert_eq!(fused.growth_roll, 1.0);
+        assert_eq!(fused.assembly_roll, 1.0);
+        assert_eq!(fused.extraction_roll, 1.0);
+    }
+
+    #[test]
+    fn averaged_folds_all_six_rolls() {
+        // Six distinct values a side, none repeated anywhere: two fields
+        // holding the same number cannot catch being crossed.
+        let a = Potential {
+            hp_roll: 0.81,
+            atk_roll: 0.83,
+            def_roll: 0.85,
+            growth_roll: 0.87,
+            assembly_roll: 1.19,
+            extraction_roll: 0.89,
+        };
+        let b = Potential {
+            hp_roll: 0.91,
+            atk_roll: 0.93,
+            def_roll: 0.95,
+            growth_roll: 0.97,
+            assembly_roll: 1.17,
+            extraction_roll: 0.99,
+        };
+        let f = Potential::averaged(a, b);
+        for (got, want) in [
+            (f.hp_roll, 0.86),
+            (f.atk_roll, 0.88),
+            (f.def_roll, 0.90),
+            (f.growth_roll, 0.92),
+            (f.assembly_roll, 1.18),
+            (f.extraction_roll, 0.94),
+        ] {
+            assert!((got - want).abs() < 1e-5, "{got} != {want}");
+        }
+        // Two Excellent builders fuse into an Excellent builder.
+        assert_eq!(Potential::roll_label(f.assembly_roll), "Excellent");
     }
 }
 

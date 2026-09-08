@@ -233,7 +233,13 @@ fn clock(game: &Game) -> u64 {
 /// asset directory to build — every test runs against the real
 /// `assets/` tree.
 fn game_about_to_step(onto: Biome) -> Game {
-    let mut game = Game::new(16, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game_about_to_step_seeded(16, onto)
+}
+
+/// The same, on a caller's own seed — for a test whose outcome depends on
+/// where the spawner put things and so has to be re-baselined on its own.
+fn game_about_to_step_seeded(seed: u32, onto: Biome) -> Game {
+    let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     game.world.resource_mut::<ZoneLevel>().0 = 2;
     stand_on_claimed_ground(&mut game, onto);
     step_from_onto(&mut game, Biome::OpenGrid, onto, true);
@@ -475,7 +481,7 @@ fn drag_ground_takes_no_integrity() {
 /// the player is no longer standing in, while a fight waits on the screen.
 #[test]
 fn a_drag_step_stops_ticking_the_moment_a_battle_opens() {
-    let mut game = game_about_to_step(Biome::Deadlock);
+    let mut game = game_about_to_step_seeded(17, Biome::Deadlock);
     let pos = *game.world.get::<Position>(game.player_entity()).unwrap();
     // A provoked guardian already standing beside the destination reaches
     // the player on the step's very first tick, which is the only

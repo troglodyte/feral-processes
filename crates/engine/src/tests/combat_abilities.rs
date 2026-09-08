@@ -785,7 +785,7 @@ fn drain_heals_the_user_for_a_fraction_of_the_damage_it_dealt() {
 
 #[test]
 fn drain_never_heals_the_user_past_its_maximum() {
-    let mut game = Game::new(4102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(4105, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let enemies = battle_with_a_pack_of(&mut game, 1, 200);
     {

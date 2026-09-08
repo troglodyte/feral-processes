@@ -1109,9 +1109,7 @@ fn a_burner_with_no_cell_within_reach_is_fetched_one_off_the_shelf() {
     let worker = hauler(&mut game);
     park_at_post(&mut game, worker, recharger);
 
-    tick_until(&mut game, 80, |g| {
-        hopper(g, recharger, ids::POWER_CELL) > 0
-    });
+    tick_until(&mut game, 80, |g| hopper(g, recharger, ids::POWER_CELL) > 0);
 
     assert!(
         hopper(&game, recharger, ids::POWER_CELL) > 0,
@@ -1208,9 +1206,7 @@ fn a_fed_burner_gives_the_body_back() {
          below is asserting nothing"
     );
 
-    tick_until(&mut game, 80, |g| {
-        hopper(g, recharger, ids::POWER_CELL) > 0
-    });
+    tick_until(&mut game, 80, |g| hopper(g, recharger, ids::POWER_CELL) > 0);
     // One more beat for the scheduler to see the satisfied want.
     game.tick();
 
@@ -1243,9 +1239,7 @@ fn a_fed_burner_gives_the_body_back_on_a_base_with_no_orders_at_all() {
         "an empty queue is no reason not to keep the grid lit"
     );
 
-    tick_until(&mut game, 80, |g| {
-        hopper(g, recharger, ids::POWER_CELL) > 0
-    });
+    tick_until(&mut game, 80, |g| hopper(g, recharger, ids::POWER_CELL) > 0);
     game.tick();
 
     assert_eq!(

@@ -438,7 +438,7 @@ fn a_back_group_with_a_ranged_move_still_connects() {
 /// the restriction is about distance, not about the moves themselves.
 #[test]
 fn an_engaged_group_still_uses_its_melee_moves() {
-    let mut game = Game::new(88, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut game = Game::new(90, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let construct = game.spawn_wild_creature("construct", 5, 5).unwrap();
     // A carrier spends its round on the routine rather than a move (see
     // `wild_retaliate`), and whether this one rolled a routine is a property

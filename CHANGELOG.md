@@ -33,7 +33,7 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
-## Unreleased
+## 0.13.131
 
 **A program with nothing left now rounds on a colleague** — past refusing to
 work there is a fourth rung, where a miserable base program picks whoever it

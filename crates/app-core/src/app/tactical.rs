@@ -16,8 +16,14 @@ use feral_processes_engine::battle::SpecialOption;
 use feral_processes_engine::tactical::turn::StepOutcome;
 
 impl App {
-    /// Arrows step the acting body; a lowercase letter picks an action;
-    /// `[E]` hands the turn on without spending it.
+    /// Arrows and the numpad step the acting body; a lowercase letter picks
+    /// an action; `[E]` hands the turn on without spending it.
+    ///
+    /// **The diagonals are not a new rule, they are the missing keys for a
+    /// rule already in force.** `game::pursuit::walk_field` is Chebyshev, so
+    /// `reach::movement_field` already offers diagonal cells and the wild
+    /// side already walks them; the player was the one body on the board
+    /// that could not.
     pub(crate) fn handle_tactical_key(&mut self, key: GameKey) {
         // A wild body is mid-turn. Its turns are the pacing loop's to
         // spend, and a key pressed into one would act for a body that is
@@ -30,8 +36,18 @@ impl App {
             GameKey::Down => self.tactical_step((0, 1)),
             GameKey::Left => self.tactical_step((-1, 0)),
             GameKey::Right => self.tactical_step((1, 0)),
+            GameKey::UpLeft => self.tactical_step((-1, -1)),
+            GameKey::UpRight => self.tactical_step((1, -1)),
+            GameKey::DownLeft => self.tactical_step((-1, 1)),
+            GameKey::DownRight => self.tactical_step((1, 1)),
             GameKey::Char('a') => self.open_tactical_aim(TacticalIntent::Swing),
-            GameKey::Char('r') => {
+            // `s`, because the abstract fight has called this `[s]pecial`
+            // since long before there was a board to fight on — one model
+            // teaching a key the other refuses is what the shared letter
+            // buys. Free here: this handler is the only reader of a key in
+            // `Mode::TacticalBattle`, so nothing fell through to the map's
+            // own `s`.
+            GameKey::Char('s') => {
                 if self.tactical_routine_rows().is_empty() {
                     self.refuse("Nothing to run.");
                     return;
@@ -97,6 +113,13 @@ impl App {
             GameKey::Down => (0, 1),
             GameKey::Left => (-1, 0),
             GameKey::Right => (1, 0),
+            // The same eight the body walks. A numpad that steers a body but
+            // not the cursor it aims with reads as one of the two being
+            // broken.
+            GameKey::UpLeft => (-1, -1),
+            GameKey::UpRight => (1, -1),
+            GameKey::DownLeft => (-1, 1),
+            GameKey::DownRight => (1, 1),
             GameKey::Enter => {
                 self.commit_tactical_aim((cx, cy));
                 return;

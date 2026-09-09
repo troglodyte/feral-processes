@@ -40,10 +40,17 @@ use sounds::SoundBank;
 
 fn map_special_key(key: KeyCode) -> Option<GameKey> {
     match key {
-        KeyCode::ArrowUp => Some(GameKey::Up),
-        KeyCode::ArrowDown => Some(GameKey::Down),
-        KeyCode::ArrowLeft => Some(GameKey::Left),
-        KeyCode::ArrowRight => Some(GameKey::Right),
+        KeyCode::ArrowUp | KeyCode::Numpad8 => Some(GameKey::Up),
+        KeyCode::ArrowDown | KeyCode::Numpad2 => Some(GameKey::Down),
+        KeyCode::ArrowLeft | KeyCode::Numpad4 => Some(GameKey::Left),
+        KeyCode::ArrowRight | KeyCode::Numpad6 => Some(GameKey::Right),
+        // Physical key codes, so the numpad steers whether or not NumLock is
+        // on — the digits it types when it is are read from
+        // `KeyboardInput::text` and belong to whatever screen binds them.
+        KeyCode::Numpad7 => Some(GameKey::UpLeft),
+        KeyCode::Numpad9 => Some(GameKey::UpRight),
+        KeyCode::Numpad1 => Some(GameKey::DownLeft),
+        KeyCode::Numpad3 => Some(GameKey::DownRight),
         KeyCode::Enter | KeyCode::NumpadEnter => Some(GameKey::Enter),
         KeyCode::Escape => Some(GameKey::Esc),
         KeyCode::Backspace => Some(GameKey::Backspace),
@@ -55,11 +62,23 @@ fn map_special_key(key: KeyCode) -> Option<GameKey> {
 /// Delivered from the held state via `KeyRepeat` rather than from
 /// `just_pressed`, so holding one keeps moving (and keeps scrolling, in the
 /// menus that read the same keys).
+/// The numpad is here for the same reason the arrows are: a held key must
+/// keep walking. Two physical keys landing on one direction is deliberate —
+/// holding both at once is the player's own gesture, not a double-fire the
+/// list can prevent.
 const REPEATING_KEYS: &[KeyCode] = &[
     KeyCode::ArrowUp,
     KeyCode::ArrowDown,
     KeyCode::ArrowLeft,
     KeyCode::ArrowRight,
+    KeyCode::Numpad8,
+    KeyCode::Numpad2,
+    KeyCode::Numpad4,
+    KeyCode::Numpad6,
+    KeyCode::Numpad7,
+    KeyCode::Numpad9,
+    KeyCode::Numpad1,
+    KeyCode::Numpad3,
 ];
 
 /// The modifier keys, polled rather than mapped. They are not in
@@ -1281,18 +1300,58 @@ mod tests {
         assert!(!REPEATING_KEYS.contains(&KeyCode::Tab));
     }
 
-    /// The four repeating keys must be the four directions and nothing else:
-    /// a duplicate would make one direction unreachable while another fired
-    /// twice.
+    /// The repeating keys must cover the eight directions and nothing else.
+    ///
+    /// **Deliberately not a uniqueness check any more.** The arrows and the
+    /// numpad's cross land on the same four `GameKey`s on purpose, so what
+    /// is worth pinning is coverage: every polled key names a direction, and
+    /// between them they name all eight. A missing corner is a numpad that
+    /// walks seven ways, which reads at the keyboard as the eighth key being
+    /// broken.
     #[test]
-    fn the_repeating_keys_are_exactly_the_four_directions() {
-        let mut mapped: Vec<GameKey> = REPEATING_KEYS
+    fn the_repeating_keys_cover_the_eight_directions() {
+        let mapped: Vec<GameKey> = REPEATING_KEYS
             .iter()
             .filter_map(|&k| map_special_key(k))
             .collect();
-        let before = mapped.len();
-        mapped.dedup();
-        assert_eq!(before, REPEATING_KEYS.len(), "a direction went unmapped");
-        assert_eq!(mapped.len(), 4, "two arrow keys map to the same direction");
+        assert_eq!(
+            mapped.len(),
+            REPEATING_KEYS.len(),
+            "a repeating key went unmapped"
+        );
+        for direction in [
+            GameKey::Up,
+            GameKey::Down,
+            GameKey::Left,
+            GameKey::Right,
+            GameKey::UpLeft,
+            GameKey::UpRight,
+            GameKey::DownLeft,
+            GameKey::DownRight,
+        ] {
+            assert!(
+                mapped.contains(&direction),
+                "{direction:?} is not on any polled key"
+            );
+        }
+    }
+
+    /// The numpad's corners are the diagonals, and each is its own. Pinned
+    /// per key rather than as a set: a transposed pair passes a census that
+    /// only counts, and walks the player the wrong way.
+    #[test]
+    fn the_numpad_corners_are_the_four_diagonals() {
+        for (key, expected) in [
+            (KeyCode::Numpad7, GameKey::UpLeft),
+            (KeyCode::Numpad9, GameKey::UpRight),
+            (KeyCode::Numpad1, GameKey::DownLeft),
+            (KeyCode::Numpad3, GameKey::DownRight),
+            (KeyCode::Numpad8, GameKey::Up),
+            (KeyCode::Numpad2, GameKey::Down),
+            (KeyCode::Numpad4, GameKey::Left),
+            (KeyCode::Numpad6, GameKey::Right),
+        ] {
+            assert_eq!(map_special_key(key), Some(expected), "{key:?}");
+        }
     }
 }

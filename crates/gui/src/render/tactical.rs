@@ -296,11 +296,15 @@ pub(super) fn action_bar(view: &TacticalView) -> Vec<(String, String)> {
     }
     let mut rows = vec![
         (
-            "↑↓←→".to_string(),
+            "↑↓←→ numpad".to_string(),
             format!("move ({} left)", view.allowance),
         ),
         ("a".to_string(), "attack".to_string()),
-        ("r".to_string(), "routine".to_string()),
+        // `special`, not `routine`: this is the word the abstract fight's
+        // own action menu builds (`Game::battle_action_options`), and one
+        // fight model naming the same verb differently is what makes the
+        // shared `s` stop reading as the same key.
+        ("s".to_string(), "special".to_string()),
         ("E".to_string(), "end turn".to_string()),
     ];
     if view.acted {
@@ -445,6 +449,14 @@ mod tests {
         let open = action_bar(&view);
         assert!(open.iter().any(|(k, _)| k == "a"));
         assert!(open.iter().any(|(k, _)| k == "E"));
+        assert!(
+            open.iter().any(|(k, l)| k == "s" && l == "special"),
+            "the special key must read the way the abstract fight's does: {open:?}"
+        );
+        assert!(
+            !open.iter().any(|(k, _)| k == "r"),
+            "`r` is not a tactical key any more: {open:?}"
+        );
 
         view.acted = true;
         let spent = action_bar(&view);
@@ -453,6 +465,53 @@ mod tests {
             vec!["E"],
             "a spent turn still offered an action"
         );
+    }
+
+    /// **The bar is one row on a border with no wrap and no clip**, so
+    /// widening the movement cell to name the numpad is a measured question
+    /// and not a guess — `the_keybar_fits_the_log_pane`'s rule, asked of
+    /// the content that replaces that bar in a fight. Measured through
+    /// `keybar_segments` and `fitting` rather than against a hand-built
+    /// list, so the thing measured is the thing drawn.
+    #[test]
+    fn the_action_bar_fits_the_log_pane() {
+        use crate::render::hud::{layout, strip::fitting};
+
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open");
+        // The fixture may open on the wild side, whose bar is one short
+        // sentence — measuring that would pass against any width at all.
+        view.player_turn = true;
+        view.acted = false;
+        let actions = action_bar(&view);
+        assert_eq!(actions.len(), 4, "not the full bar: {actions:?}");
+        for (w, h) in [(1280.0, 720.0), (1920.0, 1080.0)] {
+            let m = ui_metrics(h);
+            with_painter(|p| {
+                let char_w = p.measure_ui_advance("M", m.font_size);
+                let pane = layout::regions(w, h, char_w, &m, false).log_pane;
+                let avail = pane.w - m.inset * 2.0;
+                let segments = crate::render::hud::log_frame::keybar_segments(Some(&actions));
+                let taken = fitting(&segments, avail, p, &m);
+                let drawn: String = taken.iter().map(|(t, _, _)| t.as_str()).collect();
+                let slack = avail - p.measure_ui_advance(&drawn, m.small());
+
+                // Against the bar as it would be with unlimited room, so
+                // this cannot drift as segments are added: `fitting` drops
+                // from the end, so anything short of the whole is a key the
+                // player cannot see.
+                let whole = fitting(&segments, f32::INFINITY, p, &m);
+                assert_eq!(
+                    taken.len(),
+                    whole.len(),
+                    "the action bar dropped a key at {w}x{h} — slack {slack:.1}px: {drawn:?}"
+                );
+                assert!(
+                    slack >= 0.0,
+                    "the action bar overhangs its pane by {slack:.1}px"
+                );
+            });
+        }
     }
 
     /// The wild side's turn says so rather than offering keys that would be

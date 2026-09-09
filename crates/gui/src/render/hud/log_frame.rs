@@ -283,7 +283,7 @@ fn divider() -> Vec<Piece> {
 /// 1280x720 it is already narrower than what the next-lowest-priority key
 /// (`e drain`) needs, and this bar has no room to spend on advertising a key
 /// nothing else on the census requires. `?` is still where it is discovered.
-fn keybar_segments(actions: Option<&[(String, String)]>) -> Vec<Vec<Piece>> {
+pub(in crate::render) fn keybar_segments(actions: Option<&[(String, String)]>) -> Vec<Vec<Piece>> {
     if let Some(actions) = actions {
         return actions
             .iter()

@@ -474,7 +474,7 @@ impl Game {
     /// One flush point covers a win and a jack-out alike, because
     /// `end_battle` is the only place `BattleState` is dropped: you keep what
     /// you killed before you ran.
-    pub(crate) fn settle_rewards(&mut self) {
+    pub(crate) fn settle_rewards(&mut self, won: bool) {
         let Some(rewards) = self.fight_rewards_mut() else {
             return;
         };
@@ -496,7 +496,7 @@ impl Game {
         // counter-strike wording) immediately before calling `end_battle`,
         // and a flatline is announced by `death_handling_system` inside the
         // round that lands it. A win was the only silent ending.
-        if self.world.resource::<BattleState>().groups.is_empty() {
+        if won {
             self.log_kind(MessageKind::Outcome, "You won!");
         }
         // Above the payout, deliberately: it is the answer to what the

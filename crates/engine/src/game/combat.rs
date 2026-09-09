@@ -2,6 +2,7 @@
 //! the action menus the renderer draws from.
 
 use crate::abilities::{AbilityId, AffinityKind};
+use crate::tactical::TacticalBattle;
 use crate::tuning::{
     AFFINITY_MAX, AFFINITY_NEUTRAL, DEFAULT_BASE_SPEED, DEFEND_MITIGATION_BONUS, INITIATIVE_DIE,
     MAX_PACK_BODIES, PLAYER_BASE_SPEED,
@@ -408,15 +409,43 @@ impl Game {
             .unwrap_or(0)
     }
 
-    /// Every living enemy across every group, in group-then-slot order.
+    /// Every living hostile in the current fight, whichever model is holding
+    /// it — group-then-slot order in the abstract one, placement order on a
+    /// battle map.
+    ///
+    /// The two models are never both present, so the order of the arms is
+    /// not a precedence rule.
+    ///
+    /// **This is not the definition of a win** and must not become one. A
+    /// won fight is one whose roster was *emptied* — `remove_member` taking
+    /// the last group out in the abstract model, the last body leaving the
+    /// board in the tactical one — and a jack-out with every hostile at zero
+    /// HP but not yet reaped would read as a win off "nothing alive" alone.
+    /// `FightVerdict::won` is where each model states its own answer.
+    ///
+    /// A body on a battle map carries no side marker and needs none: the
+    /// party is the player plus `Party`, and everything else standing on the
+    /// board is hostile. That is also what makes a program decompiled
+    /// mid-fight stop counting the instant it joins the roster, with nothing
+    /// written to say so.
     pub(crate) fn all_living_enemies(&self) -> Vec<Entity> {
-        let Some(battle) = self.world.get_resource::<BattleState>() else {
+        if let Some(battle) = self.world.get_resource::<BattleState>() {
+            return battle
+                .groups
+                .iter()
+                .flat_map(|g| g.members.iter().copied())
+                .filter(|&e| self.creature_alive(e))
+                .collect();
+        }
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return Vec::new();
         };
+        let player = self.player_entity();
+        let party = &self.world.resource::<Party>().0;
         battle
-            .groups
-            .iter()
-            .flat_map(|g| g.members.iter().copied())
+            .bodies()
+            .map(|(entity, _)| entity)
+            .filter(|&e| e != player && !party.contains(&e))
             .filter(|&e| self.creature_alive(e))
             .collect()
     }

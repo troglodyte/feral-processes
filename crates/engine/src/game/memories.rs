@@ -9,7 +9,7 @@ use crate::components::{
     Structure, Task, TaskKind,
 };
 use crate::memories::{MemoryDb, MemoryId};
-use crate::resources::{BattleState, GameClock, Party};
+use crate::resources::{GameClock, Party};
 use crate::tuning::{MEMORY_CAP_PER_PROGRAM, MEMORY_FORGET_THRESHOLD, MEMORY_POSTING_PERIOD};
 use bevy_ecs::prelude::{Entity, Mut, With};
 
@@ -175,15 +175,10 @@ impl crate::Game {
     /// minted at the roster barrier, and the player does not pass through it.
     /// The dead are already reaped by the time this runs, which is harmless —
     /// what a bond is worth is having *survived* together.
-    pub(crate) fn form_victory_memories(&mut self) {
-        let won = self
-            .world
-            .get_resource::<BattleState>()
-            .is_some_and(|b| b.groups.is_empty());
+    pub(crate) fn form_victory_memories(&mut self, won: bool, outmatched: bool) {
         if !won {
             return;
         }
-        let outmatched = self.world.resource::<BattleState>().outmatched;
         // Collected before anything is written: `remember` takes `&mut self`,
         // and the roster it walks must be the one that came out of the fight
         // rather than one shifting under the loop.

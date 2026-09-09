@@ -1419,9 +1419,8 @@ fn a_companion_that_died_winning_is_not_bonded_to() {
     let hostile = hostile_of(&mut game, "glitch", 0);
     let player = game.player_entity();
     insert_battle(&mut game, player, vec![hostile]);
-    game.world.resource_mut::<BattleState>().groups.clear();
 
-    game.form_victory_memories();
+    game.form_victory_memories(true, false);
 
     assert!(
         !bonded_subjects(&game, survivor).contains(&MemorySubject::Program(id_fallen)),

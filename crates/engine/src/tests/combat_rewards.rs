@@ -1189,7 +1189,8 @@ fn a_drop_inside_a_tactical_fight_is_held_for_the_tally() {
         bodies: 2,
     };
     let board = generate(spec);
-    game.world.insert_resource(TacticalBattle::open(spec, board));
+    game.world
+        .insert_resource(TacticalBattle::open(spec, board));
 
     game.award_loot(corpse);
 

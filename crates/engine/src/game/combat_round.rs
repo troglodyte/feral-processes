@@ -781,22 +781,17 @@ impl Game {
         battle.groups.is_empty()
     }
 
-    /// Handles `group`'s member at `index` dying (from a direct hit, an area
-    /// effect, or a status tick): logs the kill, awards its loot/XP,
-    /// despawns it, and drops it from the group. If that emptied the last
-    /// standing group, the whole encounter ends in a win (`BattleState`
-    /// removed) and this returns `true`; otherwise the fight continues,
-    /// returning `false`.
-    pub(crate) fn finish_member(&mut self, group: usize, index: usize, player: Entity) -> bool {
-        let Some(victim) = self
-            .world
-            .get_resource::<BattleState>()
-            .and_then(|b| b.groups.get(group))
-            .and_then(|g| g.members.get(index))
-            .copied()
-        else {
-            return self.living_group_count() == 0;
-        };
+    /// What a hostile's death costs and pays, wherever it was standing: the
+    /// kill line, the player's XP, the loot, the nest's respawn timer, the
+    /// town's opinion of a patrol member killed, and the despawn.
+    ///
+    /// **One function, because which model the fight was fought in decides
+    /// only what happens to the roster afterwards.** `finish_member` is the
+    /// abstract half — locating the victim by group and slot, and dropping
+    /// it out of its group — and it is the whole of what is group-shaped
+    /// here. A copy of this on the tactical side would be a second place a
+    /// patrol kill could stop charging a town.
+    pub(crate) fn finish_hostile(&mut self, victim: Entity, player: Entity) {
         self.log_kind(
             MessageKind::Outcome,
             "The rogue program crashes and deletes itself!",
@@ -820,6 +815,25 @@ impl Game {
         if let Some(town) = patrol {
             self.charge_for_a_patrol_kill(town);
         }
+    }
+
+    /// Handles `group`'s member at `index` dying (from a direct hit, an area
+    /// effect, or a status tick): logs the kill, awards its loot/XP,
+    /// despawns it, and drops it from the group. If that emptied the last
+    /// standing group, the whole encounter ends in a win (`BattleState`
+    /// removed) and this returns `true`; otherwise the fight continues,
+    /// returning `false`.
+    pub(crate) fn finish_member(&mut self, group: usize, index: usize, player: Entity) -> bool {
+        let Some(victim) = self
+            .world
+            .get_resource::<BattleState>()
+            .and_then(|b| b.groups.get(group))
+            .and_then(|g| g.members.get(index))
+            .copied()
+        else {
+            return self.living_group_count() == 0;
+        };
+        self.finish_hostile(victim, player);
         if self.remove_member(group, index) {
             self.end_battle(player, Some(victim));
             true

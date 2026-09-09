@@ -41,6 +41,21 @@ pub struct Scenario {
     /// A context to roll, instead of naming `opponents`. Mutually exclusive
     /// with them — one scenario asks one question.
     pub encounter: Option<Encounter>,
+    /// Which of the game's two combat models fights this scenario.
+    ///
+    /// Read by `arena::run` and refused by the played arena screen: a fight
+    /// on a battle map is driven a body at a time, and the arena session
+    /// drives rounds. `stage` is where the two are reconciled.
+    pub model: CombatModel,
+    /// `Tactical` only — the bearing the pack is seated on, as seen from
+    /// the party.
+    ///
+    /// `None` takes the deployment's own default. A real fight reads this
+    /// off the tile the pack was found on, which is what makes walking into
+    /// one from the side start you flanked; a staged fight spawns its
+    /// opponents around the player and so has no bearing to read, and
+    /// authoring one is the only way to measure what being flanked costs.
+    pub approach: Option<Approach>,
     pub reps: u32,
     pub seed: u64,
 }
@@ -57,6 +72,8 @@ impl Default for Scenario {
             party: Vec::new(),
             opponents: Vec::new(),
             encounter: None,
+            model: CombatModel::default(),
+            approach: None,
             reps: 1,
             seed: 0,
         }
@@ -87,6 +104,56 @@ pub enum Encounter {
     Field { biome: Biome },
     Stack { biome: Biome, depth: u32 },
     Lair { biome: Biome, depth: u32 },
+}
+
+/// Which combat model a fight is fought in.
+///
+/// The scenario's own answer and, as `stage`'s last parameter, the answer
+/// its caller can drive — `stage` refuses a fight nobody in the room can
+/// play. A parameter rather than a guard at each call site because a third
+/// caller then has to state which models it drives instead of remembering a
+/// check nothing would fail to compile without.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CombatModel {
+    /// Groups and slots — `Game::begin_battle`.
+    #[default]
+    Group,
+    /// A battle map — `Game::open_tactical_battle_at`.
+    Tactical,
+}
+
+/// A compass bearing, as seen from the party.
+///
+/// Eight points because `deploy::bearing` is a signum per axis, which is all
+/// the resolution a deployment can express; authoring an angle would promise
+/// a precision the board cannot hold.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Approach {
+    North,
+    NorthEast,
+    East,
+    SouthEast,
+    South,
+    SouthWest,
+    West,
+    NorthWest,
+}
+
+impl Approach {
+    /// The step `deploy::plan` seats the pack along. `y` grows southward,
+    /// the world map's own convention.
+    pub fn bearing(self) -> (i32, i32) {
+        match self {
+            Approach::North => (0, -1),
+            Approach::NorthEast => (1, -1),
+            Approach::East => (1, 0),
+            Approach::SouthEast => (1, 1),
+            Approach::South => (0, 1),
+            Approach::SouthWest => (-1, 1),
+            Approach::West => (-1, 0),
+            Approach::NorthWest => (-1, -1),
+        }
+    }
 }
 
 /// Where the player under test comes from.
@@ -285,6 +352,13 @@ impl Scenario {
             return Err(
                 "`encounter` and `opponents` are mutually exclusive — a rolled context \
                  fields its own composition"
+                    .into(),
+            );
+        }
+        if self.approach.is_some() && self.model != CombatModel::Tactical {
+            return Err(
+                "`approach` applies only to `model: Tactical` — a group fight has no board \
+                 to seat anyone on"
                     .into(),
             );
         }
@@ -501,6 +575,67 @@ mod tests {
         .unwrap_err();
         assert!(err.contains("encounter"), "{err}");
         assert!(err.contains("opponents"), "{err}");
+    }
+
+    #[test]
+    fn a_scenario_defaults_to_the_group_model_and_no_approach() {
+        let s = Scenario::from_ron(r#"( opponents: [(species: "glitch", count: 1)] )"#).unwrap();
+        assert_eq!(s.model, CombatModel::Group);
+        assert_eq!(s.approach, None);
+    }
+
+    #[test]
+    fn a_tactical_scenario_round_trips_its_model_and_approach() {
+        let s = Scenario::from_ron(
+            r#"(
+                opponents: [(species: "glitch", count: 3)],
+                model: Tactical,
+                approach: Some(SouthWest),
+            )"#,
+        )
+        .unwrap();
+        assert_eq!(s.model, CombatModel::Tactical);
+        assert_eq!(s.approach, Some(Approach::SouthWest));
+
+        let path = std::env::temp_dir().join("feral_processes_scenario_tactical_round_trip.ron");
+        s.save(&path).unwrap();
+        let back = Scenario::load(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(s, back);
+    }
+
+    #[test]
+    fn an_approach_without_the_tactical_model_is_an_err_naming_both() {
+        let err = Scenario::from_ron(
+            r#"(
+                opponents: [(species: "glitch", count: 1)],
+                approach: Some(East),
+            )"#,
+        )
+        .unwrap_err();
+        assert!(err.contains("approach"), "{err}");
+        assert!(err.contains("Tactical"), "{err}");
+    }
+
+    #[test]
+    fn every_approach_is_a_distinct_eight_way_step() {
+        let all = [
+            Approach::North,
+            Approach::NorthEast,
+            Approach::East,
+            Approach::SouthEast,
+            Approach::South,
+            Approach::SouthWest,
+            Approach::West,
+            Approach::NorthWest,
+        ];
+        let bearings: std::collections::BTreeSet<(i32, i32)> =
+            all.iter().map(|a| a.bearing()).collect();
+        assert_eq!(bearings.len(), all.len(), "two approaches share a bearing");
+        for (dx, dy) in bearings {
+            assert_eq!((dx.signum(), dy.signum()), (dx, dy), "not a signum step");
+            assert!((dx, dy) != (0, 0), "a bearing that goes nowhere");
+        }
     }
 
     #[test]

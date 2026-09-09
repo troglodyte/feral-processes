@@ -141,11 +141,7 @@ impl Disposition {
     /// roster would take the same disposition while each individual answer
     /// still looked arbitrary.
     pub fn seed(program_id: u32) -> Self {
-        let mut h = 0xcbf2_9ce4_8422_2325_u64;
-        for byte in (program_id as u64).to_le_bytes() {
-            h ^= byte as u64;
-            h = h.wrapping_mul(0x0000_0100_0000_01b3);
-        }
+        let h = crate::derive::fold(crate::derive::FNV_BASIS, &[program_id as u64]);
         Disposition::ALL[crate::derive::index(h, Disposition::ALL.len())]
     }
 }

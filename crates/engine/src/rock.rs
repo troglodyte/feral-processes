@@ -262,18 +262,14 @@ const VEIN_BLOCK: i32 = 4;
 /// That is the measured failure `descriptions::Slot::tags` documents, reached
 /// here by the same route.
 fn block_seed(seed: u32, x: i32, y: i32) -> u64 {
-    let mut h = 0xcbf2_9ce4_8422_2325_u64;
-    for word in [
-        seed as u64,
-        x.div_euclid(VEIN_BLOCK) as i64 as u64,
-        y.div_euclid(VEIN_BLOCK) as i64 as u64,
-    ] {
-        for byte in word.to_le_bytes() {
-            h ^= byte as u64;
-            h = h.wrapping_mul(0x0000_0100_0000_01b3);
-        }
-    }
-    h
+    crate::derive::fold(
+        crate::derive::FNV_BASIS,
+        &[
+            seed as u64,
+            x.div_euclid(VEIN_BLOCK) as i64 as u64,
+            y.div_euclid(VEIN_BLOCK) as i64 as u64,
+        ],
+    )
 }
 
 #[cfg(test)]

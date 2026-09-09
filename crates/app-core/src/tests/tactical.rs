@@ -337,3 +337,57 @@ fn the_aim_cursor_moves_diagonally_too() {
         "the cursor ignored a diagonal the body would have walked"
     );
 }
+
+/// Whether anything in the log says so.
+fn log_has(app: &App, needle: &str) -> bool {
+    app.game
+        .as_ref()
+        .expect("the fixture has a game")
+        .message_log(64)
+        .into_iter()
+        .any(|line| line.text.contains(needle))
+}
+
+/// `d`, because that is the letter `Game::battle_action_options` has bound
+/// to Defend since long before there was a board to fight on — the same
+/// shared-letter argument `a` and `s` already make here.
+#[test]
+fn d_braces_the_acting_body_and_hands_the_turn_on() {
+    let mut app = fighting(9110);
+    wait_for_the_player(&mut app);
+    let acting = acting_entity(&mut app);
+    assert!(!log_has(&app, "braces"), "fixture: nobody has braced yet");
+
+    app.handle_key(GameKey::Char('d'));
+
+    assert!(log_has(&app, "braces"), "[d] braced nobody");
+    assert_ne!(
+        acting_entity(&mut app),
+        acting,
+        "[d] left the turn where it was"
+    );
+}
+
+/// A key pressed into a wild body's turn would act for a body that is not
+/// the player's — the handler's own early return, and a brace is a third
+/// action it has to hold for.
+#[test]
+fn d_does_nothing_on_a_wild_bodys_turn() {
+    let mut app = fighting(9111);
+    wait_for_the_player(&mut app);
+    app.handle_key(GameKey::Char('E'));
+    assert!(
+        !app.tactical_player_turn(),
+        "fixture: the wild side must hold the turn"
+    );
+    let acting = acting_entity(&mut app);
+
+    app.handle_key(GameKey::Char('d'));
+
+    assert!(!log_has(&app, "braces"), "[d] braced a wild body");
+    assert_eq!(
+        acting_entity(&mut app),
+        acting,
+        "[d] spent a turn that was not the player's"
+    );
+}

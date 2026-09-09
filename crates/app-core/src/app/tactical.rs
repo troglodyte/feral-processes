@@ -55,6 +55,17 @@ impl App {
                 self.menu_selected = 0;
                 self.mode = Mode::TacticalRoutine;
             }
+            // `d`, the letter `Game::battle_action_options` has bound to
+            // Defend since long before there was a board — `s`'s argument
+            // again, and lowercase for the same reason `a` and `s` are:
+            // this screen is the map with a different tile source, not a
+            // list of rows.
+            GameKey::Char('d') => {
+                if let Some(game) = &mut self.game {
+                    game.tactical_defend();
+                }
+                self.after_tactical_action();
+            }
             // Uppercase, because lowercase letters are row selectors.
             GameKey::Char('E') => {
                 if let Some(game) = &mut self.game {

@@ -393,6 +393,9 @@ pub(super) fn action_bar(mode: Mode, view: &TacticalView) -> Vec<(String, String
             format!("move ({} left)", view.allowance),
         ),
         ("a".to_string(), "attack".to_string()),
+        // Between attack and special, so the bar reads in the order the
+        // abstract fight's own action menu does: a, d, s.
+        ("d".to_string(), "defend".to_string()),
         // `special`, not `routine`: this is the word the abstract fight's
         // own action menu builds (`Game::battle_action_options`), and one
         // fight model naming the same verb differently is what makes the

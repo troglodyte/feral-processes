@@ -17,6 +17,9 @@ On your turn:
   down what you have left; a slow body gets fewer steps than a quick one.
 - a — swing at something next to you. The cursor opens on your own cell;
   move it onto the body you mean and press Enter.
+- d — brace. The acting body takes less from every swing for the rest of
+  the round, so it is worth most to whoever acts early and nothing at all
+  to whoever acts last — the turn strip tells you which you are.
 - s — run one of the acting body's routines, the same list the intrusion
   screen calls specials. Pick one and the cursor opens again, showing the
   cells it will cover.

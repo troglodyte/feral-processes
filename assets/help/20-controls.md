@@ -95,7 +95,7 @@ In an intrusion:
 
 On a [battle map](battle-maps), which surface fights use if you turn them on
 in Options, the keys are different: arrows or the numpad step the acting
-body, a swings, s runs a routine, and E ends the turn.
+body, a swings, d braces, s runs a routine, and E ends the turn.
 
 This screen is the manual now, not a card: Esc backs out of it a page at a time, like every other
 screen. [Start here](start-here) if you have not read anything else, or read what the keys are for:

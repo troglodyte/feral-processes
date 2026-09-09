@@ -607,65 +607,159 @@ impl Game {
             .enumerate()
             .filter_map(|(idx, group)| {
                 let front = group.front()?;
-                let stats = self.world.get::<Stats>(front)?;
-                let species = self
-                    .world
-                    .get::<Creature>(front)
-                    .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species));
-                let species_name = species
-                    .map(|s| self.zone_tagged_name(front, s.name.clone()))
-                    .unwrap_or_default();
-                let resistance = self.target_resistance(front)?;
-                let is_boss = species.is_some_and(|s| s.is_boss);
-                Some(EnemyGroupView {
-                    letter: (b'A' + idx as u8) as char,
-                    species_name,
-                    count: group.members.len(),
-                    front_hp: stats.hp,
-                    front_max_hp: stats.max_hp,
-                    front_rarity: self.rarity_of(front),
-                    atk: stats.atk,
-                    mitigation: stats.mitigation,
-                    is_boss,
-                    engaged: idx < ENGAGED_GROUPS,
-                    status_effect: self.status_label(front),
-                    // No odds against a boss, because there is no attempt to
-                    // make — `battle_set_action` refuses the target outright.
-                    decompile_chance: catalyst_potency
-                        .filter(|_| !is_boss)
-                        .map(|potency| taming::capture_chance(potency, resistance, bonuses)),
-                })
+                self.enemy_row(
+                    front,
+                    idx,
+                    group.members.len(),
+                    idx < ENGAGED_GROUPS,
+                    catalyst_potency,
+                    bonuses,
+                )
             })
             .collect();
 
         let party: Vec<PartySlotView> = (0..battle.planned.len())
             .filter_map(|slot| {
                 let entity = self.actor_entity(battle::Actor::Party(slot))?;
-                let stats = self.world.get::<Stats>(entity)?;
-                Some(PartySlotView {
-                    slot,
-                    entity,
-                    name: if slot == 0 {
-                        "You".to_string()
-                    } else {
-                        self.creature_label(entity)
-                    },
-                    hp: stats.hp,
-                    max_hp: stats.max_hp,
-                    atk: self.effective_atk(entity),
-                    mitigation: self.effective_mitigation(entity),
-                    status_effect: self.status_label(entity),
-                    power: self.world.get::<PowerReserve>(entity).map(|n| n.get()),
-                    planned: battle.planned[slot]
-                        .as_ref()
-                        .map(|action| self.action_label(entity, action)),
-                    front: slot < FRONT_SLOTS,
-                    gear: self.gear_tag(entity),
-                })
+                let planned = self
+                    .world
+                    .resource::<BattleState>()
+                    .planned
+                    .get(slot)
+                    .and_then(|action| action.as_ref())
+                    .cloned();
+                let planned = planned.map(|action| self.action_label(entity, &action));
+                self.party_row(slot, entity, planned)
             })
             .collect();
 
         Some((groups, party))
+    }
+
+    /// One enemy row, whichever model is holding the fight.
+    ///
+    /// The group model hands it a group's front and that group's size; a
+    /// battle map hands it a body and a count of one, because groups
+    /// dissolve on a grid. Shared rather than copied: this is where the
+    /// con colour, the rarity, the boss flag and the capture odds are
+    /// decided, and a second copy of it is a results page that disagrees
+    /// with the fight it is reporting.
+    fn enemy_row(
+        &self,
+        front: Entity,
+        idx: usize,
+        count: usize,
+        engaged: bool,
+        catalyst_potency: Option<f32>,
+        bonuses: crate::taming::DecompilerBonuses,
+    ) -> Option<EnemyGroupView> {
+        let stats = self.world.get::<Stats>(front)?;
+        let species = self
+            .world
+            .get::<Creature>(front)
+            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species));
+        let species_name = species
+            .map(|s| self.zone_tagged_name(front, s.name.clone()))
+            .unwrap_or_default();
+        let resistance = self.target_resistance(front)?;
+        let is_boss = species.is_some_and(|s| s.is_boss);
+        Some(EnemyGroupView {
+            letter: (b'A' + idx as u8) as char,
+            species_name,
+            count,
+            front_hp: stats.hp,
+            front_max_hp: stats.max_hp,
+            front_rarity: self.rarity_of(front),
+            atk: stats.atk,
+            mitigation: stats.mitigation,
+            is_boss,
+            engaged,
+            status_effect: self.status_label(front),
+            // No odds against a boss, because there is no attempt to
+            // make — `battle_set_action` refuses the target outright.
+            decompile_chance: catalyst_potency
+                .filter(|_| !is_boss)
+                .map(|potency| taming::capture_chance(potency, resistance, bonuses)),
+        })
+    }
+
+    /// One party row, whichever model is holding the fight.
+    ///
+    /// `planned` is the group model's alone — a battle map plans nothing,
+    /// it acts — and it is the only field of the fourteen that differs
+    /// between them, which is why this is one function and not two.
+    fn party_row(
+        &self,
+        slot: usize,
+        entity: Entity,
+        planned: Option<String>,
+    ) -> Option<PartySlotView> {
+        let stats = self.world.get::<Stats>(entity)?;
+        Some(PartySlotView {
+            slot,
+            entity,
+            name: if slot == 0 {
+                "You".to_string()
+            } else {
+                self.creature_label(entity)
+            },
+            hp: stats.hp,
+            max_hp: stats.max_hp,
+            atk: self.effective_atk(entity),
+            mitigation: self.effective_mitigation(entity),
+            status_effect: self.status_label(entity),
+            power: self.world.get::<PowerReserve>(entity).map(|n| n.get()),
+            planned,
+            front: slot < FRONT_SLOTS,
+            gear: self.gear_tag(entity),
+        })
+    }
+
+    /// The same pair, off a battle map.
+    ///
+    /// `battle_rows`' counterpart, and the second producer the results page
+    /// has: `BattleTimeline::closing` is what `Mode::BattleResult` draws,
+    /// and filled from `battle_rows` alone a tactical fight ended on an
+    /// empty screen with its win, its salvage and its XP written nowhere
+    /// the player looks.
+    ///
+    /// One row per hostile body still standing, all of them `engaged`:
+    /// groups dissolve on a grid, and so does the reach rule that made
+    /// `ENGAGED_GROUPS` mean anything.
+    pub(crate) fn tactical_rows(&self) -> Option<(Vec<EnemyGroupView>, Vec<PartySlotView>)> {
+        let battle = self
+            .world
+            .get_resource::<crate::tactical::TacticalBattle>()?;
+        let bonuses = self.player_decompiler_bonuses();
+        let catalyst_potency = self.taming_catalyst().map(|(_, potency)| potency);
+
+        let standing: Vec<Entity> = battle
+            .bodies()
+            .map(|(entity, _)| entity)
+            .filter(|&e| self.world.get::<crate::components::Hostile>(e).is_some())
+            .collect();
+        let groups: Vec<EnemyGroupView> = standing
+            .into_iter()
+            .enumerate()
+            .filter_map(|(idx, body)| self.enemy_row(body, idx, 1, true, catalyst_potency, bonuses))
+            .collect();
+
+        // Off `Party` and not off the board: a companion that fell is still
+        // the party's, and the row reporting that it fell is the one the
+        // results page most needs.
+        let party: Vec<PartySlotView> = std::iter::once(self.player_entity())
+            .chain(self.world.resource::<Party>().0.iter().copied())
+            .enumerate()
+            .filter_map(|(slot, entity)| self.party_row(slot, entity, None))
+            .collect();
+
+        Some((groups, party))
+    }
+
+    /// The roster a finished fight leaves behind, from whichever model held
+    /// it. Neither is present for a fight that never opened.
+    pub(crate) fn closing_rows(&self) -> Option<(Vec<EnemyGroupView>, Vec<PartySlotView>)> {
+        self.battle_rows().or_else(|| self.tactical_rows())
     }
 
     /// The battle screen's whole readout, as things stand right now. This is

@@ -29,6 +29,18 @@ impl Game {
         self.world.resource::<PlayerEntity>().0
     }
 
+    /// Where a body stands in the world, as a bare pair.
+    ///
+    /// **`tactical/` asks through this rather than reading `Position`
+    /// itself.** A battle map's coordinates live in `TacticalBattle` and
+    /// nothing in that module may write a world position — and the whole
+    /// enforcement of that is the module not naming the component, so the
+    /// two honest reads it needs (where a fight opened, and which way the
+    /// pack lay) come through a door instead of an import.
+    pub(crate) fn tile_of(&self, entity: Entity) -> Option<(i32, i32)> {
+        self.world.get::<Position>(entity).map(|p| (p.x, p.y))
+    }
+
     pub(crate) fn log(&mut self, s: impl Into<String>) {
         self.world.resource_mut::<MessageLog>().push(s);
         self.snapshot_roster();

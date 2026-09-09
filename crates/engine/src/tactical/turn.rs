@@ -11,7 +11,7 @@ use bevy_ecs::prelude::Entity;
 use crate::Game;
 use crate::abilities::{self, AbilityDef, AbilityEffect};
 use crate::components::AbilityCooldowns;
-use crate::components::{Hostile, Position, Stats};
+use crate::components::{Hostile, Stats};
 use crate::game::combat_teardown::FightVerdict;
 use crate::resources::{GameClock, Party, ZoneLevel};
 use crate::tactical::map::{BattleSpec, generate};
@@ -47,11 +47,7 @@ impl Game {
     /// then this is reachable from tests alone.
     pub fn open_tactical_battle(&mut self, pack: Vec<Entity>) {
         let player = self.player_entity();
-        let site = self
-            .world
-            .get::<Position>(player)
-            .map(|p| (p.x, p.y))
-            .unwrap_or((0, 0));
+        let site = self.tile_of(player).unwrap_or((0, 0));
         let party: Vec<Entity> = std::iter::once(player)
             .chain(self.world.resource::<Party>().0.iter().copied())
             .filter(|&e| self.creature_alive(e))
@@ -60,11 +56,7 @@ impl Game {
         // the player actually bumped into — a centroid would answer a
         // different question, and the one being asked is which way the
         // player was facing trouble.
-        let toward = pack
-            .first()
-            .and_then(|&e| self.world.get::<Position>(e))
-            .map(|p| (p.x, p.y))
-            .unwrap_or(site);
+        let toward = pack.first().and_then(|&e| self.tile_of(e)).unwrap_or(site);
         let bearing = deploy::bearing(site, toward);
 
         let spec = BattleSpec {
@@ -244,9 +236,7 @@ impl Game {
         // put the swinger down, and a body left standing on the board at
         // zero HP would keep its place in the order.
         self.reap_tactical_dead(Some(target));
-        if self.world.get_resource::<TacticalBattle>().is_some() {
-            self.world.resource_mut::<TacticalBattle>().end_turn();
-        }
+        self.hand_on_turn(actor);
         true
     }
 
@@ -291,6 +281,22 @@ impl Game {
             return false;
         }
         if !reach::in_range(from, aim, ability.tactical_range()) {
+            return false;
+        }
+        // A capture is aimed at something hostile, and the refusal lands
+        // here with the other five rather than inside the effect: aimed at
+        // one of your own it would spend the catalyst and the turn, and on
+        // a good roll hand the companion back through `roster_parts` — a
+        // fresh `ProgramId`, level one, no memories, and kill XP paid to
+        // the player for it. Aimed at empty ground it would spend both for
+        // nothing at all.
+        if matches!(ability.effect, AbilityEffect::Decompile)
+            && !self
+                .world
+                .resource::<TacticalBattle>()
+                .occupant(aim)
+                .is_some_and(|body| self.world.get::<Hostile>(body).is_some())
+        {
             return false;
         }
         self.run_tactical_routine(actor, &ability, aim, 0);
@@ -345,7 +351,7 @@ impl Game {
                 .world
                 .resource::<TacticalBattle>()
                 .occupant(aim)
-                .filter(|&e| e != actor);
+                .filter(|&e| e != actor && self.world.get::<Hostile>(e).is_some());
             if let Some(target) = target
                 && self.decompile_body(target, player)
             {
@@ -366,9 +372,56 @@ impl Game {
             let aimed = self.world.resource::<TacticalBattle>().occupant(aim);
             self.reap_tactical_dead(aimed);
         }
-        if self.world.get_resource::<TacticalBattle>().is_some() {
-            self.world.resource_mut::<TacticalBattle>().end_turn();
+        self.hand_on_turn(actor);
+    }
+
+    /// Hands the turn on after `actor` has finished with it, and spends the
+    /// round's upkeep when the order comes back round.
+    ///
+    /// **Only if `actor` is still the one acting.** A body that died to its
+    /// own action — a fumble's recoil, a blast centred on its own cell —
+    /// left the order inside the reap, and `TacticalBattle::remove` hands
+    /// the turn on as it goes, because the cursor names a body rather than
+    /// a position. Ending the turn again on top of that skips whoever was
+    /// standing behind it: a companion who fumbles fatally costs the player
+    /// their turn, with nothing on screen to say why.
+    ///
+    /// The upkeep is the one the group model's round spends in
+    /// `battle_resolve_round`'s last two lines, at the same cadence — see
+    /// `tactical_round_upkeep`.
+    fn hand_on_turn(&mut self, actor: Entity) {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return;
+        };
+        if battle.actor() != Some(actor) {
+            return;
         }
+        let before = battle.round;
+        self.world.resource_mut::<TacticalBattle>().end_turn();
+        if self.world.resource::<TacticalBattle>().round > before {
+            self.tactical_round_upkeep();
+            // What the upkeep finished off — a Bleed that took the last
+            // hostile — comes off the board here rather than waiting for
+            // somebody to act into it. `tick_round_status_effects`'s own
+            // tail, in this model's terms.
+            self.reap_tactical_dead(None);
+        }
+    }
+
+    /// What a round costs, on a battle map exactly as in a group fight:
+    /// cooldowns come down, status effects tick and expire, combat buffs
+    /// age, and the world spends one tick.
+    ///
+    /// **`battle_resolve_round`'s trailing pair, called rather than
+    /// restated.** Without it every routine is once per fight — nothing
+    /// decrements the cooldown its own refusal counts down in "rounds" — a
+    /// `Stun` never wears off, `Bleed` never bites, every authored
+    /// `duration` lasts the whole fight, and the world stands still for as
+    /// long as the player is on the board.
+    fn tactical_round_upkeep(&mut self) {
+        let player = self.player_entity();
+        self.tick_combatant_upkeep(player);
+        self.tick();
     }
 
     /// `Game::arm_cooldown` with a floor under what it writes.
@@ -395,9 +448,12 @@ impl Game {
     }
 
     /// Ends the acting body's turn without spending its action.
+    ///
+    /// Through `hand_on_turn` like every other way a turn ends, so a passed
+    /// turn buys the round's upkeep exactly as a spent one does.
     pub fn tactical_end_turn(&mut self) {
-        if self.world.get_resource::<TacticalBattle>().is_some() {
-            self.world.resource_mut::<TacticalBattle>().end_turn();
+        if let Some(actor) = self.tactical_actor() {
+            self.hand_on_turn(actor);
         }
     }
 
@@ -426,7 +482,18 @@ impl Game {
                 self.finish_hostile(body, player);
             }
         }
-        self.settle_tactical(wild);
+        let down = !self.creature_alive(player);
+        if self.settle_tactical(wild) && down {
+            // A defeat is absorbed inside the fight that lands it. The
+            // group model gets that for free — `battle_resolve_round` runs
+            // its trailing tick after `end_battle` has already torn the
+            // fight down, and `difficulty::death_handling_system` rides it
+            // — but a battle map that ends mid-round never reaches the wrap
+            // this owes. Left to the next idle tick instead, the player
+            // walks off the board at zero Integrity and reboots a moment
+            // later standing on the map.
+            self.tactical_round_upkeep();
+        }
     }
 
     /// Ends the fight if it is over, and reports whether it did.

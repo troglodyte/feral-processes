@@ -285,7 +285,7 @@ impl Game {
         // winning the fight is the one thing the results page most needs to
         // report. A copy, not a live read — the entities are gone by the
         // time anything draws it.
-        let closing = self.battle_rows().map(|(groups, party)| ClosingRoster {
+        let closing = self.closing_rows().map(|(groups, party)| ClosingRoster {
             groups,
             party,
             round: verdict.rounds,

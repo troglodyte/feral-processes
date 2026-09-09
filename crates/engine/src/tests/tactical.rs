@@ -1238,3 +1238,281 @@ fn a_one_on_one_fight_hands_control_back_to_the_player() {
     panic!("the wild side never handed the turn back");
 }
 
+/// A walkable, empty cell at least `clear` away from every body on the
+/// board — somewhere a blast can be aimed with nobody but its invoker in it.
+fn lonely_cell(game: &Game, clear: u32) -> (i32, i32) {
+    let battle = game.world.resource::<TacticalBattle>();
+    let bodies: Vec<(i32, i32)> = battle.bodies().map(|(_, cell)| cell).collect();
+    battle
+        .board
+        .cells()
+        .map(|(cell, _)| cell)
+        .find(|&(x, y)| {
+            battle.board.walkable(x, y)
+                && battle.occupant((x, y)).is_none()
+                && bodies
+                    .iter()
+                    .all(|&b| crate::tactical::reach::distance(b, (x, y)) > clear)
+        })
+        .expect("no cell on the board is clear of every body")
+}
+
+/// The order as it stands, and who follows `who` around it.
+fn after(game: &mut Game, who: Entity) -> Entity {
+    let order: Vec<Entity> = game
+        .tactical_view()
+        .expect("no fight is open")
+        .order
+        .iter()
+        .map(|row| row.entity)
+        .collect();
+    let idx = order
+        .iter()
+        .position(|&e| e == who)
+        .expect("that body is not in the order");
+    order[(idx + 1) % order.len()]
+}
+
+/// A body killed by its own action has already left the order, and
+/// `TacticalBattle::remove` handed the turn on when it went. Ending the turn
+/// again on top of that skips whoever was standing behind it — a companion
+/// who fumbles fatally costs the player their turn.
+#[test]
+fn a_body_that_kills_itself_with_its_own_action_hands_the_turn_on_once() {
+    let mut game = game();
+    // A companion rather than a hostile: a hostile holds no `PowerReserve`,
+    // so the player's door refuses it every priced routine there is.
+    let actor = crate::tests::support::spawn_tamed(&mut game, 40, 3);
+    crate::tests::support::enlist(&mut game, actor);
+    tactical_fight(&mut game, 1, 400);
+    assert!(wait_for_turn(&mut game, actor));
+    only_routine(&mut game, actor, "cascade_overflow");
+
+    // Alone in its own blast: the roll is forced for one recipient, so the
+    // one that matters has to be the only one there is.
+    let alone = lonely_cell(&game, 3);
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .move_to(actor, alone)
+    );
+    game.world.get_mut::<Stats>(actor).unwrap().hp = 1;
+    let next = after(&mut game, actor);
+    crate::tests::support::force_the_next_attack_to_land(&mut game);
+
+    assert!(
+        game.tactical_use_routine(0, alone),
+        "the blast was refused before it could land"
+    );
+    assert!(
+        !game.creature_alive(actor),
+        "the blast spared its own invoker — this fixture needs a lethal roll"
+    );
+    assert_eq!(
+        game.tactical_actor(),
+        Some(next),
+        "the turn was handed on twice: the body behind the one that died never acted"
+    );
+}
+
+/// A round on a battle map spends the upkeep an abstract round spends —
+/// cooldowns and status effects tick, and the world clock moves. Without it
+/// every routine is once per fight and a fight costs the world no time at
+/// all.
+#[test]
+fn a_round_on_a_battle_map_cools_a_routine_and_spends_a_world_tick() {
+    let mut game = game();
+    tactical_fight(&mut game, 1, 400);
+    let player = game.player_entity();
+    only_routine(&mut game, player, "cascade_overflow");
+    assert!(wait_for_turn(&mut game, player));
+    let at = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(player)
+        .expect("the player was not seated");
+    assert!(
+        game.tactical_use_routine(0, at),
+        "the blast was refused before it could be charged"
+    );
+    let armed = cooldown_of(&game, player, "cascade_overflow");
+    assert!(armed > 0, "a routine with a cooldown was not put on one");
+
+    let round = game.tactical_view().expect("the fight closed").round;
+    let tick = game.current_tick();
+    for _ in 0..64 {
+        if game.tactical_actor().is_none() {
+            break;
+        }
+        if game.tactical_view().is_some_and(|v| v.round > round) {
+            break;
+        }
+        game.tactical_end_turn();
+    }
+
+    assert!(
+        cooldown_of(&game, player, "cascade_overflow") < armed,
+        "a full round passed and the routine never cooled"
+    );
+    assert!(
+        game.current_tick() > tick,
+        "a round of a battle map cost the world no time"
+    );
+}
+
+fn cooldown_of(game: &Game, body: Entity, routine: &str) -> u32 {
+    game.world
+        .get::<crate::components::AbilityCooldowns>(body)
+        .and_then(|c| c.0.get(routine).copied())
+        .unwrap_or(0)
+}
+
+/// A defeat is absorbed inside the fight that lands it, exactly as the
+/// abstract model's trailing tick absorbs one. Left to the next idle tick,
+/// the player walks off a battle map at zero Integrity and reboots a moment
+/// later on the map.
+#[test]
+fn a_player_dropped_on_a_battle_map_does_not_walk_away_dead() {
+    let mut game = game();
+    tactical_fight(&mut game, 1, 400);
+    let player = game.player_entity();
+    only_routine(&mut game, player, "cascade_overflow");
+    assert!(wait_for_turn(&mut game, player));
+
+    let alone = lonely_cell(&game, 3);
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .move_to(player, alone)
+    );
+    game.world.get_mut::<Stats>(player).unwrap().hp = 1;
+    crate::tests::support::force_the_next_attack_to_land(&mut game);
+    assert!(game.tactical_use_routine(0, alone));
+
+    assert!(
+        game.world.get_resource::<TacticalBattle>().is_none(),
+        "the player went down and the fight stayed open"
+    );
+    assert!(
+        game.world.get::<Stats>(player).unwrap().hp > 0,
+        "the player left the battle map dead: the reboot was deferred"
+    );
+}
+
+/// A capture is aimed at something hostile. Aimed at one of your own it used
+/// to spend the catalyst and, on a good roll, hand the companion back
+/// through `roster_parts` — a fresh `ProgramId`, level one, no memories.
+#[test]
+fn a_capture_refuses_a_body_of_your_own() {
+    let mut game = game();
+    let friend = crate::tests::support::spawn_tamed(&mut game, 40, 3);
+    crate::tests::support::enlist(&mut game, friend);
+    let level_before = game.world.get::<Experience>(friend).map(|e| e.level);
+    let id_before = game
+        .world
+        .get::<crate::components::ProgramId>(friend)
+        .map(|p| p.0);
+
+    tactical_fight(&mut game, 1, 400);
+    let player = game.player_entity();
+    only_routine(&mut game, player, "decompile");
+    game.world
+        .get_mut::<crate::components::Decompiler>(player)
+        .unwrap()
+        .skill = 50;
+    crate::tests::support::set_inventory(&mut game, &[(crate::items::ids::ICE_BREAKER, 50)]);
+    assert!(wait_for_turn(&mut game, player));
+
+    let at = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(friend)
+        .expect("the companion was not seated");
+    let beside = beside(&game, at).expect("no cell beside the companion");
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .move_to(player, beside)
+    );
+    let catalysts = catalysts_held(&game);
+
+    assert!(
+        !game.tactical_use_routine(0, at),
+        "a capture aimed at your own companion was accepted"
+    );
+    assert_eq!(
+        game.tactical_actor(),
+        Some(player),
+        "the refused capture spent the turn"
+    );
+    assert_eq!(
+        catalysts_held(&game),
+        catalysts,
+        "the refused capture spent a catalyst"
+    );
+    assert_eq!(
+        game.world.get::<Experience>(friend).map(|e| e.level),
+        level_before,
+        "the companion was handed back through roster_parts"
+    );
+    assert_eq!(
+        game.world
+            .get::<crate::components::ProgramId>(friend)
+            .map(|p| p.0),
+        id_before,
+        "the companion was minted a new identity"
+    );
+}
+
+/// The results page draws from `BattleTimeline::closing`, which only the
+/// group model ever filled — so a tactical fight ended on a blank screen
+/// with the win, the salvage and the XP written nowhere the player looks.
+#[test]
+fn a_finished_tactical_fight_leaves_a_results_roster() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 1);
+    let player = game.player_entity();
+    let target = pack[0];
+
+    for _ in 0..64 {
+        if game.world.get_resource::<TacticalBattle>().is_none() {
+            break;
+        }
+        if !wait_for_turn(&mut game, player) {
+            break;
+        }
+        let Some(at) = game.world.resource::<TacticalBattle>().cell_of(target) else {
+            break;
+        };
+        if let Some(beside) = beside(&game, at) {
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(player, beside);
+        }
+        game.tactical_attack(target);
+    }
+    assert!(
+        game.world.get_resource::<TacticalBattle>().is_none(),
+        "the fight is still open"
+    );
+
+    let view = game
+        .battle_result_view()
+        .expect("a finished tactical fight left no results roster: the screen draws nothing");
+    let named: Vec<String> = view.party.iter().map(|slot| slot.name.clone()).collect();
+    assert!(
+        named.iter().any(|name| name == "You"),
+        "the results roster names no player: {named:?}"
+    );
+    assert!(
+        view.groups.is_empty(),
+        "the board was cleared and the results still list a hostile"
+    );
+}
+
+fn catalysts_held(game: &Game) -> u32 {
+    game.world
+        .get::<crate::components::Inventory>(game.player_entity())
+        .expect("the player carries nothing")
+        .count(&crate::items::ItemId::from(crate::items::ids::ICE_BREAKER))
+}

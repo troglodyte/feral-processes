@@ -10,6 +10,8 @@
 //! folded through `derive::fold` and reduced through `derive::index`, the
 //! way `rock::RockDb::kind_at` derives base space.
 
+use std::collections::{BTreeSet, VecDeque};
+
 use crate::derive::{FNV_BASIS, fold, index};
 use crate::tuning::{
     TACTICAL_BOARD_LARGE, TACTICAL_BOARD_MEDIUM, TACTICAL_BOARD_SMALL, TACTICAL_LARGE_BODIES,
@@ -224,6 +226,103 @@ impl Board {
     }
 }
 
+/// Eight-way, in a fixed order so every walk over a board is deterministic.
+const NEIGHBOURS: [(i32, i32); 8] = [
+    (0, -1),
+    (1, -1),
+    (1, 0),
+    (1, 1),
+    (0, 1),
+    (-1, 1),
+    (-1, 0),
+    (-1, -1),
+];
+
+/// Every walkable cell reachable from `from`, eight-way.
+///
+/// **Cost-blind on purpose**, and not the movement field. This asks "can a
+/// body get there at all", which `Rough`'s cost cannot change; the movement
+/// field asks "how far can this body get this turn", which is a different
+/// question with a different answer. Corner-cutting is allowed, matching
+/// `walk_field`'s eight directions, so connectivity here and reachability
+/// there agree.
+fn region(board: &Board, from: (i32, i32)) -> BTreeSet<(i32, i32)> {
+    let mut seen = BTreeSet::new();
+    if !board.walkable(from.0, from.1) {
+        return seen;
+    }
+    let mut queue = VecDeque::from([from]);
+    seen.insert(from);
+    while let Some((x, y)) = queue.pop_front() {
+        for (dx, dy) in NEIGHBOURS {
+            let next = (x + dx, y + dy);
+            if board.walkable(next.0, next.1) && seen.insert(next) {
+                queue.push_back(next);
+            }
+        }
+    }
+    seen
+}
+
+/// Opens blockers until the walkable ground is one piece.
+///
+/// A sealed pocket is rare at these blocker rates rather than impossible,
+/// and rare is the worst kind: it survives every test run and then happens
+/// to a player, who finds a body that cannot leave the cell it deployed on
+/// and a fight that cannot finish. Each pass grows the mainland by at least
+/// one cell, so this terminates in at most `side * side` passes.
+fn carve_to_connect(board: &mut Board) {
+    loop {
+        let Some(start) = board.cells().find(|(_, k)| k.walkable()).map(|(c, _)| c) else {
+            return;
+        };
+        let mainland = region(board, start);
+        let stranded = board
+            .cells()
+            .find(|((x, y), k)| k.walkable() && !mainland.contains(&(*x, *y)))
+            .map(|(c, _)| c);
+        let Some(stranded) = stranded else {
+            return;
+        };
+        for cell in corridor(board, &mainland, stranded) {
+            board.set(cell.0, cell.1, BattleCell::Open);
+        }
+    }
+}
+
+/// The shortest run of blockers between `from` and any cell of `mainland`.
+///
+/// A breadth-first walk that ignores walkability entirely and keeps
+/// predecessors, so the path it reports back is the fewest cells that have
+/// to be opened — the carve takes a corridor, not a demolition.
+fn corridor(board: &Board, mainland: &BTreeSet<(i32, i32)>, from: (i32, i32)) -> Vec<(i32, i32)> {
+    let mut came_from: std::collections::BTreeMap<(i32, i32), (i32, i32)> =
+        std::collections::BTreeMap::new();
+    let mut seen = BTreeSet::from([from]);
+    let mut queue = VecDeque::from([from]);
+    while let Some(at) = queue.pop_front() {
+        if mainland.contains(&at) {
+            let mut path = Vec::new();
+            let mut step = at;
+            while step != from {
+                if !board.walkable(step.0, step.1) {
+                    path.push(step);
+                }
+                step = came_from[&step];
+            }
+            return path;
+        }
+        for (dx, dy) in NEIGHBOURS {
+            let next = (at.0 + dx, at.1 + dy);
+            if board.in_bounds(next.0, next.1) && seen.insert(next) {
+                came_from.insert(next, at);
+                queue.push_back(next);
+            }
+        }
+    }
+    Vec::new()
+}
+
 /// The whole generator: derive every cell, then make sure the walkable
 /// ground is one piece.
 pub fn generate(spec: BattleSpec) -> Board {
@@ -231,7 +330,9 @@ pub fn generate(spec: BattleSpec) -> Board {
     let cells = (0..side * side)
         .map(|i| kind_at(spec, i % side, i / side))
         .collect();
-    Board { side, cells }
+    let mut board = Board { side, cells };
+    carve_to_connect(&mut board);
+    board
 }
 
 #[cfg(test)]
@@ -402,5 +503,88 @@ mod tests {
         assert_eq!(board.cell(-1, 0), BattleCell::Blocked);
         assert!(!board.walkable(-1, 0));
         assert!(!board.blocks_sight(-1, 0));
+    }
+
+    /// A hand-built board with a wall straight down the middle: two regions
+    /// before the carve, one after.
+    #[test]
+    fn a_wall_across_the_board_is_carved_through() {
+        let mut board = Board {
+            side: 7,
+            cells: vec![BattleCell::Open; 49],
+        };
+        for y in 0..7 {
+            board.set(3, y, BattleCell::Cover);
+        }
+        assert_eq!(
+            region(&board, (0, 0)).len(),
+            21,
+            "the fixture is not actually split"
+        );
+
+        carve_to_connect(&mut board);
+
+        assert_eq!(
+            region(&board, (0, 0)).len(),
+            board.cells().filter(|(_, k)| k.walkable()).count(),
+            "the carve left ground the rest of the board cannot reach"
+        );
+    }
+
+    /// The carve opens a way through and does not flatten the board.
+    #[test]
+    fn the_carve_spends_as_few_cells_as_it_can() {
+        let mut board = Board {
+            side: 7,
+            cells: vec![BattleCell::Open; 49],
+        };
+        for y in 0..7 {
+            board.set(3, y, BattleCell::Cover);
+        }
+        carve_to_connect(&mut board);
+        let opened = board
+            .cells()
+            .filter(|((x, _), k)| *x == 3 && k.walkable())
+            .count();
+        assert_eq!(
+            opened, 1,
+            "the carve took out more of the wall than it needed"
+        );
+    }
+
+    /// The property the whole task exists for, over every shipped biome a
+    /// fight can open on and every tier.
+    #[test]
+    fn no_generated_board_strands_anybody() {
+        for biome in [
+            Biome::OpenGrid,
+            Biome::Deadlock,
+            Biome::NullSector,
+            Biome::Backplane,
+        ] {
+            for bodies in [2_u32, 5, 9] {
+                for tick in 0..60_u64 {
+                    let board = generate(BattleSpec {
+                        world_seed: 77,
+                        site: (4, 4),
+                        tick,
+                        zone: 2,
+                        biome,
+                        bodies,
+                    });
+                    let walkable = board.cells().filter(|(_, k)| k.walkable()).count();
+                    let start = board
+                        .cells()
+                        .find(|(_, k)| k.walkable())
+                        .map(|(c, _)| c)
+                        .expect("a board with no ground at all");
+                    assert_eq!(
+                        region(&board, start).len(),
+                        walkable,
+                        "{biome:?} at {bodies} bodies, tick {tick}: ground is in pieces"
+                    );
+                }
+            }
+        }
     }
 }

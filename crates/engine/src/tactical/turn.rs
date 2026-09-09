@@ -304,11 +304,11 @@ impl Game {
         // the player for it. Aimed at empty ground it would spend both for
         // nothing at all.
         if matches!(ability.effect, AbilityEffect::Decompile)
-            && !self
+            && self
                 .world
                 .resource::<TacticalBattle>()
                 .occupant(aim)
-                .is_some_and(|body| self.world.get::<Hostile>(body).is_some())
+                .is_none_or(|body| self.world.get::<Hostile>(body).is_none())
         {
             return false;
         }

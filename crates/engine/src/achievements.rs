@@ -264,7 +264,7 @@ pub struct Profile {
     pub player_icon: Option<String>,
     /// Whether surface fights open on a tactical grid rather than the
     /// abstract group model — see
-    /// `docs/superpowers/specs/2026-09-09-tactical-surface-battles-design.md`.
+    /// `docs/superpowers/archive/specs/2026-09-09-tactical-surface-battles-design.md`.
     ///
     /// Cross-run rather than per-save for the reason every field here is:
     /// this is a statement about how the player wants to play, not about one

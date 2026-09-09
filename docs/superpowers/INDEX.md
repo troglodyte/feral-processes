@@ -12,19 +12,21 @@ exceptions.** Every archived spec shipped; the ones left in `specs/` are open,
 parked, partial or superseded, and each says which in its own header. Sorting
 the directory *is* the answer, so no sweep is needed next time.
 
-**The three exceptions are built and stay in `specs/` anyway**, because source
+**The two exceptions are built and stay in `specs/` anyway**, because source
 doc comments pin their paths and moving them would edit `crates/`:
-`2026-09-04-program-extraction-design` (seventeen `//!` and `///` citations),
-`2026-09-04-dev-sprite-editor-design` (`sprite_forge.rs` and `docs/seams.md`)
-and `2026-09-06-settlement-growth-design` (`tests/settlement_growth.rs:3`).
+`2026-09-04-program-extraction-design` (seventeen `//!` and `///` citations)
+and `2026-09-04-dev-sprite-editor-design` (`sprite_forge.rs` and
+`docs/seams.md`).
 
-The third is a **debt, not a precedent.** The rule above said a third should
-not be created without moving the citations with it, and that is still the
-rule; it was created anyway because the citation was noticed during the
-landing itself, and editing a source file mid-deploy is how unreviewed changes
-ride into a release. It is one `//!` line. Moving it and archiving the spec is
-a two-minute follow-up, and until someone does it this file is carrying an
-exception it argued against.
+**The debt this section recorded is paid.** There was a third —
+`2026-09-06-settlement-growth-design`, one `//!` line in
+`tests/settlement_growth.rs` — created because the citation was noticed
+during the landing itself, and editing a source file mid-deploy is how
+unreviewed changes ride into a release. On 2026-09-09 it was archived with
+its citation moved, as its own change rather than inside a deploy, which is
+what the rule asked for all along. The same pass archived
+`2026-09-09-tactical-surface-battles-design` and moved its two citations, so
+no fourth exception was created.
 
 The archive habit worth keeping is archiving **on landing**, not by a later
 sweep — `2026-09-02-base-instrumentation-design` and the two settlement specs
@@ -73,17 +75,18 @@ historical, and git history is where its 62 lines live.
 
 ## Do not move these
 
-Cited from source doc comments, so their paths are load-bearing. Three live in
-`specs/` despite being built — `2026-09-04-program-extraction-design`,
-`2026-09-04-dev-sprite-editor-design` and
-`2026-09-06-settlement-growth-design`, the invariant's three exceptions above.
-The other nine are already in `archive/specs/`:
+Cited from source doc comments, so their paths are load-bearing. Two live in
+`specs/` despite being built — `2026-09-04-program-extraction-design` and
+`2026-09-04-dev-sprite-editor-design`, the invariant's two exceptions above.
+The other eleven are already in `archive/specs/`:
 `2026-07-31-the-stack`, `2026-08-03-nest-aggression`,
 `2026-08-05-stack-movement-routines`, `2026-08-06-easter-eggs`,
 `2026-08-09-battle-telemetry`, `2026-08-17-base-power-grid`,
-`2026-08-19-base-out-of-phase`, `2026-08-27-paned-command-hud` and
-`2026-09-01-character-creation`. Four more are cited from `CHANGELOG.md`,
-`docs/seams.md` or `assets/nemesis/README.md`: `2026-08-17-nemesis`,
+`2026-08-19-base-out-of-phase`, `2026-08-27-paned-command-hud`,
+`2026-09-01-character-creation`, `2026-09-06-settlement-growth-design` and
+`2026-09-09-tactical-surface-battles-design`. Four more are cited from
+`CHANGELOG.md`, `docs/seams.md` or `assets/nemesis/README.md`:
+`2026-08-17-nemesis`,
 `2026-08-19-windows-and-macos-distribution`, `2026-08-21-item-quality` and
 `2026-08-23-rock-kinds-and-mining-mode`.
 
@@ -246,6 +249,17 @@ implementation landed in a different release the row says so.
 `2026-08-24-rest-interruption-design` was archived earlier, on landing in
 `v0.13.94`, but its row was left in the open table above until this pass —
 which is the same rot from the other direction.
+
+## The specs archived on 2026-09-09
+
+Both were built and both are cited from source, so each moved **with its
+citations** — which is the rule the invariant above states and the reason
+neither became a standing exception.
+
+| Spec | What it designed | Release |
+| --- | --- | --- |
+| `2026-09-06-settlement-growth-design` | A server growing into a mainframe | `v0.13.117` |
+| `2026-09-09-tactical-surface-battles-design` | Opt-in tactical fights on a battle map, nine phases | `v0.13.139` (the tactical arena, phase 9, `v0.13.140`) |
 
 ## Four rows that need a footnote
 

@@ -486,3 +486,15 @@ fn a_tactical_fight_reports_a_group_per_body_and_a_matching_end() {
     assert_eq!(end.0, start.0, "the end names a different fight");
     assert!(end.1, "clearing the board did not read as a win");
 }
+
+/// The gate roughly a hundred refusals ask through knows about both models.
+#[test]
+fn a_tactical_fight_counts_as_an_active_battle() {
+    let mut game = game();
+    assert!(!game.has_active_battle());
+    tactical_fight(&mut game, 1, 10);
+    assert!(
+        game.has_active_battle(),
+        "every screen that refuses mid-fight would have opened on a battle map"
+    );
+}

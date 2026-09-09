@@ -142,8 +142,19 @@ impl Game {
         self.world.resource_mut::<GameClock>().tick = tick;
     }
 
+    /// Whether a fight is open, in either combat model.
+    ///
+    /// **The one gate roughly a hundred call sites ask "can I do this right
+    /// now" through**, so it is widened rather than copied: a screen that
+    /// refuses while a group fight is on has exactly as much business being
+    /// refused while a battle map is on, and a second predicate beside this
+    /// one would be a hundred places to remember to update.
     pub fn has_active_battle(&self) -> bool {
         self.world.get_resource::<BattleState>().is_some()
+            || self
+                .world
+                .get_resource::<crate::tactical::TacticalBattle>()
+                .is_some()
     }
 
     /// Advances the world clock with no player action behind it — the hook

@@ -293,7 +293,7 @@ fn post_field(
     let reach = haul_walk_radius(pocket_radius);
     for station in stations {
         let field = walk_field((station.x, station.y), reach, |p| {
-            grid.walkable(p.0, p.1) && (p == start || !blocked.contains(&p))
+            (grid.walkable(p.0, p.1) && (p == start || !blocked.contains(&p))).then_some(1)
         });
         if let Some(&here) = field.get(&start) {
             return Ok((field, here));
@@ -339,7 +339,7 @@ pub(crate) fn crew_reach(
 ) -> HashMap<(i32, i32), u32> {
     let start = (from.x, from.y);
     walk_field(start, haul_walk_radius(pocket_radius), |p| {
-        grid.walkable(p.0, p.1) && (p == start || !blocked.contains(&p))
+        (grid.walkable(p.0, p.1) && (p == start || !blocked.contains(&p))).then_some(1)
     })
 }
 

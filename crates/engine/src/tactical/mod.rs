@@ -14,6 +14,7 @@
 
 pub mod deploy;
 pub mod map;
+pub mod reach;
 
 use bevy_ecs::prelude::{Entity, Resource};
 

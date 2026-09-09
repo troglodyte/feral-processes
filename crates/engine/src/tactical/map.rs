@@ -217,6 +217,28 @@ impl Board {
         }
     }
 
+    /// A board written out by hand, one string per row, for tests that need
+    /// a known layout rather than a generated one: `.` open, `~` rough, `#`
+    /// cover, `X` blocked. Square, because `Board` has one `side`.
+    #[cfg(test)]
+    pub(crate) fn from_rows(rows: &[&str]) -> Board {
+        let side = rows.len() as i32;
+        let cells: Vec<BattleCell> = rows
+            .iter()
+            .flat_map(|row| {
+                assert_eq!(row.chars().count() as i32, side, "a board is square");
+                row.chars().map(|c| match c {
+                    '.' => BattleCell::Open,
+                    '~' => BattleCell::Rough,
+                    '#' => BattleCell::Cover,
+                    'X' => BattleCell::Blocked,
+                    other => panic!("no such cell: {other}"),
+                })
+            })
+            .collect();
+        Board { side, cells }
+    }
+
     pub fn cells(&self) -> impl Iterator<Item = ((i32, i32), BattleCell)> + '_ {
         let side = self.side;
         self.cells

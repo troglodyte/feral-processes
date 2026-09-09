@@ -33,6 +33,14 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.142
+
+**A companion's turn on a battle map now reads as the player's.** The keybar
+said "the wild side is moving" and drew no action keys and no movement wash
+while the fight sat waiting for that companion to be moved — one predicate
+too many, gated on the player's own body where the engine's is gated on
+hostility.
+
 ## 0.13.141
 
 **A battle map says whose turn it is.** An arrow hangs over the acting body's

@@ -46,11 +46,13 @@ mod field;
 mod frame_map;
 mod group_menu;
 mod help;
+mod history;
 pub(crate) mod hud;
 mod icon_editor;
 mod inventory;
 mod manifest;
 mod manifest_layout;
+mod marks;
 mod meta;
 mod notify;
 mod party;
@@ -70,6 +72,7 @@ mod stack_market;
 mod stock;
 mod structure_manifest;
 mod talents;
+mod terrain;
 #[cfg(test)]
 mod test_support;
 mod tools;
@@ -79,7 +82,7 @@ mod transfer;
 use arena::{
     draw_arena_builder, draw_arena_load, draw_arena_pick, draw_arena_result, draw_arena_save,
 };
-use base::{draw_history, draw_playing_base};
+use base::draw_playing_base;
 // The one cue on the map a test outside `render` has to be able to name:
 // arming the tools is `App`-level state and the fixture that reaches base
 // space lives beside `App`.
@@ -105,6 +108,7 @@ use field::{draw_field_routine, draw_field_routine_ally};
 use frame_map::{draw_frame_map, draw_frame_map_cursor, draw_map_inset};
 use group_menu::{draw_dev_console, draw_group_menu};
 use help::{draw_help_index, draw_help_page};
+use history::draw_history;
 use inventory::{
     draw_equip_swap, draw_erase_quantity, draw_gear_inspect, draw_inventory,
     draw_inventory_item_action, effect_lines,

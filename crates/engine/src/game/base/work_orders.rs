@@ -1961,9 +1961,6 @@ impl Game {
         }
     }
 
-    /// `drift_idle_staff` for the tests, which need one beat at a time
-    /// rather than a whole scheduler pass.
-    #[cfg(test)]
     /// The beat's amenity index, for a test that wants to ask
     /// `on_respite`/`is_on_shift` the same question the scheduler does.
     #[cfg(test)]
@@ -1971,6 +1968,9 @@ impl Game {
         self.amenities()
     }
 
+    /// `drift_idle_staff` for the tests, which need one beat at a time
+    /// rather than a whole scheduler pass.
+    #[cfg(test)]
     pub(crate) fn drift_idle_staff_for_test(
         &mut self,
         staff: &[Entity],

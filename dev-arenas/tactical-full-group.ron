@@ -1,0 +1,40 @@
+// `full-group.ron`'s fight, fought on a battle map instead — the same
+// party, the same pack, the same seed, so the pair is the comparison.
+//
+// What the group model cannot see about this fight is the whole reason the
+// file exists: forced focus fire disappears (only a group's front can be
+// hit there; here damage spreads across whoever is in reach), and so does
+// `ENGAGED_GROUPS` (a group past the second cannot act there at all unless
+// it is `ranged`; here everything walks up and swings). The expectation is
+// that this hits harder and swings wider than its twin.
+//
+// Bin only. The played arena drives rounds, so `[F]` on this file is a
+// refusal naming the bin rather than a fight — see `dev-arenas/README.md`.
+(
+    player: Fresh(level: 20, zone: 3),
+    equip: [
+        (item: "plasma_router", tier: 0),
+        (item: "bastion_lattice", tier: 0),
+        (item: "singularity_matrix", tier: 0),
+    ],
+    party: [
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+        (species: "scrapper", level: 12, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+    ],
+    opponents: [(species: "rootkit", count: 4)],
+    model: Tactical,
+    // Head-on. A staged fight spawns its pack around the player, so there
+    // is no tile to read a bearing off the way a real fight does; every
+    // other point of the compass is the same fight from the side, which is
+    // what this row is for.
+    approach: Some(East),
+    reps: 50,
+    seed: 7,
+)

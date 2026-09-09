@@ -1,7 +1,7 @@
 //! The dev arena: the gate, the session, and the screens that edit and
 //! fight a scenario.
 
-use feral_processes_engine::arena::{Encounter, OpponentSpec, PlayerSource, Scenario};
+use feral_processes_engine::arena::{CombatModel, Encounter, OpponentSpec, PlayerSource, Scenario};
 use feral_processes_engine::tuning::MAX_GROUP_SIZE;
 use feral_processes_engine::world::Biome;
 
@@ -737,6 +737,33 @@ fn a_shipped_scenario_round_trips_through_the_builder() {
     assert_eq!(app.mode, Mode::ArenaBuilder, "{:?}", app.status_line);
     let written = Scenario::load(&arenas_dir(&app).join("round-trip.ron")).unwrap();
     assert_eq!(loaded, written);
+}
+
+#[test]
+fn a_tactical_scenario_round_trips_and_is_refused_a_fight_by_name() {
+    // The played arena drives rounds and a battle map is driven a body at a
+    // time, so `stage` refuses this one. The refusal has to reach the
+    // screen — an accepted fight here opens `Mode::Battle` over a fight
+    // with no `BattleState` behind it — and the file has to survive the
+    // builder, which never edits either row.
+    let mut app = app_with_scratch_arenas(52);
+    load_scenario(&mut app, "tactical-full-group");
+    assert_eq!(app.mode, Mode::ArenaBuilder, "{:?}", app.status_line);
+
+    let loaded = app.arena.as_ref().unwrap().scenario.clone();
+    assert_eq!(loaded.model, CombatModel::Tactical);
+    save_scenario(&mut app, "tactical-round-trip");
+    let written = Scenario::load(&arenas_dir(&app).join("tactical-round-trip.ron")).unwrap();
+    assert_eq!(loaded, written);
+
+    app.handle_key(GameKey::Char('f'));
+    assert_eq!(
+        app.mode,
+        Mode::ArenaBuilder,
+        "the screen opened a fight it has no way to play"
+    );
+    let line = app.status_line.clone().expect("a refusal with nothing said");
+    assert!(line.contains("arena"), "{line}");
 }
 
 #[test]

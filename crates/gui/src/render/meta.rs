@@ -34,6 +34,7 @@ fn main_menu_options(has_saves: bool, arena: bool, sprite_forge: bool) -> Vec<St
         options.push("[L] Load Game".to_string());
     }
     options.push("[A] Achievements".to_string());
+    options.push("[O] Options".to_string());
     if arena {
         options.push("[R] Arena".to_string());
     }
@@ -42,6 +43,34 @@ fn main_menu_options(has_saves: bool, arena: bool, sprite_forge: bool) -> Vec<St
     }
     options.push("[Q] Quit".to_string());
     options
+}
+
+/// The settings screen. Rows come from `App::option_rows`, which is also
+/// what app-core scrolls, so the highlight cannot land on a row this never
+/// draws — `draw_achievements`' rule.
+///
+/// The description is **hand-wrapped into short lines**, not one long
+/// sentence: `wrapped_row_lines` breaks tag segments and nothing else, so a
+/// prose row wider than the body is simply drawn off the edge.
+pub(super) fn draw_options(app: &App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
+    let mut rows = vec![text_row("")];
+    for (i, row) in app.option_rows().iter().enumerate() {
+        rows.push(item_row(
+            format!("{}: {}", row.label, row.value),
+            i == app.menu_selected,
+        ));
+    }
+    rows.push(text_row(""));
+    rows.push(text_row(
+        "Surface packs and town patrols fight on a generated grid,",
+    ));
+    rows.push(text_row(
+        "one body at a time. Nests, lairs, Entropy Sweeps and the",
+    ));
+    rows.push(text_row("Stack keep the abstract model."));
+    rows.push(text_row(""));
+    rows.push(text_row("Enter toggles, Esc to close."));
+    draw_popup("Options", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// Every authored rung, earned or not — the point is showing what is left.
@@ -229,5 +258,22 @@ mod tests {
         let at = |s: &str| opts.iter().position(|o| o.contains(s)).unwrap();
         assert!(at("Arena") < at("Sprite Forge"));
         assert!(at("Sprite Forge") < at("Quit"));
+    }
+
+    /// The menu has to offer the row, not just the screen exist — a row the
+    /// handler does not offer opens whatever screen is underneath it, and
+    /// the note on `main_menu_options` says so. `[O]` sits between
+    /// Achievements and the two dev switches, which is where
+    /// `handle_main_menu_key` pushes its `o`.
+    #[test]
+    fn the_main_menu_offers_the_options_row() {
+        let opts = main_menu_options(true, true, true);
+        let at = |s: &str| opts.iter().position(|o| o.contains(s)).unwrap();
+        assert!(
+            opts.iter().any(|row| row.contains("[O]")),
+            "the main menu does not offer the options row: {opts:#?}"
+        );
+        assert!(at("Achievements") < at("Options"));
+        assert!(at("Options") < at("Arena"));
     }
 }

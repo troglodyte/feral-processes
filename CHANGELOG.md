@@ -33,6 +33,13 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.134
+
+**A test-only helper was being compiled into the game.** A scripted edit in
+0.13.133 landed a new function between `#[cfg(test)]` and the one it
+guarded, so `drift_idle_staff_for_test` shipped in the release binary and a
+plain `cargo run` warned about it. No behaviour change.
+
 ## 0.13.133
 
 **A program in a bad mood now takes itself somewhere to sit.** Instead of

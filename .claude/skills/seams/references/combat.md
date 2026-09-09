@@ -728,3 +728,43 @@
   body mid-walk, so a path has no observable difference from its endpoint, and
   a renderer that wants to animate it can descend the cost field. See
   `docs/seams.md`.
+
+- **`Game::start_battle` is where the model is chosen, by inspecting the
+  pack.** The toggle says a player wants tactical fights; it does not say
+  *this* fight is one. **Deciding per call site cannot be made to work**:
+  `game/turn.rs`'s pursuit path calls `start_battle` for a `Pursuing` body
+  without knowing whether it is a nest guardian (out of scope) or a town
+  patrol (in scope), and both arrive at the same line — so the decision has
+  to look at what is in the pack. `fights_tactically` is that look: the
+  profile toggle, `require_surface` **called** rather than restated, and no
+  `NestGuardian` among the bodies. **The fourth gate is an omission and is
+  the reason the arena needed no code** — `arena::stage` calls
+  `begin_battle` directly, so it never passes through here and can never be
+  routed; nests, lairs and raids open their fights by their own routes for
+  the same reason. A reviewer hunting for the arena's exclusion will not
+  find one; what to check instead is that `begin_battle` still has exactly
+  two callers. **Nothing above app-core re-derives the gates** —
+  `App::opened_battle_mode` reads `Game::in_tactical_battle`, which model
+  actually opened, because a second copy drifts on the day a fourth
+  encounter kind lands and the symptom is a screen drawing one model over a
+  fight fought in the other.
+
+- **An AI turn hands the turn on once, and the action already did it.** The
+  action ends the turn, so `tactical_attack` and `tactical_use_routine` each
+  end it themselves once they land — and `tactical_ai_turn_at` ended it
+  again at its tail, so a hostile that swung spent **two** rungs of the
+  order and skipped whoever came next. Against a lone hostile, the shape
+  every wandering encounter has, the order is `[hostile, party]` and the
+  hostile took every turn for ever. **The tail cannot simply be deleted**: a
+  hostile with nothing in reach swings at nobody and ends no turn, so it is
+  owed in some paths and not others — it asks whether the body is still up
+  (`actor() == Some(actor)`), which also answers the case the old comment
+  reached for, a fight that ended inside the action. **Phase 6's tests could
+  not see it**: they assert a hostile closes and swings and that the AI
+  declines a party body's turn, and neither asks who acts next — nothing
+  headless waits on the answer, so it surfaced the first time a screen did.
+  `tactical_ai_actor` is now the one definition of whose turn the AI drives
+  and `Game::tactical_awaits_input` its complement, because **every party
+  body is the player's to command** — the gate is `Hostile`, not `Player`,
+  and two predicates would either hang the fight waiting for a key nobody
+  may press or move a companion by itself.

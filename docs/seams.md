@@ -13385,3 +13385,128 @@ path is a sequence with no observable difference from its endpoint, and
 `movement_field` has already answered which endpoints are legal and what
 each costs. A renderer that wants to animate the walk can descend the cost
 field; it does not need the engine to have taken the steps.
+
+### `Game::start_battle` is where the model is chosen, by inspecting the pack
+
+The toggle says a player wants tactical fights; it does not say *this* fight
+is one. Three kinds of encounter are in scope — a wandering pack and a town
+patrol — and four are not: a nest guardian, a lair, a raid and the arena.
+Deciding per call site is the obvious shape and it cannot be made to work.
+`game/turn.rs`'s pursuit path calls `start_battle` for a `Pursuing` body
+without knowing whether it is a guardian or a patrol; both arrive at the same
+line. So the decision has to look at what is *in* the pack, and
+`fights_tactically` is that look: the profile toggle, `require_surface`
+called rather than restated, and no `NestGuardian` among the bodies.
+
+The fourth gate is an **omission**, and it is the reason the arena needed no
+code at all. `arena::stage` calls `begin_battle` directly — it authors its
+own composition and must not be capped — so it never passes through
+`start_battle` and can never be routed. Nests, lairs and raids open their
+fights by their own routes for the same reason. A reviewer looking for the
+arena's exclusion will not find one; what they should check instead is that
+`begin_battle` still has exactly two callers.
+
+**Nothing above app-core re-derives this.** `App::opened_battle_mode` reads
+`Game::in_tactical_battle` — which model actually opened — rather than
+asking the three questions again. A second copy of the gates would drift on
+the day a fourth encounter kind lands, and the symptom would be a screen
+that draws one model over a fight fought in the other.
+
+### A tactical fight is drawn in the map pane, and both its readouts cost no layout
+
+The alternative was a battle screen of its own, and it was refused on the
+cost of the second grid. `draw_surface_map` carries the camera and its
+easing, `tile_origin_px`, `map_cell`'s zoom ladder, the glyph palette,
+`ConRead`, the sprite fallback and the vignette; a second grid beside it is
+all of that again, forever, with nothing making the two agree. Drawing
+battle tiles *into* `map_pane` instead of `view_tiles_at` costs one arm on
+one `if` and inherits every one of those.
+
+What is **not** inherited is the loop. `render/tactical.rs` is a smaller
+sibling, not a copy: a battle map has no biomes, no structures, no build
+sites, no depots, no haul marks and no posted workers, so ~300 lines of
+`draw_surface_map` would have been dead branches. The rules the two genuinely
+share are called across the seam — `ConRead::of`, `glyph_color`,
+`Painter::sprite` — which is why `ConRead` and `tile_origin_px` are
+`pub(super)` and not private.
+
+**The two readouts are where the layout traps are.** The turn-order strip
+takes the **compass block's slot**: a block drawn inside the pane, starting
+at `layout::strip_inset` because THREAT's quad hangs down into the pane. A
+strip on `map_pane`'s bottom border is the one-line change that costs two
+layout changes — the map buys a band it can never draw tiles in, and buying
+it only while a fight is open re-lays the entire tile grid on the keypress
+that opens one, which at the keyboard reads as the camera lurching. The
+compass moved inside for exactly that, one release after trying it. A fight
+has no destination for a bearing, so the two can never want the slot at
+once, and `draw_playing_base` gates the compass on `in_tactical` rather than
+letting them stack.
+
+The action bar is a **content swap on the keybar**, `LogPane::actions`. The
+keybar already rides `log_pane`'s bottom border and already degrades through
+`strip::fitting`, so a fight's action list costs nothing; a bar of its own
+would have had to buy height from somewhere, and there is nowhere left.
+
+**No vignette on the battle map.** The surface map dims with the player's
+Power because the world is seen through a failing signal. A battle map is a
+discrete arena and dimming it would hide the one thing the screen exists to
+show. This will read as a dropped multiplication to anyone holding the
+surface map's rule; it is not.
+
+### The tactical modes are deliberately not `is_battle`
+
+They are fights, so the classification looks wrong, and the compiler will
+force whoever adds a fourth to pick a side. `Mode::is_battle` gates two
+things and both want `false` here.
+
+It gates the **reveal**: `App::unrevealed` returns zero unless
+`mode.is_battle()`, and the reveal exists because the abstract model
+narrates a whole round at once and has to let it land a line at a time.
+A tactical fight resolves one body at a time in front of the player, who
+watched it happen — there is nothing to hold back. Classified in, every
+line a turn logged would be paced out at `REVEAL_LINES_PER_SECOND` **and
+`handle_key` would swallow one keypress per line**, which is the exact
+failure ungating the reveal caused on the map before it was gated.
+
+It also routes `Fx`. A tactical fight is drawn on the map, so its hits and
+floats belong to the map's effects layer, which is what `in_battle: false`
+selects.
+
+What paces the wild side instead is `App::advance_tactical`, a carry against
+`dt` at `TACTICAL_TURNS_PER_SECOND` — `advance_compile`'s rule, and for its
+reason: one turn per rendered frame ties the fight's pace to the frame rate
+the machine happens to manage.
+
+### An AI turn hands the turn on once, and the action already did it
+
+The action ends the turn — that is the turn model — so `tactical_attack`
+and `tactical_use_routine` each call `end_turn` themselves once they have
+landed. `tactical_ai_turn_at` also ended it, unconditionally, at its tail.
+A hostile that swung therefore spent **two** rungs of the initiative order
+and skipped whoever came after it. Against a lone hostile, which is the
+shape every wandering encounter has, the order is `[hostile, party]` and the
+hostile took every turn for ever: a fight the player is never handed control
+of.
+
+The tail cannot simply be deleted. A hostile with nothing in reach swings at
+nobody and ends no turn, and `targets.is_empty()` returns early having ended
+its own — so the tail is owed in some paths and not others. It asks whether
+the body is **still up** (`actor() == Some(actor)`) rather than tracking a
+flag, which also covers the case the old comment was reaching for: a fight
+that ended inside the action took the resource with it, and that is the same
+question with the same answer.
+
+**Phase 6's tests could not see this.** They assert that a hostile closes
+the gap and swings, and that the AI declines a party body's turn. Neither
+asks who acts next, and nothing in a headless suite waits on the answer —
+it surfaced the first time a screen did. The gate now is
+`a_hostiles_turn_costs_exactly_one_rung_of_the_order`, which reads the
+order, names the body that should be next, and drives exactly one AI turn.
+
+The same commit made `tactical_ai_actor` the one definition of whose turn
+the AI drives, with `Game::tactical_awaits_input` as its complement. Asked
+separately they would eventually disagree about a body that is neither the
+player nor a hostile, and **every party body is the player's to command** —
+so the gate is `Hostile` and not `Player`, and a companion on a battle map
+waits for a key exactly as the player does. Two predicates would either hang
+the fight waiting for a key nobody may press, or move a companion by itself.

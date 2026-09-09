@@ -848,6 +848,15 @@ relying on one, and correct all three places if it has moved.
 - **One draw an AI turn, spent on the cell, and none at temperature zero** —
   the aim and the swing target are argmaxes, and the candidates are sorted
   before they are scored.
+- **`Game::start_battle` is where the model is chosen, by inspecting the
+  pack** — the pursuit path cannot know whether it is a guardian or a
+  patrol, and the arena stays abstract by never passing through it.
+- **An AI turn hands the turn on once, because the action already did it.**
+- **A tactical fight is drawn in the map pane, and its turn strip takes the
+  compass block's slot** — a block inside the pane, never a border strip.
+- **The tactical modes are deliberately not `is_battle`**, which gates the
+  reveal and routes `Fx`; `App::advance_tactical` paces the wild side
+  against `dt` instead.
 
 ### Items, gear and economy
 

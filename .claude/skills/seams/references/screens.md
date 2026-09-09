@@ -277,3 +277,21 @@
   one section taller than the Broker's and **has no absolute height gate** —
   `draw_contracts` has never had one either; what is held is the delta, the
   contracts screen's chrome plus exactly a three-row header.
+
+- **The tactical modes are deliberately not `is_battle`.** They are fights,
+  so the classification reads wrong, and the exhaustive match makes whoever
+  adds a fourth pick a side. `Mode::is_battle` gates two things and both
+  want `false` here. It gates the **reveal** — `App::unrevealed` returns
+  zero unless `mode.is_battle()` — and the reveal exists because the
+  abstract model narrates a whole round at once and has to let it land a
+  line at a time; a tactical fight resolves one body at a time in front of
+  the player, who watched it happen, so there is nothing to hold back.
+  Classified in, every line a turn logged would be paced out at
+  `REVEAL_LINES_PER_SECOND` **and `handle_key` would swallow one keypress
+  per line**, which is the exact failure ungating the reveal caused on the
+  map before it was gated. It also routes `Fx`, and a tactical fight is
+  drawn on the map, so its hits belong to the map's effects layer. What
+  paces the wild side instead is `App::advance_tactical`, a carry against
+  `dt` at `TACTICAL_TURNS_PER_SECOND` — `advance_compile`'s rule and its
+  reason, since one turn per rendered frame ties the fight's pace to the
+  frame rate the machine happens to manage.

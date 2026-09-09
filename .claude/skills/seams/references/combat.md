@@ -592,3 +592,42 @@
   body that cannot move at all can neither close nor walk off the board, so
   an authored `SpeciesDef::movement` is clamped exactly as a derived figure
   is. See `docs/seams.md` for the argument.
+
+- **A fight ends through `Game::finish_fight`, and a `FightVerdict` is what
+  each model answers it with.** `end_battle` read `BattleState` six times,
+  four of them asking "is anything hostile left" in different words, and
+  `mark_nemeses`' own comment says the three must agree. The verdict is four
+  fields; `finish_fight` is the sequence, and **the sequence is the thing
+  being protected** — every step of it is ordered against another
+  (`settle_rewards` before the closing capture, the capture before the reap,
+  `mark_nemeses` in a narrow window above the resource removal, the lair
+  collapse last). A second teardown beside it drifts a line at a time and
+  nothing fails to compile. The trap is `won`: it means the roster was
+  *emptied*, never "nothing is alive" — a jack-out taken in the round that
+  flatlined the last hostile, before anything reaped it, reads as a win off
+  the latter. Two smaller doors come with it: `Game::fight_rewards_mut` (the
+  tally is a field on *each* model's resource, because a new `Resource`
+  shifts bevy's query order under unrelated tests) and
+  `Game::finish_hostile` (the kill line, XP, loot, nest respawn, patrol
+  standing charge, despawn — a copy of it is a second place a patrol kill
+  stops charging a town). See `docs/seams.md` for the argument.
+- **A tactical fight's initiative is rolled once and kept in step by
+  deletion, and the cursor names a body rather than a position.** Rolled
+  once because the turn-order strip is a planning instrument and a reshuffle
+  between rounds makes any plan longer than a turn worthless;
+  `Game::initiative_roll` is extracted so both models price a body the same
+  way. The trap is the cursor's three removal cases, which are not alike: an
+  entry **ahead** of it shifts everything down one and the cursor must
+  follow or somebody silently loses a turn; an entry behind it changes
+  nothing; and the **acting** body leaving means the cursor already names
+  its successor, so the turn must be reset or the dead body's spent movement
+  is charged to whoever is next. See `docs/seams.md` for the argument.
+- **A step off the board edge is a departure, not a refusal, and the
+  player's own departure closes the fight.** Walking out is the only way to
+  express disengaging on a grid, and it is safe only because of the
+  `Position` seam above — a body that walks off is standing exactly where
+  the fight opened, so there is nothing to restore. Three endings, one win:
+  the board clear of hostiles is a win **even when they all broke off**; the
+  player down is a loss; the player walking out is the jack-out. Omit the
+  third and a fight stays open with nobody holding it. See `docs/seams.md`
+  for the argument.

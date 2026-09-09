@@ -13046,3 +13046,123 @@ toward zero, which would make the band straddling the average twice as wide
 as every other one — a body one point *below* average would move like an
 average one, silently, and the roster would read as though speed did
 nothing at the middle.
+
+
+### A fight ends through one function, and a `FightVerdict` is what a model answers it with
+
+**A fight ends through `Game::finish_fight`, and a `FightVerdict` is what
+each combat model answers it with.**
+
+`end_battle` read `BattleState` in six places. Four of them were the same
+question in different words — `groups.is_empty()` for the "You won!"
+headline, again for the telemetry's `won`, again inverted for
+`mark_nemeses`' fled gate, and again for `form_victory_memories` — and
+`mark_nemeses`' own comment says out loud that the three "must agree". The
+other two were `round` and `outmatched`, plus `lair` read out of the removed
+resource and `planned` read through `battle_rows`. All of that is the
+abstract model's vocabulary, and none of it can be handed a fight fought on
+a battle map.
+
+The split is a verdict and a sequence. `FightVerdict` is four fields — the
+roster was emptied, how many rounds, whether the party was outweighed at the
+bell, and the Stack lair if there was one — and `finish_fight` is the
+existing teardown body in the existing order. `end_battle` is now the
+abstract model's verdict-builder and nothing else. `settle_rewards`,
+`mark_nemeses` and `form_victory_memories` take their answer rather than
+re-deriving it, which is what collapses the four reads into one.
+
+**The order is the thing being protected.** The sequence is not arbitrary at
+any step: `settle_rewards` runs before the closing roster is captured
+because the tally has to be written while the dead are still nameable; the
+closing capture runs before the reap because a companion that died winning
+is what the results page most needs to report; `mark_nemeses` and
+`form_victory_memories` sit in a narrow window below the stray sweep and
+above the resource removal; and the lair collapse is last and below the
+prune. A second teardown written beside this one would agree with it on the
+day it was written and drift a line at a time, and nothing would fail to
+compile.
+
+**`won` stays "the roster was emptied" and must not become "nothing is
+alive."** Those coincide today because a hostile is despawned and taken off
+the roster in the same breath it dies, but they answer different questions,
+and the case that separates them is real: a jack-out taken in the same round
+that flatlined the last hostile, before anything reaped it, would read as a
+win off "nothing is alive". `Game::all_living_enemies` — which *is* widened
+to answer for either model — carries that warning in its own doc for the
+same reason.
+
+Two smaller doors fall out of the same work and are load-bearing on their
+own. `Game::fight_rewards_mut` is the one way onto a fight's payout tally:
+`BattleRewards` stayed a field rather than becoming a `Resource` of its own,
+because a new resource shifts bevy's query iteration order under unrelated
+tests, so it is a field on *each* model's resource and one accessor answers
+off whichever is present. And `Game::finish_hostile` is what a hostile's
+death costs and pays — the kill line, the XP, the loot, the nest's respawn
+timer, the town's opinion of a patrol member killed, and the despawn —
+leaving `finish_member` with only the part that is genuinely group-shaped.
+A copy of `finish_hostile` on the tactical side is a second place a patrol
+kill could quietly stop charging a town.
+
+The adapter was rejected before any of this: an adapter over `BattleState`
+would have to invent a group letter, a shared HP bar and an
+`attackers_in_group` count for a body standing on a cell, and each invented
+answer is a lie the teardown then acts on.
+
+### The turn order is kept in step by deletion, and the cursor names a body
+
+**A tactical fight's initiative is rolled once and kept in step by deletion,
+not by re-sorting, and the cursor names a body rather than a position.**
+
+`roll_initiative` re-rolls the whole line every round, which is right for a
+model where a round is one simultaneous exchange. A grid fight resolving one
+body at a time in front of the player is a different thing: the turn-order
+strip is a planning instrument, and an order that reshuffles between rounds
+makes every plan longer than one turn worthless. So the roll happens once,
+at the bell, through `Game::initiative_roll` — extracted so both models
+price a body's initiative identically, since they differ in *when* they roll
+and not in what a body is worth.
+
+"Re-sorted as bodies die" is then deletion. A body that dies or breaks off
+leaves `initiative` in `TacticalBattle::remove`, and the survivors' relative
+order — settled at the bell — is never disturbed again.
+
+The trap is the cursor. It is an index, but what it *means* is a body, and
+the two come apart exactly when an entry is removed. Three cases, and they
+are not the same: an entry ahead of the cursor shifts everything behind it
+down one, so the cursor has to follow or it skips whoever was next; an entry
+behind the cursor changes nothing; and the *acting* body leaving means the
+cursor already names whoever stood behind it, which is a fresh turn and has
+to be reset as one, or the dead body's spent movement is charged to its
+successor. Getting the first wrong is a body silently losing its turn every
+time something ahead of it dies, which reads as the order being random.
+
+Rounds are counted at the wrap rather than tracked, and an emptied order
+parks the cursor at zero rather than counting rounds against a fight nobody
+is left in.
+
+### The board edge is a departure, not a wall
+
+**A step off the board edge takes the body out of the fight, and the
+player's own departure closes it.**
+
+Disengaging is in the spec's settled list and there is only one way to
+express it on a grid: walk out. So the edge is not a wall, and
+`Game::tactical_step` answers `Departed` rather than `Refused` — a body that
+walks out leaves the board, the turn order and the fight in one act, and
+keeps every point of the HP it had.
+
+This is safe only because of the seam above it: a tactical fight writes no
+world `Position`, so a body that walks off a battle map is standing exactly
+where the fight opened. There is nothing to restore and nowhere for it to
+end up.
+
+Three endings, and only one of them is a win. The board being clear of
+hostiles is the win — **including when they all broke off**, because the
+field is the party's and there is nothing left to fight, which is the same
+answer an emptied roster gives. The player being down is a loss. And the
+player walking out is the jack-out: a companion can break off and leave the
+party fighting on, but the player is the one holding the fight open, so
+their leaving closes it exactly as `battle_flee` does. Leaving that third
+case out is a fight that stays open with nobody in it — the resource
+outlives the screen, and the next thing to ask `tactical_actor` gets a body
+the player is no longer controlling.

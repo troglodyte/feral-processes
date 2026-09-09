@@ -821,6 +821,16 @@ relying on one, and correct all three places if it has moved.
   the budget and `walk_field`'s search box** — safe only because no step
   costs less than one, which is what makes `TACTICAL_MOVE_MIN`/`MAX`
   correctness bounds.
+- **A fight ends through `Game::finish_fight`, and a `FightVerdict` is what
+  each model answers it with** — `won` is the roster *emptied*, never
+  "nothing is alive".
+- **A fight's payout is reached through `Game::fight_rewards_mut`, and what
+  a hostile's death pays is `Game::finish_hostile`** — both model-blind, and
+  `finish_member` keeps only what is group-shaped.
+- **A tactical fight's initiative is rolled once and kept in step by
+  deletion, and the cursor names a body rather than a position.**
+- **A step off the board edge is a departure and not a refusal, and the
+  player's own is the jack-out.**
 
 ### Items, gear and economy
 

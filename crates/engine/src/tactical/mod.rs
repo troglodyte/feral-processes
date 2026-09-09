@@ -15,6 +15,7 @@
 pub mod deploy;
 pub mod map;
 pub mod reach;
+pub mod turn;
 
 use bevy_ecs::prelude::{Entity, Resource};
 
@@ -49,6 +50,33 @@ pub struct TacticalBattle {
     /// a new `Resource` shifts bevy's query iteration order under unrelated
     /// tests, and a fight's payout has no business doing that.
     pub(crate) rewards: BattleRewards,
+    /// Every body still in the fight, fastest first — rolled once when the
+    /// fight opens rather than fresh each round, so a turn-order strip is
+    /// stable enough to plan against.
+    ///
+    /// **Kept in step by deletion, not by re-sorting.** A body that dies or
+    /// walks off the edge leaves this list in `remove`, which is the whole
+    /// of "re-sorted as bodies die": the survivors' relative order was
+    /// settled at the bell and nothing later may disturb it.
+    initiative: Vec<Entity>,
+    /// Which entry of `initiative` is acting. Never points past the end
+    /// while any body remains — `wrap` is what holds that.
+    turn: usize,
+    /// What the acting body has spent on movement this turn, against
+    /// `Game::movement_allowance`.
+    spent: u32,
+    /// Whether the acting body has taken its action. The action ends the
+    /// turn, so this is only ever read between the action landing and the
+    /// turn being handed on.
+    acted: bool,
+    /// How many times the order has come round, from 1. The results
+    /// header's figure and the telemetry's alike.
+    pub round: u32,
+    /// Whether the hostiles outweighed the party at the bell, by summed
+    /// `Stats::power()` — `BattleState::outmatched`'s counterpart, and a
+    /// snapshot for its reason: by the time a fight is won the question is
+    /// unanswerable.
+    pub(crate) outmatched: bool,
 }
 
 impl TacticalBattle {
@@ -58,6 +86,12 @@ impl TacticalBattle {
             board,
             bodies: Vec::new(),
             rewards: BattleRewards::default(),
+            initiative: Vec::new(),
+            turn: 0,
+            spent: 0,
+            acted: false,
+            round: 1,
+            outmatched: false,
         }
     }
 
@@ -108,9 +142,93 @@ impl TacticalBattle {
         true
     }
 
-    /// Takes a body off the board — killed, or walked off the edge.
+    /// Takes a body off the board — killed, or walked off the edge — and out
+    /// of the turn order with it.
+    ///
+    /// **The cursor names a body, not a position.** Removing an entry ahead
+    /// of the cursor shifts everything behind it down one, so the cursor
+    /// follows; removing the *acting* body leaves the cursor already naming
+    /// whoever stood behind it, which is a fresh turn and is reset as one.
+    /// A body that dies on somebody else's turn costs the order nothing.
     pub fn remove(&mut self, body: Entity) {
         self.bodies.retain(|(e, _)| *e != body);
+        let Some(idx) = self.initiative.iter().position(|&e| e == body) else {
+            return;
+        };
+        self.initiative.remove(idx);
+        if idx < self.turn {
+            self.turn -= 1;
+        } else if idx == self.turn {
+            self.begin_turn();
+        }
+        self.wrap();
+    }
+
+    /// Seats the turn order, fastest first. Called once, when the fight
+    /// opens.
+    pub fn set_initiative(&mut self, order: Vec<Entity>) {
+        self.initiative = order;
+        self.turn = 0;
+        self.begin_turn();
+    }
+
+    /// The turn order as it stands, fastest first.
+    pub fn initiative(&self) -> &[Entity] {
+        &self.initiative
+    }
+
+    /// Whose turn it is, or `None` when nobody is left to take one.
+    pub fn actor(&self) -> Option<Entity> {
+        self.initiative.get(self.turn).copied()
+    }
+
+    /// What the acting body has spent on movement so far this turn.
+    pub fn spent(&self) -> u32 {
+        self.spent
+    }
+
+    /// Whether the acting body has already taken its action.
+    pub fn acted(&self) -> bool {
+        self.acted
+    }
+
+    /// Charges `cost` against the acting body's movement.
+    pub fn spend(&mut self, cost: u32) {
+        self.spent += cost;
+    }
+
+    /// Records that the acting body has acted. The caller ends the turn —
+    /// this only says the action landed, because a body killed by its own
+    /// fumble leaves the order instead.
+    pub fn mark_acted(&mut self) {
+        self.acted = true;
+    }
+
+    /// Hands the turn to the next body in the order, starting a new round
+    /// when it comes back round to the front.
+    pub fn end_turn(&mut self) {
+        self.turn += 1;
+        self.wrap();
+        self.begin_turn();
+    }
+
+    fn begin_turn(&mut self) {
+        self.spent = 0;
+        self.acted = false;
+    }
+
+    /// Brings the cursor back inside the order, counting a round each time
+    /// it comes round. An empty order parks it at zero rather than counting
+    /// rounds against a fight nobody is left in.
+    fn wrap(&mut self) {
+        if self.initiative.is_empty() {
+            self.turn = 0;
+            return;
+        }
+        if self.turn >= self.initiative.len() {
+            self.turn = 0;
+            self.round += 1;
+        }
     }
 
     /// Every body and where it stands, in placement order.
@@ -246,6 +364,97 @@ mod tests {
         assert_eq!(battle.cell_of(bodies[0]), None);
         assert_eq!(battle.occupant(cell), None);
         assert_eq!(battle.bodies().count(), 0);
+    }
+
+    /// A fixture with all three bodies placed and seated in the order they
+    /// were spawned.
+    fn seated() -> (TacticalBattle, Vec<Entity>) {
+        let (mut battle, bodies) = fight();
+        let cells: Vec<(i32, i32)> = battle
+            .board
+            .cells()
+            .filter(|(_, k)| k.walkable())
+            .map(|(c, _)| c)
+            .take(3)
+            .collect();
+        for (body, cell) in bodies.iter().zip(&cells) {
+            battle.place(*body, *cell);
+        }
+        battle.set_initiative(bodies.clone());
+        (battle, bodies)
+    }
+
+    #[test]
+    fn the_order_is_walked_in_order_and_wraps_into_a_new_round() {
+        let (mut battle, bodies) = seated();
+        assert_eq!(battle.actor(), Some(bodies[0]));
+        assert_eq!(battle.round, 1);
+        battle.end_turn();
+        assert_eq!(battle.actor(), Some(bodies[1]));
+        assert_eq!(battle.round, 1, "a hand-off is not a round");
+        battle.end_turn();
+        battle.end_turn();
+        assert_eq!(battle.actor(), Some(bodies[0]));
+        assert_eq!(battle.round, 2);
+    }
+
+    /// The turn economy: a fresh turn owes nothing and has acted on nothing.
+    #[test]
+    fn a_new_turn_starts_with_nothing_spent_and_nothing_done() {
+        let (mut battle, _) = seated();
+        battle.spend(3);
+        battle.mark_acted();
+        assert_eq!(battle.spent(), 3);
+        assert!(battle.acted());
+        battle.end_turn();
+        assert_eq!(battle.spent(), 0);
+        assert!(!battle.acted());
+    }
+
+    /// A body dying on somebody else's turn costs the order nothing: the
+    /// cursor names a body, not a position, so everyone behind the gap keeps
+    /// their place.
+    #[test]
+    fn a_body_removed_ahead_of_the_cursor_leaves_the_acting_body_acting() {
+        let (mut battle, bodies) = seated();
+        battle.end_turn();
+        battle.end_turn();
+        assert_eq!(battle.actor(), Some(bodies[2]));
+        battle.remove(bodies[0]);
+        assert_eq!(battle.actor(), Some(bodies[2]), "the cursor slipped");
+        assert_eq!(battle.initiative(), &[bodies[1], bodies[2]]);
+    }
+
+    #[test]
+    fn removing_the_acting_body_hands_the_turn_to_whoever_stood_behind_it() {
+        let (mut battle, bodies) = seated();
+        battle.end_turn();
+        battle.spend(2);
+        assert_eq!(battle.actor(), Some(bodies[1]));
+        battle.remove(bodies[1]);
+        assert_eq!(battle.actor(), Some(bodies[2]));
+        assert_eq!(battle.spent(), 0, "the dead body's spend carried over");
+    }
+
+    /// The last body in the order leaving wraps the cursor rather than
+    /// stranding it past the end.
+    #[test]
+    fn removing_the_last_body_in_the_order_wraps_the_cursor() {
+        let (mut battle, bodies) = seated();
+        battle.end_turn();
+        battle.end_turn();
+        battle.remove(bodies[2]);
+        assert_eq!(battle.actor(), Some(bodies[0]));
+        assert_eq!(battle.round, 2);
+    }
+
+    #[test]
+    fn an_emptied_order_has_nobody_acting() {
+        let (mut battle, bodies) = seated();
+        for body in bodies {
+            battle.remove(body);
+        }
+        assert_eq!(battle.actor(), None);
     }
 
     /// Placement order is what `bodies` reports, every time. Bevy's own

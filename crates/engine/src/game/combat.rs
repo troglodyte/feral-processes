@@ -267,7 +267,7 @@ impl Game {
     ///
     /// A body with no `Stats` weighs nothing rather than being skipped, which
     /// is the same answer and needs no filter.
-    fn summed_power(&self, who: impl Iterator<Item = Entity>) -> i64 {
+    pub(crate) fn summed_power(&self, who: impl Iterator<Item = Entity>) -> i64 {
         who.filter_map(|e| self.world.get::<Stats>(e))
             .map(|s| s.power() as i64)
             .sum()
@@ -529,6 +529,22 @@ impl Game {
     /// in descending initiative order. Ties break on a stable key — party
     /// before enemies, then slot / group index — so a seeded run always
     /// produces the same order.
+    /// What `entity` rolled for initiative: what it fights at, plus a draw
+    /// off `INITIATIVE_DIE`.
+    ///
+    /// **One roll for both combat models.** The abstract one re-rolls the
+    /// whole line every round and the tactical one rolls once at the bell,
+    /// which is a difference in *when* rather than in what a body is worth —
+    /// two copies of the sum would eventually disagree about the second.
+    pub(crate) fn initiative_roll(&mut self, entity: Entity) -> i32 {
+        let base = self.combat_speed(entity);
+        let roll = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_range(0..=INITIATIVE_DIE)
+        };
+        base + roll
+    }
+
     pub(crate) fn roll_initiative(&mut self) -> Vec<battle::Actor> {
         let Some(battle_state) = self.world.get_resource::<BattleState>() else {
             return Vec::new();
@@ -562,12 +578,7 @@ impl Game {
             if !self.creature_alive(entity) {
                 continue;
             }
-            let base = self.combat_speed(entity);
-            let roll = {
-                let mut rng = self.world.resource_mut::<GameRng>();
-                rng.0.random_range(0..=INITIATIVE_DIE)
-            };
-            rolled.push((base + roll, actor));
+            rolled.push((self.initiative_roll(entity), actor));
         }
         rolled.sort_by_key(|&(initiative, _)| std::cmp::Reverse(initiative));
         rolled.into_iter().map(|(_, actor)| actor).collect()

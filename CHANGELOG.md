@@ -33,6 +33,18 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.136
+
+**A Zone Portal no longer costs a tamed program to build.** A Portal is
+despawned the moment it is walked through, so the committed body died with
+the doorway — and the build quality it bought is worth nothing on a structure
+that runs no job.
+
+The exemption is now a flag a structure sets for itself, `costs_no_program`,
+rather than something read off `stores`: the shipped shelves and the Portal
+declare it, and `stores` goes back to meaning only that a hauler may empty
+into it.
+
 ## 0.13.135
 
 **A Depot no longer costs a tamed program to build.** Every structure but

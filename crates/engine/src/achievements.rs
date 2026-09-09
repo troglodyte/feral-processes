@@ -262,6 +262,17 @@ pub struct Profile {
     /// `#[serde(default)]`, so an existing `profile.ron` keeps parsing.
     #[serde(default)]
     pub player_icon: Option<String>,
+    /// Whether surface fights open on a tactical grid rather than the
+    /// abstract group model — see
+    /// `docs/superpowers/specs/2026-09-09-tactical-surface-battles-design.md`.
+    ///
+    /// Cross-run rather than per-save for the reason every field here is:
+    /// this is a statement about how the player wants to play, not about one
+    /// run. A plain `bool` for `seen_notifications`' reason — `load` discards
+    /// the *whole* profile on a parse failure, so nothing here may become
+    /// unparseable by a later build.
+    #[serde(default)]
+    pub tactical_battles: bool,
 }
 
 impl Profile {
@@ -765,5 +776,51 @@ mod tests {
             distinct.len() > 1,
             "every rolling rung landed on the same stat; the roll is not distributing"
         );
+    }
+
+    /// The whole reason this is a plain `bool` on `Profile` rather than
+    /// anything richer: `load` throws away the entire profile — every
+    /// achievement earned — when it cannot parse, so a `profile.ron` written
+    /// by a build that predates this field must keep loading untouched.
+    #[test]
+    fn a_profile_without_the_options_field_still_loads() {
+        let path = temp_profile("options_absent");
+        std::fs::write(
+            &path,
+            "(earned:[(id:\"first_kill\",first_tick:12)],seen_notifications:[],player_icon:None)",
+        )
+        .unwrap();
+
+        let (profile, warning) = Profile::load(&path);
+
+        assert_eq!(warning, None, "an older profile must not warn: {warning:?}");
+        assert_eq!(profile.earned.len(), 1, "the achievement was discarded");
+        assert!(
+            !profile.tactical_battles,
+            "an absent toggle must read as off"
+        );
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn the_tactical_toggle_survives_a_profile_round_trip() {
+        let path = temp_profile("options_round_trip");
+        let profile = Profile {
+            tactical_battles: true,
+            ..Profile::default()
+        };
+        profile.save(&path).unwrap();
+
+        let (read_back, warning) = Profile::load(&path);
+
+        assert_eq!(
+            warning, None,
+            "a profile this build wrote must reload: {warning:?}"
+        );
+        assert!(
+            read_back.tactical_battles,
+            "the toggle did not survive the write"
+        );
+        let _ = std::fs::remove_file(&path);
     }
 }

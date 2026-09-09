@@ -498,3 +498,240 @@ fn a_tactical_fight_counts_as_an_active_battle() {
         "every screen that refuses mid-fight would have opened on a battle map"
     );
 }
+
+/// A free walkable cell next to `cell`, for a test that needs two bodies
+/// standing beside each other rather than wherever deployment put them.
+fn free_neighbour(game: &Game, cell: (i32, i32)) -> (i32, i32) {
+    let battle = game.world.resource::<TacticalBattle>();
+    [
+        (1, 0),
+        (-1, 0),
+        (0, 1),
+        (0, -1),
+        (1, 1),
+        (-1, -1),
+        (1, -1),
+        (-1, 1),
+    ]
+    .into_iter()
+    .map(|(dx, dy)| (cell.0 + dx, cell.1 + dy))
+    .find(|&at| battle.board.walkable(at.0, at.1) && battle.occupant(at).is_none())
+    .expect("a body with no free cell beside it")
+}
+
+fn hp_of(game: &Game, body: Entity) -> i32 {
+    game.world
+        .get::<Stats>(body)
+        .expect("a body with no stats")
+        .hp
+}
+
+/// Installs `routine` as the acting body's only one, so its index is zero.
+fn only_routine(game: &mut Game, body: Entity, routine: &str) {
+    game.world
+        .entity_mut(body)
+        .insert(crate::components::Routines(vec![routine.to_string()]));
+}
+
+/// Full friendly fire, and the assertion is a *heal*: a patch centred on the
+/// player mends the hostile standing beside them, because `recipients` never
+/// reads `Hostile`. A blast would prove the same thing through a roll that
+/// can miss.
+#[test]
+fn a_routine_lands_on_everyone_inside_its_shape_whichever_side_they_are_on() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 40);
+    let player = game.player_entity();
+    only_routine(&mut game, player, "mirror_restore");
+    assert!(wait_for_turn(&mut game, player));
+
+    let at = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(player)
+        .expect("the player was not seated");
+    let beside = free_neighbour(&game, at);
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .move_to(pack[0], beside)
+    );
+    game.world.get_mut::<Stats>(pack[0]).unwrap().hp = 10;
+    let before = hp_of(&game, pack[0]);
+
+    assert!(
+        game.tactical_use_routine(0, at),
+        "a patch aimed at the caster's own cell was refused"
+    );
+    assert!(
+        hp_of(&game, pack[0]) > before,
+        "the patch spared the hostile standing inside it — recipients read a side"
+    );
+}
+
+/// The action ends the turn, whatever the action was.
+#[test]
+fn running_a_routine_hands_the_turn_on() {
+    let mut game = game();
+    tactical_fight(&mut game, 1, 40);
+    let player = game.player_entity();
+    only_routine(&mut game, player, "mirror_restore");
+    assert!(wait_for_turn(&mut game, player));
+    let at = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(player)
+        .unwrap();
+
+    assert!(game.tactical_use_routine(0, at));
+    assert_ne!(
+        game.tactical_actor(),
+        Some(player),
+        "the routine ran and the player kept the turn"
+    );
+}
+
+/// Every refusal lands before anything is spent — the Power, the cooldown
+/// and the turn alike.
+#[test]
+fn a_routine_aimed_out_of_range_is_refused_before_it_is_charged() {
+    let mut game = game();
+    tactical_fight(&mut game, 1, 40);
+    let player = game.player_entity();
+    // `WholeParty` derives a range of 0..0: it is aimed at the invoker's own
+    // cell and nowhere else.
+    only_routine(&mut game, player, "mirror_restore");
+    assert!(wait_for_turn(&mut game, player));
+    let at = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(player)
+        .unwrap();
+    let beside = free_neighbour(&game, at);
+    let power = game
+        .world
+        .get::<crate::components::PowerReserve>(player)
+        .map(|r| r.get());
+
+    assert!(
+        !game.tactical_use_routine(0, beside),
+        "an out-of-range aim ran"
+    );
+    assert_eq!(
+        game.world
+            .get::<crate::components::PowerReserve>(player)
+            .map(|r| r.get()),
+        power,
+        "a refused routine was charged anyway"
+    );
+    assert!(
+        game.world
+            .get::<crate::components::AbilityCooldowns>(player)
+            .is_none_or(|c| c.0.is_empty()),
+        "a refused routine armed its cooldown"
+    );
+    assert_eq!(
+        game.tactical_actor(),
+        Some(player),
+        "a refused routine cost the turn"
+    );
+}
+
+/// A field-only routine has nothing to resolve against a body on a battle
+/// map, and a passive is never chosen at all — `battle_special_options`'
+/// two exclusions, applied at the other end.
+#[test]
+fn a_routine_that_is_never_run_in_a_fight_is_refused_on_a_battle_map() {
+    let mut game = game();
+    tactical_fight(&mut game, 1, 40);
+    let player = game.player_entity();
+    let field_only = game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .all()
+        .find(|d| d.effect.field_only())
+        .expect("no field-only routine ships")
+        .id
+        .clone();
+    only_routine(&mut game, player, &field_only);
+    assert!(wait_for_turn(&mut game, player));
+    let at = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(player)
+        .unwrap();
+
+    assert!(!game.tactical_use_routine(0, at));
+    assert_eq!(game.tactical_actor(), Some(player));
+}
+
+/// A capture on a battle map is aimed at a body, and it is the same capture:
+/// `decompile_body`, reached through a cell rather than a group index.
+#[test]
+fn a_capture_on_a_battle_map_turns_the_program_it_was_aimed_at() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 40);
+    let player = game.player_entity();
+    only_routine(&mut game, player, "decompile");
+    game.world.get_mut::<Stats>(pack[0]).unwrap().hp = 1;
+    game.world
+        .get_mut::<crate::components::Decompiler>(player)
+        .unwrap()
+        .skill = 50;
+    crate::tests::support::set_inventory(&mut game, &[(crate::items::ids::ICE_BREAKER, 50)]);
+
+    for _ in 0..50 {
+        if game
+            .world
+            .get::<crate::components::Tamed>(pack[0])
+            .is_some()
+        {
+            break;
+        }
+        if !wait_for_turn(&mut game, player) {
+            break;
+        }
+        let at = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(pack[0])
+            .expect("the target left the board");
+        // Walk into reach: a capture is a `Single` at arm's length.
+        while game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(player)
+            .is_some_and(|from| crate::tactical::reach::distance(from, at) > 1)
+        {
+            let from = game
+                .world
+                .resource::<TacticalBattle>()
+                .cell_of(player)
+                .unwrap();
+            let dir = ((at.0 - from.0).signum(), (at.1 - from.1).signum());
+            if game.tactical_step(dir) != StepOutcome::Moved {
+                break;
+            }
+        }
+        // Out of reach with the turn's movement spent: hand the turn on and
+        // close the rest of the gap on the next one.
+        if !game.tactical_use_routine(0, at) {
+            game.tactical_end_turn();
+        }
+    }
+
+    assert!(
+        game.world
+            .get::<crate::components::Tamed>(pack[0])
+            .is_some(),
+        "the program was never captured"
+    );
+    assert!(
+        game.world.get::<Hostile>(pack[0]).is_none(),
+        "a captured program is still hostile"
+    );
+    assert!(
+        game.world.get_resource::<TacticalBattle>().is_none(),
+        "the last hostile left the board and the fight stayed open"
+    );
+}

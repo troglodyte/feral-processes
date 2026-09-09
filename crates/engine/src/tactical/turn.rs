@@ -9,11 +9,12 @@
 use bevy_ecs::prelude::Entity;
 
 use crate::Game;
+use crate::abilities::{self, AbilityEffect};
 use crate::components::{Hostile, Position, Stats};
 use crate::game::combat_teardown::FightVerdict;
 use crate::resources::{GameClock, Party, ZoneLevel};
 use crate::tactical::map::{BattleSpec, generate};
-use crate::tactical::{TacticalBattle, deploy};
+use crate::tactical::{TacticalBattle, deploy, reach};
 use crate::world::WorldMap;
 
 /// What one press of a direction did.
@@ -241,7 +242,97 @@ impl Game {
         // Every body that fell, not just the target: a fumble's riposte can
         // put the swinger down, and a body left standing on the board at
         // zero HP would keep its place in the order.
-        self.reap_tactical_dead(target);
+        self.reap_tactical_dead(Some(target));
+        if self.world.get_resource::<TacticalBattle>().is_some() {
+            self.world.resource_mut::<TacticalBattle>().end_turn();
+        }
+        true
+    }
+
+    /// The acting body runs the routine at `index` in its own
+    /// `Game::actor_abilities`, aimed at `aim`.
+    ///
+    /// `tactical_attack`'s counterpart, and the same index the group model's
+    /// `BattleAction::Special` carries, so a screen offering the two models
+    /// the same rows offers the same numbers.
+    ///
+    /// **Every refusal lands before anything is spent** — the Power, the
+    /// cooldown and the turn alike — which is `commit_caravan_basket`'s rule
+    /// and the reason the price is charged only once the aim has been
+    /// checked. Six of them: no fight, nobody acting, the body has already
+    /// acted, no such routine, a routine that is not run in a fight at all
+    /// (a passive, or a field-only effect — `battle_special_options`' own
+    /// two exclusions), whatever `ability_unavailable` says, and an aim
+    /// outside the routine's range.
+    ///
+    /// Reports whether the routine ran. The action ends the turn, so one
+    /// that runs hands the turn on — unless it ended the fight.
+    pub fn tactical_use_routine(&mut self, index: usize, aim: (i32, i32)) -> bool {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return false;
+        };
+        let Some(actor) = battle.actor() else {
+            return false;
+        };
+        if battle.acted() {
+            return false;
+        }
+        let Some(from) = battle.cell_of(actor) else {
+            return false;
+        };
+        let Some(ability) = self.actor_abilities(actor).into_iter().nth(index) else {
+            return false;
+        };
+        if ability.effect.field_only() || ability.is_passive() {
+            return false;
+        }
+        if self.ability_unavailable(actor, &ability).is_some() {
+            return false;
+        }
+        if !reach::in_range(from, aim, ability.tactical_range()) {
+            return false;
+        }
+
+        // Charged before the effect resolves, at the same moment and for the
+        // same reason as the group model's own Special site: a killing blow
+        // ends the fight below, and a cooldown armed afterwards would be
+        // written onto an entity the teardown has already cleaned up.
+        self.arm_cooldown(actor, &ability);
+        self.spend_power(actor, abilities::routine_power_cost(&ability));
+
+        let name = self.creature_label(actor);
+        // A capture is aimed at a body rather than resolved over an area:
+        // `decompile_body` turns one program, and a blast that turned every
+        // program it touched would be a different mechanic. The group model
+        // reaches the same function through a group index — see
+        // `Game::attempt_decompile`.
+        if matches!(ability.effect, AbilityEffect::Decompile) {
+            let player = self.player_entity();
+            let target = self
+                .world
+                .resource::<TacticalBattle>()
+                .occupant(aim)
+                .filter(|&e| e != actor);
+            if let Some(target) = target
+                && self.decompile_body(target, player)
+            {
+                self.world.resource_mut::<TacticalBattle>().remove(target);
+            }
+        } else {
+            let shape = ability.tactical_shape();
+            let recipients =
+                reach::recipients(self.world.resource::<TacticalBattle>(), actor, aim, shape);
+            self.use_ability(&ability, actor, &name, &recipients);
+        }
+
+        // A routine can drop a body anywhere on the board — that is what
+        // friendly fire means — so the reap is over the whole roster rather
+        // than over what was aimed at, exactly as it is after a swing.
+        if self.world.get_resource::<TacticalBattle>().is_some() {
+            self.world.resource_mut::<TacticalBattle>().mark_acted();
+            let aimed = self.world.resource::<TacticalBattle>().occupant(aim);
+            self.reap_tactical_dead(aimed);
+        }
         if self.world.get_resource::<TacticalBattle>().is_some() {
             self.world.resource_mut::<TacticalBattle>().end_turn();
         }
@@ -258,10 +349,11 @@ impl Game {
     /// Clears the dead off the board and pays for them, then closes the
     /// fight if that ended it.
     ///
-    /// `wild` names whoever the swing was aimed at, which is what
+    /// `wild` names whoever the action was aimed at, which is what
     /// `finish_fight` wants cleared of combat-only effects even when the
-    /// blow that ended the fight was struck at somebody else.
-    fn reap_tactical_dead(&mut self, wild: Entity) {
+    /// blow that ended the fight was struck at somebody else. `None` where
+    /// the aim named an empty cell — a routine may be aimed at ground.
+    fn reap_tactical_dead(&mut self, wild: Option<Entity>) {
         let player = self.player_entity();
         let fallen: Vec<Entity> = self
             .world
@@ -279,7 +371,7 @@ impl Game {
                 self.finish_hostile(body, player);
             }
         }
-        self.settle_tactical(Some(wild));
+        self.settle_tactical(wild);
     }
 
     /// Ends the fight if it is over, and reports whether it did.

@@ -153,6 +153,11 @@ impl Game {
         })
     }
 
+    /// Who is standing on a battle-map cell, if anybody.
+    pub fn tactical_occupant(&self, cell: (i32, i32)) -> Option<Entity> {
+        self.world.get_resource::<TacticalBattle>()?.occupant(cell)
+    }
+
     /// Which cells a routine would cover, aimed where it is aimed.
     ///
     /// **A call into the geometry that resolves it**, never a second

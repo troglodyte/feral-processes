@@ -1229,6 +1229,31 @@ impl Game {
         let Some(entity) = self.actor_entity(battle::Actor::Party(slot)) else {
             return Vec::new();
         };
+        self.special_options_for(entity)
+    }
+
+    /// The routines the body acting on a battle map may run, as menu rows.
+    ///
+    /// `battle_special_options` with the slot already resolved to a body —
+    /// a tactical fight has no slots, and the two models must offer the same
+    /// list or a routine the picker showed would be refused on use. `None`
+    /// when nothing is acting.
+    pub fn tactical_routine_options(&self) -> Vec<SpecialOption> {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return Vec::new();
+        };
+        let Some(actor) = battle.actor() else {
+            return Vec::new();
+        };
+        self.special_options_for(actor)
+    }
+
+    /// One body's runnable routines, whichever model asked.
+    ///
+    /// The filter is `tactical_use_routine`'s own two refusals restated
+    /// once: a field-only routine and a passive are never run in a fight,
+    /// and `index` is a position in `actor_abilities` for both doors.
+    fn special_options_for(&self, entity: Entity) -> Vec<SpecialOption> {
         self.actor_abilities(entity)
             .into_iter()
             .enumerate()

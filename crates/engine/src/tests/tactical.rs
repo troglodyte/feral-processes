@@ -1185,3 +1185,55 @@ fn the_stack_stays_abstract_however_the_toggle_is_set() {
     assert!(!game.in_tactical_battle(), "the Stack keeps its own model");
     assert!(game.world.get_resource::<BattleState>().is_some());
 }
+
+/// A hostile's turn hands the turn on **once**.
+///
+/// `tactical_attack` and `tactical_use_routine` both end the turn
+/// themselves — the action ends the turn — so an AI turn that ends it again
+/// at the tail spends two rungs of the order and skips whoever came next.
+/// With one hostile and one party body that is a fight the player never
+/// gets a turn in: the hostile takes every turn, for ever.
+#[test]
+fn a_hostiles_turn_costs_exactly_one_rung_of_the_order() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 200);
+    let hostile = pack[0];
+    assert!(wait_for_turn(&mut game, hostile), "the hostile gets a turn");
+
+    let order: Vec<Entity> = game
+        .world
+        .resource::<TacticalBattle>()
+        .initiative()
+        .to_vec();
+    let at = order
+        .iter()
+        .position(|&e| e == hostile)
+        .expect("the hostile is in the order");
+    let next = order[(at + 1) % order.len()];
+
+    assert!(game.tactical_ai_turn(), "the AI drove the hostile's turn");
+
+    assert_eq!(
+        game.tactical_actor(),
+        Some(next),
+        "the hostile's turn skipped the body that came after it"
+    );
+}
+
+/// The player is handed control after a lone hostile has swung, which is
+/// the shape every wandering encounter has.
+#[test]
+fn a_one_on_one_fight_hands_control_back_to_the_player() {
+    let mut game = game();
+    tactical_fight(&mut game, 1, 200);
+    let player = game.player_entity();
+
+    for _ in 0..8 {
+        if game.tactical_awaits_input() {
+            assert_eq!(game.tactical_actor(), Some(player));
+            return;
+        }
+        assert!(game.tactical_ai_turn(), "the AI has a turn to drive");
+    }
+    panic!("the wild side never handed the turn back");
+}

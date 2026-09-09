@@ -45,6 +45,7 @@ mod settlement_market;
 mod sprite_forge;
 mod stack;
 mod stack_market;
+mod tactical;
 mod telemetry;
 mod tools;
 mod trade;

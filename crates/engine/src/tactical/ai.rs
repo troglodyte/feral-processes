@@ -134,21 +134,39 @@ impl Game {
         self.tactical_ai_turn_at(TACTICAL_AI_TEMPERATURE)
     }
 
+    /// The acting body, when it is this file's to drive.
+    ///
+    /// **One definition, two readers.** `tactical_ai_turn_at` spends the
+    /// turn it names and `Game::tactical_awaits_input` is its complement —
+    /// asked separately they would eventually disagree about a body that is
+    /// neither the player nor a hostile, and the fight would either hang
+    /// waiting for a key nobody may press or move a companion by itself.
+    ///
+    /// **Every party body is the player's to command**, so the gate is
+    /// `Hostile` and not `Player`: a companion standing on a battle map
+    /// waits for input exactly as the player does.
+    fn tactical_ai_actor(&self) -> Option<Entity> {
+        let actor = self.world.get_resource::<TacticalBattle>()?.actor()?;
+        self.world.get::<Hostile>(actor).is_some().then_some(actor)
+    }
+
+    /// Whether the fight is waiting on a key rather than on the AI.
+    ///
+    /// `tactical_ai_actor`'s complement, and `false` with no fight open or
+    /// nobody acting — there is nothing to wait for either way.
+    pub fn tactical_awaits_input(&self) -> bool {
+        self.tactical_actor().is_some() && self.tactical_ai_actor().is_none()
+    }
+
     /// `tactical_ai_turn` with the softmax temperature supplied rather than
     /// read from `tuning`. `choose_wild_action_at`'s reason: a dial-back
     /// nobody can vary is a dial-back nobody has checked works — and at zero
     /// this spends no `GameRng` at all, which is what lets a test pin the
     /// choice without moving the seeded stream.
     pub(crate) fn tactical_ai_turn_at(&mut self, temperature: f32) -> bool {
-        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+        let Some(actor) = self.tactical_ai_actor() else {
             return false;
         };
-        let Some(actor) = battle.actor() else {
-            return false;
-        };
-        if self.world.get::<Hostile>(actor).is_none() {
-            return false;
-        }
 
         let Sides { targets, allies } = self.tactical_sides(actor);
         if targets.is_empty() {
@@ -169,9 +187,22 @@ impl Game {
             Intent::Routine(def) => self.run_tactical_intent(actor, def, &targets),
             Intent::Swing => self.swing_at_best_neighbour(actor, &targets),
         }
-        // Not `else`: a fight that ended inside the action took the resource
-        // with it, and `tactical_end_turn` is a no-op then anyway.
-        if self.world.get_resource::<TacticalBattle>().is_some() {
+        // **Only if the action did not already hand it on.** The action ends
+        // the turn, so `tactical_attack` and `tactical_use_routine` both end
+        // it themselves; ending it again here spends two rungs of the order
+        // and skips whoever came next, which against a lone hostile is a
+        // fight the player never gets a turn in. A body that found nothing
+        // to swing at ended none, and still owes one.
+        //
+        // Asked as "is this body still up" rather than tracked as a flag: a
+        // fight that ended inside the action took the resource with it, and
+        // that is the same question with the same answer.
+        let still_up = self
+            .world
+            .get_resource::<TacticalBattle>()
+            .and_then(|b| b.actor())
+            == Some(actor);
+        if still_up {
             self.tactical_end_turn();
         }
         true

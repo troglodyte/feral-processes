@@ -587,6 +587,27 @@ const REALTIME_TICK_INTERVAL: Duration =
 /// the same round on screen in a third of a second and looked instant.
 pub const REVEAL_LINES_PER_SECOND: f32 = 4.0;
 
+/// How many wild turns a second the tactical model spends while the player
+/// waits.
+///
+/// `REVEAL_LINES_PER_SECOND`'s counterpart in the second combat model, and
+/// presentation for its reason: what a turn *costs* is the engine's, what it
+/// looks like arriving is app-core's. Slower than the reveal because a turn
+/// is a body walking and swinging rather than a line of text — the camera
+/// has to reach it and the player has to see where it went.
+pub const TACTICAL_TURNS_PER_SECOND: f32 = 1.6;
+
+/// What a cell cursor opened from `Mode::TacticalBattle` will commit to.
+///
+/// A swing carries nothing because the cell names its own target; a routine
+/// carries its position in `actor_abilities`, which is the index
+/// `Game::tactical_use_routine` wants and **not** the picker's row.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TacticalIntent {
+    Swing,
+    Routine(usize),
+}
+
 /// How long a refusal ("that ability isn't ready") stays on screen before
 /// clearing itself, in seconds.
 ///
@@ -1205,6 +1226,31 @@ pub enum Mode {
     /// a row; here a digit is a quantity. The cursor moves on Up/Down alone,
     /// through `App::scroll`, so it still drives `menu_selected` and the
     /// popup's window still follows it — the page scrolls for free.
+    /// A fight on a battle map — the second combat model, opt-in through
+    /// `Mode::Options` and off by default.
+    ///
+    /// **The map screen with a different tile source**, not a screen of its
+    /// own: it falls through `draw`'s wildcard arm to `draw_playing_base`
+    /// like `Mode::Playing` does, so the info column, the log pane and the
+    /// stock strip are the ones the player already reads. What differs is
+    /// that `Game::tactical_view` supplies the tiles.
+    ///
+    /// Arrows step the acting body, a lowercase letter picks an action, and
+    /// `[E]` hands the turn on without spending it.
+    TacticalBattle,
+    /// The routine list for the body acting in `Mode::TacticalBattle`.
+    ///
+    /// A picker, drawn as a popup over the battle map like every other
+    /// list. A shaped routine leaves here for `Mode::TacticalAim` rather
+    /// than resolving, since where it is aimed is what a shape is for.
+    TacticalRoutine,
+    /// The cell cursor, entered from `Mode::TacticalBattle` for a swing or
+    /// from `Mode::TacticalRoutine` for a routine.
+    ///
+    /// `Mode::FieldRoutineCell`'s shape — arrows move a cursor over the map,
+    /// Enter commits, Esc goes back — and, like it, it draws **no popup**,
+    /// so it owes `needs_status_banner` a row or its refusals are silent.
+    TacticalAim,
     Transfer,
     /// One Depot's allow/deny list, opened with `[F]` from the transfer
     /// picker — see `App::depot_filter`.
@@ -1786,7 +1832,17 @@ impl Mode {
             // ghost trail here would cut the animation off at the moment
             // the player is finally looking at it.
             | Mode::BattleResult => true,
-            Mode::MainMenu
+            // **Deliberately not battle modes**, though they are fights.
+            // `is_battle` gates the reveal, and a tactical fight narrates
+            // as it resolves rather than holding lines back — gated in
+            // here, every line a body's turn logged would be paced out at
+            // `REVEAL_LINES_PER_SECOND` and would swallow a keypress each.
+            // It also routes `Fx` to the battle screen's layer, and a
+            // tactical fight is drawn on the map.
+            Mode::TacticalBattle
+            | Mode::TacticalRoutine
+            | Mode::TacticalAim
+            | Mode::MainMenu
             | Mode::Achievements
             | Mode::Options
             | Mode::CreateCharacter
@@ -2177,6 +2233,23 @@ pub struct App {
     /// coordinates. `None` outside that mode — a routine needing no cell
     /// never sets it, and Esc and a committed jump both clear it.
     pub field_cursor: Option<(i32, i32)>,
+    /// Where the cell cursor is aimed in `Mode::TacticalAim`, in **battle
+    /// map** coordinates.
+    ///
+    /// A fourth coordinate space beside `field_cursor`'s frame, the
+    /// Excavation plan's base space and the zone surface. `None` outside
+    /// that mode; opening it puts the cursor on the acting body's own cell.
+    pub tactical_cursor: Option<(i32, i32)>,
+    /// What the cursor above will commit to. `None` outside
+    /// `Mode::TacticalAim`, and taken rather than read on commit so a
+    /// second Enter cannot spend the same action twice.
+    pub pending_tactical: Option<TacticalIntent>,
+    /// Sub-turn carry against `TACTICAL_TURNS_PER_SECOND`.
+    ///
+    /// `BattleReveal::accumulated`'s counterpart, and **transient, not
+    /// saved**, for its reason: a fight is not serialized, so neither is
+    /// what a fight is part-way through.
+    pub tactical_carry: f32,
     /// Where the Excavation plan's cursor is aimed, in **base-space**
     /// coordinates. `None` outside `Mode::Excavate` — opening the mode puts
     /// it on the party's own cell and leaving clears it.

@@ -33,6 +33,28 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.139
+
+**A fight can be fought on a map now, and the toggle is off by default.** The
+game's first Options screen carries one switch; with it on, a pack met on the
+open ground opens a grid where every body has a cell, a move allowance and a
+line of sight, instead of the abstract group screen. Everything else — a nest,
+a lair, a guardian or a patrol giving chase, the arena — stays abstract, and
+which model a fight opens in is decided in one place.
+
+The two models share their combat: the same ladder, bands, mitigation,
+affinity, Power and cooldowns, through the same `use_ability`. What is new is
+the space around them — a derived battle map with cover and rough ground, a
+move-then-act turn order, routine shapes and ranges, full friendly fire, and a
+hostile that decides what it will do before it decides where to stand.
+Abilities that name no shape get one derived from what they target.
+
+Off by default and opt-in on purpose: a grid fight spreads damage across every
+body where the group model forces focus fire, so it hits harder and swings
+wider than the same pack fought abstract, and `balance_sim` cannot see it.
+`--template tactical` opens a save one keypress from a fight for comparing the
+two.
+
 ## 0.13.138
 
 **`render/base.rs` was three unrelated things wearing one name.** Its biome

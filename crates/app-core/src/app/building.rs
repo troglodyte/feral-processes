@@ -257,8 +257,8 @@ impl App {
             self.mode = Mode::Playing;
             return;
         };
-        // Two structures cost no program — the Home, and anything that
-        // declares `stores` — and both take this direct path rather than
+        // A structure that costs no program — the Home, and anything that
+        // declares `costs_no_program` — takes this direct path rather than
         // detouring through a picker that has nothing to confirm.
         //
         // **Asked of the engine rather than re-derived here.** This used to

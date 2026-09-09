@@ -9,4 +9,5 @@
     work: None,
     capacity: 1600,
     stores: true,
+    costs_no_program: true,
 )

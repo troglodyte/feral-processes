@@ -11,7 +11,9 @@ impl Game {
     /// Files a request to raise `structure_id` on the cell `(dx, dy)` from
     /// the party, spending `program` — a tamed program you own — to pay for
     /// it. The founding Home is the exception at both ends: it is stood up
-    /// on the spot rather than filed, and it costs no program.
+    /// on the spot rather than filed, and it costs no program. A structure
+    /// declaring `costs_no_program` is filed like any other and paid for
+    /// with `None`.
     ///
     /// **`program` is a trailing parameter rather than a second door.** A
     /// `place_structure_with_program` beside this one would be two ways into

@@ -2426,6 +2426,51 @@ fn every_shipped_need_has_a_shipped_amenity() {
     }
 }
 
+/// What the shipped content charges a body for, now that the exemption is
+/// authored rather than derived.
+///
+/// Every shelf used to be free because `needs_program` read `stores`, and
+/// the day that stopped being the rule the six depot files could have gone
+/// back to costing a program with nothing failing to compile — a whole
+/// ladder of storage silently repriced. So the pairing is asserted here
+/// instead: a shipped haul target is free to build, and so is the doorway
+/// out of the sector, which is spent the moment it is walked through.
+///
+/// A census over *shipped assets*, deliberately not a rule in `StructureDef`
+/// — a mod is free to price a shelf of its own however it likes.
+#[test]
+fn every_shipped_shelf_and_the_portal_cost_no_program() {
+    use crate::structures::StructureDb;
+
+    let (structures, _) = StructureDb::load_dir(&test_assets_dir().join("structures")).unwrap();
+    let mut shelves = 0;
+    let mut portals = 0;
+
+    for def in structures.all() {
+        if def.stores {
+            shelves += 1;
+            assert!(
+                !def.needs_program(),
+                "{} is a haul target and must say `costs_no_program`: a shelf is not \
+                 worth a body",
+                def.id
+            );
+        }
+        if def.zone_portal {
+            portals += 1;
+            assert!(
+                !def.needs_program(),
+                "{} is despawned the moment it is walked through and would take the \
+                 committed program with it",
+                def.id
+            );
+        }
+    }
+
+    assert!(shelves >= 6, "the shipped depot ladder runs to Mk6");
+    assert_eq!(portals, 1, "one shipped structure breaches");
+}
+
 /// A def whose declared `subject` no trigger can satisfy is dead content:
 /// every `remember` of it is refused as `WrongSubject`, and nothing else in
 /// the build says so. A def with no trigger at all is worse — it can never be

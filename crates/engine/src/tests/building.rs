@@ -2832,15 +2832,15 @@ fn a_program_at_exactly_the_required_zone_qualifies() {
     );
 }
 
-/// Two exemptions, and both are derived rather than listed.
+/// Two exemptions, and the second is authored rather than derived.
 /// `HOME_STRUCTURE_ID` is exempt at every tier: a fresh run owns zero
 /// programs, and one is granted only as an achievements reward, so a Home
-/// that cost a program would be unfoundable. A structure that declares
-/// `stores` is exempt because a shelf is not worth a body — and it is read
-/// off the def's own flag, so a mod's storage building is exempt for free.
-/// Everything else needs one.
+/// that cost a program would be unfoundable. Everything else says it for
+/// itself with `costs_no_program` — the shelves, because a shelf is not
+/// worth a body, and the Zone Portal, because it is spent the moment it is
+/// walked through. Everything that says nothing needs one.
 #[test]
-fn the_home_and_a_storing_structure_need_no_program() {
+fn the_home_a_shelf_and_a_portal_need_no_program() {
     let game = Game::new(20260908, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
 
     assert!(!game.structure_needs_program(&HOME_STRUCTURE_ID.into()));
@@ -2848,6 +2848,10 @@ fn the_home_and_a_storing_structure_need_no_program() {
     assert!(
         !game.structure_needs_program(&"depot_mk6".into()),
         "the whole ladder, not just the first shelf"
+    );
+    assert!(
+        !game.structure_needs_program(&"portal".into()),
+        "a doorway that is spent on the way through takes no body with it"
     );
     assert!(game.structure_needs_program(&"fabricator".into()));
     assert!(
@@ -3474,6 +3478,31 @@ fn a_depot_is_filed_without_spending_a_program() {
     assert!(
         filed[0].is_none(),
         "and it is holding no program — a Depot commits nobody"
+    );
+}
+
+/// A Zone Portal commits nobody either. It is the doorway a run leaves
+/// through — walked onto once and despawned by `enter_next_zone` — so a body
+/// committed to it is destroyed with it, and the `BuildQuality` the
+/// commitment buys is worth nothing on a structure that runs no job.
+#[test]
+fn a_zone_portal_is_filed_without_spending_a_program() {
+    let mut game = a_base_with_programs(20260909, 2);
+    let held = game.owned_pets().len();
+
+    game.place_structure("portal", 1, 0, None)
+        .expect("a doorway costs no body");
+
+    assert_eq!(
+        game.owned_pets().len(),
+        held,
+        "and nothing left the roster to pay for it"
+    );
+    let filed = game.build_site_programs();
+    assert_eq!(filed.len(), 1, "one order stands");
+    assert!(
+        filed[0].is_none(),
+        "and it is holding no program — a Portal commits nobody"
     );
 }
 

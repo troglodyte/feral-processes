@@ -120,15 +120,23 @@ is skipped with a warning logged in-game rather than crashing startup.
     // The `capacity` above is what makes one worth building; the shipped
     // Depot holds 50, and the researchable ladder above it runs to Mk6.
     //
-    // **This flag also waives the build's program cost.** Every other
-    // structure but the Home commits one tamed program when the order is
-    // filed; a structure with `stores` set commits nobody, because a shelf
-    // is not worth a body. The materials and the crew who raise it are
-    // unchanged. So a modded storage building is exempt for free, and a
-    // structure that wants the exemption without being a haul target has
-    // nowhere to say so — that is deliberate, and the day one exists it
-    // gets a field of its own rather than a lie in this one.
+    // This flag says one thing only: a hauler may empty into it. The shipped
+    // shelves are also free to build, but they say that themselves with
+    // `costs_no_program` below rather than reading it off this one.
     stores: true,
+
+    // Optional; defaults to false. Waives the build's program cost. Every
+    // structure but the Home commits one tamed program when the order is
+    // filed; a structure with this set commits nobody. The materials, the
+    // crew who raise it and the ticks they take are unchanged — only the
+    // body is waived.
+    //
+    // Set on the shipped Depot ladder, because a shelf is not worth a body,
+    // and on the Zone Portal, because a Portal is despawned the moment it is
+    // walked through and would take the committed program with it. The Home
+    // does not need it: it is exempt by being the Home, so a mod that edits
+    // `home.ron` cannot leave a fresh run unable to found a base.
+    costs_no_program: true,
 
     // Optional; can be left out entirely (defaults to no assembling). If
     // set, this structure automatically builds `item` out of ingredients it

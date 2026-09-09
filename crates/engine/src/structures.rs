@@ -280,14 +280,24 @@ pub struct StructureDef {
     /// depots. `#[serde(default)]` so existing structure files (including
     /// mods) written before this field existed still parse, as something a
     /// hauler ignores.
-    ///
-    /// **It also waives the build's program cost** — see
-    /// `StructureDef::needs_program`. Two meanings on one flag rather than a
-    /// second field naming the same six structures; the day a structure
-    /// wants one without the other, that is when the second field is worth
-    /// its `#[serde(default)]`.
     #[serde(default)]
     pub stores: bool,
+    /// If set, raising or upgrading this structure commits no tamed program
+    /// — see `StructureDef::needs_program`. The materials, the crew and the
+    /// ticks are unchanged; only the body is waived.
+    ///
+    /// **The one place a structure says this, and it is data.** It waived
+    /// itself off `stores` for exactly one release, which made a hauler's
+    /// target and a free build the same statement: a modded shelf was free
+    /// whether its author meant it or not, and a structure that wanted the
+    /// exemption without being a haul target — a Zone Portal, spent the
+    /// moment it is walked through — had nowhere to say so. The Home is
+    /// still exempt by `category()` rather than by this flag, because a
+    /// fresh run must be able to found one even if `home.ron` is edited.
+    /// `#[serde(default)]` so existing structure files (including mods)
+    /// written before this field existed still parse, as costing a program.
+    #[serde(default)]
+    pub costs_no_program: bool,
     /// If set, this structure automatically builds the named item from
     /// ingredients pulled out of its orthogonal neighbours' output buffers,
     /// once a program is assigned to it. Unlike `work`, which produces from
@@ -568,22 +578,22 @@ impl StructureDef {
 
     /// Whether raising or upgrading this structure costs a tamed program.
     ///
-    /// **Two exemptions, and the second is data.** The Home is exempt at
+    /// **Two exemptions, and the second is authored.** The Home is exempt at
     /// every tier: a fresh run owns zero programs and the first is granted
     /// only as an achievements reward, so a Home that cost one would be
-    /// unfoundable. Anything that declares `stores` is exempt because a
-    /// shelf is not worth a body — read off the flag rather than a list of
-    /// depot ids, so a mod's storage building is exempt for free and nothing
-    /// in Rust names shipped content. That is why `stores` now carries two
-    /// meanings (a hauler may empty into it; it costs no program) rather
-    /// than a second field saying the same thing about the same structures.
+    /// unfoundable — and that half is derived from `category()` rather than
+    /// from the flag below, so an edited `home.ron` cannot make a new run
+    /// unable to open a base. Everything else says it for itself with
+    /// `costs_no_program`: the shelves, because a shelf is not worth a body,
+    /// and the Zone Portal, because it is despawned the moment it is walked
+    /// through and takes the committed program with it.
     ///
     /// On the def rather than only on `Game`, because the build menu holds
     /// defs and not ids and would otherwise restate the rule — the copy that
     /// drifts. `Game::structure_needs_program` is the id-shaped door onto
     /// this one, and calls it.
     pub fn needs_program(&self) -> bool {
-        self.category() != StructureCategory::Home && !self.stores
+        self.category() != StructureCategory::Home && !self.costs_no_program
     }
 
     /// Which group this structure lists under. Checked in this order because

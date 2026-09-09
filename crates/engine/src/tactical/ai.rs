@@ -167,19 +167,53 @@ impl Game {
         let Some(actor) = self.tactical_ai_actor() else {
             return false;
         };
+        self.run_tactical_turn(actor, temperature);
+        true
+    }
 
+    /// Runs the acting body's turn **whichever side it is on**, and reports
+    /// whether there was one.
+    ///
+    /// `tactical_ai_actor`'s gate is `Hostile` because every party body is
+    /// the player's to command — so a fight with nobody at the keyboard
+    /// cannot be resolved through the door above, which is the whole of why
+    /// this one exists. **Its only caller is `arena::run`**: called from a
+    /// real fight it would walk a companion by itself, which is exactly the
+    /// failure that gate is there to prevent.
+    ///
+    /// A party body **swings and never invokes**, which is not a policy
+    /// invented for the tester: `PartyPlan::AllAttack` is the group model's
+    /// own arena plan and it invokes no routine either, so a number taken
+    /// on a battle map stays comparable with the one taken in front of a
+    /// group. `run_tactical_turn` is where that lands.
+    pub(crate) fn tactical_drive_turn(&mut self) -> bool {
+        let Some(actor) = self.tactical_actor() else {
+            return false;
+        };
+        self.run_tactical_turn(actor, TACTICAL_AI_TEMPERATURE);
+        true
+    }
+
+    /// One body's whole turn: decide, walk, act, hand on.
+    ///
+    /// Shared by the two doors above so the fight a measurement watched is
+    /// the fight a player would have watched.
+    fn run_tactical_turn(&mut self, actor: Entity, temperature: f32) {
         let Sides { targets, allies } = self.tactical_sides(actor);
         if targets.is_empty() {
             self.tactical_end_turn();
-            return true;
+            return;
         }
 
         // `wild_routine_ready` and not `ability_unavailable`: a hostile holds
         // no `PowerReserve` by design, so the player's gate refuses it every
         // priced routine there is. See `Game::run_tactical_routine`.
+        //
+        // A party body is offered none of it — see `tactical_drive_turn`,
+        // the only way one reaches this at all.
         let intent = match self.wild_routine_ready(actor) {
-            Some(def) => Intent::Routine(def),
-            None => Intent::Swing,
+            Some(def) if self.world.get::<Hostile>(actor).is_some() => Intent::Routine(def),
+            _ => Intent::Swing,
         };
         self.walk_to_best_cell(actor, &intent, &targets, &allies, temperature);
 
@@ -205,7 +239,6 @@ impl Game {
         if still_up {
             self.tactical_end_turn();
         }
-        true
     }
 
     /// Everyone `actor` is fighting, and everyone standing with it — cells
@@ -213,14 +246,20 @@ impl Game {
     ///
     /// Sidedness is `Hostile` and nothing else, so the party's own bodies and
     /// the player are one list. The acting body is in neither.
+    ///
+    /// Read **relative to `actor`** rather than as "hostiles are the enemy":
+    /// the arena drives both sides through this, and the absolute reading
+    /// hands a party body its own side to swing at. For a hostile actor the
+    /// two readings are the same list, which is why no seeded fight moved.
     fn tactical_sides(&self, actor: Entity) -> Sides {
         let battle = self.world.resource::<TacticalBattle>();
+        let acting_side = self.world.get::<Hostile>(actor).is_some();
         let mut sides = Sides::default();
         for (body, cell) in battle.bodies() {
             if body == actor {
                 continue;
             }
-            if self.world.get::<Hostile>(body).is_some() {
+            if (self.world.get::<Hostile>(body).is_some()) == acting_side {
                 sides.allies.push(cell);
             } else {
                 sides.targets.push(cell);

@@ -225,6 +225,51 @@ fn an_authored_bearing_seats_the_pack_on_that_side() {
 }
 
 #[test]
+fn the_arena_door_drives_a_party_body_where_the_ai_door_declines_it() {
+    let mut game = game();
+    tactical_fight(&mut game, 1, 10);
+    let player = game.player_entity();
+    assert!(wait_for_turn(&mut game, player));
+
+    assert!(
+        !game.tactical_ai_turn(),
+        "the AI door drove a body the player commands"
+    );
+    assert!(game.tactical_drive_turn(), "the arena door drove nobody");
+    assert_ne!(
+        game.tactical_actor(),
+        Some(player),
+        "a driven turn was not handed on"
+    );
+}
+
+#[test]
+fn a_fight_driven_from_both_sides_resolves() {
+    // The player alone against one hostile, so this fails rather than
+    // merely reading oddly if sidedness is taken absolutely: a party body
+    // that thinks the party is the enemy has nobody to close on, ends every
+    // turn where it stands, and the fight runs to the bound below for ever.
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 10);
+
+    for _ in 0..2000 {
+        if !game.has_active_battle() {
+            break;
+        }
+        assert!(
+            game.tactical_drive_turn(),
+            "a fight open with nobody acting"
+        );
+    }
+
+    assert!(!game.has_active_battle(), "the driven fight never resolved");
+    assert!(
+        game.world.get::<Stats>(pack[0]).is_none_or(|s| s.hp <= 0),
+        "the fight ended with the hostile still up"
+    );
+}
+
+#[test]
 fn a_tactical_fight_seats_every_body_and_rolls_one_order_over_all_of_them() {
     let mut game = game();
     let pack = tactical_fight(&mut game, 2, 10);

@@ -558,3 +558,15 @@
   source. Only the player converts — a companion has no `Perks`, so it is an
   omission rather than a check. Whatever is unconverted becomes real levels on
   the next breach, which is why this needed no save field.
+- **A battle map's coordinates live in `TacticalBattle`; `Position` is never
+  written.** The third space to settle this way, after the Stack's
+  `resources::Locale` and base space's `Locale::Base`: a body in a fight keeps
+  the `Position` it had when the fight opened, which is what lets teardown be
+  a matter of dropping a resource rather than a restore pass on each of a
+  fight's five endings. The trap is the *convenience* — the board is a grid of
+  cells and so is the world map, so writing a battle cell into `Position`
+  makes every existing drawing, targeting and pathing routine work at once,
+  and moves the creature to a real tile out in the zone that a badly-ended
+  fight then leaves it standing on. Nothing in the compiler holds this:
+  `tactical/` does not import `crate::components::Position`, and that omission
+  is the whole enforcement. See `docs/seams.md` for the argument.

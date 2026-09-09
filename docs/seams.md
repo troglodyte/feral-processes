@@ -12912,3 +12912,52 @@ was a *standing* job — which is not a `WorkOrder`, so `queue_is_empty` stays
 true — kept that posting for the rest of the run. The fix reads `staff` rather
 than `on_shift`, because the bodies it has to see are precisely the ones that
 filter just dropped.
+
+### A battle map's coordinates live in `TacticalBattle`; `Position` is never written
+
+The game already answers this question twice. The Stack keeps a party's frame
+coordinates and facing in `resources::Locale`, pinning the player's `Position`
+to the entrance tile for the whole descent; base space keeps its own in
+`Locale::Base`, which is why writing a `Position` while standing in the base
+moves nothing. A battle map is the third such space, and it settles the same
+way for the same reason: a body in a fight keeps the `Position` it had when
+the fight opened, and `crates/engine/src/tactical/` holds where it stands on
+the board.
+
+What that buys is teardown. A fight ends by dropping a resource — the board
+and every cell in it go with it, and nobody has to be put back, because nobody
+was ever moved. The alternative is a restore pass that has to run on every
+ending a fight has: a win, a flee, a Forgiving death, a party wipe, a quit
+mid-battle. Four of those five already have their own exit path, and a restore
+missed on one of them strands a creature at a battle coordinate on the world
+map.
+
+**The trap is the convenience, not the concept.** The board is a grid of cells
+and so is the world map; every drawing, targeting and pathing routine in the
+game already takes a `Position`. Writing a battle cell into `Position` makes
+all of it work at once, and it is wrong in a way that does not show up in the
+fight: it moves the creature on the world map — to `(3, 11)` of a 14x14 board,
+which is somewhere real out in the zone — and on a fight that ends badly it
+leaves it there. A companion benched by a Forgiving death, a wild body that
+fled, a pack member killed on a turn the player then quit: each is a creature
+standing somewhere it never walked to.
+
+**The compiler holds none of this.** There is no private field and no barrier
+here, in contrast to `Game`'s `world` — `tactical/` simply does not import
+`crate::components::Position`, and that omission is the whole enforcement. A
+`use crate::components::Position;` added to any file in the module is the
+change to refuse; it compiles, every test still passes, and the symptom
+arrives later and reads as a spawner fault.
+
+The occupancy is a `Vec<(Entity, (i32, i32))>` rather than a map for the
+reason `Stock`'s `BTreeMap` is a `BTreeMap`: bevy's own query iteration order
+is not stable, so anything walking a fight's bodies has to walk something that
+is, or two runs of the same fight resolve differently. Thirteen bodies is the
+ceiling — `MAX_PARTY_SIZE` plus `MAX_PACK_BODIES` — so the linear scan is also
+the faster thing.
+
+Nothing here is saved, and that is an omission rather than a check.
+`TacticalBattle` is a bare `#[derive(Resource)]` with no `Serialize`, matching
+`BattleState`: saving is opt-in by a field appearing in `save.rs`'s
+hand-written structs, and a resource simply not appearing there *is* the
+mechanism. So this cost no `SAVE_FORMAT_VERSION` movement.

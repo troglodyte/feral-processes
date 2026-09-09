@@ -810,6 +810,12 @@ relying on one, and correct all three places if it has moved.
   one accumulator.** `add_xp` accumulates into `Experience::xp` and reports
   `LevelGain::overflow`, staying pure — it reports, the caller spends.
 
+### Tactical battles
+
+- **A battle map's coordinates live in `TacticalBattle`; `Position` is never
+  written** — the third space after the Stack's `Locale` and base space's
+  own, and `tactical/` not importing `Position` is the whole enforcement.
+
 ### Items, gear and economy
 
 - **An item's price is bounded twice, and the second bound is the

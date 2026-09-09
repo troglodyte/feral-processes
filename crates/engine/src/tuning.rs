@@ -4882,6 +4882,17 @@ pub const RICH_IN_UNITS: u32 = 1;
 /// one back nets.
 pub const TOOL_CARRIER_VALUE: u32 = 2;
 
+// ─────────────────────────────────────────────────────────────────────────
+// Tactical battle grid
+// ─────────────────────────────────────────────────────────────────────────
+
+/// What crossing a `BattleCell::Rough` cell costs, against `Open`'s one.
+///
+/// Two rather than three because a body's whole allowance is small: at
+/// three, one rough cell eats most of a turn and the terrain stops being a
+/// choice and becomes a wall with extra steps.
+pub const TACTICAL_ROUGH_COST: u32 = 2;
+
 #[cfg(test)]
 mod tests {
     use super::*;

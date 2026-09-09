@@ -2131,9 +2131,10 @@ mod tests {
     /// greying it would dim the one row on the screen that is still worth
     /// picking.
     ///
-    /// Asserted over every shipped structure that declares `stores` rather
-    /// than over the id `"depot"`: the ladder runs to Mk6 and a seventh
-    /// shelf is a file, not a code change.
+    /// Asserted over every shipped structure the engine says is exempt
+    /// rather than over the id `"depot"`: the ladder runs to Mk6, the Zone
+    /// Portal is exempt too, and a seventh shelf is a file rather than a
+    /// code change.
     #[test]
     fn a_storing_structure_stays_lit_on_a_roster_that_can_pay_for_nothing() {
         let entries = shipped_entries();

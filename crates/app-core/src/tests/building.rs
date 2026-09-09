@@ -928,8 +928,8 @@ fn choose_build_row(app: &mut App, id: &str) {
 }
 
 /// A Depot costs no program — `Game::structure_needs_program` exempts any
-/// structure that declares `stores` — so picking a direction for one files
-/// the order on the spot instead of opening a picker.
+/// structure that declares `costs_no_program` — so picking a direction for
+/// one files the order on the spot instead of opening a picker.
 ///
 /// **Routed off the engine's own answer, not a second derivation here.**
 /// `founding_a_home_bypasses_the_program_picker` guards the same seam from

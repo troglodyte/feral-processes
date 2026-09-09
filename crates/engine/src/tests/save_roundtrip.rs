@@ -736,7 +736,8 @@ fn a_build_sites_program_survives_a_save_and_load() {
 
 /// And the other shape, which a Depot made reachable: an order holding
 /// **nobody**. `StructureDef::needs_program` exempts anything that declares
-/// `stores`, so a filed shelf carries no snapshot at all — and a save that
+/// `costs_no_program`, so a filed shelf carries no snapshot at all — and a
+/// save that
 /// resurrected one, or refused to load a site without one, would be a run
 /// gaining a program it never owned or losing a base it did.
 #[test]

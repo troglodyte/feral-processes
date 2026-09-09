@@ -76,21 +76,29 @@
   site is despawned at completion — which is what makes
   `cancel_build_request` a refund of goods that still exist, and makes
   `BuildSiteSave::delivered` the load-bearing save field.
-- **Two exemptions from the program cost, and both are derived**:
-  `StructureDef::needs_program` is false for the Home and for anything that
-  declares `stores`. `Game::structure_needs_program` is the id-shaped door
-  onto it and app-core's build flow routes the picker off that exact call —
-  a frontend deriving its own version (it was `category() == Home` once,
-  which was *true* until the second exemption shipped) strands a free
-  structure on a picker with nothing to confirm. **The trap is that `stores`
-  now means two things**: a hauler may empty into it, *and* it costs no
-  body. That is deliberate — the alternative was a second field naming the
-  same six depots — but it means a modded haul target is free to build
-  whether its author meant that or not. An exempt build is still a
-  *request*: materials, crew, ticks, all unchanged, and it is the first
-  `BuildSite` reachable with `program: None`, which is why
-  `return_build_holdings` and both `build_quality_of` call sites already
-  had to handle the `Option`.
+- **Two exemptions from the program cost, and only the Home's is derived**:
+  `StructureDef::needs_program` is false for the Home — by `category()`, so
+  an edited `home.ron` can never leave a fresh run unable to found a base —
+  and for anything declaring `costs_no_program`, which the six shelves and
+  the Zone Portal author for themselves. `Game::structure_needs_program` is
+  the id-shaped door onto it and app-core's build flow routes the picker off
+  that exact call — a frontend deriving its own version (it was `category()
+  == Home` once, which was *true* until the second exemption shipped)
+  strands a free structure on a picker with nothing to confirm. **The trap
+  the flag closed was `stores` meaning two things** — a hauler may empty
+  into it, *and* it costs no body — which made a modded haul target free
+  whether its author meant it or not, and left a structure that wants the
+  exemption without being a haul target nowhere to say so. **The trap the
+  flag opened is the mirror image**: the exemption is now content, so a
+  seventh depot file that forgets the line silently costs a program, and
+  `every_shipped_shelf_and_the_portal_cost_no_program` in `tests/assets.rs`
+  is the census that says so. A Portal is exempt because it is despawned by
+  `enter_next_zone` the moment it is walked onto: the committed body would
+  die with the doorway, and the `BuildQuality` it buys is worth nothing on a
+  structure that runs no job. An exempt build is still a *request*:
+  materials, crew, ticks, all unchanged, and it is the first `BuildSite`
+  reachable with `program: None`, which is why `return_build_holdings` and
+  both `build_quality_of` call sites already had to handle the `Option`.
 - **A build order commits one tamed program at filing, and that is the one
   exception to "nothing is charged at filing."** `commit_program`
   (`game/party.rs`) retires the program the moment the picker confirms —

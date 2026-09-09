@@ -8,4 +8,5 @@
     work: None,
     capacity: 50,
     stores: true,
+    costs_no_program: true,
 )

@@ -269,6 +269,21 @@ pub struct SpeciesDef {
     /// field exists to remove. A species' aptitude is fixed to the species.
     #[serde(default = "default_base_int")]
     pub base_int: i32,
+    /// What a member of this species may spend on movement in one tactical
+    /// turn, in place of the figure `base_speed` derives — see
+    /// `tactical::reach::allowance`. Read in tactical battles and nowhere
+    /// else: the abstract model has no cells to spend it on, and the Stack
+    /// ignores it entirely.
+    ///
+    /// `#[serde(default)]` and `None` on every shipped species, which all
+    /// derive from `base_speed`, so no species file (including a mod's)
+    /// needed editing. An escape hatch for a species whose footwork is not
+    /// what its initiative says — something that acts late but covers
+    /// ground — not the normal way a species gets a move rate. Clamped to
+    /// `TACTICAL_MOVE_MIN`..`TACTICAL_MOVE_MAX` like a derived one, because
+    /// those bounds are the reach field's own.
+    #[serde(default)]
+    pub movement: Option<u32>,
     pub moves: Vec<MoveDef>,
     /// If set, what the inspection view names as this species' yield, and
     /// `Game::rich_in`'s fallback when a species doesn't author its own —

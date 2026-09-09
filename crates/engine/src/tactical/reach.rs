@@ -10,8 +10,58 @@ use std::collections::{HashMap, HashSet};
 
 use bevy_ecs::prelude::Entity;
 
+use crate::Game;
+use crate::components::Creature;
 use crate::game::pursuit::walk_field;
+use crate::species::SpeciesDb;
 use crate::tactical::TacticalBattle;
+use crate::tuning::{
+    DEFAULT_BASE_SPEED, TACTICAL_MOVE_BASE, TACTICAL_MOVE_MAX, TACTICAL_MOVE_MIN,
+    TACTICAL_MOVE_SPEED_STEP,
+};
+
+/// What a body of `speed` may spend on movement in one tactical turn, or
+/// `authored` where its species names a figure of its own.
+///
+/// **One derivation, and the clamp is the type's rather than the caller's**
+/// — `movement_field` passes this straight to `walk_field` as its search
+/// radius, so both bounds are correctness bounds and an authored figure is
+/// held to them exactly as a derived one is.
+///
+/// `div_euclid` and not `/`: the band either side of `DEFAULT_BASE_SPEED`
+/// has to be the same width, and truncating division rounds toward zero, so
+/// plain `/` would make the band straddling the default twice as wide as
+/// every other one and a body one point *below* average would move like an
+/// average one.
+pub fn allowance(speed: i32, authored: Option<u32>) -> u32 {
+    let asked = match authored {
+        Some(n) => i64::from(n),
+        None => {
+            i64::from(TACTICAL_MOVE_BASE)
+                + i64::from(speed - DEFAULT_BASE_SPEED)
+                    .div_euclid(i64::from(TACTICAL_MOVE_SPEED_STEP))
+        }
+    };
+    asked.clamp(i64::from(TACTICAL_MOVE_MIN), i64::from(TACTICAL_MOVE_MAX)) as u32
+}
+
+impl Game {
+    /// `allowance` asked of an entity: its combat speed, and whatever its
+    /// species authored.
+    ///
+    /// `combat_speed` and not `species_base_speed`, so the player — who has
+    /// no `Creature` and so no species — moves off `PLAYER_BASE_SPEED` the
+    /// same way they roll initiative and hit and dodge off it. A body with
+    /// no species authors nothing and always derives.
+    pub fn movement_allowance(&self, entity: Entity) -> u32 {
+        let authored = self
+            .world
+            .get::<Creature>(entity)
+            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+            .and_then(|def| def.movement);
+        allowance(self.combat_speed(entity), authored)
+    }
+}
 
 /// Every cell `body` could walk to this turn, and what reaching each one
 /// costs it. The cell it is standing on is present at zero, because holding
@@ -76,6 +126,72 @@ mod tests {
         let mut world = World::new();
         let bodies = (0..3).map(|_| world.spawn_empty().id()).collect();
         (TacticalBattle::open(spec(), Board::from_rows(rows)), bodies)
+    }
+
+    /// A slow body, an average one and a fast one must actually differ, and
+    /// the order must never invert.
+    #[test]
+    fn the_shipped_roster_spans_the_allowance_band() {
+        let band: Vec<u32> = (6..=14).map(|speed| allowance(speed, None)).collect();
+        assert!(
+            band.windows(2).all(|w| w[0] <= w[1]),
+            "a faster body must never move less far: {band:?}"
+        );
+        assert_eq!(
+            (*band.first().unwrap(), *band.last().unwrap()),
+            (2, 6),
+            "the shipped roster's 6..14 spread must span two through six"
+        );
+    }
+
+    /// The base is read against the deployment gap, so a change to either
+    /// that silently turns closing into a march fails here.
+    #[test]
+    fn an_average_body_closes_the_deployment_gap_in_two_turns() {
+        let average = allowance(DEFAULT_BASE_SPEED, None) as i32;
+        assert!(
+            average < crate::tuning::TACTICAL_DEPLOY_GAP,
+            "closing in one turn leaves no room to position"
+        );
+        assert!(
+            average * 2 >= crate::tuning::TACTICAL_DEPLOY_GAP,
+            "closing must not take three turns"
+        );
+    }
+
+    #[test]
+    fn the_allowance_is_clamped_at_both_ends() {
+        assert_eq!(allowance(-100, None), TACTICAL_MOVE_MIN);
+        assert_eq!(allowance(1000, None), TACTICAL_MOVE_MAX);
+        assert_eq!(allowance(DEFAULT_BASE_SPEED, Some(0)), TACTICAL_MOVE_MIN);
+        assert_eq!(allowance(DEFAULT_BASE_SPEED, Some(999)), TACTICAL_MOVE_MAX);
+    }
+
+    #[test]
+    fn an_authored_figure_overrides_the_speed_derivation() {
+        let derived = allowance(DEFAULT_BASE_SPEED, None);
+        let authored = TACTICAL_MOVE_MAX - 1;
+        assert_ne!(
+            derived, authored,
+            "the fixture must be able to tell them apart"
+        );
+        assert_eq!(allowance(DEFAULT_BASE_SPEED, Some(authored)), authored);
+    }
+
+    /// The bands either side of the default are the same width. Truncating
+    /// division would widen the one straddling it.
+    #[test]
+    fn the_bands_either_side_of_average_are_the_same_width() {
+        let step = TACTICAL_MOVE_SPEED_STEP;
+        let below: Vec<u32> = (DEFAULT_BASE_SPEED - step..DEFAULT_BASE_SPEED)
+            .map(|s| allowance(s, None))
+            .collect();
+        let at: Vec<u32> = (DEFAULT_BASE_SPEED..DEFAULT_BASE_SPEED + step)
+            .map(|s| allowance(s, None))
+            .collect();
+        assert!(below.iter().all(|&a| a == below[0]));
+        assert!(at.iter().all(|&a| a == at[0]));
+        assert_eq!(below[0] + 1, at[0], "the band below must be one cell short");
     }
 
     #[test]

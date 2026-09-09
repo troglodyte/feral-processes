@@ -4920,6 +4920,35 @@ pub const TACTICAL_LARGE_BODIES: u32 = 7;
 /// no fight opens with both sides walking toward each other for a turn.
 pub const TACTICAL_DEPLOY_GAP: i32 = 6;
 
+/// A body of average speed's movement allowance, in cost.
+///
+/// Read against `TACTICAL_DEPLOY_GAP`: four points closes six cells in two
+/// turns, which is the "step or two of closing" the gap is sized for, and
+/// it leaves room either side for speed to be worth something — over the
+/// shipped roster the band runs two to six, so the slowest body takes three
+/// turns to cross what the fastest crosses in one.
+pub const TACTICAL_MOVE_BASE: u32 = 4;
+
+/// Points of `Game::combat_speed` that buy one more cell of movement.
+///
+/// Two, against the shipped roster's 6..14 spread and
+/// `DEFAULT_BASE_SPEED`'s 10. One point per cell would triple that spread
+/// and let a single stat decide a tactical fight on its own — speed already
+/// buys initiative, accuracy and evasion — while three would flatten the
+/// roster onto two values.
+pub const TACTICAL_MOVE_SPEED_STEP: i32 = 2;
+
+/// The allowance's floor and ceiling.
+///
+/// Not taste: `reach::movement_field` passes the allowance to `walk_field`
+/// as its search radius, so an unbounded allowance is an unbounded search,
+/// and a body that cannot move at all can neither close nor walk off the
+/// board — a fight that cannot finish. Both ends are therefore correctness
+/// bounds, and both are reachable only by a mod: the shipped roster derives
+/// two through six without either clamp biting.
+pub const TACTICAL_MOVE_MIN: u32 = 2;
+pub const TACTICAL_MOVE_MAX: u32 = 8;
+
 #[cfg(test)]
 mod tests {
     use super::*;

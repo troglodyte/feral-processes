@@ -97,6 +97,25 @@ is skipped with a warning logged in-game rather than crashing startup.
     // half only.
     base_speed: 12,
 
+    // Optional; leave it out and this species moves at whatever `base_speed`
+    // above derives. Only read in *tactical* battles — the opt-in grid combat
+    // model, switched on from the options screen — where a body spends an
+    // allowance of movement points before it acts. Open ground costs one point
+    // a cell and rough ground costs two, so this is a budget rather than a
+    // count of steps. Nothing outside a tactical battle reads it: the abstract
+    // battle model has no cells to spend it on and the Stack ignores it
+    // entirely.
+    //
+    // The derived figure is 4 at the roster average of 10, one more per two
+    // points of `base_speed` above that and one less per two below, which puts
+    // the shipped roster between 2 (Construct) and 6 (Sprite). Setting this
+    // field is an escape hatch for a species whose footwork isn't what its
+    // initiative says — something that acts late but covers ground, or the
+    // reverse — and no shipped species uses it. Whatever you author is held to
+    // the same 2..8 bounds a derived figure is: a body that cannot move at all
+    // is one a fight cannot finish around.
+    movement: Some(5),  // or `None`, the default, to derive it from base_speed
+
     // Optional; can be left out entirely (defaults to 10). How good this
     // species is at *extracting* — posted to a Mining Node or any other
     // producing structure, it changes how often a cycle fizzles rather than

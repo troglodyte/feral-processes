@@ -13398,19 +13398,120 @@ line. So the decision has to look at what is *in* the pack, and
 `fights_tactically` is that look: the profile toggle, `require_surface`
 called rather than restated, and no `NestGuardian` among the bodies.
 
-The fourth gate is an **omission**, and it is the reason the arena needed no
-code at all. `arena::stage` calls `begin_battle` directly — it authors its
-own composition and must not be capped — so it never passes through
-`start_battle` and can never be routed. Nests, lairs and raids open their
-fights by their own routes for the same reason. A reviewer looking for the
-arena's exclusion will not find one; what they should check instead is that
-`begin_battle` still has exactly two callers.
+The fourth gate is an **omission**. `arena::stage` calls `begin_battle`
+directly — it authors its own composition and must not be capped — so it
+never passes through `start_battle` and can never be routed by it. Nests,
+lairs and raids open their fights by their own routes for the same reason. A
+reviewer looking for the arena's exclusion will not find one.
+
+That omission is what left the arena abstract when this landed, and it is
+also what let the arena be given the model back on its own terms a phase
+later, without touching `fights_tactically` at all — see *The arena chooses
+its own model, and `stage` takes the one its caller can drive*. `stage` is
+still the only staged path, and `begin_battle` still has exactly two
+callers.
 
 **Nothing above app-core re-derives this.** `App::opened_battle_mode` reads
 `Game::in_tactical_battle` — which model actually opened — rather than
 asking the three questions again. A second copy of the gates would drift on
 the day a fourth encounter kind lands, and the symptom would be a screen
 that draws one model over a fight fought in the other.
+
+### The arena chooses its own model, and `stage` takes the one its caller can drive
+
+`start_battle` decides by inspecting the pack, and a staged fight never
+passes through it. So the arena needed a chooser of its own, and the obvious
+one — `stage` reads `Scenario::model` and opens whichever fight it names —
+is wrong in a way that only shows on a screen.
+
+The arena has two halves and they are not equally able. The bin resolves a
+fight by playing *rounds*; a fight on a battle map is played a body at a
+time, and `App::start_arena_fight` ends in `self.mode = Mode::Battle`
+unconditionally. A `stage` that honoured the file would therefore hand the
+played arena a screen drawn over a fight with no `BattleState` behind it —
+silently, since nothing in the types disagrees.
+
+So `stage` takes the model its **caller** can drive, and refuses a scenario
+asking for the other one. app-core passes `CombatModel::Group` always and
+gets back a refusal naming the bin, through the `Err` arm it already had;
+`arena::run` passes `scenario.model`. A parameter rather than a guard at
+each call site because the guard is a thing to forget, with nothing failing
+to compile — where a parameter makes the next caller state which models it
+drives.
+
+The scenario's own field stays a field rather than becoming a bin flag for
+the reason the two tools are one library at all: the builder screen holds a
+`Scenario` and writes it whole, so a `model:` row survives being loaded and
+saved by a screen that cannot fight it. A flag would live outside the file
+and be lost by the round trip.
+
+**Rejected: routing the arena through `fights_tactically`.** It reads the
+*profile* toggle, and an arena session touches no profile by design — so a
+scenario's answer would depend on whether the person running the bin plays
+with tactical battles on. The measurement has to say what it measures.
+
+**The board's biome is the tile the player stands on**, deliberately not the
+biome an `encounter:` row names. `open_tactical_battle_at` builds the
+`BattleSpec` itself, and overriding the biome means either a third parameter
+on that door or a second copy of the construction — the copy this repo
+forbids. A rolled `Field(biome: Marsh)` scenario therefore fights a marsh
+pack on the player's own ground, which is written down in
+`dev-arenas/README.md` rather than fixed.
+
+### A headless tactical rep drives both sides, and a party body swings without invoking
+
+`tactical_ai_actor`'s gate is `Hostile`, and that is not an accident of the
+AI's scope: **every party body is the player's to command**, so a companion
+standing on a battle map waits for input exactly as the player does. The
+consequence is that a fight with nobody at the keyboard cannot be resolved
+through that door at all — which is precisely the fight the bin has to run.
+
+`tactical_drive_turn` is the second door onto the same body of code, and its
+only caller is `arena::run`. Called from a real fight it would walk a
+companion by itself, which is the failure the gate exists to prevent. Both
+doors call one `run_tactical_turn`, so the fight a measurement watched is the
+fight a player would have watched.
+
+Two halves make it honest, and both were found by asking what a party body
+would actually do inside code written for hostiles:
+
+- **Sidedness is read relative to the acting body.** `tactical_sides` split
+  by `Hostile` absolutely — allies are the hostiles, targets are everyone
+  else — which is right for a hostile actor and hands a party body *its own
+  side* to swing at. For a hostile actor the two readings are the same list,
+  which is why no seeded fight moved when it changed. The regression test is
+  the player alone against one hostile: under the absolute reading a party
+  body has nobody to close on, ends every turn where it stands, and the
+  fight runs to `ROUND_CAP` for ever.
+- **A party body swings and never invokes.** Not a policy invented for the
+  tester: `PartyPlan::AllAttack` is the group model's own arena plan and it
+  invokes no routine either, so a number taken on a battle map stays
+  comparable with the one taken in front of a group. Driving a party body
+  through `wild_routine_ready` instead would also have run its routines for
+  free — a hostile holds no `PowerReserve`, which is why that picker exists.
+
+A `PartyPlan` is therefore **refused** for a tactical scenario rather than
+ignored: bracing is a slot's departure from All-Attack and a battle map has
+no slots, and a silently ignored knob in an instrument reads as the knob
+being worthless.
+
+One thing about the rep loop was nearly a silent wrong answer.
+`MessageLog::open_round` has exactly one caller and it is the group model's
+`battle_resolve_round`, so on a battle map `since_round()` is the *whole
+fight* — and `Watch::observe`, which copies that range wholesale once a
+round, would have re-recorded every line every round. It now takes lines
+from where it stopped, keyed on the log's generation; the group model bumps
+that per round, so `taken` is zero there at every call and its transcript is
+copied entire exactly as it always was. Rounds are read off
+`TacticalBattle::round` rather than counted per pass, and the round a fight
+ends inside is observed too — which is what `run_rep` records when a fight
+ends inside a resolution.
+
+Measured, `dev-arenas/full-group.ron` against its tactical twin over 50 reps:
+4.0 rounds at 98% player HP against 7.3 at 93%. Both clear. The difference is
+turns spent walking and damage spread across whoever is in reach rather than
+forced onto a group's front, which is what the parent spec predicted and
+could not confirm.
 
 ### A tactical fight is drawn in the map pane, and both its readouts cost no layout
 

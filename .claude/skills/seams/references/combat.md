@@ -737,18 +737,65 @@
   patrol (in scope), and both arrive at the same line — so the decision has
   to look at what is in the pack. `fights_tactically` is that look: the
   profile toggle, `require_surface` **called** rather than restated, and no
-  `NestGuardian` among the bodies. **The fourth gate is an omission and is
-  the reason the arena needed no code** — `arena::stage` calls
-  `begin_battle` directly, so it never passes through here and can never be
-  routed; nests, lairs and raids open their fights by their own routes for
-  the same reason. A reviewer hunting for the arena's exclusion will not
-  find one; what to check instead is that `begin_battle` still has exactly
-  two callers. **Nothing above app-core re-derives the gates** —
+  `NestGuardian` among the bodies. **The fourth gate is an omission** —
+  `arena::stage` calls `begin_battle` directly, so it never passes through
+  here and can never be routed *by this*; nests, lairs and raids open their
+  fights by their own routes for the same reason. A reviewer hunting for the
+  arena's exclusion will not find one; what to check instead is that
+  `begin_battle` still has exactly two callers. The arena got the model back
+  on its own terms a phase later without touching `fights_tactically`, which
+  is the next entry. **Nothing above app-core re-derives the gates** —
   `App::opened_battle_mode` reads `Game::in_tactical_battle`, which model
   actually opened, because a second copy drifts on the day a fourth
   encounter kind lands and the symptom is a screen drawing one model over a
   fight fought in the other.
 
+- **The arena chooses its own model, and `stage` takes the one its *caller*
+  can drive.** A `stage` that simply honoured `Scenario::model` is wrong in a
+  way only a screen shows: the bin resolves a fight by playing rounds, a
+  battle map is played a body at a time, and `App::start_arena_fight` ends in
+  `self.mode = Mode::Battle` unconditionally — so the played arena would draw
+  a battle screen over a fight with no `BattleState` behind it, silently,
+  nothing in the types disagreeing. app-core passes `CombatModel::Group`
+  always and gets a refusal naming the bin through the `Err` arm it already
+  had; `arena::run` passes the file's answer. A parameter rather than a guard
+  at each call site because a guard is a thing to forget with nothing failing
+  to compile. **Routing the arena through `fights_tactically` instead is the
+  tidy version and is wrong**: that reads the *profile* toggle, and an arena
+  session touches no profile — a measurement would depend on how the person
+  running the bin likes to play. The model stays a **file field** and not a
+  bin flag because the builder holds a `Scenario` and writes it whole, so the
+  row survives a screen that cannot fight it; a flag lives outside the file
+  and is lost by the round trip. **The board's biome is the player's own
+  tile**, not an `encounter:` row's — overriding it is a third parameter on
+  the door or a second copy of the `BattleSpec` construction, so a rolled
+  marsh pack fights on whatever ground the player stands on and the README
+  says so. See `docs/seams.md`.
+- **A headless tactical rep drives both sides through one AI, and a party
+  body swings without invoking.** `tactical_ai_actor`'s gate is `Hostile`
+  because every party body is the player's to command, so a fight with nobody
+  at the keyboard cannot be resolved through that door at all —
+  `tactical_drive_turn` is the second door onto the same `run_tactical_turn`,
+  and `arena::run` is its only caller; from a real fight it walks a companion
+  by itself. Two traps under it, both from asking what a party body does
+  inside code written for hostiles. **`tactical_sides` had to become relative
+  to the actor**: split by `Hostile` absolutely it hands a party body its own
+  side to swing at, and the reproducer is the player alone against one
+  hostile — a body that thinks the party is the enemy has nobody to close on,
+  ends every turn where it stands, and the fight runs to `ROUND_CAP` for
+  ever. For a hostile actor the two readings are the same list, which is why
+  no seeded fight moved. And **the swing-only rule is `PartyPlan::AllAttack`
+  parity**, not a policy invented for the tester — the group model's own
+  arena plan invokes nothing either, so the two models' numbers stay
+  comparable, and driving a party body through `wild_routine_ready` would
+  have run its routines free besides (a hostile holds no `PowerReserve`,
+  which is that picker's whole reason). A `PartyPlan` is **refused** for a
+  tactical scenario rather than ignored. The rep loop's own trap:
+  `MessageLog::open_round` has one caller and it is the group model's, so
+  `since_round()` on a battle map is the whole fight and `Watch::observe`
+  would re-record every line every round — it takes from where it stopped,
+  keyed on the log generation, which the group model bumps per round so its
+  own behaviour is unchanged. See `docs/seams.md`.
 - **An AI turn hands the turn on once, and the action already did it.** The
   action ends the turn, so `tactical_attack` and `tactical_use_routine` each
   end it themselves once they land — and `tactical_ai_turn_at` ended it

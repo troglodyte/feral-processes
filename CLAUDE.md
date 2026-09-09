@@ -850,7 +850,12 @@ relying on one, and correct all three places if it has moved.
   before they are scored.
 - **`Game::start_battle` is where the model is chosen, by inspecting the
   pack** — the pursuit path cannot know whether it is a guardian or a
-  patrol, and the arena stays abstract by never passing through it.
+  patrol, and the arena never passes through it.
+- **The arena is the second chooser, and `arena::stage` takes the model its
+  *caller* can drive** rather than the one the file asks for.
+- **A headless tactical rep drives both sides through `tactical_drive_turn`,
+  and a party body swings without invoking** — `PartyPlan::AllAttack`'s
+  parity, not a policy invented for the tester.
 - **An AI turn hands the turn on once, because the action already did it.**
 - **A tactical fight is drawn in the map pane, and its turn strip takes the
   compass block's slot** — a block inside the pane, never a border strip.

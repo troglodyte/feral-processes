@@ -3,7 +3,7 @@
 use crate::Experience;
 use crate::Game;
 use crate::components::{Creature, Hostile, Position, Stats, StatusEffects};
-use crate::resources::{BattleState, DifficultyMode};
+use crate::resources::{BattleState, DifficultyMode, Party};
 use crate::species::SpeciesDb;
 use crate::tactical::TacticalBattle;
 use crate::tactical::reach::allowance;
@@ -863,6 +863,49 @@ fn a_hostile_closes_the_deployment_gap_on_its_own_and_swings() {
         hp_of(&game, player) < before,
         "a hostile that crossed {opened} cells never swung: {before} HP untouched"
     );
+}
+
+/// A companion's turn is the player's turn, and the screen has to say so.
+///
+/// **The third predicate.** `tactical_ai_actor` and
+/// `Game::tactical_awaits_input` are deliberately one definition, gated on
+/// `Hostile`; `TacticalView::player_turn` was a third, gated on `Player` —
+/// so on a companion's turn app-core sat waiting for a key while the screen
+/// said the wild side was moving and offered no keys to press.
+#[test]
+fn a_companion_s_turn_reads_as_the_player_s_on_the_screen() {
+    let mut game = game();
+    let companion = body(&mut game, &generic_species().id);
+    game.world.resource_mut::<Party>().0.push(companion);
+    tactical_fight(&mut game, 1, 40);
+    assert!(
+        wait_for_turn(&mut game, companion),
+        "the companion never got a turn"
+    );
+
+    assert!(
+        game.tactical_awaits_input(),
+        "the engine is waiting on a key for this body"
+    );
+    let view = game.tactical_view().expect("the fight is open");
+    assert!(
+        view.player_turn,
+        "...and the screen must agree: a companion's turn is the player's, so \
+         the keybar owes it the action keys rather than `the wild side is moving`"
+    );
+}
+
+/// A hostile's turn is nobody's to command, on both surfaces.
+#[test]
+fn a_hostile_s_turn_reads_as_the_wild_side_s() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 40);
+    let hostile = pack[0];
+    assert!(wait_for_turn(&mut game, hostile), "the hostile never acted");
+
+    assert!(!game.tactical_awaits_input());
+    let view = game.tactical_view().expect("the fight is open");
+    assert!(!view.player_turn, "the screen offered keys for a wild body");
 }
 
 /// The AI drives one side. A party body's turn is the player's to spend, and

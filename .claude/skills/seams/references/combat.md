@@ -814,7 +814,14 @@
   and `Game::tactical_awaits_input` its complement, because **every party
   body is the player's to command** — the gate is `Hostile`, not `Player`,
   and two predicates would either hang the fight waiting for a key nobody
-  may press or move a companion by itself.
+  may press or move a companion by itself. **A third one shipped anyway**:
+  `TacticalView::player_turn` answered `actor == player`, so on a companion's
+  turn the keybar said "the wild side is moving" and the reach wash went
+  undrawn while app-core, reading the real door, sat waiting for a key the
+  screen had named none of. It is a *call* to `tactical_awaits_input` now.
+  The lesson generalises past this seam: a predicate consolidated in the
+  engine is only consolidated as far as the view layer, and a view field
+  that restates it in different words is the copy that drifts.
 
 - **A turn ends in one place, `Game::hand_on_turn`, and it hands on only if
   the body that acted is still the one acting.** `TacticalBattle::remove`

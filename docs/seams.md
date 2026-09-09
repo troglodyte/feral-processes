@@ -13612,6 +13612,22 @@ so the gate is `Hostile` and not `Player`, and a companion on a battle map
 waits for a key exactly as the player does. Two predicates would either hang
 the fight waiting for a key nobody may press, or move a companion by itself.
 
+**A third predicate shipped anyway, one layer up.** `TacticalView::
+player_turn` — the field the keybar and the movement wash are drawn from —
+was written `actor == Some(player)`, which is the `Player` gate this seam
+exists to reject, in a file the consolidation never looked at. It did not
+hang the fight: app-core reads the real door, so a companion's turn accepted
+keys exactly as it should. What it did was lie about them. The bar read "the
+wild side is moving", no reachable cell was washed, and the player sat
+looking at a board that said it was not their move while the game waited for
+them to make one. Every test that could have caught it was asking the engine,
+where the two predicates already agreed.
+
+The fix is a call rather than a corrected copy, and the pair of tests that
+holds it asserts `view.player_turn == game.tactical_awaits_input()` on both
+sides — a companion's turn and a hostile's — because a test over one of them
+passes against a field pinned to a constant.
+
 ### A turn ends in one place, and a body that killed itself has already left the order
 
 `TacticalBattle::remove` takes a body out of the order, and when that body

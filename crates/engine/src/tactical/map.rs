@@ -10,7 +10,7 @@
 //! folded through `derive::fold` and reduced through `derive::index`, the
 //! way `rock::RockDb::kind_at` derives base space.
 
-use crate::derive::{FNV_BASIS, fold};
+use crate::derive::{FNV_BASIS, fold, index};
 use crate::tuning::{
     TACTICAL_BOARD_LARGE, TACTICAL_BOARD_MEDIUM, TACTICAL_BOARD_SMALL, TACTICAL_LARGE_BODIES,
     TACTICAL_MEDIUM_BODIES, TACTICAL_ROUGH_COST,
@@ -119,6 +119,121 @@ impl BattleSpec {
     }
 }
 
+/// The four kinds in the order `terrain_weights` gives their weights.
+const KINDS: [BattleCell; 4] = [
+    BattleCell::Open,
+    BattleCell::Rough,
+    BattleCell::Cover,
+    BattleCell::Blocked,
+];
+
+/// What each biome's ground is made of, as `[Open, Rough, Cover, Blocked]`
+/// weights summing to 100.
+///
+/// **Exhaustive on `Biome`** — `cell_mark`'s rule. A `_ =>` arm would ship a
+/// new biome's fights on whatever the fallback happened to be, and terrain
+/// that is quietly the wrong terrain reads as the generator being bland
+/// rather than as a missing row.
+///
+/// In `tuning.rs`'s neighbourhood rather than in `.ron` for the reason
+/// `Biome::name` already gives: mods extend species, structures, items and
+/// environments, but the biome set is a fixed enum `WorldMap::classify`
+/// sorts noise into, and ground for a variant that cannot exist is not a
+/// thing a file can usefully say.
+fn terrain_weights(biome: Biome) -> [u32; 4] {
+    match biome {
+        // A plain. Position matters least here, which is the point of it.
+        Biome::OpenGrid => [82, 12, 4, 2],
+        // Interference underfoot: slow going, little to hide behind.
+        Biome::Deadlock => [60, 30, 7, 3],
+        // Holes in the substrate — see across them, cannot cross them.
+        Biome::NullSector => [62, 16, 8, 14],
+        // A circuit board: dense with things to put between you and a shot.
+        Biome::Backplane => [58, 14, 20, 8],
+        // Laid and carved base floor. A fight does not open here today, but
+        // if one ever does it opens on a floor, which is what these are.
+        Biome::Platform | Biome::Excavated => [92, 6, 2, 0],
+        // Unwalkable ground: `Biome::walkable()` is false for all three, so
+        // nothing is ever placed there and no fight opens there. Plain open
+        // rather than solid, so that if one ever did it would be a board and
+        // not a wall.
+        Biome::DataVoid | Biome::BlackIce | Biome::Entropy => [100, 0, 0, 0],
+    }
+}
+
+/// The ground of one cell, derived and never rolled.
+fn kind_at(spec: BattleSpec, x: i32, y: i32) -> BattleCell {
+    let weights = terrain_weights(spec.biome);
+    let total: u32 = weights.iter().sum();
+    let mut n = index(spec.cell_seed(x, y), total as usize) as u32;
+    for (kind, weight) in KINDS.iter().zip(weights) {
+        if n < weight {
+            return *kind;
+        }
+        n -= weight;
+    }
+    BattleCell::Open
+}
+
+/// A generated battle map. Never saved; discarded at teardown.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Board {
+    pub side: i32,
+    cells: Vec<BattleCell>,
+}
+
+impl Board {
+    pub fn in_bounds(&self, x: i32, y: i32) -> bool {
+        x >= 0 && y >= 0 && x < self.side && y < self.side
+    }
+
+    /// Off the board reads as `Blocked` — seen over, never stepped on.
+    ///
+    /// The right answer for generation, the carve and deployment, none of
+    /// which may reach outside the board. Walking *off* the edge is a
+    /// departure from the fight rather than a step, and belongs to the turn
+    /// model; nothing here treats the edge as an exit.
+    pub fn cell(&self, x: i32, y: i32) -> BattleCell {
+        if !self.in_bounds(x, y) {
+            return BattleCell::Blocked;
+        }
+        self.cells[(y * self.side + x) as usize]
+    }
+
+    pub fn walkable(&self, x: i32, y: i32) -> bool {
+        self.cell(x, y).walkable()
+    }
+
+    pub fn blocks_sight(&self, x: i32, y: i32) -> bool {
+        self.cell(x, y).blocks_sight()
+    }
+
+    fn set(&mut self, x: i32, y: i32, kind: BattleCell) {
+        if self.in_bounds(x, y) {
+            let i = (y * self.side + x) as usize;
+            self.cells[i] = kind;
+        }
+    }
+
+    pub fn cells(&self) -> impl Iterator<Item = ((i32, i32), BattleCell)> + '_ {
+        let side = self.side;
+        self.cells
+            .iter()
+            .enumerate()
+            .map(move |(i, &kind)| (((i as i32) % side, (i as i32) / side), kind))
+    }
+}
+
+/// The whole generator: derive every cell, then make sure the walkable
+/// ground is one piece.
+pub fn generate(spec: BattleSpec) -> Board {
+    let side = spec.side();
+    let cells = (0..side * side)
+        .map(|i| kind_at(spec, i % side, i / side))
+        .collect();
+    Board { side, cells }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -221,5 +336,71 @@ mod tests {
         ] {
             assert_eq!(kind.walkable(), kind.movement_cost().is_some());
         }
+    }
+
+    /// The weights read as percentages at a glance, which is the only
+    /// reason they are worth reading at all.
+    #[test]
+    fn every_biomes_ground_sums_to_a_hundred() {
+        for biome in [
+            Biome::DataVoid,
+            Biome::Deadlock,
+            Biome::NullSector,
+            Biome::Backplane,
+            Biome::OpenGrid,
+            Biome::BlackIce,
+            Biome::Platform,
+            Biome::Excavated,
+            Biome::Entropy,
+        ] {
+            let total: u32 = terrain_weights(biome).iter().sum();
+            assert_eq!(total, 100, "{biome:?} does not sum to 100");
+        }
+    }
+
+    #[test]
+    fn the_same_spec_yields_an_identical_board() {
+        let a = generate(spec(4));
+        let b = generate(spec(4));
+        assert_eq!(a.side, b.side);
+        assert_eq!(a.cells().collect::<Vec<_>>(), b.cells().collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn a_board_is_its_tier_square() {
+        let board = generate(spec(9));
+        assert_eq!(board.side, TACTICAL_BOARD_LARGE);
+        assert_eq!(
+            board.cells().count(),
+            (TACTICAL_BOARD_LARGE * TACTICAL_BOARD_LARGE) as usize
+        );
+    }
+
+    fn blockers(board: &Board) -> usize {
+        board.cells().filter(|(_, kind)| !kind.walkable()).count()
+    }
+
+    /// The ground is the biome's, not one texture everywhere. Backplane is
+    /// a circuit board and is dense with cover; Open Grid is a plain.
+    #[test]
+    fn a_backplane_fight_has_more_to_hide_behind_than_an_open_grid_one() {
+        let mut plain = spec(4);
+        plain.biome = Biome::OpenGrid;
+        let mut city = spec(4);
+        city.biome = Biome::Backplane;
+        assert!(
+            blockers(&generate(city)) > blockers(&generate(plain)),
+            "the biome does not reach the ground"
+        );
+    }
+
+    #[test]
+    fn out_of_bounds_is_seen_over_and_never_stepped_on() {
+        let board = generate(spec(4));
+        assert!(!board.in_bounds(-1, 0));
+        assert!(!board.in_bounds(board.side, 0));
+        assert_eq!(board.cell(-1, 0), BattleCell::Blocked);
+        assert!(!board.walkable(-1, 0));
+        assert!(!board.blocks_sight(-1, 0));
     }
 }

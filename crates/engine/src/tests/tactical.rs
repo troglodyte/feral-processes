@@ -131,6 +131,14 @@ fn log_texts(game: &Game) -> Vec<String> {
 /// A tactical fight opened around `count` hostiles standing next to the
 /// player, each on `hp`.
 fn tactical_fight(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
+    let pack = tactical_pack(game, count, hp);
+    game.open_tactical_battle(pack.clone());
+    pack
+}
+
+/// `count` hostiles standing next to the player, with no fight opened around
+/// them yet — so a test may open one on a bearing of its own.
+fn tactical_pack(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
     let player = game.player_entity();
     let at = *game
         .world
@@ -164,7 +172,6 @@ fn tactical_fight(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
                 .id()
         })
         .collect();
-    game.open_tactical_battle(pack.clone());
     pack
 }
 
@@ -179,6 +186,42 @@ fn wait_for_turn(game: &mut Game, who: Entity) -> bool {
         }
     }
     panic!("the turn never came back round");
+}
+
+/// The mean y of `bodies`' cells — which side of the board a rank sits on.
+fn mean_y(game: &Game, bodies: &[Entity]) -> f32 {
+    let battle = game.world.resource::<TacticalBattle>();
+    let ys: Vec<i32> = bodies
+        .iter()
+        .filter_map(|&b| battle.cell_of(b))
+        .map(|(_, y)| y)
+        .collect();
+    assert!(!ys.is_empty(), "nobody was seated");
+    ys.iter().sum::<i32>() as f32 / ys.len() as f32
+}
+
+#[test]
+fn an_authored_bearing_seats_the_pack_on_that_side() {
+    // The pack stands *east* of the player either way, so a deployment
+    // reading the tiles would answer the same thing twice. This is what
+    // `open_tactical_battle_at` exists for.
+    let mut north = game();
+    let pack = tactical_pack(&mut north, 2, 10);
+    north.open_tactical_battle_at(pack.clone(), (0, -1));
+    let player = north.player_entity();
+    assert!(
+        mean_y(&north, &pack) < mean_y(&north, &[player]),
+        "a northward approach did not seat the pack north"
+    );
+
+    let mut south = game();
+    let pack = tactical_pack(&mut south, 2, 10);
+    south.open_tactical_battle_at(pack.clone(), (0, 1));
+    let player = south.player_entity();
+    assert!(
+        mean_y(&south, &pack) > mean_y(&south, &[player]),
+        "a southward approach did not seat the pack south"
+    );
 }
 
 #[test]

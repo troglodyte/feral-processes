@@ -42,22 +42,34 @@ impl Game {
     /// are seated on the bearing the pack was actually found at, so walking
     /// into a pack from the side starts the party flanked.
     ///
-    /// Nothing routes here yet. `start_battle` chooses the model in the
-    /// phase that gives a tactical fight a screen to be fought on; until
-    /// then this is reachable from tests alone.
+    /// `Game::start_battle` routes here for a pack `fights_tactically`
+    /// takes.
     pub fn open_tactical_battle(&mut self, pack: Vec<Entity>) {
-        let player = self.player_entity();
-        let site = self.tile_of(player).unwrap_or((0, 0));
-        let party: Vec<Entity> = std::iter::once(player)
-            .chain(self.world.resource::<Party>().0.iter().copied())
-            .filter(|&e| self.creature_alive(e))
-            .collect();
+        let site = self.tile_of(self.player_entity()).unwrap_or((0, 0));
         // Off the first member, which `gather_pack` guarantees is the body
         // the player actually bumped into — a centroid would answer a
         // different question, and the one being asked is which way the
         // player was facing trouble.
         let toward = pack.first().and_then(|&e| self.tile_of(e)).unwrap_or(site);
         let bearing = deploy::bearing(site, toward);
+        self.open_tactical_battle_at(pack, bearing);
+    }
+
+    /// `open_tactical_battle` with the bearing supplied rather than read off
+    /// the pack's own tile.
+    ///
+    /// `tactical_ai_turn_at`'s precedent, and its reason: a staged fight
+    /// spawns its opponents around the player, so the tile the derivation
+    /// reads answers nothing, and being flanked is exactly what an
+    /// instrument wants to be able to ask about. The one caller past the
+    /// door above is `arena::stage`.
+    pub(crate) fn open_tactical_battle_at(&mut self, pack: Vec<Entity>, bearing: (i32, i32)) {
+        let player = self.player_entity();
+        let site = self.tile_of(player).unwrap_or((0, 0));
+        let party: Vec<Entity> = std::iter::once(player)
+            .chain(self.world.resource::<Party>().0.iter().copied())
+            .filter(|&e| self.creature_alive(e))
+            .collect();
 
         let spec = BattleSpec {
             world_seed: self.world.resource::<WorldMap>().seed(),

@@ -383,7 +383,7 @@ impl Game {
             if swing > 0 && (self.is_stunned(entity) || !self.creature_alive(entity)) {
                 break;
             }
-            match self.party_member_swing(slot, entity, group, player) {
+            match self.party_member_swing(entity, group, player) {
                 SwingControl::BattleOver => return true,
                 SwingControl::NoTarget => break,
                 SwingControl::Swung => {}
@@ -400,33 +400,58 @@ impl Game {
     /// One swing of one party member's turn. Re-resolves its own target
     /// every call, because a swing that empties a group re-letters the ones
     /// behind it and the next swing has to be aiming at what is there now.
-    fn party_member_swing(
-        &mut self,
-        slot: usize,
-        entity: Entity,
-        group: usize,
-        player: Entity,
-    ) -> SwingControl {
+    fn party_member_swing(&mut self, entity: Entity, group: usize, player: Entity) -> SwingControl {
         let Some(live) = self.retarget(group) else {
             return SwingControl::NoTarget;
         };
         let Some(front) = self.front_of_group(live) else {
             return SwingControl::NoTarget;
         };
-        let (move_name, natural) = if slot == 0 {
-            ("data strike".to_string(), PLAYER_UNARMED_DAMAGE)
-        } else {
-            match self.roll_species_move(entity) {
-                Some(mv) => (mv.name.clone(), mv.attack_parts().0),
-                None => ("a raw signal burst".to_string(), PLAYER_UNARMED_DAMAGE),
-            }
-        };
+        let (move_name, natural) = self.swing_move(entity);
         let range = self.attack_range(entity, natural);
         let outcome = self.resolve_and_apply_attack(entity, front, battle::Swing::plain(range));
-        // A miss and a fumble are `PartyDamage` too — this is still the
-        // party's turn being narrated, and the kind is what paces the reveal.
-        let line = if slot == 0 {
-            match outcome {
+        let line = self.party_swing_line(entity, &move_name, outcome);
+        self.log_swing(MessageKind::PartyDamage, outcome, line);
+
+        if !self.creature_alive(front) && self.finish_group_member(live, player) {
+            return SwingControl::BattleOver;
+        }
+        SwingControl::Swung
+    }
+
+    /// The move one of the party's own bodies swings with, and its natural
+    /// damage: the player's bare-handed `data strike`, or a roll across the
+    /// species' authored moves for a companion, falling back to a raw signal
+    /// burst for a species that authors none.
+    ///
+    /// **Read off the entity, never off a battle slot.** Slot 0 was the
+    /// player only because `Party` is indexed that way in the abstract
+    /// model; a body on a tactical battle map has no slot at all.
+    pub(crate) fn swing_move(&mut self, entity: Entity) -> (String, battle::DamageRange) {
+        if entity == self.player_entity() {
+            return ("data strike".to_string(), PLAYER_UNARMED_DAMAGE);
+        }
+        match self.roll_species_move(entity) {
+            Some(mv) => (mv.name.clone(), mv.attack_parts().0),
+            None => ("a raw signal burst".to_string(), PLAYER_UNARMED_DAMAGE),
+        }
+    }
+
+    /// How a swing by one of the party's own bodies reads.
+    ///
+    /// One wording for both combat models, because the alternative is a
+    /// second copy of eight lines that drift apart a phrase at a time. A
+    /// miss and a fumble come back through here too: they are still the
+    /// party's turn being narrated, and `MessageKind::PartyDamage` is what
+    /// paces the reveal.
+    pub(crate) fn party_swing_line(
+        &self,
+        entity: Entity,
+        move_name: &str,
+        outcome: battle::AttackOutcome,
+    ) -> String {
+        if entity == self.player_entity() {
+            return match outcome {
                 battle::AttackOutcome::Crit { dmg } => {
                     format!("You tear a {move_name} clean through for {dmg} damage!")
                 }
@@ -434,31 +459,22 @@ impl Game {
                     format!("You unleash a {move_name} for {dmg} damage.")
                 }
                 battle::AttackOutcome::Miss => format!("Your {move_name} glances off."),
-                battle::AttackOutcome::Fumble(rung) => {
-                    self.fumble_line_for_player(&move_name, rung)
-                }
-            }
-        } else {
-            let name = self.creature_label(entity);
-            match outcome {
-                battle::AttackOutcome::Crit { dmg } => {
-                    format!("{name} tears a {move_name} clean through for {dmg} damage!")
-                }
-                battle::AttackOutcome::Hit { dmg } => {
-                    format!("{name} executes {move_name} for {dmg} damage.")
-                }
-                battle::AttackOutcome::Miss => format!("{name}'s {move_name} glances off."),
-                battle::AttackOutcome::Fumble(rung) => {
-                    self.fumble_line_for_other(&name, &move_name, rung)
-                }
-            }
-        };
-        self.log_swing(MessageKind::PartyDamage, outcome, line);
-
-        if !self.creature_alive(front) && self.finish_group_member(live, player) {
-            return SwingControl::BattleOver;
+                battle::AttackOutcome::Fumble(rung) => self.fumble_line_for_player(move_name, rung),
+            };
         }
-        SwingControl::Swung
+        let name = self.creature_label(entity);
+        match outcome {
+            battle::AttackOutcome::Crit { dmg } => {
+                format!("{name} tears a {move_name} clean through for {dmg} damage!")
+            }
+            battle::AttackOutcome::Hit { dmg } => {
+                format!("{name} executes {move_name} for {dmg} damage.")
+            }
+            battle::AttackOutcome::Miss => format!("{name}'s {move_name} glances off."),
+            battle::AttackOutcome::Fumble(rung) => {
+                self.fumble_line_for_other(&name, move_name, rung)
+            }
+        }
     }
 
     /// Rolls the wielded program's chance to fire one of its own routines on

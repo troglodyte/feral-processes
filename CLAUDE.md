@@ -1260,7 +1260,7 @@ relying on one, and correct all three places if it has moved.
 ## Build & test
 
 ```sh
-cargo test --workspace     # 5245 tests
+cargo test --workspace     # 5261 tests
 cargo run                  # the game; `default-run` in crates/launcher
 cargo clippy --workspace
 cargo fmt

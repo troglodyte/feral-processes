@@ -33,6 +33,18 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.135
+
+**A Depot no longer costs a tamed program to build.** Every structure but
+the Home committed one when the order was filed, which priced a shelf at a
+body — so anything that declares `stores` is now exempt alongside the Home,
+the whole researchable ladder from the first Depot to the Mk6 included. The
+build is otherwise unchanged: it is still filed as a request, still paid for
+in materials, and still raised by the crew.
+
+The exemption is read off the structure's own `stores` flag rather than a
+list of ids, so a mod's storage building is exempt for free.
+
 ## 0.13.134
 
 **A test-only helper was being compiled into the game.** A scripted edit in

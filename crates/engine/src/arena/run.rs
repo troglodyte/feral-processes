@@ -79,6 +79,54 @@ pub(crate) fn run_rep(game: &mut Game, watch: &mut Watch, plan: PartyPlan) -> Re
     watch.finish(game)
 }
 
+/// Plays a staged **tactical** fight in `game` out to its end.
+///
+/// `run_rep`'s counterpart, and a sibling rather than an arm of it: the two
+/// models disagree about what a turn is. There is no round to plan and
+/// resolve — every body on the board acts in initiative order, so the loop
+/// drives one turn at a time through `Game::tactical_drive_turn` and reads
+/// the round off the fight rather than counting one per pass.
+///
+/// **`PartyPlan` has no meaning here** and `arena::run` refuses one rather
+/// than ignoring it: bracing is a slot's departure from All-Attack, and a
+/// battle map has no slots. What a party body does instead is
+/// `tactical_drive_turn`'s own decision, and it is All-Attack's analogue —
+/// close, and swing.
+///
+/// The bound is `ROUND_CAP` again, and it is reached the same way: `Watch`
+/// counts a round per observation, and an observation is a round of the
+/// order coming round. A driven turn always hands the turn on, so a fight
+/// that cannot resolve spends rounds rather than spinning inside one.
+pub(crate) fn run_tactical_rep(game: &mut Game, watch: &mut Watch) -> RepRecord {
+    while watch.rounds() < ROUND_CAP {
+        // `run_rep`'s two reasons, unchanged: `has_active_battle` already
+        // answers for both models, and a Permadeath save carried in ends the
+        // run rather than the fight.
+        if !game.has_active_battle() || game.is_game_over().is_some() {
+            break;
+        }
+        let round = tactical_round(game);
+        if !game.tactical_drive_turn() {
+            break;
+        }
+        // The fight ending inside the turn is observed too, and counts as a
+        // round: it is the round it happened in, which is what `run_rep`
+        // records when a fight ends inside a resolution.
+        if !game.has_active_battle() || tactical_round(game) != round {
+            watch.observe(game);
+        }
+    }
+
+    watch.finish(game)
+}
+
+/// Which round the open tactical fight is on, or 0 when none is.
+fn tactical_round(game: &Game) -> u32 {
+    game.world
+        .get_resource::<crate::tactical::TacticalBattle>()
+        .map_or(0, |battle| battle.round)
+}
+
 /// The party slots that brace this round under `plan`, in slot order.
 ///
 /// One function for all three plans so the "which slots depart from

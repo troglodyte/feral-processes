@@ -131,6 +131,14 @@ fn log_texts(game: &Game) -> Vec<String> {
 /// A tactical fight opened around `count` hostiles standing next to the
 /// player, each on `hp`.
 fn tactical_fight(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
+    let pack = tactical_pack(game, count, hp);
+    game.open_tactical_battle(pack.clone());
+    pack
+}
+
+/// `count` hostiles standing next to the player, with no fight opened around
+/// them yet — so a test may open one on a bearing of its own.
+fn tactical_pack(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
     let player = game.player_entity();
     let at = *game
         .world
@@ -164,7 +172,6 @@ fn tactical_fight(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
                 .id()
         })
         .collect();
-    game.open_tactical_battle(pack.clone());
     pack
 }
 
@@ -179,6 +186,87 @@ fn wait_for_turn(game: &mut Game, who: Entity) -> bool {
         }
     }
     panic!("the turn never came back round");
+}
+
+/// The mean y of `bodies`' cells — which side of the board a rank sits on.
+fn mean_y(game: &Game, bodies: &[Entity]) -> f32 {
+    let battle = game.world.resource::<TacticalBattle>();
+    let ys: Vec<i32> = bodies
+        .iter()
+        .filter_map(|&b| battle.cell_of(b))
+        .map(|(_, y)| y)
+        .collect();
+    assert!(!ys.is_empty(), "nobody was seated");
+    ys.iter().sum::<i32>() as f32 / ys.len() as f32
+}
+
+#[test]
+fn an_authored_bearing_seats_the_pack_on_that_side() {
+    // The pack stands *east* of the player either way, so a deployment
+    // reading the tiles would answer the same thing twice. This is what
+    // `open_tactical_battle_at` exists for.
+    let mut north = game();
+    let pack = tactical_pack(&mut north, 2, 10);
+    north.open_tactical_battle_at(pack.clone(), (0, -1));
+    let player = north.player_entity();
+    assert!(
+        mean_y(&north, &pack) < mean_y(&north, &[player]),
+        "a northward approach did not seat the pack north"
+    );
+
+    let mut south = game();
+    let pack = tactical_pack(&mut south, 2, 10);
+    south.open_tactical_battle_at(pack.clone(), (0, 1));
+    let player = south.player_entity();
+    assert!(
+        mean_y(&south, &pack) > mean_y(&south, &[player]),
+        "a southward approach did not seat the pack south"
+    );
+}
+
+#[test]
+fn the_arena_door_drives_a_party_body_where_the_ai_door_declines_it() {
+    let mut game = game();
+    tactical_fight(&mut game, 1, 10);
+    let player = game.player_entity();
+    assert!(wait_for_turn(&mut game, player));
+
+    assert!(
+        !game.tactical_ai_turn(),
+        "the AI door drove a body the player commands"
+    );
+    assert!(game.tactical_drive_turn(), "the arena door drove nobody");
+    assert_ne!(
+        game.tactical_actor(),
+        Some(player),
+        "a driven turn was not handed on"
+    );
+}
+
+#[test]
+fn a_fight_driven_from_both_sides_resolves() {
+    // The player alone against one hostile, so this fails rather than
+    // merely reading oddly if sidedness is taken absolutely: a party body
+    // that thinks the party is the enemy has nobody to close on, ends every
+    // turn where it stands, and the fight runs to the bound below for ever.
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 10);
+
+    for _ in 0..2000 {
+        if !game.has_active_battle() {
+            break;
+        }
+        assert!(
+            game.tactical_drive_turn(),
+            "a fight open with nobody acting"
+        );
+    }
+
+    assert!(!game.has_active_battle(), "the driven fight never resolved");
+    assert!(
+        game.world.get::<Stats>(pack[0]).is_none_or(|s| s.hp <= 0),
+        "the fight ended with the hostile still up"
+    );
 }
 
 #[test]

@@ -337,10 +337,16 @@ fields including `Rough` costs, shape resolution against `Cover`, deployment
 bearings and bounds, initiative ordering, leash-edge departure, and the
 `AbilityTarget` -> shape census.
 
-A **tactical arena** — `dev-arenas/*.ron` extended with placement, run
-headlessly through the existing `arena` binary — is the only way to watch a
-tactical fight resolve without a display. It is deferred until the mode
-works, by decision.
+A **tactical arena** — `dev-arenas/*.ron` extended, run headlessly through
+the existing `arena` binary — is the only way to watch a tactical fight
+resolve without a display. It was deferred until the mode worked, and then
+built: a `model:` row and an `approach:` bearing, `arena::stage` taking the
+model its *caller* can drive, and a rep loop that drives both sides through
+`tactical/ai.rs`. Per-body **placement** was not built — the deployment is
+derived as it is in a real fight and one authored bearing seats the pack,
+which is the only part a staged fight cannot answer for itself. The two
+seams it minted are in `docs/seams.md`; `dev-arenas/README.md` is the
+schema.
 
 ---
 
@@ -359,7 +365,8 @@ spec-and-plan pipeline rather than inline TDD.
 7. Presentation: app-core modes and key handlers, battle tiles in `map_pane`,
    turn strip, action bar, cell cursor
 8. Pacing keys and the `dev-saves` template
-9. *(deferred)* tactical arena
+9. Tactical arena — the `model:`/`approach:` rows, `stage`'s driver
+   parameter, `run_tactical_rep`, and `dev-arenas/tactical-full-group.ron`
 
 Scope is comparable to the Stack or settlements.
 

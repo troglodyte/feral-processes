@@ -21,6 +21,13 @@ pub struct Watch {
     hp_fraction: f32,
     rounds: u32,
     transcript: Vec<String>,
+    /// The battle log generation the count below belongs to.
+    generation: u64,
+    /// How many lines of the current round's range are already in
+    /// `transcript`. Zero for the group model at every round, since
+    /// `open_round` bumps the generation and empties the range; the
+    /// tactical model is what makes it a count — see `observe`.
+    taken: usize,
 }
 
 impl Watch {
@@ -47,6 +54,8 @@ impl Watch {
             hp_fraction: hp_fraction_of(game, player),
             rounds: 0,
             transcript: Vec::new(),
+            generation: game.battle_log_generation(),
+            taken: 0,
         }
     }
 
@@ -68,8 +77,26 @@ impl Watch {
         // keeps only Outcome/Loot/LevelUp/Raid. `MESSAGE_LOG_CAP` is the
         // second reason — a long fight drops lines off the front before it
         // finishes.
+        //
+        // Taken from where the last call stopped rather than wholesale,
+        // because `MessageLog::open_round` has exactly one caller and it is
+        // the group model's `battle_resolve_round`: on a battle map the
+        // round's range is the *whole fight*, so a wholesale copy re-records
+        // every line every round. The generation is what says which of the
+        // two this is — the group model bumps it per round, so `taken` is
+        // zero there at every call and the range is copied entire, exactly
+        // as it always was. A range that has dropped lines off its front
+        // under `MESSAGE_LOG_CAP` skips that many, which is the same
+        // bounded loss the cap itself is.
+        let generation = game.battle_log_generation();
+        if generation != self.generation {
+            self.generation = generation;
+            self.taken = 0;
+        }
+        let lines = game.battle_log();
         self.transcript
-            .extend(game.battle_log().into_iter().map(|line| line.text));
+            .extend(lines.iter().skip(self.taken).map(|line| line.text.clone()));
+        self.taken = lines.len();
     }
 
     /// What the fight cost, once it is over.
@@ -169,8 +196,14 @@ mod tests {
     #[test]
     fn a_benched_companion_counts_as_downed() {
         let s = scenario(20, 1, &[("glitch", 8)], &[("sprite", 1)]);
-        let mut staged =
-            crate::arena::stage(&s, &crate::tests::support::test_assets_dir(), 3, false).unwrap();
+        let mut staged = crate::arena::stage(
+            &s,
+            &crate::tests::support::test_assets_dir(),
+            3,
+            false,
+            crate::arena::CombatModel::Group,
+        )
+        .unwrap();
 
         let companion = staged.game.world.resource::<crate::resources::Party>().0[0];
         // What `bench_or_dissolve` leaves behind: on the roster, alive by

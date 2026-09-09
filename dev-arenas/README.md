@@ -110,6 +110,8 @@ run rather than quietly changing the fight.
 | `party` | `[]` | `Fresh` only. Companions to field |
 | `opponents` | — | The fight, authored. Required unless `encounter` is set |
 | `encounter` | `None` | A context to roll instead of authoring one |
+| `model` | `Group` | Which combat model fights it — see below |
+| `approach` | `None` | `Tactical` only. Which way the pack is seated |
 | `reps` | `1` | How many times to run it |
 | `seed` | `0` | Rep *n* runs at `seed + n` |
 
@@ -338,6 +340,52 @@ Unlike an authored composition, a rolled pack **is** capped by the zone's own
 ceilings, because it is the game's own fight. It therefore warns about
 nothing: nothing was asked for past a ceiling, because nothing was asked for.
 
+### `model` and `approach`
+
+The game has two combat models and this row says which one fights the
+scenario. `Group` is the default and the one every file written before this
+existed asks for: groups, slots, and `ENGAGED_GROUPS`. `Tactical` is the
+opt-in battle map.
+
+```ron
+(
+  opponents: [(species: "rootkit", count: 4)],
+  model: Tactical,
+  approach: Some(East),
+)
+```
+
+**A tactical scenario is bin-only.** The played arena drives *rounds* and a
+fight on a battle map is driven a body at a time, so `[F]` on one is a
+refusal naming the bin rather than a fight. The builder never edits either
+row, so such a file still loads, saves and round-trips through the screen —
+it just cannot be played there. Watching a tactical fight by hand is the
+ordinary game with the toggle on, not the arena.
+
+**What drives the party.** Every body on the board is driven by the same code
+the hostiles are — `tactical/ai.rs`, whose gate is `Hostile` precisely
+because a party body is the player's to command, so the bin has its own door
+into it. A party body **swings and never invokes**, which is not a policy
+invented for the tester: `PartyPlan::AllAttack` is the group model's own
+arena plan and it invokes no routine either, so the two models' numbers stay
+comparable. For the same reason a `PartyPlan` is *refused* rather than
+ignored here — bracing is a slot's departure from All-Attack, and a battle
+map has no slots.
+
+`approach` is the compass point the pack is seated on, as seen from the
+party — eight of them, because a deployment is a signum per axis. A real
+fight reads this off the tile the pack was found on, which is what makes
+walking into one from the side start you flanked; a staged fight spawns its
+opponents around the player and so has no bearing to read, and authoring one
+is the only way to ask what being flanked costs. `None` takes whatever the
+derivation makes of the tiles it finds.
+
+**The board's biome is the tile the player is standing on**, not the biome an
+`encounter:` row names. So a rolled `Field(biome: Marsh)` scenario fights a
+marsh *pack* on the player's own ground. Overriding it means either a third
+parameter on the door or a second copy of the `BattleSpec` construction, and
+neither is worth it until a question needs it.
+
 ## The shipped scenarios
 
 - **`opening-fight.ron`** — the fight the game actually opens on. A fresh
@@ -357,6 +405,12 @@ nothing: nothing was asked for past a ceiling, because nothing was asked for.
   `0.8.1` scaling change.
 - **`geared-vs-boss.ron`** — the `extraction` template against a boss, and
   the worked example of the template path.
+- **`tactical-full-group.ron`** — `full-group.ron`'s fight on a battle map:
+  the same party, the same pack, the same seed, so the pair is the
+  comparison. Over 50 reps the group model clears it in 4.0 rounds at 98% HP
+  left and the battle map in 7.3 at 93% — turns spent walking, and damage
+  spread across whoever is in reach rather than forced onto a group's front.
+  Bin only, like every `model: Tactical` file.
 
 These are meant to be kept and re-run after a `tuning.rs` edit, not to
 demonstrate syntax. Add one whenever you find a fight worth watching twice —

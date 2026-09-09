@@ -343,7 +343,12 @@ mod tests {
     /// what makes it the right fixture for comparing the two.
     #[test]
     fn the_tactical_template_opens_one_step_from_a_fight() {
-        let out = std::env::temp_dir().join("feral_processes_template_tactical.bin");
+        // Suffixed, like every other per-template test here:
+        // `every_checked_in_template_still_loads` generates
+        // `..._template_<name>.bin` for *each* template and deletes it, so
+        // the unsuffixed path is that loop's file — and in parallel it is
+        // removed between the write below and the load.
+        let out = std::env::temp_dir().join("feral_processes_template_tactical_one_step.bin");
         generate("tactical", &out).unwrap();
         let mut game = Game::load(&out, &assets_dir()).unwrap();
         let _ = std::fs::remove_file(&out);

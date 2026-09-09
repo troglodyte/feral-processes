@@ -291,14 +291,15 @@ impl Game {
         // fresh `ProgramId`, level one, no memories, and kill XP paid to
         // the player for it. Aimed at empty ground it would spend both for
         // nothing at all.
-        if matches!(ability.effect, AbilityEffect::Decompile)
-            && !self
+        if matches!(ability.effect, AbilityEffect::Decompile) {
+            let hostile = self
                 .world
                 .resource::<TacticalBattle>()
                 .occupant(aim)
-                .is_some_and(|body| self.world.get::<Hostile>(body).is_some())
-        {
-            return false;
+                .is_some_and(|body| self.world.get::<Hostile>(body).is_some());
+            if !hostile {
+                return false;
+            }
         }
         self.run_tactical_routine(actor, &ability, aim, 0);
         true

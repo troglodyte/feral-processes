@@ -45,6 +45,36 @@ fn sprite_inset(tile_px: f32, glyph_px: u16) -> f32 {
     (tile_px - glyph_px as f32) / 2.0
 }
 
+/// The arrow that hangs over whoever is acting: its width and its height as
+/// fractions of a tile, and how far its point is held off the tile's top
+/// edge at rest.
+///
+/// **It hangs *above* the tile rather than sitting in it**, which is what
+/// keeps it out of every channel a tile already spends: the con earmark owns
+/// the top-left corner, the HP bar the bottom edge, and the middle is the
+/// glyph or the sprite this arrow exists to point at. Drawn inside the cell
+/// it would have to be small enough to dodge all three, and an arrow that
+/// small is not the thing a player finds by glancing.
+///
+/// The gap is what the bob swings out of: the arrow's rest position is its
+/// *lowest*, so a lift can never carry it down onto the body.
+const TURN_ARROW_WIDTH: f32 = 0.44;
+const TURN_ARROW_HEIGHT: f32 = 0.30;
+const TURN_ARROW_GAP: f32 = 2.0;
+
+/// The three points of that arrow, given the top-left of the acting body's
+/// tile and how far this frame's bob has lifted it.
+///
+/// A free function for `marks::nemesis_mark_rect`'s reason — the geometry is
+/// the thing worth holding, and holding it needs no `Painter`.
+fn turn_arrow(px: f32, py: f32, tile_px: f32, lift: f32) -> [(f32, f32); 3] {
+    let cx = px + tile_px / 2.0;
+    let half = tile_px * TURN_ARROW_WIDTH / 2.0;
+    let point = py - TURN_ARROW_GAP - lift;
+    let base = point - tile_px * TURN_ARROW_HEIGHT;
+    [(cx - half, base), (cx + half, base), (cx, point)]
+}
+
 /// Draws the whole battle map, and reports where the acting body stands so
 /// the caller can hang the turn strip and the compass-slot readout off it.
 #[allow(clippy::too_many_arguments)]
@@ -139,6 +169,45 @@ pub(super) fn draw_tactical_map(
         draw_body(body, painter, px, py, tile_px, glyph_px);
     }
 
+    // Whose turn it is, hung over that body's head and bouncing.
+    //
+    // **The one channel on this grid that says *now*** — the turn strip in
+    // the corner already names the order and is the wrong place to find the
+    // answer to "where am I": a fight is played by looking at the board.
+    // Blue for a body the player commands and red for one the wild side
+    // does, which is `palette::PLAN` against `palette::THREAT` rather than
+    // the HP bar's green: this arrow is the player having a choice, the same
+    // reading the reach wash above is drawn with, and a hostile taking its
+    // turn is inbound harm.
+    //
+    // **`staffed_bob` and not `centred_bob`.** The shared raised cosine
+    // either way, so this bounce and the base's agree rather than being two
+    // invented curves — but this one is anchored at its rest position and
+    // lifts only, because that rest position is `TURN_ARROW_GAP` off the
+    // body's head and a down-swing would spend it.
+    //
+    // No pane-bounds check, unlike the loops above: `center` is this body's
+    // own cell, so it is drawn within `Fx`'s one tile of camera lag of the
+    // middle of the pane and can never be at an edge to hang off.
+    if let Some(body) = acting_body(view) {
+        let (px, py) = tile_origin_px(
+            body.cell,
+            center,
+            (half_w, half_h),
+            (off_x, off_y),
+            tile_px,
+            pane,
+        );
+        painter.poly(
+            &turn_arrow(px, py, tile_px, fx.staffed_bob(body.entity)),
+            if body.is_hostile {
+                palette::THREAT
+            } else {
+                palette::PLAN
+            },
+        );
+    }
+
     // Last, so the cursor is never under a body it is pointing at.
     if let Some(cell) = cursor {
         let (px, py) = tile_origin_px(
@@ -153,13 +222,20 @@ pub(super) fn draw_tactical_map(
     }
 }
 
+/// The body whose turn it is — the one derivation of that, since the camera,
+/// the arrow over its head and every caller asking where it stands must all
+/// name the same body.
+///
+/// `TacticalView::active` indexes `order`, which is the initiative roll and
+/// not the board, so this is a lookup and not a subscript.
+fn acting_body(view: &TacticalView) -> Option<&TacticalBody> {
+    let acting = view.order.get(view.active?)?.entity;
+    view.bodies.iter().find(|b| b.entity == acting)
+}
+
 /// Where the body whose turn it is stands.
 pub(super) fn acting_cell(view: &TacticalView) -> Option<(i32, i32)> {
-    let acting = view.order.get(view.active?)?.entity;
-    view.bodies
-        .iter()
-        .find(|b| b.entity == acting)
-        .map(|b| b.cell)
+    acting_body(view).map(|b| b.cell)
 }
 
 /// One body: its art or its glyph, its con read, and what is left of it.
@@ -438,6 +514,142 @@ mod tests {
         assert!(
             with.len() > without.len(),
             "the cursor painted nothing at all"
+        );
+    }
+
+    /// The downward-pointing, horizontally symmetric triangles among a set
+    /// of polygons, as `(apex, width, height)`.
+    ///
+    /// The discriminator is the *apex being centred between the other two
+    /// points*, which is what tells this arrow from the con earmark — the
+    /// only other polygon on this grid, a right-angled wedge folded into a
+    /// corner whose third point sits directly under one of its neighbours.
+    /// It has to be told apart by shape and not by colour: `palette::glyph`
+    /// resolves `GlyphColor::Red` to `THREAT` and `Blue` to `PLAN`, so an
+    /// earmark can be painted in either of the two colours this arrow uses.
+    fn arrows(polys: &[Vec<(f32, f32)>]) -> Vec<((f32, f32), f32, f32)> {
+        polys
+            .iter()
+            .filter(|p| p.len() == 3)
+            .filter_map(|p| {
+                let (a, b, c) = (p[0], p[1], p[2]);
+                let centred = ((a.0 + b.0) / 2.0 - c.0).abs() < 0.01;
+                (a.1 == b.1 && c.1 > a.1 && centred).then(|| (c, (b.0 - a.0).abs(), c.1 - a.1))
+            })
+            .collect()
+    }
+
+    /// The arrow clears the head of the body it points at, at rest and at
+    /// the top of its bounce alike.
+    ///
+    /// **Geometry and not a screenshot**: what this is really asserting is
+    /// that the arrow spends none of the three channels a tile already has
+    /// — the top-left earmark, the bottom HP bar, and the glyph in the
+    /// middle — and the whole of that is the shape sitting above `py`.
+    #[test]
+    fn the_turn_arrow_hangs_clear_of_the_body_it_points_at() {
+        let tile = 32.0;
+        for lift in [0.0, 2.0, 4.0, 12.0] {
+            let a = turn_arrow(100.0, 200.0, tile, lift);
+            let (base_l, base_r, point) = (a[0], a[1], a[2]);
+            assert!(
+                point.1 <= 200.0 - TURN_ARROW_GAP,
+                "the point touched the tile at lift {lift}: {a:?}"
+            );
+            assert!(
+                base_l.1 < point.1,
+                "the arrow is not pointing down at lift {lift}: {a:?}"
+            );
+            assert!(
+                (base_l.0 + base_r.0) / 2.0 == point.0
+                    && (point.0 - (100.0 + tile / 2.0)).abs() < 0.01,
+                "the arrow is off the middle of its tile at lift {lift}: {a:?}"
+            );
+            assert!(
+                (base_r.0 - base_l.0 - tile * TURN_ARROW_WIDTH).abs() < 0.01
+                    && (point.1 - base_l.1 - tile * TURN_ARROW_HEIGHT).abs() < 0.01,
+                "the arrow is not the authored size at lift {lift}: {a:?}"
+            );
+        }
+    }
+
+    /// Blue over a body the player commands, red over one the wild side
+    /// does — and exactly one arrow, because two would be two claims about
+    /// whose turn it is.
+    #[test]
+    fn the_turn_arrow_names_the_side_whose_turn_it_is() {
+        use crate::paint::painted_poly_points;
+
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open");
+        for hostile in [false, true] {
+            let rung = view
+                .order
+                .iter()
+                .position(|r| r.is_hostile == hostile)
+                .unwrap_or_else(|| panic!("the fixture fields no hostile == {hostile} body"));
+            view.active = Some(rung);
+            let mut fx = Fx::new();
+            let (_, shapes) =
+                with_painter(|p| draw_tactical_map(&view, None, &[], &mut fx, p, pane(), 32.0, 24));
+
+            let (mine, theirs) = if hostile {
+                (palette::THREAT, palette::PLAN)
+            } else {
+                (palette::PLAN, palette::THREAT)
+            };
+            assert_eq!(
+                arrows(&painted_poly_points(&shapes, mine)).len(),
+                1,
+                "a hostile == {hostile} turn must wear exactly one arrow in its own colour"
+            );
+            assert!(
+                arrows(&painted_poly_points(&shapes, theirs)).is_empty(),
+                "a hostile == {hostile} turn drew the other side's arrow"
+            );
+        }
+    }
+
+    /// ...and it bounces.
+    ///
+    /// **Eight frames spanning the bob's full cycle**, for
+    /// `the_caret_bounces_around_the_middle_of_its_slab`'s reason: the phase
+    /// is keyed off an `Entity` this test can neither see nor choose, and
+    /// for some of the sixty-four buckets a two-sample probe half a period
+    /// apart lands on the identical pixel both times.
+    #[test]
+    fn the_turn_arrow_bounces() {
+        use crate::paint::painted_poly_points;
+
+        let mut game = fighting();
+        let view = game.tactical_view().expect("the fight is open");
+        let side = if view.order[view.active.expect("somebody is acting")].is_hostile {
+            palette::THREAT
+        } else {
+            palette::PLAN
+        };
+        // A fresh `Fx` per frame, so the camera glide — which is stateful
+        // across frames — contributes the same offset to every sample and
+        // the only thing moving is the bob.
+        let ys: Vec<f32> = (0..8)
+            .map(|i| {
+                let mut fx = Fx::new();
+                fx.begin_frame(i as f64 / 8.0, Vec::new(), Vec::new(), true);
+                let (_, shapes) = with_painter(|p| {
+                    draw_tactical_map(&view, None, &[], &mut fx, p, pane(), 32.0, 24)
+                });
+                arrows(&painted_poly_points(&shapes, side))
+                    .first()
+                    .expect("the arrow is drawn")
+                    .0
+                    .1
+            })
+            .collect();
+        let min = ys.iter().cloned().fold(f32::INFINITY, f32::min);
+        let max = ys.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        assert!(
+            max - min > 1.0,
+            "the arrow must bounce, not sit still: {ys:?}"
         );
     }
 

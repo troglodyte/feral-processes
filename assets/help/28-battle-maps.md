@@ -6,9 +6,10 @@ you do. Fights underground and fights with a nest guardian keep the
 [intrusion](intrusions) screen either way.
 
 The board is drawn where the world map was, and a strip inside it names the
-round and every body in the order they act, fastest first. Everyone on your
-side is yours to command — a companion's turn is your turn, not something
-you watch.
+round and every body in the order they act, fastest first. An arrow bounces
+over the head of whoever is acting — blue for one of yours, red for one of
+theirs. Everyone on your side is yours to command — a companion's turn is
+your turn, not something you watch.
 
 On your turn:
 

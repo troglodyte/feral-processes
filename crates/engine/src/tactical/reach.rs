@@ -1,4 +1,5 @@
-//! How far a body can get this turn, and what it costs it to get there.
+//! How far a body can get this turn, what it costs it to get there, and
+//! what its routines cover once it stops.
 //!
 //! The fifth caller of `game::pursuit::walk_field`, after the two on the
 //! zone surface and the two in base space. It is a caller and not a second
@@ -11,10 +12,12 @@ use std::collections::{HashMap, HashSet};
 use bevy_ecs::prelude::Entity;
 
 use crate::Game;
+use crate::abilities::{AbilityRange, AbilityShape};
 use crate::components::Creature;
 use crate::game::pursuit::walk_field;
 use crate::species::SpeciesDb;
-use crate::tactical::TacticalBattle;
+use crate::tactical::map::Board;
+use crate::tactical::{TacticalBattle, deploy};
 use crate::tuning::{
     DEFAULT_BASE_SPEED, TACTICAL_MOVE_BASE, TACTICAL_MOVE_MAX, TACTICAL_MOVE_MIN,
     TACTICAL_MOVE_SPEED_STEP,
@@ -101,6 +104,154 @@ pub fn movement_field(
     });
     field.retain(|_, cost| *cost <= allowance);
     field
+}
+
+/// How far apart two cells are, in steps.
+///
+/// Chebyshev, because movement is eight-way and every step costs at least
+/// one: the diagonal that carries a body one cell nearer on both axes has to
+/// read as one cell nearer, or a routine's range would disagree with the
+/// walk that closed it.
+pub fn distance(a: (i32, i32), b: (i32, i32)) -> u32 {
+    (a.0 - b.0).abs().max((a.1 - b.1).abs()) as u32
+}
+
+/// Whether `aim` is a cell `from` may aim a routine of this `range` at.
+pub fn in_range(from: (i32, i32), aim: (i32, i32), range: AbilityRange) -> bool {
+    let d = distance(from, aim);
+    d >= range.min && d <= range.max
+}
+
+/// Whether anything standing at `from` can see `to`.
+///
+/// A straight sample of the cells between them — the endpoints excluded, so
+/// standing *in* cover neither blinds a body nor protects it, which is the
+/// same asymmetry the Stack settled when it recorded that `walkable()` and
+/// `blocks_sight()` are not complements. Sampled at `distance` steps rather
+/// than walked, so the line a `Cone` checks and the line a `Line` draws
+/// cannot disagree about which cells lie between two others.
+pub fn line_of_sight(board: &Board, from: (i32, i32), to: (i32, i32)) -> bool {
+    let steps = distance(from, to);
+    for step in 1..steps {
+        let t = f64::from(step) / f64::from(steps);
+        let x = from.0 + ((to.0 - from.0) as f64 * t).round() as i32;
+        let y = from.1 + ((to.1 - from.1) as f64 * t).round() as i32;
+        if board.blocks_sight(x, y) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Every cell a routine of this `shape`, run from `from` and aimed at `aim`,
+/// covers.
+///
+/// **The invoker's own cell is covered by `Radius` alone.** A blast centred
+/// on where you stand is the one shape that can catch you, which is what
+/// makes `WholeParty`'s derived shape land on the invoker at all; a `Line`
+/// and a `Cone` are cast away from the body casting them and start one cell
+/// out.
+///
+/// Terrain is read by two of the four. `Line` stops at the first cell that
+/// blocks sight and `Cone` drops any cell it cannot see, both through
+/// `Board::blocks_sight` — a `Cover` cell, and nothing else. `Radius` is
+/// stopped by nothing, because a blast that had to see its own far side
+/// would need a second sight rule per cell in it, and `Single` names one
+/// cell that was already in range.
+pub fn shape_cells(
+    board: &Board,
+    from: (i32, i32),
+    aim: (i32, i32),
+    shape: AbilityShape,
+) -> Vec<(i32, i32)> {
+    match shape {
+        AbilityShape::Single => vec![aim],
+        AbilityShape::Radius { radius } => {
+            let r = radius as i32;
+            let mut cells = Vec::new();
+            for y in (aim.1 - r)..=(aim.1 + r) {
+                for x in (aim.0 - r)..=(aim.0 + r) {
+                    if board.in_bounds(x, y) {
+                        cells.push((x, y));
+                    }
+                }
+            }
+            cells
+        }
+        AbilityShape::Line { length } => {
+            let step = deploy::bearing(from, aim);
+            let mut cells = Vec::new();
+            for i in 1..=length as i32 {
+                let cell = (from.0 + step.0 * i, from.1 + step.1 * i);
+                if !board.in_bounds(cell.0, cell.1) || board.blocks_sight(cell.0, cell.1) {
+                    break;
+                }
+                cells.push(cell);
+            }
+            cells
+        }
+        AbilityShape::Cone { length, degrees } => {
+            let facing = f64::from(aim.1 - from.1).atan2(f64::from(aim.0 - from.0));
+            // Half the aperture either side of the facing, and the epsilon
+            // is what keeps a wedge authored at 90 degrees holding the two
+            // diagonals that sit exactly 45 degrees off it — on an
+            // eight-way grid those are most of what a cone is for.
+            let half = f64::from(degrees) / 2.0 * std::f64::consts::PI / 180.0 + 1e-9;
+            let reach = length as i32;
+            let mut cells = Vec::new();
+            for y in (from.1 - reach)..=(from.1 + reach) {
+                for x in (from.0 - reach)..=(from.0 + reach) {
+                    let cell = (x, y);
+                    if cell == from || !board.in_bounds(x, y) {
+                        continue;
+                    }
+                    if distance(from, cell) > length {
+                        continue;
+                    }
+                    let angle = f64::from(y - from.1).atan2(f64::from(x - from.0));
+                    let mut off = (angle - facing).abs();
+                    if off > std::f64::consts::PI {
+                        off = std::f64::consts::TAU - off;
+                    }
+                    if off <= half && line_of_sight(board, from, cell) {
+                        cells.push(cell);
+                    }
+                }
+            }
+            cells
+        }
+    }
+}
+
+/// Everybody a routine of this `shape`, run by `actor` and aimed at `aim`,
+/// lands on.
+///
+/// **Whichever side they are on.** Friendly fire is full and is the whole
+/// reason a shape is worth aiming: a blast wide enough to catch three
+/// hostiles is wide enough to catch the companion standing among them, and
+/// a `Radius` heal mends whatever is in it. Nothing here reads `Hostile`,
+/// and the omission is the feature.
+///
+/// In board order — the order the bodies were placed — for `TacticalBattle`'s
+/// own reason: bevy's query order is not stable and a fight's recipients
+/// must not resolve differently between runs.
+pub fn recipients(
+    battle: &TacticalBattle,
+    actor: Entity,
+    aim: (i32, i32),
+    shape: AbilityShape,
+) -> Vec<Entity> {
+    let Some(from) = battle.cell_of(actor) else {
+        return Vec::new();
+    };
+    let covered: HashSet<(i32, i32)> = shape_cells(&battle.board, from, aim, shape)
+        .into_iter()
+        .collect();
+    battle
+        .bodies()
+        .filter(|(_, cell)| covered.contains(cell))
+        .map(|(entity, _)| entity)
+        .collect()
 }
 
 #[cfg(test)]
@@ -298,6 +449,192 @@ mod tests {
         assert!(
             field.keys().all(|&(x, y)| battle.board.in_bounds(x, y)),
             "the field left the board"
+        );
+    }
+
+    /// A hand-written board with a wall of cover across the middle.
+    ///
+    /// `.` open, `#` cover, `X` blocked — see `Board::from_rows`.
+    fn walled() -> Board {
+        Board::from_rows(&[
+            ".......", ".......", ".......", "..###..", ".......", "...X...", ".......",
+        ])
+    }
+
+    #[test]
+    fn sight_stops_at_cover_and_carries_over_a_chasm() {
+        let board = walled();
+        assert!(
+            !line_of_sight(&board, (3, 1), (3, 5)),
+            "cover in the way did not stop the line"
+        );
+        assert!(
+            line_of_sight(&board, (3, 4), (3, 6)),
+            "a chasm is seen over, not through"
+        );
+    }
+
+    /// Standing *in* cover neither blinds a body nor hides it: the endpoints
+    /// are excluded, which is `walkable()`/`blocks_sight()` not being
+    /// complements read from the other end.
+    #[test]
+    fn a_body_standing_in_cover_is_still_seen() {
+        let board = walled();
+        assert!(line_of_sight(&board, (3, 2), (3, 3)));
+        assert!(line_of_sight(&board, (3, 3), (3, 2)));
+    }
+
+    #[test]
+    fn a_line_runs_from_the_caster_and_stops_at_what_it_cannot_see_through() {
+        let board = walled();
+        let cells = shape_cells(&board, (3, 0), (3, 6), AbilityShape::Line { length: 6 });
+        assert_eq!(
+            cells,
+            vec![(3, 1), (3, 2)],
+            "the line either caught its own caster or ran through cover"
+        );
+    }
+
+    /// The aim names a direction, not a destination — a line is cast from
+    /// the caster whatever cell along it was picked.
+    #[test]
+    fn a_line_reads_its_aim_as_a_bearing() {
+        let board = Board::from_rows(&["....", "....", "....", "...."]);
+        let near = shape_cells(&board, (0, 0), (1, 0), AbilityShape::Line { length: 3 });
+        let far = shape_cells(&board, (0, 0), (3, 0), AbilityShape::Line { length: 3 });
+        assert_eq!(near, far);
+        assert_eq!(near, vec![(1, 0), (2, 0), (3, 0)]);
+    }
+
+    /// A wedge authored at ninety degrees holds the two diagonals sitting
+    /// exactly forty-five degrees off its facing. On an eight-way grid those
+    /// are most of what a cone is for, and a strict comparison drops both.
+    #[test]
+    fn a_ninety_degree_cone_holds_its_diagonals() {
+        let board = Board::from_rows(&[".....", ".....", ".....", ".....", "....."]);
+        let cells = shape_cells(
+            &board,
+            (2, 2),
+            (2, 0),
+            AbilityShape::Cone {
+                length: 2,
+                degrees: 90,
+            },
+        );
+        for expected in [(2, 1), (1, 1), (3, 1), (0, 0), (4, 0)] {
+            assert!(
+                cells.contains(&expected),
+                "{expected:?} fell out of the cone"
+            );
+        }
+        assert!(
+            !cells.contains(&(2, 2)),
+            "the cone caught the body that opened it"
+        );
+        assert!(
+            !cells.contains(&(2, 3)),
+            "the cone reached behind the body that opened it"
+        );
+    }
+
+    #[test]
+    fn a_cone_drops_what_it_cannot_see() {
+        let board = walled();
+        let cells = shape_cells(
+            &board,
+            (3, 1),
+            (3, 6),
+            AbilityShape::Cone {
+                length: 4,
+                degrees: 90,
+            },
+        );
+        assert!(cells.contains(&(3, 2)));
+        assert!(!cells.contains(&(3, 4)), "the cone reached through cover");
+    }
+
+    /// A blast is stopped by nothing — no sight rule, and none of the four
+    /// cell kinds excluded.
+    #[test]
+    fn a_blast_reaches_behind_cover_and_over_a_chasm() {
+        let board = walled();
+        let cells = shape_cells(&board, (0, 0), (3, 4), AbilityShape::Radius { radius: 1 });
+        assert!(cells.contains(&(3, 3)), "the blast stopped at cover");
+        assert!(cells.contains(&(3, 5)), "the blast stopped at a chasm");
+        assert_eq!(cells.len(), 9);
+    }
+
+    #[test]
+    fn a_blast_is_clipped_by_the_board_and_not_by_the_arithmetic() {
+        let board = Board::from_rows(&["....", "....", "....", "...."]);
+        let cells = shape_cells(&board, (0, 0), (0, 0), AbilityShape::Radius { radius: 2 });
+        assert!(cells.iter().all(|&(x, y)| board.in_bounds(x, y)));
+        assert_eq!(cells.len(), 9);
+    }
+
+    #[test]
+    fn a_single_target_shape_names_the_cell_it_was_aimed_at() {
+        let board = walled();
+        assert_eq!(
+            shape_cells(&board, (0, 0), (5, 5), AbilityShape::Single),
+            vec![(5, 5)]
+        );
+    }
+
+    #[test]
+    fn a_range_is_inclusive_at_both_ends_and_measured_in_steps() {
+        let range = AbilityRange { min: 2, max: 3 };
+        assert!(!in_range((0, 0), (1, 1), range), "point blank was allowed");
+        assert!(in_range((0, 0), (2, 2), range));
+        assert!(in_range((0, 0), (3, 0), range));
+        assert!(!in_range((0, 0), (4, 4), range), "out of reach was allowed");
+    }
+
+    /// Full friendly fire: nothing in `recipients` reads `Hostile`, and
+    /// these bodies carry no components at all — which is the proof.
+    #[test]
+    fn a_blast_lands_on_whoever_is_standing_in_it() {
+        let (mut battle, bodies) = fight(&[".....", ".....", ".....", ".....", "....."]);
+        battle.place(bodies[0], (2, 2));
+        battle.place(bodies[1], (2, 3));
+        battle.place(bodies[2], (0, 0));
+        let caught = recipients(
+            &battle,
+            bodies[0],
+            (2, 2),
+            AbilityShape::Radius { radius: 1 },
+        );
+        assert_eq!(
+            caught,
+            vec![bodies[0], bodies[1]],
+            "a blast centred on the caster must catch the caster and its neighbour, and \
+             nobody standing outside it"
+        );
+    }
+
+    /// A line is cast away from the body casting it, so the one shape that
+    /// can catch its own caster is the blast above.
+    #[test]
+    fn a_line_never_catches_the_body_that_cast_it() {
+        let (mut battle, bodies) = fight(&[".....", ".....", ".....", ".....", "....."]);
+        battle.place(bodies[0], (0, 0));
+        battle.place(bodies[1], (2, 0));
+        let caught = recipients(&battle, bodies[0], (4, 0), AbilityShape::Line { length: 4 });
+        assert_eq!(caught, vec![bodies[1]]);
+    }
+
+    #[test]
+    fn a_body_that_is_not_on_the_board_lands_nothing() {
+        let (mut battle, bodies) = fight(&[".....", ".....", ".....", ".....", "....."]);
+        battle.place(bodies[1], (2, 2));
+        assert!(
+            recipients(
+                &battle,
+                bodies[0],
+                (2, 2),
+                AbilityShape::Radius { radius: 2 }
+            )
+            .is_empty()
         );
     }
 }

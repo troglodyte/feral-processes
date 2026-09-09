@@ -33,6 +33,26 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.140
+
+**A staged fight can be fought on a battle map.** A `dev-arenas` scenario now
+names which of the two combat models fights it, and the `arena` bin resolves a
+tactical one headlessly — the only way to watch a fight on a map resolve
+without a display, and the phase the tactical spec deferred until the mode
+worked. `dev-arenas/tactical-full-group.ron` is `full-group.ron`'s fight on a
+board, the same party and pack and seed, so the pair is the comparison: 4.0
+rounds at 98% player HP against 7.3 at 93%, over 50 reps each.
+
+Both sides are driven by the game's own AI, and a party body swings without
+invoking — which is what `PartyPlan::AllAttack` already does in the group
+model, so the two sets of numbers stay comparable. An `approach:` row seats
+the pack on a bearing, since a staged fight spawns its opponents around the
+player and so has none to read.
+
+**A tactical scenario is bin-only.** The played arena drives rounds and a
+battle map is driven a body at a time, so `[F]` on one answers with a line
+naming the bin rather than opening a screen it cannot play.
+
 ## 0.13.139
 
 **A fight can be fought on a map now, and the toggle is off by default.** The

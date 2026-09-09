@@ -17,7 +17,7 @@ censuses (`ALL_MODES`, the refusal count).
 **Tech Stack:** Rust, `bevy_ecs` 0.19 (engine), RON via serde (profile),
 `bevy` + `bevy_egui` (gui, drawn through `Painter`).
 
-**Spec:** `docs/superpowers/specs/2026-09-09-tactical-surface-battles-design.md`
+**Spec:** `docs/superpowers/archive/specs/2026-09-09-tactical-surface-battles-design.md`
 (§8 is this phase; §12 item 1).
 
 ## Global Constraints
@@ -131,7 +131,7 @@ In `Profile`, directly after `player_icon`:
 ```rust
     /// Whether surface fights open on a tactical grid rather than the
     /// abstract group model — see
-    /// `docs/superpowers/specs/2026-09-09-tactical-surface-battles-design.md`.
+    /// `docs/superpowers/archive/specs/2026-09-09-tactical-surface-battles-design.md`.
     ///
     /// Cross-run rather than per-save for the reason every field here is:
     /// this is a statement about how the player wants to play, not about

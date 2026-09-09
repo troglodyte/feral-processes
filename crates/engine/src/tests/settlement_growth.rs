@@ -1,6 +1,6 @@
 //! A Server growing into a Mainframe: the latch, the drift and the shelf.
 //!
-//! `docs/superpowers/specs/2026-09-06-settlement-growth-design.md`.
+//! `docs/superpowers/archive/specs/2026-09-06-settlement-growth-design.md`.
 
 use crate::settlements::SettlementKey;
 

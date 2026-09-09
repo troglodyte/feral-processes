@@ -19,7 +19,7 @@ this module.
 **Tech Stack:** Rust, `bevy_ecs` 0.19 (`Resource`, `Entity`), no `serde` on
 any type introduced here.
 
-**Spec:** `docs/superpowers/specs/2026-09-09-tactical-surface-battles-design.md`
+**Spec:** `docs/superpowers/archive/specs/2026-09-09-tactical-surface-battles-design.md`
 (§2 the `tactical/` layout, §3 the battle map, §12 item 2).
 
 **Depends on:** Phase 1, landed — `achievements::Profile::tactical_battles`
@@ -507,7 +507,7 @@ Create `crates/engine/src/tactical/mod.rs`:
 //!
 //! Opt-in, off by default, and the second of the game's two combat models —
 //! see
-//! `docs/superpowers/specs/2026-09-09-tactical-surface-battles-design.md`.
+//! `docs/superpowers/archive/specs/2026-09-09-tactical-surface-battles-design.md`.
 //! Nothing outside this module's own tests calls into it yet; the router
 //! that chooses between the two models is a later phase.
 //!

@@ -3,9 +3,10 @@
 //!
 //! Opt-in, off by default, and the second of the game's two combat models —
 //! see
-//! `docs/superpowers/specs/2026-09-09-tactical-surface-battles-design.md`.
-//! Nothing outside this module's own tests calls into it yet; the router
-//! that chooses between the two models is a later phase.
+//! `docs/superpowers/archive/specs/2026-09-09-tactical-surface-battles-design.md`.
+//! `Game::start_battle` is the router that chooses between the two models,
+//! by inspecting the pack; `arena::stage` is the second chooser, and takes
+//! the model its caller can drive.
 //!
 //! **A battle coordinate lives here and nowhere else.** No world `Position`
 //! is ever written for a body standing on a battle map, the same way the

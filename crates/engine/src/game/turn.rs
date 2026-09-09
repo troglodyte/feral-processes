@@ -29,6 +29,18 @@ impl Game {
         self.world.resource::<PlayerEntity>().0
     }
 
+    /// Where a body stands in the world, as a bare pair.
+    ///
+    /// **`tactical/` asks through this rather than reading `Position`
+    /// itself.** A battle map's coordinates live in `TacticalBattle` and
+    /// nothing in that module may write a world position — and the whole
+    /// enforcement of that is the module not naming the component, so the
+    /// two honest reads it needs (where a fight opened, and which way the
+    /// pack lay) come through a door instead of an import.
+    pub(crate) fn tile_of(&self, entity: Entity) -> Option<(i32, i32)> {
+        self.world.get::<Position>(entity).map(|p| (p.x, p.y))
+    }
+
     pub(crate) fn log(&mut self, s: impl Into<String>) {
         self.world.resource_mut::<MessageLog>().push(s);
         self.snapshot_roster();
@@ -142,8 +154,19 @@ impl Game {
         self.world.resource_mut::<GameClock>().tick = tick;
     }
 
+    /// Whether a fight is open, in either combat model.
+    ///
+    /// **The one gate roughly a hundred call sites ask "can I do this right
+    /// now" through**, so it is widened rather than copied: a screen that
+    /// refuses while a group fight is on has exactly as much business being
+    /// refused while a battle map is on, and a second predicate beside this
+    /// one would be a hundred places to remember to update.
     pub fn has_active_battle(&self) -> bool {
         self.world.get_resource::<BattleState>().is_some()
+            || self
+                .world
+                .get_resource::<crate::tactical::TacticalBattle>()
+                .is_some()
     }
 
     /// Advances the world clock with no player action behind it — the hook

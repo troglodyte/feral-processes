@@ -3,11 +3,13 @@
 //! (`game/turn.rs`) is the one caller: it walks each provoked nest guardian
 //! downhill along the field this module builds.
 //!
-//! Every edge here costs a flat `1u32` (`NEIGHBOURS`, 8-directional), so
-//! `dijkstra_all` is a breadth-first search in effect and the `pathfinding`
-//! crate isn't strictly required to produce this field. It's the dependency
-//! regardless — an explicit request, not an oversight — for a
-//! well-tested traversal over a hand-rolled flood fill.
+//! Every surface caller prices every edge at a flat `1u32` (`NEIGHBOURS`,
+//! 8-directional), so for them `dijkstra_all` is a breadth-first search in
+//! effect and the `pathfinding` crate isn't strictly required to produce
+//! this field. It's the dependency regardless — an explicit request, not an
+//! oversight — for a well-tested traversal over a hand-rolled flood fill,
+//! and the tactical battle map, whose `Rough` ground costs two, is what
+//! makes it a Dijkstra search rather than a breadth-first one in fact.
 
 use std::collections::HashMap;
 
@@ -15,9 +17,9 @@ use pathfinding::directed::dijkstra::dijkstra_all;
 
 use crate::world::{NEIGHBOURS, WorldMap};
 
-/// Chebyshev step counts from `origin` to every tile reachable within
+/// Accumulated step costs from `origin` to every tile reachable within
 /// `radius`, routed around unwalkable terrain and around whatever else
-/// `step_allowed` refuses. `origin` itself is present with cost 0. A tile
+/// `step_cost` refuses. `origin` itself is present with cost 0. A tile
 /// absent from the result is unreachable, refused, or outside the box —
 /// callers must not try to tell those apart, since none of them is a tile
 /// the walker should step onto.
@@ -34,10 +36,25 @@ use crate::world::{NEIGHBOURS, WorldMap};
 /// to hold is now the caller's business and the two spaces share one search.
 /// `FnMut` because a `WorldMap` reader has to hold the map mutably —
 /// `WorldMap::tile` generates chunks lazily.
+///
+/// **The rule is a cost function and not a predicate**: `None` is refused,
+/// `Some(c)` is what entering that tile costs. Every surface and base-space
+/// caller answers `Some(1)`, which is exactly the uniform field this
+/// returned before; the battle map's `Rough` ground costs two and is why
+/// the shape widened. A predicate cannot say "crossable, but dearly", and
+/// the alternative — a second walk for the one space with graded ground —
+/// is the copy this seam exists to prevent.
+///
+/// `radius` still bounds a *Chebyshev box*, not a cost budget, and with
+/// graded ground the two are no longer the same thing. That is safe rather
+/// than lucky: no step costs less than one, so a tile outside a box of
+/// half-width `b` costs more than `b` to reach and cannot be inside a budget
+/// of `b`. A caller spending a budget passes it as the radius and filters
+/// the result by cost.
 pub(crate) fn walk_field(
     origin: (i32, i32),
     radius: i32,
-    mut step_allowed: impl FnMut((i32, i32)) -> bool,
+    mut step_cost: impl FnMut((i32, i32)) -> Option<u32>,
 ) -> HashMap<(i32, i32), u32> {
     let reached = dijkstra_all(&origin, |&(x, y)| {
         NEIGHBOURS
@@ -49,13 +66,12 @@ pub(crate) fn walk_field(
                 // lazily-generated, effectively infinite zone map would keep
                 // walking `WorldMap::tile` outward, generating chunks with
                 // nothing to stop it.
-                (nx - origin.0).abs() <= radius
-                    && (ny - origin.1).abs() <= radius
-                    && step_allowed((nx, ny))
+                (nx - origin.0).abs() <= radius && (ny - origin.1).abs() <= radius
             })
             // Movement is Chebyshev: all eight directions, diagonals
-            // included, cost the same single step.
-            .map(|n| (n, 1u32))
+            // included, are one step, and what that step costs is the step
+            // rule's to say.
+            .filter_map(|n| step_cost(n).map(|cost| (n, cost)))
             .collect::<Vec<_>>()
     });
 
@@ -79,7 +95,9 @@ pub(crate) fn pursuit_field(
 ) -> HashMap<(i32, i32), u32> {
     // A guardian's refusal is entirely a property of the terrain it is
     // standing on, so this reads the tile and nothing else.
-    walk_field(origin, radius, |(x, y)| map.tile(x, y).open_to_hostiles())
+    walk_field(origin, radius, |(x, y)| {
+        map.tile(x, y).open_to_hostiles().then_some(1)
+    })
 }
 
 #[cfg(test)]
@@ -131,11 +149,31 @@ mod tests {
             "pursuit must still refuse the base slab"
         );
 
-        let walked = walk_field((0, 0), 2, |(x, y)| map.tile(x, y).walkable);
+        let walked = walk_field((0, 0), 2, |(x, y)| map.tile(x, y).walkable.then_some(1));
         assert_eq!(
             walked.get(&(1, 0)),
             Some(&1),
             "an ordinary walk must be able to cross the base slab"
+        );
+    }
+
+    /// The step rule prices a tile, it does not merely admit it. A caller
+    /// that says one tile costs three gets a field that says so — and one
+    /// that routes *around* that tile rather than through it, which a
+    /// predicate could never express.
+    #[test]
+    fn a_dearer_tile_costs_what_the_step_rule_says_it_does() {
+        let field = walk_field((0, 0), 2, |p| Some(if p == (1, 0) { 3 } else { 1 }));
+
+        assert_eq!(
+            field.get(&(1, 0)),
+            Some(&3),
+            "the dear tile must cost what the rule priced it at"
+        );
+        assert_eq!(
+            field.get(&(2, 0)),
+            Some(&2),
+            "the tile beyond it must be reached around the dear one, not through it"
         );
     }
 

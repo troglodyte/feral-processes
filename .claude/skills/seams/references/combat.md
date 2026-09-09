@@ -488,11 +488,19 @@
   passes with the arm deleted.
 - **`walkable()` alone does not decide where a `Pursuing` guardian may step**
   — `pursuit_field` excludes `Biome::Platform` separately.
-- **There is one Dijkstra walk on the surface, and the step rule is a
-  parameter.** `walk_field`, with `pursuit_field` a one-line wrapper. The
-  predicate takes **the coordinate as well as the tile**, because refusing a
-  tile a `Structure` stands on is entity state. You may step off an occupied
-  tile, never onto one.
+- **There is one Dijkstra walk on the surface, and the step rule is a cost
+  function, not a predicate.** `walk_field`, with `pursuit_field` a one-line
+  wrapper. The rule takes **the coordinate as well as the tile**, because
+  refusing a tile a `Structure` stands on is entity state. You may step off
+  an occupied tile, never onto one. It answers `Option<u32>` — `None`
+  refused, `Some(c)` what entering costs — because the tactical battle map's
+  `Rough` ground costs two and a predicate cannot say "crossable, but
+  dearly"; every surface and base-space caller answers `.then_some(1)` and
+  gets the uniform field it always got. `radius` still bounds a Chebyshev
+  **box** and not a budget, which is safe only because no step costs less
+  than one: a caller spending a budget passes it as the radius and filters
+  the result by cost, and an unbounded allowance would be an unbounded
+  search.
 - **A `NestGuardian`'s tether refuses a step only when it both leaves
   `NEST_TETHER_RADIUS` and fails to close on the nest.** The simpler check
   froze a displaced guardian for the rest of the run.
@@ -558,3 +566,261 @@
   source. Only the player converts — a companion has no `Perks`, so it is an
   omission rather than a check. Whatever is unconverted becomes real levels on
   the next breach, which is why this needed no save field.
+- **A battle map's coordinates live in `TacticalBattle`; `Position` is never
+  written.** The third space to settle this way, after the Stack's
+  `resources::Locale` and base space's `Locale::Base`: a body in a fight keeps
+  the `Position` it had when the fight opened, which is what lets teardown be
+  a matter of dropping a resource rather than a restore pass on each of a
+  fight's five endings. The trap is the *convenience* — the board is a grid of
+  cells and so is the world map, so writing a battle cell into `Position`
+  makes every existing drawing, targeting and pathing routine work at once,
+  and moves the creature to a real tile out in the zone that a badly-ended
+  fight then leaves it standing on. Nothing in the compiler holds this:
+  `tactical/` does not import `crate::components::Position`, and that omission
+  is the whole enforcement. See `docs/seams.md` for the argument.
+- **A body is a wall in `reach::movement_field`, and a body's allowance is
+  both its budget and `walk_field`'s search box.** One occupancy rule rather
+  than a pass-through set and a destination set — an occupied cell is neither
+  crossed nor stopped on, friend or foe — because bodies that can be walked
+  through cannot hold a line, and this model has no other zone of control.
+  The budget is spent in *cost*, so four points is four open cells or two
+  rough ones, and it is handed to `walk_field` as the radius as well: that
+  is sound only because no step costs less than one, so nothing outside a
+  box of half-width `allowance` can be inside a budget of `allowance`. The
+  trap is the corollary — `TACTICAL_MOVE_MIN` and `TACTICAL_MOVE_MAX` read
+  as taste and are not. An unbounded allowance is an unbounded search, and a
+  body that cannot move at all can neither close nor walk off the board, so
+  an authored `SpeciesDef::movement` is clamped exactly as a derived figure
+  is. See `docs/seams.md` for the argument.
+
+- **A fight ends through `Game::finish_fight`, and a `FightVerdict` is what
+  each model answers it with.** `end_battle` read `BattleState` six times,
+  four of them asking "is anything hostile left" in different words, and
+  `mark_nemeses`' own comment says the three must agree. The verdict is four
+  fields; `finish_fight` is the sequence, and **the sequence is the thing
+  being protected** — every step of it is ordered against another
+  (`settle_rewards` before the closing capture, the capture before the reap,
+  `mark_nemeses` in a narrow window above the resource removal, the lair
+  collapse last). A second teardown beside it drifts a line at a time and
+  nothing fails to compile. The trap is `won`: it means the roster was
+  *emptied*, never "nothing is alive" — a jack-out taken in the round that
+  flatlined the last hostile, before anything reaped it, reads as a win off
+  the latter. Two smaller doors come with it: `Game::fight_rewards_mut` (the
+  tally is a field on *each* model's resource, because a new `Resource`
+  shifts bevy's query order under unrelated tests) and
+  `Game::finish_hostile` (the kill line, XP, loot, nest respawn, patrol
+  standing charge, despawn — a copy of it is a second place a patrol kill
+  stops charging a town). See `docs/seams.md` for the argument.
+- **A tactical fight's initiative is rolled once and kept in step by
+  deletion, and the cursor names a body rather than a position.** Rolled
+  once because the turn-order strip is a planning instrument and a reshuffle
+  between rounds makes any plan longer than a turn worthless;
+  `Game::initiative_roll` is extracted so both models price a body the same
+  way. The trap is the cursor's three removal cases, which are not alike: an
+  entry **ahead** of it shifts everything down one and the cursor must
+  follow or somebody silently loses a turn; an entry behind it changes
+  nothing; and the **acting** body leaving means the cursor already names
+  its successor, so the turn must be reset or the dead body's spent movement
+  is charged to whoever is next. See `docs/seams.md` for the argument.
+- **A step off the board edge is a departure, not a refusal, and the
+  player's own departure closes the fight.** Walking out is the only way to
+  express disengaging on a grid, and it is safe only because of the
+  `Position` seam above — a body that walks off is standing exactly where
+  the fight opened, so there is nothing to restore. Three endings, one win:
+  the board clear of hostiles is a win **even when they all broke off**; the
+  player down is a loss; the player walking out is the jack-out. Omit the
+  third and a fight stays open with nobody holding it. See `docs/seams.md`
+  for the argument.
+
+- **A routine's `shape:` and `range:` are read in tactical fights alone, and
+  `AbilityDef::tactical_shape`/`tactical_range` is the one place authored and
+  derived are reconciled.** Both are `#[serde(default)]` and **nothing
+  shipped authors either**, so the derivation off `AbilityTarget` is what the
+  whole roster runs on: one recipient is a `Single` at arm's length, a whole
+  side is a blast, and `WholeParty` is the one centred on the invoker
+  (derived range 0..0 — its own cell and nowhere else). The trap is reading
+  `def.shape` directly: it is `None` for every routine in the game, so a
+  reader that skips the door resolves the entire roster to nothing and the
+  failure is silent — a routine that quietly becomes single-target reads as
+  a nerf rather than a bug. Two censuses in `tests/assets.rs` close it, one
+  of them a second `match` pinning the derivation table. Three constants and
+  not one for the derived radii, because "one group" and "everything" are
+  different sizes and the party's own is the widest. Not to be confused with
+  `ranged`, a yes-or-no about the front line in the *group* model.
+  See `docs/seams.md` for the argument.
+- **`use_ability` is the door the two combat models share; each converts its
+  own aim, and full friendly fire is `reach::recipients` never reading
+  `Hostile`.** The design named `ability_recipients` as the shared door and
+  the code already disagreed — `field_recipients` is a second converter —
+  so the tactical one is a sibling rather than an arm, and the
+  `SpecialTarget::Cell` variant that arm would need is an invented answer
+  every abstract match in three crates would have to reject. The trap is the
+  friendly-fire "fix": a side filter in `recipients` is one line, reads as an
+  obvious bug fix, breaks nothing that compiles, and deletes the reason a
+  shape is worth aiming — the test that holds it places bodies carrying **no
+  components at all**. Terrain is read by two shapes of four: a line stops at
+  the first cell that blocks sight and a cone drops what it cannot see, a
+  blast is stopped by nothing, and `line_of_sight` excludes both endpoints,
+  so standing in cover neither blinds a body nor hides it. The aim is a
+  *bearing* for a line and a cone and a *destination* for a blast. The cone's
+  epsilon is not slop: an eight-way grid's diagonals sit exactly 45 degrees
+  off the facing, so a 90-degree wedge holds them only under a comparison
+  that admits equality. See `docs/seams.md` for the argument.
+- **`Game::decompile_body` is the capture; taking the captured body out of
+  the fight is each model's own half.** Everything down to the conversion —
+  catalyst, roll, fraying count, XP, component strip, nest respawn — is the
+  same act either way; a group index, a rank to promote and an `end_battle`
+  are the group model's vocabulary and none of the three exists on a battle
+  map. The fraying counter came with it: `Game::decompile_attempts`/`_mut`
+  are `fight_rewards_mut`'s counterpart and follow its rule — a field on each
+  model's resource, never a resource of its own — so `target_resistance`
+  quotes the same count whichever model is holding the fight. A capture is
+  aimed at one body and not resolved over an area, and it is the one effect
+  in `tactical_use_routine` that does not go through `use_ability` — the same
+  exception the group model's own Special site makes. See `docs/seams.md` for
+  the argument.
+- **A routine's effect is shared; its refusals are not — `Game::run_tactical_
+  routine`, and `cooldown_floor` is the whole of the difference.** The trap is
+  the tidy version: route the enemy AI through `tactical_use_routine`, the
+  door the player already uses. `ability_unavailable` reads the reserve off
+  the entity asked about and hostiles hold none by design, and every routine
+  that can be *run* is priced in Power — so that door refuses a hostile every
+  routine there is. Silently: it answers `false`, the AI falls through to a
+  swing, the fight still finishes and the suite still passes. The arm ships
+  correct-looking and never fires. It takes an `AbilityDef` and not an index,
+  because `tactical_use_routine`'s index is into `actor_abilities`, which
+  drops ids the `AbilityDb` cannot resolve and so is *not* a position in
+  `Routines`. The floor is `abilities::armed_cooldown`'s own parameter: the
+  player's routines cool at their authored rate, a hostile's are floored at
+  `ENEMY_ROUTINE_MIN_COOLDOWN`. Nothing shipped can observe that floor —
+  `field_only_dead_fields` warns about a cooldown on a field-only effect, so
+  every shipped `cooldown: 0` routine is field-only and `wild_routine_ready`
+  excludes it; the branch guards a mod, and a test that wants it must edit a
+  shipped def rather than assert on one. See `docs/seams.md` for the argument.
+- **A hostile decides what it will do before it decides where to stand, and
+  the closing term is a shortfall to the *band* and never a distance to the
+  target.** The obvious order — walk somewhere good, then pick an action —
+  cannot express a standoff at all, because what "good ground" means depends
+  on the range of the thing being run. And a distance term is monotone: it
+  rewards every step toward the enemy, so a carrier standing inside its own
+  minimum range is told to walk further in, and the routine it walked in to
+  use is the one it can no longer fire. The three terms are read against each
+  other, not tuned apart — the reach bonus must outrank closing across the
+  whole width of `TACTICAL_BOARD_LARGE`, or a body walks past the swing it
+  came for; crowding is the smallest because it is a tie-break between cells
+  that both reach. Line of sight is asked only of a cell already in band, so
+  cover ranks between "closed" and "can fire" rather than filtering a body
+  out. None of it is `combat_policy.rs`: trained weights speak group indices
+  and aggro slots, and what replaces a slot here is where a body stands —
+  which is also why the swing takes the wounded neighbour rather than
+  consulting `battle::slot_aggro_weight`. See `docs/seams.md`.
+- **One draw a turn, spent on the cell, and none at temperature zero.** The
+  aim and the swing target are argmaxes on purpose: a second draw lets a
+  hostile fumble an aim it spent its whole walk earning, which reads as
+  stupidity rather than variety. `sample_scored` returns the argmax before it
+  touches the RNG at temperature zero, so `tactical_ai_turn_at(0.0)` is both
+  pinnable and stream-neutral. The trap is the candidate list —
+  `movement_field` answers a `HashMap`, iteration order over one is not stable
+  between runs, and two equally-scored cells resolving differently in a seeded
+  fight surfaces as an intermittent failure somewhere else entirely, so the
+  cells are sorted before they are scored. The walk is committed as one
+  placement, not a run of `tactical_step`s: nothing on the board reacts to a
+  body mid-walk, so a path has no observable difference from its endpoint, and
+  a renderer that wants to animate it can descend the cost field. See
+  `docs/seams.md`.
+
+- **`Game::start_battle` is where the model is chosen, by inspecting the
+  pack.** The toggle says a player wants tactical fights; it does not say
+  *this* fight is one. **Deciding per call site cannot be made to work**:
+  `game/turn.rs`'s pursuit path calls `start_battle` for a `Pursuing` body
+  without knowing whether it is a nest guardian (out of scope) or a town
+  patrol (in scope), and both arrive at the same line — so the decision has
+  to look at what is in the pack. `fights_tactically` is that look: the
+  profile toggle, `require_surface` **called** rather than restated, and no
+  `NestGuardian` among the bodies. **The fourth gate is an omission and is
+  the reason the arena needed no code** — `arena::stage` calls
+  `begin_battle` directly, so it never passes through here and can never be
+  routed; nests, lairs and raids open their fights by their own routes for
+  the same reason. A reviewer hunting for the arena's exclusion will not
+  find one; what to check instead is that `begin_battle` still has exactly
+  two callers. **Nothing above app-core re-derives the gates** —
+  `App::opened_battle_mode` reads `Game::in_tactical_battle`, which model
+  actually opened, because a second copy drifts on the day a fourth
+  encounter kind lands and the symptom is a screen drawing one model over a
+  fight fought in the other.
+
+- **An AI turn hands the turn on once, and the action already did it.** The
+  action ends the turn, so `tactical_attack` and `tactical_use_routine` each
+  end it themselves once they land — and `tactical_ai_turn_at` ended it
+  again at its tail, so a hostile that swung spent **two** rungs of the
+  order and skipped whoever came next. Against a lone hostile, the shape
+  every wandering encounter has, the order is `[hostile, party]` and the
+  hostile took every turn for ever. **The tail cannot simply be deleted**: a
+  hostile with nothing in reach swings at nobody and ends no turn, so it is
+  owed in some paths and not others — it asks whether the body is still up
+  (`actor() == Some(actor)`), which also answers the case the old comment
+  reached for, a fight that ended inside the action. **Phase 6's tests could
+  not see it**: they assert a hostile closes and swings and that the AI
+  declines a party body's turn, and neither asks who acts next — nothing
+  headless waits on the answer, so it surfaced the first time a screen did.
+  `tactical_ai_actor` is now the one definition of whose turn the AI drives
+  and `Game::tactical_awaits_input` its complement, because **every party
+  body is the player's to command** — the gate is `Hostile`, not `Player`,
+  and two predicates would either hang the fight waiting for a key nobody
+  may press or move a companion by itself.
+
+- **A turn ends in one place, `Game::hand_on_turn`, and it hands on only if
+  the body that acted is still the one acting.** `TacticalBattle::remove`
+  already begins the next body's turn when it takes the acting body out —
+  the cursor names a body, not a position — so an action that ends the turn
+  unconditionally on top of that skips whoever stood behind it. The trap is
+  that a body killing itself with its own action looks impossible and is
+  not: a fumble's `Recoil` or `Opening` rung damages the swinger, and a
+  `Radius` routine catches its own invoker. In an order of `[companion,
+  player, hostile]` a companion who fumbles fatally costs the player their
+  turn, with nothing on screen to say why. Same question the phase-6 AI fix
+  asks at its own level, one level down. See `docs/seams.md`.
+- **A round on a battle map spends the upkeep an abstract round spends, and
+  `tick_combatant_upkeep` is the half both models share.** The trap is how
+  quiet the omission is: with nothing ticking, every routine is once per
+  fight (its refusal counting down "rounds" that never pass), `Stun` never
+  wears off, `Bleed` never bites, every authored `duration` lasts the whole
+  fight, `ENEMY_ROUTINE_MIN_COOLDOWN` is a floor under a clock that does not
+  run, the world stands still for the length of the fight, and a defeat is
+  deferred to the next idle tick — the player walks off the board at zero
+  Integrity. Not a call to `tick_round_status_effects`, which ends in
+  `reap_dead_members` and an `end_battle` that panics without a
+  `BattleState`; what to do about what the upkeep killed is each model's own
+  half. Two traps under that, both found reviewing the fix rather than the
+  feature. The reap belongs **between** the upkeep and the tick, because a
+  Bleed is damage and `death_handling_system` rides `Game::tick` gated on
+  nothing but `hp <= 0` — tick first and a Forgiving player is rebooted
+  inside an open fight, alive again with their world `Position` warped to
+  the anchor while they stand on the board. And the order wraps in **two**
+  places: `TacticalBattle::remove` calls `wrap()` itself, so a body dying on
+  the last rung begins a round no `end_turn` was reached for, which is why
+  `hand_on_turn` compares against a round its caller read before it acted.
+  A fight that ends mid-round never wraps at all, so `settle_tactical`
+  spends that round's tick as it closes. See `docs/seams.md`.
+- **The results page has two producers — `Game::closing_rows` — and one row
+  builder per half.** `BattleTimeline::closing` was filled from
+  `battle_rows`, which opens on `BattleState`, so a tactical fight left it
+  `None` and `draw_battle` returned before drawing anything: **a blank
+  results screen at the end of every tactical fight**, with the win, the
+  salvage and the XP written only to the log. The trap in fixing it is the
+  obvious shape — a second producer that builds both halves itself — when
+  `planned` is the only one of fourteen party fields the models disagree
+  about, and a second copy of the other thirteen is a results page that
+  disagrees with the fight it reports. `enemy_row` and `party_row` are one
+  function each; a battle map passes a body and a count of one, all bodies
+  `engaged`, because groups dissolve on a grid. See `docs/seams.md`.
+- **A capture is aimed at something hostile, and the refusal is at the
+  player's door with the other five.** Aimed at your own companion,
+  `decompile_body` succeeded on a good roll and handed it back through
+  `roster_parts` — a **new `ProgramId`**, `Experience::default()`, no
+  memories, every other program's memory of it orphaned, and kill XP paid to
+  the player for its own companion. It kept its level-15 `Stats` and read as
+  level 1. The gate is `Hostile` and nothing else: `tactical_attack` refuses
+  only `actor == target`, and a swing at your own is real friendly fire and
+  stays legal. Aimed at empty ground the same door refuses, which is what
+  keeps a capture from spending its catalyst and the turn on nothing.

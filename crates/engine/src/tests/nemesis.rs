@@ -630,7 +630,7 @@ fn marking_a_nemesis_spends_no_gamerng_draw() {
         (game, wild)
     };
     let (mut marked, _) = build();
-    marked.mark_nemeses();
+    marked.mark_nemeses(false);
     let (mut untouched, _) = build();
 
     let draw_several = |game: &mut Game| -> Vec<u64> {

@@ -76,7 +76,7 @@ pub(crate) const CUTTING_OUTLINE: Color = hud::palette::PLAN;
 /// creatures; a tile wearing it in neither reads as harmless. Both are
 /// silent, and neither would fail to compile.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum ConRead {
+pub(super) enum ConRead {
     /// The glyph carries it and the corner stays bare.
     Glyph(GlyphColor),
     /// The glyph's hue is spoken for, so the corner carries it.
@@ -93,7 +93,7 @@ impl ConRead {
     /// glyph is free to carry the rung. Gated on the name instead, an
     /// unloaded sprite costs a tile the better of the two homes for a
     /// reason the player cannot see.
-    fn of(difficulty: Option<GlyphColor>, is_boss: bool, drew_sprite: bool) -> Self {
+    pub(super) fn of(difficulty: Option<GlyphColor>, is_boss: bool, drew_sprite: bool) -> Self {
         match difficulty {
             Some(rung) if is_boss || drew_sprite => Self::Earmark(rung),
             Some(rung) => Self::Glyph(rung),
@@ -108,7 +108,7 @@ impl ConRead {
     /// vignetted — a rung mixed in here would otherwise burn at full
     /// brightness at the edge of the light, which is the one place the
     /// player is squinting anyway.
-    fn glyph_ink(self, authored: Color, vig: f32) -> Color {
+    pub(super) fn glyph_ink(self, authored: Color, vig: f32) -> Color {
         match self {
             Self::Glyph(rung) => {
                 let c = glyph_color(rung);
@@ -119,7 +119,7 @@ impl ConRead {
     }
 
     /// The rung the corner draws, if the corner is the one carrying it.
-    fn earmark(self) -> Option<GlyphColor> {
+    pub(super) fn earmark(self) -> Option<GlyphColor> {
         match self {
             Self::Earmark(rung) => Some(rung),
             _ => None,
@@ -201,6 +201,26 @@ pub(super) fn draw_playing_base(
     // the party, or the party left base space".
     let watch = app.watch_center();
     let watching = app.watching;
+    // Before the `game` borrow, `plan`'s rule. The preview is a **call**
+    // into the geometry that resolves the routine, never a second
+    // derivation, so a drawn blast and a delivered one cannot differ.
+    let tactical_cursor = app.tactical_cursor;
+    let tactical_preview: Vec<(i32, i32)> = match (app.tactical_cursor, app.pending_tactical) {
+        (Some(aim), Some(feral_processes_app_core::TacticalIntent::Routine(index))) => app
+            .game
+            .as_mut()
+            .map(|g| g.tactical_shape_cells(index, aim))
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    };
+    let in_tactical = app.game.as_ref().is_some_and(|g| g.in_tactical_battle());
+    // The keybar's content for as long as a fight is open, built before the
+    // `game` borrow like every other read on this list.
+    let tactical_actions: Option<Vec<(String, String)>> = app
+        .game
+        .as_mut()
+        .and_then(|g| g.tactical_view())
+        .map(|v| tactical::action_bar(&v));
     let Some(game) = &mut app.game else { return };
 
     let stock_rows = game.base_stock();
@@ -236,7 +256,41 @@ pub(super) fn draw_playing_base(
     // rather than from a second `Locale` check here, and `None` is also
     // what "nothing is selected" looks like.
     let compass = game.compass_bearing();
-    if let Some(view) = game.stack_view() {
+    // **Ahead of both**, because it is the most specific state: a tactical
+    // fight is surface-only, so it can never be open at the same time as a
+    // Stack view, and the order says which grid wins rather than leaving it
+    // to two conditions agreeing.
+    if let Some(view) = game.tactical_view() {
+        tactical::draw_tactical_map(
+            &view,
+            tactical_cursor,
+            &tactical_preview,
+            fx,
+            painter,
+            regions.map_pane,
+            tile_px,
+            glyph_px,
+        );
+        hud::map_frame::draw_map_frame(
+            regions.map_pane,
+            terrain,
+            hud::map_frame::Threat {
+                hostiles: view.bodies.iter().filter(|b| b.is_hostile).count(),
+                shielded: game.raid_defense_active(),
+            },
+            // The camera is on the acting body and says so through the turn
+            // strip below, which names it — a second label on the frame's
+            // own mount would say it twice.
+            None,
+            painter,
+            m,
+        );
+        // **The compass block's slot, and never both.** A block inside the
+        // pane costs no layout — the compass moved inside for exactly that
+        // reason — and a fight has no destination for a bearing to point
+        // at, so the two can never want it at once.
+        tactical::draw_turn_strip(&view, regions.map_pane, painter, m);
+    } else if let Some(view) = game.stack_view() {
         draw_stack(&view, painter, regions.map_pane, m, status.power);
         // Over the corridor, not part of it: the same map the `g` screen
         // draws, small enough to leave the view readable.
@@ -293,7 +347,9 @@ pub(super) fn draw_playing_base(
     // outside the branch because it is the same block in both — though
     // `compass_bearing` answers `None` underground, so the Stack never in
     // fact draws one.
-    if let Some(row) = &compass {
+    if let Some(row) = &compass
+        && !in_tactical
+    {
         hud::compass_block::draw_compass_block(regions.map_pane, row, painter, m);
     }
 
@@ -383,6 +439,7 @@ pub(super) fn draw_playing_base(
             vitals: &vitals,
             refusal: status_line.as_deref(),
             border: fx.log_border(hud::palette::PANE_BORDER),
+            actions: tactical_actions.as_deref(),
         },
         painter,
         m,
@@ -1182,7 +1239,7 @@ fn draw_excavation_plan(
 /// *without* the extra rings — the rings are fetched to be read, not drawn,
 /// so they cost a leading offset that keeps the pane framing the same view
 /// it did before the camera existed.
-fn tile_origin_px(
+pub(super) fn tile_origin_px(
     world: (i32, i32),
     player: (i32, i32),
     half: (i32, i32),

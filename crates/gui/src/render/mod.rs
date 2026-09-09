@@ -71,6 +71,7 @@ mod stack;
 mod stack_market;
 mod stock;
 mod structure_manifest;
+mod tactical;
 mod talents;
 mod terrain;
 #[cfg(test)]
@@ -115,8 +116,8 @@ use inventory::{
 };
 use manifest::{ManifestNav, draw_manifest, draw_manifest_pick};
 use meta::{
-    draw_achievements, draw_game_over, draw_load_game, draw_main_menu, draw_quit_app_confirm,
-    draw_quit_run_confirm, draw_save_action,
+    draw_achievements, draw_game_over, draw_load_game, draw_main_menu, draw_options,
+    draw_quit_app_confirm, draw_quit_run_confirm, draw_save_action,
 };
 use party::{
     draw_companion_equip, draw_companion_memories, draw_companion_menu, draw_fuse_menu,
@@ -541,7 +542,13 @@ fn draw_message_text(
 fn needs_status_banner(mode: Mode) -> bool {
     matches!(
         mode,
-        Mode::Battle
+        // The battle map and its cursor draw straight on the window with no
+        // popup over them, `Mode::FieldRoutineCell`'s reason — so a refusal
+        // has nowhere else to land. The routine picker is a popup and takes
+        // its refusal inside, like every other list.
+        Mode::TacticalBattle
+            | Mode::TacticalAim
+            | Mode::Battle
             | Mode::BattleResult
             | Mode::FrameMap
             | Mode::FieldRoutineCell
@@ -586,6 +593,7 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
             draw_quit_app_confirm(app.menu_selected, refusal, painter, &m);
         }
         Mode::Achievements => draw_achievements(app, refusal, painter, &m),
+        Mode::Options => draw_options(app, refusal, painter, &m),
         Mode::LoadGame => draw_load_game(app, refusal, painter, &m),
         Mode::SaveAction => draw_save_action(app, refusal, painter, &m),
         // The icon editor hangs off the wizard's Icon step as `App` state
@@ -1199,6 +1207,13 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
+        Mode::TacticalRoutine => tactical::draw_tactical_routines(
+            &game.tactical_routine_options(),
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
         Mode::FieldRoutine => draw_field_routine(game, selected, refusal, painter, m),
         Mode::FieldRoutineAlly => {
             draw_field_routine_ally(game, pending_field_routine, selected, refusal, painter, m)
@@ -1399,7 +1414,10 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 103] = [
+    const ALL_MODES: [Mode; 107] = [
+        Mode::TacticalBattle,
+        Mode::TacticalRoutine,
+        Mode::TacticalAim,
         Mode::MainMenu,
         Mode::CreateCharacter,
         Mode::LoadGame,
@@ -1490,6 +1508,7 @@ mod tests {
         Mode::Recipes,
         Mode::BaseOutput,
         Mode::Achievements,
+        Mode::Options,
         Mode::Help,
         Mode::HelpPage,
         Mode::Notification,
@@ -1512,8 +1531,15 @@ mod tests {
 
     fn census_app() -> feral_processes_app_core::App {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let tmp = std::env::temp_dir().join(format!("fp_gui_census_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&tmp);
+        // Keyed by a counter as well as the pid: six tests call this, the
+        // harness runs them on parallel threads, and a directory shared
+        // across them raced — one thread's `remove_dir_all` landing between
+        // another's failed `mkdir` and the `is_dir` check that would have
+        // forgiven it, which surfaces as `AlreadyExists` from
+        // `create_dir_all` and reads as anything but a fixture fault.
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let nth = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let tmp = std::env::temp_dir().join(format!("fp_gui_census_{}_{nth}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
         let mut app = feral_processes_app_core::App::new(
             root.join("assets"),
@@ -2109,5 +2135,46 @@ mod tests {
                 "{mode:?} already surfaces status_line itself"
             );
         }
+    }
+
+    /// The row draws its setting's current value. The menu row that opens
+    /// this screen is asserted in `meta.rs`'s own tests, beside the private
+    /// `main_menu_options` those two already walk.
+    #[test]
+    fn the_options_screen_draws_its_toggle() {
+        let mut app = census_app();
+        app.mode = Mode::Options;
+        let m = ui_metrics(900.0);
+        let (_, shapes) = crate::paint::with_painter(|p| draw_options(&app, None, p, &m));
+        let drawn = crate::paint::painted_text(&shapes);
+        assert!(
+            drawn
+                .iter()
+                .any(|t| t.contains("Tactical surface battles") && t.contains("Off")),
+            "the toggle row did not draw its value: {drawn:#?}"
+        );
+    }
+
+    /// The width census. `wrapped_row_lines` wraps only tag segments, so a
+    /// prose line too long for the body draws off the popup's edge in
+    /// silence — the failure this screen's hand-wrapped description exists
+    /// to avoid.
+    #[test]
+    fn no_options_row_overflows_the_popup_body_at_1280x720() {
+        let mut app = census_app();
+        app.mode = Mode::Options;
+        let m = ui_metrics(720.0);
+        let body = super::popup::popup_body_width(1280.0, PopupSize::Large, &m);
+        let (_, shapes) = crate::paint::with_painter(|p| draw_options(&app, None, p, &m));
+        let drawn = crate::paint::painted_text(&shapes);
+        crate::paint::with_painter(|p| {
+            for line in &drawn {
+                let width = p.measure_ui_advance(format!("  {line}"), m.font_size);
+                assert!(
+                    width <= body,
+                    "an options row draws {width}px into a {body}px body: {line:?}"
+                );
+            }
+        });
     }
 }

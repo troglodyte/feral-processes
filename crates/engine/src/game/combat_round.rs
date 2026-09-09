@@ -383,7 +383,7 @@ impl Game {
             if swing > 0 && (self.is_stunned(entity) || !self.creature_alive(entity)) {
                 break;
             }
-            match self.party_member_swing(slot, entity, group, player) {
+            match self.party_member_swing(entity, group, player) {
                 SwingControl::BattleOver => return true,
                 SwingControl::NoTarget => break,
                 SwingControl::Swung => {}
@@ -400,33 +400,58 @@ impl Game {
     /// One swing of one party member's turn. Re-resolves its own target
     /// every call, because a swing that empties a group re-letters the ones
     /// behind it and the next swing has to be aiming at what is there now.
-    fn party_member_swing(
-        &mut self,
-        slot: usize,
-        entity: Entity,
-        group: usize,
-        player: Entity,
-    ) -> SwingControl {
+    fn party_member_swing(&mut self, entity: Entity, group: usize, player: Entity) -> SwingControl {
         let Some(live) = self.retarget(group) else {
             return SwingControl::NoTarget;
         };
         let Some(front) = self.front_of_group(live) else {
             return SwingControl::NoTarget;
         };
-        let (move_name, natural) = if slot == 0 {
-            ("data strike".to_string(), PLAYER_UNARMED_DAMAGE)
-        } else {
-            match self.roll_species_move(entity) {
-                Some(mv) => (mv.name.clone(), mv.attack_parts().0),
-                None => ("a raw signal burst".to_string(), PLAYER_UNARMED_DAMAGE),
-            }
-        };
+        let (move_name, natural) = self.swing_move(entity);
         let range = self.attack_range(entity, natural);
         let outcome = self.resolve_and_apply_attack(entity, front, battle::Swing::plain(range));
-        // A miss and a fumble are `PartyDamage` too — this is still the
-        // party's turn being narrated, and the kind is what paces the reveal.
-        let line = if slot == 0 {
-            match outcome {
+        let line = self.party_swing_line(entity, &move_name, outcome);
+        self.log_swing(MessageKind::PartyDamage, outcome, line);
+
+        if !self.creature_alive(front) && self.finish_group_member(live, player) {
+            return SwingControl::BattleOver;
+        }
+        SwingControl::Swung
+    }
+
+    /// The move one of the party's own bodies swings with, and its natural
+    /// damage: the player's bare-handed `data strike`, or a roll across the
+    /// species' authored moves for a companion, falling back to a raw signal
+    /// burst for a species that authors none.
+    ///
+    /// **Read off the entity, never off a battle slot.** Slot 0 was the
+    /// player only because `Party` is indexed that way in the abstract
+    /// model; a body on a tactical battle map has no slot at all.
+    pub(crate) fn swing_move(&mut self, entity: Entity) -> (String, battle::DamageRange) {
+        if entity == self.player_entity() {
+            return ("data strike".to_string(), PLAYER_UNARMED_DAMAGE);
+        }
+        match self.roll_species_move(entity) {
+            Some(mv) => (mv.name.clone(), mv.attack_parts().0),
+            None => ("a raw signal burst".to_string(), PLAYER_UNARMED_DAMAGE),
+        }
+    }
+
+    /// How a swing by one of the party's own bodies reads.
+    ///
+    /// One wording for both combat models, because the alternative is a
+    /// second copy of eight lines that drift apart a phrase at a time. A
+    /// miss and a fumble come back through here too: they are still the
+    /// party's turn being narrated, and `MessageKind::PartyDamage` is what
+    /// paces the reveal.
+    pub(crate) fn party_swing_line(
+        &self,
+        entity: Entity,
+        move_name: &str,
+        outcome: battle::AttackOutcome,
+    ) -> String {
+        if entity == self.player_entity() {
+            return match outcome {
                 battle::AttackOutcome::Crit { dmg } => {
                     format!("You tear a {move_name} clean through for {dmg} damage!")
                 }
@@ -434,31 +459,22 @@ impl Game {
                     format!("You unleash a {move_name} for {dmg} damage.")
                 }
                 battle::AttackOutcome::Miss => format!("Your {move_name} glances off."),
-                battle::AttackOutcome::Fumble(rung) => {
-                    self.fumble_line_for_player(&move_name, rung)
-                }
-            }
-        } else {
-            let name = self.creature_label(entity);
-            match outcome {
-                battle::AttackOutcome::Crit { dmg } => {
-                    format!("{name} tears a {move_name} clean through for {dmg} damage!")
-                }
-                battle::AttackOutcome::Hit { dmg } => {
-                    format!("{name} executes {move_name} for {dmg} damage.")
-                }
-                battle::AttackOutcome::Miss => format!("{name}'s {move_name} glances off."),
-                battle::AttackOutcome::Fumble(rung) => {
-                    self.fumble_line_for_other(&name, &move_name, rung)
-                }
-            }
-        };
-        self.log_swing(MessageKind::PartyDamage, outcome, line);
-
-        if !self.creature_alive(front) && self.finish_group_member(live, player) {
-            return SwingControl::BattleOver;
+                battle::AttackOutcome::Fumble(rung) => self.fumble_line_for_player(move_name, rung),
+            };
         }
-        SwingControl::Swung
+        let name = self.creature_label(entity);
+        match outcome {
+            battle::AttackOutcome::Crit { dmg } => {
+                format!("{name} tears a {move_name} clean through for {dmg} damage!")
+            }
+            battle::AttackOutcome::Hit { dmg } => {
+                format!("{name} executes {move_name} for {dmg} damage.")
+            }
+            battle::AttackOutcome::Miss => format!("{name}'s {move_name} glances off."),
+            battle::AttackOutcome::Fumble(rung) => {
+                self.fumble_line_for_other(&name, move_name, rung)
+            }
+        }
     }
 
     /// Rolls the wielded program's chance to fire one of its own routines on
@@ -591,65 +607,159 @@ impl Game {
             .enumerate()
             .filter_map(|(idx, group)| {
                 let front = group.front()?;
-                let stats = self.world.get::<Stats>(front)?;
-                let species = self
-                    .world
-                    .get::<Creature>(front)
-                    .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species));
-                let species_name = species
-                    .map(|s| self.zone_tagged_name(front, s.name.clone()))
-                    .unwrap_or_default();
-                let resistance = self.target_resistance(front)?;
-                let is_boss = species.is_some_and(|s| s.is_boss);
-                Some(EnemyGroupView {
-                    letter: (b'A' + idx as u8) as char,
-                    species_name,
-                    count: group.members.len(),
-                    front_hp: stats.hp,
-                    front_max_hp: stats.max_hp,
-                    front_rarity: self.rarity_of(front),
-                    atk: stats.atk,
-                    mitigation: stats.mitigation,
-                    is_boss,
-                    engaged: idx < ENGAGED_GROUPS,
-                    status_effect: self.status_label(front),
-                    // No odds against a boss, because there is no attempt to
-                    // make — `battle_set_action` refuses the target outright.
-                    decompile_chance: catalyst_potency
-                        .filter(|_| !is_boss)
-                        .map(|potency| taming::capture_chance(potency, resistance, bonuses)),
-                })
+                self.enemy_row(
+                    front,
+                    idx,
+                    group.members.len(),
+                    idx < ENGAGED_GROUPS,
+                    catalyst_potency,
+                    bonuses,
+                )
             })
             .collect();
 
         let party: Vec<PartySlotView> = (0..battle.planned.len())
             .filter_map(|slot| {
                 let entity = self.actor_entity(battle::Actor::Party(slot))?;
-                let stats = self.world.get::<Stats>(entity)?;
-                Some(PartySlotView {
-                    slot,
-                    entity,
-                    name: if slot == 0 {
-                        "You".to_string()
-                    } else {
-                        self.creature_label(entity)
-                    },
-                    hp: stats.hp,
-                    max_hp: stats.max_hp,
-                    atk: self.effective_atk(entity),
-                    mitigation: self.effective_mitigation(entity),
-                    status_effect: self.status_label(entity),
-                    power: self.world.get::<PowerReserve>(entity).map(|n| n.get()),
-                    planned: battle.planned[slot]
-                        .as_ref()
-                        .map(|action| self.action_label(entity, action)),
-                    front: slot < FRONT_SLOTS,
-                    gear: self.gear_tag(entity),
-                })
+                let planned = self
+                    .world
+                    .resource::<BattleState>()
+                    .planned
+                    .get(slot)
+                    .and_then(|action| action.as_ref())
+                    .cloned();
+                let planned = planned.map(|action| self.action_label(entity, &action));
+                self.party_row(slot, entity, planned)
             })
             .collect();
 
         Some((groups, party))
+    }
+
+    /// One enemy row, whichever model is holding the fight.
+    ///
+    /// The group model hands it a group's front and that group's size; a
+    /// battle map hands it a body and a count of one, because groups
+    /// dissolve on a grid. Shared rather than copied: this is where the
+    /// con colour, the rarity, the boss flag and the capture odds are
+    /// decided, and a second copy of it is a results page that disagrees
+    /// with the fight it is reporting.
+    fn enemy_row(
+        &self,
+        front: Entity,
+        idx: usize,
+        count: usize,
+        engaged: bool,
+        catalyst_potency: Option<f32>,
+        bonuses: crate::taming::DecompilerBonuses,
+    ) -> Option<EnemyGroupView> {
+        let stats = self.world.get::<Stats>(front)?;
+        let species = self
+            .world
+            .get::<Creature>(front)
+            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species));
+        let species_name = species
+            .map(|s| self.zone_tagged_name(front, s.name.clone()))
+            .unwrap_or_default();
+        let resistance = self.target_resistance(front)?;
+        let is_boss = species.is_some_and(|s| s.is_boss);
+        Some(EnemyGroupView {
+            letter: (b'A' + idx as u8) as char,
+            species_name,
+            count,
+            front_hp: stats.hp,
+            front_max_hp: stats.max_hp,
+            front_rarity: self.rarity_of(front),
+            atk: stats.atk,
+            mitigation: stats.mitigation,
+            is_boss,
+            engaged,
+            status_effect: self.status_label(front),
+            // No odds against a boss, because there is no attempt to
+            // make — `battle_set_action` refuses the target outright.
+            decompile_chance: catalyst_potency
+                .filter(|_| !is_boss)
+                .map(|potency| taming::capture_chance(potency, resistance, bonuses)),
+        })
+    }
+
+    /// One party row, whichever model is holding the fight.
+    ///
+    /// `planned` is the group model's alone — a battle map plans nothing,
+    /// it acts — and it is the only field of the fourteen that differs
+    /// between them, which is why this is one function and not two.
+    fn party_row(
+        &self,
+        slot: usize,
+        entity: Entity,
+        planned: Option<String>,
+    ) -> Option<PartySlotView> {
+        let stats = self.world.get::<Stats>(entity)?;
+        Some(PartySlotView {
+            slot,
+            entity,
+            name: if slot == 0 {
+                "You".to_string()
+            } else {
+                self.creature_label(entity)
+            },
+            hp: stats.hp,
+            max_hp: stats.max_hp,
+            atk: self.effective_atk(entity),
+            mitigation: self.effective_mitigation(entity),
+            status_effect: self.status_label(entity),
+            power: self.world.get::<PowerReserve>(entity).map(|n| n.get()),
+            planned,
+            front: slot < FRONT_SLOTS,
+            gear: self.gear_tag(entity),
+        })
+    }
+
+    /// The same pair, off a battle map.
+    ///
+    /// `battle_rows`' counterpart, and the second producer the results page
+    /// has: `BattleTimeline::closing` is what `Mode::BattleResult` draws,
+    /// and filled from `battle_rows` alone a tactical fight ended on an
+    /// empty screen with its win, its salvage and its XP written nowhere
+    /// the player looks.
+    ///
+    /// One row per hostile body still standing, all of them `engaged`:
+    /// groups dissolve on a grid, and so does the reach rule that made
+    /// `ENGAGED_GROUPS` mean anything.
+    pub(crate) fn tactical_rows(&self) -> Option<(Vec<EnemyGroupView>, Vec<PartySlotView>)> {
+        let battle = self
+            .world
+            .get_resource::<crate::tactical::TacticalBattle>()?;
+        let bonuses = self.player_decompiler_bonuses();
+        let catalyst_potency = self.taming_catalyst().map(|(_, potency)| potency);
+
+        let standing: Vec<Entity> = battle
+            .bodies()
+            .map(|(entity, _)| entity)
+            .filter(|&e| self.world.get::<crate::components::Hostile>(e).is_some())
+            .collect();
+        let groups: Vec<EnemyGroupView> = standing
+            .into_iter()
+            .enumerate()
+            .filter_map(|(idx, body)| self.enemy_row(body, idx, 1, true, catalyst_potency, bonuses))
+            .collect();
+
+        // Off `Party` and not off the board: a companion that fell is still
+        // the party's, and the row reporting that it fell is the one the
+        // results page most needs.
+        let party: Vec<PartySlotView> = std::iter::once(self.player_entity())
+            .chain(self.world.resource::<Party>().0.iter().copied())
+            .enumerate()
+            .filter_map(|(slot, entity)| self.party_row(slot, entity, None))
+            .collect();
+
+        Some((groups, party))
+    }
+
+    /// The roster a finished fight leaves behind, from whichever model held
+    /// it. Neither is present for a fight that never opened.
+    pub(crate) fn closing_rows(&self) -> Option<(Vec<EnemyGroupView>, Vec<PartySlotView>)> {
+        self.battle_rows().or_else(|| self.tactical_rows())
     }
 
     /// The battle screen's whole readout, as things stand right now. This is
@@ -781,22 +891,17 @@ impl Game {
         battle.groups.is_empty()
     }
 
-    /// Handles `group`'s member at `index` dying (from a direct hit, an area
-    /// effect, or a status tick): logs the kill, awards its loot/XP,
-    /// despawns it, and drops it from the group. If that emptied the last
-    /// standing group, the whole encounter ends in a win (`BattleState`
-    /// removed) and this returns `true`; otherwise the fight continues,
-    /// returning `false`.
-    pub(crate) fn finish_member(&mut self, group: usize, index: usize, player: Entity) -> bool {
-        let Some(victim) = self
-            .world
-            .get_resource::<BattleState>()
-            .and_then(|b| b.groups.get(group))
-            .and_then(|g| g.members.get(index))
-            .copied()
-        else {
-            return self.living_group_count() == 0;
-        };
+    /// What a hostile's death costs and pays, wherever it was standing: the
+    /// kill line, the player's XP, the loot, the nest's respawn timer, the
+    /// town's opinion of a patrol member killed, and the despawn.
+    ///
+    /// **One function, because which model the fight was fought in decides
+    /// only what happens to the roster afterwards.** `finish_member` is the
+    /// abstract half — locating the victim by group and slot, and dropping
+    /// it out of its group — and it is the whole of what is group-shaped
+    /// here. A copy of this on the tactical side would be a second place a
+    /// patrol kill could stop charging a town.
+    pub(crate) fn finish_hostile(&mut self, victim: Entity, player: Entity) {
         self.log_kind(
             MessageKind::Outcome,
             "The rogue program crashes and deletes itself!",
@@ -820,6 +925,25 @@ impl Game {
         if let Some(town) = patrol {
             self.charge_for_a_patrol_kill(town);
         }
+    }
+
+    /// Handles `group`'s member at `index` dying (from a direct hit, an area
+    /// effect, or a status tick): logs the kill, awards its loot/XP,
+    /// despawns it, and drops it from the group. If that emptied the last
+    /// standing group, the whole encounter ends in a win (`BattleState`
+    /// removed) and this returns `true`; otherwise the fight continues,
+    /// returning `false`.
+    pub(crate) fn finish_member(&mut self, group: usize, index: usize, player: Entity) -> bool {
+        let Some(victim) = self
+            .world
+            .get_resource::<BattleState>()
+            .and_then(|b| b.groups.get(group))
+            .and_then(|g| g.members.get(index))
+            .copied()
+        else {
+            return self.living_group_count() == 0;
+        };
+        self.finish_hostile(victim, player);
         if self.remove_member(group, index) {
             self.end_battle(player, Some(victim));
             true
@@ -887,6 +1011,13 @@ impl Game {
 
     /// Which entities `target` lands on, read from `actor`'s side of the
     /// fight.
+    ///
+    /// **The group model's converter, and one of three.**
+    /// `Game::field_recipients` answers the same question for a routine run
+    /// on the map and `tactical::reach::recipients` for one run on a battle
+    /// map, off a shape and an aimed cell. What the three share is what they
+    /// hand over — `use_ability` below, which consumes a list of bodies and
+    /// nothing else.
     ///
     /// Resolved at resolve time rather than plan time — so a group that died
     /// before the acting member's turn retargets, and an ally knocked out in
@@ -1000,6 +1131,13 @@ impl Game {
     /// for damage or a debuff. See `Game::ability_recipients`, which
     /// resolves which entities those are. `actor` is who is spending the
     /// ability, which a damage effect needs for its ATK.
+    ///
+    /// **The door the two combat models share.** It consumes a list of
+    /// bodies and nothing else — no group index, no slot, no cell — which is
+    /// what lets a tactical fight resolve a routine through the same damage,
+    /// bands, mitigation, affinity and status rules a fight in front of a
+    /// group does, and is the single reason the second model is a module
+    /// rather than a rewrite.
     pub(crate) fn use_ability(
         &mut self,
         ability: &AbilityDef,

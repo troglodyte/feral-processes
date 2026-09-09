@@ -3,6 +3,7 @@
 
 use crate::items::DownedProgram;
 use crate::progression::StatRow;
+use crate::tactical::TacticalBattle;
 use crate::tuning::{DECOMPILE_ATTEMPT_BONUS_CAP, GEAR_AFFIX_CHANCE};
 use crate::tuning::{
     DECOMPILER_SKILL_PER_LEVEL, NEST_RESPAWN_TICKS, PARTY_XP_DIVISOR, PERK_POINTS_PER_LEVEL,
@@ -272,6 +273,87 @@ impl Game {
         )
     }
 
+    /// This fight's payout tally, whichever model is holding the fight — or
+    /// `None` when there is no fight at all.
+    ///
+    /// **The one door onto a fight's rewards.** Both combat models
+    /// accumulate into a `BattleRewards`, and every writer reaches it
+    /// through here rather than naming a model's resource: a kill pays the
+    /// same way whether it was struck across a group front or across a
+    /// battle map, and `settle_rewards` drains whichever one filled up.
+    /// The two are never both present, so the order of the arms is not a
+    /// precedence rule.
+    ///
+    /// The `is_some` probe rather than an `if let` returning out of its
+    /// body: a borrow returned from inside a conditional outlives the
+    /// conditional, which the borrow checker refuses.
+    pub(crate) fn fight_rewards_mut(&mut self) -> Option<&mut BattleRewards> {
+        if self.world.get_resource::<BattleState>().is_some() {
+            return Some(
+                &mut self
+                    .world
+                    .resource_mut::<BattleState>()
+                    .into_inner()
+                    .rewards,
+            );
+        }
+        if self.world.get_resource::<TacticalBattle>().is_some() {
+            return Some(
+                &mut self
+                    .world
+                    .resource_mut::<TacticalBattle>()
+                    .into_inner()
+                    .rewards,
+            );
+        }
+        None
+    }
+
+    /// How many decompiles this fight has already thrown at each program,
+    /// whichever model is holding it.
+    ///
+    /// `fight_rewards_mut`'s counterpart and its rule: the counter is a field
+    /// on *each* model's resource rather than a resource of its own, because
+    /// a new `Resource` shifts bevy's query iteration order under unrelated
+    /// tests. Fight-scoped either way — a program's defences fray for the
+    /// length of one fight and no longer.
+    pub(crate) fn decompile_attempts_mut(&mut self) -> Option<&mut HashMap<Entity, u32>> {
+        if self.world.get_resource::<BattleState>().is_some() {
+            return Some(
+                &mut self
+                    .world
+                    .resource_mut::<BattleState>()
+                    .into_inner()
+                    .decompile_attempts,
+            );
+        }
+        if self.world.get_resource::<TacticalBattle>().is_some() {
+            return Some(
+                &mut self
+                    .world
+                    .resource_mut::<TacticalBattle>()
+                    .into_inner()
+                    .decompile_attempts,
+            );
+        }
+        None
+    }
+
+    /// How many decompiles this fight has already thrown at `entity`, from
+    /// whichever model is holding it. Zero outside a fight, and zero for a
+    /// program nobody has tried yet.
+    pub(crate) fn decompile_attempts(&self, entity: Entity) -> u32 {
+        let tactical = self
+            .world
+            .get_resource::<TacticalBattle>()
+            .and_then(|b| b.decompile_attempts.get(&entity).copied());
+        self.world
+            .get_resource::<BattleState>()
+            .and_then(|b| b.decompile_attempts.get(&entity).copied())
+            .or(tactical)
+            .unwrap_or(0)
+    }
+
     /// Adds `qty` copies of `copy` to this fight's salvage tally — or, with
     /// no fight to hold one, announces it where it happened.
     ///
@@ -285,11 +367,11 @@ impl Game {
         if qty == 0 {
             return;
         }
-        let Some(mut battle) = self.world.get_resource_mut::<BattleState>() else {
+        let Some(rewards) = self.fight_rewards_mut() else {
             self.announce_drops(&[(copy, qty)]);
             return;
         };
-        let drops = &mut battle.rewards.drops;
+        let drops = &mut rewards.drops;
         match drops.iter_mut().find(|(held, _)| *held == copy) {
             Some(row) => row.1 += qty,
             None => drops.push((copy, qty)),
@@ -299,10 +381,10 @@ impl Game {
     /// Folds `tally` into `companion`'s row of this fight's rewards,
     /// reporting whether there was a fight to fold it into.
     pub(crate) fn record_companion_xp(&mut self, companion: Entity, tally: &XpTally) -> bool {
-        let Some(mut battle) = self.world.get_resource_mut::<BattleState>() else {
+        let Some(rewards) = self.fight_rewards_mut() else {
             return false;
         };
-        let rows = &mut battle.rewards.companions;
+        let rows = &mut rewards.companions;
         match rows.iter_mut().find(|(entity, _)| *entity == companion) {
             Some((_, held)) => held.absorb(tally),
             None => rows.push((companion, tally.clone())),
@@ -437,13 +519,11 @@ impl Game {
     /// One flush point covers a win and a jack-out alike, because
     /// `end_battle` is the only place `BattleState` is dropped: you keep what
     /// you killed before you ran.
-    pub(crate) fn settle_rewards(&mut self) {
-        let mut rewards = {
-            let Some(mut battle) = self.world.get_resource_mut::<BattleState>() else {
-                return;
-            };
-            std::mem::take(&mut battle.rewards)
+    pub(crate) fn settle_rewards(&mut self, won: bool) {
+        let Some(rewards) = self.fight_rewards_mut() else {
+            return;
         };
+        let mut rewards = std::mem::take(rewards);
         // First of the results, so it reads directly under the blow that
         // ended the fight.
         //
@@ -461,7 +541,7 @@ impl Game {
         // counter-strike wording) immediately before calling `end_battle`,
         // and a flatline is announced by `death_handling_system` inside the
         // round that lands it. A win was the only silent ending.
-        if self.world.resource::<BattleState>().groups.is_empty() {
+        if won {
             self.log_kind(MessageKind::Outcome, "You won!");
         }
         // Above the payout, deliberately: it is the answer to what the
@@ -937,9 +1017,8 @@ impl Game {
         // `record_drop` for why that fallback is a formatter call rather than
         // a second wording.
         let stored = self
-            .world
-            .get_resource_mut::<BattleState>()
-            .map(|mut b| b.rewards.player.absorb(&tally))
+            .fight_rewards_mut()
+            .map(|rewards| rewards.player.absorb(&tally))
             .is_some();
         if !stored {
             // Unindented and with no `Experience:` header: outside a fight
@@ -1045,10 +1124,16 @@ impl Game {
         }
     }
 
-    /// One decompile attempt against `group`'s front program: spends a
-    /// catalyst, rolls `taming::capture_chance`, and on success converts the
-    /// target into a tamed program and drops it from the group. Returns
-    /// whether that ended the battle.
+    /// One decompile attempt against `group`'s front program, in the group
+    /// model: the capture itself, and then dropping the captured program out
+    /// of its group. Returns whether that ended the battle.
+    ///
+    /// **The capture is `decompile_body` and taking the body out of the
+    /// fight is this.** That split is where the two combat models part
+    /// company: a group index, a rank to promote and an `end_battle` are
+    /// this model's vocabulary and none of the three exists on a battle map,
+    /// while everything above them — the catalyst, the roll, the XP, the
+    /// conversion — is the same act either way.
     ///
     /// The roster-full refusal lives in `ability_unavailable` alone now: a
     /// greyed row can't be planned, and `battle_set_action` refuses one that
@@ -1062,14 +1147,46 @@ impl Game {
     /// first to resolve spends the only copy. Without this guard the second
     /// would hit an `expect` instead of a refusal.
     pub(crate) fn attempt_decompile(&mut self, group: usize, player: Entity) -> bool {
+        let Some(front) = self.front_of_group(group) else {
+            return false;
+        };
+        if !self.decompile_body(front, player) {
+            return false;
+        }
+        if self.remove_member(group, 0) {
+            self.end_battle(player, Some(front));
+            return true;
+        }
+        self.log("Another rogue program from the pack engages!");
+        false
+    }
+
+    /// One decompile attempt against `target`: spends a catalyst, rolls
+    /// `taming::capture_chance`, and on success converts the program into a
+    /// tamed one standing under the player's control. Reports whether the
+    /// capture landed.
+    ///
+    /// **What it does not do is take the captured body out of the fight** —
+    /// see `attempt_decompile` above, which is the group model's half of
+    /// that, and `Game::tactical_use_routine`, which is the battle map's.
+    ///
+    /// The roster-full refusal lives in `ability_unavailable` alone now: a
+    /// greyed row can't be planned, and `battle_set_action` refuses one that
+    /// somehow is, and nothing inside a resolving round grows `pet_count`
+    /// except a successful decompile itself, so that state can't reach here.
+    ///
+    /// The no-catalyst guard below stays, though: `ability_unavailable`
+    /// checks it per slot at *plan* time, but the catalyst is a round-wide
+    /// pool, not a per-slot one — two party members can each plan Decompile
+    /// while only one catalyst is held, both pass the per-slot check, and the
+    /// first to resolve spends the only copy. Without this guard the second
+    /// would hit an `expect` instead of a refusal.
+    pub(crate) fn decompile_body(&mut self, front: Entity, player: Entity) -> bool {
         let Some((catalyst, potency)) = self.taming_catalyst() else {
             self.log_kind(
                 MessageKind::Outcome,
                 "No taming catalyst left — the decompile attempt fizzles.",
             );
-            return false;
-        };
-        let Some(front) = self.front_of_group(group) else {
             return false;
         };
         self.world
@@ -1096,11 +1213,13 @@ impl Game {
         // Below the odds read, deliberately, so what the battle screen has
         // been showing stays honest about what the roll would have been.
         let roll = roll || self.tutorial_grants_capture();
-        let attempts = {
-            let mut battle = self.world.resource_mut::<BattleState>();
-            let counter = battle.decompile_attempts.entry(front).or_insert(0);
-            *counter += 1;
-            *counter
+        let attempts = match self.decompile_attempts_mut() {
+            Some(counters) => {
+                let counter = counters.entry(front).or_insert(0);
+                *counter += 1;
+                *counter
+            }
+            None => 1,
         };
 
         if !roll {
@@ -1116,16 +1235,14 @@ impl Game {
             // `settle_rewards` is what reaches the summary. See
             // `BattleRewards::decompile_verdict`.
             self.log_kind(MessageKind::Info, verdict.clone());
-            self.world
-                .resource_mut::<BattleState>()
-                .rewards
-                .decompile_verdict = Some(verdict);
+            if let Some(rewards) = self.fight_rewards_mut() {
+                rewards.decompile_verdict = Some(verdict);
+            }
             return false;
         }
-        self.world
-            .resource_mut::<BattleState>()
-            .rewards
-            .decompile_verdict = None;
+        if let Some(rewards) = self.fight_rewards_mut() {
+            rewards.decompile_verdict = None;
+        }
         self.note_deed(crate::contracts::Deed::Tamed);
 
         // Taken while the program is still hostile: `kill_xp` reads its
@@ -1172,12 +1289,7 @@ impl Game {
         // and kept because the record is what the collapse reads: a third
         // way out of a fight should not have to remember to write it.
         self.mark_lair_cleared(front);
-        if self.remove_member(group, 0) {
-            self.end_battle(player, Some(front));
-            return true;
-        }
-        self.log("Another rogue program from the pack engages!");
-        false
+        true
     }
 
     /// Whether the run's live onboarding mission is the one that teaches

@@ -77,6 +77,7 @@ mod sprite_palette;
 mod stack;
 mod stack_movement;
 mod stock;
+mod tactical;
 mod talents;
 mod taming;
 mod tantrums;

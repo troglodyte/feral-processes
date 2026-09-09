@@ -2,6 +2,7 @@
 //! the action menus the renderer draws from.
 
 use crate::abilities::{AbilityId, AffinityKind};
+use crate::tactical::TacticalBattle;
 use crate::tuning::{
     AFFINITY_MAX, AFFINITY_NEUTRAL, DEFAULT_BASE_SPEED, DEFEND_MITIGATION_BONUS, INITIATIVE_DIE,
     MAX_PACK_BODIES, PLAYER_BASE_SPEED,
@@ -252,8 +253,35 @@ impl Game {
     /// roll, and a third caller that does want capping calls `group_pack`
     /// itself.
     pub(crate) fn start_battle(&mut self, pack: Vec<Entity>) {
+        if self.fights_tactically(&pack) {
+            self.open_tactical_battle(pack);
+            return;
+        }
         let groups = self.group_pack(pack);
         self.begin_battle(groups);
+    }
+
+    /// Whether this pack is one the tactical model takes.
+    ///
+    /// **Inspecting the pack is what separates the two, and it has to be.**
+    /// The pursuit path is shared by nest guardians and town patrols
+    /// (`game/turn.rs`), so which model a chase opens cannot be a per-call-
+    /// site decision — a patrol is in scope and a guardian is not, and both
+    /// arrive here through the same call.
+    ///
+    /// Three gates, and the fourth is an omission: `arena::stage` calls
+    /// `begin_battle` directly and never passes through here, so the arena
+    /// stays abstract with no code written for it. Nests, lairs and raids
+    /// likewise open their fights by their own routes.
+    ///
+    /// `require_surface` is called rather than restated. Base space and the
+    /// Stack are both off it, and the Stack's own model is settled.
+    fn fights_tactically(&self, pack: &[Entity]) -> bool {
+        self.profile().tactical_battles
+            && self.require_surface().is_ok()
+            && !pack
+                .iter()
+                .any(|&e| self.world.get::<NestGuardian>(e).is_some())
     }
 
     /// What one side of a fight weighs, by summed `Stats::power()`.
@@ -266,10 +294,37 @@ impl Game {
     ///
     /// A body with no `Stats` weighs nothing rather than being skipped, which
     /// is the same answer and needs no filter.
-    fn summed_power(&self, who: impl Iterator<Item = Entity>) -> i64 {
+    pub(crate) fn summed_power(&self, who: impl Iterator<Item = Entity>) -> i64 {
         who.filter_map(|e| self.world.get::<Stats>(e))
             .map(|s| s.power() as i64)
             .sum()
+    }
+
+    /// How a fight announces itself: who took point, and how many came with
+    /// them.
+    ///
+    /// One wording for both combat models. `bodies` is the whole pack, so
+    /// the singular case is a pack of one rather than a separate concept.
+    pub(crate) fn intercept_line(&self, point: Option<Entity>, bodies: usize) -> String {
+        let name = point
+            .and_then(|e| self.world.get::<Creature>(e))
+            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+            .map(|s| s.name.clone())
+            .unwrap_or_else(|| "program".to_string());
+        self.intercept_line_named(&name, bodies.saturating_sub(1))
+    }
+
+    /// `intercept_line` with the point species' name already in hand, which
+    /// is the shape `begin_battle` has: it resolves the name off the group
+    /// rather than off a body.
+    fn intercept_line_named(&self, name: &str, others: usize) -> String {
+        if others > 0 {
+            format!(
+                "A pack of rogue programs intercepts your signal — a {name} takes point, {others} more behind it!"
+            )
+        } else {
+            format!("A rogue {name} intercepts your signal!")
+        }
     }
 
     /// Opens a battle around `groups` verbatim. Called by `start_battle`,
@@ -329,13 +384,8 @@ impl Game {
             party: g.telemetry_party(),
             enemies: g.telemetry_enemy_groups(),
         });
-        if others > 0 {
-            self.log(format!(
-                "A pack of rogue programs intercepts your signal — a {name} takes point, {others} more behind it!"
-            ));
-        } else {
-            self.log(format!("A rogue {name} intercepts your signal!"));
-        }
+        let line = self.intercept_line_named(&name, others);
+        self.log(line);
         // The first nemesis in the opening groups, group-then-slot order —
         // deterministic, and there is no notion of "the" nemesis when a
         // pack holds two, so picking one rather than logging every one of
@@ -408,15 +458,43 @@ impl Game {
             .unwrap_or(0)
     }
 
-    /// Every living enemy across every group, in group-then-slot order.
+    /// Every living hostile in the current fight, whichever model is holding
+    /// it — group-then-slot order in the abstract one, placement order on a
+    /// battle map.
+    ///
+    /// The two models are never both present, so the order of the arms is
+    /// not a precedence rule.
+    ///
+    /// **This is not the definition of a win** and must not become one. A
+    /// won fight is one whose roster was *emptied* — `remove_member` taking
+    /// the last group out in the abstract model, the last body leaving the
+    /// board in the tactical one — and a jack-out with every hostile at zero
+    /// HP but not yet reaped would read as a win off "nothing alive" alone.
+    /// `FightVerdict::won` is where each model states its own answer.
+    ///
+    /// A body on a battle map carries no side marker and needs none: the
+    /// party is the player plus `Party`, and everything else standing on the
+    /// board is hostile. That is also what makes a program decompiled
+    /// mid-fight stop counting the instant it joins the roster, with nothing
+    /// written to say so.
     pub(crate) fn all_living_enemies(&self) -> Vec<Entity> {
-        let Some(battle) = self.world.get_resource::<BattleState>() else {
+        if let Some(battle) = self.world.get_resource::<BattleState>() {
+            return battle
+                .groups
+                .iter()
+                .flat_map(|g| g.members.iter().copied())
+                .filter(|&e| self.creature_alive(e))
+                .collect();
+        }
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return Vec::new();
         };
+        let player = self.player_entity();
+        let party = &self.world.resource::<Party>().0;
         battle
-            .groups
-            .iter()
-            .flat_map(|g| g.members.iter().copied())
+            .bodies()
+            .map(|(entity, _)| entity)
+            .filter(|&e| e != player && !party.contains(&e))
             .filter(|&e| self.creature_alive(e))
             .collect()
     }
@@ -500,6 +578,22 @@ impl Game {
     /// in descending initiative order. Ties break on a stable key — party
     /// before enemies, then slot / group index — so a seeded run always
     /// produces the same order.
+    /// What `entity` rolled for initiative: what it fights at, plus a draw
+    /// off `INITIATIVE_DIE`.
+    ///
+    /// **One roll for both combat models.** The abstract one re-rolls the
+    /// whole line every round and the tactical one rolls once at the bell,
+    /// which is a difference in *when* rather than in what a body is worth —
+    /// two copies of the sum would eventually disagree about the second.
+    pub(crate) fn initiative_roll(&mut self, entity: Entity) -> i32 {
+        let base = self.combat_speed(entity);
+        let roll = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_range(0..=INITIATIVE_DIE)
+        };
+        base + roll
+    }
+
     pub(crate) fn roll_initiative(&mut self) -> Vec<battle::Actor> {
         let Some(battle_state) = self.world.get_resource::<BattleState>() else {
             return Vec::new();
@@ -533,12 +627,7 @@ impl Game {
             if !self.creature_alive(entity) {
                 continue;
             }
-            let base = self.combat_speed(entity);
-            let roll = {
-                let mut rng = self.world.resource_mut::<GameRng>();
-                rng.0.random_range(0..=INITIATIVE_DIE)
-            };
-            rolled.push((base + roll, actor));
+            rolled.push((self.initiative_roll(entity), actor));
         }
         rolled.sort_by_key(|&(initiative, _)| std::cmp::Reverse(initiative));
         rolled.into_iter().map(|(_, actor)| actor).collect()
@@ -1140,6 +1229,31 @@ impl Game {
         let Some(entity) = self.actor_entity(battle::Actor::Party(slot)) else {
             return Vec::new();
         };
+        self.special_options_for(entity)
+    }
+
+    /// The routines the body acting on a battle map may run, as menu rows.
+    ///
+    /// `battle_special_options` with the slot already resolved to a body —
+    /// a tactical fight has no slots, and the two models must offer the same
+    /// list or a routine the picker showed would be refused on use. `None`
+    /// when nothing is acting.
+    pub fn tactical_routine_options(&self) -> Vec<SpecialOption> {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return Vec::new();
+        };
+        let Some(actor) = battle.actor() else {
+            return Vec::new();
+        };
+        self.special_options_for(actor)
+    }
+
+    /// One body's runnable routines, whichever model asked.
+    ///
+    /// The filter is `tactical_use_routine`'s own two refusals restated
+    /// once: a field-only routine and a passive are never run in a fight,
+    /// and `index` is a position in `actor_abilities` for both doors.
+    fn special_options_for(&self, entity: Entity) -> Vec<SpecialOption> {
         self.actor_abilities(entity)
             .into_iter()
             .enumerate()

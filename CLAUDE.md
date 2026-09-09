@@ -778,7 +778,9 @@ relying on one, and correct all three places if it has moved.
 - **`walkable()` alone does not decide where a `Pursuing` guardian may
   step** — `pursuit_field` excludes `Biome::Platform` separately.
 - **There is one Dijkstra walk on the surface, and the step rule is a
-  parameter.** `walk_field`, with `pursuit_field` a one-line wrapper.
+  *cost function*, not a predicate** — `walk_field`, with `pursuit_field` a
+  one-line wrapper and every surface and base-space caller answering
+  `.then_some(1)`.
 - **A `NestGuardian`'s tether refuses a step only when it both leaves
   `NEST_TETHER_RADIUS` and fails to close on the nest.** The simpler check
   froze a displaced guardian for the rest of the run.
@@ -809,6 +811,68 @@ relying on one, and correct all three places if it has moved.
 - **XP at the cap is banked, not discarded, and banking and taxing share the
   one accumulator.** `add_xp` accumulates into `Experience::xp` and reports
   `LevelGain::overflow`, staying pure — it reports, the caller spends.
+
+### Tactical battles
+
+- **A battle map's coordinates live in `TacticalBattle`; `Position` is never
+  written** — the third space after the Stack's `Locale` and base space's
+  own, and `tactical/` not importing `Position` is the whole enforcement.
+- **A body is a wall in `reach::movement_field`, and the allowance is both
+  the budget and `walk_field`'s search box** — safe only because no step
+  costs less than one, which is what makes `TACTICAL_MOVE_MIN`/`MAX`
+  correctness bounds.
+- **A fight ends through `Game::finish_fight`, and a `FightVerdict` is what
+  each model answers it with** — `won` is the roster *emptied*, never
+  "nothing is alive".
+- **A fight's payout is reached through `Game::fight_rewards_mut`, and what
+  a hostile's death pays is `Game::finish_hostile`** — both model-blind, and
+  `finish_member` keeps only what is group-shaped.
+- **A tactical fight's initiative is rolled once and kept in step by
+  deletion, and the cursor names a body rather than a position.**
+- **A step off the board edge is a departure and not a refusal, and the
+  player's own is the jack-out.**
+- **A routine's `shape:` and `range:` are read in tactical fights alone, and
+  `AbilityDef::tactical_shape`/`tactical_range` is the one place an authored
+  figure and the one derived from `AbilityTarget` are reconciled.**
+- **`use_ability` is the door the two combat models share; each converts its
+  own aim, and full friendly fire is `reach::recipients` never reading
+  `Hostile`.**
+- **`Game::decompile_body` is the capture, and taking the captured body out
+  of the fight is each model's own half.**
+- **A routine's effect is shared; its refusals are not** —
+  `Game::run_tactical_routine`, taking a def rather than an index, and
+  `cooldown_floor` the whole of the difference between the two doors.
+- **A hostile decides what it will do before it decides where to stand, and
+  the closing term is a shortfall to the *band*, never a distance to the
+  target.**
+- **One draw an AI turn, spent on the cell, and none at temperature zero** —
+  the aim and the swing target are argmaxes, and the candidates are sorted
+  before they are scored.
+- **`Game::start_battle` is where the model is chosen, by inspecting the
+  pack** — the pursuit path cannot know whether it is a guardian or a
+  patrol, and the arena stays abstract by never passing through it.
+- **An AI turn hands the turn on once, because the action already did it.**
+- **A tactical fight is drawn in the map pane, and its turn strip takes the
+  compass block's slot** — a block inside the pane, never a border strip.
+- **The tactical modes are deliberately not `is_battle`**, which gates the
+  reveal and routes `Fx`; `App::advance_tactical` paces the wild side
+  against `dt` instead.
+- **A turn ends in one place, `Game::hand_on_turn`, and it hands on only if
+  the body that acted is still the one acting** — a body killed by its own
+  fumble or its own blast has already left the order, and `remove` handed
+  the turn on as it went.
+- **A round on a battle map spends the upkeep an abstract round spends, in
+  that order** — `tick_combatant_upkeep`, then the reap, then the tick,
+  because the upkeep can kill and `death_handling_system` rides the tick.
+- **The order wraps in two places**, `end_turn` and `TacticalBattle::
+  remove`, so `hand_on_turn` compares against the round its caller read
+  before it acted, and a fight that ends mid-round is `settle_tactical`'s
+  tick.
+- **The results page has two producers, `Game::closing_rows`, and one row
+  builder per half** — `planned` is the only field of fourteen the two
+  models disagree about.
+- **A capture is aimed at something hostile, refused at the player's door**,
+  where a swing at your own is friendly fire and stays legal.
 
 ### Items, gear and economy
 
@@ -1191,7 +1255,7 @@ relying on one, and correct all three places if it has moved.
 ## Build & test
 
 ```sh
-cargo test --workspace     # 5061 tests
+cargo test --workspace     # 5245 tests
 cargo run                  # the game; `default-run` in crates/launcher
 cargo clippy --workspace
 cargo fmt

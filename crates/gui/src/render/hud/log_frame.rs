@@ -84,6 +84,15 @@ pub(in crate::render) struct LogPane<'a> {
     pub refusal: Option<&'a str>,
     /// The pane's border, dimmed or lit by the frame effects layer.
     pub border: Color,
+    /// What the body acting on a battle map may do, replacing the map's own
+    /// keys for as long as a tactical fight is open.
+    ///
+    /// **A content swap and not a second strip.** The keybar already rides
+    /// this pane's bottom border and already degrades through `fitting`, so
+    /// a fight's action list costs no layout at all — where a bar of its own
+    /// would have to buy height from the map, and buying it only during a
+    /// fight re-lays the whole tile grid the moment one opens.
+    pub actions: Option<&'a [(String, String)]>,
 }
 
 /// Which channel a line belongs to, as the gutter says it.
@@ -274,7 +283,13 @@ fn divider() -> Vec<Piece> {
 /// 1280x720 it is already narrower than what the next-lowest-priority key
 /// (`e drain`) needs, and this bar has no room to spend on advertising a key
 /// nothing else on the census requires. `?` is still where it is discovered.
-fn keybar_segments() -> Vec<Vec<Piece>> {
+fn keybar_segments(actions: Option<&[(String, String)]>) -> Vec<Vec<Piece>> {
+    if let Some(actions) = actions {
+        return actions
+            .iter()
+            .map(|(key, label)| keycap(key, label))
+            .collect();
+    }
     vec![
         keycap("< >", "ascend/descend"),
         divider(),
@@ -431,7 +446,7 @@ pub(in crate::render) fn draw_log_pane(pane: Rect, log: &LogPane, painter: &Pain
     let avail = pane.w - m.inset * 2.0;
     let vitals = fitting(&vitals_segments(log.vitals), avail, painter, m);
     draw_pieces(pane, Mount::TopLeft, &vitals, painter, m);
-    let taken = fitting(&keybar_segments(), avail, painter, m);
+    let taken = fitting(&keybar_segments(log.actions), avail, painter, m);
     draw_pieces(pane, Mount::BottomLeft, &taken, painter, m);
 }
 
@@ -497,6 +512,7 @@ mod tests {
             vitals,
             refusal,
             border: palette::PANE_BORDER,
+            actions: None,
         }
     }
 
@@ -655,7 +671,7 @@ mod tests {
                 let char_w = p.measure_ui_advance("M", m.font_size);
                 let pane = layout::regions(w, h, char_w, &m, false).log_pane;
                 let avail = pane.w - m.inset * 2.0;
-                let taken = fitting(&keybar_segments(), avail, p, &m);
+                let taken = fitting(&keybar_segments(None), avail, p, &m);
                 let drawn: String = taken.iter().map(|(t, _, _)| t.as_str()).collect();
                 let slack = avail - p.measure_ui_advance(&drawn, m.small());
 

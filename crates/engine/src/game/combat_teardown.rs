@@ -5,8 +5,34 @@
 //! exists at all: `BattleState::planned` indexes `Party` positionally, so a
 //! member killed mid-fight cannot leave the roster until the fight does.
 
+use crate::resources::LairFight;
+use crate::tactical::TacticalBattle;
 use crate::tuning::{FLEE_COUNTERATTACK_CHANCE, JACK_OUT_LUCK_MAX, JACK_OUT_LUCK_MIN, MAX_NEMESES};
 use crate::*;
+
+/// How a fight ended, in the terms `Game::finish_fight` needs and no others.
+///
+/// **What each combat model has to answer, rather than what either one
+/// stores.** The teardown used to read `BattleState` in six places — four of
+/// them asking the same question in slightly different words — which is the
+/// abstract model's vocabulary and could not be handed a fight fought on a
+/// battle map. A model states its ending once, here.
+///
+/// There is no `rewards` field: `Game::settle_rewards` drains the tally
+/// through `Game::fight_rewards_mut`, which already answers for either
+/// model, and it runs while the resource is still standing.
+pub(crate) struct FightVerdict {
+    /// Whether the party emptied the hostile roster. Not "is anything alive"
+    /// — see `Game::all_living_enemies`.
+    pub(crate) won: bool,
+    /// How many rounds it took, for the results header and the telemetry.
+    pub(crate) rounds: u32,
+    /// Whether the hostiles outweighed the party at the bell, which
+    /// `Game::form_victory_memories` reads for the `hard_won` tag.
+    pub(crate) outmatched: bool,
+    /// The Stack lair this fight was roused from, if it was one.
+    pub(crate) lair: Option<LairFight>,
+}
 
 impl Game {
     /// Attempts to jack out, returning whether the party actually got clear.
@@ -216,20 +242,53 @@ impl Game {
     /// stepped up behind it. A freshly tamed program joining the party still
     /// Bleeding is the bug this guards.
     pub(crate) fn end_battle(&mut self, player: Entity, wild: Option<Entity>) {
+        let verdict = {
+            let battle = self.world.resource::<BattleState>();
+            FightVerdict {
+                // **Emptied, not "nothing alive".** A jack-out taken with
+                // every hostile at zero HP and not yet reaped has hostiles
+                // that are dead and a fight that was not won, and only the
+                // roster can tell the two apart.
+                won: battle.groups.is_empty(),
+                rounds: battle.round,
+                outmatched: battle.outmatched,
+                lair: battle.lair,
+            }
+        };
+        self.finish_fight(player, wild, verdict);
+    }
+
+    /// Tears a finished fight down, whichever model was holding it.
+    ///
+    /// **The one ending.** Both combat models come through here, and a
+    /// `FightVerdict` is the whole of what they answer it with — everything
+    /// below this line is the same sequence in the same order, because the
+    /// order is the thing that would drift. `end_battle` is the abstract
+    /// model's verdict-builder and nothing more.
+    ///
+    /// The two fight resources are removed together rather than by a branch:
+    /// they are never both present, so "drop whichever held this fight" is
+    /// one statement per model and no decision at all.
+    pub(crate) fn finish_fight(
+        &mut self,
+        player: Entity,
+        wild: Option<Entity>,
+        verdict: FightVerdict,
+    ) {
         // Before the closing capture and everything after it: the tally has
         // to be written while the dead are still nameable and while the
         // prune at the bottom is still ahead of it. `settle_rewards` carries
         // the full argument.
-        self.settle_rewards();
+        self.settle_rewards(verdict.won);
         // First of the teardown proper, deliberately: `dissolve_tamed_program` below drops the dead
         // out of `Party` and despawns them, and a companion that died
         // winning the fight is the one thing the results page most needs to
         // report. A copy, not a live read — the entities are gone by the
         // time anything draws it.
-        let closing = self.battle_rows().map(|(groups, party)| ClosingRoster {
+        let closing = self.closing_rows().map(|(groups, party)| ClosingRoster {
             groups,
             party,
-            round: self.world.resource::<BattleState>().round,
+            round: verdict.rounds,
             player_decompiler: self.player_decompiler_bonuses().skill,
         });
         self.world.resource_mut::<BattleTimeline>().closing = closing;
@@ -244,25 +303,22 @@ impl Game {
         // `finish_member` only reaches here once `remove_member` has emptied
         // the last group, which is what makes an empty roster the win.
         let fight = self.fight_id();
-        self.record(|g| {
-            let battle = g.world.resource::<BattleState>();
-            crate::telemetry::Record::FightEnd {
-                fight,
-                rounds: battle.round,
-                won: battle.groups.is_empty(),
-                player_hp_frac: g
-                    .world
-                    .get::<Stats>(player)
-                    .map(|s| s.hp_fraction())
-                    .unwrap_or(0.0),
-                companions_downed: g
-                    .world
-                    .resource::<Party>()
-                    .0
-                    .iter()
-                    .filter(|&&e| !g.creature_alive(e))
-                    .count() as u32,
-            }
+        self.record(|g| crate::telemetry::Record::FightEnd {
+            fight,
+            rounds: verdict.rounds,
+            won: verdict.won,
+            player_hp_frac: g
+                .world
+                .get::<Stats>(player)
+                .map(|s| s.hp_fraction())
+                .unwrap_or(0.0),
+            companions_downed: g
+                .world
+                .resource::<Party>()
+                .0
+                .iter()
+                .filter(|&&e| !g.creature_alive(e))
+                .count() as u32,
         });
         self.clear_battle_status_effects(player, wild);
         let dead: Vec<Entity> = self
@@ -301,12 +357,12 @@ impl Game {
         // Below the stray sweep and above `BattleState`'s removal a few
         // lines down — see `mark_nemeses`'s own doc for why that window is
         // narrow rather than a preference.
-        self.mark_nemeses();
+        self.mark_nemeses(verdict.won);
         // Beside `mark_nemeses` and inside the same window, because the two
         // are the same event read from opposite ends: what a fight the party
         // lost leaves standing, and what a fight it won leaves in the
         // survivors. Both need `BattleState`, which goes a few lines down.
-        self.form_victory_memories();
+        self.form_victory_memories(verdict.won, verdict.outmatched);
         // Deliberately *not* pruned here — see `prune_battle_narration`.
         // The decisive round has not been revealed yet at this point, so
         // deleting it now is deleting it before anyone can read it.
@@ -315,10 +371,8 @@ impl Game {
         // go with `BattleState`, and `App::battle_view` answers from
         // `BattleTimeline::closing` for the whole of `Mode::BattleResult`.
         self.world.resource_mut::<BattleTimeline>().frames.clear();
-        let lair = self
-            .world
-            .remove_resource::<BattleState>()
-            .and_then(|battle| battle.lair);
+        self.world.remove_resource::<BattleState>();
+        self.world.remove_resource::<TacticalBattle>();
         // Last of the teardown, and below the prune deliberately: the
         // collapse rewrites the locale and the sector's links, which is the
         // fight's consequence rather than part of it, and its lines are
@@ -328,7 +382,7 @@ impl Game {
         // The guardian going down is what this asks about, not the fight
         // being won: a party that put the lair's own program down and then
         // ran from its escort has still finished the stack.
-        if let Some(lair) = lair
+        if let Some(lair) = verdict.lair
             && self.lair_cleared(lair.pos)
         {
             self.collapse_stack(lair.pos.entrance);
@@ -351,25 +405,20 @@ impl Game {
     /// already-marked hostile always escalates even with the cap full; only
     /// a *fresh* mark is refused, which is what keeps this asymmetric rather
     /// than needing a demotion path.
-    pub(crate) fn mark_nemeses(&mut self) {
+    pub(crate) fn mark_nemeses(&mut self, won: bool) {
         // Belt and braces with `all_living_enemies()` returning empty on a
-        // win: `remove_member` already empties `groups` there, so this guard
-        // is provably redundant against the loop below as the code stands
-        // today, and no test can tell the two apart — deleting it leaves
-        // every test in `tests/nemesis.rs` green. It stays anyway, because
-        // it is the spec's rule in its own words ("if the groups are
-        // non-empty when the battle tears down, every living hostile is
-        // marked"), stated rather than inferred from another function's
-        // incidental behaviour. Without it, a future change to
-        // `remove_member` that left an emptied-but-present group behind
-        // would start marking hostiles on wins with nothing here to catch
-        // it. Don't "clean this up" for being uncovered — it is uncovered on
-        // purpose.
-        let fled = self
-            .world
-            .get_resource::<BattleState>()
-            .is_some_and(|b| !b.groups.is_empty());
-        if !fled {
+        // win: an emptied roster leaves nothing for the loop below to mark
+        // as the code stands today, so this guard is provably redundant and
+        // no test can tell the two apart — deleting it leaves every test in
+        // `tests/nemesis.rs` green. It stays anyway, because it is the
+        // spec's rule in its own words ("if hostiles are still standing when
+        // the battle tears down, every living one is marked"), stated rather
+        // than inferred from another function's incidental behaviour.
+        // Without it, a model that left a dead-but-unreaped body in its
+        // roster would start marking hostiles on wins with nothing here to
+        // catch it. Don't "clean this up" for being uncovered — it is
+        // uncovered on purpose.
+        if won {
             return;
         }
         let mut holders = self

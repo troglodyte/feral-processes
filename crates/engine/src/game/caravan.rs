@@ -853,7 +853,9 @@ impl Game {
         let radius = crate::tuning::CARAVAN_SPAWN_DISTANCE_TILES + CARAVAN_PATH_MARGIN;
         let field = {
             let mut map = self.world.resource_mut::<crate::world::WorldMap>();
-            crate::game::pursuit::walk_field(target, radius, |(x, y)| map.tile(x, y).walkable)
+            crate::game::pursuit::walk_field(target, radius, |(x, y)| {
+                map.tile(x, y).walkable.then_some(1)
+            })
         };
         let Some(&here) = field.get(&(pos.x, pos.y)) else {
             return Err(());

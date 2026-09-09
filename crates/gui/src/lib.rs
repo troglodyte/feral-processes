@@ -483,6 +483,7 @@ fn frame(
     let fe = &mut *frontend;
     fe.app.update_realtime();
     fe.app.advance_reveal(input.time.delta_secs());
+    fe.app.advance_tactical(input.time.delta_secs());
     fe.app.advance_status(input.time.delta_secs());
     fe.app.advance_compile(input.time.delta_secs());
 

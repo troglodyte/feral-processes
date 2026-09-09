@@ -1167,6 +1167,42 @@ fn jacking_out_still_reports_what_was_killed() {
     );
 }
 
+/// The second arm of `Game::fight_rewards_mut`. A tactical fight holds its
+/// salvage back exactly as a group fight does — the tally is what
+/// `settle_rewards` drains, and the whole point of one door is that a kill
+/// cannot pay differently depending on which model it happened in.
+#[test]
+fn a_drop_inside_a_tactical_fight_is_held_for_the_tally() {
+    use crate::tactical::TacticalBattle;
+    use crate::tactical::map::{BattleSpec, generate};
+    use crate::world::Biome;
+
+    let mut game = Game::new(9, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let boss = a_boss(&game);
+    let corpse = corpse_of(&mut game, &boss.id);
+    let spec = BattleSpec {
+        world_seed: 9,
+        site: (0, 0),
+        tick: 1,
+        zone: 1,
+        biome: Biome::OpenGrid,
+        bodies: 2,
+    };
+    let board = generate(spec);
+    game.world
+        .insert_resource(TacticalBattle::open(spec, board));
+
+    game.award_loot(corpse);
+
+    let lines = log_texts(&game);
+    assert!(
+        !lines.iter().any(|t| *t == "Salvage:"),
+        "the drop was announced where it fell instead of being tallied: {lines:#?}"
+    );
+    let held = &game.world.resource::<TacticalBattle>().rewards.drops;
+    assert!(!held.is_empty(), "the tactical fight's tally stayed empty");
+}
+
 /// With no battle to hold the tally, a drop is announced where it happens —
 /// through the same formatter, so the two paths cannot come to word it
 /// differently. Nothing in the game reaches `award_loot` outside a fight

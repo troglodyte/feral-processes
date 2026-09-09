@@ -279,3 +279,32 @@
   A block at `m.inset` is painted straight through the lower half of
   THREAT's glyphs, which is the vitals/filter-header collision again in a
   third place.
+
+- **A tactical fight is drawn in the map pane, and both its readouts cost no
+  layout.** A battle screen of its own was refused on the cost of the second
+  grid: `draw_surface_map` carries the camera and its easing,
+  `tile_origin_px`, `map_cell`'s zoom ladder, the palette, `ConRead`, the
+  sprite fallback and the vignette, and a second grid beside it is all of
+  that again forever with nothing making the two agree. What is *not*
+  inherited is the loop — `render/tactical.rs` is a smaller sibling and not
+  a copy, since a battle map has no biomes, structures, build sites, depots,
+  haul marks or posted workers — and the rules the two genuinely share are
+  called across the seam, which is why `ConRead` and `tile_origin_px` are
+  `pub(super)`. **The layout traps are in the two readouts.** The turn-order
+  strip takes the **compass block's slot** — a block inside the pane,
+  starting at `layout::strip_inset` because THREAT's quad hangs down into it
+  — because a strip on `map_pane`'s bottom border is the one-line change
+  that costs two layout changes, and buying its band only while a fight is
+  open re-lays the whole tile grid on the keypress that opens one, which at
+  the keyboard reads as the camera lurching. That is the argument the
+  compass itself moved inside for, one release after trying it; a fight has
+  no bearing to draw, so `draw_playing_base` gates the compass on
+  `in_tactical` rather than letting the two stack. The action bar is a
+  **content swap on the keybar** (`LogPane::actions`), which already rides
+  the log pane's border and already degrades through `strip::fitting`, so it
+  costs nothing where a bar of its own would have to buy height there is
+  none of. **No vignette on the battle map**: the surface map dims with
+  Power because the world is seen through a failing signal, and a discrete
+  arena dimmed would hide the one thing the screen exists to show — which
+  will read as a dropped multiplication to anyone holding the surface map's
+  rule, and is not.

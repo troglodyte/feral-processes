@@ -4882,6 +4882,130 @@ pub const RICH_IN_UNITS: u32 = 1;
 /// one back nets.
 pub const TOOL_CARRIER_VALUE: u32 = 2;
 
+// ─────────────────────────────────────────────────────────────────────────
+// Tactical battle grid
+// ─────────────────────────────────────────────────────────────────────────
+
+/// What crossing a `BattleCell::Rough` cell costs, against `Open`'s one.
+///
+/// Two rather than three because a body's whole allowance is small: at
+/// three, one rough cell eats most of a turn and the terrain stops being a
+/// choice and becomes a wall with extra steps.
+pub const TACTICAL_ROUGH_COST: u32 = 2;
+
+/// The three board extents, in cells on a side.
+///
+/// Three fixed tiers rather than a per-body formula so the player learns
+/// their shapes: a board is a place you fight in repeatedly, and one that
+/// is a slightly different size every time is one you can never read at a
+/// glance. Sized for manoeuvre — deployment is what puts the two sides in
+/// contact, so a board large enough to flank on does not open every fight
+/// with a walk.
+pub const TACTICAL_BOARD_SMALL: i32 = 14;
+pub const TACTICAL_BOARD_MEDIUM: i32 = 20;
+pub const TACTICAL_BOARD_LARGE: i32 = 28;
+
+/// Total bodies — party plus wild — at which the board steps up a tier.
+///
+/// Both are reachable and so is the tier between them: the smallest fight
+/// the game fields is the player and one wild body, and the largest is
+/// `MAX_PARTY_SIZE` against `MAX_PACK_BODIES`.
+pub const TACTICAL_MEDIUM_BODIES: u32 = 4;
+pub const TACTICAL_LARGE_BODIES: u32 = 7;
+
+/// Cells between the two sides' anchors at deployment.
+///
+/// The board is sized for manoeuvre and the deployment is sized for
+/// contact: six cells is a step or two of closing rather than a march, so
+/// no fight opens with both sides walking toward each other for a turn.
+pub const TACTICAL_DEPLOY_GAP: i32 = 6;
+
+/// A body of average speed's movement allowance, in cost.
+///
+/// Read against `TACTICAL_DEPLOY_GAP`: four points closes six cells in two
+/// turns, which is the "step or two of closing" the gap is sized for, and
+/// it leaves room either side for speed to be worth something — over the
+/// shipped roster the band runs two to six, so the slowest body takes three
+/// turns to cross what the fastest crosses in one.
+pub const TACTICAL_MOVE_BASE: u32 = 4;
+
+/// Points of `Game::combat_speed` that buy one more cell of movement.
+///
+/// Two, against the shipped roster's 6..14 spread and
+/// `DEFAULT_BASE_SPEED`'s 10. One point per cell would triple that spread
+/// and let a single stat decide a tactical fight on its own — speed already
+/// buys initiative, accuracy and evasion — while three would flatten the
+/// roster onto two values.
+pub const TACTICAL_MOVE_SPEED_STEP: i32 = 2;
+
+/// How far a routine that reaches one recipient may be aimed, in cells.
+///
+/// One, so a `Single` routine is arm's length exactly as a swing is: the
+/// group model draws no distinction between a routine and a basic attack's
+/// reach either, and one that could be run two cells away would make the
+/// positioning this model is built on optional.
+pub const TACTICAL_MELEE_RANGE: u32 = 1;
+
+/// How far a routine that reaches a whole side may be aimed, in cells.
+///
+/// Six, which is `TACTICAL_DEPLOY_GAP`: an area routine reaches the far
+/// side's deployment from the near side's, so it is worth running on the
+/// first turn of a fight and does not need a march to bring it into play.
+pub const TACTICAL_THROWN_RANGE: u32 = 6;
+
+/// What a routine derives for a radius when its file authored no shape —
+/// one per side-facing `AbilityTarget`, in cells.
+///
+/// **The three are not one constant.** What the group model means by "one
+/// group" is a handful of bodies standing together and what it means by
+/// "everything" is the field, so a single figure would either make a group
+/// routine hit the board or a field routine hit two cells. The party's own
+/// is the widest of the three because a party is spread by the player's own
+/// movement rather than by deployment, and a rally that reached only the
+/// bodies pressed against the invoker would never land on the companion
+/// that needed it.
+pub const TACTICAL_GROUP_RADIUS: u32 = 1;
+pub const TACTICAL_FIELD_RADIUS: u32 = 2;
+pub const TACTICAL_PARTY_RADIUS: u32 = 3;
+
+/// The allowance's floor and ceiling.
+///
+/// Not taste: `reach::movement_field` passes the allowance to `walk_field`
+/// as its search radius, so an unbounded allowance is an unbounded search,
+/// and a body that cannot move at all can neither close nor walk off the
+/// board — a fight that cannot finish. Both ends are therefore correctness
+/// bounds, and both are reachable only by a mod: the shipped roster derives
+/// two through six without either clamp biting.
+pub const TACTICAL_MOVE_MIN: u32 = 2;
+pub const TACTICAL_MOVE_MAX: u32 = 8;
+
+/// What a hostile is looking for when it picks the cell it will fight from.
+///
+/// Three terms, and they are read together rather than tuned apart. The
+/// reach bonus is worth more than closing the whole width of the largest
+/// board, so a cell it can actually hit from always beats a cell that is
+/// merely nearer — without that ordering a body walks past the swing it
+/// came for. Crowding is the smallest of the three because it is a
+/// tie-breaker between cells that are otherwise as good: it should spread a
+/// pack that has a choice, never talk a body out of the fight.
+pub const TACTICAL_AI_REACH_SCORE: f32 = 40.0;
+pub const TACTICAL_AI_CLOSING_WEIGHT: f32 = 1.0;
+pub const TACTICAL_AI_CROWDING_WEIGHT: f32 = 0.5;
+
+/// How much a hostile's choice of cell is allowed to wander off the best
+/// one, as `policy::sample_scored`'s softmax temperature.
+///
+/// Not `ENEMY_POLICY_TEMPERATURE`: that one divides a trained policy's
+/// learned scores, and these are hand-authored on a scale of their own, so
+/// sharing the constant would couple two dials that mean different things.
+/// Small against `TACTICAL_AI_CLOSING_WEIGHT`, so a hostile picks among
+/// cells within about a step of the best and not among all of them.
+///
+/// Zero is a supported setting and means argmax with no draw at all —
+/// `sample_scored` short-circuits before it touches the RNG, which is what
+/// lets a test pin the choice without moving the seeded stream.
+pub const TACTICAL_AI_TEMPERATURE: f32 = 0.5;
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -411,6 +411,27 @@ impl Game {
     /// plus each of their combat buffs. Anything a lingering Bleed finished
     /// off is then cleared out of its group.
     pub(crate) fn tick_round_status_effects(&mut self, player: Entity) {
+        self.tick_combatant_upkeep(player);
+        if self.reap_dead_members(player) {
+            return;
+        }
+        if !self.creature_alive(player) {
+            let front = self.front_of_group(0);
+            self.end_battle(player, front);
+        }
+    }
+
+    /// The upkeep itself, without the group model's opinion about what died
+    /// under it.
+    ///
+    /// **Both combat models spend this, and what to do about a body it
+    /// finished off is each one's own half** — the group model reaps
+    /// members and tears the fight down through `end_battle`, a battle map
+    /// clears the board and closes through `settle_tactical`, and neither
+    /// function exists in the other's world. `all_living_enemies` already
+    /// answers for both, so the loops below are shared verbatim rather than
+    /// copied into `tactical/`.
+    pub(crate) fn tick_combatant_upkeep(&mut self, player: Entity) {
         for wild in self.all_living_enemies() {
             let label = self.entity_label(wild);
             self.tick_status_effects(wild, &label);
@@ -430,13 +451,6 @@ impl Game {
             self.tick_status_effects(companion, &label);
             self.tick_combat_buff(companion);
             self.tick_ability_cooldowns(companion);
-        }
-        if self.reap_dead_members(player) {
-            return;
-        }
-        if !self.creature_alive(player) {
-            let front = self.front_of_group(0);
-            self.end_battle(player, front);
         }
     }
 }

@@ -622,7 +622,7 @@ impl App {
             .map(|g| g.has_active_battle())
             .unwrap_or(false);
         if entered_battle {
-            self.mode = Mode::Battle;
+            self.mode = self.opened_battle_mode();
         }
         // Beside the battle check above and not folded into it: the engine
         // hands over a cue rather than a mode because it cannot see

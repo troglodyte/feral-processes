@@ -790,7 +790,7 @@ pub struct CompanionInfo {
 /// `Some`/`None` for "is this the player" the same way it already does for
 /// `is_anchor`'s structure-only fields, instead of reading `sprite`/`colour`
 /// on every other entity and getting an empty string and a 0 back.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PlayerLook {
     pub sprite: String,
     /// 0-based index into the renderer's player swatches; `None` is the

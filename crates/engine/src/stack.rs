@@ -328,41 +328,14 @@ impl FrameSpec {
     /// that must be a stable property of a *cell* of a stack salts off the
     /// one scheme rather than inventing a second that could collide with it.
     ///
-    /// Each word is folded in **one byte at a time**, true FNV-1a style,
-    /// rather than XOR-ed in whole and multiplied through the prime once.
-    /// A whole-word XOR gets exactly one multiply-by-prime round to spread
-    /// it, and one round cannot carry a low-bit difference much past the
-    /// prime's own width (`PRIME` is ~41 bits) before the fold ends —
-    /// measured, a whole-word fold leaves many of the 64 output bits,
-    /// including several of the highest, identical across most adjacent
-    /// cell pairs `(x, y)` / `(x + 1, y)`, with the bottom bit alternating
-    /// in lockstep with `x`'s parity instead. This is a property of the
-    /// fold, not a fixed count — three separate measurements taken against
-    /// this function's history came back 21/64 with the top 6 fixed,
-    /// 22/64 with the top 8, and 23/64 with the top 7, all depending on
-    /// which cell pairs happened to be sampled, so no single number is
-    /// asserted here or by a test. `[a, b]` diverging from `[b, a]` (the
-    /// property the existing `salting_*` tests check) is not the same
-    /// claim as "adjacent cells cannot rhyme" — the two can both be true at
-    /// once, exactly as measured here, because `assert_ne!` only needs one
-    /// bit of difference to pass. Folding each word in eight single-byte
-    /// rounds gives every byte its own XOR-then-multiply pass, so no output
-    /// bit is left a fixed function of the input the way one round leaves
-    /// the low bit (see `descriptions::fold`'s doc for the general version
-    /// of this argument).
+    /// The fold itself is `derive::fold` — byte-at-a-time FNV-1a, for the
+    /// reason spelled out there, which used to be spelled out here.
     ///
     /// `LAIR_SALT`, `ORPHAN_SALT` and `FALL_SALT` are deliberately **not**
     /// migrated onto this: each answers one question per frame, a single XOR
     /// is sufficient there, and all three are pinned by tests.
     pub(crate) fn salted(self, words: &[u64]) -> u64 {
-        let mut h = self.rng_seed();
-        for &word in words {
-            for byte in word.to_le_bytes() {
-                h ^= byte as u64;
-                h = h.wrapping_mul(0x0000_0100_0000_01b3);
-            }
-        }
-        h
+        crate::derive::fold(self.rng_seed(), words)
     }
 }
 

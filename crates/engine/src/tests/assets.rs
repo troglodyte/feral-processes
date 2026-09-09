@@ -755,6 +755,104 @@ fn every_shipped_routine_that_rolls_to_hit_is_aimed_and_no_other_is() {
     );
 }
 
+/// What each targeting mode derives when a routine authors no `shape:` or
+/// `range:` — which is every routine the game ships.
+///
+/// A second copy of `AbilityTarget::derived_shape`/`derived_range` on
+/// purpose, and the only copy of a formula this repo keeps: it is a *pin*,
+/// so moving the derivation has to be deliberate rather than a one-word edit
+/// nothing notices. The `match` is what makes a sixth targeting mode a
+/// compile error here as well as there — a `#[serde(default)]` field with no
+/// census is the trap this exists to close, and a routine that quietly
+/// became single-target on a battle map reads as a nerf rather than a bug.
+fn derived_geometry(
+    target: crate::abilities::AbilityTarget,
+) -> (
+    crate::abilities::AbilityShape,
+    crate::abilities::AbilityRange,
+) {
+    use crate::abilities::AbilityRange as R;
+    use crate::abilities::AbilityShape as S;
+    use crate::abilities::AbilityTarget::*;
+    match target {
+        OneAlly | OneEnemyGroupFront => (S::Single, R { min: 0, max: 1 }),
+        WholeParty => (S::Radius { radius: 3 }, R { min: 0, max: 0 }),
+        WholeEnemyGroup => (S::Radius { radius: 1 }, R { min: 0, max: 6 }),
+        AllEnemies => (S::Radius { radius: 2 }, R { min: 0, max: 6 }),
+    }
+}
+
+/// Every targeting mode answers with a shape and a range, and with the ones
+/// documented in the design.
+#[test]
+fn every_targeting_mode_derives_the_geometry_it_is_documented_to() {
+    use crate::abilities::AbilityTarget::*;
+    for target in [
+        OneAlly,
+        WholeParty,
+        OneEnemyGroupFront,
+        WholeEnemyGroup,
+        AllEnemies,
+    ] {
+        let (shape, range) = derived_geometry(target);
+        assert_eq!(
+            target.derived_shape(),
+            shape,
+            "{target:?} derives a shape the census does not expect"
+        );
+        assert_eq!(
+            target.derived_range(),
+            range,
+            "{target:?} derives a range the census does not expect"
+        );
+    }
+}
+
+/// Nothing shipped authors a `shape:` yet — the content pass that gives the
+/// roster real geometry is not part of the mode — so every one of them
+/// resolves through the derivation, and what it resolves to has to be
+/// something a battle map can draw and aim.
+#[test]
+fn every_shipped_routine_resolves_to_a_shape_a_battle_map_can_use() {
+    use crate::abilities::AbilityShape;
+    let game = Game::new(3307, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut single = 0;
+    let mut area = 0;
+    for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
+        let range = def.tactical_range();
+        assert!(
+            range.min <= range.max,
+            "{:?} may be aimed between {} and {} cells away, which is nowhere",
+            def.id,
+            range.min,
+            range.max
+        );
+        match def.tactical_shape() {
+            AbilityShape::Single => single += 1,
+            AbilityShape::Radius { radius } => {
+                area += 1;
+                assert!(radius > 0, "{:?} blasts a radius of nothing", def.id);
+            }
+            AbilityShape::Line { length } => {
+                assert!(length > 0, "{:?} draws a line of nothing", def.id);
+            }
+            AbilityShape::Cone { length, degrees } => {
+                assert!(length > 0, "{:?} opens a cone of nothing", def.id);
+                assert!(
+                    (1..=360).contains(&degrees),
+                    "{:?} opens a cone {degrees} degrees wide",
+                    def.id
+                );
+            }
+        }
+    }
+    assert!(
+        single > 0 && area > 0,
+        "the census read {single} single-target and {area} area routines, so at least \
+         one half of it proves nothing"
+    );
+}
+
 /// The scope word an ability's `name` must end in, given what it targets.
 /// `OneAlly` and `OneEnemyGroupFront` share "Single" — one recipient either
 /// way, and which side it lands on is never in doubt from the picker.

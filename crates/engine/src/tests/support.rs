@@ -59,6 +59,7 @@ pub(crate) fn generic_species() -> SpeciesDef {
         habitats: Vec::new(),
         base_speed: crate::tuning::DEFAULT_BASE_SPEED,
         base_int: crate::tuning::DEFAULT_BASE_INT,
+        movement: None,
         moves: vec![crate::species::MoveDef {
             name: "Test Strike".to_string(),
             power: 5,

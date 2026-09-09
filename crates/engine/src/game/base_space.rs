@@ -56,7 +56,8 @@ pub(crate) fn transit_path(grid: &BaseGrid, from: (i32, i32), to: (i32, i32)) ->
         return vec![from];
     }
     let reach = crate::tuning::haul_walk_radius(grid.radius());
-    let field = crate::game::pursuit::walk_field(to, reach, |p| grid.walkable(p.0, p.1));
+    let field =
+        crate::game::pursuit::walk_field(to, reach, |p| grid.walkable(p.0, p.1).then_some(1));
     let Some(&start) = field.get(&from) else {
         return Vec::new();
     };

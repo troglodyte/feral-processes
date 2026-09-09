@@ -198,12 +198,29 @@ impl Game {
 
     /// Every party slot as the fight opened. `species` is `None` for the
     /// player, who carries no `Creature`.
-    pub(crate) fn telemetry_party(&self) -> Vec<PartyMember> {
-        let slots = self
+    /// How many party slots the open fight has, whichever model is holding
+    /// it — the player plus the roster.
+    ///
+    /// `BattleState::planned` is that count in the abstract model and is
+    /// indexed positionally into `Party`, which is why the tactical arm can
+    /// answer the same question without a battle line of its own: the slots
+    /// *are* `Party`, and `actor_entity` reads it either way.
+    fn telemetry_party_slots(&self) -> usize {
+        if let Some(battle) = self.world.get_resource::<BattleState>() {
+            return battle.planned.len();
+        }
+        if self
             .world
-            .get_resource::<BattleState>()
-            .map(|b| b.planned.len())
-            .unwrap_or(0);
+            .get_resource::<crate::tactical::TacticalBattle>()
+            .is_some()
+        {
+            return self.world.resource::<Party>().0.len() + 1;
+        }
+        0
+    }
+
+    pub(crate) fn telemetry_party(&self) -> Vec<PartyMember> {
+        let slots = self.telemetry_party_slots();
         (0..slots)
             .filter_map(|slot| {
                 let entity = self.actor_entity(battle::Actor::Party(slot))?;
@@ -230,16 +247,31 @@ impl Game {
     }
 
     pub(crate) fn telemetry_enemy_groups(&self) -> Vec<EnemyGroupInfo> {
-        self.world
-            .get_resource::<BattleState>()
-            .map(|b| b.groups.as_slice())
-            .unwrap_or_default()
-            .iter()
+        if let Some(battle) = self.world.get_resource::<BattleState>() {
+            return battle
+                .groups
+                .iter()
+                .enumerate()
+                .map(|(group, g)| EnemyGroupInfo {
+                    group,
+                    species: g.species.to_string(),
+                    count: g.members.len(),
+                })
+                .collect();
+        }
+        // A body apiece, which is not a shim: groups dissolve on a battle
+        // map, so one hostile per group is what that model's roster *is*.
+        self.all_living_enemies()
+            .into_iter()
             .enumerate()
-            .map(|(group, g)| EnemyGroupInfo {
+            .map(|(group, entity)| EnemyGroupInfo {
                 group,
-                species: g.species.to_string(),
-                count: g.members.len(),
+                species: self
+                    .world
+                    .get::<Creature>(entity)
+                    .map(|c| c.species.clone())
+                    .unwrap_or_default(),
+                count: 1,
             })
             .collect()
     }
@@ -248,11 +280,7 @@ impl Game {
     /// reads 0 rather than being dropped, so the vector stays index-aligned
     /// with `fight_start`'s party across the whole fight.
     pub(crate) fn telemetry_party_hp(&self) -> Vec<i32> {
-        let slots = self
-            .world
-            .get_resource::<BattleState>()
-            .map(|b| b.planned.len())
-            .unwrap_or(0);
+        let slots = self.telemetry_party_slots();
         (0..slots)
             .map(|slot| {
                 self.actor_entity(battle::Actor::Party(slot))

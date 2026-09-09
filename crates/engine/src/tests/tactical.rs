@@ -1727,3 +1727,147 @@ fn a_round_begun_by_a_death_on_the_last_rung_still_costs_its_upkeep() {
         "the death started a new round and its upkeep was never spent"
     );
 }
+
+/// A brace has to actually cost the next swing something, or it is a spent
+/// turn dressed up as a choice.
+///
+/// The swing is driven by hand rather than through `tactical_ai_turn`,
+/// because the AI's cell pick draws and what is being measured is the
+/// mitigation, not the AI's aim. The stream is reseeded *after* the brace
+/// and immediately before the swing, so the two runs meet the swing on an
+/// identical stream and the only difference between them is the buff —
+/// `force_the_next_attack_to_land` cannot do that job here, since
+/// `swing_move` rolls the move first and eats the forced roll. The seed is
+/// searched for rather than pinned, `first_rng_seed_where`'s rule.
+///
+/// Seated by hand for the reason the last-rung test is: initiative is
+/// rolled off speed, and a player landing on the *last* rung has their
+/// brace ticked off by the wrap before anybody swings.
+#[test]
+fn bracing_reduces_what_the_next_swing_lands() {
+    let damage_taken = |brace: bool, stream: u64| {
+        let mut game = game();
+        let pack = tactical_fight(&mut game, 1, 400);
+        let player = game.player_entity();
+        let wild = pack[0];
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_initiative(vec![player, wild]);
+
+        // Hard enough that a fifth off it is visible in whole points, and
+        // survivable so the fight is still open when the HP is read back.
+        game.world.get_mut::<Stats>(wild).unwrap().atk = 60;
+        {
+            let mut stats = game.world.get_mut::<Stats>(player).unwrap();
+            stats.max_hp = 4000;
+            stats.hp = 4000;
+        }
+        let beside = {
+            let battle = game.world.resource::<TacticalBattle>();
+            let (px, py) = battle.cell_of(player).expect("the player is seated");
+            (px + 1, py)
+        };
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(wild, beside),
+            "fixture: the hostile must stand within reach"
+        );
+
+        if brace {
+            assert!(game.tactical_defend(), "the player may brace on its turn");
+        } else {
+            game.tactical_end_turn();
+        }
+        assert_eq!(
+            game.tactical_actor(),
+            Some(wild),
+            "fixture: the hostile must be the one swinging"
+        );
+
+        crate::tests::support::reseed_rng(&mut game, stream);
+        let before = game.world.get::<Stats>(player).unwrap().hp;
+        assert!(game.tactical_attack(player), "the hostile must reach");
+        before - game.world.get::<Stats>(player).unwrap().hp
+    };
+
+    // A stream on which the swing lands enough for a fifth of it to be a
+    // whole point at all — every matchup has a miss chance by design.
+    let stream = (0..512u64)
+        .find(|&s| damage_taken(false, s) >= 5)
+        .expect("no stream in 0..512 landed the swing");
+    let open = damage_taken(false, stream);
+    let braced = damage_taken(true, stream);
+    assert!(
+        braced < open,
+        "bracing cost the swing nothing: {braced} against {open}"
+    );
+}
+
+/// Bracing is an action, and an action ends the turn — the same rule
+/// `tactical_attack` and `tactical_use_routine` hold.
+#[test]
+fn bracing_ends_the_turn() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 40);
+    let player = game.player_entity();
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .set_initiative(vec![player, pack[0]]);
+
+    assert!(game.tactical_defend());
+    assert_eq!(
+        game.tactical_actor(),
+        Some(pack[0]),
+        "a brace that does not hand the turn on lets a body brace for ever"
+    );
+}
+
+/// A body that has already spent its action may not brace on top of it.
+#[test]
+fn a_body_that_has_acted_may_not_brace() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 40);
+    let player = game.player_entity();
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .set_initiative(vec![player, pack[0]]);
+    let raw = game.effective_mitigation(player);
+    game.world.resource_mut::<TacticalBattle>().mark_acted();
+
+    assert!(!game.tactical_defend(), "an acted body braced anyway");
+    assert_eq!(
+        game.effective_mitigation(player),
+        raw,
+        "the refusal armed the buff on its way out"
+    );
+}
+
+/// The brace lasts the rest of the round and no longer: it is armed for one
+/// round and the order coming back round is what spends that.
+#[test]
+fn a_brace_is_gone_once_the_order_comes_round() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 400);
+    let player = game.player_entity();
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .set_initiative(vec![player, pack[0]]);
+    let raw = game.effective_mitigation(player);
+
+    assert!(game.tactical_defend());
+    assert_eq!(
+        game.effective_mitigation(player),
+        raw + crate::tuning::DEFEND_MITIGATION_BONUS,
+        "the brace never took"
+    );
+
+    // The last rung's turn ending is what wraps the round, and the wrap is
+    // what spends the upkeep the buff ages under.
+    game.tactical_end_turn();
+    assert_eq!(
+        game.effective_mitigation(player),
+        raw,
+        "the brace outlived the round it was armed for"
+    );
+}

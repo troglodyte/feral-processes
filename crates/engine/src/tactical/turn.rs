@@ -253,6 +253,57 @@ impl Game {
         true
     }
 
+    /// The acting body braces: `DEFEND_MITIGATION_BONUS` percentage points
+    /// of mitigation for the rest of the round.
+    ///
+    /// `tactical_attack`'s third sibling, and the group model's own Defend
+    /// rather than a second spelling of it — `Game::begin_defend` holds the
+    /// number and the line, so a brace on a board and a brace in front of a
+    /// group cannot come to disagree about either. The mitigation lands for
+    /// free from there: `effective_mitigation` is read inside
+    /// `Game::apply_damage`, the one door damage comes through.
+    ///
+    /// **Only the mitigation crosses over, not the aggro.**
+    /// `DEFEND_AGGRO_WEIGHT` is a weight on an aggro *slot*, and a battle
+    /// map has none — a hostile takes the wounded body in reach
+    /// (`swing_at_best_neighbour`), so bracing is a survival play here and
+    /// not a tank one.
+    ///
+    /// **The brace is worth what the order says it is worth.** It is armed
+    /// for one round and `hand_on_turn`'s wrap is what ages it, so a body
+    /// on the last rung braces against nobody: the wrap fires the moment it
+    /// hands the turn on. Accepted rather than overlooked — the turn strip
+    /// is on screen, so where a body sits in the order is something the
+    /// player can read before spending the turn.
+    ///
+    /// Three refusals, all before anything is spent: no fight, nobody
+    /// acting, and a body that has already taken its action. **No
+    /// `is_stunned` gate**, unlike `battle_resolve_round`'s Defend loop —
+    /// nothing in this model reads stun at all and a stunned body already
+    /// takes a whole turn on a board, so gating the brace alone would make
+    /// bracing the one thing a stunned body could not do.
+    ///
+    /// Reports whether the brace took. The action ends the turn.
+    pub fn tactical_defend(&mut self) -> bool {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return false;
+        };
+        let Some(actor) = battle.actor() else {
+            return false;
+        };
+        if battle.acted() {
+            return false;
+        }
+
+        let round_before = battle.round;
+        self.begin_defend(actor);
+        self.world.resource_mut::<TacticalBattle>().mark_acted();
+        // No reap: bracing damages nobody, and the round upkeep
+        // `hand_on_turn` may spend brings its own.
+        self.hand_on_turn(actor, round_before);
+        true
+    }
+
     /// The acting body runs the routine at `index` in its own
     /// `Game::actor_abilities`, aimed at `aim`.
     ///

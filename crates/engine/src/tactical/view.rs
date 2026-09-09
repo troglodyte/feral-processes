@@ -81,7 +81,9 @@ pub struct TacticalView {
     pub order: Vec<TurnRow>,
     /// Which rung of `order` is acting, `None` once the board is empty.
     pub active: Option<usize>,
-    /// Whether the acting body is the player's to move.
+    /// Whether the acting body is the player's to move — **every party body
+    /// is**, companions included, so this is `Game::tactical_awaits_input`
+    /// and not "is the player acting".
     pub player_turn: bool,
     /// Steps the acting body has left, already net of what it has spent.
     pub allowance: u32,
@@ -104,8 +106,14 @@ impl Game {
     /// The open tactical fight, or `None`.
     pub fn tactical_view(&mut self) -> Option<TacticalView> {
         self.world.get_resource::<TacticalBattle>()?;
-        let player = self.player_entity();
         let player_power = self.player_power();
+        // **The door and not a third predicate.** `tactical_ai_actor` gates
+        // on `Hostile` because every party body is the player's to command,
+        // and `tactical_awaits_input` is its complement — asked here as
+        // `actor == player` instead, a companion's turn drew the keybar's
+        // "the wild side is moving" and no reach wash while app-core, which
+        // reads the real door, sat waiting for a key.
+        let awaits_input = self.tactical_awaits_input();
         let battle = self.world.resource::<TacticalBattle>();
         let board = battle.board.clone();
         let round = battle.round;
@@ -145,7 +153,7 @@ impl Game {
             bodies,
             order,
             active,
-            player_turn: actor == Some(player),
+            player_turn: awaits_input,
             allowance,
             acted,
             round,

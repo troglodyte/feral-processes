@@ -13510,3 +13510,111 @@ player nor a hostile, and **every party body is the player's to command** —
 so the gate is `Hostile` and not `Player`, and a companion on a battle map
 waits for a key exactly as the player does. Two predicates would either hang
 the fight waiting for a key nobody may press, or move a companion by itself.
+
+### A turn ends in one place, and a body that killed itself has already left the order
+
+`TacticalBattle::remove` takes a body out of the order, and when that body
+is the one *acting* it calls `begin_turn()` on the way out — the cursor
+names a body rather than a position, so removing the acting body leaves the
+cursor already naming whoever stood behind it, with a fresh turn. That is
+the right rule and it was already written down. What sat on top of it was
+`tactical_attack` and `tactical_use_routine` each ending the turn
+unconditionally once the reap had run, guarded only on the fight still
+being open.
+
+The two are reachable together, and the branch's own comments say so: a
+fumble's `Recoil` or `Opening` rung calls `apply_damage` on the *swinger*,
+and a `Radius` routine catches whoever is standing in it, its invoker
+included — `a_blast_lands_on_whoever_is_standing_in_it` proves the second.
+A body that dies to its own action is reaped, `remove` hands the turn on,
+and then the action hands it on again. In an order of `[companion, player,
+hostile]` a companion who fumbles fatally costs the player their turn, with
+nothing on screen to say why.
+
+`Game::hand_on_turn` is now the one way a turn ends: it hands on only if
+`actor()` still names the body that acted, which is the same question
+`tactical_ai_turn_at`'s tail already asks one level up and the same answer.
+`tactical_end_turn` — the pass verb, and what app-core and the AI call —
+routes through it too, so there is one place to put anything a turn ending
+owes.
+
+This is what the phase-6 double-end-turn fix half-found. That fix was
+correct where it sat, in `ai.rs`; the bug under it was in the action path,
+where it applied to the player's own turns as well.
+
+### A round on a battle map costs what a round costs
+
+`battle_resolve_round` ends with two lines: `tick_round_status_effects` and
+`self.tick()`. Nothing in `tactical/` called either, and `update_realtime`
+is gated on `Mode::Playing`, so a tactical fight ran with no upkeep at all.
+Every consequence is silent and every one of them reads as a different bug:
+
+- **Every routine is once per fight.** `ability_unavailable` refuses on a
+  non-zero cooldown and nothing decremented it. Its refusal names the unit
+  — "2 more rounds" — of a clock that did not run.
+- **`ENEMY_ROUTINE_MIN_COOLDOWN` was inert as designed.** The floor's whole
+  purpose is to stop a `cooldown: 0` routine firing every turn; with
+  nothing cooling, it turned "every turn" into "once", which is not the
+  same feature.
+- **`Stun` was dead twice over** — never consulted by `tactical/`, and
+  never expiring either. Every `FumbleRung::Crash` and every `Debuff{Stun}`
+  did nothing.
+- **`Bleed` never bit and no `duration` ever ran out**, so an authored
+  three-round buff lasted the fight.
+- **The world stood still.** Base production, needs decay, Trace, nest
+  respawns and raid pressure all stop for as long as the player is on a
+  board, where an abstract fight of the same length costs a tick a round.
+- **A defeat was deferred.** `difficulty::death_handling_system` runs
+  inside `Game::tick`'s schedule, so a Permadeath flatline or a Forgiving
+  reboot did not happen when the player fell — they left the battle map at
+  zero Integrity and it resolved on the next idle tick.
+
+A round on a battle map is the initiative order wrapping, which
+`TacticalBattle::end_turn` already counts, so `hand_on_turn` spends the
+upkeep when `round` moves. Two things made that not quite a call to the
+existing function. `tick_round_status_effects` ends in `reap_dead_members`
+and an `end_battle` on a dead player — both group-model teardown, and
+`end_battle` panics outright without a `BattleState`. So the loops split
+out as `tick_combatant_upkeep`, which both models call, and what to do
+about a body the upkeep finished off stays each model's own half:
+`reap_tactical_dead` in this one. `all_living_enemies` already answered for
+both models, so the loops themselves are shared verbatim rather than copied
+into `tactical/`.
+
+The second is the fight that ends mid-round and never reaches a wrap. The
+group model gets its round's tick regardless — `battle_resolve_round`'s
+tail runs after `end_battle` has already torn the fight down, which is
+exactly how a defeat is absorbed inside the fight that lands it. A battle
+map needed that stated: the reap spends one upkeep when `settle_tactical`
+closes a fight **the player went down in**. Only that case, because it is
+the only one with anything left to resolve, and a win taking a second tick
+would make a round cost two.
+
+### The results page has two producers, and the rows they build are one function
+
+`BattleTimeline::closing` is what `Mode::BattleResult` draws — the roster
+frozen as the fight ended, because the entities are gone by the time
+anything reads it. `finish_fight` filled it from `battle_rows`, whose first
+line is `self.world.get_resource::<BattleState>()?`. A tactical fight has
+no `BattleState`, so `closing` was `None`, `battle_result_view` was `None`,
+and `draw_battle` returned before drawing anything. **Every tactical fight
+ended on a blank screen** — the win, the salvage, the XP and the decompile
+verdict all written to the log and never drawn on the page that exists to
+show them.
+
+`closing_rows` is the door now, `battle_rows` or `tactical_rows`. What is
+worth keeping is what did *not* get copied: `enemy_row` and `party_row` are
+one function each, and the models differ only in what they hand them. The
+group model passes a group's front and that group's size; a battle map
+passes a body and a count of one, because groups dissolve on a grid — and
+with them the reach rule that made `engaged` mean anything, so every body
+on a board is engaged. `planned` is the group model's alone: a battle map
+does not plan, it acts. That is one field of fourteen, and it is the whole
+of the difference — which is why a second copy of the row fill was the
+wrong shape, and why the drift it would have caused (a results page
+disagreeing with the fight it reports about HP, mitigation, gear or a
+status) has nowhere to happen now.
+
+The party half is read off `Party` rather than off the board, because a
+companion that fell is still the party's and the row saying so is the one
+the page most needs.

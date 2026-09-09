@@ -768,3 +768,51 @@
   body is the player's to command** — the gate is `Hostile`, not `Player`,
   and two predicates would either hang the fight waiting for a key nobody
   may press or move a companion by itself.
+
+- **A turn ends in one place, `Game::hand_on_turn`, and it hands on only if
+  the body that acted is still the one acting.** `TacticalBattle::remove`
+  already begins the next body's turn when it takes the acting body out —
+  the cursor names a body, not a position — so an action that ends the turn
+  unconditionally on top of that skips whoever stood behind it. The trap is
+  that a body killing itself with its own action looks impossible and is
+  not: a fumble's `Recoil` or `Opening` rung damages the swinger, and a
+  `Radius` routine catches its own invoker. In an order of `[companion,
+  player, hostile]` a companion who fumbles fatally costs the player their
+  turn, with nothing on screen to say why. Same question the phase-6 AI fix
+  asks at its own level, one level down. See `docs/seams.md`.
+- **A round on a battle map spends the upkeep an abstract round spends, and
+  `tick_combatant_upkeep` is the half both models share.** The trap is how
+  quiet the omission is: with nothing ticking, every routine is once per
+  fight (its refusal counting down "rounds" that never pass), `Stun` never
+  wears off, `Bleed` never bites, every authored `duration` lasts the whole
+  fight, `ENEMY_ROUTINE_MIN_COOLDOWN` is a floor under a clock that does not
+  run, the world stands still for the length of the fight, and a defeat is
+  deferred to the next idle tick — the player walks off the board at zero
+  Integrity. Not a call to `tick_round_status_effects`, which ends in
+  `reap_dead_members` and an `end_battle` that panics without a
+  `BattleState`; what to do about what the upkeep killed is each model's own
+  half. A fight that ends mid-round never reaches the wrap, so the reap
+  spends one upkeep when the fight closes **and the player is down** — the
+  only ending with anything left to resolve. See `docs/seams.md`.
+- **The results page has two producers — `Game::closing_rows` — and one row
+  builder per half.** `BattleTimeline::closing` was filled from
+  `battle_rows`, which opens on `BattleState`, so a tactical fight left it
+  `None` and `draw_battle` returned before drawing anything: **a blank
+  results screen at the end of every tactical fight**, with the win, the
+  salvage and the XP written only to the log. The trap in fixing it is the
+  obvious shape — a second producer that builds both halves itself — when
+  `planned` is the only one of fourteen party fields the models disagree
+  about, and a second copy of the other thirteen is a results page that
+  disagrees with the fight it reports. `enemy_row` and `party_row` are one
+  function each; a battle map passes a body and a count of one, all bodies
+  `engaged`, because groups dissolve on a grid. See `docs/seams.md`.
+- **A capture is aimed at something hostile, and the refusal is at the
+  player's door with the other five.** Aimed at your own companion,
+  `decompile_body` succeeded on a good roll and handed it back through
+  `roster_parts` — a **new `ProgramId`**, `Experience::default()`, no
+  memories, every other program's memory of it orphaned, and kill XP paid to
+  the player for its own companion. It kept its level-15 `Stats` and read as
+  level 1. The gate is `Hostile` and nothing else: `tactical_attack` refuses
+  only `actor == target`, and a swing at your own is real friendly fire and
+  stays legal. Aimed at empty ground the same door refuses, which is what
+  keeps a capture from spending its catalyst and the turn on nothing.

@@ -857,6 +857,18 @@ relying on one, and correct all three places if it has moved.
 - **The tactical modes are deliberately not `is_battle`**, which gates the
   reveal and routes `Fx`; `App::advance_tactical` paces the wild side
   against `dt` instead.
+- **A turn ends in one place, `Game::hand_on_turn`, and it hands on only if
+  the body that acted is still the one acting** — a body killed by its own
+  fumble or its own blast has already left the order, and `remove` handed
+  the turn on as it went.
+- **A round on a battle map spends the upkeep an abstract round spends**,
+  `tick_combatant_upkeep` the shared half and what died under it each
+  model's own; a fight that ends mid-round buys one when the player is down.
+- **The results page has two producers, `Game::closing_rows`, and one row
+  builder per half** — `planned` is the only field of fourteen the two
+  models disagree about.
+- **A capture is aimed at something hostile, refused at the player's door**,
+  where a swing at your own is friendly fire and stays legal.
 
 ### Items, gear and economy
 
@@ -1239,7 +1251,7 @@ relying on one, and correct all three places if it has moved.
 ## Build & test
 
 ```sh
-cargo test --workspace     # 5061 tests
+cargo test --workspace     # 5245 tests
 cargo run                  # the game; `default-run` in crates/launcher
 cargo clippy --workspace
 cargo fmt

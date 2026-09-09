@@ -1054,12 +1054,15 @@ pub struct BattleState {
 /// `balance_sim` number with them. What this removes is a loot line and an
 /// XP line landing between every pair of blows.
 ///
-/// It lives on `BattleState` for the lifetime `decompile_attempts` wants and
-/// for the same two payoffs: battles are never serialised, so it costs no
-/// `SAVE_FORMAT_VERSION` bump, and it is not a `Resource` of its own, so it
-/// cannot shift bevy's query iteration order under an unrelated test.
-/// `Game::end_battle` takes it out before dropping the resource, which is
-/// what makes a win and a jack-out pay through one path.
+/// It is a field on each combat model's own resource — `BattleState` here,
+/// `TacticalBattle` in `tactical` — for the lifetime `decompile_attempts`
+/// wants and for the same two payoffs: battles are never serialised, so it
+/// costs no `SAVE_FORMAT_VERSION` bump, and it is not a `Resource` of its
+/// own, so it cannot shift bevy's query iteration order under an unrelated
+/// test. `Game::fight_rewards_mut` is the one door onto whichever of the two
+/// is holding the fight, and `Game::settle_rewards` takes it out before the
+/// resource is dropped — which is what makes a win and a jack-out, in either
+/// model, pay through one path.
 #[derive(Default)]
 pub struct BattleRewards {
     /// Every copy that dropped, merged by copy. Held in the order things

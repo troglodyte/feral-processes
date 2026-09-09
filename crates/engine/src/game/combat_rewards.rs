@@ -3,6 +3,7 @@
 
 use crate::items::DownedProgram;
 use crate::progression::StatRow;
+use crate::tactical::TacticalBattle;
 use crate::tuning::{DECOMPILE_ATTEMPT_BONUS_CAP, GEAR_AFFIX_CHANCE};
 use crate::tuning::{
     DECOMPILER_SKILL_PER_LEVEL, NEST_RESPAWN_TICKS, PARTY_XP_DIVISOR, PERK_POINTS_PER_LEVEL,
@@ -272,6 +273,42 @@ impl Game {
         )
     }
 
+    /// This fight's payout tally, whichever model is holding the fight — or
+    /// `None` when there is no fight at all.
+    ///
+    /// **The one door onto a fight's rewards.** Both combat models
+    /// accumulate into a `BattleRewards`, and every writer reaches it
+    /// through here rather than naming a model's resource: a kill pays the
+    /// same way whether it was struck across a group front or across a
+    /// battle map, and `settle_rewards` drains whichever one filled up.
+    /// The two are never both present, so the order of the arms is not a
+    /// precedence rule.
+    ///
+    /// The `is_some` probe rather than an `if let` returning out of its
+    /// body: a borrow returned from inside a conditional outlives the
+    /// conditional, which the borrow checker refuses.
+    pub(crate) fn fight_rewards_mut(&mut self) -> Option<&mut BattleRewards> {
+        if self.world.get_resource::<BattleState>().is_some() {
+            return Some(
+                &mut self
+                    .world
+                    .resource_mut::<BattleState>()
+                    .into_inner()
+                    .rewards,
+            );
+        }
+        if self.world.get_resource::<TacticalBattle>().is_some() {
+            return Some(
+                &mut self
+                    .world
+                    .resource_mut::<TacticalBattle>()
+                    .into_inner()
+                    .rewards,
+            );
+        }
+        None
+    }
+
     /// Adds `qty` copies of `copy` to this fight's salvage tally — or, with
     /// no fight to hold one, announces it where it happened.
     ///
@@ -285,11 +322,11 @@ impl Game {
         if qty == 0 {
             return;
         }
-        let Some(mut battle) = self.world.get_resource_mut::<BattleState>() else {
+        let Some(rewards) = self.fight_rewards_mut() else {
             self.announce_drops(&[(copy, qty)]);
             return;
         };
-        let drops = &mut battle.rewards.drops;
+        let drops = &mut rewards.drops;
         match drops.iter_mut().find(|(held, _)| *held == copy) {
             Some(row) => row.1 += qty,
             None => drops.push((copy, qty)),
@@ -299,10 +336,10 @@ impl Game {
     /// Folds `tally` into `companion`'s row of this fight's rewards,
     /// reporting whether there was a fight to fold it into.
     pub(crate) fn record_companion_xp(&mut self, companion: Entity, tally: &XpTally) -> bool {
-        let Some(mut battle) = self.world.get_resource_mut::<BattleState>() else {
+        let Some(rewards) = self.fight_rewards_mut() else {
             return false;
         };
-        let rows = &mut battle.rewards.companions;
+        let rows = &mut rewards.companions;
         match rows.iter_mut().find(|(entity, _)| *entity == companion) {
             Some((_, held)) => held.absorb(tally),
             None => rows.push((companion, tally.clone())),
@@ -438,12 +475,10 @@ impl Game {
     /// `end_battle` is the only place `BattleState` is dropped: you keep what
     /// you killed before you ran.
     pub(crate) fn settle_rewards(&mut self) {
-        let mut rewards = {
-            let Some(mut battle) = self.world.get_resource_mut::<BattleState>() else {
-                return;
-            };
-            std::mem::take(&mut battle.rewards)
+        let Some(rewards) = self.fight_rewards_mut() else {
+            return;
         };
+        let mut rewards = std::mem::take(rewards);
         // First of the results, so it reads directly under the blow that
         // ended the fight.
         //
@@ -937,9 +972,8 @@ impl Game {
         // `record_drop` for why that fallback is a formatter call rather than
         // a second wording.
         let stored = self
-            .world
-            .get_resource_mut::<BattleState>()
-            .map(|mut b| b.rewards.player.absorb(&tally))
+            .fight_rewards_mut()
+            .map(|rewards| rewards.player.absorb(&tally))
             .is_some();
         if !stored {
             // Unindented and with no `Experience:` header: outside a fight
@@ -1116,16 +1150,14 @@ impl Game {
             // `settle_rewards` is what reaches the summary. See
             // `BattleRewards::decompile_verdict`.
             self.log_kind(MessageKind::Info, verdict.clone());
-            self.world
-                .resource_mut::<BattleState>()
-                .rewards
-                .decompile_verdict = Some(verdict);
+            if let Some(rewards) = self.fight_rewards_mut() {
+                rewards.decompile_verdict = Some(verdict);
+            }
             return false;
         }
-        self.world
-            .resource_mut::<BattleState>()
-            .rewards
-            .decompile_verdict = None;
+        if let Some(rewards) = self.fight_rewards_mut() {
+            rewards.decompile_verdict = None;
+        }
         self.note_deed(crate::contracts::Deed::Tamed);
 
         // Taken while the program is still hostile: `kill_xp` reads its

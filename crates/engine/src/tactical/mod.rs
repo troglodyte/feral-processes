@@ -18,6 +18,7 @@ pub mod reach;
 
 use bevy_ecs::prelude::{Entity, Resource};
 
+use crate::resources::BattleRewards;
 use crate::tactical::map::{BattleSpec, Board};
 
 /// A tactical fight's spatial state: the map it is fought on and where
@@ -41,6 +42,13 @@ pub struct TacticalBattle {
     /// `BTreeMap` rule again — and a fight holds at most thirteen bodies,
     /// so a linear scan is the simpler thing and also the faster one.
     bodies: Vec<(Entity, (i32, i32))>,
+    /// What this fight has paid out so far, held back until it ends.
+    ///
+    /// The second arm of `Game::fight_rewards_mut`, and a field rather than
+    /// a resource of its own for the reason `BattleRewards`' own doc gives:
+    /// a new `Resource` shifts bevy's query iteration order under unrelated
+    /// tests, and a fight's payout has no business doing that.
+    pub(crate) rewards: BattleRewards,
 }
 
 impl TacticalBattle {
@@ -49,6 +57,7 @@ impl TacticalBattle {
             spec,
             board,
             bodies: Vec::new(),
+            rewards: BattleRewards::default(),
         }
     }
 

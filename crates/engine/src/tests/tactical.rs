@@ -1074,3 +1074,114 @@ fn there_is_no_tactical_view_without_a_tactical_fight() {
     assert!(game.tactical_view().is_none());
     assert!(game.tactical_shape_cells(0, (0, 0)).is_empty());
 }
+
+/// Turns the tactical model on for this run.
+fn with_tactical_on(game: &mut Game) {
+    let mut profile = game.profile().clone();
+    profile.tactical_battles = true;
+    game.install_profile(profile);
+}
+
+/// A pack of one hostile standing beside the player, unopened.
+fn loose_pack(game: &mut Game, guardian: bool) -> Vec<Entity> {
+    let player = game.player_entity();
+    let at = *game
+        .world
+        .get::<Position>(player)
+        .expect("the player stands somewhere");
+    let species = game
+        .species_defs()
+        .into_iter()
+        .next()
+        .expect("at least one species ships");
+    let body = game.world.spawn((
+        Creature {
+            species: species.id.clone(),
+        },
+        Hostile,
+        Position {
+            x: at.x + 1,
+            y: at.y,
+        },
+        Stats {
+            hp: 10,
+            max_hp: 10,
+            atk: 1,
+            mitigation: 0,
+        },
+        StatusEffects::default(),
+    ));
+    let id = body.id();
+    if guardian {
+        // A nest to be tethered to. What it *is* does not matter here; that
+        // the pack carries a `NestGuardian` at all is the whole gate.
+        let nest = game
+            .world
+            .spawn(Position {
+                x: at.x + 4,
+                y: at.y,
+            })
+            .id();
+        game.world
+            .entity_mut(id)
+            .insert(crate::components::NestGuardian { nest });
+    }
+    vec![id]
+}
+
+#[test]
+fn the_toggle_on_the_surface_is_what_opens_a_tactical_fight() {
+    let mut game = game();
+    with_tactical_on(&mut game);
+    let pack = loose_pack(&mut game, false);
+    game.start_battle(pack);
+
+    assert!(game.in_tactical_battle(), "the tactical model took it");
+    assert!(
+        game.world.get_resource::<BattleState>().is_none(),
+        "and the abstract one did not"
+    );
+}
+
+#[test]
+fn the_toggle_off_leaves_every_fight_abstract() {
+    let mut game = game();
+    let pack = loose_pack(&mut game, false);
+    game.start_battle(pack);
+
+    assert!(!game.in_tactical_battle());
+    assert!(game.world.get_resource::<BattleState>().is_some());
+}
+
+/// The pursuit path is shared by nest guardians and town patrols, so the
+/// scope split cannot be a per-call-site decision — inspecting the pack is
+/// what separates them.
+#[test]
+fn a_nest_guardian_is_fought_abstract_however_the_toggle_is_set() {
+    let mut game = game();
+    with_tactical_on(&mut game);
+    let pack = loose_pack(&mut game, true);
+    game.start_battle(pack);
+
+    assert!(!game.in_tactical_battle(), "a guardian stays abstract");
+    assert!(game.world.get_resource::<BattleState>().is_some());
+}
+
+#[test]
+fn the_stack_stays_abstract_however_the_toggle_is_set() {
+    let mut game = game();
+    with_tactical_on(&mut game);
+    let pack = loose_pack(&mut game, false);
+    game.world.insert_resource(crate::resources::Locale::Stack {
+        depth: 1,
+        frames: 3,
+        x: 1,
+        y: 1,
+        facing: crate::stack::Dir::North,
+        entrance: (0, 0),
+    });
+    game.start_battle(pack);
+
+    assert!(!game.in_tactical_battle(), "the Stack keeps its own model");
+    assert!(game.world.get_resource::<BattleState>().is_some());
+}

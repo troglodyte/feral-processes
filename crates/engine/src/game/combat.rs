@@ -253,8 +253,35 @@ impl Game {
     /// roll, and a third caller that does want capping calls `group_pack`
     /// itself.
     pub(crate) fn start_battle(&mut self, pack: Vec<Entity>) {
+        if self.fights_tactically(&pack) {
+            self.open_tactical_battle(pack);
+            return;
+        }
         let groups = self.group_pack(pack);
         self.begin_battle(groups);
+    }
+
+    /// Whether this pack is one the tactical model takes.
+    ///
+    /// **Inspecting the pack is what separates the two, and it has to be.**
+    /// The pursuit path is shared by nest guardians and town patrols
+    /// (`game/turn.rs`), so which model a chase opens cannot be a per-call-
+    /// site decision — a patrol is in scope and a guardian is not, and both
+    /// arrive here through the same call.
+    ///
+    /// Three gates, and the fourth is an omission: `arena::stage` calls
+    /// `begin_battle` directly and never passes through here, so the arena
+    /// stays abstract with no code written for it. Nests, lairs and raids
+    /// likewise open their fights by their own routes.
+    ///
+    /// `require_surface` is called rather than restated. Base space and the
+    /// Stack are both off it, and the Stack's own model is settled.
+    fn fights_tactically(&self, pack: &[Entity]) -> bool {
+        self.profile().tactical_battles
+            && self.require_surface().is_ok()
+            && !pack
+                .iter()
+                .any(|&e| self.world.get::<NestGuardian>(e).is_some())
     }
 
     /// What one side of a fight weighs, by summed `Stats::power()`.

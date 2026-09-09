@@ -501,6 +501,342 @@ impl Game {
         schedule
     }
 
+    fn restore_nests(&mut self, nests: Vec<save::NestSave>) -> HashMap<(i32, i32), Entity> {
+        let mut nest_positions: HashMap<(i32, i32), Entity> = HashMap::new();
+        for n in nests {
+            let Some(species) = self.world.resource::<SpeciesDb>().get(&n.species).cloned() else {
+                continue;
+            };
+            let nest = self
+                .world
+                .spawn(spawning::nest_components(
+                    &species,
+                    n.position.0,
+                    n.position.1,
+                    // Clamped rather than trusted outright: NEST_DURABILITY
+                    // is a tuning.rs constant, not part of the save format,
+                    // so lowering it must not leave an existing save's nest
+                    // loading with hp above the new max — the structure
+                    // path a little further down clamps the same way.
+                    n.durability.min(NEST_DURABILITY),
+                    n.pending_respawns,
+                ))
+                .id();
+            nest_positions.insert(n.position, nest);
+        }
+        nest_positions
+    }
+
+    fn restore_caravans(
+        &mut self,
+        memory: save::CaravanMemorySave,
+        caravans: Vec<save::CaravanSave>,
+    ) {
+        self.world.insert_resource(crate::resources::CaravanMemory {
+            visit: memory.visit,
+            bought: memory.bought.into_iter().collect(),
+        });
+
+        // A caravan whose `.ron` file has gone since the save was written is
+        // dropped rather than spawned glyphless: the visit becomes a miss,
+        // which is the same thing an install with no `assets/caravans/` at
+        // all sees, and is what makes deleting the directory supported rather
+        // than breaking a save.
+        for c in caravans {
+            let Some(def) = self.visit_at(c.visit).and_then(|v| {
+                self.world
+                    .resource::<crate::caravans::CaravanDb>()
+                    .get(&v.def_id)
+                    .cloned()
+            }) else {
+                continue;
+            };
+            self.world.spawn((
+                Caravan {
+                    stage: c.stage,
+                    visit: c.visit,
+                    arrival_tile: c.arrival_tile,
+                    stage_ticks: c.stage_ticks,
+                    // Never saved: a reload is exactly when the player should
+                    // be told again. `DigSite::announced_stuck`'s rule.
+                    announced_stuck: false,
+                },
+                Position {
+                    x: c.position.0,
+                    y: c.position.1,
+                },
+                Glyph {
+                    ch: def.glyph,
+                    color: def.color,
+                },
+            ));
+        }
+    }
+
+    fn restore_build_sites(&mut self, sites: Vec<save::BuildSiteSave>) {
+        for b in sites {
+            let goal = b.goal;
+            let mut site = self.world.spawn((
+                BuildSite {
+                    structure: b.structure,
+                    cost: b.cost,
+                    delivered: b.delivered,
+                    progress: b.progress,
+                    // Never saved, `DigSite`'s two latches' rule: a crew's
+                    // "I already said so" is true of a conversation and not
+                    // of the world, so a reload says it again.
+                    announced_dry: false,
+                    announced_stuck: false,
+                    goal,
+                    program: b.program,
+                },
+                Position {
+                    x: b.position.0,
+                    y: b.position.1,
+                },
+            ));
+            // An upgrade site is born without one, because the machine it is
+            // about is still standing on that cell and still drawing itself.
+            // Attached unconditionally, the tile would carry two views and
+            // the map would paint a build slab over a working machine.
+            if goal == crate::components::BuildGoal::New {
+                site.insert(Glyph {
+                    ch: BUILD_SITE_GLYPH,
+                    color: GlyphColor::Orange,
+                });
+            }
+        }
+    }
+
+    fn restore_dig_sites(&mut self, sites: Vec<save::DigSiteSave>) {
+        for d in sites {
+            let wall = self.wall_at(d.position.0, d.position.1);
+            self.world.spawn((
+                DigSite {
+                    marked: d.marked,
+                    // Never saved: a crew's "I already said so" is true of a
+                    // conversation, not of the world, and a reload is
+                    // exactly when the player should be told again.
+                    announced_stuck: false,
+                    announced_dry: false,
+                },
+                Durability {
+                    // Clamped rather than trusted, the same way a nest's is
+                    // just above: a kind's durability lives in
+                    // `assets/rock/` and not in the save format, so
+                    // softening a kind — or deleting its file — must not
+                    // leave an existing save's wall loading with more rock
+                    // in it than a fresh one has.
+                    //
+                    // **Re-derived from the site's own `Position`**, which
+                    // is why a `DigSite` still saves nothing about what it
+                    // is made of: the kind is a property of the place.
+                    // Clamping against the flat `BASE_ROCK_DURABILITY`
+                    // instead would silently cap every dense wall in the
+                    // base at the fallback's ceiling on the first reload.
+                    hp: d.durability.min(wall.durability),
+                    max_hp: wall.durability,
+                },
+                Position {
+                    x: d.position.0,
+                    y: d.position.1,
+                },
+            ));
+        }
+    }
+
+    fn restore_sorties(&mut self, saved: Vec<save::SortieSave>, sortie_members: &[(u32, Entity)]) {
+        // A record whose members all failed to load — a species file deleted
+        // between sessions — is dropped rather than restored empty: an empty
+        // squad is a countdown nothing comes home from, and a base is better
+        // off short a trip than waiting forever on one.
+        let sorties: Vec<crate::resources::Sortie> = saved
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, s)| {
+                let members: Vec<Entity> = sortie_members
+                    .iter()
+                    .filter(|&&(i, _)| i as usize == index)
+                    .map(|&(_, e)| e)
+                    .collect();
+                if members.is_empty() {
+                    return None;
+                }
+                Some(crate::resources::Sortie {
+                    site: s.site,
+                    risk: s.risk,
+                    members,
+                    ticks_total: s.ticks_total,
+                    ticks_elapsed: s.ticks_elapsed,
+                    battles_total: s.battles_total,
+                    battles_done: s.battles_done,
+                    aborted: s.aborted,
+                    loot: s.loot,
+                    programs: s.programs,
+                    xp: s.xp,
+                    kills: s.kills,
+                    casualties: s.casualties,
+                })
+            })
+            .collect();
+        self.world
+            .insert_resource(crate::resources::Sorties(sorties));
+    }
+
+    fn restore_routes(&mut self, saved: Vec<save::RouteSave>) {
+        // Straight field-for-field, `routes::Route`'s own reason: cargo
+        // names no entity, so there is nothing here to reconcile against
+        // `sortie_members` above.
+        let routes: Vec<crate::routes::Route> = saved
+            .into_iter()
+            .map(|r| crate::routes::Route {
+                destination: r.destination,
+                destination_def: r.destination_def,
+                destination_tile: r.destination_tile,
+                cargo: r.cargo,
+                standing: r.standing,
+                stalled: r.stalled,
+                leg: r.leg,
+                ticks_total: r.ticks_total,
+                ticks_elapsed: r.ticks_elapsed,
+                proceeds: r.proceeds,
+            })
+            .collect();
+        self.world.insert_resource(crate::resources::Routes(routes));
+    }
+
+    fn restore_structures(
+        &mut self,
+        structures: Vec<save::StructureSave>,
+    ) -> HashMap<(i32, i32), Entity> {
+        let mut structure_positions: HashMap<(i32, i32), Entity> = HashMap::new();
+        for s in structures {
+            let Some(def) = self.world.resource::<StructureDb>().get(&s.kind).cloned() else {
+                continue;
+            };
+            let mut entity = self.world.spawn((
+                Structure {
+                    kind: def.id.clone(),
+                },
+                Position {
+                    x: s.position.0,
+                    y: s.position.1,
+                },
+                Glyph {
+                    ch: def.glyph,
+                    color: def.color,
+                },
+            ));
+            // A save written before `raidable` existed still records a
+            // durability for what is now a non-raidable structure; the def
+            // wins, so that stored value is simply dropped.
+            if def.raidable {
+                entity.insert(Durability {
+                    hp: s.durability.unwrap_or(def.durability).min(def.durability),
+                    max_hp: def.durability,
+                });
+            }
+            let structure_id = entity.id();
+            structure_positions.insert(s.position, structure_id);
+            entity.insert(Stock {
+                input: s.stock_input.iter().cloned().collect(),
+                output: s.stock_output.iter().cloned().collect(),
+                capacity: def.capacity,
+            });
+            // The def decides whether a rig stands here, not the save: a
+            // stored hopper on a structure whose `strips` a mod has since
+            // taken away is simply dropped, `durability`'s own rule two
+            // arms above.
+            if def.strips.is_some() {
+                entity.insert(crate::components::Hopper {
+                    queue: s.hopper.clone(),
+                    progress: s.hopper_progress,
+                });
+            }
+            // Both halves mirror `Game::spawn_structure`'s list, which is the
+            // hand-written copy this file has always been: a burning supplier
+            // missing its `PowerFuel` reads as a base whose grid collapsed on
+            // reload, and nothing here fails to compile when it drifts.
+            if def.runs_a_job() || def.power_upkeep.is_some() {
+                entity.insert(MachineStatus::default());
+            }
+            if def.power_upkeep.is_some() {
+                entity.insert(crate::components::PowerFuel {
+                    ticks_left: s.power_fuel,
+                });
+            }
+            // Absent rather than defaulted when neither flag is set, so
+            // "has a standing job" stays readable as the component's
+            // presence — the same invariant `Equipment` keeps.
+            if s.standing_work || s.standing_guard {
+                entity.insert(StandingJob {
+                    work: s.standing_work,
+                    guard: s.standing_guard,
+                });
+            }
+            // Absent rather than empty for `StandingJob`'s reason one arm
+            // up: "this Depot takes anything" has exactly one
+            // representation, and `Game::set_depot_filter` keeps it that
+            // way on the live side.
+            if !s.denied_items.is_empty() {
+                entity.insert(crate::components::DepotFilter {
+                    denied: s.denied_items.iter().cloned().collect(),
+                });
+            }
+            // Rebuilt from the def rather than from the save: with the
+            // deposit pool gone, a node carries nothing per-instance that a
+            // `.ron` file doesn't already say. What the node *produced* is
+            // in `Stock` above, which is where the state now lives.
+            if let Some(work) = &def.work {
+                entity.insert(ResourceNode {
+                    resource: work.produces.clone(),
+                    level: work.level,
+                });
+            }
+            // Inserted unconditionally: a Home reloaded at 1.0 carries a
+            // component it did not have before, which changes nothing
+            // because 1.0 is the neutral the absent case already means.
+            entity.insert(crate::components::BuildQuality(s.build_quality));
+            if def.upgrade.is_some() {
+                let tier = s.tier.unwrap_or(1);
+                entity.insert(StructureTier(tier));
+                // WorkDef::level only carries the tier-1 baseline, so a
+                // restored node's reliability has to be re-derived from its
+                // tier or a Mk3 would come back extracting like a Mk1.
+                if let Some(mut node) = entity.get_mut::<ResourceNode>()
+                    && node.level.is_some()
+                {
+                    node.level = Some(tier);
+                }
+            }
+        }
+        structure_positions
+    }
+
+    fn attach_cronjobs(
+        &mut self,
+        pending: Vec<(Entity, save::CronjobSave)>,
+        structure_positions: &HashMap<(i32, i32), Entity>,
+    ) {
+        // Reconnect each restored cronjob to its target structure now that
+        // both sides exist. A structure is matched by position (entity ids
+        // aren't stable across a save/load round trip) — if it's gone,
+        // the assignment is silently dropped rather than crashing.
+        for (worker, cronjob) in pending {
+            if let Some(&target) = structure_positions.get(&cronjob.target_position) {
+                self.world.entity_mut(worker).insert(Task {
+                    kind: match cronjob.kind {
+                        save::CronjobKind::GatherResource => TaskKind::GatherResource,
+                        save::CronjobKind::Guard => TaskKind::Guard,
+                    },
+                    target,
+                    progress: cronjob.progress,
+                    required: cronjob.required,
+                });
+            }
+        }
+    }
+
     pub fn load(path: &Path, assets_dir: &Path) -> std::io::Result<Self> {
         let data = save::load_from_file(path)?;
         // Permadeath's one guarantee, and it is enforced here rather than in
@@ -895,136 +1231,13 @@ impl Game {
         // The bundle itself comes from `nest_components` (`game/spawning.rs`),
         // shared with `Game::spawn_nest` — see that function's doc comment,
         // which is the other half of this note.
-        let mut nest_positions: HashMap<(i32, i32), Entity> = HashMap::new();
-        for n in data.nests {
-            let Some(species) = game.world.resource::<SpeciesDb>().get(&n.species).cloned() else {
-                continue;
-            };
-            let nest = game
-                .world
-                .spawn(spawning::nest_components(
-                    &species,
-                    n.position.0,
-                    n.position.1,
-                    // Clamped rather than trusted outright: NEST_DURABILITY
-                    // is a tuning.rs constant, not part of the save format,
-                    // so lowering it must not leave an existing save's nest
-                    // loading with hp above the new max — the structure
-                    // path a little further down clamps the same way.
-                    n.durability.min(NEST_DURABILITY),
-                    n.pending_respawns,
-                ))
-                .id();
-            nest_positions.insert(n.position, nest);
-        }
+        let nest_positions = game.restore_nests(data.nests);
 
-        game.world.insert_resource(crate::resources::CaravanMemory {
-            visit: data.caravan_memory.visit,
-            bought: data.caravan_memory.bought.into_iter().collect(),
-        });
+        game.restore_caravans(data.caravan_memory, data.caravans);
 
-        // A caravan whose `.ron` file has gone since the save was written is
-        // dropped rather than spawned glyphless: the visit becomes a miss,
-        // which is the same thing an install with no `assets/caravans/` at
-        // all sees, and is what makes deleting the directory supported rather
-        // than breaking a save.
-        for c in data.caravans {
-            let Some(def) = game.visit_at(c.visit).and_then(|v| {
-                game.world
-                    .resource::<crate::caravans::CaravanDb>()
-                    .get(&v.def_id)
-                    .cloned()
-            }) else {
-                continue;
-            };
-            game.world.spawn((
-                Caravan {
-                    stage: c.stage,
-                    visit: c.visit,
-                    arrival_tile: c.arrival_tile,
-                    stage_ticks: c.stage_ticks,
-                    // Never saved: a reload is exactly when the player should
-                    // be told again. `DigSite::announced_stuck`'s rule.
-                    announced_stuck: false,
-                },
-                Position {
-                    x: c.position.0,
-                    y: c.position.1,
-                },
-                Glyph {
-                    ch: def.glyph,
-                    color: def.color,
-                },
-            ));
-        }
+        game.restore_build_sites(data.build_sites);
 
-        for b in data.build_sites {
-            let goal = b.goal;
-            let mut site = game.world.spawn((
-                BuildSite {
-                    structure: b.structure,
-                    cost: b.cost,
-                    delivered: b.delivered,
-                    progress: b.progress,
-                    // Never saved, `DigSite`'s two latches' rule: a crew's
-                    // "I already said so" is true of a conversation and not
-                    // of the world, so a reload says it again.
-                    announced_dry: false,
-                    announced_stuck: false,
-                    goal,
-                    program: b.program,
-                },
-                Position {
-                    x: b.position.0,
-                    y: b.position.1,
-                },
-            ));
-            // An upgrade site is born without one, because the machine it is
-            // about is still standing on that cell and still drawing itself.
-            // Attached unconditionally, the tile would carry two views and
-            // the map would paint a build slab over a working machine.
-            if goal == crate::components::BuildGoal::New {
-                site.insert(Glyph {
-                    ch: BUILD_SITE_GLYPH,
-                    color: GlyphColor::Orange,
-                });
-            }
-        }
-
-        for d in data.dig_sites {
-            let wall = game.wall_at(d.position.0, d.position.1);
-            game.world.spawn((
-                DigSite {
-                    marked: d.marked,
-                    // Never saved: a crew's "I already said so" is true of a
-                    // conversation, not of the world, and a reload is
-                    // exactly when the player should be told again.
-                    announced_stuck: false,
-                    announced_dry: false,
-                },
-                Durability {
-                    // Clamped rather than trusted, the same way a nest's is
-                    // just above: a kind's durability lives in
-                    // `assets/rock/` and not in the save format, so
-                    // softening a kind — or deleting its file — must not
-                    // leave an existing save's wall loading with more rock
-                    // in it than a fresh one has.
-                    //
-                    // **Re-derived from the site's own `Position`**, which
-                    // is why a `DigSite` still saves nothing about what it
-                    // is made of: the kind is a property of the place.
-                    // Clamping against the flat `BASE_ROCK_DURABILITY`
-                    // instead would silently cap every dense wall in the
-                    // base at the fallback's ceiling on the first reload.
-                    hp: d.durability.min(wall.durability),
-                    max_hp: wall.durability,
-                },
-                Position {
-                    x: d.position.0,
-                    y: d.position.1,
-                },
-            ));
-        }
+        game.restore_dig_sites(data.dig_sites);
 
         // At most one creature may claim the weapon hand. Taken defensively
         // — the first wins and any others are ignored — rather than trusting
@@ -1094,184 +1307,12 @@ impl Game {
         // `enter_next_zone` must not wipe this: the program travels with you
         // across a breach exactly as the party does.
         game.world.insert_resource(WieldedProgram(wielded));
-        // A record whose members all failed to load — a species file deleted
-        // between sessions — is dropped rather than restored empty: an empty
-        // squad is a countdown nothing comes home from, and a base is better
-        // off short a trip than waiting forever on one.
-        let sorties: Vec<crate::resources::Sortie> = data
-            .player
-            .sorties
-            .into_iter()
-            .enumerate()
-            .filter_map(|(index, s)| {
-                let members: Vec<Entity> = sortie_members
-                    .iter()
-                    .filter(|&&(i, _)| i as usize == index)
-                    .map(|&(_, e)| e)
-                    .collect();
-                if members.is_empty() {
-                    return None;
-                }
-                Some(crate::resources::Sortie {
-                    site: s.site,
-                    risk: s.risk,
-                    members,
-                    ticks_total: s.ticks_total,
-                    ticks_elapsed: s.ticks_elapsed,
-                    battles_total: s.battles_total,
-                    battles_done: s.battles_done,
-                    aborted: s.aborted,
-                    loot: s.loot,
-                    programs: s.programs,
-                    xp: s.xp,
-                    kills: s.kills,
-                    casualties: s.casualties,
-                })
-            })
-            .collect();
-        game.world
-            .insert_resource(crate::resources::Sorties(sorties));
-        // Straight field-for-field, `routes::Route`'s own reason: cargo
-        // names no entity, so there is nothing here to reconcile against
-        // `sortie_members` above.
-        let routes: Vec<crate::routes::Route> = data
-            .player
-            .routes
-            .into_iter()
-            .map(|r| crate::routes::Route {
-                destination: r.destination,
-                destination_def: r.destination_def,
-                destination_tile: r.destination_tile,
-                cargo: r.cargo,
-                standing: r.standing,
-                stalled: r.stalled,
-                leg: r.leg,
-                ticks_total: r.ticks_total,
-                ticks_elapsed: r.ticks_elapsed,
-                proceeds: r.proceeds,
-            })
-            .collect();
-        game.world.insert_resource(crate::resources::Routes(routes));
+        game.restore_sorties(data.player.sorties, &sortie_members);
+        game.restore_routes(data.player.routes);
 
-        let mut structure_positions: HashMap<(i32, i32), Entity> = HashMap::new();
-        for s in data.structures {
-            let Some(def) = game.world.resource::<StructureDb>().get(&s.kind).cloned() else {
-                continue;
-            };
-            let mut entity = game.world.spawn((
-                Structure {
-                    kind: def.id.clone(),
-                },
-                Position {
-                    x: s.position.0,
-                    y: s.position.1,
-                },
-                Glyph {
-                    ch: def.glyph,
-                    color: def.color,
-                },
-            ));
-            // A save written before `raidable` existed still records a
-            // durability for what is now a non-raidable structure; the def
-            // wins, so that stored value is simply dropped.
-            if def.raidable {
-                entity.insert(Durability {
-                    hp: s.durability.unwrap_or(def.durability).min(def.durability),
-                    max_hp: def.durability,
-                });
-            }
-            let structure_id = entity.id();
-            structure_positions.insert(s.position, structure_id);
-            entity.insert(Stock {
-                input: s.stock_input.iter().cloned().collect(),
-                output: s.stock_output.iter().cloned().collect(),
-                capacity: def.capacity,
-            });
-            // The def decides whether a rig stands here, not the save: a
-            // stored hopper on a structure whose `strips` a mod has since
-            // taken away is simply dropped, `durability`'s own rule two
-            // arms above.
-            if def.strips.is_some() {
-                entity.insert(crate::components::Hopper {
-                    queue: s.hopper.clone(),
-                    progress: s.hopper_progress,
-                });
-            }
-            // Both halves mirror `Game::spawn_structure`'s list, which is the
-            // hand-written copy this file has always been: a burning supplier
-            // missing its `PowerFuel` reads as a base whose grid collapsed on
-            // reload, and nothing here fails to compile when it drifts.
-            if def.runs_a_job() || def.power_upkeep.is_some() {
-                entity.insert(MachineStatus::default());
-            }
-            if def.power_upkeep.is_some() {
-                entity.insert(crate::components::PowerFuel {
-                    ticks_left: s.power_fuel,
-                });
-            }
-            // Absent rather than defaulted when neither flag is set, so
-            // "has a standing job" stays readable as the component's
-            // presence — the same invariant `Equipment` keeps.
-            if s.standing_work || s.standing_guard {
-                entity.insert(StandingJob {
-                    work: s.standing_work,
-                    guard: s.standing_guard,
-                });
-            }
-            // Absent rather than empty for `StandingJob`'s reason one arm
-            // up: "this Depot takes anything" has exactly one
-            // representation, and `Game::set_depot_filter` keeps it that
-            // way on the live side.
-            if !s.denied_items.is_empty() {
-                entity.insert(crate::components::DepotFilter {
-                    denied: s.denied_items.iter().cloned().collect(),
-                });
-            }
-            // Rebuilt from the def rather than from the save: with the
-            // deposit pool gone, a node carries nothing per-instance that a
-            // `.ron` file doesn't already say. What the node *produced* is
-            // in `Stock` above, which is where the state now lives.
-            if let Some(work) = &def.work {
-                entity.insert(ResourceNode {
-                    resource: work.produces.clone(),
-                    level: work.level,
-                });
-            }
-            // Inserted unconditionally: a Home reloaded at 1.0 carries a
-            // component it did not have before, which changes nothing
-            // because 1.0 is the neutral the absent case already means.
-            entity.insert(crate::components::BuildQuality(s.build_quality));
-            if def.upgrade.is_some() {
-                let tier = s.tier.unwrap_or(1);
-                entity.insert(StructureTier(tier));
-                // WorkDef::level only carries the tier-1 baseline, so a
-                // restored node's reliability has to be re-derived from its
-                // tier or a Mk3 would come back extracting like a Mk1.
-                if let Some(mut node) = entity.get_mut::<ResourceNode>()
-                    && node.level.is_some()
-                {
-                    node.level = Some(tier);
-                }
-            }
-        }
+        let structure_positions = game.restore_structures(data.structures);
 
-        // Reconnect each restored cronjob to its target structure now that
-        // both sides exist. A structure is matched by position (entity ids
-        // aren't stable across a save/load round trip) — if it's gone,
-        // the assignment is silently dropped rather than crashing.
-        for (worker, cronjob) in pending_cronjobs {
-            if let Some(&target) = structure_positions.get(&cronjob.target_position) {
-                game.world.entity_mut(worker).insert(Task {
-                    kind: match cronjob.kind {
-                        save::CronjobKind::GatherResource => TaskKind::GatherResource,
-                        save::CronjobKind::Guard => TaskKind::Guard,
-                    },
-                    target,
-                    progress: cronjob.progress,
-                    required: cronjob.required,
-                });
-            }
-        }
+        game.attach_cronjobs(pending_cronjobs, &structure_positions);
 
         game.restore_surface_links(data.link_sites);
         // Before `restore_locale`, which records what the party can see from

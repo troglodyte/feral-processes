@@ -329,6 +329,42 @@ mod tests {
         );
     }
 
+    /// Loading is not the bar for `tactical` either: it exists so a session
+    /// testing the second combat model opens *one keypress from a fight*,
+    /// and a wandering encounter is otherwise something you walk until you
+    /// find. So this asserts a lone hostile is standing on one of the
+    /// party's four orthogonal neighbours — a template parked two tiles
+    /// away would load perfectly and test nothing.
+    ///
+    /// **It cannot carry the toggle, and that is not a fault of the
+    /// capture.** `Profile::tactical_battles` lives in `profile.ron`, not
+    /// in the save, so this template opens the same fight in whichever
+    /// model the player has chosen on the Options screen — which is also
+    /// what makes it the right fixture for comparing the two.
+    #[test]
+    fn the_tactical_template_opens_one_step_from_a_fight() {
+        let out = std::env::temp_dir().join("feral_processes_template_tactical.bin");
+        generate("tactical", &out).unwrap();
+        let mut game = Game::load(&out, &assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&out);
+
+        let at = game.player_status().position;
+        let adjacent: Vec<_> = game
+            .view_entities(6, 6)
+            .into_iter()
+            .filter(|e| e.is_hostile && !e.is_tamed && !e.is_structure)
+            .filter(|e| (e.pos.0 - at.0).abs() + (e.pos.1 - at.1).abs() == 1)
+            .collect();
+
+        assert_eq!(
+            adjacent.len(),
+            1,
+            "the party must start beside exactly one wild program — walking \
+             into it is the whole gesture the template exists to save, and a \
+             second one on the doorstep is a different fight"
+        );
+    }
+
     /// Loading is not the bar for `settlements` either: it exists so a
     /// session testing towns opens *standing at one that will deal with
     /// them*, and the nearest town in this world is 128 tiles from the

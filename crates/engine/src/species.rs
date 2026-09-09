@@ -117,6 +117,11 @@ pub fn basic_attack_ability(species: &SpeciesId, index: usize, mv: &MoveDef) -> 
         boss_drop: None,
         triggers: None,
         ranged: mv.ranged,
+        // A converted basic attack derives its geometry like every other
+        // shapeless routine: `OneEnemyGroupFront` is a `Single` at arm's
+        // length, which is what a swing on a battle map already is.
+        shape: None,
+        range: None,
     }
 }
 

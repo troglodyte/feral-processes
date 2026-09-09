@@ -504,6 +504,56 @@ it comes from: a species' basic attacks are converted into abilities at
 load (`species::basic_attack_ability`), and this is the field that survives
 the conversion.
 
+## `shape` and `range` — battle maps only
+
+Both are read in **tactical fights alone**: the opt-in surface combat model
+that fights on a generated grid. In the ordinary group model, and everywhere
+in the Stack, they are ignored entirely, so authoring them changes nothing
+about how a routine resolves in front of a group.
+
+```ron
+shape: Some(Cone(length: 4, degrees: 90)),
+range: Some((min: 2, max: 6)),
+```
+
+Four shapes:
+
+| shape | covers |
+|---|---|
+| `Single` | whoever stands on the aimed cell |
+| `Line(length: n)` | a run of cells from the invoker toward the aim |
+| `Cone(length: n, degrees: d)` | a wedge from the invoker toward the aim, `d` wide in total |
+| `Radius(radius: r)` | everything within `r` of the aimed cell |
+
+`Line` and `Cone` are cast *from the invoker* and are stopped by anything
+that blocks sight — a `Cover` cell. `Radius` is centred on the aim and is
+stopped by nothing.
+
+**Recipients inside the shape take the effect whichever side they are on.**
+Friendly fire is full and deliberate: a blast wide enough to catch three
+hostiles is wide enough to catch your own party standing among them, and a
+`Radius` heal mends whatever is in it.
+
+`range` is how far from the invoker the routine may be *aimed*, in cells,
+inclusive at both ends. A `min` above zero makes a routine unusable at
+point-blank; nothing shipped authors one.
+
+Both default to nothing, and nothing shipped authors either — a routine
+with no `shape:` derives one from its `target:`, so an existing file and an
+existing mod both keep working untouched:
+
+| `target` | derived shape | derived range |
+|---|---|---|
+| `OneAlly` | `Single` | 0–1 |
+| `OneEnemyGroupFront` | `Single` | 0–1 |
+| `WholeParty` | `Radius(3)` | 0–0, i.e. centred on the invoker |
+| `WholeEnemyGroup` | `Radius(1)` | 0–6 |
+| `AllEnemies` | `Radius(2)` | 0–6 |
+
+Not to be confused with `ranged` above, which is a yes-or-no about reaching
+past the front line in the group model. The two never meet: one is a fact
+about groups, the other a distance in cells.
+
 ## The exclusive set
 
 `exclusive: true` marks a routine **nobody can learn**. It never enters

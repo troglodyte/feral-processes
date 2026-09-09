@@ -213,6 +213,89 @@ impl AbilityTarget {
             | AbilityTarget::AllEnemies => false,
         }
     }
+
+    /// What this lands on when it is run on a battle map and its file
+    /// authored no `shape:` — which is every routine the game ships.
+    ///
+    /// The group model's vocabulary read as geometry: a routine that names
+    /// one recipient is a `Single`, and one that names a whole side is a
+    /// blast. `WholeParty` is the one centred on the invoker, because it is
+    /// the one whose recipients are defined by standing with them.
+    ///
+    /// **Exhaustive on purpose**, `phrase`'s rule: a sixth targeting mode
+    /// with a `_` arm would ship as whichever shape that arm named, and a
+    /// routine that quietly became single-target reads as a nerf rather than
+    /// a bug.
+    pub fn derived_shape(self) -> AbilityShape {
+        match self {
+            AbilityTarget::OneAlly | AbilityTarget::OneEnemyGroupFront => AbilityShape::Single,
+            AbilityTarget::WholeParty => AbilityShape::Radius {
+                radius: crate::tuning::TACTICAL_PARTY_RADIUS,
+            },
+            AbilityTarget::WholeEnemyGroup => AbilityShape::Radius {
+                radius: crate::tuning::TACTICAL_GROUP_RADIUS,
+            },
+            AbilityTarget::AllEnemies => AbilityShape::Radius {
+                radius: crate::tuning::TACTICAL_FIELD_RADIUS,
+            },
+        }
+    }
+
+    /// How far from the invoker this may be aimed when its file authored no
+    /// `range:`.
+    ///
+    /// A single recipient is reached at arm's length and a blast is thrown,
+    /// which is the whole of the split; `WholeParty` is aimed at the invoker
+    /// itself and so reaches nowhere at all. Exhaustive for `derived_shape`'s
+    /// reason.
+    pub fn derived_range(self) -> AbilityRange {
+        match self {
+            AbilityTarget::OneAlly | AbilityTarget::OneEnemyGroupFront => AbilityRange {
+                min: 0,
+                max: crate::tuning::TACTICAL_MELEE_RANGE,
+            },
+            AbilityTarget::WholeParty => AbilityRange { min: 0, max: 0 },
+            AbilityTarget::WholeEnemyGroup | AbilityTarget::AllEnemies => AbilityRange {
+                min: 0,
+                max: crate::tuning::TACTICAL_THROWN_RANGE,
+            },
+        }
+    }
+}
+
+/// What a routine covers on a battle map, in cells.
+///
+/// Read in tactical fights alone — the group model has no geometry to spend
+/// it on, and the Stack stays abstract — so authoring one changes nothing
+/// about how a routine resolves in front of a group.
+///
+/// Four shapes and no more. `Single` is the degenerate case the other three
+/// generalise; `Line` and `Cone` are cast *from the invoker* toward the aim
+/// and are stopped by anything that blocks sight; `Radius` is centred on the
+/// aim and is stopped by nothing, because a blast that had to see its own
+/// far side would need a second sight rule for every cell in it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AbilityShape {
+    /// Whoever is standing on the aimed cell, and nobody else.
+    Single,
+    /// A one-cell-wide run of cells from the invoker toward the aim.
+    Line { length: u32 },
+    /// A wedge from the invoker toward the aim, `degrees` wide in total.
+    Cone { length: u32, degrees: u32 },
+    /// Everything within `radius` of the aimed cell, the aimed cell
+    /// included.
+    Radius { radius: u32 },
+}
+
+/// How far from the invoker a routine may be aimed, in cells, inclusive at
+/// both ends.
+///
+/// A `min` above zero is what makes a routine unusable at point-blank range
+/// — nothing ships one, and it is half of what an authored shape is for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AbilityRange {
+    pub min: u32,
+    pub max: u32,
 }
 
 /// The category an ability's magnitude belongs to, for affinity purposes —
@@ -575,6 +658,24 @@ pub struct AbilityDef {
     /// all orthogonal modifiers carried here for the same reason.
     #[serde(default)]
     pub triggers: Option<PassiveTrigger>,
+    /// What this covers on a battle map. `None` — the default, and what
+    /// every shipped routine is — derives one from `target`, see
+    /// `AbilityTarget::derived_shape`.
+    ///
+    /// `#[serde(default)]` so every existing file and every mod keeps
+    /// parsing untouched. Read only in tactical fights: the group model has
+    /// no cells to spend a shape on, and the Stack stays abstract.
+    #[serde(default)]
+    pub shape: Option<AbilityShape>,
+    /// How far from the invoker this may be aimed on a battle map. `None`
+    /// derives one from `target`, see `AbilityTarget::derived_range`.
+    ///
+    /// Not to be confused with `ranged`, which is a yes-or-no about reaching
+    /// past the front line in the *group* model and is read by the basic
+    /// attack path alone. The two never meet: one is a fact about groups,
+    /// the other a distance in cells.
+    #[serde(default)]
+    pub range: Option<AbilityRange>,
 }
 
 /// What makes a passive routine fire.
@@ -633,6 +734,26 @@ impl PassiveTrigger {
             }
             PassiveTrigger::RoundStart => "Fires at the start of every round".to_string(),
         }
+    }
+}
+
+impl AbilityDef {
+    /// What this covers on a battle map: whatever the file authored, or the
+    /// shape its `target` derives.
+    ///
+    /// **The one place the two are reconciled.** A reader that took
+    /// `def.shape` directly would resolve every shipped routine to nothing,
+    /// which is the trap a `#[serde(default)]` field with no single door
+    /// always sets: the failure is silent and reads as the routine doing
+    /// less than it says.
+    pub fn tactical_shape(&self) -> AbilityShape {
+        self.shape.unwrap_or_else(|| self.target.derived_shape())
+    }
+
+    /// How far from the invoker this may be aimed on a battle map, authored
+    /// or derived. `tactical_shape`'s rule and its reason.
+    pub fn tactical_range(&self) -> AbilityRange {
+        self.range.unwrap_or_else(|| self.target.derived_range())
     }
 }
 

@@ -4938,6 +4938,36 @@ pub const TACTICAL_MOVE_BASE: u32 = 4;
 /// roster onto two values.
 pub const TACTICAL_MOVE_SPEED_STEP: i32 = 2;
 
+/// How far a routine that reaches one recipient may be aimed, in cells.
+///
+/// One, so a `Single` routine is arm's length exactly as a swing is: the
+/// group model draws no distinction between a routine and a basic attack's
+/// reach either, and one that could be run two cells away would make the
+/// positioning this model is built on optional.
+pub const TACTICAL_MELEE_RANGE: u32 = 1;
+
+/// How far a routine that reaches a whole side may be aimed, in cells.
+///
+/// Six, which is `TACTICAL_DEPLOY_GAP`: an area routine reaches the far
+/// side's deployment from the near side's, so it is worth running on the
+/// first turn of a fight and does not need a march to bring it into play.
+pub const TACTICAL_THROWN_RANGE: u32 = 6;
+
+/// What a routine derives for a radius when its file authored no shape —
+/// one per side-facing `AbilityTarget`, in cells.
+///
+/// **The three are not one constant.** What the group model means by "one
+/// group" is a handful of bodies standing together and what it means by
+/// "everything" is the field, so a single figure would either make a group
+/// routine hit the board or a field routine hit two cells. The party's own
+/// is the widest of the three because a party is spread by the player's own
+/// movement rather than by deployment, and a rally that reached only the
+/// bodies pressed against the invoker would never land on the companion
+/// that needed it.
+pub const TACTICAL_GROUP_RADIUS: u32 = 1;
+pub const TACTICAL_FIELD_RADIUS: u32 = 2;
+pub const TACTICAL_PARTY_RADIUS: u32 = 3;
+
 /// The allowance's floor and ceiling.
 ///
 /// Not taste: `reach::movement_field` passes the allowance to `walk_field`

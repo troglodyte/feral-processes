@@ -238,6 +238,171 @@ impl CreatureRestore {
     }
 }
 
+/// The player as a save wrote them, spawned before `Game` exists — `spawn_player`'s
+/// counterpart on the load path, and the reason that one takes a bare start tile.
+fn spawn_player_from_save(
+    world: &mut World,
+    player_save: save::PlayerSave,
+    player_routines: Vec<AbilityId>,
+    player_perk_levels: u32,
+) -> Entity {
+    world
+        .spawn((
+            Player,
+            Position {
+                x: player_save.position.0,
+                y: player_save.position.1,
+            },
+            Glyph {
+                ch: player_save.glyph,
+                color: GlyphColor::Cyan,
+            },
+            Stats {
+                hp: player_save.hp,
+                max_hp: player_save.max_hp,
+                atk: player_save.atk,
+                mitigation: player_save.mitigation,
+            },
+            PowerReserve::new(player_save.power),
+            Experience {
+                level: player_save.level,
+                xp: player_save.xp,
+                // Derived, not read back. `PlayerSave::xp_to_next` is a
+                // second copy of `xp_for_level(level)`, which agrees
+                // until `XP_PER_LEVEL_STEP` moves — and then hands a
+                // pre-retune save a level at the old price. The field
+                // stays written (removing one is what earns a
+                // `SAVE_FORMAT_VERSION` bump) and is simply not trusted.
+                xp_to_next: crate::progression::xp_for_level(player_save.level),
+            },
+            Decompiler {
+                skill: player_save.decompiler,
+            },
+            Equipment {
+                weapon: worn_from_save(
+                    player_save.weapon,
+                    player_save.weapon_level,
+                    player_save.weapon_fusion_tier,
+                    player_save.weapon_rarity,
+                    player_save.weapon_affix.clone(),
+                    player_save.weapon_affixes.clone(),
+                    player_save.weapon_quality,
+                ),
+                armor: worn_from_save(
+                    player_save.armor,
+                    player_save.armor_level,
+                    player_save.armor_fusion_tier,
+                    player_save.armor_rarity,
+                    player_save.armor_affix.clone(),
+                    player_save.armor_affixes.clone(),
+                    player_save.armor_quality,
+                ),
+                module: worn_from_save(
+                    player_save.module,
+                    player_save.module_level,
+                    player_save.module_fusion_tier,
+                    player_save.module_rarity,
+                    player_save.module_affix.clone(),
+                    player_save.module_affixes.clone(),
+                    player_save.module_quality,
+                ),
+            },
+            Inventory {
+                items: player_save.inventory,
+            },
+            // Gear fusion was uncapped before it shared `MAX_FUSIONS`,
+            // so an older save can carry a copy above the ceiling.
+            // Only the carried copies are clamped — the worn copies
+            // above keep the tier their bonus was applied at, because
+            // `Stats` is restored with that bonus already in it and
+            // unequipping must subtract exactly what was added.
+            //
+            // Clamping can collapse two rows onto one key, so this goes
+            // through `add` rather than building the `Vec` directly:
+            // `GearCopies` holds one row per `GearCopy`, and a duplicate
+            // row would make `count` under-report and strand the copies
+            // in the row it didn't find.
+            //
+            // `fused_gear` is the pre-0.8.9 store and is drained here
+            // rather than read anywhere else — see its doc in `save.rs`
+            // for why the two coexist and when the legacy one goes.
+            {
+                let mut carried = GearCopies::default();
+                let legacy = player_save.fused_gear.into_iter().map(|(item, tier, qty)| {
+                    (
+                        // These copies predate both the affix and the
+                        // quality fields by two years of releases.
+                        GearCopy {
+                            item,
+                            rarity: Rarity::Ordinary,
+                            tier,
+                            affixes: Vec::new(),
+                            quality: crate::tuning::QUALITY_DEFAULT,
+                        },
+                        qty,
+                    )
+                });
+                let saved = player_save
+                    .gear_copies
+                    .into_iter()
+                    .map(|(copy, qty)| (copy_from_save(copy), qty));
+                for (copy, qty) in legacy.chain(saved) {
+                    carried.add(
+                        GearCopy {
+                            tier: copy.tier.min(crate::tuning::MAX_FUSIONS),
+                            ..copy
+                        },
+                        qty,
+                    );
+                }
+                carried
+            },
+            StatusEffects::default(),
+            CombatBuff::default(),
+            FieldBuff {
+                active: player_save.field_buffs,
+            },
+            Perks {
+                points: player_save.perk_points,
+                unlocked: player_save.unlocked_perks,
+            },
+            // Nested because the bundle tuple above is already at
+            // bevy's 15-element ceiling — the query-tuple limit CLAUDE.md
+            // already names, reached here from the bundle side instead.
+            (
+                // `max`, never a plain assignment from
+                // `unlocked_perks.len()`. That length is exact for a save
+                // written before respec shipped and *wrong* for every save
+                // written after one: a respec empties the list and leaves
+                // the count standing, so assigning the length would throw
+                // the count away and re-open the overflow-XP exploit
+                // across a save/load.
+                BoughtStats {
+                    ever_bought: player_save.bought_stats.ever_bought.max(player_perk_levels),
+                    ..player_save.bought_stats
+                },
+                Routines(player_routines),
+                PlayerIdentity {
+                    class: player_save.class,
+                    sprite: player_save.sprite.clone(),
+                    colour: player_save.colour,
+                    icon: player_save.icon.as_deref().and_then(PlayerIcon::decode),
+                },
+                DownedPrograms(player_save.downed_programs),
+                // Never `STARTER_TOOL_ID` here — the profile rule.
+                // `spawn_player` is `new_with`'s only caller and is
+                // where that grant lives; a load restores exactly what
+                // the save carried. A save predating tools carries no
+                // `tools` key at all, so `PlayerSave::tools`'s own
+                // `starter_tools()` default lands the starter tool
+                // there instead of an empty loadout — see that field's
+                // doc comment.
+                Tools(player_save.tools),
+            ),
+        ))
+        .id()
+}
+
 impl Game {
     pub fn new(seed: u32, difficulty: DifficultyMode, assets_dir: &Path) -> std::io::Result<Self> {
         Self::new_with(seed, difficulty, assets_dir, &CharacterChoice::default())
@@ -838,7 +1003,7 @@ impl Game {
     }
 
     pub fn load(path: &Path, assets_dir: &Path) -> std::io::Result<Self> {
-        let data = save::load_from_file(path)?;
+        let mut data = save::load_from_file(path)?;
         // Permadeath's one guarantee, and it is enforced here rather than in
         // `load_from_file` on purpose: the load list reads a dead slot to
         // label it, and `savetool` has to be able to dump one. The refusal
@@ -1020,165 +1185,18 @@ impl Game {
             y: data.spawn_point.1,
         });
 
-        let player = world
-            .spawn((
-                Player,
-                Position {
-                    x: data.player.position.0,
-                    y: data.player.position.1,
-                },
-                Glyph {
-                    ch: data.player.glyph,
-                    color: GlyphColor::Cyan,
-                },
-                Stats {
-                    hp: data.player.hp,
-                    max_hp: data.player.max_hp,
-                    atk: data.player.atk,
-                    mitigation: data.player.mitigation,
-                },
-                PowerReserve::new(data.player.power),
-                Experience {
-                    level: data.player.level,
-                    xp: data.player.xp,
-                    // Derived, not read back. `PlayerSave::xp_to_next` is a
-                    // second copy of `xp_for_level(level)`, which agrees
-                    // until `XP_PER_LEVEL_STEP` moves — and then hands a
-                    // pre-retune save a level at the old price. The field
-                    // stays written (removing one is what earns a
-                    // `SAVE_FORMAT_VERSION` bump) and is simply not trusted.
-                    xp_to_next: crate::progression::xp_for_level(data.player.level),
-                },
-                Decompiler {
-                    skill: data.player.decompiler,
-                },
-                Equipment {
-                    weapon: worn_from_save(
-                        data.player.weapon,
-                        data.player.weapon_level,
-                        data.player.weapon_fusion_tier,
-                        data.player.weapon_rarity,
-                        data.player.weapon_affix.clone(),
-                        data.player.weapon_affixes.clone(),
-                        data.player.weapon_quality,
-                    ),
-                    armor: worn_from_save(
-                        data.player.armor,
-                        data.player.armor_level,
-                        data.player.armor_fusion_tier,
-                        data.player.armor_rarity,
-                        data.player.armor_affix.clone(),
-                        data.player.armor_affixes.clone(),
-                        data.player.armor_quality,
-                    ),
-                    module: worn_from_save(
-                        data.player.module,
-                        data.player.module_level,
-                        data.player.module_fusion_tier,
-                        data.player.module_rarity,
-                        data.player.module_affix.clone(),
-                        data.player.module_affixes.clone(),
-                        data.player.module_quality,
-                    ),
-                },
-                Inventory {
-                    items: data.player.inventory,
-                },
-                // Gear fusion was uncapped before it shared `MAX_FUSIONS`,
-                // so an older save can carry a copy above the ceiling.
-                // Only the carried copies are clamped — the worn copies
-                // above keep the tier their bonus was applied at, because
-                // `Stats` is restored with that bonus already in it and
-                // unequipping must subtract exactly what was added.
-                //
-                // Clamping can collapse two rows onto one key, so this goes
-                // through `add` rather than building the `Vec` directly:
-                // `GearCopies` holds one row per `GearCopy`, and a duplicate
-                // row would make `count` under-report and strand the copies
-                // in the row it didn't find.
-                //
-                // `fused_gear` is the pre-0.8.9 store and is drained here
-                // rather than read anywhere else — see its doc in `save.rs`
-                // for why the two coexist and when the legacy one goes.
-                {
-                    let mut carried = GearCopies::default();
-                    let legacy = data.player.fused_gear.into_iter().map(|(item, tier, qty)| {
-                        (
-                            // These copies predate both the affix and the
-                            // quality fields by two years of releases.
-                            GearCopy {
-                                item,
-                                rarity: Rarity::Ordinary,
-                                tier,
-                                affixes: Vec::new(),
-                                quality: crate::tuning::QUALITY_DEFAULT,
-                            },
-                            qty,
-                        )
-                    });
-                    let saved = data
-                        .player
-                        .gear_copies
-                        .into_iter()
-                        .map(|(copy, qty)| (copy_from_save(copy), qty));
-                    for (copy, qty) in legacy.chain(saved) {
-                        carried.add(
-                            GearCopy {
-                                tier: copy.tier.min(crate::tuning::MAX_FUSIONS),
-                                ..copy
-                            },
-                            qty,
-                        );
-                    }
-                    carried
-                },
-                StatusEffects::default(),
-                CombatBuff::default(),
-                FieldBuff {
-                    active: data.player.field_buffs,
-                },
-                Perks {
-                    points: data.player.perk_points,
-                    unlocked: data.player.unlocked_perks,
-                },
-                // Nested because the bundle tuple above is already at
-                // bevy's 15-element ceiling — the query-tuple limit CLAUDE.md
-                // already names, reached here from the bundle side instead.
-                (
-                    // `max`, never a plain assignment from
-                    // `unlocked_perks.len()`. That length is exact for a save
-                    // written before respec shipped and *wrong* for every save
-                    // written after one: a respec empties the list and leaves
-                    // the count standing, so assigning the length would throw
-                    // the count away and re-open the overflow-XP exploit
-                    // across a save/load.
-                    BoughtStats {
-                        ever_bought: data.player.bought_stats.ever_bought.max(player_perk_levels),
-                        ..data.player.bought_stats
-                    },
-                    Routines(player_routines),
-                    PlayerIdentity {
-                        class: data.player.class,
-                        sprite: data.player.sprite.clone(),
-                        colour: data.player.colour,
-                        icon: data.player.icon.as_deref().and_then(PlayerIcon::decode),
-                    },
-                    DownedPrograms(data.player.downed_programs),
-                    // Never `STARTER_TOOL_ID` here — the profile rule.
-                    // `spawn_player` is `new_with`'s only caller and is
-                    // where that grant lives; a load restores exactly what
-                    // the save carried. A save predating tools carries no
-                    // `tools` key at all, so `PlayerSave::tools`'s own
-                    // `starter_tools()` default lands the starter tool
-                    // there instead of an empty loadout — see that field's
-                    // doc comment.
-                    Tools(data.player.tools),
-                ),
-            ))
-            .id();
+        // Taken off `data.player` before the spawn consumes it. Sortie
+        // membership is reconciled after the creature loop, which cannot run
+        // until the player exists; the other two are read at the tail.
+        let player_name = data.player.name.clone();
+        let saved_sorties = std::mem::take(&mut data.player.sorties);
+        let saved_routes = std::mem::take(&mut data.player.routes);
+        let tutorial_seeded = data.player.tutorial_seeded;
+        let player =
+            spawn_player_from_save(&mut world, data.player, player_routines, player_perk_levels);
         world.insert_resource(PlayerEntity(player));
 
-        if let Some(name) = CustomName::sanitize(Some(data.player.name.clone())) {
+        if let Some(name) = CustomName::sanitize(Some(player_name)) {
             world.entity_mut(player).insert(CustomName(name));
         }
 
@@ -1307,8 +1325,8 @@ impl Game {
         // `enter_next_zone` must not wipe this: the program travels with you
         // across a breach exactly as the party does.
         game.world.insert_resource(WieldedProgram(wielded));
-        game.restore_sorties(data.player.sorties, &sortie_members);
-        game.restore_routes(data.player.routes);
+        game.restore_sorties(saved_sorties, &sortie_members);
+        game.restore_routes(saved_routes);
 
         let structure_positions = game.restore_structures(data.structures);
 
@@ -1371,7 +1389,7 @@ impl Game {
         // finished so an established run is left alone. New runs are seeded
         // by `Game::new`, which sets the flag, so this fires exactly once
         // and only for a save the previous build wrote.
-        if !data.player.tutorial_seeded {
+        if !tutorial_seeded {
             let ids: Vec<crate::contracts::ContractId> = game
                 .world
                 .resource::<crate::contracts::ContractDb>()
@@ -2018,7 +2036,7 @@ impl Game {
         caravans
     }
 
-    pub fn save(&mut self, path: &Path) -> std::io::Result<()> {
+    fn player_save_for(&mut self) -> save::PlayerSave {
         let player = self.player_entity();
         let pos = *self.world.get::<Position>(player).unwrap();
         let stats = *self.world.get::<Stats>(player).unwrap();
@@ -2119,6 +2137,101 @@ impl Game {
                 proceeds: r.proceeds,
             })
             .collect();
+        save::PlayerSave {
+            position: (pos.x, pos.y),
+            hp: stats.hp,
+            max_hp: stats.max_hp,
+            atk: stats.atk,
+            mitigation: stats.mitigation,
+            power: needs.get(),
+            inventory,
+            level: exp.level,
+            xp: exp.xp,
+            xp_to_next: exp.xp_to_next,
+            decompiler,
+            weapon: equipment.weapon.as_ref().map(|e| e.copy.item.clone()),
+            weapon_level: equipment.weapon.as_ref().map(|e| e.level).unwrap_or(1),
+            weapon_fusion_tier: equipment.weapon.as_ref().map(|e| e.copy.tier).unwrap_or(0),
+            weapon_rarity: equipment
+                .weapon
+                .as_ref()
+                .map(|e| e.copy.rarity)
+                .unwrap_or_default(),
+            weapon_affix: None,
+            weapon_affixes: equipment
+                .weapon
+                .as_ref()
+                .map(|e| e.copy.affixes.clone())
+                .unwrap_or_default(),
+            weapon_quality: equipment
+                .weapon
+                .as_ref()
+                .map(|e| e.copy.quality)
+                .unwrap_or(crate::tuning::QUALITY_DEFAULT),
+            armor: equipment.armor.as_ref().map(|e| e.copy.item.clone()),
+            armor_level: equipment.armor.as_ref().map(|e| e.level).unwrap_or(1),
+            armor_fusion_tier: equipment.armor.as_ref().map(|e| e.copy.tier).unwrap_or(0),
+            armor_rarity: equipment
+                .armor
+                .as_ref()
+                .map(|e| e.copy.rarity)
+                .unwrap_or_default(),
+            armor_affix: None,
+            armor_affixes: equipment
+                .armor
+                .as_ref()
+                .map(|e| e.copy.affixes.clone())
+                .unwrap_or_default(),
+            armor_quality: equipment
+                .armor
+                .as_ref()
+                .map(|e| e.copy.quality)
+                .unwrap_or(crate::tuning::QUALITY_DEFAULT),
+            module: equipment.module.as_ref().map(|e| e.copy.item.clone()),
+            module_level: equipment.module.as_ref().map(|e| e.level).unwrap_or(1),
+            module_fusion_tier: equipment.module.as_ref().map(|e| e.copy.tier).unwrap_or(0),
+            module_rarity: equipment
+                .module
+                .as_ref()
+                .map(|e| e.copy.rarity)
+                .unwrap_or_default(),
+            module_affix: None,
+            module_affixes: equipment
+                .module
+                .as_ref()
+                .map(|e| e.copy.affixes.clone())
+                .unwrap_or_default(),
+            module_quality: equipment
+                .module
+                .as_ref()
+                .map(|e| e.copy.quality)
+                .unwrap_or(crate::tuning::QUALITY_DEFAULT),
+            // The legacy store is never written again — see its doc in
+            // `save.rs`. It is `skip_serializing_if` empty, so a save
+            // from here on carries only `gear_copies`.
+            fused_gear: Vec::new(),
+            gear_copies,
+            downed_programs,
+            tools,
+            perk_points: perks.points,
+            unlocked_perks: perks.unlocked,
+            bought_stats,
+            tutorial_seeded: true,
+            routines,
+            field_buffs,
+            sorties,
+            routes,
+            name,
+            class: identity.class,
+            glyph,
+            sprite: identity.sprite,
+            colour: identity.colour,
+            icon: identity.icon.as_ref().map(PlayerIcon::encode),
+        }
+    }
+
+    pub fn save(&mut self, path: &Path) -> std::io::Result<()> {
+        let player_save = self.player_save_for();
         // Ids first, then a pass: `creature_save_for` takes `&mut self`, and
         // an open query iteration holds the world borrowed for as long as it
         // runs.
@@ -2167,97 +2280,7 @@ impl Game {
             // it is `None` for the whole of a live run, so an autosave
             // carries it as truthfully as the seal does.
             game_over: self.is_game_over(),
-            player: save::PlayerSave {
-                position: (pos.x, pos.y),
-                hp: stats.hp,
-                max_hp: stats.max_hp,
-                atk: stats.atk,
-                mitigation: stats.mitigation,
-                power: needs.get(),
-                inventory,
-                level: exp.level,
-                xp: exp.xp,
-                xp_to_next: exp.xp_to_next,
-                decompiler,
-                weapon: equipment.weapon.as_ref().map(|e| e.copy.item.clone()),
-                weapon_level: equipment.weapon.as_ref().map(|e| e.level).unwrap_or(1),
-                weapon_fusion_tier: equipment.weapon.as_ref().map(|e| e.copy.tier).unwrap_or(0),
-                weapon_rarity: equipment
-                    .weapon
-                    .as_ref()
-                    .map(|e| e.copy.rarity)
-                    .unwrap_or_default(),
-                weapon_affix: None,
-                weapon_affixes: equipment
-                    .weapon
-                    .as_ref()
-                    .map(|e| e.copy.affixes.clone())
-                    .unwrap_or_default(),
-                weapon_quality: equipment
-                    .weapon
-                    .as_ref()
-                    .map(|e| e.copy.quality)
-                    .unwrap_or(crate::tuning::QUALITY_DEFAULT),
-                armor: equipment.armor.as_ref().map(|e| e.copy.item.clone()),
-                armor_level: equipment.armor.as_ref().map(|e| e.level).unwrap_or(1),
-                armor_fusion_tier: equipment.armor.as_ref().map(|e| e.copy.tier).unwrap_or(0),
-                armor_rarity: equipment
-                    .armor
-                    .as_ref()
-                    .map(|e| e.copy.rarity)
-                    .unwrap_or_default(),
-                armor_affix: None,
-                armor_affixes: equipment
-                    .armor
-                    .as_ref()
-                    .map(|e| e.copy.affixes.clone())
-                    .unwrap_or_default(),
-                armor_quality: equipment
-                    .armor
-                    .as_ref()
-                    .map(|e| e.copy.quality)
-                    .unwrap_or(crate::tuning::QUALITY_DEFAULT),
-                module: equipment.module.as_ref().map(|e| e.copy.item.clone()),
-                module_level: equipment.module.as_ref().map(|e| e.level).unwrap_or(1),
-                module_fusion_tier: equipment.module.as_ref().map(|e| e.copy.tier).unwrap_or(0),
-                module_rarity: equipment
-                    .module
-                    .as_ref()
-                    .map(|e| e.copy.rarity)
-                    .unwrap_or_default(),
-                module_affix: None,
-                module_affixes: equipment
-                    .module
-                    .as_ref()
-                    .map(|e| e.copy.affixes.clone())
-                    .unwrap_or_default(),
-                module_quality: equipment
-                    .module
-                    .as_ref()
-                    .map(|e| e.copy.quality)
-                    .unwrap_or(crate::tuning::QUALITY_DEFAULT),
-                // The legacy store is never written again — see its doc in
-                // `save.rs`. It is `skip_serializing_if` empty, so a save
-                // from here on carries only `gear_copies`.
-                fused_gear: Vec::new(),
-                gear_copies,
-                downed_programs,
-                tools,
-                perk_points: perks.points,
-                unlocked_perks: perks.unlocked,
-                bought_stats,
-                tutorial_seeded: true,
-                routines,
-                field_buffs,
-                sorties,
-                routes,
-                name,
-                class: identity.class,
-                glyph,
-                sprite: identity.sprite,
-                colour: identity.colour,
-                icon: identity.icon.as_ref().map(PlayerIcon::encode),
-            },
+            player: player_save,
             creatures,
             structures,
             nests,

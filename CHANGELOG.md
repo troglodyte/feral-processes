@@ -33,6 +33,29 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.141
+
+**A battle map says whose turn it is.** An arrow hangs over the acting body's
+head and bounces — blue for one of yours, red for one of theirs — because the
+turn strip in the corner names the order and is the wrong place to look when
+the question is where you are. It hangs above the tile rather than in it, so
+it spends none of the three channels a tile already has: the con earmark's
+corner, the HP bar's edge, and the glyph in the middle it points at. The
+bounce is the raised cosine the base's staffed mark and build caret already
+ride.
+
+**A fight on a board takes the keys the abstract fight already taught.** `s`
+opens the routine picker where `r` did, matching `[s]pecial` in the intrusion
+screen's own action list, and the numpad steps the acting body all eight ways,
+corners included.
+
+**The aim cursor gets its own keybar.** It was showing the board's three
+action keys, which do nothing while it is open, and neither of the two that
+commit and cancel it.
+
+**`assets/help/28-battle-maps.md` is the manual page for a board.** Nothing in
+`assets/help/` had heard of a fight on a map.
+
 ## 0.13.140
 
 **A staged fight can be fought on a battle map.** A `dev-arenas` scenario now

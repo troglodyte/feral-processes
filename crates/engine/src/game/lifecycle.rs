@@ -1864,6 +1864,119 @@ impl Game {
         })
     }
 
+    fn structure_saves_for(&mut self) -> Vec<save::StructureSave> {
+        let mut structures = Vec::new();
+        let mut structure_query = self.world.query::<(
+            &Structure,
+            &Position,
+            Option<&Durability>,
+            Option<&StructureTier>,
+            Option<&Stock>,
+            Option<&StandingJob>,
+            Option<&crate::components::PowerFuel>,
+            Option<&crate::components::Hopper>,
+            Option<&crate::components::BuildQuality>,
+            Option<&crate::components::DepotFilter>,
+        )>();
+        // `Stock` is optional here only because test fixtures hand-spawn
+        // bare `Structure`s; `place_structure` and `load` both give every
+        // real one a buffer.
+        for (structure, pos, durability, tier, stock, standing, fuel, hopper, quality, filter) in
+            structure_query.iter(&self.world)
+        {
+            let encode = |map: Option<&std::collections::BTreeMap<ItemId, u32>>| {
+                map.map(|m| m.iter().map(|(i, n)| (i.clone(), *n)).collect())
+                    .unwrap_or_default()
+            };
+            structures.push(save::StructureSave {
+                kind: structure.kind.clone(),
+                position: (pos.x, pos.y),
+                durability: durability.map(|d| d.hp),
+                tier: tier.map(|t| t.0),
+                stock_input: encode(stock.map(|s| &s.input)),
+                stock_output: encode(stock.map(|s| &s.output)),
+                hopper: hopper.map(|h| h.queue.clone()).unwrap_or_default(),
+                hopper_progress: hopper.map(|h| h.progress).unwrap_or(0),
+                standing_work: standing.is_some_and(|j| j.work),
+                standing_guard: standing.is_some_and(|j| j.guard),
+                denied_items: filter
+                    .map(|f| f.denied.iter().cloned().collect())
+                    .unwrap_or_default(),
+                power_fuel: fuel
+                    .map(|f| f.ticks_left)
+                    .unwrap_or(crate::tuning::POWER_UPKEEP_TICKS),
+                build_quality: quality.map_or(1.0, |q| q.0),
+            });
+        }
+        structures
+    }
+
+    fn nest_saves_for(&mut self) -> Vec<save::NestSave> {
+        let mut nests = Vec::new();
+        let mut nest_query = self.world.query::<(&Nest, &Position, &Durability)>();
+        for (nest, pos, durability) in nest_query.iter(&self.world) {
+            nests.push(save::NestSave {
+                species: nest.species.clone(),
+                position: (pos.x, pos.y),
+                durability: durability.hp,
+                pending_respawns: nest.pending_respawns.clone(),
+            });
+        }
+        nests
+    }
+
+    fn dig_site_saves_for(&mut self) -> Vec<save::DigSiteSave> {
+        let mut dig_sites = Vec::new();
+        let mut dig_query = self.world.query::<(&DigSite, &Position, &Durability)>();
+        for (site, pos, durability) in dig_query.iter(&self.world) {
+            dig_sites.push(save::DigSiteSave {
+                // Base-space coordinates: a `DigSite` is the one
+                // non-`Structure` entity besides a posted program that
+                // stands in the base's own space.
+                position: (pos.x, pos.y),
+                durability: durability.hp,
+                marked: site.marked,
+            });
+        }
+        dig_sites
+    }
+
+    fn build_site_saves_for(&mut self) -> Vec<save::BuildSiteSave> {
+        let mut build_sites = Vec::new();
+        let mut build_query = self.world.query::<(&BuildSite, &Position)>();
+        for (site, pos) in build_query.iter(&self.world) {
+            build_sites.push(save::BuildSiteSave {
+                // Base-space coordinates, exactly as a `DigSite`'s are.
+                position: (pos.x, pos.y),
+                structure: site.structure.clone(),
+                cost: site.cost.clone(),
+                delivered: site.delivered.clone(),
+                progress: site.progress,
+                goal: site.goal,
+                program: site.program.clone(),
+            });
+        }
+        build_sites
+    }
+
+    fn caravan_saves_for(&mut self) -> Vec<save::CaravanSave> {
+        let mut caravans = Vec::new();
+        let mut caravan_query = self.world.query::<(&Caravan, &Position)>();
+        for (caravan, pos) in caravan_query.iter(&self.world) {
+            caravans.push(save::CaravanSave {
+                // Surface or base space, per `CaravanStage::in_base_space` —
+                // the component's own `Position` is already in whichever the
+                // stage says, so this copies rather than decides.
+                position: (pos.x, pos.y),
+                stage: caravan.stage,
+                visit: caravan.visit,
+                arrival_tile: caravan.arrival_tile,
+                stage_ticks: caravan.stage_ticks,
+            });
+        }
+        caravans
+    }
+
     pub fn save(&mut self, path: &Path) -> std::io::Result<()> {
         let player = self.player_entity();
         let pos = *self.world.get::<Position>(player).unwrap();
@@ -1985,103 +2098,15 @@ impl Game {
             .filter_map(|e| self.creature_save_for(e))
             .collect();
 
-        let mut structures = Vec::new();
-        let mut structure_query = self.world.query::<(
-            &Structure,
-            &Position,
-            Option<&Durability>,
-            Option<&StructureTier>,
-            Option<&Stock>,
-            Option<&StandingJob>,
-            Option<&crate::components::PowerFuel>,
-            Option<&crate::components::Hopper>,
-            Option<&crate::components::BuildQuality>,
-            Option<&crate::components::DepotFilter>,
-        )>();
-        // `Stock` is optional here only because test fixtures hand-spawn
-        // bare `Structure`s; `place_structure` and `load` both give every
-        // real one a buffer.
-        for (structure, pos, durability, tier, stock, standing, fuel, hopper, quality, filter) in
-            structure_query.iter(&self.world)
-        {
-            let encode = |map: Option<&std::collections::BTreeMap<ItemId, u32>>| {
-                map.map(|m| m.iter().map(|(i, n)| (i.clone(), *n)).collect())
-                    .unwrap_or_default()
-            };
-            structures.push(save::StructureSave {
-                kind: structure.kind.clone(),
-                position: (pos.x, pos.y),
-                durability: durability.map(|d| d.hp),
-                tier: tier.map(|t| t.0),
-                stock_input: encode(stock.map(|s| &s.input)),
-                stock_output: encode(stock.map(|s| &s.output)),
-                hopper: hopper.map(|h| h.queue.clone()).unwrap_or_default(),
-                hopper_progress: hopper.map(|h| h.progress).unwrap_or(0),
-                standing_work: standing.is_some_and(|j| j.work),
-                standing_guard: standing.is_some_and(|j| j.guard),
-                denied_items: filter
-                    .map(|f| f.denied.iter().cloned().collect())
-                    .unwrap_or_default(),
-                power_fuel: fuel
-                    .map(|f| f.ticks_left)
-                    .unwrap_or(crate::tuning::POWER_UPKEEP_TICKS),
-                build_quality: quality.map_or(1.0, |q| q.0),
-            });
-        }
+        let structures = self.structure_saves_for();
 
-        let mut nests = Vec::new();
-        let mut nest_query = self.world.query::<(&Nest, &Position, &Durability)>();
-        for (nest, pos, durability) in nest_query.iter(&self.world) {
-            nests.push(save::NestSave {
-                species: nest.species.clone(),
-                position: (pos.x, pos.y),
-                durability: durability.hp,
-                pending_respawns: nest.pending_respawns.clone(),
-            });
-        }
+        let nests = self.nest_saves_for();
 
-        let mut dig_sites = Vec::new();
-        let mut dig_query = self.world.query::<(&DigSite, &Position, &Durability)>();
-        for (site, pos, durability) in dig_query.iter(&self.world) {
-            dig_sites.push(save::DigSiteSave {
-                // Base-space coordinates: a `DigSite` is the one
-                // non-`Structure` entity besides a posted program that
-                // stands in the base's own space.
-                position: (pos.x, pos.y),
-                durability: durability.hp,
-                marked: site.marked,
-            });
-        }
+        let dig_sites = self.dig_site_saves_for();
 
-        let mut build_sites = Vec::new();
-        let mut build_query = self.world.query::<(&BuildSite, &Position)>();
-        for (site, pos) in build_query.iter(&self.world) {
-            build_sites.push(save::BuildSiteSave {
-                // Base-space coordinates, exactly as a `DigSite`'s are.
-                position: (pos.x, pos.y),
-                structure: site.structure.clone(),
-                cost: site.cost.clone(),
-                delivered: site.delivered.clone(),
-                progress: site.progress,
-                goal: site.goal,
-                program: site.program.clone(),
-            });
-        }
+        let build_sites = self.build_site_saves_for();
 
-        let mut caravans = Vec::new();
-        let mut caravan_query = self.world.query::<(&Caravan, &Position)>();
-        for (caravan, pos) in caravan_query.iter(&self.world) {
-            caravans.push(save::CaravanSave {
-                // Surface or base space, per `CaravanStage::in_base_space` —
-                // the component's own `Position` is already in whichever the
-                // stage says, so this copies rather than decides.
-                position: (pos.x, pos.y),
-                stage: caravan.stage,
-                visit: caravan.visit,
-                arrival_tile: caravan.arrival_tile,
-                stage_ticks: caravan.stage_ticks,
-            });
-        }
+        let caravans = self.caravan_saves_for();
 
         let tile_overrides = self
             .world

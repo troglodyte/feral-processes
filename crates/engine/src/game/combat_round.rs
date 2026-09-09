@@ -918,6 +918,13 @@ impl Game {
     /// Which entities `target` lands on, read from `actor`'s side of the
     /// fight.
     ///
+    /// **The group model's converter, and one of three.**
+    /// `Game::field_recipients` answers the same question for a routine run
+    /// on the map and `tactical::reach::recipients` for one run on a battle
+    /// map, off a shape and an aimed cell. What the three share is what they
+    /// hand over — `use_ability` below, which consumes a list of bodies and
+    /// nothing else.
+    ///
     /// Resolved at resolve time rather than plan time — so a group that died
     /// before the acting member's turn retargets, and an ally knocked out in
     /// the meantime is skipped instead of being healed as a corpse.
@@ -1030,6 +1037,13 @@ impl Game {
     /// for damage or a debuff. See `Game::ability_recipients`, which
     /// resolves which entities those are. `actor` is who is spending the
     /// ability, which a damage effect needs for its ATK.
+    ///
+    /// **The door the two combat models share.** It consumes a list of
+    /// bodies and nothing else — no group index, no slot, no cell — which is
+    /// what lets a tactical fight resolve a routine through the same damage,
+    /// bands, mitigation, affinity and status rules a fight in front of a
+    /// group does, and is the single reason the second model is a module
+    /// rather than a rewrite.
     pub(crate) fn use_ability(
         &mut self,
         ability: &AbilityDef,

@@ -71,6 +71,7 @@ mod stack;
 mod stack_market;
 mod stock;
 mod structure_manifest;
+mod tactical;
 mod talents;
 mod terrain;
 #[cfg(test)]
@@ -541,7 +542,13 @@ fn draw_message_text(
 fn needs_status_banner(mode: Mode) -> bool {
     matches!(
         mode,
-        Mode::Battle
+        // The battle map and its cursor draw straight on the window with no
+        // popup over them, `Mode::FieldRoutineCell`'s reason — so a refusal
+        // has nowhere else to land. The routine picker is a popup and takes
+        // its refusal inside, like every other list.
+        Mode::TacticalBattle
+            | Mode::TacticalAim
+            | Mode::Battle
             | Mode::BattleResult
             | Mode::FrameMap
             | Mode::FieldRoutineCell
@@ -1200,6 +1207,13 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
+        Mode::TacticalRoutine => tactical::draw_tactical_routines(
+            &game.tactical_routine_options(),
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
         Mode::FieldRoutine => draw_field_routine(game, selected, refusal, painter, m),
         Mode::FieldRoutineAlly => {
             draw_field_routine_ally(game, pending_field_routine, selected, refusal, painter, m)
@@ -1400,7 +1414,10 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 104] = [
+    const ALL_MODES: [Mode; 107] = [
+        Mode::TacticalBattle,
+        Mode::TacticalRoutine,
+        Mode::TacticalAim,
         Mode::MainMenu,
         Mode::CreateCharacter,
         Mode::LoadGame,

@@ -162,9 +162,11 @@ pub fn stage(
 ) -> Result<Staged, String> {
     if scenario.model != driver {
         return Err(match scenario.model {
-            CombatModel::Tactical => "this scenario is `model: Tactical`, and the arena screen                  fights in front of a group — run it through `cargo run --bin arena`"
-                .into(),
-            CombatModel::Group => "this scenario is `model: Group`, and the caller is set up                  for a battle map"
+            CombatModel::Tactical => "this scenario is `model: Tactical`, and the arena \
+                 screen fights in front of a group — run it through `cargo run --bin arena`"
+                .to_string(),
+            CombatModel::Group => "this scenario is `model: Group`, and the caller is set \
+                 up for a battle map"
                 .to_string(),
         });
     }
@@ -514,6 +516,9 @@ mod tests {
         };
         assert!(err.contains("Tactical"), "{err}");
         assert!(err.contains("arena"), "{err}");
+        // A wrapped literal that lost its `\` reads as a sentence with a
+        // hole in it, and every other assertion here passes against one.
+        assert!(!err.contains("  "), "{err}");
     }
 
     #[test]

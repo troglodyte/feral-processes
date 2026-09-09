@@ -762,7 +762,10 @@ fn a_tactical_scenario_round_trips_and_is_refused_a_fight_by_name() {
         Mode::ArenaBuilder,
         "the screen opened a fight it has no way to play"
     );
-    let line = app.status_line.clone().expect("a refusal with nothing said");
+    let line = app
+        .status_line
+        .clone()
+        .expect("a refusal with nothing said");
     assert!(line.contains("arena"), "{line}");
 }
 

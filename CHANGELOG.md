@@ -33,6 +33,21 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.137
+
+**`Game::load` and `Game::save` now name their sections instead of spelling
+them out inline.** Loading a save was one 598-line function and writing one
+was 391, so the two halves of a save section — the code that writes the
+structures and the code that reads them back — sat hundreds of lines apart
+with nothing naming either. Fifteen helpers now pair them off:
+`spawn_player_from_save` against `player_save_for`, `restore_structures`
+against `structure_saves_for`, and so on through nests, dig sites, build
+sites, caravans, sorties, routes and cronjobs. `load` is down to 270 lines
+and `save` to 134.
+
+No behaviour change: the bodies moved verbatim, and the wall of
+`insert_resource` calls stayed where it is, being length without complexity.
+
 ## 0.13.136
 
 **A Zone Portal no longer costs a tamed program to build.** A Portal is

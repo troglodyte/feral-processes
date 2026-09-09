@@ -831,6 +831,14 @@ relying on one, and correct all three places if it has moved.
   deletion, and the cursor names a body rather than a position.**
 - **A step off the board edge is a departure and not a refusal, and the
   player's own is the jack-out.**
+- **A routine's `shape:` and `range:` are read in tactical fights alone, and
+  `AbilityDef::tactical_shape`/`tactical_range` is the one place an authored
+  figure and the one derived from `AbilityTarget` are reconciled.**
+- **`use_ability` is the door the two combat models share; each converts its
+  own aim, and full friendly fire is `reach::recipients` never reading
+  `Hostile`.**
+- **`Game::decompile_body` is the capture, and taking the captured body out
+  of the fight is each model's own half.**
 
 ### Items, gear and economy
 

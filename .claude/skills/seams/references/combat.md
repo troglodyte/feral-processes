@@ -631,3 +631,51 @@
   player down is a loss; the player walking out is the jack-out. Omit the
   third and a fight stays open with nobody holding it. See `docs/seams.md`
   for the argument.
+
+- **A routine's `shape:` and `range:` are read in tactical fights alone, and
+  `AbilityDef::tactical_shape`/`tactical_range` is the one place authored and
+  derived are reconciled.** Both are `#[serde(default)]` and **nothing
+  shipped authors either**, so the derivation off `AbilityTarget` is what the
+  whole roster runs on: one recipient is a `Single` at arm's length, a whole
+  side is a blast, and `WholeParty` is the one centred on the invoker
+  (derived range 0..0 — its own cell and nowhere else). The trap is reading
+  `def.shape` directly: it is `None` for every routine in the game, so a
+  reader that skips the door resolves the entire roster to nothing and the
+  failure is silent — a routine that quietly becomes single-target reads as
+  a nerf rather than a bug. Two censuses in `tests/assets.rs` close it, one
+  of them a second `match` pinning the derivation table. Three constants and
+  not one for the derived radii, because "one group" and "everything" are
+  different sizes and the party's own is the widest. Not to be confused with
+  `ranged`, a yes-or-no about the front line in the *group* model.
+  See `docs/seams.md` for the argument.
+- **`use_ability` is the door the two combat models share; each converts its
+  own aim, and full friendly fire is `reach::recipients` never reading
+  `Hostile`.** The design named `ability_recipients` as the shared door and
+  the code already disagreed — `field_recipients` is a second converter —
+  so the tactical one is a sibling rather than an arm, and the
+  `SpecialTarget::Cell` variant that arm would need is an invented answer
+  every abstract match in three crates would have to reject. The trap is the
+  friendly-fire "fix": a side filter in `recipients` is one line, reads as an
+  obvious bug fix, breaks nothing that compiles, and deletes the reason a
+  shape is worth aiming — the test that holds it places bodies carrying **no
+  components at all**. Terrain is read by two shapes of four: a line stops at
+  the first cell that blocks sight and a cone drops what it cannot see, a
+  blast is stopped by nothing, and `line_of_sight` excludes both endpoints,
+  so standing in cover neither blinds a body nor hides it. The aim is a
+  *bearing* for a line and a cone and a *destination* for a blast. The cone's
+  epsilon is not slop: an eight-way grid's diagonals sit exactly 45 degrees
+  off the facing, so a 90-degree wedge holds them only under a comparison
+  that admits equality. See `docs/seams.md` for the argument.
+- **`Game::decompile_body` is the capture; taking the captured body out of
+  the fight is each model's own half.** Everything down to the conversion —
+  catalyst, roll, fraying count, XP, component strip, nest respawn — is the
+  same act either way; a group index, a rank to promote and an `end_battle`
+  are the group model's vocabulary and none of the three exists on a battle
+  map. The fraying counter came with it: `Game::decompile_attempts`/`_mut`
+  are `fight_rewards_mut`'s counterpart and follow its rule — a field on each
+  model's resource, never a resource of its own — so `target_resistance`
+  quotes the same count whichever model is holding the fight. A capture is
+  aimed at one body and not resolved over an area, and it is the one effect
+  in `tactical_use_routine` that does not go through `use_ability` — the same
+  exception the group model's own Special site makes. See `docs/seams.md` for
+  the argument.

@@ -13166,3 +13166,116 @@ their leaving closes it exactly as `battle_flee` does. Leaving that third
 case out is a fight that stays open with nobody in it — the resource
 outlives the screen, and the next thing to ask `tactical_actor` gets a body
 the player is no longer controlling.
+
+### A routine's geometry is authored or derived, and one door reconciles the two
+
+**`shape:` and `range:` are read in tactical fights alone, and
+`AbilityDef::tactical_shape`/`tactical_range` is the one place an authored
+figure and a derived one are reconciled.**
+
+Both fields are `#[serde(default)]`, so every shipped `.ron` and every mod
+keeps parsing untouched — and *nothing shipped authors either*, which is the
+whole reason the derivation matters more than the schema. The 86 shipped
+routines all resolve through `AbilityTarget::derived_shape`/`derived_range`:
+the group model's vocabulary read as geometry, where a routine naming one
+recipient is a `Single` at arm's length and one naming a whole side is a
+blast. `WholeParty` is the one centred on the invoker, because it is the one
+whose recipients are defined by standing with them, and its derived range is
+0..0 — aimed at your own cell and nowhere else.
+
+The trap is the field read directly. `def.shape` is `None` for everything in
+the game, so a reader taking it resolves the entire roster to nothing and the
+failure is silent: a routine that quietly becomes single-target on a battle
+map reads as a nerf rather than a bug. This repo has been bitten by a
+`#[serde(default)]` asset field with no census before, which is why there are
+two here — the derivation table pinned by a second `match` in
+`tests/assets.rs` (the one copy of a formula this repo keeps deliberately, so
+moving the derivation has to be a decision rather than a one-word edit), and
+every shipped routine held to a shape a battle map can draw and a range it
+can aim.
+
+Three constants and not one for the derived radii. What the group model means
+by "one group" is a handful of bodies standing together and what it means by
+"everything" is the field, so a single figure would either make a group
+routine hit the board or a field routine hit two cells; the party's own is
+the widest, because a party is spread by the player's own movement rather
+than by deployment and a rally that reached only the bodies pressed against
+the invoker would never land on the companion that needed it.
+
+`range` sits next to `ranged`, which is a yes-or-no about reaching past the
+front line in the *group* model and is read by the basic-attack path alone.
+The two never meet — one is a fact about groups, the other a distance in
+cells — and the README says so, because that adjacency in a `.ron` file is
+the one place a modder could reasonably confuse them.
+
+### Two combat models, one applicator, and friendly fire is an omission
+
+**`Game::use_ability` is the door the two combat models share; each converts
+its own aim into recipients, and full friendly fire is `reach::recipients`
+never reading `Hostile`.**
+
+The design named `ability_recipients` as the shared door. It is not, and the
+code already said so before this phase: `Game::field_recipients` is a second
+converter, for routines run on the map, and it resolves two of the five
+targeting modes and treats the rest as unreachable. What all three share is
+what they *hand over* — `use_ability(&AbilityDef, actor, name, &[Entity])`,
+which consumes nothing but a list of bodies. That signature is the single
+reason a second combat model is a module and not a rewrite.
+
+So the tactical converter is a sibling, `tactical::reach::recipients`, and
+not an arm inside `ability_recipients`. The alternative was a
+`SpecialTarget::Cell` variant, which would have to be rejected by every
+abstract arm and by every `match` on `SpecialTarget` in app-core and gui —
+an invented answer the far side then has to guard against, which is the
+adapter this design already rejected, one variant smaller.
+
+Friendly fire is the part with no code. `recipients` collects whoever stands
+on a covered cell and never asks which side they are on, so a blast wide
+enough to catch three hostiles is wide enough to catch the companion standing
+among them and a `Radius` heal mends whatever is in it. The test that holds
+it places bodies carrying **no components at all** — not even `Hostile` — and
+asserts a patch centred on the player mends the hostile beside them. The
+trap is the "fix": adding a side filter reads as an obvious bug fix, is one
+line, breaks nothing that compiles, and deletes the reason a shape is worth
+aiming.
+
+Two of the four shapes read terrain and two do not. A line stops at the first
+cell that blocks sight and a cone drops what it cannot see, both through
+`Board::blocks_sight` — so a `Cover` cell and nothing else stops them —
+while a blast is stopped by nothing, because a blast that had to see its own
+far side would need a second sight rule for every cell in it. `line_of_sight`
+excludes both endpoints, which is `walkable()` and `blocks_sight()` not being
+complements read from the other end: standing in cover neither blinds a body
+nor hides it. And the aim is a *bearing* for a line and a cone and a
+*destination* for a blast, which is why a line cast at an adjacent cell and
+one cast at the far wall cover the same cells.
+
+The cone's epsilon is not slop. An eight-way grid puts its diagonals exactly
+45 degrees off the facing, so a wedge authored at 90 degrees holds them only
+under a comparison that admits equality — and those diagonals are most of
+what a cone is for.
+
+### Capturing a program is one function; taking it out of the fight is each model's
+
+**`Game::decompile_body` is the capture, and `attempt_decompile` is the group
+model's half of what comes after it.**
+
+The catalyst, the roll, the fraying count, the XP, the component strip, the
+conversion and the nest respawn are the same act whichever model is holding
+the fight. What is not shared is what happens to the body afterwards: a group
+index, a rank to promote and an `end_battle` are the group model's
+vocabulary, and none of the three exists on a battle map, where the body
+simply leaves the board and the fight settles itself.
+
+The fraying counter came with it. `Game::decompile_attempts`/`_mut` are
+`fight_rewards_mut`'s counterpart and follow its rule — a field on *each*
+model's own resource rather than a resource of its own, because a new
+`Resource` shifts bevy's query iteration order under unrelated tests — so
+`target_resistance` quotes the same count either way, and what the screen has
+been showing is what the next roll gets.
+
+A capture is aimed at a body and not resolved over an area, deliberately: a
+blast that turned every program it touched would be a different mechanic
+entirely, and the catalyst is spent once. It is the one effect in
+`tactical_use_routine` that does not go through `use_ability`, which is the
+same exception the group model's own `BattleAction::Special` site makes.

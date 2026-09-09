@@ -280,6 +280,12 @@ pub struct StructureDef {
     /// depots. `#[serde(default)]` so existing structure files (including
     /// mods) written before this field existed still parse, as something a
     /// hauler ignores.
+    ///
+    /// **It also waives the build's program cost** — see
+    /// `StructureDef::needs_program`. Two meanings on one flag rather than a
+    /// second field naming the same six structures; the day a structure
+    /// wants one without the other, that is when the second field is worth
+    /// its `#[serde(default)]`.
     #[serde(default)]
     pub stores: bool,
     /// If set, this structure automatically builds the named item from
@@ -558,6 +564,26 @@ impl StructureDef {
     /// machine" rather than as an error.
     pub fn runs_a_job(&self) -> bool {
         self.work.is_some() || self.assembles.is_some() || self.strips.is_some()
+    }
+
+    /// Whether raising or upgrading this structure costs a tamed program.
+    ///
+    /// **Two exemptions, and the second is data.** The Home is exempt at
+    /// every tier: a fresh run owns zero programs and the first is granted
+    /// only as an achievements reward, so a Home that cost one would be
+    /// unfoundable. Anything that declares `stores` is exempt because a
+    /// shelf is not worth a body — read off the flag rather than a list of
+    /// depot ids, so a mod's storage building is exempt for free and nothing
+    /// in Rust names shipped content. That is why `stores` now carries two
+    /// meanings (a hauler may empty into it; it costs no program) rather
+    /// than a second field saying the same thing about the same structures.
+    ///
+    /// On the def rather than only on `Game`, because the build menu holds
+    /// defs and not ids and would otherwise restate the rule — the copy that
+    /// drifts. `Game::structure_needs_program` is the id-shaped door onto
+    /// this one, and calls it.
+    pub fn needs_program(&self) -> bool {
+        self.category() != StructureCategory::Home && !self.stores
     }
 
     /// Which group this structure lists under. Checked in this order because

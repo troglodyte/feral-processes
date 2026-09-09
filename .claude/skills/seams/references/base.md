@@ -76,6 +76,21 @@
   site is despawned at completion — which is what makes
   `cancel_build_request` a refund of goods that still exist, and makes
   `BuildSiteSave::delivered` the load-bearing save field.
+- **Two exemptions from the program cost, and both are derived**:
+  `StructureDef::needs_program` is false for the Home and for anything that
+  declares `stores`. `Game::structure_needs_program` is the id-shaped door
+  onto it and app-core's build flow routes the picker off that exact call —
+  a frontend deriving its own version (it was `category() == Home` once,
+  which was *true* until the second exemption shipped) strands a free
+  structure on a picker with nothing to confirm. **The trap is that `stores`
+  now means two things**: a hauler may empty into it, *and* it costs no
+  body. That is deliberate — the alternative was a second field naming the
+  same six depots — but it means a modded haul target is free to build
+  whether its author meant that or not. An exempt build is still a
+  *request*: materials, crew, ticks, all unchanged, and it is the first
+  `BuildSite` reachable with `program: None`, which is why
+  `return_build_holdings` and both `build_quality_of` call sites already
+  had to handle the `Option`.
 - **A build order commits one tamed program at filing, and that is the one
   exception to "nothing is charged at filing."** `commit_program`
   (`game/party.rs`) retires the program the moment the picker confirms —

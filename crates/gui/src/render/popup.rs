@@ -1474,6 +1474,7 @@ mod tests {
                 } else {
                     StructureCategory::Assembler
                 },
+                needs_program: i != 0,
             })
             .collect();
         // Deployable, which is the ordinary case and the one with the *most*

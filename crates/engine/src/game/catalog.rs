@@ -876,12 +876,22 @@ impl Game {
     }
 
     /// Whether raising or upgrading the structure named `id` costs a tamed
-    /// program at all. False only for `HOME_STRUCTURE_ID`, and exempt at
-    /// every tier: a fresh run owns zero programs and the first is granted
-    /// only as an achievements reward, so a Home that cost one would be
-    /// unfoundable.
-    pub(crate) fn structure_needs_program(&self, id: &StructureId) -> bool {
-        id.as_str() != HOME_STRUCTURE_ID
+    /// program at all — the id-shaped door onto
+    /// `StructureDef::needs_program`, which is where the rule itself lives
+    /// and what the two exemptions are argued in.
+    ///
+    /// An id with no def behind it needs one, which is the safe answer and
+    /// never reached: `place_structure` refuses an unknown structure long
+    /// before it asks what the build costs.
+    ///
+    /// `pub` because app-core routes the program picker off this exact
+    /// answer — see `App::handle_build_direction_key`. A frontend deriving
+    /// its own version of the rule is the thing this prevents.
+    pub fn structure_needs_program(&self, id: &StructureId) -> bool {
+        self.world
+            .resource::<StructureDb>()
+            .get(id.as_str())
+            .is_none_or(|def| def.needs_program())
     }
 
     pub fn species_defs(&self) -> Vec<SpeciesDef> {

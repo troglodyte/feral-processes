@@ -118,7 +118,16 @@ is skipped with a warning logged in-game rather than crashing startup.
     // menu: it is delivered to, not worked.
     //
     // The `capacity` above is what makes one worth building; the shipped
-    // Depot holds 100, five machines' worth of full buffers.
+    // Depot holds 50, and the researchable ladder above it runs to Mk6.
+    //
+    // **This flag also waives the build's program cost.** Every other
+    // structure but the Home commits one tamed program when the order is
+    // filed; a structure with `stores` set commits nobody, because a shelf
+    // is not worth a body. The materials and the crew who raise it are
+    // unchanged. So a modded storage building is exempt for free, and a
+    // structure that wants the exemption without being a haul target has
+    // nowhere to say so — that is deliberate, and the day one exists it
+    // gets a field of its own rather than a lie in this one.
     stores: true,
 
     // Optional; can be left out entirely (defaults to no assembling). If

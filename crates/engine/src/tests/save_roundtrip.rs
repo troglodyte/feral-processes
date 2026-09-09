@@ -734,6 +734,37 @@ fn a_build_sites_program_survives_a_save_and_load() {
     );
 }
 
+/// And the other shape, which a Depot made reachable: an order holding
+/// **nobody**. `StructureDef::needs_program` exempts anything that declares
+/// `stores`, so a filed shelf carries no snapshot at all — and a save that
+/// resurrected one, or refused to load a site without one, would be a run
+/// gaining a program it never owned or losing a base it did.
+#[test]
+fn a_program_less_build_site_survives_a_save_and_load() {
+    let dir = scratch_assets_dir("build_site_no_program_roundtrip");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("s.ron");
+
+    let mut game = Game::new(20260908, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.spawn((
+        BuildSite {
+            program: None,
+            ..BuildSite::new("depot".to_string(), vec![])
+        },
+        Position { x: 1, y: 1 },
+    ));
+
+    game.save(&path).expect("save");
+    let mut loaded = Game::load(&path, &test_assets_dir()).expect("load");
+
+    let sites = loaded.build_site_programs();
+    assert_eq!(sites.len(), 1, "the site came back");
+    assert!(
+        sites[0].is_none(),
+        "and it is still holding nobody — a shelf commits no body at either end"
+    );
+}
+
 /// **Spec test 10 — the whole journey, through the disk.**
 ///
 /// `refund_program` has only ever been handed a snapshot taken moments

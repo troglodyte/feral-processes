@@ -257,27 +257,25 @@ impl App {
             self.mode = Mode::Playing;
             return;
         };
-        // Home is the one structure that costs no program — see
-        // `structure_needs_program`'s doc — and the one a fresh run has to
-        // be able to found with zero programs owned, so it keeps this direct
-        // path rather than detouring through the picker below.
+        // Two structures cost no program — the Home, and anything that
+        // declares `stores` — and both take this direct path rather than
+        // detouring through a picker that has nothing to confirm.
         //
-        // Derived through `StructureDef::category()` rather than a literal
-        // `id == "home"` comparison: the engine's own `HOME_STRUCTURE_ID` is
-        // private to that crate, but a hand-copied `"home"` string is worse
-        // than unreachable — it silently stops meaning "Home" the moment
-        // `assets/structures/home.ron`'s id ever changes, and the failure
-        // mode is a fresh run (zero programs owned) unable to found a base
-        // at all, because Home would now route into a picker with nothing
-        // in it. `category()` reads `crate::HOME_STRUCTURE_ID` on the
-        // engine's own side of that seam, so a rename can't desync the two.
-        let is_home = self.game.as_ref().is_some_and(|game| {
-            game.buildable_structure_defs()
-                .into_iter()
-                .find(|def| def.id == id)
-                .is_some_and(|def| def.category() == StructureCategory::Home)
-        });
-        if is_home {
+        // **Asked of the engine rather than re-derived here.** This used to
+        // read `def.category() == StructureCategory::Home`, which was itself
+        // the safe version of a hand-copied `"home"` literal — but it is
+        // still a second statement of a rule the engine already owns, and
+        // the two are only right while the exemption stays a single
+        // category. `Game::structure_needs_program` is that rule; a
+        // frontend's own copy of it is what silently strands a free
+        // structure on a picker with nothing in it, and a fresh run (zero
+        // programs owned) unable to found a base at all is what that looks
+        // like at the keyboard.
+        let needs_program = self
+            .game
+            .as_ref()
+            .is_some_and(|game| game.structure_needs_program(&id));
+        if !needs_program {
             if let Some(game) = &mut self.game {
                 let outcome = game.place_structure(&id, dx, dy, None);
                 self.report(outcome);

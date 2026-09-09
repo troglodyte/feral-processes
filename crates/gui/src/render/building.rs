@@ -18,6 +18,11 @@ pub(super) struct BuildEntry {
     pub label: String,
     pub description: String,
     pub category: StructureCategory,
+    /// Whether this row is one the roster's shortfall is even about —
+    /// `StructureDef::needs_program`, carried rather than re-derived here,
+    /// so the menu and the engine cannot disagree about which structures a
+    /// program is owed for.
+    pub needs_program: bool,
 }
 
 /// The heading a group opens with, or `None` for Home — a single structure
@@ -49,8 +54,8 @@ fn category_heading(category: StructureCategory) -> Option<&'static str> {
 /// changes, so an ungrouped list would simply repeat headings rather than
 /// mislabel anything.
 ///
-/// **`shortfall` greys rather than hides.** Every structure here but Home
-/// costs the same thing — one program of zone 1 or deeper, which is every
+/// **`shortfall` greys rather than hides.** Every structure the cost applies
+/// to costs the same thing — one program of zone 1 or deeper, which is every
 /// program — so a roster that cannot pay stops all of them at once. That
 /// makes it one line at the top of the screen and not a tag repeated down
 /// every row, and the rows stay listed and stay pickable: a structure that
@@ -64,14 +69,19 @@ fn category_heading(category: StructureCategory) -> Option<&'static str> {
 /// string, so a caller cannot pass a sentence and leave the rows lit, or
 /// grey the rows and print nothing.
 ///
-/// **Home never greys.** It is the one structure the engine waives the cost
-/// for (`Game::structure_needs_program`), and it is the one a fresh run —
-/// zero programs owned, by definition — has to be able to found. Told
-/// otherwise, the very first screen of a new game would be a menu of dim
-/// rows saying the player cannot afford the thing they are about to do.
-/// Read off `StructureCategory::Home`, the same derivation
-/// `App::handle_build_direction_key` routes Home past the picker with, so a
-/// rename of the def id cannot desync the two.
+/// **An exempt structure never greys**, and `BuildEntry::needs_program`
+/// carries which those are rather than this deciding. The Home is one: a
+/// fresh run owns zero programs by definition, and told otherwise the very
+/// first screen of a new game would be a menu of dim rows saying the player
+/// cannot afford the thing they are about to do. A Depot is the other, and
+/// it is the row a roster with nothing free most wants lit.
+///
+/// The flag arrives from `StructureDef::needs_program` — the engine's own
+/// rule, the same one `App::handle_build_direction_key` routes the picker
+/// off — so the menu cannot come to disagree with what the deploy will
+/// actually charge. A `category == Home` test here was the version that
+/// could, and it went dim on every Depot the moment the exemption stopped
+/// being one category.
 pub(super) fn build_menu_rows(
     entries: &[BuildEntry],
     selected: usize,
@@ -94,7 +104,7 @@ pub(super) fn build_menu_rows(
             }
         }
         let label = format!("[{}] {}", menu_shortcut(i), entry.label);
-        let affordable = shortfall.is_none() || entry.category == StructureCategory::Home;
+        let affordable = shortfall.is_none() || !entry.needs_program;
         rows.push(match affordable {
             true => item_row(label, i == selected),
             // `spent_item_row` rather than a hidden row: still selectable,
@@ -130,6 +140,7 @@ pub(super) fn draw_build_menu(
                 label: format!("{} - {}", def.name, build_cost_label(&cost)),
                 description: def.description.clone(),
                 category: def.category(),
+                needs_program: def.needs_program(),
             }
         })
         .collect();
@@ -1769,6 +1780,7 @@ mod tests {
                 label: format!("{} - {}", def.name, build_cost_label(&[])),
                 description: def.description.clone(),
                 category: def.category(),
+                needs_program: def.needs_program(),
             })
             .collect()
     }
@@ -1800,6 +1812,7 @@ mod tests {
             label: "Overlong Node - free".to_string(),
             description: synthetic_description(),
             category: StructureCategory::Utility,
+            needs_program: true,
         });
         // All three forms: each greyed one carries a line the deployable one
         // does not, and an unwrapped sentence runs off the edge just as
@@ -1918,6 +1931,7 @@ mod tests {
             label: "Overlong Node - free".to_string(),
             description: synthetic_description(),
             category: StructureCategory::Utility,
+            needs_program: true,
         });
         let menu = build_menu_rows(&entries, 0, None);
         let greyed = build_menu_rows(&entries, 0, Some(DEPLOY_NEEDS_A_PROGRAM));
@@ -2068,10 +2082,9 @@ mod tests {
         let colors = entry_colors(&shut);
         assert_eq!(colors.len(), entries.len(), "one row per structure");
         for (entry, color) in entries.iter().zip(&colors) {
-            let home = entry.category == StructureCategory::Home;
             assert_eq!(
                 *color,
-                if home { TEXT } else { TEXT_DIM },
+                if entry.needs_program { TEXT_DIM } else { TEXT },
                 "{} reads wrong on a roster that can pay for nothing",
                 entry.label
             );
@@ -2110,6 +2123,38 @@ mod tests {
             ))[home],
             TEXT
         );
+    }
+
+    /// **Nor does a Depot.** A storing structure costs no program either
+    /// (`StructureDef::needs_program`), and a shelf is exactly what a base
+    /// whose roster has nothing free still wants to be able to put up — so
+    /// greying it would dim the one row on the screen that is still worth
+    /// picking.
+    ///
+    /// Asserted over every shipped structure that declares `stores` rather
+    /// than over the id `"depot"`: the ladder runs to Mk6 and a seventh
+    /// shelf is a file, not a code change.
+    #[test]
+    fn a_storing_structure_stays_lit_on_a_roster_that_can_pay_for_nothing() {
+        let entries = shipped_entries();
+        let colors = entry_colors(&build_menu_rows(&entries, 0, Some(DEPLOY_NEEDS_A_PROGRAM)));
+        let shelves: Vec<usize> = entries
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| !e.needs_program && e.category != StructureCategory::Home)
+            .map(|(i, _)| i)
+            .collect();
+        assert!(
+            !shelves.is_empty(),
+            "the shipped assets define at least one storing structure"
+        );
+        for i in shelves {
+            assert_eq!(
+                colors[i], TEXT,
+                "{} costs no program, so a roster shortfall is not about it",
+                entries[i].label
+            );
+        }
     }
 
     /// The upgrade menu's requirement is **per row**, because it varies with

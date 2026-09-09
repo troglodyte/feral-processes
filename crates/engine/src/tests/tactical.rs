@@ -420,3 +420,69 @@ fn killing_the_last_hostile_ends_the_fight_and_pays_for_it() {
         "the kill paid no experience"
     );
 }
+
+/// A tactical fight's telemetry says what the model actually is: one group
+/// per hostile body, because groups dissolve on a battle map, and a party
+/// list read off `Party` rather than off a battle line it does not have.
+#[test]
+fn a_tactical_fight_reports_a_group_per_body_and_a_matching_end() {
+    let mut game = game();
+    game.enable_battle_telemetry();
+    let pack = tactical_fight(&mut game, 2, 1);
+    let player = game.player_entity();
+
+    for _ in 0..64 {
+        if game.world.get_resource::<TacticalBattle>().is_none() {
+            break;
+        }
+        if !wait_for_turn(&mut game, player) {
+            break;
+        }
+        let target = pack
+            .iter()
+            .copied()
+            .find(|&e| game.world.resource::<TacticalBattle>().cell_of(e).is_some());
+        let Some(target) = target else { break };
+        let at = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(target)
+            .unwrap();
+        if let Some(beside) = beside(&game, at) {
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(player, beside);
+        }
+        game.tactical_attack(target);
+    }
+
+    let records = game.take_battle_telemetry();
+    let start = records
+        .iter()
+        .find_map(|r| match r {
+            crate::telemetry::Record::FightStart {
+                fight,
+                party,
+                enemies,
+                ..
+            } => Some((*fight, party.len(), enemies.clone())),
+            _ => None,
+        })
+        .expect("a tactical fight opened without a FightStart");
+    assert_eq!(start.1, 1, "the party list read off a battle line it lacks");
+    assert_eq!(start.2.len(), 2, "the pack was not one group per body");
+    assert!(
+        start.2.iter().all(|g| g.count == 1),
+        "a group on a battle map holds more than one body"
+    );
+
+    let end = records
+        .iter()
+        .find_map(|r| match r {
+            crate::telemetry::Record::FightEnd { fight, won, .. } => Some((*fight, *won)),
+            _ => None,
+        })
+        .expect("the fight ended without a FightEnd");
+    assert_eq!(end.0, start.0, "the end names a different fight");
+    assert!(end.1, "clearing the board did not read as a win");
+}

@@ -273,6 +273,33 @@ impl Game {
             .sum()
     }
 
+    /// How a fight announces itself: who took point, and how many came with
+    /// them.
+    ///
+    /// One wording for both combat models. `bodies` is the whole pack, so
+    /// the singular case is a pack of one rather than a separate concept.
+    pub(crate) fn intercept_line(&self, point: Option<Entity>, bodies: usize) -> String {
+        let name = point
+            .and_then(|e| self.world.get::<Creature>(e))
+            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+            .map(|s| s.name.clone())
+            .unwrap_or_else(|| "program".to_string());
+        self.intercept_line_named(&name, bodies.saturating_sub(1))
+    }
+
+    /// `intercept_line` with the point species' name already in hand, which
+    /// is the shape `begin_battle` has: it resolves the name off the group
+    /// rather than off a body.
+    fn intercept_line_named(&self, name: &str, others: usize) -> String {
+        if others > 0 {
+            format!(
+                "A pack of rogue programs intercepts your signal — a {name} takes point, {others} more behind it!"
+            )
+        } else {
+            format!("A rogue {name} intercepts your signal!")
+        }
+    }
+
     /// Opens a battle around `groups` verbatim. Called by `start_battle`,
     /// which caps its pack first, and by `arena`, which does not.
     pub(crate) fn begin_battle(&mut self, groups: Vec<EnemyGroup>) {
@@ -330,13 +357,8 @@ impl Game {
             party: g.telemetry_party(),
             enemies: g.telemetry_enemy_groups(),
         });
-        if others > 0 {
-            self.log(format!(
-                "A pack of rogue programs intercepts your signal — a {name} takes point, {others} more behind it!"
-            ));
-        } else {
-            self.log(format!("A rogue {name} intercepts your signal!"));
-        }
+        let line = self.intercept_line_named(&name, others);
+        self.log(line);
         // The first nemesis in the opening groups, group-then-slot order —
         // deterministic, and there is no notion of "the" nemesis when a
         // pack holds two, so picking one rather than logging every one of

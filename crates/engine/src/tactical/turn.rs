@@ -98,11 +98,28 @@ impl Game {
 
         let standing: Vec<Entity> = battle.bodies().map(|(entity, _)| entity).collect();
         battle.set_initiative(self.roll_turn_order(&standing));
+        // Opened before the intercept line, so that line is the first thing
+        // the battle pane shows — `begin_battle`'s ordering.
         self.world
             .resource_mut::<crate::resources::MessageLog>()
             .open_battle();
         self.world.insert_resource(battle);
-        self.next_fight_id();
+
+        // After the resource is in place, deliberately: both telemetry
+        // helpers read the fight back off it, so a record taken earlier
+        // would describe a fight that does not exist yet — again
+        // `begin_battle`'s ordering, and its reason.
+        let fight = self.next_fight_id();
+        self.record(|g| crate::telemetry::Record::FightStart {
+            fight,
+            seed: g.world.resource::<WorldMap>().seed() as u64,
+            zone: g.world.resource::<ZoneLevel>().0,
+            depth: 0,
+            party: g.telemetry_party(),
+            enemies: g.telemetry_enemy_groups(),
+        });
+        let line = self.intercept_line(pack.first().copied(), pack.len());
+        self.log(line);
     }
 
     /// `standing` in descending initiative order, rolled once.

@@ -941,3 +941,136 @@ fn choosing_a_cell_at_zero_temperature_does_not_move_the_seeded_stream() {
         "an argmax turn spent a draw and shifted every later roll"
     );
 }
+
+/// The view stands every body where the board stands it, and never reads a
+/// world `Position` to do it — the seam the whole module rests on.
+#[test]
+fn a_tactical_view_stands_every_body_where_the_board_does() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 3, 10);
+    let player = game.player_entity();
+
+    let placed: Vec<(Entity, (i32, i32))> =
+        game.world.resource::<TacticalBattle>().bodies().collect();
+    let view = game.tactical_view().expect("a fight is open");
+
+    assert_eq!(view.bodies.len(), placed.len());
+    for (entity, cell) in placed {
+        let body = view
+            .bodies
+            .iter()
+            .find(|b| b.entity == entity)
+            .expect("every placed body is in the view");
+        assert_eq!(body.cell, cell, "the view moved a body off its cell");
+    }
+    assert!(
+        view.bodies
+            .iter()
+            .any(|b| b.is_player && b.entity == player),
+        "the player is on the board"
+    );
+    assert_eq!(
+        view.bodies.iter().filter(|b| b.is_hostile).count(),
+        pack.len(),
+        "every hostile is drawn as one"
+    );
+    // The con read is the hostiles' alone, or the map draws a danger
+    // rung under a companion.
+    assert!(
+        view.bodies
+            .iter()
+            .all(|b| b.difficulty.is_none() || b.is_hostile)
+    );
+}
+
+#[test]
+fn the_view_names_whose_turn_it_is_and_what_is_left_of_it() {
+    let mut game = game();
+    tactical_fight(&mut game, 2, 10);
+    let player = game.player_entity();
+    assert!(wait_for_turn(&mut game, player), "the player gets a turn");
+
+    let full = game.movement_allowance(player);
+    let before = game.tactical_view().expect("a fight is open");
+    assert!(before.player_turn, "it is the player's turn");
+    assert_eq!(
+        before.order[before.active.expect("somebody is acting")].entity,
+        player,
+    );
+    assert_eq!(before.allowance, full, "an untouched turn has it all");
+    assert!(!before.acted);
+    assert!(
+        before.reachable.contains(
+            &before
+                .bodies
+                .iter()
+                .find(|b| b.entity == player)
+                .expect("the player is on the board")
+                .cell
+        ),
+        "a body can always stand where it already stands"
+    );
+
+    // One step spent is one step gone. Which direction is open depends on
+    // the generated board, so this takes whichever one moved.
+    let stepped = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        .into_iter()
+        .any(|dir| matches!(game.tactical_step(dir), StepOutcome::Moved));
+    assert!(stepped, "some neighbour is open");
+    let after = game.tactical_view().expect("a fight is open");
+    assert!(
+        after.allowance < full,
+        "a step is spent out of the allowance the view reports"
+    );
+}
+
+/// The preview and the delivery are the same geometry, which is the whole
+/// reason the preview is a call rather than a second derivation.
+#[test]
+fn the_aim_preview_is_the_cells_the_routine_would_actually_cover() {
+    let mut game = game();
+    tactical_fight(&mut game, 3, 10);
+    let player = game.player_entity();
+    assert!(wait_for_turn(&mut game, player), "the player gets a turn");
+
+    let from = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(player)
+        .expect("the player is on the board");
+    let ability = game
+        .actor_abilities(player)
+        .into_iter()
+        .next()
+        .expect("the player knows a routine");
+
+    let covered = game.tactical_shape_cells(0, from);
+    let battle = game.world.resource::<TacticalBattle>();
+    let hit = crate::tactical::reach::recipients(battle, player, from, ability.tactical_shape());
+
+    for body in hit {
+        let cell = battle.cell_of(body).expect("a recipient is on the board");
+        assert!(
+            covered.contains(&cell),
+            "a body was hit on a cell the preview did not draw"
+        );
+    }
+    for (body, cell) in battle.bodies() {
+        if covered.contains(&cell) {
+            let hit =
+                crate::tactical::reach::recipients(battle, player, from, ability.tactical_shape());
+            assert!(
+                hit.contains(&body),
+                "the preview drew a cell whose occupant is not hit"
+            );
+        }
+    }
+}
+
+#[test]
+fn there_is_no_tactical_view_without_a_tactical_fight() {
+    let mut game = game();
+    assert!(!game.in_tactical_battle());
+    assert!(game.tactical_view().is_none());
+    assert!(game.tactical_shape_cells(0, (0, 0)).is_empty());
+}

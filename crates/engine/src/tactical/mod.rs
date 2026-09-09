@@ -17,6 +17,7 @@ pub mod deploy;
 pub mod map;
 pub mod reach;
 pub mod turn;
+pub mod view;
 
 use std::collections::HashMap;
 

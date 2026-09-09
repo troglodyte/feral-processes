@@ -4893,6 +4893,26 @@ pub const TOOL_CARRIER_VALUE: u32 = 2;
 /// choice and becomes a wall with extra steps.
 pub const TACTICAL_ROUGH_COST: u32 = 2;
 
+/// The three board extents, in cells on a side.
+///
+/// Three fixed tiers rather than a per-body formula so the player learns
+/// their shapes: a board is a place you fight in repeatedly, and one that
+/// is a slightly different size every time is one you can never read at a
+/// glance. Sized for manoeuvre — deployment is what puts the two sides in
+/// contact, so a board large enough to flank on does not open every fight
+/// with a walk.
+pub const TACTICAL_BOARD_SMALL: i32 = 14;
+pub const TACTICAL_BOARD_MEDIUM: i32 = 20;
+pub const TACTICAL_BOARD_LARGE: i32 = 28;
+
+/// Total bodies — party plus wild — at which the board steps up a tier.
+///
+/// Both are reachable and so is the tier between them: the smallest fight
+/// the game fields is the player and one wild body, and the largest is
+/// `MAX_PARTY_SIZE` against `MAX_PACK_BODIES`.
+pub const TACTICAL_MEDIUM_BODIES: u32 = 4;
+pub const TACTICAL_LARGE_BODIES: u32 = 7;
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -10,7 +10,12 @@
 //! folded through `derive::fold` and reduced through `derive::index`, the
 //! way `rock::RockDb::kind_at` derives base space.
 
-use crate::tuning::TACTICAL_ROUGH_COST;
+use crate::derive::{FNV_BASIS, fold};
+use crate::tuning::{
+    TACTICAL_BOARD_LARGE, TACTICAL_BOARD_MEDIUM, TACTICAL_BOARD_SMALL, TACTICAL_LARGE_BODIES,
+    TACTICAL_MEDIUM_BODIES, TACTICAL_ROUGH_COST,
+};
+use crate::world::Biome;
 
 /// What a cell of a battle map is made of.
 ///
@@ -54,9 +59,134 @@ impl BattleCell {
     }
 }
 
+/// Everything a battle map is derived from.
+///
+/// `stack::FrameSpec`'s counterpart: a board is a pure function of this and
+/// nothing else, which is what makes it unit-testable without a `Game` and
+/// what makes it safe never to save.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BattleSpec {
+    pub world_seed: u32,
+    /// The world tile the fight opened on.
+    pub site: (i32, i32),
+    /// `GameClock` at the moment the fight opened.
+    ///
+    /// In the spec so that two fights on one tile are not the same board.
+    /// Safe here and nowhere else: a battle is never saved and never
+    /// regenerated, so a board that depends on the moment cannot come back
+    /// wrong after a reload — the trap `stack::generate`'s doc warns about.
+    pub tick: u64,
+    pub zone: u32,
+    pub biome: Biome,
+    /// Party plus wild. Decides the board's extent, nothing else.
+    pub bodies: u32,
+}
+
+impl BattleSpec {
+    /// The board's extent, in cells on a side.
+    pub fn side(self) -> i32 {
+        if self.bodies >= TACTICAL_LARGE_BODIES {
+            TACTICAL_BOARD_LARGE
+        } else if self.bodies >= TACTICAL_MEDIUM_BODIES {
+            TACTICAL_BOARD_MEDIUM
+        } else {
+            TACTICAL_BOARD_SMALL
+        }
+    }
+
+    /// The fold every cell of this board starts from.
+    ///
+    /// `bodies` is deliberately absent: it decides the extent, and folding
+    /// it in as well would mean one more companion in the party changed the
+    /// ground under a fight on the same tile at the same moment.
+    fn base_seed(self) -> u64 {
+        fold(
+            FNV_BASIS,
+            &[
+                self.world_seed as u64,
+                self.site.0 as u32 as u64,
+                self.site.1 as u32 as u64,
+                self.tick,
+                self.zone as u64,
+                self.biome as u64,
+            ],
+        )
+    }
+
+    /// A stable seed for one cell of this board.
+    pub(crate) fn cell_seed(self, x: i32, y: i32) -> u64 {
+        fold(self.base_seed(), &[x as u32 as u64, y as u32 as u64])
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::world::Biome;
+
+    fn spec(bodies: u32) -> BattleSpec {
+        BattleSpec {
+            world_seed: 1234,
+            site: (12, -7),
+            tick: 900,
+            zone: 3,
+            biome: Biome::OpenGrid,
+            bodies,
+        }
+    }
+
+    #[test]
+    fn the_board_steps_up_a_tier_at_four_bodies_and_at_seven() {
+        assert_eq!(spec(1).side(), TACTICAL_BOARD_SMALL);
+        assert_eq!(spec(3).side(), TACTICAL_BOARD_SMALL);
+        assert_eq!(spec(4).side(), TACTICAL_BOARD_MEDIUM);
+        assert_eq!(spec(6).side(), TACTICAL_BOARD_MEDIUM);
+        assert_eq!(spec(7).side(), TACTICAL_BOARD_LARGE);
+        assert_eq!(spec(13).side(), TACTICAL_BOARD_LARGE);
+    }
+
+    /// Every tier is reachable in play: the smallest fight the game can
+    /// field is the player and one wild body, and the largest is a full
+    /// party against a full pack.
+    #[test]
+    fn all_three_tiers_are_reachable_between_the_smallest_and_largest_fight() {
+        let smallest = 1 + 1;
+        let largest = crate::tuning::MAX_PARTY_SIZE as u32 + crate::tuning::MAX_PACK_BODIES;
+        assert_eq!(spec(smallest).side(), TACTICAL_BOARD_SMALL);
+        assert_eq!(spec(largest).side(), TACTICAL_BOARD_LARGE);
+        assert!(
+            (smallest..=largest).any(|n| spec(n).side() == TACTICAL_BOARD_MEDIUM),
+            "the middle tier can never be reached"
+        );
+    }
+
+    #[test]
+    fn a_cell_seed_is_a_property_of_the_spec_and_the_cell() {
+        assert_eq!(spec(4).cell_seed(3, 5), spec(4).cell_seed(3, 5));
+        assert_ne!(spec(4).cell_seed(3, 5), spec(4).cell_seed(3, 6));
+        assert_ne!(spec(4).cell_seed(3, 5), spec(4).cell_seed(5, 3));
+    }
+
+    /// Two fights on the same tile are not the same fight. A board is never
+    /// saved and never regenerated, so leaning on the clock here cannot come
+    /// back wrong after a reload.
+    #[test]
+    fn a_later_fight_on_the_same_tile_gets_a_different_board() {
+        let mut later = spec(4);
+        later.tick += 1;
+        assert_ne!(spec(4).cell_seed(0, 0), later.cell_seed(0, 0));
+    }
+
+    #[test]
+    fn the_biome_and_the_zone_both_reach_the_cell_seed() {
+        let mut marsh = spec(4);
+        marsh.biome = Biome::Deadlock;
+        assert_ne!(spec(4).cell_seed(0, 0), marsh.cell_seed(0, 0));
+
+        let mut deeper = spec(4);
+        deeper.zone += 1;
+        assert_ne!(spec(4).cell_seed(0, 0), deeper.cell_seed(0, 0));
+    }
 
     /// The pair that makes four kinds necessary rather than arbitrary: one
     /// you can see over and cannot cross, one you can do neither with. If

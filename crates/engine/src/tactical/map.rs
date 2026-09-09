@@ -227,7 +227,7 @@ impl Board {
 }
 
 /// Eight-way, in a fixed order so every walk over a board is deterministic.
-const NEIGHBOURS: [(i32, i32); 8] = [
+pub(crate) const NEIGHBOURS: [(i32, i32); 8] = [
     (0, -1),
     (1, -1),
     (1, 0),

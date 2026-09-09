@@ -12,4 +12,5 @@
 //! Stack keeps its coordinates in `resources::Locale` and base space keeps
 //! its own in `Locale::Base`. This module does not import `Position`.
 
+pub mod deploy;
 pub mod map;

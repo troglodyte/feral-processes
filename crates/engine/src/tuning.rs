@@ -4913,6 +4913,13 @@ pub const TACTICAL_BOARD_LARGE: i32 = 28;
 pub const TACTICAL_MEDIUM_BODIES: u32 = 4;
 pub const TACTICAL_LARGE_BODIES: u32 = 7;
 
+/// Cells between the two sides' anchors at deployment.
+///
+/// The board is sized for manoeuvre and the deployment is sized for
+/// contact: six cells is a step or two of closing rather than a march, so
+/// no fight opens with both sides walking toward each other for a turn.
+pub const TACTICAL_DEPLOY_GAP: i32 = 6;
+
 #[cfg(test)]
 mod tests {
     use super::*;

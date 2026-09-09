@@ -33,6 +33,19 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.143
+
+**A body on a battle map can brace.** The board had attack, special and end
+turn; the intrusion screen has had Defend on `d` since long before there was
+a board, and a fight you can only spend a turn swinging in has no answer to a
+turn you would rather survive. It is the group model's own `begin_defend`
+rather than a second spelling of it, so the mitigation and the line stay one
+definition — but only the mitigation crosses over: `DEFEND_AGGRO_WEIGHT`
+weights an aggro slot and a board has none, so bracing is a survival play
+here and not a tank one. It lasts the rest of the round, which makes it worth
+most to whoever acts early and nothing at all to whoever acts last; the turn
+strip is on screen, so that is a thing to read before spending the turn.
+
 ## 0.13.142
 
 **A companion's turn on a battle map now reads as the player's.** The keybar

@@ -28,6 +28,7 @@ mod keys;
 mod log_filter;
 mod menus;
 mod notifications;
+mod options;
 mod party;
 mod playing;
 mod quitting;

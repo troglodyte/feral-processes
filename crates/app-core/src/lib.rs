@@ -254,6 +254,27 @@ pub enum SwapChoice {
     Unequip,
 }
 
+/// One line of the options screen. Built here and never restated in the
+/// renderer, `views::AchievementRow`'s reason: the same list bounds the
+/// scroll and draws the rows, so the highlight cannot land on a row nothing
+/// paints.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OptionRow {
+    pub key: OptionKey,
+    pub label: String,
+    /// Already rendered — `"On"` / `"Off"` — so the renderer holds no
+    /// opinion about how a setting reads.
+    pub value: String,
+}
+
+/// Which setting a row is. An enum rather than the row's index so
+/// `App::toggle_option` is an exhaustive match and a second option added
+/// without a toggle arm fails to compile.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OptionKey {
+    TacticalBattles,
+}
+
 /// One row of the manual's index.
 pub struct HelpIndexRow {
     pub title: String,
@@ -1667,6 +1688,16 @@ pub enum Mode {
     /// group menu: the profile is the one thing here that outlives a run, so
     /// it belongs beside New Game rather than inside one.
     Achievements,
+    /// The settings screen, opened with `[O]` from the main menu. Rows come
+    /// from `App::option_rows`; Enter toggles the highlighted one and writes
+    /// `profile.ron` on the spot.
+    ///
+    /// **Main menu only, deliberately.** An option here is read off the
+    /// `Profile` resource the engine is handed once per run by
+    /// `install_profile`, so a mid-run change would not reach the running
+    /// game — a switch that appears to do nothing is worse than one the
+    /// player has to leave the run to reach.
+    Options,
     Help,
     /// One page of the manual. A **document**, not a menu: Up/Down scroll the
     /// prose and Enter does nothing, because selection-driven scrolling keeps
@@ -1757,6 +1788,7 @@ impl Mode {
             | Mode::BattleResult => true,
             Mode::MainMenu
             | Mode::Achievements
+            | Mode::Options
             | Mode::CreateCharacter
             | Mode::LoadGame
             | Mode::SaveAction

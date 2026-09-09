@@ -200,6 +200,7 @@ impl App {
         match self.mode {
             Mode::MainMenu => self.handle_main_menu_key(key),
             Mode::Achievements => self.handle_achievements_key(key),
+            Mode::Options => self.handle_options_key(key),
             Mode::LoadGame => self.handle_load_game_key(key),
             Mode::SaveAction => self.handle_save_action_key(key),
             Mode::CreateCharacter => self.handle_creation_key(key),

@@ -9,7 +9,8 @@
 use bevy_ecs::prelude::Entity;
 
 use crate::Game;
-use crate::abilities::{self, AbilityEffect};
+use crate::abilities::{self, AbilityDef, AbilityEffect};
+use crate::components::AbilityCooldowns;
 use crate::components::{Hostile, Position, Stats};
 use crate::game::combat_teardown::FightVerdict;
 use crate::resources::{GameClock, Party, ZoneLevel};
@@ -292,13 +293,45 @@ impl Game {
         if !reach::in_range(from, aim, ability.tactical_range()) {
             return false;
         }
+        self.run_tactical_routine(actor, &ability, aim, 0);
+        true
+    }
 
+    /// Resolves a routine that has already been decided on and cleared: the
+    /// price, the effect, the reap and the turn.
+    ///
+    /// **The effect is shared; the refusals are not** — `Game::take_routine`'s
+    /// split, for the same reason. A hostile holds no `PowerReserve` by
+    /// design, so `ability_unavailable` refuses it every priced routine there
+    /// is, and every routine that can be *run* is priced; routing the enemy
+    /// AI through the player's door would have given it a routine arm that
+    /// compiles, tests green and can never fire. So the player's door keeps
+    /// its six refusals and `tactical/ai.rs` brings `wild_routine_ready`'s
+    /// gate instead, and the two meet here.
+    ///
+    /// `cooldown_floor` is the whole of the remaining difference, and it is
+    /// `abilities::armed_cooldown`'s own parameter rather than a second
+    /// spelling of it: the player's routines cool at their authored rate and
+    /// a hostile's are floored at `ENEMY_ROUTINE_MIN_COOLDOWN`, exactly as
+    /// `wild_retaliate` floors them in the group model.
+    ///
+    /// Takes the `AbilityDef` itself and not an index. `tactical_use_routine`
+    /// indexes `actor_abilities`, which drops any id the `AbilityDb` cannot
+    /// resolve — so that index is *not* a position in `Routines`, and a
+    /// caller holding a def it found for itself must not have to invert one.
+    pub(crate) fn run_tactical_routine(
+        &mut self,
+        actor: Entity,
+        ability: &AbilityDef,
+        aim: (i32, i32),
+        cooldown_floor: u32,
+    ) {
         // Charged before the effect resolves, at the same moment and for the
         // same reason as the group model's own Special site: a killing blow
         // ends the fight below, and a cooldown armed afterwards would be
         // written onto an entity the teardown has already cleaned up.
-        self.arm_cooldown(actor, &ability);
-        self.spend_power(actor, abilities::routine_power_cost(&ability));
+        self.arm_tactical_cooldown(actor, ability, cooldown_floor);
+        self.spend_power(actor, abilities::routine_power_cost(ability));
 
         let name = self.creature_label(actor);
         // A capture is aimed at a body rather than resolved over an area:
@@ -322,7 +355,7 @@ impl Game {
             let shape = ability.tactical_shape();
             let recipients =
                 reach::recipients(self.world.resource::<TacticalBattle>(), actor, aim, shape);
-            self.use_ability(&ability, actor, &name, &recipients);
+            self.use_ability(ability, actor, &name, &recipients);
         }
 
         // A routine can drop a body anywhere on the board — that is what
@@ -336,7 +369,29 @@ impl Game {
         if self.world.get_resource::<TacticalBattle>().is_some() {
             self.world.resource_mut::<TacticalBattle>().end_turn();
         }
-        true
+    }
+
+    /// `Game::arm_cooldown` with a floor under what it writes.
+    ///
+    /// A `cooldown: 0` routine is armed by neither, so a hostile carrying one
+    /// would otherwise run it every single turn of the fight.
+    fn arm_tactical_cooldown(&mut self, actor: Entity, ability: &AbilityDef, floor: u32) {
+        if floor == 0 {
+            self.arm_cooldown(actor, ability);
+            return;
+        }
+        let mut cooldowns = self
+            .world
+            .get::<AbilityCooldowns>(actor)
+            .map(|c| c.0.clone())
+            .unwrap_or_default();
+        cooldowns.insert(
+            ability.id.clone(),
+            abilities::armed_cooldown(ability.cooldown, floor),
+        );
+        self.world
+            .entity_mut(actor)
+            .insert(AbilityCooldowns(cooldowns));
     }
 
     /// Ends the acting body's turn without spending its action.

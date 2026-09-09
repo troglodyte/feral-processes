@@ -252,3 +252,88 @@ fn acting_cell(app: &mut App) -> (i32, i32) {
         .expect("the acting body is on the board")
         .cell
 }
+
+/// **The board's own reach already includes the diagonals** — `walk_field`
+/// is Chebyshev, so `movement_field` offers them and the wild side's AI
+/// walks them. Until the numpad landed, the player was the one body on the
+/// board that could not, which is a manoeuvring advantage handed to the
+/// hostiles for no reason anyone chose.
+#[test]
+fn a_diagonal_the_engine_calls_reachable_is_reachable_by_a_key() {
+    let mut app = fighting(9120);
+    wait_for_the_player(&mut app);
+    let from = acting_cell(&mut app);
+    let reachable = app
+        .game
+        .as_mut()
+        .expect("the fixture has a game")
+        .tactical_view()
+        .expect("the fight is open")
+        .reachable;
+
+    let diagonals = [
+        ((-1, -1), GameKey::UpLeft),
+        ((1, -1), GameKey::UpRight),
+        ((-1, 1), GameKey::DownLeft),
+        ((1, 1), GameKey::DownRight),
+    ];
+    let (delta, key) = diagonals
+        .into_iter()
+        .find(|((dx, dy), _)| reachable.contains(&(from.0 + dx, from.1 + dy)))
+        .expect("no diagonal neighbour of the acting body was reachable at all");
+
+    app.handle_key(key);
+
+    assert_eq!(
+        acting_cell(&mut app),
+        (from.0 + delta.0, from.1 + delta.1),
+        "{key:?} did not take the body to the diagonal the engine offered it"
+    );
+}
+
+/// The abstract fight has called this `[s]pecial` since long before there
+/// was a board to fight on, and one fight model teaching a key the other
+/// refuses is the whole of the cost.
+#[test]
+fn the_special_key_is_s_the_way_it_is_in_an_abstract_fight() {
+    let mut app = fighting(9121);
+    wait_for_the_player(&mut app);
+    assert!(
+        !app.tactical_routine_rows().is_empty(),
+        "the acting body can run nothing, so this would pass on the refusal"
+    );
+
+    app.handle_key(GameKey::Char('s'));
+
+    assert_eq!(app.mode, Mode::TacticalRoutine);
+}
+
+#[test]
+fn r_is_not_a_second_way_into_the_picker() {
+    let mut app = fighting(9122);
+    wait_for_the_player(&mut app);
+
+    app.handle_key(GameKey::Char('r'));
+
+    assert_eq!(app.mode, Mode::TacticalBattle);
+    assert_eq!(app.status_line, None);
+}
+
+/// The cursor takes the same eight directions the body walks: a numpad that
+/// steers a body but not the cursor it aims with reads as one of the two
+/// being broken.
+#[test]
+fn the_aim_cursor_moves_diagonally_too() {
+    let mut app = fighting(9123);
+    wait_for_the_player(&mut app);
+    app.handle_key(GameKey::Char('a'));
+    let (cx, cy) = app.tactical_cursor.expect("the cursor is open");
+
+    app.handle_key(GameKey::DownRight);
+
+    assert_eq!(
+        app.tactical_cursor,
+        Some((cx + 1, cy + 1)),
+        "the cursor ignored a diagonal the body would have walked"
+    );
+}

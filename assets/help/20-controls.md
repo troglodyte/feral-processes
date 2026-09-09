@@ -93,6 +93,10 @@ In an intrusion:
 - A — all attack, and D all defend: shift commands the whole party
 - Up/Down — scroll the narration, on the results page too
 
+On a [battle map](battle-maps), which surface fights use if you turn them on
+in Options, the keys are different: arrows or the numpad step the acting
+body, a swings, s runs a routine, and E ends the turn.
+
 This screen is the manual now, not a card: Esc backs out of it a page at a time, like every other
 screen. [Start here](start-here) if you have not read anything else, or read what the keys are for:
 [intrusions](intrusions), [your base](your-base), and [the Stack](the-stack).

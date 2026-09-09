@@ -711,6 +711,24 @@ pub enum GameKey {
     ShiftRight,
     CtrlLeft,
     CtrlRight,
+    /// The four diagonals, as one gesture each.
+    ///
+    /// `ShiftLeft`'s shape and for its reason: these name physical keys —
+    /// the numpad's corners — rather than intentions, so they are four
+    /// variants and not a `(dx, dy)` payload that would rewrite every
+    /// `GameKey::Left` arm in movement, building, inspection, the arena and
+    /// the Stack to serve the one screen that asked.
+    ///
+    /// **Where they differ from the modified arrows is the fold**:
+    /// `App::handle_key` collapses `ShiftLeft` to `Left` for every mode but
+    /// the one that reads it, and a diagonal has no honest orthogonal fold.
+    /// Turning `UpLeft` into `Up` on the world map walks the player
+    /// somewhere they did not ask to go, so off the battle map these are
+    /// ignored instead.
+    UpLeft,
+    UpRight,
+    DownLeft,
+    DownRight,
     Char(char),
     Enter,
     Esc,

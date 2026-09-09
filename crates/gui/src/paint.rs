@@ -760,6 +760,32 @@ pub(crate) fn painted_rect_widths(shapes: &[egui::epaint::ClippedShape]) -> Vec<
         .collect()
 }
 
+/// The points of every filled polygon `with_painter` recorded in exactly
+/// `color`.
+///
+/// `painted_rect_fill_count`'s counterpart for `Painter::poly`, which egui
+/// records as a `Shape::Path` and so leaves invisible to every helper above
+/// — the con earmark and the turn arrow are both polygons, and a test
+/// asking whether one was drawn has nothing else to ask with. The colour
+/// comparison is made here for that helper's reason: quantisation to egui's
+/// 8-bit channels happens on the way in.
+#[cfg(test)]
+pub(crate) fn painted_poly_points(
+    shapes: &[egui::epaint::ClippedShape],
+    color: Color,
+) -> Vec<Vec<(f32, f32)>> {
+    let want = to_egui(color);
+    shapes
+        .iter()
+        .filter_map(|cs| match &cs.shape {
+            egui::Shape::Path(p) if p.fill == want => {
+                Some(p.points.iter().map(|q| (q.x, q.y)).collect())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 /// A shape's kind, coarsely, for a test that cares which of two things was
 /// painted first rather than what either of them was.
 #[cfg(test)]

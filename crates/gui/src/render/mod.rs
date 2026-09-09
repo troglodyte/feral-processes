@@ -1531,8 +1531,15 @@ mod tests {
 
     fn census_app() -> feral_processes_app_core::App {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let tmp = std::env::temp_dir().join(format!("fp_gui_census_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&tmp);
+        // Keyed by a counter as well as the pid: six tests call this, the
+        // harness runs them on parallel threads, and a directory shared
+        // across them raced — one thread's `remove_dir_all` landing between
+        // another's failed `mkdir` and the `is_dir` check that would have
+        // forgiven it, which surfaces as `AlreadyExists` from
+        // `create_dir_all` and reads as anything but a fixture fault.
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let nth = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let tmp = std::env::temp_dir().join(format!("fp_gui_census_{}_{nth}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
         let mut app = feral_processes_app_core::App::new(
             root.join("assets"),

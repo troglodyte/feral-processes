@@ -24,7 +24,7 @@ use super::popup::{PopupSize, draw_popup, item_row, spent_item_row, text_row};
 use crate::fx::Fx;
 use crate::paint::{Color, Painter, Rect};
 use crate::text::Metrics;
-use feral_processes_app_core::menu_shortcut;
+use feral_processes_app_core::{Mode, menu_shortcut};
 use feral_processes_engine::battle::SpecialOption;
 
 /// The ground, by kind. Brightness and nothing else carries passability,
@@ -290,7 +290,24 @@ pub(super) fn draw_turn_strip(view: &TacticalView, pane: Rect, painter: &Painter
 /// `log_pane`'s bottom border and already degrades through
 /// `strip::fitting`, so a fight's action list is a content swap and costs
 /// no layout at all.
-pub(super) fn action_bar(view: &TacticalView) -> Vec<(String, String)> {
+///
+/// **The mode is an argument because a fight is two screens.** The cursor
+/// is not the board: the three action keys do nothing while it is open, and
+/// the two that commit and cancel it appear nowhere else. Taken here rather
+/// than branched on at `draw_playing_base`, so which bar a screen gets is
+/// one derivation a test can ask rather than a condition in a renderer.
+pub(super) fn action_bar(mode: Mode, view: &TacticalView) -> Vec<(String, String)> {
+    if mode == Mode::TacticalAim {
+        // Movement first because it is what the player is doing; `fitting`
+        // drops from the end, and Esc is the row that may go — a cursor
+        // backed out of by the key every other screen backs out with is the
+        // one thing here nobody has to be told twice.
+        return vec![
+            ("↑↓←→ numpad".to_string(), "aim".to_string()),
+            ("Enter".to_string(), "confirm".to_string()),
+            ("Esc".to_string(), "cancel".to_string()),
+        ];
+    }
     if !view.player_turn {
         return vec![(String::new(), "the wild side is moving".to_string())];
     }
@@ -446,7 +463,7 @@ mod tests {
         let mut view = game.tactical_view().expect("the fight is open");
         view.player_turn = true;
         view.acted = false;
-        let open = action_bar(&view);
+        let open = action_bar(Mode::TacticalBattle, &view);
         assert!(open.iter().any(|(k, _)| k == "a"));
         assert!(open.iter().any(|(k, _)| k == "E"));
         assert!(
@@ -459,7 +476,7 @@ mod tests {
         );
 
         view.acted = true;
-        let spent = action_bar(&view);
+        let spent = action_bar(Mode::TacticalBattle, &view);
         assert_eq!(
             spent.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>(),
             vec!["E"],
@@ -483,34 +500,69 @@ mod tests {
         // sentence — measuring that would pass against any width at all.
         view.player_turn = true;
         view.acted = false;
-        let actions = action_bar(&view);
-        assert_eq!(actions.len(), 4, "not the full bar: {actions:?}");
-        for (w, h) in [(1280.0, 720.0), (1920.0, 1080.0)] {
-            let m = ui_metrics(h);
-            with_painter(|p| {
-                let char_w = p.measure_ui_advance("M", m.font_size);
-                let pane = layout::regions(w, h, char_w, &m, false).log_pane;
-                let avail = pane.w - m.inset * 2.0;
-                let segments = crate::render::hud::log_frame::keybar_segments(Some(&actions));
-                let taken = fitting(&segments, avail, p, &m);
-                let drawn: String = taken.iter().map(|(t, _, _)| t.as_str()).collect();
-                let slack = avail - p.measure_ui_advance(&drawn, m.small());
+        // Both bars: the cursor's is its own content at its own width, and
+        // a census over one of them passes against the other overflowing.
+        for mode in [Mode::TacticalBattle, Mode::TacticalAim] {
+            let actions = action_bar(mode, &view);
+            assert!(
+                actions.len() >= 3,
+                "not a full bar for {mode:?}: {actions:?}"
+            );
+            for (w, h) in [(1280.0, 720.0), (1920.0, 1080.0)] {
+                let m = ui_metrics(h);
+                with_painter(|p| {
+                    let char_w = p.measure_ui_advance("M", m.font_size);
+                    let pane = layout::regions(w, h, char_w, &m, false).log_pane;
+                    let avail = pane.w - m.inset * 2.0;
+                    let segments = crate::render::hud::log_frame::keybar_segments(Some(&actions));
+                    let taken = fitting(&segments, avail, p, &m);
+                    let drawn: String = taken.iter().map(|(t, _, _)| t.as_str()).collect();
+                    let slack = avail - p.measure_ui_advance(&drawn, m.small());
 
-                // Against the bar as it would be with unlimited room, so
-                // this cannot drift as segments are added: `fitting` drops
-                // from the end, so anything short of the whole is a key the
-                // player cannot see.
-                let whole = fitting(&segments, f32::INFINITY, p, &m);
-                assert_eq!(
-                    taken.len(),
-                    whole.len(),
-                    "the action bar dropped a key at {w}x{h} — slack {slack:.1}px: {drawn:?}"
-                );
-                assert!(
-                    slack >= 0.0,
-                    "the action bar overhangs its pane by {slack:.1}px"
-                );
-            });
+                    // Against the bar as it would be with unlimited room, so
+                    // this cannot drift as segments are added: `fitting`
+                    // drops from the end, so anything short of the whole is
+                    // a key the player cannot see.
+                    let whole = fitting(&segments, f32::INFINITY, p, &m);
+                    assert_eq!(
+                        taken.len(),
+                        whole.len(),
+                        "{mode:?}'s bar dropped a key at {w}x{h} — slack {slack:.1}px: {drawn:?}"
+                    );
+                    assert!(
+                        slack >= 0.0,
+                        "{mode:?}'s bar overhangs its pane by {slack:.1}px"
+                    );
+                });
+            }
+        }
+    }
+
+    /// The cursor is a different screen from the board, and offering the
+    /// board's keys on it names three that do nothing and hides the two
+    /// that commit and cancel.
+    #[test]
+    fn the_aim_cursor_gets_its_own_keys() {
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open");
+        view.player_turn = true;
+        view.acted = false;
+
+        let rows = action_bar(Mode::TacticalAim, &view);
+
+        assert!(
+            rows.iter().any(|(k, _)| k == "Enter"),
+            "the cursor's commit key is not on the bar: {rows:?}"
+        );
+        assert!(
+            rows.iter().any(|(k, _)| k == "Esc"),
+            "the cursor's cancel key is not on the bar: {rows:?}"
+        );
+        for dead in ["a", "s", "E"] {
+            assert!(
+                !rows.iter().any(|(k, _)| k == dead),
+                "{dead:?} does nothing while aiming, so the bar must not offer it: {rows:?}"
+            );
         }
     }
 
@@ -521,7 +573,7 @@ mod tests {
         let mut game = fighting();
         let mut view = game.tactical_view().expect("the fight is open");
         view.player_turn = false;
-        let rows = action_bar(&view);
+        let rows = action_bar(Mode::TacticalBattle, &view);
         assert!(rows.iter().all(|(k, _)| k.is_empty()));
     }
 }

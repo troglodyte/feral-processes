@@ -5288,10 +5288,10 @@ measured from the nest, which cannot by itself keep a swarm off a base
 built within leash range of one. A second "walkable but off-limits" rule
 belongs in that filter, not beside it in a caller.
 
-### There is one Dijkstra walk on the surface, and the step rule is a parameter
+### There is one Dijkstra walk on the surface, and the step rule is a cost function
 
-**There is one Dijkstra walk on the surface, and the step rule is a
-parameter.** `walk_field` (`game/pursuit.rs`) is the search;
+**There is one Dijkstra walk on the surface, and the step rule is a cost
+function, not a predicate.** `walk_field` (`game/pursuit.rs`) is the search;
 `pursuit_field` is a one-line wrapper that adds the `Biome::Platform`
 exclusion above. A hauling program has to cross the base slab, which is
 exactly the tile set that filter removes, so the two callers genuinely
@@ -5310,6 +5310,34 @@ tile whatever occupies it, since `place_structure` never checks whether a
 program is standing there and a worker built over would otherwise be
 absent from its own field forever. You may step off an occupied tile,
 never onto one.
+
+**The rule widened from `FnMut(coord) -> bool` to `FnMut(coord) ->
+Option<u32>` on 2026-09-09**, where `None` is refused and `Some(c)` is what
+entering that tile costs. The tactical battle map (`tactical/`) is the fifth
+caller and the first space whose ground is graded: `BattleCell::Rough` costs
+two where `Open` costs one, and a predicate cannot say "crossable, but
+dearly". The four existing callers answer `.then_some(1)` and get exactly
+the uniform field they got before, so nothing on the surface or in base
+space changed by a step.
+
+The alternative was a second walk for the one space with graded ground, and
+that is precisely the copy this seam exists to prevent — the reach field
+would have had to restate the successor bounding, the corner-cutting and
+the origin insertion, and the copy that drifts is the one nobody runs. The
+fallback the design named — drop `Rough`'s cost and leave `walk_field`
+alone — was rejected because it costs the battle terrain its whole reason
+for having four kinds rather than three: `Rough` and `Open` would differ in
+nothing.
+
+`radius` still bounds a **Chebyshev box** and not a cost budget, and with
+graded ground those are no longer the same quantity. That is safe rather
+than lucky, and the argument is one line: no step costs less than one, so a
+tile outside a box of half-width `b` costs more than `b` to reach and
+cannot be inside a budget of `b`. `reach::movement_field` therefore passes
+the body's allowance as the radius and filters the result by cost, and the
+box can never cut off a cell the filter would have kept. It is also why
+`TACTICAL_MOVE_MAX` is a correctness bound and not a taste one: an
+unbounded allowance is an unbounded search.
 
 **`station_tiles` yields all four faces, not the nearest one**, and
 `post_field` walks them in that order and stops at the first that routes.
@@ -12961,3 +12989,60 @@ Nothing here is saved, and that is an omission rather than a check.
 `BattleState`: saving is opt-in by a field appearing in `save.rs`'s
 hand-written structs, and a resource simply not appearing there *is* the
 mechanism. So this cost no `SAVE_FORMAT_VERSION` movement.
+
+### A body is a wall, and the allowance is both the budget and the search box
+
+**A body is a wall in `reach::movement_field`, and the allowance is both the
+budget and `walk_field`'s search box.**
+
+The occupancy rule was a choice between three, and the two rejected ones
+both cost something real. *Everyone passable, destinations checked* is the
+cheapest to write and leaves the fight with no zone of control at all — you
+conga through the enemy line, and every positional decision the mode exists
+for stops mattering, because nothing can be blocked off. *Allies passable,
+enemies not* is the one most tactics games pick, and it costs a second
+concept: the field then has a pass-through set distinct from a destination
+set, and every reader of the field has to know which question it is asking.
+One rule — an occupied cell is neither crossed nor stopped on, friend or foe
+— is what `TacticalBattle::move_to` already refuses, so the walk and the
+move agree by construction rather than by a test. The price is that a party
+can block its own corridor, which is a positional mistake the player can see
+and undo rather than a rule they have to learn.
+
+The budget is spent in **cost and not in steps**, which is the whole of what
+`BattleCell::Rough` is worth: four points buys four open cells or two rough
+ones, and choosing between them is the terrain being a decision rather than
+decoration. Where the allowance earns a second job is as `walk_field`'s
+`radius`, which bounds a Chebyshev box rather than a cost. With graded
+ground those two quantities have come apart, so the reuse needs an argument
+rather than an assumption: no step costs less than one, therefore a tile
+outside a box of half-width `b` costs strictly more than `b` to reach and
+cannot be inside a budget of `b`. The box can never cut off a cell the cost
+filter would have kept, and the walk stays one search rather than a search
+plus a widening.
+
+The trap is the corollary. `TACTICAL_MOVE_MIN` and `TACTICAL_MOVE_MAX` read
+like taste — how fast should a fast program be? — and are not. The ceiling
+bounds the search: an allowance of a million is a box of a million cells on
+a side, on a board that is at most twenty-eight. The floor bounds the fight:
+a body that cannot move can neither close on anything nor walk off the edge,
+which is this model's only way to leave, so a fight containing one can end
+only by that body being killed. Both are reachable only by a mod — the
+shipped roster derives two through six without either clamp biting — which
+is exactly why an authored `SpeciesDef::movement` is held to them too rather
+than trusted. That field is `#[serde(default)]` and no shipped species
+authors one, so the only proof it works at all is a test that parses a
+`.ron` string with it: `SpeciesDb::insert` never parses anything, and this
+repo has already shipped a `serde(default)` asset field that could be
+authored nowhere.
+
+The allowance itself is one derivation, `reach::allowance`, four points at
+`DEFAULT_BASE_SPEED` and one more per `TACTICAL_MOVE_SPEED_STEP` either way.
+It is read against `TACTICAL_DEPLOY_GAP` and a test holds the two together:
+an average body must not close six cells in one turn (which leaves no room
+to position) and must not need three (which is the march deployment exists
+to avoid). `div_euclid` rather than `/` because truncating division rounds
+toward zero, which would make the band straddling the average twice as wide
+as every other one — a body one point *below* average would move like an
+average one, silently, and the roster would read as though speed did
+nothing at the middle.

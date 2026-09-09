@@ -778,7 +778,9 @@ relying on one, and correct all three places if it has moved.
 - **`walkable()` alone does not decide where a `Pursuing` guardian may
   step** — `pursuit_field` excludes `Biome::Platform` separately.
 - **There is one Dijkstra walk on the surface, and the step rule is a
-  parameter.** `walk_field`, with `pursuit_field` a one-line wrapper.
+  *cost function*, not a predicate** — `walk_field`, with `pursuit_field` a
+  one-line wrapper and every surface and base-space caller answering
+  `.then_some(1)`.
 - **A `NestGuardian`'s tether refuses a step only when it both leaves
   `NEST_TETHER_RADIUS` and fails to close on the nest.** The simpler check
   froze a displaced guardian for the rest of the run.
@@ -815,6 +817,10 @@ relying on one, and correct all three places if it has moved.
 - **A battle map's coordinates live in `TacticalBattle`; `Position` is never
   written** — the third space after the Stack's `Locale` and base space's
   own, and `tactical/` not importing `Position` is the whole enforcement.
+- **A body is a wall in `reach::movement_field`, and the allowance is both
+  the budget and `walk_field`'s search box** — safe only because no step
+  costs less than one, which is what makes `TACTICAL_MOVE_MIN`/`MAX`
+  correctness bounds.
 
 ### Items, gear and economy
 

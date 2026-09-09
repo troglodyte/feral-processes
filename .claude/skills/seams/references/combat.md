@@ -488,11 +488,19 @@
   passes with the arm deleted.
 - **`walkable()` alone does not decide where a `Pursuing` guardian may step**
   — `pursuit_field` excludes `Biome::Platform` separately.
-- **There is one Dijkstra walk on the surface, and the step rule is a
-  parameter.** `walk_field`, with `pursuit_field` a one-line wrapper. The
-  predicate takes **the coordinate as well as the tile**, because refusing a
-  tile a `Structure` stands on is entity state. You may step off an occupied
-  tile, never onto one.
+- **There is one Dijkstra walk on the surface, and the step rule is a cost
+  function, not a predicate.** `walk_field`, with `pursuit_field` a one-line
+  wrapper. The rule takes **the coordinate as well as the tile**, because
+  refusing a tile a `Structure` stands on is entity state. You may step off
+  an occupied tile, never onto one. It answers `Option<u32>` — `None`
+  refused, `Some(c)` what entering costs — because the tactical battle map's
+  `Rough` ground costs two and a predicate cannot say "crossable, but
+  dearly"; every surface and base-space caller answers `.then_some(1)` and
+  gets the uniform field it always got. `radius` still bounds a Chebyshev
+  **box** and not a budget, which is safe only because no step costs less
+  than one: a caller spending a budget passes it as the radius and filters
+  the result by cost, and an unbounded allowance would be an unbounded
+  search.
 - **A `NestGuardian`'s tether refuses a step only when it both leaves
   `NEST_TETHER_RADIUS` and fails to close on the nest.** The simpler check
   froze a displaced guardian for the rest of the run.
@@ -570,3 +578,17 @@
   fight then leaves it standing on. Nothing in the compiler holds this:
   `tactical/` does not import `crate::components::Position`, and that omission
   is the whole enforcement. See `docs/seams.md` for the argument.
+- **A body is a wall in `reach::movement_field`, and a body's allowance is
+  both its budget and `walk_field`'s search box.** One occupancy rule rather
+  than a pass-through set and a destination set — an occupied cell is neither
+  crossed nor stopped on, friend or foe — because bodies that can be walked
+  through cannot hold a line, and this model has no other zone of control.
+  The budget is spent in *cost*, so four points is four open cells or two
+  rough ones, and it is handed to `walk_field` as the radius as well: that
+  is sound only because no step costs less than one, so nothing outside a
+  box of half-width `allowance` can be inside a budget of `allowance`. The
+  trap is the corollary — `TACTICAL_MOVE_MIN` and `TACTICAL_MOVE_MAX` read
+  as taste and are not. An unbounded allowance is an unbounded search, and a
+  body that cannot move at all can neither close nor walk off the board, so
+  an authored `SpeciesDef::movement` is clamped exactly as a derived figure
+  is. See `docs/seams.md` for the argument.

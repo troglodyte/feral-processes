@@ -839,6 +839,15 @@ relying on one, and correct all three places if it has moved.
   `Hostile`.**
 - **`Game::decompile_body` is the capture, and taking the captured body out
   of the fight is each model's own half.**
+- **A routine's effect is shared; its refusals are not** —
+  `Game::run_tactical_routine`, taking a def rather than an index, and
+  `cooldown_floor` the whole of the difference between the two doors.
+- **A hostile decides what it will do before it decides where to stand, and
+  the closing term is a shortfall to the *band*, never a distance to the
+  target.**
+- **One draw an AI turn, spent on the cell, and none at temperature zero** —
+  the aim and the swing target are argmaxes, and the candidates are sorted
+  before they are scored.
 
 ### Items, gear and economy
 

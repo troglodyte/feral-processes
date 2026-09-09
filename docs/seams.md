@@ -13279,3 +13279,109 @@ blast that turned every program it touched would be a different mechanic
 entirely, and the catalyst is spent once. It is the one effect in
 `tactical_use_routine` that does not go through `use_ability`, which is the
 same exception the group model's own `BattleAction::Special` site makes.
+
+### A routine's effect is shared; its refusals are not
+
+**`Game::run_tactical_routine` is what the player's door and the enemy AI
+both reach, and `cooldown_floor` is the whole of the difference.**
+
+`ability_unavailable` reads the reserve off the entity being asked about,
+and its own doc records what that means for the other side: *"A missing
+`PowerReserve` refuses rather than permits. Hostiles hold none by design."*
+Set that against the rule that every routine which can be *run* is priced in
+Power, and a hostile routed through `tactical_use_routine` is refused every
+routine there is. Not loudly — the door answers `false`, the AI falls
+through to a swing, the fight still finishes, and the tests still pass. What
+ships is a routine arm that compiles, reads correctly and has never once
+fired.
+
+So the door was split the way `Game::take_routine` is split. The six
+refusals stay on the player's side. The price, the effect, the reap and the
+turn moved down into `run_tactical_routine`, and `tactical/ai.rs` brings
+`wild_routine_ready`'s gate instead — the same gate `wild_retaliate` uses in
+the group model, which has no Power term for the same reason.
+
+It takes an `AbilityDef` and not an index, and that is not convenience.
+`tactical_use_routine`'s index is into `actor_abilities`, which resolves
+through the `AbilityDb` and silently drops any id the db does not hold — so
+that index is *not* a position in `Routines`, and a caller holding a def it
+found for itself would have to invert a lossy mapping to use it.
+
+The floor is a parameter because it genuinely differs by side, and it is
+`abilities::armed_cooldown`'s own parameter rather than a second spelling of
+one: the player's routines cool at their authored rate, a hostile's are
+floored at `ENEMY_ROUTINE_MIN_COOLDOWN`. Nothing shipped can observe that
+floor — `field_only_dead_fields` warns about a cooldown on a field-only
+effect, so every shipped `cooldown: 0` routine is field-only and
+`wild_routine_ready` excludes it. The branch guards a mod, and the test
+stands in for one by editing a shipped def rather than by shipping a fake
+asset.
+
+### A hostile decides what it will do before it decides where to stand
+
+**`Intent` is chosen first, and `Intent::band` is what a cell is scored
+against.**
+
+The obvious order is the other one — walk somewhere good, then pick an
+action from there — and it cannot express a standoff. A body carrying a
+routine it cannot fire inside three cells wants to be at three cells; a body
+that intends to swing wants to be at one. There is no scoring of ground that
+answers both without first knowing which it is.
+
+That is also why the closing term is a **shortfall to the band** and never a
+distance to the nearest target. A distance term is monotone: it rewards
+every step taken toward the enemy, so a carrier standing inside its own
+minimum range is told to walk further in, and the routine it walked in to
+use is the routine it can no longer fire. The shortfall is zero inside the
+band and grows in both directions out of it, so the same one expression
+closes a melee body and backs a ranged one off.
+
+Three terms, and they are read against each other rather than tuned apart.
+The reach bonus has to outrank closing across the **whole width of the
+largest board**, or a body walks past the swing it came for toward ground it
+merely likes the distance of; the test asserts that ordering against
+`TACTICAL_BOARD_LARGE` rather than against a hand-picked pair of cells.
+Crowding is the smallest, because it is a tie-break between cells that are
+otherwise as good: it should spread a pack that has a choice and never talk
+a body out of the fight.
+
+Line of sight is asked only of a cell already in band, so a cell behind
+cover scores as one that has closed but cannot fire — better than standing
+further back, worse than stepping around. Reading it as a hard filter
+instead would strand a body that has nowhere clear to reach.
+
+None of this is `combat_policy.rs`. That file's trained weights and its
+whole feature vector speak group indices and aggro slots, and a battle map
+has neither — what replaces a slot is where a body is standing. Which is
+also why the swing picks the wounded adjacent body rather than consulting
+`battle::slot_aggro_weight`: a slot is the group model's answer to who is
+exposed, and on a battle map being reachable at all is that answer.
+
+### One draw a turn, and the cell is where it is spent
+
+**`walk_to_best_cell` is the only place an AI turn touches `GameRng`, and at
+temperature zero it does not touch it at all.**
+
+The aim and the swing target are plain argmaxes. That is not timidity about
+randomness — it is that a second draw would let a hostile fumble an aim it
+had already spent its whole walk getting into position for, which reads as
+the AI being stupid rather than as the AI being varied. The uncertainty
+belongs at the one decision that has genuinely close alternatives.
+
+Two things fall out of holding to one draw. `sample_scored` returns the
+argmax before it touches the RNG when the temperature is zero, so
+`tactical_ai_turn_at(0.0)` is both exactly pinnable and stream-neutral — a
+test can assert which cell was chosen without moving a seeded run's every
+later roll. And the candidate cells are **sorted** before they are scored,
+because `movement_field` answers a `HashMap` and iteration order over one is
+not stable between runs: two equally-scored cells resolving differently in a
+seeded fight is the same class of defect as an unsorted habitat lookup, and
+it would surface as an intermittent failure somewhere else entirely.
+
+The whole walk is committed as one placement rather than as a run of
+`tactical_step`s. Nothing on this board reacts to a body mid-walk — there
+are no opportunity attacks and no cell that does anything on entry — so a
+path is a sequence with no observable difference from its endpoint, and
+`movement_field` has already answered which endpoints are legal and what
+each costs. A renderer that wants to animate the walk can descend the cost
+field; it does not need the engine to have taken the steps.

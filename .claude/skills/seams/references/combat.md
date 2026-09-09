@@ -679,3 +679,52 @@
   in `tactical_use_routine` that does not go through `use_ability` — the same
   exception the group model's own Special site makes. See `docs/seams.md` for
   the argument.
+- **A routine's effect is shared; its refusals are not — `Game::run_tactical_
+  routine`, and `cooldown_floor` is the whole of the difference.** The trap is
+  the tidy version: route the enemy AI through `tactical_use_routine`, the
+  door the player already uses. `ability_unavailable` reads the reserve off
+  the entity asked about and hostiles hold none by design, and every routine
+  that can be *run* is priced in Power — so that door refuses a hostile every
+  routine there is. Silently: it answers `false`, the AI falls through to a
+  swing, the fight still finishes and the suite still passes. The arm ships
+  correct-looking and never fires. It takes an `AbilityDef` and not an index,
+  because `tactical_use_routine`'s index is into `actor_abilities`, which
+  drops ids the `AbilityDb` cannot resolve and so is *not* a position in
+  `Routines`. The floor is `abilities::armed_cooldown`'s own parameter: the
+  player's routines cool at their authored rate, a hostile's are floored at
+  `ENEMY_ROUTINE_MIN_COOLDOWN`. Nothing shipped can observe that floor —
+  `field_only_dead_fields` warns about a cooldown on a field-only effect, so
+  every shipped `cooldown: 0` routine is field-only and `wild_routine_ready`
+  excludes it; the branch guards a mod, and a test that wants it must edit a
+  shipped def rather than assert on one. See `docs/seams.md` for the argument.
+- **A hostile decides what it will do before it decides where to stand, and
+  the closing term is a shortfall to the *band* and never a distance to the
+  target.** The obvious order — walk somewhere good, then pick an action —
+  cannot express a standoff at all, because what "good ground" means depends
+  on the range of the thing being run. And a distance term is monotone: it
+  rewards every step toward the enemy, so a carrier standing inside its own
+  minimum range is told to walk further in, and the routine it walked in to
+  use is the one it can no longer fire. The three terms are read against each
+  other, not tuned apart — the reach bonus must outrank closing across the
+  whole width of `TACTICAL_BOARD_LARGE`, or a body walks past the swing it
+  came for; crowding is the smallest because it is a tie-break between cells
+  that both reach. Line of sight is asked only of a cell already in band, so
+  cover ranks between "closed" and "can fire" rather than filtering a body
+  out. None of it is `combat_policy.rs`: trained weights speak group indices
+  and aggro slots, and what replaces a slot here is where a body stands —
+  which is also why the swing takes the wounded neighbour rather than
+  consulting `battle::slot_aggro_weight`. See `docs/seams.md`.
+- **One draw a turn, spent on the cell, and none at temperature zero.** The
+  aim and the swing target are argmaxes on purpose: a second draw lets a
+  hostile fumble an aim it spent its whole walk earning, which reads as
+  stupidity rather than variety. `sample_scored` returns the argmax before it
+  touches the RNG at temperature zero, so `tactical_ai_turn_at(0.0)` is both
+  pinnable and stream-neutral. The trap is the candidate list —
+  `movement_field` answers a `HashMap`, iteration order over one is not stable
+  between runs, and two equally-scored cells resolving differently in a seeded
+  fight surfaces as an intermittent failure somewhere else entirely, so the
+  cells are sorted before they are scored. The walk is committed as one
+  placement, not a run of `tactical_step`s: nothing on the board reacts to a
+  body mid-walk, so a path has no observable difference from its endpoint, and
+  a renderer that wants to animate it can descend the cost field. See
+  `docs/seams.md`.

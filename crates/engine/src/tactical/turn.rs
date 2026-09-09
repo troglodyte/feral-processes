@@ -224,6 +224,7 @@ impl Game {
             return false;
         }
 
+        let round_before = self.world.resource::<TacticalBattle>().round;
         let (move_name, natural) = self.swing_move(actor);
         let range = self.attack_range(actor, natural);
         let outcome =
@@ -236,7 +237,7 @@ impl Game {
         // put the swinger down, and a body left standing on the board at
         // zero HP would keep its place in the order.
         self.reap_tactical_dead(Some(target));
-        self.hand_on_turn(actor);
+        self.hand_on_turn(actor, round_before);
         true
     }
 
@@ -332,6 +333,7 @@ impl Game {
         aim: (i32, i32),
         cooldown_floor: u32,
     ) {
+        let round_before = self.world.resource::<TacticalBattle>().round;
         // Charged before the effect resolves, at the same moment and for the
         // same reason as the group model's own Special site: a killing blow
         // ends the fight below, and a cooldown armed afterwards would be
@@ -372,7 +374,7 @@ impl Game {
             let aimed = self.world.resource::<TacticalBattle>().occupant(aim);
             self.reap_tactical_dead(aimed);
         }
-        self.hand_on_turn(actor);
+        self.hand_on_turn(actor, round_before);
     }
 
     /// Hands the turn on after `actor` has finished with it, and spends the
@@ -386,42 +388,60 @@ impl Game {
     /// standing behind it: a companion who fumbles fatally costs the player
     /// their turn, with nothing on screen to say why.
     ///
+    /// **`round_before` is read by the caller, before it acts.** The order
+    /// wraps in two places, not one: `end_turn` below, and
+    /// `TacticalBattle::remove`, which calls `wrap()` itself — so a body
+    /// that dies on the *last* rung starts the next round without
+    /// `end_turn` being reached at all, and a wrap detected across this
+    /// function alone would miss it and skip that round's upkeep.
+    ///
     /// The upkeep is the one the group model's round spends in
     /// `battle_resolve_round`'s last two lines, at the same cadence — see
     /// `tactical_round_upkeep`.
-    fn hand_on_turn(&mut self, actor: Entity) {
+    fn hand_on_turn(&mut self, actor: Entity, round_before: u32) {
         let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return;
         };
-        if battle.actor() != Some(actor) {
-            return;
+        if battle.actor() == Some(actor) {
+            self.world.resource_mut::<TacticalBattle>().end_turn();
         }
-        let before = battle.round;
-        self.world.resource_mut::<TacticalBattle>().end_turn();
-        if self.world.resource::<TacticalBattle>().round > before {
+        if self.world.resource::<TacticalBattle>().round > round_before {
             self.tactical_round_upkeep();
-            // What the upkeep finished off — a Bleed that took the last
-            // hostile — comes off the board here rather than waiting for
-            // somebody to act into it. `tick_round_status_effects`'s own
-            // tail, in this model's terms.
-            self.reap_tactical_dead(None);
         }
     }
 
     /// What a round costs, on a battle map exactly as in a group fight:
     /// cooldowns come down, status effects tick and expire, combat buffs
-    /// age, and the world spends one tick.
+    /// age, whatever that killed leaves the board, and the world spends one
+    /// tick.
     ///
-    /// **`battle_resolve_round`'s trailing pair, called rather than
-    /// restated.** Without it every routine is once per fight — nothing
-    /// decrements the cooldown its own refusal counts down in "rounds" — a
-    /// `Stun` never wears off, `Bleed` never bites, every authored
-    /// `duration` lasts the whole fight, and the world stands still for as
-    /// long as the player is on the board.
+    /// **`battle_resolve_round`'s tail, in the same order.** Without it
+    /// every routine is once per fight — nothing decrements the cooldown
+    /// its own refusal counts down in "rounds" — a `Stun` never wears off,
+    /// `Bleed` never bites, every authored `duration` lasts the whole
+    /// fight, and the world stands still for as long as the player is on
+    /// the board.
+    ///
+    /// **The reap is between the upkeep and the tick, and that is not
+    /// arrangement.** The upkeep can kill — a Bleed is damage — and
+    /// `difficulty::death_handling_system` rides `Game::tick`, so ticking
+    /// first reboots a Forgiving player *inside* a fight that is still
+    /// open: they read as alive again, `settle_tactical` sees nothing
+    /// wrong, and their world `Position` has been warped to the anchor
+    /// while they stand on a board. The group model has this by
+    /// construction — `tick_round_status_effects` reaps and tears down
+    /// before `battle_resolve_round` reaches its tick — and this is the
+    /// same sequence spelled out.
+    ///
+    /// The tick is skipped when the reap closed the fight, because
+    /// `settle_tactical` spent the round's tick on the way out.
     fn tactical_round_upkeep(&mut self) {
         let player = self.player_entity();
         self.tick_combatant_upkeep(player);
-        self.tick();
+        self.reap_tactical_dead(None);
+        if self.world.get_resource::<TacticalBattle>().is_some() {
+            self.tick();
+        }
     }
 
     /// `Game::arm_cooldown` with a floor under what it writes.
@@ -452,8 +472,12 @@ impl Game {
     /// Through `hand_on_turn` like every other way a turn ends, so a passed
     /// turn buys the round's upkeep exactly as a spent one does.
     pub fn tactical_end_turn(&mut self) {
-        if let Some(actor) = self.tactical_actor() {
-            self.hand_on_turn(actor);
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return;
+        };
+        let round_before = battle.round;
+        if let Some(actor) = battle.actor() {
+            self.hand_on_turn(actor, round_before);
         }
     }
 
@@ -482,18 +506,7 @@ impl Game {
                 self.finish_hostile(body, player);
             }
         }
-        let down = !self.creature_alive(player);
-        if self.settle_tactical(wild) && down {
-            // A defeat is absorbed inside the fight that lands it. The
-            // group model gets that for free — `battle_resolve_round` runs
-            // its trailing tick after `end_battle` has already torn the
-            // fight down, and `difficulty::death_handling_system` rides it
-            // — but a battle map that ends mid-round never reaches the wrap
-            // this owes. Left to the next idle tick instead, the player
-            // walks off the board at zero Integrity and reboots a moment
-            // later standing on the map.
-            self.tactical_round_upkeep();
-        }
+        self.settle_tactical(wild);
     }
 
     /// Ends the fight if it is over, and reports whether it did.
@@ -535,6 +548,16 @@ impl Game {
             lair: None,
         };
         self.finish_fight(player, wild, verdict);
+        // The round the fight died in still costs what a round costs, and a
+        // defeat is absorbed by it: the group model runs
+        // `battle_resolve_round`'s trailing tick after `end_battle` has
+        // already torn the fight down, which is what puts
+        // `difficulty::death_handling_system` inside the fight rather than
+        // after it. A battle map that ends mid-round never reaches the wrap
+        // that would otherwise owe this — so left out, the player walks off
+        // the board at zero Integrity and reboots a moment later standing
+        // on the map.
+        self.tick();
         true
     }
 

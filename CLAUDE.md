@@ -861,9 +861,13 @@ relying on one, and correct all three places if it has moved.
   the body that acted is still the one acting** — a body killed by its own
   fumble or its own blast has already left the order, and `remove` handed
   the turn on as it went.
-- **A round on a battle map spends the upkeep an abstract round spends**,
-  `tick_combatant_upkeep` the shared half and what died under it each
-  model's own; a fight that ends mid-round buys one when the player is down.
+- **A round on a battle map spends the upkeep an abstract round spends, in
+  that order** — `tick_combatant_upkeep`, then the reap, then the tick,
+  because the upkeep can kill and `death_handling_system` rides the tick.
+- **The order wraps in two places**, `end_turn` and `TacticalBattle::
+  remove`, so `hand_on_turn` compares against the round its caller read
+  before it acted, and a fight that ends mid-round is `settle_tactical`'s
+  tick.
 - **The results page has two producers, `Game::closing_rows`, and one row
   builder per half** — `planned` is the only field of fourteen the two
   models disagree about.

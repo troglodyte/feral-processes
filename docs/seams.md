@@ -13569,26 +13569,50 @@ Every consequence is silent and every one of them reads as a different bug:
   reboot did not happen when the player fell — they left the battle map at
   zero Integrity and it resolved on the next idle tick.
 
-A round on a battle map is the initiative order wrapping, which
-`TacticalBattle::end_turn` already counts, so `hand_on_turn` spends the
-upkeep when `round` moves. Two things made that not quite a call to the
-existing function. `tick_round_status_effects` ends in `reap_dead_members`
-and an `end_battle` on a dead player — both group-model teardown, and
-`end_battle` panics outright without a `BattleState`. So the loops split
-out as `tick_combatant_upkeep`, which both models call, and what to do
-about a body the upkeep finished off stays each model's own half:
-`reap_tactical_dead` in this one. `all_living_enemies` already answered for
-both models, so the loops themselves are shared verbatim rather than copied
-into `tactical/`.
+A round on a battle map is the initiative order wrapping, and
+`TacticalBattle` already counts that. Three things made this not a call to
+the existing function, and two of them were found by a second review *of
+the first attempt at this fix* — they are the reason this entry is long.
 
-The second is the fight that ends mid-round and never reaches a wrap. The
-group model gets its round's tick regardless — `battle_resolve_round`'s
-tail runs after `end_battle` has already torn the fight down, which is
-exactly how a defeat is absorbed inside the fight that lands it. A battle
-map needed that stated: the reap spends one upkeep when `settle_tactical`
-closes a fight **the player went down in**. Only that case, because it is
-the only one with anything left to resolve, and a win taking a second tick
-would make a round cost two.
+**The group model's tail is not shareable whole.**
+`tick_round_status_effects` ends in `reap_dead_members` and an `end_battle`
+on a dead player, both group-model teardown, and `end_battle` panics
+outright without a `BattleState`. So the loops split out as
+`tick_combatant_upkeep`, which both models call, and what to do about a
+body the upkeep finished off stays each model's own half.
+`all_living_enemies` already answered for both models, so the loops
+themselves are shared verbatim rather than copied into `tactical/`.
+
+**The reap goes between the upkeep and the tick, and that is not
+arrangement.** The upkeep can kill: a Bleed is damage, and
+`tick_combatant_upkeep` is the only place a tactical fight ticks the
+player's own status at all. `difficulty::death_handling_system` rides
+`Game::tick` and is gated on nothing but `hp <= 0` — no battle check, in
+either model. So `upkeep; tick; reap` reboots a Forgiving player *inside*
+an open fight: `hp` goes positive again, their world `Position` is warped
+to the anchor and the Stack ejects them if they were underground, and then
+the reap asks `creature_alive(player)`, gets `true`, and leaves the fight
+open around a player whose world position no longer matches the fight they
+are standing in. The group model never had to state this — its reap and
+teardown are inside `tick_round_status_effects`, which runs before
+`battle_resolve_round` reaches its tick — and the first fix here dropped
+the reap half for the panic above and put the remainder on the wrong side
+of the tick.
+
+**The order wraps in two places.** `TacticalBattle::remove` ends in
+`wrap()` of its own, so a body that dies on the *last* rung of the order
+starts the next round without `end_turn` being called at all — and the
+handoff never reaches its wrap check either, because the dead body is no
+longer the actor. Detected across `end_turn` alone, that round's upkeep is
+silently skipped: nothing cools, nothing ticks, and the world stands still
+for a round that visibly went by. So `hand_on_turn` takes the round its
+caller read **before it acted**, and compares against that.
+
+The fight that ends mid-round never reaches a wrap either, so
+`settle_tactical` spends the round's tick as it closes — which is where a
+defeat is absorbed, and it is why `tactical_round_upkeep` skips its own
+tick when the reap closed the fight. Exactly one tick a round, whichever
+way the round ended.
 
 ### The results page has two producers, and the rows they build are one function
 

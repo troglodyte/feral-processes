@@ -791,9 +791,17 @@
   Integrity. Not a call to `tick_round_status_effects`, which ends in
   `reap_dead_members` and an `end_battle` that panics without a
   `BattleState`; what to do about what the upkeep killed is each model's own
-  half. A fight that ends mid-round never reaches the wrap, so the reap
-  spends one upkeep when the fight closes **and the player is down** — the
-  only ending with anything left to resolve. See `docs/seams.md`.
+  half. Two traps under that, both found reviewing the fix rather than the
+  feature. The reap belongs **between** the upkeep and the tick, because a
+  Bleed is damage and `death_handling_system` rides `Game::tick` gated on
+  nothing but `hp <= 0` — tick first and a Forgiving player is rebooted
+  inside an open fight, alive again with their world `Position` warped to
+  the anchor while they stand on the board. And the order wraps in **two**
+  places: `TacticalBattle::remove` calls `wrap()` itself, so a body dying on
+  the last rung begins a round no `end_turn` was reached for, which is why
+  `hand_on_turn` compares against a round its caller read before it acted.
+  A fight that ends mid-round never wraps at all, so `settle_tactical`
+  spends that round's tick as it closes. See `docs/seams.md`.
 - **The results page has two producers — `Game::closing_rows` — and one row
   builder per half.** `BattleTimeline::closing` was filled from
   `battle_rows`, which opens on `BattleState`, so a tactical fight left it

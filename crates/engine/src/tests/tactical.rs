@@ -1516,3 +1516,83 @@ fn catalysts_held(game: &Game) -> u32 {
         .expect("the player carries nothing")
         .count(&crate::items::ItemId::from(crate::items::ids::ICE_BREAKER))
 }
+
+/// The round's upkeep can kill, and what it killed has to be answered for
+/// *before* the world tick — the order `battle_resolve_round` keeps. Ticked
+/// first, `difficulty::death_handling_system` reboots a Forgiving player
+/// inside a fight that is still open: they read as alive again, the fight
+/// never ends, and their world `Position` has been warped to the anchor
+/// while they stand on the board.
+#[test]
+fn a_bleed_that_kills_the_player_at_a_round_boundary_ends_the_fight() {
+    let mut game = game();
+    tactical_fight(&mut game, 1, 400);
+    let player = game.player_entity();
+    game.world.get_mut::<Stats>(player).unwrap().hp = 1;
+    game.world
+        .get_mut::<crate::components::StatusEffects>(player)
+        .unwrap()
+        .active = Some(crate::components::ActiveStatus {
+        kind: crate::components::StatusKind::Bleed,
+        remaining: 4,
+        power: 20,
+        landed_this_round: false,
+    });
+
+    let round = game.tactical_view().expect("the fight closed").round;
+    for _ in 0..64 {
+        if game.tactical_actor().is_none() {
+            break;
+        }
+        if game.tactical_view().is_some_and(|v| v.round > round) {
+            break;
+        }
+        game.tactical_end_turn();
+    }
+
+    assert!(
+        game.world.get_resource::<TacticalBattle>().is_none(),
+        "the bleed took the player down and the fight stayed open around them"
+    );
+}
+
+/// `TacticalBattle::remove` wraps the order itself, so a body that dies on
+/// the *last* rung starts the next round without `end_turn` ever being
+/// called. Read off `end_turn` alone, that round's upkeep is skipped: no
+/// cooldowns come down, no status ticks, and the world clock stands still
+/// for a round nobody can see went by.
+#[test]
+fn a_round_begun_by_a_death_on_the_last_rung_still_costs_its_upkeep() {
+    let mut game = game();
+    let actor = crate::tests::support::spawn_tamed(&mut game, 40, 3);
+    crate::tests::support::enlist(&mut game, actor);
+    let pack = tactical_fight(&mut game, 1, 400);
+    let player = game.player_entity();
+    // Seated by hand: the property is about the *last* rung, and initiative
+    // is rolled off speed.
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .set_initiative(vec![player, pack[0], actor]);
+    assert!(wait_for_turn(&mut game, actor));
+    only_routine(&mut game, actor, "cascade_overflow");
+
+    let alone = lonely_cell(&game, 3);
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .move_to(actor, alone)
+    );
+    game.world.get_mut::<Stats>(actor).unwrap().hp = 1;
+    crate::tests::support::force_the_next_attack_to_land(&mut game);
+    let tick = game.current_tick();
+
+    assert!(game.tactical_use_routine(0, alone));
+    assert!(
+        !game.creature_alive(actor),
+        "the blast spared its own invoker — this fixture needs a lethal roll"
+    );
+    assert!(
+        game.current_tick() > tick,
+        "the death started a new round and its upkeep was never spent"
+    );
+}

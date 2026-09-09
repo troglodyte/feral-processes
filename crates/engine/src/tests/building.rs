@@ -2832,15 +2832,29 @@ fn a_program_at_exactly_the_required_zone_qualifies() {
     );
 }
 
+/// Two exemptions, and both are derived rather than listed.
 /// `HOME_STRUCTURE_ID` is exempt at every tier: a fresh run owns zero
 /// programs, and one is granted only as an achievements reward, so a Home
-/// that cost a program would be unfoundable. Everything else needs one.
+/// that cost a program would be unfoundable. A structure that declares
+/// `stores` is exempt because a shelf is not worth a body — and it is read
+/// off the def's own flag, so a mod's storage building is exempt for free.
+/// Everything else needs one.
 #[test]
-fn home_is_the_one_structure_that_needs_no_program() {
+fn the_home_and_a_storing_structure_need_no_program() {
     let game = Game::new(20260908, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
 
     assert!(!game.structure_needs_program(&HOME_STRUCTURE_ID.into()));
+    assert!(!game.structure_needs_program(&"depot".into()));
+    assert!(
+        !game.structure_needs_program(&"depot_mk6".into()),
+        "the whole ladder, not just the first shelf"
+    );
     assert!(game.structure_needs_program(&"fabricator".into()));
+    assert!(
+        game.structure_needs_program(&"nothing_ships_this".into()),
+        "an id with no def behind it still costs one — place_structure \
+         refuses it as unknown long before the cost is asked about"
+    );
 }
 
 /// The weapon in the player's hand is not a spare part — it cannot be
@@ -3434,6 +3448,77 @@ fn founding_a_home_needs_no_program() {
         .expect("the Home is exempt at every tier");
 
     assert!(game.has_home(), "and it is standing");
+}
+
+/// A Depot is filed like any other request — the crew still raise it out of
+/// its own materials — but it commits nobody. The order stands holding no
+/// program at all, which is what makes `BuildSite::program` an `Option`
+/// reachable for the first time: before this, only the Home was exempt and
+/// the Home files no request.
+#[test]
+fn a_depot_is_filed_without_spending_a_program() {
+    let mut game = a_base_with_programs(20260907, 2);
+    let held = game.owned_pets().len();
+
+    game.place_structure("depot", 1, 0, None)
+        .expect("a shelf costs no body");
+
+    assert_eq!(
+        game.owned_pets().len(),
+        held,
+        "and nothing left the roster to pay for it"
+    );
+    assert!(filed_at(&mut game, 1, 0).is_some(), "the order stands");
+    let filed = game.build_site_programs();
+    assert_eq!(filed.len(), 1, "one order stands");
+    assert!(
+        filed[0].is_none(),
+        "and it is holding no program — a Depot commits nobody"
+    );
+}
+
+/// The roster floor is about a body being spent, so an exempt structure is
+/// past it before it is asked: a base holding its last program can still
+/// stand up somewhere to put things. `a_one_program_base_may_not_spend_its_only_body`
+/// is the same fixture on the other side of the exemption.
+#[test]
+fn a_one_program_base_may_still_build_a_depot() {
+    let mut game = a_base_with_programs(20260907, 0);
+    tame_at_zone(&mut game, 1);
+
+    game.place_structure("depot", 1, 0, None)
+        .expect("the roster floor never fires for a build that spends nobody");
+
+    assert_eq!(
+        game.owned_pets().len(),
+        1,
+        "and the one body is still on the roster"
+    );
+}
+
+/// A program handed to an exempt build is *not* spent — `commit_for_build`
+/// returns `Ok(None)` before it reads the offer at all. The frontend never
+/// offers one, but the engine is the thing that has to be right about it: a
+/// depot that quietly ate a body when a caller passed one would read as the
+/// exemption not working.
+#[test]
+fn a_depot_offered_a_program_still_spends_nothing() {
+    let mut game = a_base_with_programs(20260907, 2);
+    let offered = tame_at_zone(&mut game, 1);
+    let held = game.owned_pets().len();
+
+    game.place_structure("depot", 1, 0, Some(offered))
+        .expect("an exempt build accepts an offer and declines it");
+
+    assert_eq!(
+        game.owned_pets().len(),
+        held,
+        "the offered program is still owned"
+    );
+    assert!(
+        game.owned_pets().iter().any(|p| p.entity == offered),
+        "and it is that one, not a body of the same count"
+    );
 }
 
 /// **A build order may never take the base to zero programs.** Nothing would

@@ -45,7 +45,6 @@ use feral_processes_engine::icon::Canvas;
 use feral_processes_engine::items::{EquipmentSlot, EquipmentStats, GearCopy, ItemId};
 use feral_processes_engine::settlements::SettlementKey;
 use feral_processes_engine::sorties::SortieId;
-use feral_processes_engine::structures::StructureCategory;
 use feral_processes_engine::tuning::{
     ITEM_FUSION_BONUS_PER_TIER, ITEM_FUSION_COST, MAX_ACTIVE_CONTRACTS, MAX_FUSIONS,
 };

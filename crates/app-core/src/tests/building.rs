@@ -900,6 +900,69 @@ fn deploy_second_structure(app: &mut App) {
     app.handle_key(GameKey::Right);
 }
 
+/// Opens the build menu and picks the row for `id`, leaving the app on
+/// `Mode::BuildDirection`.
+///
+/// Down-and-Enter rather than a row shortcut, because a row's shortcut *is*
+/// its position and every structure dropped into `assets/structures/`
+/// renumbers whatever sorts after it.
+fn choose_build_row(app: &mut App, id: &str) {
+    open_via_menu(app, 'b', "Deploy a structure");
+    let idx = app
+        .game
+        .as_ref()
+        .expect("a running game")
+        .buildable_structure_defs()
+        .iter()
+        .position(|def| def.id == id)
+        .unwrap_or_else(|| panic!("{id} is not offered in the build menu"));
+    for _ in 0..idx {
+        app.handle_key(GameKey::Down);
+    }
+    app.handle_key(GameKey::Enter);
+    assert_eq!(
+        app.mode,
+        Mode::BuildDirection,
+        "the row for {id} was picked"
+    );
+}
+
+/// A Depot costs no program — `Game::structure_needs_program` exempts any
+/// structure that declares `stores` — so picking a direction for one files
+/// the order on the spot instead of opening a picker.
+///
+/// **Routed off the engine's own answer, not a second derivation here.**
+/// `founding_a_home_bypasses_the_program_picker` guards the same seam from
+/// the Home's side; what this adds is that the exemption is no longer a
+/// category the frontend can recognise by itself.
+#[test]
+fn deploying_a_depot_bypasses_the_program_picker() {
+    let mut app = app_in_base_with_programs(873, 2);
+    let held = app.game.as_mut().unwrap().owned_pets().len();
+
+    choose_build_row(&mut app, "depot");
+    app.handle_key(GameKey::Right);
+
+    assert_ne!(
+        app.mode,
+        Mode::BuildProgram,
+        "a Depot commits directly rather than detouring through the picker"
+    );
+    assert!(
+        app.game
+            .as_mut()
+            .unwrap()
+            .adjacent_build_site(1, 0)
+            .is_some(),
+        "and the order is filed by the direction press alone"
+    );
+    assert_eq!(
+        app.game.as_mut().unwrap().owned_pets().len(),
+        held,
+        "with nobody spent on it"
+    );
+}
+
 #[test]
 fn choosing_a_direction_asks_which_program_to_spend() {
     let mut app = app_in_base_with_programs(870, 2);

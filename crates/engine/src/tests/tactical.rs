@@ -735,3 +735,209 @@ fn a_capture_on_a_battle_map_turns_the_program_it_was_aimed_at() {
         "the last hostile left the board and the fight stayed open"
     );
 }
+
+/// Hands the fight round until `bound` turns have passed, driving every
+/// hostile through the AI and ending every party body's turn at once.
+/// Bounded, so a model that stops handing the turn on fails rather than
+/// hangs.
+fn run_ai_rounds(game: &mut Game, bound: usize) {
+    for _ in 0..bound {
+        if game.tactical_actor().is_none() {
+            return;
+        }
+        if !game.tactical_ai_turn() {
+            game.tactical_end_turn();
+        }
+    }
+}
+
+fn cell_of(game: &Game, body: Entity) -> Option<(i32, i32)> {
+    game.world.resource::<TacticalBattle>().cell_of(body)
+}
+
+/// The whole point of the file: a hostile left to itself closes the
+/// deployment gap and swings, so a tactical fight finishes without the
+/// player driving both sides.
+#[test]
+fn a_hostile_closes_the_deployment_gap_on_its_own_and_swings() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 200);
+    let player = game.player_entity();
+    let opened = crate::tactical::reach::distance(
+        cell_of(&game, player).expect("the player is on the board"),
+        cell_of(&game, pack[0]).expect("the hostile is on the board"),
+    );
+    let before = hp_of(&game, player);
+
+    run_ai_rounds(&mut game, 40);
+
+    assert!(
+        hp_of(&game, player) < before,
+        "a hostile that crossed {opened} cells never swung: {before} HP untouched"
+    );
+}
+
+/// The AI drives one side. A party body's turn is the player's to spend, and
+/// `false` is what tells a driver to wait for input rather than to hand the
+/// turn on.
+#[test]
+fn a_party_body_s_turn_is_not_the_ai_s_to_drive() {
+    let mut game = game();
+    tactical_fight(&mut game, 1, 40);
+    let player = game.player_entity();
+    assert!(wait_for_turn(&mut game, player), "the player never acted");
+    let stood = cell_of(&game, player);
+
+    assert!(
+        !game.tactical_ai_turn(),
+        "the AI claimed a turn that belongs to the player"
+    );
+    assert_eq!(cell_of(&game, player), stood, "the AI moved the player");
+    assert_eq!(
+        game.tactical_actor(),
+        Some(player),
+        "a refused turn must not be handed on"
+    );
+}
+
+/// The trap this phase was shaped around. A hostile holds no `PowerReserve`
+/// by design, so `ability_unavailable` refuses it every priced routine there
+/// is — and every routine that can be run is priced. Routed through the
+/// player's door the AI's routine arm would compile, test green and never
+/// once fire.
+///
+/// Asserted in both halves deliberately: that the player's gate really does
+/// refuse this hostile this routine, and that it runs anyway.
+///
+/// Read off the log and the cooldown after **one** turn rather than off a
+/// finished fight: teardown wipes every battle-scoped component, so a
+/// cooldown asked about after the last blow is gone whether it was armed or
+/// not.
+#[test]
+fn a_hostile_runs_a_routine_the_player_s_own_gate_would_refuse_it() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 200);
+    let wild = pack[0];
+    only_routine(&mut game, wild, "acid_wash");
+    let def = game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .get("acid_wash")
+        .cloned()
+        .expect("acid_wash ships");
+    assert!(
+        game.ability_unavailable(wild, &def).is_some(),
+        "a hostile with no reserve must be refused a priced routine, or this \
+         test is not covering the trap it was written for"
+    );
+
+    assert!(wait_for_turn(&mut game, wild), "the hostile never acted");
+    assert!(game.tactical_ai_turn(), "the hostile's turn was not run");
+
+    assert!(
+        log_texts(&game).iter().any(|l| l.contains(&def.name)),
+        "the hostile never ran the routine it was carrying: {:?}",
+        log_texts(&game)
+    );
+    assert_eq!(
+        game.world
+            .get::<crate::components::AbilityCooldowns>(wild)
+            .and_then(|c| c.0.get("acid_wash").copied()),
+        Some(crate::abilities::armed_cooldown(
+            def.cooldown,
+            crate::tuning::ENEMY_ROUTINE_MIN_COOLDOWN
+        )),
+        "a routine that ran must be cooled at the enemy side's own floor"
+    );
+}
+
+/// A hostile's routine is floored at `ENEMY_ROUTINE_MIN_COOLDOWN`, so one
+/// whose file authors no cooldown cannot be run every turn of the fight.
+///
+/// The fixture is a shipped routine with its cooldown edited to zero,
+/// because **no shipped routine can reach this branch**: `field_only_dead_
+/// fields` warns about a cooldown on a field-only effect, so every shipped
+/// `cooldown: 0` routine is field-only and `wild_routine_ready` excludes it.
+/// The branch guards a mod, and the edit is what stands in for one — driven
+/// through a real turn, since the floor the AI *passes* is the half a call
+/// to `run_tactical_routine` would not cover.
+#[test]
+fn a_hostile_s_routine_is_floored_even_when_its_file_authors_no_cooldown() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 200);
+    let wild = pack[0];
+    let mut free = game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .get("acid_wash")
+        .cloned()
+        .expect("acid_wash ships");
+    free.cooldown = 0;
+    game.world
+        .resource_mut::<crate::abilities::AbilityDb>()
+        .insert(free.clone());
+    only_routine(&mut game, wild, &free.id);
+
+    assert!(wait_for_turn(&mut game, wild), "the hostile never acted");
+    assert!(game.tactical_ai_turn(), "the hostile's turn was not run");
+
+    assert_eq!(
+        game.world
+            .get::<crate::components::AbilityCooldowns>(wild)
+            .and_then(|c| c.0.get(&free.id).copied()),
+        Some(crate::abilities::armed_cooldown(
+            0,
+            crate::tuning::ENEMY_ROUTINE_MIN_COOLDOWN
+        )),
+        "a routine its file left uncooled must still be floored for a hostile"
+    );
+}
+
+/// Where a hostile chooses to stand is one draw a turn, and none at all at
+/// temperature zero — `sample_scored` answers the argmax before it touches
+/// the RNG. That is what lets a test pin the choice without moving the
+/// seeded stream every later roll in the run depends on.
+///
+/// Two identical runs rather than a snapshot, because `StdRng` is not
+/// `Clone`. Asserted on a turn that ends in no action, because a swing rolls
+/// to hit and this is a claim about the *walk*.
+#[test]
+fn choosing_a_cell_at_zero_temperature_does_not_move_the_seeded_stream() {
+    /// A fight with its one hostile marooned in the far corner, where no
+    /// allowance closes on anybody, so its turn is a walk and nothing else.
+    fn marooned() -> (Game, Entity) {
+        let mut game = game();
+        let pack = tactical_fight(&mut game, 1, 40);
+        let wild = pack[0];
+        assert!(wait_for_turn(&mut game, wild), "the hostile never acted");
+        let side = game.world.resource::<TacticalBattle>().board.side;
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(wild, (side - 1, side - 1)),
+            "the far corner must be standable"
+        );
+        (game, wild)
+    }
+
+    fn next_draw(game: &mut Game) -> u64 {
+        use rand::RngExt;
+        game.world
+            .resource_mut::<crate::resources::GameRng>()
+            .0
+            .random::<u64>()
+    }
+
+    let (mut ran, _) = marooned();
+    let (mut untouched, _) = marooned();
+    assert!(
+        ran.tactical_ai_turn_at(0.0),
+        "the hostile's turn was not run"
+    );
+
+    assert_eq!(
+        next_draw(&mut ran),
+        next_draw(&mut untouched),
+        "an argmax turn spent a draw and shifted every later roll"
+    );
+}

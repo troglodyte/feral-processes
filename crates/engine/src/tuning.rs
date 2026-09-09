@@ -4979,6 +4979,33 @@ pub const TACTICAL_PARTY_RADIUS: u32 = 3;
 pub const TACTICAL_MOVE_MIN: u32 = 2;
 pub const TACTICAL_MOVE_MAX: u32 = 8;
 
+/// What a hostile is looking for when it picks the cell it will fight from.
+///
+/// Three terms, and they are read together rather than tuned apart. The
+/// reach bonus is worth more than closing the whole width of the largest
+/// board, so a cell it can actually hit from always beats a cell that is
+/// merely nearer — without that ordering a body walks past the swing it
+/// came for. Crowding is the smallest of the three because it is a
+/// tie-breaker between cells that are otherwise as good: it should spread a
+/// pack that has a choice, never talk a body out of the fight.
+pub const TACTICAL_AI_REACH_SCORE: f32 = 40.0;
+pub const TACTICAL_AI_CLOSING_WEIGHT: f32 = 1.0;
+pub const TACTICAL_AI_CROWDING_WEIGHT: f32 = 0.5;
+
+/// How much a hostile's choice of cell is allowed to wander off the best
+/// one, as `policy::sample_scored`'s softmax temperature.
+///
+/// Not `ENEMY_POLICY_TEMPERATURE`: that one divides a trained policy's
+/// learned scores, and these are hand-authored on a scale of their own, so
+/// sharing the constant would couple two dials that mean different things.
+/// Small against `TACTICAL_AI_CLOSING_WEIGHT`, so a hostile picks among
+/// cells within about a step of the best and not among all of them.
+///
+/// Zero is a supported setting and means argmax with no draw at all —
+/// `sample_scored` short-circuits before it touches the RNG, which is what
+/// lets a test pin the choice without moving the seeded stream.
+pub const TACTICAL_AI_TEMPERATURE: f32 = 0.5;
+
 #[cfg(test)]
 mod tests {
     use super::*;

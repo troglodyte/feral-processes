@@ -1119,6 +1119,16 @@ impl AbilityDb {
         Ok((db, warnings))
     }
 
+    /// Replaces one def, for a test that needs an ability the shipped
+    /// catalogue cannot express — `Board::from_rows`' reason. The floor a
+    /// hostile's cooldown is armed at is only observable on a battle-legal
+    /// routine authoring `cooldown: 0`, and `field_only_dead_fields` is why
+    /// no shipped file is one.
+    #[cfg(test)]
+    pub(crate) fn insert(&mut self, def: AbilityDef) {
+        self.abilities.insert(def.id.clone(), def);
+    }
+
     pub fn get(&self, id: &str) -> Option<&AbilityDef> {
         self.abilities.get(id)
     }

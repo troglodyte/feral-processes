@@ -27,8 +27,8 @@ mod watch;
 
 pub use report::{RepRecord, Report, Summary};
 pub use scenario::{
-    CharacterSpec, CompanionSpec, Encounter, EquipSpec, InventorySpec, OpponentSpec, PlayerSource,
-    Scenario,
+    Approach, CharacterSpec, CombatModel, CompanionSpec, Encounter, EquipSpec, InventorySpec,
+    OpponentSpec, PlayerSource, Scenario,
 };
 pub use watch::Watch;
 
@@ -144,12 +144,30 @@ pub struct Staged {
 /// at `scenario.seed + n` and the result screen's next-seed key is the same
 /// increment — a `stage` that read the field would force both callers to
 /// mutate a scenario they do not own.
+///
+/// `driver` is the combat model the **caller** can drive, and a scenario
+/// asking for the other one is refused here. `Game::start_battle` chooses a
+/// model by inspecting the pack and never sees a staged fight; this is the
+/// arena's own chooser, and it needs the caller's half because the two
+/// halves of the arena are not equally able. A parameter rather than a
+/// guard at each call site: a third caller then has to say which models it
+/// drives, where a guard is a thing to forget with nothing failing to
+/// compile.
 pub fn stage(
     scenario: &Scenario,
     assets_dir: &Path,
     seed: u64,
     telemetry: bool,
+    driver: CombatModel,
 ) -> Result<Staged, String> {
+    if scenario.model != driver {
+        return Err(match scenario.model {
+            CombatModel::Tactical => "this scenario is `model: Tactical`, and the arena screen                  fights in front of a group — run it through `cargo run --bin arena`"
+                .into(),
+            CombatModel::Group => "this scenario is `model: Group`, and the caller is set up                  for a battle map"
+                .to_string(),
+        });
+    }
     let mut game = setup::build_player(scenario, assets_dir)?;
     // Armed here rather than by whoever installs the `Game`, because
     // `begin_battle` below is what emits `fight_start` — a game armed after
@@ -188,7 +206,23 @@ pub fn stage(
     // Noted before the fight, because `BattleState` owns the groups from
     // here on and is gone again by the time the answer is wanted.
     let watch = Watch::new(&game, seed, &groups);
-    game.begin_battle(groups);
+    match scenario.model {
+        CombatModel::Group => game.begin_battle(groups),
+        // Groups dissolve on a battle map, so the pack arrives flat. An
+        // authored `approach` seats it; without one the game's own
+        // derivation answers, which in a staged fight reads the tiles
+        // `build_opponents` spawned the pack on.
+        CombatModel::Tactical => {
+            let pack: Vec<Entity> = groups
+                .iter()
+                .flat_map(|group| group.members.iter().copied())
+                .collect();
+            match scenario.approach {
+                Some(approach) => game.open_tactical_battle_at(pack, approach.bearing()),
+                None => game.open_tactical_battle(pack),
+            }
+        }
+    }
 
     Ok(Staged {
         game,
@@ -271,6 +305,12 @@ pub fn run(
     assets_dir: &Path,
     opts: RunOptions,
 ) -> Result<(Report, Vec<Record>), String> {
+    if scenario.model == CombatModel::Tactical && opts.party != PartyPlan::default() {
+        return Err(format!(
+            "`{:?}` is a group-model instrument and a battle map has no slots to brace",
+            opts.party
+        ));
+    }
     let mut warnings = Vec::new();
     let mut reps = Vec::with_capacity(scenario.reps as usize);
     let mut records = Vec::new();
@@ -280,15 +320,15 @@ pub fn run(
             assets_dir,
             scenario.seed + rep as u64,
             opts.telemetry,
+            scenario.model,
         )?;
         if rep == 0 {
             warnings = staged.warnings.clone();
         }
-        reps.push(run::run_rep(
-            &mut staged.game,
-            &mut staged.watch,
-            opts.party,
-        ));
+        reps.push(match scenario.model {
+            CombatModel::Group => run::run_rep(&mut staged.game, &mut staged.watch, opts.party),
+            CombatModel::Tactical => run::run_tactical_rep(&mut staged.game, &mut staged.watch),
+        });
         if opts.telemetry {
             let fight = rep as u64 + 1;
             records.extend(
@@ -323,9 +363,15 @@ pub(crate) fn test_fight(scenario: &Scenario, seed: u64) -> RepRecord {
         &crate::tests::support::test_assets_dir(),
         seed,
         false,
+        scenario.model,
     )
     .unwrap();
-    run::run_rep(&mut staged.game, &mut staged.watch, PartyPlan::default())
+    match scenario.model {
+        CombatModel::Group => {
+            run::run_rep(&mut staged.game, &mut staged.watch, PartyPlan::default())
+        }
+        CombatModel::Tactical => run::run_tactical_rep(&mut staged.game, &mut staged.watch),
+    }
 }
 
 #[cfg(test)]
@@ -427,10 +473,122 @@ mod tests {
     #[test]
     fn staging_leaves_the_fight_open_with_nobody_having_acted() {
         let s = a_scenario(1, 5, &[("glitch", 3)]);
-        let staged = stage(&s, &test_assets_dir(), 5, false).unwrap();
+        let staged = stage(&s, &test_assets_dir(), 5, false, CombatModel::Group).unwrap();
 
         assert!(staged.game.has_active_battle());
         assert_eq!(staged.watch.rounds(), 0);
+    }
+
+    /// `a_scenario`'s fight, fought on a battle map instead.
+    fn a_tactical_scenario(reps: u32, seed: u64, approach: Option<Approach>) -> Scenario {
+        Scenario {
+            model: CombatModel::Tactical,
+            approach,
+            ..a_scenario(reps, seed, &[("glitch", 6)])
+        }
+    }
+
+    #[test]
+    fn a_tactical_scenario_stages_onto_a_board_and_opens_no_group_fight() {
+        let s = a_tactical_scenario(1, 5, None);
+        let staged = stage(&s, &test_assets_dir(), 5, false, CombatModel::Tactical).unwrap();
+
+        assert!(staged.game.has_active_battle());
+        assert!(
+            staged.game.tactical_actor().is_some(),
+            "no body is acting on the board"
+        );
+        assert!(
+            staged.game.world.get_resource::<BattleState>().is_none(),
+            "a tactical scenario opened a group fight as well"
+        );
+        assert_eq!(staged.watch.rounds(), 0);
+    }
+
+    #[test]
+    fn a_tactical_scenario_staged_for_a_group_driver_is_refused_by_name() {
+        let s = a_tactical_scenario(1, 5, None);
+        let err = match stage(&s, &test_assets_dir(), 5, false, CombatModel::Group) {
+            Ok(_) => panic!("the group screen was handed a fight on a battle map"),
+            Err(e) => e,
+        };
+        assert!(err.contains("Tactical"), "{err}");
+        assert!(err.contains("arena"), "{err}");
+    }
+
+    #[test]
+    fn an_authored_approach_seats_the_pack_where_it_says() {
+        let cells = |approach| {
+            let s = a_tactical_scenario(1, 5, Some(approach));
+            let staged = stage(&s, &test_assets_dir(), 5, false, CombatModel::Tactical).unwrap();
+            let mut game = staged.game;
+            let mut query = game.world.query_filtered::<Entity, With<Hostile>>();
+            let pack: Vec<Entity> = query.iter(&game.world).collect();
+            let battle = game.world.resource::<crate::tactical::TacticalBattle>();
+            let ys: Vec<i32> = pack
+                .iter()
+                .filter_map(|&e| battle.cell_of(e))
+                .map(|(_, y)| y)
+                .collect();
+            assert!(!ys.is_empty(), "the pack was not seated");
+            ys.iter().sum::<i32>() as f32 / ys.len() as f32
+        };
+
+        assert!(
+            cells(Approach::North) < cells(Approach::South),
+            "the two approaches seated the pack on the same side"
+        );
+    }
+
+    #[test]
+    fn a_tactical_fight_resolves_and_reports_what_it_cost() {
+        let record = test_fight(&a_tactical_scenario(1, 5, None), 5);
+
+        assert!(record.rounds > 0, "a fight that took no rounds");
+        assert!(
+            record.rounds < 2000,
+            "the fight ran to the stalemate bound: {} rounds",
+            record.rounds
+        );
+        assert!(
+            !record.transcript.is_empty(),
+            "a fight nobody wrote anything about"
+        );
+        // `open_round` has one caller and it is the group model's, so the
+        // round's range on a battle map is the whole fight — taken
+        // wholesale, every line would appear once per round it survived.
+        let first = &record.transcript[0];
+        assert_eq!(
+            record
+                .transcript
+                .iter()
+                .filter(|line| *line == first)
+                .count(),
+            1,
+            "the transcript re-recorded the fight's opening line"
+        );
+    }
+
+    #[test]
+    fn the_same_seed_replays_the_same_tactical_fight_and_two_diverge() {
+        let s = a_tactical_scenario(1, 5, None);
+        assert_eq!(test_fight(&s, 12), test_fight(&s, 12));
+        assert_ne!(test_fight(&s, 1).transcript, test_fight(&s, 999).transcript);
+    }
+
+    #[test]
+    fn a_brace_plan_is_refused_for_a_tactical_scenario_rather_than_ignored() {
+        let s = a_tactical_scenario(1, 5, None);
+        let err = run(
+            &s,
+            &test_assets_dir(),
+            RunOptions {
+                party: PartyPlan::BraceInRotation,
+                ..RunOptions::default()
+            },
+        )
+        .unwrap_err();
+        assert!(err.contains("BraceInRotation"), "{err}");
     }
 
     #[test]
@@ -461,7 +619,7 @@ mod tests {
             ..Scenario::default()
         };
         let hp = |seed: u64| {
-            let staged = stage(&s, &test_assets_dir(), seed, false).unwrap();
+            let staged = stage(&s, &test_assets_dir(), seed, false, CombatModel::Group).unwrap();
             let mut game = staged.game;
             let mut query = game.world.query_filtered::<&Stats, With<Hostile>>();
             query.iter(&game.world).map(|s| s.max_hp).sum::<i32>()
@@ -485,7 +643,14 @@ mod tests {
 
     #[test]
     fn staging_a_rolled_encounter_opens_a_fight_with_no_warnings() {
-        let staged = stage(&a_rolled_scenario(1, 4), &test_assets_dir(), 4, false).unwrap();
+        let staged = stage(
+            &a_rolled_scenario(1, 4),
+            &test_assets_dir(),
+            4,
+            false,
+            CombatModel::Group,
+        )
+        .unwrap();
 
         assert!(staged.game.has_active_battle());
         assert_eq!(staged.watch.rounds(), 0);
@@ -548,7 +713,7 @@ mod tests {
             ..Scenario::default()
         };
 
-        let staged = stage(&s, &test_assets_dir(), 0, false).unwrap();
+        let staged = stage(&s, &test_assets_dir(), 0, false, CombatModel::Group).unwrap();
 
         assert_eq!(staged.warnings.len(), 1, "{:?}", staged.warnings);
         let w = &staged.warnings[0];

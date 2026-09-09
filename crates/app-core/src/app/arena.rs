@@ -268,7 +268,19 @@ impl App {
             }
         }
 
-        match arena::stage(&scenario, &self.assets_dir, seed, self.telemetry_enabled) {
+        // `CombatModel::Group` and never the scenario's own answer: this
+        // session drives rounds, and a fight on a battle map is driven a
+        // body at a time. `stage` turns a tactical scenario into a refusal
+        // naming the bin, which is the whole of the arena's tactical half
+        // for now — the alternative is a screen opened on a fight it has no
+        // way to play.
+        match arena::stage(
+            &scenario,
+            &self.assets_dir,
+            seed,
+            self.telemetry_enabled,
+            arena::CombatModel::Group,
+        ) {
             Ok(staged) => {
                 if let Some(session) = &mut self.arena {
                     session.warnings = staged.warnings;

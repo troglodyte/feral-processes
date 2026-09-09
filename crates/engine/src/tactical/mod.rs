@@ -17,6 +17,8 @@ pub mod map;
 pub mod reach;
 pub mod turn;
 
+use std::collections::HashMap;
+
 use bevy_ecs::prelude::{Entity, Resource};
 
 use crate::resources::BattleRewards;
@@ -72,6 +74,16 @@ pub struct TacticalBattle {
     /// How many times the order has come round, from 1. The results
     /// header's figure and the telemetry's alike.
     pub round: u32,
+    /// How many decompiles this fight has thrown at each program, so a
+    /// program's defences fray across a fight and no longer.
+    ///
+    /// `BattleState::decompile_attempts`' counterpart, and a field here for
+    /// `rewards`' reason: a counter of its own would be a `Resource`, and a
+    /// new one shifts bevy's query iteration order under unrelated tests.
+    /// Read and written through `Game::decompile_attempts`/`_mut`, never
+    /// directly, so a capture rolls against the same count on a battle map
+    /// as it does in front of a group.
+    pub(crate) decompile_attempts: HashMap<Entity, u32>,
     /// Whether the hostiles outweighed the party at the bell, by summed
     /// `Stats::power()` — `BattleState::outmatched`'s counterpart, and a
     /// snapshot for its reason: by the time a fight is won the question is
@@ -86,6 +98,7 @@ impl TacticalBattle {
             board,
             bodies: Vec::new(),
             rewards: BattleRewards::default(),
+            decompile_attempts: HashMap::new(),
             initiative: Vec::new(),
             turn: 0,
             spent: 0,

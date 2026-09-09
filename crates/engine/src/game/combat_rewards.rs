@@ -309,6 +309,51 @@ impl Game {
         None
     }
 
+    /// How many decompiles this fight has already thrown at each program,
+    /// whichever model is holding it.
+    ///
+    /// `fight_rewards_mut`'s counterpart and its rule: the counter is a field
+    /// on *each* model's resource rather than a resource of its own, because
+    /// a new `Resource` shifts bevy's query iteration order under unrelated
+    /// tests. Fight-scoped either way — a program's defences fray for the
+    /// length of one fight and no longer.
+    pub(crate) fn decompile_attempts_mut(&mut self) -> Option<&mut HashMap<Entity, u32>> {
+        if self.world.get_resource::<BattleState>().is_some() {
+            return Some(
+                &mut self
+                    .world
+                    .resource_mut::<BattleState>()
+                    .into_inner()
+                    .decompile_attempts,
+            );
+        }
+        if self.world.get_resource::<TacticalBattle>().is_some() {
+            return Some(
+                &mut self
+                    .world
+                    .resource_mut::<TacticalBattle>()
+                    .into_inner()
+                    .decompile_attempts,
+            );
+        }
+        None
+    }
+
+    /// How many decompiles this fight has already thrown at `entity`, from
+    /// whichever model is holding it. Zero outside a fight, and zero for a
+    /// program nobody has tried yet.
+    pub(crate) fn decompile_attempts(&self, entity: Entity) -> u32 {
+        let tactical = self
+            .world
+            .get_resource::<TacticalBattle>()
+            .and_then(|b| b.decompile_attempts.get(&entity).copied());
+        self.world
+            .get_resource::<BattleState>()
+            .and_then(|b| b.decompile_attempts.get(&entity).copied())
+            .or(tactical)
+            .unwrap_or(0)
+    }
+
     /// Adds `qty` copies of `copy` to this fight's salvage tally — or, with
     /// no fight to hold one, announces it where it happened.
     ///
@@ -1079,10 +1124,16 @@ impl Game {
         }
     }
 
-    /// One decompile attempt against `group`'s front program: spends a
-    /// catalyst, rolls `taming::capture_chance`, and on success converts the
-    /// target into a tamed program and drops it from the group. Returns
-    /// whether that ended the battle.
+    /// One decompile attempt against `group`'s front program, in the group
+    /// model: the capture itself, and then dropping the captured program out
+    /// of its group. Returns whether that ended the battle.
+    ///
+    /// **The capture is `decompile_body` and taking the body out of the
+    /// fight is this.** That split is where the two combat models part
+    /// company: a group index, a rank to promote and an `end_battle` are
+    /// this model's vocabulary and none of the three exists on a battle map,
+    /// while everything above them — the catalyst, the roll, the XP, the
+    /// conversion — is the same act either way.
     ///
     /// The roster-full refusal lives in `ability_unavailable` alone now: a
     /// greyed row can't be planned, and `battle_set_action` refuses one that
@@ -1096,14 +1147,46 @@ impl Game {
     /// first to resolve spends the only copy. Without this guard the second
     /// would hit an `expect` instead of a refusal.
     pub(crate) fn attempt_decompile(&mut self, group: usize, player: Entity) -> bool {
+        let Some(front) = self.front_of_group(group) else {
+            return false;
+        };
+        if !self.decompile_body(front, player) {
+            return false;
+        }
+        if self.remove_member(group, 0) {
+            self.end_battle(player, Some(front));
+            return true;
+        }
+        self.log("Another rogue program from the pack engages!");
+        false
+    }
+
+    /// One decompile attempt against `target`: spends a catalyst, rolls
+    /// `taming::capture_chance`, and on success converts the program into a
+    /// tamed one standing under the player's control. Reports whether the
+    /// capture landed.
+    ///
+    /// **What it does not do is take the captured body out of the fight** —
+    /// see `attempt_decompile` above, which is the group model's half of
+    /// that, and `Game::tactical_use_routine`, which is the battle map's.
+    ///
+    /// The roster-full refusal lives in `ability_unavailable` alone now: a
+    /// greyed row can't be planned, and `battle_set_action` refuses one that
+    /// somehow is, and nothing inside a resolving round grows `pet_count`
+    /// except a successful decompile itself, so that state can't reach here.
+    ///
+    /// The no-catalyst guard below stays, though: `ability_unavailable`
+    /// checks it per slot at *plan* time, but the catalyst is a round-wide
+    /// pool, not a per-slot one — two party members can each plan Decompile
+    /// while only one catalyst is held, both pass the per-slot check, and the
+    /// first to resolve spends the only copy. Without this guard the second
+    /// would hit an `expect` instead of a refusal.
+    pub(crate) fn decompile_body(&mut self, front: Entity, player: Entity) -> bool {
         let Some((catalyst, potency)) = self.taming_catalyst() else {
             self.log_kind(
                 MessageKind::Outcome,
                 "No taming catalyst left — the decompile attempt fizzles.",
             );
-            return false;
-        };
-        let Some(front) = self.front_of_group(group) else {
             return false;
         };
         self.world
@@ -1130,11 +1213,13 @@ impl Game {
         // Below the odds read, deliberately, so what the battle screen has
         // been showing stays honest about what the roll would have been.
         let roll = roll || self.tutorial_grants_capture();
-        let attempts = {
-            let mut battle = self.world.resource_mut::<BattleState>();
-            let counter = battle.decompile_attempts.entry(front).or_insert(0);
-            *counter += 1;
-            *counter
+        let attempts = match self.decompile_attempts_mut() {
+            Some(counters) => {
+                let counter = counters.entry(front).or_insert(0);
+                *counter += 1;
+                *counter
+            }
+            None => 1,
         };
 
         if !roll {
@@ -1204,12 +1289,7 @@ impl Game {
         // and kept because the record is what the collapse reads: a third
         // way out of a fight should not have to remember to write it.
         self.mark_lair_cleared(front);
-        if self.remove_member(group, 0) {
-            self.end_battle(player, Some(front));
-            return true;
-        }
-        self.log("Another rogue program from the pack engages!");
-        false
+        true
     }
 
     /// Whether the run's live onboarding mission is the one that teaches

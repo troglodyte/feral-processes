@@ -68,11 +68,7 @@ impl Game {
                 .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
                 .map(|s| s.taming_difficulty)
                 .unwrap_or(DEFAULT_TAMING_DIFFICULTY),
-            prior_attempts: self
-                .world
-                .get_resource::<BattleState>()
-                .and_then(|b| b.decompile_attempts.get(&entity).copied())
-                .unwrap_or(0),
+            prior_attempts: self.decompile_attempts(entity),
             power_ratio: power_ratio(stats.power(), self.player_power()) as f32,
         })
     }

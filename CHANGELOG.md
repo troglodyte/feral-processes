@@ -33,6 +33,20 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.138
+
+**`render/base.rs` was three unrelated things wearing one name.** Its biome
+and terrain painting primitives are now `render/terrain.rs`, the per-tile
+marks a program or machine wears are `render/marks.rs`, and the message log
+history screen — which had nothing to do with the base map and was simply
+misfiled — is `render/history.rs`. What is left in `base.rs` is the three
+functions that drive the map, down from roughly 1,940 lines of code to 1,198.
+
+No behaviour change: every item moved verbatim, and the only edits are the
+visibility keywords items needed once they crossed a module boundary. The
+drawing seam is untouched — none of the three new files names a graphics
+library, which stays `paint.rs`'s alone.
+
 ## 0.13.137
 
 **`Game::load` and `Game::save` now name their sections instead of spelling

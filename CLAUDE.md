@@ -436,6 +436,12 @@ relying on one, and correct all three places if it has moved.
   so it outlives the building.
 - **A downed program lives in three places now, and the rack is the only one
   that is not a queue.**
+- **A rig holds its own tool and the player holds theirs** —
+  `Game::install_rig_tool` is the one writer of `Hopper::standing_tool`, the
+  strip resolves against `ToolDb`, and a rig with nothing fitted runs
+  nothing.
+- **The rig's tool screen is `[F]`**, because `c` already opens the transfer
+  picker at a rig and `T` is one of `EASTER_EGGS.md`'s hidden keys.
 - **A carrier in transit is carried, so the never-free rule and both
   destruction paths name `CarryingProgram` beside `Carrying`.**
 - **Three of the five classes do something at a post, each in a different
@@ -1282,7 +1288,7 @@ relying on one, and correct all three places if it has moved.
 ## Build & test
 
 ```sh
-cargo test --workspace     # 5273 tests
+cargo test --workspace     # 5377 tests
 cargo run                  # the game; `default-run` in crates/launcher
 cargo clippy --workspace
 cargo fmt

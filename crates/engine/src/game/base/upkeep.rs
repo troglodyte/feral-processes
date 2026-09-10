@@ -793,6 +793,9 @@ impl Game {
                 self.return_carried_program(w);
                 self.world.entity_mut(w).remove::<(Task, Carrying)>();
             }
+            // The second of the two destruction paths for the rig's tool
+            // too — see `Game::return_rig_tool`.
+            self.return_rig_tool(structure);
             // The second of the two destruction paths — see
             // `Game::clear_pending_build_at`. A machine swept out from under
             // its own pending upgrade leaves the units already carried there

@@ -694,6 +694,38 @@
   derived per read — a new pattern, since `capacity` is copied in at build
   and never tier-scaled, and a stored ceiling goes stale the moment a tier
   lands.
+- **A rig holds its own tool and the player holds theirs.**
+  `Game::install_rig_tool` is the one writer of `Hopper::standing_tool` and
+  the strip resolves against `ToolDb`, never `installed_tools()`. Read off
+  the player's slots — which it was, because the tool arrived as a side
+  effect of a hand-load — pulling your own tool starved every rig in the
+  base that had been loaded with it, and `set_machine_status` speaks only on
+  transition so a rig that had already said `Starved` said nothing at all.
+  **The asymmetry with `uninstall_tool` is deliberate**: a slot holds
+  knowledge the player never lost, so re-granting a carrier there would mint
+  one from nothing and make pulling the never-spent starter a way to print
+  them; a rig holds the object that was carried in. Both live in
+  `game/tools.rs` so the reason is in front of whoever tidies them into
+  agreement. **No return has a pack-room rung** — `Inventory` is an
+  unbounded `Vec` and `add` saturates only against `u32`, so the refusal
+  cannot fire; that is the whole difference from `return_carried_program`,
+  whose third rung exists because `DownedPrograms` is capped.
+  `HopperEntry::tool` is re-stamped on every fit and so can never differ
+  from the rig's tool — kept rather than deleted only because it is a save
+  field, and a field *removed* is the one case field-named RON does not
+  excuse from a `SAVE_FORMAT_VERSION` bump.
+- **The rig's screen is `[F]`, and both of the obvious keys were wrong.**
+  Not `c`: a rig declares `capacity`, so `adjacent_stock` already finds it
+  and `c` opens the transfer picker there — binding the holder to it forks
+  on whether the output buffer happens to be empty. Not `T` either, which
+  `crates/engine/EASTER_EGGS.md` reserves for the battle taunt and throw:
+  a documented feature cannot own a key no help page may name, and
+  `no_shipped_help_page_names_a_hidden_key` is what fails the build.
+  **And `open_rig_tool` answers `bool`** — `playing.rs`'s match value is
+  `acted` and `after_world_action` clears `status_line` when it is true, so
+  reporting a refusal as an action erases the sentence `App::refuse` just
+  wrote. `c` may return `true` on its own refusal only because
+  `refuse_transfer` speaks engine-side into the log instead.
 - **A carrier in transit is carried, so the never-free rule and both
   destruction paths name `CarryingProgram` beside `Carrying`.** `Carrying`
   could not be widened — it is one `(item, qty)` pair *because*

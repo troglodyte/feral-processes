@@ -265,17 +265,14 @@ fn a_rig_beside_a_stocked_rack(racked: u32) -> (Game, Entity, Entity, Entity) {
         .unwrap()
         .0
         .push(program(5));
-    let player_tools = game.player_entity();
-    game.world
-        .get_mut::<crate::components::Tools>(player_tools)
-        .unwrap()
-        .0
-        .push(crate::tools::ToolId("salvage_clamp".to_string()));
-    // The hand-load is what sets the standing tool, and the rig chews
-    // through this one program before the fetch has anything to do.
-    game.load_teardown_rig(&[0], &crate::tools::ToolId("salvage_clamp".to_string()))
+    // Fitting the tool is what sets the standing tool, and it is the only
+    // thing that does — the rig's yield is a property of the rig.
+    game.world.get_mut::<Inventory>(player).unwrap().add(
+        ItemId::tool(&crate::tools::ToolId("salvage_clamp".to_string())),
+        1,
+    );
+    game.install_rig_tool(rig, &crate::tools::ToolId("salvage_clamp".to_string()))
         .unwrap();
-    game.world.get_mut::<Hopper>(rig).unwrap().queue.clear();
     for level in 1..=racked {
         game.world
             .get_mut::<Racked>(rack)

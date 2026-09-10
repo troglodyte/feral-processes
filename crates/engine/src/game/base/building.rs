@@ -1101,6 +1101,9 @@ impl Game {
                 self.return_carried_program(worker);
                 self.world.entity_mut(worker).remove::<(Task, Carrying)>();
             }
+            // The rig's own tool is carried in exactly as a program is, and
+            // comes back out the same way. `Game::return_rig_tool`.
+            self.return_rig_tool(target);
             if let Some(pos) = self.world.get::<Position>(target).copied() {
                 self.clear_pending_build_at(pos.x, pos.y);
             }

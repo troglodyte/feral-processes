@@ -38,6 +38,7 @@ impl App {
         let creation_catalogue = CreationCatalogue::load(&assets_dir).unwrap_or_default();
         Self {
             depot_filter: None,
+            rig_tool: None,
             mode: Mode::MainMenu,
             game: None,
             status_line: profile_warning,
@@ -98,7 +99,6 @@ impl App {
             pending_erase: None,
             erase_quantity_input: String::new(),
             pending_downed_program_index: None,
-            downed_programs_bulk: false,
             basket_rows: Vec::new(),
             basket_rack_room: 0,
             basket_amounts: Vec::new(),

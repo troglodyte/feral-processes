@@ -58,6 +58,7 @@ mod notify;
 mod party;
 mod popup;
 mod progression;
+mod rig_tool;
 mod routines;
 mod settlement;
 mod settlement_board;
@@ -126,6 +127,7 @@ use party::{
 };
 use popup::{PopupSize, Row, counted_item_row, draw_popup, text_row};
 use progression::{draw_perks_menu, draw_research_menu, draw_respec_confirm};
+use rig_tool::draw_rig_tool;
 use routines::{
     draw_extract, draw_extract_confirm, draw_extract_pick, draw_routine_etch, draw_routine_install,
     draw_routine_target, draw_routines,
@@ -832,7 +834,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     let manifest_origin = app.manifest_origin;
     let pending_field_routine = app.pending_field_routine;
     let pending_downed_program = app.pending_downed_program_index;
-    let downed_programs_bulk = app.downed_programs_bulk;
     let pending_structure = app.pending_structure.clone();
     let pending_item = app.pending_inventory_item.clone();
     let pending_inspect = app.pending_inspect.clone();
@@ -898,6 +899,10 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     // the clone is the item catalogue once per frame rather than per row.
     let depot_filter = match app.mode {
         Mode::DepotFilter => app.depot_filter.clone(),
+        _ => None,
+    };
+    let rig_tool = match app.mode {
+        Mode::RigTool => app.rig_tool.clone(),
         _ => None,
     };
     // The name is resolved here rather than in the renderer, because a
@@ -1042,6 +1047,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::DepotFilter => {
             draw_depot_filter(depot_filter.as_ref(), selected, refusal, painter, m)
         }
+        Mode::RigTool => draw_rig_tool(rig_tool.as_ref(), selected, refusal, painter, m),
         Mode::Craft => draw_craft_menu(game, selected, refusal, painter, m),
         Mode::CraftQuantity => draw_craft_quantity(
             game,
@@ -1194,15 +1200,9 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             )
         }
         Mode::ItemDescribe => draw_gear_inspect(game, pending_inspect.clone(), refusal, painter, m),
-        Mode::DownedPrograms => draw_downed_programs(
-            game,
-            pending_downed_program,
-            downed_programs_bulk,
-            selected,
-            refusal,
-            painter,
-            m,
-        ),
+        Mode::DownedPrograms => {
+            draw_downed_programs(game, pending_downed_program, selected, refusal, painter, m)
+        }
         Mode::Tools => draw_tools(game, selected, refusal, painter, m),
         Mode::Companion => draw_companion_menu(game, selected, refusal, painter, m),
         Mode::Fuse => draw_fuse_menu(game, selected, refusal, painter, m),
@@ -1433,7 +1433,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 107] = [
+    const ALL_MODES: [Mode; 108] = [
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
         Mode::TacticalAim,
@@ -1444,6 +1444,7 @@ mod tests {
         Mode::Playing,
         Mode::Transfer,
         Mode::DepotFilter,
+        Mode::RigTool,
         Mode::BaseMenu,
         Mode::PartyMenu,
         Mode::Battle,

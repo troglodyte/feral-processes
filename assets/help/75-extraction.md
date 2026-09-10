@@ -48,22 +48,25 @@ Two things are worth knowing before you spend a body.
   Research Node, and a downed program is not a shortcut past it.
 
 Research Teardown and you can build a Teardown Rig, which does the same work while you are
-somewhere else. Stand beside it with the store open and press L to hand it everything you are
-holding, or open one program's tool page and press Q to hand it just that one. Either way you pick
-the tool it should use, and the figures on that page are what it will pay.
+somewhere else. **The rig holds its own tool.** Stand beside it and press F to fit one out of your
+pack; it runs on that tool and not on anything in your own slots, and the figures on that screen
+are what it will pay. Press F again to swap the tool — the one it replaces comes back to you — or R
+to pull it out entirely, which stops the rig until something else is fitted.
 
 - It is a machine like any other. Post a program to it, keep it on the grid, and it strips what is
-  in its hopper one body at a time. Nothing moves while it is dark or while nobody is at it.
+  in its hopper one body at a time. Nothing moves while it is dark, while nobody is at it, or while
+  it has no tool.
+- You do not load it by hand. Put your downed programs in a Quarantine Rack and a posted body
+  fetches them across one at a time, so a rig, a rack and a tool are what a working teardown line
+  takes.
 - What it leaves goes into its own output buffer, as ordinary materials. Collect it yourself or let
   a hauler carry it to a depot — nothing downstream treats it differently from anything else a
   machine makes.
-- Its hopper holds fewer programs than you can carry. Hand it more than fits and it takes what it
-  can and leaves the rest with you, so nothing is thrown away.
 - If the buffer has no room for a whole body's worth, the rig holds that program rather than paying
   part of it. Clear the buffer and it picks up where it left off.
 - The Routine Reader and the Harness Puller stay work for your hands. One teaches you something and
-  the other pays a piece of gear, and neither is a material a buffer could hold, so the rig turns
-  both away at the door.
+  the other pays a piece of gear, and neither is a material a buffer could hold, so the rig will not
+  take either one.
 
 A Teardown Rig is also an extraction bench, so building one makes your own teardowns quicker too,
 and upgrading it pays them richer — the same way a Compiler does.

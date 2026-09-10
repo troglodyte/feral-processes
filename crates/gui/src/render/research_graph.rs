@@ -12,7 +12,7 @@ use feral_processes_engine::{Game, ResearchGraph};
 
 use super::popup::{DESCRIPTION_INDENT, description_rows_at, draw_row};
 use super::progression::{conversion_rows, material_rows, row_color};
-use super::{RED, SELECT_BG, TEXT_DIM};
+use super::{BORDER, PANEL_BG, RED, SELECT_BG, TEXT_DIM};
 
 /// Fraction of the window width the detail panel takes.
 const PANEL_FRACTION: f32 = 0.30;
@@ -137,6 +137,12 @@ pub(super) fn draw_research_graph(
     m: &Metrics,
 ) {
     let (screen_w, screen_h) = (painter.screen_w(), painter.screen_h());
+    // The graph draws no popup, so it owes its own backdrop — and it has to
+    // come first, or the map behind shows through every box and edge and
+    // nothing on the tree is discernible. `draw_frame_map_cursor`'s shape:
+    // the panel fill across the whole window, then the border.
+    painter.rect(0.0, 0.0, screen_w, screen_h, PANEL_BG);
+    painter.rect_lines(0.0, 0.0, screen_w, screen_h, 2.0, BORDER);
     let research_currency = game.research_currency();
     let held = game.banked(&research_currency);
     let graph = game.research_graph();
@@ -406,7 +412,7 @@ mod tests {
         assert!(geo.cell_w.is_finite() && geo.cell_h.is_finite());
     }
 
-    use crate::paint::{painted_rect_stroke_count, painted_text};
+    use crate::paint::{painted_fills, painted_rect_stroke_count, painted_text};
     use feral_processes_engine::ResearchState;
 
     /// Every node in the tree is drawn, because the whole point of this view
@@ -495,5 +501,37 @@ mod tests {
                 .contains("Requires Zone 3 first."),
             "a refusal must reach the screen the player typed into"
         );
+    }
+
+    /// The graph draws no popup, so it owes its own backdrop — and it has to
+    /// be the *first* fill on the screen, covering the whole window, or the
+    /// map behind shows through and nothing on the tree is discernible. That
+    /// is how this shipped: every box, edge and label was drawn straight onto
+    /// the world.
+    #[test]
+    fn the_graph_paints_a_backdrop_over_the_whole_window_first() {
+        let mut game = Game::new(936, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let m = ui_metrics(720.0);
+        let (_, shapes) = with_painter(|p| draw_research_graph(&mut game, 0, None, p, &m));
+        let fills = painted_fills(&shapes);
+        let (index, rect) = *fills.first().expect("the screen paints something");
+        assert_eq!(index, 0, "the backdrop must be the very first shape");
+        assert!(
+            rect.x <= 0.01 && rect.y <= 0.01,
+            "the backdrop starts at the window's origin: {rect:?}"
+        );
+        assert!(
+            rect.w >= p_screen_w() - 0.01 && rect.h >= p_screen_h() - 0.01,
+            "the backdrop covers the whole window: {rect:?}"
+        );
+    }
+
+    /// `with_painter`'s window, which the draw reads off the painter rather
+    /// than being handed.
+    fn p_screen_w() -> f32 {
+        1440.0
+    }
+    fn p_screen_h() -> f32 {
+        900.0
     }
 }

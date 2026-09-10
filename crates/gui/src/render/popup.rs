@@ -1032,12 +1032,21 @@ pub(super) const DESCRIPTION_INDENT: &str = "    ";
 /// the last `Row::Item`, so a description made of `Row::Text` is torn off the
 /// entry it describes and pinned to the foot of the box.
 pub(super) fn description_rows(description: &str) -> impl Iterator<Item = Row> + '_ {
-    wrap_text(
+    description_rows_at(
         description,
         DESCRIBE_WRAP_COLUMNS - DESCRIPTION_INDENT.chars().count(),
     )
-    .into_iter()
-    .map(|line| colored_item_row(format!("{DESCRIPTION_INDENT}{line}"), false, TEXT_DIM))
+}
+
+/// `description_rows` with the column budget named, for a surface narrower
+/// than a `PopupSize::Large` body — the research graph's detail panel.
+pub(super) fn description_rows_at(
+    description: &str,
+    columns: usize,
+) -> impl Iterator<Item = Row> + '_ {
+    wrap_text(description, columns)
+        .into_iter()
+        .map(|line| colored_item_row(format!("{DESCRIPTION_INDENT}{line}"), false, TEXT_DIM))
 }
 
 /// A menu row wrapped onto indented continuation lines at its own segment

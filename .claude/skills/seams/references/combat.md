@@ -878,3 +878,34 @@
   only `actor == target`, and a swing at your own is real friendly fire and
   stays legal. Aimed at empty ground the same door refuses, which is what
   keeps a capture from spending its catalyst and the turn on nothing.
+- **A brace on a board is `Game::begin_defend`, and only the mitigation
+  crosses over.** `Game::tactical_defend` is `tactical_attack`'s third
+  sibling; the effect needed nothing new, because `effective_mitigation`
+  reads `CombatBuff` from inside `Game::apply_damage`, the one door damage
+  comes through. Two traps. **The duration is the group model's cadence and
+  not the tabletop one**: `remaining: 1` against `hand_on_turn`'s wrap, so a
+  brace covers everyone below the bracing body in the order and a body on
+  the *last* rung braces against nobody — the wrap fires the moment it hands
+  the turn on. "Until your next turn" is fairer and was rejected on what it
+  costs a shared component: the buff would have to outlive one upkeep tick
+  **and** be cleared at the body's own turn start, and `is_defending`
+  identifies a brace by its *power* being exactly `DEFEND_MITIGATION_BONUS`
+  and never reads `remaining`, so the two expiry rules would be invisible to
+  each other. What the chosen rule costs is legible instead — the turn strip
+  names the order and hangs an arrow over whoever is acting. **And the aggro
+  half must not be ported**: `DEFEND_AGGRO_WEIGHT` weights an aggro *slot*
+  and a board has none, so the port is a term in `swing_at_best_neighbour`'s
+  sort — one line, reads as finishing the feature, and wrong. That sort is
+  deliberately not `slot_aggro_weight`: reaching a body at all is a battle
+  map's answer to who is exposed, and a brace that pulled the swing makes
+  bracing a lure, which is a different feature and would have to be read
+  against the AI's three cell-scoring terms, which are tuned against each
+  other. **The stun gate is a third omission**, `battle_resolve_round`'s
+  Defend loop skips a stunned body and this does not — nothing in
+  `tactical/` reads stun at all, so gating the brace alone would make
+  bracing the one thing a stunned body could not do, which reads as the
+  brace being broken rather than as the missing stun handling it is. The
+  fixture's own trap: `force_the_next_attack_to_land` cannot pin a tactical
+  swing, because `swing_move` rolls the move first and eats the forced roll
+  — reseed through `reseed_rng` immediately before the swing instead. See
+  `docs/seams.md` for the argument.

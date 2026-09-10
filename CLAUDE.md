@@ -878,6 +878,10 @@ relying on one, and correct all three places if it has moved.
   models disagree about.
 - **A capture is aimed at something hostile, refused at the player's door**,
   where a swing at your own is friendly fire and stays legal.
+- **A brace on a board is `Game::begin_defend` with only the mitigation
+  crossing over, and it is worth what the turn order says it is worth** —
+  `DEFEND_AGGRO_WEIGHT` weights a slot a battle map has none of, and the
+  round-cadence buff leaves a body on the last rung bracing against nobody.
 
 ### Items, gear and economy
 

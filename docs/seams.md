@@ -13759,3 +13759,78 @@ status) has nowhere to happen now.
 The party half is read off `Party` rather than off the board, because a
 companion that fell is still the party's and the row saying so is the one
 the page most needs.
+
+### A brace on a board is the group model's, and only the mitigation crosses over
+
+The board shipped with three actions — swing, routine, end turn — and no
+brace, while the intrusion screen has had Defend on `d` since long before
+there was a board. A fight you can only spend a turn swinging in has no
+answer to a turn you would rather survive, which on a grid is the more
+common turn: the model's whole positioning pressure is that the action ends
+the turn, so a body that has walked into reach and does not like what it
+sees had only `[E]` to press.
+
+`Game::tactical_defend` is `tactical_attack`'s third sibling and calls
+`Game::begin_defend`, the group model's own. Nothing else was needed for
+the effect to land: `effective_mitigation` reads `CombatBuff` and is called
+inside `Game::apply_damage`, the one door damage comes through, so a
+`CombatBuff` armed on a battle map is already honoured by every swing,
+routine and Bleed on it. Writing a second brace here would have meant a
+second `DEFEND_MITIGATION_BONUS` and a second "braces against the next
+strike", and the copy that drifts is the one nobody plays.
+
+**Two things were decided rather than inherited.**
+
+The first is how long it lasts. `begin_defend` arms `remaining: 1`, and on
+a battle map the thing that ages a `CombatBuff` is `hand_on_turn`'s wrap —
+so a brace covers everyone below the bracing body in the order and nobody
+above it, and a body on the *last* rung braces against nobody at all: the
+wrap fires the moment it hands the turn on. The alternative was the
+tabletop reading, "until your next turn", which is initiative-independent
+and strictly fairer. It was rejected on what it costs the shared type. The
+buff would have to outlive one upkeep tick **and** be cleared when the
+body's own turn came round again — a second expiry rule sitting beside
+`CombatBuff`'s one, on a component both combat models write. And the two
+would have been invisible to each other, because `is_defending` identifies
+a brace by its *power* being exactly `DEFEND_MITIGATION_BONUS` and never
+looks at `remaining` at all: a brace ticked by the round and a brace
+cleared by a turn would read as the same buff to every caller. Against
+that, what the round-cadence rule actually costs the player is legible —
+the turn strip names the order and hangs an arrow over whoever is acting,
+so where a body sits is something to read before spending its turn, not
+something to discover afterwards.
+
+The second is whether a brace draws fire. In front of a group it does:
+`battle::slot_aggro_weight` adds `DEFEND_AGGRO_WEIGHT` on top of a slot's
+base, which is what makes Defend a party-level play rather than a personal
+one. A board has no slots, so the port is not a constant but a term in
+`swing_at_best_neighbour`'s sort. Rejected, and not on effort. That sort is
+deliberately *not* `slot_aggro_weight` — reaching a body at all is a battle
+map's answer to who is exposed, since the body that walked into range chose
+to be there, and what is left to decide is which of the ones now in reach
+to finish. A brace that pulled the swing would make bracing a lure, which
+is a different feature from the one asked for, and it would have to be read
+against the three terms in the AI's *cell* scoring, which are tuned against
+each other and not apart. So the brace is a survival play here and a tank
+play there, and the two models mean different things by the same key on
+purpose.
+
+**The stun gate did not come across either, and that is deliberate.**
+`battle_resolve_round`'s Defend loop skips a body that `is_stunned`. Nothing
+in `tactical/` reads stun at all — a stunned body already takes a whole
+turn on a board, walks its allowance and swings — so gating the brace alone
+would have made bracing the one thing a stunned body could not do. That
+reads at the keyboard as the brace being broken rather than as the missing
+stun handling it actually is, and it would be one more site to find on the
+day stun is honoured here.
+
+**The fixture has a trap of its own worth recording.**
+`force_the_next_attack_to_land` cannot make a tactical swing deterministic:
+`swing_move` rolls the move out of the species moveset *first*, so the
+forced roll is spent on picking the move and the attack resolves against
+whatever falls next. The braced and unbraced arms are reseeded through
+`reseed_rng` immediately before the swing instead — after the brace, which
+draws nothing — so both meet the swing on an identical stream and the only
+difference between them is the buff. The stream is searched for rather than
+pinned, `first_rng_seed_where`'s rule, and searched for one that lands
+enough damage that a fifth of it is a whole point.

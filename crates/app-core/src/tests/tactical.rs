@@ -2,7 +2,9 @@
 //! paces the wild side.
 
 use super::support::test_app;
-use crate::{App, GameKey, Mode, TACTICAL_TURNS_PER_SECOND, TacticalIntent};
+use crate::{
+    App, GameKey, Mode, TACTICAL_STEPS_PER_SECOND, TACTICAL_TURNS_PER_SECOND, TacticalIntent,
+};
 
 /// An app standing in a fight opened by walking into a lone wild program.
 ///
@@ -167,8 +169,8 @@ fn end_turn_hands_the_turn_on() {
     );
 }
 
-/// The wild side is paced against `dt` and not against the frame — one turn
-/// per beat, whatever the machine renders at.
+/// The wild side is paced against `dt` and not against the frame — one beat
+/// per beat's worth of seconds, whatever the machine renders at.
 #[test]
 fn the_wild_side_is_paced_against_the_clock() {
     let mut app = fighting(9108);
@@ -176,21 +178,99 @@ fn the_wild_side_is_paced_against_the_clock() {
     app.handle_key(GameKey::Char('E'));
     assert!(!app.tactical_player_turn(), "a wild body is up");
 
-    let before = acting_entity(&mut app);
-    // A frame far too short to owe a turn.
+    let before = acting_cell(&mut app);
+    // A frame far too short to owe a beat.
     app.advance_tactical(0.001);
     assert_eq!(
-        acting_entity(&mut app),
+        acting_cell(&mut app),
         before,
-        "a turn was spent inside a frame that had not paid for one"
+        "a beat was spent inside a frame that had not paid for one"
     );
 
     app.advance_tactical(1.0 / TACTICAL_TURNS_PER_SECOND);
     assert_ne!(
-        acting_entity(&mut app),
+        acting_cell(&mut app),
         before,
-        "a full beat spent no turn at all"
+        "a full beat spent nothing at all"
     );
+}
+
+/// **The regression the whole seam exists for.** A hostile used to cross its
+/// entire allowance in the frame its turn came up in, which read as a
+/// teleport; one beat now buys exactly one cell.
+///
+/// Driven **from the bell** rather than after the order has come round: by
+/// then the first hostile is already standing next to somebody and has
+/// nothing left to walk, so the fixture would prove nothing.
+#[test]
+fn one_beat_moves_a_wild_body_exactly_one_cell() {
+    let mut app = fighting(9111);
+    open_on_a_wild_turn(&mut app);
+
+    let before = acting_cell(&mut app);
+    app.advance_tactical(1.0 / TACTICAL_TURNS_PER_SECOND);
+    let after = acting_cell(&mut app);
+
+    assert_eq!(
+        (after.0 - before.0).abs().max((after.1 - before.1).abs()),
+        1,
+        "one beat carried the body from {before:?} to {after:?}"
+    );
+}
+
+/// A body mid-walk is paced against the faster of the two rates, so a long
+/// approach does not take five seconds — and a body that has not set off yet
+/// still waits a full turn beat, which is what makes the handover legible.
+#[test]
+fn a_walking_body_steps_at_the_step_rate_and_not_the_turn_rate() {
+    let mut app = fighting(9112);
+    open_on_a_wild_turn(&mut app);
+
+    let start = acting_cell(&mut app);
+    // Not enough for a turn beat: a body that has chosen nothing yet waits.
+    app.advance_tactical(1.0 / TACTICAL_STEPS_PER_SECOND);
+    assert_eq!(
+        acting_cell(&mut app),
+        start,
+        "the first step went before the turn beat that announces it"
+    );
+
+    // A frame at a time until the body is genuinely part-way through its
+    // approach — the window is narrower than a turn beat, which is the whole
+    // point of there being a second rate.
+    let mut walking = false;
+    for _ in 0..600 {
+        walking = app
+            .game
+            .as_ref()
+            .expect("the fixture has a game")
+            .tactical_walking();
+        if walking || app.tactical_player_turn() {
+            break;
+        }
+        app.advance_tactical(1.0 / 60.0);
+    }
+    assert!(walking, "no body took an approach long enough to test");
+
+    let mid = acting_cell(&mut app);
+    // A hair over a step, so an accumulated float remainder cannot make this
+    // flake; still four times inside a turn beat, which is what is being
+    // asserted.
+    app.advance_tactical(1.0 / TACTICAL_STEPS_PER_SECOND + 0.001);
+    assert_ne!(
+        acting_cell(&mut app),
+        mid,
+        "a body mid-walk was made to wait a whole turn beat for its next cell"
+    );
+}
+
+/// Hands the turn on once if the player has it, so the fight is sitting on a
+/// wild body that has its whole approach still to walk.
+fn open_on_a_wild_turn(app: &mut App) {
+    if app.tactical_player_turn() {
+        app.handle_key(GameKey::Char('E'));
+    }
+    assert!(!app.tactical_player_turn(), "a wild body is up");
 }
 
 /// Nothing paces while the player is the one being waited on, and the carry

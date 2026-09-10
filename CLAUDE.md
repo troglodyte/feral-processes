@@ -848,6 +848,16 @@ relying on one, and correct all three places if it has moved.
 - **One draw an AI turn, spent on the cell, and none at temperature zero** —
   the aim and the swing target are argmaxes, and the candidates are sorted
   before they are scored.
+- **A hostile's walk is a run of real `Game::tactical_step`s spent one cell a
+  beat, and `tactical_ai_turn` is that beat loop rather than a second
+  spelling of a turn.**
+- **`TacticalBattle::walk` is an `Option` because `None` is "has not chosen
+  yet" and `Some(vec![])` is "has arrived"** — read as one, a spent walk is
+  re-planned every beat and the draw above becomes one a cell.
+- **The pacing carry is in seconds because a battle map has two rates**, a
+  cell of a walk against `TACTICAL_STEPS_PER_SECOND` and everything else
+  against `TACTICAL_TURNS_PER_SECOND`, derived off `Game::tactical_walking`
+  rather than held beside the carry.
 - **`Game::start_battle` is where the model is chosen, by inspecting the
   pack** — the pursuit path cannot know whether it is a guardian or a
   patrol, and the arena never passes through it.

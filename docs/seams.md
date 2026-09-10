@@ -13378,13 +13378,66 @@ not stable between runs: two equally-scored cells resolving differently in a
 seeded fight is the same class of defect as an unsorted habitat lookup, and
 it would surface as an intermittent failure somewhere else entirely.
 
-The whole walk is committed as one placement rather than as a run of
-`tactical_step`s. Nothing on this board reacts to a body mid-walk — there
-are no opportunity attacks and no cell that does anything on entry — so a
-path is a sequence with no observable difference from its endpoint, and
-`movement_field` has already answered which endpoints are legal and what
-each costs. A renderer that wants to animate the walk can descend the cost
-field; it does not need the engine to have taken the steps.
+The *cell* is one decision and stays one. What is spent a piece at a time is
+the walk to it — see the next entry, which corrected the first version of
+this one.
+
+### A hostile's walk is a run of real steps, one to a beat
+
+**`walk_to_best_cell` commits a path and `run_tactical_beat` spends it one
+cell at a time, through `Game::tactical_step` — the same door the player's
+own arrow keys go through.**
+
+The first version of this committed the whole walk as a single placement, and
+argued that nothing on the board reacts to a body mid-walk — no opportunity
+attacks, no cell that does anything on entry — so a path was a sequence with
+no observable difference from its endpoint. That argument had a hole in it,
+and the hole was the player. A hostile with an allowance of six crossed six
+cells between two rendered frames and then swung; what that reads as at the
+keyboard is a teleport, not an approach, and a fight whose positioning is the
+whole mechanic cannot afford for the positioning to be invisible. The
+observable difference from the endpoint is *being watched*.
+
+The rejected fix was to leave the placement alone and animate the glyph in
+the renderer, which is what the old entry suggested ("a renderer that wants
+to animate the walk can descend the cost field"). It cannot be made to work
+past the walk itself: the action resolves in the same call as the placement,
+so the blow lands, the damage is logged and the body may die while its glyph
+is still sliding across the board. Splitting the walk from the action is
+required either way, and once it is split the honest thing is for the steps
+to be real — then the drawn board and the fight agree at every instant, and
+nothing has to be told twice.
+
+So a turn became a run of `AiBeat`s. `tactical_ai_turn` is still the whole
+turn and is **written as the beat loop** rather than beside it, which is what
+holds the arena's fight and the played fight to the same board — a property
+`a_turn_and_the_beats_it_is_made_of_reach_the_same_board` asserts directly.
+
+Three things hold it up.
+
+The path is **descended from the cost field** `movement_field` already
+answered (`reach::path_to`) rather than searched for again, so which cells
+are legal and what each costs stays settled in one place. `walk_field` prices
+a step by the cell entered, so a predecessor is a neighbour whose cost is
+this cell's less what entering this cell cost — an arithmetic identity, and
+`Rough` ground costing two is why it has to be that and not "cost minus one".
+Ties break in the board's reading order for the same reason the candidate
+cells are sorted.
+
+`TacticalBattle::walk` is an `Option<Vec<_>>`, and **`None` is "has not chosen
+yet" while `Some(vec![])` is "has arrived"**. Read as one — a bare `Vec`, empty
+meaning both — the beat that finds the walk spent plans a fresh one instead of
+acting, which spends a `GameRng` draw per cell rather than per turn and moves
+every later roll in a seeded run. It is the field the whole "one draw a turn"
+property above now rests on, and
+`a_spent_walk_acts_rather_than_planning_a_fresh_one` is what pins it: with the
+guard removed that test fails, which was checked by removing it.
+
+The steps go through `Game::tactical_step` rather than `move_to` plus
+`spend`. A hostile's step is then priced, bounded and refused by exactly the
+code a companion's step is, and the alternative — a second implementation of
+what a step costs, living in the AI — is the copy nobody plays and so the one
+that drifts.
 
 ### `Game::start_battle` is where the model is chosen, by inspecting the pack
 
@@ -13574,9 +13627,24 @@ floats belong to the map's effects layer, which is what `in_battle: false`
 selects.
 
 What paces the wild side instead is `App::advance_tactical`, a carry against
-`dt` at `TACTICAL_TURNS_PER_SECOND` — `advance_compile`'s rule, and for its
-reason: one turn per rendered frame ties the fight's pace to the frame rate
-the machine happens to manage.
+`dt` — `advance_compile`'s rule, and for its reason: one beat per rendered
+frame ties the fight's pace to the frame rate the machine happens to manage.
+
+**It carries seconds, and there are two rates.** A body mid-walk owes a cell
+every `TACTICAL_STEPS_PER_SECOND` and everything else owes a beat every
+`TACTICAL_TURNS_PER_SECOND` — nearly four times slower — so a carry counted
+in beats could not be spent against the other rate, which is why the units
+changed when the walk was split into steps. The turn beat is what a body
+waits *before* it sets off and after it strikes, and 6 cells a second is what
+keeps an eight-cell approach from taking five seconds; a turn beat per cell
+was tried on paper and is what that would have cost.
+
+**The wait is derived from the fight rather than remembered.**
+`Game::tactical_walking` is true exactly between a body's first step and its
+last, which is exactly the span that owes the faster rate, so `App` holds one
+piece of pacing state instead of two that could disagree. It reads false on a
+turn nothing has planned yet, which is deliberate: a body about to set off is
+not walking, and that is what buys the beat of anticipation before it does.
 
 ### An AI turn hands the turn on once, and the action already did it
 

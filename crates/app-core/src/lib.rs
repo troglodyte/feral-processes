@@ -597,6 +597,17 @@ pub const REVEAL_LINES_PER_SECOND: f32 = 4.0;
 /// has to reach it and the player has to see where it went.
 pub const TACTICAL_TURNS_PER_SECOND: f32 = 1.6;
 
+/// How many cells a second a body walking a battle map crosses.
+///
+/// The turn beat above is what a body waits *before* it sets off and after
+/// it strikes — the time the player reads a blow in — and this is the rate
+/// it walks at once it has. Nearly four times faster, deliberately: a body
+/// may cross `TACTICAL_MOVE_MAX` cells in one turn, so a turn beat per cell
+/// would put a five-second approach in front of the player, and the whole
+/// reason the walk is stepped at all is that the alternative — the whole
+/// allowance crossed between two frames — read as a teleport.
+pub const TACTICAL_STEPS_PER_SECOND: f32 = 6.0;
+
 /// What a cell cursor opened from `Mode::TacticalBattle` will commit to.
 ///
 /// A swing carries nothing because the cell names its own target; a routine
@@ -2262,7 +2273,11 @@ pub struct App {
     /// `Mode::TacticalAim`, and taken rather than read on commit so a
     /// second Enter cannot spend the same action twice.
     pub pending_tactical: Option<TacticalIntent>,
-    /// Sub-turn carry against `TACTICAL_TURNS_PER_SECOND`.
+    /// Seconds owed toward the wild side's next beat.
+    ///
+    /// **Seconds and not beats**, because a tactical fight has two rates: a
+    /// body mid-walk owes a step and everything else owes a turn, and a
+    /// carry counted in one of them cannot be spent against the other.
     ///
     /// `BattleReveal::accumulated`'s counterpart, and **transient, not
     /// saved**, for its reason: a fight is not serialized, so neither is

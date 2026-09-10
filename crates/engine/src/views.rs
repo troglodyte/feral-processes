@@ -283,6 +283,22 @@ pub struct WornDetailView {
     /// `level` above, so the figure on this page is the figure on the row
     /// that opened it.
     pub power: Option<ItemPower>,
+    /// What one wide swing of this weapon lands on, and how often — `None`
+    /// for a copy declaring no reach, which is everything but a handful of
+    /// weapons.
+    ///
+    /// **On the worn half and formatted in the engine.** Worn, because that
+    /// block is by definition what only means something for a wearable copy,
+    /// which is exactly what a reach is. Formatted here for `copy_name`'s
+    /// reason and because a read-only screen's row count is owned by
+    /// app-core: a per-row transform in the renderer opens the page on a row
+    /// that is not drawn.
+    ///
+    /// A row rather than a term in `Game::copy_power`: the rating is
+    /// absolute and prices the swing, so a reach weapon paid for with a weak
+    /// band rates below its single-target peer and this is what the player
+    /// reads instead.
+    pub reach: Option<String>,
     /// The wearer's Accuracy **with this copy in its slot** — what the slot
     /// already holds is taken back off first, so inspecting the piece you
     /// are wearing reports the accuracy you actually have.

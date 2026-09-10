@@ -415,3 +415,50 @@ fn the_gear_page_skips_an_affix_the_build_does_not_know() {
         detail.affixes
     );
 }
+
+/// A weapon's reach is a fact about the swing and not about the stats, so
+/// `Game::copy_power` prices it at nothing — a reach weapon paid for with a
+/// weak band rates *below* its single-target peer on the swap picker. The
+/// answer is this row: the rating prices the swing, the page says what the
+/// swing lands on, and the player decides.
+///
+/// Measured against a scratch install rather than shipped content, for the
+/// reason the sweep tests do: this is about the derivation, and it must not
+/// move when the shipped weapons are retuned.
+#[test]
+fn the_gear_page_says_what_a_wide_swing_lands_on() {
+    let dir = modded_assets_dir(
+        "gear_page_reach",
+        &[],
+        &[(
+            "sweeping_edge.ron",
+            r#"(id: "sweeping_edge", name: "Sweeping Edge", description: "d",
+                value: Some(40),
+                equipment: Some((Weapon, (damage: (min: 4, max: 6)))),
+                reach: Some((target: WholeEnemyGroup, recharge: 3)))"#,
+        )],
+        &[],
+        &[],
+        &[],
+    );
+    let game = Game::new(4110, DifficultyMode::Forgiving, &dir).unwrap();
+    let worn = |item: &str| {
+        game.gear_detail(&GearCopy::plain(ItemId::from(item)), game.player_entity())
+            .worn
+            .expect("a weapon is wearable")
+    };
+
+    let row = worn("sweeping_edge")
+        .reach
+        .expect("a reach weapon says so on its page");
+    assert!(
+        row.contains(AbilityTarget::WholeEnemyGroup.phrase()),
+        "the row says what the swing lands on: {row}"
+    );
+    assert!(row.contains('3'), "and how often it may land there: {row}");
+
+    assert!(
+        worn("arc_lance").reach.is_none(),
+        "an ordinary weapon has no row to spend on a reach it does not have"
+    );
+}

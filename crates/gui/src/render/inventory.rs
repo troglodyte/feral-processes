@@ -523,14 +523,14 @@ pub(super) fn draw_gear_inspect(
 ///
 /// The storage is deliberately not capped with it — only the drawing.
 ///
-/// **It was 3, and the combat-rating row took the third.** The page had
-/// exactly zero rows of headroom, so the rating had to be paid for out of
-/// something already on it rather than added to it. This is the block with a
-/// cap already, it degrades by *counting* what it cannot draw rather than
-/// dropping it in silence, and the trade-offs it leads with are the lines
-/// that matter — so it is the one block that can lose a row and still say
-/// what it is for.
-const GEAR_AFFIX_ROW_CAP: usize = 2;
+/// **It was 3, and the combat-rating row took the third; it was 2, and the
+/// wide-swing row took the second.** The page had exactly zero rows of
+/// headroom each time, so a row added to it has to be paid for out of
+/// something already on it. This is the block with a cap already, it
+/// degrades by *counting* what it cannot draw rather than dropping it in
+/// silence, and the trade-offs it leads with are the lines that matter — so
+/// it is the one block that can lose a row and still say what it is for.
+const GEAR_AFFIX_ROW_CAP: usize = 1;
 
 /// The page's rows, split out so a height test can count them without a
 /// window — the same split `inventory_row_lines` makes for its width test.
@@ -616,6 +616,22 @@ pub(super) fn gear_inspect_rows(game: &Game, inspect: &GearInspect) -> Vec<Row> 
                 worn.hit_chance * 100.0,
                 worn.nominal.zone
             )));
+        }
+        // What the swing lands on, for a weapon that swings wide. One row,
+        // stated by the engine — `Game::copy_power` prices a reach at
+        // nothing, so this is the *only* thing on the page that says why a
+        // weapon rating below its peer might still be the one to carry.
+        //
+        // It is bought out of `GEAR_AFFIX_ROW_CAP` for the reason the
+        // combat-rating row was: the page has no scroll and had no
+        // headroom, so a row added to it has to be paid for out of
+        // something already there.
+        if let Some(line) = &worn.reach {
+            rows.extend(
+                wrap_text(line, DESCRIBE_WRAP_COLUMNS)
+                    .into_iter()
+                    .map(text_row),
+            );
         }
         // Indented under the stats they are folded into, and with no blank
         // line above them: this page has no scroll, and a separator here
@@ -961,6 +977,55 @@ mod tests {
         );
     }
 
+    /// A scratch content tree: the shipped assets with one synthetic item
+    /// written on top, carrying every optional block the gear page can
+    /// draw at once. Returned as a guard so the copy is swept up when the
+    /// test ends.
+    struct ScratchAssets(std::path::PathBuf);
+
+    impl Drop for ScratchAssets {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn assets_plus_worst_case_item(tag: &str) -> ScratchAssets {
+        fn copy_tree(from: &std::path::Path, to: &std::path::Path) {
+            std::fs::create_dir_all(to).unwrap();
+            for entry in std::fs::read_dir(from).unwrap() {
+                let entry = entry.unwrap();
+                let dst = to.join(entry.file_name());
+                if entry.file_type().unwrap().is_dir() {
+                    copy_tree(&entry.path(), &dst);
+                } else {
+                    std::fs::copy(entry.path(), dst).unwrap();
+                }
+            }
+        }
+        let shipped = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let dir =
+            std::env::temp_dir().join(format!("feral_processes_gui_{tag}_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        copy_tree(shipped, &dir);
+        // `core_dump` is the grant with the deepest mechanics block, and the
+        // reach and the band are what put the wide-swing and accuracy rows
+        // on the same page as it.
+        std::fs::write(
+            dir.join("items").join("gui_worst_case_page.ron"),
+            r#"(
+    id: "gui_worst_case_page",
+    name: "Worst Case Page",
+    description: "A synthetic item carrying every block the gear page can draw at once.",
+    value: Some(40),
+    equipment: Some((Weapon, (atk: 3, mitigation: 2, decompiler: 1, damage: (min: 5, max: 10), accuracy: 2, evasion: 1))),
+    grants: Some("core_dump"),
+    reach: Some((target: AllEnemies, recharge: 4)),
+)"#,
+        )
+        .unwrap();
+        ScratchAssets(dir)
+    }
+
     /// **The page has no scroll**, so a row past the bottom is dropped in
     /// silence — `draw_popup` pages a `Row::Item` span and this page has
     /// none. Every shipped item's page has to fit the smallest window the
@@ -971,10 +1036,18 @@ mod tests {
     /// that block. The worst case is every distinct affix the game ships on
     /// one copy — more than the fusion ladder can actually reach, which is
     /// the right side to be wrong on for a bound.
+    ///
+    /// **And over a synthetic item no shipped file matches**, because the
+    /// bound is a bound and not a census of what ships: the optional blocks
+    /// are independent, so the tallest page is one carrying *all* of them —
+    /// a weapon with a band, an accuracy, a wide swing and a granted
+    /// routine's whole mechanics block, with every affix stacked under it.
+    /// Nothing shipped puts a reach and a grant on the same item, and the
+    /// day something does, the page must already fit.
     #[test]
     fn the_tallest_gear_page_fits_its_popup() {
-        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
-        let game = Game::new(41, DifficultyMode::Forgiving, assets).expect("shipped assets");
+        let install = assets_plus_worst_case_item("tallest_gear_page");
+        let game = Game::new(41, DifficultyMode::Forgiving, &install.0).expect("shipped assets");
 
         let every_affix: Vec<_> = game.affix_defs().into_iter().map(|a| a.id).collect();
         let mut tallest = (0usize, String::new());

@@ -201,6 +201,24 @@ is skipped with a warning logged in-game rather than crashing startup.
     // it is a machine that wants a program and pays items out.
     strips: Some((hopper: 6)),
 
+    // Optional; can be left out entirely (defaults to racking nothing).
+    // If set, the structure is a Quarantine Rack: a shelf for downed
+    // programs, filled and emptied from the `c` transfer picker the same way
+    // a Depot's items are, and fetched from by a body posted at an adjacent
+    // rig whose hopper has run empty.
+    //
+    // `slots` is how many downed programs it holds AT TIER 1. Unlike
+    // `capacity`, tier multiplies this: the ceiling is `slots * tier`,
+    // derived on every read rather than stored, so an upgrade takes effect
+    // immediately and nothing goes stale. Authored per machine rather than
+    // in tuning, `strips`' reason.
+    //
+    // A rack is NOT a haul target — no item ever enters one — so `stores`
+    // stays false and a hauler will never empty a Depot into it. It knows
+    // nothing about tools either: which tool a fetched carrier is stripped
+    // with is the RIG's standing tool, set by the player's own hand-load.
+    racks: Some((slots: 8)),
+
     // Optional; can be left out entirely (defaults to no regeneration).
     // If set, the structure restores `per_tick` Power to the player every
     // tick that they're standing within `radius` tiles of it — no assigned

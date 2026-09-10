@@ -1,7 +1,7 @@
 (
     id: "transcriber",
     name: "Transcriber",
-    description: "Raw Trace from into Logic Wafers.",
+    description: "Raw Trace into Logic Wafers.",
     glyph: 'S',
     color: Cyan,
     build_cost: [("core_fragment", 18)],

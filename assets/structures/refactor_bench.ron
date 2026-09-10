@@ -1,7 +1,7 @@
 (
     id: "refactor_bench",
     name: "Refactor Bench",
-    description: "Recompile Kernels from Annealed Cores.",
+    description: "Annealed Cores into Recompile Kernels.",
     glyph: 'X',
     color: Orange,
     build_cost: [("core_fragment", 22), ("annealed_core", 4)],

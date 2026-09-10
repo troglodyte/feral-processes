@@ -1,7 +1,7 @@
 (
     id: "armory",
     name: "Armory",
-    description: "Compile bench for researched weapon and armor recipes — the gear won't appear in the craft menu until one is standing.",
+    description: "Bytecode Blocks into Hardened Shells, and the compile bench for researched plating recipes — the armor won't appear in the craft menu until one is standing.",
     glyph: '%',
     color: Blue,
     build_cost: [("core_fragment", 18)],

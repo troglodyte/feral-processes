@@ -1070,3 +1070,70 @@ fn the_menu_counts_the_shelves_when_it_says_a_node_is_affordable() {
     );
     assert!(game.unlock_research("billed").is_ok());
 }
+
+/// A node's conversion lines are derived from what it unlocks, not authored
+/// beside the description — so a recipe retuned in `assets/items/` or a
+/// machine repointed in `assets/structures/` cannot leave the research menu
+/// quoting the old one. Both halves are folded here because a node may
+/// unlock a bench and a recipe at once and the screen draws one list.
+#[test]
+fn a_research_node_reports_the_conversions_its_structures_perform() {
+    let game = Game::new(714, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    let node = research_node(&game, "routine_fabrication");
+
+    assert!(
+        node.conversions
+            .iter()
+            .any(|c| c.contains("Core Fragment") && c.contains("into Blank Substrate")),
+        "the Lathe's conversion must be named: {:?}",
+        node.conversions
+    );
+    assert!(
+        node.conversions
+            .iter()
+            .any(|c| c.contains("Blank Substrate") && c.contains("into Routine Disk")),
+        "the Disk Press's conversion must be named: {:?}",
+        node.conversions
+    );
+    assert_eq!(
+        node.conversions.len(),
+        3,
+        "one line per assembling structure and no line for the Log Scraper, \
+         which is a work node and converts nothing: {:?}",
+        node.conversions
+    );
+}
+
+#[test]
+fn a_research_node_reports_the_recipes_it_unlocks_with_their_quantities() {
+    let game = Game::new(715, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    let node = research_node(&game, "ablative");
+
+    assert_eq!(
+        node.conversions,
+        vec!["Portal Fragment x12, Cache Grain x3 into Ablative Plating.".to_string()],
+        "a recipe's own cost is what the line quotes, quantities included"
+    );
+}
+
+#[test]
+fn a_research_node_that_unlocks_no_conversion_reports_none() {
+    let game = Game::new(716, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    let node = research_node(&game, "paging");
+
+    assert!(
+        node.conversions.is_empty(),
+        "a Depot converts nothing and must add no line: {:?}",
+        node.conversions
+    );
+}
+
+fn research_node(game: &Game, id: &str) -> ResearchStatus {
+    game.research_nodes()
+        .into_iter()
+        .find(|n| n.id == id)
+        .unwrap_or_else(|| panic!("{id:?} should be a shipped research node"))
+}

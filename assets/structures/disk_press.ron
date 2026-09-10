@@ -1,7 +1,7 @@
 (
     id: "disk_press",
     name: "Disk Press",
-    description: "Press Routine Disks out of Blank Substrate. Can pull items from a Lathe.",
+    description: "Blank Substrate into Routine Disks. Can pull items from a Lathe.",
     glyph: 'P',
     color: Magenta,
     build_cost: [("core_fragment", 20), ("blank_substrate", 4)],

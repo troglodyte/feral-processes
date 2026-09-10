@@ -128,6 +128,7 @@ impl App {
             stack_zoom: STACK_MAP_MIN_ZOOM,
             log_expanded: false,
             menu_selected: 0,
+            research_graph_view: false,
             last_autosave_tick: 0,
             pending_sounds: Vec::new(),
             reveal: BattleReveal::default(),

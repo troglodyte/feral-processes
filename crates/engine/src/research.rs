@@ -175,6 +175,38 @@ impl ResearchDb {
                     ));
                 }
             }
+            // Kahn over what is left: anything unemitted when the queue
+            // drains is on, or downstream of, a cycle. Both members of one
+            // are permanently unresearchable — `missing_prereqs` can never
+            // empty for either — so they go the way a dangling prereq goes.
+            // Running it inside the fixpoint loop is what makes the cascade
+            // free: the two rules relax against each other.
+            if dropped.is_empty() {
+                let mut emitted: HashSet<&str> = HashSet::new();
+                loop {
+                    let ready: Vec<&str> = db
+                        .nodes
+                        .values()
+                        .filter(|def| {
+                            !emitted.contains(def.id.as_str())
+                                && def.requires.iter().all(|r| emitted.contains(r.as_str()))
+                        })
+                        .map(|def| def.id.as_str())
+                        .collect();
+                    if ready.is_empty() {
+                        break;
+                    }
+                    emitted.extend(ready);
+                }
+                for def in db.nodes.values() {
+                    if !emitted.contains(def.id.as_str()) {
+                        dropped.push((
+                            def.id.clone(),
+                            format!("skipped research {:?}: a cycle in requires", def.id),
+                        ));
+                    }
+                }
+            }
             if dropped.is_empty() {
                 break;
             }
@@ -520,22 +552,53 @@ mod tests {
         );
     }
 
-    /// `load_dir` checks that a prerequisite *exists*, never that the graph
-    /// is acyclic, so a mod can hand this walk a cycle. Terminating is the
-    /// whole assertion: before `seen` guarded the walk this hung the moment
-    /// the research menu was opened.
+    /// A mod can author `a` requires `b` requires `a`. Both nodes are
+    /// permanently unresearchable — `missing_prereqs` can never empty for
+    /// either — which is the same condition `load_dir` already drops a node
+    /// with a dangling prereq for. Dropping them here is also what lets
+    /// `Game::research_graph`'s tier fold be a plain `1 + max(parents)`: a
+    /// cycle has no fixpoint under it.
     #[test]
-    fn a_cycle_in_requires_does_not_hang_the_walk() {
+    fn a_cycle_in_requires_is_dropped_with_a_warning() {
         let a = r#"(id: "a", name: "A", description: "d", cost: 1, recommended: true, requires: ["b"])"#;
         let b = r#"(id: "b", name: "B", description: "d", cost: 1, requires: ["a"])"#;
         let (db, warnings) = load("cycle", &[("a", a), ("b", b)]);
+        assert!(db.get("a").is_none(), "a cycle member can never be bought");
+        assert!(db.get("b").is_none());
+        assert_eq!(warnings.len(), 2, "each dropped node explains itself");
         assert!(
-            warnings.is_empty(),
-            "a cycle is not something load_dir rejects today: {warnings:?}"
+            warnings.iter().all(|w| w.contains("cycle")),
+            "the warning has to name what was wrong: {warnings:?}"
         );
-        let mut path: Vec<String> = db.recommended_ids().into_iter().collect();
-        path.sort();
-        assert_eq!(path, vec!["a", "b"]);
+        assert!(
+            db.recommended_ids().is_empty(),
+            "nothing survives to be recommended"
+        );
+    }
+
+    /// The drop must not reach past the cycle. A node *depending* on one is
+    /// already handled by the existing dangling-prereq cascade; a node the
+    /// cycle depends on nothing of must survive untouched.
+    #[test]
+    fn a_cycle_takes_only_itself_and_its_dependents() {
+        let a = r#"(id: "a", name: "A", description: "d", cost: 1, requires: ["b"])"#;
+        let b = r#"(id: "b", name: "B", description: "d", cost: 1, requires: ["a"])"#;
+        let downstream =
+            r#"(id: "downstream", name: "Downstream", description: "d", cost: 2, requires: ["a"])"#;
+        let (db, _) = load(
+            "cycle_bystander",
+            &[
+                ("a", a),
+                ("b", b),
+                ("downstream", downstream),
+                ("automation", VALID),
+            ],
+        );
+        assert!(db.get("automation").is_some(), "a bystander is untouched");
+        assert!(
+            db.get("downstream").is_none(),
+            "a node hanging off a dropped cycle is just as unreachable"
+        );
     }
 
     /// The recommendation is only worth drawing if it lands on a row a new

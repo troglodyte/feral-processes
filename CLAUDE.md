@@ -1289,6 +1289,13 @@ relying on one, and correct all three places if it has moved.
 - **The wrap is `text::wrap` in the engine**, and
   `render/popup.rs::wrap_text` is a call to it.
 
+### The research tree
+
+- **The research tree's flow-chart layout is derived once, in
+  `Game::research_graph`, and keyed by `ResearchId`** — `views::
+  ResearchGraph::step` is the one rule for what an arrow key does, and
+  app-core computes no neighbours.
+
 ## Build & test
 
 ```sh

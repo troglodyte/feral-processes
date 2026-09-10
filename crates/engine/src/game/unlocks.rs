@@ -368,6 +368,93 @@ impl Game {
         nodes
     }
 
+    /// The research tree laid out as a flow chart — see `ResearchGraph`.
+    ///
+    /// Derived here rather than in the two things that read it, because
+    /// app-core's cursor and gui's boxes asking two different questions
+    /// about what is next to a node is how the cursor leaves the boxes.
+    pub fn research_graph(&self) -> ResearchGraph {
+        let db = self.world.resource::<ResearchDb>();
+        // `all()` is cost-then-id, so every pass below is already
+        // deterministic where a `HashMap` walk would not be.
+        let defs: Vec<&ResearchDef> = db.all().collect();
+
+        // Tier: the longest path from a root, by Kahn. `load_dir` drops a
+        // cycle, so this terminates.
+        let mut tier: HashMap<&str, usize> = HashMap::new();
+        while tier.len() < defs.len() {
+            let mut settled = false;
+            for def in &defs {
+                if tier.contains_key(def.id.as_str()) {
+                    continue;
+                }
+                if def.requires.iter().all(|r| tier.contains_key(r.as_str())) {
+                    let depth = def
+                        .requires
+                        .iter()
+                        .map(|r| tier[r.as_str()] + 1)
+                        .max()
+                        .unwrap_or(0);
+                    tier.insert(def.id.as_str(), depth);
+                    settled = true;
+                }
+            }
+            if !settled {
+                break;
+            }
+        }
+
+        // Slot: within a tier, ordered by the first-listed parent's slot then
+        // by id. Tiers ascend, so a parent's slot is always already known —
+        // the rule reads the parent's *slot* and never its tier, which is
+        // what lets the one tier-skipping edge fall out of it.
+        let tiers = tier.values().map(|t| t + 1).max().unwrap_or(0);
+        let mut slot: HashMap<&str, usize> = HashMap::new();
+        let mut cells: Vec<ResearchCell> = Vec::with_capacity(defs.len());
+        for t in 0..tiers {
+            let mut column: Vec<&&ResearchDef> = defs
+                .iter()
+                .filter(|def| tier.get(def.id.as_str()) == Some(&t))
+                .collect();
+            column.sort_by_key(|def| {
+                // A parent named in `requires` but not loaded cannot happen:
+                // `load_dir` drops the node.
+                let parent = def
+                    .requires
+                    .first()
+                    .and_then(|r| slot.get(r.as_str()).copied())
+                    .unwrap_or(0);
+                (parent, def.id.clone())
+            });
+            for (index, def) in column.into_iter().enumerate() {
+                slot.insert(def.id.as_str(), index);
+                cells.push(ResearchCell {
+                    id: def.id.clone(),
+                    tier: t,
+                    slot: index,
+                });
+            }
+        }
+
+        let edges: Vec<(ResearchId, ResearchId)> = defs
+            .iter()
+            .filter(|def| tier.contains_key(def.id.as_str()))
+            .flat_map(|def| {
+                def.requires
+                    .iter()
+                    .map(|r| (r.clone(), def.id.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        let widest = cells.iter().map(|c| c.slot + 1).max().unwrap_or(0);
+        ResearchGraph {
+            cells,
+            edges,
+            tiers,
+            widest,
+        }
+    }
+
     /// Unlocks `id`, consuming its Research Data cost. Fails with an
     /// explicit message when the id is unknown, it's already unlocked, a
     /// prerequisite is missing, the party hasn't reached the node's zone, or

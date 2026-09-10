@@ -319,3 +319,38 @@
   `Game::tactical_walking`, rather than remembered in a second field beside
   the carry — and it reads false on a turn nothing has planned yet, which is
   what buys the beat of anticipation before a body sets off.
+
+- **The research tree's flow-chart layout is derived once, in
+  `Game::research_graph`, and keyed by `ResearchId`.** Two consumers ask
+  "what is next to this node" — app-core's cursor, which moves
+  `menu_selected` on an arrow key, and gui's draw, which puts a box
+  somewhere — and neither owns the answer. `views::ResearchGraph` holds the
+  whole layout, and `ResearchGraph::step` is the one rule for an arrow key;
+  app-core computes no neighbours at all. That is the "a comment claiming to
+  mirror other code must be a call, not a copy" rule applied to geometry
+  rather than to a formula, and the copy that drifts here is the cursor —
+  the symptom is the highlight sitting on empty pane. **Keyed by
+  `ResearchId` and never by index into `Game::research_nodes()`**, which
+  sorts by `ResearchState`: an index-parallel structure is correct on the
+  day it ships and wrong the first time anyone buys anything. **`tier` is
+  the *longest* path from a root**, so every edge points strictly rightward —
+  the shipped tree's one diamond (`paging` → `segmentation` beside `paging` →
+  `cache_coherence` → `segmentation`) puts `segmentation` at tier 1 under
+  shortest path, with an edge from a tier-1 node pointing nowhere; under
+  longest path the short leg stretches instead, and
+  `every_edge_points_strictly_rightward` pins that edge by name so a
+  "simplification" cannot ship quietly. **`step` returns a `ResearchId` and
+  never an `Option`**, total in all four directions: a branch in app-core
+  about where the cursor may go is the first half of a second cursor. Up and
+  down clamp rather than wrap, because a column's ends are at opposite edges
+  of the pane where a list's are adjacent. The tier fold is a plain
+  `1 + max(parents)` and has no fixpoint on a cycle, which is why
+  `ResearchDb::load_dir` now drops one — both members are permanently
+  unresearchable anyway, the same condition it already dropped a dangling
+  prereq for. **The fit is a correctness property**: the whole tree is
+  visible at once, no pan and no scroll, so a box's label draws at
+  `Metrics::small()` — `text::wrap` splits on whitespace only, so the
+  longest unbreakable shipped word is `Self-Execution` at 14 and not
+  `Fabrication` at 11, and 14 does not fit six across at the body font at
+  1280x720. On a failure the knob is `PANEL_FRACTION` or `GUTTER_X`, never
+  the assertion.

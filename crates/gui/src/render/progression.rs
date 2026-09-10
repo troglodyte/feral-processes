@@ -116,7 +116,7 @@ pub(super) fn draw_perks_menu(
 /// amber is a wall you clear inside the tree, blue one you clear by
 /// breaching. Both stay clear of the dim grey an already-researched row
 /// takes, so the three unpickable states never read as each other.
-const LOCKED_BY_PREREQ: Color = Color::new(0.72, 0.50, 0.22, 1.0);
+pub(super) const LOCKED_BY_PREREQ: Color = Color::new(0.72, 0.50, 0.22, 1.0);
 const LOCKED_BY_ZONE: Color = Color::new(0.38, 0.52, 0.78, 1.0);
 
 /// What a research row says about itself after its name and price. This is
@@ -157,7 +157,7 @@ fn state_tag(state: &ResearchState) -> String {
 /// A locked node names both of its reasons in `state_tag` but has only one
 /// colour, so the harder wall wins: a breach is something the whole run has
 /// to do, a prerequisite something this screen can do next.
-fn row_color(node: &ResearchStatus) -> Color {
+pub(super) fn row_color(node: &ResearchStatus) -> Color {
     match &node.state {
         ResearchState::Unlocked => TEXT_DIM,
         ResearchState::Available if node.recommended => GREEN,
@@ -184,7 +184,7 @@ fn row_color(node: &ResearchStatus) -> Color {
 /// A `Row::Item` and not a `Row::Text`, `description_rows`' reason: anything
 /// after the last `Row::Item` is pinned to the foot of the box, torn off the
 /// node it belongs to.
-fn material_rows(materials: &[ResearchMaterial]) -> Vec<Row> {
+pub(super) fn material_rows(materials: &[ResearchMaterial], columns: usize) -> Vec<Row> {
     if materials.is_empty() {
         return Vec::new();
     }
@@ -194,19 +194,16 @@ fn material_rows(materials: &[ResearchMaterial]) -> Vec<Row> {
         .map(|m| format!("{} {}/{}", m.name, m.have, m.need))
         .collect::<Vec<_>>()
         .join("  ");
-    wrap_text(
-        &line,
-        DESCRIBE_WRAP_COLUMNS - DESCRIPTION_INDENT.chars().count(),
-    )
-    .into_iter()
-    .map(|l| {
-        colored_item_row(
-            format!("{DESCRIPTION_INDENT}{l}"),
-            false,
-            if short { LOCKED_BY_PREREQ } else { TEXT_DIM },
-        )
-    })
-    .collect()
+    wrap_text(&line, columns)
+        .into_iter()
+        .map(|l| {
+            colored_item_row(
+                format!("{DESCRIPTION_INDENT}{l}"),
+                false,
+                if short { LOCKED_BY_PREREQ } else { TEXT_DIM },
+            )
+        })
+        .collect()
 }
 
 /// What a node lets the base turn into what, one row per conversion under
@@ -221,15 +218,10 @@ fn material_rows(materials: &[ResearchMaterial]) -> Vec<Row> {
 /// `Row::Item`s, `material_rows`' reason: `popup_layout` pins anything after
 /// the last item row to the foot of the box, where it would be torn off the
 /// node it belongs to.
-fn conversion_rows(conversions: &[String]) -> Vec<Row> {
+pub(super) fn conversion_rows(conversions: &[String], columns: usize) -> Vec<Row> {
     conversions
         .iter()
-        .flat_map(|line| {
-            wrap_text(
-                line,
-                DESCRIBE_WRAP_COLUMNS - DESCRIPTION_INDENT.chars().count(),
-            )
-        })
+        .flat_map(|line| wrap_text(line, columns))
         .map(|line| colored_item_row(format!("{DESCRIPTION_INDENT}{line}"), false, CYAN))
         .collect()
 }
@@ -239,7 +231,7 @@ fn conversion_rows(conversions: &[String]) -> Vec<Row> {
 pub(super) fn research_menu_rows(held: u32, nodes: &[ResearchStatus], selected: usize) -> Vec<Row> {
     let mut rows = vec![
         Row::TextColored(format!("Research Data: {held}"), CYAN),
-        text_row("Pick a row's key to research it. Esc to close"),
+        text_row("Pick a row's key to research it. G for the tree. Esc to close"),
         text_row(""),
     ];
     for (i, node) in nodes.iter().enumerate() {
@@ -251,12 +243,18 @@ pub(super) fn research_menu_rows(held: u32, nodes: &[ResearchStatus], selected: 
             node.cost
         );
         rows.push(colored_item_row(label, i == selected, row_color(node)));
-        rows.extend(material_rows(&node.materials));
+        rows.extend(material_rows(
+            &node.materials,
+            DESCRIBE_WRAP_COLUMNS - DESCRIPTION_INDENT.chars().count(),
+        ));
         rows.extend(description_rows(&node.description));
         // Last, so the prose reads as prose and the conversions as the
         // concrete thing the node buys — and so a node that converts nothing
         // ends exactly where it used to.
-        rows.extend(conversion_rows(&node.conversions));
+        rows.extend(conversion_rows(
+            &node.conversions,
+            DESCRIBE_WRAP_COLUMNS - DESCRIPTION_INDENT.chars().count(),
+        ));
     }
     rows
 }

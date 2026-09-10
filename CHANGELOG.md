@@ -34,6 +34,17 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.149
+
+**A machine's description reads ingredient-first, and the research tree
+states the conversion a node buys.** Four bench descriptions named their
+product before their ingredients, the Transcriber carried a "from into"
+typo, and the Armory named neither — a census now holds every assembling
+structure to naming the recipe's ingredients and then its product, checked
+against the recipe itself. In the research menu each node draws a cyan line
+per conversion it unlocks, quantities included, derived from the recipe
+rather than authored beside the description.
+
 ## 0.13.148
 
 **The argument behind every load-bearing seam now lives in the memory graph,

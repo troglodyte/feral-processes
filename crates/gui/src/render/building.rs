@@ -15,7 +15,17 @@ use feral_processes_engine::{
 /// One buildable structure as the build menu needs it: everything that
 /// required a `Game` to work out, already worked out.
 pub(super) struct BuildEntry {
-    pub label: String,
+    /// The structure's own name. Carried apart from `cost` — rather than
+    /// arriving as one joined label — because the deployed tag goes
+    /// *between* them: a cost line already reads `Bytecode Block (12/20)`,
+    /// so a count parenthesised after it is another cost fragment.
+    pub name: String,
+    /// What it costs, as `build_cost_label` writes it.
+    pub cost: String,
+    /// How many of this structure the base already counts — standing plus on
+    /// order, `Game::deployed_count`. Zero is drawn as nothing at all: a
+    /// menu of `(0)`s is noise on every row of a fresh base.
+    pub deployed: u32,
     pub description: String,
     pub category: StructureCategory,
     /// Whether this row is one the roster's shortfall is even about —
@@ -103,7 +113,15 @@ pub(super) fn build_menu_rows(
                 rows.push(colored_item_row(heading, false, TEXT_DIM));
             }
         }
-        let label = format!("[{}] {}", menu_shortcut(i), entry.label);
+        let label = match entry.deployed {
+            0 => format!("[{}] {} - {}", menu_shortcut(i), entry.name, entry.cost),
+            n => format!(
+                "[{}] {} ({n}) - {}",
+                menu_shortcut(i),
+                entry.name,
+                entry.cost
+            ),
+        };
         let affordable = shortfall.is_none() || !entry.needs_program;
         rows.push(match affordable {
             true => item_row(label, i == selected),
@@ -137,7 +155,9 @@ pub(super) fn draw_build_menu(
             let raw_cost = game.structure_build_cost(def);
             let cost = build_cost_display(game, &raw_cost, &status.inventory, &stock);
             BuildEntry {
-                label: format!("{} - {}", def.name, build_cost_label(&cost)),
+                name: def.name.clone(),
+                cost: build_cost_label(&cost),
+                deployed: game.deployed_count(&def.id),
                 description: def.description.clone(),
                 category: def.category(),
                 needs_program: def.needs_program(),
@@ -1783,7 +1803,9 @@ mod tests {
         let (db, _) = StructureDb::load_dir(dir).expect("the shipped structures load");
         db.all()
             .map(|def| BuildEntry {
-                label: format!("{} - {}", def.name, build_cost_label(&[])),
+                name: def.name.clone(),
+                cost: build_cost_label(&[]),
+                deployed: WIDEST_DEPLOYED_TAG,
                 description: def.description.clone(),
                 category: def.category(),
                 needs_program: def.needs_program(),
@@ -1801,10 +1823,64 @@ mod tests {
             .expect("the shipped assets define structures")
     }
 
+    /// The deployed count the width fixtures carry. Nothing caps how many of
+    /// an uncapped structure a base may stand, so the tag is measured at the
+    /// widest figure a grid could plausibly reach rather than at the shipped
+    /// `max_deployed` ceilings — which are 1 and 3, and would leave the row
+    /// two characters narrower than the one a player can actually build to.
+    const WIDEST_DEPLOYED_TAG: u32 = 99;
+
     /// A description longer than anything authored, so the wrap is what is
     /// tested rather than the assets happening to be short enough.
     fn synthetic_description() -> String {
         "Recompiles damaged structures across the whole base, itself included, ".repeat(6)
+    }
+
+    /// A row says how many of that structure the base already counts, and
+    /// says nothing at all when the answer is none.
+    ///
+    /// The tag sits between the name and the cost rather than after it: a
+    /// cost line already reads `Bytecode Block (12/20)`, so `(3)` on the end
+    /// of one is a fourth cost fragment rather than a count.
+    #[test]
+    fn a_deploy_row_is_tagged_with_how_many_already_stand() {
+        let entries = vec![
+            BuildEntry {
+                name: "Mining Node".to_string(),
+                cost: "12 Core Fragments".to_string(),
+                deployed: 3,
+                description: "Cuts ore.".to_string(),
+                category: StructureCategory::Extractor,
+                needs_program: true,
+            },
+            BuildEntry {
+                name: "Lathe".to_string(),
+                cost: "12 Core Fragments".to_string(),
+                deployed: 0,
+                description: "Turns parts.".to_string(),
+                category: StructureCategory::Extractor,
+                needs_program: true,
+            },
+        ];
+        let rows = build_menu_rows(&entries, 0, None);
+        let texts: Vec<&str> = rows.iter().map(row_text).collect();
+
+        assert!(
+            texts
+                .iter()
+                .any(|t| t.contains("Mining Node (3) - 12 Core Fragments")),
+            "a row with three standing says so: {texts:?}"
+        );
+        assert!(
+            texts
+                .iter()
+                .any(|t| t.contains("Lathe - 12 Core Fragments")),
+            "and a row with none is left alone: {texts:?}"
+        );
+        assert!(
+            !texts.iter().any(|t| t.contains("(0)")),
+            "a fresh base is not a menu of zeroes: {texts:?}"
+        );
     }
 
     /// `draw_row` clamps a row vertically and **never horizontally**, so a
@@ -1815,7 +1891,9 @@ mod tests {
     fn no_deploy_menu_row_runs_past_the_popup_body() {
         let mut entries = shipped_entries();
         entries.push(BuildEntry {
-            label: "Overlong Node - free".to_string(),
+            name: "Overlong Node".to_string(),
+            cost: build_cost_label(&[]),
+            deployed: WIDEST_DEPLOYED_TAG,
             description: synthetic_description(),
             category: StructureCategory::Utility,
             needs_program: true,
@@ -1934,7 +2012,9 @@ mod tests {
     fn no_deploy_row_overflows_its_popup_in_pixels() {
         let mut entries = shipped_entries();
         entries.push(BuildEntry {
-            label: "Overlong Node - free".to_string(),
+            name: "Overlong Node".to_string(),
+            cost: build_cost_label(&[]),
+            deployed: WIDEST_DEPLOYED_TAG,
             description: synthetic_description(),
             category: StructureCategory::Utility,
             needs_program: true,
@@ -2092,7 +2172,7 @@ mod tests {
                 *color,
                 if entry.needs_program { TEXT_DIM } else { TEXT },
                 "{} reads wrong on a roster that can pay for nothing",
-                entry.label
+                entry.name
             );
         }
         assert!(
@@ -2159,7 +2239,7 @@ mod tests {
             assert_eq!(
                 colors[i], TEXT,
                 "{} costs no program, so a roster shortfall is not about it",
-                entries[i].label
+                entries[i].name
             );
         }
     }

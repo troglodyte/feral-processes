@@ -947,6 +947,45 @@ fn a_pending_upgrade_does_not_consume_a_max_deployed_slot() {
         .expect("and so is the third — the pending upgrade is not a fourth Line Driver");
 }
 
+/// The figure a deploy row is tagged with is the one the cap measures: a
+/// request on order counts alongside a structure standing, and a pending
+/// *upgrade* counts as neither.
+///
+/// One derivation, because the two ends meet on the same screen — a menu
+/// counting only what stands would tag a row `(1)` and then refuse the pick
+/// with "You already have 2", which is exactly the figure the player cannot
+/// account for that `count_build_requests` exists to prevent.
+#[test]
+fn deployed_count_is_the_figure_the_cap_measures() {
+    let mut game = base(1126);
+    set_zone(&mut game, 2);
+    unlock_research_chain(&mut game, "cache_coherence");
+    give(&mut game, &ItemId::from("cache_grain"), 40);
+    let kind = "line_driver".to_string();
+
+    assert_eq!(game.deployed_count(&kind), 0, "nothing is deployed yet");
+
+    place_now(&mut game, "line_driver", 1, 0).unwrap();
+    assert_eq!(game.deployed_count(&kind), 1, "a standing structure counts");
+
+    file_build(&mut game, "line_driver", -1, 0).expect("the second is inside the ceiling");
+    assert_eq!(
+        game.deployed_count(&kind),
+        2,
+        "and so does one still on order"
+    );
+
+    let driver = structure_at(&mut game, 1, 0).expect("one stands there");
+    let pos = *game.world.get::<Position>(driver).unwrap();
+    game.world
+        .spawn((BuildSite::upgrade(kind.clone(), vec![], 2), pos));
+    assert_eq!(
+        game.deployed_count(&kind),
+        2,
+        "a pending upgrade raises nothing new, so it counts as neither"
+    );
+}
+
 /// A second request on a structure already being upgraded is refused, and
 /// refused *distinctly*: every other refusal leaves the player waiting on a
 /// breach or looking for a different machine, this one leaves them with a

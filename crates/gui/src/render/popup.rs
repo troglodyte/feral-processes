@@ -1465,7 +1465,9 @@ mod tests {
         use feral_processes_engine::structures::StructureCategory;
         let entries: Vec<BuildEntry> = (0..structures)
             .map(|i| BuildEntry {
-                label: format!("Structure {i} - 12 Core Fragments"),
+                name: format!("Structure {i}"),
+                cost: "12 Core Fragments".to_string(),
+                deployed: i as u32,
                 description: format!("What structure {i} is for."),
                 category: if i == 0 {
                     StructureCategory::Home

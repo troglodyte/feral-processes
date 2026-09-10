@@ -140,7 +140,7 @@ impl Game {
             // by nothing: `spawn_structure` performs no checks, because by
             // the time a crew finishes a request those were answered when it
             // was filed. This is where they are answered.
-            let standing = self.count_structures(&def.id) + self.count_build_requests(&def.id);
+            let standing = self.deployed_count(&def.id);
             if standing >= def.max_deployed {
                 return Err(format!(
                     "You already have {standing} {}{} — that's as many as this grid will hold.",
@@ -742,9 +742,30 @@ impl Game {
     }
 
     /// How many of `kind` are deployed right now.
-    fn count_structures(&mut self, kind: &StructureId) -> u32 {
-        let mut query = self.world.query::<&Structure>();
-        query.iter(&self.world).filter(|s| &s.kind == kind).count() as u32
+    ///
+    /// `iter_entities` rather than a query, for `count_build_requests`'
+    /// reason: `Game::deployed_count` is `&self` because a screen quotes the
+    /// figure, and a `World::query` would make this the one term in that sum
+    /// it could not ask for.
+    fn count_structures(&self, kind: &StructureId) -> u32 {
+        self.world
+            .iter_entities()
+            .filter_map(|e| e.get::<Structure>())
+            .filter(|s| &s.kind == kind)
+            .count() as u32
+    }
+
+    /// How many of `kind` the base counts as deployed: standing structures
+    /// plus requests the crew has not raised yet.
+    ///
+    /// **The one derivation of that sum**, called by `place_structure`'s
+    /// `max_deployed` check and by the deploy menu's per-row tag alike. A
+    /// menu counting only what stands would tag a row `(1)` and then be
+    /// refused with "You already have 2" — the figure the player cannot
+    /// account for that `count_build_requests` exists to prevent, arriving
+    /// at the other end of the same screen.
+    pub fn deployed_count(&self, kind: &StructureId) -> u32 {
+        self.count_structures(kind) + self.count_build_requests(kind)
     }
 
     /// The highest tier a structure with this `upgrade` path can currently

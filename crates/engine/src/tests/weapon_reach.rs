@@ -682,3 +682,32 @@ fn a_plain_weapon_swings_at_one_body_on_a_board() {
         "and catches no companion either"
     );
 }
+
+/// A wide swing can empty the last group and kill its own swinger in the
+/// **same turn** — one body's blow lands the killing hit, a later body's
+/// fumble puts the swinger down on a Recoil rung. The group model then
+/// closes the fight inside `reap_dead_members`, and
+/// `battle_resolve_round` still owes the round's upkeep.
+///
+/// A narrow swing cannot reach that state: a fumble deals the defender no
+/// damage, so the swing that empties a group is never the swing that kills
+/// the swinger. This is the state the arena found on the second rep of
+/// `dev-arenas/measure-reach-broadcast-storm.ron`.
+///
+/// Asserted on `tick_round_status_effects` directly, because getting there
+/// through a fight means hunting a stream for a fatal fumble on the right
+/// body — the state is what matters and it is exactly reproducible.
+#[test]
+fn the_rounds_upkeep_survives_a_swing_that_ended_the_fight_and_the_swinger() {
+    let (_dir, mut game) = install("reach_upkeep_after_the_end");
+    let player = game.player_entity();
+    let wild = abstract_fight(&mut game);
+
+    // What a sweep that emptied the roster leaves behind: no fight, and a
+    // swinger who did not outlive it.
+    game.world.remove_resource::<BattleState>();
+    game.world.despawn(wild);
+    game.world.get_mut::<Stats>(player).unwrap().hp = 0;
+
+    game.tick_round_status_effects(player);
+}

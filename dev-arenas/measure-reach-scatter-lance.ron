@@ -1,0 +1,20 @@
+// One arm of the weapon-reach throughput measurement — see
+// `docs/measurements/2026-09-10-weapon-reach-throughput.md`. The four
+// files differ in exactly one row, the player's weapon, so the numbers are
+// comparable within one build.
+//
+// The standard-tier reach weapon, against one whole group.
+(
+    player: Fresh(level: 12, zone: 2),
+    equip: [
+        (item: "scatter_lance", tier: 0),
+        (item: "hardened_shell", tier: 0),
+    ],
+    party: [
+        (species: "scrapper", level: 8, equip: [(item: "kinetic_edge")]),
+        (species: "scrapper", level: 8, equip: [(item: "kinetic_edge")]),
+    ],
+    opponents: [(species: "rootkit", count: 4)],
+    reps: 200,
+    seed: 31,
+)

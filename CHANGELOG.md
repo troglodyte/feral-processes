@@ -34,6 +34,18 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.153
+
+**A Teardown Rig holds its own tool, and the player's hand-load is gone.**
+Walk up to a rig in base space and press `F` to fit a tool carrier out of
+your pack; the rig strips with that tool and not with anything in your own
+slots, `R` pulls it back out, and a rig with nothing fitted runs nothing.
+Pulling a tool out of your own slots used to starve every rig in the base
+that had been loaded with it, silently. Feeding a rig is the base's job
+now — put downed programs in a Quarantine Rack and a posted body carries
+them across — so the store you open with `D` is your own hands and nothing
+else.
+
 ## 0.13.152
 
 **The Quarantine Rack stores downed programs, and base staff fetch from it.**

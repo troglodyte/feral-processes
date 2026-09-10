@@ -167,6 +167,16 @@ A rig already requires a posted body, so the fetch is that body leaving its
 post — `run_dig_crew`'s shape. No new want, no `schedule_base_labour` change,
 no `LabourDemand` term.
 
+**When it fires, and how much it moves.** A body posted at a rig whose hopper
+is empty, with a rack in `hauling::crew_reach` of that body holding at least
+one carrier, walks and fetches **one** carrier — one trip, one carrier, which
+is what the carry shape holds. It is resolved in `run_teardown_rigs`, the
+`&mut Game` pass the rig's tick already lives in (a bevy system could not call
+`extraction_yield`/`extraction_ticks`, which is why that pass exists at all),
+so the fetch and the strip cannot disagree about the hopper's room. An
+unreachable rack is not a want: the body stays on its post, `build_wants`'
+deadlock rule.
+
 The carrier is **carried**, not claimed:
 
 ```rust

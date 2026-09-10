@@ -1800,12 +1800,13 @@ fn every_upgrade_path_asks_for_a_zone_material() {
 /// Every line the Zone Portal demands at sector N names something the base
 /// can actually be making by sector N.
 ///
-/// `ZONE_MATERIALS`' shape, and its reason: nothing in `StructureDef` says
-/// the portal's bill has to be *reachable*, and the constraint is entirely a
+/// `ZONE_MATERIALS`' shape, and its reason: nothing in `StructureDef` says the
+/// portal's bill has to be *reachable*, and the constraint is entirely a
 /// content decision. `zone_build_cost` exists precisely because two of the
-/// lines are not legal in sector 1 — Cache Grain behind `cache_coherence`
-/// and the Recompile Kernel behind `program_refactoring`, both `min_zone:
-/// 2` — and that argument is written down in `docs/seams.md` and asserted
+/// lines are not legal in sector 1 — Cache Grain behind `cache_coherence` and
+/// the Recompile Kernel behind `program_refactoring`, both `min_zone: 2` — and
+/// that argument is written down in
+/// `seam:a-zone-portal-line-is-ramped-from-the-zone-it-was` and asserted
 /// nowhere. Moving `("cache_grain", 10)` up into `build_cost` makes sector 1
 /// unbreachable, and would have failed no test.
 ///

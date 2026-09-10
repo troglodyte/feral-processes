@@ -365,11 +365,12 @@ fn u_opens_the_compass_and_never_a_way_home() {
 }
 
 /// `t` closes the same hole `d`'s `in_base()` guard and the group menu's
-/// `base_only` rows already closed: every trader `Game::view_entities` can
-/// now find is a `Structure`, and a `Structure` is never found outside base
-/// space — so the open grid used to open `Mode::Trade` onto a list that
-/// could only ever come back empty. Noted rather than fixed in
-/// `docs/seams.md` when the other two keys moved.
+/// `base_only` rows already closed: every trader `Game::view_entities` can now
+/// find is a `Structure`, and a `Structure` is never found outside base space
+/// — so the open grid used to open `Mode::Trade` onto a list that could only
+/// ever come back empty. Noted rather than fixed in
+/// `seam:require-surface-used-to-mean-not-in-the-stack-and-ten-of` when the
+/// other two keys moved.
 #[test]
 fn t_opens_the_trader_list_only_from_the_base() {
     let mut app = test_app(4015);

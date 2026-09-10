@@ -92,8 +92,8 @@ pub(in crate::render) fn strip_clearance(m: &Metrics) -> f32 {
 /// it, top and bottom, off this one call.
 ///
 /// The rule this closes has now cost three releases, each time as an opaque
-/// quad painted over text that was already there — see `docs/seams.md`'s
-/// "A top-mounted strip eats its own pane's body".
+/// quad painted over text that was already there — see
+/// `seam:a-top-mounted-strip-eats-its-own-panes-body`.
 pub(in crate::render) fn strip_inset(m: &Metrics) -> f32 {
     strip_clearance(m) + m.inset
 }

@@ -276,19 +276,20 @@ impl Game {
     /// whenever the party is not in base space, regardless of what `(x, y)`
     /// numerically is.
     ///
-    /// **`Structure` is the space tag** (see `docs/seams.md`): every
-    /// structure stands in `base_grid::BaseGrid`'s coordinate space, never
-    /// the zone surface, so a `Structure` query only ever answers a
-    /// base-space question. Gating on `in_base` closes that generally
-    /// instead of at each call site — `game/stack.rs`'s `link_site_free`
-    /// used to call this with **surface** coordinates while scattering
-    /// Stack entrances, and with the zone spawn point and base space's
-    /// origin both commonly `(0, 0)`, it silently refused valid link sites
-    /// near a base. The one legitimate caller left with `(x, y)` computed
-    /// while off base (`place_structure`'s founding Home) is asking about a
-    /// base that cannot exist yet — no Home means no other structure either,
-    /// since removing a Home cascades to every structure it stands beside —
-    /// so `None` is the right answer there too, not a special case.
+    /// **`Structure` is the space tag** (see
+    /// `seam:structure-is-the-space-tag`): every structure stands in
+    /// `base_grid::BaseGrid`'s coordinate space, never the zone surface, so a
+    /// `Structure` query only ever answers a base-space question. Gating on
+    /// `in_base` closes that generally instead of at each call site —
+    /// `game/stack.rs`'s `link_site_free` used to call this with **surface**
+    /// coordinates while scattering Stack entrances, and with the zone spawn
+    /// point and base space's origin both commonly `(0, 0)`, it silently
+    /// refused valid link sites near a base. The one legitimate caller left
+    /// with `(x, y)` computed while off base (`place_structure`'s founding
+    /// Home) is asking about a base that cannot exist yet — no Home means no
+    /// other structure either, since removing a Home cascades to every
+    /// structure it stands beside — so `None` is the right answer there too,
+    /// not a special case.
     pub(crate) fn find_blocking_structure_at(&mut self, x: i32, y: i32) -> Option<Entity> {
         if !self.in_base() {
             return None;

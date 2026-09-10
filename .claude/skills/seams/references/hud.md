@@ -139,8 +139,7 @@
   native 8x8 one. The trap there is reading the two as one number:
   changing `ICON_GRID` is a screen decision, changing `ICON_SIZE` breaks
   the sprite format `assets/sprites/README.md` calls non-negotiable. The
-  full argument is `docs/seams.md`, "The player's drawn icon is the one
-  sprite drawn untinted".
+  full argument is `seam:a-one-cell-sprite-substitutes-for-a-glyph-and-the-table-it`.
 - **`ICON_PALETTE` is exactly fifteen entries because it is the player
   icon's save format, and `SPRITE_PALETTE` is a separate constant for that
   reason.** `PlayerIcon::encode` writes one lowercase hex digit per cell
@@ -166,8 +165,7 @@
   `SPRITE_PALETTE`, a second constant that never enters `PlayerIcon`'s
   codec at all, rather than a longer `ICON_PALETTE` — merging the two back
   into one is the DRY move this seam exists to refuse. Full argument in
-  `docs/seams.md`, "`ICON_PALETTE` is fixed at fifteen entries by the save
-  format, and `SPRITE_PALETTE` is why it stays that way".
+  `seam:icon-palette-is-fixed-at-fifteen-entries-by-the-save-format`.
 - **A machine's stall asks for attention and never reads as a threat.**
   `Clogged`/`Stranded`/`Unpowered` take `ATTENTION` — waiting fixes none of
   them, and it is the colour `Game::attention` already spends on them —

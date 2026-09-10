@@ -155,9 +155,10 @@ pub enum Standing {
 /// has not built.
 ///
 /// A **compile-time** assertion rather than a test, because the claim in
-/// `docs/seams.md` is that closing this gap by retune fails the build —
-/// a `#[test]` would only fail the suite, and it also reads to clippy as an
-/// assertion on a constant, which it is.
+/// `seam:the-garrison-clamp-is-on-the-settlement-half-alone-and-both` is that
+/// closing this gap by retune fails the build — a `#[test]` would only fail
+/// the suite, and it also reads to clippy as an assertion on a constant, which
+/// it is.
 const _: () = assert!(crate::tuning::SETTLEMENT_GARRISON_MAX < crate::tuning::RAID_DAMAGE);
 
 /// A garrison can never zero a **town** raid either, however many Allied

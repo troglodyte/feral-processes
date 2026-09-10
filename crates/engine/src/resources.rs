@@ -1381,9 +1381,9 @@ impl ZoneLevel {
 ///
 /// `Base` is the same arrangement pointed the other way, and the reason
 /// `Game::require_surface` had to be split: "not in the Stack" and "on the
-/// surface proper" were one condition while there were two locales, and
-/// eleven guarded actions had never had to say which they meant. See
-/// `docs/seams.md`.
+/// surface proper" were one condition while there were two locales, and eleven
+/// guarded actions had never had to say which they meant. See
+/// `seam:require-surface-used-to-mean-not-in-the-stack-and-ten-of`.
 #[derive(Resource, Clone, Copy, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum Locale {
     #[default]

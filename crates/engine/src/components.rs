@@ -2028,8 +2028,9 @@ pub struct Durability {
 /// the space rule this repo otherwise holds — a `Structure` is the space tag,
 /// with posted programs the one prior exception — so anything reading a
 /// `Position` off one of these must already know which locale it is in. See
-/// `docs/seams.md`; 0.13.0 shipped two fixes for exactly this bug class, and
-/// a wrong-space read is silent.
+/// `seam:a-digsite-is-the-second-non-structure-entity-standing-in`; 0.13.0
+/// shipped two fixes for exactly this bug class, and a wrong-space read is
+/// silent.
 #[derive(Component, Clone, Copy, Debug, Default)]
 pub struct DigSite {
     /// Whether the player marked this cell for a crew. Set by the mark verb

@@ -161,15 +161,16 @@ impl App {
                     self.refuse("There's nobody selling anything here.");
                     return;
                 }
-                // Closed the same way `d` above is: `Game::view_entities`
-                // now refuses to answer a `Structure` query outside base
-                // space (every trader is one), so the list this used to
-                // open on the open grid would always come back empty —
-                // Task 5 left it noted rather than fixed in `docs/seams.md`,
+                // Closed the same way `d` above is: `Game::view_entities` now
+                // refuses to answer a `Structure` query outside base space
+                // (every trader is one), so the list this used to open on the
+                // open grid would always come back empty — Task 5 left it
+                // noted rather than fixed in
+                // `seam:require-surface-used-to-mean-not-in-the-stack-and-ten-of`,
                 // and this is the guard flip that note asked for. Both
-                // remaining branches are surface-or-base only, `is_underground`
-                // having already returned above, so `in_base` cannot collide
-                // with the Stack case handled there.
+                // remaining branches are surface-or-base only,
+                // `is_underground` having already returned above, so `in_base`
+                // cannot collide with the Stack case handled there.
                 if !self.game.as_ref().is_some_and(|g| g.in_base()) {
                     self.refuse("Nobody's selling out here — the traders are through the anchor.");
                     return;

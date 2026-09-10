@@ -7,8 +7,8 @@ description: Use before changing a load-bearing seam in feral-processes - the ba
 
 `CLAUDE.md` states each seam as **one sentence — the rule alone**. This skill
 holds the second half: **the trap the rule exists to close**, in the compressed
-form that used to live in `CLAUDE.md` itself. `docs/seams.md` is the third tier
-— the full argument, the measurement, the history, and what was tried and
+form that used to live in `CLAUDE.md` itself. The **memory graph** is the third
+tier — the full argument, the measurement, the history, and what was tried and
 rejected.
 
 Three tiers, and which one you want depends on what you are doing:
@@ -17,7 +17,7 @@ Three tiers, and which one you want depends on what you are doing:
 |---|---|---|
 | the rule | `CLAUDE.md`, always in context | always |
 | the trap | `references/*.md` here | before changing code in that subsystem |
-| the argument | `docs/seams.md`, same title | before changing **the seam itself** |
+| the argument | the memory graph, `seam:<slug>` | before changing **the seam itself** |
 
 ## How to use this
 
@@ -25,8 +25,25 @@ Three tiers, and which one you want depends on what you are doing:
 2. Read that reference file — the whole file, not a grep. The traps are
    cross-referenced (`cell_mark`'s rule, `NoPost::BoxedIn`'s rule,
    `party::role_of`'s reason) and a single bullet read alone loses them.
-3. If you are changing the seam rather than working within it, read the
-   matching `###` entry in `docs/seams.md` before you edit.
+3. If you are changing the seam rather than working within it, read its
+   argument out of the graph before you edit:
+
+   ```
+   memory_search(<the rule's own words>, subsystem: "seams")   # find the seam
+   memory_get_entity("seam:<slug>")                            # read it whole
+   ```
+
+   Search returns a 400-character window per hit, which is a result list and
+   not the argument — always follow it with `memory_get_entity`. Scope the
+   search with `subsystem: "seams"`: an argument runs to 2,500 characters on
+   average, and a long observation dilutes term frequency badly enough that a
+   bare identifier can rank a short unrelated note above the seam that
+   discusses it.
+
+   The slug is the entry's title, lowercased, apostrophes dropped, every other
+   run of non-alphanumerics collapsed to `-`, cut to 60 characters on a word
+   boundary. Don't reconstruct it from a `CLAUDE.md` rule — the rule sentence
+   and the argument's title are not the same string. Search, then read.
 
 | subsystem | reference | seams |
 |---|---|---:|
@@ -47,8 +64,20 @@ Three tiers, and which one you want depends on what you are doing:
 
 A new seam is **three writes, in this order**:
 
-1. The **argument** goes to `docs/seams.md` as a new `###` section — the
-   measurement, what was tried, what was rejected.
+1. The **argument** goes to the graph — the measurement, what was tried, what
+   was rejected:
+
+   ```
+   memory_add_observations(
+     entity: "seam:<slug>", entityType: "seam", subsystem: "seams",
+     observations: [<the title>, <the argument>])
+   ```
+
+   Two observations, title first: the short one is what search ranks on, the
+   long one is what `memory_get_entity` serves. `entityType: "seam"` is
+   load-bearing — the SessionStart digest pins only `user`, `preference`,
+   `constraint` and `convention` types, so this type is what keeps 331
+   arguments out of every session's opening context.
 2. The **trap** goes to the matching `references/*.md` here, as a bullet in
    the existing house style: a bold rule sentence, then the trap.
 3. The **rule** goes to `CLAUDE.md` under the same `###` heading, as a bullet
@@ -56,5 +85,8 @@ A new seam is **three writes, in this order**:
    151 KB by letting each seam's trap creep back in beside its rule, and it is
    loaded on every turn.
 
+Still three writes: moving the argument into the graph changed where the third
+one lands, not how many there are. Two arrives only if the trap tier moves too.
+
 Each was verified against the source, not remembered. Verify again before
-relying on one, and correct **all three** files if it has moved.
+relying on one, and correct **all three** places if it has moved.

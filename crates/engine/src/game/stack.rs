@@ -420,11 +420,12 @@ impl Game {
     /// changing where climbing back up puts you, worst of all.
     ///
     /// **This guard used to mean "not in the Stack",** which was the same
-    /// condition while there were two locales. It is not any more, and the
-    /// ten sites that turned out to mean base space rather than the surface
-    /// moved to `require_base`. `docs/seams.md` carries the table; adding a
-    /// caller here means asserting the action belongs to the *wild*, not to
-    /// the base.
+    /// condition while there were two locales. It is not any more, and the ten
+    /// sites that turned out to mean base space rather than the surface moved
+    /// to `require_base`.
+    /// `seam:require-surface-used-to-mean-not-in-the-stack-and-ten-of` carries
+    /// the table; adding a caller here means asserting the action belongs to
+    /// the *wild*, not to the base.
     ///
     /// Party and inventory management deliberately isn't on this list.
     /// Fusing programs, installing routines, crafting, equipping and

@@ -5,10 +5,9 @@ workspace.
 
 **This file is loaded into context on every turn, so it holds rules and not
 arguments.** The reasoning behind each load-bearing seam — the measurement,
-the history, what was tried and rejected — lives in
-[`docs/seams.md`](docs/seams.md) under the same title. Read the matching
-entry there before changing a seam, and write any new reasoning there rather
-than here.
+the history, what was tried and rejected — lives in the **memory graph** as
+`seam:<slug>`. Read the matching entry there before changing a seam, and write
+any new reasoning there rather than here; the `seams` skill has the two calls.
 
 The crates:
 
@@ -85,15 +84,14 @@ sentence: the rule alone.**
 The trap each rule exists to close is in the **`seams` skill**
 (`.claude/skills/seams/`), one reference file per subsystem — invoke it
 before changing code in one of these areas. The argument behind a seam —
-the measurement, the history, what was tried and rejected — is in
-[`docs/seams.md`](docs/seams.md) under the same title; read that entry
-before changing a seam itself.
+the measurement, the history, what was tried and rejected — is in the memory
+graph as `seam:<slug>`, reached with `memory_search(…, subsystem: "seams")`
+then `memory_get_entity`; read it before changing a seam itself.
 
 **One sentence is a budget, not a style.** This file is loaded on every
 turn, and it reached 151 KB by letting each seam's trap creep back in
-beside its rule. A new seam is three writes — the argument to
-`docs/seams.md`, the trap to the skill, the rule here — and the skill
-documents the order.
+beside its rule. A new seam is three writes — the argument to the graph, the
+trap to the skill, the rule here — and the skill documents the order.
 
 Each was verified against the source, not remembered. Verify again before
 relying on one, and correct all three places if it has moved.
@@ -298,11 +296,6 @@ relying on one, and correct all three places if it has moved.
 - **A supplier that declares `power_upkeep` (an `Option<ItemId>` naming its
   fuel) does nothing at all while it is dry — grid supply and its own
   `power_regen` trickle alike — and the Home never declares it.**
-- **A supplier burns the cheapest `ItemDef::grid_fuel` it can reach — windows
-  of `POWER_UPKEEP_TICKS`, never ticks — and its declared `power_upkeep` id is
-  the gate on the family rather than the whole of it.**
-- **An over-time consumable needs `PrebattleBuff::interval`, and `ticks` must
-  be a whole multiple of it.**
 - **`collect::plan_adjacent_take` is the one machine-to-machine reach**, the
   assembler's pull and a supplier's fuel walking the same four tiles.
 - **A raid's flash is base-space too, and `render/base.rs` gates both draw

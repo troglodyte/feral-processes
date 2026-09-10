@@ -15,8 +15,8 @@ the directory *is* the answer, so no sweep is needed next time.
 **The two exceptions are built and stay in `specs/` anyway**, because source
 doc comments pin their paths and moving them would edit `crates/`:
 `2026-09-04-program-extraction-design` (seventeen `//!` and `///` citations)
-and `2026-09-04-dev-sprite-editor-design` (`sprite_forge.rs` and
-`docs/seams.md`).
+and `2026-09-04-dev-sprite-editor-design` (`sprite_forge.rs` and a seam
+argument in the memory graph).
 
 **The debt this section recorded is paid.** There was a third —
 `2026-09-06-settlement-growth-design`, one `//!` line in
@@ -85,7 +85,8 @@ The other eleven are already in `archive/specs/`:
 `2026-08-19-base-out-of-phase`, `2026-08-27-paned-command-hud`,
 `2026-09-01-character-creation`, `2026-09-06-settlement-growth-design` and
 `2026-09-09-tactical-surface-battles-design`. Four more are cited from
-`CHANGELOG.md`, `docs/seams.md` or `assets/nemesis/README.md`:
+`CHANGELOG.md`, a seam argument in the memory graph, or
+`assets/nemesis/README.md`:
 `2026-08-17-nemesis`,
 `2026-08-19-windows-and-macos-distribution`, `2026-08-21-item-quality` and
 `2026-08-23-rock-kinds-and-mining-mode`.

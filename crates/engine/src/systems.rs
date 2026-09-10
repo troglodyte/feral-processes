@@ -758,6 +758,23 @@ fn burn_grid_upkeep(world: &mut World) {
             .iter(world),
     );
 
+    // Every grid fuel in the install, cheapest window first, ties broken by
+    // id so two cells worth the same number of windows resolve the same way
+    // every run — `ItemDb` keys by `String` in a `HashMap`.
+    //
+    // **Cheapest first is the rule that keeps a tier from retiring the one
+    // below it**: the base eats the staple it can already make in bulk, and
+    // the dense cell stays worth carrying into the field.
+    let fuels: Vec<(ItemId, u32)> = {
+        let items = world.resource::<ItemDb>();
+        let mut found: Vec<(ItemId, u32)> = items
+            .all()
+            .filter_map(|def| Some((def.id.clone(), def.grid_fuel?)))
+            .collect();
+        found.sort_by(|a, b| (a.1, a.0.as_str()).cmp(&(b.1, b.0.as_str())));
+        found
+    };
+
     // Collected before anything is written, and carrying the def's name and
     // fuel item so the announcement and the pull below need no second lookup
     // while other borrows are open.
@@ -789,38 +806,71 @@ fn burn_grid_upkeep(world: &mut World) {
             continue;
         }
         let want = crate::tuning::POWER_UPKEEP_CELLS_PER_WINDOW;
-        // **Its own hopper first.** That is where `haul_step_system` puts a
-        // cell fetched for it — see `systems::intake_recipe` — and a burner
-        // that could not spend its own input would have been walked
-        // something it can never use. Preferred rather than merely accepted,
-        // so a supplier a program has just stocked stops drawing down a
-        // shelf the rest of the base is spending from too.
-        let mut bought = world
-            .get_mut::<Stock>(burner)
-            .map(|mut stock| crate::game::base::hauling::take_from_input(&mut stock, &cell, want))
-            .unwrap_or(0);
-        let plan = crate::game::base::collect::plan_adjacent_take(
-            tile,
-            want - bought,
-            &by_tile,
-            |feeder| {
-                world
-                    .get::<Stock>(feeder)
-                    .and_then(|s| s.output.get(&cell).copied())
-                    .unwrap_or(0)
-            },
-        );
-        for (feeder, want) in plan {
-            let Some(mut stock) = world.get_mut::<Stock>(feeder) else {
+        // **A supplier that names a fuel which is not fuel burns nothing.**
+        // The declared id is the gate and the family is the pool: naming a
+        // real cell opens the whole grid-fuel set, and a typo opens none of
+        // it — which is what keeps a misspelt `power_upkeep` silently inert
+        // rather than quietly running on everyone else's cells.
+        let candidates: &[(ItemId, u32)] = if fuels.iter().any(|(id, _)| *id == cell) {
+            &fuels
+        } else {
+            &[]
+        };
+        // One kind pays for the whole window. Tried cheapest first, and a
+        // kind with nothing within reach is skipped before a single unit of
+        // it moves — a window part-paid in two different cells would spend
+        // the dense one for a fraction of what it is worth.
+        let mut bought = 0;
+        let mut burnt: Option<(ItemId, u32)> = None;
+        for (fuel, windows) in candidates {
+            // **Its own hopper first.** That is where `haul_step_system` puts
+            // a cell fetched for it — see `systems::intake_recipe` — and a
+            // burner that could not spend its own input would have been
+            // walked something it can never use. Preferred rather than merely
+            // accepted, so a supplier a program has just stocked stops
+            // drawing down a shelf the rest of the base is spending from too.
+            let held = world
+                .get::<Stock>(burner)
+                .and_then(|s| s.input.get(fuel).copied())
+                .unwrap_or(0);
+            let plan = crate::game::base::collect::plan_adjacent_take(
+                tile,
+                want.saturating_sub(held),
+                &by_tile,
+                |feeder| {
+                    world
+                        .get::<Stock>(feeder)
+                        .and_then(|s| s.output.get(fuel).copied())
+                        .unwrap_or(0)
+                },
+            );
+            if held + plan.iter().map(|(_, qty)| qty).sum::<u32>() == 0 {
                 continue;
-            };
-            bought += crate::game::base::hauling::take_from(&mut stock, &cell, want);
+            }
+            bought = world
+                .get_mut::<Stock>(burner)
+                .map(|mut stock| {
+                    crate::game::base::hauling::take_from_input(&mut stock, fuel, want)
+                })
+                .unwrap_or(0);
+            for (feeder, qty) in plan {
+                let Some(mut stock) = world.get_mut::<Stock>(feeder) else {
+                    continue;
+                };
+                bought += crate::game::base::hauling::take_from(&mut stock, fuel, qty);
+            }
+            if bought > 0 {
+                burnt = Some((fuel.clone(), *windows));
+                break;
+            }
         }
-        if bought > 0 {
+        // Nothing burnt leaves `bought` at zero, which is what the status
+        // decision below already reads as `Dry`.
+        if let Some((cell, windows)) = burnt {
             world
                 .get_mut::<PowerFuel>(burner)
                 .expect("collected with the component")
-                .ticks_left = crate::tuning::POWER_UPKEEP_TICKS;
+                .ticks_left = windows * crate::tuning::POWER_UPKEEP_TICKS;
             // A standing consumer of a chain's terminal product, and the
             // ledger does not balance without it: the Power Cells a base
             // burns to stay lit are otherwise produced and never spent.

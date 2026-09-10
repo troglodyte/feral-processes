@@ -1218,3 +1218,117 @@ fn a_supplier_burns_the_cell_in_its_own_hopper_before_the_shelf_beside_it() {
         "the shelf beside it is left alone while the hopper can pay"
     );
 }
+
+/// A dense cell buys the windows its `ItemDef::grid_fuel` declares, and the
+/// figure the burner ends up carrying is the item's rather than the constant's.
+///
+/// The span is deliberately longer than one plain window and shorter than the
+/// dense one: a supplier that ignored `grid_fuel` and refuelled at
+/// `POWER_UPKEEP_TICKS` would have spent a *second* cell inside it, so the
+/// shelf count alone separates the two behaviours.
+#[test]
+fn a_supplier_fed_a_dense_cell_burns_it_for_the_windows_it_declares() {
+    let mut game = base_with_home(4111);
+    let (recharger, depot) = recharger_beside_a_depot(&mut game, 0);
+    let windows = game
+        .world
+        .resource::<crate::items_db::ItemDb>()
+        .get("buffered_cell")
+        .expect("a shipped item")
+        .grid_fuel
+        .expect("the dense cell is grid fuel");
+    assert!(
+        windows > 1,
+        "a dense cell has to be worth more than one window"
+    );
+    game.world
+        .get_mut::<Stock>(depot)
+        .unwrap()
+        .output
+        .insert(ItemId::from("buffered_cell"), 2);
+    let lit = grid_supply(&game);
+
+    for _ in 0..(crate::tuning::POWER_UPKEEP_TICKS + 1) {
+        game.tick();
+    }
+
+    assert_eq!(
+        grid_supply(&game),
+        lit,
+        "the dense cell keeps it on the grid"
+    );
+    assert_eq!(
+        shelved(&game, depot, "buffered_cell"),
+        1,
+        "exactly one dense cell was spent — a supplier reading the constant \
+         instead of the item would have bought a second window by now"
+    );
+    assert_eq!(
+        game.world
+            .get::<crate::components::PowerFuel>(recharger)
+            .expect("a burning supplier carries its charge")
+            .ticks_left,
+        windows * crate::tuning::POWER_UPKEEP_TICKS - 1,
+        "and the charge it bought is the item's windows, less the tick it \
+         has already spent out of the new one"
+    );
+}
+
+/// Cheapest first, which is what keeps a new tier from retiring the one
+/// below it: the base eats the staple and the dense cell stays worth
+/// carrying into the field.
+#[test]
+fn a_supplier_within_reach_of_both_burns_the_cheaper_cell() {
+    let mut game = base_with_home(4112);
+    let (_, depot) = recharger_beside_a_depot(&mut game, 2);
+    game.world
+        .get_mut::<Stock>(depot)
+        .unwrap()
+        .output
+        .insert(ItemId::from("buffered_cell"), 2);
+
+    for _ in 0..(crate::tuning::POWER_UPKEEP_TICKS + 1) {
+        game.tick();
+    }
+
+    assert_eq!(
+        shelved(&game, depot, ids::POWER_CELL),
+        1,
+        "the staple is what got spent"
+    );
+    assert_eq!(
+        shelved(&game, depot, "buffered_cell"),
+        2,
+        "and the dense cells were left alone"
+    );
+}
+
+/// An item that is not grid fuel is not fuel however much of it is standing
+/// beside a dry supplier — the trickle line is for the player, not the base.
+#[test]
+fn a_supplier_will_not_burn_an_item_that_is_not_grid_fuel() {
+    let mut game = base_with_home(4113);
+    let (_, depot) = recharger_beside_a_depot(&mut game, 0);
+    let recharger_supply = authored_supply(&game, "recharger_node");
+    let lit = grid_supply(&game);
+    game.world
+        .get_mut::<Stock>(depot)
+        .unwrap()
+        .output
+        .insert(ItemId::from("sustain_cell"), 5);
+
+    for _ in 0..(crate::tuning::POWER_UPKEEP_TICKS + 1) {
+        game.tick();
+    }
+
+    assert_eq!(
+        grid_supply(&game),
+        lit - recharger_supply,
+        "it went dark with a shelf full of cells it cannot burn"
+    );
+    assert_eq!(
+        shelved(&game, depot, "sustain_cell"),
+        5,
+        "and none of them were spent"
+    );
+}

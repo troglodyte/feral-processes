@@ -19,12 +19,15 @@ I = [
  ("access_shard",        "Access Shard",              12, "",         "",       "",                      "",                                                  "",            "",                                0, 0),
  ("annealed_core",       "Annealed Core",              3, "",         "",       "",                      "4 core_fragment",                                   "annealing_node", "",                             0, 0),
  ("arc_lance",           "Arc Lance",                 12, "",         "Weapon", "atk+3 acc+2",                 "12 core_fragment",                                  "fabricator",  "scrapper 10%;worm 8%",            0, 0),
+ ("backfeed_cell",       "Backfeed Cell",             15, "",         "",       "",                      "",                                                  "",            "",                                0, 0),
  ("bastion_lattice",     "Bastion Lattice",           80, "",         "Armor",  "def+4",                 "12 portal_fragment+4 bytecode_block+2 charge_coil", "armory",      "sentinel 8%;rootkit 6%",          0, 0),
  ("black_ice_pick",      "Black ICE Pick",            90, "",         "Weapon", "atk+3 decompiler+2 acc+2",    "18 portal_fragment",                                "fabricator",  "cipher 7%;rootkit 6%",            0, 0),
  ("blank_substrate",     "Blank Substrate",            3, "",         "",       "",                      "4 core_fragment",                                   "lathe",       "",                                0, 0),
  ("bounds_check",        "Bounds Check",               5, "",         "",       "companion def+5%",      "2 annealed_core",                                   "refactor_bench", "",                             0, 0),
  ("buffer_extension",    "Buffer Extension",           5, "",         "",       "companion hp+5%",       "2 annealed_core",                                   "refactor_bench", "",                             0, 0),
+ ("buffered_cell",       "Buffered Cell",             12, "",         "",       "",                      "",                                                  "",            "",                                0, 0),
  ("bytecode_block",      "Bytecode Block",             4, "",         "",       "",                      "4 core_fragment",                                   "refinery",    "",                                0, 0),
+ ("capacitor_array",     "Capacitor Array",           20, "",         "",       "",                      "",                                                  "",            "",                                0, 0),
  ("charge_coil",         "Charge Coil",                3, "",         "",       "",                      "3 power_cell",                                      "winding_node", "",                                0, 0),
  ("core_fragment",       "Core Fragment",              1, "Currency", "",       "",                      "",                                                  "",            "",                                0, 0),
  ("cortex_hack",         "Cortex Hack",               25, "",         "Module", "decompiler+3",          "",                                                  "",            "cipher 35%",                      0, 0),
@@ -63,6 +66,7 @@ I = [
  ("research_data",       "Research Data",              1, "ResearchCurrency", "",       "",                      "",                                                  "",            "",                                0, 0),
  ("routine_disk",        "Routine Disk",               5, "",         "",       "",                      "2 blank_substrate",                                 "disk_press",  "",                                0, 0),
  ("scrap_ward",          "Scrap Ward",                 4, "",         "Armor",  "def+1 eva+3",                 "4 core_fragment",                                   "",            "glitch 10%;sprite 8%",            0.12, 0),
+ ("sustain_cell",         "Sustain Cell",              12, "",         "",       "",                      "",                                                  "",            "",                                0, 0),
  ("shim_blade",          "Shim Blade",                14, "",         "Weapon", "atk+2 decompiler+1 acc+2",    "14 core_fragment",                                  "fabricator",  "worm 9%;scrapper 7%",             0, 0),
  ("shiv_routine",        "Shiv Routine",               4, "",         "Weapon", "atk+1 acc+3",                 "4 core_fragment",                                   "",            "sprite 10%;drone 8%",             0, 0),
  ("siege_compiler",      "Siege Compiler",            90, "",         "Weapon", "atk+3 def+2 acc+1",           "18 portal_fragment",                                "fabricator",  "construct 7%;sentinel 6%",        0, 0),
@@ -155,7 +159,7 @@ DROPS_CHART, TALLY = drop_table()
 doc = f"""# Item catalogue
 
 Every shipped item in feral-processes, charted from its own file in
-`assets/items/`. Fifty-four of them.
+`assets/items/`. Fifty-nine of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
 `assets/items/*.ron` on 2026-08-11 and will drift the moment one of those

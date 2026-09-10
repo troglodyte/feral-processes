@@ -1,0 +1,21 @@
+(
+    id: "capacitance",
+    name: "Capacitance",
+    description: "Bank a whole reserve in one cell. Compile Capacitor Arrays and Backfeed Cells at a Winding Node.",
+    cost: 90,
+    materials: [("power_cell", 24), ("bytecode_block", 12)],
+    min_zone: 3,
+    requires: ["charge_density"],
+    unlocks_recipes: [
+        (
+            result: "capacitor_array",
+            cost: [("buffered_cell", 2), ("bytecode_block", 2), ("cache_grain", 4), ("logic_wafer", 1)],
+            requires_structure: Some("winding_node"),
+        ),
+        (
+            result: "backfeed_cell",
+            cost: [("buffered_cell", 1), ("bytecode_block", 1), ("cache_grain", 3), ("logic_wafer", 1)],
+            requires_structure: Some("winding_node"),
+        ),
+    ],
+)

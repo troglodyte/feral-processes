@@ -204,7 +204,17 @@ any non-finite `taming_potency`, `consume.power`, or
     //     `EncounterDamp`, or `DropBoost`; `power` is its magnitude (flat
     //     for the stat kinds, percentage points for the rest); `ticks` is
     //     how many game ticks it lasts (ordinary turns, not battle rounds —
-    //     it keeps counting down whether or not the player is in a fight).
+    //     it keeps counting down whether or not the player is in a fight);
+    //     `interval` is how many ticks pass between firings, defaulting to
+    //     1 (every tick).
+    //
+    //     **An over-time kind needs an `interval` to be worth authoring.**
+    //     `Regen` and `Trickle` fire on every tick they are eligible for, so
+    //     `power: 3` with no interval is not a drip, it is a tap left
+    //     running — twenty times the rate Power drains at. Set `interval` to
+    //     the cadence you actually want and make `ticks` a whole multiple of
+    //     it, or the last firing is silently short: the cadence is phased
+    //     off the remaining count, not off a counter of its own.
     //
     //     **`ticks` always applies here, whatever `kind` you pick.** A
     //     *routine* arming most of these kinds runs until the party rests
@@ -217,7 +227,7 @@ any non-finite `taming_potency`, `consume.power`, or
     consume: Some((
         power: 25.0,
         heal: 5,
-        prebattle_buff: Some((kind: Atk, power: 2, ticks: 30)),
+        prebattle_buff: Some((kind: Atk, power: 2, ticks: 30, interval: 1)),
     )),
 
     // `consume` is the *only* way `Game::use_item` spends an item, but it
@@ -289,6 +299,25 @@ any non-finite `taming_potency`, `consume.power`, or
     // cache pays depth-scaled Credits and rolls for a Portal Fragment, from
     // constants in `tuning.rs`.
     cache_drop: Some(0.08),
+
+    // Optional; can be left out entirely (defaults to not being fuel). Makes
+    // this item something a `power_upkeep` supplier will burn, and says how
+    // many upkeep *windows* one unit buys. The staple Power Cell declares
+    // `Some(1)`; a cell worth three windows declares `Some(3)`.
+    //
+    // Windows rather than ticks on purpose: how long one window lasts is a
+    // difficulty knob and lives in `tuning.rs`, so an item file only ever
+    // says how many of those a denser cell is worth. That keeps a mod from
+    // retuning the base's fuel economy by editing an item.
+    //
+    // A supplier burns the *cheapest* fuel it can reach — lowest window
+    // count first — so adding a denser tier never retires the one below it:
+    // the base keeps eating the staple it can make in bulk, and the dense
+    // one stays worth carrying into the field. A supplier is also gated on
+    // its own declared fuel: if `power_upkeep` names an item that is not
+    // grid fuel, that supplier burns nothing at all rather than falling back
+    // to something that is.
+    grid_fuel: Some(1),
 
     // Optional; can be left out entirely (defaults to no upgrade). What this
     // item does to one *tamed program* when applied from the party menu's

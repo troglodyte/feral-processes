@@ -298,6 +298,11 @@ relying on one, and correct all three places if it has moved.
 - **A supplier that declares `power_upkeep` (an `Option<ItemId>` naming its
   fuel) does nothing at all while it is dry — grid supply and its own
   `power_regen` trickle alike — and the Home never declares it.**
+- **A supplier burns the cheapest `ItemDef::grid_fuel` it can reach — windows
+  of `POWER_UPKEEP_TICKS`, never ticks — and its declared `power_upkeep` id is
+  the gate on the family rather than the whole of it.**
+- **An over-time consumable needs `PrebattleBuff::interval`, and `ticks` must
+  be a whole multiple of it.**
 - **`collect::plan_adjacent_take` is the one machine-to-machine reach**, the
   assembler's pull and a supplier's fuel walking the same four tiles.
 - **A raid's flash is base-space too, and `render/base.rs` gates both draw

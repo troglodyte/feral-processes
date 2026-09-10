@@ -34,6 +34,16 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.148
+
+**The argument behind every load-bearing seam now lives in the memory graph,
+and `docs/seams.md` is gone.** All 331 entries moved across as `seam:<slug>`
+entities, verified byte-exact against the file before it was deleted; the
+`seams` skill carries the two calls that reach one. The seventeen doc
+comments that cited the file by name — sixteen in `crates/`, one in
+`assets/species/README.md` — now name the seam they always meant instead.
+No behaviour changes.
+
 ## 0.13.147
 
 **A Power Cell has tiers now, and one line of them drips instead of

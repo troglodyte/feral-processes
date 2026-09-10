@@ -34,6 +34,15 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.155
+
+**The deploy menu says how many of each structure you already have.** A row
+carries the count between its name and its cost, and carries nothing at all
+when the answer is none.
+
+**It is the same figure the grid's ceiling measures**, so a row tagged with
+a count you have already filled is the one the deploy is about to refuse.
+
 ## 0.13.154
 
 **A weapon may declare how wide its swing is.** The Scatter Lance sweeps a

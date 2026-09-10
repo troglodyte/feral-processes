@@ -61,6 +61,7 @@ mod racks;
 mod raids;
 mod refactor;
 mod research;
+mod research_graph;
 mod respec;
 mod respite;
 mod rig_tool;

@@ -98,6 +98,99 @@ pub enum ResearchState {
     },
 }
 
+/// Which way an arrow key moves on the research graph.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GraphDir {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+/// One node's place on the research flow chart: which column it sits in and
+/// how far down that column.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResearchCell {
+    pub id: ResearchId,
+    pub tier: usize,
+    pub slot: usize,
+}
+
+/// The research tree drawn as a grid — a cell per node, the edge list, and
+/// the two figures a renderer needs to size a box.
+///
+/// Keyed by `ResearchId` throughout and never by index into
+/// `Game::research_nodes()`, which re-sorts by `ResearchState` as the player
+/// buys things.
+///
+/// `tier` is the *longest* path from a root, so every edge points strictly
+/// rightward: a node with one shallow parent and one deep one takes the deep
+/// one's depth, and the short leg stretches across the gap rather than
+/// pointing backwards.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ResearchGraph {
+    /// In `(tier, slot)` order.
+    pub cells: Vec<ResearchCell>,
+    /// (prerequisite, dependent), both `ResearchId`.
+    pub edges: Vec<(ResearchId, ResearchId)>,
+    /// One past the deepest tier; 0 for an empty tree.
+    pub tiers: usize,
+    /// The slot count of the most crowded tier; 0 for an empty tree.
+    pub widest: usize,
+}
+
+impl ResearchGraph {
+    /// A linear scan of the cells. The shipped tree is 34 nodes and this is
+    /// called a handful of times a frame; an index map would be the
+    /// optimization ahead of evidence this repo's principles name.
+    pub fn cell(&self, id: &str) -> Option<&ResearchCell> {
+        self.cells.iter().find(|c| c.id == id)
+    }
+
+    /// Where an arrow key lands from `from`. Total: an id with no cell, or a
+    /// step off the edge of the grid, returns `from` itself.
+    ///
+    /// Up and down clamp rather than wrapping. A list wraps because its ends
+    /// are adjacent on screen; a column's are at opposite edges of the pane,
+    /// so a wrap there reads as the cursor teleporting.
+    pub fn step(&self, from: &str, dir: GraphDir) -> ResearchId {
+        let Some(cell) = self.cell(from) else {
+            return from.to_string();
+        };
+        let landed = match dir {
+            GraphDir::Up | GraphDir::Down => {
+                let want = match dir {
+                    GraphDir::Up => cell.slot.checked_sub(1),
+                    _ => Some(cell.slot + 1),
+                };
+                want.and_then(|slot| {
+                    self.cells
+                        .iter()
+                        .find(|c| c.tier == cell.tier && c.slot == slot)
+                })
+            }
+            GraphDir::Left | GraphDir::Right => {
+                let target = match dir {
+                    GraphDir::Left => cell.tier.checked_sub(1),
+                    _ => Some(cell.tier + 1),
+                };
+                target.filter(|t| *t < self.tiers).and_then(|target| {
+                    self.cells
+                        .iter()
+                        .filter(|c| c.tier == target)
+                        // The nearest slot, ties toward the lower one, so
+                        // the walk is reversible in the common case and a
+                        // held arrow key does not drift.
+                        .min_by_key(|c| (c.slot.abs_diff(cell.slot), c.slot))
+                })
+            }
+        };
+        landed
+            .map(|c| c.id.clone())
+            .unwrap_or_else(|| from.to_string())
+    }
+}
+
 /// One stack of cargo the player is carrying: `qty` of exactly this copy.
 /// A plain copy lives in `components::Inventory`, anything fused or rare in
 /// `components::GearCopies` — `GearCopy::is_plain` is which.

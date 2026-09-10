@@ -1900,3 +1900,147 @@ fn a_body_on_the_last_rung_braces_against_nobody() {
         "the last rung's brace outlived the wrap that follows it"
     );
 }
+
+/// A hostile's approach is walked, not teleported: every beat that steps
+/// moves it exactly one cell, and it takes as many beats as the walk is
+/// long.
+///
+/// **The regression this whole seam exists for.** Committed as one
+/// placement, a hostile crossed its entire allowance between two frames and
+/// read as a teleport.
+#[test]
+fn a_hostiles_walk_is_spent_one_cell_a_beat() {
+    use crate::tactical::ai::AiBeat;
+    use crate::tactical::reach::distance;
+
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 200);
+    let wild = pack[0];
+    assert!(wait_for_turn(&mut game, wild), "the hostile never acted");
+
+    let mut at = cell_of(&game, wild).expect("the hostile is on the board");
+    let mut steps = 0;
+    loop {
+        match game.tactical_ai_beat() {
+            AiBeat::Stepped => {
+                let now = cell_of(&game, wild).expect("the walker left the board");
+                assert_eq!(distance(at, now), 1, "a beat crossed more than one cell");
+                at = now;
+                steps += 1;
+                assert!(steps <= TACTICAL_MOVE_MAX, "the walk never ended");
+            }
+            AiBeat::Acted => break,
+            AiBeat::Idle => panic!("the hostile's turn was not the AI's to drive"),
+        }
+    }
+    assert!(
+        steps > 1,
+        "the fixture never made the hostile walk, so nothing was tested"
+    );
+}
+
+/// The walk is planned on the beat that takes its first step and read back
+/// by every beat after it — **one `GameRng` draw a turn, not one a cell**.
+///
+/// The case that holds it is a walk already spent: `Some(vec![])` is a body
+/// that has arrived and `None` is one that has not chosen yet, and a beat
+/// that read the two as one would plan a fresh approach — and draw again —
+/// every beat for the rest of the turn instead of acting.
+#[test]
+fn a_spent_walk_acts_rather_than_planning_a_fresh_one() {
+    use crate::tactical::ai::AiBeat;
+
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 200);
+    let wild = pack[0];
+    assert!(wait_for_turn(&mut game, wild), "the hostile never acted");
+    assert_eq!(
+        game.tactical_ai_beat(),
+        AiBeat::Stepped,
+        "the hostile had no approach to walk"
+    );
+
+    // Arrived: the plan is made and there is nothing left of it.
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .commit_walk(Vec::new());
+    let stood = cell_of(&game, wild).expect("the walker left the board");
+
+    assert_eq!(
+        game.tactical_ai_beat(),
+        AiBeat::Acted,
+        "a spent walk was re-planned instead of acted on"
+    );
+    assert_eq!(
+        cell_of(&game, wild).or(Some(stood)),
+        Some(stood),
+        "the body walked again on a turn it had already finished walking"
+    );
+}
+
+/// The two granularities are one turn. A fight watched a beat at a time and
+/// the same fight resolved in a single call have to reach the same board, or
+/// the arena is measuring a different game from the one being played.
+#[test]
+fn a_turn_and_the_beats_it_is_made_of_reach_the_same_board() {
+    use crate::tactical::ai::AiBeat;
+
+    let mut whole = game();
+    let mut paced = game();
+    let wild_whole = tactical_fight(&mut whole, 1, 200)[0];
+    let wild_paced = tactical_fight(&mut paced, 1, 200)[0];
+    assert!(wait_for_turn(&mut whole, wild_whole));
+    assert!(wait_for_turn(&mut paced, wild_paced));
+
+    assert!(whole.tactical_ai_turn(), "the whole turn was not driven");
+    for _ in 0..=TACTICAL_MOVE_MAX {
+        if paced.tactical_ai_beat() == AiBeat::Acted {
+            break;
+        }
+    }
+
+    assert_eq!(
+        cell_of(&whole, wild_whole),
+        cell_of(&paced, wild_paced),
+        "the paced fight ended the turn somewhere else"
+    );
+    let player = whole.player_entity();
+    assert_eq!(
+        hp_of(&whole, player),
+        hp_of(&paced, paced.player_entity()),
+        "the paced fight landed a different blow"
+    );
+}
+
+/// What a driver reads to know it owes a step rather than a turn. A body
+/// that has not set off yet is not walking — which is what buys the beat of
+/// anticipation before it does — and one that has arrived is not either.
+#[test]
+fn a_body_is_walking_only_between_its_first_step_and_its_last() {
+    use crate::tactical::ai::AiBeat;
+
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 200);
+    let wild = pack[0];
+    assert!(wait_for_turn(&mut game, wild), "the hostile never acted");
+    assert!(
+        !game.tactical_walking(),
+        "a body that has chosen nothing yet was called mid-walk"
+    );
+
+    assert_eq!(game.tactical_ai_beat(), AiBeat::Stepped);
+    assert!(
+        game.tactical_walking(),
+        "a body mid-approach reads as still"
+    );
+
+    for _ in 0..=TACTICAL_MOVE_MAX {
+        if game.tactical_ai_beat() == AiBeat::Acted {
+            break;
+        }
+    }
+    assert!(
+        !game.tactical_walking(),
+        "the turn ended with a walk still owed"
+    );
+}

@@ -6,8 +6,6 @@
     color: Magenta,
     build_cost: [
         ("portal_fragment", 24),
-        ("patch_routine",    4),
-        ("hardened_shell",   3),
         ("routine_disk",     4),
     ],
     zone_build_cost: [

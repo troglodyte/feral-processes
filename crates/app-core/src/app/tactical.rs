@@ -10,9 +10,17 @@
 //! there are no table rows to rewind and nothing is held back from the log.
 //! What this holds instead is a carry against `dt` — `advance_compile`'s
 //! rule, and for its reason — so the pace is the same on any machine.
+//!
+//! **A body's walk is paced too, and faster than its turn.** The engine
+//! spends a hostile's turn one `AiBeat` at a time; this decides how long
+//! each one is on screen, and a cell of an approach is not worth as long as
+//! the blow at the end of it.
 
-use crate::{App, GameKey, Mode, TACTICAL_TURNS_PER_SECOND, TacticalIntent};
+use crate::{
+    App, GameKey, Mode, TACTICAL_STEPS_PER_SECOND, TACTICAL_TURNS_PER_SECOND, TacticalIntent,
+};
 use feral_processes_engine::battle::SpecialOption;
+use feral_processes_engine::tactical::ai::AiBeat;
 use feral_processes_engine::tactical::turn::StepOutcome;
 
 impl App {
@@ -172,13 +180,20 @@ impl App {
             .is_some_and(|g| g.tactical_awaits_input())
     }
 
-    /// Spends the wild side's turns, one every `TACTICAL_TURNS_PER_SECOND`.
+    /// Spends the wild side's turn a beat at a time: a cell of a walk every
+    /// `TACTICAL_STEPS_PER_SECOND`, an action every
+    /// `TACTICAL_TURNS_PER_SECOND`.
     ///
     /// `advance_reveal`'s sibling and its counterpart in the second combat
     /// model, called every frame from the same place. The carry is what
-    /// makes the pace independent of the frame rate, and the loop is a
-    /// `while` so a frame long enough to owe two turns spends two rather
-    /// than dropping one.
+    /// makes the pace independent of the frame rate, and the loop spends
+    /// every beat a long frame owes rather than dropping the surplus.
+    ///
+    /// **The wait is derived from the fight rather than remembered**, so
+    /// there is no second piece of pacing state to hold in step with the
+    /// first: `Game::tactical_walking` is true exactly between a body's
+    /// first step and its last, which is the same span that owes the faster
+    /// rate.
     pub fn advance_tactical(&mut self, dt: f32) {
         if !matches!(
             self.mode,
@@ -194,20 +209,32 @@ impl App {
             self.tactical_carry = 0.0;
             return;
         }
-        self.tactical_carry += dt * TACTICAL_TURNS_PER_SECOND;
-        while self.tactical_carry >= 1.0 {
-            self.tactical_carry -= 1.0;
-            let ran = self
+        self.tactical_carry += dt;
+        loop {
+            let beat = self.tactical_beat();
+            if self.tactical_carry < beat {
+                return;
+            }
+            self.tactical_carry -= beat;
+            let spent = self
                 .game
                 .as_mut()
-                .map(|g| g.tactical_ai_turn())
-                .unwrap_or(false);
-            if !ran {
-                break;
+                .map(|g| g.tactical_ai_beat())
+                .unwrap_or(AiBeat::Idle);
+            if spent == AiBeat::Idle {
+                return;
             }
             if self.settle_tactical_end() {
                 return;
             }
+        }
+    }
+
+    /// How long the wild side waits before its next beat.
+    fn tactical_beat(&self) -> f32 {
+        match self.game.as_ref().is_some_and(|g| g.tactical_walking()) {
+            true => 1.0 / TACTICAL_STEPS_PER_SECOND,
+            false => 1.0 / TACTICAL_TURNS_PER_SECOND,
         }
     }
 

@@ -10,6 +10,14 @@
 //! do it. The action is decided *first* because a routine's range is what a
 //! cell is scored against — a body that picked its ground before it knew
 //! whether it was closing or holding off would have to guess.
+//!
+//! **The walk is spent one cell at a time, through the door the player's own
+//! arrow keys go through.** A turn is a run of `AiBeat`s — a step, then
+//! another step, then the action — because a hostile that crossed six cells
+//! between two frames read as a teleport, and a fight the player is watching
+//! is the one thing that makes a path observably different from its
+//! endpoint. `tactical_ai_turn` is still the whole turn: it is this loop,
+//! run to the end.
 
 use bevy_ecs::prelude::Entity;
 
@@ -20,6 +28,7 @@ use crate::policy;
 use crate::resources::GameRng;
 use crate::tactical::map::Board;
 use crate::tactical::reach::{distance, line_of_sight};
+use crate::tactical::turn::StepOutcome;
 use crate::tactical::{TacticalBattle, reach};
 use crate::tuning::{
     ENEMY_ROUTINE_MIN_COOLDOWN, TACTICAL_AI_CLOSING_WEIGHT, TACTICAL_AI_CROWDING_WEIGHT,
@@ -65,6 +74,23 @@ impl Intent {
             ),
         }
     }
+}
+
+/// What one beat of a body's turn spent.
+///
+/// Three answers rather than a `bool` because a driver pacing the fight owes
+/// a different wait after each: a step is one cell of a walk and the next is
+/// due soon, an action ends the turn and the next body is due after a beat
+/// the player can read the blow in, and there was nothing to drive at all.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AiBeat {
+    /// The body walked one cell. The rest of its turn is still owed.
+    Stepped,
+    /// The body spent its action — or passed — and the turn has been handed
+    /// on.
+    Acted,
+    /// Nobody this file may drive is acting.
+    Idle,
 }
 
 /// The two sides of a fight as the scoring reads them: where everyone the
@@ -171,6 +197,36 @@ impl Game {
         true
     }
 
+    /// Spends one beat of the acting hostile's turn: one cell of its walk,
+    /// or the action that ends it.
+    ///
+    /// **`tactical_ai_turn`'s fine grain, and the coarse one is written in
+    /// terms of it** rather than beside it — a fight watched a beat at a time
+    /// and the same fight resolved in one call have to reach the same board,
+    /// and two implementations of a turn is how they would come not to.
+    ///
+    /// A driver that wants the walk drawn calls this and paces itself off the
+    /// answer; a driver that only wants the fight resolved calls
+    /// `tactical_ai_turn`.
+    pub fn tactical_ai_beat(&mut self) -> AiBeat {
+        let Some(actor) = self.tactical_ai_actor() else {
+            return AiBeat::Idle;
+        };
+        self.run_tactical_beat(actor, TACTICAL_AI_TEMPERATURE)
+    }
+
+    /// Whether the acting body is part-way through a walk it has committed
+    /// to, and so owes a step rather than a turn.
+    ///
+    /// `false` with no fight open, and `false` on a turn nothing has planned
+    /// yet — a body about to set off is not walking, which is what buys the
+    /// beat of anticipation before it does.
+    pub fn tactical_walking(&self) -> bool {
+        self.world
+            .get_resource::<TacticalBattle>()
+            .is_some_and(|battle| battle.walking())
+    }
+
     /// Runs the acting body's turn **whichever side it is on**, and reports
     /// whether there was one.
     ///
@@ -197,12 +253,27 @@ impl Game {
     /// One body's whole turn: decide, walk, act, hand on.
     ///
     /// Shared by the two doors above so the fight a measurement watched is
-    /// the fight a player would have watched.
+    /// the fight a player would have watched — and **the beat loop rather
+    /// than a second spelling of a turn**, so that holds for a fight paced
+    /// in front of the player too.
     fn run_tactical_turn(&mut self, actor: Entity, temperature: f32) {
+        while self.run_tactical_beat(actor, temperature) == AiBeat::Stepped {}
+    }
+
+    /// One beat of `actor`'s turn: the next cell of its walk, or the action
+    /// that ends the turn.
+    ///
+    /// The walk is planned on the beat that takes its first step and read
+    /// back off `TacticalBattle` by every beat after it, which is what holds
+    /// this to **one `GameRng` draw a turn** rather than one a cell.
+    fn run_tactical_beat(&mut self, actor: Entity, temperature: f32) -> AiBeat {
         let Sides { targets, allies } = self.tactical_sides(actor);
         if targets.is_empty() {
             self.tactical_end_turn();
-            return;
+            return AiBeat::Acted;
+        }
+        if self.step_along_walk(actor) {
+            return AiBeat::Stepped;
         }
 
         // `wild_routine_ready` and not `ability_unavailable`: a hostile holds
@@ -211,11 +282,22 @@ impl Game {
         //
         // A party body is offered none of it — see `tactical_drive_turn`,
         // the only way one reaches this at all.
+        //
+        // Asked again on the beat that acts rather than carried across the
+        // walk: it reads cooldowns and a routine list, neither of which a
+        // walk moves, so the answer is the one the walk was scored against
+        // and storing an `AbilityDef` on the fight would be a second copy of
+        // it.
         let intent = match self.wild_routine_ready(actor) {
             Some(def) if self.world.get::<Hostile>(actor).is_some() => Intent::Routine(def),
             _ => Intent::Swing,
         };
-        self.walk_to_best_cell(actor, &intent, &targets, &allies, temperature);
+        if !self.world.resource::<TacticalBattle>().walk_planned() {
+            self.walk_to_best_cell(actor, &intent, &targets, &allies, temperature);
+            if self.step_along_walk(actor) {
+                return AiBeat::Stepped;
+            }
+        }
 
         match intent {
             Intent::Routine(def) => self.run_tactical_intent(actor, def, &targets),
@@ -238,6 +320,43 @@ impl Game {
             == Some(actor);
         if still_up {
             self.tactical_end_turn();
+        }
+        AiBeat::Acted
+    }
+
+    /// Takes the next cell off `actor`'s committed walk and steps it there,
+    /// reporting whether there was one.
+    ///
+    /// **Through `Game::tactical_step`, the door the player's own arrow keys
+    /// go through**, so a hostile's step is priced, bounded and refused by
+    /// exactly the code a companion's is — the alternative is a second
+    /// implementation of what a step costs, and the one that drifts is the
+    /// one nobody plays.
+    ///
+    /// A refused step abandons the rest of the walk rather than retrying it:
+    /// the path was legal when it was planned and nothing on this board moves
+    /// between beats, so a refusal means the plan is wrong about the world
+    /// and the body is better off acting from where it stands than standing
+    /// still forever.
+    fn step_along_walk(&mut self, actor: Entity) -> bool {
+        let battle = self.world.resource::<TacticalBattle>();
+        let Some(from) = battle.cell_of(actor) else {
+            return false;
+        };
+        let Some(next) = self.world.resource_mut::<TacticalBattle>().take_walk_step() else {
+            return false;
+        };
+        let dir = (next.0 - from.0, next.1 - from.1);
+        match self.tactical_step(dir) {
+            StepOutcome::Moved => true,
+            // `get_resource_mut`, because a departure closes the fight and
+            // takes the resource with it.
+            StepOutcome::Departed | StepOutcome::Refused => {
+                if let Some(mut battle) = self.world.get_resource_mut::<TacticalBattle>() {
+                    battle.commit_walk(Vec::new());
+                }
+                false
+            }
         }
     }
 
@@ -268,14 +387,18 @@ impl Game {
         sides
     }
 
-    /// Picks the cell `actor` will act from and puts it there.
+    /// Picks the cell `actor` will act from and commits the walk to it.
     ///
-    /// **The whole walk is committed as one placement** rather than as a
-    /// run of `tactical_step`s. Nothing on this board reacts to a body
-    /// mid-walk — there are no opportunity attacks and no cell that does
-    /// anything on entry — so a path would be a sequence with no observable
-    /// difference from its endpoint, and `movement_field` has already
-    /// answered which endpoints are legal and what each costs.
+    /// **The cell is chosen once and the path to it is spent one step at a
+    /// time**, through `Game::tactical_step`. The choice is still a single
+    /// decision — nothing on this board reacts to a body mid-walk, so there
+    /// is nothing to reconsider between cells — but the steps are real,
+    /// because a fight is watched and a body crossing six cells in one frame
+    /// reads as a teleport rather than as an approach.
+    ///
+    /// The path is descended from the field `movement_field` already
+    /// answered, so which cells are legal and what each costs is settled in
+    /// one place.
     fn walk_to_best_cell(
         &mut self,
         actor: Entity,
@@ -284,9 +407,18 @@ impl Game {
         allies: &[(i32, i32)],
         temperature: f32,
     ) {
+        // Committed on every path out, empty ones included: an unplanned walk
+        // is re-planned by the next beat, and a body that found nowhere worth
+        // going would draw again every beat for the rest of the turn.
+        self.world
+            .resource_mut::<TacticalBattle>()
+            .commit_walk(Vec::new());
         let allowance = self.movement_allowance(actor);
         let battle = self.world.resource::<TacticalBattle>();
         let field = reach::movement_field(battle, actor, allowance);
+        let Some(from) = battle.cell_of(actor) else {
+            return;
+        };
         if field.is_empty() {
             return;
         }
@@ -294,11 +426,11 @@ impl Game {
         // Sorted, because `movement_field` answers a `HashMap` and iteration
         // order over one is not stable between runs: two equally-scored
         // cells must not resolve differently in a seeded fight.
-        let mut cells: Vec<((i32, i32), u32)> = field.into_iter().collect();
-        cells.sort_by_key(|&((x, y), _)| (y, x));
+        let mut cells: Vec<(i32, i32)> = field.keys().copied().collect();
+        cells.sort_by_key(|&(x, y)| (y, x));
         let scores: Vec<f32> = cells
             .iter()
-            .map(|&(cell, _)| cell_score(&battle.board, cell, band, targets, allies))
+            .map(|&cell| cell_score(&battle.board, cell, band, targets, allies))
             .collect();
 
         // One draw a turn, and none at all at temperature zero:
@@ -309,12 +441,12 @@ impl Game {
             let mut rng = self.world.resource_mut::<GameRng>();
             policy::sample_scored(&scores, temperature, &mut rng.0)
         };
-        let (cell, cost) = cells[pick];
-
-        let mut battle = self.world.resource_mut::<TacticalBattle>();
-        if battle.move_to(actor, cell) {
-            battle.spend(cost);
-        }
+        let cell = cells[pick];
+        let battle = self.world.resource::<TacticalBattle>();
+        let path = reach::path_to(&battle.board, &field, from, cell);
+        self.world
+            .resource_mut::<TacticalBattle>()
+            .commit_walk(path);
     }
 
     /// Aims the routine `actor` has already committed to and runs it.

@@ -292,6 +292,12 @@
   map before it was gated. It also routes `Fx`, and a tactical fight is
   drawn on the map, so its hits belong to the map's effects layer. What
   paces the wild side instead is `App::advance_tactical`, a carry against
-  `dt` at `TACTICAL_TURNS_PER_SECOND` — `advance_compile`'s rule and its
-  reason, since one turn per rendered frame ties the fight's pace to the
-  frame rate the machine happens to manage.
+  `dt` — `advance_compile`'s rule and its reason, since one beat per rendered
+  frame ties the fight's pace to the frame rate the machine happens to
+  manage. **The carry is in seconds because there are two rates**: a body
+  mid-walk owes a cell every `TACTICAL_STEPS_PER_SECOND`, everything else a
+  beat every `TACTICAL_TURNS_PER_SECOND`, and a carry counted in beats cannot
+  be spent against the other one. Which is owed is **derived**, off
+  `Game::tactical_walking`, rather than remembered in a second field beside
+  the carry — and it reads false on a turn nothing has planned yet, which is
+  what buys the beat of anticipation before a body sets off.

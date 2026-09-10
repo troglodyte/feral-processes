@@ -22,6 +22,7 @@ use crate::tuning::{
     DEFAULT_BASE_SPEED, TACTICAL_MOVE_BASE, TACTICAL_MOVE_MAX, TACTICAL_MOVE_MIN,
     TACTICAL_MOVE_SPEED_STEP,
 };
+use crate::world::NEIGHBOURS;
 
 /// What a body of `speed` may spend on movement in one tactical turn, or
 /// `authored` where its species names a figure of its own.
@@ -104,6 +105,57 @@ pub fn movement_field(
     });
     field.retain(|_, cost| *cost <= allowance);
     field
+}
+
+/// The cells a body at `from` walks through to reach `to`, in the order it
+/// enters them — `to` last, and the cell it is standing on left out, so the
+/// length is the number of steps the walk costs it in turns of the pacing
+/// loop.
+///
+/// **Descended from the cost field rather than searched for again.**
+/// `walk_field` prices a step by the cell being *entered*, so a cell's
+/// predecessor is a neighbour whose cost is exactly this cell's less what
+/// entering this cell cost — one arithmetic identity, and no second walk to
+/// come adrift of the first about which cells are legal.
+///
+/// **Tie-broken in the board's reading order**, (y, x), for
+/// `walk_to_best_cell`'s reason: `movement_field` answers a `HashMap` and
+/// iteration order over one is not stable between runs, so two equally short
+/// approaches must not be walked differently in a seeded fight.
+///
+/// Empty where `to` is the cell already stood on, and empty where the field
+/// never reached it — a caller with no path takes no steps and acts from
+/// where it stands, which is the same answer either way.
+pub fn path_to(
+    board: &Board,
+    field: &HashMap<(i32, i32), u32>,
+    from: (i32, i32),
+    to: (i32, i32),
+) -> Vec<(i32, i32)> {
+    let mut path = Vec::new();
+    let mut cell = to;
+    while cell != from {
+        let Some(prev) = field
+            .get(&cell)
+            .zip(board.cell(cell.0, cell.1).movement_cost())
+            .and_then(|(&cost, entering)| cost.checked_sub(entering))
+            .and_then(|before| {
+                let mut back: Vec<(i32, i32)> = NEIGHBOURS
+                    .iter()
+                    .map(|(dx, dy)| (cell.0 + dx, cell.1 + dy))
+                    .filter(|n| field.get(n) == Some(&before))
+                    .collect();
+                back.sort_by_key(|&(x, y)| (y, x));
+                back.first().copied()
+            })
+        else {
+            return Vec::new();
+        };
+        path.push(cell);
+        cell = prev;
+    }
+    path.reverse();
+    path
 }
 
 /// How far apart two cells are, in steps.
@@ -277,6 +329,86 @@ mod tests {
         let mut world = World::new();
         let bodies = (0..3).map(|_| world.spawn_empty().id()).collect();
         (TacticalBattle::open(spec(), Board::from_rows(rows)), bodies)
+    }
+
+    /// The path is what the pacing loop spends, one cell a beat, so it holds
+    /// the cells entered and never the one already stood on.
+    #[test]
+    fn a_path_holds_the_cells_walked_and_not_the_one_stood_on() {
+        let (mut battle, bodies) = fight(&["......"; 6]);
+        battle.place(bodies[0], (0, 0));
+        let field = movement_field(&battle, bodies[0], 6);
+        let path = path_to(&battle.board, &field, (0, 0), (3, 0));
+
+        assert_eq!(path, vec![(1, 0), (2, 0), (3, 0)]);
+        assert_eq!(
+            path_to(&battle.board, &field, (0, 0), (0, 0)),
+            Vec::new(),
+            "standing still is no steps at all"
+        );
+    }
+
+    /// Every entry is one Chebyshev step from the last, which is what makes
+    /// each one a legal `Game::tactical_step`.
+    #[test]
+    fn every_entry_is_one_step_from_the_one_before_it() {
+        let (mut battle, bodies) = fight(&[
+            "..........",
+            "..........",
+            "..XXXXXX..",
+            "..........",
+            "..........",
+            "..........",
+            "..........",
+            "..........",
+            "..........",
+            "..........",
+        ]);
+        battle.place(bodies[0], (4, 0));
+        let field = movement_field(&battle, bodies[0], 8);
+        let path = path_to(&battle.board, &field, (4, 0), (4, 4));
+
+        assert!(
+            !path.is_empty(),
+            "the far side is reachable around the wall"
+        );
+        for pair in std::iter::once(&(4, 0))
+            .chain(path.iter())
+            .collect::<Vec<_>>()[..]
+            .windows(2)
+        {
+            assert_eq!(distance(*pair[0], *pair[1]), 1, "{path:?} jumped a cell");
+        }
+        assert!(
+            path.iter().all(|&(x, y)| battle.board.walkable(x, y)),
+            "{path:?} crossed ground it cannot stand on"
+        );
+        assert_eq!(path.last(), Some(&(4, 4)));
+    }
+
+    /// Rough ground costs two, so the descent has to subtract what entering
+    /// a cell cost rather than assuming every step is one.
+    #[test]
+    fn a_path_across_rough_ground_still_lands_on_its_cell() {
+        let (mut battle, bodies) =
+            fight(&["......", ".~~~~.", "......", "......", "......", "......"]);
+        battle.place(bodies[0], (1, 0));
+        let field = movement_field(&battle, bodies[0], 8);
+        let path = path_to(&battle.board, &field, (1, 0), (2, 2));
+
+        assert_eq!(path.last(), Some(&(2, 2)), "path was {path:?}");
+        assert!(!path.is_empty());
+    }
+
+    /// A cell outside the budget was never reached, and a caller handed no
+    /// path acts from where it stands.
+    #[test]
+    fn a_cell_the_field_never_reached_has_no_path() {
+        let (mut battle, bodies) = fight(&["......"; 6]);
+        battle.place(bodies[0], (0, 0));
+        let field = movement_field(&battle, bodies[0], 2);
+
+        assert_eq!(path_to(&battle.board, &field, (0, 0), (5, 5)), Vec::new());
     }
 
     /// A slow body, an average one and a fast one must actually differ, and

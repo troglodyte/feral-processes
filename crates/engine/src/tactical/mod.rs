@@ -74,6 +74,16 @@ pub struct TacticalBattle {
     /// turn, so this is only ever read between the action landing and the
     /// turn being handed on.
     acted: bool,
+    /// The cells the acting body has committed to walking and has not walked
+    /// yet, in the order it will enter them.
+    ///
+    /// **`None` is "has not chosen yet" and `Some(vec![])` is "has chosen to
+    /// stop here"**, which is the whole reason this is not a bare `Vec`: a
+    /// hostile's walk is spent one cell a beat, and a beat that found the
+    /// list empty must tell "the walk is done, act now" from "no walk has
+    /// been planned" — read as one, the AI plans a fresh walk every beat and
+    /// draws `GameRng` once per cell instead of once per turn.
+    walk: Option<Vec<(i32, i32)>>,
     /// How many times the order has come round, from 1. The results
     /// header's figure and the telemetry's alike.
     pub round: u32,
@@ -106,6 +116,7 @@ impl TacticalBattle {
             turn: 0,
             spent: 0,
             acted: false,
+            walk: None,
             round: 1,
             outmatched: false,
         }
@@ -213,6 +224,35 @@ impl TacticalBattle {
         self.spent += cost;
     }
 
+    /// Commits the acting body to a walk, to be spent one cell at a time.
+    ///
+    /// Committing an empty path is how a body says it is staying where it
+    /// is: the walk is then planned and finished at once.
+    pub fn commit_walk(&mut self, path: Vec<(i32, i32)>) {
+        self.walk = Some(path);
+    }
+
+    /// Whether the acting body has already chosen where it is walking.
+    pub fn walk_planned(&self) -> bool {
+        self.walk.is_some()
+    }
+
+    /// The next cell of the committed walk, taken off it.
+    pub fn take_walk_step(&mut self) -> Option<(i32, i32)> {
+        let walk = self.walk.as_mut()?;
+        match walk.is_empty() {
+            true => None,
+            false => Some(walk.remove(0)),
+        }
+    }
+
+    /// Whether the acting body is part-way through a walk it has committed
+    /// to. What a driver pacing the fight reads to know it owes a step
+    /// rather than a turn.
+    pub fn walking(&self) -> bool {
+        self.walk.as_ref().is_some_and(|walk| !walk.is_empty())
+    }
+
     /// Records that the acting body has acted. The caller ends the turn —
     /// this only says the action landed, because a body killed by its own
     /// fumble leaves the order instead.
@@ -231,6 +271,7 @@ impl TacticalBattle {
     fn begin_turn(&mut self) {
         self.spent = 0;
         self.acted = false;
+        self.walk = None;
     }
 
     /// Brings the cursor back inside the order, counting a round each time
@@ -425,6 +466,37 @@ mod tests {
         battle.end_turn();
         assert_eq!(battle.spent(), 0);
         assert!(!battle.acted());
+    }
+
+    /// `None` is "has not chosen yet" and `Some(vec![])` is "has arrived",
+    /// and the whole walk-a-cell-a-beat pacing rests on the difference.
+    #[test]
+    fn a_planned_walk_and_an_unplanned_one_are_not_the_same_answer() {
+        let (mut battle, _) = seated();
+        assert!(!battle.walk_planned(), "a fresh turn has chosen nothing");
+        assert!(!battle.walking());
+
+        battle.commit_walk(vec![(1, 1), (2, 2)]);
+        assert!(battle.walk_planned());
+        assert!(battle.walking());
+        assert_eq!(battle.take_walk_step(), Some((1, 1)));
+        assert_eq!(battle.take_walk_step(), Some((2, 2)));
+
+        assert_eq!(battle.take_walk_step(), None, "the walk is spent");
+        assert!(battle.walk_planned(), "a spent walk is still a plan");
+        assert!(!battle.walking(), "a body that has arrived is not walking");
+    }
+
+    /// A walk belongs to the turn that committed it, so the next body starts
+    /// having chosen nothing.
+    #[test]
+    fn handing_the_turn_on_clears_the_committed_walk() {
+        let (mut battle, _) = seated();
+        battle.commit_walk(vec![(1, 1)]);
+        battle.end_turn();
+
+        assert!(!battle.walk_planned());
+        assert_eq!(battle.take_walk_step(), None);
     }
 
     /// A body dying on somebody else's turn costs the order nothing: the

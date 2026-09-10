@@ -723,11 +723,26 @@
   `movement_field` answers a `HashMap`, iteration order over one is not stable
   between runs, and two equally-scored cells resolving differently in a seeded
   fight surfaces as an intermittent failure somewhere else entirely, so the
-  cells are sorted before they are scored. The walk is committed as one
-  placement, not a run of `tactical_step`s: nothing on the board reacts to a
-  body mid-walk, so a path has no observable difference from its endpoint, and
-  a renderer that wants to animate it can descend the cost field. See
-  `docs/seams.md`.
+  cells are sorted before they are scored. See `docs/seams.md`.
+- **A hostile's walk is a run of real steps, one to a beat.** It used to be
+  committed as a single placement, argued for on the grounds that nothing on
+  the board reacts to a body mid-walk — so a path had no observable difference
+  from its endpoint. The hole in that was the player: six cells crossed
+  between two frames reads as a teleport, not an approach, in a model whose
+  whole mechanic is positioning. Animating it in the renderer instead cannot
+  work past the walk, because the action resolves in the same call as the
+  placement and the blow would land while the glyph was still sliding. So a
+  turn is a run of `AiBeat`s, and `tactical_ai_turn` is **written as that
+  loop** rather than beside it, or the arena would measure a different fight
+  from the one played. Three traps. The path is descended from the cost field
+  (`reach::path_to`) — a predecessor is a neighbour whose cost is this cell's
+  less what *entering this cell* cost, which `Rough` ground costing two is why
+  it cannot be "minus one". `TacticalBattle::walk` is an `Option<Vec<_>>`
+  because **`None` is "has not chosen yet" and `Some(vec![])` is "has
+  arrived"**: read as one, a spent walk is re-planned every beat and the one
+  draw a turn above becomes one a cell. And the steps go through
+  `Game::tactical_step`, the player's own door, so a hostile's step is not a
+  second implementation of what a step costs. See `docs/seams.md`.
 
 - **`Game::start_battle` is where the model is chosen, by inspecting the
   pack.** The toggle says a player wants tactical fights; it does not say

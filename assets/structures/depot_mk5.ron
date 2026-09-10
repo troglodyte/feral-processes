@@ -1,7 +1,7 @@
 (
     id: "depot_mk5",
     name: "Depot Mk5",
-    description: "Eight hundred units, addressed rather than stacked. A base with one of these clogs because a crew ran short, never because the shelf did.",
+    description: "Storage, 800 units, Walk up to it and press c to access.",
     glyph: 'D',
     sprite: Some("depot"),
     color: Cyan,

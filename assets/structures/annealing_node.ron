@@ -1,7 +1,7 @@
 (
     id: "annealing_node",
     name: "Annealing Node",
-    description: "Assign a program here and it cycles Core Fragments from whatever is touching it into Annealed Cores. Put it next to a Mining Node, and a Refactor Bench next to it.",
+    description: "Core Fragments into Annealed Cores.",
     glyph: 'A',
     color: Cyan,
     build_cost: [("core_fragment", 16)],

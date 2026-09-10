@@ -1,7 +1,7 @@
 (
     id: "teardown_rig",
     name: "Teardown Rig",
-    description: "Hand it the programs you dropped and it strips them while you are out. Post a program here, keep it powered, and collect what it leaves in the buffer. It is an extraction bench too, so upgrading it pays your own teardowns as well.",
+    description: "Extracts items from downed programs.",
     glyph: 'V',
     color: Orange,
     build_cost: [("core_fragment", 20), ("bytecode_block", 6)],

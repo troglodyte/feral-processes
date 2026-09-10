@@ -1,7 +1,7 @@
 (
     id: "portal",
     name: "Zone Portal",
-    description: "Breaches into the next zone. The bill draws Portal Fragments from the Stack and terminal products off the base — Patch Routines, Hardened Shell and Routine Disks to start, with Trace Sniffers, Cache Grain and a Recompile Kernel joining as deeper sectors open. Deeper zones cost more of everything, and nothing in the bill survives the trip — only Credits cross.",
+    description: "Breaches into the next zone. Upgrade mechanism, beware - stronger entities will appear.",
     glyph: 'O',
     color: Magenta,
     build_cost: [

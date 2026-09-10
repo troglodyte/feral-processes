@@ -1,7 +1,7 @@
 (
     id: "depot_mk2",
     name: "Depot Mk2",
-    description: "Twice the shelf of a plain Depot: a hundred units, so a base keeps producing through a night you spend somewhere else. Takes and gives exactly as the first one does, filter included.",
+    description:  "Storage, 100 units, Walk up to it and press c to access.",
     glyph: 'D',
     sprite: Some("depot"),
     color: Cyan,

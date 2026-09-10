@@ -1,7 +1,7 @@
 (
     id: "depot_mk4",
     name: "Depot Mk4",
-    description: "Four hundred units. Past here a Depot is no longer a buffer between two machines — it is what the base is holding, and a sortie can be provisioned straight out of it.",
+    description: "Storage, 400 units, Walk up to it and press c to access.",
     glyph: 'D',
     sprite: Some("depot"),
     color: Cyan,

@@ -1,7 +1,7 @@
 (
     id: "refinery",
     name: "Refinery",
-    description: "Assign a program here and it compiles Core Fragments from whatever is touching it into Bytecode Blocks. Put it next to a Mining Node.",
+    description: "Core Fragments into Bytecode Blocks.",
     glyph: 'B',
     color: Orange,
     build_cost: [("core_fragment", 18)],

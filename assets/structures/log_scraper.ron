@@ -1,7 +1,7 @@
 (
     id: "log_scraper",
     name: "Log Scraper",
-    description: "Assign a program here to scrape Raw Trace off the Grid's chatter. Yield is a chance per cycle that improves as the scraper is upgraded.",
+    description: "Mine Raw Trace off the Grid's chatter.",
     glyph: 'T',
     color: Cyan,
     build_cost: [("core_fragment", 14)],

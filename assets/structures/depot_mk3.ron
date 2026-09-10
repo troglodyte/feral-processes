@@ -1,8 +1,7 @@
 (
     id: "depot_mk3",
     name: "Depot Mk3",
-    description: "Two hundred units, racked on cache fabric. Enough that a full production chain can run itself out rather than stalling on the first machine with nowhere to put its output.",
-    glyph: 'D',
+    description: "Storage, 200 units, Walk up to it and press c to access.",
     sprite: Some("depot"),
     color: Cyan,
     build_cost: [("core_fragment", 55), ("cache_grain", 4)],

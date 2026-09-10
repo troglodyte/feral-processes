@@ -1,7 +1,7 @@
 (
     id: "depot",
     name: "Depot",
-    description: "The smallest shelf a base can stand up: fifty units, and a clogged machine somewhere to empty into. Walk up to it and press c to take from it or hand your own cargo over, and F from there to set what it will accept.",
+    description: "The smallest storage, fifty units, Walk up to it and press c to access.",
     glyph: 'D',
     color: Cyan,
     build_cost: [("core_fragment", 12)],

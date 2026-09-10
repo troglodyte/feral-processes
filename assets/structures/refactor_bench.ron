@@ -1,7 +1,7 @@
 (
     id: "refactor_bench",
     name: "Refactor Bench",
-    description: "Assign a program here and it builds Recompile Kernels out of Annealed Cores from whatever is touching it. Compiles the three stat upgrades by hand. Put it next to an Annealing Node.",
+    description: "Recompile Kernels from Annealed Cores.",
     glyph: 'X',
     color: Orange,
     build_cost: [("core_fragment", 22), ("annealed_core", 4)],

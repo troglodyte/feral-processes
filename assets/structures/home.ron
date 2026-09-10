@@ -1,7 +1,7 @@
 (
     id: "home",
     name: "Home",
-    description: "Anchors your base — everything else must be deployed on laid floor, and demolishing it cascades. GC Entropy Sweeps can't touch it, it is where a Symlink puts you down, and it supplies your base's Grid on its own, before you ever build a Recharger.",
+    description: "Anchors your base, supplies a modest amount of grid energy.",
     glyph: 'H',
     color: Green,
     build_cost: [],

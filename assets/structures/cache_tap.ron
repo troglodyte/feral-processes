@@ -1,7 +1,7 @@
 (
     id: "cache_tap",
     name: "Cache Tap",
-    description: "Assign a program here to draw Cache Grain out of the sector's cache fabric. Slower than a Mining Node and worth more: the second zone and everything past it is built out of what this produces.",
+    description: "Draw Cache Grain out of the sector's cache fabric. (Mining node)",
     glyph: 'C',
     color: Cyan,
     build_cost: [("core_fragment", 20), ("blank_substrate", 2)],

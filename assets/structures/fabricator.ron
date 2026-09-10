@@ -1,7 +1,7 @@
 (
     id: "fabricator",
     name: "Fabricator",
-    description: "Compile bench for researched module and utility recipes — the gear won't appear in the craft menu until one is standing, and every tier you upgrade it to compiles better copies. Assign a program and it builds Trace Sniffers out of Logic Wafers from whatever is touching it. Put it next to a Transcriber.",
+    description: "Trace Sniffers out of Logic Wafers, also the bench for module and utility recipes.",
     glyph: '*',
     color: White,
     build_cost: [("core_fragment", 18)],

@@ -1,7 +1,7 @@
 (
     id: "repair_bay",
     name: "Repair Bay",
-    description: "A cradle and a spool of spare instructions. A program of yours that went down in a fight walks here on its own, is written back up to full Integrity a tick at a time, and stands off the bench when it's whole. Without one, a downed program stays down. No worker, no input.",
+    description: "Repairs downed programs. A cradle and a spool of spare instructions.",
     glyph: 'r',
     color: Green,
     build_cost: [("core_fragment", 16)],

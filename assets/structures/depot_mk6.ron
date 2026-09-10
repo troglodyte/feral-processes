@@ -1,7 +1,7 @@
 (
     id: "depot_mk6",
     name: "Depot Mk6",
-    description: "Sixteen hundred units, and the deepest shelf anything in the sector knows how to compile. What a base of this size runs out of is bodies to carry things to it.",
+    description: "Storage, 1600 units, Walk up to it and press c to access.",
     glyph: 'D',
     sprite: Some("depot"),
     color: Cyan,

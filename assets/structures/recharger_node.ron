@@ -1,7 +1,7 @@
 (
     id: "recharger_node",
     name: "Recharger Node",
-    description: "Trickles Power back into you every tick while you stand anywhere on your base, and separately supplies the base's Grid whether you're there or not — a different resource, same word. No worker to post, but it burns a Power Cell to keep either half running — out of its own hopper or off any buffer beside it — and goes quiet on both the moment it can't pay. The base staff walk one over from a shelf when nothing is within reach.",
+    description: "Base power source, supplies the base's Grid. It burns a Power Cell to keep running.",
     glyph: 'z',
     color: Orange,
     build_cost: [("core_fragment", 10)],

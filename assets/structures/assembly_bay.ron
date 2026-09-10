@@ -1,7 +1,7 @@
 (
     id: "assembly_bay",
     name: "Assembly Bay",
-    description: "Assign a program here and it builds Patch Routines out of Charge Coils from whatever is touching it. Put it next to a Winding Node.",
+    description: "Builds Patch Routines out of Charge Coils.",
     glyph: 'Y',
     color: Magenta,
     build_cost: [("core_fragment", 20), ("charge_coil", 4)],

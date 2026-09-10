@@ -1248,6 +1248,9 @@ relying on one, and correct all three places if it has moved.
   `FieldBuffKind::scales_with_invoker`.
 - **"Raid" is the code's word and "GC Entropy Sweep" is the player's.** The
   `.ron` fields are mod schema and deliberately kept their names.
+- **A fight's vocabulary is security, not swordplay** — an attempt lands,
+  lands unchecked, fumbles or is refused, Bleed is a leak and Stun a stall,
+  and the unit is Integrity rather than damage.
 - **`world.get::<Stats>(e).is_none()` is the idiom for "this entity is
   gone"** — don't reach for `World::get_entity`.
 - **There is one place a runtime path is decided,

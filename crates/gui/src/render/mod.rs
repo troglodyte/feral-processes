@@ -58,6 +58,7 @@ mod notify;
 mod party;
 mod popup;
 mod progression;
+mod research_graph;
 mod rig_tool;
 mod routines;
 mod settlement;

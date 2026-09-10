@@ -5,7 +5,7 @@
     // across a whole group against segfault_v3's seventeen into one face is
     // the premium, and the four-round cooldown is what stops it being the
     // only routine anyone would ever field.
-    description: "Tear a whole group open and leave every one of them bleeding",
+    description: "Split a whole group open and leave every one of them leaking",
     target: WholeEnemyGroup,
     effect: Damage(power: 22, spread: 6, status: Some((kind: Bleed, chance: 0.75, duration: 4, power: 6))),
     cooldown: 4,

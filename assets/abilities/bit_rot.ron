@@ -1,7 +1,7 @@
 (
     id: "bit_rot",
     name: "Bit Rot Everyone",
-    description: "Bleed the whole field for 4 rounds",
+    description: "Leak the whole field for 4 rounds",
     target: AllEnemies,
     effect: Debuff(kind: Bleed, power: 2, duration: 4),
     cooldown: 5,

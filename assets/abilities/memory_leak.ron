@@ -1,7 +1,7 @@
 (
     id: "memory_leak",
     name: "Bit Rot Single v1.0",
-    description: "Bleed 2 per round for 3 rounds on one target",
+    description: "Leak 2 per round for 3 rounds on one target",
     target: OneEnemyGroupFront,
     effect: Debuff(kind: Bleed, power: 2, duration: 3),
     cooldown: 1,

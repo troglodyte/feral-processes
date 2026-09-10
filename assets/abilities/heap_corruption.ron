@@ -1,7 +1,7 @@
 (
     id: "heap_corruption",
     name: "Bit Rot Group",
-    description: "Bleed every member of one group for 3 rounds",
+    description: "Leak every member of one group for 3 rounds",
     target: WholeEnemyGroup,
     effect: Debuff(kind: Bleed, power: 3, duration: 3),
     cooldown: 3,

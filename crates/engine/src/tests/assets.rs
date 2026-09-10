@@ -2399,18 +2399,45 @@ fn no_player_facing_text_says_cast_or_spell() {
         "spell",
         "spells",
     ];
+    let (checked, complaints) = player_facing_census(FORBIDDEN);
+    assert!(
+        checked > 200,
+        "the census read only {checked} strings, so it is not walking the shipped content"
+    );
+    assert!(
+        complaints.is_empty(),
+        "player-facing text uses the fantasy vocabulary — say \"run\"/\"invoke\" a \
+         routine, and \"invocation\" for the noun:\n{}",
+        messages(&complaints)
+    );
+}
+
+/// Every authored player-facing string in the shipped content, walked once so
+/// that a second vocabulary gate is a *call* rather than a second copy of the
+/// walk. Returns how many strings were read — a census that reads nothing
+/// passes vacuously — and one complaint per string carrying a forbidden word.
+///
+/// Matched on whitespace-and-punctuation-delimited **tokens**, never on
+/// substrings: `broadcast_storm` is a shipped ability id and "spelled out" is
+/// ordinary prose, and a substring match would fail both while proving
+/// nothing.
+///
+/// Covers **authored content**, which is where the vocabulary lives.
+/// Player-facing strings built in Rust are held by review; there is no way to
+/// enumerate them from a test.
+fn player_facing_census(forbidden: &[&str]) -> (i32, Vec<(&'static str, String)>) {
     let offends = |text: &str| -> Option<String> {
         text.split(|c: char| !c.is_ascii_alphabetic())
-            .find(|w| FORBIDDEN.contains(&w.to_ascii_lowercase().as_str()))
+            .find(|w| forbidden.contains(&w.to_ascii_lowercase().as_str()))
             .map(|w| w.to_string())
     };
     let game = Game::new(3304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let mut checked = 0;
     let mut complaints = Vec::new();
-    let mut check = |what: &str, id: &str, text: &str, checked: &mut i32| {
+    let mut check = |what: &'static str, id: &str, text: &str, checked: &mut i32| {
         *checked += 1;
         if let Some(word) = offends(text) {
-            complaints.push(format!("{what} {id:?} says {word:?} in: {text:?}"));
+            complaints.push((what, format!("{what} {id:?} says {word:?} in: {text:?}")));
         }
     };
     for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
@@ -2444,16 +2471,77 @@ fn no_player_facing_text_says_cast_or_spell() {
             }
         }
     }
+    (checked, complaints)
+}
+
+/// A fight is an **intrusion**, and the vocabulary around it is security
+/// rather than swordplay: an attempt *lands* or is *refused*, Integrity is
+/// what refuses it, Bleed reads as a **leak**, Stun as a **stall**, and a
+/// defended body **hardens**.
+///
+/// `player_facing_census`' second caller — the walk is shared, the word lists
+/// are not. Two lists because the scope differs:
+///
+/// - The melee words are wrong on **every** surface.
+/// - `bleed` and `stun` are wrong only where a *status* is being specified,
+///   which is an ability. "Bleeds off the charge that makes a capture fail"
+///   (`static_mesh`) and "Bleeds a hostile Overseer's own watchdog line back"
+///   (`watchdog_tap`) are bleeding a line in the engineering sense, which is
+///   the register this game wants, not the status the chip calls Leaking.
+///
+/// Deliberately absent from both lists:
+///
+/// - **damage** — `Damage 19-31 to every hostile program` is the terse spec
+///   form an ability description is written in, and it matches the manifest's
+///   own `Damage` row. What the reframe dropped is "damage" as the *unit* on a
+///   narration line, which is Rust-side text this gate cannot see anyway.
+/// - **swing** — `assets/help/60-your-base.md` swings at rock, which is
+///   mining's established word (`swing_damage`, `durability / min_swings`).
+/// - **strike** — `Barrier Slam`, `Burrow Strike` and `Ram` are species move
+///   names that predate this and are content decisions, not vocabulary slips.
+/// - **wound** — a homograph. `charge_coil` has "Power Cells wound into a
+///   store", which is the past tense of *wind*, so only `wounded` is bannable
+///   and nothing ships it.
+#[test]
+fn no_player_facing_text_uses_melee_vocabulary() {
+    const MELEE: &[&str] = &[
+        "wounded", "glance", "glances", "glancing", "brace", "braces", "bracing", "parry",
+        "parries", "slash", "slashes", "stab", "stabs",
+    ];
+    const STATUS: &[&str] = &["bleed", "bleeds", "bleeding", "stun", "stuns", "stunned"];
+
+    let (checked, melee) = player_facing_census(MELEE);
     assert!(
         checked > 200,
         "the census read only {checked} strings, so it is not walking the shipped content"
     );
     assert!(
-        complaints.is_empty(),
-        "player-facing text uses the fantasy vocabulary — say \"run\"/\"invoke\" a \
-         routine, and \"invocation\" for the noun:\n{}",
-        complaints.join("\n")
+        melee.is_empty(),
+        "player-facing text uses melee vocabulary — a fight is an intrusion, and an \
+         attempt lands or is refused:\n{}",
+        messages(&melee)
     );
+
+    let (_, status) = player_facing_census(STATUS);
+    let in_abilities: Vec<(&str, String)> = status
+        .into_iter()
+        .filter(|(what, _)| *what == "ability")
+        .collect();
+    assert!(
+        in_abilities.is_empty(),
+        "an ability names a status the player sees under another word — Bleed is a \
+         leak, Stun is a stall:\n{}",
+        messages(&in_abilities)
+    );
+}
+
+/// The complaint text out of a [`player_facing_census`] result, tags dropped.
+fn messages(complaints: &[(&str, String)]) -> String {
+    complaints
+        .iter()
+        .map(|(_, text)| text.as_str())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn help_assets_dir() -> std::path::PathBuf {

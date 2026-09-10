@@ -1,7 +1,7 @@
 (
     id: "bus_fault",
     name: "Pipeline Stall Everyone",
-    description: "Damage the whole field, sometimes locking targets up",
+    description: "Damage the whole field, sometimes stalling targets out",
     target: AllEnemies,
     effect: Damage(power: 6, spread: 2, status: Some((kind: Stun, chance: 0.25, duration: 1, power: 0))),
     cooldown: 5,

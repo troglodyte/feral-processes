@@ -1,7 +1,7 @@
 (
     id: "hard_lock",
     name: "Hard Lock Single v2.0",
-    description: "Stun one target for 2 rounds",
+    description: "Stall one target for 2 rounds",
     target: OneEnemyGroupFront,
     effect: Debuff(kind: Stun, power: 0, duration: 2),
     cooldown: 4,

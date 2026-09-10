@@ -13,7 +13,7 @@ Five keys run the whole screen.
 - j — jack out
 
 Shift commands everybody at once: A has the whole party attack — it asks for a group only when
-there is more than one to choose between — and D has it all brace.
+there is more than one to choose between — and D has it all defend.
 
 Hostiles are sorted into groups, one group per species. A zone decides how deep that can go — zone 1
 fields a single program, zone 2 up to ten in a group and two groups at once, and by zone 4 four
@@ -24,17 +24,17 @@ of the back groups into the fight.
 Your own line matters the same way. The front slot draws the most fire, so the order you keep your
 party in is a choice you make before the fight, on the companions screen.
 
-Every swing rolls once, and that one roll picks between four outcomes: a critical hit, a plain hit,
-a fumble, or a miss. The odds come from the attacker's Accuracy against the defender's Evasion as a
-straight ratio, held between 25% and 95% — so a deep zone that scales everything up changes nobody's
-chance of connecting.
+Every attempt rolls once, and that one roll picks between four outcomes: it lands unchecked, it
+lands, it fumbles, or it is refused. The odds come from the attacker's Accuracy against the
+defender's Evasion as a straight ratio, held between 25% and 95% — so a deep zone that scales
+everything up changes nobody's chance of landing.
 
 A fumble lands on one of four rungs, worst the deeper into the band it fell. Exposed cuts your
-Evasion until your next turn, Recoil turns half your own damage back on you, Opening hands the
-target a free swing, and Crash costs you your next action. They replace each other rather than
+Evasion until your next turn, Recoil turns half of what you threw back on you, Opening hands the
+target a free attempt, and Crash costs you your next action. They replace each other rather than
 piling up.
 
-Mitigation is percentage points off the damage that lands, summed from base stats, gear and buffs,
+Mitigation is percentage points off whatever lands, summed from base stats, gear and buffs,
 and capped at 75% so nothing is ever untouchable. It is the one stat levelling never raises — a
 percentage that grew every level would end at immunity — so what a level buys defensively is
 Evasion instead.
@@ -47,7 +47,7 @@ stat, and the attempts you have already made on that same program, which count f
 them.
 
 Jacking out is a roll, not a door. It weighs your side's strength against the pack's, and a failed
-attempt costs you the round while every engaged group swings. Getting clear costs a little XP and
-sometimes a parting strike, so it is a decision rather than a free reset.
+attempt costs you the round while every engaged group gets its attempt in. Getting clear costs a little XP and
+sometimes a parting counter, so it is a decision rather than a free reset.
 
 Read on: [routines](routines), [your companions](companions), and [getting stronger](getting-stronger).

@@ -715,6 +715,28 @@ impl Game {
         found.into_iter().map(|(_, _, e)| e).next()
     }
 
+    /// How many more programs this rig's hopper will take.
+    ///
+    /// **The one capacity helper**, and that is the point: the player's own
+    /// hand-load and the crew fetch are the two routes into a hopper, and a
+    /// second copy of this sum is how they come to disagree about the room
+    /// left. A structure that is not a rig, or one whose `strips` a mod has
+    /// taken away, answers 0.
+    pub(crate) fn hopper_room(&self, rig: Entity) -> usize {
+        let Some(kind) = self.world.get::<Structure>(rig).map(|s| s.kind.clone()) else {
+            return 0;
+        };
+        let capacity = self
+            .world
+            .resource::<StructureDb>()
+            .get(&kind)
+            .and_then(|def| def.strips.as_ref())
+            .map(|s| s.hopper as usize)
+            .unwrap_or(0);
+        let held = self.world.get::<Hopper>(rig).map_or(0, |h| h.queue.len());
+        capacity.saturating_sub(held)
+    }
+
     /// The one door a downed program leaves the pack for a machine through
     /// — spec section 10's deposit.
     ///
@@ -752,16 +774,7 @@ impl Game {
             return Err(format!("The {} is work for your hands.", tool_def.name));
         }
 
-        let capacity = {
-            let kind = self.world.get::<Structure>(rig).unwrap().kind.clone();
-            self.world
-                .resource::<StructureDb>()
-                .get(&kind)
-                .and_then(|def| def.strips.as_ref())
-                .map(|s| s.hopper as usize)
-                .unwrap_or(0)
-        };
-        let room = capacity.saturating_sub(self.world.get::<Hopper>(rig).unwrap().queue.len());
+        let room = self.hopper_room(rig);
         if room == 0 {
             return Err("The rig is full.".to_string());
         }

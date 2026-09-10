@@ -236,3 +236,201 @@ fn a_put_lands_in_the_first_rack_with_room_in_tile_order() {
     assert_eq!(shelf_of(&game, west), vec![7]);
     assert!(shelf_of(&game, east).is_empty());
 }
+
+// ---------------------------------------------------------------------------
+// The crew fetch: a posted body walks to a rack when the rig it works runs
+// dry, and the two rules that guard the trip.
+// ---------------------------------------------------------------------------
+
+use crate::components::{CarryingProgram, Hopper, Task, TaskKind};
+
+/// A staffed, lit Teardown Rig at (3,3) with a Quarantine Rack at (3,2)
+/// holding `racked` carriers, and the rig hand-loaded once so it has a
+/// standing tool. Returns `(game, rig, rack, worker)`.
+fn a_rig_beside_a_stocked_rack(racked: u32) -> (Game, Entity, Entity, Entity) {
+    let mut game = Game::new(4220, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base_at(&mut game, 3, 4);
+    let rig = spawn_machine_at(&mut game, "teardown_rig", 3, 3);
+    let rack = spawn_machine_at(&mut game, "quarantine_rack", 3, 2);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(worker).insert(Task {
+        kind: TaskKind::GatherResource,
+        target: rig,
+        progress: 0,
+        required: 1,
+    });
+    let player = game.player_entity();
+    game.world
+        .get_mut::<crate::components::DownedPrograms>(player)
+        .unwrap()
+        .0
+        .push(program(5));
+    let player_tools = game.player_entity();
+    game.world
+        .get_mut::<crate::components::Tools>(player_tools)
+        .unwrap()
+        .0
+        .push(crate::tools::ToolId("salvage_clamp".to_string()));
+    // The hand-load is what sets the standing tool, and the rig chews
+    // through this one program before the fetch has anything to do.
+    game.load_teardown_rig(&[0], &crate::tools::ToolId("salvage_clamp".to_string()))
+        .unwrap();
+    game.world.get_mut::<Hopper>(rig).unwrap().queue.clear();
+    for level in 1..=racked {
+        game.world
+            .get_mut::<Racked>(rack)
+            .unwrap()
+            .0
+            .push(program(200 + level));
+    }
+    stand_ample_grid_supply(&mut game);
+    (game, rig, rack, worker)
+}
+
+#[test]
+fn a_posted_body_fetches_one_carrier_from_a_rack_in_reach() {
+    let (mut game, rig, rack, worker) = a_rig_beside_a_stocked_rack(2);
+
+    game.tick();
+    assert!(
+        game.world.get::<CarryingProgram>(worker).is_some(),
+        "the body picks one up"
+    );
+    assert_eq!(shelf_of(&game, rack).len(), 1, "one trip, one carrier");
+
+    game.tick();
+    let hopper = game.world.get::<Hopper>(rig).unwrap();
+    assert_eq!(hopper.queue.len(), 1, "and it lands in the hopper");
+    assert_eq!(hopper.queue[0].program.level, 201);
+    assert!(
+        game.world.get::<CarryingProgram>(worker).is_none(),
+        "the trip is over"
+    );
+    assert_eq!(
+        hopper.queue[0].tool.0, "salvage_clamp",
+        "stripped with the rig's standing tool"
+    );
+}
+
+/// **An unreachable rack is not a want** — the body stays on its post and
+/// nothing is announced, `build_wants`' deadlock rule.
+#[test]
+fn a_rack_out_of_reach_produces_no_fetch() {
+    let (mut game, _rig, rack, worker) = a_rig_beside_a_stocked_rack(1);
+    // Off the laid floor entirely, so no walk reaches it.
+    game.world.get_mut::<Position>(rack).unwrap().x = 900;
+    game.world.get_mut::<Position>(rack).unwrap().y = 900;
+
+    game.tick();
+    assert!(game.world.get::<CarryingProgram>(worker).is_none());
+    assert_eq!(shelf_of(&game, rack).len(), 1);
+}
+
+/// A rig nobody has hand-loaded has no tool to strip with, so it does not
+/// fetch — and falls through to the `Starved` an empty hopper already
+/// writes, on the transition `set_machine_status` speaks on.
+#[test]
+fn a_rig_with_no_standing_tool_does_not_fetch() {
+    let (mut game, rig, rack, worker) = a_rig_beside_a_stocked_rack(1);
+    game.world.get_mut::<Hopper>(rig).unwrap().standing_tool = None;
+
+    game.tick();
+    assert!(game.world.get::<CarryingProgram>(worker).is_none());
+    assert_eq!(shelf_of(&game, rack).len(), 1, "the rack keeps it");
+    assert_eq!(
+        game.world.get::<crate::components::MachineStatus>(rig),
+        Some(&crate::components::MachineStatus::Starved),
+        "nothing is feeding it, and hand-loading it once is the fix"
+    );
+}
+
+/// **The first of the two silent rules.** Freeing a body mid-trip destroys
+/// what it is holding, and a carrier is a kill the player cannot get back.
+#[test]
+fn the_scheduler_never_frees_a_body_carrying_a_program() {
+    let (mut game, _rig, _rack, worker) = a_rig_beside_a_stocked_rack(1);
+    game.tick();
+    assert!(game.world.get::<CarryingProgram>(worker).is_some());
+
+    // Everything that would otherwise take it off shift, at once.
+    game.world
+        .entity_mut(worker)
+        .insert(crate::components::OffShift {
+            need: crate::needs::NeedId::from("coherence"),
+        });
+    let amenities = game.amenities_for_test();
+    assert!(
+        game.is_on_shift(worker, &amenities),
+        "a body holding a carrier is never freed"
+    );
+}
+
+/// **The second.** Destroying the building must not destroy the kill.
+#[test]
+fn destroying_the_rig_by_removal_returns_the_carrier() {
+    let (mut game, rig, rack, worker) = a_rig_beside_a_stocked_rack(1);
+    game.tick();
+    assert!(game.world.get::<CarryingProgram>(worker).is_some());
+
+    game.remove_structure(rig).unwrap();
+    assert!(game.world.get::<CarryingProgram>(worker).is_none());
+    assert_eq!(
+        shelf_of(&game, rack),
+        vec![201],
+        "it goes back on the rack rather than dropping with the task"
+    );
+}
+
+#[test]
+fn destroying_the_rig_by_damage_returns_the_carrier() {
+    let (mut game, rig, rack, worker) = a_rig_beside_a_stocked_rack(1);
+    game.tick();
+    assert!(game.world.get::<CarryingProgram>(worker).is_some());
+    // `spawn_machine_at` writes no `Durability` — `damage_structure` reads
+    // one and returns without it, so the fixture would assert nothing.
+    game.world
+        .entity_mut(rig)
+        .insert(crate::components::Durability { hp: 10, max_hp: 10 });
+
+    game.damage_structure(rig, 100_000, "The Teardown Rig");
+    assert!(game.world.get::<CarryingProgram>(worker).is_none());
+    assert_eq!(shelf_of(&game, rack), vec![201]);
+}
+
+/// With no rack left to take it, the carrier goes to the player's own store
+/// rather than being dropped.
+#[test]
+fn a_returned_carrier_falls_back_to_the_players_store() {
+    let (mut game, rig, rack, worker) = a_rig_beside_a_stocked_rack(1);
+    game.tick();
+    // Despawned rather than removed through the door: `remove_structure`
+    // spends a tick, and that tick is one the body would spend delivering
+    // the carrier it is holding.
+    game.world.despawn(rack);
+
+    game.remove_structure(rig).unwrap();
+    assert!(game.world.get::<CarryingProgram>(worker).is_none());
+    assert!(
+        pack_of(&game).contains(&201),
+        "the kill survives the machine"
+    );
+}
+
+#[test]
+fn an_in_transit_carrier_survives_save_and_load() {
+    let (mut game, _rig, _rack, worker) = a_rig_beside_a_stocked_rack(1);
+    game.tick();
+    assert!(game.world.get::<CarryingProgram>(worker).is_some());
+
+    let path = std::env::temp_dir().join(format!("feral_in_transit_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let held = loaded
+        .world
+        .iter_entities()
+        .find_map(|e| e.get::<CarryingProgram>())
+        .expect("the trip survives quitting mid-walk");
+    assert_eq!(held.0.level, 201);
+}

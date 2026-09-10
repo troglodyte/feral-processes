@@ -511,6 +511,16 @@ pub struct CreatureSave {
     /// This is a shape change to `CreatureSave`, so it required bumping
     /// `SAVE_FORMAT_VERSION` — see that constant's docs.
     pub carrying: Option<(ItemId, u32)>,
+    /// The downed program this body is carrying to a rig — see
+    /// `components::CarryingProgram`. Additive behind `#[serde(default)]`,
+    /// unlike `carrying` above, which changed `CreatureSave`'s shape before
+    /// the payload was field-named RON.
+    ///
+    /// Saved rather than dropped because the alternative is a kill lost to
+    /// quitting mid-trip, which is the same failure both destruction paths
+    /// are written to avoid.
+    #[serde(default)]
+    pub carrying_program: Option<crate::items::DownedProgram>,
     /// The rare-spawn tier this creature rolled — see `components::Rarity`.
     ///
     /// Persisted as the *tag* only. The multiplier it names was already
@@ -1852,6 +1862,7 @@ mod tests {
             patrol_position: None,
             pursuing: false,
             carrying: None,
+            carrying_program: None,
             rarity: Rarity::Ordinary,
             boss: false,
             nemesis_grudges: 0,

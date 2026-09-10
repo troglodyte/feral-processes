@@ -435,7 +435,6 @@ mod tests {
     /// the painter places against.
     #[test]
     fn the_header_sits_over_the_columns_it_names() {
-        let game = shipped_game();
         let entries = vec![
             ("core fragment".to_string(), -12i64, 7u32, 300u32),
             ("power cell".to_string(), 4i64, 1u32, 9u32),
@@ -508,7 +507,6 @@ mod tests {
     /// measures against.
     #[test]
     fn no_transfer_hint_line_overflows_its_popup() {
-        let game = shipped_game();
         let entries = vec![("core fragment".to_string(), 0, 0, 0)];
         let rows = body_rows(&entries, Some(u32::MAX), 0);
 
@@ -529,7 +527,6 @@ mod tests {
     /// room line at all, a Depot with nothing left draws one reading 0.
     #[test]
     fn the_room_line_is_absent_without_a_depot_and_reads_zero_when_full() {
-        let game = shipped_game();
         let entries = vec![("core fragment".to_string(), 0, 0, 4)];
 
         let heads = |room| match &body_rows(&entries, room, 0)[0] {

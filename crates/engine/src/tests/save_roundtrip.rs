@@ -330,6 +330,7 @@ fn a_rich_program_writes_every_field_it_was_given() {
         patrol_position: _,
         pursuing: _,
         carrying: _,
+        carrying_program: _,
         rarity: _,
         boss: _,
         equipment: _,
@@ -392,6 +393,7 @@ fn a_rich_program_writes_every_field_it_was_given() {
     assert!(saved.patrol_position.is_none(), "patrol_position");
     assert!(!saved.pursuing, "pursuing");
     assert!(saved.carrying.is_none(), "carrying");
+    assert!(saved.carrying_program.is_none(), "carrying_program");
     assert_eq!(saved.rarity, Rarity::Gold, "rarity");
     assert!(!saved.boss, "boss");
     assert_eq!(

@@ -1665,6 +1665,9 @@ impl Game {
             if let Some((item, qty)) = c.carrying.clone() {
                 entity.insert(Carrying { item, qty });
             }
+            if let Some(program) = c.carrying_program.clone() {
+                entity.insert(crate::components::CarryingProgram(program));
+            }
             if let Some(index) = sortie_index {
                 ctx.sortie_members.push((index, creature_id));
             }
@@ -1875,6 +1878,10 @@ impl Game {
                 .world
                 .get::<Carrying>(e)
                 .map(|c| (c.item.clone(), c.qty)),
+            carrying_program: self
+                .world
+                .get::<crate::components::CarryingProgram>(e)
+                .map(|c| c.0.clone()),
             rarity: self.world.get::<Rarity>(e).copied().unwrap_or_default(),
             nemesis_grudges: self.world.get::<Nemesis>(e).map(|n| n.0).unwrap_or(0),
             program_id: self.world.get::<ProgramId>(e).map(|p| p.0).unwrap_or(0),

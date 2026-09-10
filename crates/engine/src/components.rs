@@ -638,6 +638,22 @@ pub struct Hopper {
     pub standing_tool: Option<crate::tools::ToolId>,
 }
 
+/// A downed program a posted body is physically carrying to a rig — the
+/// record of one crew trip, and the third place a `DownedProgram` can be
+/// standing while it is between the other three.
+///
+/// **`Carrying` could not be widened.** That is one `(item, qty)` pair
+/// *because* `HAUL_CARRY_CAPACITY` bounds a trip, and a carrier has no
+/// `ItemId` at all.
+///
+/// Two rules written for `Carrying` have this as a second subject, and
+/// neither fails to compile if a site is missed — the symptom is a lost kill
+/// with no error: `Game::is_on_shift` must never free a body holding one,
+/// and both structure-destruction paths must put it back rather than drop
+/// it with the `Task`.
+#[derive(Component, Clone, Debug)]
+pub struct CarryingProgram(pub DownedProgram);
+
 /// A Quarantine Rack's shelf of downed programs — see `StructureDef::racks`
 /// and `Game::rack_slots`.
 ///

@@ -159,6 +159,7 @@ fn game_with_programs(fixture: &str, seed: u32, programs: &[(bool, &str)]) -> Ga
         patrol_position: None,
         pursuing: false,
         carrying: None,
+        carrying_program: None,
         rarity: Default::default(),
         nemesis_grudges: 0,
         equipment: Vec::new(),

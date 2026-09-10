@@ -24,7 +24,9 @@
 use crate::Game;
 use crate::base_grid::BaseGrid;
 use crate::components::TaskKind;
-use crate::components::{Carrying, Disgruntled, Downed, Grievance, OffShift, Position};
+use crate::components::{
+    Carrying, CarryingProgram, Disgruntled, Downed, Grievance, OffShift, Position,
+};
 use crate::game::base::hauling::{NoPost, step_to_post};
 use crate::game::base::offshift::{Amenities, in_reach};
 use crate::resources::Locale;
@@ -228,7 +230,13 @@ impl Game {
         if self.world.get::<Downed>(who).is_some() {
             return false;
         }
-        if self.world.get::<Carrying>(who).is_some() {
+        // `CarryingProgram` beside `Carrying`, and for exactly its reason:
+        // freeing a body mid-trip destroys what it is holding. A carrier is
+        // a kill the player cannot get back, so the omission is worse here
+        // than it is for a stack of fragments.
+        if self.world.get::<Carrying>(who).is_some()
+            || self.world.get::<CarryingProgram>(who).is_some()
+        {
             return true;
         }
         self.world.get::<OffShift>(who).is_none()

@@ -5,10 +5,9 @@ workspace.
 
 **This file is loaded into context on every turn, so it holds rules and not
 arguments.** The reasoning behind each load-bearing seam — the measurement,
-the history, what was tried and rejected — lives in
-[`docs/seams.md`](docs/seams.md) under the same title. Read the matching
-entry there before changing a seam, and write any new reasoning there rather
-than here.
+the history, what was tried and rejected — lives in the **memory graph** as
+`seam:<slug>`. Read the matching entry there before changing a seam, and write
+any new reasoning there rather than here; the `seams` skill has the two calls.
 
 The crates:
 
@@ -85,15 +84,14 @@ sentence: the rule alone.**
 The trap each rule exists to close is in the **`seams` skill**
 (`.claude/skills/seams/`), one reference file per subsystem — invoke it
 before changing code in one of these areas. The argument behind a seam —
-the measurement, the history, what was tried and rejected — is in
-[`docs/seams.md`](docs/seams.md) under the same title; read that entry
-before changing a seam itself.
+the measurement, the history, what was tried and rejected — is in the memory
+graph as `seam:<slug>`, reached with `memory_search(…, subsystem: "seams")`
+then `memory_get_entity`; read it before changing a seam itself.
 
 **One sentence is a budget, not a style.** This file is loaded on every
 turn, and it reached 151 KB by letting each seam's trap creep back in
-beside its rule. A new seam is three writes — the argument to
-`docs/seams.md`, the trap to the skill, the rule here — and the skill
-documents the order.
+beside its rule. A new seam is three writes — the argument to the graph, the
+trap to the skill, the rule here — and the skill documents the order.
 
 Each was verified against the source, not remembered. Verify again before
 relying on one, and correct all three places if it has moved.

@@ -850,7 +850,7 @@
   transfers whole, and **arriving is what counts** — `in_reach` gates the
   write, so walking toward the amenity is worth zero. Reverses the module
   doc's own former claim that morale recovers by time alone; see
-  `docs/seams.md`.
+  `seam:a-bad-mood-is-an-errand-now-and-the-memory-is-the-mechanism`.
 - **The errand is gated on there being one, and that is what keeps the ladder
   at two rungs.** `Game::on_respite` requires `Amenities::any()`, so a base
   with no amenity keeps its *sulking* programs in the posting pool — which is

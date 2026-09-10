@@ -577,7 +577,7 @@
   and moves the creature to a real tile out in the zone that a badly-ended
   fight then leaves it standing on. Nothing in the compiler holds this:
   `tactical/` does not import `crate::components::Position`, and that omission
-  is the whole enforcement. See `docs/seams.md` for the argument.
+  is the whole enforcement. See `seam:a-battle-maps-coordinates-live-in-tacticalbattle-position` for the argument.
 - **A body is a wall in `reach::movement_field`, and a body's allowance is
   both its budget and `walk_field`'s search box.** One occupancy rule rather
   than a pass-through set and a destination set — an occupied cell is neither
@@ -591,7 +591,7 @@
   as taste and are not. An unbounded allowance is an unbounded search, and a
   body that cannot move at all can neither close nor walk off the board, so
   an authored `SpeciesDef::movement` is clamped exactly as a derived figure
-  is. See `docs/seams.md` for the argument.
+  is. See `seam:a-body-is-a-wall-and-the-allowance-is-both-the-budget-and` for the argument.
 
 - **A fight ends through `Game::finish_fight`, and a `FightVerdict` is what
   each model answers it with.** `end_battle` read `BattleState` six times,
@@ -610,7 +610,7 @@
   shifts bevy's query order under unrelated tests) and
   `Game::finish_hostile` (the kill line, XP, loot, nest respawn, patrol
   standing charge, despawn — a copy of it is a second place a patrol kill
-  stops charging a town). See `docs/seams.md` for the argument.
+  stops charging a town). See `seam:a-fight-ends-through-one-function-and-a-fightverdict-is` for the argument.
 - **A tactical fight's initiative is rolled once and kept in step by
   deletion, and the cursor names a body rather than a position.** Rolled
   once because the turn-order strip is a planning instrument and a reshuffle
@@ -621,7 +621,7 @@
   follow or somebody silently loses a turn; an entry behind it changes
   nothing; and the **acting** body leaving means the cursor already names
   its successor, so the turn must be reset or the dead body's spent movement
-  is charged to whoever is next. See `docs/seams.md` for the argument.
+  is charged to whoever is next. See `seam:the-turn-order-is-kept-in-step-by-deletion-and-the-cursor` for the argument.
 - **A step off the board edge is a departure, not a refusal, and the
   player's own departure closes the fight.** Walking out is the only way to
   express disengaging on a grid, and it is safe only because of the
@@ -629,7 +629,7 @@
   the fight opened, so there is nothing to restore. Three endings, one win:
   the board clear of hostiles is a win **even when they all broke off**; the
   player down is a loss; the player walking out is the jack-out. Omit the
-  third and a fight stays open with nobody holding it. See `docs/seams.md`
+  third and a fight stays open with nobody holding it. See `seam:the-board-edge-is-a-departure-not-a-wall`
   for the argument.
 
 - **A routine's `shape:` and `range:` are read in tactical fights alone, and
@@ -647,7 +647,7 @@
   not one for the derived radii, because "one group" and "everything" are
   different sizes and the party's own is the widest. Not to be confused with
   `ranged`, a yes-or-no about the front line in the *group* model.
-  See `docs/seams.md` for the argument.
+  See `seam:a-routines-geometry-is-authored-or-derived-and-one-door` for the argument.
 - **`use_ability` is the door the two combat models share; each converts its
   own aim, and full friendly fire is `reach::recipients` never reading
   `Hostile`.** The design named `ability_recipients` as the shared door and
@@ -665,7 +665,7 @@
   *bearing* for a line and a cone and a *destination* for a blast. The cone's
   epsilon is not slop: an eight-way grid's diagonals sit exactly 45 degrees
   off the facing, so a 90-degree wedge holds them only under a comparison
-  that admits equality. See `docs/seams.md` for the argument.
+  that admits equality. See `seam:two-combat-models-one-applicator-and-friendly-fire-is-an` for the argument.
 - **`Game::decompile_body` is the capture; taking the captured body out of
   the fight is each model's own half.** Everything down to the conversion —
   catalyst, roll, fraying count, XP, component strip, nest respawn — is the
@@ -677,7 +677,7 @@
   quotes the same count whichever model is holding the fight. A capture is
   aimed at one body and not resolved over an area, and it is the one effect
   in `tactical_use_routine` that does not go through `use_ability` — the same
-  exception the group model's own Special site makes. See `docs/seams.md` for
+  exception the group model's own Special site makes. See `seam:capturing-a-program-is-one-function-taking-it-out-of-the` for
   the argument.
 - **A routine's effect is shared; its refusals are not — `Game::run_tactical_
   routine`, and `cooldown_floor` is the whole of the difference.** The trap is
@@ -696,7 +696,7 @@
   `field_only_dead_fields` warns about a cooldown on a field-only effect, so
   every shipped `cooldown: 0` routine is field-only and `wild_routine_ready`
   excludes it; the branch guards a mod, and a test that wants it must edit a
-  shipped def rather than assert on one. See `docs/seams.md` for the argument.
+  shipped def rather than assert on one. See `seam:a-routines-effect-is-shared-its-refusals-are-not` for the argument.
 - **A hostile decides what it will do before it decides where to stand, and
   the closing term is a shortfall to the *band* and never a distance to the
   target.** The obvious order — walk somewhere good, then pick an action —
@@ -713,7 +713,7 @@
   out. None of it is `combat_policy.rs`: trained weights speak group indices
   and aggro slots, and what replaces a slot here is where a body stands —
   which is also why the swing takes the wounded neighbour rather than
-  consulting `battle::slot_aggro_weight`. See `docs/seams.md`.
+  consulting `battle::slot_aggro_weight`. See `seam:a-hostile-decides-what-it-will-do-before-it-decides-where`.
 - **One draw a turn, spent on the cell, and none at temperature zero.** The
   aim and the swing target are argmaxes on purpose: a second draw lets a
   hostile fumble an aim it spent its whole walk earning, which reads as
@@ -723,7 +723,7 @@
   `movement_field` answers a `HashMap`, iteration order over one is not stable
   between runs, and two equally-scored cells resolving differently in a seeded
   fight surfaces as an intermittent failure somewhere else entirely, so the
-  cells are sorted before they are scored. See `docs/seams.md`.
+  cells are sorted before they are scored. See `seam:one-draw-a-turn-and-the-cell-is-where-it-is-spent`.
 - **A hostile's walk is a run of real steps, one to a beat.** It used to be
   committed as a single placement, argued for on the grounds that nothing on
   the board reacts to a body mid-walk — so a path had no observable difference
@@ -742,7 +742,7 @@
   arrived"**: read as one, a spent walk is re-planned every beat and the one
   draw a turn above becomes one a cell. And the steps go through
   `Game::tactical_step`, the player's own door, so a hostile's step is not a
-  second implementation of what a step costs. See `docs/seams.md`.
+  second implementation of what a step costs. See `seam:a-hostiles-walk-is-a-run-of-real-steps-one-to-a-beat`.
 
 - **`Game::start_battle` is where the model is chosen, by inspecting the
   pack.** The toggle says a player wants tactical fights; it does not say
@@ -785,7 +785,7 @@
   tile**, not an `encounter:` row's — overriding it is a third parameter on
   the door or a second copy of the `BattleSpec` construction, so a rolled
   marsh pack fights on whatever ground the player stands on and the README
-  says so. See `docs/seams.md`.
+  says so. See `seam:the-arena-chooses-its-own-model-and-stage-takes-the-one-its`.
 - **A headless tactical rep drives both sides through one AI, and a party
   body swings without invoking.** `tactical_ai_actor`'s gate is `Hostile`
   because every party body is the player's to command, so a fight with nobody
@@ -810,7 +810,7 @@
   `since_round()` on a battle map is the whole fight and `Watch::observe`
   would re-record every line every round — it takes from where it stopped,
   keyed on the log generation, which the group model bumps per round so its
-  own behaviour is unchanged. See `docs/seams.md`.
+  own behaviour is unchanged. See `seam:a-headless-tactical-rep-drives-both-sides-and-a-party-body`.
 - **An AI turn hands the turn on once, and the action already did it.** The
   action ends the turn, so `tactical_attack` and `tactical_use_routine` each
   end it themselves once they land — and `tactical_ai_turn_at` ended it
@@ -848,7 +848,7 @@
   `Radius` routine catches its own invoker. In an order of `[companion,
   player, hostile]` a companion who fumbles fatally costs the player their
   turn, with nothing on screen to say why. Same question the phase-6 AI fix
-  asks at its own level, one level down. See `docs/seams.md`.
+  asks at its own level, one level down. See `seam:a-turn-ends-in-one-place-and-a-body-that-killed-itself-has`.
 - **A round on a battle map spends the upkeep an abstract round spends, and
   `tick_combatant_upkeep` is the half both models share.** The trap is how
   quiet the omission is: with nothing ticking, every routine is once per
@@ -870,7 +870,7 @@
   the last rung begins a round no `end_turn` was reached for, which is why
   `hand_on_turn` compares against a round its caller read before it acted.
   A fight that ends mid-round never wraps at all, so `settle_tactical`
-  spends that round's tick as it closes. See `docs/seams.md`.
+  spends that round's tick as it closes. See `seam:a-round-on-a-battle-map-costs-what-a-round-costs`.
 - **The results page has two producers — `Game::closing_rows` — and one row
   builder per half.** `BattleTimeline::closing` was filled from
   `battle_rows`, which opens on `BattleState`, so a tactical fight left it
@@ -882,7 +882,7 @@
   about, and a second copy of the other thirteen is a results page that
   disagrees with the fight it reports. `enemy_row` and `party_row` are one
   function each; a battle map passes a body and a count of one, all bodies
-  `engaged`, because groups dissolve on a grid. See `docs/seams.md`.
+  `engaged`, because groups dissolve on a grid. See `seam:the-results-page-has-two-producers-and-the-rows-they-build`.
 - **A capture is aimed at something hostile, and the refusal is at the
   player's door with the other five.** Aimed at your own companion,
   `decompile_body` succeeded on a good roll and handed it back through
@@ -923,4 +923,4 @@
   fixture's own trap: `force_the_next_attack_to_land` cannot pin a tactical
   swing, because `swing_move` rolls the move first and eats the forced roll
   — reseed through `reseed_rng` immediately before the swing instead. See
-  `docs/seams.md` for the argument.
+  `seam:a-brace-on-a-board-is-the-group-models-and-only-the` for the argument.

@@ -160,13 +160,25 @@ impl Game {
     /// The slot is the position in `player + Party`, counted **before** the
     /// dead are dropped, exactly as `roll_enemy_target` counts it — a fallen
     /// front-rank companion must not promote the member behind it.
+    ///
+    /// **A cloaked member leaves the list**, the trained policy's half of
+    /// what `roll_enemy_target` does for the baseline — and under the same
+    /// **never-empty rule**: with every living member cloaked the filter is
+    /// skipped, since an empty list here abandons the whole scored choice
+    /// (`choose_wild_action` returns `None`) and costs the hostile its round.
     fn living_targets(&self, player: Entity) -> Vec<(usize, Entity)> {
         let party = self.world.resource::<Party>().0.clone();
-        std::iter::once(player)
+        let living: Vec<(usize, Entity)> = std::iter::once(player)
             .chain(party)
             .enumerate()
             .filter(|(_, e)| self.creature_alive(*e))
-            .collect()
+            .collect();
+        let seen: Vec<(usize, Entity)> = living
+            .iter()
+            .copied()
+            .filter(|(_, e)| !self.is_cloaked(*e))
+            .collect();
+        if seen.is_empty() { living } else { seen }
     }
 
     /// Reads one candidate `(move, target)` pair into the feature vector the

@@ -481,6 +481,20 @@ pub enum AbilityEffect {
     /// Carries no fields — where it lands is the anchor, which is a rule of
     /// the mechanic and not an authored address.
     Symlink,
+    /// Makes each recipient untargetable — see `components::Cloaked`. No
+    /// picker may name a cloaked body until it acts or something lands on
+    /// it; an area routine that covers its cell still hits it, because the
+    /// filter sits at the doors that *name* a body and at none of the doors
+    /// that *resolve* against one.
+    Cloak {
+        /// Battle rounds the cloak holds for, absent anything breaking it.
+        ///
+        /// **Not scaled by the invoker** — `Trickle`'s reason. This is a
+        /// count against a fixed ceiling rather than a magnitude, so a level
+        /// term would swamp whatever the file authors. `AbilityDb::load_dir`
+        /// refuses a `0`: it is a routine that spends Power and does nothing.
+        duration: u32,
+    },
 }
 
 impl AbilityEffect {
@@ -518,12 +532,45 @@ impl AbilityEffect {
             // The three that move nothing measurable. `Phase` and `Jump`
             // carry no magnitude at all — how far they reach is fixed by the
             // mechanic — so there is nothing here for an affinity to scale.
+            //
+            // `Cloak` joins them: its `duration` is a count against a fixed
+            // ceiling, not a magnitude, so there is nothing here to scale
+            // either — see the variant's own doc.
             AbilityEffect::Cleanse
             | AbilityEffect::Decompile
             | AbilityEffect::Phase
             | AbilityEffect::Jump
-            | AbilityEffect::Symlink => None,
+            | AbilityEffect::Symlink
+            | AbilityEffect::Cloak { .. } => None,
             AbilityEffect::FieldBuff { kind, .. } => kind.affinity_kind(),
+        }
+    }
+
+    /// Whether running this ends the invoker's own cloak.
+    ///
+    /// **Exhaustive rather than `_ => false`** — `render/stack.rs::cell_mark`'s
+    /// rule. A new effect kind must state whether it is aggressive, or it
+    /// ships as a routine you can run from inside a cloak for free.
+    ///
+    /// The field-only variants answer `false` because they cannot be run in
+    /// a battle at all; `Cleanse`, `Heal`, `Buff` and `Cloak` answer `false`
+    /// because tending your own side is not the aggressive act a cloak is
+    /// waiting for. That set of omissions *is* the feature — see
+    /// `Game::break_cloak`.
+    pub fn breaks_cloak(&self) -> bool {
+        match self {
+            AbilityEffect::Damage { .. }
+            | AbilityEffect::Drain { .. }
+            | AbilityEffect::Debuff { .. }
+            | AbilityEffect::Decompile => true,
+            AbilityEffect::Heal { .. }
+            | AbilityEffect::Buff { .. }
+            | AbilityEffect::Cleanse
+            | AbilityEffect::Cloak { .. }
+            | AbilityEffect::FieldBuff { .. }
+            | AbilityEffect::Phase
+            | AbilityEffect::Jump
+            | AbilityEffect::Symlink => false,
         }
     }
 }
@@ -923,6 +970,32 @@ impl AbilityDef {
             .then_some("effect: Phase, Jump and Symlink require target: WholeParty")
     }
 
+    /// A `Cloak` paired with an enemy-facing `target`, or with a `duration`
+    /// of zero.
+    ///
+    /// There is no mechanic to cloak an enemy — the component is read by the
+    /// five doors that name a body, and a hostile made untargetable by the
+    /// party would simply be a routine that removes a fight from the player.
+    /// So the target is held to the two ally-facing shapes, exactly as the
+    /// creature-scoped `FieldBuff` kinds are (`field_buff_target_mismatch`).
+    ///
+    /// A `duration: 0` arms a cloak that expires on the upkeep of the round
+    /// it was run in, which is a routine that spends Power and a turn and
+    /// does nothing — `field_buff_duration_mismatch`'s second half, for the
+    /// same reason it refuses rather than resolves.
+    fn cloak_mismatch(&self) -> Option<&'static str> {
+        let AbilityEffect::Cloak { duration } = &self.effect else {
+            return None;
+        };
+        if !matches!(
+            self.target,
+            AbilityTarget::OneAlly | AbilityTarget::WholeParty
+        ) {
+            return Some("effect: Cloak requires target: OneAlly or WholeParty");
+        }
+        (*duration == 0).then_some("effect: Cloak needs a duration of at least one round")
+    }
+
     /// A `triggers` set on a **field-only** effect. A `Phase` cannot fire
     /// when an ally drops: every `PassiveTrigger` names a moment inside a
     /// battle, and a field-only effect is by definition one that runs
@@ -1094,6 +1167,10 @@ impl AbilityDb {
                         continue;
                     }
                     if let Some(reason) = def.movement_target_mismatch() {
+                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
+                        continue;
+                    }
+                    if let Some(reason) = def.cloak_mismatch() {
                         warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
                         continue;
                     }
@@ -1300,6 +1377,12 @@ pub fn effect_label(def: &AbilityDef, level: u32, affinity: f32) -> String {
             "Moves the party to a cell you point at, fatally if it is solid".to_string()
         }
         AbilityEffect::Symlink => "Returns the party to the base anchor".to_string(),
+        // No `level`/`affinity` term, deliberately: the duration is a round
+        // count against a fixed ceiling rather than a magnitude, so what the
+        // file authors is what the player gets at every level.
+        AbilityEffect::Cloak { duration } => {
+            format!("Hides one ally from targeting for {duration} rounds")
+        }
     }
 }
 

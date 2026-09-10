@@ -233,6 +233,12 @@ impl Game {
             if let battle::AttackOutcome::Fumble(rung) = outcome {
                 self.apply_fumble_rung(attacker, defender, rung);
             }
+            // **A miss still reveals the attacker.** Committing to a swing is
+            // the aggressive act, whatever the roll says — and this is the
+            // asymmetry that keeps the *defender's* cloak standing, since
+            // only landed damage reaches `apply_damage`. So a cloak cannot
+            // be flushed out by swinging at where you guess it is.
+            self.break_cloak(attacker);
             return outcome;
         }
         // **The returned outcome carries what *landed*, not what was
@@ -248,6 +254,11 @@ impl Game {
         // and not inside `apply_damage`. Below the `rolled <= 0` return
         // above, deliberately: a miss and a fumble are not maulings.
         self.note_maul(attacker, defender, landed);
+        // Below the swing's own resolution, so the log reads blow-then-reveal.
+        // The defender's own cloak is broken inside `apply_damage`, one door
+        // down, because that is where "something connected" is known for
+        // every source of damage and not only for a swing.
+        self.break_cloak(attacker);
         match outcome {
             battle::AttackOutcome::Hit { .. } => battle::AttackOutcome::Hit { dmg: landed },
             battle::AttackOutcome::Crit { .. } => battle::AttackOutcome::Crit { dmg: landed },
@@ -291,6 +302,13 @@ impl Game {
     pub(crate) fn apply_damage(&mut self, target: Entity, dmg: i32) -> i32 {
         let dealt = self.mitigate_incoming_damage(target, dmg);
         self.lower_hp(target, dealt);
+        // "An area attack connected." The third and last `break_cloak`
+        // caller, and the only one naming the body on the receiving end —
+        // here rather than at `resolve_and_apply_attack` because a blast
+        // resolved through `reach::recipients` never aimed at this body at
+        // all, and a cloak that survived being hit would be a body nothing
+        // could ever reveal.
+        self.break_cloak(target);
         dealt
     }
 

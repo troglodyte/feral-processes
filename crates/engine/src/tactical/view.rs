@@ -56,6 +56,14 @@ pub struct TacticalBody {
     pub rarity: Rarity,
     pub hp_fraction: Option<f32>,
     pub level: Option<u32>,
+    /// Whether no picker may name this body — see `components::Cloaked`.
+    ///
+    /// **Nothing is hidden from the player's view.** A cloaked body still
+    /// appears here and in the turn strip, whichever side it is on; the
+    /// renderer fades it. Omitting a hostile from `bodies` so no renderer
+    /// can leak it is the presentation half of "a body that approaches
+    /// unseen", and is deliberately not built yet.
+    pub cloaked: bool,
 }
 
 /// One rung of the turn-order strip.
@@ -223,6 +231,7 @@ impl Game {
             rarity: self.rarity_of(entity),
             hp_fraction: stats.map(|s| s.hp_fraction()),
             level: self.world.get::<Experience>(entity).map(|e| e.level),
+            cloaked: self.is_cloaked(entity),
         }
     }
 

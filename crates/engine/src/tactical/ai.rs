@@ -370,19 +370,37 @@ impl Game {
     /// the arena drives both sides through this, and the absolute reading
     /// hands a party body its own side to swing at. For a hostile actor the
     /// two readings are the same list, which is why no seeded fight moved.
+    ///
+    /// **A cloaked body leaves `targets`**, which is what keeps it out of
+    /// `best_aim`'s scoring and out of `swing_at_best_neighbour` — the fifth
+    /// door that names a body. `allies` is untouched: a cloak hides a body
+    /// from being aimed at, not from being stood beside, and the crowding
+    /// term is about where there is room to stand.
+    ///
+    /// **The never-empty rule.** With every hostile-side body cloaked the
+    /// filter is skipped, because an empty `targets` list is what
+    /// `Intent::choose` reads as "nothing to fight" — a whole side that
+    /// stopped closing, stopped swinging and stood still until the caps
+    /// expired.
     fn tactical_sides(&self, actor: Entity) -> Sides {
         let battle = self.world.resource::<TacticalBattle>();
         let acting_side = self.world.get::<Hostile>(actor).is_some();
         let mut sides = Sides::default();
+        let mut hidden: Vec<(i32, i32)> = Vec::new();
         for (body, cell) in battle.bodies() {
             if body == actor {
                 continue;
             }
             if (self.world.get::<Hostile>(body).is_some()) == acting_side {
                 sides.allies.push(cell);
+            } else if self.is_cloaked(body) {
+                hidden.push(cell);
             } else {
                 sides.targets.push(cell);
             }
+        }
+        if sides.targets.is_empty() {
+            sides.targets = hidden;
         }
         sides
     }

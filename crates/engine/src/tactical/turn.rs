@@ -217,6 +217,15 @@ impl Game {
     /// them are the next phase; this is the `Single` case they generalise,
     /// and it is what lets a fight be fought to its end.
     ///
+    /// **A cloaked target is refused**, alongside the adjacency check and by
+    /// the same `false` — one of the five doors that name a body. There is no
+    /// never-empty rule here: this is a pick of one body rather than a pool
+    /// to draw from, and a body that cannot be aimed at is exactly what the
+    /// cloak is. An area routine covering its cell still lands
+    /// (`reach::recipients` never learns the word), and a cloaked body is
+    /// still a wall in `reach::movement_field`, so the cell it stands on is
+    /// the tell.
+    ///
     /// Reports whether the swing happened. The action ends the turn, so a
     /// swing that lands hands the turn on — unless it ended the fight.
     pub fn tactical_attack(&mut self, target: Entity) -> bool {
@@ -233,6 +242,9 @@ impl Game {
             return false;
         };
         if actor == target || (from.0 - at.0).abs() > 1 || (from.1 - at.1).abs() > 1 {
+            return false;
+        }
+        if self.is_cloaked(target) {
             return false;
         }
 

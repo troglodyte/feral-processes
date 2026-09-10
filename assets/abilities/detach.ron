@@ -1,0 +1,9 @@
+(
+    id: "detach",
+    name: "Detach Single",
+    description: "Hides one ally from targeting for 3 rounds, until they act or something lands on them",
+    target: OneAlly,
+    effect: Cloak(duration: 3),
+    cooldown: 4,
+    power_cost: 11.0,
+)

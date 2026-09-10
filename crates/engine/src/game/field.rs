@@ -581,8 +581,8 @@ impl Game {
 
     /// Every buff currently running on the player or a party member, for the
     /// map's buff list and the battle roster alike. Reads `FieldBuff` (which
-    /// outlives a battle) and `CombatBuff` (armed only during one, e.g. a
-    /// brace) off the same holders with no branching on whether a battle is
+    /// outlives a battle), `Cloaked` and `CombatBuff` (both armed only during
+    /// one) off the same holders with no branching on whether a battle is
     /// active — outside one, `CombatBuff` is simply empty, so the list is
     /// field buffs only, exactly the shape `Game::message_history` and
     /// `Game::structure_report` use to keep a screen's row-shaping in the
@@ -612,6 +612,20 @@ impl Game {
                         holder_label: holder_label.clone(),
                     });
                 }
+            }
+
+            if let Some(cloak) = self.world.get::<Cloaked>(holder).copied() {
+                views.push(ActiveBuffView {
+                    // Fixed the way `CombatBuff`'s below is: `Cloaked`
+                    // carries no invocation-time name, only the fact of it.
+                    name: "Cloaked".to_string(),
+                    // An em dash, `PowerCell::Unrated`'s convention — there
+                    // is no magnitude here to report, and a `0` would be a
+                    // bad answer where this is *no* answer.
+                    magnitude: "\u{2014}".to_string(),
+                    remaining: format!("{}t", cloak.remaining),
+                    holder_label: holder_label.clone(),
+                });
             }
 
             if let Some(active) = self.world.get::<CombatBuff>(holder).and_then(|b| b.active) {

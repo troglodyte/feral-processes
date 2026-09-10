@@ -406,6 +406,57 @@ impl Game {
         self.log(format!("{name} braces against the next strike."));
     }
 
+    /// Arms a cloak on `entity` for `rounds` battle rounds, inserting
+    /// `Cloaked` if it holds none — `arm_buff`'s shape, and for the same
+    /// reason: nothing is spawned holding this component.
+    ///
+    /// A fresh cloak replaces whatever was left of an old one rather than
+    /// adding to it, which is what keeps re-running the routine from being a
+    /// way to stack rounds past the ceiling.
+    pub(crate) fn arm_cloak(&mut self, entity: Entity, rounds: u32) {
+        match self.world.get_mut::<Cloaked>(entity) {
+            Some(mut existing) => existing.remaining = rounds,
+            None => {
+                self.world
+                    .entity_mut(entity)
+                    .insert(Cloaked { remaining: rounds });
+            }
+        }
+    }
+
+    /// Whether `entity` is currently cloaked — the one read behind all five
+    /// of the doors that name a body.
+    pub(crate) fn is_cloaked(&self, entity: Entity) -> bool {
+        self.world.get::<Cloaked>(entity).is_some()
+    }
+
+    /// **The only place an action removes a cloak.**
+    ///
+    /// Three callers, and each names a different body's cloak:
+    /// `resolve_and_apply_attack` breaks the *attacker's* (committing to a
+    /// swing is the aggressive act, whatever the roll says),
+    /// `use_ability` breaks the *actor's* when the effect
+    /// `AbilityEffect::breaks_cloak`, and `apply_damage` breaks the
+    /// *target's* — an area attack connected.
+    ///
+    /// Everything not on that list is an **omission, and the omissions are
+    /// the feature**: moving, bracing, a `Heal`, a `Buff` and a `Cleanse` all
+    /// leave a cloak standing. So does a swing that *missed* a cloaked body,
+    /// since only landed damage reaches `apply_damage` — you cannot flush a
+    /// cloak out by swinging at where you guess it is.
+    ///
+    /// Logs **on the transition only**, `set_machine_status`'s rule, so that
+    /// a `Damage` routine — which reaches both the attacker hook and the
+    /// actor hook — reveals its invoker once rather than twice.
+    pub(crate) fn break_cloak(&mut self, entity: Entity) {
+        if self.world.get::<Cloaked>(entity).is_none() {
+            return;
+        }
+        self.world.entity_mut(entity).remove::<Cloaked>();
+        let label = self.creature_label(entity);
+        self.log(format!("{label} is exposed."));
+    }
+
     /// End-of-round status upkeep across every combatant in the fight: each
     /// living enemy in every group, the player, and every party member,
     /// plus each of their combat buffs. Anything a lingering Bleed finished
@@ -434,23 +485,46 @@ impl Game {
     pub(crate) fn tick_combatant_upkeep(&mut self, player: Entity) {
         for wild in self.all_living_enemies() {
             let label = self.entity_label(wild);
-            self.tick_status_effects(wild, &label);
-            // Both of these were party-only while abilities were party-only.
-            // A carrier's routine has to cool or it fires once and never
-            // again, and a mirrored buff has to expire or its `duration` is
-            // decoration.
-            self.tick_combat_buff(wild);
-            self.tick_ability_cooldowns(wild);
+            self.tick_one_combatant(wild, &label);
         }
         let player_label = self.entity_label(player);
-        self.tick_status_effects(player, &player_label);
-        self.tick_combat_buff(player);
-        self.tick_ability_cooldowns(player);
+        self.tick_one_combatant(player, &player_label);
         for companion in self.world.resource::<Party>().0.clone() {
             let label = self.creature_label(companion);
-            self.tick_status_effects(companion, &label);
-            self.tick_combat_buff(companion);
-            self.tick_ability_cooldowns(companion);
+            self.tick_one_combatant(companion, &label);
+        }
+    }
+
+    /// One body's worth of that upkeep.
+    ///
+    /// **Written once rather than three times.** The three loops above ran
+    /// the same block verbatim, so a fourth thing to age meant writing it
+    /// three more times — and the drift that heads off is a cloak that
+    /// expires for companions and never for the player.
+    fn tick_one_combatant(&mut self, entity: Entity, label: &str) {
+        self.tick_status_effects(entity, label);
+        // Both of these were party-only while abilities were party-only.
+        // A carrier's routine has to cool or it fires once and never
+        // again, and a mirrored buff has to expire or its `duration` is
+        // decoration.
+        self.tick_combat_buff(entity);
+        self.tick_ability_cooldowns(entity);
+        self.tick_cloak(entity);
+    }
+
+    /// Ages a cloak by one round, dropping it when the count runs out.
+    ///
+    /// The round cap is the ceiling on the situation and not the usual way
+    /// a cloak ends — `break_cloak` is. Silent on expiry rather than routed
+    /// through that door: nothing acted, so there is no reveal to announce,
+    /// and the row leaving the buff list is what the player reads.
+    fn tick_cloak(&mut self, entity: Entity) {
+        let Some(mut cloak) = self.world.get_mut::<Cloaked>(entity) else {
+            return;
+        };
+        cloak.remaining = cloak.remaining.saturating_sub(1);
+        if cloak.remaining == 0 {
+            self.world.entity_mut(entity).remove::<Cloaked>();
         }
     }
 }

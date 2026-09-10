@@ -1,0 +1,7 @@
+(
+    id: "backfeed_cell",
+    name: "Backfeed Cell",
+    description: "Restores 25 Power, then feeds 5 more every ten ticks for twice as long as a Sustain Cell. Not Grid fuel.",
+    value: Some(15),
+    consume: Some((power: 25.0, prebattle_buff: Some((kind: Trickle, power: 5, ticks: 600, interval: 10)))),
+)

@@ -1,0 +1,8 @@
+(
+    id: "capacitor_array",
+    name: "Capacitor Array",
+    description: "Restores a full reserve, and keeps a supplier lit for eight windows.",
+    value: Some(20),
+    consume: Some((power: 100.0)),
+    grid_fuel: Some(8),
+)

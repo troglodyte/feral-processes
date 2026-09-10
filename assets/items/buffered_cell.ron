@@ -1,0 +1,8 @@
+(
+    id: "buffered_cell",
+    name: "Buffered Cell",
+    description: "Restores 60 Power, and keeps a supplier lit three times as long as the staple.",
+    value: Some(12),
+    consume: Some((power: 60.0)),
+    grid_fuel: Some(3),
+)

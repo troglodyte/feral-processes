@@ -298,11 +298,24 @@ is skipped with a warning logged in-game rather than crashing startup.
     // the `Starved` an input-short machine wears), and the base's machines
     // lose the power cut as though the supplier had been demolished.
     //
-    // ORTHOGONALLY ADJACENT is the whole cost. Nothing hauls fuel to a
-    // burner and it never reads its own buffer, so a supplier parked away
-    // from a feeder goes dark however many units the base is sitting on. A
-    // burning supplier wants a Depot or a Power Conduit on one of its four
-    // neighbouring tiles, and a row of them wants a feeder per node.
+    // A burner spends its own input buffer first — that is where a hauler
+    // fetching for it puts a cell — and then reaches ORTHOGONALLY ADJACENT
+    // for a feeder's output. Base staff will walk it one, so what a bad
+    // placement costs now is a body's round trip rather than the grid; a
+    // burning supplier still wants a Depot or a Power Conduit on one of its
+    // four neighbouring tiles, and a row of them wants a feeder per node.
+    //
+    // The item named here is the fuel this supplier *prefers* and the one a
+    // hauler fetches for it, but it is not the only thing it will burn: any
+    // item declaring `grid_fuel` is accepted, cheapest first (see
+    // assets/items/README.md). A denser cell dropped on an adjacent shelf
+    // therefore works, and buys however many windows it declares.
+    //
+    // The id named here is also the *gate*. It has to be an item that
+    // declares `grid_fuel` itself — a supplier naming something that is not
+    // fuel burns nothing at all rather than falling back to the family, so a
+    // typo here is inert rather than quietly running on everyone else's
+    // cells.
     //
     // Only worth setting on a structure that supplies or regenerates
     // something: upkeep on one that does neither costs the player a unit to

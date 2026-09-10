@@ -1210,3 +1210,93 @@ fn the_inspect_page_says_a_priced_heal_runs_both_ways() {
         "an unpriced heal never reaches the field list, so the page must not offer it there"
     );
 }
+
+/// A consumable's `PrebattleBuff::interval` is honoured, which is the whole
+/// of what makes the trickle line a drip rather than a tap left running.
+///
+/// **The reserve is spent down first, and that is not tidiness.**
+/// `power_regen_system` runs ahead of `needs_tick_system`, so a reserve
+/// parked at `POWER_MAX` converges on the fixed steady state
+/// `POWER_MAX - HUNGER_DECAY_PER_TICK` whether or not anything trickled into
+/// it — a before/after taken at the ceiling reads "nothing changed" in
+/// exactly the case where something should have.
+#[test]
+fn a_trickle_cell_fires_on_its_authored_cadence_and_not_every_tick() {
+    let mut game = Game::new(9140, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let cell = ItemId::from("sustain_cell");
+    let authored = game
+        .world
+        .resource::<crate::items_db::ItemDb>()
+        .get("sustain_cell")
+        .expect("a shipped item")
+        .consume
+        .and_then(|c| c.prebattle_buff)
+        .expect("the trickle line arms a field buff");
+    assert!(
+        authored.interval > 1,
+        "a cell authored at every tick would make this test vacuous"
+    );
+    give(&mut game, &cell, 1);
+    game.world
+        .get_mut::<PowerReserve>(player)
+        .unwrap()
+        .spend(90.0);
+
+    game.use_item(&cell);
+    let armed = reserve_of(&game, player);
+    let span = authored.interval * 4;
+    for _ in 0..span {
+        game.tick();
+    }
+
+    let fired = span / authored.interval;
+    let drain = crate::tuning::HUNGER_DECAY_PER_TICK * span as f32;
+    let expected = armed + (fired * authored.power as u32) as f32 - drain;
+    assert!(
+        (reserve_of(&game, player) - expected).abs() < 1.5,
+        "expected the cell to fire {fired} times across {span} ticks and land \
+         near {expected}, found {}; firing every tick would have added {} \
+         instead",
+        reserve_of(&game, player),
+        span * authored.power as u32
+    );
+}
+
+/// The drip has to clear `HUNGER_DECAY_PER_TICK` or it is not a restore at
+/// all — a cell that trickles slower than Power leaks reads at the keyboard
+/// as an item that does nothing.
+#[test]
+fn every_shipped_trickle_cell_outruns_the_drain() {
+    let game = Game::new(9141, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut checked = 0;
+    for def in game.world.resource::<crate::items_db::ItemDb>().all() {
+        let Some(buff) = def.consume.and_then(|c| c.prebattle_buff) else {
+            continue;
+        };
+        if buff.kind != FieldBuffKind::Trickle {
+            continue;
+        }
+        let rate = buff.power as f32 / buff.interval.max(1) as f32;
+        assert!(
+            rate > crate::tuning::HUNGER_DECAY_PER_TICK,
+            "{} trickles {rate} Power a tick against a drain of {}",
+            def.id.as_str(),
+            crate::tuning::HUNGER_DECAY_PER_TICK
+        );
+        assert_eq!(
+            buff.ticks % buff.interval.max(1),
+            0,
+            "{}'s duration is not a whole number of its own firings — the \
+             cadence is phased off `remaining`, so the last one is silently \
+             short",
+            def.id.as_str()
+        );
+        checked += 1;
+    }
+    assert_eq!(
+        checked, 2,
+        "expected the two shipped trickle cells; one that lost its buff would \
+         drop out of this scan unnoticed"
+    );
+}

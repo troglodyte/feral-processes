@@ -1,0 +1,7 @@
+(
+    id: "sustain_cell",
+    name: "Sustain Cell",
+    description: "Restores 15 Power, then feeds 3 more every ten ticks for a long walk. Not Grid fuel.",
+    value: Some(12),
+    consume: Some((power: 15.0, prebattle_buff: Some((kind: Trickle, power: 3, ticks: 300, interval: 10)))),
+)

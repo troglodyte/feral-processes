@@ -1685,10 +1685,24 @@ fn every_burning_supplier_supplies_something_and_the_home_burns_nothing() {
              nothing — the upkeep buys the player no number at all",
             def.id
         );
+        let resolved = items.get(fuel.as_str());
         assert!(
-            items.get(fuel.as_str()).is_some(),
+            resolved.is_some(),
             "{} declares power_upkeep {:?}, which no ItemDb entry resolves — \
              a supplier that can never be fed",
+            def.id,
+            fuel
+        );
+        // The declared id is the *gate* on the whole grid-fuel family (see
+        // `systems::burn_grid_upkeep`): naming an item that is not fuel does
+        // not fall back to one that is, it burns nothing. So an id that
+        // resolves but declares no `grid_fuel` is the same silent supplier
+        // the check above exists to catch, one step further in.
+        assert!(
+            resolved.and_then(|d| d.grid_fuel).is_some(),
+            "{} declares power_upkeep {:?}, which is a real item but not grid \
+             fuel — the supplier is gated on its own declared fuel, so it \
+             will burn nothing at all",
             def.id,
             fuel
         );
@@ -1748,8 +1762,10 @@ fn every_zone_gated_gear_recipe_asks_for_a_zone_material() {
         }
     }
     assert_eq!(
-        checked, 6,
-        "expected the six zone-gated gear recipes; one that lost its recipe would drop out of this scan unnoticed"
+        checked, 10,
+        "expected every zone-gated recipe the tree unlocks — six of gear and \
+         four of Power cells; one that lost its recipe would drop out of this \
+         scan unnoticed"
     );
 }
 
@@ -4157,5 +4173,44 @@ fn the_depot_ladder_doubles_and_every_rung_past_the_first_is_researched() {
                 node.min_zone
             );
         }
+    }
+}
+
+/// **Nothing a research node gates may appear on the character-creation
+/// shelf.** `ItemDb::creation_shelf` picks rows by `value <=
+/// CREATION_SHELF_MAX_VALUE` and nothing else, so an item priced low enough
+/// is offered to a character who has not been created yet — research-gated
+/// content handed over for starting Credits, before the run that was
+/// supposed to earn it exists.
+///
+/// This is `TOOL_CARRIER_VALUE`'s trap in a second place: a minted item joins
+/// every pool that filters by *value* rather than by name, and that one was
+/// closed by an explicit bar in `barred`. Here the price is what holds it,
+/// which is exactly the kind of thing that rots under a retune — the shelf
+/// also sorts by `(price, id)` and truncates, so a cheap new item does not
+/// merely appear, it pushes an existing row off the end in silence.
+#[test]
+fn no_research_gated_recipe_is_offered_on_the_creation_shelf() {
+    let game = Game::new(957, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let gated: Vec<&ItemId> = game
+        .world
+        .resource::<crate::research::ResearchDb>()
+        .all()
+        .flat_map(|def| def.unlocks_recipes.iter().map(|r| &r.result))
+        .collect();
+    assert!(
+        !gated.is_empty(),
+        "the tree unlocks no recipes at all, so this census proves nothing"
+    );
+    let shelf = game.world.resource::<ItemDb>().creation_shelf();
+    for row in &shelf {
+        assert!(
+            !gated.contains(&&row.id),
+            "{} is unlocked by research but sits on the creation shelf at {} \
+             — under CREATION_SHELF_MAX_VALUE, so starting Credits buy what \
+             the research tree is supposed to gate",
+            row.id.as_str(),
+            row.price
+        );
     }
 }

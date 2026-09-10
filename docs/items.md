@@ -1,7 +1,7 @@
 # Item catalogue
 
 Every shipped item in feral-processes, charted from its own file in
-`assets/items/`. Fifty-four of them.
+`assets/items/`. Fifty-nine of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
 `assets/items/*.ron` on 2026-08-11 and will drift the moment one of those
@@ -13,7 +13,7 @@ for test setup and data-defined recipes, and nothing else needs them.
 
 | | |
 |---|---|
-| items | 55 |
+| items | 59 |
 | equipment | 31 across 3 slots |
 | craftable | 39 |
 | need a bench | 30 |
@@ -32,8 +32,8 @@ THE VALUE LADDER
 
 printable     1-2     5 items   a base can make it out of nothing
 scavenged     3-8    19 items   salvage and intermediates
-standard     12-16   11 items   the craftable working set
-researched   20-60   10 items   a node and a bench, or a rare drop
+standard     12-16   14 items   the craftable working set
+researched   20-60   11 items   a node and a bench, or a rare drop
 premium      80-120   9 items   portal_fragment gear
 
 unpriced: Credits (TradeCurrency)
@@ -169,7 +169,7 @@ breach.
 | Logic Wafer | 3 | 4 raw_trace | `transcriber` |
 | Charge Coil | 3 | 3 power_cell | `winding_node` |
 
-30 of the 55 items name a bench, and the eleven assembler
+30 of the 59 items name a bench, and the eleven assembler
 recipes in the game are exactly the products of the eleven machines — because a
 machine runs its product's own `craftable.cost`, there is no second recipe on
 the structure that could drift from the bench recipe, and every craftable a

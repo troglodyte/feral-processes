@@ -46,6 +46,19 @@ pub struct PrebattleBuff {
     pub power: i32,
     /// Game ticks, not battle rounds — see `ActiveFieldBuff::remaining`.
     pub ticks: u32,
+    /// Ticks between firings, the same axis `AbilityEffect::FieldBuff::
+    /// interval` gives a routine. Absent means every tick, which is what
+    /// every consumable did before this field existed.
+    ///
+    /// **An over-time kind is unauthorable without it.** `Regen` and
+    /// `Trickle` fire on every tick they are eligible for, so at any
+    /// magnitude worth carrying an item that armed one was not a drip but a
+    /// tap left running — `power: 3` a tick is twenty times
+    /// `HUNGER_DECAY_PER_TICK`. The cadence is what makes the difference
+    /// between "this tops you up over a long walk" and "Power is free until
+    /// it expires".
+    #[serde(default = "crate::abilities::every_turn")]
+    pub interval: u32,
 }
 
 /// What `Game::refactor_companion` does to a tamed program. Magnitudes live
@@ -140,6 +153,21 @@ pub struct ItemDef {
     /// without touching engine code.
     #[serde(default)]
     pub cache_drop: Option<f32>,
+    /// How many windows of `tuning::POWER_UPKEEP_TICKS` one unit buys a
+    /// `StructureDef::power_upkeep` supplier. Absent means this item is not
+    /// grid fuel and no supplier will burn it.
+    ///
+    /// **Windows rather than ticks**, because the window's length is a
+    /// difficulty knob and difficulty is not content: `tuning.rs` keeps
+    /// saying how long a supplier runs on the staple cell, and an item file
+    /// only says how many of those a denser one is worth. Authored ticks
+    /// would let a mod retune the base's fuel economy by editing an item.
+    ///
+    /// A supplier burns the **lowest-window** fuel it can reach, so a new
+    /// tier never retires the one below it — the cheap cell is what the base
+    /// eats, and the dense one stays worth carrying.
+    #[serde(default)]
+    pub grid_fuel: Option<u32>,
     /// What this item does to a tamed program through
     /// `Game::refactor_companion`. `#[serde(default)]` like every other
     /// optional field, so an existing mod's items keep parsing as ordinary
@@ -435,6 +463,7 @@ impl ItemDb {
                     craftable: None,
                     droppable: ability.boss_drop.clone(),
                     cache_drop: None,
+                    grid_fuel: None,
                     // A disk *installs* its routine; it is not worn, so
                     // there is nothing for a worn grant to hang off.
                     grants: None,
@@ -508,6 +537,7 @@ impl ItemDb {
                     craftable: None,
                     droppable: None,
                     cache_drop: None,
+                    grid_fuel: None,
                     // A carrier installs into a slot; it is not worn.
                     grants: None,
                     upgrade: None,
@@ -975,7 +1005,7 @@ mod tests {
             equipment.len(),
             "an equippable not in the table above is unpinned"
         );
-        assert_eq!(db.all().count(), 64);
+        assert_eq!(db.all().count(), 68);
     }
 
     #[test]

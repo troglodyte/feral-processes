@@ -34,6 +34,12 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.157
+
+**The research graph draws its own backdrop.** It draws no popup, so
+without one the map showed through every box and edge and nothing on the
+tree was discernible.
+
 ## 0.13.156
 
 **The research tree can be read as a flow chart.** `G` on the research

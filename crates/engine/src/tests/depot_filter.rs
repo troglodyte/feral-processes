@@ -130,7 +130,10 @@ fn a_denied_item_lands_in_the_next_depot_instead() {
     set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 5)]);
     deny(&mut game, first, ids::CORE_FRAGMENT);
 
-    let (_, given) = game.transfer_items(&[], &[(ItemId::from(ids::CORE_FRAGMENT), 5)]);
+    let (_, given) = game.transfer_items(&TransferBasket::items(
+        &[],
+        &[(ItemId::from(ids::CORE_FRAGMENT), 5)],
+    ));
 
     assert_eq!(given, vec![(ItemId::from(ids::CORE_FRAGMENT), 5)]);
     assert_eq!(node_output(&game, first, ids::CORE_FRAGMENT), 0);
@@ -158,7 +161,10 @@ fn an_item_every_depot_refuses_cannot_be_put_at_all() {
         "but the screen must not offer a put nothing will take"
     );
 
-    let (_, given) = game.transfer_items(&[], &[(ItemId::from(ids::CORE_FRAGMENT), 5)]);
+    let (_, given) = game.transfer_items(&TransferBasket::items(
+        &[],
+        &[(ItemId::from(ids::CORE_FRAGMENT), 5)],
+    ));
     assert!(given.is_empty());
     assert_eq!(
         game.world
@@ -181,7 +187,10 @@ fn a_denied_item_already_on_the_shelf_can_still_be_taken() {
     deny(&mut game, shelf, ids::CORE_FRAGMENT);
 
     assert_eq!(row(&game, ids::CORE_FRAGMENT).on_shelves, 6);
-    let (taken, _) = game.transfer_items(&[(ItemId::from(ids::CORE_FRAGMENT), 6)], &[]);
+    let (taken, _) = game.transfer_items(&TransferBasket::items(
+        &[(ItemId::from(ids::CORE_FRAGMENT), 6)],
+        &[],
+    ));
     assert_eq!(taken, vec![(ItemId::from(ids::CORE_FRAGMENT), 6)]);
 }
 

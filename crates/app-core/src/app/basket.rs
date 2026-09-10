@@ -18,9 +18,6 @@
 
 use crate::*;
 
-/// One direction of a basket, as the engine's `transfer_items` wants it.
-type Basket = Vec<(ItemId, u32)>;
-
 /// Closes half the gap between `n` and `target`, landing exactly on the
 /// target rather than stalling one short.
 ///
@@ -179,19 +176,20 @@ impl App {
         }
     }
 
-    /// The basket as the engine wants it: what to take and what to give,
-    /// each with the untouched rows dropped.
-    pub(crate) fn basket_request(&self) -> (Basket, Basket) {
-        let mut take = Basket::new();
-        let mut give = Basket::new();
+    /// The basket as the engine wants it: what to take, what to give and
+    /// which carriers cross, each with the untouched rows dropped.
+    pub(crate) fn basket_request(&self) -> TransferBasket {
+        let mut basket = TransferBasket::default();
         for (row, n) in self.basket_rows.iter().zip(self.basket_amounts.iter()) {
             match (*n).cmp(&0) {
-                std::cmp::Ordering::Greater => take.push((row.item.clone(), *n as u32)),
-                std::cmp::Ordering::Less => give.push((row.item.clone(), n.unsigned_abs() as u32)),
+                std::cmp::Ordering::Greater => basket.take.push((row.item.clone(), *n as u32)),
+                std::cmp::Ordering::Less => basket
+                    .give
+                    .push((row.item.clone(), n.unsigned_abs() as u32)),
                 std::cmp::Ordering::Equal => {}
             }
         }
-        (take, give)
+        basket
     }
 
     /// The one teardown every exit uses. Clearing the three fields is what

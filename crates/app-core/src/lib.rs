@@ -54,8 +54,8 @@ use feral_processes_engine::{
     EntityView, FieldRoutinePick, FieldRoutineTarget, FieldRoutineTargetView, Game,
     HandCraftProgress, LogEntry, LogLine, MESSAGE_LOG_CAP, MessageSource, OrderPriority,
     ProgramSaleOption, RouteDestination, RouteRefusal, RouteReport, SlotShift, SortieRefusal,
-    SortieReport, SortieRow, StockRow, SwingOutcome, TransferRow, WorkOrder, WorkOrderReport,
-    WorkProfile, condense,
+    SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket, TransferRow, WorkOrder,
+    WorkOrderReport, WorkProfile, condense,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the

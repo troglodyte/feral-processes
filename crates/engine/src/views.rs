@@ -2672,6 +2672,25 @@ pub struct TransferRow {
     pub can_put: u32,
 }
 
+/// One downed program the transfer picker offers, on whichever side of the
+/// basket it is currently standing — see `Game::rack_offer`.
+///
+/// **Not a widened `TransferRow`.** That row's three figures are quantities
+/// of a fungible item, and a carrier has none: its range is `[-1, +1]` and
+/// its two columns are 1/0 or 0/1. `racked` is which side it is sitting on,
+/// and the screen derives both figures from it.
+///
+/// No handle on the program itself: the **index** into `rack_offer`'s list
+/// is what the basket names, `load_teardown_rig`'s own idiom, so an
+/// `Entity` never crosses into a view.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TransferCarrier {
+    /// `Game::downed_program_label`'s sentence — "the level 9 Scrapper".
+    pub label: String,
+    /// True when it stands on a rack, so the only move it has is a take.
+    pub racked: bool,
+}
+
 /// One Depot's filter as its screen draws it — see
 /// `Game::depot_filter_view`.
 ///

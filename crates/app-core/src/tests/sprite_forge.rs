@@ -90,8 +90,8 @@ fn sprite_subjects_is_every_species_and_structure_plus_player_and_anchor() {
 
     assert_eq!(
         subjects.len(),
-        50,
-        "17 species + 31 structures + player + anchor, with no shipped \
+        51,
+        "17 species + 32 structures + player + anchor, with no shipped \
          sprite_name overlaps to de-duplicate away"
     );
     let names: Vec<&str> = subjects.iter().map(|s| s.name.as_str()).collect();

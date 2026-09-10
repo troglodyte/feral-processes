@@ -194,6 +194,7 @@ pub(crate) fn app_beside_a_teardown_rig_holding(
         denied_items: Vec::new(),
         power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
         build_quality: 1.0,
+        racked: Vec::new(),
         hopper: Vec::new(),
         hopper_progress: 0,
     });
@@ -730,6 +731,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         denied_items: Vec::new(),
         power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
         build_quality: 1.0,
+        racked: Vec::new(),
         hopper: Vec::new(),
         hopper_progress: 0,
     });
@@ -850,6 +852,7 @@ pub(crate) fn app_owning_one_deep_program_and_a_compiler(
         denied_items: Vec::new(),
         power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
         build_quality: 1.0,
+        racked: Vec::new(),
         hopper: Vec::new(),
         hopper_progress: 0,
     });
@@ -952,6 +955,7 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
             denied_items: Vec::new(),
             power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
             build_quality: 1.0,
+            racked: Vec::new(),
             hopper: Vec::new(),
             hopper_progress: 0,
         });
@@ -1561,6 +1565,7 @@ pub(crate) fn app_inside_a_small_base_with_programs(
         denied_items: Vec::new(),
         power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
         build_quality: 1.0,
+        racked: Vec::new(),
         hopper: Vec::new(),
         hopper_progress: 0,
     });
@@ -1692,6 +1697,7 @@ pub(crate) fn app_at_a_contract_broker(seed: u32, underground: bool) -> App {
         denied_items: Vec::new(),
         power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
         build_quality: 1.0,
+        racked: Vec::new(),
         hopper: Vec::new(),
         hopper_progress: 0,
     });
@@ -1825,6 +1831,7 @@ pub(crate) fn app_beside_depots(seed: u32, depots: i32, filled: u32, pack: &[(&s
             denied_items: Vec::new(),
             power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
             build_quality: 1.0,
+            racked: Vec::new(),
             hopper: Vec::new(),
             hopper_progress: 0,
         });
@@ -1972,6 +1979,7 @@ pub(crate) fn app_beside_stocked_machines(seed: u32, stock: &[(&str, u32)]) -> A
             denied_items: Vec::new(),
             power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
             build_quality: 1.0,
+            racked: Vec::new(),
             hopper: Vec::new(),
             hopper_progress: 0,
         });

@@ -2892,7 +2892,7 @@ pub(crate) fn take_everything_adjacent(game: &mut Game) -> Vec<(ItemId, u32)> {
         .filter(|r| r.on_shelves > 0)
         .map(|r| (r.item, r.on_shelves))
         .collect();
-    game.transfer_items(&all, &[]).0
+    game.transfer_items(&TransferBasket::items(&all, &[])).0
 }
 
 /// A costed `Heal` — the shape that reaches the field routine list once

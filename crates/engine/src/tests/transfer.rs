@@ -283,10 +283,10 @@ fn a_transfer_takes_before_it_gives() {
     );
     set_inventory(&mut game, &[(ids::POWER_CELL, 4)]);
 
-    let (taken, given) = game.transfer_items(
+    let (taken, given) = game.transfer_items(&TransferBasket::items(
         &[(ItemId::from(ids::CORE_FRAGMENT), 4)],
         &[(ItemId::from(ids::POWER_CELL), 4)],
-    );
+    ));
     assert_eq!(taken, vec![(ItemId::from(ids::CORE_FRAGMENT), 4)]);
     assert_eq!(
         given,
@@ -314,10 +314,10 @@ fn a_two_way_basket_ticks_once_and_logs_each_half_once() {
     set_inventory(&mut game, &[(ids::POWER_CELL, 2)]);
 
     let before = game.current_tick();
-    game.transfer_items(
+    game.transfer_items(&TransferBasket::items(
         &[(ItemId::from(ids::CORE_FRAGMENT), 2)],
         &[(ItemId::from(ids::POWER_CELL), 2)],
-    );
+    ));
     assert_eq!(game.current_tick(), before + 1, "one commit, one turn");
 
     let said = lines(&game);
@@ -346,7 +346,10 @@ fn a_one_way_basket_says_only_its_own_half() {
         &[(ids::CORE_FRAGMENT, 6)],
     );
 
-    game.transfer_items(&[(ItemId::from(ids::CORE_FRAGMENT), 2)], &[]);
+    game.transfer_items(&TransferBasket::items(
+        &[(ItemId::from(ids::CORE_FRAGMENT), 2)],
+        &[],
+    ));
     assert!(lines(&game).iter().any(|l| l.starts_with("You collect")));
     assert!(!lines(&game).iter().any(|l| l.starts_with("You put away")));
 }
@@ -369,10 +372,10 @@ fn an_all_zero_basket_spends_no_turn_and_says_nothing() {
     let before = game.current_tick();
     let said = lines(&game).len();
 
-    let (taken, given) = game.transfer_items(
+    let (taken, given) = game.transfer_items(&TransferBasket::items(
         &[(ItemId::from(ids::CORE_FRAGMENT), 0)],
         &[(ItemId::from(ids::POWER_CELL), 0)],
-    );
+    ));
     assert!(taken.is_empty() && given.is_empty());
     assert_eq!(game.current_tick(), before);
     assert_eq!(lines(&game).len(), said);
@@ -396,10 +399,10 @@ fn the_two_clamps_survive_the_merge() {
     );
     set_inventory(&mut game, &[(ids::POWER_CELL, 20)]);
 
-    let (taken, given) = game.transfer_items(
+    let (taken, given) = game.transfer_items(&TransferBasket::items(
         &[(ItemId::from(ids::CORE_FRAGMENT), 99)],
         &[(ItemId::from(ids::POWER_CELL), 20)],
-    );
+    ));
     assert_eq!(taken, vec![(ItemId::from(ids::CORE_FRAGMENT), 3)]);
     assert_eq!(
         given,
@@ -495,7 +498,10 @@ fn a_take_reaches_every_orthogonal_neighbour_and_no_diagonal_one() {
     );
 
     let before = count_item(&game, ids::CORE_FRAGMENT);
-    let (taken, _) = game.transfer_items(&[(ItemId::from(ids::CORE_FRAGMENT), 99)], &[]);
+    let (taken, _) = game.transfer_items(&TransferBasket::items(
+        &[(ItemId::from(ids::CORE_FRAGMENT), 99)],
+        &[],
+    ));
 
     assert_eq!(
         count_item(&game, ids::CORE_FRAGMENT) - before,
@@ -537,7 +543,10 @@ fn a_take_leaves_a_neighbours_input_untouched() {
         .input
         .insert(ItemId::from(ids::POWER_CELL), 4);
 
-    game.transfer_items(&[(ItemId::from(ids::CORE_FRAGMENT), 3)], &[]);
+    game.transfer_items(&TransferBasket::items(
+        &[(ItemId::from(ids::CORE_FRAGMENT), 3)],
+        &[],
+    ));
 
     let stock = game.world.get::<Stock>(node).unwrap();
     assert!(stock.output.is_empty(), "the output is emptied");
@@ -615,7 +624,10 @@ fn asking_for_part_of_a_buffer_leaves_the_rest_in_it() {
     );
 
     let before = count_item(&game, ids::CORE_FRAGMENT);
-    let (got, _) = game.transfer_items(&[(ItemId::from(ids::CORE_FRAGMENT), 4)], &[]);
+    let (got, _) = game.transfer_items(&TransferBasket::items(
+        &[(ItemId::from(ids::CORE_FRAGMENT), 4)],
+        &[],
+    ));
 
     assert_eq!(got, vec![(ItemId::from(ids::CORE_FRAGMENT), 4)]);
     assert_eq!(count_item(&game, ids::CORE_FRAGMENT) - before, 4);
@@ -667,10 +679,10 @@ fn both_movers_walk_their_neighbours_in_tile_order() {
             .unwrap_or(0)
     };
 
-    let (taken, given) = game.transfer_items(
+    let (taken, given) = game.transfer_items(&TransferBasket::items(
         &[(ItemId::from(ids::CORE_FRAGMENT), 7)],
         &[(ItemId::from(ids::POWER_CELL), 5)],
-    );
+    ));
     assert_eq!(taken, vec![(ItemId::from(ids::CORE_FRAGMENT), 7)]);
     assert_eq!(
         held(&game, west, ids::CORE_FRAGMENT),
@@ -701,7 +713,10 @@ fn a_give_larger_than_the_first_depots_room_spills_into_the_second() {
     let west = stocked(&mut game, "depot", p.x - 1, p.y, 3, &[]);
     set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 5)]);
 
-    let (_, given) = game.transfer_items(&[], &[(ItemId::from(ids::CORE_FRAGMENT), 5)]);
+    let (_, given) = game.transfer_items(&TransferBasket::items(
+        &[],
+        &[(ItemId::from(ids::CORE_FRAGMENT), 5)],
+    ));
     assert_eq!(given, vec![(ItemId::from(ids::CORE_FRAGMENT), 5)]);
 
     let in_output = |e: Entity| {
@@ -777,7 +792,10 @@ fn given_goods_land_in_output_and_the_base_can_see_them() {
     stocked(&mut game, "depot", p.x + 1, p.y, 200, &[]);
     set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 5)]);
 
-    let (_, landed) = game.transfer_items(&[], &[(ItemId::from(ids::CORE_FRAGMENT), 5)]);
+    let (_, landed) = game.transfer_items(&TransferBasket::items(
+        &[],
+        &[(ItemId::from(ids::CORE_FRAGMENT), 5)],
+    ));
     assert_eq!(landed, vec![(ItemId::from(ids::CORE_FRAGMENT), 5)]);
 
     let held = game

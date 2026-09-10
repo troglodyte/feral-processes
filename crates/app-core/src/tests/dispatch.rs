@@ -35,6 +35,7 @@ pub(super) fn app_at_a_relay(seed: u32, item: &ItemId, qty: u32) -> App {
         denied_items: Vec::new(),
         power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
         build_quality: 1.0,
+        racked: Vec::new(),
         hopper: Vec::new(),
         hopper_progress: 0,
     });
@@ -50,6 +51,7 @@ pub(super) fn app_at_a_relay(seed: u32, item: &ItemId, qty: u32) -> App {
         denied_items: Vec::new(),
         power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
         build_quality: 1.0,
+        racked: Vec::new(),
         hopper: Vec::new(),
         hopper_progress: 0,
     });

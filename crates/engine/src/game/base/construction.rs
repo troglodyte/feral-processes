@@ -176,14 +176,38 @@ impl Game {
         if carrying_for_this {
             return true;
         }
-        outstanding.into_iter().any(|(item, _)| {
-            if self.pack_source(&item).is_some() {
-                return true;
-            }
-            let mut query = self.world.query_filtered::<&Stock, With<Structure>>();
-            query
-                .iter(&self.world)
-                .any(|stock| stock.output.get(&item).copied().unwrap_or(0) > 0)
+        // **A call, not a second reading of the bill.** Answered here with
+        // its own copy of "is there a source", this question drifted from
+        // the one `builder_errand` asks by a whole line of the bill: this
+        // side said *any* outstanding line, that side fetched the *first*,
+        // and a bill whose head can never be supplied kept a body posted
+        // forever while nothing under it was ever carried. `Errand::Dry` is
+        // silent on the grounds that the scheduler reports it, and the
+        // scheduler had just decided the site was fine — so the base stood
+        // still and said nothing at all.
+        self.next_fetch(site, Position { x: 0, y: 0 }).is_some()
+    }
+
+    /// The first outstanding line of `site` that can actually be fetched
+    /// right now, and where the nearest unit of it is, measured from `from`.
+    ///
+    /// **This is the one definition of "there is something to fetch"**,
+    /// shared by `build_is_workable` — which decides whether to staff the
+    /// site at all — and `builder_errand` — which decides what the body
+    /// standing there does next. Two readings of the bill is how a site
+    /// counted as workable on the strength of a line the builder would
+    /// never reach.
+    ///
+    /// `from` chooses **which** source, never **whether** there is one, so
+    /// the scheduler can ask from anywhere.
+    fn next_fetch(&mut self, site: Entity, from: Position) -> Option<(ItemId, u32, Source)> {
+        let outstanding = self
+            .world
+            .get::<BuildSite>(site)
+            .map(|build| build.outstanding())?;
+        outstanding.into_iter().find_map(|(item, short)| {
+            let source = self.nearest_source(&item, from)?;
+            Some((item, short, source))
         })
     }
 
@@ -272,16 +296,16 @@ impl Game {
                 Errand::PutBack
             };
         }
-        let Some((item, short)) = outstanding.into_iter().next() else {
+        if outstanding.is_empty() {
             return Errand::Raise(target);
-        };
+        }
         let from = self
             .world
             .get::<Position>(worker)
             .copied()
             .unwrap_or(Position { x: 0, y: 0 });
-        match self.nearest_source(&item, from) {
-            Some(source) => Errand::Fetch(item, short, source),
+        match self.next_fetch(site, from) {
+            Some((item, short, source)) => Errand::Fetch(item, short, source),
             None => Errand::Dry,
         }
     }

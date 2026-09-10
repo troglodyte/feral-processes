@@ -8706,7 +8706,34 @@ which is what makes that acceptable here and not for a machine.
 never whether the whole bill can be met — the latter puts the deadlock back
 for any structure costing more than the base can hold at once.
 
-**Two traps came out of that fix, and both are the kind that ships.** The
+**A third trap, found in a player's own save on 2026-09-09 and the worst of
+the three: the two halves were reading the bill differently.**
+`build_is_workable` asked whether **any** outstanding line had a source;
+`builder_errand` fetched the **first** outstanding line and answered
+`Errand::Dry` when it could not get that one. Every shipped bill of one item
+made them the same question, so nothing caught it — but a Zone Portal costs
+Portal Fragments and then Routine Disks, and a fragment drops from a Stack
+guardian and from nothing else. So on the surface the head of that bill is
+dry forever while the tail is fully supplied: the scheduler kept a body
+posted because the disks were reachable, the body asked for a fragment and
+got nothing every tick, and `Errand::Dry` is deliberately *silent* on the
+grounds that the scheduler reports it — while the scheduler had just decided
+the site was fine. One body pinned to a site that could never advance,
+nothing delivered, no line in the log, and — because the base's standing
+work orders were all satisfied — eleven machines standing idle with no
+explanation anywhere on any screen. The player's reading was that the base
+had stopped making things, which is exactly what it looked like.
+
+The fix is `next_fetch`, one function both sides call: the first outstanding
+line that has a source, and where the nearest unit of it is. `from` chooses
+*which* source and never *whether* there is one, so the scheduler asks it
+from the origin and the builder asks it from its own tile and they cannot
+disagree. This is the repo's own "a comment claiming to mirror other code
+must be a call, not a copy" rule arriving one bug late — neither side
+claimed to mirror the other, which is how it got in: they were written as
+two different questions and were only ever one.
+
+**Two traps came out of the original fix, and both are the kind that ships.** The
 announcement had to *move*: a dry site is now never posted, so no builder
 ever stands there to report it, and the report belongs where the drop
 happens — which is the codebase's existing rule that the scheduler is the

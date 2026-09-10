@@ -734,6 +734,53 @@ fn a_request_the_base_cannot_supply_does_not_deadlock_production() {
     );
 }
 
+/// **Head-of-line blocking**: a bill whose first line can never be supplied
+/// must not stall the lines under it.
+///
+/// A Zone Portal costs Portal Fragments and Routine Disks, in that order. A
+/// fragment drops from a Stack guardian and from nothing else — no machine
+/// in any base can make one — while a Disk Press makes disks all day. So the
+/// head of that bill is dry for as long as the party stays on the surface,
+/// and the tail is fully supplied.
+///
+/// `build_is_workable` asks whether *any* outstanding line can be fetched,
+/// so the site keeps a body posted; `builder_errand` fetched the *first*
+/// outstanding line and reported `Errand::Dry` when it could not get it —
+/// silently, because the scheduler owns that announcement and the scheduler
+/// had decided the site was fine. One body pinned to a site forever, nothing
+/// delivered, and not a word in the log. The two questions have to be the
+/// same question.
+#[test]
+fn a_builder_fetches_the_line_it_can_get_when_the_line_above_it_is_dry() {
+    let mut game = base(1117);
+    builder(&mut game);
+    give(&mut game, &ItemId::from(ids::ROUTINE_DISK), 4);
+    file_build(&mut game, "portal", 1, 0).unwrap();
+    let site = site_at(&mut game, 1, 0);
+
+    for _ in 0..200 {
+        game.tick();
+    }
+
+    let build = game
+        .world
+        .get::<BuildSite>(site)
+        .expect("the site can never be finished, so it is still standing");
+    assert_eq!(
+        build.delivered_of(&ItemId::from(ids::ROUTINE_DISK)),
+        4,
+        "the disks are on a shelf the crew can reach — an unobtainable line \
+         above them in the bill must not be what stops them being carried"
+    );
+    assert!(
+        game.message_history(400)
+            .into_iter()
+            .any(|m| m.text.contains("nothing to raise")),
+        "and once the tail is delivered the site really is dry, so the crew \
+         says what it is still short of rather than standing there silently"
+    );
+}
+
 /// Examine names the request and what is still to be carried to it.
 ///
 /// The materials standing on a site are deliberately not drawn on the map,

@@ -1871,3 +1871,32 @@ fn a_brace_is_gone_once_the_order_comes_round() {
         "the brace outlived the round it was armed for"
     );
 }
+
+/// The brace's one accepted cost, pinned rather than reasoned about: a body
+/// on the **last** rung braces against nobody, because `hand_on_turn`'s wrap
+/// fires the moment it hands the turn on and the wrap is what ages the buff.
+///
+/// Stated in `CLAUDE.md`, in the `seams` skill and in `docs/seams.md`, so it
+/// is a claim that has to be checked rather than remembered — and it is the
+/// thing that would silently become false if the brace were ever rearmed for
+/// longer.
+#[test]
+fn a_body_on_the_last_rung_braces_against_nobody() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 400);
+    let player = game.player_entity();
+    // The player last, where the wrap lands directly behind its turn.
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .set_initiative(vec![pack[0], player]);
+    assert!(wait_for_turn(&mut game, player));
+    let raw = game.effective_mitigation(player);
+
+    assert!(game.tactical_defend());
+
+    assert_eq!(
+        game.effective_mitigation(player),
+        raw,
+        "the last rung's brace outlived the wrap that follows it"
+    );
+}

@@ -11,6 +11,7 @@
 use super::support::*;
 use crate::abilities::{AbilityDb, AbilityShape};
 use crate::items_db::ItemDb;
+use crate::tactical::TacticalBattle;
 use crate::tuning::TACTICAL_GROUP_RADIUS;
 use crate::*;
 
@@ -501,5 +502,183 @@ fn a_dead_swinger_stops_the_sweep() {
         wounded(&game, &bodies[1..]),
         0,
         "the sweep stops at the body the swinger died on"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// The battle map's sweep.
+// ─────────────────────────────────────────────────────────────────────────
+
+/// A tactical fight with the player wearing `weapon`, the whole party and
+/// pack placed by hand, and the player holding the turn.
+///
+/// The bodies are laid out in a row so the geometry is stated rather than
+/// deployed: the player, the body they aim at, one body a cell further on
+/// (inside the derived `Radius { 1 }` around the aim) and one two cells
+/// further still (outside it).
+struct Board {
+    game: Game,
+    player: Entity,
+    target: Entity,
+    beside: Entity,
+    away: Entity,
+    pet: Entity,
+}
+
+fn tactical_board(tag: &str, weapon: &str) -> (ScratchAssets, Board) {
+    let dir = modded_assets_dir(tag, &[], &[REACH_WEAPON, NARROW_WEAPON], &[], &[], &[]);
+    let mut game = Game::new(9_200, DifficultyMode::Forgiving, &dir).unwrap();
+    let mut profile = game.profile().clone();
+    profile.tactical_battles = true;
+    game.install_profile(profile);
+
+    let player = game.player_entity();
+    wear(&mut game, player, weapon);
+    let pet = spawn_tamed(&mut game, 10_000, 1);
+    enlist(&mut game, pet);
+
+    let at = *game.world.get::<Position>(player).unwrap();
+    let pack: Vec<Entity> = (0..3)
+        .map(|i| {
+            let e = spawn_wild_without_routine(&mut game, "scrapper", at.x + 1 + i, at.y);
+            let mut stats = game.world.get_mut::<Stats>(e).unwrap();
+            stats.max_hp = 10_000;
+            stats.hp = 10_000;
+            e
+        })
+        .collect();
+    game.open_tactical_battle(pack.clone());
+
+    // A row along y, with the player at x and the aim at x + 1. `Radius { 1 }`
+    // around the aim covers x..=x + 2, so `beside` is caught and `away` is
+    // not — and the companion is placed inside it deliberately.
+    let (x, y) = (4, 4);
+    let placements = [
+        (player, (x, y)),
+        (pack[0], (x + 1, y)),
+        (pack[1], (x + 2, y)),
+        (pack[2], (x + 4, y)),
+        (pet, (x + 1, y + 1)),
+    ];
+    for (body, cell) in placements {
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(body, cell),
+            "the fixture could not stand a body on {cell:?}"
+        );
+    }
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .set_initiative(vec![player, pack[0], pack[1], pack[2], pet]);
+
+    let board = Board {
+        game,
+        player,
+        target: pack[0],
+        beside: pack[1],
+        away: pack[2],
+        pet,
+    };
+    (dir, board)
+}
+
+fn hurt(game: &Game, body: Entity) -> bool {
+    let s = game.world.get::<Stats>(body).unwrap();
+    s.hp < s.max_hp
+}
+
+/// The feature on a board. The shape is the one derived from the weapon's
+/// `target`, centred on the cell of the body already being swung at —
+/// `reach::recipients`' existing rule that an aim is a destination for a
+/// blast.
+///
+/// Seeded through `first_rng_seed_where` for the group sweep's reason: no
+/// matchup is a guaranteed landing.
+#[test]
+fn a_weapon_reach_lands_on_every_body_in_the_blast() {
+    let (_dir, mut board) = tactical_board("reach_blast", "wide_lance");
+    let seed = (0..512u64)
+        .find(|&seed| {
+            let mut probe = tactical_board("reach_blast_probe", "wide_lance").1;
+            reseed_rng(&mut probe.game, seed);
+            probe.game.tactical_attack(probe.target);
+            hurt(&probe.game, probe.target) && hurt(&probe.game, probe.beside)
+        })
+        .expect("some stream in 0..512 lands both swings");
+    reseed_rng(&mut board.game, seed);
+
+    assert!(
+        board.game.tactical_attack(board.target),
+        "the swing was refused"
+    );
+    assert!(
+        hurt(&board.game, board.target),
+        "the body aimed at takes the swing it always took"
+    );
+    assert!(
+        hurt(&board.game, board.beside),
+        "the body inside the blast takes its own"
+    );
+}
+
+/// **The friendly-fire rule, held explicitly.** `reach::recipients` never
+/// reads `Hostile`, and a side filter added here is one line that reads as
+/// an obvious bug fix, breaks nothing that compiles, and deletes the reason
+/// a shape is worth aiming at all. A cleaving weapon catches your own
+/// companion standing beside the target. That is the tactical price of the
+/// reach.
+#[test]
+fn a_weapon_reach_catches_a_companion_standing_beside_the_target() {
+    let seed = (0..512u64)
+        .find(|&seed| {
+            let mut probe = tactical_board("reach_ff_probe", "wide_lance").1;
+            reseed_rng(&mut probe.game, seed);
+            probe.game.tactical_attack(probe.target);
+            hurt(&probe.game, probe.pet)
+        })
+        .expect("some stream in 0..512 lands the swing on the companion");
+
+    let (_dir, mut board) = tactical_board("reach_friendly_fire", "wide_lance");
+    reseed_rng(&mut board.game, seed);
+    board.game.tactical_attack(board.target);
+    assert!(
+        hurt(&board.game, board.pet),
+        "a companion inside the blast is not filtered out of it"
+    );
+}
+
+/// The negative half, or the two above pass against "hit everything on the
+/// board". The blast is a shape and not a side.
+#[test]
+fn a_body_outside_the_shape_is_untouched() {
+    let (_dir, mut board) = tactical_board("reach_outside", "wide_lance");
+    assert!(
+        board.game.tactical_attack(board.target),
+        "the swing was refused"
+    );
+    assert!(
+        !hurt(&board.game, board.away),
+        "a body two cells past the aim stands outside the derived radius"
+    );
+    assert!(
+        !hurt(&board.game, board.player),
+        "the swinger is not a recipient of its own cleave"
+    );
+}
+
+/// A weapon with no reach swings exactly where it always did, on a board as
+/// in front of a group.
+#[test]
+fn a_plain_weapon_swings_at_one_body_on_a_board() {
+    let (_dir, mut board) = tactical_board("reach_board_narrow", "plain_lance");
+    board.game.tactical_attack(board.target);
+    assert!(
+        !hurt(&board.game, board.beside),
+        "an ordinary weapon reaches nobody beside the body it is aimed at"
+    );
+    assert!(
+        !hurt(&board.game, board.pet),
+        "and catches no companion either"
     );
 }

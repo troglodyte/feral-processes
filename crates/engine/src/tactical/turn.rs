@@ -251,10 +251,56 @@ impl Game {
         let round_before = self.world.resource::<TacticalBattle>().round;
         let (move_name, natural) = self.swing_move(actor);
         let range = self.attack_range(actor, natural);
-        let outcome =
-            self.resolve_and_apply_attack(actor, target, crate::battle::Swing::plain(range));
-        let line = self.party_swing_line(actor, &move_name, outcome);
-        self.log_swing(crate::resources::MessageKind::PartyDamage, outcome, line);
+
+        // A reach weapon sweeps its shape, converted by this model's own
+        // converter: `reach::recipients` reads the aim as a *destination*
+        // for a blast and a *bearing* for a line or a cone, which is its
+        // existing rule and needs no special handling here. The aim is the
+        // cell of the adjacent body already being swung at, and the
+        // adjacency gate above is untouched — a reach is breadth and never
+        // distance.
+        //
+        // One swing a turn here, so there is no once-per-turn problem to
+        // solve: `party_member_attacks`' `Option::take` has no counterpart.
+        let wide = self.swing_reach(actor);
+        let mut bodies = vec![target];
+        if let Some(spec) = wide {
+            self.arm_reach_charge(actor, spec.recharge);
+            let swept = {
+                let battle = self.world.resource::<TacticalBattle>();
+                reach::recipients(battle, actor, at, spec.tactical_shape())
+            };
+            // **Nothing here reads `Hostile`.** Friendly fire is full and is
+            // the whole reason a shape is worth aiming — a companion
+            // standing beside the target is caught, and a side filter is
+            // the trap this seam names.
+            //
+            // The swinger itself is dropped, and that is not a side filter:
+            // `tactical_attack` already refuses `actor == target` at its own
+            // door, so a body cannot swing at itself and its own cleave
+            // cannot land on it either. Without it every wide swing would
+            // hit the wielder, since `Radius { 1 }` around an adjacent cell
+            // always covers the cell swung from.
+            bodies.extend(
+                swept
+                    .into_iter()
+                    .filter(|&body| body != target && body != actor),
+            );
+        }
+
+        for (index, body) in bodies.into_iter().enumerate() {
+            // `party_member_swing`'s guard, and its reason: a fumble's
+            // Recoil or Opening rung damages the swinger, so it really can
+            // die on its own first body. The opening swing is unguarded, or
+            // the narrow path stops behaving as it always has.
+            if index > 0 && !self.creature_alive(actor) {
+                break;
+            }
+            let outcome =
+                self.resolve_and_apply_attack(actor, body, crate::battle::Swing::plain(range));
+            let line = self.party_swing_line(actor, &move_name, outcome);
+            self.log_swing(crate::resources::MessageKind::PartyDamage, outcome, line);
+        }
         self.world.resource_mut::<TacticalBattle>().mark_acted();
 
         // Every body that fell, not just the target: a fumble's riposte can

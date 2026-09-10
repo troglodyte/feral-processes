@@ -118,6 +118,9 @@ shape to reconcile.
 The rack is reached from `Mode::Transfer` (`c`), the one screen and one basket
 that already moves cargo both ways.
 
+The basket's sign convention is fixed and untouched by this: **positive is a
+take** (units out of the container into the pack), negative is a put.
+
 **A carrier is a row whose range is `[-1, +1]`.** One row per carrier, the
 name column its label, the two figures 1/0 or 0/1 depending on which side it
 is sitting on. Everything about the screen then works unchanged: the

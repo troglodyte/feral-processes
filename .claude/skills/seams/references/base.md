@@ -241,34 +241,6 @@
   out of its def instead of a hardcoded `ids::POWER_CELL`, so the typo trap
   moved from "impossible to author" to "silently ships" — closed by a third
   census assertion, every declared fuel must resolve in `ItemDb`.
-- **A supplier burns the *cheapest* grid fuel it can reach, and its declared
-  fuel is the gate rather than the whole pool.** `ItemDef::grid_fuel` is how
-  many `POWER_UPKEEP_TICKS` windows one unit buys; `burn_grid_upkeep` sorts
-  the family `(windows, id)` — the id half for `assembler_system`'s reason,
-  since `ItemDb` keys by `String` in a `HashMap` — and spends the lowest it
-  can find. **Richest-first is the trap**: it turns the dense cell the player
-  crafted for the field into the thing the base silently eats first, and it
-  retires the staple, which is the one subsystem where the game itself is the
-  consumer. The **gate** is the other half and it is what keeps
-  `a_typo_d_fuel_id_never_burns_and_never_supplies_beside_real_power_cells`
-  meaningful: "a supplier burns any grid fuel" would let a `power_upkeep`
-  naming `"powercell"` resolve to nothing, find the family anyway, and run on
-  everyone else's cells. Naming a real fuel opens the pool; naming anything
-  else opens none of it. **Windows and not ticks** because the window's length
-  is difficulty and lives in `tuning.rs`, while how many a cell is worth is
-  content — authored ticks let a mod retune the base's fuel economy from an
-  item file. And **one kind pays for a whole window**: each candidate is
-  checked for reach before a unit moves, so a window is never part-funded from
-  two cells, which is unobservable at `POWER_UPKEEP_CELLS_PER_WINDOW = 1` and
-  a one-character edit away from not being.
-- **An over-time consumable with no `interval` is a tap, not a drip.**
-  `PrebattleBuff::interval` defaults to `every_turn()`, and `Regen`/`Trickle`
-  fire on every tick they are eligible for — so an item authored `power: 3`
-  with no cadence restores twenty times `HUNGER_DECAY_PER_TICK` every tick it
-  runs, which against a fixed `POWER_MAX` of 100 is not a restore item but a
-  suspension of the resource. `ticks` must be a whole multiple of `interval`
-  too: the cadence is phased off `remaining` rather than a counter of its
-  own, so a duration that is not divides the last firing away in silence.
 - **A trickle test has to spend `PowerReserve` down before timing it, or a
   saturated reserve hides the very thing being tested.** `power_regen_system`
   runs *ahead* of `needs_tick_system` in the schedule, so a reserve parked at

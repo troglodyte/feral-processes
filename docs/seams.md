@@ -10743,53 +10743,6 @@ halves are, that sentence describes half the machine. It now says the
 building burns to "keep either half running, and goes quiet on both the
 moment it can't pay" — a property of the structure, not of one output.
 
-### A supplier burns the cheapest grid fuel it can reach, and its declared fuel is the gate rather than the whole pool
-
-**The ladder needed the base to accept more than one cell without letting the
-base eat the good ones.** `power_cell` had two jobs — a quarter-tank
-consumable and a supplier's fuel — and a tier above it has to keep both or it
-is not the same item in a better coat. The question a denser cell asks is what
-a supplier does when several kinds are within reach.
-
-**Cheapest first, and the reason is the rule a new tier must never retire the
-one below it.** Burning whatever is nearest, or whatever is richest, makes a
-Capacitor Array worth eight windows into the thing the base quietly consumes
-first — the player crafts them for the field, walks past a Depot, and finds
-them gone. Cheapest-first inverts that: the base eats the staple it can make
-in bulk on a Conduit's timer, and every denser cell stays in the pack. It also
-means the plain Power Cell never becomes vestigial, which is what "a new tier
-must never retire the one below it" asks for in the one subsystem where the
-game itself is the consumer.
-
-The ordering is `(windows, id)` rather than `windows` alone because `ItemDb`
-keys by `String` in a `HashMap`: two cells authored at the same window count
-would otherwise resolve differently between runs, which is
-`assembler_system`'s sort for the same reason.
-
-**Windows and not ticks, and that split is `tuning.rs`'s boundary rather than
-a convenience.** `ItemDef::grid_fuel` says how many `POWER_UPKEEP_TICKS` a
-unit buys, so how *long* a window is stays a difficulty knob in Rust while how
-many of them a cell is worth stays content. Authored ticks would let a mod
-retune the base's whole fuel economy by editing one item file, which is the
-line "content is moddable; how hard the game is, is not" draws.
-
-**The declared id stayed the gate, and that is what kept the typo census
-meaningful.** The obvious shape — a supplier burns any grid fuel, full stop —
-quietly breaks `a_typo_d_fuel_id_never_burns_and_never_supplies_beside_real
-_power_cells`: a `power_upkeep` naming `"powercell"` would resolve to nothing,
-find the family anyway, and run happily on everyone else's cells. So the rule
-is two-part: naming a real fuel opens the whole pool, and naming anything else
-opens none of it. A misspelt supplier is inert, loudly, exactly as before.
-
-**One kind pays for a whole window.** A window part-funded from two different
-cells would spend a dense one for a fraction of what it declares; each
-candidate is checked for reach *before* a unit of it moves, and a kind with
-nothing available is skipped rather than partly taken. With
-`POWER_UPKEEP_CELLS_PER_WINDOW` at 1 this is unobservable today, which is
-precisely why it is written down — the constant is the thing that would make
-it observable, and it is a one-character edit.
-
-
 ### The player's class is its own enum, and sharing five names with `AffinityClass` is what makes that cheap
 
 `species::AffinityClass` is a *species'* derived role — the one affinity

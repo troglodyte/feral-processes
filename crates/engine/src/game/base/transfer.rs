@@ -108,6 +108,42 @@ impl Game {
         rows.into_values().collect()
     }
 
+    /// How many carriers this Quarantine Rack holds, `slots * tier`.
+    ///
+    /// **Derived per read and never stored**, `BuildSite::required_ticks`'
+    /// rule: a ceiling copied into the component at build goes stale the
+    /// moment a tier lands. A structure with no `StructureTier` reads as
+    /// tier 1, `extraction_ticks`' own reading of a never-upgraded machine;
+    /// a def that racks nothing answers 0.
+    pub fn rack_slots(&self, rack: Entity) -> u32 {
+        let Some(kind) = self.world.get::<Structure>(rack).map(|s| s.kind.clone()) else {
+            return 0;
+        };
+        let Some(slots) = self
+            .world
+            .resource::<StructureDb>()
+            .get(&kind)
+            .and_then(|def| def.racks.as_ref())
+            .map(|r| r.slots)
+        else {
+            return 0;
+        };
+        let tier = self
+            .world
+            .get::<crate::components::StructureTier>(rack)
+            .map_or(1, |t| t.0.max(1));
+        slots * tier
+    }
+
+    /// Free slots on this rack — its ceiling less what is standing on it.
+    pub fn rack_room(&self, rack: Entity) -> u32 {
+        let held = self
+            .world
+            .get::<crate::components::Racked>(rack)
+            .map_or(0, |r| r.0.len() as u32);
+        self.rack_slots(rack).saturating_sub(held)
+    }
+
     /// Room left across the adjacent Depots, or `None` when there is no
     /// Depot beside the party at all.
     ///

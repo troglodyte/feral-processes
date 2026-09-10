@@ -918,6 +918,11 @@ impl Game {
                     progress: s.hopper_progress,
                 });
             }
+            // Same rule one rung along: a stored shelf on a structure whose
+            // `racks` a mod has since taken away is dropped.
+            if def.racks.is_some() {
+                entity.insert(crate::components::Racked(s.racked.clone()));
+            }
             // Both halves mirror `Game::spawn_structure`'s list, which is the
             // hand-written copy this file has always been: a burning supplier
             // missing its `PowerFuel` reads as a base whose grid collapsed on
@@ -1936,12 +1941,24 @@ impl Game {
             Option<&crate::components::Hopper>,
             Option<&crate::components::BuildQuality>,
             Option<&crate::components::DepotFilter>,
+            Option<&crate::components::Racked>,
         )>();
         // `Stock` is optional here only because test fixtures hand-spawn
         // bare `Structure`s; `place_structure` and `load` both give every
         // real one a buffer.
-        for (structure, pos, durability, tier, stock, standing, fuel, hopper, quality, filter) in
-            structure_query.iter(&self.world)
+        for (
+            structure,
+            pos,
+            durability,
+            tier,
+            stock,
+            standing,
+            fuel,
+            hopper,
+            quality,
+            filter,
+            racked,
+        ) in structure_query.iter(&self.world)
         {
             let encode = |map: Option<&std::collections::BTreeMap<ItemId, u32>>| {
                 map.map(|m| m.iter().map(|(i, n)| (i.clone(), *n)).collect())
@@ -1965,6 +1982,7 @@ impl Game {
                     .map(|f| f.ticks_left)
                     .unwrap_or(crate::tuning::POWER_UPKEEP_TICKS),
                 build_quality: quality.map_or(1.0, |q| q.0),
+                racked: racked.map(|r| r.0.clone()).unwrap_or_default(),
             });
         }
         structures

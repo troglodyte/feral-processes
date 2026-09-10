@@ -998,6 +998,13 @@ pub struct StructureSave {
     pub hopper: Vec<crate::components::HopperEntry>,
     #[serde(default)]
     pub hopper_progress: u64,
+    /// A Quarantine Rack's shelf — see `components::Racked`. `DownedProgram`
+    /// directly rather than through a parallel `*Save` type,
+    /// `PlayerSave::downed_programs`' precedent: it has no legacy shape to
+    /// reconcile. Defaulted, so a save written before the rack existed loads
+    /// with an empty one.
+    #[serde(default)]
+    pub racked: Vec<crate::items::DownedProgram>,
     /// The two halves of `components::StandingJob` — keep this machine
     /// worked, and keep this structure guarded, whether or not an order
     /// asks for it.

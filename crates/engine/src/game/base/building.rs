@@ -466,6 +466,9 @@ impl Game {
                 level: work.level,
             });
         }
+        if def.racks.is_some() {
+            entity.insert(crate::components::Racked::default());
+        }
         if def.strips.is_some() {
             entity.insert(crate::components::Hopper::default());
         }

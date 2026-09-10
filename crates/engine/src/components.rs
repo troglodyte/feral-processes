@@ -597,12 +597,17 @@ pub struct HopperEntry {
 /// `StructureDef::strips`, `Game::load_teardown_rig` and
 /// `Game::run_teardown_rigs`.
 ///
-/// **The whole instance boundary of phase 4.** A `DownedProgram` exists in
-/// exactly two places in the game: `DownedPrograms` on the player, and this.
-/// What leaves a rig is plain items in `Stock::output`, which is what lets
-/// hauling, depots, `collect::plan_adjacent_take` and work orders carry the
-/// yield with no instance rule at all — decision 2's seam, which
+/// **The instance boundary, and it now has three sides.** A `DownedProgram`
+/// exists in three places: `DownedPrograms` on the player, `Racked` on a
+/// Quarantine Rack, and this — plus `CarryingProgram` on a body walking one
+/// from the second to the third. What still holds is the half that matters:
+/// what leaves a **rig** is plain items in `Stock::output`, which is what
+/// lets hauling, depots, `collect::plan_adjacent_take` and work orders carry
+/// the yield with no instance rule at all — decision 2's seam, which
 /// `GearCopies`' doc above states and which spec §10.1 declines to spend.
+///
+/// The rack is the one of the three that is not a queue: nothing works
+/// through it, and it is filled and emptied by hand from the `c` picker.
 ///
 /// A `Vec` rather than a keyed store, `DownedPrograms`' own reason: two
 /// equal-comparing programs are still two separate kills, and the queue is
@@ -616,6 +621,16 @@ pub struct Hopper {
     pub queue: Vec<HopperEntry>,
     pub progress: u64,
 }
+
+/// A Quarantine Rack's shelf of downed programs — see `StructureDef::racks`
+/// and `Game::rack_slots`.
+///
+/// A `Vec`, `DownedPrograms`' own reason: two equal-comparing programs are
+/// still two separate kills. Unbounded by the type; the ceiling is
+/// `slots * tier`, derived per read rather than carried here, so an upgrade
+/// takes effect the tick it lands.
+#[derive(Component, Default, Clone, Debug)]
+pub struct Racked(pub Vec<DownedProgram>);
 
 /// Player-only: tool ids installed in the player's tool slots, in slot
 /// order — position is what the extraction screen selects by, `Routines`'

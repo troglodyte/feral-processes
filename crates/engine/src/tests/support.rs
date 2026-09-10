@@ -1268,6 +1268,9 @@ pub(super) fn spawn_machine_at(game: &mut Game, kind: &str, x: i32, y: i32) -> E
     if def.strips.is_some() {
         entity.insert(crate::components::Hopper::default());
     }
+    if def.racks.is_some() {
+        entity.insert(crate::components::Racked::default());
+    }
     entity.id()
 }
 

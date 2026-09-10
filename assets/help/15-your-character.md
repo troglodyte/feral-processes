@@ -23,7 +23,7 @@ a different one down, so a class is a trade rather than a bonus.
 - Saboteur afflicts hardest and repairs worst.
 - Leech drains hardest and buffs softest.
 
-What a class does not touch is your ordinary swing. Attacking is not a routine, so a damped
+What a class does not touch is your ordinary attack. Attacking is not a routine, so a damped
 category costs you nothing until you invoke something in that category — which is also why picking
 a class you will not build around is a quiet way to pay for nothing. Each class also names an
 opening kit, which the next step lets you trade away.

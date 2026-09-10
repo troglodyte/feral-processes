@@ -1,7 +1,7 @@
 (
     id: "null_route",
     name: "Hard Lock Everyone",
-    description: "Stun every hostile program for 1 round",
+    description: "Stall every hostile program for 1 round",
     target: AllEnemies,
     effect: Debuff(kind: Stun, power: 0, duration: 1),
     cooldown: 5,

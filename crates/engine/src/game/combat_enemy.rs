@@ -173,7 +173,7 @@ impl Game {
         // it stands", which only a back group with no ranged move can be.
         let Some((mv, target)) = self.choose_wild_action(wild, group, player) else {
             let name = self.creature_label(wild);
-            self.log(format!("{name} circles beyond reach, unable to strike."));
+            self.log(format!("{name} probes from beyond reach, and cannot land."));
             return false;
         };
         // A moveset's status effects are what a program *can* bring to bear,
@@ -231,15 +231,15 @@ impl Game {
             let name = self.creature_label(target);
             let line = match outcome {
                 battle::AttackOutcome::Crit { dmg } => format!(
-                    "The rogue program tears {} clean through {} for {dmg} damage!",
+                    "The rogue program's {} lands unchecked on {} — {dmg} straight through!",
                     mv.name, name
                 ),
                 battle::AttackOutcome::Hit { dmg } => format!(
-                    "The rogue program executes {} on {} for {dmg} damage.",
+                    "The rogue program injects {} into {} for {dmg} Integrity.",
                     mv.name, name
                 ),
                 battle::AttackOutcome::Miss => {
-                    format!("The rogue program's {} glances off {}.", mv.name, name)
+                    format!("The rogue program's {} is refused by {}.", mv.name, name)
                 }
                 battle::AttackOutcome::Fumble(rung) => {
                     self.fumble_line_for_other("The rogue program", &mv.name, rung)
@@ -259,14 +259,14 @@ impl Game {
         } else {
             let line = match outcome {
                 battle::AttackOutcome::Crit { dmg } => format!(
-                    "The rogue program tears {} clean through for {dmg} damage!",
+                    "The rogue program's {} lands unchecked — {dmg} straight through!",
                     mv.name
                 ),
                 battle::AttackOutcome::Hit { dmg } => {
-                    format!("The rogue program executes {} for {dmg} damage.", mv.name)
+                    format!("The rogue program injects {} for {dmg} Integrity.", mv.name)
                 }
                 battle::AttackOutcome::Miss => {
-                    format!("The rogue program's {} glances off you.", mv.name)
+                    format!("The rogue program's {} is refused.", mv.name)
                 }
                 battle::AttackOutcome::Fumble(rung) => {
                     self.fumble_line_for_other("The rogue program", &mv.name, rung)

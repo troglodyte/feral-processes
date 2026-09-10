@@ -17,7 +17,7 @@ Take across as well:
 
 - A party. Five can fight beside you, and past zone 1 you want the front slot filled by something
   that can hold it while the rest work.
-- Power to spend. Group routines cost far more than a swing, and Power is what pays for them.
+- Power to spend. Group routines cost far more than a plain attack, and Power is what pays for them.
 - Gear worth re-equipping. A piece locks in the level and zone you equipped it at, so re-equipping
   everything the moment you land is free strength.
 

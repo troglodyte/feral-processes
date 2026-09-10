@@ -432,15 +432,18 @@ fn log_has(app: &App, needle: &str) -> bool {
 /// to Defend since long before there was a board to fight on — the same
 /// shared-letter argument `a` and `s` already make here.
 #[test]
-fn d_braces_the_acting_body_and_hands_the_turn_on() {
+fn d_hardens_the_acting_body_and_hands_the_turn_on() {
     let mut app = fighting(9110);
     wait_for_the_player(&mut app);
     let acting = acting_entity(&mut app);
-    assert!(!log_has(&app, "braces"), "fixture: nobody has braced yet");
+    assert!(
+        !log_has(&app, "hardens"),
+        "fixture: nobody has hardened yet"
+    );
 
     app.handle_key(GameKey::Char('d'));
 
-    assert!(log_has(&app, "braces"), "[d] braced nobody");
+    assert!(log_has(&app, "hardens"), "[d] hardened nobody");
     assert_ne!(
         acting_entity(&mut app),
         acting,

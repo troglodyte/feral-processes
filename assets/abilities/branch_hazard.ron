@@ -1,7 +1,7 @@
 (
     id: "branch_hazard",
     name: "Pipeline Stall Group",
-    description: "Damage every member of one group, sometimes locking them up",
+    description: "Damage every member of one group, sometimes stalling them out",
     target: WholeEnemyGroup,
     effect: Damage(power: 6, spread: 2, status: Some((kind: Stun, chance: 0.3, duration: 1, power: 0))),
     cooldown: 4,

@@ -172,6 +172,24 @@
 - **"Raid" is the code's word and "GC Entropy Sweep" is the player's.** The
   `.ron` fields are mod schema and deliberately kept their names. New
   player-facing text follows the player's word; note the noun-phrase trap.
+- **A fight's vocabulary is security, not swordplay.** The nouns were already
+  right — Integrity, routine, ICE, decompile, jack out, *intrusion* for a
+  fight — and every verb around them was melee. An attempt **lands**, lands
+  **unchecked**, fumbles, or is **refused**; Bleed is a **leak**, Stun a
+  **stall**, Exposed **unpatched**; a defender **hardens**. Raid's depth, not
+  Cast's: player-facing text only, so `apply_damage`, `DamageRange` and the
+  `.ron` `kind: Bleed`/`kind: Stun` keep their names. **Three traps.** The
+  unit is `for {dmg} Integrity` and never a bare number —
+  `tests/wielded.rs::damage_in` splits on `" for "` and parses the next
+  token, so a sentence-final number arrives as `"7."`. The stun word is the
+  game's own from `Pipeline Stall` **because `STATUS_W` is 13**:
+  `Deadlocked (12)` is 15 where `Stalled (12)` is 12, so the word was picked
+  against the layout. And `no_player_facing_text_uses_melee_vocabulary` needs
+  **two lists** — `bleed` is correct engineering prose in an item
+  (`static_mesh` bleeds off a charge) and only wrong in an ability, which is
+  why `player_facing_census` tags each complaint with its surface. `damage`
+  and `swing` are deliberately unbanned: the first is the spec form an
+  ability description uses, the second is mining's word for hitting rock.
 - **`world.get::<Stats>(e).is_none()` is the idiom for "this entity is
   gone"** — don't reach for `World::get_entity`.
 - **There is one place a runtime path is decided,

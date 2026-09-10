@@ -440,7 +440,7 @@ fn a_proc_scales_off_the_wielded_programs_stats() {
             set_level(&mut game, program, 8);
             game
         },
-        |g| damage_in(g, "Blade hits").is_some(),
+        |g| damage_in(g, "Blade lands on").is_some(),
     );
 
     let program = game.wielded_program().unwrap();
@@ -492,7 +492,7 @@ fn a_proc_scales_off_the_wielded_programs_stats() {
                 .level,
         "the two levels have to differ or this asserts nothing"
     );
-    let landed = damage_in(&game, "Blade hits").expect("the proc landed a hit");
+    let landed = damage_in(&game, "Blade lands on").expect("the proc landed a hit");
     assert!(
         (lo..=hi).contains(&landed),
         "the proc's level, affinity and ATK all come off the program in your hand: \
@@ -507,11 +507,11 @@ fn a_proc_lands_on_top_of_the_strike() {
     // asking for the proc and assuming the strike.
     let game = first_seed_where(
         |rng_seed| armed_battle(9114, rng_seed, "kernel_panic", 9999),
-        |g| damage_in(g, "Blade hits").is_some() && damage_in(g, "data strike").is_some(),
+        |g| damage_in(g, "Blade lands on").is_some() && damage_in(g, "data strike").is_some(),
     );
 
     let strike = damage_in(&game, "data strike").expect("the player still strikes");
-    let proc = damage_in(&game, "Blade hits").unwrap();
+    let proc = damage_in(&game, "Blade lands on").unwrap();
 
     assert_eq!(
         9999 - game.world.get::<Stats>(front_enemy(&game)).unwrap().hp,
@@ -540,7 +540,7 @@ fn no_proc_fires_when_the_strike_ended_the_battle() {
         }
         decided += 1;
         assert!(
-            damage_in(&game, "Blade hits").is_none(),
+            damage_in(&game, "Blade lands on").is_none(),
             "a routine must never resolve after the fight is already won (seed {rng_seed})"
         );
     }
@@ -560,7 +560,7 @@ fn a_companion_attack_never_procs() {
         assert!(
             log_text(&game)
                 .iter()
-                .filter(|l| l.contains("Blade hits"))
+                .filter(|l| l.contains("Blade lands on"))
                 .count()
                 <= 1,
             "two attackers, at most one proc — only slot 0 carries the weapon (seed {rng_seed})"
@@ -719,7 +719,7 @@ fn a_wielded_program_survives_a_save_and_load() {
 fn a_proc_charges_neither_the_player_nor_the_program() {
     let game = first_seed_where(
         |rng_seed| armed_battle(9115, rng_seed, "kernel_panic", 9999),
-        |g| damage_in(g, "Blade hits").is_some(),
+        |g| damage_in(g, "Blade lands on").is_some(),
     );
     let program = game.wielded_program().unwrap();
     let cost = abilities::routine_power_cost(&ability(&game, "kernel_panic"));

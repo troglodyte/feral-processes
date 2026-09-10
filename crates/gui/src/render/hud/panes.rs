@@ -465,7 +465,7 @@ fn crew_rows(d: &PaneData) -> Vec<Row> {
         },
     ));
     out.push(text(vec![(
-        format!("{}{}{}", cell("  UNIT", 16), cell("LV", 4), "HP"),
+        format!("{}{}{}", cell("  UNIT", 16), cell("LV", 4), "INTEG"),
         palette::LABEL,
         false,
     )]));

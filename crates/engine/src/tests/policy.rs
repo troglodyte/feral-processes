@@ -306,7 +306,7 @@ fn a_back_group_still_only_uses_ranged_moves() {
         .text
         .clone();
     assert!(
-        last.contains("circles beyond reach"),
+        last.contains("beyond reach"),
         "the existing idle line should still be what happens: {last}"
     );
 }

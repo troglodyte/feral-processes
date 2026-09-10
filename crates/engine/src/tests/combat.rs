@@ -920,7 +920,7 @@ fn a_party_members_hit_is_logged_as_party_damage() {
         "one attacking member should log one PartyDamage line, got {damage_lines:?}"
     );
     assert!(
-        damage_lines[0].contains("damage"),
+        damage_lines[0].chars().any(|c| c.is_ascii_digit()),
         "the line the frontend emphasises a number inside has to carry one: {:?}",
         damage_lines[0]
     );

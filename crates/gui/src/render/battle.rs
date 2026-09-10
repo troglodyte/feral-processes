@@ -66,7 +66,7 @@ const HP_W: usize = 9;
 const STAT_W: usize = 3;
 /// Widest value is `ENGAGED`.
 const REACH_W: usize = 7;
-/// Widest condition the engine words is `BLEEDING (12)` — see
+/// Widest condition the engine words is `LEAKING (12)` — see
 /// `Game::status_label`. Anything longer clips rather than shifting DECOMP.
 const STATUS_W: usize = 13;
 /// `DECOMP` itself is the widest thing in the column; `100%` fits under it.
@@ -151,7 +151,7 @@ fn hostile_header() -> String {
     roster_line(
         "   ",
         "GROUP",
-        "HP",
+        "INTEG",
         "ATK",
         "MIT",
         "RANGE",
@@ -163,7 +163,7 @@ fn party_header() -> String {
     roster_line(
         "   ",
         "NAME",
-        "HP",
+        "INTEG",
         "ATK",
         "MIT",
         "POS",
@@ -680,7 +680,7 @@ mod tests {
                 9,
                 4,
                 "ENGAGED",
-                &hostile_tail("BLEEDING (2)", &odds_cell(Some(0.62))),
+                &hostile_tail("LEAKING (2)", &odds_cell(Some(0.62))),
             ),
             roster_row(
                 "B  ",
@@ -719,7 +719,7 @@ mod tests {
             );
         }
         assert!(at(&lines[0], TAIL_COL).starts_with("STATUS"));
-        assert!(at(&lines[1], TAIL_COL).starts_with("BLEEDING"));
+        assert!(at(&lines[1], TAIL_COL).starts_with("LEAKING"));
         assert!(at(&lines[3], TAIL_COL).starts_with("GEAR"));
         assert!(at(&lines[4], TAIL_COL).starts_with("w|a|m"));
     }
@@ -739,7 +739,7 @@ mod tests {
                 9,
                 4,
                 "ENGAGED",
-                &hostile_tail("BLEEDING (2)", &odds_cell(Some(0.62))),
+                &hostile_tail("LEAKING (2)", &odds_cell(Some(0.62))),
             ),
             roster_row(
                 "B  ",
@@ -763,8 +763,8 @@ mod tests {
         .join("\n");
         assert_eq!(
             block,
-            "   GROUP              HP        ATK MIT RANGE   STATUS        DECOMP\n\
-             A  4 Null Daemons     18/30       9   4 ENGAGED BLEEDING (2)     62%\n\
+            "   GROUP              INTEG     ATK MIT RANGE   STATUS        DECOMP\n\
+             A  4 Null Daemons     18/30       9   4 ENGAGED LEAKING (2)      62%\n\
              B  Warden Process     44/44      14   9 BACK    OK               18%\n\
              C  Sentinel [BOSS]    120/120    22  15 BACK    OK                 —"
         );
@@ -799,7 +799,7 @@ mod tests {
         .join("\n");
         assert_eq!(
             block,
-            "   NAME               HP        ATK MIT POS     GEAR    POWER ACTION\n\
+            "   NAME               INTEG     ATK MIT POS     GEAR    POWER ACTION\n\
              >1 You                21/30      11   6 FRONT   w|a|m  62/100 Attack A\n\
              \u{20}2 Sparkgrub          18/18       7   3 FRONT   w|.|.       — Defend"
         );
@@ -807,7 +807,7 @@ mod tests {
 
     /// DECOMP is a fixed cell inside the hostile tail, not something appended
     /// after a condition — so it sits under its header whatever the engine
-    /// words the condition as. `BLEEDING (12)` is the widest one there is.
+    /// words the condition as. `LEAKING (12)` is the widest one there is.
     #[test]
     fn the_decompile_odds_column_holds_its_place() {
         const DECOMP_COL: usize = TAIL_COL + STATUS_W + 1;
@@ -818,7 +818,7 @@ mod tests {
             9,
             4,
             "ENGAGED",
-            &hostile_tail("BLEEDING (12)", &odds_cell(Some(0.62))),
+            &hostile_tail("LEAKING (12)", &odds_cell(Some(0.62))),
         );
         let ok = roster_row(
             "B  ",
@@ -861,7 +861,7 @@ mod tests {
     fn the_header_labels_sit_over_their_columns() {
         let h = party_header();
         assert!(at(&h, MARK_W).starts_with("NAME"));
-        assert!(at(&h, MARK_W + NAME_W + 1).starts_with("HP"));
+        assert!(at(&h, MARK_W + NAME_W + 1).starts_with("INTEG"));
         assert!(at(&h, TAIL_COL).starts_with("GEAR"));
         // Right-aligned in its cell, like the numbers under it — `POWER` is
         // two cells narrower than the `100/100` that sets the width, so it

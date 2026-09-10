@@ -673,13 +673,13 @@ impl Game {
     }
 
     /// Display string for `entity`'s current active status condition, if
-    /// any — e.g. "Bleeding (2)" or "Stunned (1)", the number being battle
+    /// any — e.g. "Leaking (2)" or "Stalled (1)", the number being battle
     /// rounds remaining. `None` if it has no active condition.
     pub(crate) fn status_label(&self, entity: Entity) -> Option<String> {
         let active = self.world.get::<StatusEffects>(entity)?.active?;
         Some(match active.kind {
-            StatusKind::Bleed => format!("Bleeding ({})", active.remaining),
-            StatusKind::Stun => format!("Stunned ({})", active.remaining),
+            StatusKind::Bleed => format!("Leaking ({})", active.remaining),
+            StatusKind::Stun => format!("Stalled ({})", active.remaining),
             StatusKind::Exposed => format!("Exposed ({})", active.remaining),
         })
     }

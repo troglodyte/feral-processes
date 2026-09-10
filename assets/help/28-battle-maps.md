@@ -15,9 +15,9 @@ On your turn:
 
 - Arrows or the numpad — step one cell, diagonals included. The bar counts
   down what you have left; a slow body gets fewer steps than a quick one.
-- a — swing at something next to you. The cursor opens on your own cell;
+- a — attack something next to you. The cursor opens on your own cell;
   move it onto the body you mean and press Enter.
-- d — brace. The acting body takes less from every swing for the rest of
+- d — defend. The acting body takes less from every attempt for the rest of
   the round, so it is worth most to whoever acts early and nothing at all
   to whoever acts last — the turn strip tells you which you are.
 - s — run one of the acting body's routines, the same list the intrusion
@@ -25,13 +25,13 @@ On your turn:
   cells it will cover.
 - E — end the turn without spending it.
 
-Move first and act second. The action ends the turn, so once you have swung
-or run something the only key left is the one that hands it on.
+Move first and act second. The action ends the turn, so once you have
+attacked or run something the only key left is the one that hands it on.
 
 While the cursor is open, the arrows and numpad move it, Enter commits and
 Esc backs out without spending anything. Nothing checks whose side a cell is
-on — a blast centred badly lands on your own, and a swing aimed at a
-companion is a legal swing.
+on — a blast centred badly lands on your own, and an attempt aimed at a
+companion is a legal one.
 
 Walking off the edge of the board is how you leave a fight you do not want,
 and you can walk a companion out the same way — nobody is dragged back. The

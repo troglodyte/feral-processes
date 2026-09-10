@@ -442,12 +442,30 @@ impl Game {
     }
 
     /// The front member of `group` — the only one that takes hits.
+    ///
+    /// **A cloaked member is skipped**, so `OneEnemyGroupFront` cannot reach
+    /// one and neither can a single-target swing. One of the five doors that
+    /// *name* a body; `WholeEnemyGroup` and `AllEnemies` are untouched,
+    /// because they resolve a membership list rather than picking a front.
+    ///
+    /// **The never-empty rule.** Where every member is cloaked the filter is
+    /// skipped for this pick and the group answers its real front: answering
+    /// `None` would refuse the player's single-target attacks outright for
+    /// the rounds until the caps expire, which reads as the game being stuck
+    /// rather than as a mechanic. The round cap is the ceiling on the
+    /// situation; this is what makes the rounds underneath it playable.
     pub(crate) fn front_of_group(&self, group: usize) -> Option<Entity> {
-        self.world
+        let members = &self
+            .world
             .get_resource::<BattleState>()?
             .groups
             .get(group)?
-            .front()
+            .members;
+        members
+            .iter()
+            .find(|&&e| !self.is_cloaked(e))
+            .or(members.first())
+            .copied()
     }
 
     /// How many groups are still standing.

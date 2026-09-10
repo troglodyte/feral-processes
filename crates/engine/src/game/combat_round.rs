@@ -1332,6 +1332,10 @@ impl Game {
                         format!("{name} siphons {dmg} from {on}, restoring {restored}."),
                     );
                 }
+                AbilityEffect::Cloak { duration } => {
+                    self.arm_cloak(recipient, *duration);
+                    self.log(format!("{name} detaches {on} from the scheduler."));
+                }
                 AbilityEffect::Cleanse => {
                     let had_status = self
                         .world
@@ -1366,6 +1370,18 @@ impl Game {
                     )
                 }
             }
+        }
+        // **After the action resolves**, so the swing's own line is logged
+        // before the reveal. Gated on the effect rather than on damage
+        // landing, which is what catches `Debuff` and `Decompile` — neither
+        // deals damage, so neither reaches any other hook.
+        //
+        // A `Damage` routine fires this *and* the attacker hook inside
+        // `resolve_and_apply_attack`; `break_cloak` is idempotent and logs
+        // only on the transition, so the second is a no-op rather than a
+        // duplicate line.
+        if ability.effect.breaks_cloak() {
+            self.break_cloak(actor);
         }
     }
 

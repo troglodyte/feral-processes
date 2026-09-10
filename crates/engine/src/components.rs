@@ -1109,6 +1109,31 @@ pub struct CombatBuff {
     pub active: Option<ActiveBuff>,
 }
 
+/// Battle-scoped: a body no picker may name until it acts.
+///
+/// **Not a `CombatBuff`**, which holds exactly one wanted buff at a time —
+/// bracing would clobber a cloak, and an ally's Rally would strip one — and
+/// **not a `StatusEffects` entry**, which is reserved for conditions
+/// inflicted on you and so would be stripped by an ally's `Cleanse`. It also
+/// moves no stat, where a `BuffKind` is a stat axis folded into
+/// `combatant_profile`.
+///
+/// It changes *who a picker may name* and nothing else: the filter is
+/// applied at the five doors that name a body and deliberately at none of
+/// the doors that resolve against one, which is why an area routine still
+/// covers a cloaked cell.
+///
+/// Ticked down in `Game::tick_one_combatant` and cleared in
+/// `game/combat_teardown.rs` beside `CombatBuff` and `AbilityCooldowns`, so
+/// like both of those it appears nowhere in `save.rs` and cost no
+/// `SAVE_FORMAT_VERSION` bump.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Cloaked {
+    /// Battle rounds left. The cap is the ceiling on the situation; what
+    /// usually ends a cloak first is `Game::break_cloak`.
+    pub remaining: u32,
+}
+
 /// Which routine or item armed a `FieldBuff` entry. Drives the two
 /// collision rules `Game::arm_field_buff` enforces — it is not shown to the
 /// player, `ActiveFieldBuff::name` is.

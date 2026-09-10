@@ -262,6 +262,19 @@ neither became a standing exception.
 | `2026-09-06-settlement-growth-design` | A server growing into a mainframe | `v0.13.117` |
 | `2026-09-09-tactical-surface-battles-design` | Opt-in tactical fights on a battle map, nine phases | `v0.13.139` (the tactical arena, phase 9, `v0.13.140`) |
 
+## The spec archived on 2026-09-10
+
+Archived **on landing**, which is the habit this file recommends — nothing in
+`crates/` or `assets/` cites its path, so it moved on its own.
+
+The release column is left to the merge on purpose: the version is decided
+there (one release per change landing on `main`), and a tag written on a
+branch is a claim that a rebase or a competing merge can invalidate.
+
+| Spec | What it designed | Evidence |
+| --- | --- | --- |
+| `2026-09-10-invisibility-routine-design` | A body no picker may name until it acts | `components::Cloaked`, `Game::break_cloak` and `AbilityEffect::Cloak` resolve in `crates/engine`; `assets/abilities/detach.ron` |
+
 ## Four rows that need a footnote
 
 - **`2026-07-21-inventory-capacity`** — built, then *deliberately reverted*.

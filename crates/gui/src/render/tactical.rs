@@ -45,6 +45,18 @@ fn sprite_inset(tile_px: f32, glyph_px: u16) -> f32 {
     (tile_px - glyph_px as f32) / 2.0
 }
 
+/// How much of its ink a cloaked body keeps — see `components::Cloaked`.
+///
+/// One multiply at the draw site fades **both** halves: `Painter::sprite`'s
+/// tint multiplies, and `ConRead::glyph_ink` carries the authored alpha
+/// through, so a body's art and its glyph dim together with no sixteenth
+/// `Painter` operation and no change to `paint.rs`.
+///
+/// Faded rather than hidden: a cloaked body is still a wall in
+/// `reach::movement_field`, so the cell it stands on is already a tell, and
+/// a tell is the right amount of information.
+const CLOAKED_ALPHA: f32 = 0.35;
+
 /// The arrow that hangs over whoever is acting: its width and its height as
 /// fractions of a tile, and how far its point is held off the tile's top
 /// edge at rest.
@@ -267,11 +279,14 @@ fn draw_body(
     let authored = super::glyph_color(body.color);
     // The player's `@` is a role, read off `is_player` and never off the
     // hue they happen to have spawned with.
-    let ink = if body.is_player {
+    let mut ink = if body.is_player {
         palette::PLAYER
     } else {
         authored
     };
+    if body.cloaked {
+        ink.a *= CLOAKED_ALPHA;
+    }
     let inset = sprite_inset(tile_px, glyph_px);
     // **The sprite call's own answer**, never `sprite.is_some()`: a name the
     // table has nothing under falls back to the glyph, and that glyph is
@@ -516,6 +531,51 @@ mod tests {
                 body.glyph
             );
         }
+    }
+
+    /// A cloaked body fades, and an uncloaked one does not.
+    ///
+    /// Read off the **alpha** rather than the colour: the map dims every
+    /// glyph it draws by a vignette and a per-tile shade, so rgb moves for
+    /// reasons that have nothing to do with a cloak — and alpha is the one
+    /// channel `ConRead::glyph_ink` carries through untouched, which is what
+    /// makes the same multiply fade a sprite's tint too.
+    #[test]
+    fn a_cloaked_body_draws_faded_and_an_uncloaked_one_does_not() {
+        let mut game = fighting();
+        let view = game.tactical_view().expect("the fight is open");
+        let subject = view
+            .bodies
+            .iter()
+            .find(|b| b.is_hostile)
+            .cloned()
+            .expect("a hostile stands on the board");
+
+        let alpha_of = |cloaked: bool| {
+            let mut view = view.clone();
+            for body in &mut view.bodies {
+                if body.entity == subject.entity {
+                    body.cloaked = cloaked;
+                }
+            }
+            let mut fx = Fx::new();
+            let (_, shapes) =
+                with_painter(|p| draw_tactical_map(&view, None, &[], &mut fx, p, pane(), 32.0, 24));
+            crate::paint::painted_map_glyphs(&shapes)
+                .into_iter()
+                .find(|(text, _)| text == &subject.glyph.to_string())
+                .map(|(_, c)| c.a)
+                .expect("the body was not drawn at all")
+        };
+
+        let plain = alpha_of(false);
+        let faded = alpha_of(true);
+        assert!(plain > 0.9, "an uncloaked body drew faded already: {plain}");
+        assert!(
+            (faded - plain * CLOAKED_ALPHA).abs() < 0.02,
+            "a cloaked body drew at alpha {faded}, not {} — one multiply at the draw site",
+            plain * CLOAKED_ALPHA
+        );
     }
 
     /// The cursor is drawn last, so it is never under a body it points at.

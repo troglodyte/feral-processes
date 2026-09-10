@@ -12,15 +12,30 @@ impl Game {
     /// member: front slots draw more fire than back ones, and a bracing
     /// member draws more still. Soft ranks — every member stays targetable,
     /// slot order only changes the odds.
+    ///
+    /// **A cloaked member leaves the pool**, one of the five doors that name
+    /// a body — and under **the never-empty rule**: with every living member
+    /// cloaked the filter is skipped for this roll. Without that, the
+    /// `total == 0` fallback below returns the player specifically, so an
+    /// all-cloaked party would find the player taking every blow, which
+    /// reads as a bug rather than as a mechanic.
     pub(crate) fn roll_enemy_target(&mut self, player: Entity) -> Entity {
         let party = self.world.resource::<Party>().0.clone();
         let mut pool: Vec<(Entity, u32)> = Vec::new();
+        let mut hidden: Vec<(Entity, u32)> = Vec::new();
         for (slot, entity) in std::iter::once(player).chain(party).enumerate() {
             if !self.creature_alive(entity) {
                 continue;
             }
             let weight = crate::battle::slot_aggro_weight(slot, self.is_defending(entity));
-            pool.push((entity, weight));
+            if self.is_cloaked(entity) {
+                hidden.push((entity, weight));
+            } else {
+                pool.push((entity, weight));
+            }
+        }
+        if pool.is_empty() {
+            pool = hidden;
         }
         let total: u32 = pool.iter().map(|(_, w)| w).sum();
         if total == 0 {

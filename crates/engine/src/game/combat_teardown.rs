@@ -150,7 +150,7 @@ impl Game {
         true
     }
 
-    /// Clears any residual status effects, combat buffs, and ability
+    /// Clears any residual status effects, combat buffs, cloaks and ability
     /// cooldowns from the player, every party member, and every hostile
     /// still in the fight. Status conditions are scoped to a single
     /// intrusion, so nothing should carry forward once one ends, however it
@@ -169,6 +169,10 @@ impl Game {
         if let Some(mut c) = self.world.get_mut::<AbilityCooldowns>(player) {
             c.0.clear();
         }
+        // `Cloaked` is battle-scoped exactly as the two above are, which is
+        // what keeps it out of `save.rs` — left set, it would follow the
+        // player out of the fight and hide them from the next one.
+        self.uncloak(player);
         // Every hostile still in the fight, not only the one passed in.
         // Survivors of a jack-out stay on the map, and a mirrored buff left
         // armed on one never ticks down — `effective_atk`/`effective_mitigation`
@@ -187,6 +191,7 @@ impl Game {
             if let Some(mut c) = self.world.get_mut::<AbilityCooldowns>(hostile) {
                 c.0.clear();
             }
+            self.uncloak(hostile);
         }
         let party = self.world.resource::<Party>().0.clone();
         for companion in party {
@@ -203,6 +208,21 @@ impl Game {
             if let Some(mut c) = self.world.get_mut::<AbilityCooldowns>(companion) {
                 c.0.clear();
             }
+            self.uncloak(companion);
+        }
+    }
+
+    /// Drops `entity`'s cloak with no line and no transition check — the
+    /// teardown's half, where `Game::break_cloak` is the *action's* half. A
+    /// fight ending is not a reveal, and announcing one per body would put
+    /// three lines under every won fight.
+    ///
+    /// `get_entity_mut` rather than `entity_mut`: teardown is reached with
+    /// entities that have already despawned (a kill) or left their group (a
+    /// decompile), and clearing one of those again has to stay a no-op.
+    fn uncloak(&mut self, entity: Entity) {
+        if let Ok(mut body) = self.world.get_entity_mut(entity) {
+            body.remove::<Cloaked>();
         }
     }
 

@@ -6,8 +6,13 @@
 //! one, and the geometry is a pure function of the window and the tree's
 //! shape so it can be held to a measured assertion.
 
-use crate::paint::Rect;
+use crate::paint::{Color, Painter, Rect};
 use crate::text::Metrics;
+use feral_processes_engine::{Game, ResearchGraph};
+
+use super::popup::{DESCRIPTION_INDENT, description_rows_at, draw_row};
+use super::progression::{conversion_rows, material_rows, row_color};
+use super::{RED, SELECT_BG, TEXT_DIM};
 
 /// Fraction of the window width the detail panel takes.
 const PANEL_FRACTION: f32 = 0.30;
@@ -45,13 +50,13 @@ impl GraphGeometry {
     /// Measured through the real font rather than assumed off an advance
     /// ratio — a row width computed instead of measured has bitten this
     /// repo before.
-    pub fn label_columns(&self, painter: &crate::paint::Painter, m: &Metrics) -> usize {
+    pub fn label_columns(&self, painter: &Painter, m: &Metrics) -> usize {
         columns_for(painter, self.cell_w - m.pad * 2.0, m.small())
     }
 }
 
 /// How many characters of `size` text fit `width` pixels.
-pub(super) fn columns_for(painter: &crate::paint::Painter, width: f32, size: u16) -> usize {
+pub(super) fn columns_for(painter: &Painter, width: f32, size: u16) -> usize {
     let advance = painter.measure_ui_advance("M", size);
     if advance <= 0.0 || width <= 0.0 {
         return 0;
@@ -62,7 +67,7 @@ pub(super) fn columns_for(painter: &crate::paint::Painter, width: f32, size: u16
 pub(super) fn geometry(
     screen_w: f32,
     screen_h: f32,
-    graph: &feral_processes_engine::ResearchGraph,
+    graph: &ResearchGraph,
     m: &Metrics,
 ) -> GraphGeometry {
     let header = m.line_height + m.pad;
@@ -113,6 +118,135 @@ pub(super) fn box_label(name: &str, columns: usize) -> Vec<String> {
             }
         })
         .collect()
+}
+
+/// An edge that does not end at the selected node.
+const EDGE_DIM: Color = Color::new(0.35, 0.35, 0.42, 1.0);
+/// An edge into the selected node — the whole of what makes the one
+/// tier-skipping edge readable, since there is no edge router.
+const EDGE_LIVE: Color = Color::new(0.25, 0.85, 0.85, 1.0);
+
+/// The research tree as a flow chart. `draw_research_menu`'s signature
+/// exactly, so the `Mode::Research` arm is one guard and two calls that
+/// differ in nothing else.
+pub(super) fn draw_research_graph(
+    game: &mut Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let (screen_w, screen_h) = (painter.screen_w(), painter.screen_h());
+    let research_currency = game.research_currency();
+    let held = game.banked(&research_currency);
+    let graph = game.research_graph();
+    let nodes = game.research_nodes();
+    let geo = geometry(screen_w, screen_h, &graph, m);
+
+    painter.ui(
+        format!("Research Data: {held}"),
+        m.pad,
+        m.line_height,
+        m.font_size,
+        Color::new(0.25, 0.85, 0.85, 1.0),
+    );
+    painter.ui(
+        "G list  arrows move  Enter research  Esc close",
+        geo.panel.x,
+        m.line_height,
+        m.small(),
+        TEXT_DIM,
+    );
+
+    // An empty `assets/research/` is a supported install: the header is
+    // drawn and nothing else.
+    let Some(node) = nodes.get(selected.min(nodes.len().saturating_sub(1))) else {
+        return;
+    };
+    let selected_id = node.id.clone();
+
+    // Edges first, so a box paints over a line rather than the other way
+    // round.
+    for (from, to) in &graph.edges {
+        let (Some(a), Some(b)) = (graph.cell(from), graph.cell(to)) else {
+            continue;
+        };
+        let ra = geo.cell_rect(a.tier, a.slot);
+        let rb = geo.cell_rect(b.tier, b.slot);
+        let live = *to == selected_id;
+        let color = if live { EDGE_LIVE } else { EDGE_DIM };
+        let thickness = if live { 2.0 } else { 1.0 };
+        let ay = ra.y + ra.h * 0.5;
+        let by = rb.y + rb.h * 0.5;
+        let mid = ra.x + ra.w + (rb.x - (ra.x + ra.w)) * 0.5;
+        painter.line(ra.x + ra.w, ay, mid, ay, thickness, color);
+        painter.line(mid, ay, mid, by, thickness, color);
+        painter.line(mid, by, rb.x, by, thickness, color);
+    }
+
+    let columns = geo.label_columns(painter, m);
+    for cell in &graph.cells {
+        let Some(node) = nodes.iter().find(|n| n.id == cell.id) else {
+            continue;
+        };
+        let r = geo.cell_rect(cell.tier, cell.slot);
+        if node.id == selected_id {
+            painter.rect(r.x, r.y, r.w, r.h, SELECT_BG);
+        }
+        painter.rect_lines(r.x, r.y, r.w, r.h, 1.0, row_color(node));
+        let mut y = r.y + m.line_height;
+        for line in box_label(&node.name, columns) {
+            painter.ui(line, r.x + m.pad, y, m.small(), row_color(node));
+            y += m.line_height;
+        }
+        painter.ui(
+            format!("{}", node.cost),
+            r.x + m.pad,
+            (r.y + r.h - m.pad).max(y),
+            m.small(),
+            TEXT_DIM,
+        );
+    }
+
+    // The panel, out of the list's own row builders — a second wording of a
+    // node's bill or conversions is the copy that drifts.
+    let panel_columns = columns_for(painter, geo.panel.w - m.pad * 2.0, m.font_size)
+        .saturating_sub(DESCRIPTION_INDENT.chars().count());
+    let max_y = geo.panel.y + geo.panel.h;
+    let mut cy = geo.panel.y + m.line_height;
+    cy = draw_row(
+        &super::popup::colored_item_row(node.name.clone(), false, row_color(node)),
+        geo.panel.x,
+        geo.panel.w,
+        cy,
+        max_y,
+        painter,
+        m,
+    );
+    cy = draw_row(
+        &super::popup::text_row(format!("{} Research Data", node.cost)),
+        geo.panel.x,
+        geo.panel.w,
+        cy,
+        max_y,
+        painter,
+        m,
+    );
+    for row in material_rows(&node.materials, panel_columns)
+        .iter()
+        .chain(
+            description_rows_at(&node.description, panel_columns)
+                .collect::<Vec<_>>()
+                .iter(),
+        )
+        .chain(conversion_rows(&node.conversions, panel_columns).iter())
+    {
+        cy = draw_row(row, geo.panel.x, geo.panel.w, cy, max_y, painter, m);
+    }
+
+    if let Some(refusal) = refusal {
+        painter.ui(refusal, m.pad, screen_h - m.pad, m.font_size, RED);
+    }
 }
 
 #[cfg(test)]
@@ -270,5 +404,96 @@ mod tests {
         let geo = geometry(1280.0, 720.0, &g, &m);
         assert!(geo.pane.w.is_finite() && geo.panel.w.is_finite());
         assert!(geo.cell_w.is_finite() && geo.cell_h.is_finite());
+    }
+
+    use crate::paint::{painted_rect_stroke_count, painted_text};
+    use feral_processes_engine::ResearchState;
+
+    /// Every node in the tree is drawn, because the whole point of this view
+    /// is that the shape is visible at once. Asserted on a name from each of
+    /// the six tiers rather than all 34, so a failure names where it broke.
+    #[test]
+    fn every_tier_is_drawn() {
+        let mut game = Game::new(932, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let m = ui_metrics(720.0);
+        let (_, shapes) = with_painter(|p| draw_research_graph(&mut game, 0, None, p, &m));
+        let text = painted_text(&shapes).join("\n");
+        for name in [
+            "Automation",
+            "Cache Coherence",
+            "Segmentation",
+            "Overclock",
+            "Cortex",
+            "Mesh Plating",
+        ] {
+            assert!(text.contains(name), "{name} is not on the screen");
+        }
+    }
+
+    /// The panel describes the node under the highlight with the *same*
+    /// derivations the list uses, so the two views cannot word a node
+    /// differently. Driven off `research_nodes()` rather than a hardcoded
+    /// node, because that vec re-sorts by state.
+    #[test]
+    fn the_panel_draws_the_selected_nodes_materials_and_conversions() {
+        let mut game = Game::new(933, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let nodes = game.research_nodes();
+        let picked = nodes
+            .iter()
+            .position(|n| !n.materials.is_empty() && !n.conversions.is_empty())
+            .expect("some shipped node has both a bill and a conversion");
+        let node = &nodes[picked];
+        let want_material = node.materials[0].name.clone();
+        let want_conversion = node.conversions[0].clone();
+        let want_name = node.name.clone();
+        let m = ui_metrics(720.0);
+        let (_, shapes) = with_painter(|p| draw_research_graph(&mut game, picked, None, p, &m));
+        let text = painted_text(&shapes).join("\n");
+        assert!(text.contains(&want_name), "the panel names the node");
+        assert!(
+            text.contains(&want_material),
+            "the panel draws the bill: {want_material:?}"
+        );
+        assert!(
+            text.contains(want_conversion.split(" into ").next().unwrap()),
+            "the panel draws the conversion: {want_conversion:?}"
+        );
+    }
+
+    /// A box's colour is `progression::row_color`, so the five states read on
+    /// the graph exactly as they read in the list.
+    #[test]
+    fn a_boxs_outline_takes_the_lists_row_colour() {
+        let mut game = Game::new(934, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let nodes = game.research_nodes();
+        let locked = nodes
+            .iter()
+            .filter(|n| matches!(n.state, ResearchState::Locked { min_zone: None, .. }))
+            .count();
+        assert!(locked > 0, "a fresh run has prereq-locked nodes to draw");
+        let m = ui_metrics(720.0);
+        let (_, shapes) = with_painter(|p| draw_research_graph(&mut game, 0, None, p, &m));
+        assert_eq!(
+            painted_rect_stroke_count(&shapes, super::super::progression::LOCKED_BY_PREREQ),
+            locked,
+            "one amber outline per prereq-locked node"
+        );
+    }
+
+    /// A refusal raised on this screen has to be drawn on it. The graph
+    /// draws no popup, so it carries the line itself.
+    #[test]
+    fn a_refusal_is_drawn_on_the_graph() {
+        let mut game = Game::new(935, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let m = ui_metrics(720.0);
+        let (_, shapes) = with_painter(|p| {
+            draw_research_graph(&mut game, 0, Some("Requires Zone 3 first."), p, &m)
+        });
+        assert!(
+            painted_text(&shapes)
+                .join("\n")
+                .contains("Requires Zone 3 first."),
+            "a refusal must reach the screen the player typed into"
+        );
     }
 }

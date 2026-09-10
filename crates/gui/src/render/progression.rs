@@ -231,7 +231,7 @@ pub(super) fn conversion_rows(conversions: &[String], columns: usize) -> Vec<Row
 pub(super) fn research_menu_rows(held: u32, nodes: &[ResearchStatus], selected: usize) -> Vec<Row> {
     let mut rows = vec![
         Row::TextColored(format!("Research Data: {held}"), CYAN),
-        text_row("Pick a row's key to research it. Esc to close"),
+        text_row("Pick a row's key to research it. G for the tree. Esc to close"),
         text_row(""),
     ];
     for (i, node) in nodes.iter().enumerate() {

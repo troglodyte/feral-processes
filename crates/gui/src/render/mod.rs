@@ -831,6 +831,7 @@ fn cost_rows(game: &Game, cost: &[(ItemId, u32)], have: impl Fn(&ItemId) -> u32)
 /// about, as the `(item, tier)` pair both their screens take.
 fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m: &Metrics) {
     let selected = app.menu_selected;
+    let graph_view = app.research_graph_view;
     let pending_manifest = app.pending_manifest;
     let manifest_origin = app.manifest_origin;
     let pending_field_routine = app.pending_field_routine;
@@ -1345,6 +1346,9 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
                 let quote = game.respec_quote(RespecSubject::Talents(target));
                 draw_respec_confirm(&quote, "talent", refusal, painter, m);
             }
+        }
+        Mode::Research if graph_view => {
+            research_graph::draw_research_graph(game, selected, refusal, painter, m)
         }
         Mode::Research => draw_research_menu(game, selected, refusal, painter, m),
         Mode::Contracts => draw_contracts(

@@ -34,6 +34,19 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.156
+
+**The research tree can be read as a flow chart.** `G` on the research
+screen swaps the list for the tree drawn left to right — a box per node
+coloured the way its row is, orthogonal elbows through the gutters, and the
+prerequisites of whatever is selected lit up. Arrow keys walk it, `Enter`
+buys, and the detail panel down the right is built from the list's own row
+builders, so the two views cannot describe a node differently.
+
+**A research node in a `requires` cycle is now dropped at load.** Both
+members of one are permanently unresearchable, which is the condition the
+loader already dropped a node with a dangling prerequisite for.
+
 ## 0.13.155
 
 **The deploy menu says how many of each structure you already have.** A row

@@ -1,6 +1,6 @@
 # Power Cell ladder — design
 
-**Status:** approved, unimplemented
+**Status:** implemented on `claude/power-cell-ladder`
 **Date:** 2026-09-10
 
 ## The problem
@@ -40,10 +40,17 @@ restores a smaller lump and then drips, and is not fuel at all.
 | Item | value | Power | grid fuel | recipe (ingredient value) | gate |
 |---|---|---|---|---|---|
 | Power Cell | 1 | 25 | 1 window | 2 `core_fragment` (2) | none — **unchanged** |
-| **Buffered Cell** | 9 | 60 | 3 windows | 3 `power_cell`, 1 `logic_wafer`, 3 `cache_grain`, 1 `bytecode_block` (13) | research, zone 2, Winding Node |
-| **Sustain Cell** | 9 | 15 + drip | — | 2 `power_cell`, 1 `logic_wafer`, 2 `cache_grain`, 1 `bytecode_block` (11) | research, zone 2, Winding Node |
+| **Buffered Cell** | 12 | 60 | 3 windows | 3 `power_cell`, 1 `logic_wafer`, 3 `cache_grain`, 1 `bytecode_block` (13) | research, zone 2, Winding Node |
+| **Sustain Cell** | 12 | 15 + drip | — | 2 `power_cell`, 2 `logic_wafer`, 2 `cache_grain`, 1 `bytecode_block` (14) | research, zone 2, Winding Node |
 | **Capacitor Array** | 20 | 100 (full) | 8 windows | 2 `buffered_cell`, 2 `bytecode_block`, 4 `cache_grain`, 1 `logic_wafer` (33) | research, zone 3, Winding Node |
 | **Backfeed Cell** | 15 | 25 + drip | — | 1 `buffered_cell`, 1 `bytecode_block`, 3 `cache_grain`, 1 `logic_wafer` (19) | research, zone 3, Winding Node |
+
+**The values moved once during implementation.** Priced at 9 the two zone-2
+cells landed in the gap between the value ladder's `scavenged` (3-8) and
+`standard` (12-16) bands and printed as *unpriced* on `docs/items.md`,
+alongside Credits — which is the one item that is supposed to sit outside the
+ladder. Both went to 12, and Sustain's bill grew a second Logic Wafer so its
+ingredients still out-value the result.
 
 The drips, priced against `HUNGER_DECAY_PER_TICK` (0.15 Power a tick — the
 line a trickle has to clear to mean anything):
@@ -108,8 +115,12 @@ second thing to get wrong.
   the zone-2 material, so the ladder opens exactly when its ingredient does
   and the zone-material census is satisfied.
 - **Two research nodes**, both on the `power_grid` branch:
-  - `charge_density` — zone 2, requires `power_grid`, unlocks Buffered Cell
-    and Sustain Cell.
+  - `charge_density` — zone 2, requires **`cache_coherence`**, unlocks
+    Buffered Cell and Sustain Cell. Re-parented from `power_grid` during
+    implementation: a bill may only name what its own prerequisites can
+    make, and Cache Grain comes off the Cache Tap, which `cache_coherence`
+    unlocks — along with the Line Driver, the second supplier, which makes it
+    the right parent on the fiction too.
   - `capacitance` — zone 3, requires `charge_density`, unlocks Capacitor
     Array and Backfeed Cell.
   Each node's `materials` bill names only what its own prerequisite closure
@@ -152,9 +163,21 @@ All in `crates/engine`. No app-core, no gui, no save bump.
    first, then `collect::plan_adjacent_take`, both unchanged in shape); set
    `ticks_left` from the item burnt. The ledger `Consume` event names the item
    actually burnt.
-4. `systems::intake_recipe` and `Game::fuel_wants` — accept the family so a
-   hauler fetching a dense cell to a dry supplier is not walking it something
-   it cannot use.
+4. ~~`systems::intake_recipe` and `Game::fuel_wants`~~ — **not changed, and
+   deliberately.** `intake_recipe` takes a def and an `ItemDb` and has no
+   world to ask what is on a shelf, so "fetch whichever fuel the base
+   actually has" cannot be answered where the fetch list is built. Rather
+   than thread availability through it, the named `power_upkeep` item stays
+   the only thing a hauler fetches: the base runs on the staple it produces
+   on a Conduit's timer, and a dense cell is a player-placed override that a
+   supplier will burn from its own hopper or an adjacent feeder.
+
+   **The edge this leaves**, stated so it is a decision rather than a
+   surprise: a base holding *only* dense cells, on a Depot not touching the
+   supplier, goes Dry with fuel on a shelf. It is narrow — dense cells are
+   never auto-produced and each costs three staples to make, so reaching it
+   means deliberately converting the whole stock — but it is real, and the
+   fix if it ever bites is to give the fetch list a world.
 
 `game::base::power::is_fuelled` is untouched — `ticks_left > 0` still means
 what it meant.
@@ -207,3 +230,23 @@ stops mattering once the base is established. If they should keep saying
 something late, the lever is the trickle line (a deep-zone cell that drips
 until you rest, reusing `ActiveFieldBuff::runs_until_rest`) rather than more
 rungs on the lump ladder.
+
+## Found during implementation, not fixed
+
+Two things surfaced that are outside this change's blast radius:
+
+- **`docs/*-gen.py` tables were already stale.** `python3 docs/audit-gen.py`
+  reports nine items and five research nodes absent from tables that claim to
+  transcribe the assets, plus three wrong cell values in the structures table.
+  The items table was brought current for the four new cells only.
+- **`docs/research.md` does not list the two new nodes.** `research-gen.py`'s
+  `recipe` unlock kind assumes one item, one bench and a `portal_fragment`
+  price; these nodes unlock two recipes each and are priced in staples, so the
+  generator needs a shape change before the page can carry them.
+- **`every_research_material_is_reachable_through_that_nodes_own
+  _prerequisites` has a blind spot.** It grows its makeable set through
+  `ItemDef::craftable` only, never through a prerequisite node's own
+  `unlocks_recipes` — so a bill naming an item a prereq unlocks is rejected
+  as unreachable when it is not. That is a false negative, so it can never
+  let a bad bill ship; `capacitance`'s bill was written around it rather than
+  the census being widened to fit new content.

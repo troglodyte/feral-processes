@@ -3,6 +3,7 @@
     name: "Depot Mk3",
     description: "Storage, 200 units, Walk up to it and press c to access.",
     sprite: Some("depot"),
+    glyph: 'D',
     color: Cyan,
     build_cost: [("core_fragment", 55), ("cache_grain", 4)],
     work: None,

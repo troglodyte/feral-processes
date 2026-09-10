@@ -2567,6 +2567,13 @@ pub struct App {
     /// of, not instead of, typing a row's own number/letter directly.
     /// Reset to 0 every time a menu mode is entered.
     pub menu_selected: usize,
+    /// Whether the research screen is drawing the graph rather than the
+    /// list. A view flag and not a `Mode`, so `ALL_MODES` and every mode
+    /// census stay as they are.
+    ///
+    /// Session state: it survives closing and reopening the screen, which
+    /// is what a player who prefers one view expects.
+    pub research_graph_view: bool,
     /// The game tick (see `Game::current_tick`) as of the last autosave —
     /// reset to the current tick whenever a game starts or loads, so a
     /// resumed session doesn't immediately autosave on its very first move.

@@ -1,6 +1,7 @@
 //! The perk and research pickers.
 
 use crate::*;
+use feral_processes_engine::GraphDir;
 
 impl App {
     /// Picks a numbered perk to unlock; stays open so multiple can be
@@ -57,6 +58,14 @@ impl App {
             self.close_screen();
             return;
         }
+        // Checked before `selected_index`, for the reason `handle_perks_key`
+        // checks its own `X` first: uppercase is not a row selector today,
+        // but putting the check after would be a live hazard the day
+        // somebody widens `selected_index`.
+        if key == GameKey::Char('G') {
+            self.research_graph_view = !self.research_graph_view;
+            return;
+        }
         // Collecting the ids through `as_ref().map` (rather than a
         // `let Some(game) = &self.game` binding) ends the borrow here —
         // `selected_index` needs `&mut self`.
@@ -68,8 +77,42 @@ impl App {
         }) else {
             return;
         };
-        if let Some(idx) = self.selected_index(key, ids.len()) {
-            let id = ids[idx].clone();
+        if !self.research_graph_view {
+            if let Some(idx) = self.selected_index(key, ids.len()) {
+                let id = ids[idx].clone();
+                let Some(game) = &mut self.game else { return };
+                let outcome = game.unlock_research(&id);
+                self.report(outcome);
+            }
+            return;
+        }
+        // The graph view. Digits and lowercase letters select nothing here —
+        // a row number labels nothing the player can see on a flow chart.
+        let Some(from) = ids.get(self.menu_selected.min(ids.len().saturating_sub(1))) else {
+            return;
+        };
+        let dir = match key {
+            GameKey::Up => Some(GraphDir::Up),
+            GameKey::Down => Some(GraphDir::Down),
+            GameKey::Left => Some(GraphDir::Left),
+            GameKey::Right => Some(GraphDir::Right),
+            _ => None,
+        };
+        if let Some(dir) = dir {
+            let Some(game) = self.game.as_ref() else {
+                return;
+            };
+            let landed = game.research_graph().step(from, dir);
+            // A scan of 34 entries per keypress. An index map would be a
+            // second cursor to keep in step with `research_nodes()`, which
+            // re-sorts by state.
+            if let Some(idx) = ids.iter().position(|id| *id == landed) {
+                self.menu_selected = idx;
+            }
+            return;
+        }
+        if key == GameKey::Enter {
+            let id = from.clone();
             let Some(game) = &mut self.game else { return };
             let outcome = game.unlock_research(&id);
             self.report(outcome);

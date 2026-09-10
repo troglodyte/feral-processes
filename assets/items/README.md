@@ -383,6 +383,48 @@ any non-finite `taming_potency`, `consume.power`, or
     // its trigger comes round, so taking the item off ends it.
     grants: Some("watchdog"),
 
+    // Optional; can be left out entirely (defaults to no reach). **How wide
+    // one swing of this weapon is**, past the body it is aimed at. When the
+    // charge is up, the swing lands on every body the target names — every
+    // member of the group in front of a group, every body inside the shape
+    // on a battle map. You attack the way you always attack; there is no
+    // second key and no Power cost.
+    //
+    // `target` is the same vocabulary `../abilities/` uses, and only its two
+    // plural enemy-facing values are legal: `WholeEnemyGroup` or
+    // `AllEnemies`.
+    //
+    // `shape` is optional and overrides the geometry a battle map derives
+    // from `target` — `WholeEnemyGroup` becomes a small blast and
+    // `AllEnemies` a wider one. Author one only for real geometry: a `Line`
+    // or a `Cone` is cast from the wielder toward the body being swung at,
+    // where a `Radius` is centred on that body. Nothing shipped authors one.
+    //
+    // `recharge` is how many of the fight's own rounds pass before the swing
+    // may be wide again. It is required, and shipped content never sets it
+    // to 0 — a wide swing on every swing is a straight throughput
+    // multiplier. `0` is legal and simply means "always ready".
+    //
+    // The reach is **breadth and never distance**: it does not extend how
+    // far the weapon reaches, and a battle map's adjacency rule is
+    // untouched. On a battle map the sweep is **full friendly fire** — a
+    // companion standing beside the target is caught, and that is the price
+    // of aiming a shape.
+    //
+    // Three faults are refused at load, and the file is skipped with a
+    // warning like any other malformed one: a `reach` on an item that is not
+    // a `Weapon`, a `target` that is ally-facing or names a single body
+    // (`OneEnemyGroupFront`), and a `shape` of `Single`. The last two are
+    // the same fault in two vocabularies — a reach that reaches nobody.
+    //
+    // Nothing about a reach is saved: it is read off the worn weapon's
+    // definition every swing, so retuning this file reaches a run already in
+    // progress.
+    reach: Some((
+        target: WholeEnemyGroup,
+        recharge: 2,
+    )),
+
     // Optional; defaults to false. Marks this item as a **rest charge**: one
     // unit is spent by resting anywhere outside the player's base. Inside
     // the base a rest is free and spends nothing, so this is what makes

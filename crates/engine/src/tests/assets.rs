@@ -2338,6 +2338,68 @@ fn every_weapon_authors_a_range_and_nothing_else_does() {
     }
 }
 
+/// Every shipped reach weapon authors a recharge above zero.
+///
+/// A wide swing on **every** swing is a straight throughput multiplier that
+/// nothing in the balance gate would see — `balance_sim` models no reach at
+/// all — so the recharge is what pays for the breadth. `serde`'s `u32`
+/// default is 0, and `ItemDb::load_dir` deliberately does not refuse one
+/// (`recharge: 0` is inert rather than special-cased, so a mod may author
+/// it), which means nothing but this census catches a forgotten field on a
+/// shipped file.
+#[test]
+fn every_shipped_reach_weapon_authors_a_recharge() {
+    let game = Game::new(3315, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut checked = 0;
+    for item in game.item_defs() {
+        let Some(reach) = item.reach else {
+            continue;
+        };
+        assert!(
+            reach.recharge > 0,
+            "{} swings wide on every swing, which no balance instrument can see",
+            item.id
+        );
+        checked += 1;
+    }
+    assert!(
+        checked >= 2,
+        "the shipped set should carry both reach weapons, not {checked}"
+    );
+}
+
+/// Belt and braces over `ItemDef::unreachable_reach`, asserted against the
+/// shipped tree rather than a temp file: the loader's refusals are what
+/// stop a *mod* shipping an incoherent reach, and this is what stops one
+/// being edited into this repo's own content and silently skipped at
+/// startup — a shipped weapon that fails to load is a weapon that is simply
+/// not in the game, with one warning nobody reads.
+#[test]
+fn every_shipped_reach_weapon_is_enemy_facing() {
+    let game = Game::new(3316, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    for item in game.item_defs() {
+        let Some(reach) = item.reach else {
+            continue;
+        };
+        assert!(
+            matches!(
+                reach.target,
+                crate::abilities::AbilityTarget::WholeEnemyGroup
+                    | crate::abilities::AbilityTarget::AllEnemies
+            ),
+            "{} reaches {:?}, which is either the party's own side or one body",
+            item.id,
+            reach.target
+        );
+        assert_ne!(
+            reach.tactical_shape(),
+            crate::abilities::AbilityShape::Single,
+            "{} resolves to a single cell on a battle map and so reaches nobody",
+            item.id
+        );
+    }
+}
+
 /// The shipped manual, `assets/help/`. Every page parses and every link
 /// resolves — `HelpDb::load_dir` skips a malformed page with a warning
 /// rather than refusing to start, which is right for a modder's directory

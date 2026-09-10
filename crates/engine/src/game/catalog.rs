@@ -526,10 +526,28 @@ impl Game {
             quality: copy.quality,
             stats,
             power: self.copy_power(copy),
+            reach: self.reach_line(&copy.item),
             accuracy,
             hit_chance: crate::battle::hit_chance(accuracy, nominal.evasion),
             nominal,
         })
+    }
+
+    /// What a weapon's wide swing lands on and how often, as the inspect
+    /// page says it.
+    ///
+    /// Read off the def rather than through `Game::swing_reach`, which asks
+    /// after a live `ReachCharge` and a round number a page does not have —
+    /// this row states what the weapon *is*, not what this instant's swing
+    /// would do. Both read the same `items::WeaponReach`, so the row and the
+    /// sweep cannot come to disagree about either figure.
+    fn reach_line(&self, item: &ItemId) -> Option<String> {
+        let reach = self.world.resource::<ItemDb>().get(item.as_str())?.reach?;
+        let cadence = match reach.recharge {
+            0 | 1 => "every round".to_string(),
+            n => format!("once every {n} rounds"),
+        };
+        Some(format!("Wide swing: {}, {cadence}", reach.target.phrase()))
     }
 
     /// A signed one-line summary of a gear bonus — `"14–21 DMG +3 ATK"`,

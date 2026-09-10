@@ -458,7 +458,26 @@ impl Game {
     /// living enemy in every group, the player, and every party member,
     /// plus each of their combat buffs. Anything a lingering Bleed finished
     /// off is then cleared out of its group.
+    ///
+    /// **A fight that already ended is owed nothing here**, and the guard is
+    /// what makes that true rather than a panic. `battle_resolve_round`
+    /// spends this at its tail unconditionally, and a round can close the
+    /// fight inside it — so with the roster emptied *and* the player down,
+    /// the `end_battle` below would be a second teardown reading a
+    /// `BattleState` the first one dropped. `end_battle` panics without one;
+    /// `run_tactical_beat`'s own doc names this function as the reason a
+    /// battle map does not call it.
+    ///
+    /// Reachable since a weapon's swing could land on more than one body: a
+    /// narrow swing that empties a group cannot also kill its swinger, since
+    /// the fumble that kills the swinger deals the defender nothing, but one
+    /// sweep can do both on two different bodies. Everything `end_battle`
+    /// would have done has already been done by the teardown that closed the
+    /// fight, so returning is the whole fix.
     pub(crate) fn tick_round_status_effects(&mut self, player: Entity) {
+        if self.world.get_resource::<BattleState>().is_none() {
+            return;
+        }
         self.tick_combatant_upkeep(player);
         if self.reap_dead_members(player) {
             return;

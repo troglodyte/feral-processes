@@ -491,6 +491,55 @@ impl EquipmentSlot {
     }
 }
 
+/// How wide one swing of a weapon is, past the body it is aimed at.
+///
+/// This lives on `ItemDef` and deliberately **not** on `EquipmentStats`.
+/// Three reasons, each independently sufficient — see
+/// `docs/superpowers/archive/specs/2026-09-10-weapon-reach-design.md`. The stats
+/// are scaled four ways by `Game::copy_bonus` and a reach must not scale,
+/// `damage`'s own rule that a tier sharpens what an item does and never
+/// hands it a stat it never had. `EquipmentStats::is_empty` and
+/// `has_upside` **destructure** on `cell_mark`'s rule and a non-numeric
+/// field has no answer for either. And the def is already in reach at the
+/// swing site: `Equipment::weapon` → `EquippedItem` → `GearCopy` →
+/// `ItemId` → `ItemDef`. On the def the reach is off all four scaling axes
+/// *by construction* rather than by a rule someone has to keep remembering.
+///
+/// `Copy` because the def lives inside `ItemDb`, a world resource, and
+/// every sweep that reads one holds `&mut self` to swing: a borrow out of
+/// the resource cannot be held across the blow.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WeaponReach {
+    /// Enemy-facing and plural — `WholeEnemyGroup` or `AllEnemies`.
+    /// Refused at load otherwise, since the other three variants each
+    /// resolve to the player's own side or to a single body.
+    ///
+    /// A *target* and not a shape, because the arrow only points this way:
+    /// the group model has no reading of a `Line` at all, so a shape-first
+    /// field would need a shape→group mapping invented out of nothing.
+    pub target: crate::abilities::AbilityTarget,
+    /// The battle map's geometry, overriding the one derived from `target`.
+    /// Read through `tactical_shape` and never directly.
+    #[serde(default)]
+    pub shape: Option<crate::abilities::AbilityShape>,
+    /// Rounds between wide swings, counted on the holding model's own round
+    /// counter. Multi-target on every swing is a straight throughput
+    /// multiplier nothing in the balance gate would see, so the rate is
+    /// content and is authored per weapon.
+    pub recharge: u32,
+}
+
+impl WeaponReach {
+    /// What this covers on a battle map, authored or derived —
+    /// `AbilityDef::tactical_shape`'s rule and its reason. Reading `shape`
+    /// directly resolves every shipped reach weapon to nothing, and a
+    /// weapon that quietly became single-target reads as a nerf rather than
+    /// a bug.
+    pub fn tactical_shape(&self) -> crate::abilities::AbilityShape {
+        self.shape.unwrap_or_else(|| self.target.derived_shape())
+    }
+}
+
 /// Flat stat bonuses an equipped item grants while worn, at gear level 1
 /// (base). See `GEAR_LEVEL_STEP`/`EquipmentStats::scaled_for_level` for
 /// how a higher gear level scales these up.

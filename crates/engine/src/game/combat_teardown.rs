@@ -150,9 +150,9 @@ impl Game {
         true
     }
 
-    /// Clears any residual status effects, combat buffs, cloaks and ability
-    /// cooldowns from the player, every party member, and every hostile
-    /// still in the fight. Status conditions are scoped to a single
+    /// Clears any residual status effects, combat buffs, cloaks, reach
+    /// charges and ability cooldowns from the player, every party member,
+    /// and every hostile still in the fight. Status conditions are scoped to a single
     /// intrusion, so nothing should carry forward once one ends, however it
     /// ends. `wild` is `None` when the pack is already gone, and may name an
     /// entity that has already left its group (a decompile) or already
@@ -173,6 +173,10 @@ impl Game {
         // what keeps it out of `save.rs` — left set, it would follow the
         // player out of the fight and hide them from the next one.
         self.uncloak(player);
+        // `ReachCharge` for the same reason and with the same consequence:
+        // left set, a reach weapon's first swing of the *next* fight would
+        // be held narrow by a charge armed in this one.
+        self.disarm_reach_charge(player);
         // Every hostile still in the fight, not only the one passed in.
         // Survivors of a jack-out stay on the map, and a mirrored buff left
         // armed on one never ticks down — `effective_atk`/`effective_mitigation`
@@ -192,6 +196,7 @@ impl Game {
                 c.0.clear();
             }
             self.uncloak(hostile);
+            self.disarm_reach_charge(hostile);
         }
         let party = self.world.resource::<Party>().0.clone();
         for companion in party {
@@ -209,6 +214,7 @@ impl Game {
                 c.0.clear();
             }
             self.uncloak(companion);
+            self.disarm_reach_charge(companion);
         }
     }
 
@@ -223,6 +229,20 @@ impl Game {
     fn uncloak(&mut self, entity: Entity) {
         if let Ok(mut body) = self.world.get_entity_mut(entity) {
             body.remove::<Cloaked>();
+        }
+    }
+
+    /// Drops `entity`'s reach charge — `uncloak`'s sibling, `get_entity_mut`
+    /// for its reason: teardown is reached with entities that have already
+    /// despawned or already left their group, and clearing one of those has
+    /// to stay a no-op.
+    ///
+    /// Removed rather than zeroed, `Cloaked`'s treatment and not
+    /// `AbilityCooldowns`': absent is what a body that has not swung wide
+    /// yet looks like, so there is one reading of "ready" and not two.
+    fn disarm_reach_charge(&mut self, entity: Entity) {
+        if let Ok(mut body) = self.world.get_entity_mut(entity) {
+            body.remove::<ReachCharge>();
         }
     }
 

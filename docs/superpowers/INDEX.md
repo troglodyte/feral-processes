@@ -274,6 +274,7 @@ branch is a claim that a rebase or a competing merge can invalidate.
 | Spec | What it designed | Evidence |
 | --- | --- | --- |
 | `2026-09-10-invisibility-routine-design` | A body no picker may name until it acts | `components::Cloaked`, `Game::break_cloak` and `AbilityEffect::Cloak` resolve in `crates/engine`; `assets/abilities/detach.ron` |
+| `2026-09-10-weapon-reach-design` | A weapon whose swing lands on more than one body | `items::WeaponReach`, `Game::swing_reach` and `components::ReachCharge` resolve in `crates/engine`; `assets/items/scatter_lance.ron`, `assets/items/broadcast_storm.ron`. Its one `///` citation moved with it, on the branch — no fourth exception |
 
 ## Four rows that need a footnote
 

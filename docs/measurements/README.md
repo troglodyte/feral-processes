@@ -54,6 +54,18 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-09-10 — What a wide swing is worth against the single-target ladder](2026-09-10-weapon-reach-throughput.md)
+  — the two shipped reach weapons are priced **below** the ladder on band and
+  still clear a fight ~**9%** faster than it, at both tiers: 5.8 rounds
+  against the Arc Lance's 6.4, and 9.8 against the Plasma Router's 10.8. Win
+  rate moves 89.5% → 90.0%, inside the noise of 200 reps, so breadth buys
+  speed and not survival. `balance_sim` models no reach and gates none of it,
+  which is why the gap is written down rather than asserted. Carries the
+  finding nobody was looking for: 200 reps crashed the game twice, because a
+  wide swing can empty the last group and kill its own swinger in one turn
+  and the round's upkeep then read a `BattleState` the teardown had dropped —
+  a state a narrow swing cannot reach and the suite could not have found.
+
 - [2026-09-06 — How many ticks a run actually reaches](2026-09-06-run-length.md)
   — The anchor for `SETTLEMENT_GROWTH_DUE_MIN`/`_MAX`. Every shipped dev-save
   template sits at tick **5344-6944**, which is a *floor* on a mature run and

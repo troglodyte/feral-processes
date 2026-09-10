@@ -1041,6 +1041,11 @@ mod tests {
             ("sandbox_liner", EquipmentSlot::Armor, 0, 2, 0),
             ("redundant_bank", EquipmentSlot::Module, 0, 3, 0),
             ("deadman_relay", EquipmentSlot::Module, 0, 6, 0),
+            // Reach tier — priced *below* the single-target ladder at every
+            // tier, because the breadth is what they are worth and
+            // `balance_sim` models no reach at all.
+            ("scatter_lance", EquipmentSlot::Weapon, 2, 0, 0),
+            ("broadcast_storm", EquipmentSlot::Weapon, 3, 0, 0),
         ];
         for (id, want_slot, atk, def, decompiler) in equipment {
             let (slot, stats) = db.get(id).unwrap().equipment.unwrap();
@@ -1056,7 +1061,7 @@ mod tests {
             equipment.len(),
             "an equippable not in the table above is unpinned"
         );
-        assert_eq!(db.all().count(), 68);
+        assert_eq!(db.all().count(), 70);
     }
 
     #[test]

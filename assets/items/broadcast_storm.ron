@@ -1,0 +1,9 @@
+(
+    id: "broadcast_storm",
+    name: "Broadcast Storm",
+    description: "Floods every listener on the segment at once. Recharging it takes a while, and nothing on the far side is left untouched.",
+    value: Some(70),
+    equipment: Some((Weapon, (atk: 3, damage: (min: 4, max: 8), accuracy: 1))),
+    reach: Some((target: AllEnemies, recharge: 5)),
+    droppable: Some([("cipher", 0.05), ("rootkit", 0.04)]),
+)

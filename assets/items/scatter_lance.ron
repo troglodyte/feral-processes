@@ -1,0 +1,9 @@
+(
+    id: "scatter_lance",
+    name: "Scatter Lance",
+    description: "Broadcasts the payload across a whole hostile group. It hits softer than a directed lance, and it hits everything.",
+    value: Some(20),
+    equipment: Some((Weapon, (atk: 2, damage: (min: 3, max: 6), accuracy: 1))),
+    reach: Some((target: WholeEnemyGroup, recharge: 2)),
+    craftable: Some((cost: [("core_fragment", 20)], requires_structure: Some("fabricator"))),
+)

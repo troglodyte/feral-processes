@@ -4,7 +4,6 @@
     description: "Take a process off the scheduler mid-fight: nothing can address it until it acts or something lands on it. Teaches Detach Single — write it onto a Routine Disk to run it.",
     cost: 46,
     materials: [("routine_disk", 6), ("logic_wafer", 6)],
-    min_zone: 2,
     requires: ["self_exec"],
     unlocks_abilities: ["detach"],
 )

@@ -33,6 +33,13 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.146
+
+**The reach wash is drawn for either side.** The tint showing where the body
+whose turn it is may still step was gated on the turn being the player's, so
+a fight showed where the party could go and never where the wild side could —
+which is the half of the board a fight is planned against.
+
 ## 0.13.145
 
 **A builder fetches the line it can get.** A build request whose bill led

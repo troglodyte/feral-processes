@@ -22,6 +22,42 @@
   Cache Grain apart the way it once did. A new tier must never retire the
   one below it regardless. Fixtures stock through `stock_upgrade_materials`.
 
+- **A weapon's reach lives on `ItemDef` and is authored as an enemy-facing
+  plural `AbilityTarget`.** Three independently sufficient reasons keep it
+  off `EquipmentStats`: `copy_bonus` scales that struct four ways and a
+  reach must not scale (`damage`'s own rule), `is_empty`/`has_upside`
+  **destructure** it on `cell_mark`'s rule and a non-numeric field has no
+  answer for either, and the def is already in reach at the swing site. A
+  *target* and not a shape because the arrow only points that way — a `Line`
+  has no group meaning, so a shape-first field needs a shape→group mapping
+  invented out of nothing; an authored `shape:` overrides, reconciled
+  through `WeaponReach::tactical_shape`, which is `AbilityDef::
+  tactical_shape`'s trap again: **nothing shipped authors one**, so a reader
+  taking `self.shape` directly resolves every reach weapon to nothing and a
+  weapon that quietly went single-target reads as a nerf. `Game::swing_reach`
+  is the one door that decides whether *this* swing is wide; each model
+  converts it with the converter it already has, and `components::ReachCharge`
+  is battle-scoped beside `Cloaked` so nothing reaches `save.rs`. **Three
+  traps.** `attacks_for` loops a Striker's second swing *inside* the turn, so
+  the reach is read once in `party_member_attacks` and spent with
+  `Option::take` — armed per swing it silently doubles the weapon and
+  `BattleState::planned` never learns the feature exists
+  (`proc_wielded_routine`'s rule). A side filter in the board's sweep is one
+  line that reads as an obvious bug fix and deletes the reason a shape is
+  worth aiming — `reach::recipients` never learns `Hostile`, and a companion
+  beside the target is caught; the *swinger* is dropped, which is not a side
+  filter but `tactical_attack`'s own `actor == target` refusal, and without
+  it every wide swing hits the wielder since `Radius { 1 }` around an
+  adjacent cell always covers the cell swung from. And the sweep made a
+  latent panic reachable: a wide swing can empty the last group *and* kill
+  its own swinger, which a narrow one cannot, so `battle_resolve_round`'s
+  tail spent `tick_round_status_effects` on a torn-down fight —
+  `end_battle` panics without a `BattleState`. `copy_power` and
+  `balance_sim` gain no term by design, so a reach weapon rates below its
+  single-target peer and the gear page's one row is the answer; the gap is
+  measured in `docs/measurements/2026-09-10-weapon-reach-throughput.md`
+  rather than asserted. See `seam:a-weapons-reach-lives-on-itemdef-and-is-authored-as-a`
+  for the argument.
 - **A carried copy of gear is one value, `items::GearCopy`**, and `Inventory`
   is by definition the *plain-copy* store. `GearCopy::is_plain` decides which
   store and exactly three functions ask it. Every entry point naming an item

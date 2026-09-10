@@ -921,6 +921,10 @@ relying on one, and correct all three places if it has moved.
   being no source.
 - **A research bill is paid from the pack, topped up off the adjacent
   shelves**, and the whole bill is refused before a unit moves.
+- **A weapon's reach lives on `ItemDef` and is authored as an enemy-facing
+  plural `AbilityTarget`**, so it is off `copy_bonus`'s four scaling axes by
+  construction and each combat model converts it with the converter it
+  already has.
 - **A carried copy of gear is one value, `items::GearCopy`**, and
   `Inventory` is by definition the *plain-copy* store.
 - **`Game::copy_bonus` is the one expression for what gear is worth, and the
@@ -1288,7 +1292,7 @@ relying on one, and correct all three places if it has moved.
 ## Build & test
 
 ```sh
-cargo test --workspace     # 5377 tests
+cargo test --workspace     # 5394 tests
 cargo run                  # the game; `default-run` in crates/launcher
 cargo clippy --workspace
 cargo fmt

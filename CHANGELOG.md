@@ -34,6 +34,26 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.154
+
+**A weapon may declare how wide its swing is.** The Scatter Lance sweeps a
+whole hostile group and the Broadcast Storm sweeps every hostile on the
+field; you attack the way you always attack, and the swing is wide when the
+weapon's charge is up.
+
+**Both are priced below the single-target ladder, and the gear page says
+why.** A reach weapon rates lower on the swap picker than the weapon it
+replaces — the rating prices the swing, and `[I]` says what the swing lands
+on and how often.
+
+**On a battle map a wide swing is full friendly fire.** A companion standing
+beside the body you aimed at is caught in it, which is what makes a shape
+worth aiming.
+
+**Fixed: a round could end twice.** A swing that emptied the last hostile
+group and killed its own swinger left the round's upkeep tearing down a
+fight that was already gone.
+
 ## 0.13.153
 
 **A Teardown Rig holds its own tool, and the player's hand-load is gone.**

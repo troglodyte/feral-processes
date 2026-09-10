@@ -260,3 +260,246 @@ fn a_reach_charge_does_not_survive_the_fight() {
         "a fresh fight opens with the charge ready"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// The abstract model's sweep.
+// ─────────────────────────────────────────────────────────────────────────
+
+/// A single hostile group `count` deep, with the fight opened around it and
+/// enough Integrity on every body that nothing dies mid-turn.
+///
+/// **`insert_battle_with_groups`, never `insert_battle`.** `group_pack`
+/// reads the local `max_group_size`, which at a zone-1 spawn point is one
+/// member — the rolled partition would drop the bodies this fixture exists
+/// to stand behind the front.
+fn group_of(game: &mut Game, count: usize) -> Vec<Entity> {
+    let player = game.player_entity();
+    let at = *game.world.get::<Position>(player).unwrap();
+    let members: Vec<Entity> = (0..count)
+        .map(|_| {
+            let e = spawn_wild_without_routine(game, "scrapper", at.x, at.y);
+            let mut stats = game.world.get_mut::<Stats>(e).unwrap();
+            stats.max_hp = 100_000;
+            stats.hp = 100_000;
+            e
+        })
+        .collect();
+    let species = game
+        .world
+        .get::<Creature>(members[0])
+        .unwrap()
+        .species
+        .clone();
+    insert_battle_with_groups(
+        game,
+        player,
+        vec![crate::battle::EnemyGroup {
+            species,
+            members: members.clone(),
+        }],
+    );
+    members
+}
+
+/// The open fight's first group, read back off `BattleState` rather than
+/// carried out of the fixture — `first_rng_seed_where` rebuilds the world
+/// per seed, so the entities a closure minted are not the ones under test.
+fn group_members(game: &Game) -> Vec<Entity> {
+    game.world.resource::<BattleState>().groups[0]
+        .members
+        .clone()
+}
+
+/// How many bodies `who` is standing at less than full Integrity.
+fn wounded(game: &Game, bodies: &[Entity]) -> usize {
+    bodies
+        .iter()
+        .filter(|&&e| {
+            let s = game.world.get::<Stats>(e).unwrap();
+            s.hp < s.max_hp
+        })
+        .count()
+}
+
+/// Every swing the player has taken this turn, counted off the one thing
+/// every outcome of one shares: the move's own name. A crit, a hit, a miss
+/// and all four fumble rungs each write exactly one line naming it, so this
+/// is an exact count of swings resolved and not an estimate of how many
+/// landed.
+fn player_swings_logged(game: &Game) -> usize {
+    game.world
+        .resource::<MessageLog>()
+        .lines
+        .iter()
+        .filter(|l| l.text.contains("data strike"))
+        .count()
+}
+
+/// The feature. One swing, and every member of the group takes its own
+/// `resolve_and_apply_attack` — so mitigation, affinity and the fumble
+/// ladder hold for each of them with no new damage path.
+///
+/// Seeded through `first_rng_seed_where` rather than forced: no matchup in
+/// the game is a guaranteed landing (`HIT_CHANCE_MAX`), so three swings
+/// that all land is a stream to choose and not one to force.
+#[test]
+fn a_weapon_reach_lands_on_every_member_of_the_group() {
+    let dir = modded_assets_dir(
+        "reach_group_sweep",
+        &[],
+        &[REACH_WEAPON, NARROW_WEAPON],
+        &[],
+        &[],
+        &[],
+    );
+    let game = first_rng_seed_where(
+        |seed| {
+            let mut game = Game::new(9_101, DifficultyMode::Forgiving, &dir).unwrap();
+            let player = game.player_entity();
+            wear(&mut game, player, "wide_lance");
+            group_of(&mut game, 3);
+            reseed_rng(&mut game, seed);
+            player_swings_at_group(&mut game, 0);
+            game
+        },
+        |game| wounded(game, &group_members(game)) == 3,
+    );
+
+    let bodies = group_members(&game);
+    assert_eq!(bodies.len(), 3, "the group is still three deep");
+    assert_eq!(
+        wounded(&game, &bodies),
+        3,
+        "one wide swing lands on every member of the group"
+    );
+}
+
+/// `attacks_for` loops a Striker's second swing *inside* the turn, so a
+/// charge armed per swing silently doubles what the weapon is worth and
+/// nothing in `BattleState::planned` or app-core ever learns the feature
+/// exists — `proc_wielded_routine`'s rule, applied verbatim.
+///
+/// Counted in swings rather than in damage: a Striker's turn against a
+/// three-deep group is three swings then one if the charge is armed once,
+/// and three then three if it is armed per swing.
+#[test]
+fn a_reach_arms_once_a_turn_and_not_once_a_swing() {
+    let dir = modded_assets_dir(
+        "reach_once_a_turn",
+        &[],
+        &[REACH_WEAPON, NARROW_WEAPON],
+        &[],
+        &[],
+        &[],
+    );
+    // A stream in which the turn is neither cut short nor turned around: a
+    // Crash rung ends the turn and a Recoil rung can kill the swinger, and
+    // both would leave a *shorter* count that the per-swing bug also
+    // produces. The criterion is orthogonal to what is being counted.
+    let game = first_rng_seed_where(
+        |seed| {
+            let mut game = Game::new(9_102, DifficultyMode::Forgiving, &dir).unwrap();
+            let player = game.player_entity();
+            game.world.get_mut::<Experience>(player).unwrap().level =
+                crate::tuning::EXTRA_ATTACK_LEVEL;
+            game.world.get_mut::<PlayerIdentity>(player).unwrap().class =
+                Some(crate::classes::PlayerClass::Striker);
+            wear(&mut game, player, "wide_lance");
+            group_of(&mut game, 3);
+            reseed_rng(&mut game, seed);
+            player_swings_at_group(&mut game, 0);
+            game
+        },
+        |game| {
+            let player = game.player_entity();
+            !game.is_stunned(player) && game.creature_alive(player)
+        },
+    );
+    let player = game.player_entity();
+    assert_eq!(
+        game.attacks_for(player),
+        2,
+        "the fixture wants a wielder that swings twice a turn"
+    );
+    assert_eq!(
+        player_swings_logged(&game),
+        4,
+        "three bodies on the wide swing and one on the narrow one that follows"
+    );
+}
+
+/// The recharge, measured where it is felt. Round 1 sweeps the group; round
+/// 2 is an ordinary swing at the front and the bodies behind it are
+/// untouched.
+#[test]
+fn a_recharging_reach_swings_narrow_until_it_is_ready() {
+    let dir = modded_assets_dir(
+        "reach_recharge",
+        &[],
+        &[REACH_WEAPON, NARROW_WEAPON],
+        &[],
+        &[],
+        &[],
+    );
+    let mut game = Game::new(9_103, DifficultyMode::Forgiving, &dir).unwrap();
+    let player = game.player_entity();
+    wear(&mut game, player, "wide_lance");
+    let bodies = group_of(&mut game, 3);
+
+    player_swings_at_group(&mut game, 0);
+    let after_the_wide_swing: Vec<i32> = bodies
+        .iter()
+        .map(|&e| game.world.get::<Stats>(e).unwrap().hp)
+        .collect();
+
+    // The next round, inside the fixture weapon's recharge of 3.
+    game.world.resource_mut::<BattleState>().round += 1;
+    player_swings_at_group(&mut game, 0);
+
+    for (index, body) in bodies.iter().enumerate().skip(1) {
+        assert_eq!(
+            game.world.get::<Stats>(*body).unwrap().hp,
+            after_the_wide_swing[index],
+            "body {index} stands behind the front and the narrow swing cannot reach it"
+        );
+    }
+}
+
+/// A Recoil rung damages the fumbler, so the swinger really can die on its
+/// own first body — the guard `party_member_attacks` already carries, one
+/// level down.
+///
+/// Asserted directly rather than by forcing a fatal fumble: the rung is one
+/// band of one roll, and a deterministic fatal one is a stream to hunt for
+/// rather than one to force. A swinger that is already down is exactly the
+/// state a Recoil leaves behind mid-sweep.
+///
+/// **The first body is not guarded and must not be.** `party_member_
+/// attacks` spells its own guard `swing > 0 &&` — a body's opening swing
+/// lands whatever its own Integrity says — so the sweep breaks between
+/// bodies and never before the first one, or the narrow path stops
+/// behaving as it always has.
+#[test]
+fn a_dead_swinger_stops_the_sweep() {
+    let dir = modded_assets_dir(
+        "reach_dead_swinger",
+        &[],
+        &[REACH_WEAPON, NARROW_WEAPON],
+        &[],
+        &[],
+        &[],
+    );
+    let mut game = Game::new(9_104, DifficultyMode::Forgiving, &dir).unwrap();
+    let player = game.player_entity();
+    wear(&mut game, player, "wide_lance");
+    let bodies = group_of(&mut game, 3);
+
+    game.world.get_mut::<Stats>(player).unwrap().hp = 0;
+    player_swings_at_group(&mut game, 0);
+
+    assert_eq!(
+        wounded(&game, &bodies[1..]),
+        0,
+        "the sweep stops at the body the swinger died on"
+    );
+}

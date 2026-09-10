@@ -371,6 +371,14 @@ impl Game {
         group: usize,
         player: Entity,
     ) -> bool {
+        // Read once for the whole turn and **spent** by the swing that takes
+        // it — `proc_wielded_routine`'s rule above, and for its reason. A
+        // Striker's second swing is looped *inside* this turn, so a reach
+        // asked for per swing would silently double what the weapon is worth
+        // and nothing in `BattleState::planned` or app-core would ever learn
+        // the feature exists. `Option::take` leaves `None` behind, so every
+        // later swing this turn is narrow with no second question asked.
+        let mut reach = self.swing_reach(entity);
         for swing in 0..self.attacks_for(entity) {
             // A Crash the actor fumbled on an earlier swing costs it "their
             // next action", and a swing is an action — so it ends the turn
@@ -383,7 +391,7 @@ impl Game {
             if swing > 0 && (self.is_stunned(entity) || !self.creature_alive(entity)) {
                 break;
             }
-            match self.party_member_swing(entity, group, player) {
+            match self.party_member_swing(entity, group, player, &mut reach) {
                 SwingControl::BattleOver => return true,
                 SwingControl::NoTarget => break,
                 SwingControl::Swung => {}
@@ -400,7 +408,13 @@ impl Game {
     /// One swing of one party member's turn. Re-resolves its own target
     /// every call, because a swing that empties a group re-letters the ones
     /// behind it and the next swing has to be aiming at what is there now.
-    fn party_member_swing(&mut self, entity: Entity, group: usize, player: Entity) -> SwingControl {
+    fn party_member_swing(
+        &mut self,
+        entity: Entity,
+        group: usize,
+        player: Entity,
+        reach: &mut Option<items::WeaponReach>,
+    ) -> SwingControl {
         let Some(live) = self.retarget(group) else {
             return SwingControl::NoTarget;
         };
@@ -409,11 +423,60 @@ impl Game {
         };
         let (move_name, natural) = self.swing_move(entity);
         let range = self.attack_range(entity, natural);
-        let outcome = self.resolve_and_apply_attack(entity, front, battle::Swing::plain(range));
-        let line = self.party_swing_line(entity, &move_name, outcome);
-        self.log_swing(MessageKind::PartyDamage, outcome, line);
 
-        if !self.creature_alive(front) && self.finish_group_member(live, player) {
+        // The recipient list is built **once**, before anything is swung at,
+        // and the front is first and never dropped from it: a blast centred
+        // on the body you aimed at contains it, and a line or cone cast
+        // toward it passes through it.
+        //
+        // `ability_recipients` is the abstract model's own converter, so a
+        // wide swing lands on exactly what a `WholeEnemyGroup` routine lands
+        // on. Its aim is the *retargeted* index, not the one the player
+        // named a round ago.
+        let wide = reach.take();
+        let mut bodies = vec![front];
+        if let Some(spec) = wide {
+            // Armed before the sweep rather than after it: a Recoil rung can
+            // kill the swinger part-way through, and a wide swing that was
+            // taken has to be paid for whether or not the swinger survived
+            // it.
+            self.arm_reach_charge(entity, spec.recharge);
+            let swept = self.ability_recipients(
+                entity,
+                spec.target,
+                &battle::SpecialTarget::EnemyGroup { group: live },
+            );
+            bodies.extend(swept.into_iter().filter(|&body| body != front));
+        }
+
+        for (index, body) in bodies.into_iter().enumerate() {
+            // `party_member_attacks` spells the same guard `swing > 0 &&`,
+            // and for the same reason: a Recoil rung damages the fumbler, so
+            // the swinger really can die on its own first body. The opening
+            // swing is unguarded there and is unguarded here, or the narrow
+            // path stops behaving as it always has.
+            if index > 0 && !self.creature_alive(entity) {
+                break;
+            }
+            // Every body takes its own `resolve_and_apply_attack` with the
+            // same band — no new damage path, so mitigation, affinity and
+            // every rung of the fumble ladder hold for free, and the ladder
+            // rolls per body because a wide swing is a sloppy swing.
+            let outcome = self.resolve_and_apply_attack(entity, body, battle::Swing::plain(range));
+            let line = self.party_swing_line(entity, &move_name, outcome);
+            self.log_swing(MessageKind::PartyDamage, outcome, line);
+        }
+
+        if wide.is_some() {
+            // A wide swing drops bodies from any rank, and a corpse left in
+            // a group is promoted to front and then attacked as though
+            // alive — the Special arm's reason for reaping the same way.
+            // After the sweep and never per body, or a swing that empties a
+            // group re-letters it half way through its own sweep.
+            if self.reap_dead_members(player) {
+                return SwingControl::BattleOver;
+            }
+        } else if !self.creature_alive(front) && self.finish_group_member(live, player) {
             return SwingControl::BattleOver;
         }
         SwingControl::Swung

@@ -1,6 +1,8 @@
 # A body nothing can address
 
-**Status:** designed, not implemented.
+**Status:** implemented. This file lives in `archive/specs/`, which is what
+says so — the header is the thing that has rotted before, so read the
+directory.
 
 A battle routine that makes one body untargetable until it does something
 aggressive. It is not a stat, not a status condition and not a buff — it

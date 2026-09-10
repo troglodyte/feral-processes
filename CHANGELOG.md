@@ -34,6 +34,15 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.152
+
+**The Quarantine Rack stores downed programs, and base staff fetch from it.**
+A new base structure holds carriers the player has no room for; it is filled
+and emptied from the same `c` transfer picker items move through, as rows
+whose range is one; and a program posted at a Teardown Rig whose hopper has
+run dry walks to a rack in reach and brings one back, stripping it with the
+tool that rig was last hand-loaded with.
+
 ## 0.13.151
 
 **A fight now reads as an intrusion rather than a brawl.** The nouns were

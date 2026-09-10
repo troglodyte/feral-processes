@@ -434,6 +434,10 @@ relying on one, and correct all three places if it has moved.
   `remove_structure`.
 - **A trader's buyback shelf is keyed by `(kind, tile)`, not by `Entity`**,
   so it outlives the building.
+- **A downed program lives in three places now, and the rack is the only one
+  that is not a queue.**
+- **A carrier in transit is carried, so the never-free rule and both
+  destruction paths name `CarryingProgram` beside `Carrying`.**
 - **Three of the five classes do something at a post, each in a different
   system.** The Leech bonus rides the **scaled** branch only, which is why
   `CycleModifiers` carries the *class* rather than a finished bonus.

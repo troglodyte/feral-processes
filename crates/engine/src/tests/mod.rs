@@ -63,6 +63,7 @@ mod refactor;
 mod research;
 mod respec;
 mod respite;
+mod rig_tool;
 mod routes;
 mod routines;
 mod save_roundtrip;

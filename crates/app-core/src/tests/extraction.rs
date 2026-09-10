@@ -189,60 +189,13 @@ fn app_beside_a_rig_holding(n: u32) -> App {
     assert_eq!(app.mode, Mode::DownedPrograms);
     app
 }
-
-/// `L` from the list opens the tool page in bulk intent, and a tool row
-/// there queues **every** held program rather than extracting the
-/// highlighted one by hand.
+/// The rig is fed by the base now, so this screen has exactly one verb: a
+/// row spends the highlighted program out of the player's own pack. `Q` and
+/// `L` are unbound on both pages, and `App::selected_index` answering `None`
+/// for anything not lowercase-or-a-digit is what keeps an uppercase key from
+/// also picking a row.
 #[test]
-fn the_bulk_verb_queues_every_held_program() {
-    let mut app = app_beside_a_rig_holding(3);
-    app.handle_key(GameKey::Char('L'));
-    assert!(app.downed_programs_bulk);
-    assert_eq!(
-        app.pending_downed_program_index,
-        Some(0),
-        "bulk intent still shows a tool page, and it is the first row's"
-    );
-
-    app.handle_key(GameKey::Char('1'));
-
-    let game = app.game.as_mut().unwrap();
-    assert!(
-        game.downed_program_rows().is_empty(),
-        "the pack should be empty"
-    );
-    assert!(
-        !app.downed_programs_bulk,
-        "bulk intent clears after the act"
-    );
-    assert_eq!(app.status_line, None, "a successful load is not a refusal");
-}
-
-/// `Q` on the tool page queues exactly the one program whose page it is.
-#[test]
-fn the_per_row_verb_queues_one_and_leaves_the_rest() {
-    let mut app = app_beside_a_rig_holding(3);
-    app.handle_key(GameKey::Char('1'));
-    assert_eq!(app.pending_downed_program_index, Some(0));
-
-    app.handle_key(GameKey::Char('Q'));
-
-    let game = app.game.as_mut().unwrap();
-    assert_eq!(game.downed_program_rows().len(), 2);
-    assert!(
-        app.pending_downed_program_index.is_none(),
-        "the tool page for a now-queued program is gone"
-    );
-}
-
-/// The gate the whole binding rests on: `App::selected_index` answers
-/// `None` for anything that is not lowercase or a digit, so an uppercase
-/// binding can never also pick a row. Asserted on the key each page does
-/// *not* bind — `Q` on the list and `L` on the tool page — because those
-/// are the two that would fall through to the row selector if the rule ever
-/// changed. Lowercase digits still extract by hand, paying the pack.
-#[test]
-fn the_new_uppercase_keys_pick_no_row_and_lowercase_still_extracts() {
+fn the_screen_is_the_players_own_hands_and_a_row_pays_the_pack() {
     let mut app = app_beside_a_rig_holding(3);
 
     app.handle_key(GameKey::Char('Q'));
@@ -259,11 +212,9 @@ fn the_new_uppercase_keys_pick_no_row_and_lowercase_still_extracts() {
         Some(0),
         "`L` is unbound on the tool page, and must not pick a tool row there"
     );
-    assert!(!app.downed_programs_bulk);
 
-    // A hand extraction pays the player through `grant_loot`; a rig load
-    // pays the rig's own buffer and leaves the pack alone, so the pack
-    // growing is what says *which* verb spent the program.
+    // A hand extraction pays the player through `grant_loot`, which is what
+    // says the row spent the program into the pack rather than a machine.
     let carried = |app: &App| -> u32 {
         app.game
             .as_ref()
@@ -284,6 +235,67 @@ fn the_new_uppercase_keys_pick_no_row_and_lowercase_still_extracts() {
     );
     assert!(
         carried(&app) > before,
-        "a hand extraction pays into the pack — a rig load would not"
+        "a hand extraction pays into the pack"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// `Mode::RigTool`: the rig's own tool holder, `[F]` in base space.
+// ---------------------------------------------------------------------------
+
+/// `[F]` beside a rig opens the holder; `Esc` closes it. Not `c`, which
+/// already opens the transfer picker at a rig to collect what it stripped,
+/// and not `T`, which `crates/engine/EASTER_EGGS.md` reserves.
+#[test]
+fn f_beside_a_rig_opens_the_tool_holder() {
+    let mut app = app_beside_a_rig_holding(1);
+    app.handle_key(GameKey::Esc);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
+
+    app.handle_key(GameKey::Char('F'));
+
+    assert_eq!(app.mode, Mode::RigTool);
+    assert!(
+        app.rig_tool.is_some(),
+        "the screen carries the rig it opened"
+    );
+
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
+    assert!(app.rig_tool.is_none(), "and drops it on the way out");
+}
+
+/// A key that reads as doing nothing is the failure being avoided, so the
+/// refusal is spoken rather than swallowed.
+#[test]
+fn f_with_no_rig_beside_you_refuses_out_loud() {
+    let mut app = app_beside_a_rig_holding(1);
+    app.handle_key(GameKey::Esc);
+    app.handle_key(GameKey::Esc);
+    // Walk out of the rig's four orthogonal tiles without leaving base
+    // space. Asserted rather than assumed: walking *into* the rig's cell
+    // does not move the player, so a step in its direction would leave the
+    // party adjacent and this test would pass for nothing.
+    app.handle_key(GameKey::Char('j'));
+    app.handle_key(GameKey::Char('j'));
+    assert!(
+        app.game
+            .as_ref()
+            .unwrap()
+            .adjacent_teardown_rigs()
+            .is_empty(),
+        "the fixture must actually get the party clear of the rig"
+    );
+    app.handle_key(GameKey::Char('F'));
+
+    assert_eq!(app.mode, Mode::Playing, "no screen opens");
+    let said = app
+        .status_line
+        .clone()
+        .expect("the refusal is said out loud");
+    assert!(
+        said.contains("rig"),
+        "and it is this key's own refusal, not another's: {said:?}"
     );
 }

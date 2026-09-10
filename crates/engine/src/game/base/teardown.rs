@@ -102,15 +102,27 @@ impl Game {
             return;
         };
 
-        let Some(tool) = self
-            .installed_tools()
-            .into_iter()
-            .find(|def| def.id == entry.tool)
-        else {
-            // The tool was uninstalled after the load. The queue is the
-            // player's instruction and the program is not destroyed for it;
-            // the rig simply has nothing to work it with, which is the same
-            // shape as an empty hopper rather than a program that vanished.
+        // **The rig's own tool, never the player's slots.** Resolved
+        // against `ToolDb` and gated on the rig still having one fitted:
+        // read off `installed_tools()` instead — which it was, before a rig
+        // held its own — pulling a tool out of the *player's* slot silently
+        // starved every rig in the base that had been loaded with it, and
+        // nothing named the rig or the slot in the log.
+        let fitted = self
+            .world
+            .get::<Hopper>(rig)
+            .and_then(|h| h.standing_tool.clone());
+        let Some(tool) = fitted.and_then(|_| {
+            self.world
+                .resource::<crate::tools::ToolDb>()
+                .get(entry.tool.as_str())
+                .cloned()
+        }) else {
+            // Either nothing is fitted (the player pulled it, so the rig has
+            // nothing to work with and the programs already fetched stay put)
+            // or the tool file itself is gone from a modded install. Both are
+            // the same shape as an empty hopper rather than a program that
+            // vanished.
             self.set_rig_status(rig, MachineStatus::Starved);
             return;
         };

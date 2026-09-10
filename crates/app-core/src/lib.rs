@@ -18,6 +18,7 @@ pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevCon
 pub use app::dispatch::{RouteCargoBasket, SortieSquadRow};
 pub use app::group_menu::GroupMenuRow;
 pub use app::icon_editor::IconEditorView;
+pub use app::rig_tool::RigToolScreen;
 pub use app::sprite_forge::{
     PointerButton, PointerHit, PointerPhase, SpriteArt, SpriteEditorView, SpriteOp, SpriteSubject,
     SpriteWrite,
@@ -88,9 +89,9 @@ use feral_processes_engine::{
     ContractRow, CreationCatalogue, DepotFilterView, DifficultyMode, DispatchReach, Entity,
     EntityView, FieldRoutinePick, FieldRoutineTarget, FieldRoutineTargetView, Game,
     HandCraftProgress, LogEntry, LogLine, MESSAGE_LOG_CAP, MessageSource, OrderPriority,
-    ProgramSaleOption, RouteDestination, RouteRefusal, RouteReport, SlotShift, SortieRefusal,
-    SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket, TransferCarrier, TransferRow,
-    WorkOrder, WorkOrderReport, WorkProfile, condense,
+    ProgramSaleOption, RigToolView, RouteDestination, RouteRefusal, RouteReport, SlotShift,
+    SortieRefusal, SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket,
+    TransferCarrier, TransferRow, WorkOrder, WorkOrderReport, WorkProfile, condense,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -1324,6 +1325,10 @@ pub enum Mode {
     /// standing instruction to a building that takes effect the moment it
     /// is set. Nothing here is spent, so there is nothing to commit.
     DepotFilter,
+    /// Which tool the Teardown Rig beside the party runs on — `[F]` in base
+    /// space. A screen of its own rather than a page of `Mode::Tools`,
+    /// which is the player's own slots: a rig's tool is the *rig's*.
+    RigTool,
     /// The base menu, opened with `b`. Lists every base errand that is
     /// currently possible and dispatches to its screen — see
     /// `App::base_menu_rows`.
@@ -1926,6 +1931,7 @@ impl Mode {
             // And the filter screen is opened from the picker, so it is
             // one further step from a fight than the picker is.
             | Mode::DepotFilter
+            | Mode::RigTool
             | Mode::Craft
             | Mode::CraftQuantity
             // A blocking screen entered from the map, same as `Craft`
@@ -2390,17 +2396,6 @@ pub struct App {
     /// that row. Session state, not save state — cleared on Esc or on an
     /// extraction attempt of either outcome, never carried past the mode.
     pub pending_downed_program_index: Option<usize>,
-    /// Whether `Mode::DownedPrograms`' tool page is showing *bulk* intent —
-    /// entered with `L` from the list, where a tool row queues every held
-    /// program at the adjacent Teardown Rig instead of extracting one by
-    /// hand.
-    ///
-    /// A flag on the page rather than a second page: the rows are the same
-    /// rows and the preview is the same preview, and only what a row key
-    /// *means* changes — which is what the header says. Cleared on every
-    /// exit from the page, so a bulk load cannot leak into the next hand
-    /// extraction. Session state, `pending_downed_program_index`'s reason.
-    pub downed_programs_bulk: bool,
     /// What is on offer, snapshotted when the transfer picker opens — one
     /// row per item, carrying what the adjacent shelves hold of it and what
     /// the pack could put back.
@@ -2446,6 +2441,10 @@ pub struct App {
     /// writes through to the engine and re-reads, so what is here is a
     /// cache of the answer rather than an edit waiting to be committed.
     pub depot_filter: Option<DepotFilterScreen>,
+    /// The rig `Mode::RigTool` is fitting, and what it last read of it.
+    /// Session state, `depot_filter`'s reason — the screen acts on a
+    /// machine, so it is re-read after every edit rather than restored.
+    pub rig_tool: Option<RigToolScreen>,
     /// How many of each caravan row the basket is holding, **index-aligned**
     /// with the drawn list: the wagon's offers first, then the cargo it will
     /// take, exactly as `caravan_row` resolves them.

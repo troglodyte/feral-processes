@@ -2884,3 +2884,42 @@ pub struct ToolRow {
     /// yet installed.
     pub carriers_held: u32,
 }
+
+/// What `Mode::RigTool` draws — `DepotFilterView`'s shape, including its
+/// self-closing rule: `Game::rig_tool_view` answers `None` once `rig` stops
+/// being a standing rig the player is beside, so a machine demolished or
+/// walked away from under the screen closes it rather than drawing a stale
+/// row.
+///
+/// `tile` is base space and it is the header, `DepotFilterView`'s own
+/// reason: a base may stand two rigs against one cell and the player has to
+/// be told which one they are fitting.
+///
+/// `queued` is what the hopper is holding, drawn because pulling the tool
+/// stops the rig dead — a removal with work already fetched is worth seeing
+/// before it is made.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RigToolView {
+    pub tile: (i32, i32),
+    pub name: String,
+    pub installed: Option<RigToolRow>,
+    pub candidates: Vec<RigToolRow>,
+    pub queued: usize,
+}
+
+/// One tool as the rig screen names it — `ToolRow` without the player's
+/// slot, since a rig holds exactly one and has no ladder to place it on.
+///
+/// `ticks` is a *call* into `Game::extraction_ticks` rather than the def's
+/// raw figure, `BuildOrderRow`'s rule: the screen quotes what a strip will
+/// actually cost at this base's bench tier, so a number read here and a
+/// number paid at the rig cannot differ.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RigToolRow {
+    pub id: crate::tools::ToolId,
+    pub name: String,
+    pub category: crate::tools::ToolCategory,
+    pub tier: u32,
+    pub ticks: u64,
+    pub carriers_held: u32,
+}

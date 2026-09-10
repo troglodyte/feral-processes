@@ -378,6 +378,20 @@ impl App {
                 // and `P` to put away — and an item on a shelf *and* in the
                 // pack had a row on each screen with no way to see the
                 // other.
+                // **Not `c`**: a rig carries `Stock`, so `c` already opens
+                // the transfer picker at one to collect what it has
+                // stripped, and one key meaning two things depending on
+                // whether a buffer happens to be empty is worse than a
+                // second key.
+                //
+                // **And not `T`**, which was the first choice and is one of
+                // the hidden keys `crates/engine/EASTER_EGGS.md` lists — a
+                // documented feature cannot have a key no page may name, and
+                // `no_shipped_help_page_names_a_hidden_key` is what says so.
+                // `F` is free here and already means "set up the machine
+                // beside you" on the transfer picker, where `[F]` opens a
+                // Depot's filter.
+                GameKey::Char('F') => self.open_rig_tool(),
                 GameKey::Char('c') => {
                     let offer = game.transfer_offer();
                     let carriers = game.rack_offer();

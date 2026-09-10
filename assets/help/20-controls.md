@@ -33,6 +33,7 @@ Acting on the world:
   Right puts your own cargo into an adjacent Depot. [A] takes the lot; Shift goes to the end of a
   row and Ctrl halves the gap; [F] sets what a Depot beside you will accept
 - t — trade
+- F — fit a tool to the Teardown Rig beside you, or pull the one it has
 - a — call a routine
 - x — examine a direction
 - d — demolish a direction

@@ -1,7 +1,7 @@
 (
     id: "teardown_rig",
     name: "Teardown Rig",
-    description: "Extracts items from downed programs.",
+    description: "Extracts items from downed programs. Walk up to it and press F to fit a tool.",
     glyph: 'V',
     color: Orange,
     build_cost: [("core_fragment", 20), ("bytecode_block", 6)],

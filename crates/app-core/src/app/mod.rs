@@ -28,6 +28,7 @@ mod menus;
 mod party;
 mod playing;
 mod progression;
+pub mod rig_tool;
 mod routines;
 pub(crate) mod settlement_board;
 pub(crate) mod settlement_market;

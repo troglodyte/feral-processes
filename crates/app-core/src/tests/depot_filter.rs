@@ -174,7 +174,7 @@ fn a_denial_closes_the_put_on_the_picker_behind_it() {
     let row = app
         .basket_rows
         .iter()
-        .find(|r| r.item == item(ITEM))
+        .find_map(|r| r.item().filter(|r| r.item == item(ITEM)))
         .expect("the row stays, so the pack is not hidden");
     assert_eq!(row.carried, 4);
     assert_eq!(row.can_put, 0, "and nothing may be put where it is refused");

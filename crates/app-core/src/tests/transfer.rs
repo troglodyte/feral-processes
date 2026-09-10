@@ -42,12 +42,12 @@ fn picker(seed: u32) -> App {
 /// make them assert something else.
 fn picker_with_shelf(seed: u32, shelf: u32) -> App {
     let mut app = picker(seed);
-    app.basket_rows = vec![TransferRow {
+    app.basket_rows = vec![TransferEntry::Item(TransferRow {
         item: item(ITEM),
         on_shelves: shelf,
         carried: 0,
         can_put: 0,
-    }];
+    })];
     app.basket_amounts = vec![0];
     app.menu_selected = 0;
     app
@@ -81,7 +81,7 @@ fn depot_picker(seed: u32, filled: u32, pack: &[(&str, u32)]) -> App {
 fn row_of(app: &App, id: &str) -> usize {
     app.basket_rows
         .iter()
-        .position(|r| r.item == item(id))
+        .position(|r| r.item().is_some_and(|r| r.item == item(id)))
         .unwrap_or_else(|| panic!("no row for {id}"))
 }
 
@@ -95,7 +95,11 @@ fn c_opens_the_transfer_window_with_an_empty_basket() {
 
     assert_eq!(app.mode, Mode::Transfer);
     assert_eq!(app.basket_rows.len(), 1);
-    assert_eq!(app.basket_rows[0].on_shelves, 12, "both machines pooled");
+    assert_eq!(
+        app.basket_rows[0].item().unwrap().on_shelves,
+        12,
+        "both machines pooled"
+    );
     assert_eq!(amounts(&app), vec![0]);
 }
 
@@ -458,4 +462,140 @@ fn both_exits_leave_nothing_stale() {
         );
         assert_eq!(app.basket_room, None, "{leave:?} left a room figure");
     }
+}
+
+// ---------------------------------------------------------------------------
+// Carrier rows: a range of `[-1, +1]` riding every rule the item rows follow.
+// ---------------------------------------------------------------------------
+
+fn carrier(label: &str, racked: bool) -> TransferEntry {
+    TransferEntry::Carrier(TransferCarrier {
+        label: label.to_string(),
+        racked,
+    })
+}
+
+/// A picker holding `held` pack-side carriers and `racked` shelf-side ones,
+/// with `rack_room` free slots. No item rows: these tests are arithmetic
+/// about the carrier axis alone.
+fn carrier_picker(held: usize, racked: usize, rack_room: u32) -> App {
+    let mut app = picker(980);
+    let mut rows = Vec::new();
+    for i in 0..held {
+        rows.push(carrier(&format!("the level {i} Scrapper"), false));
+    }
+    for i in 0..racked {
+        rows.push(carrier(&format!("the level {} Sentinel", 100 + i), true));
+    }
+    app.basket_amounts = vec![0; rows.len()];
+    app.basket_rows = rows;
+    app.basket_rack_room = rack_room;
+    app.menu_selected = 0;
+    app
+}
+
+#[test]
+fn a_carrier_row_clamps_to_one_either_way() {
+    let mut app = carrier_picker(1, 1, 8);
+    // Row 0 is the pack's — a put, so only Right moves it.
+    for key in [GameKey::Right, GameKey::Right, GameKey::Right] {
+        app.handle_key(key);
+    }
+    assert_eq!(app.basket_amounts[0], -1);
+    app.handle_key(GameKey::Left);
+    assert_eq!(app.basket_amounts[0], 0, "and no further the other way");
+    app.handle_key(GameKey::Left);
+    assert_eq!(app.basket_amounts[0], 0, "a pack-side carrier has no take");
+
+    app.menu_selected = 1;
+    app.handle_key(GameKey::Left);
+    assert_eq!(app.basket_amounts[1], 1);
+    app.handle_key(GameKey::Left);
+    assert_eq!(app.basket_amounts[1], 1);
+}
+
+/// The Ctrl half-step must land on the end rather than stalling, which is
+/// what `half_way_to`'s `div_ceil` exists for — and a gap of one is the case
+/// it exists for.
+#[test]
+fn both_modifier_pairs_land_a_carrier_row_on_its_end() {
+    for (key, want) in [
+        (GameKey::ShiftRight, -1),
+        (GameKey::CtrlRight, -1),
+        (GameKey::ShiftLeft, 0),
+        (GameKey::CtrlLeft, 0),
+    ] {
+        let mut app = carrier_picker(1, 0, 8);
+        app.handle_key(key);
+        assert_eq!(app.basket_amounts[0], want, "{key:?} on a pack-side row");
+    }
+    for (key, want) in [(GameKey::ShiftLeft, 1), (GameKey::CtrlLeft, 1)] {
+        let mut app = carrier_picker(0, 1, 8);
+        app.handle_key(key);
+        assert_eq!(app.basket_amounts[0], want, "{key:?} on a racked row");
+    }
+}
+
+#[test]
+fn the_pack_ceiling_is_the_store_less_what_is_held_and_pending() {
+    use feral_processes_engine::tuning::MAX_DOWNED_PROGRAMS;
+    // One short of the cap, with two on the shelf: the first take is
+    // offered, and once it is pending the second is not.
+    let mut app = carrier_picker(MAX_DOWNED_PROGRAMS - 1, 2, 8);
+    let first = MAX_DOWNED_PROGRAMS - 1;
+    assert_eq!(app.take_available(first), 1);
+    app.menu_selected = first;
+    app.handle_key(GameKey::Left);
+    assert_eq!(app.basket_amounts[first], 1);
+    assert_eq!(
+        app.take_available(first + 1),
+        0,
+        "the other rows' pending takes spend the store's room"
+    );
+    // And a pending put frees it again — the net is what the commit checks.
+    app.menu_selected = 0;
+    app.handle_key(GameKey::Right);
+    assert_eq!(app.take_available(first + 1), 1);
+}
+
+#[test]
+fn the_rack_budget_is_shared_across_the_pack_side_rows() {
+    let mut app = carrier_picker(2, 0, 1);
+    assert_eq!(app.put_available(0), 1);
+    app.handle_key(GameKey::Right);
+    assert_eq!(app.put_available(1), 0, "one slot, one put");
+    assert_eq!(app.put_available(0), 1, "the edited row keeps its own");
+}
+
+/// A digit is a quantity on this screen, and a carrier has none — so `7`
+/// clamps to the row's own end rather than asking for seven of it.
+#[test]
+fn a_digit_on_a_carrier_row_does_not_set_seven() {
+    let mut app = carrier_picker(0, 1, 8);
+    app.handle_key(GameKey::Char('7'));
+    assert_eq!(app.basket_amounts[0], 1);
+}
+
+#[test]
+fn take_everything_fills_a_carrier_row_to_one_and_no_further() {
+    let mut app = carrier_picker(1, 2, 8);
+    app.handle_key(GameKey::Char('A'));
+    assert_eq!(app.basket_amounts, vec![0, 1, 1]);
+}
+
+/// The row's position less the item count is its `rack_offer` index, which
+/// is the whole of why items are listed first.
+#[test]
+fn the_basket_names_carriers_by_their_offer_index() {
+    let mut app = picker(981);
+    let items = app.basket_rows.len();
+    assert!(items > 0, "the fixture stocks item rows");
+    app.basket_rows.push(carrier("the level 3 Scrapper", true));
+    app.basket_rows.push(carrier("the level 4 Scrapper", true));
+    app.basket_amounts = vec![0; app.basket_rows.len()];
+    app.basket_amounts[items + 1] = 1;
+
+    let basket = app.basket_request();
+    assert_eq!(basket.carriers, vec![1]);
+    assert!(basket.take.is_empty() && basket.give.is_empty());
 }

@@ -248,6 +248,19 @@ impl Game {
         slots * tier
     }
 
+    /// Free slots across every rack beside the party — the shared budget a
+    /// carrier put is clamped against, `transfer_room`'s counterpart.
+    ///
+    /// A plain `u32` where `transfer_room` is an `Option`, because the
+    /// screen says nothing about racks that a zero could be misread as: a
+    /// pack-side carrier with nowhere to go simply does not move.
+    pub fn total_rack_room(&self) -> u32 {
+        self.adjacent_racks()
+            .into_iter()
+            .map(|rack| self.rack_room(rack))
+            .sum()
+    }
+
     /// Free slots on this rack — its ceiling less what is standing on it.
     pub fn rack_room(&self, rack: Entity) -> u32 {
         let held = self

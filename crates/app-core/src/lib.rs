@@ -27,6 +27,41 @@ pub use app::sprite_forge::{
 pub use app::telemetry::append_records;
 pub use feral_processes_engine::ProgramRole;
 
+/// One row of the transfer picker: an item, or a whole downed program.
+///
+/// A **sum** rather than a widened `TransferRow`. That row's three figures
+/// are quantities of a fungible item; a carrier has none — its range is
+/// `[-1, +1]` and its two columns are 1/0 or 0/1 — so widening it would
+/// leave three fields that mean nothing on half the rows.
+///
+/// **Items come first and carriers after**, and that ordering is load-bearing:
+/// a carrier row's position less the item count is its index into
+/// `Game::rack_offer()`, which is what `TransferBasket::carriers` names.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TransferEntry {
+    Item(TransferRow),
+    Carrier(TransferCarrier),
+}
+
+impl TransferEntry {
+    /// The item row inside, or `None` for a carrier — the accessor the item
+    /// rules read through, so none of them has to learn what a carrier is.
+    pub fn item(&self) -> Option<&TransferRow> {
+        match self {
+            TransferEntry::Item(row) => Some(row),
+            TransferEntry::Carrier(_) => None,
+        }
+    }
+
+    /// The carrier inside, or `None` for an item row.
+    pub fn carrier(&self) -> Option<&TransferCarrier> {
+        match self {
+            TransferEntry::Carrier(c) => Some(c),
+            TransferEntry::Item(_) => None,
+        }
+    }
+}
+
 use app::arena::{ArenaPickKind, ArenaSession};
 
 use std::collections::HashMap;
@@ -54,8 +89,8 @@ use feral_processes_engine::{
     EntityView, FieldRoutinePick, FieldRoutineTarget, FieldRoutineTargetView, Game,
     HandCraftProgress, LogEntry, LogLine, MESSAGE_LOG_CAP, MessageSource, OrderPriority,
     ProgramSaleOption, RouteDestination, RouteRefusal, RouteReport, SlotShift, SortieRefusal,
-    SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket, TransferRow, WorkOrder,
-    WorkOrderReport, WorkProfile, condense,
+    SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket, TransferCarrier, TransferRow,
+    WorkOrder, WorkOrderReport, WorkProfile, condense,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -2375,7 +2410,7 @@ pub struct App {
     /// state *indexed into this list*, so re-deriving opens a gap where the
     /// two lengths disagree. Nothing ticks while a menu is open, so the
     /// snapshot cannot go stale — the commit is the first tick.
-    pub basket_rows: Vec<TransferRow>,
+    pub basket_rows: Vec<TransferEntry>,
     /// How much of each `basket_rows` entry the player has asked for, and in
     /// which direction: **negative puts in, positive takes out**. Same length
     /// as that list, all zeroes on open. Written with it, so the two cannot
@@ -2395,6 +2430,15 @@ pub struct App {
     /// the base is full when it has no shelf at all. Never infer the `None`
     /// from a zero.
     pub basket_room: Option<u32>,
+    /// Free slots across the adjacent Quarantine Racks — `basket_room`'s
+    /// counterpart on the carrier axis, and the ceiling every carrier *put*
+    /// is clamped against.
+    ///
+    /// A plain `u32` and not an `Option`: the screen says nothing about
+    /// racks that a zero could be mistaken for. Where a carrier may go is
+    /// already legible from the rows — a pack-side carrier with nowhere to
+    /// put it simply will not move.
+    pub basket_rack_room: u32,
     /// The Depot whose allow/deny list `Mode::DepotFilter` is editing, and
     /// what it last read of it — `None` whenever that screen is shut.
     ///

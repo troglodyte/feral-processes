@@ -95,12 +95,18 @@ impl App {
     /// but the amounts — no tick has passed and nothing has been spent.
     pub(crate) fn leave_depot_filter(&mut self) {
         self.depot_filter = None;
-        let offer = self
-            .game
-            .as_ref()
-            .map(|g| (g.transfer_offer(), g.transfer_room()));
+        let offer = self.game.as_ref().map(|g| {
+            (
+                g.transfer_offer(),
+                g.rack_offer(),
+                g.transfer_room(),
+                g.total_rack_room(),
+            )
+        });
         match offer {
-            Some((rows, room)) => self.open_transfer(rows, room),
+            Some((rows, carriers, room, rack_room)) => {
+                self.open_transfer(rows, carriers, room, rack_room)
+            }
             None => self.leave_basket(),
         }
     }

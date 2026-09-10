@@ -100,6 +100,7 @@ impl App {
             pending_downed_program_index: None,
             downed_programs_bulk: false,
             basket_rows: Vec::new(),
+            basket_rack_room: 0,
             basket_amounts: Vec::new(),
             caravan_amounts: Vec::new(),
             settlement_amounts: Vec::new(),

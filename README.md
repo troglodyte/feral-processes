@@ -14,7 +14,8 @@ img/            screenshots and clips
 
 ## Adding a screenshot or a clip
 
-The media section has five placeholder slots. Each is a `<div class="ph">`
+The media section has five placeholder slots (a gameplay clip, a battle map, a
+base running its chains, a town hub, and the roster). Each is a `<div class="ph">`
 block with an HTML comment above the section explaining the swap. To fill one:
 
 1. Drop the file into `img/`.
@@ -40,15 +41,40 @@ Keep the `full` class on a block to make it span both gallery columns.
 
 ## Keeping it honest
 
-The page states content counts (17 species, 77 routines, 64 items, 26
-structures, 30 contracts, 18 perks), the research tree size, and the version in
-the hero badge and the footer. Those are counts of `assets/*/*.ron` on `main`
-and a read of the workspace version — they drift. Re-check them when you touch
-this page:
+The stats row states eight content counts, and the version appears twice — the
+hero badge and the footer. Those are counts of `assets/*/*.ron` on `main` and a
+read of the workspace version, and every one of them drifts. Re-derive them
+rather than trusting the page:
 
 ```sh
-git -C /path/to/main-checkout ls-files 'assets/species/*.ron' | wc -l
+cd /path/to/main-checkout
+for d in species abilities items structures contracts research affixes perks; do
+  printf '%-12s %s\n' "$d" "$(ls assets/$d/*.ron | wc -l)"
+done
+grep -m1 '^version' Cargo.toml
 ```
 
+The counts on the page as of v0.13.150: 17 species, 86 routines, 68 items,
+36 structures, 40 contracts, 34 research nodes, 20 affixes, 19 perks.
+
 The root `README.md` on `main` is carved out of the doc-update obligation and is
-already stale on several of these; do not copy its numbers.
+already stale on several of these; do not copy its numbers. `docs/manual.md` is
+carved out too — the live manual is `assets/help/`, which is what the page links
+to.
+
+## What the page must not claim
+
+Retired mechanics that earlier copy described, and that must stay off it:
+
+- Breaching does **not** rebuild the sector. The world is one continuous map per
+  run; a breach raises the danger tier and leaves the base, the structures and
+  every town found standing where they were.
+- Beating a wild program drops **no** materials on the spot. The body is carried
+  home and broken down with a tool.
+- Tactical battle maps are **opt-in and off by default**. Don't present them as
+  the default combat model.
+
+Several of the systems the page describes — sorties, caravan routes, town raids
+and patrols, the extraction chain — shipped green and have had little or no
+screen time. The copy describes their mechanics, which are real; it does not
+claim they are tuned.

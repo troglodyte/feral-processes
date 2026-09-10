@@ -33,6 +33,17 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.147
+
+**A Power Cell has tiers now, and one line of them drips instead of
+lumping.** Four consumables behind two research nodes: the Buffered Cell and
+Capacitor Array restore more in a click and keep a supplier lit for however
+many upkeep windows they declare, while the Sustain and Backfeed Cells
+restore less and then feed Power back on a cadence — worth more in total than
+a lump, but only to someone actually spending it. A supplier burns the
+cheapest fuel it can reach, so the base keeps eating the staple it can make
+in bulk and the dense cells stay worth carrying into the field.
+
 ## 0.13.146
 
 **The reach wash is drawn for either side.** The tint showing where the body

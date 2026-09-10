@@ -1739,6 +1739,18 @@ mod tests {
                                  structures and recipes it hands over and what \
                                  they cost to build once you have it."
                             ),
+                            // The deepest shipped node states three
+                            // conversions, and a multi-ingredient recipe
+                            // line wraps — this screen's worst case for
+                            // height, the bill's reason above.
+                            conversions: (0..3)
+                                .map(|c| {
+                                    format!(
+                                        "Portal Fragment x12, Cache Grain x3, Logic Wafer x2 \
+                                         into Product {i}-{c}."
+                                    )
+                                })
+                                .collect(),
                             cost: 10 + i as u32,
                             state: if i % 3 == 0 {
                                 ResearchState::Unlocked

@@ -1,7 +1,7 @@
 (
     id: "fabricator",
     name: "Fabricator",
-    description: "Trace Sniffers out of Logic Wafers, also the bench for module and utility recipes.",
+    description: "Logic Wafers into Trace Sniffers, also the bench for weapon, module and utility recipes.",
     glyph: '*',
     color: White,
     build_cost: [("core_fragment", 18)],

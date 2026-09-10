@@ -209,6 +209,31 @@ fn material_rows(materials: &[ResearchMaterial]) -> Vec<Row> {
     .collect()
 }
 
+/// What a node lets the base turn into what, one row per conversion under
+/// its description — see `ResearchStatus::conversions`.
+///
+/// **Cyan, where the description above is dim.** That is the ask this
+/// feature was built for: the line has to be findable while scrolling a
+/// tree of prose, and cyan on this screen already means a countable good
+/// (the Research Data header), which is exactly what a conversion is about.
+/// It is not a state colour, so it cannot collide with `row_color`'s five.
+///
+/// `Row::Item`s, `material_rows`' reason: `popup_layout` pins anything after
+/// the last item row to the foot of the box, where it would be torn off the
+/// node it belongs to.
+fn conversion_rows(conversions: &[String]) -> Vec<Row> {
+    conversions
+        .iter()
+        .flat_map(|line| {
+            wrap_text(
+                line,
+                DESCRIBE_WRAP_COLUMNS - DESCRIPTION_INDENT.chars().count(),
+            )
+        })
+        .map(|line| colored_item_row(format!("{DESCRIPTION_INDENT}{line}"), false, CYAN))
+        .collect()
+}
+
 /// The research picker's rows, in the shape `perks_menu_rows` documents and
 /// for the same reason: nothing may follow the last `Row::Item`.
 pub(super) fn research_menu_rows(held: u32, nodes: &[ResearchStatus], selected: usize) -> Vec<Row> {
@@ -228,6 +253,10 @@ pub(super) fn research_menu_rows(held: u32, nodes: &[ResearchStatus], selected: 
         rows.push(colored_item_row(label, i == selected, row_color(node)));
         rows.extend(material_rows(&node.materials));
         rows.extend(description_rows(&node.description));
+        // Last, so the prose reads as prose and the conversions as the
+        // concrete thing the node buys — and so a node that converts nothing
+        // ends exactly where it used to.
+        rows.extend(conversion_rows(&node.conversions));
     }
     rows
 }
@@ -330,6 +359,52 @@ mod tests {
         );
     }
 
+    /// The ask this line exists to answer: a player scanning the tree can see
+    /// what each node lets the base *make* without opening anything. So the
+    /// conversion sits on its own row rather than inside the description
+    /// prose — `text::wrap` splits on whitespace, so a `\n` authored into a
+    /// description would be collapsed to a space and the line would vanish
+    /// into the paragraph.
+    #[test]
+    fn a_nodes_conversions_are_their_own_rows_under_it() {
+        let node = ResearchStatus {
+            id: "routine_fabrication".to_string(),
+            name: "Routine Fabrication".to_string(),
+            description: "Blank media a routine can be written onto.".to_string(),
+            cost: 26,
+            state: ResearchState::Available,
+            materials: Vec::new(),
+            conversions: vec!["Core Fragment x4 into Blank Substrate.".to_string()],
+            affordable: true,
+            recommended: false,
+        };
+
+        let rows = research_menu_rows(40, &[node], 0);
+
+        let conversion = rows
+            .iter()
+            .find(|r| matches!(r, Row::Item { text, .. } if text.contains("into Blank Substrate")))
+            .expect("the conversion must reach the screen as a row of its own");
+        assert!(
+            matches!(conversion, Row::Item { color, .. } if *color == CYAN),
+            "a conversion takes cyan so it is findable against the dim description"
+        );
+        let description = rows
+            .iter()
+            .position(|r| matches!(r, Row::Item { text, .. } if text.contains("Blank media")))
+            .expect("the description is still drawn");
+        let position = rows
+            .iter()
+            .position(
+                |r| matches!(r, Row::Item { text, .. } if text.contains("into Blank Substrate")),
+            )
+            .expect("found above");
+        assert!(
+            position > description,
+            "the conversion follows the prose rather than interrupting it"
+        );
+    }
+
     #[test]
     fn an_unlocked_row_reads_as_spent_and_an_available_one_says_nothing() {
         assert_eq!(state_tag(&ResearchState::Unlocked), " (researched)");
@@ -353,6 +428,7 @@ mod tests {
             materials: Vec::new(),
             affordable: true,
             recommended,
+            conversions: Vec::new(),
         };
         let prereq = |missing: &str| ResearchState::Locked {
             missing: vec![missing.to_string()],

@@ -37,6 +37,15 @@ is skipped with a warning logged in-game rather than crashing startup.
     // so a modder controls exactly how their structure reads — but that also
     // means nothing checks it against those fields, so if you change a
     // structure's capabilities, update the description to match by hand.
+    //
+    // One rule is checked, and only for a structure that sets `assembles`
+    // below: the line has to name the recipe's ingredients and then its
+    // product, in that order — "Core Fragments into Blank Substrate", never
+    // "Blank Substrate out of Core Fragments". A base is planned in the
+    // build menu, and a chain is only plannable if every link reads in the
+    // direction it runs. The rest of the sentence is yours; the Lathe adds
+    // where to put it, the Fabricator its bench role. See
+    // `every_assembling_structure_describes_its_conversion_in_that_order`.
     description: "Extracts Core Fragments while a program is posted to it. The cheapest thing you can deploy.",
 
     // Omit (`None`) for a purely decorative/utility structure. Set `Some(...)`

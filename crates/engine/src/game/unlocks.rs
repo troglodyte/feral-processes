@@ -262,6 +262,51 @@ impl Game {
     /// ceiling: hiding the stalled rows would mean a player who never
     /// breached never learns the tier is there, and the visible band is
     /// exactly what makes breaching worth doing.
+    /// One sentence per conversion this node makes possible, recipes first
+    /// and then the machines it makes buildable — see
+    /// `ResearchStatus::conversions`.
+    ///
+    /// The two sources reduce to the same pair, `(cost, result)`, which is
+    /// why this is one walk and not two shapes: a recipe carries its cost on
+    /// the node, and a machine's is that item's own `craftable.cost` through
+    /// `systems::assembly_recipe` — the shared answer to "what does this
+    /// bench build", so a research line and the bench's own screens cannot
+    /// quote different ingredients.
+    ///
+    /// A structure that assembles nothing contributes nothing, silently: a
+    /// Depot and a Log Scraper are perfectly good things for a node to
+    /// unlock and simply have no conversion to state.
+    fn research_conversions(&self, def: &crate::research::ResearchDef) -> Vec<String> {
+        let structures = self.world.resource::<StructureDb>();
+        let items = self.world.resource::<ItemDb>();
+        def.unlocks_recipes
+            .iter()
+            .map(|r| (r.cost.as_slice(), &r.result))
+            .chain(def.unlocks_structures.iter().filter_map(|id| {
+                let structure = structures.get(id)?;
+                let cost = crate::systems::assembly_recipe(structure, items)?;
+                Some((cost, &structure.assembles.as_ref()?.item))
+            }))
+            .map(|(cost, result)| self.conversion_line(cost, result))
+            .collect()
+    }
+
+    /// "Bytecode Block x3 into Hardened Shell." — the one place a conversion
+    /// is worded, so the recipe half and the machine half of the list above
+    /// read alike.
+    ///
+    /// Names are resolved here through `Game::item_name` for
+    /// `Game::copy_name`'s reason: a renderer spelling an item itself is how
+    /// two screens come to call the same thing different things.
+    fn conversion_line(&self, cost: &[(ItemId, u32)], result: &ItemId) -> String {
+        let inputs = cost
+            .iter()
+            .map(|(item, qty)| format!("{} x{qty}", self.item_name(item)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("{inputs} into {}.", self.item_name(result))
+    }
+
     pub fn research_nodes(&self) -> Vec<ResearchStatus> {
         let research_currency = self.research_currency();
         let held = self
@@ -307,6 +352,7 @@ impl Game {
                     // goods.
                     affordable: held >= def.cost && materials.iter().all(|m| m.have >= m.need),
                     materials,
+                    conversions: self.research_conversions(def),
                     recommended: recommended.contains(&def.id),
                     #[cfg(test)]
                     unlocks_abilities: def.unlocks_abilities.clone(),

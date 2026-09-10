@@ -247,6 +247,62 @@ fn every_shipped_item_and_structure_has_description_text() {
     }
 }
 
+/// **A machine's description says what it turns into what, in that order.**
+/// The build menu is where a base is planned, and a chain is only plannable
+/// if each link reads in the direction it runs — a line that names the
+/// product first ("Routine Disks out of Blank Substrate") is the same fact
+/// read backwards, and a reader assembling four machines into a chain has to
+/// re-order every one of them in their head. Two of the eleven shipped
+/// benches were also simply wrong about the direction before this census
+/// existed.
+///
+/// Ordering rather than an exact sentence, because the rest of the line is
+/// the modder's — the Lathe adds where to put it, the Fabricator its bench
+/// role. What is fixed is that the ingredients are named, the product is
+/// named, and the ingredients come first.
+///
+/// The names come from the recipe rather than the file, so retuning a
+/// machine's product in `assets/items/` fails here instead of leaving the
+/// build menu quoting the old one. `assets/structures/README.md` says the
+/// same thing in prose; this is the half that cannot be ignored.
+#[test]
+fn every_assembling_structure_describes_its_conversion_in_that_order() {
+    let game = Game::new(4, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let items = game.world.resource::<crate::items_db::ItemDb>();
+    let mut checked = 0;
+    for def in game.structure_defs() {
+        let Some(assembles) = def.assembles.as_ref() else {
+            continue;
+        };
+        let cost = crate::systems::assembly_recipe(&def, items)
+            .unwrap_or_else(|| panic!("{} assembles an item with no recipe", def.id));
+        let product = game.item_name(&assembles.item);
+        let at = |needle: &str| {
+            def.description.find(needle).unwrap_or_else(|| {
+                panic!(
+                    "{} does not name {needle:?} in its description: {:?}",
+                    def.id, def.description
+                )
+            })
+        };
+        let product_at = at(product);
+        for (item, _) in cost {
+            let ingredient = game.item_name(item);
+            assert!(
+                at(ingredient) < product_at,
+                "{} reads backwards: {ingredient:?} must come before {product:?} in {:?}",
+                def.id,
+                def.description
+            );
+        }
+        checked += 1;
+    }
+    assert!(
+        checked >= 11,
+        "the shipped benches should all have been checked, not {checked}"
+    );
+}
+
 /// Crafting must never mint Credits. Base salvage is deliberately sellable
 /// (see `Game::sell_item`), and a Mining Node with a program on it produces
 /// that salvage forever — so an item worth more than the sum of its

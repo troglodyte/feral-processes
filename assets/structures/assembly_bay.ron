@@ -1,7 +1,7 @@
 (
     id: "assembly_bay",
     name: "Assembly Bay",
-    description: "Builds Patch Routines out of Charge Coils.",
+    description: "Charge Coils into Patch Routines.",
     glyph: 'Y',
     color: Magenta,
     build_cost: [("core_fragment", 20), ("charge_coil", 4)],

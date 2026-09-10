@@ -32,6 +32,18 @@ pub struct ResearchStatus {
     /// what the party can reach of it right now. Empty for a node that
     /// authored none.
     pub materials: Vec<ResearchMaterial>,
+    /// What this node lets the base turn into what, one sentence per
+    /// conversion, in the shape "Bytecode Block x3 into Hardened Shell."
+    /// Empty for a node that unlocks neither a recipe nor an assembling
+    /// structure.
+    ///
+    /// Derived in the engine rather than authored beside the description —
+    /// `ResearchMaterial`'s reason one rung up. A recipe's cost lives in
+    /// `assets/items/` (or the node's own `unlocks_recipes`) and a machine's
+    /// product in `assets/structures/`, so an authored copy here is the copy
+    /// that goes stale the first time either is retuned. See
+    /// `Game::research_conversions`.
+    pub conversions: Vec<String>,
     /// Whether the player can pay `cost` **and** every line of `materials`
     /// right now. Independent of `state`: a node can be `Available` but
     /// unaffordable, or affordable but `Locked`.

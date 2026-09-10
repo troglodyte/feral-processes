@@ -196,6 +196,18 @@ pub struct ItemDef {
     /// ordinary cargo that cannot buy a rest.
     #[serde(default)]
     pub enables_rest: bool,
+    /// What one swing of this weapon lands on, past the body it is aimed
+    /// at. Absent on everything that is not a weapon, and refused at load
+    /// on anything that is not — see `unreachable_reach`.
+    ///
+    /// On the def rather than in `equipment`'s `EquipmentStats`, which is
+    /// what keeps it off `Game::copy_bonus`'s four scaling axes by
+    /// construction; `items::WeaponReach` carries the argument.
+    /// `#[serde(default)]` so every existing item file and every mod's keeps
+    /// parsing untouched, and the save stores an `ItemId` and resolves the
+    /// def every load, so this reaches no save field.
+    #[serde(default)]
+    pub reach: Option<crate::items::WeaponReach>,
     /// Overrides the two-letter tag the base stock strip lists this item
     /// under. `#[serde(default)]` and almost always absent: `ItemDef::tag`
     /// derives one from the name, so a mod gets a tag for free. Authored
@@ -322,6 +334,37 @@ impl ItemDef {
             Some(_) => None,
         }
     }
+
+    /// Why this item's `reach` could never widen a swing, if it couldn't.
+    /// Skipped rather than half-honoured, `ungrantable_ability`'s call: a
+    /// weapon whose whole point is the sweep is worth less than nothing if
+    /// it silently swings narrow.
+    ///
+    /// Three faults, and each is asserted by its own test — one test over
+    /// one path passes against an implementation that refuses only that
+    /// path.
+    fn unreachable_reach(&self) -> Option<String> {
+        let reach = self.reach.as_ref()?;
+        if !matches!(self.equipment, Some((EquipmentSlot::Weapon, _))) {
+            return Some("reach: only a weapon swings".into());
+        }
+        if reach.target.is_ally_facing() {
+            return Some(format!(
+                "reach: {:?} lands on the party's own side",
+                reach.target
+            ));
+        }
+        // Two vocabularies for one fault: the group model says it with
+        // `OneEnemyGroupFront` and the battle map with `Single`. Read
+        // through `tactical_shape` so an unauthored shape is the derived
+        // one, which is what every shipped reach weapon runs on.
+        if reach.target == crate::abilities::AbilityTarget::OneEnemyGroupFront
+            || reach.tactical_shape() == crate::abilities::AbilityShape::Single
+        {
+            return Some("reach: reaches nobody past the body already being swung at".into());
+        }
+        None
+    }
 }
 
 #[derive(Resource, Default)]
@@ -365,6 +408,10 @@ impl ItemDb {
                         continue;
                     }
                     if let Some(reason) = def.ungrantable_ability(abilities) {
+                        warnings.push(format!("skipped invalid item file {path:?}: {reason}"));
+                        continue;
+                    }
+                    if let Some(reason) = def.unreachable_reach() {
                         warnings.push(format!("skipped invalid item file {path:?}: {reason}"));
                         continue;
                     }
@@ -465,8 +512,10 @@ impl ItemDb {
                     cache_drop: None,
                     grid_fuel: None,
                     // A disk *installs* its routine; it is not worn, so
-                    // there is nothing for a worn grant to hang off.
+                    // there is nothing for a worn grant to hang off. Nor
+                    // is it swung, so it declares no reach either.
                     grants: None,
+                    reach: None,
                     upgrade: None,
                     // A disk is installed, not slept against.
                     enables_rest: false,
@@ -538,8 +587,10 @@ impl ItemDb {
                     droppable: None,
                     cache_drop: None,
                     grid_fuel: None,
-                    // A carrier installs into a slot; it is not worn.
+                    // A carrier installs into a slot; it is not worn, and
+                    // it is not swung.
                     grants: None,
+                    reach: None,
                     upgrade: None,
                     enables_rest: false,
                     // Every carrier derives the same family tag from

@@ -34,6 +34,17 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.150
+
+**A routine can take one body off the scheduler, and nothing can address it
+until it acts.** Detach Single — taught by the new Process Detachment
+research node — cloaks one ally: no target roll names it, no group hands it
+forward as a front, and no swing on a battle map may aim at it. It is not
+invulnerability, deliberately: an area routine whose shape covers its cell
+still lands, the body is still a wall nothing may walk through, and the cloak
+ends the moment it swings, runs anything aggressive, or takes a hit — but not
+when it moves, braces, mends an ally, or is missed.
+
 ## 0.13.149
 
 **A machine's description reads ingredient-first, and the research tree

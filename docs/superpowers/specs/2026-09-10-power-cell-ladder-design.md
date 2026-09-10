@@ -124,9 +124,10 @@ second thing to get wrong.
   - `capacitance` — zone 3, requires `charge_density`, unlocks Capacitor
     Array and Backfeed Cell.
   Each node's `materials` bill names only what its own prerequisite closure
-  can already make (`power_cell`, `cache_grain`, `bytecode_block`, and for
-  the second node `buffered_cell`). `refinery` and `winding_node` are both
-  ungated, so `bytecode_block` is legal in a bill.
+  can already make — `power_cell` and `cache_grain` for the first,
+  `power_cell` and `bytecode_block` for the second. `capacitance` was written
+  around the census blind spot noted at the foot of this file rather than
+  billing the Buffered Cell its own prerequisite unlocks.
 - **Traders** stock them with no code at all: `caravan::stock_pool` takes
   anything without an `EconomyRole` that is not `banked`, and the settlement
   shelf draws from the same source. **This means Credits buy what research

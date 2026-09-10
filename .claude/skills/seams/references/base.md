@@ -147,7 +147,19 @@
   nobody is left to say it (the scheduler owns stall announcements); and it
   must count a load **already in a builder's hands**, or the base announces
   the *whole* bill the instant a builder scoops the last shelf, then latches
-  quiet. Both latches clear in `build_wants` and nowhere else.
+  quiet. Both latches clear in `build_wants` and nowhere else. **A third
+  trap is that this question has a second asker**: `builder_errand` decides
+  what the body standing there fetches next, and reading the bill its own
+  way it drifted from this one by a whole line — this side said *any*
+  outstanding line had a source, that side fetched the *first* and answered
+  `Errand::Dry` if it could not get that one. Every shipped bill of one item
+  makes them identical; a Zone Portal's does not, and no base can ever make
+  a Portal Fragment. So the site stayed workable on the strength of its
+  Routine Disks, held a body forever, delivered nothing and said nothing —
+  `Errand::Dry` is silent because the scheduler reports it, and the
+  scheduler had just decided the site was fine. `Game::next_fetch` is the
+  one definition now and both call it; `from` chooses *which* source, never
+  *whether* there is one.
 - **A builder *walks* to its materials, and that is what the dig crew does
   not do.** `stock::spend_from_base` teleports a unit off a shelf;
   `construction::Source` is a tile to walk to — any deployed structure's

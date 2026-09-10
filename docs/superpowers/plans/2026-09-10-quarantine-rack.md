@@ -136,9 +136,11 @@ first; this plan argues from it and does not restate its reasoning.
   a parameter object for the commit — the existing `transfer_items(take, give)`
   gains two more lists and that is the signature that should become a struct
   rather than a fourth and fifth positional argument;
-  `Game::rack_offer(&self) -> Vec<TransferCarrier>` where `TransferCarrier`
-  carries the carrier, its label, which side it is on, and (for a racked one)
-  which rack entity holds it.
+  `Game::rack_offer(&self) -> Vec<views::TransferCarrier>`, where
+  `views::TransferCarrier` carries the `DownedProgram`, its label, which side it
+  is sitting on, and — for a racked one — which rack entity holds it. This is the
+  engine-side view type; Task 4's `TransferEntry` is the app-core sum of
+  `views::TransferRow` and this.
 
 **Steps:**
 
@@ -172,9 +174,10 @@ first; this plan argues from it and does not restate its reasoning.
 
 **Interfaces:**
 - Consumes: Task 3's `rack_offer` and basket object.
-- Produces: `App::basket_rows: Vec<TransferEntry>` where `TransferEntry` is the
-  sum of an item row and a carrier row. `TransferRow` itself is **not** widened —
-  its three figures are quantities and a carrier has none.
+- Produces: `App::basket_rows: Vec<TransferEntry>`, where
+  `TransferEntry` is the sum of `views::TransferRow` (unchanged) and Task 3's
+  `views::TransferCarrier`. `TransferRow` itself is **not** widened — its three
+  figures are quantities and a carrier has none.
 
 **Steps:**
 

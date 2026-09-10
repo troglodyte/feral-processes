@@ -34,6 +34,35 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.151
+
+**A fight now reads as an intrusion rather than a brawl.** The nouns were
+already right — Integrity, routine, ICE, decompile, jack out, the Grid — but
+every verb around them was ordinary melee: you tore a routine clean through
+for damage, it glanced off, a body braced and recovered its guard. A swing is
+now an exploit attempt and Integrity is what refuses it, so an attempt lands,
+lands unchecked, fumbles, or is refused, and the number it moves carries
+Integrity as its unit instead of the word "damage".
+
+**Bleed is a leak, Stun is a stall, and Exposed is unpatched.** The status
+chips read `Leaking (3)` and `Stalled (1)`, the narration sprung a leak and
+stalls a target out, and the sixteen ability descriptions that specified a
+status under the old word follow them — the `kind:` fields are mod schema and
+are untouched. The stun word is the game's own, from the Pipeline Stall
+ability, and it is what keeps the widest chip inside a status column that
+cannot grow.
+
+**Two labels stopped disagreeing with the prose beside them.** The battle
+table and the roster pane printed a bare `HP` where every sentence in the game
+says Integrity and the HUD strip already said `INTEG`, and one gear row on the
+manifest said `DEF` where everything else says `MIT`.
+
+**The manual's combat pages speak the same language as the fight.** The
+intrusions and battle-map pages explained fighting in plain melee terms — a
+critical hit, a plain hit, a fumble or a miss, `d` to brace, a swing aimed at
+a companion being a legal swing. Mining keeps its swing: hitting rock is what
+that word is for.
+
 ## 0.13.150
 
 **A routine can take one body off the scheduler, and nothing can address it

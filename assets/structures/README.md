@@ -201,6 +201,12 @@ is skipped with a warning logged in-game rather than crashing startup.
     // it is a machine that wants a program and pays items out.
     strips: Some((hopper: 6)),
 
+    // A rig also remembers the tool it was last hand-loaded with — its
+    // STANDING TOOL. That is runtime state and not a field here, but it is
+    // what a carrier fetched off a Quarantine Rack is stripped with, since
+    // nobody is standing there to name one. A rig that has never been
+    // hand-loaded has none and will not fetch.
+
     // Optional; can be left out entirely (defaults to racking nothing).
     // If set, the structure is a Quarantine Rack: a shelf for downed
     // programs, filled and emptied from the `c` transfer picker the same way

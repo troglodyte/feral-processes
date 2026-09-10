@@ -240,6 +240,7 @@ pub(super) fn app_in_base_with_a_compiler(seed: u32) -> App {
         racked: Vec::new(),
         hopper: Vec::new(),
         hopper_progress: 0,
+        standing_tool: None,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &assets_dir).unwrap());

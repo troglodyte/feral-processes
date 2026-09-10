@@ -998,6 +998,11 @@ pub struct StructureSave {
     pub hopper: Vec<crate::components::HopperEntry>,
     #[serde(default)]
     pub hopper_progress: u64,
+    /// The rig's standing tool — see `components::Hopper::standing_tool`.
+    /// Defaulted, so a save written before it existed loads with a rig that
+    /// has not been hand-loaded yet.
+    #[serde(default)]
+    pub standing_tool: Option<crate::tools::ToolId>,
     /// A Quarantine Rack's shelf — see `components::Racked`. `DownedProgram`
     /// directly rather than through a parallel `*Save` type,
     /// `PlayerSave::downed_programs`' precedent: it has no legacy shape to

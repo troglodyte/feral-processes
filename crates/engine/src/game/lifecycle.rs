@@ -916,6 +916,7 @@ impl Game {
                 entity.insert(crate::components::Hopper {
                     queue: s.hopper.clone(),
                     progress: s.hopper_progress,
+                    standing_tool: s.standing_tool.clone(),
                 });
             }
             // Same rule one rung along: a stored shelf on a structure whose
@@ -1973,6 +1974,7 @@ impl Game {
                 stock_output: encode(stock.map(|s| &s.output)),
                 hopper: hopper.map(|h| h.queue.clone()).unwrap_or_default(),
                 hopper_progress: hopper.map(|h| h.progress).unwrap_or(0),
+                standing_tool: hopper.and_then(|h| h.standing_tool.clone()),
                 standing_work: standing.is_some_and(|j| j.work),
                 standing_guard: standing.is_some_and(|j| j.guard),
                 denied_items: filter

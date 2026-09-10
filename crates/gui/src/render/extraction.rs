@@ -345,6 +345,7 @@ mod tests {
                 racked: Vec::new(),
                 hopper: Vec::new(),
                 hopper_progress: 0,
+                standing_tool: None,
             });
         }
         save::save_to_file(&path, &data).unwrap();

@@ -728,6 +728,7 @@ mod tests {
                     hp: Some((10, 10)),
                 }]
             },
+            standing_tool: None,
         }
     }
 

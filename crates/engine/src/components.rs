@@ -620,6 +620,22 @@ pub struct HopperEntry {
 pub struct Hopper {
     pub queue: Vec<HopperEntry>,
     pub progress: u64,
+    /// The tool this rig is set up with — the last one the player handed it
+    /// by hand, and the one a carrier arriving by any other route is
+    /// stripped with.
+    ///
+    /// It lives on the **rig** rather than beside the carrier because
+    /// `Game::extraction_yield` reads a tool for both halves of its answer:
+    /// `yields` is the pool and `tier` is the scale. A rack stores bare
+    /// programs and knows nothing about tools, so a crew fetch would have
+    /// nowhere to get one from.
+    ///
+    /// `None` on a rig nobody has hand-loaded yet, which is what makes the
+    /// hand-load worth keeping: it is the one gesture that *names* a tool,
+    /// and removing it would need a screen invented to replace it. Never a
+    /// `Routines` or `Gear` tool — `load_teardown_rig` refuses both before
+    /// it writes this.
+    pub standing_tool: Option<crate::tools::ToolId>,
 }
 
 /// A Quarantine Rack's shelf of downed programs — see `StructureDef::racks`

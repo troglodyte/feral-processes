@@ -801,6 +801,11 @@ impl Game {
                     tool: tool.clone(),
                 });
             }
+            // Below every refusal above, so a refused load — a `Routines` or
+            // `Gear` tool, a full hopper, an index naming nothing — sets no
+            // standing tool. The tool the player hands over is the tool the
+            // rig is set up with, and this is the one place that is written.
+            hopper.standing_tool = Some(tool.clone());
         }
 
         let left_behind = asked - taking;

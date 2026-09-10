@@ -1195,6 +1195,14 @@ pub struct StructureReport {
     /// guard can both be on one structure at once, which is why this is a
     /// list and why `EntityView::structure_worker` could not answer it.
     pub assignees: Vec<Assignee>,
+    /// A Teardown Rig's standing tool by display **name**, `None` on a rig
+    /// nobody has hand-loaded yet and on every structure that is not one.
+    ///
+    /// A name and not a `ToolId`, `input`/`output`'s reason: resolving an id
+    /// against a catalogue is the kind of lookup a renderer has no business
+    /// doing. Drawn because a rig with no standing tool is the one that
+    /// silently will not fetch from a rack.
+    pub standing_tool: Option<String>,
 }
 
 impl StructureReport {

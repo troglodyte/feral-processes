@@ -533,6 +533,51 @@ mod tests {
         }
     }
 
+    /// A cloaked body fades, and an uncloaked one does not.
+    ///
+    /// Read off the **alpha** rather than the colour: the map dims every
+    /// glyph it draws by a vignette and a per-tile shade, so rgb moves for
+    /// reasons that have nothing to do with a cloak — and alpha is the one
+    /// channel `ConRead::glyph_ink` carries through untouched, which is what
+    /// makes the same multiply fade a sprite's tint too.
+    #[test]
+    fn a_cloaked_body_draws_faded_and_an_uncloaked_one_does_not() {
+        let mut game = fighting();
+        let view = game.tactical_view().expect("the fight is open");
+        let subject = view
+            .bodies
+            .iter()
+            .find(|b| b.is_hostile)
+            .cloned()
+            .expect("a hostile stands on the board");
+
+        let alpha_of = |cloaked: bool| {
+            let mut view = view.clone();
+            for body in &mut view.bodies {
+                if body.entity == subject.entity {
+                    body.cloaked = cloaked;
+                }
+            }
+            let mut fx = Fx::new();
+            let (_, shapes) =
+                with_painter(|p| draw_tactical_map(&view, None, &[], &mut fx, p, pane(), 32.0, 24));
+            crate::paint::painted_map_glyphs(&shapes)
+                .into_iter()
+                .find(|(text, _)| text == &subject.glyph.to_string())
+                .map(|(_, c)| c.a)
+                .expect("the body was not drawn at all")
+        };
+
+        let plain = alpha_of(false);
+        let faded = alpha_of(true);
+        assert!(plain > 0.9, "an uncloaked body drew faded already: {plain}");
+        assert!(
+            (faded - plain * CLOAKED_ALPHA).abs() < 0.02,
+            "a cloaked body drew at alpha {faded}, not {} — one multiply at the draw site",
+            plain * CLOAKED_ALPHA
+        );
+    }
+
     /// The cursor is drawn last, so it is never under a body it points at.
     #[test]
     fn the_cursor_is_drawn_over_the_bodies() {

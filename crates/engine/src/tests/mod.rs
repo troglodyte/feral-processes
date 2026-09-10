@@ -18,6 +18,7 @@ mod caravans;
 mod catalog;
 mod chains;
 mod classes;
+mod cloak;
 mod combat;
 mod combat_abilities;
 mod combat_packs;

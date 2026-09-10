@@ -591,6 +591,62 @@ mod tests {
         });
     }
 
+    /// The cloak row is the case this column has silently overflowed before,
+    /// measured rather than eyeballed. Built from the shipped routine's own
+    /// authored duration through `Game::active_buffs`' format, so a retuned
+    /// `detach.ron` is measured rather than a number invented here.
+    ///
+    /// Two digits on the round count deliberately: a mod is free to author
+    /// one, and the row that has to fit is the widest one the format can
+    /// produce rather than the one the shipped file happens to make.
+    #[test]
+    fn the_cloaked_buff_row_fits_the_status_column() {
+        use feral_processes_engine::abilities::{AbilityDb, AbilityEffect};
+
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/abilities");
+        let (db, warnings) = AbilityDb::load_dir(&dir).expect("the abilities load");
+        assert!(warnings.is_empty(), "{warnings:?}");
+
+        let longest = db
+            .all()
+            .filter_map(|d| match d.effect {
+                AbilityEffect::Cloak { duration } => Some(duration),
+                _ => None,
+            })
+            .max()
+            .expect("a Cloak routine ships with the game");
+        let rows = [buff(
+            "Cloaked",
+            "\u{2014}",
+            &format!("{}t", longest.max(99)),
+            None,
+        )];
+
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let room = super::super::hud::layout::regions(1440.0, 900.0, char_w, &m, false)
+                .info_column
+                .w
+                - m.inset * 2.0;
+            for row in buff_rows(&rows, TagStyle::OwnLine) {
+                let Row::Item { text, suffix, .. } = &row else {
+                    continue;
+                };
+                let mut drawn = p.measure_ui_advance(format!("  {text}"), m.font_size);
+                if let Some(suffix) = suffix {
+                    drawn += m.inset + p.measure_ui_advance(suffix, m.font_size);
+                }
+                assert!(
+                    drawn <= room,
+                    "the cloak row overflows the status column by {:.0}px \
+                     ({drawn:.0} drawn into {room:.0} of room):\n{text} [{suffix:?}]",
+                    drawn - room
+                );
+            }
+        });
+    }
+
     /// The companion-borne half the test above deliberately stops short of:
     /// the same widest shipped row, with a holder tag on it. `buff_rows` is
     /// the one place a row's text is built and it bounds only the *name*, so

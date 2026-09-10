@@ -161,6 +161,34 @@ way deleting the Currency item does.
     //     Clears each recipient's active status condition. No fields.
     //     Silent on a recipient that had nothing to clear.
     //
+    //   Cloak(duration: 3)
+    //     Makes each recipient untargetable for `duration` battle rounds.
+    //     Nothing can *name* a cloaked body: it leaves the wild side's
+    //     target roll, it is skipped as a group's front, and a swing aimed
+    //     at it on a battle map is refused. It is **not** invulnerable —
+    //     an area routine whose shape covers its cell still lands on it,
+    //     because the rule sits at the doors that pick a body and at none of
+    //     the doors that resolve against one, and on a battle map it is
+    //     still a wall nothing may walk through.
+    //
+    //     The cloak ends early the moment the body does something
+    //     aggressive — a swing, a `Damage`, `Drain`, `Debuff` or `Decompile`
+    //     routine — or the moment damage lands on it. Moving, bracing, and
+    //     running a `Heal`, `Buff`, `Cleanse` or another `Cloak` all leave
+    //     it standing, and so does a swing that *missed* it: only a landed
+    //     blow reveals a body, so a cloak cannot be flushed out by swinging
+    //     at where you guess it is. `duration` is the ceiling on all of
+    //     that, not the usual way one ends.
+    //
+    //     `duration` is **not** scaled by the invoker's level or affinity —
+    //     it is a round count against a fixed ceiling rather than a
+    //     magnitude, so what you author is what the player gets at every
+    //     level. Two shapes are refused at load with a warning, the same as
+    //     a non-finite number: any `target` but `OneAlly` or `WholeParty`
+    //     (there is no mechanic to cloak an enemy), and a `duration: 0`
+    //     (a routine that spends Power and does nothing). This is what
+    //     `detach.ron` uses.
+    //
     //   Decompile
     //     Spends a taming catalyst and rolls a capture against the target
     //     group's front program — the formula lives in `taming`, not here.

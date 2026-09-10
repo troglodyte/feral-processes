@@ -893,6 +893,53 @@
   only `actor == target`, and a swing at your own is real friendly fire and
   stays legal. Aimed at empty ground the same door refuses, which is what
   keeps a capture from spending its catalyst and the turn on nothing.
+- **A cloak is a targeting rule, and the filter sits at the doors that *name*
+  a body and at none of the doors that *resolve* against one.**
+  `components::Cloaked` moves no stat; the five naming doors are
+  `front_of_group`, `roll_enemy_target`, `living_targets`,
+  `tactical_attack` and `tactical_sides`. **The split is the whole design** —
+  `reach::recipients` never learns the word, so an area routine covering the
+  cell still lands (collateral, not aim); the abstract model's
+  `WholeEnemyGroup`/`AllEnemies` arms resolve a membership list rather than
+  picking a front and keep hitting too; and `movement_field` still treats a
+  cloaked body as a wall, so the cell it stands on is the tell. **Its own
+  component and not a `BuffKind` or a `StatusKind`**: `CombatBuff` holds one
+  wanted buff and bracing overwrites it, so a cloaked body that braced would
+  uncloak itself and an ally's Rally would strip a cloak; `StatusEffects` is
+  reserved for unwanted conditions, so `Cleanse` would strip your own. Being
+  battle-scoped beside those two is what cost **no `SAVE_FORMAT_VERSION` bump
+  and no save field**. **The never-empty rule**: where every candidate at a
+  door is cloaked the filter is skipped for that pick, because
+  `roll_enemy_target`'s `total == 0` fallback returns the *player*
+  specifically, `front_of_group` answering `None` refuses the player's
+  single-target attacks outright, and an empty `tactical_sides::targets` is
+  what `run_tactical_beat` reads as "nothing to fight". `tactical_attack` is
+  exempt: it is a pick of one body, not a pool. **`Game::break_cloak` is the
+  one door an action removes it through**, three callers each naming a
+  different body's — the attacker's in `resolve_and_apply_attack`, the
+  actor's in `use_ability` gated on `AbilityEffect::breaks_cloak`, and the
+  target's in `apply_damage`. Idempotent and logged on the transition, so a
+  `Damage` routine hitting two of the three reveals once. **Everything not on
+  that list is an omission and the omissions are the feature** — moving,
+  bracing, `Heal`, `Buff`, `Cleanse`. **A miss is asymmetric on purpose**: it
+  breaks the attacker's, because committing to a swing is the aggressive act,
+  and leaves the defender's, because only landed damage reaches
+  `apply_damage` — so a cloak cannot be flushed out by swinging at where you
+  guess it is. `breaks_cloak` is exhaustive on `cell_mark`'s rule, with a
+  second copy of the table in `tests/assets.rs` so flipping an arm is a
+  decision taken twice. **The upkeep had to be extracted first**:
+  `tick_combatant_upkeep` was three verbatim copies of the same block, so a
+  fourth thing to age meant writing it three more times, and the drift that
+  heads off is a cloak that expires for companions and never for the player.
+  **Two mutations survived the first test pass and both are the trap for
+  anyone re-testing this**: deleting the `tactical_sides` filter leaves
+  everything green, because `tactical_attack` already refuses the target — it
+  is isolated only by `swing_at_best_neighbour`'s sort, which picks the
+  wounded cloaked body every turn and is refused every turn, so the exposed
+  body beside it is never swung at; and deleting the attacker hook leaves
+  everything green under `player_attacks`, because the round's retaliation
+  breaks the player's cloak through `apply_damage` instead. See
+  `seam:a-cloak-is-a-targeting-rule-and-the-filter-sits-at-the`.
 - **A brace on a board is `Game::begin_defend`, and only the mitigation
   crosses over.** `Game::tactical_defend` is `tactical_attack`'s third
   sibling; the effect needed nothing new, because `effective_mitigation`

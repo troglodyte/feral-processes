@@ -965,6 +965,56 @@ fn every_shipped_ability_name_ends_in_the_scope_it_targets() {
     }
 }
 
+/// Every shipped routine states whether running it ends the invoker's own
+/// cloak, and the table is what says which answer each kind gives.
+///
+/// `AbilityEffect::breaks_cloak` is exhaustive, so a new effect kind fails
+/// to *compile* rather than shipping as a routine you can run from inside a
+/// cloak for free — `render/stack.rs::cell_mark`'s rule. What a compiler
+/// cannot hold is that the answers stay the ones the design gives, which is
+/// the second `match` here: it is a copy on purpose, in the same spirit as
+/// `every_shipped_routine_resolves_to_a_shape_a_battle_map_can_use`, so
+/// flipping an arm in `abilities.rs` has to be a decision taken twice.
+///
+/// Both halves must be non-empty, or a roster with nothing aggressive in it
+/// would pass an assertion about aggression.
+#[test]
+fn every_shipped_routine_states_whether_it_breaks_a_cloak() {
+    use crate::abilities::AbilityEffect as E;
+    let game = Game::new(3306, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (mut aggressive, mut peaceful) = (0, 0);
+    for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
+        let expected = match &def.effect {
+            E::Damage { .. } | E::Drain { .. } | E::Debuff { .. } | E::Decompile => true,
+            E::Heal { .. }
+            | E::Buff { .. }
+            | E::Cleanse
+            | E::Cloak { .. }
+            | E::FieldBuff { .. }
+            | E::Phase
+            | E::Jump
+            | E::Symlink => false,
+        };
+        assert_eq!(
+            def.effect.breaks_cloak(),
+            expected,
+            "ability {:?} disagrees with the design about whether running it is \
+             the aggressive act a cloak is waiting for",
+            def.id
+        );
+        if expected {
+            aggressive += 1
+        } else {
+            peaceful += 1
+        }
+    }
+    assert!(
+        aggressive > 0 && peaceful > 0,
+        "the census read {aggressive} aggressive and {peaceful} peaceful routines, \
+         so one half of it proves nothing"
+    );
+}
+
 /// Two abilities sharing a display name is invisible in the picker — the
 /// player sees two identical rows and picks by luck. The version tag exists
 /// so same-family, same-scope siblings stay distinguishable; this is what

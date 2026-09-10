@@ -12,6 +12,7 @@ use super::support::*;
 use crate::abilities::{AbilityDb, AbilityShape};
 use crate::items_db::ItemDb;
 use crate::tuning::TACTICAL_GROUP_RADIUS;
+use crate::*;
 
 /// `gear_passives.rs`' loader fixture: the reach's refusals live in
 /// `ItemDb::load_dir` beside `ungrantable_ability`, so they need a real
@@ -130,5 +131,132 @@ fn a_reach_weapon_loads_and_derives_its_shape() {
             radius: TACTICAL_GROUP_RADIUS
         },
         "an unauthored shape is derived from the target, `AbilityDef::tactical_shape`'s rule"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// The one door, and the charge that gates it.
+// ─────────────────────────────────────────────────────────────────────────
+
+/// A weapon carrying a reach and a band, and one carrying only the band —
+/// the control half, so a `swing_reach` that answered `Some` for everything
+/// could not pass.
+const REACH_WEAPON: (&str, &str) = (
+    "wide_lance.ron",
+    r#"(id: "wide_lance", name: "Wide Lance", description: "A lance that sweeps.",
+        value: Some(40),
+        equipment: Some((Weapon, (damage: (min: 4, max: 6)))),
+        reach: Some((target: WholeEnemyGroup, recharge: 3)))"#,
+);
+
+const NARROW_WEAPON: (&str, &str) = (
+    "plain_lance.ron",
+    r#"(id: "plain_lance", name: "Plain Lance", description: "A lance.",
+        value: Some(40),
+        equipment: Some((Weapon, (damage: (min: 4, max: 6)))))"#,
+);
+
+/// A run against a scratch install carrying the two fixture weapons above.
+/// Shipped content ships its own reach weapons, but a test about the
+/// *mechanism* must not move when those are retuned.
+fn install(tag: &str) -> (ScratchAssets, Game) {
+    let dir = modded_assets_dir(tag, &[], &[REACH_WEAPON, NARROW_WEAPON], &[], &[], &[]);
+    let game = Game::new(9_100, DifficultyMode::Forgiving, &dir).unwrap();
+    (dir, game)
+}
+
+/// A hostile standing on the player's tile, in a fight with them —
+/// `cloak.rs`' `abstract_fight`.
+fn abstract_fight(game: &mut Game) -> Entity {
+    let player = game.player_entity();
+    let pos = *game.world.get::<Position>(player).unwrap();
+    let wild = spawn_wild_without_routine(game, "scrapper", pos.x, pos.y);
+    insert_battle(game, player, vec![wild]);
+    wild
+}
+
+/// The baseline. Without it a `swing_reach` that answered `Some` for every
+/// armed body would pass every other test in this file.
+#[test]
+fn a_weapon_with_no_reach_answers_none() {
+    let (_dir, mut game) = install("reach_door_none");
+    let player = game.player_entity();
+    wear(&mut game, player, "plain_lance");
+    abstract_fight(&mut game);
+
+    assert!(
+        game.swing_reach(player).is_none(),
+        "an ordinary weapon swings at one body"
+    );
+}
+
+/// The recharge is what stops a wide swing being a straight throughput
+/// multiplier, so the gap between arming and being ready is the feature.
+#[test]
+fn a_reach_is_unavailable_until_its_charge_is_ready() {
+    let (_dir, mut game) = install("reach_door_charge");
+    let player = game.player_entity();
+    wear(&mut game, player, "wide_lance");
+    abstract_fight(&mut game);
+
+    assert!(
+        game.swing_reach(player).is_some(),
+        "an unarmed charge is a ready one"
+    );
+    let opened = game.world.resource::<BattleState>().round;
+    game.arm_reach_charge(player, 3);
+
+    for spent in 0..3 {
+        game.world.resource_mut::<BattleState>().round = opened + spent;
+        assert!(
+            game.swing_reach(player).is_none(),
+            "round {} is inside the recharge and must swing narrow",
+            opened + spent
+        );
+    }
+    game.world.resource_mut::<BattleState>().round = opened + 3;
+    assert!(
+        game.swing_reach(player).is_some(),
+        "the charge is ready on the round it was armed for"
+    );
+}
+
+/// `ReachCharge` is battle-scoped exactly as `Cloaked`, `CombatBuff` and
+/// `AbilityCooldowns` are, which is what keeps it out of `save.rs`. Left
+/// set, it would follow the wielder out of one fight and hold their first
+/// swing of the next one narrow.
+#[test]
+fn a_reach_charge_does_not_survive_the_fight() {
+    let (_dir, mut game) = install("reach_door_teardown");
+    let player = game.player_entity();
+    let pet = spawn_tamed(&mut game, 200, 1);
+    enlist(&mut game, pet);
+    wear(&mut game, player, "wide_lance");
+    let wild = abstract_fight(&mut game);
+
+    game.arm_reach_charge(player, 9);
+    game.arm_reach_charge(pet, 9);
+    game.arm_reach_charge(wild, 9);
+    game.clear_battle_status_effects(player, Some(wild));
+
+    for (who, label) in [
+        (player, "the player"),
+        (pet, "a companion"),
+        (wild, "a hostile"),
+    ] {
+        assert!(
+            game.world
+                .get::<crate::components::ReachCharge>(who)
+                .is_none(),
+            "{label}'s charge survived the fight"
+        );
+    }
+
+    // The next fight's first swing is wide, which is what the removal buys.
+    game.world.remove_resource::<BattleState>();
+    abstract_fight(&mut game);
+    assert!(
+        game.swing_reach(player).is_some(),
+        "a fresh fight opens with the charge ready"
     );
 }

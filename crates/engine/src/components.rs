@@ -1181,6 +1181,26 @@ pub struct Cloaked {
     pub remaining: u32,
 }
 
+/// Battle-scoped: when a reach weapon's swing may next be a wide one.
+///
+/// Battle-scoped for `Cloaked`'s reason and with `Cloaked`'s consequence —
+/// it is removed in `game/combat_teardown.rs` beside `CombatBuff` and
+/// `AbilityCooldowns`, so it appears nowhere in `save.rs` and cost no
+/// `SAVE_FORMAT_VERSION` bump. Left set, it would follow the wielder out of
+/// one fight and hold their first swing of the next one narrow, which is
+/// the half a player would read as the weapon being broken.
+///
+/// Inserted on demand by `Game::arm_reach_charge` rather than at any spawn
+/// site: absent already reads as "ready", which is what a body that has not
+/// swung wide yet is.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct ReachCharge {
+    /// The first round on the holding model's own counter whose swing may be
+    /// wide again. A `recharge` of 0 arms it for the round it was armed in
+    /// and so is inert rather than special-cased — nothing divides by it.
+    pub ready_on: u32,
+}
+
 /// Which routine or item armed a `FieldBuff` entry. Drives the two
 /// collision rules `Game::arm_field_buff` enforces — it is not shown to the
 /// player, `ActiveFieldBuff::name` is.

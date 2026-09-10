@@ -35,6 +35,64 @@ impl Game {
         }
     }
 
+    /// What one swing of `actor`'s weapon lands on past the body it is aimed
+    /// at, or `None` for the swing every body has always had.
+    ///
+    /// **The one door both combat models ask**, and neither re-derives it.
+    /// The *conversion* to bodies is each model's own — `ability_recipients`
+    /// in front of a group, `tactical::reach::recipients` on a board —
+    /// because the two converters already disagree and folding them needs a
+    /// `SpecialTarget::Cell` variant every abstract match in three crates
+    /// would have to reject.
+    ///
+    /// Three things have to hold. The actor wears a weapon whose def
+    /// declares a reach; a fight is open, since the charge counts that
+    /// fight's rounds and there is no counter outside one; and the charge is
+    /// ready. Routed through `Equipment` to the def directly and **not**
+    /// through `gear_bonus`, which answers `EquipmentStats` and has no def
+    /// to give.
+    pub(crate) fn swing_reach(&self, actor: Entity) -> Option<items::WeaponReach> {
+        let round = self.fight_round()?;
+        let worn = self.world.get::<Equipment>(actor)?.weapon.clone()?;
+        let reach = self
+            .world
+            .resource::<ItemDb>()
+            .get(worn.copy.item.as_str())?
+            .reach?;
+        match self.world.get::<ReachCharge>(actor) {
+            Some(charge) if charge.ready_on > round => None,
+            _ => Some(reach),
+        }
+    }
+
+    /// Holds `actor`'s next `recharge` rounds of swings narrow.
+    ///
+    /// `insert_if_new` then write, `Game::equip`'s idiom for `Equipment`: a
+    /// body grows the component the first time it swings wide, and absent
+    /// already reads as ready.
+    pub(crate) fn arm_reach_charge(&mut self, actor: Entity, recharge: u32) {
+        let Some(round) = self.fight_round() else {
+            return;
+        };
+        let Ok(mut body) = self.world.get_entity_mut(actor) else {
+            return;
+        };
+        body.insert_if_new(ReachCharge { ready_on: 0 });
+        if let Some(mut charge) = body.get_mut::<ReachCharge>() {
+            charge.ready_on = round + recharge;
+        }
+    }
+
+    /// Which round the open fight is on, whichever model is holding it, or
+    /// `None` when no fight is open. The only counter a `ReachCharge` is
+    /// ever measured against.
+    fn fight_round(&self) -> Option<u32> {
+        if let Some(battle) = self.world.get_resource::<BattleState>() {
+            return Some(battle.round);
+        }
+        self.world.get_resource::<TacticalBattle>().map(|b| b.round)
+    }
+
     /// What one deterministic swing at a thing that cannot dodge lands:
     /// the band's mean plus `effective_atk`, floored at 1.
     ///

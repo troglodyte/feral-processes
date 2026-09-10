@@ -33,6 +33,28 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.144
+
+**A hostile walks its approach one cell at a time.** A body's whole walk was
+committed as a single placement, so one with room for six cells crossed all
+six between two rendered frames and then swung — a teleport rather than an
+approach, in the one combat model whose entire mechanic is where everybody is
+standing. The cell it picks is still one decision; what is now spent a step
+at a time is the path to it, through the same door the player's own arrow
+keys go through. A body waits a readable beat before it sets off and after it
+strikes, and covers ground at nearly four times that rate in between, so a
+long approach reads as an approach without taking five seconds to watch.
+
+**Every structure describes itself in plain English.** Thirty-six catalogue
+entries rewritten from prose to what the thing does and how to use it.
+
+**The zone portal is cheaper by two ingredients**, no longer asking for patch
+routines or hardened shells on top of its portal fragments and routine disks.
+
+**The Depot Mk3 is buildable again.** The rewrite above took its `glyph` line
+with it, so the file stopped parsing and the structure dropped out of the
+catalogue — never released in that state, and caught by the asset census.
+
 ## 0.13.143
 
 **A body on a battle map can brace.** The board had attack, special and end

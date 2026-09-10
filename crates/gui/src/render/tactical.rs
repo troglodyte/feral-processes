@@ -62,6 +62,14 @@ const TURN_ARROW_WIDTH: f32 = 0.44;
 const TURN_ARROW_HEIGHT: f32 = 0.30;
 const TURN_ARROW_GAP: f32 = 2.0;
 
+/// How heavily a cell the acting body can still step to is washed.
+///
+/// Under the aim preview's own 0.22 so a shaped routine reads over it, and
+/// faint enough that the terrain under it stays legible: the wash says a
+/// cell is *available*, and a cell whose kind it hid would make it say
+/// something it does not know.
+const REACH_WASH_ALPHA: f32 = 0.13;
+
 /// The three points of that arrow, given the top-left of the acting body's
 /// tile and how far this frame's bob has lifted it.
 ///
@@ -122,17 +130,26 @@ pub(super) fn draw_tactical_map(
         }
         painter.rect(px, py, tile_px - 1.0, tile_px - 1.0, cell_color(kind));
 
-        // Where the acting body may still step. `PLAN` and not `ATTENTION`:
-        // this is the player having a choice, not the fight asking them for
-        // one — the Excavation plan's own reading, on the same channel.
-        if view.player_turn && view.reachable.contains(&cell) {
+        // Where the body whose turn it is may still step — **either side**.
+        // `TacticalView::reachable` is `battle.actor()`'s own field and has
+        // never had a notion of sides, so this is drawn off it alone and
+        // never off `player_turn`: a wash that appeared only for bodies the
+        // player commands hid the half of the board a fight is planned
+        // *against*.
+        //
+        // **One colour for both, and `PLAN` rather than `ATTENTION`.** The
+        // wash answers *where*, and whose turn it is is already answered a
+        // few lines down by the arrow bobbing over that body's head, in
+        // `PLAN` against `THREAT`. Tinting the wash by side too would put
+        // one answer on two channels and make neither the place to read it.
+        if view.reachable.contains(&cell) {
             let c = palette::PLAN;
             painter.rect(
                 px,
                 py,
                 tile_px - 1.0,
                 tile_px - 1.0,
-                Color::new(c.r, c.g, c.b, 0.13),
+                Color::new(c.r, c.g, c.b, REACH_WASH_ALPHA),
             );
         }
         // What the aim would land on. Over the reach wash, because a routine
@@ -446,7 +463,7 @@ pub(super) fn draw_tactical_routines(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::paint::{painted_text, with_painter};
+    use crate::paint::{painted_rect_fill_count, painted_text, with_painter};
     use crate::text::ui_metrics;
     use feral_processes_engine::{DifficultyMode, Game};
 
@@ -790,5 +807,41 @@ mod tests {
         view.player_turn = false;
         let rows = action_bar(Mode::TacticalBattle, &view);
         assert!(rows.iter().all(|(k, _)| k.is_empty()));
+    }
+
+    /// The reach wash is drawn off `reachable` alone, so the wild side's
+    /// turn wears it exactly as the party's does.
+    ///
+    /// Gated on `player_turn` it was invisible for every body the player
+    /// does not command, which is the half of the board a player plans
+    /// *against* — and the gate is one `&&` that reads as deliberate, so
+    /// nothing but this test says the two sides are drawn alike.
+    #[test]
+    fn the_reach_wash_is_drawn_for_either_side() {
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open");
+        assert!(
+            !view.reachable.is_empty(),
+            "the acting body can reach nowhere, so this test would be vacuous"
+        );
+        let c = palette::PLAN;
+        let wash = Color::new(c.r, c.g, c.b, REACH_WASH_ALPHA);
+
+        view.player_turn = true;
+        let mut fx = Fx::new();
+        let (_, mine) =
+            with_painter(|p| draw_tactical_map(&view, None, &[], &mut fx, p, pane(), 32.0, 24));
+        view.player_turn = false;
+        let mut fx = Fx::new();
+        let (_, theirs) =
+            with_painter(|p| draw_tactical_map(&view, None, &[], &mut fx, p, pane(), 32.0, 24));
+
+        let ours = painted_rect_fill_count(&mine, wash);
+        assert!(ours > 0, "the party's own reach wash painted nothing");
+        assert_eq!(
+            painted_rect_fill_count(&theirs, wash),
+            ours,
+            "the wild side's turn drew a different reach wash from the party's"
+        );
     }
 }

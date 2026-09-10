@@ -237,6 +237,7 @@ pub(super) fn app_in_base_with_a_compiler(seed: u32) -> App {
         denied_items: Vec::new(),
         power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
         build_quality: 1.0,
+        racked: Vec::new(),
         hopper: Vec::new(),
         hopper_progress: 0,
     });

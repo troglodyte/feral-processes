@@ -10,7 +10,7 @@ use crate::paint::{Color, GRAY, Painter, Rect, TextRun, WHITE};
 use crate::text::{Metrics, map_cell, ui_metrics};
 use feral_processes_app_core::{
     App, ArenaRow, BattlePane, DevConsoleRow, GearInspect, GroupMenuRow, MENU_SCAN_RADIUS, Mode,
-    Staffing, SwapChoice, SwapRow, TradeChoice, equip_preview_tag, equip_swap_rows,
+    Staffing, SwapChoice, SwapRow, TradeChoice, TransferEntry, equip_preview_tag, equip_swap_rows,
     inventory_item_actions, item_fusion_note, menu_shortcut, qty_column, stat_summary,
 };
 use feral_processes_engine::RespecSubject;
@@ -900,14 +900,34 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::DepotFilter => app.depot_filter.clone(),
         _ => None,
     };
-    let transfer_entries: Vec<(ItemId, i64, u32, u32)> = match app.mode {
+    // The name is resolved here rather than in the renderer, because a
+    // carrier row has no `ItemId` to look one up by: its label is the
+    // engine's own sentence, and the table is a table of *names* either way.
+    let transfer_entries: Vec<(String, i64, u32, u32)> = match app.mode {
         Mode::Transfer => app
             .basket_rows
             .iter()
             .enumerate()
-            .map(|(row, r)| {
+            .filter_map(|(row, entry)| {
                 let amount = app.basket_amounts.get(row).copied().unwrap_or(0);
-                (r.item.clone(), amount, r.carried, r.on_shelves)
+                let game = app.game.as_ref()?;
+                Some(match entry {
+                    TransferEntry::Item(r) => (
+                        game.item_name(&r.item).to_string(),
+                        amount,
+                        r.carried,
+                        r.on_shelves,
+                    ),
+                    // A carrier's two columns are 1/0 or 0/1 — which side it
+                    // is standing on — and `projected` moves it across from
+                    // there exactly as it moves a unit of an item.
+                    TransferEntry::Carrier(c) => (
+                        c.label.clone(),
+                        amount,
+                        u32::from(!c.racked),
+                        u32::from(c.racked),
+                    ),
+                })
             })
             .collect(),
         _ => Vec::new(),
@@ -1012,7 +1032,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         }
         Mode::BuildProgram => draw_build_program(game, build_commit, selected, refusal, painter, m),
         Mode::Transfer => draw_transfer(
-            game,
             &transfer_entries,
             app.basket_room,
             selected,

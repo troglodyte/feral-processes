@@ -62,21 +62,25 @@ const HEADINGS: [&str; 3] = ["item", "you", "container"];
 /// puts it in `popup_layout`'s pinned header rather than in the scrolling
 /// body. It does need a width census: `draw_row` clips vertically only.
 ///
-/// `entries` is `(item, amount, carried, on_shelves)` per row, zipped by the
-/// caller. The two figures are the row's **holdings**, not `App`'s two
+/// `entries` is `(name, amount, carried, on_shelves)` per row, zipped by the
+/// caller — the name already resolved, because a carrier row has no `ItemId`
+/// to look one up by and the table is a table of names either way. A carrier
+/// rides every rule above unchanged: its two figures are 1/0 or 0/1, which
+/// `projected` moves across exactly as it moves a unit of an item.
+///
+/// The two figures are the row's **holdings**, not `App`'s two
 /// ceilings: what the player may still move is what the keys clamp against,
 /// and stating it as a column is what made the screen report a Depot's
 /// shared budget as the size of the player's own pack.
 pub(super) fn draw_transfer(
-    game: &Game,
-    entries: &[(ItemId, i64, u32, u32)],
+    entries: &[(String, i64, u32, u32)],
     room: Option<u32>,
     selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
-    let body = body_rows(game, entries, room, selected);
+    let body = body_rows(entries, room, selected);
     draw_popup("Transfer", PopupSize::Large, &body, refusal, painter, m);
 }
 
@@ -87,12 +91,7 @@ pub(super) fn draw_transfer(
 /// claims the base is full when it has no shelf at all. `Some(0)` still
 /// draws it — that is a Depot with nothing left, which is exactly the thing
 /// the player needs told.
-fn body_rows(
-    game: &Game,
-    entries: &[(ItemId, i64, u32, u32)],
-    room: Option<u32>,
-    selected: usize,
-) -> Vec<Row> {
+fn body_rows(entries: &[(String, i64, u32, u32)], room: Option<u32>, selected: usize) -> Vec<Row> {
     let mut body = Vec::new();
     if let Some(room) = room {
         let given: u32 = entries.iter().fold(0u32, |acc, (_, n, _, _)| {
@@ -113,11 +112,11 @@ fn body_rows(
         body.push(text_row("[F] set what a Depot beside you will accept"));
     }
     body.push(text_row(""));
-    let cols = Columns::of(game, entries);
+    let cols = Columns::of(entries);
     body.push(text_row(cols.header()));
-    for (i, (item, amount, carried, on_shelves)) in entries.iter().enumerate() {
+    for (i, (name, amount, carried, on_shelves)) in entries.iter().enumerate() {
         body.push(item_row(
-            cols.row(game.item_name(item), *carried, *on_shelves, *amount),
+            cols.row(name, *carried, *on_shelves, *amount),
             i == selected,
         ));
     }
@@ -168,15 +167,15 @@ struct Columns {
 }
 
 impl Columns {
-    fn of(game: &Game, entries: &[(ItemId, i64, u32, u32)]) -> Self {
+    fn of(entries: &[(String, i64, u32, u32)]) -> Self {
         let mut cols = Columns {
             name: HEADINGS[0].len(),
             you: HEADINGS[1].len(),
             container: HEADINGS[2].len(),
         };
-        for (item, amount, carried, on_shelves) in entries {
+        for (name, amount, carried, on_shelves) in entries {
             let (you, container) = projected(*carried, *on_shelves, *amount);
-            cols.name = cols.name.max(game.item_name(item).chars().count());
+            cols.name = cols.name.max(name.chars().count());
             cols.you = cols.you.max(you.to_string().len());
             cols.container = cols.container.max(container.to_string().len());
         }
@@ -267,6 +266,25 @@ mod tests {
             .clone()
     }
 
+    /// The widest carrier label the shipped species can build.
+    ///
+    /// `Game::downed_program_label` is "the level N <species>", and a
+    /// carrier row's name column is that sentence — longer than every
+    /// shipped item name, which is why the census below measures it rather
+    /// than assuming the item side is the worst case. The level is written
+    /// out as three digits: nothing bounds a modded species' level, and the
+    /// shipped cap is two, so this is one digit of headroom rather than a
+    /// number read off the assets.
+    fn widest_carrier_label(game: &Game) -> String {
+        let species = game
+            .species_defs()
+            .into_iter()
+            .map(|def| def.name.clone())
+            .max_by_key(|name| name.chars().count())
+            .expect("the shipped assets define species");
+        format!("the level 100 {species}")
+    }
+
     /// **The widest transfer row the shipped assets can build still fits, and
     /// so does the header over it.**
     ///
@@ -288,9 +306,26 @@ mod tests {
         // The widest either figure can print: `projected` clamps at
         // `u32::MAX`, so both columns are ten digits whatever the basket asks
         // for.
-        let entries = vec![(item, u32::MAX as i64, u32::MAX, u32::MAX)];
-        let cols = Columns::of(&game, &entries);
-        let row = cols.row(&name, u32::MAX, u32::MAX, u32::MAX as i64);
+        let carrier = widest_carrier_label(&game);
+        assert!(
+            carrier.chars().count() > 0,
+            "the census measured no carrier label"
+        );
+        // Both names against the widest figures either column can print:
+        // `projected` clamps at `u32::MAX`, so both are ten digits whatever
+        // the basket asks for. The widest of the two names is what has to
+        // fit, and the table is as wide as the widest row in it either way.
+        let entries = vec![
+            (name.clone(), u32::MAX as i64, u32::MAX, u32::MAX),
+            (carrier.clone(), u32::MAX as i64, u32::MAX, u32::MAX),
+        ];
+        let cols = Columns::of(&entries);
+        let widest = if carrier.chars().count() > name.chars().count() {
+            &carrier
+        } else {
+            &name
+        };
+        let row = cols.row(widest, u32::MAX, u32::MAX, u32::MAX as i64);
         let header = cols.header();
 
         with_painter(|p| {
@@ -351,8 +386,11 @@ mod tests {
 
         // Figures of different widths too, or the columns would line up by
         // luck rather than by being ones.
-        let entries = vec![(short.0, 5i64, 7u32, 9u32), (long.0, -1234i64, 99u32, 1u32)];
-        let rows = body_rows(&game, &entries, None, 0);
+        let entries = vec![
+            (game.item_name(&short.0).to_string(), 5i64, 7u32, 9u32),
+            (game.item_name(&long.0).to_string(), -1234i64, 99u32, 1u32),
+        ];
+        let rows = body_rows(&entries, None, 0);
         let items: Vec<String> = rows
             .iter()
             .filter_map(|r| match r {
@@ -367,7 +405,7 @@ mod tests {
             "the rows are ragged: {items:?}"
         );
 
-        let cols = Columns::of(&game, &entries);
+        let cols = Columns::of(&entries);
         with_painter(|p| {
             let m = ui_metrics(900.0);
             // `draw_row`'s own label for an unselected, untagged, iconless
@@ -399,10 +437,10 @@ mod tests {
     fn the_header_sits_over_the_columns_it_names() {
         let game = shipped_game();
         let entries = vec![
-            (ItemId::from("core_fragment"), -12i64, 7u32, 300u32),
-            (ItemId::from("power_cell"), 4i64, 1u32, 9u32),
+            ("core fragment".to_string(), -12i64, 7u32, 300u32),
+            ("power cell".to_string(), 4i64, 1u32, 9u32),
         ];
-        let rows = body_rows(&game, &entries, None, 0);
+        let rows = body_rows(&entries, None, 0);
         let header = rows
             .iter()
             .filter_map(|r| match r {
@@ -420,7 +458,7 @@ mod tests {
             .collect();
         assert_eq!(items.len(), 2, "one row per entry");
 
-        let cols = Columns::of(&game, &entries);
+        let cols = Columns::of(&entries);
         with_painter(|p| {
             let m = ui_metrics(900.0);
             for edge in cols.boundaries() {
@@ -471,8 +509,8 @@ mod tests {
     #[test]
     fn no_transfer_hint_line_overflows_its_popup() {
         let game = shipped_game();
-        let entries = vec![(ItemId::from("core_fragment"), 0, 0, 0)];
-        let rows = body_rows(&game, &entries, Some(u32::MAX), 0);
+        let entries = vec![("core fragment".to_string(), 0, 0, 0)];
+        let rows = body_rows(&entries, Some(u32::MAX), 0);
 
         with_painter(|p| {
             let m = ui_metrics(900.0);
@@ -492,9 +530,9 @@ mod tests {
     #[test]
     fn the_room_line_is_absent_without_a_depot_and_reads_zero_when_full() {
         let game = shipped_game();
-        let entries = vec![(ItemId::from("core_fragment"), 0, 0, 4)];
+        let entries = vec![("core fragment".to_string(), 0, 0, 4)];
 
-        let heads = |room| match &body_rows(&game, &entries, room, 0)[0] {
+        let heads = |room| match &body_rows(&entries, room, 0)[0] {
             Row::Text(t) => t.clone(),
             _ => panic!("the body opens with a text row"),
         };

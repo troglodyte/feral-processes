@@ -145,7 +145,7 @@ impl Game {
             }
             if self.is_stunned(entity) {
                 let name = self.actor_label(actor, entity);
-                self.log(format!("{name} stalls — stunned, and loses the turn!"));
+                self.log(format!("{name} stalls out, and loses the turn!"));
                 continue;
             }
             match actor {
@@ -453,24 +453,24 @@ impl Game {
         if entity == self.player_entity() {
             return match outcome {
                 battle::AttackOutcome::Crit { dmg } => {
-                    format!("You tear a {move_name} clean through for {dmg} damage!")
+                    format!("Your {move_name} lands unchecked — {dmg} straight through!")
                 }
                 battle::AttackOutcome::Hit { dmg } => {
-                    format!("You unleash a {move_name} for {dmg} damage.")
+                    format!("You inject {move_name} for {dmg} Integrity.")
                 }
-                battle::AttackOutcome::Miss => format!("Your {move_name} glances off."),
+                battle::AttackOutcome::Miss => format!("Your {move_name} is refused."),
                 battle::AttackOutcome::Fumble(rung) => self.fumble_line_for_player(move_name, rung),
             };
         }
         let name = self.creature_label(entity);
         match outcome {
             battle::AttackOutcome::Crit { dmg } => {
-                format!("{name} tears a {move_name} clean through for {dmg} damage!")
+                format!("{name}'s {move_name} lands unchecked — {dmg} straight through!")
             }
             battle::AttackOutcome::Hit { dmg } => {
-                format!("{name} executes {move_name} for {dmg} damage.")
+                format!("{name} injects {move_name} for {dmg} Integrity.")
             }
-            battle::AttackOutcome::Miss => format!("{name}'s {move_name} glances off."),
+            battle::AttackOutcome::Miss => format!("{name}'s {move_name} is refused."),
             battle::AttackOutcome::Fumble(rung) => {
                 self.fumble_line_for_other(&name, move_name, rung)
             }
@@ -1215,7 +1215,10 @@ impl Game {
                         band.roll(&mut rng.0)
                     };
                     let restored = self.restore_hp(recipient, rolled);
-                    self.log_kind(heal_kind, format!("{name} patches {on} for {restored} HP."));
+                    self.log_kind(
+                        heal_kind,
+                        format!("{name} patches {on} for {restored} Integrity."),
+                    );
                 }
                 AbilityEffect::Debuff {
                     kind,
@@ -1229,10 +1232,10 @@ impl Game {
                         abilities::scaled_hp_power(*power, level, affinity),
                     );
                     match kind {
-                        StatusKind::Bleed => self.log(format!("{name} corrupts {on}'s data!")),
-                        StatusKind::Stun => self.log(format!("{name} locks up {on}!")),
+                        StatusKind::Bleed => self.log(format!("{name} springs a leak in {on}!")),
+                        StatusKind::Stun => self.log(format!("{name} stalls {on} out!")),
                         StatusKind::Exposed => {
-                            self.log(format!("{name} pries {on}'s guard wide open!"))
+                            self.log(format!("{name} strips {on}'s validation!"))
                         }
                     }
                 }
@@ -1262,12 +1265,12 @@ impl Game {
                     );
                     let line = match outcome {
                         battle::AttackOutcome::Crit { dmg } => {
-                            format!("{name} tears into {on} for {dmg} damage!")
+                            format!("{name} overruns {on} for {dmg} Integrity!")
                         }
                         battle::AttackOutcome::Hit { dmg } => {
-                            format!("{name} hits {on} for {dmg} damage.")
+                            format!("{name} lands on {on} for {dmg} Integrity.")
                         }
-                        battle::AttackOutcome::Miss => format!("{name} goes wide of {on}."),
+                        battle::AttackOutcome::Miss => format!("{name} is bounds-checked by {on}."),
                         battle::AttackOutcome::Fumble(rung) => {
                             self.fumble_line_for_other(name, "the routine", rung)
                         }

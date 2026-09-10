@@ -1122,7 +1122,7 @@ fn a_field_heal_caps_at_full_and_logs_what_it_restored() {
         .resource::<MessageLog>()
         .lines
         .iter()
-        .any(|line| line.text.contains("for 1 HP"));
+        .any(|line| line.text.contains("for 1 Integrity"));
     assert!(
         logged,
         "the line must quote the 1 point that landed, not the band that was rolled"

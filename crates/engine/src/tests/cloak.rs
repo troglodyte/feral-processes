@@ -329,7 +329,7 @@ fn breaking_a_cloak_is_announced_once_and_only_on_the_transition() {
         .resource::<MessageLog>()
         .lines
         .iter()
-        .filter(|l| l.text.contains("is exposed"))
+        .filter(|l| l.text.contains("is unpatched"))
         .count();
     assert_eq!(reveals, 1, "the reveal was logged {reveals} times");
 }

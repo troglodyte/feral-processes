@@ -21,13 +21,15 @@ impl Game {
     ) -> String {
         match rung {
             battle::FumbleRung::Exposed => {
-                format!("Your {move_name} overreaches — you're wide open.")
+                format!("Your {move_name} overreaches — you're left unpatched.")
             }
             battle::FumbleRung::Recoil { dmg } => {
-                format!("Your {move_name} backfires for {dmg} damage.")
+                format!("Your {move_name} backfires for {dmg} Integrity.")
             }
             battle::FumbleRung::Opening { dmg } => {
-                format!("Your {move_name} leaves you open, and it counters for {dmg}.")
+                format!(
+                    "Your {move_name} leaves you unpatched, and it counters for {dmg} Integrity."
+                )
             }
             battle::FumbleRung::Crash => {
                 format!("Your {move_name} hard-faults. You lose the next cycle.")
@@ -50,13 +52,15 @@ impl Game {
     ) -> String {
         match rung {
             battle::FumbleRung::Exposed => {
-                format!("{name} overreaches with {move_name}, and is left wide open.")
+                format!("{name} overreaches with {move_name}, and is left unpatched.")
             }
             battle::FumbleRung::Recoil { dmg } => {
-                format!("{name} backfires {move_name}, taking {dmg} damage.")
+                format!("{name} backfires {move_name}, taking {dmg} Integrity.")
             }
             battle::FumbleRung::Opening { dmg } => {
-                format!("{name} leaves an opening with {move_name}, and takes {dmg} for it.")
+                format!(
+                    "{name} leaves itself unpatched with {move_name}, and takes {dmg} Integrity for it."
+                )
             }
             battle::FumbleRung::Crash => {
                 format!("{name} hard-faults on {move_name}, and loses the next cycle.")

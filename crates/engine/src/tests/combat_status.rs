@@ -470,7 +470,7 @@ fn wild_programs_only_sometimes_reach_for_their_status_effect() {
         with_effect_move += 1;
         if after
             .iter()
-            .any(|l| l.contains("starts bleeding") || l.contains("locks up"))
+            .any(|l| l.contains("starts leaking") || l.contains("stalls"))
         {
             landed += 1;
         }
@@ -1309,7 +1309,7 @@ fn a_second_fumble_replaces_the_first_rung() {
     assert!(game.is_stunned(fumbler));
     assert_eq!(
         game.status_label(fumbler).as_deref(),
-        Some("Stunned (1)"),
+        Some("Stalled (1)"),
         "one status at a time — the second must clobber the first"
     );
 }

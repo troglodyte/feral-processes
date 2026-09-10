@@ -606,7 +606,7 @@ fn equip_row(slot: &ManifestEquipSlot) -> SectionRow {
         bonus.push(format!("{:+} ATK", slot.atk));
     }
     if slot.mitigation != 0 {
-        bonus.push(format!("{:+} DEF", slot.mitigation));
+        bonus.push(format!("{:+} MIT", slot.mitigation));
     }
     if slot.decompiler != 0 {
         bonus.push(format!("{:+} DECOMP", slot.decompiler));

@@ -873,7 +873,7 @@ fn a_heal_logs_what_it_actually_restored_not_what_it_rolled() {
     assert!(
         game.message_log(usize::MAX)
             .into_iter()
-            .any(|e| e.text.contains("patches you for 3 HP")),
+            .any(|e| e.text.contains("patches you for 3 Integrity")),
         "the log must name the 3 points that landed, not the 20 that were rolled: {:?}",
         game.message_log(usize::MAX)
     );
@@ -916,7 +916,7 @@ fn a_heal_on_a_full_health_target_logs_zero() {
     assert!(
         game.message_log(usize::MAX)
             .into_iter()
-            .any(|e| e.text.contains("patches you for 0 HP")),
+            .any(|e| e.text.contains("patches you for 0 Integrity")),
         "a wasted heal must say so: {:?}",
         game.message_log(usize::MAX)
     );

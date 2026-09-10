@@ -41,13 +41,10 @@ impl Game {
         }
         self.arm_status(target, effect.kind, effect.duration, effect.power);
         match effect.kind {
-            StatusKind::Bleed => self.log_kind(
-                kind,
-                format!("{target_label} starts bleeding corrupted data!"),
-            ),
-            StatusKind::Stun => self.log_kind(kind, format!("{target_label} locks up, stunned!")),
+            StatusKind::Bleed => self.log_kind(kind, format!("{target_label} starts leaking!")),
+            StatusKind::Stun => self.log_kind(kind, format!("{target_label} stalls out!")),
             StatusKind::Exposed => {
-                self.log_kind(kind, format!("{target_label} is left wide open!"))
+                self.log_kind(kind, format!("{target_label} is left unpatched!"))
             }
         }
     }
@@ -120,7 +117,7 @@ impl Game {
 
         if active.kind == StatusKind::Bleed {
             self.apply_damage(entity, active.power);
-            self.log(format!("{label} takes {} bleed damage.", active.power));
+            self.log(format!("{label} leaks {} Integrity.", active.power));
         }
 
         let remaining = active.remaining.saturating_sub(1);
@@ -136,9 +133,9 @@ impl Game {
         }
         if remaining == 0 {
             match active.kind {
-                StatusKind::Bleed => self.log(format!("{label}'s bleed clears.")),
-                StatusKind::Stun => self.log(format!("{label} shakes off the stun.")),
-                StatusKind::Exposed => self.log(format!("{label} recovers its guard.")),
+                StatusKind::Bleed => self.log(format!("{label}'s leak is plugged.")),
+                StatusKind::Stun => self.log(format!("{label} resumes.")),
+                StatusKind::Exposed => self.log(format!("{label} re-validates.")),
             }
         }
     }
@@ -403,7 +400,7 @@ impl Game {
             },
         );
         let name = self.creature_label(entity);
-        self.log(format!("{name} braces against the next strike."));
+        self.log(format!("{name} hardens against the next attempt."));
     }
 
     /// Arms a cloak on `entity` for `rounds` battle rounds, inserting
@@ -454,7 +451,7 @@ impl Game {
         }
         self.world.entity_mut(entity).remove::<Cloaked>();
         let label = self.creature_label(entity);
-        self.log(format!("{label} is exposed."));
+        self.log(format!("{label} is unpatched."));
     }
 
     /// End-of-round status upkeep across every combatant in the fight: each

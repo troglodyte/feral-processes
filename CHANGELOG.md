@@ -33,6 +33,14 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.145
+
+**A builder fetches the line it can get.** A build request whose bill led
+with something the base could never supply held a program at the site
+forever, delivered nothing under it and said nothing about any of it — which
+on a Zone Portal, whose portal fragments only a Stack guardian drops, read as
+the whole base having quietly stopped working.
+
 ## 0.13.144
 
 **A hostile walks its approach one cell at a time.** A body's whole walk was

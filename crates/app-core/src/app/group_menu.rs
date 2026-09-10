@@ -25,13 +25,13 @@ struct GroupEntry {
     /// Where this row's action is legal, which for most of the base menu is
     /// "in base space" — see `Locality`.
     ///
-    /// It used to be a `surface_only` bool and used to ask
-    /// `is_underground()`, which was the same question while "not in the
-    /// Stack" and "where the base is" were one condition. They are two now —
-    /// `docs/seams.md` carries the split — and this names the half it always
-    /// meant: the engine refuses each of these rows anywhere but base space,
-    /// so offering them on the open grid advertises a screen whose every
-    /// action is a dead end.
+    /// It used to be a `surface_only` bool and used to ask `is_underground()`,
+    /// which was the same question while "not in the Stack" and "where the
+    /// base is" were one condition. They are two now —
+    /// `seam:require-surface-used-to-mean-not-in-the-stack-and-ten-of` carries
+    /// the split — and this names the half it always meant: the engine refuses
+    /// each of these rows anywhere but base space, so offering them on the
+    /// open grid advertises a screen whose every action is a dead end.
     ///
     /// A field in a readable table rather than an `in_base()` check folded
     /// into each `available` closure, because it has to be kept in step with
@@ -254,11 +254,13 @@ const PARTY_ROWS: &[GroupEntry] = &[
         // are.** This row is the whole roster screen — gear, memories, the
         // manifest, a rename — and only the join and the stand-down are
         // decided at home. Hidden off-base it would take reading your own
-        // programs away four frames down along with the one thing that
-        // needed guarding. `add_companion` and `stand_down_companion` carry
-        // `require_base` themselves and refuse onto the status line, which
-        // is a sentence the player can act on rather than a row that is
-        // simply gone. See `docs/seams.md`'s guard table.
+        // programs away four frames down along with the one thing that needed
+        // guarding. `add_companion` and `stand_down_companion` carry
+        // `require_base` themselves and refuse onto the status line, which is
+        // a sentence the player can act on rather than a row that is simply
+        // gone. See
+        // `seam:require-surface-used-to-mean-not-in-the-stack-and-ten-of`
+        // guard table.
         label: "Companions",
         target: Mode::Companion,
         locality: Locality::Anywhere,

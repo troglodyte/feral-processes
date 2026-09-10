@@ -1876,10 +1876,10 @@ fn a_brace_is_gone_once_the_order_comes_round() {
 /// on the **last** rung braces against nobody, because `hand_on_turn`'s wrap
 /// fires the moment it hands the turn on and the wrap is what ages the buff.
 ///
-/// Stated in `CLAUDE.md`, in the `seams` skill and in `docs/seams.md`, so it
-/// is a claim that has to be checked rather than remembered — and it is the
-/// thing that would silently become false if the brace were ever rearmed for
-/// longer.
+/// Stated in `CLAUDE.md`, in the `seams` skill and in
+/// `seam:a-brace-on-a-board-is-the-group-models-and-only-the`, so it is a
+/// claim that has to be checked rather than remembered — and it is the thing
+/// that would silently become false if the brace were ever rearmed for longer.
 #[test]
 fn a_body_on_the_last_rung_braces_against_nobody() {
     let mut game = game();

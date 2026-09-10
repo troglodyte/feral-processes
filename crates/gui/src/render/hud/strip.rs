@@ -4,11 +4,12 @@
 //! readout ride its frame rather than costing the pane a body row, and the
 //! log pane's vitals and keybar do the same.
 //!
-//! **One strip to a border, and only one.** The quad below is centred *on*
-//! the line, so it reaches `size/2 + pad/2` past it on both sides — two
-//! strips reaching for each other across the gap between two panes cut each
-//! other in half, which is why the log pane's filter header is a body row
-//! and not a third mount. `docs/seams.md`'s "One strip to a border" entry
+//! **One strip to a border, and only one.** The quad below is centred *on* the
+//! line, so it reaches `size/2 + pad/2` past it on both sides — two strips
+//! reaching for each other across the gap between two panes cut each other in
+//! half, which is why the log pane's filter header is a body row and not a
+//! third mount.
+//! `seam:one-strip-to-a-border-and-the-vitals-get-the-contested-one` entry
 //! carries the measurement.
 //!
 //! **Draw order is the whole of what this module is for.** The caller has

@@ -3,7 +3,8 @@
 //! The pane's ground readout and threat readout ride its **top** border. Its
 //! bottom border carries nothing: the player's vitals used to ride it, and
 //! moved to the log pane's top border — `hud::log_frame` holds them now, and
-//! `docs/seams.md`'s "The expanded log pane is an overlay" entry holds why.
+//! `seam:the-expanded-log-pane-is-an-overlay-and-the-map-pane-does` entry
+//! holds why.
 //!
 //! The pane used to open on a static `"SECTOR MAP"` title, which carried no
 //! information. `Game::terrain_row` is what replaced it: the engine already

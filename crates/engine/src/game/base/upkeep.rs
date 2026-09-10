@@ -678,13 +678,15 @@ impl Game {
     /// lowest-tiled one that actually contributes `raid_defense`.
     ///
     /// **A `Structure` and never the anchor.** A `VisualEffect` names a
-    /// base-space cell (`render/base.rs` draws the queue only while
-    /// `base_pos` is `Some`), and the anchor is a zone-surface fixture whose
-    /// tile is also the party's pinned `Position` out of phase — so a flash
-    /// on it paints the player's own cell, which is exactly the cross-space
-    /// aliasing that gate was added to close. `docs/seams.md` records the
-    /// ambient sweep suppressing its flash rather than moving it there; this
-    /// moves it onto something that is genuinely in the right space instead.
+    /// base-space cell (`render/base.rs` draws the queue only while `base_pos`
+    /// is `Some`), and the anchor is a zone-surface fixture whose tile is also
+    /// the party's pinned `Position` out of phase — so a flash on it paints
+    /// the player's own cell, which is exactly the cross-space aliasing that
+    /// gate was added to close.
+    /// `seam:a-raids-flash-is-base-space-too-and-the-pane-has-to-say-so`
+    /// records the ambient sweep suppressing its flash rather than moving it
+    /// there; this moves it onto something that is genuinely in the right
+    /// space instead.
     ///
     /// **A deflect always has one.** Turning a raid away needs
     /// `SETTLEMENT_RAID_DEFENSE_PER_POINT * defense >= SETTLEMENT_RAID_HAUL_PERCENT`,

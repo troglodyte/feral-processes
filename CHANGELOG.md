@@ -27,7 +27,8 @@ about what is installed.
 **An entry is one bold sentence.** Earlier sections lead each bullet with a
 bold claim and follow it with a paragraph explaining it; from `0.13.58` the
 claim is the whole entry. The argument behind a change lives in its commit
-message and in `docs/seams.md`, both of which keep it — a changelog that
+message and in the memory graph's seam arguments, both of which keep it — a
+changelog that
 restates them is one nobody reads.
 
 Entries below `0.2.0` predate versioning and are kept as written, newest

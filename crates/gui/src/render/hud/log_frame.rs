@@ -12,14 +12,14 @@
 //! where it is top-aligned with the messages it heads. The keybar keeps the
 //! bottom border, which is uncontested.
 //!
-//! **A body row is not out of reach of its own pane's strips, and that was
-//! the third instance of this bug.** The same quad that reaches outward
-//! across the gap reaches exactly as far *inward*, so the vitals hang
+//! **A body row is not out of reach of its own pane's strips, and that was the
+//! third instance of this bug.** The same quad that reaches outward across the
+//! gap reaches exactly as far *inward*, so the vitals hang
 //! `layout::strip_clearance` below the top border and the keybar the same
 //! distance above the bottom one — over a body that starts and ends at
 //! `m.inset`, and painted after it. `layout::strip_inset` is the one
-//! expression for where the body may begin; see `docs/seams.md`'s "A
-//! top-mounted strip eats its own pane's body".
+//! expression for where the body may begin; see
+//! `seam:a-top-mounted-strip-eats-its-own-panes-body`.
 //!
 //! The vitals ride *this* pane rather than the map's for a second reason:
 //! the expanded pane (SPACE, `App::log_expanded`) is an overlay over the

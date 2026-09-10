@@ -495,7 +495,7 @@ impl EquipmentSlot {
 ///
 /// This lives on `ItemDef` and deliberately **not** on `EquipmentStats`.
 /// Three reasons, each independently sufficient — see
-/// `docs/superpowers/specs/2026-09-10-weapon-reach-design.md`. The stats
+/// `docs/superpowers/archive/specs/2026-09-10-weapon-reach-design.md`. The stats
 /// are scaled four ways by `Game::copy_bonus` and a reach must not scale,
 /// `damage`'s own rule that a tier sharpens what an item does and never
 /// hands it a stat it never had. `EquipmentStats::is_empty` and

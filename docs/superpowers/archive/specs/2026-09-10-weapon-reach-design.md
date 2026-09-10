@@ -1,8 +1,8 @@
 # A swing that lands on more than one body
 
-**Status:** designed, not implemented. This file lives in `specs/` rather
-than `archive/specs/`, which is what says so — the header is the thing that
-has rotted before, so read the directory.
+**Status:** implemented. This file lives in `archive/specs/`, which is what
+says so — the header is the thing that has rotted before, so read the
+directory.
 
 A weapon that declares how wide its swing is. Not a routine, not a second
 action and not a new key: you attack the way you already attack, and the

@@ -3058,7 +3058,10 @@ mod deed_sites {
         // base's own origin, and `Position` is the surface tile.
         stand_in_base(&mut game);
         stocked(&mut game, "mining_node", 1, 0, &[(ids::CORE_FRAGMENT, 10)]);
-        let (taken, _) = game.transfer_items(&[(ItemId::from(ids::CORE_FRAGMENT), 4)], &[]);
+        let (taken, _) = game.transfer_items(&TransferBasket::items(
+            &[(ItemId::from(ids::CORE_FRAGMENT), 4)],
+            &[],
+        ));
         assert!(!taken.is_empty(), "the fixture has to move something");
         assert!(finished_take_mission(&game));
     }
@@ -3072,7 +3075,10 @@ mod deed_sites {
         stand_in_base(&mut game);
         stocked(&mut game, "depot", 1, 0, &[]);
         set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 10)]);
-        let (_, given) = game.transfer_items(&[], &[(ItemId::from(ids::CORE_FRAGMENT), 4)]);
+        let (_, given) = game.transfer_items(&TransferBasket::items(
+            &[],
+            &[(ItemId::from(ids::CORE_FRAGMENT), 4)],
+        ));
         assert!(!given.is_empty(), "the fixture has to move something");
         assert!(!finished_take_mission(&game));
     }

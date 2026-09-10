@@ -159,6 +159,7 @@ fn game_with_programs(fixture: &str, seed: u32, programs: &[(bool, &str)]) -> Ga
         patrol_position: None,
         pursuing: false,
         carrying: None,
+        carrying_program: None,
         rarity: Default::default(),
         nemesis_grudges: 0,
         equipment: Vec::new(),
@@ -237,8 +238,10 @@ pub(super) fn app_in_base_with_a_compiler(seed: u32) -> App {
         denied_items: Vec::new(),
         power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
         build_quality: 1.0,
+        racked: Vec::new(),
         hopper: Vec::new(),
         hopper_progress: 0,
+        standing_tool: None,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Some(Game::load(&path, &assets_dir).unwrap());

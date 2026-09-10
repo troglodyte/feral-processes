@@ -623,7 +623,7 @@ mod tests {
     /// shipped subjects must fit inside 1280x720 with no scroll, since this
     /// screen has none — the `memory-page-has-no-scroll` precedent.
     ///
-    /// 50 is Task 4's own pinned count
+    /// 51 is Task 4's own pinned count
     /// (`sprite_subjects_is_every_species_and_structure_plus_player_and_anchor`);
     /// asserted again here so a shrinking asset tree can't silently make
     /// this census easier than the one it is meant to hold.
@@ -633,7 +633,7 @@ mod tests {
         let subjects = app.sprite_subjects();
         assert_eq!(
             subjects.len(),
-            50,
+            51,
             "the shipped subject count moved — re-check this census's premise"
         );
 

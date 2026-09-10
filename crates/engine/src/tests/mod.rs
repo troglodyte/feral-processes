@@ -57,6 +57,7 @@ mod permadeath;
 mod player_icon;
 mod policy;
 mod power;
+mod racks;
 mod raids;
 mod refactor;
 mod research;

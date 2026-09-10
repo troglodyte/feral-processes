@@ -916,7 +916,13 @@ impl Game {
                 entity.insert(crate::components::Hopper {
                     queue: s.hopper.clone(),
                     progress: s.hopper_progress,
+                    standing_tool: s.standing_tool.clone(),
                 });
+            }
+            // Same rule one rung along: a stored shelf on a structure whose
+            // `racks` a mod has since taken away is dropped.
+            if def.racks.is_some() {
+                entity.insert(crate::components::Racked(s.racked.clone()));
             }
             // Both halves mirror `Game::spawn_structure`'s list, which is the
             // hand-written copy this file has always been: a burning supplier
@@ -1659,6 +1665,9 @@ impl Game {
             if let Some((item, qty)) = c.carrying.clone() {
                 entity.insert(Carrying { item, qty });
             }
+            if let Some(program) = c.carrying_program.clone() {
+                entity.insert(crate::components::CarryingProgram(program));
+            }
             if let Some(index) = sortie_index {
                 ctx.sortie_members.push((index, creature_id));
             }
@@ -1869,6 +1878,10 @@ impl Game {
                 .world
                 .get::<Carrying>(e)
                 .map(|c| (c.item.clone(), c.qty)),
+            carrying_program: self
+                .world
+                .get::<crate::components::CarryingProgram>(e)
+                .map(|c| c.0.clone()),
             rarity: self.world.get::<Rarity>(e).copied().unwrap_or_default(),
             nemesis_grudges: self.world.get::<Nemesis>(e).map(|n| n.0).unwrap_or(0),
             program_id: self.world.get::<ProgramId>(e).map(|p| p.0).unwrap_or(0),
@@ -1936,12 +1949,24 @@ impl Game {
             Option<&crate::components::Hopper>,
             Option<&crate::components::BuildQuality>,
             Option<&crate::components::DepotFilter>,
+            Option<&crate::components::Racked>,
         )>();
         // `Stock` is optional here only because test fixtures hand-spawn
         // bare `Structure`s; `place_structure` and `load` both give every
         // real one a buffer.
-        for (structure, pos, durability, tier, stock, standing, fuel, hopper, quality, filter) in
-            structure_query.iter(&self.world)
+        for (
+            structure,
+            pos,
+            durability,
+            tier,
+            stock,
+            standing,
+            fuel,
+            hopper,
+            quality,
+            filter,
+            racked,
+        ) in structure_query.iter(&self.world)
         {
             let encode = |map: Option<&std::collections::BTreeMap<ItemId, u32>>| {
                 map.map(|m| m.iter().map(|(i, n)| (i.clone(), *n)).collect())
@@ -1956,6 +1981,7 @@ impl Game {
                 stock_output: encode(stock.map(|s| &s.output)),
                 hopper: hopper.map(|h| h.queue.clone()).unwrap_or_default(),
                 hopper_progress: hopper.map(|h| h.progress).unwrap_or(0),
+                standing_tool: hopper.and_then(|h| h.standing_tool.clone()),
                 standing_work: standing.is_some_and(|j| j.work),
                 standing_guard: standing.is_some_and(|j| j.guard),
                 denied_items: filter
@@ -1965,6 +1991,7 @@ impl Game {
                     .map(|f| f.ticks_left)
                     .unwrap_or(crate::tuning::POWER_UPKEEP_TICKS),
                 build_quality: quality.map_or(1.0, |q| q.0),
+                racked: racked.map(|r| r.0.clone()).unwrap_or_default(),
             });
         }
         structures

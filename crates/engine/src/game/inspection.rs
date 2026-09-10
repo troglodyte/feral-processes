@@ -1336,6 +1336,20 @@ impl Game {
                     workable,
                     player_adjacent: at_station(center, pos),
                     assignees: assignees_by_structure.remove(&entity).unwrap_or_default(),
+                    standing_tool: self
+                        .world
+                        .get::<crate::components::Hopper>(entity)
+                        .and_then(|h| h.standing_tool.clone())
+                        .map(|id| {
+                            // An id `ToolDb` cannot resolve — a mod's file
+                            // removed since the save — falls back to the raw
+                            // id, `downed_program_label`'s own tolerance.
+                            self.world
+                                .resource::<crate::tools::ToolDb>()
+                                .get(id.as_str())
+                                .map(|def| def.name.clone())
+                                .unwrap_or_else(|| id.0.clone())
+                        }),
                 }
             })
             .collect();

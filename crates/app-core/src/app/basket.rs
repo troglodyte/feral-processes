@@ -17,9 +17,7 @@
 //! held key reach the clamp rather than overflow.
 
 use crate::*;
-
-/// One direction of a basket, as the engine's `transfer_items` wants it.
-type Basket = Vec<(ItemId, u32)>;
+use feral_processes_engine::tuning::MAX_DOWNED_PROGRAMS;
 
 /// Closes half the gap between `n` and `target`, landing exactly on the
 /// target rather than stalling one short.
@@ -45,7 +43,51 @@ impl App {
     /// How much of the highlighted row the player may still **take**: what
     /// that item is sitting on the adjacent shelves, per row and static.
     pub(crate) fn take_available(&self, row: usize) -> u32 {
-        self.basket_rows.get(row).map_or(0, |r| r.on_shelves)
+        match self.basket_rows.get(row) {
+            Some(TransferEntry::Item(r)) => r.on_shelves,
+            // A carrier already in the pack has nothing to take; a racked
+            // one is one unit, and only while the pack has somewhere to put
+            // it. `MAX_DOWNED_PROGRAMS` is a store-wide ceiling rather than
+            // a per-row one, so it is the *other* rows that spend it — the
+            // same asymmetry `put_available` documents below, and for the
+            // same reason: counting this row would make it unlowerable.
+            Some(TransferEntry::Carrier(c)) if c.racked => {
+                u32::from(self.carrier_pack_room(row) > 0)
+            }
+            _ => 0,
+        }
+    }
+
+    /// Room left in the player's own store for another carrier, ignoring
+    /// `row`'s own pending amount.
+    ///
+    /// What is already held is derived from the rows themselves — a carrier
+    /// row that is not racked is one sitting in the pack — rather than
+    /// carried as a second figure that could disagree with them.
+    fn carrier_pack_room(&self, row: usize) -> u32 {
+        let held = self
+            .basket_rows
+            .iter()
+            .filter(|e| e.carrier().is_some_and(|c| !c.racked))
+            .count();
+        let (mut taking, mut giving) = (0usize, 0usize);
+        for (i, (entry, n)) in self
+            .basket_rows
+            .iter()
+            .zip(self.basket_amounts.iter())
+            .enumerate()
+        {
+            if i == row || entry.carrier().is_none() {
+                continue;
+            }
+            match (*n).cmp(&0) {
+                std::cmp::Ordering::Greater => taking += 1,
+                std::cmp::Ordering::Less => giving += 1,
+                std::cmp::Ordering::Equal => {}
+            }
+        }
+        let after = held + taking - giving.min(held + taking);
+        (MAX_DOWNED_PROGRAMS.saturating_sub(after)) as u32
     }
 
     /// How much of the highlighted row the player may still **put**:
@@ -76,11 +118,26 @@ impl App {
             .enumerate()
             .filter(|(i, _)| *i != row)
             .fold(0u32, |acc, (_, n)| acc.saturating_add((-*n).max(0) as u32));
-        let budget = self.basket_room.unwrap_or(0).saturating_sub(given);
-        self.basket_rows
-            .get(row)
-            .map_or(0, |r| r.can_put)
-            .min(budget)
+        match self.basket_rows.get(row) {
+            Some(TransferEntry::Item(r)) => {
+                let budget = self.basket_room.unwrap_or(0).saturating_sub(given);
+                r.can_put.min(budget)
+            }
+            // A pack-side carrier is one unit, and the shared budget it
+            // spends is rack slots rather than Depot room — the other
+            // carrier rows' pending puts, exactly as above.
+            Some(TransferEntry::Carrier(c)) if !c.racked => {
+                let spent = self
+                    .basket_rows
+                    .iter()
+                    .zip(self.basket_amounts.iter())
+                    .enumerate()
+                    .filter(|(i, (e, n))| *i != row && e.carrier().is_some() && **n < 0)
+                    .count() as u32;
+                u32::from(self.basket_rack_room.saturating_sub(spent) > 0)
+            }
+            _ => 0,
+        }
     }
 
     /// The key table. Digits are a *quantity* here rather than a row pick,
@@ -179,19 +236,37 @@ impl App {
         }
     }
 
-    /// The basket as the engine wants it: what to take and what to give,
-    /// each with the untouched rows dropped.
-    pub(crate) fn basket_request(&self) -> (Basket, Basket) {
-        let mut take = Basket::new();
-        let mut give = Basket::new();
-        for (row, n) in self.basket_rows.iter().zip(self.basket_amounts.iter()) {
-            match (*n).cmp(&0) {
-                std::cmp::Ordering::Greater => take.push((row.item.clone(), *n as u32)),
-                std::cmp::Ordering::Less => give.push((row.item.clone(), n.unsigned_abs() as u32)),
-                std::cmp::Ordering::Equal => {}
+    /// The basket as the engine wants it: what to take, what to give and
+    /// which carriers cross, each with the untouched rows dropped.
+    pub(crate) fn basket_request(&self) -> TransferBasket {
+        let mut basket = TransferBasket::default();
+        let items = self
+            .basket_rows
+            .iter()
+            .filter(|e| e.item().is_some())
+            .count();
+        for (i, (entry, n)) in self
+            .basket_rows
+            .iter()
+            .zip(self.basket_amounts.iter())
+            .enumerate()
+        {
+            if *n == 0 {
+                continue;
+            }
+            match entry {
+                TransferEntry::Item(row) if *n > 0 => {
+                    basket.take.push((row.item.clone(), *n as u32))
+                }
+                TransferEntry::Item(row) => basket
+                    .give
+                    .push((row.item.clone(), n.unsigned_abs() as u32)),
+                // The row's position less the item count — `open_transfer`'s
+                // ordering is what makes that the `rack_offer` index.
+                TransferEntry::Carrier(_) => basket.carriers.push(i - items),
             }
         }
-        (take, give)
+        basket
     }
 
     /// The one teardown every exit uses. Clearing the three fields is what

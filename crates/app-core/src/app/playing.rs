@@ -3,6 +3,16 @@
 use crate::DEV_CONSOLE_KEY;
 use crate::*;
 
+/// What `c` hands out past the `self.game` borrow: everything
+/// `App::open_transfer` needs. Opening a screen is not an action, so it
+/// cannot happen inside the borrow that answered the key.
+struct TransferOpening {
+    rows: Vec<TransferRow>,
+    carriers: Vec<TransferCarrier>,
+    room: Option<u32>,
+    rack_room: u32,
+}
+
 /// One step, reported honestly: `true` only when the world actually moved.
 ///
 /// `bite` is an out-parameter rather than a second return value because the
@@ -323,7 +333,7 @@ impl App {
         // What the transfer picker will open on, if `c` found anything —
         // the rows and the Depot room, handed out past the `self.game`
         // borrow together.
-        let mut opening: Option<(Vec<TransferRow>, Option<u32>)> = None;
+        let mut opening: Option<TransferOpening> = None;
         // What the ground took off the party, for the cue
         // `after_world_action` picks. Declared out here because the four
         // movement arms below sit inside a `self.game` borrow and have to
@@ -370,6 +380,7 @@ impl App {
                 // other.
                 GameKey::Char('c') => {
                     let offer = game.transfer_offer();
+                    let carriers = game.rack_offer();
                     // An empty offer is still worth a screen when a Depot
                     // is standing here: `[F]` is reached from inside the
                     // picker, and a Depot built five seconds ago with an
@@ -377,7 +388,7 @@ impl App {
                     // to set it up. Without this the one Depot that most
                     // needs configuring is the one that cannot be.
                     let configurable = !game.adjacent_depot_entities().is_empty();
-                    if offer.is_empty() && !configurable {
+                    if offer.is_empty() && carriers.is_empty() && !configurable {
                         // Straight back through the engine, which speaks
                         // its own refusal and spends no turn. A
                         // `status_line` copy of that sentence here would be
@@ -393,7 +404,12 @@ impl App {
                         // an `Option`: `None` is no Depot beside you at all,
                         // `Some(0)` a Depot with nothing left, and the
                         // screen has to be able to tell them apart.
-                        opening = Some((offer, game.transfer_room()));
+                        opening = Some(TransferOpening {
+                            rows: offer,
+                            carriers,
+                            room: game.transfer_room(),
+                            rack_room: game.total_rack_room(),
+                        });
                         false
                     }
                 }
@@ -471,8 +487,8 @@ impl App {
         if let Some(reason) = refusal {
             self.refuse(reason);
         }
-        if let Some((offer, room)) = opening {
-            self.open_transfer(offer, room);
+        if let Some(o) = opening {
+            self.open_transfer(o.rows, o.carriers, o.room, o.rack_room);
         }
         self.after_world_action(acted, is_move_key, ground_bite);
     }

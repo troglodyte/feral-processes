@@ -680,6 +680,33 @@
 - **Destroying a structure has two paths** — `damage_structure` and
   `remove_structure`. Anything that must happen as a structure comes down
   needs wiring into both.
+- **A downed program lives in three places now, and the rack is the only one
+  that is not a queue.** `DownedPrograms` on the player, `Racked` on a
+  Quarantine Rack, `Hopper` on a rig — plus `CarryingProgram` on a body
+  walking one from the second to the third. The pack and the hopper are both
+  *worked through*; a rack is a shelf nothing works through, which is why
+  `stores` stays false on it (that flag means "a hauler may empty items into
+  it", and no item ever enters a rack) and why it needed its own census
+  rather than a row in the one keyed on `def.stores`. What still holds is the
+  half the old two-place claim was protecting: what leaves a **rig** is plain
+  items in `Stock::output`, so hauling, depots, `collect::plan_adjacent_take`
+  and work orders need no instance rule. Its ceiling is `slots * tier`
+  derived per read — a new pattern, since `capacity` is copied in at build
+  and never tier-scaled, and a stored ceiling goes stale the moment a tier
+  lands.
+- **A carrier in transit is carried, so the never-free rule and both
+  destruction paths name `CarryingProgram` beside `Carrying`.** `Carrying`
+  could not be widened — it is one `(item, qty)` pair *because*
+  `HAUL_CARRY_CAPACITY` bounds a trip, and a carrier has no `ItemId`. None of
+  the three sites fails to compile if it is missed and the symptom is a lost
+  kill with no error. `is_on_shift` returns true for a holder, as it does for
+  `Carrying`; the two destruction paths **put the carrier back** rather than
+  adding it to the dropped tuple — `Game::return_carried_program`, first rack
+  with room in `(x, y)` order, then the player's store, and only then "lost
+  with the machine". All three are verified by deletion, which is the bar a
+  fourth site would owe too. The fetch itself sits in `run_teardown_rigs`
+  because that is where it cannot disagree with the strip about the hopper's
+  room: both routes in go through `Game::hopper_room`.
 - **A trader's buyback shelf is keyed by `(kind, tile)`, not by `Entity`**, so
   it outlives the building — and now outlives a breach too. **Breaching
   does not despawn structures**, and the world is persistent now, so the

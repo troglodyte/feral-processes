@@ -342,8 +342,10 @@ mod tests {
                 denied_items: Vec::new(),
                 power_fuel: tuning::POWER_UPKEEP_TICKS,
                 build_quality: 1.0,
+                racked: Vec::new(),
                 hopper: Vec::new(),
                 hopper_progress: 0,
+                standing_tool: None,
             });
         }
         save::save_to_file(&path, &data).unwrap();

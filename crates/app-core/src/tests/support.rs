@@ -194,8 +194,10 @@ pub(crate) fn app_beside_a_teardown_rig_holding(
         denied_items: Vec::new(),
         power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
         build_quality: 1.0,
+        racked: Vec::new(),
         hopper: Vec::new(),
         hopper_progress: 0,
+        standing_tool: None,
     });
     save::save_to_file(&path, &data).unwrap();
 
@@ -299,6 +301,7 @@ fn distant_programs(seed: u32, pick: impl FnOnce(&Game) -> Vec<String>) -> App {
             patrol_position: None,
             pursuing: false,
             carrying: None,
+            carrying_program: None,
             rarity: Default::default(),
             nemesis_grudges: 0,
             equipment: Vec::new(),
@@ -379,6 +382,7 @@ pub(crate) fn place_wild_program_east(app: &mut App, east: i32) -> Entity {
         patrol_position: None,
         pursuing: false,
         carrying: None,
+        carrying_program: None,
         rarity: Default::default(),
         nemesis_grudges: 0,
         equipment: Vec::new(),
@@ -575,6 +579,7 @@ pub(crate) fn place_settlement_and_a_pursuing_guardian(
         patrol_position: None,
         pursuing: true,
         carrying: None,
+        carrying_program: None,
         rarity: Default::default(),
         nemesis_grudges: 0,
         equipment: Vec::new(),
@@ -704,6 +709,7 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         patrol_position: None,
         pursuing: false,
         carrying: None,
+        carrying_program: None,
         rarity: Default::default(),
         nemesis_grudges: 0,
         equipment: Vec::new(),
@@ -730,8 +736,10 @@ pub(crate) fn app_owning_a_program_and_a_compiler_deep(
         denied_items: Vec::new(),
         power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
         build_quality: 1.0,
+        racked: Vec::new(),
         hopper: Vec::new(),
         hopper_progress: 0,
+        standing_tool: None,
     });
     if underground {
         data.locale = Locale::Stack {
@@ -824,6 +832,7 @@ pub(crate) fn app_owning_one_deep_program_and_a_compiler(
         patrol_position: None,
         pursuing: false,
         carrying: None,
+        carrying_program: None,
         rarity: Default::default(),
         nemesis_grudges: 0,
         equipment: Vec::new(),
@@ -850,8 +859,10 @@ pub(crate) fn app_owning_one_deep_program_and_a_compiler(
         denied_items: Vec::new(),
         power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
         build_quality: 1.0,
+        racked: Vec::new(),
         hopper: Vec::new(),
         hopper_progress: 0,
+        standing_tool: None,
     });
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &assets_dir).ok();
@@ -924,6 +935,7 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
         patrol_position: None,
         pursuing: false,
         carrying: None,
+        carrying_program: None,
         rarity: Default::default(),
         nemesis_grudges: 0,
         equipment: Vec::new(),
@@ -952,8 +964,10 @@ pub(crate) fn app_at_trading_posts(seed: u32, inventory: &[(&str, u32)], posts: 
             denied_items: Vec::new(),
             power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
             build_quality: 1.0,
+            racked: Vec::new(),
             hopper: Vec::new(),
             hopper_progress: 0,
+            standing_tool: None,
         });
     }
     // A trader is a deployed `Structure`, and every structure stands in base
@@ -1211,6 +1225,7 @@ pub(crate) fn app_with_owned_and_wild_neighbors(seed: u32, routines: &[&str]) ->
             patrol_position: None,
             pursuing: false,
             carrying: None,
+            carrying_program: None,
             rarity: Default::default(),
             nemesis_grudges: 0,
             equipment: Vec::new(),
@@ -1304,6 +1319,7 @@ pub(crate) fn app_with_companions_and_cargo(
             patrol_position: None,
             pursuing: false,
             carrying: None,
+            carrying_program: None,
             rarity: Default::default(),
             nemesis_grudges: 0,
             equipment: Vec::new(),
@@ -1561,8 +1577,10 @@ pub(crate) fn app_inside_a_small_base_with_programs(
         denied_items: Vec::new(),
         power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
         build_quality: 1.0,
+        racked: Vec::new(),
         hopper: Vec::new(),
         hopper_progress: 0,
+        standing_tool: None,
     });
     for _ in 0..programs {
         data.creatures.push(CreatureSave {
@@ -1602,6 +1620,7 @@ pub(crate) fn app_inside_a_small_base_with_programs(
             patrol_position: None,
             pursuing: false,
             carrying: None,
+            carrying_program: None,
             rarity: Default::default(),
             nemesis_grudges: 0,
             equipment: Vec::new(),
@@ -1692,8 +1711,10 @@ pub(crate) fn app_at_a_contract_broker(seed: u32, underground: bool) -> App {
         denied_items: Vec::new(),
         power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
         build_quality: 1.0,
+        racked: Vec::new(),
         hopper: Vec::new(),
         hopper_progress: 0,
+        standing_tool: None,
     });
     data.locale = if underground {
         Locale::Stack {
@@ -1825,8 +1846,10 @@ pub(crate) fn app_beside_depots(seed: u32, depots: i32, filled: u32, pack: &[(&s
             denied_items: Vec::new(),
             power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
             build_quality: 1.0,
+            racked: Vec::new(),
             hopper: Vec::new(),
             hopper_progress: 0,
+            standing_tool: None,
         });
     }
     data.player.inventory = pack
@@ -1928,6 +1951,7 @@ pub(crate) fn tame_program_at_zone_with_build_rolls(
         patrol_position: None,
         pursuing: false,
         carrying: None,
+        carrying_program: None,
         rarity: Default::default(),
         nemesis_grudges: 0,
         equipment: Vec::new(),
@@ -1972,8 +1996,10 @@ pub(crate) fn app_beside_stocked_machines(seed: u32, stock: &[(&str, u32)]) -> A
             denied_items: Vec::new(),
             power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
             build_quality: 1.0,
+            racked: Vec::new(),
             hopper: Vec::new(),
             hopper_progress: 0,
+            standing_tool: None,
         });
     }
     data.locale = Locale::Base { x: 0, y: 0 };

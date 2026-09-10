@@ -597,12 +597,17 @@ pub struct HopperEntry {
 /// `StructureDef::strips`, `Game::load_teardown_rig` and
 /// `Game::run_teardown_rigs`.
 ///
-/// **The whole instance boundary of phase 4.** A `DownedProgram` exists in
-/// exactly two places in the game: `DownedPrograms` on the player, and this.
-/// What leaves a rig is plain items in `Stock::output`, which is what lets
-/// hauling, depots, `collect::plan_adjacent_take` and work orders carry the
-/// yield with no instance rule at all — decision 2's seam, which
+/// **The instance boundary, and it now has three sides.** A `DownedProgram`
+/// exists in three places: `DownedPrograms` on the player, `Racked` on a
+/// Quarantine Rack, and this — plus `CarryingProgram` on a body walking one
+/// from the second to the third. What still holds is the half that matters:
+/// what leaves a **rig** is plain items in `Stock::output`, which is what
+/// lets hauling, depots, `collect::plan_adjacent_take` and work orders carry
+/// the yield with no instance rule at all — decision 2's seam, which
 /// `GearCopies`' doc above states and which spec §10.1 declines to spend.
+///
+/// The rack is the one of the three that is not a queue: nothing works
+/// through it, and it is filled and emptied by hand from the `c` picker.
 ///
 /// A `Vec` rather than a keyed store, `DownedPrograms`' own reason: two
 /// equal-comparing programs are still two separate kills, and the queue is
@@ -615,7 +620,49 @@ pub struct HopperEntry {
 pub struct Hopper {
     pub queue: Vec<HopperEntry>,
     pub progress: u64,
+    /// The tool this rig is set up with — the last one the player handed it
+    /// by hand, and the one a carrier arriving by any other route is
+    /// stripped with.
+    ///
+    /// It lives on the **rig** rather than beside the carrier because
+    /// `Game::extraction_yield` reads a tool for both halves of its answer:
+    /// `yields` is the pool and `tier` is the scale. A rack stores bare
+    /// programs and knows nothing about tools, so a crew fetch would have
+    /// nowhere to get one from.
+    ///
+    /// `None` on a rig nobody has hand-loaded yet, which is what makes the
+    /// hand-load worth keeping: it is the one gesture that *names* a tool,
+    /// and removing it would need a screen invented to replace it. Never a
+    /// `Routines` or `Gear` tool — `load_teardown_rig` refuses both before
+    /// it writes this.
+    pub standing_tool: Option<crate::tools::ToolId>,
 }
+
+/// A downed program a posted body is physically carrying to a rig — the
+/// record of one crew trip, and the third place a `DownedProgram` can be
+/// standing while it is between the other three.
+///
+/// **`Carrying` could not be widened.** That is one `(item, qty)` pair
+/// *because* `HAUL_CARRY_CAPACITY` bounds a trip, and a carrier has no
+/// `ItemId` at all.
+///
+/// Two rules written for `Carrying` have this as a second subject, and
+/// neither fails to compile if a site is missed — the symptom is a lost kill
+/// with no error: `Game::is_on_shift` must never free a body holding one,
+/// and both structure-destruction paths must put it back rather than drop
+/// it with the `Task`.
+#[derive(Component, Clone, Debug)]
+pub struct CarryingProgram(pub DownedProgram);
+
+/// A Quarantine Rack's shelf of downed programs — see `StructureDef::racks`
+/// and `Game::rack_slots`.
+///
+/// A `Vec`, `DownedPrograms`' own reason: two equal-comparing programs are
+/// still two separate kills. Unbounded by the type; the ceiling is
+/// `slots * tier`, derived per read rather than carried here, so an upgrade
+/// takes effect the tick it lands.
+#[derive(Component, Default, Clone, Debug)]
+pub struct Racked(pub Vec<DownedProgram>);
 
 /// Player-only: tool ids installed in the player's tool slots, in slot
 /// order — position is what the extraction screen selects by, `Routines`'

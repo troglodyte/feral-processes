@@ -787,7 +787,10 @@ impl Game {
             );
             for w in workers {
                 // See `remove_structure`: the load has to go with the task,
-                // and this is the second of the two destruction paths.
+                // and this is the second of the two destruction paths — so
+                // an in-transit carrier is put back here too, before the
+                // component goes with it.
+                self.return_carried_program(w);
                 self.world.entity_mut(w).remove::<(Task, Carrying)>();
             }
             // The second of the two destruction paths — see

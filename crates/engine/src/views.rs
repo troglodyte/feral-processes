@@ -1195,6 +1195,14 @@ pub struct StructureReport {
     /// guard can both be on one structure at once, which is why this is a
     /// list and why `EntityView::structure_worker` could not answer it.
     pub assignees: Vec<Assignee>,
+    /// A Teardown Rig's standing tool by display **name**, `None` on a rig
+    /// nobody has hand-loaded yet and on every structure that is not one.
+    ///
+    /// A name and not a `ToolId`, `input`/`output`'s reason: resolving an id
+    /// against a catalogue is the kind of lookup a renderer has no business
+    /// doing. Drawn because a rig with no standing tool is the one that
+    /// silently will not fetch from a rack.
+    pub standing_tool: Option<String>,
 }
 
 impl StructureReport {
@@ -2670,6 +2678,25 @@ pub struct TransferRow {
     pub on_shelves: u32,
     pub carried: u32,
     pub can_put: u32,
+}
+
+/// One downed program the transfer picker offers, on whichever side of the
+/// basket it is currently standing — see `Game::rack_offer`.
+///
+/// **Not a widened `TransferRow`.** That row's three figures are quantities
+/// of a fungible item, and a carrier has none: its range is `[-1, +1]` and
+/// its two columns are 1/0 or 0/1. `racked` is which side it is sitting on,
+/// and the screen derives both figures from it.
+///
+/// No handle on the program itself: the **index** into `rack_offer`'s list
+/// is what the basket names, `load_teardown_rig`'s own idiom, so an
+/// `Entity` never crosses into a view.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TransferCarrier {
+    /// `Game::downed_program_label`'s sentence — "the level 9 Scrapper".
+    pub label: String,
+    /// True when it stands on a rack, so the only move it has is a take.
+    pub racked: bool,
 }
 
 /// One Depot's filter as its screen draws it — see

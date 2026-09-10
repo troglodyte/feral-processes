@@ -414,6 +414,71 @@ impl Game {
     /// `build_quality_of`'s answer. `None` writes **no component at all**,
     /// which is the neutral every reader already means: the Home, which
     /// costs no program, and every hand-spawned fixture.
+    /// Puts a worker's in-transit carrier somewhere it survives: the first
+    /// adjacent-agnostic rack with room in `(x, y)` order, and the player's
+    /// own store when no rack will take it.
+    ///
+    /// **Both destruction paths call this before dropping the component**,
+    /// and neither would fail to compile without it — the symptom is a lost
+    /// kill with no error. A store that is full is the one case where the
+    /// carrier is genuinely lost, and it says so rather than going quiet.
+    pub(crate) fn return_carried_program(&mut self, worker: Entity) {
+        let Some(held) = self
+            .world
+            .get::<crate::components::CarryingProgram>(worker)
+            .map(|c| c.0.clone())
+        else {
+            return;
+        };
+        self.world
+            .entity_mut(worker)
+            .remove::<crate::components::CarryingProgram>();
+
+        let racks: Vec<(i32, i32, Entity)> = {
+            let db = self.world.resource::<StructureDb>();
+            let mut found: Vec<(i32, i32, Entity)> = self
+                .world
+                .iter_entities()
+                .filter_map(|e| {
+                    let kind = &e.get::<Structure>()?.kind;
+                    let p = e.get::<Position>()?;
+                    db.get(kind)?.racks.as_ref()?;
+                    e.contains::<crate::components::Racked>()
+                        .then_some((p.x, p.y, e.id()))
+                })
+                .collect();
+            found.sort();
+            found
+        };
+        if let Some(rack) = racks
+            .into_iter()
+            .map(|(_, _, e)| e)
+            .find(|rack| self.rack_room(*rack) > 0)
+            && let Some(mut shelf) = self.world.get_mut::<crate::components::Racked>(rack)
+        {
+            shelf.0.push(held);
+            return;
+        }
+
+        let label = self.downed_program_label(&held);
+        let player = self.player_entity();
+        let room = self
+            .world
+            .get::<crate::components::DownedPrograms>(player)
+            .is_some_and(|h| h.0.len() < crate::tuning::MAX_DOWNED_PROGRAMS);
+        if room {
+            if let Some(mut store) = self
+                .world
+                .get_mut::<crate::components::DownedPrograms>(player)
+            {
+                store.0.push(held);
+            }
+            self.log_base(format!("{label} comes back to your pack."));
+        } else {
+            self.log_base(format!("{label} is lost with the machine."));
+        }
+    }
+
     pub(crate) fn spawn_structure(
         &mut self,
         def: &StructureDef,
@@ -465,6 +530,9 @@ impl Game {
                 resource: work.produces.clone(),
                 level: work.level,
             });
+        }
+        if def.racks.is_some() {
+            entity.insert(crate::components::Racked::default());
         }
         if def.strips.is_some() {
             entity.insert(crate::components::Hopper::default());
@@ -1026,6 +1094,11 @@ impl Game {
                 // gone has nowhere to put its load down and would hold it for
                 // the rest of the run. `damage_structure` carries the same
                 // pair for the same reason.
+                //
+                // A carrier is **put back** before the component goes, not
+                // dropped with it: destroying the building must not destroy
+                // the kill. See `Game::return_carried_program`.
+                self.return_carried_program(worker);
                 self.world.entity_mut(worker).remove::<(Task, Carrying)>();
             }
             if let Some(pos) = self.world.get::<Position>(target).copied() {

@@ -11,10 +11,25 @@ impl App {
     /// through untouched: `None` is "no Depot beside you", `Some(0)` is "a
     /// Depot with nothing left", and the screen has to be able to tell them
     /// apart.
-    pub(crate) fn open_transfer(&mut self, rows: Vec<TransferRow>, room: Option<u32>) {
-        self.basket_amounts = vec![0; rows.len()];
-        self.basket_rows = rows;
+    pub(crate) fn open_transfer(
+        &mut self,
+        rows: Vec<TransferRow>,
+        carriers: Vec<TransferCarrier>,
+        room: Option<u32>,
+        rack_room: u32,
+    ) {
+        // Items first, carriers after: a carrier row's position less the
+        // item count is its index into `Game::rack_offer()`, which is what
+        // `basket_request` hands the commit door.
+        let entries: Vec<TransferEntry> = rows
+            .into_iter()
+            .map(TransferEntry::Item)
+            .chain(carriers.into_iter().map(TransferEntry::Carrier))
+            .collect();
+        self.basket_amounts = vec![0; entries.len()];
+        self.basket_rows = entries;
         self.basket_room = room;
+        self.basket_rack_room = rack_room;
         self.menu_selected = 0;
         self.mode = Mode::Transfer;
     }
@@ -33,9 +48,9 @@ impl App {
     /// No `status_line`: the engine has already logged what moved, and the
     /// log pane is where a haul is reported.
     pub(crate) fn commit_transfer(&mut self) {
-        let (take, give) = self.basket_request();
-        if let (false, Some(game)) = (take.is_empty() && give.is_empty(), &mut self.game) {
-            game.transfer_items(&take, &give);
+        let basket = self.basket_request();
+        if let (false, Some(game)) = (basket.is_empty(), &mut self.game) {
+            game.transfer_items(&basket);
         }
         self.leave_basket();
     }

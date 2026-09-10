@@ -3469,3 +3469,95 @@ fn a_rig_strips_while_the_party_is_in_a_zone() {
     assert!(game.world.get::<Hopper>(rig).unwrap().queue.is_empty());
     assert!(!game.world.get::<Stock>(rig).unwrap().output.is_empty());
 }
+
+// ---------------------------------------------------------------------------
+// The Quarantine Rack, task 6: `Hopper::standing_tool` — the tool a carrier
+// arriving by any route other than the player's own hands is stripped with.
+// ---------------------------------------------------------------------------
+
+fn standing_tool_of(game: &Game, rig: Entity) -> Option<String> {
+    game.world
+        .get::<Hopper>(rig)
+        .unwrap()
+        .standing_tool
+        .clone()
+        .map(|t| t.0)
+}
+
+#[test]
+fn a_hand_load_sets_the_rigs_standing_tool_and_the_next_one_overwrites_it() {
+    let (mut game, rig) = player_beside_a_rig_holding(2);
+    assert_eq!(standing_tool_of(&game, rig), None, "a fresh rig has none");
+
+    game.load_teardown_rig(&[0], &clamp("salvage_clamp"))
+        .unwrap();
+    assert_eq!(
+        standing_tool_of(&game, rig),
+        Some("salvage_clamp".to_string())
+    );
+
+    install_tool_for_test(&mut game, "core_tap");
+    game.load_teardown_rig(&[0], &clamp("core_tap")).unwrap();
+    assert_eq!(
+        standing_tool_of(&game, rig),
+        Some("core_tap".to_string()),
+        "the tool the player last handed over is the one it is set up with"
+    );
+}
+
+#[test]
+fn a_standing_tool_survives_save_and_load() {
+    let (mut game, rig) = player_beside_a_rig_holding(1);
+    game.load_teardown_rig(&[0], &clamp("salvage_clamp"))
+        .unwrap();
+    let _ = rig;
+
+    let path = std::env::temp_dir().join(format!("feral_standing_tool_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let hopper = loaded
+        .world
+        .iter_entities()
+        .find_map(|e| e.get::<Hopper>())
+        .expect("the rig should still stand");
+    assert_eq!(
+        hopper.standing_tool.as_ref().map(|t| t.0.as_str()),
+        Some("salvage_clamp")
+    );
+}
+
+/// The two refused categories are refused *above* the write, so a standing
+/// tool can never be one of them — asserted on the field after the refusal
+/// rather than on the refusal alone.
+#[test]
+fn a_refused_load_sets_no_standing_tool() {
+    let (mut game, rig) = player_beside_a_rig_holding(1);
+    install_tool_for_test(&mut game, "routine_reader");
+    assert!(
+        game.load_teardown_rig(&[0], &clamp("routine_reader"))
+            .is_err()
+    );
+    assert_eq!(standing_tool_of(&game, rig), None);
+}
+
+#[test]
+fn the_rigs_report_names_its_standing_tool_and_is_silent_without_one() {
+    let (mut game, _) = player_beside_a_rig_holding(1);
+    let rig_row = |game: &mut Game| {
+        game.structure_report()
+            .into_iter()
+            .find(|r| r.kind == "teardown_rig")
+            .expect("the rig is in range of the roster")
+    };
+    assert_eq!(rig_row(&mut game).standing_tool, None);
+
+    game.load_teardown_rig(&[0], &clamp("salvage_clamp"))
+        .unwrap();
+    let named = rig_row(&mut game).standing_tool.expect("it is set up now");
+    assert!(
+        !named.is_empty() && named != "salvage_clamp",
+        "the report carries the display name, not the id: {named}"
+    );
+}

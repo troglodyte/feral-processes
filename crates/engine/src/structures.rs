@@ -98,6 +98,26 @@ pub struct StripDef {
     pub hopper: u32,
 }
 
+/// A structure's carrier-storage capability — see `StructureDef::racks`.
+///
+/// Mirrors `StripDef` rung for rung — one figure, authored per machine — and
+/// deliberately carries nothing about tools: `Game::extraction_yield` reads a
+/// tool for both halves of its answer, and that is a fact about the *rig*
+/// (`Hopper::standing_tool`), not about the shelf.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RackDef {
+    /// How many downed programs this rack holds **at tier 1**.
+    ///
+    /// Authored per machine rather than in `tuning.rs`, for
+    /// `StripDef::hopper`'s reason: it is how big *this* box is, and a
+    /// modder's second rack should be able to differ.
+    ///
+    /// The ceiling is `slots * tier`, derived per read by `Game::rack_slots`
+    /// and never stored beside the component — `BuildSite::required_ticks`'
+    /// rule. A stored ceiling goes stale the moment a tier lands.
+    pub slots: u32,
+}
+
 /// A structure's power-regeneration capability — see
 /// `StructureDef::power_regen` and `systems::power_regen_system`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -317,6 +337,15 @@ pub struct StructureDef {
     /// mod, keeps parsing as a machine that strips nothing.
     #[serde(default)]
     pub strips: Option<StripDef>,
+    /// If set, this structure is a shelf for downed programs — filled and
+    /// emptied from the `c` transfer picker, and fetched from by a body
+    /// posted at an adjacent rig. Not a haul target: no *item* ever enters
+    /// one, which is why `stores` stays false and this field carries the
+    /// capability instead.
+    /// `#[serde(default)]` so every existing structure file, including any
+    /// mod, keeps parsing as a machine that racks nothing.
+    #[serde(default)]
+    pub racks: Option<RackDef>,
     /// If set, this structure restores the player's Power every tick while
     /// they stand within `radius` tiles — no assigned worker and no input
     /// item, unlike `work`. `#[serde(default)]` so

@@ -511,6 +511,16 @@ pub struct CreatureSave {
     /// This is a shape change to `CreatureSave`, so it required bumping
     /// `SAVE_FORMAT_VERSION` — see that constant's docs.
     pub carrying: Option<(ItemId, u32)>,
+    /// The downed program this body is carrying to a rig — see
+    /// `components::CarryingProgram`. Additive behind `#[serde(default)]`,
+    /// unlike `carrying` above, which changed `CreatureSave`'s shape before
+    /// the payload was field-named RON.
+    ///
+    /// Saved rather than dropped because the alternative is a kill lost to
+    /// quitting mid-trip, which is the same failure both destruction paths
+    /// are written to avoid.
+    #[serde(default)]
+    pub carrying_program: Option<crate::items::DownedProgram>,
     /// The rare-spawn tier this creature rolled — see `components::Rarity`.
     ///
     /// Persisted as the *tag* only. The multiplier it names was already
@@ -998,6 +1008,18 @@ pub struct StructureSave {
     pub hopper: Vec<crate::components::HopperEntry>,
     #[serde(default)]
     pub hopper_progress: u64,
+    /// The rig's standing tool — see `components::Hopper::standing_tool`.
+    /// Defaulted, so a save written before it existed loads with a rig that
+    /// has not been hand-loaded yet.
+    #[serde(default)]
+    pub standing_tool: Option<crate::tools::ToolId>,
+    /// A Quarantine Rack's shelf — see `components::Racked`. `DownedProgram`
+    /// directly rather than through a parallel `*Save` type,
+    /// `PlayerSave::downed_programs`' precedent: it has no legacy shape to
+    /// reconcile. Defaulted, so a save written before the rack existed loads
+    /// with an empty one.
+    #[serde(default)]
+    pub racked: Vec<crate::items::DownedProgram>,
     /// The two halves of `components::StandingJob` — keep this machine
     /// worked, and keep this structure guarded, whether or not an order
     /// asks for it.
@@ -1840,6 +1862,7 @@ mod tests {
             patrol_position: None,
             pursuing: false,
             carrying: None,
+            carrying_program: None,
             rarity: Rarity::Ordinary,
             boss: false,
             nemesis_grudges: 0,

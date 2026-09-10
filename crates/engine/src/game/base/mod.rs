@@ -27,6 +27,6 @@ pub(crate) mod repair;
 pub(crate) mod stock;
 pub(crate) mod tantrum;
 pub(crate) mod teardown;
-pub(crate) mod transfer;
+pub mod transfer;
 pub(crate) mod upkeep;
 pub(crate) mod work_orders;

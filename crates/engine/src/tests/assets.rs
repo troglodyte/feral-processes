@@ -1900,8 +1900,8 @@ fn every_upgrade_path_asks_for_a_zone_material() {
         checked += 1;
     }
     assert_eq!(
-        checked, 9,
-        "expected the nine upgradeable structures — the six nodes, the two compile benches whose tier is what a compiled copy's quality floor is built out of, and the Teardown Rig, whose tier is a bench tier too; one that lost its path would drop out of this scan unnoticed"
+        checked, 10,
+        "expected the ten upgradeable structures — the six nodes, the two compile benches whose tier is what a compiled copy's quality floor is built out of, the Teardown Rig, whose tier is a bench tier too, and the Quarantine Rack, whose tier is how many carriers it holds; one that lost its path would drop out of this scan unnoticed"
     );
 }
 
@@ -2780,6 +2780,30 @@ fn every_shipped_shelf_and_the_portal_cost_no_program() {
 
     assert!(shelves >= 6, "the shipped depot ladder runs to Mk6");
     assert_eq!(portals, 1, "one shipped structure breaches");
+}
+
+/// A rack is not a haul target, so `def.stores` is false and the census above
+/// never sees it — it needs its own assertion, keyed on the field it does set.
+#[test]
+fn every_shipped_rack_costs_no_program() {
+    use crate::structures::StructureDb;
+
+    let (structures, _) = StructureDb::load_dir(&test_assets_dir().join("structures")).unwrap();
+    let mut racks = 0;
+
+    for def in structures.all() {
+        if def.racks.is_some() {
+            racks += 1;
+            assert!(
+                !def.needs_program(),
+                "{} is a shelf for carriers and must say `costs_no_program`: a shelf \
+                 is not worth a body",
+                def.id
+            );
+        }
+    }
+
+    assert!(racks >= 1, "the Quarantine Rack ships");
 }
 
 /// A def whose declared `subject` no trigger can satisfy is dead content:

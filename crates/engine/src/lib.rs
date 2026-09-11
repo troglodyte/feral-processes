@@ -119,7 +119,7 @@ use resources::{
     WieldedProgram, XpTally, ZoneLevel, ZoneSpawnPoint,
 };
 pub use resources::{
-    DifficultyMode, EffectKind, HandCraftProgress, LabourDemand, LogEntry, LogLine,
+    DifficultyMode, EffectKind, EnemyStrength, HandCraftProgress, LabourDemand, LogEntry, LogLine,
     MESSAGE_LOG_CAP, MessageKind, MessageSource, SlotShift, SwingOutcome, TransitCue, VisualEffect,
     condense,
 };

@@ -85,6 +85,30 @@
   and the spread re-resolved through `ClassDb` every read, so a retuned class
   file reaches a run in progress, and an empty `assets/classes/` is a
   supported install.
+- **A difficulty band is a fractional zone step, never a flat multiplier on
+  stats**, and `Game::zone_curve_ratio` is the one derivation it shares with
+  the distance ramp. `resources::EnemyStrength` has no rung below `Standard`
+  and `Standard` is exactly zero steps, so every existing save and every
+  `balance_sim` curve is untouched by the feature existing. **The trap is the
+  obvious spelling**: a flat `stat_mult` band reads as the simpler design and
+  is the bullet below's race in miniature — `ZONE_STAT_STEP` is 1, so a zone
+  is a linear addend and a multiplicative band is a geometric quantity riding
+  it, *and* it means a different thing at every zone (x1.5 is half a zone at
+  zone 1 and three at zone 6). As a step it means one thing everywhere and
+  `balance_sim` gates it for free, the distance ramp's own argument: zone N
+  one band up **is** the zone N+1 fixture the sweeps already cover. The band
+  and the ramp are therefore the same addend at the same seam and **add
+  rather than compound** — `field_stat_mult` is
+  `zone_curve_ratio(t + band.zone_steps())`, and underground the band arrives
+  as a factor on `stack_depth_multiplier` where `trace_stat_mult` already
+  composes. Both fold sites are **caller-side**, which is what leaves
+  `a_spawns_stats_come_from_its_escalation_and_never_from_its_tile` true.
+  Changing the band makes `enter_next_zone`'s three calls, because the term
+  is baked into `Stats` at spawn and would otherwise only be felt on ground
+  not yet reached — refused mid-fight, since `clear_local_wild` despawns
+  bodies; and it misses a `NestGuardian` and a `Nemesis`, that function's own
+  exclusions. The door is a dev-console row and **not** the Options screen,
+  which writes cross-run `profile.ron` from a menu with no run behind it.
 - **Every difficulty curve in the game is linear.** A geometric enemy curve
   racing a linear player curve outruns it wherever you put the coefficients.
   A linear tier step is a *ratio*, so `ZoneLevel::raised_a_tier` applies it

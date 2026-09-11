@@ -15,6 +15,89 @@ pub enum DifficultyMode {
     Forgiving,
 }
 
+/// How much harder than the shipped curve this run's wild programs are.
+///
+/// **Every band is at or above `Standard`, and `Standard` is exactly the
+/// game as it shipped.** The ladder only climbs — there is deliberately no
+/// rung below the floor — so turning the knob can never be mistaken for a
+/// way to make a stuck run easy, and a save that never named a band plays
+/// identically to the day it was written.
+///
+/// A band is worth `tuning::ENEMY_STRENGTH_BAND_STEP` **zone steps**, not a
+/// flat multiplier on stats; that constant carries the argument. Read in
+/// exactly two places, both of them a caller computing a
+/// `SpawnEscalation::stat_mult` — `Game::field_stat_mult` on the surface and
+/// `Game::stack_depth_multiplier` underground — so the invariant that a
+/// spawn's stats come from its escalation and never from its tile is
+/// untouched.
+///
+/// Saved behind a `#[serde(default)]`, so an existing save loads at
+/// `Standard`. Additive, so it costs no `SAVE_FORMAT_VERSION` bump.
+#[derive(Resource, Default, Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub enum EnemyStrength {
+    #[default]
+    Standard,
+    Elevated,
+    High,
+    Severe,
+    Critical,
+}
+
+impl EnemyStrength {
+    /// Every band, in ladder order. The census the ordering tests read, and
+    /// what `next` cycles through.
+    pub fn all() -> [Self; 5] {
+        [
+            Self::Standard,
+            Self::Elevated,
+            Self::High,
+            Self::Severe,
+            Self::Critical,
+        ]
+    }
+
+    /// How far up the zone curve this band sits, in zone steps.
+    ///
+    /// Derived from the band's rung rather than authored per variant, so the
+    /// ladder cannot develop a gap or a rung out of order — and so the one
+    /// knob worth turning is `ENEMY_STRENGTH_BAND_STEP`.
+    pub fn zone_steps(self) -> f32 {
+        self.rung() as f32 * crate::tuning::ENEMY_STRENGTH_BAND_STEP
+    }
+
+    /// What the player is told the band is called.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Standard => "Standard",
+            Self::Elevated => "Elevated",
+            Self::High => "High",
+            Self::Severe => "Severe",
+            Self::Critical => "Critical",
+        }
+    }
+
+    /// The next band up, wrapping back to the floor at the top — one
+    /// gesture reaches every rung, which is what lets the dev console spend
+    /// a single row on this.
+    pub fn next(self) -> Self {
+        let all = Self::all();
+        all[(self.rung() + 1) % all.len()]
+    }
+
+    /// Position on the ladder. An exhaustive match rather than `as usize`,
+    /// `cell_mark`'s rule: a sixth band with no rung fails to compile
+    /// instead of silently landing on the floor.
+    fn rung(self) -> usize {
+        match self {
+            Self::Standard => 0,
+            Self::Elevated => 1,
+            Self::High => 2,
+            Self::Severe => 3,
+            Self::Critical => 4,
+        }
+    }
+}
+
 #[derive(Resource, Default, Clone, Copy, Serialize, Deserialize)]
 pub struct GameClock {
     pub tick: u64,

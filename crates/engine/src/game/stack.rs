@@ -908,7 +908,15 @@ impl Game {
     pub(crate) fn stack_depth_multiplier(&self) -> f32 {
         match self.stack_pos() {
             None => 1.0,
-            Some(pos) => stack::depth_stat_multiplier(pos.depth) * self.trace_stat_mult(),
+            // The enemy-strength band composes here as a factor, where
+            // `trace_stat_mult` already does — the Stack's own curve is a
+            // depth ladder rather than the zone one, so the band arrives as
+            // the ratio it is worth on the surface.
+            Some(pos) => {
+                stack::depth_stat_multiplier(pos.depth)
+                    * self.trace_stat_mult()
+                    * self.zone_curve_ratio(self.enemy_strength().zone_steps())
+            }
         }
     }
 

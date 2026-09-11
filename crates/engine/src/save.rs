@@ -1203,6 +1203,15 @@ pub struct SaveData {
     /// preference should not arm a tool that destroys terrain.
     #[serde(default)]
     pub mining: bool,
+    /// How much harder than the shipped curve this run's wild programs are
+    /// — `resources::EnemyStrength`.
+    ///
+    /// Additive behind a default, so a save written before the knob existed
+    /// loads at `Standard`. That is the only reading available and the right
+    /// one: the ladder has no rung below the floor, so a run that never
+    /// named a band was played on it.
+    #[serde(default)]
+    pub enemy_strength: crate::resources::EnemyStrength,
     /// Which `StructureDef::first_free` structures this run has already had
     /// for nothing — see `resources::FreeBuilds`.
     ///
@@ -1808,6 +1817,7 @@ mod tests {
             tile_overrides: Vec::new(),
             base_grid: crate::base_grid::BaseGrid::default(),
             mining: false,
+            enemy_strength: crate::resources::EnemyStrength::default(),
             free_builds: crate::resources::FreeBuilds::default(),
             anchor: None,
             zone: 1,
@@ -1991,6 +2001,30 @@ mod tests {
     /// Deleting the line rather than trusting the derive: `#[serde(default)]`
     /// on a `bool` is exactly the shape that reads as obviously right and
     /// silently isn't if the attribute is ever dropped in a refactor.
+    /// A save written before the enemy-strength knob existed carries no
+    /// `enemy_strength` field, and must load on the floor — the band it was
+    /// played on, since the ladder has no rung below `Standard`.
+    ///
+    /// Deleting the line rather than trusting the derive, the mining test's
+    /// reason: a `#[serde(default)]` dropped in a refactor reads as
+    /// obviously fine and silently is not.
+    #[test]
+    fn a_save_without_the_enemy_strength_field_loads_at_standard() {
+        let mut data = sample_data();
+        data.enemy_strength = crate::resources::EnemyStrength::Critical;
+        let text = to_ron(&data).unwrap();
+        assert!(
+            text.contains("enemy_strength: Critical"),
+            "the fixture must actually write the field to be a real test"
+        );
+        let older = text.replace("enemy_strength: Critical,", "");
+        let loaded = from_ron(&older).expect("an absent field must still parse");
+        assert_eq!(
+            loaded.enemy_strength,
+            crate::resources::EnemyStrength::Standard
+        );
+    }
+
     #[test]
     fn a_save_without_the_mining_field_loads_disarmed() {
         let mut data = sample_data();

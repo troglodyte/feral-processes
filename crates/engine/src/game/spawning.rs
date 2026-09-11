@@ -7,7 +7,7 @@ use crate::tuning::{
     BOSS_SPAWN_CHANCE, DANGER_RAMP_TILES, MAX_ENEMY_GROUPS, MAX_GROUP_SIZE, NEST_DURABILITY,
     NEST_GUARDIAN_MAX, NEST_GUARDIAN_MIN, NEST_SPAWN_CHANCE, NEST_TETHER_RADIUS,
     OPENING_RING_TILES, PACK_GATHER_RADIUS, POPULATION_CHUNK_MARGIN, SETTLEMENT_SITE_SEARCH_TILES,
-    WILD_CREATURE_CAP, ZONE_GROUP_STEP, ZONE_ONE_GROUP_CAP, ZONE_STAT_STEP, chunk_wild_population,
+    WILD_CREATURE_CAP, ZONE_GROUP_STEP, ZONE_ONE_GROUP_CAP, chunk_wild_population,
 };
 use crate::tuning::{
     GOLD_SPAWN_CHANCE, GROUP_SIZE_DISTANCE_GROWTH, GROUP_SIZE_STEP_FRAMES, GROUP_SIZE_STEP_ZONES,
@@ -546,8 +546,10 @@ impl Game {
     pub(crate) fn field_stat_mult(&self, x: i32, y: i32) -> f32 {
         let out = (self.distance_from_danger_origin(x, y) - OPENING_RING_TILES).max(0);
         let t = (out as f32 / DANGER_RAMP_TILES as f32).min(1.0);
-        let zone = self.world.resource::<ZoneLevel>().stat_multiplier() as f32;
-        (zone + ZONE_STAT_STEP as f32 * t) / zone
+        // The band is the *same addend at the same seam* as the ramp, so the
+        // two add rather than compound: at the far field one band up is two
+        // zone steps out, one bought by walking and one by the knob.
+        self.zone_curve_ratio(t + self.enemy_strength().zone_steps())
     }
 
     /// What an ambient surface spawn at `(x, y)` escalates by:

@@ -94,7 +94,9 @@ pub(in crate::render) fn regions(at: Rect, m: &Metrics) -> ColumnRegions {
 /// a fact about the four conditions rather than a gap.
 fn tab_of(kind: AttentionKind) -> InfoTab {
     match kind {
-        AttentionKind::StructureDamaged | AttentionKind::IdleStructures => InfoTab::Base,
+        AttentionKind::StructureDamaged
+        | AttentionKind::IdleStructures
+        | AttentionKind::NoResearchProject => InfoTab::Base,
         AttentionKind::PerkPoints | AttentionKind::RosterFull => InfoTab::Crew,
     }
 }

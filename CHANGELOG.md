@@ -34,6 +34,16 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.159
+
+**Research is one project the base works, not a bank you spend.** Picking a
+node makes it the run's active project: every deployed Research Node staffs
+itself and feeds it, its material bill is filed as high-priority work orders
+and paid off the base's own shelves, and a bill naming something nothing in the
+base could make refuses the pick outright. `A` abandons a project, keeping the
+progress it earned; a legacy save's stranded Research Data is written off on
+load. Saves keep loading — no format bump.
+
 ## 0.13.158
 
 **The research graph pans, and every link has its own lane.** A box is sized

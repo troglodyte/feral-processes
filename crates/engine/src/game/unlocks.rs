@@ -2,6 +2,7 @@
 //! unlocking costs.
 
 use crate::game::inspection::power_ratio;
+use crate::resources::ActiveResearch;
 use crate::taming::{DecompilerBonuses, TargetResistance};
 use crate::tuning::DEFAULT_TAMING_DIFFICULTY;
 use crate::*;
@@ -308,13 +309,8 @@ impl Game {
     }
 
     pub fn research_nodes(&self) -> Vec<ResearchStatus> {
-        let research_currency = self.research_currency();
-        let held = self
-            .world
-            .get::<Inventory>(self.player_entity())
-            .map(|inv| inv.count(&research_currency))
-            .unwrap_or(0);
         let recommended = self.world.resource::<ResearchDb>().recommended_ids();
+        let active = self.world.resource::<ActiveResearch>().id.clone();
         let mut nodes: Vec<ResearchStatus> = self
             .world
             .resource::<ResearchDb>()
@@ -322,6 +318,8 @@ impl Game {
             .map(|def| {
                 let state = if self.is_researched(&def.id) {
                     ResearchState::Unlocked
+                } else if active.as_ref() == Some(&def.id) {
+                    ResearchState::Active
                 } else {
                     let missing = self.missing_prereqs(def);
                     let min_zone = self.research_zone_gate(def);
@@ -337,7 +335,7 @@ impl Game {
                     .map(|(item, need)| ResearchMaterial {
                         name: self.item_name(item).to_string(),
                         need: *need,
-                        have: self.research_material_held(item),
+                        have: crate::game::base::work_orders::base_holding(self, item),
                     })
                     .collect();
                 ResearchStatus {
@@ -346,11 +344,17 @@ impl Game {
                     description: def.description.clone(),
                     cost: def.cost,
                     state,
-                    // Folded here rather than left to the screen, so the one
-                    // row colour rule covers both halves of the price and a
-                    // node drawn as affordable cannot then be refused for
-                    // goods.
-                    affordable: held >= def.cost && materials.iter().all(|m| m.have >= m.need),
+                    progress: self
+                        .world
+                        .resource::<ActiveResearch>()
+                        .progress
+                        .get(&def.id)
+                        .copied()
+                        .unwrap_or(0),
+                    // The same call the selection refuses on, not a
+                    // re-derivation of it — that is how the screen comes to
+                    // offer a row the selection turns down.
+                    blocked_by: self.research_block(def),
                     materials,
                     conversions: self.research_conversions(def),
                     recommended: recommended.contains(&def.id),
@@ -361,9 +365,10 @@ impl Game {
             .collect();
         // `sort_by_key` is stable, so cheapest-first survives inside each group.
         nodes.sort_by_key(|n| match n.state {
-            ResearchState::Available => 0,
-            ResearchState::Locked { .. } => 1,
-            ResearchState::Unlocked => 2,
+            ResearchState::Active => 0,
+            ResearchState::Available => 1,
+            ResearchState::Locked { .. } => 2,
+            ResearchState::Unlocked => 3,
         });
         nodes
     }
@@ -455,116 +460,14 @@ impl Game {
         }
     }
 
-    /// Unlocks `id`, consuming its Research Data cost. Fails with an
-    /// explicit message when the id is unknown, it's already unlocked, a
-    /// prerequisite is missing, the party hasn't reached the node's zone, or
-    /// the player can't pay.
+    /// What completing a node hands over: the routines it teaches and the
+    /// tools it teaches you to forge.
     ///
-    /// The zone is checked **before the cost** for the reason
-    /// `upgrade_structure` checks its ceilings before materials: a player at
-    /// zone 1 looking at a zone-3 node must be told about the zone, not sent
-    /// to earn Research Data they could not have spent. It is checked
-    /// **after** the prereqs, which is the existing order extended rather
-    /// than rearranged.
-    ///
-    /// The gate is on buying, not on having: `resources::Research` holds what
-    /// has already been unlocked and is never re-validated, so a save written
-    /// before this gate existed keeps every node it paid for whatever zone
-    /// the party is standing in.
-    /// How many units of `item` a research purchase could reach: the pack
-    /// plus the adjacent shelves.
-    ///
-    /// The one definition of "have" for a material bill, shared by the
-    /// refusal in `unlock_research` and the figure `research_nodes` puts on
-    /// the screen, so a node the menu draws as affordable cannot then be
-    /// refused. Off the base `adjacent_stock_count` answers 0 and this is
-    /// the pack alone, which is why the Research row needs no locality gate
-    /// of its own.
-    pub(crate) fn research_material_held(&self, item: &ItemId) -> u32 {
-        let carried = self
-            .world
-            .get::<Inventory>(self.player_entity())
-            .map_or(0, |inv| inv.count(item));
-        carried + self.adjacent_stock_count(item)
-    }
-
-    pub fn unlock_research(&mut self, id: &str) -> Result<(), String> {
-        if self.is_game_over().is_some() || self.has_active_battle() {
-            return Err("Can't do that right now.".into());
-        }
-        let def = self
-            .world
-            .resource::<ResearchDb>()
-            .get(id)
-            .cloned()
-            .ok_or_else(|| "Unknown research.".to_string())?;
-        if self.is_researched(id) {
-            return Err(format!("{} is already researched.", def.name));
-        }
-        let missing = self.missing_prereqs(&def);
-        if !missing.is_empty() {
-            return Err(format!("Requires {} first.", missing.join(", ")));
-        }
-        if let Some(zone) = self.research_zone_gate(&def) {
-            return Err(format!("Requires Zone {zone} first."));
-        }
-        let player = self.player_entity();
-        let research_currency = self.research_currency();
-        let held = self
-            .world
-            .get::<Inventory>(player)
-            .unwrap()
-            .count(&research_currency);
-        if held < def.cost {
-            return Err(format!("Not enough Research Data ({held}/{}).", def.cost));
-        }
-        // Every material line is checked against pack **plus** shelves
-        // before a single unit moves — `commit_caravan_basket`'s rule, and
-        // the reason the shortfall walk below is a second pass rather than a
-        // take-as-you-go loop that would strand goods on a refusal.
-        for (item, need) in &def.materials {
-            let have = self.research_material_held(item);
-            if have < *need {
-                return Err(format!(
-                    "Not enough {} ({have}/{need}).",
-                    self.item_name(item)
-                ));
-            }
-        }
-        // Only now, with the whole bill known payable, does anything move.
-        // The shelves top the pack up rather than being spent from directly:
-        // `take_from_adjacent` is the one player-side mover off a buffer, and
-        // routing through it keeps `hauling::take_from` the only way a unit
-        // leaves a `Stock`.
-        let shortfall: Vec<(ItemId, u32)> = def
-            .materials
-            .iter()
-            .filter_map(|(item, need)| {
-                let carried = self
-                    .world
-                    .get::<Inventory>(player)
-                    .map_or(0, |inv| inv.count(item));
-                (carried < *need).then(|| (item.clone(), need - carried))
-            })
-            .collect();
-        if !shortfall.is_empty() {
-            self.take_from_adjacent(&shortfall);
-        }
-        for (item, need) in &def.materials {
-            self.world
-                .get_mut::<Inventory>(player)
-                .unwrap()
-                .take(item.clone(), *need);
-        }
-        self.world
-            .get_mut::<Inventory>(player)
-            .unwrap()
-            .take(research_currency, def.cost);
-        self.world
-            .resource_mut::<Research>()
-            .0
-            .insert(def.id.clone());
-        self.log(format!("Research complete: {}.", def.name));
+    /// Extracted rather than copied into the project path, because a doc
+    /// comment cannot hold two copies of a formula in step and the copy that
+    /// drifts is the one nobody runs — `CLAUDE.md` records this biting the
+    /// repo four times.
+    fn grant_research_knowledge(&mut self, def: &ResearchDef) {
         // Knowledge, not items: what a node hands over is the ability to
         // write this routine onto a blank disk the base has to manufacture.
         for ability in &def.unlocks_abilities {
@@ -598,6 +501,167 @@ impl Game {
                 self.log(format!("You learn to forge the {name}."));
             }
         }
+    }
+
+    /// Whether this base could ever work `def` at all, or the one sentence
+    /// saying why not.
+    ///
+    /// The shared "can this base work this node" question, so the row the
+    /// screen marks blocked and the refusal `select_research` answers with
+    /// cannot disagree — `Game::orderable_items`' rule one rung up.
+    ///
+    /// Two things, in this order. A Research Node has to be standing, and
+    /// `work_orders::chain_break` cannot answer that: it refuses every
+    /// banked item by construction and names the research currency in its own
+    /// doc as the example. Then every material line through `chain_break`
+    /// itself, reported with **that function's own sentence verbatim** — the
+    /// same sentence the work-order screen shows, and two spellings of one
+    /// refusal is the drift this repo keeps recording.
+    pub(crate) fn research_block(&self, def: &ResearchDef) -> Option<String> {
+        let currency = self.research_currency();
+        if crate::game::base::work_orders::producers_of(self, &currency).is_empty() {
+            let name = self.item_name(&currency);
+            return Some(
+                match crate::game::base::work_orders::makeable_by(self, &currency) {
+                    Some(def) => format!("No {} deployed — that is what makes {name}.", def.name),
+                    None => format!("Nothing the base can build makes {name}."),
+                },
+            );
+        }
+        def.materials
+            .iter()
+            .find_map(|(item, _)| crate::game::base::work_orders::chain_break(self, item))
+    }
+
+    /// Makes `id` the one project the base is working: Research Nodes start
+    /// feeding it and its material bill is filed as ordinary High-band work
+    /// orders.
+    ///
+    /// Every refusal lands **before anything is written** —
+    /// `commit_caravan_basket`'s rule. `require_base` is in the ladder for
+    /// `queue_work_order`'s reason: this reads which machines are standing,
+    /// and they stand in base space.
+    ///
+    /// The materials are filed **once, at selection, and never topped up.** A
+    /// per-tick refile would make `cancel_work_order` a no-op on exactly the
+    /// orders a player most wants to intervene in. They go **through**
+    /// `queue_work_order` rather than around it, so every log line and every
+    /// refusal that door owns still applies.
+    pub fn select_research(&mut self, id: &str) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        self.require_base()?;
+        let def = self
+            .world
+            .resource::<ResearchDb>()
+            .get(id)
+            .cloned()
+            .ok_or_else(|| "Unknown research.".to_string())?;
+        if self.is_researched(id) {
+            return Err(format!("{} is already researched.", def.name));
+        }
+        let missing = self.missing_prereqs(&def);
+        if !missing.is_empty() {
+            return Err(format!("Requires {} first.", missing.join(", ")));
+        }
+        if let Some(zone) = self.research_zone_gate(&def) {
+            return Err(format!("Requires Zone {zone} first."));
+        }
+        if let Some(active) = self.world.resource::<ActiveResearch>().id.clone() {
+            let name = self
+                .world
+                .resource::<ResearchDb>()
+                .get(&active)
+                .map(|d| d.name.clone())
+                .unwrap_or_else(|| active.clone());
+            return Err(format!(
+                "The base is already working on {name} — abandon it first."
+            ));
+        }
+        if let Some(reason) = self.research_block(&def) {
+            return Err(reason);
+        }
+        // Only now, with every refusal past, does anything move.
+        self.world.resource_mut::<ActiveResearch>().id = Some(def.id.clone());
+        for (item, need) in &def.materials {
+            // Through the one door, so a line the queue itself would refuse
+            // is still refused here — `research_block` has already asked
+            // `chain_break` the same question, so this cannot fail, and a
+            // future divergence surfaces as a missing order rather than a
+            // silent one.
+            let _ = self.queue_work_order(
+                WorkOrder::batch(item.clone(), *need)
+                    .with_priority(crate::game::base::work_orders::OrderPriority::High)
+                    .with_research(),
+            );
+        }
+        self.log_base(format!("Research project started: {}.", def.name));
         Ok(())
+    }
+
+    /// Stops working the active project, taking its work orders back out with
+    /// it and **keeping** its progress.
+    ///
+    /// The progress entry stays because `ActiveResearch::progress` is per
+    /// node: abandoning a long project for a cheap one and coming back is not
+    /// destructive. Only completion removes an entry.
+    pub fn abandon_research(&mut self) -> Result<(), String> {
+        let Some(active) = self.world.resource::<ActiveResearch>().id.clone() else {
+            return Err("The base is not working on any research.".into());
+        };
+        let name = self
+            .world
+            .resource::<ResearchDb>()
+            .get(&active)
+            .map(|d| d.name.clone())
+            .unwrap_or_else(|| active.clone());
+        self.world.resource_mut::<ActiveResearch>().id = None;
+        self.withdraw_research_orders();
+        self.log_base(format!("Research project abandoned: {name}."));
+        Ok(())
+    }
+
+    /// One tick of the completion check: a project finishes when it has the
+    /// progress **and** the base can pay the whole bill off its shelves.
+    ///
+    /// `&&` short-circuits, so the bill is only spent once the progress gate
+    /// has passed — the other order spends a project's materials while it is
+    /// still half-researched.
+    pub(crate) fn settle_research(&mut self) {
+        let Some(active) = self.world.resource::<ActiveResearch>().id.clone() else {
+            return;
+        };
+        let Some(def) = self.world.resource::<ResearchDb>().get(&active).cloned() else {
+            return;
+        };
+        let progress = self
+            .world
+            .resource::<ActiveResearch>()
+            .progress
+            .get(&active)
+            .copied()
+            .unwrap_or(0);
+        if progress < def.cost
+            || !crate::game::base::stock::spend_bill_from_base(
+                self,
+                &def.materials,
+                crate::base_ledger::ConsumeSource::Base,
+            )
+        {
+            return;
+        }
+        self.world
+            .resource_mut::<Research>()
+            .0
+            .insert(def.id.clone());
+        self.log(format!("Research complete: {}.", def.name));
+        self.grant_research_knowledge(&def);
+        {
+            let mut research = self.world.resource_mut::<ActiveResearch>();
+            research.id = None;
+            research.progress.remove(&def.id);
+        }
+        self.withdraw_research_orders();
     }
 }

@@ -138,17 +138,15 @@ fn the_layout_is_deterministic_across_calls_and_across_games() {
 /// changes as the player buys things — where `research_nodes()` re-sorts by
 /// state. Buying a node must move nothing.
 #[test]
-fn buying_a_node_does_not_move_the_layout() {
+fn researching_a_node_does_not_move_the_layout() {
     let mut game = Game::new(907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let before = game.research_graph();
-    set_inventory(&mut game, &[("core_fragment", 100)]);
-    grant_research_data(&mut game, 500);
-    let bought = game
+    let taken = game
         .research_nodes()
         .into_iter()
-        .find(|n| n.state == ResearchState::Available && n.affordable)
-        .expect("a fresh run can afford something");
-    game.unlock_research(&bought.id).expect("it was affordable");
+        .find(|n| n.state == ResearchState::Available)
+        .expect("a fresh run has something open to it");
+    unlock_research_chain(&mut game, &taken.id);
     assert_eq!(
         game.research_graph(),
         before,

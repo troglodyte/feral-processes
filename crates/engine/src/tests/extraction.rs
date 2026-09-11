@@ -1011,14 +1011,13 @@ fn unlocking_a_node_teaches_its_tools_and_logs_once() {
         "teach",
         &[("test_node", &["core_tap"])],
     ));
-    grant_research_data(&mut game, 1);
 
     assert!(
         !game.knows_tool(&ToolId("core_tap".to_string())),
         "the fixture is vacuous unless the tool starts unknown"
     );
 
-    game.unlock_research("test_node").unwrap();
+    unlock_research_chain(&mut game, "test_node");
 
     assert!(
         game.knows_tool(&ToolId("core_tap".to_string())),
@@ -1033,7 +1032,7 @@ fn unlocking_a_node_teaches_its_tools_and_logs_once() {
 
 #[test]
 fn a_tool_taught_by_two_nodes_logs_only_the_first_time() {
-    // The ability arm's own rule (`unlock_research`'s fresh-insert check):
+    // The ability arm's own rule (`grant_research_knowledge`'s fresh-insert check):
     // knowledge is a set, and re-teaching an already-known tool from a
     // second node must not repeat the log line. Both nodes ship in the one
     // `ResearchDb`, so the log is checked once at the end rather than after
@@ -1046,10 +1045,9 @@ fn a_tool_taught_by_two_nodes_logs_only_the_first_time() {
             ("test_node_b", &["core_tap"]),
         ],
     ));
-    grant_research_data(&mut game, 2);
 
-    game.unlock_research("test_node_a").unwrap();
-    game.unlock_research("test_node_b").unwrap();
+    unlock_research_chain(&mut game, "test_node_a");
+    unlock_research_chain(&mut game, "test_node_b");
 
     assert!(game.knows_tool(&ToolId("core_tap".to_string())));
     assert_eq!(

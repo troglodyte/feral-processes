@@ -1255,6 +1255,16 @@ pub struct SaveData {
     /// Sorted on write so the encoded bytes don't depend on `HashSet`
     /// iteration order.
     pub researched: Vec<crate::research::ResearchId>,
+    /// The research project the base is working, if any — see
+    /// `resources::ActiveResearch`. Additive behind `#[serde(default)]`, so
+    /// a save written before projects existed loads with none.
+    #[serde(default)]
+    pub active_research: Option<crate::research::ResearchId>,
+    /// How far every node the player has put work into has got, in units of
+    /// the research currency. Sorted on write for the reason `researched` is:
+    /// the encoded bytes must not depend on map iteration order.
+    #[serde(default)]
+    pub research_progress: Vec<(crate::research::ResearchId, u32)>,
     /// Which routines the player has learned — see `resources::KnownRoutines`.
     /// Sorted on write for the reason `researched` is: the encoded bytes must
     /// not depend on set iteration order.
@@ -1805,6 +1815,8 @@ mod tests {
             buyback: Vec::new(),
             buyback_shelves: Vec::new(),
             researched: Vec::new(),
+            active_research: None,
+            research_progress: Vec::new(),
             known_routines: Vec::new(),
             known_tools: Vec::new(),
             link_sites: Vec::new(),

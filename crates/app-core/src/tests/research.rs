@@ -11,9 +11,15 @@ fn selected_research_id(app: &App) -> String {
     nodes[app.menu_selected.min(nodes.len() - 1)].id.clone()
 }
 
-fn research_data_held(app: &App) -> u32 {
-    let game = app.game.as_ref().expect("a run");
-    game.banked(&game.research_currency())
+/// Which project the base is working, as the screen would read it.
+fn active_project(app: &App) -> Option<String> {
+    app.game
+        .as_ref()
+        .expect("a run")
+        .research_nodes()
+        .into_iter()
+        .find(|n| n.state == feral_processes_engine::ResearchState::Active)
+        .map(|n| n.id)
 }
 
 /// Exercises the exact key sequence a player drives at the keyboard —
@@ -39,21 +45,66 @@ fn the_base_menu_opens_research_and_esc_closes_it() {
     assert_eq!(app.mode, Mode::Playing);
 }
 
+/// A refused selection lands on the status line and leaves the screen open —
+/// the six refusals themselves live in the engine, so one is enough here.
 #[test]
-fn picking_an_unaffordable_research_node_reports_why_and_stays_open() {
+fn a_refused_selection_lands_on_the_status_line() {
     let mut app = test_app(502);
     open_via_menu(&mut app, 'b', "Research");
     app.handle_key(GameKey::Char('1'));
     assert!(
         matches!(app.mode, Mode::Research),
-        "the menu stays open so several nodes can be taken in one visit"
+        "the menu stays open so the player can pick another"
     );
-    assert!(
-        app.status_line
-            .as_ref()
-            .is_some_and(|s| s.contains("Research Data")),
-        "got: {:?}",
-        app.status_line
+    assert!(app.status_line.is_some(), "a refusal has to say why");
+    assert_eq!(active_project(&app), None, "and nothing was taken on");
+}
+
+/// The row keys take a project on, and `[A]` gives it up again.
+///
+/// `[A]` is **uppercase**: `selected_index` treats every lowercase letter as a
+/// row label past the digits, so a lowercase `a` on a 34-row screen would pick
+/// a row *and* abandon the project on one keypress. That second half is what
+/// this pins.
+#[test]
+fn capital_a_abandons_and_lowercase_a_still_picks_a_row() {
+    let mut app = app_in_base_with_a_research_node(503);
+    open_via_menu(&mut app, 'b', "Research");
+    app.handle_key(GameKey::Char('1'));
+    let taken = active_project(&app).expect("the first row is takeable from a stocked base");
+
+    app.handle_key(GameKey::Char('a'));
+    assert_eq!(
+        active_project(&app).as_deref(),
+        Some(taken.as_str()),
+        "a lowercase key is a row selector and must not abandon anything"
+    );
+
+    app.handle_key(GameKey::Char('A'));
+    assert_eq!(active_project(&app), None, "and the uppercase one does");
+    assert_eq!(app.mode, Mode::Research, "the screen stays open either way");
+}
+
+/// The list's row keys and the graph's `Enter` are the same door, so both take
+/// the node under the highlight on.
+#[test]
+fn enter_selects_the_highlighted_node() {
+    let mut app = app_in_base_with_a_research_node(504);
+    open_via_menu(&mut app, 'b', "Research");
+    let from_list = {
+        app.handle_key(GameKey::Char('1'));
+        let taken = active_project(&app).expect("the list's row key takes a project on");
+        app.handle_key(GameKey::Char('A'));
+        taken
+    };
+
+    app.handle_key(GameKey::Char('G'));
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(
+        active_project(&app).as_deref(),
+        Some(from_list.as_str()),
+        "Enter in the graph view is the same door as a row key in the list"
     );
 }
 
@@ -163,9 +214,9 @@ fn holding_an_arrow_at_the_edge_of_the_grid_does_nothing() {
 }
 
 /// `Enter` is the same door the list's row keys call, so it must refuse the
-/// same way and spend nothing on a refusal.
+/// same way and file nothing on a refusal.
 #[test]
-fn enter_on_an_unaffordable_node_refuses_without_spending() {
+fn enter_on_an_unreachable_node_refuses_without_filing() {
     let mut app = test_app(524);
     open_via_menu(&mut app, 'b', "Research");
     app.handle_key(GameKey::Char('G'));
@@ -174,16 +225,15 @@ fn enter_on_an_unaffordable_node_refuses_without_spending() {
         app.handle_key(GameKey::Right);
     }
     let target = selected_research_id(&app);
-    let held_before = research_data_held(&app);
     app.handle_key(GameKey::Enter);
     assert!(
         app.status_line.is_some(),
         "a refusal has to say why, exactly as the list's does"
     );
-    assert_eq!(
-        research_data_held(&app),
-        held_before,
-        "nothing is spent on a refusal"
+    assert_eq!(active_project(&app), None, "nothing is taken on");
+    assert!(
+        app.game.as_ref().unwrap().work_orders().is_empty(),
+        "and nothing is filed"
     );
     assert!(
         !app.game.as_ref().unwrap().is_researched(&target),

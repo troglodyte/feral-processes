@@ -1881,6 +1881,50 @@ pub(crate) fn app_in_base_with_programs(seed: u32, programs: usize) -> App {
     app
 }
 
+/// A base standing inside base space with a Research Node and the Mining Node
+/// its bills draw on, so `Game::select_research` has something to accept.
+///
+/// Built by editing a save, `app_inside_a_small_base`' reason: deploying two
+/// structures through the build flow needs materials the player does not start
+/// with, and what this test wants is a base that can take a project on rather
+/// than the build flow that got it there.
+pub(crate) fn app_in_base_with_a_research_node(seed: u32) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = scratch_path("research_base", seed);
+    found_the_base(&mut app);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let _cleanup = RemoveOnDrop(&path);
+
+    let mut data = save::load_from_file(&path).unwrap();
+    // The Research Node makes the currency a project runs on; the Mining Node
+    // is what makes every shipped bill's material, which
+    // `work_orders::chain_break` refuses a project without.
+    for (index, kind) in ["research_node", "mining_node"].into_iter().enumerate() {
+        data.structures.push(save::StructureSave {
+            kind: kind.to_string(),
+            position: (2 + index as i32, 2),
+            durability: None,
+            tier: None,
+            stock_input: Vec::new(),
+            stock_output: Vec::new(),
+            standing_work: false,
+            standing_guard: false,
+            denied_items: Vec::new(),
+            power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+            build_quality: 1.0,
+            racked: Vec::new(),
+            hopper: Vec::new(),
+            hopper_progress: 0,
+            standing_tool: None,
+        });
+    }
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    stand_in_base(&mut app);
+    app
+}
+
 /// `app_in_base_with_programs` with no programs — a base a deploy or an
 /// upgrade can be offered but never afford, for a test about the refusal
 /// rather than the spend.

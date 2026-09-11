@@ -1,11 +1,17 @@
 (
     id: "research_data",
     name: "Research Data",
-    description: "Spent on the research tree. Banked rather than carried, so it never counts against your cargo.",
+    description: "What a Research Node compiles, and what a research project runs on. It goes straight into the project the base is working rather than into your cargo.",
     value: Some(1),
     role: Some(ResearchCurrency),
     // "RD" is the derivation, and it is Routine Disk's by rights. A banked
     // currency reads fine on its initial alone.
+    //
+    // `banked: true` stays: it is what keeps a Research Node's payout out of
+    // every `Stock` buffer, which is still exactly what is wanted — the payout
+    // is routed into the active project ahead of the banked branch in
+    // `systems::deliver_payout`, and `ItemDb::validate` requires the
+    // `ResearchCurrency` role to exist.
     abbrev: Some("R"),
     banked: true,
 )

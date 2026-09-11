@@ -484,6 +484,7 @@ impl Game {
         world.insert_resource(Party::default());
         world.insert_resource(WieldedProgram::default());
         world.insert_resource(Research::default());
+        world.insert_resource(crate::resources::ActiveResearch::default());
         // Empty, decompile included. It used to be seeded here so that
         // popping decompile out of its starting slot could be undone by
         // etching a fresh disk — but `Game::routine_is_permanent` closed the
@@ -1103,6 +1104,10 @@ impl Game {
         world.insert_resource(Party::default());
         world.insert_resource(WieldedProgram::default());
         world.insert_resource(Research(data.researched.into_iter().collect()));
+        world.insert_resource(crate::resources::ActiveResearch {
+            id: data.active_research,
+            progress: data.research_progress.into_iter().collect(),
+        });
         world.insert_resource(KnownRoutines(data.known_routines.into_iter().collect()));
         world.insert_resource(KnownTools(data.known_tools.into_iter().collect()));
         world.insert_resource(BuybackLedger({
@@ -1415,6 +1420,24 @@ impl Game {
         // A save taken mid-chain resumes with no seeding path of its own —
         // the position is derived from the `done` list the save carries.
         game.ensure_tutorial_held();
+        // A run saved before research became a project carries a bank of the
+        // research currency with nothing left to spend it on. The stock strip
+        // folds in every `ItemDef::banked` pool **by the flag**, so a leftover
+        // pool would sit across the top of every base screen for the rest of
+        // the run — the fold itself stays, because it names no item and a mod
+        // may ship another banked one.
+        let stranded = game.banked(&game.research_currency());
+        if stranded > 0 {
+            let currency = game.research_currency();
+            let name = game.item_name(&currency).to_string();
+            let player = game.player_entity();
+            if let Some(mut inventory) = game.world.get_mut::<Inventory>(player) {
+                inventory.take(currency, stranded);
+            }
+            game.log(format!(
+                "Your {stranded} banked {name} is written off — research runs on projects now."
+            ));
+        }
         Ok(game)
     }
 
@@ -2359,6 +2382,22 @@ impl Game {
                     .collect();
                 ids.sort();
                 ids
+            },
+            active_research: self
+                .world
+                .resource::<crate::resources::ActiveResearch>()
+                .id
+                .clone(),
+            research_progress: {
+                let mut rows: Vec<(ResearchId, u32)> = self
+                    .world
+                    .resource::<crate::resources::ActiveResearch>()
+                    .progress
+                    .iter()
+                    .map(|(id, n)| (id.clone(), *n))
+                    .collect();
+                rows.sort();
+                rows
             },
             known_routines: self
                 .world

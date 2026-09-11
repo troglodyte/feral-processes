@@ -132,6 +132,7 @@ const LOCKED_BY_ZONE: Color = Color::new(0.38, 0.52, 0.78, 1.0);
 fn state_tag(state: &ResearchState) -> String {
     match state {
         ResearchState::Unlocked => " (researched)".to_string(),
+        ResearchState::Active => " (in progress)".to_string(),
         ResearchState::Available => String::new(),
         ResearchState::Locked { missing, min_zone } => {
             let mut reasons = missing.clone();
@@ -157,9 +158,17 @@ fn state_tag(state: &ResearchState) -> String {
 /// A locked node names both of its reasons in `state_tag` but has only one
 /// colour, so the harder wall wins: a breach is something the whole run has
 /// to do, a prerequisite something this screen can do next.
+///
+/// `blocked_by` takes the amber a prerequisite takes, and takes it **ahead of**
+/// `recommended`'s green: a node the base cannot work is not somewhere the
+/// player can go, whatever the tree recommends. It is the same meaning at a
+/// different scale rather than a second one on the axis — a wall you clear
+/// yourself, by building the machine the sentence names.
 pub(super) fn row_color(node: &ResearchStatus) -> Color {
     match &node.state {
         ResearchState::Unlocked => TEXT_DIM,
+        ResearchState::Active => CYAN,
+        ResearchState::Available if node.blocked_by.is_some() => LOCKED_BY_PREREQ,
         ResearchState::Available if node.recommended => GREEN,
         ResearchState::Available => TEXT,
         ResearchState::Locked { min_zone, .. } if min_zone.is_some() => LOCKED_BY_ZONE,
@@ -175,9 +184,8 @@ pub(super) fn row_color(node: &ResearchStatus) -> Color {
 /// tree a third of a page for its deepest three-material nodes; the bill is
 /// read as a whole anyway, since a node is payable only when every line is.
 ///
-/// Colour is the screen's *only* affordability signal — `row_color` reads
-/// `state` and never `affordable` — so the line takes the amber a node
-/// locked by a prerequisite takes. That is the same meaning at a different
+/// Colour is the screen's *only* "is this paid for" signal, so the line takes
+/// the amber a node locked by a prerequisite takes. That is the same meaning at a different
 /// scale rather than a second one on the axis: a wall you clear yourself,
 /// here, by running the base, as against a breach you cannot.
 ///
@@ -226,23 +234,65 @@ pub(super) fn conversion_rows(conversions: &[String], columns: usize) -> Vec<Row
         .collect()
 }
 
+/// The one place a node's price reads as a price: the active project counts up
+/// to its cost, every other row just names it.
+fn price_tag(node: &ResearchStatus) -> String {
+    match node.state {
+        ResearchState::Active => format!("{}/{} Research Data", node.progress, node.cost),
+        _ => format!("{} Research Data", node.cost),
+    }
+}
+
+/// The sentence saying why the base cannot work this node, wrapped under its
+/// row — see `Game::research_block`.
+///
+/// **Wrapped, and on the row rather than in the refusal line.** A
+/// `chain_break` sentence runs to 158 characters and a `LogLine` is never
+/// wrapped, so this is the only place it fits. Amber, `row_color`'s reason: it
+/// is a wall the player clears by building what it names.
+///
+/// `Row::Item`s, `material_rows`' reason: `popup_layout` pins anything after
+/// the last item row to the foot of the box.
+pub(super) fn block_rows(blocked_by: Option<&String>, columns: usize) -> Vec<Row> {
+    blocked_by
+        .into_iter()
+        .flat_map(|line| wrap_text(line, columns))
+        .map(|line| {
+            colored_item_row(
+                format!("{DESCRIPTION_INDENT}{line}"),
+                false,
+                LOCKED_BY_PREREQ,
+            )
+        })
+        .collect()
+}
+
 /// The research picker's rows, in the shape `perks_menu_rows` documents and
 /// for the same reason: nothing may follow the last `Row::Item`.
-pub(super) fn research_menu_rows(held: u32, nodes: &[ResearchStatus], selected: usize) -> Vec<Row> {
+pub(super) fn research_menu_rows(nodes: &[ResearchStatus], selected: usize) -> Vec<Row> {
+    let active = nodes
+        .iter()
+        .find(|n| n.state == ResearchState::Active)
+        .map(|n| format!("Working on: {} ({}/{})", n.name, n.progress, n.cost))
+        .unwrap_or_else(|| "No research project — pick one".to_string());
     let mut rows = vec![
-        Row::TextColored(format!("Research Data: {held}"), CYAN),
-        text_row("Pick a row's key to research it. G for the tree. Esc to close"),
+        Row::TextColored(active, CYAN),
+        text_row("Pick a row's key to work it. A to abandon. G for the tree. Esc to close"),
         text_row(""),
     ];
     for (i, node) in nodes.iter().enumerate() {
         let tag = state_tag(&node.state);
         let label = format!(
-            "[{}] {} - {} Research Data{tag}",
+            "[{}] {} - {}{tag}",
             menu_shortcut(i),
             node.name,
-            node.cost
+            price_tag(node)
         );
         rows.push(colored_item_row(label, i == selected, row_color(node)));
+        rows.extend(block_rows(
+            node.blocked_by.as_ref(),
+            DESCRIBE_WRAP_COLUMNS - DESCRIPTION_INDENT.chars().count(),
+        ));
         rows.extend(material_rows(
             &node.materials,
             DESCRIBE_WRAP_COLUMNS - DESCRIPTION_INDENT.chars().count(),
@@ -266,10 +316,8 @@ pub(super) fn draw_research_menu(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let research_currency = game.research_currency();
-    let held = game.banked(&research_currency);
     let nodes = game.research_nodes();
-    let rows = research_menu_rows(held, &nodes, selected);
+    let rows = research_menu_rows(&nodes, selected);
     draw_popup("Research", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -371,13 +419,14 @@ mod tests {
             description: "Blank media a routine can be written onto.".to_string(),
             cost: 26,
             state: ResearchState::Available,
+            progress: 0,
+            blocked_by: None,
             materials: Vec::new(),
             conversions: vec!["Core Fragment x4 into Blank Substrate.".to_string()],
-            affordable: true,
             recommended: false,
         };
 
-        let rows = research_menu_rows(40, &[node], 0);
+        let rows = research_menu_rows(&[node], 0);
 
         let conversion = rows
             .iter()
@@ -423,8 +472,9 @@ mod tests {
             description: String::new(),
             cost: 10,
             state,
+            progress: 0,
+            blocked_by: None,
             materials: Vec::new(),
-            affordable: true,
             recommended,
             conversions: Vec::new(),
         };
@@ -574,6 +624,51 @@ mod tests {
         assert_eq!(drawn, expected);
     }
 
+    /// The blocked sentence is the one row on this screen whose length is not
+    /// bounded by the assets: `work_orders::chain_break`'s longest shape runs to
+    /// 158 characters against a `PopupSize::Large` body of roughly 114, so it
+    /// has to wrap or its tail is drawn outside the box in silence.
+    ///
+    /// Measured against a synthetic sentence rather than the shipped tree, and
+    /// deliberately: `the_widest_progression_row_fits_the_popup_it_is_drawn_in`
+    /// below reads a fresh `Game`, where no Research Node is standing and every
+    /// row is blocked by the short "no Research Node" sentence instead — so it
+    /// cannot see this case at all. What is under test here is the wrap, not the
+    /// prose, which is why the input is written out.
+    #[test]
+    fn a_blocked_rows_sentence_is_wrapped_inside_the_popup() {
+        let sentence = "Nothing is making Bytecode Block within the Disk Press's reach — it can \
+                        only take what a neighbour has finished, or what a worker can fetch off \
+                        a Depot shelf."
+            .to_string();
+        assert!(
+            sentence.chars().count() > 150,
+            "the fixture has to be the long shape, or it proves nothing"
+        );
+        let rows = block_rows(
+            Some(&sentence),
+            DESCRIBE_WRAP_COLUMNS - DESCRIPTION_INDENT.chars().count(),
+        );
+        assert!(!rows.is_empty(), "a blocked node draws its reason");
+
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            for row in &rows {
+                let Row::Item { text, .. } = row else {
+                    panic!("a block row is a Row::Item, popup_layout's reason");
+                };
+                // `draw_row`'s own two columns for the selection caret.
+                let drawn = p.measure_ui_advance(&format!("  {text}"), m.font_size);
+                assert!(
+                    drawn <= room,
+                    "a blocked node's reason overflows its popup by {:.0}px:\n{text}",
+                    drawn - room
+                );
+            }
+        });
+    }
+
     /// `draw_row` clamps a row vertically and nothing clamps it
     /// horizontally, so a row wider than its popup runs off the right edge
     /// in silence. Both pickers print a description under every entry, and
@@ -600,7 +695,7 @@ mod tests {
         );
 
         let screens = [
-            ("Research", research_menu_rows(40, &nodes, 0)),
+            ("Research", research_menu_rows(&nodes, 0)),
             (
                 "Perks",
                 perks_menu_rows(

@@ -32,8 +32,8 @@ much of the field you can touch per turn.
 The research that teaches the widest of them sits behind zone 3 itself, a good deal of Research
 Data, and a stack of Routine Disks and Logic Wafers your benches have to have made — so a base
 running through zone 2 is the thing that makes zone 3 survivable rather than something you set up
-after arriving. The Research Data crosses the breach; the goods do not, which is the other reason
-to spend the tree before you step rather than after.
+after arriving. A project's progress crosses the breach; the goods its bill asks for do not, which is
+the other reason to finish what you have started before you step rather than after.
 
 Two more things worth doing before the step, both of them about what does not survive it:
 

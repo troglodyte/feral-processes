@@ -44,14 +44,20 @@ pub struct ResearchStatus {
     /// that goes stale the first time either is retuned. See
     /// `Game::research_conversions`.
     pub conversions: Vec<String>,
-    /// Whether the player can pay `cost` **and** every line of `materials`
-    /// right now. Independent of `state`: a node can be `Available` but
-    /// unaffordable, or affordable but `Locked`.
-    pub affordable: bool,
+    /// How much of `cost` the base has already fed into this node, in units
+    /// of the research currency. Non-zero for a node the player worked and
+    /// then abandoned, which is why it is on every row rather than only on
+    /// the active one — see `resources::ActiveResearch`.
+    pub progress: u32,
+    /// The one sentence saying why this base could never work this node, or
+    /// `None` if it can — see `Game::research_block`, which is the same call
+    /// `Game::select_research` refuses on, so the row the screen marks blocked
+    /// and the refusal the player is handed cannot disagree.
+    pub blocked_by: Option<String>,
     /// Whether this node sits on a path the tree recommends — see
     /// `ResearchDb::recommended_ids`. Independent of `state` for the same
-    /// reason `affordable` is: a recommended node is still locked until its
-    /// prerequisites are paid for, and the menu says both things at once.
+    /// reason `blocked_by` is: a recommended node is still locked until its
+    /// prerequisites are researched, and the menu says both things at once.
     pub recommended: bool,
     /// Abilities this node hands over as routine items when researched.
     /// `cfg(test)`: read only by engine tests today, neither the renderer
@@ -69,10 +75,11 @@ pub struct ResearchStatus {
 /// and the refusal that quotes it come to word the same shortfall
 /// differently.
 ///
-/// `have` counts the pack **and** the adjacent shelves, because that is
-/// exactly what `Game::unlock_research` will spend from — a figure counting
-/// only the pack would grey out a node the player can in fact buy while
-/// standing at their own Depot.
+/// `have` counts what the **base** is holding — every Depot and every machine
+/// output buffer, through `work_orders::base_holding` — because that is exactly
+/// what `Game::settle_research` spends from. It is deliberately not the
+/// player's pack: a project's bill is paid off the shelves by the base, wherever
+/// the player happens to be standing.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResearchMaterial {
     pub name: String,
@@ -83,6 +90,12 @@ pub struct ResearchMaterial {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ResearchState {
     Unlocked,
+    /// The one project the base is working right now — see
+    /// `resources::ActiveResearch`. A variant rather than a flag beside the
+    /// enum, read the other way round from `Locked`'s two *fields*: these four
+    /// really are disjoint, so a `bool` alongside would be a second thing to
+    /// keep in step.
+    Active,
     Available,
     /// Why a node can't be taken, rather than just greying it out. The two
     /// reasons are independent and both may hold at once — a deep node in a
@@ -1337,6 +1350,9 @@ impl StructureReport {
 pub enum AttentionKind {
     StructureDamaged,
     IdleStructures,
+    /// A Research Node is standing and no project is selected, so every cycle
+    /// it runs lands nowhere — see `resources::ActiveResearch`.
+    NoResearchProject,
     PerkPoints,
     RosterFull,
 }

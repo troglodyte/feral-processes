@@ -1526,6 +1526,26 @@ impl Game {
             });
         }
 
+        // Ordered with the rows around it by def id, the rule the three above
+        // and below follow. A Research Node with nothing selected is not idle —
+        // a program may well be standing at it — so `IdleStructures` cannot
+        // stand for this: every cycle it runs simply lands nowhere.
+        if self
+            .world
+            .resource::<crate::resources::ActiveResearch>()
+            .id
+            .is_none()
+            && !crate::game::base::work_orders::producers_of(self, &self.research_currency())
+                .is_empty()
+        {
+            rows.push(AttentionRow {
+                kind: AttentionKind::NoResearchProject,
+                text: "Research Node with no project".to_string(),
+                key: 'r',
+                threat: false,
+            });
+        }
+
         let points = self
             .world
             .get::<Perks>(self.player_entity())

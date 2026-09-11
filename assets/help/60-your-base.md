@@ -98,13 +98,20 @@ The rest of what a base does:
   soaks damage off every sweep against everything you own, a Patch Node recompiles damage across the
   whole base, and a program posted to the structure that gets hit defends it with its own
   Mitigation.
-- A Research Node is the only source of Research Data, and Research Data crosses a breach. The tree
-  is what unlocks the benches, the recipes and several routines.
-- Every node costs goods as well as Research Data, and the goods do not cross a breach. The bill is
-  drawn from your pack first and then off the shelves of anything you are standing beside, so it is
-  paid at the base. Early nodes want raw salvage; deeper ones want what your benches turn it into,
-  and a node's bill is always something the nodes before it taught you to make. A research tree is
-  therefore a reason to keep the base running, not a timer to wait out.
+- Research is one project at a time, and the base works it. Pick a node on the research screen and
+  every Research Node you have deployed staffs itself and starts feeding it; with nothing picked they
+  stand idle, which the base panel will tell you about. The tree is what unlocks the benches, the
+  recipes and several routines.
+- Picking a node also files its material bill as work orders, at high priority, so the base makes the
+  goods the same way it makes anything else. The project completes when it has both the Research Data
+  and the whole bill, and the bill is paid off your shelves — any Depot, any machine buffer, wherever
+  in the base it is sitting. What you are carrying is yours and is never spent on it.
+- A node whose bill names something nothing in your base could ever make is refused outright, and the
+  refusal says which machine is missing. Early nodes want raw salvage; deeper ones want what your
+  benches turn it into, and a node's bill is always something the nodes before it taught you to make.
+  A research tree is therefore a reason to keep the base running, not a timer to wait out.
+- Abandoning a project with `A` takes its work orders back out and keeps the progress it has already
+  earned, so coming back to a long one later costs nothing.
 - A Contract Broker posts work the sector is paying for. Read its board from anywhere; sign and
   deliver at the base.
 

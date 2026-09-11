@@ -65,24 +65,29 @@ fn the_bank_is_still_readable_by_name() {
     assert_eq!(game.banked(&ItemId::from(ids::RESEARCH_DATA)), 40);
 }
 
-/// Where a banked payout lands, and the whole of what `ItemDef::banked`
-/// buys. A unit that reached the node's buffer would be back on the collect
-/// key and inside a neighbouring machine's pull range.
+/// Where a Research Node's payout lands, and the whole of the research
+/// economy: it feeds the one project the base is working, and reaches neither
+/// the node's own buffer nor the player's bank.
 #[test]
-fn a_research_cronjob_banks_straight_to_the_player() {
+fn a_posted_program_feeds_the_active_project() {
     let mut game = Game::new(709, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    stand_in_base(&mut game);
-    let node = assign_worker_producing(&mut game, ItemId::from(ids::RESEARCH_DATA));
-    let before = research_data_held(&game);
+    let node = base_with_a_research_node(&mut game);
+    game.select_research("automation").unwrap();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    park_at_post(&mut game, worker, node);
 
     for _ in 0..100 {
         game.tick();
     }
 
     assert!(
-        research_data_held(&game) > before,
-        "a research cronjob must bank over time (was {before}, now {})",
-        research_data_held(&game)
+        research_progress(&game, "automation") > 0,
+        "a research cronjob must feed the project it was selected for"
+    );
+    assert_eq!(
+        research_data_held(&game),
+        0,
+        "and nothing may reach the player's bank — there is nothing to spend it on"
     );
     assert_eq!(
         node_output(&game, node, ids::RESEARCH_DATA),
@@ -91,11 +96,66 @@ fn a_research_cronjob_banks_straight_to_the_player() {
     );
 }
 
+/// Progress stops at the node's own `cost`. Unbounded, the screen draws
+/// 700/540 and every unit past the goal is work the base threw away with no
+/// sign of it.
+#[test]
+fn progress_saturates_at_the_nodes_cost() {
+    let mut game = Game::new(721, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    game.select_research("automation").unwrap();
+    let worker = spawn_tamed(&mut game, 10, 3);
+    park_at_post(&mut game, worker, node);
+    let cost = game
+        .world
+        .resource::<ResearchDb>()
+        .get("automation")
+        .unwrap()
+        .cost;
+
+    // Well past it, and with no bill on the shelves so the project cannot
+    // complete and clear the entry out from under the assertion.
+    for _ in 0..2_000 {
+        game.tick();
+    }
+
+    assert_eq!(
+        research_progress(&game, "automation"),
+        cost,
+        "progress must saturate at the cost rather than run away past it"
+    );
+}
+
+/// With no project selected a cycle lands nowhere at all: not the bank, not
+/// the buffer, not some other node's progress. Silent by design — the node
+/// reads `Idle` in every case but this one, a hand-posted standing job, which
+/// is the player's own instruction.
+#[test]
+fn with_no_project_a_research_cycle_lands_nowhere() {
+    let mut game = Game::new(722, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let node = assign_worker_producing(&mut game, ItemId::from(ids::RESEARCH_DATA));
+
+    for _ in 0..100 {
+        game.tick();
+    }
+
+    assert_eq!(research_data_held(&game), 0, "no bank fills");
+    assert_eq!(node_output(&game, node, ids::RESEARCH_DATA), 0, "no buffer");
+    assert!(
+        game.world
+            .resource::<crate::resources::ActiveResearch>()
+            .progress
+            .is_empty(),
+        "and no node quietly accrues progress the player never asked for"
+    );
+}
+
 /// The player working the node by hand delivers by the same rule. The two
 /// paths share `deliver_payout` precisely so this cannot drift — a test
 /// covering only the cronjob would not notice a second copy.
 #[test]
-fn the_player_working_a_research_node_banks_it_too() {
+fn the_player_working_a_research_node_feeds_the_project_too() {
     let mut game = Game::new(710, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     // Spawned bare rather than through `assign_worker_producing`: a posted
@@ -115,7 +175,8 @@ fn the_player_working_a_research_node_banks_it_too() {
             work_node_parts(),
         ))
         .id();
-    let before = research_data_held(&game);
+    base_with_a_research_node(&mut game);
+    game.select_research("automation").unwrap();
 
     stand_player_at_post(&mut game, node);
     game.work_structure(node).expect("the node can be worked");
@@ -124,9 +185,8 @@ fn the_player_working_a_research_node_banks_it_too() {
     }
 
     assert!(
-        research_data_held(&game) > before,
-        "working a research node by hand must bank it (was {before}, now {})",
-        research_data_held(&game)
+        research_progress(&game, "automation") > 0,
+        "working a research node by hand must feed the project too"
     );
     assert_eq!(
         node_output(&game, node, ids::RESEARCH_DATA),
@@ -141,24 +201,25 @@ fn the_player_working_a_research_node_banks_it_too() {
 /// would break it silently — that tile is the surface entrance, not where
 /// the party is standing.
 #[test]
-fn research_banks_while_the_party_is_underground() {
+fn research_progresses_while_the_party_is_underground() {
     let mut game = Game::new(711, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     // Posted from inside the base and then back out, since the whole point of
     // this test is where the party goes next.
     from_inside_the_base(&mut game, |g| {
-        assign_worker_producing(g, ItemId::from(ids::RESEARCH_DATA))
+        let node = base_with_a_research_node(g);
+        g.select_research("automation").unwrap();
+        let worker = spawn_tamed(g, 10, 3);
+        park_at_post(g, worker, node);
     });
     dive_to_depth(&mut game, 2);
-    let before = research_data_held(&game);
 
     for _ in 0..100 {
         game.tick();
     }
 
     assert!(
-        research_data_held(&game) > before,
-        "the base banks research while the party is in the Stack (was {before}, now {})",
-        research_data_held(&game)
+        research_progress(&game, "automation") > 0,
+        "the base works its project while the party is in the Stack"
     );
 }
 
@@ -455,44 +516,170 @@ fn nothing_is_researched_at_the_start_of_a_game() {
     );
 }
 
+/// Both gates, and the ordering between them: a project completes on the
+/// progress a Research Node fed it **and** a bill the base can pay off its own
+/// shelves, and `&&` short-circuits so nothing is spent while it is still half
+/// researched.
 #[test]
-fn unlocking_research_consumes_exactly_its_cost() {
+fn a_project_completes_on_progress_and_a_bill_the_base_pays() {
     let mut game = Game::new(62, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    grant_research_data(&mut game, 20);
-    stock_research_materials(&mut game, &["automation".to_string()]);
-    game.unlock_research("automation").unwrap();
+    base_with_a_research_node(&mut game);
+    let shelf = shelve_research_bill(&mut game, "automation", 8, 8);
+    game.select_research("automation").unwrap();
+    fill_research_progress(&mut game, "automation");
+
+    game.tick();
+
     assert!(game.is_researched("automation"));
     assert_eq!(
-        research_data_held(&game),
-        12,
-        "automation costs 8 of the 20 granted"
+        node_output(&game, shelf, ids::CORE_FRAGMENT),
+        0,
+        "the bill came off the base's shelves"
     );
 }
 
+/// The first half of the pair, on its own: full progress and empty shelves
+/// completes nothing and consumes nothing.
 #[test]
-fn unlocking_research_fails_without_enough_research_data() {
+fn progress_alone_does_not_complete_a_project() {
     let mut game = Game::new(63, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    grant_research_data(&mut game, 7);
-    let err = game.unlock_research("automation").unwrap_err();
-    assert!(err.contains("Research Data"), "got: {err}");
+    base_with_a_research_node(&mut game);
+    game.select_research("automation").unwrap();
+    fill_research_progress(&mut game, "automation");
+    let before = all_shelf_stock(&game);
+
+    game.tick();
+
     assert!(!game.is_researched("automation"));
+    assert_eq!(all_shelf_stock(&game), before, "nothing left a shelf");
 }
 
+/// And the second half: a paid bill with no progress behind it completes
+/// nothing and — the assertion that fails if the two gates are ever swapped —
+/// spends none of the materials either.
 #[test]
-fn unlocking_research_fails_while_a_prerequisite_is_missing() {
+fn a_full_bill_alone_does_not_complete_a_project() {
     let mut game = Game::new(64, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    grant_research_data(&mut game, 500);
-    let err = game.unlock_research("weapon_bench").unwrap_err();
+    base_with_a_research_node(&mut game);
+    let shelf = shelve_research_bill(&mut game, "automation", 8, 8);
+    let stocked = node_output(&game, shelf, ids::CORE_FRAGMENT);
+    game.select_research("automation").unwrap();
+
+    game.tick();
+
+    assert!(!game.is_researched("automation"));
+    assert_eq!(
+        node_output(&game, shelf, ids::CORE_FRAGMENT),
+        stocked,
+        "a project still short of progress must not spend its materials"
+    );
+}
+
+/// The whole point of moving the bill off the player's pack: the base pays it
+/// out of a shelf the player is nowhere near.
+#[test]
+fn a_completed_project_consumes_its_bill_from_a_depot_the_player_is_nowhere_near() {
+    let mut game = Game::new(723, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    let shelf = shelve_research_bill(&mut game, "automation", 400, -400);
+    game.select_research("automation").unwrap();
+    fill_research_progress(&mut game, "automation");
+
+    game.tick();
+
+    assert!(game.is_researched("automation"));
+    assert_eq!(node_output(&game, shelf, ids::CORE_FRAGMENT), 0);
+}
+
+/// Completion clears the project out, drops its progress row — the one thing
+/// that ever removes one — and takes its work orders with it.
+#[test]
+fn completing_clears_the_project_drops_its_progress_row_and_withdraws_its_orders() {
+    let mut game = Game::new(724, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    shelve_research_bill(&mut game, "automation", 8, 8);
+    game.select_research("automation").unwrap();
+    fill_research_progress(&mut game, "automation");
+    assert!(
+        !game.work_orders().is_empty(),
+        "the fixture is vacuous unless selecting filed something"
+    );
+
+    game.tick();
+
+    assert_eq!(active_research(&game), None);
+    assert_eq!(research_progress(&game, "automation"), 0);
+    assert!(
+        game.work_orders().iter().all(|o| !o.for_research),
+        "a completed project takes its own orders back out"
+    );
+}
+
+/// The shared-helper regression. The routines and tools a node hands over are
+/// granted by `grant_research_knowledge`, which the project path calls rather
+/// than keeping a copy of — a copy is what drifts.
+#[test]
+fn completing_grants_the_nodes_abilities_and_tools() {
+    let mut game = Game::new(725, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let taught = game
+        .world
+        .resource::<ResearchDb>()
+        .all()
+        .find(|d| !d.unlocks_abilities.is_empty())
+        .map(|d| (d.id.clone(), d.unlocks_abilities.clone()))
+        .expect("the shipped tree teaches routines somewhere");
+    research_prereqs_of(&mut game, &taught.0);
+    base_with_a_research_node(&mut game);
+    shelve_research_bill(&mut game, &taught.0, 8, 8);
+    game.select_research(&taught.0).unwrap();
+    fill_research_progress(&mut game, &taught.0);
+
+    game.tick();
+
+    assert!(game.is_researched(&taught.0));
+    for ability in &taught.1 {
+        assert!(
+            game.world
+                .resource::<crate::resources::KnownRoutines>()
+                .0
+                .contains(ability),
+            "completing must teach {ability}, not just mark the node"
+        );
+    }
+}
+
+/// Nothing in this feature may shift the seeded stream — a retune of what a
+/// project costs must not move which programs a run spawns.
+#[test]
+fn settling_research_draws_no_rng() {
+    assert!(
+        rng_unadvanced_by(726, |game| {
+            base_with_a_research_node(game);
+            shelve_research_bill(game, "automation", 8, 8);
+            game.select_research("automation").unwrap();
+            fill_research_progress(game, "automation");
+            game.settle_research();
+            assert!(game.is_researched("automation"), "it did complete");
+        }),
+        "selecting and settling a project must draw nothing from the seeded stream"
+    );
+}
+
+/// Selection refuses a node whose prerequisites are outstanding, and files
+/// nothing when it does.
+#[test]
+fn selecting_research_fails_while_a_prerequisite_is_missing() {
+    let mut game = Game::new(65, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+
+    let err = game.select_research("weapon_bench").unwrap_err();
+
     assert!(
         err.contains("Routine Fabrication"),
         "the error should name the missing prereq: {err}"
     );
-    assert!(!game.is_researched("weapon_bench"));
-    assert_eq!(
-        research_data_held(&game),
-        500,
-        "a rejected unlock must not charge the player"
-    );
+    assert_eq!(active_research(&game), None);
+    assert!(game.work_orders().is_empty(), "and files nothing");
 }
 
 #[test]
@@ -525,41 +712,200 @@ fn a_prerequisite_free_node_is_available_immediately() {
         .find(|n| n.id == "automation")
         .unwrap();
     assert_eq!(node.state, ResearchState::Available);
-    assert!(
-        !node.affordable,
-        "available is about prereqs; affordability is separate"
-    );
 }
 
 #[test]
-fn researching_the_same_node_twice_is_rejected() {
+fn selecting_an_already_researched_node_is_rejected() {
     let mut game = Game::new(67, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    grant_research_data(&mut game, 40);
-    stock_research_materials(&mut game, &["automation".to_string()]);
-    game.unlock_research("automation").unwrap();
-    let err = game.unlock_research("automation").unwrap_err();
+    unlock_research_chain(&mut game, "automation");
+    base_with_a_research_node(&mut game);
+
+    let err = game.select_research("automation").unwrap_err();
+
     assert!(err.contains("already"), "got: {err}");
+    assert_eq!(active_research(&game), None);
+    assert!(game.work_orders().is_empty());
 }
 
 #[test]
 fn unknown_research_is_rejected() {
     let mut game = Game::new(68, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    assert!(game.unlock_research("not_a_node").is_err());
+    base_with_a_research_node(&mut game);
+
+    assert!(game.select_research("not_a_node").is_err());
+    assert_eq!(active_research(&game), None);
+    assert!(game.work_orders().is_empty());
+}
+
+/// Off the base there is no answer to which machines are standing, so the
+/// selection refuses rather than answering from the surface entrance tile —
+/// `Game::queue_work_order`'s own reason for the same guard.
+#[test]
+fn selecting_research_off_the_base_is_rejected() {
+    let mut game = Game::new(727, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    from_inside_the_base(&mut game, |g| {
+        spawn_machine_at(g, "research_node", 2, 2);
+    });
+
+    assert!(game.select_research("automation").is_err());
+    assert_eq!(active_research(&game), None);
+    assert!(game.work_orders().is_empty());
+}
+
+/// One project at a time, and abandoning is how you change your mind — which
+/// the refusal says, because a player who cannot see why the key did nothing
+/// reads it as the screen being broken.
+#[test]
+fn a_second_project_is_refused_while_one_is_running() {
+    let mut game = Game::new(728, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    game.select_research("automation").unwrap();
+    let filed = game.work_orders().len();
+
+    let second = game
+        .research_nodes()
+        .into_iter()
+        .find(|n| n.state == ResearchState::Available && n.blocked_by.is_none())
+        .expect("a fresh base has a second node open to it");
+    let err = game.select_research(&second.id).unwrap_err();
+
+    assert!(err.contains("abandon"), "got: {err}");
+    assert_eq!(
+        active_research(&game).as_deref(),
+        Some("automation"),
+        "the running project is untouched"
+    );
+    assert_eq!(game.work_orders().len(), filed, "and nothing else is filed");
+}
+
+/// Nothing makes the research currency until a Research Node is standing, and
+/// `work_orders::chain_break` cannot say so — it refuses every banked item by
+/// construction. So the node is its own refusal.
+#[test]
+fn a_base_with_no_research_node_cannot_take_a_project() {
+    let mut game = Game::new(729, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+
+    let err = game.select_research("automation").unwrap_err();
+
+    assert!(
+        err.contains("Research Node"),
+        "the refusal must name the machine that is missing: {err}"
+    );
+    assert_eq!(active_research(&game), None);
+    assert!(game.work_orders().is_empty());
+}
+
+/// The reachability half. Without it the refusal above could be permanent and
+/// every test around it would still be green.
+#[test]
+fn building_the_missing_machine_makes_the_same_selection_succeed() {
+    let mut game = Game::new(730, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // The bill's own producers stood up, and then the Research Node removed —
+    // so the Research Node is the only thing in the way.
+    let node = base_with_a_research_node(&mut game);
+    game.world.despawn(node);
+    assert!(game.select_research("automation").is_err());
+
+    spawn_machine_at(&mut game, "research_node", 2, 2);
+
+    game.select_research("automation")
+        .expect("a Research Node is all that was missing");
+}
+
+/// Selecting files one High-band order per material line, marked as the
+/// project's own — the provenance that lets them be withdrawn again.
+#[test]
+fn selecting_files_one_high_order_per_material_line() {
+    let mut game = Game::new(731, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    let bill = game
+        .world
+        .resource::<ResearchDb>()
+        .get("automation")
+        .unwrap()
+        .materials
+        .clone();
+    assert!(!bill.is_empty(), "the fixture node must author a bill");
+
+    game.select_research("automation").unwrap();
+
+    let filed: Vec<(ItemId, u32, OrderPriority, bool)> = game
+        .work_orders()
+        .iter()
+        .map(|o| (o.item.clone(), o.qty, o.priority, o.for_research))
+        .collect();
+    assert_eq!(
+        filed,
+        bill.iter()
+            .map(|(item, need)| (item.clone(), *need, OrderPriority::High, true))
+            .collect::<Vec<_>>(),
+        "one High order per line, every one of them the project's"
+    );
+}
+
+/// Abandoning takes the project's own orders back out, leaves the player's
+/// alone, and **keeps** the progress — coming back to a long project is not
+/// destructive.
+#[test]
+fn abandoning_withdraws_the_projects_orders_and_keeps_its_progress() {
+    let mut game = Game::new(732, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    spawn_machine_at(&mut game, "mining_node", 4, 4);
+    game.select_research("automation").unwrap();
+    let mine = game.work_orders()[0].item.clone();
+    game.queue_work_order(WorkOrder::batch(mine.clone(), 3))
+        .expect("the player's own order for the same material");
+    fill_research_progress(&mut game, "automation");
+    let earned = research_progress(&game, "automation");
+
+    game.abandon_research().unwrap();
+
+    assert_eq!(active_research(&game), None);
+    assert_eq!(
+        research_progress(&game, "automation"),
+        earned,
+        "the work already done is kept"
+    );
+    let left: Vec<(ItemId, u32)> = game
+        .work_orders()
+        .iter()
+        .map(|o| (o.item.clone(), o.qty))
+        .collect();
+    assert_eq!(
+        left,
+        vec![(mine, 3)],
+        "exactly the player's own order survives"
+    );
 }
 
 #[test]
-fn research_nodes_lists_available_before_locked_before_unlocked() {
+fn abandoning_nothing_is_refused() {
+    let mut game = Game::new(733, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+
+    assert!(game.abandon_research().is_err());
+}
+
+#[test]
+fn research_nodes_lists_active_before_available_before_locked_before_unlocked() {
     let mut game = Game::new(69, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    grant_research_data(&mut game, 40);
-    stock_research_materials(&mut game, &["automation".to_string()]);
-    game.unlock_research("automation").unwrap();
+    unlock_research_chain(&mut game, "automation");
+    base_with_a_research_node(&mut game);
+    let open = game
+        .research_nodes()
+        .into_iter()
+        .find(|n| n.state == ResearchState::Available && n.blocked_by.is_none())
+        .expect("something is open once Automation is in");
+    game.select_research(&open.id).unwrap();
     let ranks: Vec<u8> = game
         .research_nodes()
         .iter()
         .map(|n| match n.state {
-            ResearchState::Available => 0,
-            ResearchState::Locked { .. } => 1,
-            ResearchState::Unlocked => 2,
+            ResearchState::Active => 0,
+            ResearchState::Available => 1,
+            ResearchState::Locked { .. } => 2,
+            ResearchState::Unlocked => 3,
         })
         .collect();
     let mut sorted = ranks.clone();
@@ -613,13 +959,11 @@ fn cheapest_gated_node(game: &Game, zone: u32) -> ResearchDef {
 /// Unlocks everything `id` transitively requires — and deliberately *not*
 /// `id` itself, which is the node under test.
 ///
-/// Not `support::unlock_research_chain`, which differs in both halves that
-/// matter here: it takes the node too, and it funds the chain with a flat
-/// 1000 rather than exactly what it spends. Both would make these tests
-/// vacuous — the first has nothing left to refuse, and the second leaves the
-/// player rich enough that `the_zone_gate_is_refused_before_the_cost` could
-/// not tell a zone refusal from a cost one. It also raises `ZoneLevel` to
-/// clear the chain's own bands, which is the very thing being tested.
+/// Not `support::unlock_research_chain` on `id` itself, which would leave
+/// nothing to refuse; it is what lands each *prerequisite*. That helper also
+/// raises `ZoneLevel` to clear the chain's own bands, which is the very thing
+/// being tested, so it is called per prereq — every prereq of a gated node
+/// sits at or below its band — rather than on the node under test.
 ///
 /// Every prereq of a gated node sits in a band at or below its own — that is
 /// `no_research_node_is_gated_below_its_own_prerequisite` — so at the zone
@@ -637,16 +981,7 @@ fn research_prereqs_of(game: &mut Game, id: &str) {
             continue;
         }
         research_prereqs_of(game, &prereq);
-        let cost = game
-            .world
-            .resource::<ResearchDb>()
-            .get(&prereq)
-            .expect("a resolved prereq")
-            .cost;
-        grant_research_data(game, cost);
-        stock_research_materials(game, &[prereq.clone()]);
-        game.unlock_research(&prereq)
-            .unwrap_or_else(|e| panic!("prereq {prereq} should be buyable: {e}"));
+        unlock_research_chain(game, &prereq);
     }
 }
 
@@ -690,23 +1025,20 @@ fn a_zone_gated_node_is_still_listed() {
 }
 
 #[test]
-fn unlock_research_refuses_a_node_above_the_players_zone() {
+fn select_research_refuses_a_node_above_the_players_zone() {
     let mut game = Game::new(717, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let gated = cheapest_gated_node(&game, 2);
     research_prereqs_of(&mut game, &gated.id);
-    grant_research_data(&mut game, gated.cost);
+    base_with_a_research_node(&mut game);
 
-    let err = game.unlock_research(&gated.id).unwrap_err();
+    let err = game.select_research(&gated.id).unwrap_err();
 
     assert!(err.contains("Zone 2"), "got: {err}");
     assert!(!game.is_researched(&gated.id));
-    // The half that fails if the refusal is ever moved below the payment —
-    // without it this passes against a build that charges and then refuses.
-    assert_eq!(
-        research_data_held(&game),
-        gated.cost,
-        "a refused unlock must not charge the player"
-    );
+    // The half that fails if the refusal is ever moved below the filing —
+    // without it this passes against a build that files and then refuses.
+    assert_eq!(active_research(&game), None);
+    assert!(game.work_orders().is_empty(), "and files nothing");
 }
 
 #[test]
@@ -760,22 +1092,21 @@ fn a_node_can_report_both_a_missing_prereq_and_its_zone() {
 /// player is never sent to find fragments they couldn't have spent". Same
 /// argument: a broke player at zone 1 must hear about the zone.
 #[test]
-fn the_zone_gate_is_refused_before_the_cost() {
+fn the_zone_gate_is_refused_before_the_machines() {
     let mut game = Game::new(720, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let gated = cheapest_gated_node(&game, 2);
     research_prereqs_of(&mut game, &gated.id);
-    assert_eq!(
-        research_data_held(&game),
-        0,
-        "the fixture spends exactly what it grants, or this asserts nothing"
-    );
+    // Deliberately no Research Node: the zone must still be the reason, or a
+    // player at zone 1 is sent to build machinery for a node they could not
+    // have taken.
+    stand_in_base(&mut game);
 
-    let err = game.unlock_research(&gated.id).unwrap_err();
+    let err = game.select_research(&gated.id).unwrap_err();
 
     assert!(err.contains("Zone 2"), "got: {err}");
     assert!(
-        !err.contains("Research Data"),
-        "the zone is the reason, not the balance: {err}"
+        !err.contains("Research Node"),
+        "the zone is the reason, not the base's plant: {err}"
     );
 }
 
@@ -900,114 +1231,103 @@ fn all_shelf_stock(game: &Game) -> Vec<(ItemId, u32)> {
 }
 
 #[test]
-fn researching_spends_its_material_bill_from_the_pack() {
-    let assets = billed_assets("research_bill_pack");
+fn a_project_spends_its_material_bill_off_the_base() {
+    let assets = billed_assets("research_bill_base");
     let mut game = Game::new(901, DifficultyMode::Forgiving, &assets).unwrap();
+    base_with_a_research_node(&mut game);
+    let shelf = shelve_research_bill(&mut game, "billed", 8, 8);
+    let extra = 4;
+    {
+        let mut stock = game.world.get_mut::<Stock>(shelf).unwrap();
+        *stock
+            .output
+            .entry(ItemId::from(ids::CORE_FRAGMENT))
+            .or_default() += extra;
+    }
     set_inventory(&mut game, &[("core_fragment", 10), ("power_cell", 3)]);
-    grant_research_data(&mut game, 5);
+    game.select_research("billed").unwrap();
+    fill_research_progress(&mut game, "billed");
 
-    game.unlock_research("billed").unwrap();
+    game.tick();
 
     assert!(game.is_researched("billed"));
     assert_eq!(
+        node_output(&game, shelf, ids::CORE_FRAGMENT),
+        extra,
+        "exactly the bill came off the shelf and no more"
+    );
+    assert_eq!(
         held(&game, &ItemId::from(ids::CORE_FRAGMENT)),
-        4,
-        "six of the ten fragments are the bill"
+        10,
+        "and the player's own pack is not a research bill's source"
     );
-    assert_eq!(
-        held(&game, &ItemId::from("power_cell")),
-        1,
-        "and two of the three cells"
-    );
-    assert_eq!(
-        research_data_held(&game),
-        0,
-        "the Research Data is still charged on top of the goods, not instead of them"
-    );
+    assert_eq!(held(&game, &ItemId::from("power_cell")), 3);
 }
 
-/// The shelf half. A bill the pack cannot cover alone is still payable
-/// standing at the base, because the goods a node asks for are exactly the
-/// goods the base has been stacking — see `Game::research_material_held`.
+/// The bill is drawn across the *whole* base, not one shelf: a line split
+/// between two Depots is still payable, which is what
+/// `work_orders::base_holding` counts and what the screen therefore shows.
 #[test]
-fn researching_pulls_the_shortfall_off_an_adjacent_shelf() {
-    let assets = billed_assets("research_bill_shelf");
+fn a_bill_split_across_two_shelves_is_still_paid() {
+    let assets = billed_assets("research_bill_split");
     let mut game = Game::new(902, DifficultyMode::Forgiving, &assets).unwrap();
-    stand_in_base(&mut game);
-    let depot = shelf_beside_the_party(&mut game, ids::CORE_FRAGMENT, 6);
-    set_inventory(&mut game, &[("core_fragment", 0), ("power_cell", 2)]);
-    grant_research_data(&mut game, 5);
+    base_with_a_research_node(&mut game);
+    let near = shelf_beside_the_party(&mut game, ids::CORE_FRAGMENT, 3);
+    let far = shelf_beside_the_party(&mut game, ids::CORE_FRAGMENT, 3);
+    let cells = shelve_research_bill(&mut game, "billed", 12, 12);
+    {
+        // The fragment lines are the split under test; take the shelved
+        // fragments back out so the two Depots are the only source.
+        let mut stock = game.world.get_mut::<Stock>(cells).unwrap();
+        stock.output.remove(&ItemId::from(ids::CORE_FRAGMENT));
+    }
+    game.select_research("billed").unwrap();
+    fill_research_progress(&mut game, "billed");
 
-    game.unlock_research("billed").unwrap();
+    game.tick();
 
     assert!(game.is_researched("billed"));
     assert_eq!(
-        node_output(&game, depot, ids::CORE_FRAGMENT),
+        node_output(&game, near, ids::CORE_FRAGMENT) + node_output(&game, far, ids::CORE_FRAGMENT),
         0,
-        "the whole six came off the shelf"
-    );
-    assert_eq!(
-        held(&game, &ItemId::from(ids::CORE_FRAGMENT)),
-        0,
-        "and none of it was left standing in the pack afterwards"
+        "both halves of the six were taken"
     );
 }
 
-/// Every refusal lands before anything is spent — `Game::extract_program`'s
-/// rule, asserted per refusal rather than by one path standing for all of
-/// them.
+/// The whole bill or nothing — `commit_caravan_basket`'s rule inside
+/// `stock::spend_bill_from_base`, and the reason it is two passes rather than
+/// a take-as-you-go loop that would strand the line it could pay.
 #[test]
-fn a_node_short_of_materials_spends_nothing() {
+fn a_project_one_line_short_spends_none_of_the_others() {
     let assets = billed_assets("research_bill_refuse");
     let mut game = Game::new(903, DifficultyMode::Forgiving, &assets).unwrap();
-    stand_in_base(&mut game);
-    shelf_beside_the_party(&mut game, ids::CORE_FRAGMENT, 4);
-    set_inventory(&mut game, &[("core_fragment", 6), ("power_cell", 1)]);
-    grant_research_data(&mut game, 5);
-    let shelves = all_shelf_stock(&game);
+    base_with_a_research_node(&mut game);
+    let shelf = shelve_research_bill(&mut game, "billed", 8, 8);
+    {
+        // One cell short of the bill, with the fragment line whole.
+        let mut stock = game.world.get_mut::<Stock>(shelf).unwrap();
+        let held = stock.output.get_mut(&ItemId::from("power_cell")).unwrap();
+        *held -= 1;
+    }
+    game.select_research("billed").unwrap();
+    fill_research_progress(&mut game, "billed");
+    let before = all_shelf_stock(&game);
 
-    let refusal = game.unlock_research("billed").unwrap_err();
+    game.tick();
 
-    assert!(
-        refusal.contains("Power Cell"),
-        "the refusal names what is short, by the item's own name: {refusal}"
-    );
     assert!(!game.is_researched("billed"));
     assert_eq!(
-        held(&game, &ItemId::from(ids::CORE_FRAGMENT)),
-        6,
-        "the line the pack *could* pay must not be spent against a bill that fails"
+        all_shelf_stock(&game),
+        before,
+        "the line the base *could* pay must not be spent against a bill that fails"
     );
-    assert_eq!(held(&game, &ItemId::from("power_cell")), 1);
-    assert_eq!(
-        research_data_held(&game),
-        5,
-        "and the Research Data is untouched"
-    );
-    assert_eq!(all_shelf_stock(&game), shelves, "nothing left a shelf");
-}
-
-/// The other order: Research Data short, materials in hand. Its own test
-/// because the two checks are two separate returns, and one of them passing
-/// says nothing about the other.
-#[test]
-fn a_node_short_of_research_data_spends_no_materials() {
-    let assets = billed_assets("research_bill_no_data");
-    let mut game = Game::new(904, DifficultyMode::Forgiving, &assets).unwrap();
-    set_inventory(&mut game, &[("core_fragment", 6), ("power_cell", 2)]);
-
-    let refusal = game.unlock_research("billed").unwrap_err();
-
-    assert!(refusal.contains("Research Data"), "{refusal}");
-    assert_eq!(held(&game, &ItemId::from(ids::CORE_FRAGMENT)), 6);
-    assert_eq!(held(&game, &ItemId::from("power_cell")), 2);
 }
 
 /// A node that authored no bill is the pre-materials game, which is what
 /// `#[serde(default)]` on the field buys and what a mod's untouched tree
-/// still gets.
+/// still gets: progress alone completes it.
 #[test]
-fn a_node_with_no_material_bill_costs_only_research_data() {
+fn a_node_with_no_material_bill_completes_on_progress_alone() {
     let assets = assets_dir_with_extra_research(
         "research_no_bill",
         "unbilled.ron",
@@ -1019,57 +1339,99 @@ fn a_node_with_no_material_bill_costs_only_research_data() {
 )"#,
     );
     let mut game = Game::new(905, DifficultyMode::Forgiving, &assets).unwrap();
-    set_inventory(&mut game, &[("core_fragment", 0)]);
-    grant_research_data(&mut game, 5);
+    base_with_a_research_node(&mut game);
+    game.select_research("unbilled").unwrap();
+    fill_research_progress(&mut game, "unbilled");
 
-    game.unlock_research("unbilled").unwrap();
+    game.tick();
 
     assert!(game.is_researched("unbilled"));
+    assert!(
+        game.work_orders().is_empty(),
+        "and a node with no bill files no orders"
+    );
 }
 
-/// The screen's figure and the refusal share one definition of "have", so a
-/// row the menu draws as affordable cannot then be refused — and the figure
-/// counts the shelves, or a node payable at the player's own Depot would be
-/// greyed out in front of them.
+/// The screen's `have` column and the gate that spends the bill are one call,
+/// `work_orders::base_holding` — so a row drawn as paid for cannot then fail to
+/// complete. And it counts the base, not the pack: a Depot across the base is
+/// where a project's materials actually are.
 #[test]
-fn the_menu_counts_the_shelves_when_it_says_a_node_is_affordable() {
+fn a_materials_have_column_counts_a_depot_across_the_base() {
     let assets = billed_assets("research_bill_view");
     let mut game = Game::new(906, DifficultyMode::Forgiving, &assets).unwrap();
     stand_in_base(&mut game);
-    set_inventory(&mut game, &[("core_fragment", 0), ("power_cell", 2)]);
-    grant_research_data(&mut game, 5);
+    // In the pack, which is deliberately not a source: the column must read 0.
+    set_inventory(&mut game, &[("core_fragment", 6), ("power_cell", 2)]);
 
-    let unaffordable = game
-        .research_nodes()
-        .into_iter()
-        .find(|n| n.id == "billed")
-        .unwrap();
-    assert!(
-        !unaffordable.affordable,
-        "six fragments short is not affordable however much Research Data is banked"
-    );
-    assert_eq!(
-        unaffordable
+    let bill = |game: &Game| {
+        game.research_nodes()
+            .into_iter()
+            .find(|n| n.id == "billed")
+            .unwrap()
             .materials
             .iter()
-            .map(|m| (m.name.as_str(), m.need, m.have))
-            .collect::<Vec<_>>(),
-        vec![("Core Fragment", 6, 0), ("Power Cell", 2, 2)],
-        "the bill is reported line by line, named and counted"
+            .map(|m| (m.name.clone(), m.need, m.have))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        bill(&game),
+        vec![
+            ("Core Fragment".to_string(), 6, 0),
+            ("Power Cell".to_string(), 2, 0)
+        ],
+        "what the player is carrying is theirs, not the project's"
     );
 
-    shelf_beside_the_party(&mut game, ids::CORE_FRAGMENT, 6);
+    // Nowhere near the party, which is the point.
+    let shelf = shelve_research_bill(&mut game, "billed", 300, -300);
+    assert!(shelf != Entity::PLACEHOLDER);
 
-    let affordable = game
+    assert_eq!(
+        bill(&game),
+        vec![
+            ("Core Fragment".to_string(), 6, 6),
+            ("Power Cell".to_string(), 2, 2)
+        ],
+        "a shelf across the base is counted, wherever the player is standing"
+    );
+}
+
+/// The active project heads the list and carries its progress — the two things
+/// the screen's top row is for.
+#[test]
+fn the_active_project_is_the_first_row() {
+    let mut game = Game::new(907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    game.select_research("automation").unwrap();
+    game.world
+        .resource_mut::<crate::resources::ActiveResearch>()
+        .progress
+        .insert("automation".to_string(), 3);
+
+    let rows = game.research_nodes();
+
+    assert_eq!(rows[0].id, "automation");
+    assert_eq!(rows[0].state, ResearchState::Active);
+    assert_eq!(rows[0].progress, 3);
+}
+
+/// A blocked row carries the sentence that would refuse it, because it *is*
+/// that sentence — `Game::research_block` is one call, so the screen cannot
+/// offer a row the selection turns down for a reason it never showed.
+#[test]
+fn a_blocked_node_carries_the_sentence_that_would_refuse_it() {
+    let mut game = Game::new(908, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let refusal = game.select_research("automation").unwrap_err();
+
+    let row = game
         .research_nodes()
         .into_iter()
-        .find(|n| n.id == "billed")
+        .find(|n| n.id == "automation")
         .unwrap();
-    assert!(
-        affordable.affordable,
-        "the same six sitting on the shelf beside the party is a bill they can pay"
-    );
-    assert!(game.unlock_research("billed").is_ok());
+
+    assert_eq!(row.blocked_by.as_deref(), Some(refusal.as_str()));
 }
 
 /// A node's conversion lines are derived from what it unlocks, not authored
@@ -1137,4 +1499,103 @@ fn research_node(game: &Game, id: &str) -> ResearchStatus {
         .into_iter()
         .find(|n| n.id == id)
         .unwrap_or_else(|| panic!("{id:?} should be a shipped research node"))
+}
+
+/// The project and the progress behind it both survive a reload — a run picked
+/// up a week later is working the same node with the same work behind it.
+///
+/// A save→load test and not a RON round trip: the round trip cannot see a
+/// skipped field, so it would be vacuous against exactly the mistake that
+/// matters here.
+#[test]
+fn an_active_project_and_its_progress_survive_a_save_round_trip() {
+    let mut game = Game::new(734, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    game.select_research("automation").unwrap();
+    game.world
+        .resource_mut::<crate::resources::ActiveResearch>()
+        .progress
+        .insert("automation".to_string(), 5);
+
+    let path =
+        std::env::temp_dir().join(format!("feral_research_project_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(active_research(&loaded).as_deref(), Some("automation"));
+    assert_eq!(research_progress(&loaded, "automation"), 5);
+}
+
+/// The additive half: a save written before projects existed loads with none,
+/// and nothing else about research moves.
+#[test]
+fn a_save_written_before_this_change_loads_with_no_project() {
+    let mut game = Game::new(735, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "automation");
+
+    let path =
+        std::env::temp_dir().join(format!("feral_research_legacy_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    // The two fields as an older save leaves them: absent, which
+    // `#[serde(default)]` reads as this.
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(active_research(&loaded), None);
+    assert_eq!(research_progress(&loaded, "automation"), 0);
+    assert!(
+        loaded.is_researched("automation"),
+        "and what the run already researched is untouched"
+    );
+}
+
+/// An old save's banked Research Data is dropped on load, with a line saying
+/// so. The stock strip folds in every `ItemDef::banked` pool **by the flag**, so
+/// a leftover pool would sit across the top of every base screen for the rest of
+/// the run with nothing to spend it on. The fold itself stays — it names no
+/// item, and a mod may ship another banked one.
+#[test]
+fn a_legacy_saves_banked_research_data_is_dropped_on_load() {
+    let mut game = Game::new(736, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    grant_research_data(&mut game, 40);
+    let cargo = held(&game, &ItemId::from(ids::CORE_FRAGMENT));
+
+    let path = std::env::temp_dir().join(format!("feral_research_bank_{}.bin", std::process::id()));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(
+        loaded.banked(&ItemId::from(ids::RESEARCH_DATA)),
+        0,
+        "a bank with nothing to spend it on is dropped rather than left on the strip"
+    );
+    assert_eq!(
+        held(&loaded, &ItemId::from(ids::CORE_FRAGMENT)),
+        cargo,
+        "and ordinary cargo in the same store is untouched"
+    );
+}
+
+/// A Research Node standing with no project selected is something the player
+/// has to decide about, so it asks — and stops the moment one is picked.
+#[test]
+fn a_research_node_with_no_project_asks_for_attention() {
+    let mut game = Game::new(737, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+
+    fn asked(game: &mut Game) -> bool {
+        game.attention()
+            .iter()
+            .any(|row| row.kind == AttentionKind::NoResearchProject)
+    }
+    assert!(
+        asked(&mut game),
+        "an idle Research Node asks for the player"
+    );
+
+    game.select_research("automation").unwrap();
+
+    assert!(!asked(&mut game), "and stops once the base has a project");
 }

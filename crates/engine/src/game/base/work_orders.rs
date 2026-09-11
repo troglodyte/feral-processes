@@ -125,6 +125,22 @@ pub struct WorkOrder {
     /// engine rather than merely the tidiest.
     #[serde(skip)]
     pub(crate) announced_stalled: bool,
+    /// Whether the active research project filed this order rather than the
+    /// player — see `Game::select_research`.
+    ///
+    /// **Provenance, not a plan.** The module header's rule is that an order
+    /// stores what was asked for and never how it will be done; this says
+    /// *who asked*, and nothing about which machines run it or how far along
+    /// it is. It is what lets `Game::withdraw_research_orders` take the
+    /// project's own lines back out and leave the player's alone.
+    ///
+    /// `#[serde(default)]` and **not** `#[serde(skip)]`, unlike
+    /// `announced_stalled` above: a project abandoned after a reload has to
+    /// be able to take its orders with it, so the flag survives the round
+    /// trip. A skipped field is invisible to the RON round trip, so that is
+    /// asserted by a save-then-load test rather than a RON one.
+    #[serde(default)]
+    pub for_research: bool,
 }
 
 impl WorkOrder {
@@ -136,6 +152,7 @@ impl WorkOrder {
             standing: false,
             priority: OrderPriority::Normal,
             announced_stalled: false,
+            for_research: false,
         }
     }
 
@@ -162,6 +179,17 @@ impl WorkOrder {
     /// than `priority` because that is the field it sets.
     pub fn with_priority(self, priority: OrderPriority) -> Self {
         Self { priority, ..self }
+    }
+
+    /// Marks it as filed on the active research project's behalf.
+    ///
+    /// A setter rather than a third constructor, `with_priority`'s reason: a
+    /// provenance is a value *on* an order, not a kind of order.
+    pub fn with_research(self) -> Self {
+        Self {
+            for_research: true,
+            ..self
+        }
     }
 }
 
@@ -198,7 +226,7 @@ pub(crate) fn producers_of(game: &Game, item: &ItemId) -> Vec<Entity> {
 /// Whether any structure the game ships or a mod supplies could produce
 /// `item` at all, deployed or not. Separates "you have not built it yet"
 /// from "nothing in this game makes that", which are different errands.
-fn makeable_by(game: &Game, item: &ItemId) -> Option<StructureDef> {
+pub(crate) fn makeable_by(game: &Game, item: &ItemId) -> Option<StructureDef> {
     game.structure_defs()
         .into_iter()
         .find(|def| produced_item(def) == Some(item))
@@ -847,6 +875,12 @@ impl Game {
         // gives straight back. See `fuel_wants` for the two gates that stop
         // it borrowing a body it can never spend.
         wanted.extend(self.fuel_wants());
+        // **The research project sits third: below a build and below keeping
+        // the lights on, above every work order and every standing job.** The
+        // player picked this node by hand; it outranks the queue they filed
+        // and forgot. The priority *is* the position in this list, exactly as
+        // the two above and the three below.
+        wanted.extend(self.research_wants());
         wanted.extend(
             self.settle_orders()
                 .into_iter()
@@ -2310,6 +2344,54 @@ impl Game {
         let name = self.item_name(&dropped.item).to_string();
         self.log_base(format!("Work order cancelled: {name}."));
         Ok(())
+    }
+
+    /// Drops every queue entry the active research project filed.
+    ///
+    /// Matched on `WorkOrder::for_research` and never on the item, which is
+    /// the whole reason the flag exists: a player's own order for the same
+    /// material must survive a project being abandoned.
+    ///
+    /// It logs nothing. Withdrawal is bookkeeping the player did not ask
+    /// for, and `cancel_work_order`'s line would be a lie about who
+    /// cancelled it — the one line the player gets is the abandonment
+    /// itself.
+    pub(crate) fn withdraw_research_orders(&mut self) {
+        self.world
+            .resource_mut::<resources::WorkOrders>()
+            .0
+            .retain(|order| !order.for_research);
+    }
+
+    /// Every deployed Research Node while a project is active, and nothing
+    /// at all when none is.
+    ///
+    /// This is what staffs a Research Node — there is no `StandingJob` behind
+    /// it and no new `MachineStatus`: with no project selected the want
+    /// simply is not raised, the scheduler posts nobody, and
+    /// `idle_machine_system` reads the node `Idle`. That is what keeps "a
+    /// banked resource can never clog, so a Research Node has no full state"
+    /// true through this feature.
+    ///
+    /// `producers_of` already sorts by tile, so the result is deterministic
+    /// without a second sort. `TaskKind::GatherResource` and an `Entity` —
+    /// the shape `standing_wants` and `build_wants` return, not the
+    /// `(Entity, u32)` depth pairs `settle_orders` answers with: a Research
+    /// Node is the top of its own line and has no recipe tree behind it to
+    /// measure a depth against.
+    fn research_wants(&self) -> Vec<(Entity, TaskKind)> {
+        if self
+            .world
+            .resource::<resources::ActiveResearch>()
+            .id
+            .is_none()
+        {
+            return Vec::new();
+        }
+        producers_of(self, &self.research_currency())
+            .into_iter()
+            .map(|machine| (machine, TaskKind::GatherResource))
+            .collect()
     }
 
     pub fn work_orders(&self) -> &[WorkOrder] {

@@ -419,8 +419,12 @@ relying on one, and correct all three places if it has moved.
 - **"Nobody is posted here" is one pass over every machine**,
   `idle_machine_system`.
 - **A banked resource can never clog, so a Research Node has no "full"
-  state.** Its four reachable statuses are `Idle`, `Unstaffed`, `Stranded`,
-  `Running`.
+  state, and a node with no project selected reads `Idle` rather than
+  anything new.**
+- **Research is one project at a time, and `Game::select_research` is the one
+  door — every refusal before anything is filed.**
+- **A research project's materials are ordinary work orders, and
+  `WorkOrder::for_research` is provenance rather than a plan.**
 - **Departure lives in `haul_step_system`, not the clogged branch**, because
   it has to know whether a depot exists — a base with no depot must behave
   exactly as it did before depots shipped.

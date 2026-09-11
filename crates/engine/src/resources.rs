@@ -68,6 +68,38 @@ pub struct GameRng(pub StdRng);
 #[derive(Resource, Default)]
 pub struct Research(pub std::collections::HashSet<crate::research::ResearchId>);
 
+/// The one research project the base is working, and how far every node the
+/// player has ever put work into has got.
+///
+/// **Progress is per node, not just for the active one.** Abandoning a
+/// 540-cost project to take a cheap one and coming back is not destructive —
+/// the entry stays until the node completes, which is the only thing that
+/// removes it. Progress is in units of the research currency, the same
+/// denomination `research::ResearchDef::cost` is in, so the two compare
+/// directly with no conversion anywhere.
+#[derive(Resource, Default)]
+pub struct ActiveResearch {
+    pub id: Option<crate::research::ResearchId>,
+    pub progress: std::collections::HashMap<crate::research::ResearchId, u32>,
+}
+
+impl ActiveResearch {
+    /// Credits `amount` units of the research currency to the active
+    /// project, saturating at `cap`, and reports what landed.
+    ///
+    /// `0` when nothing is active, which is the "landed nowhere" figure a
+    /// full `Stock` already answers with — see `systems::deliver_payout`.
+    pub(crate) fn credit(&mut self, amount: u32, cap: u32) -> u32 {
+        let Some(id) = self.id.clone() else {
+            return 0;
+        };
+        let held = self.progress.entry(id).or_default();
+        let landed = amount.min(cap.saturating_sub(*held));
+        *held += landed;
+        landed
+    }
+}
+
 /// Which routines the player has learned and may install, given a blank
 /// Routine Disk to burn one onto. Written by exactly two things:
 /// `Game::unlock_research` (a node's `unlocks_abilities`) and

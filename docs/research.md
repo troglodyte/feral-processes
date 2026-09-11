@@ -12,6 +12,16 @@ structure worked by an assigned tamed program, the same way a Mining Node
 produces Core Fragments. So the whole tree below is priced in *base uptime* —
 it is the one progression track you cannot fight your way along.
 
+**The base works one node at a time.** Picking a node makes it the run's active
+project: every deployed Research Node staffs itself and feeds its Research Data
+into that node and no other, and with nothing picked they stand idle. The
+`cost` column below is what a project has to accumulate, not a price paid at
+selection — nothing is spent when you pick one. The `materials` bill is filed as
+high-priority work orders at the same moment, and paid off the base's own
+shelves once the progress is in; a bill naming something nothing standing in the
+base could make refuses the pick outright. Abandoning keeps the progress
+earned.
+
 | | |
 |---|---|
 | nodes | 26 |
@@ -184,8 +194,8 @@ zone bands are what stop that length being paid off in one sitting.
 The two halves of the tree pay in different currencies, and that is the
 sharper divide than depth.
 
-A **routine** node hands you the knowledge outright: unlock it and the
-routines are yours to install, no materials involved. A **recipe** node hands
+A **routine** node hands you the knowledge outright: complete it and the
+routines are yours to install, no further materials involved. A **recipe** node hands
 you the right to *build* something, and every one of the six is priced in
 `portal_fragment` — the item a Stack lair guardian drops and nothing else
 in the game does, and the same one that pays for a breach. So the recipe half
@@ -214,3 +224,4 @@ this page is regenerated -- edit the table at the top of
 [`docs/research-gen.py`](research-gen.py) and run
 `python3 docs/research-gen.py` from the repo root. The schema is documented in
 [`assets/research/README.md`](../assets/research/README.md).
+

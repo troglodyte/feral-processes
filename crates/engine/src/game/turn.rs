@@ -229,6 +229,11 @@ impl Game {
         // of that call's reasons: a digger posted this tick swings this
         // tick, and a cycle that ends in `strike_rock` or `floor_cell` is
         // `&mut Game` work no bevy system can express.
+        // After the scheduler, so a body assigned this tick has already
+        // delivered before the completion check runs, and beside the two crews
+        // for their reason: the grant names routines and tools through
+        // `&mut Game` work no bevy system can express.
+        self.settle_research();
         self.run_dig_crew();
         // Beside the dig crew and for its two reasons: a builder posted this
         // tick works this tick, and a cycle that ends in

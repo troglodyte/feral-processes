@@ -41,8 +41,8 @@ A few things about a copy of gear are worth knowing before you throw one away.
 
 What crosses a breach and what does not is the whole of how the economy is paced.
 
-- Credits cross, and they are the only thing a trader deals in. Research Data crosses. Materials
-  cross, including the zone material your next tier of gear is built out of.
+- Credits cross, and they are the only thing a trader deals in. A research project's progress
+  crosses. Materials cross, including the zone material your next tier of gear is built out of.
 - Core Fragments and Portal Fragments do not. Both are cleared as you step through, so every zone
   funds its own exit and its own build-out. Spend them before you go, and sell anything else you
   cannot carry.

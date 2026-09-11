@@ -42,6 +42,16 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.161
+
+**The release notes are written for someone who does not have the source
+open.** From `0.13.58` an entry was a single bold sentence and nothing else,
+and those sentences named engine internals — a want, a bill, a seam — so a
+reader outside the code could not tell what had actually changed. An entry
+now says what is different from the outside, in the game's own words, and
+then what was wrong before. The ten most recent sections are rewritten under
+the new rule. Nothing in the game changed.
+
 ## 0.13.160
 
 **A research project can finish on a small base again.** With one program and

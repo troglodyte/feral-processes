@@ -98,8 +98,8 @@ use battle::{
 use building::{
     build_commit, draw_base_output, draw_base_staff, draw_build_direction, draw_build_menu,
     draw_build_program, draw_remove_confirm, draw_remove_menu, draw_staffing_menu,
-    draw_structure_menu, draw_structures, draw_upgrade_menu, draw_work_order_pick,
-    draw_work_order_quantity, draw_work_orders,
+    draw_structure_menu, draw_structures, draw_work_order_pick, draw_work_order_quantity,
+    draw_work_orders,
 };
 use caravan::{CaravanBasket, draw_caravan};
 use contracts::draw_contracts;
@@ -872,7 +872,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     let scanned = match app.mode {
         Mode::WorkStructure => app.workable_structures(),
         Mode::Remove => app.nearby_structures(),
-        Mode::Upgrade => app.upgradeable_structures(),
         _ => Vec::new(),
     };
     // Row counts are app-core's and rows are gui's, the way the history
@@ -1100,7 +1099,17 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         ),
         Mode::Remove => draw_remove_menu(&scanned, selected, refusal, painter, m),
         Mode::RemoveConfirm => draw_remove_confirm(selected, refusal, painter, m),
-        Mode::Upgrade => draw_upgrade_menu(game, &scanned, selected, refusal, painter, m),
+        // Says the crew does the work, because the direction prompt is now
+        // the whole of the screen the player decides on: the list this
+        // replaced carried that sentence above its rows.
+        Mode::UpgradeDirection => draw_direction_prompt(
+            "Upgrade Direction",
+            "Upgrade which neighbour? Your crew fetches the parts and does \
+             the work. (arrows/hjkl, Esc to cancel)",
+            refusal,
+            painter,
+            m,
+        ),
         Mode::InspectDirection => draw_direction_prompt(
             "Inspect Direction",
             "Choose a direction to inspect (arrows/hjkl), Esc to cancel",
@@ -1473,7 +1482,7 @@ mod tests {
         Mode::Remove,
         Mode::RemoveConfirm,
         Mode::RemoveDirection,
-        Mode::Upgrade,
+        Mode::UpgradeDirection,
         Mode::InspectDirection,
         Mode::FrameMap,
         Mode::Manifest,

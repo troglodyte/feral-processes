@@ -88,10 +88,12 @@ The rest of what a base does:
   between them. Denying something already on the shelf leaves it there; a filter says what may come
   in, never what has to leave.
 - A structure upgrades to whichever is lower, its own maximum tier or the zone you are in — so a
-  structure at its ceiling in zone 1 stays listed and starts moving again after a breach. An upgrade
-  is a request like any other build: nothing is charged when you ask for it, your crew fetches the
-  parts out of the base and works on the spot, and the machine keeps running the whole time. Call one
-  off from the build orders screen and you get back whatever has been carried there.
+  structure stopped at its ceiling in zone 1 starts moving again after a breach. Pick the upgrade
+  row off the base menu and then point at the machine: it has to be the tile right beside you, north,
+  south, east or west. An upgrade is a request like any other build: nothing is charged when you ask
+  for it, your crew fetches the parts out of the base and works on the spot, and the machine keeps
+  running the whole time. Call one off from the build orders screen and you get back whatever has
+  been carried there.
 - A GC Entropy Sweep chews on a random structure now and then, and what it takes off is permanent
   unless something repairs it. Sweeps start in the second sector: the base you raise in sector 1 is
   never swept, so the first one you lose ground to is one you had a breach to prepare for. A Shield

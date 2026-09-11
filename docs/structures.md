@@ -188,9 +188,9 @@ four lines in the pane every tick.
 
 A tier is bounded twice and the two bounds mean different things. The def's
 `max_tier` is permanent; the zone is not, and reaching sector *N* is what
-unlocks Mk*N* — so **nothing upgrades at all before the first breach**. A
-structure sitting at its zone ceiling still lists in the upgrade menu rather
-than being filtered out, because a player who has never breached would
+unlocks Mk*N* — so **nothing upgrades at all before the first breach**. The
+base menu offers the upgrade row whenever anything nearby has a path at all,
+ceiling or no ceiling, because a player who has never breached would
 otherwise never learn upgrading exists.
 
 Note which they are: 4 of the 5 producers, 3 of the 11 assemblers, and 2 of the 15 utilities. The one producer that does not is the Power Conduit. So upgrading is overwhelmingly a lever on the *taps* — nearly every producer takes it, while the assemblers that do (Compiler, Armory, Fabricator) are the exception rather than the rule, and not one of the four intermediate benches is among them. You raise what comes out of the ground, not what the lines do with it.

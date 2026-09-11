@@ -134,8 +134,14 @@ const BASE_ROWS: &[GroupEntry] = &[
     },
     GroupEntry {
         label: "Upgrade a structure",
-        target: Mode::Upgrade,
+        target: Mode::UpgradeDirection,
         locality: Locality::Base,
+        // The *scan radius*, where the screen it opens reaches one tile.
+        // Deliberately the wider question, `Mode::Remove`'s own row's shape:
+        // a row that appeared only while you were already standing beside a
+        // machine would leave a player who has never stood beside one
+        // unable to learn the verb exists. Aiming at a tile with nothing on
+        // it is a sentence, not a dead end.
         available: |app| !app.upgradeable_structures().is_empty(),
     },
     GroupEntry {

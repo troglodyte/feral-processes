@@ -330,20 +330,6 @@ pub(super) const LAST_PROGRAM_CLAUSE: &str =
 pub(super) const DEPLOY_NEEDS_A_SECOND_PROGRAM: &str =
     "Committing your last program would leave nobody to build — only Home is exempt.";
 
-/// The upgrade menu's twin of `DEPLOY_NEEDS_A_SECOND_PROGRAM`.
-///
-/// One line for the screen rather than a tag down every row, `build_menu_rows`'
-/// argument: the floor is a fact about the base, so it stops every row at
-/// once and repeating it per row would say nothing extra. It is also why
-/// this line is needed at all — an upgrade row's existing tag ("needs a
-/// zone 3 program") is a *depth*, and a row greyed by the floor while
-/// wearing that tag tells a player with a zone 5 program that their program
-/// is too shallow.
-///
-/// No Home tail: Home has no upgrade, so nothing on this screen is exempt.
-pub(super) const UPGRADE_NEEDS_A_SECOND_PROGRAM: &str =
-    "Committing your last program would leave nobody to build — every upgrade costs one.";
-
 /// Whether a screen with nothing to offer is short because of the **roster
 /// floor** — the one reason that is not about any program on the roster —
 /// and so which of the two sentences it prints. The single place that
@@ -427,6 +413,17 @@ pub(super) struct BuildCommit {
     /// `draw_build_program` takes `&mut Game` after `build_commit(app)` has
     /// been hoisted, so there is no `App` left to ask.
     pub structure: StructureId,
+    /// The bill this order will put the crew on, `build_cost_display`'s
+    /// form — empty for a deploy.
+    ///
+    /// **Only an upgrade carries it, and that is not an oversight.** A
+    /// deploy knows its structure a screen earlier, so `draw_build_direction`
+    /// quotes the bill there while the player is still choosing where to put
+    /// it. An upgrade's target is not known until the direction key lands —
+    /// `Mode::UpgradeDirection` is aimed at a tile — so this is the first
+    /// screen that *can* price it, and the list it replaced was the only
+    /// place the figure used to appear.
+    pub cost: Vec<String>,
 }
 
 impl BuildCommit {
@@ -503,7 +500,7 @@ impl BuildCommit {
 /// dropping the whole prompt: the *tier* is the part the player cannot
 /// afford to lose, and it is carried on `PendingBuild` itself.
 pub(super) fn build_commit(app: &mut App) -> Option<BuildCommit> {
-    let (label, to_tier) = match app.pending_build.clone()? {
+    let (label, to_tier, cost) = match app.pending_build.clone()? {
         PendingBuild::Deploy { structure, .. } => (
             app.game
                 .as_ref()
@@ -514,6 +511,7 @@ pub(super) fn build_commit(app: &mut App) -> Option<BuildCommit> {
                 })
                 .map(|def| def.name),
             None,
+            Vec::new(),
         ),
         PendingBuild::Upgrade { structure, to_tier } => (
             app.upgradeable_structures()
@@ -521,13 +519,35 @@ pub(super) fn build_commit(app: &mut App) -> Option<BuildCommit> {
                 .find(|s| s.entity == structure)
                 .map(|s| s.label),
             Some(to_tier),
+            upgrade_cost_display(app, structure),
         ),
     };
     Some(BuildCommit {
         label: label.unwrap_or_else(|| UNNAMED_BUILD_TARGET.to_string()),
         to_tier,
         structure: app.pending_build_kind()?,
+        cost,
     })
+}
+
+/// What the crew will have to fetch to raise `structure` a tier, priced
+/// against the pack **and** the base's shelves.
+///
+/// `build_cost_display` and not `cost_display`, the rule the upgrade list
+/// held before it: the crew fetches, so quoting the pack alone would price
+/// the order against a store the verb does not read. `Game::upgrade_cost` is
+/// the same door that list used, so the figure did not move when the screen
+/// under it did.
+fn upgrade_cost_display(app: &mut App, structure: Entity) -> Vec<String> {
+    let Some(game) = app.game.as_mut() else {
+        return Vec::new();
+    };
+    let Some(cost) = game.upgrade_cost(structure) else {
+        return Vec::new();
+    };
+    let status = game.player_status();
+    let stock = game.base_stock();
+    build_cost_display(game, &cost, &status.inventory, &stock)
 }
 
 /// The noun the prompt falls back to when the order's structure cannot be
@@ -581,6 +601,20 @@ pub(super) fn build_program_rows(
             wrap_text(&commit.prompt(), DESCRIBE_WRAP_COLUMNS)
                 .into_iter()
                 .map(|line| Row::TextColored(line, ORANGE)),
+        );
+    }
+    // Wrapped, and at `DESCRIBE_WRAP_COLUMNS` like the warning above it:
+    // `draw_row` clips a row vertically and never horizontally, and a bill
+    // naming three materials with their two figures each is already past the
+    // body at one line.
+    if let Some(commit) = commit.filter(|c| !c.cost.is_empty()) {
+        rows.extend(
+            wrap_text(
+                &format!("Your crew fetches: {}", commit.cost.join(", ")),
+                DESCRIBE_WRAP_COLUMNS,
+            )
+            .into_iter()
+            .map(text_row),
         );
     }
     rows.push(text_row(PROGRAM_PICKER_PROMPT));
@@ -1149,188 +1183,6 @@ pub(super) fn draw_remove_menu(
     }
     draw_popup(
         "Demolish Structure",
-        PopupSize::Large,
-        &rows,
-        refusal,
-        painter,
-        m,
-    );
-}
-
-/// The bracketed tier tag on an upgrade-menu row.
-///
-/// A structure sitting at its ceiling is still listed rather than filtered
-/// out — see `App::upgradeable_structures` — so the row has to say why it
-/// has stopped. Whether that is temporary is exactly the difference between
-/// `ceiling` and `max_tier`: below `max_tier` the zone is what's holding it,
-/// and one more breach frees the next tier. At `max_tier` it is simply
-/// finished, and the plain tag it has always shown is right.
-fn tier_tag(s: &EntityView) -> String {
-    let tier = s.tier.unwrap_or(1);
-    match (s.ceiling, s.max_tier) {
-        (Some(ceiling), Some(max_tier)) if tier >= ceiling && ceiling < max_tier => {
-            let next = tier + 1;
-            format!("Mk{tier} — zone {next} unlocks Mk{next}")
-        }
-        _ => format!("Mk{tier}"),
-    }
-}
-
-/// How deep a program this row's next upgrade would cost, or `None` for a
-/// row that is not offering a next tier at all.
-///
-/// **Per row, unlike the deploy menu's one line**, because the requirement
-/// varies with the target: a Mk1 needs a zone 2 program and the Mk3 beside
-/// it needs a zone 4, so one sentence about the screen could only be right
-/// for one of them.
-///
-/// A structure already stopped by `ceiling` says nothing about programs.
-/// `tier_tag` has already told that row what is holding it — the zone, or
-/// the def's own maximum — and a second requirement printed underneath would
-/// name a blocker that is not the one in the way. `ceiling` rather than
-/// `max_tier` for the same reason `tier_tag` splits on it: below the ceiling
-/// is the range an upgrade can actually be ordered in today.
-///
-/// The number is `program_tier_required`'s, on the tier
-/// `App::handle_upgrade_key` would record — `tier + 1`, `Game::upgrade_structure`'s
-/// own `next` — so the tag cannot name a depth the confirm step then
-/// disagrees with.
-fn upgrade_program_tier(s: &EntityView) -> Option<u32> {
-    let tier = s.tier?;
-    let ceiling = s.ceiling?;
-    (tier < ceiling).then(|| program_tier_required(BuildGoal::Upgrade { to_tier: tier + 1 }))
-}
-
-/// What an upgrade row appends about the program its order will cost.
-fn upgrade_program_tag(tier: u32) -> String {
-    format!(" · needs a zone {tier} program")
-}
-
-/// One upgrade row's lines, given the two things only a `Game` could work
-/// out: the bill, and whether the roster can pay for this row's next tier.
-///
-/// Pure so the tag and the dimming are measurable without a `Game` or a
-/// `Painter` — `build_menu_rows`' split, one screen over. It re-derives the
-/// depth through `upgrade_program_tier` rather than taking it as a second
-/// argument, so the number the row prints and the number the caller asked
-/// the roster about come from the one function and cannot disagree.
-///
-/// **Through `wrapped_row_lines`, and this row is why it had to be.** The
-/// row was already four segments long — name, tier tag, bill, and the
-/// percentage of a pending order — with nothing clamping it horizontally,
-/// and the program requirement lands on the *end* of that, so it is the
-/// first thing to be drawn off the right edge. `companion_row_lines`' fix,
-/// for its reason: a row under budget comes back as the single line it
-/// already was, so every row that fitted before still looks exactly as it
-/// did.
-///
-/// The continuations are `Row::Item` and never `selected`: `popup_layout`
-/// cuts the scrollable body at the last `Row::Item`, so a `Row::Text` tail
-/// under the final structure would be pinned to the foot of the box, and
-/// the highlight belongs on the line carrying the shortcut.
-fn upgrade_menu_row(
-    s: &EntityView,
-    shortcut: char,
-    cost: &str,
-    selected: bool,
-    short_a_program: bool,
-) -> Vec<Row> {
-    // A machine being upgraded carries its own pending row. The row stays
-    // listed and refuses on pick rather than being hidden, so it has to
-    // say why.
-    let pending = s
-        .build
-        .as_ref()
-        .map(|row| format!(" - on order, {}% done", row.percent()))
-        .unwrap_or_default();
-    let program = upgrade_program_tier(s)
-        .map(upgrade_program_tag)
-        .unwrap_or_default();
-    let head = format!(
-        "[{shortcut}] {} at ({}, {}) [{}]",
-        s.label,
-        s.pos.0,
-        s.pos.1,
-        tier_tag(s),
-    );
-    // Greyed rather than hidden — see `build_menu_rows` — and still
-    // pickable, because the picker it leads to says the same thing at more
-    // length.
-    let colored = |text: String, selected: bool| match short_a_program {
-        true => spent_item_row(text, selected),
-        false => item_row(text, selected),
-    };
-    let mut lines = wrapped_row_lines(head, &[cost.to_string(), pending, program]).into_iter();
-    let first = lines
-        .next()
-        .expect("wrapped_row_lines always emits the head");
-    let mut rows = vec![with_icon(
-        colored(first, selected),
-        s.glyph,
-        glyph_color(s.color),
-    )];
-    rows.extend(lines.map(|line| colored(line, false)));
-    rows
-}
-
-pub(super) fn draw_upgrade_menu(
-    game: &mut Game,
-    structures: &[EntityView],
-    selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    // The pack **and** the base's shelves, `build_cost_display`'s whole
-    // reason: an upgrade is fetched by the crew now, so a menu quoting the
-    // pack alone would price it against a store the verb no longer reads.
-    let status = game.player_status();
-    let stock = game.base_stock();
-    let mut rows = vec![text_row(
-        "Upgrade which structure? Your crew fetches the parts and does the work. (Esc to cancel; Up/Down + Enter also work)",
-    )];
-    // The roster floor stops every row at once, so it is said once, above
-    // the list — `build_menu_rows`' shape, and see
-    // `UPGRADE_NEEDS_A_SECOND_PROGRAM` for why the per-row dimming cannot
-    // carry this on its own: a row's own tag names a *depth*, and the floor
-    // is not about depth. `Row::Text` and ORANGE for the deploy line's
-    // reasons — pinned above the scroll, and never inside the `Row::Item`
-    // span a keypress resolves against.
-    if floored_by_the_last_program(game) {
-        rows.push(Row::TextColored(
-            UPGRADE_NEEDS_A_SECOND_PROGRAM.to_string(),
-            ORANGE,
-        ));
-    }
-    if structures.is_empty() {
-        rows.push(text_row("(no upgradeable structures nearby)"));
-    }
-    for (i, s) in structures.iter().enumerate() {
-        let cost = game
-            .upgrade_cost(s.entity)
-            .map(|cost| {
-                format!(
-                    " - {}",
-                    build_cost_display(game, &cost, &status.inventory, &stock).join(", ")
-                )
-            })
-            .unwrap_or_default();
-        // Asked per row through `Game::programs_for_build`, the one
-        // derivation the picker draws and `App::handle_build_program_key`
-        // indexes — so a row that reads as affordable is one the picker will
-        // actually have something in.
-        let short_a_program =
-            upgrade_program_tier(s).is_some_and(|tier| game.programs_for_build(tier).is_empty());
-        rows.extend(upgrade_menu_row(
-            s,
-            menu_shortcut(i),
-            &cost,
-            i == selected,
-            short_a_program,
-        ));
-    }
-    draw_popup(
-        "Upgrade Structure",
         PopupSize::Large,
         &rows,
         refusal,
@@ -2102,17 +1954,6 @@ mod tests {
         );
     }
 
-    /// The colour of every `Row::Item` in a list, in order — what a "greyed"
-    /// row is, since dimming is not something the text says.
-    fn item_colors(rows: &[Row]) -> Vec<Color> {
-        rows.iter()
-            .filter_map(|r| match r {
-                Row::Item { color, .. } => Some(*color),
-                _ => None,
-            })
-            .collect()
-    }
-
     /// The colour of each *structure* row, in entry order — the headings and
     /// the wrapped descriptions are `Row::Item` too (they have to be, see
     /// `build_menu_rows`), and only the lines carrying a shortcut stand for
@@ -2242,164 +2083,6 @@ mod tests {
                 entries[i].name
             );
         }
-    }
-
-    /// The upgrade menu's requirement is **per row**, because it varies with
-    /// the target: a Mk1 buys a zone 2 program and the Mk3 beside it buys a
-    /// zone 4, so one sentence about the screen could only be right for one
-    /// of them.
-    #[test]
-    fn an_upgrade_row_names_the_zone_its_own_next_tier_costs() {
-        assert_eq!(upgrade_program_tier(&view(1, 5, 5)), Some(2));
-        assert_eq!(upgrade_program_tier(&view(3, 5, 5)), Some(4));
-        assert_eq!(
-            upgrade_program_tag(2),
-            " · needs a zone 2 program",
-            "appended to the row rather than replacing anything it already says"
-        );
-    }
-
-    /// The whole row, as `draw_upgrade_menu` assembles it.
-    ///
-    /// The tag is a **cost**, so it is printed whether or not the roster can
-    /// meet it — exactly like the bill of materials beside it, which does
-    /// not disappear when the shelves are empty. Appended to what the row
-    /// already said rather than replacing any of it. What affordability
-    /// decides is the *colour*: a roster that cannot reach the depth greys
-    /// the row without removing it.
-    #[test]
-    fn an_upgrade_row_that_no_program_can_pay_for_greys_but_stays() {
-        let s = view(2, 5, 5);
-        let joined = |rows: &[Row]| rows.iter().map(row_text).collect::<Vec<_>>().join(" ");
-        let afford = upgrade_menu_row(&s, 'a', " - 12 Bytecode Blocks", false, false);
-        let short = upgrade_menu_row(&s, 'a', " - 12 Bytecode Blocks", false, true);
-
-        assert!(
-            joined(&afford).contains("needs a zone 3 program"),
-            "the depth is a price and is quoted either way: {}",
-            joined(&afford)
-        );
-        let text = joined(&short);
-        assert!(text.contains("needs a zone 3 program"), "{text:?}");
-        assert!(
-            text.contains("Mining Node"),
-            "still names the structure: {text:?}"
-        );
-        assert!(
-            text.contains("[Mk2]"),
-            "still carries its tier tag: {text:?}"
-        );
-        assert!(
-            text.contains("12 Bytecode Blocks"),
-            "still quotes the bill: {text:?}"
-        );
-        assert!(
-            item_colors(&short).iter().all(|c| *c == TEXT_DIM),
-            "the row reads as unaffordable"
-        );
-        assert!(
-            item_colors(&afford).iter().all(|c| *c == TEXT),
-            "and an affordable one does not"
-        );
-    }
-
-    /// The program requirement lands on the *end* of a row that already
-    /// carries a name, a tier tag, a bill and a pending order's percentage —
-    /// so with nothing clamping a row horizontally it would be the first
-    /// thing drawn off the right edge, which is to say the new information
-    /// would be exactly the information lost.
-    ///
-    /// `wrapped_row_lines` sheds at a segment boundary, so a row that fitted
-    /// before still comes back as the one line it was; this is the census
-    /// that says the long ones now fit too.
-    #[test]
-    fn no_upgrade_row_runs_past_the_popup_body() {
-        let mut s = view(2, 5, 5);
-        s.label = "Recompiled Kernel Substrate Bench".to_string();
-        s.pos = (-1234, -5678);
-        let cost = " - Singularity Matrix (0/4), Recompile Kernel (0/2), Bytecode Block (0/18)";
-        for short_a_program in [true, false] {
-            for row in upgrade_menu_row(&s, 'a', cost, true, short_a_program) {
-                let text = row_text(&row);
-                assert!(
-                    text.chars().count() <= ROW_WRAP_COLUMNS,
-                    "a {} char upgrade row runs past the {ROW_WRAP_COLUMNS} column body: {text:?}",
-                    text.chars().count()
-                );
-            }
-        }
-    }
-
-    /// A row short enough to fit is left exactly as it was, so this wrap
-    /// changed nothing about the screen it was added to.
-    #[test]
-    fn a_short_upgrade_row_is_still_one_line() {
-        let rows = upgrade_menu_row(&view(2, 5, 5), 'a', " - 12 Bytecode Blocks", false, false);
-        assert_eq!(
-            rows.len(),
-            1,
-            "{:?}",
-            rows.iter().map(row_text).collect::<Vec<_>>()
-        );
-    }
-
-    /// The continuations are `Row::Item` and never selected: `popup_layout`
-    /// cuts the body at the last `Row::Item`, so a `Row::Text` tail under the
-    /// final structure would be torn off it and pinned to the foot of the
-    /// box, and the highlight belongs on the line carrying the shortcut.
-    #[test]
-    fn a_wrapped_upgrade_row_keeps_its_highlight_on_the_head() {
-        let mut s = view(2, 5, 5);
-        s.label = "Recompiled Kernel Substrate Bench".to_string();
-        let cost = " - Singularity Matrix (0/4), Recompile Kernel (0/2), Bytecode Block (0/18)";
-        let rows = upgrade_menu_row(&s, 'a', cost, true, false);
-        assert!(rows.len() > 1, "the fixture has to actually wrap");
-        assert!(
-            rows.iter().all(|r| matches!(r, Row::Item { .. })),
-            "a continuation drawn as text falls out of the scrollable body"
-        );
-        let selected: Vec<bool> = rows
-            .iter()
-            .map(|r| matches!(r, Row::Item { selected: true, .. }))
-            .collect();
-        assert!(selected[0], "the head carries the highlight");
-        assert!(
-            selected[1..].iter().all(|s| !s),
-            "and nothing else does: {selected:?}"
-        );
-    }
-
-    /// A row already stopped by its ceiling says nothing about programs.
-    /// `tier_tag` has told it what is holding it — the zone it has not
-    /// reached, or the def's own maximum — and a program requirement printed
-    /// under that would name a blocker that is not the one in the way.
-    #[test]
-    fn a_structure_that_cannot_go_up_is_not_told_to_buy_a_program() {
-        assert_eq!(
-            upgrade_program_tier(&view(1, 1, 5)),
-            None,
-            "held at Mk1 by the zone: breaching is what frees it, not a program"
-        );
-        assert_eq!(
-            upgrade_program_tier(&view(5, 5, 5)),
-            None,
-            "finished at the def's own ceiling"
-        );
-    }
-
-    #[test]
-    fn a_tier_below_the_ceiling_reads_as_it_always_has() {
-        assert_eq!(tier_tag(&view(2, 5, 5)), "Mk2");
-    }
-
-    #[test]
-    fn a_tier_stopped_by_the_zone_says_which_zone_would_free_it() {
-        assert_eq!(tier_tag(&view(1, 1, 5)), "Mk1 — zone 2 unlocks Mk2");
-    }
-
-    #[test]
-    fn a_tier_stopped_by_the_defs_own_ceiling_says_nothing_about_zones() {
-        assert_eq!(tier_tag(&view(5, 5, 5)), "Mk5");
     }
 
     fn assignee(kind: TaskKind) -> Assignee {
@@ -2568,7 +2251,6 @@ mod tests {
 /// the roster.
 #[cfg(test)]
 mod build_program_tests {
-    use super::tests::view;
     use super::*;
     use crate::render::test_pet;
 
@@ -2584,14 +2266,22 @@ mod build_program_tests {
             label: label.to_string(),
             to_tier: None,
             structure: "fabricator".to_string(),
+            cost: Vec::new(),
         }
     }
 
     fn upgrade(label: &str, to_tier: u32) -> BuildCommit {
+        upgrade_costing(label, to_tier, Vec::new())
+    }
+
+    /// The same, with the bill the crew would fetch — the figure the list
+    /// this screen replaced used to carry per row.
+    fn upgrade_costing(label: &str, to_tier: u32, cost: Vec<String>) -> BuildCommit {
         BuildCommit {
             label: label.to_string(),
             to_tier: Some(to_tier),
             structure: "mining_node".to_string(),
+            cost,
         }
     }
 
@@ -2834,6 +2524,19 @@ mod build_program_tests {
         let commits = [
             deploy("Recompiled Kernel Substrate Assembly Bay"),
             upgrade("Recompiled Kernel Substrate Assembly Bay", 9),
+            // With a bill on it: three materials and their two figures each
+            // is the longest line this screen can be handed, and it arrived
+            // with `Mode::UpgradeDirection` — the list it replaced wrapped
+            // its own rows and this one has to wrap too.
+            upgrade_costing(
+                "Recompiled Kernel Substrate Assembly Bay",
+                9,
+                vec![
+                    "Recompiled Bytecode Block (120/144)".to_string(),
+                    "Cache Grain Lattice (0/96)".to_string(),
+                    "Kernel Substrate Ingot (18/72)".to_string(),
+                ],
+            ),
         ];
         crate::paint::with_painter(|p| {
             let m = crate::text::ui_metrics(900.0);
@@ -2904,21 +2607,24 @@ mod build_program_tests {
         }
     }
 
-    /// The three lines the frontend prints for the roster floor all quote
+    /// Both lines the frontend prints for the roster floor quote
     /// `LAST_PROGRAM_CLAUSE`, which is `Game::commit_for_build`'s own
     /// wording with the structure name — the one thing a menu cannot know —
     /// taken off the end.
     ///
     /// Held here because the alternative is what this branch has already
-    /// had to undo twice: three screens each inventing their own phrasing
-    /// of one rule, so a player who meets the floor at the menu and again at
-    /// the confirm reads two different sentences and has to work out whether
+    /// had to undo twice: screens each inventing their own phrasing of one
+    /// rule, so a player who meets the floor at the menu and again at the
+    /// confirm reads two different sentences and has to work out whether
     /// they are the same refusal.
+    ///
+    /// **Two lines where there were three.** The upgrade menu had one of its
+    /// own; `Mode::UpgradeDirection` has no list to head, and the floor now
+    /// reaches an upgrading player at the picker like every other refusal.
     #[test]
-    fn the_three_last_program_lines_share_the_engines_clause() {
+    fn the_last_program_lines_share_the_engines_clause() {
         for line in [
             DEPLOY_NEEDS_A_SECOND_PROGRAM,
-            UPGRADE_NEEDS_A_SECOND_PROGRAM,
             &no_candidates_refusal(1, true),
         ] {
             assert!(
@@ -2930,9 +2636,36 @@ mod build_program_tests {
             DEPLOY_NEEDS_A_SECOND_PROGRAM.contains("Home"),
             "the deploy menu greys everything but Home, so its line has to say so"
         );
+    }
+
+    /// The bill the crew will fetch is on this screen, because
+    /// `Mode::UpgradeDirection` is the first screen that knows which machine
+    /// the order is for and so cannot carry it.
+    ///
+    /// Priced against the pack **and** the shelves — `build_cost_display`'s
+    /// form, which `build_commit` reaches through `Game::upgrade_cost`, the
+    /// same door the list this replaced used.
+    #[test]
+    fn an_upgrade_commit_quotes_what_the_crew_has_to_fetch() {
+        let commit = upgrade_costing("Mining Node", 2, vec!["Bytecode Block (4/12)".to_string()]);
+        let rows = build_program_rows(Some(&commit), &[cycling("Sparkgrub")], 0);
+        let drawn: Vec<&str> = rows.iter().map(row_text).collect();
         assert!(
-            !UPGRADE_NEEDS_A_SECOND_PROGRAM.contains("Home"),
-            "Home has no upgrade, so nothing on that screen is exempt"
+            drawn.iter().any(|t| t.contains("Bytecode Block (4/12)")),
+            "the order has to say what it will cost the base: {drawn:?}"
+        );
+    }
+
+    /// A deploy does not repeat it: `draw_build_direction` has already
+    /// quoted the bill one screen earlier, where the structure was chosen
+    /// before the tile.
+    #[test]
+    fn a_deploy_commit_does_not_repeat_the_bill() {
+        let rows = build_program_rows(Some(&deploy("Fabricator")), &[cycling("Sparkgrub")], 0);
+        let drawn: Vec<&str> = rows.iter().map(row_text).collect();
+        assert!(
+            !drawn.iter().any(|t| t.starts_with("Your crew fetches")),
+            "the deploy direction screen already said it: {drawn:?}"
         );
     }
 
@@ -2948,6 +2681,18 @@ mod build_program_tests {
         let commits = [
             deploy("Recompiled Kernel Substrate Assembly Bay"),
             upgrade("Recompiled Kernel Substrate Assembly Bay", 9),
+            // The bill `Mode::UpgradeDirection` pushed onto this screen —
+            // unwrapped it is 118 columns, so this case is what holds the
+            // wrap in place.
+            upgrade_costing(
+                "Recompiled Kernel Substrate Assembly Bay",
+                9,
+                vec![
+                    "Recompiled Bytecode Block (120/144)".to_string(),
+                    "Cache Grain Lattice (0/96)".to_string(),
+                    "Kernel Substrate Ingot (18/72)".to_string(),
+                ],
+            ),
         ];
         for commit in &commits {
             for row in build_program_rows(Some(commit), &pets, 0) {
@@ -3002,21 +2747,6 @@ mod build_program_tests {
         assert!(
             warning < first_item,
             "the warning fell into the scrolling body"
-        );
-    }
-
-    /// `upgrade_program_tier` reads the row's *current* tier, so a picker
-    /// reached from a Mk2 row is asking for a zone 3 program — the same
-    /// number `App::handle_upgrade_key` records as `to_tier`.
-    #[test]
-    fn the_upgrade_rows_tag_and_the_picker_agree_on_the_depth() {
-        let row = view(2, 5, 5);
-        let tier = upgrade_program_tier(&row).expect("a Mk2 below its ceiling can go up");
-        assert_eq!(upgrade_program_tag(tier), " · needs a zone 3 program");
-        assert_eq!(
-            upgrade("Mining Node", tier).tier(),
-            tier,
-            "the picker the row leads to asks for exactly what the row said"
         );
     }
 
@@ -3108,23 +2838,6 @@ mod build_program_tests {
         assert!(
             dimmed.iter().any(|t| t.contains("Mining Node")),
             "an unaffordable structure row is greyed, not hidden: {dimmed:?}"
-        );
-
-        // The upgrade menu: the same one line, and the row dimmed with it.
-        let structures = [view(1, 5, 5)];
-        let (_, shapes) = crate::paint::with_painter(|p| {
-            draw_upgrade_menu(&mut game, &structures, 0, None, p, &m);
-        });
-        let drawn = crate::paint::painted_text(&shapes);
-        assert!(
-            says(&drawn, UPGRADE_NEEDS_A_SECOND_PROGRAM),
-            "the upgrade menu has to name it too — its per-row tag names a depth, \
-             and depth is not what stopped this: {drawn:?}"
-        );
-        let dimmed = crate::paint::painted_runs_in(&shapes, TEXT_DIM, false);
-        assert!(
-            dimmed.iter().any(|t| t.contains("Mining Node")),
-            "and the row it would lead to is greyed: {dimmed:?}"
         );
 
         // The picker the greyed rows still lead to: nothing offered, and the

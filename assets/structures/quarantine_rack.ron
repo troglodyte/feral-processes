@@ -7,5 +7,4 @@
     build_cost: [("core_fragment", 14), ("bytecode_block", 2)],
     racks: Some((slots: 8)),
     upgrade: Some((max_tier: 5, cost: [("core_fragment", 10), ("cache_grain", 1)])),
-    costs_no_program: true,
 )

@@ -2828,13 +2828,11 @@ fn a_program_at_exactly_the_required_zone_qualifies() {
     );
 }
 
-/// Two exemptions, and the second is authored rather than derived.
-/// `HOME_STRUCTURE_ID` is exempt at every tier: a fresh run owns zero
-/// programs, and one is granted only as an achievements reward, so a Home
-/// that cost a program would be unfoundable. Everything else says it for
-/// itself with `costs_no_program` — the shelves, because a shelf is not
-/// worth a body, and the Zone Portal, because it is spent the moment it is
-/// walked through. Everything that says nothing needs one.
+/// The Home is exempt twice over, and the second exemption is the one that
+/// matters: it runs no job, so the rule below already frees it, but it is
+/// also exempt by `category()`. A fresh run owns zero programs and one is
+/// granted only as an achievements reward, so a `home.ron` edited to declare
+/// `work:` must not be able to leave a new game unable to found a base.
 #[test]
 fn the_home_a_shelf_and_a_portal_need_no_program() {
     let game = Game::new(20260908, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -2855,6 +2853,48 @@ fn the_home_a_shelf_and_a_portal_need_no_program() {
         "an id with no def behind it still costs one — place_structure \
          refuses it as unknown long before the cost is asked about"
     );
+}
+
+/// **A body is spent on a machine that will take a body.** The program cost
+/// follows `StructureDef::runs_a_job` — an extractor, an assembler or a rig
+/// — so everything a program never stands at is free of it: a Shield, a
+/// Patch Node, a Repair Bay, a Relay, a shelf, the doorway out of the
+/// sector. Asserted over the shipped ids rather than by re-deriving the
+/// predicate, because the point of the rule is what the *content* costs.
+#[test]
+fn only_a_machine_that_runs_a_job_costs_a_program() {
+    let game = Game::new(20260911, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    for id in [
+        "mining_node",
+        "research_node",
+        "lathe",
+        "compiler",
+        "teardown_rig",
+    ] {
+        assert!(
+            game.structure_needs_program(&id.into()),
+            "{id} runs a job, so a program is what it is staffed with"
+        );
+    }
+    for id in [
+        "shield",
+        "patch_node",
+        "repair_bay",
+        "relay",
+        "data_cache",
+        "sandbox",
+        "recharger_node",
+        "defrag_bay",
+        "line_driver",
+        "market",
+        "contract_broker",
+    ] {
+        assert!(
+            !game.structure_needs_program(&id.into()),
+            "{id} runs no job, so there is nothing for a committed program to do"
+        );
+    }
 }
 
 /// The weapon in the player's hand is not a spare part — it cannot be

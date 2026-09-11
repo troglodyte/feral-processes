@@ -2799,73 +2799,61 @@ fn every_shipped_need_has_a_shipped_amenity() {
     }
 }
 
-/// What the shipped content charges a body for, now that the exemption is
-/// authored rather than derived.
+/// What the shipped content charges a body for.
 ///
-/// Every shelf used to be free because `needs_program` read `stores`, and
-/// the day that stopped being the rule the six depot files could have gone
-/// back to costing a program with nothing failing to compile — a whole
-/// ladder of storage silently repriced. So the pairing is asserted here
-/// instead: a shipped haul target is free to build, and so is the doorway
-/// out of the sector, which is spent the moment it is walked through.
+/// **A body is spent on a machine that will take a body.** The cost follows
+/// `StructureDef::runs_a_job`, so the census is written the other way round
+/// — over the fields a structure authors for some *other* purpose — and it
+/// is a real statement about content rather than a re-derivation: a shelf, a
+/// rack, the doorway out of the sector, anything that defends, repairs,
+/// services a need or trades costs nobody, and every producer costs one. A
+/// Shield that grew an `assembles:` line would fail both arms at once.
 ///
-/// A census over *shipped assets*, deliberately not a rule in `StructureDef`
-/// — a mod is free to price a shelf of its own however it likes.
+/// Deliberately a census over *shipped assets* and not a rule in
+/// `StructureDef` — a mod is free to build a bench that defends.
 #[test]
-fn every_shipped_shelf_and_the_portal_cost_no_program() {
-    use crate::structures::StructureDb;
+fn the_shipped_program_cost_follows_the_job() {
+    use crate::structures::{StructureCategory, StructureDb};
 
     let (structures, _) = StructureDb::load_dir(&test_assets_dir().join("structures")).unwrap();
-    let mut shelves = 0;
-    let mut portals = 0;
+    let mut free = 0;
+    let mut costed = 0;
 
     for def in structures.all() {
-        if def.stores {
-            shelves += 1;
+        if def.category() == StructureCategory::Home {
+            continue;
+        }
+        let idle = def.stores
+            || def.racks.is_some()
+            || def.zone_portal
+            || def.raid_defense > 0
+            || def.repair.is_some()
+            || def.trade.is_some()
+            || !def.services.is_empty();
+        if idle {
+            free += 1;
             assert!(
                 !def.needs_program(),
-                "{} is a haul target and must say `costs_no_program`: a shelf is not \
-                 worth a body",
+                "{} runs no job, so there is nothing at it for a committed program \
+                 to stand at",
                 def.id
             );
         }
-        if def.zone_portal {
-            portals += 1;
+        if def.work.is_some() || def.assembles.is_some() || def.strips.is_some() {
+            costed += 1;
             assert!(
-                !def.needs_program(),
-                "{} is despawned the moment it is walked through and would take the \
-                 committed program with it",
+                def.needs_program(),
+                "{} is staffed, and a program is what it is staffed with",
                 def.id
             );
         }
     }
 
-    assert!(shelves >= 6, "the shipped depot ladder runs to Mk6");
-    assert_eq!(portals, 1, "one shipped structure breaches");
-}
-
-/// A rack is not a haul target, so `def.stores` is false and the census above
-/// never sees it — it needs its own assertion, keyed on the field it does set.
-#[test]
-fn every_shipped_rack_costs_no_program() {
-    use crate::structures::StructureDb;
-
-    let (structures, _) = StructureDb::load_dir(&test_assets_dir().join("structures")).unwrap();
-    let mut racks = 0;
-
-    for def in structures.all() {
-        if def.racks.is_some() {
-            racks += 1;
-            assert!(
-                !def.needs_program(),
-                "{} is a shelf for carriers and must say `costs_no_program`: a shelf \
-                 is not worth a body",
-                def.id
-            );
-        }
-    }
-
-    assert!(racks >= 1, "the Quarantine Rack ships");
+    assert!(free >= 9, "the shipped depot ladder alone runs to Mk6");
+    assert!(
+        costed >= 5,
+        "the shipped assets define nodes, benches and a rig"
+    );
 }
 
 /// A def whose declared `subject` no trigger can satisfy is dead content:

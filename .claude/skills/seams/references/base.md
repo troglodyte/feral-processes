@@ -76,29 +76,36 @@
   site is despawned at completion — which is what makes
   `cancel_build_request` a refund of goods that still exist, and makes
   `BuildSiteSave::delivered` the load-bearing save field.
-- **Two exemptions from the program cost, and only the Home's is derived**:
-  `StructureDef::needs_program` is false for the Home — by `category()`, so
-  an edited `home.ron` can never leave a fresh run unable to found a base —
-  and for anything declaring `costs_no_program`, which the six shelves and
-  the Zone Portal author for themselves. `Game::structure_needs_program` is
-  the id-shaped door onto it and app-core's build flow routes the picker off
-  that exact call — a frontend deriving its own version (it was `category()
-  == Home` once, which was *true* until the second exemption shipped)
-  strands a free structure on a picker with nothing to confirm. **The trap
-  the flag closed was `stores` meaning two things** — a hauler may empty
-  into it, *and* it costs no body — which made a modded haul target free
-  whether its author meant it or not, and left a structure that wants the
-  exemption without being a haul target nowhere to say so. **The trap the
-  flag opened is the mirror image**: the exemption is now content, so a
-  seventh depot file that forgets the line silently costs a program, and
-  `every_shipped_shelf_and_the_portal_cost_no_program` in `tests/assets.rs`
-  is the census that says so. A Portal is exempt because it is despawned by
-  `enter_next_zone` the moment it is walked onto: the committed body would
-  die with the doorway, and the `BuildQuality` it buys is worth nothing on a
-  structure that runs no job. An exempt build is still a *request*:
+- **A build costs a tamed program exactly when the structure runs a job**,
+  and both exemptions fall out of that one rule. `StructureDef::needs_program`
+  is `runs_a_job()` — `work`, `assembles` or `strips` — so a body is spent on
+  the thing a body will afterwards be posted to, and a Shield, a Patch Node, a
+  Relay, a Data Cache, a shelf and the Zone Portal are all free for the same
+  reason rather than each for its own. The Home is exempt a second time by
+  `category()`, so an edited `home.ron` declaring `work:` can never leave a
+  fresh run — zero programs owned — unable to found a base.
+  `Game::structure_needs_program` is the id-shaped door onto it and app-core's
+  build flow routes the picker off that exact call — a frontend deriving its
+  own version (it was `category() == Home` once, which was *true* until the
+  second exemption shipped) strands a free structure on a picker with nothing
+  to confirm. **Two traps were closed in turn and the second is the one to
+  keep in view.** First `stores` meant two things — a hauler may empty into
+  it, *and* it costs no body — which made a modded haul target free whether
+  its author meant it or not; the fix was an authored `costs_no_program`
+  flag. That flag then made the exemption *content*: a seventh depot file
+  that forgot the line silently cost a program, and every ornament had to
+  remember to say it. Deriving off the job closes both, at the price a mod
+  can no longer build a bench that costs nobody — deliberate, because the
+  cost is a rule about the economy and not a property of a structure. A
+  Portal was the case that forced the flag and is still free: it is despawned
+  by `enter_next_zone` the moment it is walked onto, so the committed body
+  would die with the doorway. An exempt build is still a *request*:
   materials, crew, ticks, all unchanged, and it is the first `BuildSite`
   reachable with `program: None`, which is why `return_build_holdings` and
   both `build_quality_of` call sites already had to handle the `Option`.
+  `the_shipped_program_cost_follows_the_job` in `tests/assets.rs` is the
+  census, written over the fields a structure authors for some *other*
+  purpose so it stays a statement about content rather than a re-derivation.
 - **A build order commits one tamed program at filing, and that is the one
   exception to "nothing is charged at filing."** `commit_program`
   (`game/party.rs`) retires the program the moment the picker confirms —

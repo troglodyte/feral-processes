@@ -234,6 +234,25 @@ pub(super) fn conversion_rows(conversions: &[String], columns: usize) -> Vec<Row
         .collect()
 }
 
+/// What a node hands over, as the first line under its row — see
+/// `ResearchStatus::unlocks`.
+///
+/// **Above the description, where the conversions are below it.** The prose
+/// says what the node *is* and is worth reading once; this line is what the
+/// player is scanning the tree for, so it goes where the eye lands first.
+/// Cyan for `conversion_rows`' reason and the same meaning: it names the
+/// concrete thing the node buys, against the dim prose around it.
+///
+/// `Row::Item`s, `material_rows`' reason: `popup_layout` pins anything after
+/// the last item row to the foot of the box.
+pub(super) fn unlock_rows(unlocks: Option<&String>, columns: usize) -> Vec<Row> {
+    unlocks
+        .into_iter()
+        .flat_map(|line| wrap_text(line, columns))
+        .map(|line| colored_item_row(format!("{DESCRIPTION_INDENT}{line}"), false, CYAN))
+        .collect()
+}
+
 /// The one place a node's price reads as a price: the active project counts up
 /// to its cost, a node with work banked against it says so, and every other row
 /// just names it.
@@ -324,6 +343,13 @@ pub(super) fn research_menu_rows(
         ));
         rows.extend(material_rows(
             &node.materials,
+            DESCRIBE_WRAP_COLUMNS - DESCRIPTION_INDENT.chars().count(),
+        ));
+        // Above the prose: what the node hands over is what the player is
+        // scanning for, and the description is what they read once they have
+        // found it.
+        rows.extend(unlock_rows(
+            node.unlocks.as_ref(),
             DESCRIBE_WRAP_COLUMNS - DESCRIPTION_INDENT.chars().count(),
         ));
         rows.extend(description_rows(&node.description));
@@ -435,6 +461,44 @@ mod tests {
         );
     }
 
+    /// The other half of the same ask, at the other end of the node: what it
+    /// *hands over* is the first thing under the row, where what it lets the
+    /// base *make* is the last. Prose in between, because the prose is what
+    /// the player reads once they have found the node they were scanning for.
+    #[test]
+    fn a_nodes_unlocks_lead_its_description() {
+        let node = ResearchStatus {
+            id: "routine_fabrication".to_string(),
+            name: "Routine Fabrication".to_string(),
+            description: "Blank media a routine can be written onto, and the whole chain of benches that makes it.".to_string(),
+            cost: 26,
+            state: ResearchState::Available,
+            progress: 0,
+            blocked_by: None,
+            materials: Vec::new(),
+            conversions: vec!["Core Fragment x4 into Blank Substrate.".to_string()],
+            unlocks: Some("Unlocks: Lathe, Disk Press".to_string()),
+            recommended: false,
+        };
+
+        let rows = research_menu_rows(&[node], 0, "Research Data");
+        let at = |needle: &str| {
+            rows.iter()
+                .position(|r| matches!(r, Row::Item { text, .. } if text.contains(needle)))
+                .unwrap_or_else(|| panic!("{needle:?} must reach the screen as a row"))
+        };
+
+        let unlocks = at("Unlocks: Lathe");
+        assert!(
+            unlocks < at("Blank media") && unlocks < at("into Blank Substrate"),
+            "the unlocks line leads both the prose and the conversions"
+        );
+        assert!(
+            matches!(&rows[unlocks], Row::Item { color, .. } if *color == CYAN),
+            "cyan, the colour this screen already spends on what a node buys"
+        );
+    }
+
     /// The ask this line exists to answer: a player scanning the tree can see
     /// what each node lets the base *make* without opening anything. So the
     /// conversion sits on its own row rather than inside the description
@@ -446,13 +510,14 @@ mod tests {
         let node = ResearchStatus {
             id: "routine_fabrication".to_string(),
             name: "Routine Fabrication".to_string(),
-            description: "Blank media a routine can be written onto.".to_string(),
+            description: "Blank media a routine can be written onto, and the whole chain of benches that makes it.".to_string(),
             cost: 26,
             state: ResearchState::Available,
             progress: 0,
             blocked_by: None,
             materials: Vec::new(),
             conversions: vec!["Core Fragment x4 into Blank Substrate.".to_string()],
+            unlocks: Some("Unlocks: Lathe, Disk Press".to_string()),
             recommended: false,
         };
 
@@ -507,6 +572,7 @@ mod tests {
             materials: Vec::new(),
             recommended,
             conversions: Vec::new(),
+            unlocks: None,
         };
         let prereq = |missing: &str| ResearchState::Locked {
             missing: vec![missing.to_string()],

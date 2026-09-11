@@ -1743,11 +1743,20 @@ mod tests {
                                 })
                                 .collect(),
                             description: format!(
-                                "What node {i} unlocks, at the length the \
-                                 shipped nodes run to: a sentence naming what \
-                                 it teaches, then another one naming the \
-                                 structures and recipes it hands over and what \
-                                 they cost to build once you have it."
+                                "What node {i} is, at rather more than the \
+                                 length the shipped nodes run to: a sentence \
+                                 saying what it teaches, and another on where \
+                                 what it hands over is compiled and what that \
+                                 costs once you have the bench."
+                            ),
+                            // The deepest shipped node hands over six
+                            // things — four routines and two tools — and
+                            // that line wraps.
+                            unlocks: Some(
+                                "Unlocks: Deep Scan Party, Trace Analysis Party, Stealth \
+                                 Protocol Party, Salvage Routine Party, Core Tap, \
+                                 Harness Puller"
+                                    .to_string(),
                             ),
                             // The deepest shipped node states three
                             // conversions, and a multi-ingredient recipe

@@ -1,7 +1,7 @@
 (
     id: "cortex",
     name: "Cortex Hacking",
-    description: "Compile Cortex Hacks at a Fabricator. Also teaches the Routine Reader, which reads a downed process for the routines it was running and keeps one.",
+    description: "A module that speaks to a hostile program in its own dialect, compiled at a Fabricator. Also the reader that goes through a downed process for the routines it was running and keeps one.",
     cost: 125,
     materials: [("trace_sniffer", 6), ("logic_wafer", 12)],
     min_zone: 3,

@@ -1,7 +1,7 @@
 (
     id: "deep_analysis",
     name: "Deep Analysis",
-    description: "Field routines that bend the odds of a whole run rather than a single fight. Compiles Deep Scan Party, Trace Analysis Party, Stealth Protocol Party and Salvage Routine Party into cargo. Also teaches the Core Tap, which draws the compiled core out of a downed process, and the Harness Puller, which pulls the worn gear off one.",
+    description: "Field routines that bend the odds of a whole run rather than a single fight, compiled into cargo. Also the two extraction tools: one draws the compiled core out of a downed process, the other pulls the worn gear off it.",
     cost: 130,
     materials: [("routine_disk", 16), ("logic_wafer", 16)],
     min_zone: 3,

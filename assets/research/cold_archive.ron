@@ -1,7 +1,7 @@
 (
     id: "cold_archive",
     name: "Cold Archive",
-    description: "Put down what the base will not touch for a long time and lose nothing to entropy. Unlocks the Depot Mk6, the deepest shelf there is.",
+    description: "Put down what the base will not touch for a long time and lose nothing to entropy — the deepest shelf there is.",
     cost: 540,
     materials: [("cache_grain", 45), ("charge_coil", 40)],
     min_zone: 6,

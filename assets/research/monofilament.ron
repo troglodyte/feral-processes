@@ -1,7 +1,7 @@
 (
     id: "monofilament",
     name: "Monofilament Edge",
-    description: "Compile Monofilament Whips at a Fabricator.",
+    description: "A filament one molecule wide, and the hardest hit at its tier. Compiled at a Fabricator.",
     cost: 110,
     materials: [("trace_sniffer", 5), ("logic_wafer", 12)],
     min_zone: 3,

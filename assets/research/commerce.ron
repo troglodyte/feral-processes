@@ -1,7 +1,7 @@
 (
     id: "commerce",
     name: "Isometric Commerce",
-    description: "Barter protocols. Unlocks the iso Market.",
+    description: "Barter protocols, and a counter to run them across.",
     cost: 14,
     materials: [("core_fragment", 40)],
     unlocks_structures: ["market"],

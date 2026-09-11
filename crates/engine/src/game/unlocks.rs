@@ -293,6 +293,45 @@ impl Game {
             .collect()
     }
 
+    /// "Unlocks: Fabricator" — everything this node hands over, by display
+    /// name, or `None` for a node that hands over nothing.
+    ///
+    /// Benches first, then what its recipes produce, then routines, then
+    /// tools: the order runs from the thing you build to the things you do
+    /// with it, and it is the order the defs author the lists in.
+    ///
+    /// Names are resolved here rather than in the renderer for
+    /// `conversion_line`'s reason — `Game::copy_name`'s rule — and an id
+    /// nothing resolves is dropped rather than printed raw: the loader has
+    /// already dropped an unknown ability or tool id off the def, so a
+    /// leftover here would be a name only the engine could see.
+    fn research_unlocks(&self, def: &crate::research::ResearchDef) -> Option<String> {
+        let structures = self.world.resource::<StructureDb>();
+        let abilities = self.world.resource::<AbilityDb>();
+        let tools = self.world.resource::<ToolDb>();
+        let names: Vec<&str> = def
+            .unlocks_structures
+            .iter()
+            .filter_map(|id| structures.get(id).map(|s| s.name.as_str()))
+            .chain(
+                def.unlocks_recipes
+                    .iter()
+                    .map(|r| self.item_name(&r.result)),
+            )
+            .chain(
+                def.unlocks_abilities
+                    .iter()
+                    .filter_map(|id| abilities.get(id).map(|a| a.name.as_str())),
+            )
+            .chain(
+                def.unlocks_tools
+                    .iter()
+                    .filter_map(|id| tools.get(id.as_str()).map(|t| t.name.as_str())),
+            )
+            .collect();
+        (!names.is_empty()).then(|| format!("Unlocks: {}", names.join(", ")))
+    }
+
     /// "Bytecode Block x3 into Hardened Shell." — the one place a conversion
     /// is worded, so the recipe half and the machine half of the list above
     /// read alike.
@@ -381,6 +420,7 @@ impl Game {
                     blocked_by,
                     materials,
                     conversions: self.research_conversions(def),
+                    unlocks: self.research_unlocks(def),
                     recommended: recommended.contains(&def.id),
                     #[cfg(test)]
                     unlocks_abilities: def.unlocks_abilities.clone(),

@@ -1915,3 +1915,34 @@ fn a_project_still_earning_is_not_stalled() {
         "a project that has earned nothing yet is working, not stuck"
     );
 }
+
+/// What a node hands over is derived from the four `unlocks_*` lists, not read
+/// off the prose — the description is authored and a mod's is whatever the
+/// modder wrote, so the one line the screen can rely on has to come from the
+/// lists themselves.
+#[test]
+fn a_research_node_reports_everything_it_hands_over() {
+    let game = Game::new(717, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+
+    assert_eq!(
+        research_node(&game, "weapon_bench").unlocks.as_deref(),
+        Some("Unlocks: Fabricator"),
+        "a structure is named by its own display name"
+    );
+    assert_eq!(
+        research_node(&game, "ablative").unlocks.as_deref(),
+        Some("Unlocks: Ablative Plating"),
+        "a recipe is named by what it produces"
+    );
+
+    let deep = research_node(&game, "deep_analysis");
+    let line = deep.unlocks.expect("a node that teaches routines says so");
+    assert!(
+        line.starts_with("Unlocks: Deep Scan"),
+        "routines lead, in the order the node authored them: {line:?}"
+    );
+    assert!(
+        line.contains("Core Tap") && line.contains("Harness Puller"),
+        "tools are named too, after the routines: {line:?}"
+    );
+}

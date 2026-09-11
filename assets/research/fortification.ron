@@ -1,7 +1,7 @@
 (
     id: "fortification",
     name: "Fortification",
-    description: "Automated perimeter defense and self-repair. Unlocks the Shield and the Patch Node.",
+    description: "Automated perimeter defense and self-repair.",
     cost: 18,
     materials: [("bytecode_block", 8), ("power_cell", 8)],
     recommended: true,

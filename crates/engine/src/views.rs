@@ -44,6 +44,16 @@ pub struct ResearchStatus {
     /// that goes stale the first time either is retuned. See
     /// `Game::research_conversions`.
     pub conversions: Vec<String>,
+    /// "Unlocks: Fabricator" — everything this node hands over, by display
+    /// name, or `None` for a node that hands over nothing.
+    ///
+    /// Derived from the four `unlocks_*` lists rather than read off the
+    /// description, `conversions`' reason: the prose is authored, and what a
+    /// mod's prose says about its own unlocks is whatever the modder wrote.
+    /// One line rather than a row per unlock, `ResearchMaterial`'s reason —
+    /// `popup_layout` pages this screen by `Row::Item` span. See
+    /// `Game::research_unlocks`.
+    pub unlocks: Option<String>,
     /// How much of `cost` the base has already fed into this node, in units
     /// of the research currency. Non-zero for a node the player worked and
     /// then abandoned, which is why it is on every row rather than only on

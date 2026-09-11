@@ -20,7 +20,7 @@ use crate::text::Metrics;
 use feral_processes_engine::{Game, ResearchGraph, ResearchId};
 
 use super::popup::{DESCRIPTION_INDENT, description_rows_at, draw_row};
-use super::progression::{conversion_rows, material_rows, row_color};
+use super::progression::{conversion_rows, material_rows, row_color, unlock_rows};
 use super::{BORDER, PANEL_BG, RED, SELECT_BG, TEXT_DIM};
 
 /// Fraction of the window width the detail panel takes.
@@ -508,6 +508,7 @@ pub(super) fn draw_research_graph(
     }
     for row in material_rows(&node.materials, panel_columns)
         .iter()
+        .chain(unlock_rows(node.unlocks.as_ref(), panel_columns).iter())
         .chain(
             description_rows_at(&node.description, panel_columns)
                 .collect::<Vec<_>>()

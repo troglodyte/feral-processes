@@ -19,14 +19,20 @@ Core Fragments.
 
     // Shown in the research menu (`T` in game).
     //
-    // Say what the node *is*; what it lets the base turn into what is added
-    // for you. The menu draws one cyan line under the description per
-    // conversion the node makes possible — a recipe in `unlocks_recipes`
-    // below, or a structure in `unlocks_structures` that sets `assembles` —
-    // derived from the recipe itself, so a modded node gets its lines free
-    // and no authored copy can go stale when a cost is retuned.
+    // Say what the node *is*; what it hands over and what it lets the base
+    // turn into what are both added for you, so a modded node gets those
+    // lines free and no authored copy can go stale when a cost is retuned.
+    //
+    // Above the description the menu draws one cyan line naming everything
+    // the node hands over, by display name: the structures, the results of
+    // its recipes, the routines and the tools, in that order.
+    //
+    // Below it, one cyan line per conversion the node makes possible — a
+    // recipe in `unlocks_recipes` below, or a structure in
+    // `unlocks_structures` that sets `assembles` — derived from the recipe
+    // itself.
     name: "Weapon Fabrication",
-    description: "A bench for weapon and module work. Unlocks the Fabricator.",
+    description: "A bench for weapon and module work, building modules out of Logic Wafers.",
 
     // Research Data a project on this node has to accumulate before it
     // completes. Research Nodes feed it in while the node is the base's active

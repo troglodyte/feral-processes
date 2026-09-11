@@ -1,7 +1,7 @@
 (
     id: "paging",
     name: "Paging",
-    description: "Address a shelf rather than walking it end to end. Unlocks the Depot Mk2, which holds twice what your first Depot does.",
+    description: "Address a shelf rather than walking it end to end — twice what your first Depot holds.",
     cost: 50,
     materials: [("bytecode_block", 16), ("charge_coil", 6)],
     min_zone: 2,

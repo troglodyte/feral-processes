@@ -676,9 +676,9 @@ mod tests {
     ///
     /// This measures the shipped recipes a fresh game offers. The rest are
     /// gated behind a bench, research or both, and a gui test can reach
-    /// neither: `place_structure` wants build materials and `unlock_research`
-    /// wants banked Research Data, and both live in the engine's private
-    /// `World`. `a_row_too_wide_for_the_popup_wraps_instead_of_running_off`
+    /// neither: `place_structure` wants build materials and `select_research`
+    /// wants a base with a Research Node and its material chain standing, and
+    /// both live in the engine's private `World`. `a_row_too_wide_for_the_popup_wraps_instead_of_running_off`
     /// is what covers them, by building a row wider than any of them.
     #[test]
     fn the_widest_compile_row_fits_the_popup_it_is_drawn_in() {

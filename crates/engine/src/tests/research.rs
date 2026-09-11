@@ -113,16 +113,21 @@ fn progress_saturates_at_the_nodes_cost() {
         .unwrap()
         .cost;
 
-    // Well past it, and with no bill on the shelves so the project cannot
-    // complete and clear the entry out from under the assertion.
+    // Sampled every tick rather than read once at the end: the base can make
+    // this bill, so the project completes and `settle_research` drops the entry
+    // — a single read afterwards would be asserting on a zero and passing for
+    // the wrong reason.
     for _ in 0..2_000 {
         game.tick();
+        assert!(
+            research_progress(&game, "automation") <= cost,
+            "progress must saturate at the cost rather than run away past it"
+        );
     }
 
-    assert_eq!(
-        research_progress(&game, "automation"),
-        cost,
-        "progress must saturate at the cost rather than run away past it"
+    assert!(
+        game.is_researched("automation"),
+        "and the fixture has to get there, or the ceiling was never approached"
     );
 }
 
@@ -743,13 +748,29 @@ fn unknown_research_is_rejected() {
 #[test]
 fn selecting_research_off_the_base_is_rejected() {
     let mut game = Game::new(727, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // The **whole** base stood up, so the only thing refusing is the locale.
+    // Built from inside and then walked out: with a bare Research Node the
+    // material line is refused anyway and the test passes with `require_base`
+    // deleted, which is what it used to do.
     from_inside_the_base(&mut game, |g| {
-        spawn_machine_at(g, "research_node", 2, 2);
+        base_with_a_research_node(g);
+        g.select_research("automation")
+            .expect("the fixture is vacuous unless this base can take a project");
+        g.abandon_research().unwrap();
     });
 
-    assert!(game.select_research("automation").is_err());
+    let err = game.select_research("automation").unwrap_err();
+
+    assert!(
+        !err.contains("Research Node"),
+        "the locale is the reason, not the plant: {err}"
+    );
     assert_eq!(active_research(&game), None);
-    assert!(game.work_orders().is_empty());
+    assert!(
+        game.work_orders().is_empty(),
+        "and nothing is filed — every `queue_work_order` would refuse its own \
+         `require_base` through the `let _`, leaving a project with no bill"
+    );
 }
 
 /// One project at a time, and abandoning is how you change your mind — which
@@ -1598,4 +1619,299 @@ fn a_research_node_with_no_project_asks_for_attention() {
     game.select_research("automation").unwrap();
 
     assert!(!asked(&mut game), "and stops once the base has a project");
+}
+
+/// The whole loop, end to end on the base a player actually has: one Research
+/// Node, one program, no shortcuts. The project earns its progress, the base
+/// makes its bill, and it completes.
+///
+/// The bug this exists to catch: `research_wants` raised a want for every
+/// deployed Research Node for as long as a project was active, **including
+/// after its progress had saturated**. Sitting above `settle_orders`, that want
+/// held the base's only body on a node producing nothing — `deliver_payout`
+/// returns 0 once progress reaches `cost` — while the material orders the
+/// project had just filed were cut by `truncate(staff.len())` and never worked.
+/// The project could not complete, and the only ways out were abandoning it,
+/// demolishing a node, or finding a second program.
+///
+/// Every other completion test shortcuts both halves (`fill_research_progress`
+/// plus `shelve_research_bill`), which is exactly why none of them saw it.
+#[test]
+fn a_one_program_base_can_finish_a_project_on_its_own() {
+    let mut game = Game::new(901, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    spawn_tamed(&mut game, 10, 3);
+    game.select_research("automation").unwrap();
+
+    for _ in 0..4000 {
+        game.tick();
+    }
+
+    assert!(
+        game.is_researched("automation"),
+        "a base with one body has to be able to finish what it started \
+         (progress {}, orders still standing {:?})",
+        research_progress(&game, "automation"),
+        game.work_orders()
+            .iter()
+            .map(|o| (o.item.clone(), o.qty))
+            .collect::<Vec<_>>()
+    );
+}
+
+/// And the half that says why it works: a project with its progress already in
+/// stops holding a body at the node, because there is nothing left to feed it.
+#[test]
+fn a_saturated_project_frees_its_research_node() {
+    let mut game = Game::new(902, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.select_research("automation").unwrap();
+    game.tick();
+    assert_eq!(
+        game.world.get::<Task>(worker).map(|t| t.target),
+        Some(node),
+        "the fixture is vacuous unless the body starts on the node"
+    );
+
+    fill_research_progress(&mut game, "automation");
+    game.tick();
+
+    assert!(
+        game.world
+            .get::<Task>(worker)
+            .is_none_or(|t| t.target != node),
+        "a node with nothing left to feed must not hold the base's only body"
+    );
+}
+
+/// Refusal 6: a material line nothing in the base could ever make is refused
+/// with `work_orders::chain_break`'s own sentence, **verbatim**.
+///
+/// Its own test because no other one can reach it: `base_with_a_research_node`
+/// stands a producer for every item any shipped bill names and everything
+/// behind it, and `a_base_with_no_research_node_cannot_take_a_project` is
+/// refusal 5. So this stands the Research Node and deliberately nothing else.
+///
+/// The sentence is fetched by calling `chain_break` rather than hardcoded: the
+/// same words appear on the work-order screen, and two spellings of one
+/// refusal is the drift this repo keeps recording.
+#[test]
+fn a_material_with_no_producer_names_the_missing_machine() {
+    let mut game = Game::new(738, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    spawn_machine_at(&mut game, "research_node", 2, 2);
+    let material = game
+        .world
+        .resource::<ResearchDb>()
+        .get("automation")
+        .unwrap()
+        .materials[0]
+        .0
+        .clone();
+    let want = crate::game::base::work_orders::chain_break(&game, &material)
+        .expect("nothing is standing that makes it, so the line is broken");
+
+    let err = game.select_research("automation").unwrap_err();
+
+    assert_eq!(
+        err, want,
+        "the refusal is chain_break's own sentence, not a second wording of it"
+    );
+    assert_eq!(active_research(&game), None);
+    assert!(game.work_orders().is_empty(), "and nothing is filed");
+}
+
+/// The two save keys are additive behind `#[serde(default)]`, and this is the
+/// half that can actually fail: the real save's own keys, **stripped out of the
+/// RON**, rather than a save written by this binary — which always carries them
+/// and leaves the test green with both attributes deleted.
+///
+/// `routes::a_pre_routes_save_loads_with_no_routes`' shape.
+#[test]
+fn a_save_written_before_projects_existed_loads_with_none() {
+    let mut game = Game::new(739, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    unlock_research_chain(&mut game, "automation");
+    game.select_research("routine_fabrication").unwrap();
+    game.world
+        .resource_mut::<crate::resources::ActiveResearch>()
+        .progress
+        .insert("routine_fabrication".to_string(), 4);
+
+    let dir = std::env::temp_dir().join(format!("feral_research_pre_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("save.bin");
+    game.save(&path).unwrap();
+
+    // Emptied first, `routes::a_pre_routes_save_loads_with_no_routes`' shape:
+    // both keys then serialise as one line each and can be stripped whole. A
+    // populated `research_progress` is a multi-line list, and cutting its
+    // header alone leaves its rows orphaned and the RON unparseable.
+    let mut data = crate::save::load_from_file(&path).unwrap();
+    data.active_research = None;
+    data.research_progress.clear();
+    let text = crate::save::to_ron(&data).unwrap();
+    let stripped: String = text
+        .lines()
+        .filter(|l| {
+            let l = l.trim_start();
+            !l.starts_with("active_research:") && !l.starts_with("research_progress:")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        stripped.lines().count() + 1 < text.lines().count(),
+        "both keys must have been there to strip, or this proves nothing"
+    );
+    let old_path = dir.join("old.bin");
+    let old = crate::save::from_ron(&stripped).expect("a pre-project save still parses");
+    crate::save::save_to_file(&old_path, &old).unwrap();
+
+    let loaded = Game::load(&old_path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+
+    assert_eq!(active_research(&loaded), None);
+    assert_eq!(research_progress(&loaded, "routine_fabrication"), 0);
+    assert!(
+        loaded.is_researched("automation"),
+        "and what the run already researched is untouched"
+    );
+}
+
+/// Neither key costs a `SAVE_FORMAT_VERSION` bump: the save is field-named RON,
+/// so an absent key is a `#[serde(default)]` away from loading.
+#[test]
+fn save_format_version_is_unchanged_by_research_projects() {
+    assert_eq!(
+        crate::save::SAVE_FORMAT_VERSION,
+        32,
+        "two additive fields under field-named RON must not cost a version \
+         bump — see the doc comment on SAVE_FORMAT_VERSION"
+    );
+}
+
+/// A cycle that landed nothing because there was nowhere to put it says
+/// nothing, where a *clogged* ordinary node still says so — the clog figure is
+/// the only signal a buffer is full.
+///
+/// The case: a hand-posted standing job on a Research Node with no project
+/// selected. "Your subroutine extracted 0 Research Data", every fourteen ticks
+/// for the rest of the run, reads as the node being broken; the attention row
+/// already says what to do about it, and the player's own instruction is not
+/// news.
+#[test]
+fn a_research_cycle_with_nowhere_to_land_is_not_announced() {
+    let mut game = Game::new(740, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    park_at_post(&mut game, worker, node);
+    game.set_standing_job(node, true, false).unwrap();
+
+    for _ in 0..600 {
+        game.tick();
+    }
+
+    let said = game
+        .message_history(500)
+        .iter()
+        .filter(|l| l.text.contains("Research Data"))
+        .map(|l| l.text.clone())
+        .collect::<Vec<_>>();
+    assert!(
+        said.is_empty(),
+        "a cycle that landed nothing must not announce a payout: {said:?}"
+    );
+}
+
+/// The contrast that makes the rule above mean something: with a project
+/// running, the same node's cycles *are* announced.
+#[test]
+fn a_research_cycle_that_lands_is_still_announced() {
+    let mut game = Game::new(741, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.select_research("automation").unwrap();
+    park_at_post(&mut game, worker, node);
+
+    for _ in 0..200 {
+        game.tick();
+    }
+
+    assert!(
+        game.message_history(500)
+            .iter()
+            .any(|l| l.text.contains("Research Data")),
+        "a cycle that fed the project has to say so"
+    );
+}
+
+/// A project with its progress in and its bill short has one surface and this
+/// is it. The bill's work order is *removed* when it completes, so a line
+/// consumed before the project settled leaves nothing in the queue for the
+/// player to find — and without this row, nothing on any screen says why the
+/// base has stopped.
+#[test]
+fn a_project_waiting_on_materials_asks_for_the_player() {
+    let mut game = Game::new(742, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    game.select_research("automation").unwrap();
+    fill_research_progress(&mut game, "automation");
+
+    let stalled = |game: &mut Game| {
+        game.attention()
+            .iter()
+            .any(|r| r.kind == AttentionKind::ResearchStalled)
+    };
+    assert!(
+        stalled(&mut game),
+        "progress in and an empty base is exactly the stall this row is for"
+    );
+
+    let shelf = shelve_research_bill(&mut game, "automation", 300, -300);
+    assert!(shelf != Entity::PLACEHOLDER);
+
+    assert!(
+        !stalled(&mut game),
+        "and it stops the moment the base is holding the bill"
+    );
+}
+
+/// It names the item, because "research is stalled" without saying on what is a
+/// row that cannot be acted on.
+#[test]
+fn the_stalled_row_names_what_the_project_is_short_of() {
+    let mut game = Game::new(743, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    game.select_research("automation").unwrap();
+    fill_research_progress(&mut game, "automation");
+    let want = game
+        .item_name(&ItemId::from(ids::CORE_FRAGMENT))
+        .to_string();
+
+    let row = game
+        .attention()
+        .into_iter()
+        .find(|r| r.kind == AttentionKind::ResearchStalled)
+        .expect("the project is stalled");
+
+    assert!(row.text.contains(&want), "got: {}", row.text);
+}
+
+/// A project still *earning* is not stalled — the row is about the material
+/// gate, and firing it while the Research Nodes are still working would read as
+/// the base being broken on every project from the moment it was picked.
+#[test]
+fn a_project_still_earning_is_not_stalled() {
+    let mut game = Game::new(744, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    game.select_research("automation").unwrap();
+
+    assert!(
+        !game
+            .attention()
+            .iter()
+            .any(|r| r.kind == AttentionKind::ResearchStalled),
+        "a project that has earned nothing yet is working, not stuck"
+    );
 }

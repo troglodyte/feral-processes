@@ -1353,6 +1353,13 @@ pub enum AttentionKind {
     /// A Research Node is standing and no project is selected, so every cycle
     /// it runs lands nowhere — see `resources::ActiveResearch`.
     NoResearchProject,
+    /// A project has all the progress it needs and is waiting on materials the
+    /// base is not holding. Its own row rather than folding into
+    /// `NoResearchProject`, because the two ask for opposite things: one wants a
+    /// decision, this one wants production — and a bill's work order is
+    /// *removed* when it completes, so a line consumed before the project
+    /// settled leaves nothing outstanding for the player to find.
+    ResearchStalled,
     PerkPoints,
     RosterFull,
 }

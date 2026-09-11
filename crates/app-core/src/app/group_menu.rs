@@ -159,9 +159,10 @@ const BASE_ROWS: &[GroupEntry] = &[
         target: Mode::Research,
         locality: Locality::Anywhere,
         available: |app| {
-            app.game
-                .as_ref()
-                .is_some_and(|g| !g.research_nodes().is_empty())
+            // `has_research_tree`, not `research_nodes`: this closure runs
+            // every frame, and the full derivation counts every node's bill
+            // against every shelf and walks every material chain.
+            app.game.as_ref().is_some_and(|g| g.has_research_tree())
         },
     },
     GroupEntry {

@@ -229,10 +229,13 @@ impl Game {
         // of that call's reasons: a digger posted this tick swings this
         // tick, and a cycle that ends in `strike_rock` or `floor_cell` is
         // `&mut Game` work no bevy system can express.
-        // After the scheduler, so a body assigned this tick has already
-        // delivered before the completion check runs, and beside the two crews
-        // for their reason: the grant names routines and tools through
-        // `&mut Game` work no bevy system can express.
+        // Beside the two crews and for their reason: completing a project hands
+        // over routines and tools through `&mut Game` work no bevy system can
+        // express. It sits **after** `schedule_base_labour` so a Research Node
+        // staffed this tick is already posted, and **before** `schedule.run`,
+        // so the cycle that tips a project over its cost is settled on the
+        // following tick rather than this one — a deliberate one-tick lag, and
+        // the alternative is a second settle pass after the schedule.
         self.settle_research();
         self.run_dig_crew();
         // Beside the dig crew and for its two reasons: a builder posted this

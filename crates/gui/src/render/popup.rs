@@ -1781,6 +1781,7 @@ mod tests {
                         })
                         .collect::<Vec<_>>(),
                     selected,
+                    "Research Data",
                 ),
             ),
         ]

@@ -1541,7 +1541,24 @@ impl Game {
             rows.push(AttentionRow {
                 kind: AttentionKind::NoResearchProject,
                 text: "Research Node with no project".to_string(),
-                key: 'r',
+                // `b`, the base menu, which is where Research is reached —
+                // `AttentionRow::key` is "the map key that opens the screen
+                // this is acted on from" and the HUD badge draws it literally.
+                // `r` on the map is `rest`.
+                key: 'b',
+                threat: false,
+            });
+        }
+
+        // Ordered beside the row above it, and gated so the bill is only walked
+        // when the project is actually at its material gate: the progress read
+        // is a map lookup, `base_holding` is a walk of every output buffer, and
+        // `attention` is a per-frame call.
+        if let Some(short) = self.research_material_shortfall() {
+            rows.push(AttentionRow {
+                kind: AttentionKind::ResearchStalled,
+                text: format!("research waiting on {short}"),
+                key: 'b',
                 threat: false,
             });
         }

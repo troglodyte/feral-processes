@@ -290,8 +290,11 @@ Engine, against the real assets:
 - Abandoning withdraws the project's orders and **keeps** its progress; the
   player's own order for the same item survives.
 - `schedule_base_labour` staffs a Research Node with a project active and
-  does not without one; a body on a Research Node is released when the
-  project ends.
+  does not without one.
+- Ending a project frees its body **while the queue still has work**, and
+  **leaves it standing on a run-dry base** — the documented behaviour of the
+  `queue_is_empty` early return, asserted so nobody "fixes" it into a
+  wholesale standdown on the first tick after a load.
 - Save → load round trip carries the active project and the progress map,
   and a save written before the change loads clean with its `researched`
   set whole. (A RON round trip cannot catch a skipped field, so this is a

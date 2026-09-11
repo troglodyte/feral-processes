@@ -1735,6 +1735,8 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         buyback: Vec::new(),
         buyback_shelves: Vec::new(),
         researched: Vec::new(),
+        active_research: None,
+        research_progress: Vec::new(),
         known_routines: Vec::new(),
         known_tools: Vec::new(),
         link_sites: Vec::new(),

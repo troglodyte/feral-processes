@@ -66,6 +66,15 @@ impl App {
             self.research_graph_view = !self.research_graph_view;
             return;
         }
+        // Uppercase, and checked here beside `G` for its reason: lowercase
+        // letters are row selectors past the digits, so a lowercase `a` would
+        // both pick a row and abandon the project on one keypress.
+        if key == GameKey::Char('A') {
+            let Some(game) = &mut self.game else { return };
+            let outcome = game.abandon_research();
+            self.report(outcome);
+            return;
+        }
         // Collecting the ids through `as_ref().map` (rather than a
         // `let Some(game) = &self.game` binding) ends the borrow here —
         // `selected_index` needs `&mut self`.
@@ -81,7 +90,7 @@ impl App {
             if let Some(idx) = self.selected_index(key, ids.len()) {
                 let id = ids[idx].clone();
                 let Some(game) = &mut self.game else { return };
-                let outcome = game.unlock_research(&id);
+                let outcome = game.select_research(&id);
                 self.report(outcome);
             }
             return;
@@ -114,7 +123,7 @@ impl App {
         if key == GameKey::Enter {
             let id = from.clone();
             let Some(game) = &mut self.game else { return };
-            let outcome = game.unlock_research(&id);
+            let outcome = game.select_research(&id);
             self.report(outcome);
         }
     }

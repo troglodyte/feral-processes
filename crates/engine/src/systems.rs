@@ -473,13 +473,31 @@ pub(crate) fn resolve_gather_cycle(
 /// signal the player gets that a banked resource is accruing — it has no
 /// inventory row and its total lives one keypress away on the research
 /// screen — so silencing it would read as the node having stopped.
+///
+/// The research currency is checked **ahead of** the banked branch, because it
+/// is the narrower question: the research currency *is* banked, so the other
+/// order sends every unit of it to a bank nothing spends and the project never
+/// moves. With no project selected it lands nowhere and returns 0 — the same
+/// "landed nothing" figure a full `Stock` answers with, and silent by design:
+/// the node reads `Idle` in every case but a hand-posted `StandingJob`, which
+/// is the player's own instruction.
 pub(crate) fn deliver_payout(
     resource: &ItemId,
     payout: u32,
     stock: &mut Stock,
     items: &ItemDb,
     bank: Option<&mut Inventory>,
+    research: &mut crate::resources::ActiveResearch,
+    research_defs: &crate::research::ResearchDb,
 ) -> u32 {
+    if items.research_currency() == Some(resource) {
+        let cap = research
+            .id
+            .as_ref()
+            .and_then(|id| research_defs.get(id))
+            .map_or(0, |def| def.cost);
+        return research.credit(payout, cap);
+    }
     if items.get(resource.as_str()).is_some_and(|d| d.banked) {
         return match bank {
             Some(inventory) => {
@@ -1092,6 +1110,12 @@ pub struct CronjobLookups<'w> {
     /// adds a read where there was none rather than shifting what the world
     /// holds.
     needs: Res<'w, NeedDb>,
+    /// The research project a Research Node's payout feeds, and the catalogue
+    /// its cost is read off — see `deliver_payout`. Bundled here rather than
+    /// added as two more system parameters for the reason `power` is: the
+    /// parameter list is already at clippy's threshold.
+    research: ResMut<'w, crate::resources::ActiveResearch>,
+    research_defs: Res<'w, crate::research::ResearchDb>,
 }
 
 /// Generic job progression: any entity with a `Task` advances it once per
@@ -1137,6 +1161,8 @@ pub fn task_progress_system(
         memories: memory_db,
         clock,
         needs: need_db,
+        research: mut active_research,
+        research_defs: research_db,
     } = db;
     // Copied out rather than captured: the record closures are `move`, and
     // capturing the `Res` handles themselves would move them out of the
@@ -1339,7 +1365,15 @@ pub fn task_progress_system(
             .get(resource.as_str())
             .map(|d| d.name.as_str())
             .unwrap_or(resource.as_str());
-        let landed = deliver_payout(&resource, payout, &mut stock, &item_db, bank.as_deref_mut());
+        let landed = deliver_payout(
+            &resource,
+            payout,
+            &mut stock,
+            &item_db,
+            bank.as_deref_mut(),
+            &mut active_research,
+            &research_db,
+        );
         // `payout` against `landed` is the clog loss: `deliver_payout`
         // clamps against `output_room()`, and the difference is a number
         // nothing else in the game records.
@@ -1436,6 +1470,11 @@ pub struct PlayerGatherLookups<'w> {
     zone: Res<'w, ZoneLevel>,
     power: Res<'w, PowerGrid>,
     clock: Res<'w, GameClock>,
+    /// `CronjobLookups`' own pair, for `deliver_payout`'s research branch: the
+    /// player cranking a Research Node by hand feeds the project by the same
+    /// rule a posted program does.
+    research: ResMut<'w, crate::resources::ActiveResearch>,
+    research_defs: Res<'w, crate::research::ResearchDb>,
 }
 
 /// The player running a gather job themselves, rather than posting a
@@ -1471,6 +1510,8 @@ pub fn player_gather_system(
         structures: structure_db,
         zone,
         power: grid,
+        research: mut active_research,
+        research_defs: research_db,
     } = db;
     let tick_now = clock.tick;
     let zone_now = zone.0;
@@ -1593,6 +1634,8 @@ pub fn player_gather_system(
             &mut stock,
             &item_db,
             Some(&mut inventory),
+            &mut active_research,
+            &research_db,
         );
         // The player cranking the handle is base production too. The design
         // spec named only `task_progress_system`, but a run where the player

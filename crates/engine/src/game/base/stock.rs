@@ -136,6 +136,33 @@ pub(crate) fn spend_from_base(
     taken
 }
 
+/// Takes a whole bill off the base's shelves, or nothing at all.
+///
+/// The whole bill is checked against `work_orders::base_holding` **before a
+/// single unit moves** — `commit_caravan_basket`'s rule, and the reason this
+/// is two passes rather than a take-as-you-go loop that would strand goods on
+/// a shortfall. Returns `false` and moves nothing if any line is short.
+///
+/// Every take routes through `spend_from_base` above rather than a second
+/// walk of the shelves, so the ledger, the tile ordering and
+/// `hauling::take_from` stay the one path a unit leaves a `Stock` by.
+pub(crate) fn spend_bill_from_base(
+    game: &mut Game,
+    bill: &[(ItemId, u32)],
+    source: crate::base_ledger::ConsumeSource,
+) -> bool {
+    if bill
+        .iter()
+        .any(|(item, need)| crate::game::base::work_orders::base_holding(game, item) < *need)
+    {
+        return false;
+    }
+    for (item, need) in bill {
+        spend_from_base(game, item, *need, source);
+    }
+    true
+}
+
 /// Puts up to `qty` of `item` back onto the base's Depot shelves, and
 /// reports how much landed.
 ///

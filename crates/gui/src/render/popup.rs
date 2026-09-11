@@ -1726,7 +1726,6 @@ mod tests {
             (
                 "research",
                 research_menu_rows(
-                    40,
                     &(0..n)
                         .map(|i| ResearchStatus {
                             id: format!("node_{i}"),
@@ -1768,7 +1767,16 @@ mod tests {
                             } else {
                                 ResearchState::Available
                             },
-                            affordable: true,
+                            progress: 0,
+                            // The screen's worst case for height again: a
+                            // `chain_break` sentence runs to 158 characters
+                            // and wraps to lines of its own.
+                            blocked_by: Some(
+                                "Nothing is making Bytecode Block within the Disk Press's \
+                                 reach — it can only take what a neighbour has finished, or \
+                                 what a worker can fetch off a Depot shelf."
+                                    .to_string(),
+                            ),
                             recommended: i == 1,
                         })
                         .collect::<Vec<_>>(),

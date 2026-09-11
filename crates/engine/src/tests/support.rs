@@ -1119,13 +1119,8 @@ pub(super) fn unlock_research_chain(game: &mut Game, id: &str) {
             out.push(def.id);
         }
     }
-    grant_research_data(game, 1000);
     let mut chain = Vec::new();
     order(game, id, &mut chain);
-    // The material half of the same shortcut: a node's bill is a production
-    // run, and a fixture that only wanted a bench researched should no more
-    // have to mine for it than it has to post a program on a Research Node.
-    stock_research_materials(game, &chain);
     let needed = chain
         .iter()
         .filter_map(|node| game.world.resource::<ResearchDb>().get(node))
@@ -1134,29 +1129,170 @@ pub(super) fn unlock_research_chain(game: &mut Game, id: &str) {
         .unwrap_or(0);
     let zone = &mut game.world.resource_mut::<ZoneLevel>().0;
     *zone = (*zone).max(needed);
+    // Driven through the real completion door, `Game::settle_research`, rather
+    // than a direct write into `resources::Research`: the routines and tools a
+    // node hands over are granted there, and a fixture that inserted the id by
+    // hand would silently stop unlocking them.
+    //
+    // What is shortcut is the *earning*, both halves of it — the progress a
+    // Research Node would have fed in, and the bill the base would have made.
+    // A fixture that only wanted a bench researched should no more have to
+    // mine for it than it has to post a program on a Research Node. The
+    // scratch shelf is despawned afterwards so it cannot be counted by a
+    // `base_holding` assertion in the test that called this.
+    let shelf = game
+        .world
+        .spawn((
+            Structure {
+                kind: "test_research_shelf".to_string(),
+            },
+            Position { x: -64, y: -64 },
+            Stock::new(1_000_000),
+        ))
+        .id();
     for node in chain {
-        if !game.is_researched(&node) {
-            game.unlock_research(&node).unwrap();
+        if game.is_researched(&node) {
+            continue;
         }
+        let def = game
+            .world
+            .resource::<ResearchDb>()
+            .get(&node)
+            .cloned()
+            .expect("the chain was walked out of the db");
+        {
+            let mut stock = game.world.get_mut::<Stock>(shelf).unwrap();
+            for (item, need) in &def.materials {
+                *stock.output.entry(item.clone()).or_default() += need;
+            }
+        }
+        {
+            let mut research = game
+                .world
+                .resource_mut::<crate::resources::ActiveResearch>();
+            research.id = Some(def.id.clone());
+            research.progress.insert(def.id.clone(), def.cost);
+        }
+        game.settle_research();
+        assert!(
+            game.is_researched(&node),
+            "the fixture must actually land {node}"
+        );
     }
+    game.world.despawn(shelf);
 }
 
-/// Puts every material the named research nodes ask for into the player's
-/// pack, in the quantities the bills name.
+/// Stands the party in base space with a Research Node deployed, which is the
+/// state `Game::select_research` refuses without — a project needs somewhere to
+/// come from, and the node is what makes the research currency.
 ///
-/// Derived from the `ResearchDef`s rather than listed here, `stock_upgrade
-/// _materials`' reason: a retuned bill joins this the moment its `.ron` file
-/// does, and a fixture about a bench is not a fixture about what research
-/// costs.
-pub(super) fn stock_research_materials(game: &mut Game, nodes: &[String]) {
-    let wanted: Vec<(ItemId, u32)> = nodes
-        .iter()
-        .filter_map(|id| game.world.resource::<ResearchDb>().get(id))
+/// Returns the node, since a test about progress has to be able to post a body
+/// on it.
+pub(super) fn base_with_a_research_node(game: &mut Game) -> Entity {
+    stand_in_base(game);
+    // A Research Node draws power, and a dark machine makes no progress — the
+    // grid must never be the reason a project sits still.
+    stand_ample_grid_supply(game);
+    let node = spawn_machine_at(game, "research_node", 2, 2);
+    // A project is refused unless every line of its bill is a chain the base
+    // could actually work — `Game::research_block` through
+    // `work_orders::chain_break`. So this stands a producer for every item any
+    // shipped bill names *and every ingredient behind it*, plus the Depot that
+    // lets a bench be fed by a walk rather than only by a neighbour.
+    //
+    // Derived from the shipped assets rather than named here, so a retuned bill
+    // or a new intermediate joins this the moment its `.ron` file does.
+    let bills: Vec<WorkOrder> = game
+        .world
+        .resource::<ResearchDb>()
+        .all()
         .flat_map(|def| def.materials.clone())
+        .map(|(item, qty)| WorkOrder::batch(item, qty.max(1)))
         .collect();
-    for (item, qty) in wanted {
-        give(game, &item, qty);
+    let mut needed: Vec<ItemId> =
+        crate::game::base::work_orders::queue_needs(&bills, game.world.resource::<ItemDb>())
+            .into_iter()
+            .collect();
+    // Sorted so the tiles these land on do not depend on set iteration order.
+    needed.sort();
+    let mut placed: Vec<String> = vec!["research_node".to_string()];
+    let mut lane = 0;
+    for item in needed {
+        let Some(def) = crate::game::base::work_orders::makeable_by(game, &item) else {
+            continue;
+        };
+        if placed.contains(&def.id) {
+            continue;
+        }
+        // Spread along one row so nothing lands on the Research Node or on
+        // another producer's tile.
+        spawn_machine_at(game, &def.id, 10 + lane * 2, 10);
+        placed.push(def.id);
+        lane += 1;
     }
+    spawn_machine_at(game, "depot", 10 + lane * 2, 10);
+    node
+}
+
+/// Puts the whole bill of the named research node onto a scratch base shelf, so
+/// `Game::settle_research`'s second gate is satisfied without a production run.
+///
+/// A shelf rather than the player's pack, deliberately: a project's bill is
+/// paid off the base's buffers through `stock::spend_bill_from_base`, and a
+/// fixture that stocked the pack would leave every completion test green
+/// against a bill nobody could pay.
+pub(super) fn shelve_research_bill(game: &mut Game, id: &str, x: i32, y: i32) -> Entity {
+    let materials = game
+        .world
+        .resource::<ResearchDb>()
+        .get(id)
+        .map(|def| def.materials.clone())
+        .unwrap_or_default();
+    let mut stock = Stock::new(1_000_000);
+    for (item, need) in &materials {
+        *stock.output.entry(item.clone()).or_default() += need;
+    }
+    game.world
+        .spawn((
+            Structure {
+                kind: "test_research_shelf".to_string(),
+            },
+            Position { x, y },
+            stock,
+        ))
+        .id()
+}
+
+/// Credits the active project with the full progress a Research Node would have
+/// fed it, so a completion test does not have to run one for hundreds of ticks.
+pub(super) fn fill_research_progress(game: &mut Game, id: &str) {
+    let cost = game
+        .world
+        .resource::<ResearchDb>()
+        .get(id)
+        .map_or(0, |def| def.cost);
+    game.world
+        .resource_mut::<crate::resources::ActiveResearch>()
+        .progress
+        .insert(id.to_string(), cost);
+}
+
+/// How far the base has got on `id` — see `resources::ActiveResearch`.
+pub(super) fn research_progress(game: &Game, id: &str) -> u32 {
+    game.world
+        .resource::<crate::resources::ActiveResearch>()
+        .progress
+        .get(id)
+        .copied()
+        .unwrap_or(0)
+}
+
+/// Which project the base is working, if any.
+pub(super) fn active_research(game: &Game) -> Option<String> {
+    game.world
+        .resource::<crate::resources::ActiveResearch>()
+        .id
+        .clone()
 }
 
 /// Stocks every material a structure upgrade asks for *besides* the fragment
@@ -1404,13 +1540,20 @@ pub(super) fn run_one_full_gather_cycle(game: &mut Game, resource: &str) -> u32 
 /// `systems::mining_success_chance`), which is what keeps the payout
 /// assertions off the RNG entirely.
 ///
-/// Measured across *both* places a cycle can pay into — the node's own
-/// buffer for ordinary salvage, and the player's bank for a banked resource
-/// (see `systems::deliver_payout`) — so this helper keeps answering the one
-/// question it is for, "how much did a cycle pay", whichever kind of
-/// resource the caller asked about. The buffer is sized far past any one
-/// cycle's payout so a clog can never be mistaken for a payout curve that
-/// moved.
+/// Measured across **all three** places a cycle can pay into — the node's own
+/// buffer for ordinary salvage, the player's bank for a banked resource, and
+/// the active research project's progress for the research currency (see
+/// `systems::deliver_payout`) — so this helper keeps answering the one
+/// question it is for, "how much did a cycle pay", whichever kind of resource
+/// the caller asked about. The buffer is sized far past any one cycle's payout
+/// so a clog can never be mistaken for a payout curve that moved.
+///
+/// For the research currency it also **arms a project**, on the priciest node
+/// in the tree: with none selected a cycle lands nowhere at all by design, and
+/// the priciest node is what keeps `ActiveResearch::credit`'s saturation from
+/// clipping the figure under test. Set directly rather than through
+/// `Game::select_research`, which would want a base, a Research Node and a
+/// whole material chain standing for a question about one cycle's payout.
 pub(super) fn run_one_full_gather_cycle_at_tier(
     game: &mut Game,
     kind: &str,
@@ -1443,7 +1586,31 @@ pub(super) fn run_one_full_gather_cycle_at_tier(
     });
 
     let item = ItemId::from(resource);
-    let paid = |game: &Game| node_output(game, structure, resource) + held(game, &item);
+    let project = (game.world.resource::<ItemDb>().research_currency() == Some(&item)).then(|| {
+        let id = game
+            .world
+            .resource::<ResearchDb>()
+            .all()
+            .max_by_key(|def| def.cost)
+            .map(|def| def.id.clone())
+            .expect("the shipped tree has nodes");
+        game.world
+            .resource_mut::<crate::resources::ActiveResearch>()
+            .id = Some(id.clone());
+        id
+    });
+    let paid = |game: &Game| {
+        node_output(game, structure, resource)
+            + held(game, &item)
+            + project.as_ref().map_or(0, |id| {
+                game.world
+                    .resource::<crate::resources::ActiveResearch>()
+                    .progress
+                    .get(id)
+                    .copied()
+                    .unwrap_or(0)
+            })
+    };
     let before = paid(game);
     game.tick();
     paid(game) - before

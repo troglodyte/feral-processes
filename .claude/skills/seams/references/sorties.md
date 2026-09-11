@@ -85,13 +85,15 @@
   standing its bodies in the pocket proves nothing. The draw is behind
   **`show_effects`**, the raid flash's gate. A cue is drained on the frame it
   is queued, so a return nobody is home to see is dropped.
-- **`award_companion_xp` and `roll_work_resource_drop` are extractions, not
-  copies.** The first holds the growth roll, the cap, the XP buff, the tally
-  and the routine unlocks; the second holds a `Perk::Teardown` term added to
-  the roll rather than drawn for. The drop **reports rather than grants** —
-  that is the whole of what differs. The rest of `award_loot` — Trace, the
-  `Terminate` feat, boss records, fragments — is deliberately **not** shared:
-  those belong to a fight the player was in.
+- **`award_companion_xp` is an extraction, not a copy.** It holds the growth
+  roll, the cap, the XP buff, the tally and the routine unlocks, and a
+  sortie's off-screen fight calls it rather than restating any of that. The
+  rest of `award_loot` — Trace, the `Terminate` feat, boss records, fragments
+  — is deliberately **not** shared: those belong to a fight the player was
+  in. `roll_work_resource_drop` used to be the second half of this rule and
+  is gone; `Perk::Teardown`'s term rode it, and now rides
+  `Game::extraction_yield` instead, which is why the *tool* is what pays that
+  perk and a kill pays nothing directly.
 
 - **A route is one record with a `standing` flag, and a one-off is the flag
   turned off.** `routes::Route` carries the manifest, the destination, the

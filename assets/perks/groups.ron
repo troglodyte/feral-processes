@@ -20,10 +20,10 @@
     ),
     (
         name: "Fieldcraft",
-        perks: [LowPowerMode, ExploitFocus, Obfuscation, Teardown, ProcessPool],
+        perks: [LowPowerMode, ExploitFocus, Obfuscation, ProcessPool],
     ),
     (
         name: "Workshop",
-        perks: [KeenScavenger, LeanCompiler, TightenTolerances, Failover],
+        perks: [KeenScavenger, LeanCompiler, Teardown, TightenTolerances, Failover],
     ),
 ]

@@ -18,7 +18,7 @@ P = [
  ("KeenScavenger",  "Keen Scavenger",    2, "+1pp mining success",                   "KEEN_SCAVENGER_BONUS_PER_LEVEL = 0.01",     "systems::mining_success_chance"),
  ("LowPowerMode",   "Low Power Mode",    2, "-1pp Power drain, floor 0",             "LOW_POWER_MODE_REDUCTION_PER_LEVEL = 0.01", "the hunger-decay multiplier"),
  ("ExploitFocus",   "Exploit Focus",     3, "-3pp of the target's HP penalty",       "EXPLOIT_FOCUS_HP_PENALTY_REDUCTION_PER_LEVEL = 0.03", "taming::capture_chance"),
- ("LeanCompiler",   "Lean Compiler",     3, "-1 of each ingredient, floor 1",        "LEAN_COMPILER_DISCOUNT_PER_LEVEL = 1",      "Game::craft_recipes' costs"),
+ ("LeanCompiler",   "Lean Compiler",     4, "-1 of each ingredient, floor 1",        "LEAN_COMPILER_DISCOUNT_PER_LEVEL = 1",      "Game::craft_recipes' costs"),
  ("Attacker",       "Attacker",          2, "+2 ATK, permanent",                     "ATTACKER_BONUS_PER_LEVEL = 2",              "a direct Stats write at purchase"),
  ("Defender",       "Defender",          2, "+2 DEF, permanent",                     "DEFENDER_BONUS_PER_LEVEL = 2",              "a direct Stats write at purchase"),
  ("Buffer",         "Buffer",            3, "+1% max Integrity, at least +10",       "BUFFER_BONUS_PERCENT_PER_LEVEL = 0.01",     "a direct Stats write, plus a full heal"),
@@ -29,7 +29,7 @@ P = [
  ("DrainAffinity",  "Siphon Protocol",   2, "+15% Drain damage",                     "AFFINITY_PERK_BONUS_PER_LEVEL_UNSCALED",    "the player's own invocations only"),
  ("Obfuscation",    "Obfuscation",       3, "-10% to every Trace rise, floor 1",     "OBFUSCATION_REDUCTION_PER_LEVEL = 0.10",    "Game::raise_trace"),
  ("ProcessPool",    "Process Pool",      3, "+1 tamed program you may own",          "PROCESS_POOL_SLOTS_PER_LEVEL = 1",          "Game::pet_capacity"),
- ("Teardown",       "Teardown",          4, "+1 work resource per kill",             "TEARDOWN_SALVAGE_PER_LEVEL = 1",            "Game::award_loot"),
+ ("Teardown",       "Teardown",          4, "+1 unit out of every teardown",         "TEARDOWN_SALVAGE_PER_LEVEL = 1",            "Game::extraction_yield"),
  ("Failover",       "Failover",          2, "+1 Durability per repair interval",     "FAILOVER_REPAIR_PER_LEVEL = 1",             "Game::total_repair_rate"),
  ("TightenTolerances", "Tighten Tolerances", 3, "+5pp on a compiled copy's quality floor", "QUALITY_PERK_PER_LEVEL = 5",             "Game::craft_quality_floor"),
  ("TargetLock",     "Target Lock",       3, "+2 Accuracy on every attack you make",  "TARGET_LOCK_ACCURACY_PER_LEVEL = 2",        "Game::accuracy_bonus"),
@@ -120,16 +120,20 @@ positionally, so this order is load-bearing: append, never reorder.
 {price_ladder()}
 
 What the perks at 3 have in common is that they change a *rate* rather than a
-number: Buffer scales with the Integrity you already have, Lean Compiler pays
-out on every craft for the rest of the run, Exploit Focus is worth more the
-healthier the program you are trying to take, Obfuscation is a proportion of
-whatever you were about to spend, Process Pool raises a ceiling every later
-program is measured against, and Tighten Tolerances moves the band every
-piece of gear you compile from here on rolls inside. The ones at 2 are flat.
+number: Buffer scales with the Integrity you already have, Exploit Focus is
+worth more the healthier the program you are trying to take, Obfuscation is a
+proportion of whatever you were about to spend, Process Pool raises a ceiling
+every later program is measured against, and Tighten Tolerances moves the band
+every piece of gear you compile from here on rolls inside. The ones at 2 are
+flat.
 
-Teardown is alone at 4 because it is the steepest thing in the catalogue
-relative to what it modifies: a kill drops 2-4 work resources, so a single
-level is worth between a third and a half again of every fight in the run.
+The two at 4 are the steepest things in the catalogue relative to what they
+modify. Lean Compiler takes an item off every line of every recipe, for the
+rest of the run. Teardown adds a unit to every teardown: a tool pulls 3 units
+out of a fresh common body, so a single level is a third again of every body
+you strip — and it pays at your own hands and at a Teardown Rig alike, which
+is the perk's whole shape now that a kill leaves a program rather than
+material.
 
 Note what {one_of_each} points means against how they arrive. A Perk Point is
 {POINTS_PER_LEVEL} per player level and at most 5 more from a fully cleared

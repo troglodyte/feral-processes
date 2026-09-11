@@ -618,6 +618,7 @@ impl Game {
         let Some((nx, ny)) = self.replacement_link_site(entrance) else {
             return;
         };
+        self.note_deed(crate::contracts::Deed::CollapsedStack);
 
         if self.stack_pos().is_some_and(|pos| pos.entrance == entrance) {
             self.clear_stack();

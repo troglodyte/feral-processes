@@ -1202,6 +1202,13 @@ impl Game {
                 Deed::QueuedStandingOrder => "Place a standing work order".to_string(),
                 Deed::UnlockedPerk => "Spend a Perk Point".to_string(),
                 Deed::PostedStaff => "Set a machine to be kept staffed".to_string(),
+                Deed::ClearedNest => "Destroy a nest".to_string(),
+                Deed::RepelledRaid => "Hold off a GC Entropy Sweep without a scratch".to_string(),
+                Deed::ReturnedSortie => "Bring a squad home from a sortie".to_string(),
+                Deed::TradedWithTown => "Trade at a settlement".to_string(),
+                Deed::ExtractedProgram => "Break down a downed program".to_string(),
+                Deed::CollapsedStack => "Beat a Stack's guardian".to_string(),
+                Deed::FinishedResearch => "Finish a research project".to_string(),
             },
         }
     }

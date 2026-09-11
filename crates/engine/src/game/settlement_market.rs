@@ -370,6 +370,7 @@ impl Game {
         });
         if settled.is_ok() {
             self.credit_trade_volume(key, volume);
+            self.note_deed(crate::contracts::Deed::TradedWithTown);
         }
         settled
     }

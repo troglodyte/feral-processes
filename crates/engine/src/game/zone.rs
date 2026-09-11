@@ -67,6 +67,7 @@ impl Game {
                     crate::tuning::SETTLEMENT_NEST_CLEARED_STANDING,
                 );
             }
+            self.note_deed(crate::contracts::Deed::ClearedNest);
             // Reads Nest::species, so this has to run before despawn_nest
             // deletes the component it's reading.
             self.grant_nest_cache(nest);

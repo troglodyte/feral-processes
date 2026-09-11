@@ -815,6 +815,7 @@ impl Game {
         // Stack. A plain `log()` is `MessageKind::Info`, which
         // `retain_outcomes_since_battle` prunes.
         self.log_base(format!("Research complete: {}.", def.name));
+        self.note_deed(crate::contracts::Deed::FinishedResearch);
         self.grant_research_knowledge(&def);
         {
             let mut research = self.world.resource_mut::<ActiveResearch>();

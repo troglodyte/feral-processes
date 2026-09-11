@@ -98,6 +98,23 @@ pub enum Deed {
     /// was to turn the job **off** and on again — which pulls the body off
     /// the machine and is the opposite of what the mission asks for.
     PostedStaff,
+    /// A nest was destroyed. `Game::attack_nest`.
+    ClearedNest,
+    /// A GC Entropy Sweep landed no damage. `Game::sweep_held`, which is the
+    /// one place both deflection branches meet — the shield network's and the
+    /// posted defender's.
+    RepelledRaid,
+    /// A squad came back from a sortie. `Game::return_sortie`.
+    ReturnedSortie,
+    /// A basket was committed at a settlement. `Game::commit_settlement_basket`.
+    TradedWithTown,
+    /// A downed program was spent through a tool. `Game::extract_program`.
+    ExtractedProgram,
+    /// A Stack's guardian was beaten and the stack came down with it.
+    /// `Game::collapse_stack`.
+    CollapsedStack,
+    /// A research project finished. `Game::finish_research`.
+    FinishedResearch,
 }
 
 impl Deed {
@@ -116,7 +133,14 @@ impl Deed {
             | Deed::Tamed
             | Deed::TookFromContainer
             | Deed::QueuedStandingOrder
-            | Deed::UnlockedPerk => false,
+            | Deed::UnlockedPerk
+            | Deed::ClearedNest
+            | Deed::RepelledRaid
+            | Deed::ReturnedSortie
+            | Deed::TradedWithTown
+            | Deed::ExtractedProgram
+            | Deed::CollapsedStack
+            | Deed::FinishedResearch => false,
         }
     }
 }

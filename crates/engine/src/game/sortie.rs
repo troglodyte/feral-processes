@@ -601,6 +601,7 @@ impl Game {
             .0
             .remove(index);
         self.queue_squad_walk(&sortie.members, false);
+        self.note_deed(crate::contracts::Deed::ReturnedSortie);
         let names: Vec<String> = sortie
             .members
             .iter()

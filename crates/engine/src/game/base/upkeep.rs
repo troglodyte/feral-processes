@@ -514,6 +514,16 @@ impl Game {
     /// they swamped the real machines, and a sweep that destroyed one
     /// dropped the mark and every swing of chip progress while `BaseGrid`
     /// still reported the cell solid — the wall silently healed to full.
+    /// A sweep that landed no damage, whichever way it was turned aside.
+    ///
+    /// One hook where the two deflection branches meet — the shield network's
+    /// and the posted defender's — rather than the deed at each of them: a
+    /// hook that has to be repeated is aimed at the wrong seam.
+    fn sweep_held(&mut self, target: Entity) {
+        self.push_effect(target, EffectKind::Deflected);
+        self.note_deed(crate::contracts::Deed::RepelledRaid);
+    }
+
     fn run_raid(&mut self) {
         let targets: Vec<Entity> = {
             let mut query = self
@@ -548,7 +558,7 @@ impl Game {
             if raid_damage > 0 {
                 self.damage_structure(target, raid_damage, &target_label);
             } else {
-                self.push_effect(target, EffectKind::Deflected);
+                self.sweep_held(target);
                 self.log_base(format!(
                     "Your shield network fends off a GC Entropy Sweep on {target_label} without a scratch!"
                 ));
@@ -586,7 +596,7 @@ impl Game {
         if mitigated > 0 {
             self.damage_structure(target, mitigated, &target_label);
         } else {
-            self.push_effect(target, EffectKind::Deflected);
+            self.sweep_held(target);
             self.log_base(format!(
                 "{worker_label} fends off a GC Entropy Sweep on {target_label} without a scratch!"
             ));

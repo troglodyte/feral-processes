@@ -1749,6 +1749,15 @@ mod tests {
                                  structures and recipes it hands over and what \
                                  they cost to build once you have it."
                             ),
+                            // The deepest shipped node hands over six
+                            // things — four routines and two tools — and
+                            // that line wraps.
+                            unlocks: Some(
+                                "Unlocks: Deep Scan Party, Trace Analysis Party, Stealth \
+                                 Protocol Party, Salvage Routine Party, Core Tap, \
+                                 Harness Puller"
+                                    .to_string(),
+                            ),
                             // The deepest shipped node states three
                             // conversions, and a multi-ingredient recipe
                             // line wraps — this screen's worst case for

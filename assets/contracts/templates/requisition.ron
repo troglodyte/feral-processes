@@ -1,7 +1,7 @@
 (
     id: "requisition",
     name: "Requisition: {target}",
-    description: "The Broker is short on stock again. Hand over {count} {target}.",
+    description: "The Broker is short on stock again and is not fussy about which crew fills the gap, only about how soon.",
     objective: Deliver(count: (8, 20)),
     reward: [Credits(2), Xp(5)],
     repeatable: true,

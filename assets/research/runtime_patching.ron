@@ -1,7 +1,7 @@
 (
     id: "runtime_patching",
     name: "Runtime Patching",
-    description: "Patch an ally back together mid-fight. Unlocks Hot Patch.",
+    description: "Patch an ally back together mid-fight.",
     cost: 60,
     materials: [("routine_disk", 12), ("logic_wafer", 10)],
     min_zone: 2,

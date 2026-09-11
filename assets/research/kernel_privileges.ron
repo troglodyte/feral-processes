@@ -1,7 +1,7 @@
 (
     id: "kernel_privileges",
     name: "Kernel Privileges",
-    description: "Halt every hostile process at once. Unlocks Null Route.",
+    description: "Halt every hostile process at once.",
     cost: 135,
     materials: [("routine_disk", 16), ("logic_wafer", 16), ("bytecode_block", 16)],
     min_zone: 3,

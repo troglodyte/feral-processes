@@ -1,7 +1,7 @@
 (
     id: "firewall",
     name: "Firewall Plating",
-    description: "Compile Firewall Plating at an Armory.",
+    description: "Plate purpose-built to stop hostile traffic. Compiled at an Armory.",
     cost: 45,
     materials: [("hardened_shell", 4), ("bytecode_block", 14)],
     min_zone: 2,

@@ -470,7 +470,7 @@ mod tests {
         let node = ResearchStatus {
             id: "routine_fabrication".to_string(),
             name: "Routine Fabrication".to_string(),
-            description: "Blank media a routine can be written onto.".to_string(),
+            description: "Blank media a routine can be written onto, and the whole chain of benches that makes it.".to_string(),
             cost: 26,
             state: ResearchState::Available,
             progress: 0,
@@ -510,7 +510,7 @@ mod tests {
         let node = ResearchStatus {
             id: "routine_fabrication".to_string(),
             name: "Routine Fabrication".to_string(),
-            description: "Blank media a routine can be written onto.".to_string(),
+            description: "Blank media a routine can be written onto, and the whole chain of benches that makes it.".to_string(),
             cost: 26,
             state: ResearchState::Available,
             progress: 0,

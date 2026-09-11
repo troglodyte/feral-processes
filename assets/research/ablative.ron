@@ -1,7 +1,7 @@
 (
     id: "ablative",
     name: "Ablative Lattice",
-    description: "Compile Ablative Plating at an Armory.",
+    description: "Plate that sheds a layer per hit so the process behind it does not. Compiled at an Armory.",
     cost: 110,
     materials: [("hardened_shell", 8), ("bytecode_block", 24)],
     min_zone: 3,

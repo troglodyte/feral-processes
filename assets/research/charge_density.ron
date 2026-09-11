@@ -1,7 +1,7 @@
 (
     id: "charge_density",
     name: "Charge Density",
-    description: "Wind a cell that holds more than it should. Compile Buffered and Sustain Cells at a Winding Node.",
+    description: "Wind a cell that holds more than it should. Compiled at a Winding Node.",
     cost: 40,
     materials: [("power_cell", 10), ("cache_grain", 8)],
     min_zone: 2,

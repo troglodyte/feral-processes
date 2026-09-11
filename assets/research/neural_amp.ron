@@ -1,7 +1,7 @@
 (
     id: "neural_amp",
     name: "Neural Interfacing",
-    description: "Compile Neural Amplifiers at a Fabricator.",
+    description: "A module that amplifies the signal a decompile rides in on. Compiled at a Fabricator.",
     cost: 55,
     materials: [("trace_sniffer", 3), ("logic_wafer", 8)],
     min_zone: 2,

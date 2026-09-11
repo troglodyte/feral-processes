@@ -1,7 +1,7 @@
 (
     id: "virtual_memory",
     name: "Virtual Memory",
-    description: "Promise a base more room than it physically has and make good on it. Unlocks the Depot Mk4.",
+    description: "Promise a base more room than it physically has and make good on it.",
     cost: 220,
     materials: [("cache_grain", 14), ("charge_coil", 16)],
     min_zone: 4,

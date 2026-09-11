@@ -1,7 +1,7 @@
 (
     id: "overclock",
     name: "Overclock Cores",
-    description: "Compile Overclock Cores at a Fabricator.",
+    description: "A core that pushes your own clock past spec. Compiled at a Fabricator.",
     cost: 45,
     materials: [("trace_sniffer", 2), ("logic_wafer", 8)],
     min_zone: 2,

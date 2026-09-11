@@ -1,7 +1,7 @@
 (
     id: "core_tap",
     name: "Core Tap",
-    description: "Draws the compiled core out from under a downed process's shell.",
+    description: "Draws the annealed cores and cache grains out from under a downed process's shell.",
     category: Cores,
     // A plausible pool, not a tuned one: unlike `salvage_clamp` this tool
     // is not the starter and is not read by the drop-neutrality test, so

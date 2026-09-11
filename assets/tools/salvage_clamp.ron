@@ -1,7 +1,7 @@
 (
     id: "salvage_clamp",
     name: "Salvage Clamp",
-    description: "Prises the loose material off a downed process.",
+    description: "Prises core fragments and bytcode blocks off a downed process.",
     category: Materials,
     // Task 6 checked these weights against the decision-8 drop-neutrality
     // test (`tests::extraction::the_starter_tool_is_drop_neutral_for_a_

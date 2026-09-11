@@ -1,7 +1,7 @@
 (
     id: "tailings_run",
     name: "Tailings Run",
-    description: "Spoil heaps from an extraction that outlived its operators. Rich, and picked over by things that got there first.",
+    description: "Spoil heaps from an extraction that outlived its operators. Rich, and picked over by things that got there first. Maybe something still survives.",
     risk: 1,
     battles_min: 10,
     battles_max: 14,

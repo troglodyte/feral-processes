@@ -1,7 +1,7 @@
 (
     id: "the_switchyard",
     name: "The Switchyard",
-    description: "Freight routing, abandoned mid-shift. The traffic never stopped; it just stopped being scheduled.",
+    description: "Freight routing, abandoned mid-shift. The traffic never stopped; it just stopped being scheduled, monitored, or maintained.",
     risk: 1,
     battles_min: 10,
     battles_max: 14,

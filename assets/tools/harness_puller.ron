@@ -1,7 +1,7 @@
 (
     id: "harness_puller",
-    name: "Harness Puller",
-    description: "Pulls the worn harness off a downed process, gear and all.",
+    name: "Gear Puller",
+    description: "Pulls the worn gear off a downed process, gear and all.",
     // The fifth category, and the second one with no `yields`: what comes
     // out is the species' own drop table rolled at extraction, not a pool
     // drawn from. See `Game::gear_chances`.

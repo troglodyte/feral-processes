@@ -1,6 +1,6 @@
 (
     id: "routine_reader",
-    name: "Routine Reader",
+    name: "Routine Extractor",
     description: "Reads a downed process for the routines it was running, and keeps one.",
     category: Routines,
     // No `yields`: a Routines tool reads no pool. What comes out is drawn

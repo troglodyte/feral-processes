@@ -42,6 +42,41 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.167
+
+**A contract now tells you how and where it is finished.** "Deliver 4 Core
+Fragments" never said that a delivery is a keypress at the counter the job
+was signed at, so compiling the items and putting them on a shelf did
+nothing and looked like the job was broken; "Reach sector 3" named no gesture
+a player could go and make, since *reach* is a verb the game does not use
+anywhere else. Every job carries a third line now, under the flavour text,
+saying how it is satisfied and where — and for a delivery that line goes
+live when you reach the counter, naming the town or your own Broker and
+counting what is in your pack. The two objective lines that used words the
+game does not speak now read "Breach to sector 3" and "Carry 4 Core Fragment
+at once".
+
+Walking up to the counter with cargo a held job wants also raises a row in
+the info column, so a delivery you could make right now reaches you without
+opening anything. And the manual has a Broker page: there were fifteen help
+pages and not one of them was about contracts, which is most of the reason
+the screen was the only place the loop was ever explained.
+
+**The board can ask for eight things it never could.** Clear nests, hold off
+a GC Entropy Sweep without a scratch, bring a squad home from a sortie, trade
+at a settlement, break down a downed program, beat a Stack's guardian, finish
+a research project, and get a town onto good terms with you. Jobs used to
+come in four shapes — kill some, fetch some, build one, go somewhere — so
+most of what the game has was something the Broker could not name at all,
+which is most of why a board read as filler. A deed job can also ask for
+more than one of something now, so "clear three nests" is a job rather than
+three separate ones.
+
+Eight new contracts ship using them, and seven existing descriptions have
+been rewritten: they used to end by restating the line directly above them,
+which spent the one place a job can say *why* on saying *what* a second time.
+
+
 ## 0.13.166
 
 **Breaching into sector 2 now warns you that sweeps start here.** A GC

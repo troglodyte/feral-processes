@@ -34,6 +34,7 @@ pub enum DevAction {
     DestroyStructure,
     Encounter,
     AdvanceTicks,
+    CycleEnemyStrength,
 }
 
 pub struct DevConsoleRow {
@@ -71,6 +72,14 @@ const DEV_ROWS: &[DevConsoleRow] = &[
     DevConsoleRow {
         label: "Advance 25 cycles",
         action: DevAction::AdvanceTicks,
+    },
+    // Last, and the one row that changes the run rather than provoking an
+    // event in it. The band it lands on goes to the status line rather than
+    // into this label: the table is `&'static`, and a dynamic label would
+    // make every row's text a call the renderer has to make.
+    DevConsoleRow {
+        label: "Cycle enemy strength",
+        action: DevAction::CycleEnemyStrength,
     },
 ];
 
@@ -176,6 +185,10 @@ impl App {
         let Some(game) = self.game.as_mut() else {
             return;
         };
+        // Held until after `after_world_action`, which is free to write the
+        // status line itself — a sentence set inside the match would be
+        // overwritten by the tail that every row runs.
+        let mut said: Option<Result<String, String>> = None;
         match action {
             DevAction::Sweep => game.dev_force_raid(),
             DevAction::DamageStructure => game.dev_damage_structure(),
@@ -195,7 +208,22 @@ impl App {
                     game.wait();
                 }
             }
+            DevAction::CycleEnemyStrength => {
+                let band = game.enemy_strength().next();
+                said = Some(game.set_enemy_strength(band).map(|()| {
+                    format!(
+                        "Enemy strength: {} (+{} zone steps). Local wild re-stocked.",
+                        band.label(),
+                        band.zone_steps()
+                    )
+                }));
+            }
         }
         self.after_world_action(true, false, 0);
+        match said {
+            Some(Ok(line)) => self.status_line = Some(line),
+            Some(Err(e)) => self.refuse(e),
+            None => {}
+        }
     }
 }

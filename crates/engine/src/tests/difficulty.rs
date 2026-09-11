@@ -7,10 +7,10 @@
 //! feature for free.
 
 use super::support::test_assets_dir;
+use crate::Game;
 use crate::components::{Hostile, Position, Stats};
 use crate::resources::{DifficultyMode, EnemyStrength, GameRng, ZoneLevel, ZoneSpawnPoint};
 use crate::tuning::{DANGER_RAMP_TILES, OPENING_RING_TILES};
-use crate::Game;
 use bevy_ecs::prelude::*;
 use rand::SeedableRng;
 
@@ -37,7 +37,10 @@ fn no_band_sits_below_the_shipped_curve() {
             "{band:?} is below Standard, which this ladder must never be"
         );
     }
-    let steps: Vec<f32> = EnemyStrength::all().iter().map(|b| b.zone_steps()).collect();
+    let steps: Vec<f32> = EnemyStrength::all()
+        .iter()
+        .map(|b| b.zone_steps())
+        .collect();
     for pair in steps.windows(2) {
         assert!(
             pair[1] > pair[0],
@@ -143,7 +146,8 @@ fn a_higher_band_spawns_a_stronger_body() {
     let mut g = game(9306);
     let (sx, sy) = danger_origin(&g);
     let spawn = |g: &mut Game| -> (i32, i32) {
-        g.world.insert_resource(GameRng(rand::rngs::StdRng::seed_from_u64(7717)));
+        g.world
+            .insert_resource(GameRng(rand::rngs::StdRng::seed_from_u64(7717)));
         let mult = g.field_stat_mult(sx, sy);
         let e = g
             .spawn_wild_creature_scaled("glitch", sx, sy, mult, false)

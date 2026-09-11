@@ -9,6 +9,7 @@
 
 use super::support::*;
 use crate::*;
+use feral_processes_engine::EnemyStrength;
 
 /// The gate is a field read once in `App::new`, not a live env lookup, so a
 /// test can open it without touching an environment the parallel suite
@@ -116,6 +117,57 @@ fn the_tick_trigger_advances_the_world() {
     assert!(
         after < before,
         "burning {DEV_CONSOLE_TICKS} cycles should have moved Power: {before} -> {after}"
+    );
+}
+
+/// The one row that changes the run rather than provoking an event in it.
+/// A press climbs the ladder and says where it landed.
+#[test]
+fn the_strength_trigger_climbs_the_ladder_and_reports_it() {
+    let mut app = console_app(6);
+    assert_eq!(
+        app.game.as_ref().unwrap().enemy_strength(),
+        EnemyStrength::Standard,
+        "a run starts on the floor"
+    );
+    app.handle_key(GameKey::Char(DEV_CONSOLE_KEY));
+    app.menu_selected = App::dev_console_rows()
+        .iter()
+        .position(|r| r.action == DevAction::CycleEnemyStrength)
+        .expect("the table must offer the strength trigger");
+
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(
+        app.game.as_ref().unwrap().enemy_strength(),
+        EnemyStrength::Elevated
+    );
+    let line = app.status_line.clone().expect("a press has to report back");
+    assert!(
+        line.contains("Elevated"),
+        "the band it landed on is the one thing the press must say: {line}"
+    );
+}
+
+/// The ladder wraps, so one row reaches every rung — including back to the
+/// floor, which is the only way a dev undoes a press.
+#[test]
+fn cycling_past_the_top_returns_to_the_floor() {
+    let mut app = console_app(7);
+    app.handle_key(GameKey::Char(DEV_CONSOLE_KEY));
+    app.menu_selected = App::dev_console_rows()
+        .iter()
+        .position(|r| r.action == DevAction::CycleEnemyStrength)
+        .unwrap();
+
+    for _ in 0..EnemyStrength::all().len() {
+        app.handle_key(GameKey::Enter);
+    }
+
+    assert_eq!(
+        app.game.as_ref().unwrap().enemy_strength(),
+        EnemyStrength::Standard,
+        "a full lap must come back to the floor"
     );
 }
 

@@ -654,6 +654,9 @@ relying on one, and correct all three places if it has moved.
   are all ungated.
 - **A player's class grants affinities and nothing else, and
   `ability_affinity`'s player arm is where it lands.**
+- **A difficulty band is a fractional zone step, never a flat multiplier on
+  stats**, and `Game::zone_curve_ratio` is the one derivation it shares with
+  the distance ramp.
 - **Every difficulty curve in the game is linear.** A geometric enemy curve
   racing a linear player curve outruns it wherever you put the coefficients.
 - **One draw, four bands: `battle::resolve_attack` is how every

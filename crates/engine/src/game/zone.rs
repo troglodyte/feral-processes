@@ -338,39 +338,6 @@ impl Game {
             .then_some(entity)
     }
 
-    /// Raises the world's tier.
-    ///
-    /// A breach used to be a migration: every hostile, nest and Stack
-    /// entrance despawned, a fresh `WorldMap` carved from a fresh seed,
-    /// the party and the base anchor teleported onto it, and a zone's
-    /// worth of economy — the buyback shelves, the caravan, the spendable
-    /// currencies — destroyed on the way through. Nothing of the sector
-    /// you left survived, which is why nothing in it was ever worth
-    /// knowing.
-    ///
-    /// The world is persistent now. There is one map for the run, minted
-    /// at `Game::new`, and a breach raises the tier that everything
-    /// spawned into it is scaled against. The party does not move; the
-    /// ground under them does not change; what changes is what walks on
-    /// it. That is the infrastructure settlements need — a place can only
-    /// be worth returning to if it is still there.
-    ///
-    /// Two lines below look like the wipe code that was deleted around
-    /// them and are the opposite — they are the mechanism:
-    ///
-    /// - Clearing `PopulatedChunks` is what makes the world visibly harden.
-    ///   It marks which chunks have been stocked, so emptying it sends
-    ///   `Game::ensure_local_population` back over ground it has already
-    ///   covered to re-stock it at the new tier. It is paired with
-    ///   `Game::clear_local_wild` and is inert without it: `populate_chunk`
-    ///   counts the survivors against `WILD_LOCAL_DENSITY_TARGET`, so on
-    ///   ground already worked an unpaired re-stock fills only the gaps and
-    ///   leaves the old tier standing.
-    /// - Clearing `StackMemory` is what makes an entrance re-tier. A
-    ///   surviving link keys a `FrameSpec` that now folds in the tier, so
-    ///   the frame behind it is re-carved and the memory of the old one —
-    ///   which cells were seen, which caches were emptied, which lair was
-    ///   cleared — describes a frame that no longer exists.
     /// This run's enemy-strength band — `resources::EnemyStrength`.
     pub fn enemy_strength(&self) -> crate::resources::EnemyStrength {
         *self.world.resource::<crate::resources::EnemyStrength>()
@@ -407,7 +374,10 @@ impl Game {
     /// stats it spawned with until it dies. And only chunks within
     /// `POPULATION_CHUNK_MARGIN` are touched — ground walked into later has
     /// never been populated and stocks at the new band anyway.
-    pub fn set_enemy_strength(&mut self, band: crate::resources::EnemyStrength) -> Result<(), String> {
+    pub fn set_enemy_strength(
+        &mut self,
+        band: crate::resources::EnemyStrength,
+    ) -> Result<(), String> {
         if self.has_active_battle() {
             return Err("Not in the middle of a fight.".to_string());
         }
@@ -428,6 +398,39 @@ impl Game {
         self.world.insert_resource(band);
     }
 
+    /// Raises the world's tier.
+    ///
+    /// A breach used to be a migration: every hostile, nest and Stack
+    /// entrance despawned, a fresh `WorldMap` carved from a fresh seed,
+    /// the party and the base anchor teleported onto it, and a zone's
+    /// worth of economy — the buyback shelves, the caravan, the spendable
+    /// currencies — destroyed on the way through. Nothing of the sector
+    /// you left survived, which is why nothing in it was ever worth
+    /// knowing.
+    ///
+    /// The world is persistent now. There is one map for the run, minted
+    /// at `Game::new`, and a breach raises the tier that everything
+    /// spawned into it is scaled against. The party does not move; the
+    /// ground under them does not change; what changes is what walks on
+    /// it. That is the infrastructure settlements need — a place can only
+    /// be worth returning to if it is still there.
+    ///
+    /// Two lines below look like the wipe code that was deleted around
+    /// them and are the opposite — they are the mechanism:
+    ///
+    /// - Clearing `PopulatedChunks` is what makes the world visibly harden.
+    ///   It marks which chunks have been stocked, so emptying it sends
+    ///   `Game::ensure_local_population` back over ground it has already
+    ///   covered to re-stock it at the new tier. It is paired with
+    ///   `Game::clear_local_wild` and is inert without it: `populate_chunk`
+    ///   counts the survivors against `WILD_LOCAL_DENSITY_TARGET`, so on
+    ///   ground already worked an unpaired re-stock fills only the gaps and
+    ///   leaves the old tier standing.
+    /// - Clearing `StackMemory` is what makes an entrance re-tier. A
+    ///   surviving link keys a `FrameSpec` that now folds in the tier, so
+    ///   the frame behind it is re-carved and the memory of the old one —
+    ///   which cells were seen, which caches were emptied, which lair was
+    ///   cleared — describes a frame that no longer exists.
     pub(crate) fn enter_next_zone(&mut self) {
         self.notify(crate::notifications::NotificationKind::Breach);
 

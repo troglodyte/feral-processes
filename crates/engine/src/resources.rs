@@ -33,9 +33,7 @@ pub enum DifficultyMode {
 ///
 /// Saved behind a `#[serde(default)]`, so an existing save loads at
 /// `Standard`. Additive, so it costs no `SAVE_FORMAT_VERSION` bump.
-#[derive(
-    Resource, Default, Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize,
-)]
+#[derive(Resource, Default, Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum EnemyStrength {
     #[default]
     Standard,

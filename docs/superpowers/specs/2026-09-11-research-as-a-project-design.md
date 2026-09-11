@@ -73,6 +73,10 @@ the encoded bytes must not differ run to run.
 order does.** `Game::research_wants` returns the deployed Research Nodes
 (`work_orders::producers_of` against the research currency, which is already
 sorted by tile) while a project is active, and nothing at all when none is.
+It returns `Vec<(Entity, TaskKind)>` with `TaskKind::GatherResource` — the
+shape `standing_wants` and `build_wants` return, not the `(Entity, u32)`
+depth pairs `settle_orders` returns — because a Research Node is the top of
+its own line and has no recipe tree behind it to measure a depth against.
 
 Placement in the ladder: research wants are **prepended to the order block**
 — behind build wants, which are prepended above everything, and ahead of the
@@ -173,6 +177,19 @@ must mark a row blocked with the same call that refuses it**, so the screen
 cannot offer a row the selection would then turn down. `ResearchStatus`
 carries `blocked_by: Option<String>` filled from steps 5 and 6.
 
+`views::ResearchState` gains a fourth variant, **`Active`**, and
+`research_nodes` sorts it **first** — ahead of `Available`, `Locked`,
+`Unlocked`. A variant rather than a flag, for the reason `Locked`'s two
+reasons are fields rather than variants, read the other way: the four states
+really are disjoint (a node cannot be both active and locked, and an active
+one is by definition not yet unlocked), so a `bool` beside the enum would be
+a second thing to keep in step with it.
+
+`ResearchStatus::affordable` is **retired**. It meant "the player can pay
+`cost` and every material line right now", which is a question nobody asks
+any more: the cost is worked off over time and the bill is the base's. The
+row colour rule it fed reads `blocked_by` instead.
+
 ### Completion
 
 Checked once a tick, from `Game::tick_inner`, in `Game::settle_research`:
@@ -185,8 +202,10 @@ progress >= def.cost
 Then, and only then, the bill is consumed off the base's buffers, the node
 is inserted into `resources::Research`, and the existing `unlocks_abilities`
 / `unlocks_tools` loops and the "Research complete" line run **exactly as
-they do today**. `ActiveResearch::id` is cleared and the project's
-outstanding orders are withdrawn.
+they do today**. `ActiveResearch::id` is cleared, the project's outstanding
+orders are withdrawn, and its `progress` entry is **removed** — the node is
+researched, nothing reads the figure again, and leaving it would grow the
+save by one row per node for the life of the run.
 
 Consuming from `base_holding` rather than the pack is the one behavioural
 loss and it is deliberate: research is the base's job now, so the base pays.
@@ -213,7 +232,7 @@ routes every take through it.
 | `game/base/work_orders.rs` | `WorkOrder::for_research` + `with_research`; `research_wants` and its place in `schedule_base_labour` |
 | `game/base/stock.rs` | `spend_from_base` |
 | `game/inspection.rs` | `attention` row: Research Nodes standing with no project selected |
-| `views.rs` | `ResearchStatus` gains `progress`, `blocked_by`; `ResearchMaterial::have` re-sourced |
+| `views.rs` | `ResearchStatus` gains `progress`, `blocked_by`, loses `affordable`; `ResearchState::Active`; `ResearchMaterial::have` re-sourced |
 
 ### app-core
 

@@ -445,7 +445,7 @@ impl Game {
         let defs = self.board_defs(None)?;
         Some(
             defs.iter()
-                .map(|def| self.contract_row(def, 0, None))
+                .map(|def| self.contract_row(def, 0, None, false))
                 .collect(),
         )
     }
@@ -465,7 +465,7 @@ impl Game {
         let defs = self.board_defs(Some(key))?;
         Some(
             defs.iter()
-                .map(|def| self.contract_row(def, 0, Some(key)))
+                .map(|def| self.contract_row(def, 0, Some(key), false))
                 .collect(),
         )
     }
@@ -817,7 +817,7 @@ impl Game {
             .resource::<ActiveContracts>()
             .active
             .iter()
-            .map(|held| self.contract_row(&held.def, held.progress, held.issuer))
+            .map(|held| self.contract_row(&held.def, held.progress, held.issuer, true))
             .collect()
     }
 
@@ -833,11 +833,11 @@ impl Game {
         let db = self.world.resource::<crate::contracts::ContractDb>();
         let widest = self.widest_pools();
         db.iter()
-            .map(|def| self.contract_row(def, 0, None))
+            .map(|def| self.contract_row(def, 0, None, false))
             .chain(
                 db.templates()
                     .filter_map(|t| t.widest(&widest))
-                    .map(|def| self.contract_row(&def, 0, None)),
+                    .map(|def| self.contract_row(&def, 0, None, false)),
             )
             .collect()
     }
@@ -911,7 +911,7 @@ impl Game {
     /// check, because `base_pos` is already `None` in every locale but this
     /// one, and no locale-dependent `Position` read, because `Position` is
     /// pinned to the anchor tile the whole time the party is in here.
-    pub fn broker_reach(&mut self) -> BrokerReach {
+    pub fn broker_reach(&self) -> BrokerReach {
         if !self.has_broker() {
             return BrokerReach::NoBroker;
         }
@@ -930,12 +930,16 @@ impl Game {
     }
 
     /// Whether the run has a Broker standing at all, wherever it is.
-    fn has_broker(&mut self) -> bool {
-        let mut query = self.world.query_filtered::<Entity, With<Structure>>();
-        let standing: Vec<Entity> = query.iter(&self.world).collect();
-        standing
-            .into_iter()
-            .any(|entity| self.issues_contracts(entity))
+    ///
+    /// Walked with `iter_entities`, as `standing_structures` above is, rather
+    /// than through a `query_filtered` that would take `&mut World` with it:
+    /// `broker_reach` is read from a menu-row closure every frame and from
+    /// `contract_row`, which is `&self` because the width census calls it.
+    fn has_broker(&self) -> bool {
+        self.world
+            .iter_entities()
+            .filter(|entity| entity.contains::<Structure>())
+            .any(|entity| self.issues_contracts(entity.id()))
     }
 
     /// The board's seed: the world seed, the sector and the epoch, folded
@@ -983,11 +987,17 @@ impl Game {
     }
 
     /// One contract, worded for a screen.
+    ///
+    /// `held` is what separates a job in hand from one on the board. It reaches
+    /// only `objective_hint`, whose `Deliver` arm has to tell "carry these to
+    /// the counter" from "you are standing at it" — and on an offer, picking
+    /// the row signs the job rather than handing anything over.
     fn contract_row(
         &self,
         def: &crate::contracts::ContractDef,
         progress: u32,
         issuer: Option<crate::settlements::SettlementKey>,
+        held: bool,
     ) -> crate::views::ContractRow {
         crate::views::ContractRow {
             issuer,
@@ -996,11 +1006,123 @@ impl Game {
             name: def.name.clone(),
             description: def.description.clone(),
             objective_line: self.objective_line(&def.objective),
+            hint: self.objective_hint(&def.objective, issuer, held),
             reward_line: self.reward_line(&def.reward),
             progress,
             target: def.objective.target(),
             tutorial: def.tutorial.is_some(),
         }
+    }
+
+    /// **How and where an objective is satisfied**, or `None` where the
+    /// objective is already its own instruction.
+    ///
+    /// A second derivation rather than more words on `objective_line`, for a
+    /// measured reason: the widest row the shipped assets can build leaves
+    /// 159.5px of `PopupSize::Large`'s 1243.2px body, and a character averages
+    /// 10.84px — fourteen of them. "to the Broker" spends every one, and a
+    /// town's name does not fit at all.
+    ///
+    /// Exhaustive on `Objective`, `cell_mark`'s rule: a job kind that cannot
+    /// be acted on without being told how must fail to compile here rather
+    /// than ship a blank line under itself.
+    ///
+    /// The `Deliver` arm is the one that reads the run, and it reads it for
+    /// the failure this whole derivation exists to close — a player who
+    /// compiled the items, shelved them, and watched nothing happen, because a
+    /// delivery is a keypress at the counter the job was signed at.
+    fn objective_hint(
+        &self,
+        objective: &Objective,
+        issuer: Option<crate::settlements::SettlementKey>,
+        held: bool,
+    ) -> Option<String> {
+        match objective {
+            // Both are their own instruction: "Terminate 3 wild programs"
+            // names the whole errand, and every deed line already names the
+            // key it is performed with.
+            Objective::Terminate { .. } | Objective::Perform { .. } => None,
+
+            Objective::Deliver { item, .. } => {
+                let counter = self.contract_counter_name(issuer);
+                if !held {
+                    return Some(format!(
+                        "Handed over at {counter} - a job is delivered where it was signed."
+                    ));
+                }
+                if !self.at_contract_counter(issuer) {
+                    return Some(format!(
+                        "Carry them to {counter} and pick this row there to hand them \
+                         over. Putting them on a shelf does nothing."
+                    ));
+                }
+                let carrying = self.player_carrying(item);
+                Some(if carrying == 0 {
+                    format!("You are at {counter}, but carrying none of them.")
+                } else {
+                    format!(
+                        "You are at {counter} carrying {carrying} - pick this row to \
+                         hand them over."
+                    )
+                })
+            }
+
+            Objective::Hold { .. } => Some(
+                "Nothing to hand in - this one only asks that you have them in your \
+                 pack at once."
+                    .to_string(),
+            ),
+
+            Objective::Breach { .. } => Some(
+                "Breach from a Zone Portal at your base. A breach spends Portal \
+                 Fragments, which only bosses under the ground drop."
+                    .to_string(),
+            ),
+
+            Objective::Descend { depth } => Some(format!(
+                "Stack entrances stand out on the open ground. Go down {depth} frames \
+                 from one."
+            )),
+
+            Objective::Build { .. } => Some(
+                "Deploy it from the base menu and the crew raises it - a build is a \
+                 request, not something your own hands finish."
+                    .to_string(),
+            ),
+        }
+    }
+
+    /// What to call the counter a contract is signed and delivered at - the
+    /// run's own Broker, or the town that posted it.
+    fn contract_counter_name(&self, issuer: Option<crate::settlements::SettlementKey>) -> String {
+        match issuer {
+            Some(key) => self.settlement_name(key),
+            None => "your Contract Broker".to_string(),
+        }
+    }
+
+    /// Whether the player is standing where this contract may be handed over.
+    ///
+    /// One question with one answer per row, because **the two reaches are
+    /// mutually exclusive by construction**: `settlement_reach` is false in
+    /// base space and `broker_reach` answers `AtBroker` only there. A town
+    /// that refuses service is not a counter either, the gate
+    /// `deliver_to_contract` applies.
+    fn at_contract_counter(&self, issuer: Option<crate::settlements::SettlementKey>) -> bool {
+        match issuer {
+            Some(key) => self.settlement_reach(key) && !self.standing_band(key).refuses_service(),
+            None => self.broker_reach() == BrokerReach::AtBroker,
+        }
+    }
+
+    /// Units of `item` in the player's pack.
+    fn player_carrying(&self, item: &ItemId) -> u32 {
+        self.world
+            .iter_entities()
+            .find(|entity| entity.contains::<crate::components::Player>())
+            .and_then(|entity| entity.get::<Inventory>())
+            .map(|inv| inv.count(item))
+            .unwrap_or(0)
     }
 
     /// What an objective asks, in the player's words. Item and species ids

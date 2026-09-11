@@ -485,3 +485,104 @@ fn a_save_from_before_town_jobs_loads_its_contracts_as_the_brokers() {
     let old = Game::load(&path, &test_assets_dir()).unwrap();
     assert_eq!(held(&old, id.as_str()).issuer, None);
 }
+
+/// **A hint names the counter the job was signed at, and goes live when you
+/// reach it.**
+///
+/// The same trap `a_job_is_delivered_where_it_was_signed` closes applies to the
+/// wording: the two reaches are mutually exclusive by construction, so a hint
+/// read while standing in one place proves nothing about the other. Both jobs
+/// are held at once and read from both counters in turn — which is also the
+/// only way to catch a hint that named the Broker on a town's job because it
+/// ignored `issuer` and happened to be read off-base.
+#[test]
+fn a_hint_names_its_own_counter_and_goes_live_at_it() {
+    let mut game = game();
+    let key = town_next_to_player(&mut game);
+    let item: crate::items::ItemId = ids::CORE_FRAGMENT.into();
+
+    let hold = |game: &mut Game, id: &str, issuer: Option<SettlementKey>| {
+        let accepted_tick = game.current_tick();
+        game.world.resource_mut::<ActiveContracts>().active.push(
+            crate::resources::ActiveContract {
+                def: crate::contracts::ContractDef {
+                    id: crate::contracts::ContractId::from(id),
+                    name: id.to_string(),
+                    description: String::new(),
+                    objective: Objective::Deliver {
+                        item: ids::CORE_FRAGMENT.into(),
+                        count: 2,
+                    },
+                    reward: Vec::new(),
+                    min_zone: 0,
+                    repeatable: false,
+                    starter: false,
+                    tutorial: None,
+                },
+                progress: 0,
+                accepted_tick,
+                issuer,
+            },
+        );
+    };
+    hold(&mut game, "town_job", Some(key));
+    hold(&mut game, "broker_job", None);
+    game.world
+        .get_mut::<crate::components::Inventory>(game.player_entity())
+        .unwrap()
+        .add(item.clone(), 8);
+    // On top of whatever the run started with - a new player is not
+    // empty-handed, and a hardcoded figure here reads as a leak.
+    let carried = game
+        .world
+        .get::<crate::components::Inventory>(game.player_entity())
+        .unwrap()
+        .count(&item)
+        .to_string();
+
+    let hint = |game: &Game, id: &str| {
+        game.active_contracts()
+            .into_iter()
+            .find(|r| r.id == crate::contracts::ContractId::from(id))
+            .and_then(|r| r.hint)
+            .expect("a Deliver objective always says where it is handed over")
+    };
+    let town_name = game.settlement_name(key);
+
+    // Standing at the town. Its own job is live; the Broker's still reads as
+    // an errand, and names the Broker rather than the town in front of you.
+    assert!(
+        hint(&game, "town_job").contains(&town_name),
+        "a town's job names the town: {:?}",
+        hint(&game, "town_job")
+    );
+    assert!(
+        hint(&game, "town_job").contains(&carried),
+        "and quotes what is in the pack once you are standing at it: {:?}",
+        hint(&game, "town_job")
+    );
+    assert!(
+        hint(&game, "broker_job").contains("Broker")
+            && !hint(&game, "broker_job").contains(&town_name),
+        "the Broker's job is not delivered to whichever town you happen to be \
+         standing at: {:?}",
+        hint(&game, "broker_job")
+    );
+
+    // Now at the Broker's desk. The live half swaps over.
+    stand_up_broker(&mut game);
+    assert_eq!(
+        game.broker_reach(),
+        crate::game::contracts::BrokerReach::AtBroker
+    );
+    assert!(
+        hint(&game, "broker_job").contains(&carried),
+        "the Broker's job goes live at the Broker: {:?}",
+        hint(&game, "broker_job")
+    );
+    assert!(
+        hint(&game, "town_job").contains("Carry them to"),
+        "and the town's job goes back to being an errand: {:?}",
+        hint(&game, "town_job")
+    );
+}

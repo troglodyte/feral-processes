@@ -3664,3 +3664,137 @@ fn an_objective_line_asks_in_the_games_own_vocabulary() {
     assert_eq!(line("breach"), "Breach to sector 3");
     assert_eq!(line("hold"), "Carry 4 Core Fragment at once");
 }
+
+/// **A contract says how and where it is satisfied, not only what it asks
+/// for.**
+///
+/// `objective_line` has fourteen characters of headroom on the widest shipped
+/// row before it runs off `PopupSize::Large`, measured against the real font —
+/// far too few for "to the Broker", and a town's name does not fit at all. So
+/// the *where* is its own derivation, wrapped under the description the way
+/// the authored prose already is.
+///
+/// The case that made this necessary: a player holding a `Deliver` compiled
+/// the items, put them on a shelf, and nothing happened — because a delivery
+/// is a keypress at the counter the job was signed at, and no surface said so.
+#[test]
+fn a_delivery_says_where_it_is_handed_over() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def(
+            "raw",
+            Objective::Deliver {
+                item: crate::items::ItemId::from("core_fragment"),
+                count: 6,
+            },
+            vec![Reward::Xp(1)],
+        ),
+        0,
+    );
+
+    let hint = game
+        .active_contracts()
+        .into_iter()
+        .find(|r| r.id == ContractId::from("raw"))
+        .and_then(|r| r.hint)
+        .expect("a Deliver objective always says where it is handed over");
+
+    assert!(
+        hint.contains("Broker"),
+        "it names the counter the job was signed at: {hint:?}"
+    );
+}
+
+/// **`Hold` is the objective that asks for nothing to be handed in, and its
+/// hint is the only place that is said.**
+///
+/// It exists precisely so the onboarding chain can teach that fighting pays in
+/// stock before a Broker has been built, so a player reading "Carry 4 Core
+/// Fragment at once" and going looking for a counter is the failure it was
+/// added to avoid.
+#[test]
+fn holding_says_there_is_nothing_to_hand_in() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def(
+            "stock",
+            Objective::Hold {
+                item: crate::items::ItemId::from("core_fragment"),
+                count: 4,
+            },
+            vec![Reward::Xp(1)],
+        ),
+        0,
+    );
+
+    let hint = game
+        .active_contracts()
+        .into_iter()
+        .find(|r| r.id == ContractId::from("stock"))
+        .and_then(|r| r.hint)
+        .expect("Hold says there is nothing to hand in");
+    assert!(
+        hint.contains("hand in"),
+        "it says the thing that is *not* required: {hint:?}"
+    );
+}
+
+/// **A breach names the door it goes through.** "Breach to sector 3" is the
+/// gesture; the Zone Portal and the Portal Fragments it spends are what the
+/// player has to go and get, and nothing else on the screen says so.
+#[test]
+fn a_breach_names_the_portal_and_what_it_spends() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def("push", Objective::Breach { zone: 3 }, vec![Reward::Xp(1)]),
+        0,
+    );
+
+    let hint = game
+        .active_contracts()
+        .into_iter()
+        .find(|r| r.id == ContractId::from("push"))
+        .and_then(|r| r.hint)
+        .expect("a Breach objective says how a breach is made");
+    assert!(
+        hint.contains("Zone Portal") && hint.contains("Portal Fragment"),
+        "it names the structure and the currency: {hint:?}"
+    );
+}
+
+/// **Killing things needs no hint, and that is a decision rather than a gap.**
+///
+/// `Game::objective_hint` is an exhaustive match, `cell_mark`'s rule, so a new
+/// `Objective` variant fails to compile rather than shipping a silent `None`.
+/// What this holds is the other half: the two variants that deliberately
+/// answer `None` still do, so "no hint" cannot quietly become the default the
+/// next variant is added under.
+#[test]
+fn an_obvious_objective_is_left_without_a_hint() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def(
+            "hunt",
+            Objective::Terminate {
+                species: None,
+                count: 3,
+            },
+            vec![Reward::Xp(1)],
+        ),
+        0,
+    );
+
+    let row = game
+        .active_contracts()
+        .into_iter()
+        .find(|r| r.id == ContractId::from("hunt"))
+        .expect("the contract is in hand");
+    assert_eq!(
+        row.hint, None,
+        "'Terminate 3 wild programs' is its own instruction"
+    );
+}

@@ -296,6 +296,7 @@ fn every_notification_kind_is_fired_by_a_named_site() {
             NotificationKind::LowPower => "Game::note_low_power, once a tick",
             NotificationKind::DownedProgram => "Game::bench_or_dissolve, the benched arm",
             NotificationKind::Breach => "Game::enter_next_zone",
+            NotificationKind::SweepsBegin => "Game::enter_next_zone, the breach onto RAID_MIN_ZONE",
             NotificationKind::ContractClosed => "Game::complete_contract",
             NotificationKind::OnboardingComplete => "Game::complete_contract, the onboarding arm",
             NotificationKind::OnboardingMission => "Game::ensure_tutorial_held",
@@ -337,6 +338,7 @@ fn tutorials_latch_and_milestones_do_not() {
             // ...and the level cap is a different number in every sector,
             // so reaching one is news again at each of them.
             NotificationKind::Breach
+            | NotificationKind::SweepsBegin
             | NotificationKind::ContractClosed
             | NotificationKind::OnboardingComplete
             | NotificationKind::OnboardingMission
@@ -647,4 +649,40 @@ fn reaching_the_level_cap_announces_itself_once_per_sector() {
         Some("Ceiling Reached".to_string()),
         "Always, so the second sector's ceiling is news again"
     );
+}
+
+/// The warning that sweeps have started is hung on the breach *into*
+/// `RAID_MIN_ZONE` and nowhere else. A gate written as `>=` would re-fire it
+/// at every breach for the rest of the run, and one written against a
+/// literal would keep firing at sector 2 after the constant moved — so the
+/// call site reads the constant and this reads it too.
+#[test]
+fn the_sweep_warning_fires_on_the_breach_into_the_first_swept_sector() {
+    let mut game = fresh();
+
+    for _ in 1..tuning::RAID_MIN_ZONE {
+        drain(&mut game);
+        game.enter_next_zone();
+        assert!(
+            titles(&mut game).contains(&"Sweeps Begin".to_string()),
+            "the breach into sector {} says nothing about sweeps",
+            tuning::RAID_MIN_ZONE
+        );
+    }
+
+    for _ in 0..2 {
+        drain(&mut game);
+        game.enter_next_zone();
+        assert!(
+            !titles(&mut game).contains(&"Sweeps Begin".to_string()),
+            "a later breach repeats the warning"
+        );
+    }
+}
+
+/// Every title the queue is holding, drained.
+fn titles(game: &mut Game) -> Vec<String> {
+    std::iter::from_fn(|| game.take_notification())
+        .map(|n| n.title)
+        .collect()
 }

@@ -440,6 +440,14 @@ impl Game {
             zone.0
         };
 
+        // Equality, not `>=`: the warning is about sweeps *starting*, and a
+        // `>=` gate would repeat it at every breach for the rest of the run.
+        // Read off the constant `Game::raid_check` gates on, so the screen
+        // and the gate cannot come to disagree about which sector it is.
+        if new_level == crate::tuning::RAID_MIN_ZONE {
+            self.notify(crate::notifications::NotificationKind::SweepsBegin);
+        }
+
         self.world.insert_resource(StackMemory::default());
         self.world
             .insert_resource(crate::resources::PopulatedChunks::default());

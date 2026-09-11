@@ -102,6 +102,21 @@ pub enum NotificationKind {
     // --- Milestones: `Always`, news about a moment that has happened again ---
     /// A portal holds and a new sector resolves — `Game::enter_next_zone`.
     Breach,
+    /// The breach that lands on `tuning::RAID_MIN_ZONE` —
+    /// `Game::enter_next_zone`, queued behind the `Breach` screen that
+    /// function opens with, so the two are read back to back.
+    ///
+    /// **`Always`, and firing once a run is the trigger's shape rather than
+    /// a latch** — `LevelCapReached`'s reason. A run breaches into a given
+    /// sector exactly once, and latching on `Profile` instead would leave a
+    /// second playthrough's first sweep unexplained, which is
+    /// `OnboardingMission`'s argument.
+    ///
+    /// Hung on the breach rather than on the tick sweeps actually go live:
+    /// `Game::raid_check` wants `RAID_MIN_BASE_STAFF` undowned bodies as
+    /// well, so this is a warning with a Shield's sixteen Core Fragments of
+    /// lead time rather than a report of something already true.
+    SweepsBegin,
     /// A contract is settled and paid out — `Game::complete_contract`.
     ///
     /// **Templated, and its holes are the contract's own words.** A screen
@@ -186,7 +201,7 @@ impl NotificationKind {
     /// scroll to forgive. `Perk::all`'s shape and its reason: a walk over
     /// the whole enum is what makes a census non-vacuous, and the array
     /// length fails to compile when a variant is added without being listed.
-    pub fn all() -> [NotificationKind; 14] {
+    pub fn all() -> [NotificationKind; 15] {
         [
             NotificationKind::BaseFounding,
             NotificationKind::FirstDescent,
@@ -197,6 +212,7 @@ impl NotificationKind {
             NotificationKind::DownedProgram,
             NotificationKind::FirstStatic,
             NotificationKind::Breach,
+            NotificationKind::SweepsBegin,
             NotificationKind::ContractClosed,
             NotificationKind::OnboardingComplete,
             NotificationKind::OnboardingMission,
@@ -323,6 +339,23 @@ impl NotificationKind {
                 color: GlyphColor::Magenta,
                 repeat: Repeat::Always,
             },
+            NotificationKind::SweepsBegin => NotificationDef {
+                title: "Sweeps Begin",
+                body: "The first sector was beneath the garbage collector's notice. This one is \
+                       not. From here a sweep comes for your base as stray data — it damages \
+                       whatever it lands on, and staff posted at a machine defend it and are hurt \
+                       doing so.\n\nA Shield soaks damage off every sweep against every structure \
+                       you own, and a second one stacks with the first. A Patch Node writes \
+                       damaged structures back up across the whole base on its own, while you are \
+                       somewhere else.\n\n[b] for the base menu, then Deploy a structure.",
+                sprite: None,
+                // The Shield's own glyph and hue, so the screen and the thing
+                // it is telling you to build agree on what to look for. The
+                // sweep itself keeps `FirstRaid`'s red `!`.
+                glyph: '^',
+                color: GlyphColor::Blue,
+                repeat: Repeat::Always,
+            },
             NotificationKind::ContractClosed => NotificationDef {
                 title: "Contract Closed",
                 body: "{name}\n\nCOMPLETED: {objective}\n\nThe Broker marks it settled and pays \
@@ -402,6 +435,8 @@ impl NotificationKind {
             NotificationKind::LowPower => "tutorial_low_power",
             NotificationKind::DownedProgram => "tutorial_downed_program",
             NotificationKind::Breach => "milestone_breach",
+            // New, and `Always` besides, so nothing is ever latched here.
+            NotificationKind::SweepsBegin => "milestone_sweeps_begin",
             NotificationKind::ContractClosed => "milestone_contract",
             // New, so no `profile.ron` holds it — and `Always` besides, so
             // nothing is ever latched under it.

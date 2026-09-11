@@ -42,6 +42,25 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.166
+
+**Breaching into sector 2 now warns you that sweeps start here.** A GC
+Entropy Sweep cannot reach your base in the opening sector, and nothing said
+so — the first thing most bases learned about the garbage collector was a
+structure already losing Durability, with a Shield sixteen Core Fragments
+away and nothing built toward it. The breach screen is followed by a second
+one now, naming what a sweep does to a base and the two things that answer
+it: a Shield, which soaks damage off every sweep against every structure you
+own, and a Patch Node, which writes damaged structures back up across the
+whole base on its own.
+
+It fires on the breach that lands on the first swept sector and on no later
+one, and it is read off the same setting the sweeps themselves are gated on,
+so the two cannot come to disagree about which sector that is. Unlike the
+other first-time notices it is not latched across runs: a new run starts in
+the unswept sector again, so a second playthrough is warned again.
+
+
 ## 0.13.165
 
 **Upgrading a structure is now done by pointing at it.** Pick "Upgrade a

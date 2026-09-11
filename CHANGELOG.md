@@ -42,6 +42,24 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.163
+
+**Every research node now says what it hands over before it says what it
+is.** Both research views — the list on `T` and the flow chart on `G` —
+draw one cyan `Unlocks:` line above each node's description, naming the
+structures, items, routines and tools that node gives you. Working out
+which node unlocks a particular bench used to mean reading thirty-four
+paragraphs of prose, because the prose was the only thing that said so.
+
+**That line is derived from what the node actually hands over, so it cannot
+go stale.** A node repointed at a different structure re-words itself, and a
+modded node gets its line without authoring one. Twenty-odd descriptions
+were saying the same thing in a sentence of their own and now say what the
+node *is* instead — which bench a recipe is compiled at, what a tool does,
+and that a routine still has to be written onto a Routine Disk before you
+can run it.
+
+
 ## 0.13.162
 
 **`FERAL_DEV=1` adds a dev-console row that makes the world fight harder.**

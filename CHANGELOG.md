@@ -42,6 +42,27 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.162
+
+**`FERAL_DEV=1` adds a dev-console row that makes the world fight harder.**
+The game only ever scaled a wild program one way — by zone, by how far from
+home you were standing, and by Stack depth — so trying a run against a stiffer
+world meant editing tuning constants and rebuilding. The console on `` ` ``
+now carries a five-rung ladder, Standard through Critical, and a press
+re-stocks the wild around you, so the change is felt where you are standing
+rather than at the next spawn.
+
+**A rung is worth half a zone, not a flat multiplier on stats.** A band means
+"the ground fights like it is N zones deeper", and means the same thing at
+zone 1 as at zone 9. A flat multiplier would not: every difficulty curve in
+the game is linear, so x1.5 is half a zone at the start of a run and three
+zones by the end of one.
+
+**Nothing changes for a run on Standard.** The ladder has no rung below the
+curve the game shipped with, Standard is exactly zero steps, and a save
+written before this loads on it. `save::SAVE_FORMAT_VERSION` is untouched.
+
+
 ## 0.13.161
 
 **The release notes are written for someone who does not have the source

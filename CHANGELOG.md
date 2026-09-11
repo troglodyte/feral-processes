@@ -42,6 +42,25 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.168
+
+**The Teardown perk says what it actually does.** Its line in the picker read
+"+1 salvage per kill", which stopped being true when a defeated program
+started leaving a body to strip instead of dropping material on the spot. The
+bonus has paid out at extraction ever since — a unit per level out of every
+teardown, on whatever tool is fitted, at your own hands and at a Teardown Rig
+alike — but nothing said so, so buying it for the kills was buying it for
+something that no longer happens. The perk has also moved from Fieldcraft to
+Workshop in the picker, beside Keen Scavenger and Lean Compiler, which is the
+company it now keeps.
+
+The manual's perk page said the same wrong thing and has been corrected, as
+has the perk catalogue in `docs/`, which was additionally a release behind on
+Lean Compiler's price.
+
+**The Harness Puller is called the Gear Puller**, and several perk, tool and
+sortie descriptions have been rewritten to read better.
+
 ## 0.13.167
 
 **A contract now tells you how and where it is finished.** "Deliver 4 Core

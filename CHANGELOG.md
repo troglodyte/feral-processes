@@ -34,6 +34,18 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.158
+
+**The research graph pans, and every link has its own lane.** A box is sized
+off the font rather than divided out of the pane, the viewport follows the
+cursor, and a gutter is sized by the edges crossing it so each takes its own
+vertical run — the nine links into the deepest tier used to share one x and
+read as a single bar with stubs.
+
+**A box against the edge of the view keeps its whole outline.** The top row
+drew with no top and the first column with no left side, an outline being
+stroked on a rect the pane clipped at.
+
 ## 0.13.157
 
 **The research graph draws its own backdrop.** It draws no popup, so

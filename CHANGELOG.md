@@ -24,152 +24,172 @@ This is a correction, adopted after `0.3.0` — everything from `v0.2.0` to
 which is a changelog nobody can read and a version number that says nothing
 about what is installed.
 
-**An entry is one bold sentence.** Earlier sections lead each bullet with a
-bold claim and follow it with a paragraph explaining it; from `0.13.58` the
-claim is the whole entry. The argument behind a change lives in its commit
-message and in the memory graph's seam arguments, both of which keep it — a
-changelog that
-restates them is one nobody reads.
+**An entry is a claim a player can check, then the reason it matters.** The
+bold sentence says what is different from the outside — what you can now do,
+or what has stopped going wrong — in the words the game itself uses, and it
+never names a type, a function or a field. One or two sentences follow it:
+what was wrong before, and what is different now. Naming code in *those* is
+fine where it is the clearest thing to say.
+
+From `0.13.58` to `0.13.160` the bold claim was the whole entry, on the
+argument that the explanation lives in the commit message and the memory
+graph's seam arguments. It does — but the claim was the *conclusion* of that
+explanation, and a conclusion with its premises removed is a riddle. Those
+entries could only be read by someone who already knew the code, which is
+nobody the changelog is for. The ten most recent sections were rewritten
+under this rule on 2026-09-11; the rest stand as written.
 
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.161
+
+**The release notes are written for someone who does not have the source
+open.** From `0.13.58` an entry was a single bold sentence and nothing else,
+and those sentences named engine internals — a want, a bill, a seam — so a
+reader outside the code could not tell what had actually changed. An entry
+now says what is different from the outside, in the game's own words, and
+then what was wrong before. The ten most recent sections are rewritten under
+the new rule. Nothing in the game changed.
+
 ## 0.13.160
 
-**A research project no longer starves the bill it filed.** The want raised for
-a Research Node outlived the progress it was earning, so on a one-node,
-one-program base it held the only body on a node paying zero while the material
-orders it had just filed went unworked and the project could never complete.
+**A research project can finish on a small base again.** With one program and
+one Research Node, the program stood at that node forever: once a project's
+progress was full the node went on asking for a worker anyway, and that
+request outranked the material orders the project had just filed — so the
+materials were never built and the project could never complete. Abandoning
+it, demolishing the node or finding a second program were the only ways out.
+A node with nothing left to earn now lets its worker go.
 
-**The graph view says what the list says.** It read a bank this release deleted,
-and showed neither a project's progress nor the sentence that would refuse the
-row it was offering.
+**A project waiting on materials says so, and a full node stops repeating
+itself.** A project short of something now names the item on the base panel
+and points at `b`; before, a stalled project looked exactly like one quietly
+working. A Research Node with nowhere to put what it extracted had been
+logging "extracted 0 Research Data" every few seconds.
 
-**A stalled project asks for the player, and a saturated one stops talking.** A
-project waiting on goods now names what it is short of on the base panel; a
-Research Node with nowhere to put its yield no longer logs a zero payout every
-fourteen ticks. The research screen also drew its blocked sentence under rows
-that could not be picked at all, and opening the picker is ~7x cheaper.
+**The research flow chart says what the list says.** It was reading a stored
+figure this release stopped keeping, so it showed neither a project's progress
+nor the reason a node it was offering would be refused, and it printed its
+"you can't take this" line under all thirty-four rows rather than the selected
+one. Separately, the base menu had been rebuilding the whole research tree
+every frame just to decide whether to offer the row.
 
 ## 0.13.159
 
-**Research is one project the base works, not a bank you spend.** Picking a
-node makes it the run's active project: every deployed Research Node staffs
-itself and feeds it, its material bill is filed as high-priority work orders
-and paid off the base's own shelves, and a bill naming something nothing in the
-base could make refuses the pick outright. `A` abandons a project, keeping the
-progress it earned; a legacy save's stranded Research Data is written off on
-load. Saves keep loading — no format bump.
+**Research is something the base works on, not a bank you spend from.**
+Picking a node makes it the run's one active project: every Research Node you
+have deployed staffs itself and feeds it, the materials it needs are filed as
+high-priority work orders and paid out of the base's own shelves, and picking
+a node whose bill names something your base has no way to make is refused on
+the spot. `A` abandons a project and keeps the progress it earned. Research
+Data banked under the old system is written off when the save loads — the save
+itself keeps loading, with no format bump.
 
 ## 0.13.158
 
-**The research graph pans, and every link has its own lane.** A box is sized
-off the font rather than divided out of the pane, the viewport follows the
-cursor, and a gutter is sized by the edges crossing it so each takes its own
-vertical run — the nine links into the deepest tier used to share one x and
-read as a single bar with stubs.
+**The research flow chart scrolls, so a tree bigger than the window can still
+be read.** The view follows the cursor instead of trying to fit everything at
+once, and each box is sized off the text in it rather than by dividing up the
+pane.
 
-**A box against the edge of the view keeps its whole outline.** The top row
-drew with no top and the first column with no left side, an outline being
-stroked on a rect the pane clipped at.
+**Every arrow between nodes gets its own lane.** The nine links feeding the
+deepest tier were drawn on top of one another and read as a single thick bar
+with stubs coming off it.
+
+**A box at the edge of the view keeps all four sides.** The top row drew with
+no top edge and the leftmost column with no left edge.
 
 ## 0.13.157
 
-**The research graph draws its own backdrop.** It draws no popup, so
-without one the map showed through every box and edge and nothing on the
-tree was discernible.
+**The research flow chart is legible over the map.** It painted no backdrop of
+its own, so the world showed through every box and line and nothing on the
+tree could be made out.
 
 ## 0.13.156
 
-**The research tree can be read as a flow chart.** `G` on the research
-screen swaps the list for the tree drawn left to right — a box per node
-coloured the way its row is, orthogonal elbows through the gutters, and the
-prerequisites of whatever is selected lit up. Arrow keys walk it, `Enter`
-buys, and the detail panel down the right is built from the list's own row
-builders, so the two views cannot describe a node differently.
+**The research tree can be read as a flow chart.** `G` on the research screen
+swaps the list for the tree drawn left to right: a box per node in the colour
+its row already uses, elbowed arrows between them, and the prerequisites of
+whatever is selected lit up. Arrow keys walk it, `Enter` buys, and the detail
+panel down the right is built from the list's own rows, so the two views
+cannot describe the same node differently.
 
-**A research node in a `requires` cycle is now dropped at load.** Both
-members of one are permanently unresearchable, which is the condition the
-loader already dropped a node with a dangling prerequisite for.
+**A research node that requires itself, round a loop, is dropped when the game
+loads.** Both nodes in a loop like that can never be researched — the same
+condition a node with a missing prerequisite was already dropped for.
 
 ## 0.13.155
 
-**The deploy menu says how many of each structure you already have.** A row
-carries the count between its name and its cost, and carries nothing at all
-when the answer is none.
-
-**It is the same figure the grid's ceiling measures**, so a row tagged with
-a count you have already filled is the one the deploy is about to refuse.
+**The deploy menu says how many of each structure you already have.** The
+count sits between the name and the cost, and a row you have none of carries
+nothing. It is the same figure the deploy limit is measured against, so a row
+showing a count you have already filled is the one the deploy is about to
+refuse.
 
 ## 0.13.154
 
-**A weapon may declare how wide its swing is.** The Scatter Lance sweeps a
-whole hostile group and the Broadcast Storm sweeps every hostile on the
-field; you attack the way you always attack, and the swing is wide when the
-weapon's charge is up.
+**Two weapons hit more than one target.** The Scatter Lance sweeps a whole
+enemy group and the Broadcast Storm sweeps every enemy on the field. You
+attack the way you always attack; the swing is wide when the weapon's charge
+is up.
 
-**Both are priced below the single-target ladder, and the gear page says
-why.** A reach weapon rates lower on the swap picker than the weapon it
-replaces — the rating prices the swing, and `[I]` says what the swing lands
-on and how often.
+**Both rate lower on the swap screen than the weapon they replace, and `[I]`
+says why.** The rating prices a single swing, so a wide weapon reads weaker
+there than it plays; the inspect page spells out what the swing lands on and
+how often.
 
-**On a battle map a wide swing is full friendly fire.** A companion standing
-beside the body you aimed at is caught in it, which is what makes a shape
-worth aiming.
+**On a battle map a wide swing catches your own side.** A companion standing
+next to the enemy you aimed at is hit too, which is what makes a shape worth
+aiming.
 
-**Fixed: a round could end twice.** A swing that emptied the last hostile
-group and killed its own swinger left the round's upkeep tearing down a
-fight that was already gone.
+**Fixed: a round could end twice.** A swing that wiped out the last enemy
+group and killed its own attacker left the end-of-round bookkeeping tearing
+down a fight that was already over.
 
 ## 0.13.153
 
-**A Teardown Rig holds its own tool, and the player's hand-load is gone.**
-Walk up to a rig in base space and press `F` to fit a tool carrier out of
-your pack; the rig strips with that tool and not with anything in your own
-slots, `R` pulls it back out, and a rig with nothing fitted runs nothing.
-Pulling a tool out of your own slots used to starve every rig in the base
-that had been loaded with it, silently. Feeding a rig is the base's job
-now — put downed programs in a Quarantine Rack and a posted body carries
-them across — so the store you open with `D` is your own hands and nothing
-else.
+**A Teardown Rig holds its own tool.** Walk up to a rig in base space and
+press `F` to fit a tool carrier out of your pack; `R` takes it back, and a rig
+with nothing fitted does nothing. Before this, every rig stripped with
+whatever tool sat in the player's own slots — so taking that tool out to use
+elsewhere silently starved every rig in the base.
+
+**Feeding a rig is the base's job now.** Put downed programs in a Quarantine
+Rack and a posted worker carries them across, which leaves the store you open
+with `D` as your own hands and nothing else.
 
 ## 0.13.152
 
-**The Quarantine Rack stores downed programs, and base staff fetch from it.**
-A new base structure holds carriers the player has no room for; it is filled
-and emptied from the same `c` transfer picker items move through, as rows
-whose range is one; and a program posted at a Teardown Rig whose hopper has
-run dry walks to a rack in reach and brings one back, stripping it with the
-tool that rig was last hand-loaded with.
+**The Quarantine Rack stores downed programs.** A new base structure for the
+carriers you have no room for, filled and emptied through the same `c`
+transfer screen everything else moves through. A worker posted at a Teardown
+Rig that has run dry walks to a rack within reach and brings one back.
 
 ## 0.13.151
 
-**A fight now reads as an intrusion rather than a brawl.** The nouns were
-already right — Integrity, routine, ICE, decompile, jack out, the Grid — but
-every verb around them was ordinary melee: you tore a routine clean through
-for damage, it glanced off, a body braced and recovered its guard. A swing is
-now an exploit attempt and Integrity is what refuses it, so an attempt lands,
-lands unchecked, fumbles, or is refused, and the number it moves carries
-Integrity as its unit instead of the word "damage".
+**A fight reads as a break-in now, not a bar brawl.** The nouns were already
+right — Integrity, routine, ICE, decompile, jack out, the Grid — but every
+verb around them was ordinary melee: you tore a routine clean through for
+damage, it glanced off, a body braced and recovered its guard. A swing is an
+exploit attempt and Integrity is what refuses it, so an attempt lands, lands
+unchecked, fumbles or is refused, and the number it moves is Integrity rather
+than "damage".
 
 **Bleed is a leak, Stun is a stall, and Exposed is unpatched.** The status
-chips read `Leaking (3)` and `Stalled (1)`, the narration sprung a leak and
-stalls a target out, and the sixteen ability descriptions that specified a
-status under the old word follow them — the `kind:` fields are mod schema and
-are untouched. The stun word is the game's own, from the Pipeline Stall
-ability, and it is what keeps the widest chip inside a status column that
-cannot grow.
+chips read `Leaking (3)` and `Stalled (1)`, and the sixteen ability
+descriptions that named a status by its old word follow them. Modded ability
+files need no editing: the words inside a `.ron` file were never the words on
+screen.
 
 **Two labels stopped disagreeing with the prose beside them.** The battle
-table and the roster pane printed a bare `HP` where every sentence in the game
-says Integrity and the HUD strip already said `INTEG`, and one gear row on the
+table and the roster pane printed `HP` where every sentence in the game says
+Integrity and the HUD strip already said `INTEG`, and one gear row on the
 manifest said `DEF` where everything else says `MIT`.
 
-**The manual's combat pages speak the same language as the fight.** The
-intrusions and battle-map pages explained fighting in plain melee terms — a
-critical hit, a plain hit, a fumble or a miss, `d` to brace, a swing aimed at
-a companion being a legal swing. Mining keeps its swing: hitting rock is what
-that word is for.
+**The manual's combat pages use the same words the fight does.** They were
+still explaining a critical hit, a plain hit, a fumble and a miss. Mining
+keeps its swing — hitting rock is what that word is for.
 
 ## 0.13.150
 

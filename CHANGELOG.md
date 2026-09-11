@@ -34,7 +34,7 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
-## Unreleased
+## 0.13.160
 
 **A research project no longer starves the bill it filed.** The want raised for
 a Research Node outlived the progress it was earning, so on a one-node,

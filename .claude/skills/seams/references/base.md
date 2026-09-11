@@ -62,8 +62,10 @@
   stand on a cell nothing occupies. The builder wears the job mark itself
   (`wears_job_mark`, `Excavate`'s rule). `render/base.rs` tests
   `is_structure` **before** `build.is_some()`, or an upgrading machine draws
-  as a bare slab. And the upgrade menu quotes `build_cost_display` through
-  `Game::upgrade_cost`, the pack no longer being the store the verb reads.
+  as a bare slab. And the bill is quoted through `Game::upgrade_cost` and
+  `build_cost_display`, the pack no longer being the store the verb reads —
+  on the program picker since `Mode::UpgradeDirection` replaced the upgrade
+  list, because a prompt aimed at a *tile* does not know the machine yet.
 - **`Game::spawn_structure` is the one place a structure's component list is
   written**, `roster_parts`' argument on the other roster: two callers with
   nothing in common, and nothing fails to compile when a hand-written copy

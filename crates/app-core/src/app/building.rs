@@ -210,8 +210,15 @@ impl App {
     }
 
     /// Nearby structures that declare an upgrade path. Filtered on `tier`
-    /// rather than just `is_structure`: offering an un-upgradeable structure
-    /// and then refusing it would be a worse menu than not listing it.
+    /// rather than just `is_structure`: a base with nothing that climbs
+    /// should not be offered the verb at all.
+    ///
+    /// **No longer a screen's rows** — `Mode::UpgradeDirection` aims at one
+    /// tile. Two readers are left and they want different things from it:
+    /// the base menu asks whether the row is worth offering at all, and
+    /// gui's `build_commit` names the machine an order was filed against.
+    /// Both are questions about the neighbourhood rather than about one
+    /// cell, which is why the scan radius stayed.
     pub fn upgradeable_structures(&mut self) -> Vec<EntityView> {
         self.scanned(|e| e.is_structure && e.tier.is_some())
     }
@@ -294,7 +301,8 @@ impl App {
 
     /// Confirms the order `App::pending_build` describes by spending the
     /// picked program on it — `Mode::BuildProgram`, reached from
-    /// `Mode::BuildDirection` (a deploy) or `Mode::Upgrade` (an upgrade).
+    /// `Mode::BuildDirection` (a deploy) or `Mode::UpgradeDirection` (an
+    /// upgrade).
     ///
     /// **Nothing is spent until this resolves.** `place_structure` and
     /// `upgrade_structure` are the one place either commit actually happens,
@@ -458,27 +466,55 @@ impl App {
         self.mode = Mode::Playing;
     }
 
-    pub(crate) fn handle_upgrade_key(&mut self, key: GameKey) {
+    /// The base menu's upgrade verb + a direction: file a request for the
+    /// next tier on whatever machine stands on that neighbouring tile.
+    ///
+    /// `handle_remove_direction_key`'s shape, and `Game::adjacent_structure`
+    /// is literally the same reach — the four orthogonal neighbours. An
+    /// upgrade is a crew job and so needs no adjacency of its own, but
+    /// pointing at a machine is only unambiguous while the machine is next
+    /// to you: a ray would have to choose between two structures on the
+    /// same line, and there is nothing on screen saying which it took.
+    ///
+    /// **The refusals about the machine are the engine's own sentences, not
+    /// copies of them.** `EntityView::tier` is `Some` exactly when the def
+    /// declares an upgrade path, so the `None` arm is one
+    /// `Game::upgrade_structure` is certain to refuse — filing it against no
+    /// program reaches that refusal, in its words, without app-core holding
+    /// a second copy of "can't be upgraded". Every refusal in that function
+    /// lands before `commit_for_build`, so nothing is spent on the way to
+    /// the sentence.
+    pub(crate) fn handle_upgrade_direction_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.close_screen();
             return;
         }
-        let structures = self.upgradeable_structures();
-        if let Some(idx) = self.selected_index(key, structures.len()) {
-            // `upgradeable_structures` only ever offers a row whose
-            // `EntityView::tier` is `Some` — see its own filter — so the
-            // structure named here is always one tier short of `next` below,
-            // `Game::upgrade_structure`'s own `let next = tier + 1;` for the
-            // very row this picks.
-            let Some(tier) = structures[idx].tier else {
-                return;
-            };
-            self.pending_build = Some(PendingBuild::Upgrade {
-                structure: structures[idx].entity,
-                to_tier: tier + 1,
-            });
-            self.mode = Mode::BuildProgram;
-        }
+        let dir = match key {
+            GameKey::Up | GameKey::Char('k') => (0, -1),
+            GameKey::Down | GameKey::Char('j') => (0, 1),
+            GameKey::Left | GameKey::Char('h') => (-1, 0),
+            GameKey::Right | GameKey::Char('l') => (1, 0),
+            _ => return,
+        };
+        let Some(game) = &mut self.game else { return };
+        let Some(found) = game.adjacent_structure(dir.0, dir.1) else {
+            self.refuse("Nothing to upgrade that way.");
+            self.mode = Mode::Playing;
+            return;
+        };
+        let Some(tier) = found.tier else {
+            let outcome = game.upgrade_structure(found.entity, None);
+            self.report(outcome);
+            self.mode = Mode::Playing;
+            return;
+        };
+        // `Game::upgrade_structure`'s own `let next = tier + 1;` for the
+        // very machine this points at.
+        self.pending_build = Some(PendingBuild::Upgrade {
+            structure: found.entity,
+            to_tier: tier + 1,
+        });
+        self.mode = Mode::BuildProgram;
     }
 
     pub(crate) fn handle_remove_confirm_key(&mut self, key: GameKey) {

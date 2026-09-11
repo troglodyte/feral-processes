@@ -42,6 +42,25 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.165
+
+**Upgrading a structure is now done by pointing at it.** Pick "Upgrade a
+structure" off the base menu and then press a direction — the machine
+standing on that tile, north, south, east or west of you, goes in for its
+next tier. It used to open a list of every upgradeable structure within forty
+tiles, so ordering an upgrade on the Compiler you were standing in front of
+meant finding its row among them. The menu row itself is unchanged: it is
+offered wherever anything nearby can climb, so aiming at bare ground tells
+you the tile was empty rather than doing nothing.
+
+**The bill moved to the screen that knows which machine it is for.** The list
+quoted each structure's materials down its rows; a prompt aimed at a tile
+cannot, so the program picker that confirms the order now says what your crew
+will fetch, counted against your pack and the base's shelves together. Aiming
+at something that cannot climb — Home, or any structure with no upgrade path
+— answers in the same words it always did, and spends nothing.
+
+
 ## 0.13.164
 
 **Deploying a Shield, a Patch Node, a Repair Bay or a Relay no longer costs

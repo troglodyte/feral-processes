@@ -800,8 +800,8 @@ impl Game {
         Some((self.upgrade_ceiling(upgrade), upgrade.max_tier))
     }
 
-    /// The bill the next tier would be filed against — what the upgrade menu
-    /// quotes, scaled by the tier being reached exactly as
+    /// The bill the next tier would be filed against — what the program
+    /// picker quotes, scaled by the tier being reached exactly as
     /// `upgrade_structure` prices it. `None` where there is no next tier.
     ///
     /// Priced here rather than in the renderer for `BuildOrderRow`'s reason:

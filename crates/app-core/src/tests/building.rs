@@ -5,15 +5,20 @@ use crate::*;
 use feral_processes_engine::species::AffinityClass;
 
 #[test]
-fn the_upgrade_picker_opens_from_the_base_menu_and_esc_backs_into_it() {
+fn the_upgrade_prompt_opens_from_the_base_menu_and_esc_backs_into_it() {
     // A Compiler, not a Home: the row is hidden unless something nearby
     // actually declares an upgrade path (see `App::upgradeable_structures`).
     let mut app = app_owning_a_program_and_a_compiler(230, &[]);
     // Upgrading is a base action, so the row is offered in one locale only.
+    //
+    // The *exit* cell, two tiles off the Compiler, and deliberately: the row
+    // is gated on the scan radius rather than on adjacency, so it has to be
+    // offered from here as well. `stand_beside_the_compiler` is what an
+    // upgrade that actually lands needs.
     stand_in_base(&mut app);
 
     open_via_menu(&mut app, 'b', "Upgrade a structure");
-    assert_eq!(app.mode, Mode::Upgrade);
+    assert_eq!(app.mode, Mode::UpgradeDirection);
 
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::BaseMenu, "Esc walks back up one level");
@@ -1102,20 +1107,23 @@ fn the_pickers_confirm_surfaces_the_engines_refusal() {
     );
 }
 
-/// `Mode::Upgrade`'s counterpart to `deploy_second_structure` — picks the
-/// one upgradeable structure the fixture offers, the Compiler, through the
-/// base menu rather than by hand-setting `app.mode`, since that menu path
-/// is also what proves `Mode::Upgrade` is still reachable at all.
+/// `Mode::UpgradeDirection`'s counterpart to `deploy_second_structure` —
+/// aims at the one upgradeable structure the fixture offers, the Compiler,
+/// through the base menu rather than by hand-setting `app.mode`, since that
+/// menu path is also what proves the verb is still reachable at all.
+///
+/// Callers stand the party with `stand_beside_the_compiler`, so east is the
+/// machine.
 fn open_upgrade_picker(app: &mut App) {
     open_via_menu(app, 'b', "Upgrade a structure");
-    assert_eq!(app.mode, Mode::Upgrade);
-    app.handle_key(GameKey::Char('1')); // the only row: the Compiler
+    assert_eq!(app.mode, Mode::UpgradeDirection);
+    app.handle_key(GameKey::Right); // the Compiler, one tile east
 }
 
 #[test]
 fn upgrading_a_structure_asks_which_program_to_spend() {
     let mut app = app_owning_a_program_and_a_compiler(875, &[]);
-    stand_in_base(&mut app);
+    stand_beside_the_compiler(&mut app);
     // A second program: R6's zero-program refusal is `deploy`'s test to
     // make, not this one's — this test is about the mode transition and
     // `to_tier`, and a refusal on confirm would leave the mode this test
@@ -1147,7 +1155,7 @@ fn upgrading_a_structure_asks_which_program_to_spend() {
 #[test]
 fn escaping_the_upgrade_picker_files_nothing_and_spends_nothing() {
     let mut app = app_owning_a_program_and_a_compiler(876, &[]);
-    stand_in_base(&mut app);
+    stand_beside_the_compiler(&mut app);
     // Zone 2, `upgrading_a_structure_asks_which_program_to_spend`'s reason:
     // a zone-1 program is not deep enough for `programs_for_build(2)`, and
     // this test needs the picker to actually be showing a row for its own
@@ -1166,6 +1174,88 @@ fn escaping_the_upgrade_picker_files_nothing_and_spends_nothing() {
         app.game.as_mut().unwrap().owned_pets().len(),
         2,
         "nothing is spent until the picker confirms"
+    );
+}
+
+/// Aiming at a tile with nothing on it is a sentence, not a dead end — the
+/// gesture `handle_remove_direction_key` already answers this way.
+///
+/// The row is offered off the *scan radius*, so a player can reach this
+/// prompt while standing nowhere near the machine they were thinking of;
+/// silently dropping back to the map would read as the key doing nothing.
+#[test]
+fn aiming_the_upgrade_at_empty_ground_refuses_and_files_nothing() {
+    let mut app = app_owning_a_program_and_a_compiler(877, &[]);
+    stand_beside_the_compiler(&mut app);
+    tame_program_at_zone(&mut app, 2);
+
+    open_via_menu(&mut app, 'b', "Upgrade a structure");
+    // North. Not west — the exit cell that way carries Home, which is a
+    // structure and so answers the other refusal below.
+    app.handle_key(GameKey::Up);
+
+    assert_eq!(app.mode, Mode::Playing, "a refusal leaves the prompt");
+    assert!(
+        app.status_line
+            .as_deref()
+            .is_some_and(|s| s.contains("Nothing to upgrade")),
+        "the player has to be told the tile was empty, got: {:?}",
+        app.status_line
+    );
+    assert!(app.pending_build.is_none(), "and nothing is filed");
+    assert_eq!(
+        app.game.as_mut().unwrap().owned_pets().len(),
+        2,
+        "nor spent"
+    );
+}
+
+/// A structure with no upgrade path at all is answered in **the engine's own
+/// words**, not app-core's.
+///
+/// `App::handle_upgrade_direction_key` reaches that sentence by filing the
+/// order against no program: every refusal in `Game::upgrade_structure`
+/// lands before `commit_for_build`, so the machine's own "can't be upgraded"
+/// comes back with nothing spent. A copy of that string in app-core is what
+/// this shape exists to avoid — the list this prompt replaced dodged the
+/// question by filtering such structures out, and a prompt cannot filter a
+/// tile.
+#[test]
+fn aiming_the_upgrade_at_a_structure_that_cannot_climb_quotes_the_engine() {
+    let mut app = app_owning_a_program_and_a_compiler(878, &[]);
+    // The exit cell: Home stands here, and Home declares no upgrade path —
+    // see `a_structure_with_no_upgrade_path_hides_the_upgrade_row`.
+    stand_beside_the_compiler(&mut app);
+    tame_program_at_zone(&mut app, 2);
+
+    let home = app
+        .nearby_structures()
+        .into_iter()
+        .find(|s| s.is_home)
+        .expect("the fixture founded a base");
+    let (px, py) = (1, 0);
+    assert_eq!(
+        home.pos,
+        (px - 1, py),
+        "precondition: Home is the party's western neighbour"
+    );
+
+    open_via_menu(&mut app, 'b', "Upgrade a structure");
+    app.handle_key(GameKey::Left);
+
+    assert_eq!(app.mode, Mode::Playing);
+    assert!(
+        app.status_line
+            .as_deref()
+            .is_some_and(|s| s.contains("can't be upgraded")),
+        "the engine's own refusal has to reach the player, got: {:?}",
+        app.status_line
+    );
+    assert!(app.pending_build.is_none());
+    assert_eq!(
+        app.game.as_mut().unwrap().owned_pets().len(),
+        2,
+        "a refusal spends nothing"
     );
 }
 
@@ -1205,7 +1295,7 @@ fn escaping_the_upgrade_picker_files_nothing_and_spends_nothing() {
 #[test]
 fn the_upgrade_pickers_confirm_surfaces_the_engines_refusal() {
     let mut app = app_owning_one_deep_program_and_a_compiler(877, 2, 2);
-    stand_in_base(&mut app);
+    stand_beside_the_compiler(&mut app);
     tame_program_at_zone(&mut app, 2);
     tame_program_at_zone(&mut app, 2);
 
@@ -1276,7 +1366,7 @@ fn the_upgrade_pickers_confirm_surfaces_the_engines_refusal() {
 #[test]
 fn upgrade_confirm_only_lists_programs_at_the_engines_own_depth() {
     let mut app = app_owning_one_deep_program_and_a_compiler(878, 2, 2);
-    stand_in_base(&mut app);
+    stand_beside_the_compiler(&mut app);
     // The order `app_in_base_with_programs` uses: `stand_in_base` before
     // `tame_program_at_zone`, so the added creature's save round trip finds
     // the party already in base space rather than clobbering that locale.
@@ -1304,7 +1394,7 @@ fn upgrade_confirm_only_lists_programs_at_the_engines_own_depth() {
 #[test]
 fn an_upgrade_picker_asks_about_the_structure_standing_there() {
     let mut app = app_owning_one_deep_program_and_a_compiler(879, 2, 2);
-    stand_in_base(&mut app);
+    stand_beside_the_compiler(&mut app);
     tame_program_at_zone(&mut app, 2);
 
     open_upgrade_picker(&mut app);
@@ -1333,7 +1423,7 @@ fn the_picker_spends_the_program_on_the_row_the_player_read() {
     // The fixture's own program builds badly and the added one builds well,
     // so `build_candidates`' order is the reverse of `owned_pets`'.
     let mut app = app_owning_one_deep_program_and_a_compiler(880, 2, 2);
-    stand_in_base(&mut app);
+    stand_beside_the_compiler(&mut app);
     tame_program_at_zone_with_build_rolls(&mut app, 2, 1.18, 1.0);
 
     let (owned_first, top) = {

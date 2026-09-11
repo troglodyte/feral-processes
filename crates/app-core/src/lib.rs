@@ -1372,8 +1372,8 @@ pub enum Mode {
     BuildDirection,
     /// Picking which owned program pays for the order assembled in
     /// `App::pending_build` — see `Game::programs_for_build`. Reached from
-    /// `Mode::BuildDirection` for a deploy or from `Mode::Upgrade` for an
-    /// upgrade, and never for a Home: a fresh run owns zero programs, so a
+    /// `Mode::BuildDirection` for a deploy or from `Mode::UpgradeDirection`
+    /// for an upgrade, and never for a Home: a fresh run owns zero programs, so a
     /// Home that needed one to found would be unfoundable, and
     /// `handle_build_direction_key` still calls `place_structure(.., None)`
     /// straight for it. Nothing is spent reaching this screen — the commit
@@ -1432,11 +1432,18 @@ pub enum Mode {
     /// keypress can never take down something off the far side of the screen.
     /// Home still routes into `Mode::RemoveConfirm`.
     RemoveDirection,
-    /// Lists nearby structures that declare an upgrade path (see
-    /// `Game::upgrade_structure`); picking one **files a request** for the
-    /// next tier, which the base's build crew fetches for and works. Anything
-    /// un-upgradeable is filtered out rather than offered and then refused.
-    Upgrade,
+    /// Aiming the upgrade verb at one of the four neighbouring tiles,
+    /// reached from the base menu. Whatever structure stands that way
+    /// **files a request** for the next tier, which the base's build crew
+    /// fetches for and works.
+    ///
+    /// A direction rather than the list this used to be, for
+    /// `Mode::RemoveDirection`'s reason one verb over: the machine is a
+    /// thing on the map, and a player who can see it there would rather
+    /// point at it than find its row. The cost the list used to quote per
+    /// row moved down one screen to `Mode::BuildProgram`, which is the
+    /// first point the target is known.
+    UpgradeDirection,
     InspectDirection,
     /// The party's own map of the Stack frame they are standing in — see
     /// `Game::frame_map`. Underground only, opened with `g` — a no-op on the
@@ -1946,7 +1953,7 @@ impl Mode {
             | Mode::Remove
             | Mode::RemoveConfirm
             | Mode::RemoveDirection
-            | Mode::Upgrade
+            | Mode::UpgradeDirection
             | Mode::InspectDirection
             | Mode::Manifest
             | Mode::ManifestPick
@@ -2094,9 +2101,9 @@ pub enum PendingBuild {
     /// An existing structure, and the tier its crew would raise it to.
     /// `to_tier` is carried rather than re-derived from the structure's
     /// current `EntityView::tier` at confirm time, because the structure
-    /// picked in `Mode::Upgrade` is the only place that tier was read off —
-    /// re-reading it here would trust the structure to still exist and still
-    /// report the same tier it did when the row was chosen.
+    /// aimed at in `Mode::UpgradeDirection` is the only place that tier was
+    /// read off — re-reading it here would trust the structure to still
+    /// exist and still report the same tier it did when it was pointed at.
     Upgrade { structure: Entity, to_tier: u32 },
 }
 

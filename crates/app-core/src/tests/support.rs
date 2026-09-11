@@ -1030,6 +1030,17 @@ pub(crate) fn stand_in_base(app: &mut App) {
     stand_in_base_at(app, 0, 0);
 }
 
+/// Stands the party on the one cell orthogonally adjacent to the Compiler
+/// `app_owning_a_program_and_a_compiler` plants at base-space `(2, 0)`.
+///
+/// `Mode::UpgradeDirection` aims at a *neighbour*, so an upgrade test has to
+/// say where the party is standing before it can press a direction — the
+/// exit cell `stand_in_base` leaves it on is two tiles west of that machine
+/// and every arrow key from there finds nothing.
+pub(crate) fn stand_beside_the_compiler(app: &mut App) {
+    stand_in_base_at(app, 1, 0);
+}
+
 /// Deletes the `.sav` it was built from when it drops, unwind included —
 /// `save`, `load_from_file`, `save_to_file` and `Game::load` all sit
 /// between this guard's construction and the plain `remove_file` a

@@ -65,6 +65,7 @@ fn contract_rows(
     for contract in active {
         rows.push(contract_line(contract, idx, selected, true));
         rows.extend(description_rows(&contract.description));
+        rows.extend(hint_rows(contract));
         idx += 1;
     }
 
@@ -80,12 +81,31 @@ fn contract_rows(
     for contract in offers {
         rows.push(contract_line(contract, idx, selected, false));
         rows.extend(description_rows(&contract.description));
+        rows.extend(hint_rows(contract));
         idx += 1;
     }
 
     rows.push(text_row(""));
     rows.extend(contract_footer().into_iter().map(text_row));
     rows
+}
+
+/// How and where the objective is satisfied, under the authored prose - see
+/// `Game::objective_hint`, which is where the words are decided and whether
+/// there are any.
+///
+/// Drawn through `description_rows`, so it wraps at the same column and wears
+/// the same `DESCRIPTION_INDENT` the description census filters on: a hint too
+/// long for the body fails that census rather than running off the right edge.
+/// The arrow is the whole of what separates it from the flavour text above,
+/// deliberately - `color` on this screen already means "onboarding mission",
+/// and a second meaning on one axis makes both unreadable.
+fn hint_rows(contract: &ContractRow) -> Vec<Row> {
+    contract
+        .hint
+        .as_deref()
+        .map(|hint| description_rows(&format!("\u{2192} {hint}")).collect())
+        .unwrap_or_default()
 }
 
 /// The footer's two lines. Split out, like `rename_help`, so a test can
@@ -188,6 +208,7 @@ mod tests {
             id: id.into(),
             name: "A Contract".to_string(),
             description: "d".to_string(),
+            hint: None,
             objective_line: "Build a Home".to_string(),
             reward_line: "10 Credits".to_string(),
             progress: 0,
@@ -252,6 +273,52 @@ mod tests {
                 "a wrapped line still overruns the wrap budget: {text:?}"
             );
         }
+    }
+
+    /// **The hint reaches the screen, and an absent one costs no row.**
+    ///
+    /// `contract_rows` is measured rather than `hint_rows`, for the reason the
+    /// builder is split out at all: a census that calls the helper itself
+    /// stays green through a `draw_contracts` that stopped calling it, which
+    /// is how an unwrapped paragraph shipped on this screen once already.
+    #[test]
+    fn a_hint_is_drawn_under_the_contract_it_belongs_to() {
+        let with = ContractRow {
+            hint: Some("Carry them to your Contract Broker.".to_string()),
+            ..row("deliver", false)
+        };
+        let without = ContractRow {
+            hint: None,
+            ..row("hunt", false)
+        };
+
+        let drawn = |contract: &ContractRow| -> Vec<String> {
+            contract_rows(
+                std::slice::from_ref(contract),
+                &[],
+                BrokerReach::AtBroker,
+                usize::MAX,
+            )
+            .into_iter()
+            .filter_map(|r| match r {
+                Row::Item { text, .. } => Some(text),
+                _ => None,
+            })
+            .collect()
+        };
+
+        assert!(
+            drawn(&with)
+                .iter()
+                .any(|line| line.contains("Carry them to your Contract Broker.")),
+            "a hint the engine built has to reach the screen: {:?}",
+            drawn(&with)
+        );
+        assert_eq!(
+            drawn(&without).len(),
+            drawn(&with).len() - 1,
+            "and an objective that is its own instruction spends no row on one"
+        );
     }
 
     /// **No shipped contract's description overflows the popup either.**

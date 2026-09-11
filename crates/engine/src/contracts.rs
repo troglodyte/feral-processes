@@ -98,6 +98,23 @@ pub enum Deed {
     /// was to turn the job **off** and on again — which pulls the body off
     /// the machine and is the opposite of what the mission asks for.
     PostedStaff,
+    /// A nest was destroyed. `Game::attack_nest`.
+    ClearedNest,
+    /// A GC Entropy Sweep landed no damage. `Game::sweep_held`, which is the
+    /// one place both deflection branches meet — the shield network's and the
+    /// posted defender's.
+    RepelledRaid,
+    /// A squad came back from a sortie. `Game::return_sortie`.
+    ReturnedSortie,
+    /// A basket was committed at a settlement. `Game::commit_settlement_basket`.
+    TradedWithTown,
+    /// A downed program was spent through a tool. `Game::extract_program`.
+    ExtractedProgram,
+    /// A Stack's guardian was beaten and the stack came down with it.
+    /// `Game::collapse_stack`.
+    CollapsedStack,
+    /// A research project finished. `Game::finish_research`.
+    FinishedResearch,
 }
 
 impl Deed {
@@ -116,7 +133,64 @@ impl Deed {
             | Deed::Tamed
             | Deed::TookFromContainer
             | Deed::QueuedStandingOrder
-            | Deed::UnlockedPerk => false,
+            | Deed::UnlockedPerk
+            | Deed::ClearedNest
+            | Deed::RepelledRaid
+            | Deed::ReturnedSortie
+            | Deed::TradedWithTown
+            | Deed::ExtractedProgram
+            | Deed::CollapsedStack
+            | Deed::FinishedResearch => false,
+        }
+    }
+
+    /// Where this is done, or `None` where the deed's own objective line
+    /// already says.
+    ///
+    /// The first six each name the key they are performed with — "Examine
+    /// something with [x]" is the whole errand — which is why
+    /// `Game::objective_hint` answers `None` for `Perform` as a variant and
+    /// asks here instead. The seven added after them name a *subsystem*, and
+    /// "Break down a downed program" tells a player who has never built a
+    /// Teardown Rig exactly nothing.
+    ///
+    /// Exhaustive, `cell_mark`'s rule: a new deed has to decide.
+    pub fn hint(&self) -> Option<&'static str> {
+        match self {
+            Deed::Examined
+            | Deed::Tamed
+            | Deed::TookFromContainer
+            | Deed::QueuedStandingOrder
+            | Deed::UnlockedPerk
+            | Deed::PostedStaff => None,
+            Deed::ClearedNest => Some(
+                "A nest is the thing the programs come out of. Attack the nest itself, \
+                 not what it spawns.",
+            ),
+            Deed::RepelledRaid => Some(
+                "A sweep lands no damage at all when your defences outweigh it, so this \
+                 wants a Shield standing rather than a base that merely survives.",
+            ),
+            Deed::ReturnedSortie => Some(
+                "Build a Relay, send a squad out from its board, and wait for them to \
+                 walk back in.",
+            ),
+            Deed::TradedWithTown => Some(
+                "Settlements stand out on the open ground, not in your base. Walk into \
+                 one and put something across the counter, buying or selling.",
+            ),
+            Deed::ExtractedProgram => Some(
+                "A downed program goes on the rack. A Teardown Rig with a tool fitted is \
+                 what breaks one down.",
+            ),
+            Deed::CollapsedStack => Some(
+                "Go down a Stack until you find the guardian holding it up. Beating it \
+                 takes the way back out with it.",
+            ),
+            Deed::FinishedResearch => Some(
+                "Pick a project at a Research Node, then keep the node staffed and its \
+                 materials coming until it lands.",
+            ),
         }
     }
 }
@@ -143,6 +217,14 @@ pub enum Objective {
     Breach { zone: u32 },
     /// One of these is deployed.
     Build { structure: StructureId },
+    /// Some town holds the player at this band or better.
+    ///
+    /// **Any** town, not the issuer's: `already_met` is answered from an
+    /// `ObjectiveState` that deliberately does not know whose job it is, and
+    /// `Game::offerable` shares that reader. A band is a degree rather than a
+    /// thing done, which is the whole of why this could not be a `Deed` — a
+    /// deed carries no parameters, on purpose.
+    Standing { band: crate::settlements::Standing },
     /// This many of an item are in the player's pack **at once**.
     ///
     /// Not `Deliver`: nothing is handed over and nothing is spent, so it
@@ -159,7 +241,21 @@ pub enum Objective {
     /// vocabulary — six verbs behind one variant, because a variant each
     /// would grow every match on `Objective` and make the seventh verb a
     /// schema change.
-    Perform { deed: Deed },
+    ///
+    /// `count` is what makes a deed job gradable — "clear three nests" rather
+    /// than only "clear a nest". Additive behind `#[serde(default)]`, so no
+    /// shipped file and no save written before it existed needed touching, and
+    /// an authored `Perform(deed: Examined)` still asks for exactly one.
+    Perform {
+        deed: Deed,
+        #[serde(default = "one")]
+        count: u32,
+    },
+}
+
+/// A deed job asks for one unless it says otherwise.
+fn one() -> u32 {
+    1
 }
 
 /// Everything about the run a state-shaped objective can be asked against.
@@ -184,6 +280,15 @@ pub struct ObjectiveState {
     /// `post_worker` writes no `StandingJob`, so this stays false for a body
     /// the base placed by itself.
     pub posted: bool,
+    /// The best band any town holds the player in — `relations::best_band`.
+    ///
+    /// Live on both readers, sitting with `zone` and `standing` rather than
+    /// with `depth`, `carried` and `posted`. The three neutralised ones move
+    /// as the player *walks or opens a screen*, which is what would make a
+    /// seed-derived board gain and lose slots underfoot; a band moves only on
+    /// a deliberate act — a trade, a finished job, a raid — exactly as
+    /// building a structure does.
+    pub best_standing: crate::settlements::Standing,
 }
 
 impl ObjectiveState {
@@ -205,12 +310,34 @@ impl Objective {
     /// rule and no caller branches on the variant to ask "am I done".
     pub fn target(&self) -> u32 {
         match self {
-            Objective::Terminate { count, .. } | Objective::Deliver { count, .. } => *count,
+            Objective::Terminate { count, .. }
+            | Objective::Deliver { count, .. }
+            | Objective::Perform { count, .. } => *count,
             Objective::Descend { .. }
             | Objective::Breach { .. }
             | Objective::Build { .. }
-            | Objective::Hold { .. }
-            | Objective::Perform { .. } => 1,
+            | Objective::Standing { .. }
+            | Objective::Hold { .. } => 1,
+        }
+    }
+
+    /// Whether this asks for zero of something, which completes the instant it
+    /// is accepted.
+    ///
+    /// Reads the **authored count**, not `target()`. `Hold` is why: it is
+    /// state-shaped, so its target is 1 whatever its count, and a
+    /// `Hold(count: 0)` asks whether the pack holds at least nothing — true
+    /// forever, and invisible to a check on the target.
+    pub fn asks_for_none(&self) -> bool {
+        match self {
+            Objective::Terminate { count, .. }
+            | Objective::Deliver { count, .. }
+            | Objective::Hold { count, .. }
+            | Objective::Perform { count, .. } => *count == 0,
+            Objective::Descend { .. }
+            | Objective::Breach { .. }
+            | Objective::Build { .. }
+            | Objective::Standing { .. } => false,
         }
     }
 
@@ -243,10 +370,15 @@ impl Objective {
             // Five of the six deeds are events too and answer the same way.
             // The sixth, `PostedStaff`, is a standing condition — see
             // `Deed::already_true`.
-            Objective::Perform { deed } => deed.already_true(state),
+            // A counted deed job is never *already* met: the standing
+            // condition below is worth one unit, and one unit does not fill a
+            // job asking for three. See `contract_system`, which is where that
+            // unit is actually credited.
+            Objective::Perform { deed, count } => *count == 1 && deed.already_true(state),
             Objective::Descend { depth } => state.depth >= *depth,
             Objective::Breach { zone } => state.zone >= *zone,
             Objective::Build { structure } => state.standing.contains(structure),
+            Objective::Standing { band } => state.best_standing >= *band,
             Objective::Hold { item, count } => state.count(item) >= *count,
         }
     }
@@ -771,6 +903,13 @@ fn complaint(def: &ContractDef) -> Option<String> {
         .any(|r| matches!(r, Reward::Credits(0) | Reward::Item(_, 0) | Reward::Xp(0)))
     {
         return Some("a reward of 0 pays nothing; give it at least 1 or delete it".to_string());
+    }
+    if def.objective.asks_for_none() {
+        return Some(
+            "a contract asking for zero of something completes the instant it is \
+             accepted; give it a count of at least 1"
+                .to_string(),
+        );
     }
     if def.tutorial.is_some() && def.starter {
         return Some(

@@ -1,0 +1,8 @@
+(
+    id: "good_neighbours",
+    name: "Good Neighbours",
+    description: "The Broker keeps his ledger in other people's towns, and lately none of them will take his calls. Get somebody out there to think well of you and he will consider the account reopened.",
+    objective: Standing(band: Warm),
+    reward: [Credits(80), Item("routine_disk", 1), Xp(200)],
+    min_zone: 2,
+)

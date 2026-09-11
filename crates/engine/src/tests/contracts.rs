@@ -2,7 +2,7 @@
 //! progress, and the board a Contract Broker derives.
 
 use super::support::*;
-use crate::contracts::{ContractDb, ContractId, Objective, Reward};
+use crate::contracts::{ContractDb, ContractId, Deed, Objective, Reward};
 
 /// A temp directory of `.ron` files to load a `ContractDb` out of. Tagged as
 /// well as pid-stamped because these run in parallel inside one process.
@@ -310,7 +310,7 @@ fn a_shipped_delivery_never_asks_for_the_bank() {
 #[test]
 fn every_objective_variant_ships_at_least_once() {
     let (contracts, _) = shipped_contracts();
-    let mut seen = [false; 7];
+    let mut seen = [false; 8];
     for def in contracts.iter() {
         let slot = match &def.objective {
             Objective::Terminate { .. } => 0,
@@ -320,6 +320,7 @@ fn every_objective_variant_ships_at_least_once() {
             Objective::Build { .. } => 4,
             Objective::Hold { .. } => 5,
             Objective::Perform { .. } => 6,
+            Objective::Standing { .. } => 7,
         };
         seen[slot] = true;
     }
@@ -2797,6 +2798,7 @@ fn hold_is_met_by_what_the_player_is_carrying() {
         count: 12,
     };
     let mut state = crate::contracts::ObjectiveState {
+        best_standing: crate::settlements::Standing::Hostile,
         depth: 0,
         zone: 1,
         standing: Vec::new(),
@@ -2833,6 +2835,7 @@ fn hold_is_not_met_by_an_empty_pack() {
         count: 1,
     };
     let state = crate::contracts::ObjectiveState {
+        best_standing: crate::settlements::Standing::Hostile,
         depth: 0,
         zone: 1,
         standing: Vec::new(),
@@ -2883,6 +2886,7 @@ fn a_deed_finishes_a_held_perform_contract() {
             "perform_test",
             Objective::Perform {
                 deed: crate::contracts::Deed::Examined,
+                count: 1,
             },
             vec![Reward::Xp(1)],
         ),
@@ -2918,6 +2922,7 @@ fn a_deed_of_another_kind_advances_nothing() {
             "perform_test",
             Objective::Perform {
                 deed: crate::contracts::Deed::PostedStaff,
+                count: 1,
             },
             vec![Reward::Xp(1)],
         ),
@@ -3034,6 +3039,7 @@ mod deed_sites {
                 "take_test",
                 Objective::Perform {
                     deed: Deed::TookFromContainer,
+                    count: 1,
                 },
                 vec![Reward::Xp(1)],
             ),
@@ -3172,6 +3178,7 @@ mod deed_sites {
                 "already_posted",
                 Objective::Perform {
                     deed: Deed::PostedStaff,
+                    count: 1,
                 },
                 vec![Reward::Xp(1)],
             ),
@@ -3203,6 +3210,7 @@ mod deed_sites {
                 "nothing_posted",
                 Objective::Perform {
                     deed: Deed::PostedStaff,
+                    count: 1,
                 },
                 vec![Reward::Xp(1)],
             ),
@@ -3236,6 +3244,7 @@ mod deed_sites {
                 "guard_only",
                 Objective::Perform {
                     deed: Deed::PostedStaff,
+                    count: 1,
                 },
                 vec![Reward::Xp(1)],
             ),
@@ -3282,7 +3291,7 @@ mod deed_sites {
 #[test]
 fn a_new_run_holds_the_first_mission_with_no_broker() {
     let dir = assets_with_fixture_chain("chain_first");
-    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    let game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
     let held: Vec<String> = game
         .active_contracts()
         .iter()
@@ -3617,4 +3626,415 @@ fn a_hold_contract_stays_offerable_whatever_is_in_the_pack() {
         game.offerable_contracts_for_test(&hold),
         "what is in the pack is not a board input"
     );
+}
+
+/// **A contract asks in the game's own vocabulary.**
+///
+/// Two of the seven objective lines used words the rest of the game does not.
+/// `Breach` said "Reach sector 3" — *reach* is a verb nothing else in the game
+/// spends, so it named no gesture the player could go and make, while *breach*
+/// is what the Zone Portal, the base menu and the sweep notification all call
+/// it. `Hold` said "Hold 4 Core Fragment", which reads as a second kind of
+/// handing-in rather than as the one objective that asks for nothing at all
+/// beyond having them.
+///
+/// Asserted on the whole string rather than with `contains`, since the failure
+/// being closed is a *word choice* and a substring check passes against the
+/// phrasing it is meant to reject.
+#[test]
+fn an_objective_line_asks_in_the_games_own_vocabulary() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def("breach", Objective::Breach { zone: 3 }, vec![Reward::Xp(1)]),
+        0,
+    );
+    give(
+        &mut game,
+        def(
+            "hold",
+            Objective::Hold {
+                item: crate::items::ItemId::from("core_fragment"),
+                count: 4,
+            },
+            vec![Reward::Xp(1)],
+        ),
+        0,
+    );
+
+    let rows = game.active_contracts();
+    let line = |id: &str| {
+        rows.iter()
+            .find(|r| r.id == ContractId::from(id))
+            .map(|r| r.objective_line.clone())
+            .expect("both contracts are in hand")
+    };
+
+    assert_eq!(line("breach"), "Breach to sector 3");
+    assert_eq!(line("hold"), "Carry 4 Core Fragment at once");
+}
+
+/// **A contract says how and where it is satisfied, not only what it asks
+/// for.**
+///
+/// `objective_line` has fourteen characters of headroom on the widest shipped
+/// row before it runs off `PopupSize::Large`, measured against the real font —
+/// far too few for "to the Broker", and a town's name does not fit at all. So
+/// the *where* is its own derivation, wrapped under the description the way
+/// the authored prose already is.
+///
+/// The case that made this necessary: a player holding a `Deliver` compiled
+/// the items, put them on a shelf, and nothing happened — because a delivery
+/// is a keypress at the counter the job was signed at, and no surface said so.
+#[test]
+fn a_delivery_says_where_it_is_handed_over() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def(
+            "raw",
+            Objective::Deliver {
+                item: crate::items::ItemId::from("core_fragment"),
+                count: 6,
+            },
+            vec![Reward::Xp(1)],
+        ),
+        0,
+    );
+
+    let hint = game
+        .active_contracts()
+        .into_iter()
+        .find(|r| r.id == ContractId::from("raw"))
+        .and_then(|r| r.hint)
+        .expect("a Deliver objective always says where it is handed over");
+
+    assert!(
+        hint.contains("Broker"),
+        "it names the counter the job was signed at: {hint:?}"
+    );
+}
+
+/// **`Hold` is the objective that asks for nothing to be handed in, and its
+/// hint is the only place that is said.**
+///
+/// It exists precisely so the onboarding chain can teach that fighting pays in
+/// stock before a Broker has been built, so a player reading "Carry 4 Core
+/// Fragment at once" and going looking for a counter is the failure it was
+/// added to avoid.
+#[test]
+fn holding_says_there_is_nothing_to_hand_in() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def(
+            "stock",
+            Objective::Hold {
+                item: crate::items::ItemId::from("core_fragment"),
+                count: 4,
+            },
+            vec![Reward::Xp(1)],
+        ),
+        0,
+    );
+
+    let hint = game
+        .active_contracts()
+        .into_iter()
+        .find(|r| r.id == ContractId::from("stock"))
+        .and_then(|r| r.hint)
+        .expect("Hold says there is nothing to hand in");
+    assert!(
+        hint.contains("hand in"),
+        "it says the thing that is *not* required: {hint:?}"
+    );
+}
+
+/// **A breach names the door it goes through.** "Breach to sector 3" is the
+/// gesture; the Zone Portal and the Portal Fragments it spends are what the
+/// player has to go and get, and nothing else on the screen says so.
+#[test]
+fn a_breach_names_the_portal_and_what_it_spends() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def("push", Objective::Breach { zone: 3 }, vec![Reward::Xp(1)]),
+        0,
+    );
+
+    let hint = game
+        .active_contracts()
+        .into_iter()
+        .find(|r| r.id == ContractId::from("push"))
+        .and_then(|r| r.hint)
+        .expect("a Breach objective says how a breach is made");
+    assert!(
+        hint.contains("Zone Portal") && hint.contains("Portal Fragment"),
+        "it names the structure and the currency: {hint:?}"
+    );
+}
+
+/// **Killing things needs no hint, and that is a decision rather than a gap.**
+///
+/// `Game::objective_hint` is an exhaustive match, `cell_mark`'s rule, so a new
+/// `Objective` variant fails to compile rather than shipping a silent `None`.
+/// What this holds is the other half: the two variants that deliberately
+/// answer `None` still do, so "no hint" cannot quietly become the default the
+/// next variant is added under.
+#[test]
+fn an_obvious_objective_is_left_without_a_hint() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def(
+            "hunt",
+            Objective::Terminate {
+                species: None,
+                count: 3,
+            },
+            vec![Reward::Xp(1)],
+        ),
+        0,
+    );
+
+    let row = game
+        .active_contracts()
+        .into_iter()
+        .find(|r| r.id == ContractId::from("hunt"))
+        .expect("the contract is in hand");
+    assert_eq!(
+        row.hint, None,
+        "'Terminate 3 wild programs' is its own instruction"
+    );
+}
+
+/// **A delivery you can make right now asks for the player's attention.**
+///
+/// The hint on the contracts screen only helps a player who already opened it.
+/// This is the other half: standing at the counter with cargo a held job wants
+/// is a thing that needs doing, and `Game::attention` is the one derivation of
+/// what needs doing — the same machinery that says "2 nodes without a program".
+///
+/// Three states asserted, not one: the row has to appear *because* the cargo
+/// and the counter are both there, which a single positive assertion cannot
+/// tell from a row that is always on.
+#[test]
+fn cargo_ready_to_hand_over_asks_for_attention() {
+    let mut game = fresh();
+    let item = crate::items::ItemId::from("core_fragment");
+    give(
+        &mut game,
+        def(
+            "raw",
+            Objective::Deliver {
+                item: item.clone(),
+                count: 6,
+            },
+            vec![Reward::Xp(1)],
+        ),
+        0,
+    );
+
+    let asking = |game: &mut Game| {
+        game.attention()
+            .into_iter()
+            .any(|row| row.kind == crate::views::AttentionKind::ContractDeliverable)
+    };
+
+    assert!(
+        !asking(&mut game),
+        "away from the counter it is an errand, not an interruption"
+    );
+
+    deploy_broker(&mut game);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<crate::components::Inventory>(player)
+        .unwrap()
+        .take(item.clone(), u32::MAX);
+    assert!(
+        !asking(&mut game),
+        "at the counter with nothing to hand over, there is nothing to do"
+    );
+
+    game.world
+        .get_mut::<crate::components::Inventory>(player)
+        .unwrap()
+        .add(item, 6);
+    assert!(
+        asking(&mut game),
+        "at the counter, carrying what it asked for: that is the moment"
+    );
+}
+
+/// **A deed job can ask for more than one.**
+///
+/// `Perform` was the only counting-shaped objective pinned to a target of 1,
+/// which is what made every deed job a one-shot and left "clear three nests"
+/// inexpressible without a whole new `Objective` variant. `count` is additive
+/// behind `#[serde(default)]`, so no shipped file and no save needed touching.
+#[test]
+fn a_deed_job_counts() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def(
+            "sweep",
+            Objective::Perform {
+                deed: Deed::Examined,
+                count: 3,
+            },
+            vec![Reward::Xp(1)],
+        ),
+        0,
+    );
+    assert_eq!(
+        game.world
+            .resource::<ActiveContracts>()
+            .active
+            .iter()
+            .find(|c| c.def.id == ContractId::from("sweep"))
+            .unwrap()
+            .def
+            .objective
+            .target(),
+        3,
+        "the target is the count it asked for"
+    );
+
+    // Two deeds are not enough, which is the whole of what `count` buys.
+    for expected in 1..=2 {
+        game.world
+            .resource_mut::<crate::resources::RunFeats>()
+            .deeds
+            .push(Deed::Examined);
+        game.tick();
+        assert_eq!(
+            progress_of(&game, "sweep"),
+            expected,
+            "each deed is one unit of progress"
+        );
+    }
+
+    game.world
+        .resource_mut::<crate::resources::RunFeats>()
+        .deeds
+        .push(Deed::Examined);
+    game.tick();
+    assert!(
+        game.world
+            .resource::<ActiveContracts>()
+            .done
+            .contains(&ContractId::from("sweep")),
+        "the third finishes it"
+    );
+}
+
+/// **A standing condition satisfies a one-shot and never a count.**
+///
+/// `Deed::PostedStaff` is the one deed that is also a state the run can
+/// already be in, and `contract_system` credits that state as a unit of
+/// progress *every tick it holds* — harmless while the target was always 1 and
+/// the `min` capped it. Counted, it would finish a three-deed job in three
+/// ticks without the player doing anything, which is why the standing half is
+/// gated on the target being one.
+#[test]
+fn a_standing_condition_cannot_fill_a_counted_deed_job() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def(
+            "keep_working",
+            Objective::Perform {
+                deed: Deed::PostedStaff,
+                count: 3,
+            },
+            vec![Reward::Xp(1)],
+        ),
+        0,
+    );
+    // The condition the deed describes is already true, which is exactly the
+    // case `Deed::already_true` exists for.
+    deploy_broker(&mut game);
+    let machine = deploy(&mut game, "mining_node", 2, 0);
+    game.world
+        .entity_mut(machine)
+        .insert(crate::components::StandingJob {
+            work: true,
+            ..Default::default()
+        });
+
+    for _ in 0..6 {
+        game.tick();
+    }
+    assert_eq!(
+        progress_of(&game, "keep_working"),
+        0,
+        "standing in the state is not three separate deeds"
+    );
+}
+
+/// An authored `Perform` with no count is one, so no shipped file and no save
+/// written before the field existed needed touching.
+#[test]
+fn a_deed_job_with_no_count_asks_for_one() {
+    let (db, warnings) = load(
+        "deed_default",
+        &[(
+            "look.ron",
+            r#"(id: "look", name: "Look", description: "d",
+                objective: Perform(deed: Examined),
+                reward: [Xp(5)])"#,
+        )],
+    );
+    assert!(
+        warnings.is_empty(),
+        "it parses as it always did: {warnings:?}"
+    );
+    assert_eq!(
+        db.get(&ContractId::from("look"))
+            .unwrap()
+            .objective
+            .target(),
+        1
+    );
+}
+
+/// **A contract asking for zero of something is refused at load.**
+///
+/// `Objective::already_met`'s own doc has claimed this for as long as it has
+/// existed, and it was not true: nothing checked, and `progress >= target`
+/// makes a zero-count contract pay out the instant it is accepted. Checked now
+/// across every counting objective rather than only the new one, since one
+/// predicate covers all four and a rule documented but unenforced is worse
+/// than no rule.
+#[test]
+fn a_contract_asking_for_nothing_is_refused() {
+    let (db, warnings) = load(
+        "zero_counts",
+        &[
+            (
+                "kill.ron",
+                r#"(id: "kill", name: "K", description: "d",
+                    objective: Terminate(species: None, count: 0), reward: [Xp(5)])"#,
+            ),
+            (
+                "hand.ron",
+                r#"(id: "hand", name: "H", description: "d",
+                    objective: Deliver(item: "core_fragment", count: 0), reward: [Xp(5)])"#,
+            ),
+            (
+                "carry.ron",
+                r#"(id: "carry", name: "C", description: "d",
+                    objective: Hold(item: "core_fragment", count: 0), reward: [Xp(5)])"#,
+            ),
+            (
+                "look.ron",
+                r#"(id: "look", name: "L", description: "d",
+                    objective: Perform(deed: Examined, count: 0), reward: [Xp(5)])"#,
+            ),
+        ],
+    );
+    assert_eq!(db.iter().count(), 0, "all four are refused");
+    assert_eq!(warnings.len(), 4, "and each says so: {warnings:?}");
 }

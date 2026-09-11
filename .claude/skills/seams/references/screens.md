@@ -273,6 +273,44 @@
   counters in turn. Additive behind `#[serde(default)]`, so no version bump
   — a pre-Phase-5 save loads its held contracts as the Broker's, which is
   what they were.
+- **A `Deed` is the extension point for a new job kind; an `Objective`
+  variant is for a parameterised one.** An `Objective` variant costs six to
+  eight touch points — `target`, `already_met`, `objective_line`,
+  `objective_hint`, a `contract_system` branch, a `Specialty::of_objective`
+  arm, usually a field on `ObjectiveState` *and* a query on the bevy system,
+  and a parallel `TemplateObjective` arm if it should roll. A `Deed` behind
+  the existing `Perform` costs five, all local. `Deed`'s own doc made this
+  call for the first six; the seven added after them followed it, against
+  exactly one new `Objective` variant — `Standing { band }`, which earned it
+  because a band is a *degree* and a deed carries no parameters by design.
+  **Two traps in `Perform`'s `count`.** `contract_system` credits
+  `Deed::already_true` — the standing-condition half, which only
+  `PostedStaff` answers — *every tick the state holds*: harmless while the
+  target was 1 and the `min` capped it, and a three-deed job that fills
+  itself in three ticks otherwise, so the standing half is gated on
+  `count == 1` in both readers. And `asks_for_none` reads the **authored
+  count**, never `target()` — `Hold` is state-shaped, so its target is 1
+  whatever its count and `Hold(count: 0)` asks whether the pack holds at
+  least nothing. `every_deed_has_an_emit_site` scans real source for a
+  literal `note_deed(...)` call, but its deed list is hand-written, so it
+  carries an exhaustive match beside it or a new variant is checked by
+  nothing.
+- **How and where a contract is satisfied is its own derivation, and the
+  reason is fourteen characters.** `Game::objective_hint` sits beside
+  `objective_line` rather than inside it because the widest shipped row
+  leaves 159.5px of `PopupSize::Large`'s 1243.2px body against a 10.84px
+  average character — " to the Broker" spends all fourteen and a town's name
+  does not fit. The failure it closes is a player compiling a `Deliver`'s
+  items, shelving them, and watching nothing happen. Exhaustive on
+  `Objective` (`cell_mark`'s rule); `Terminate` answers `None` and `Perform`
+  delegates to `Deed::hint`, whose first six answer `None` because their
+  objective line already names their key. `Game::deliverable_now` is a
+  **call** into the hint's own `at_contract_counter` and `player_carrying`,
+  never a second reading, or the attention badge and the row disagree.
+  Drawn through `description_rows` so the description census covers it. The
+  `held` flag exists because picking an *offer*'s row signs it rather than
+  delivering. `has_broker`/`broker_reach` are `&self` to enable this —
+  `iter_entities`, as `standing_structures` beside them already did.
 - **A town's board is `board_defs` with four things changed**, sharing the
   pool, the roll, the two-tier draw and the `swap_remove` stream: the reach
   that gates it (`settlement_reach`, one call, where `broker_reach` splits

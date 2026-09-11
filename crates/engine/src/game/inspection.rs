@@ -1515,6 +1515,19 @@ impl Game {
             });
         }
 
+        // Standing at a counter with cargo a held job wants. Read before the
+        // base rows because it is the only row here that can be acted on from
+        // exactly one tile, and it stops being available the moment the player
+        // walks away.
+        if let Some(waiting) = self.deliverable_now() {
+            rows.push(AttentionRow {
+                kind: AttentionKind::ContractDeliverable,
+                text: waiting,
+                key: 'b',
+                threat: false,
+            });
+        }
+
         let idle = structures.iter().filter(|s| s.is_idle()).count();
         if idle > 0 {
             let noun = if idle == 1 { "node" } else { "nodes" };

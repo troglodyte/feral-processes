@@ -55,6 +55,7 @@ pub fn contract_system(
     // structure, and both facts below are read off the same iteration.
     structures: Query<(&Structure, Option<&crate::components::StandingJob>)>,
     player: Query<&Inventory, With<crate::components::Player>>,
+    standings: Res<crate::resources::Standings>,
 ) {
     let state = crate::contracts::ObjectiveState {
         depth: contract_depth(&locale),
@@ -68,6 +69,7 @@ pub fn contract_system(
         posted: structures
             .iter()
             .any(|(_, job)| job.is_some_and(|j| j.work)),
+        best_standing: crate::settlements::relations::best_band(&standings),
     };
 
     for contract in &mut held.active {
@@ -83,9 +85,13 @@ pub fn contract_system(
             // whenever both fire, and `progress` is capped at `target`
             // below, so counting both is one branch fewer than telling them
             // apart for no observable difference.
-            Objective::Perform { deed } => {
+            // The standing half is worth one unit and only to a one-shot: it
+            // is credited *every tick the state holds*, which the `min` below
+            // caps harmlessly at a target of 1 and which would otherwise fill
+            // a three-deed job in three ticks with nobody doing anything.
+            Objective::Perform { deed, count } => {
                 feats.deeds.iter().filter(|d| *d == deed).count() as u32
-                    + u32::from(deed.already_true(&state))
+                    + u32::from(*count == 1 && deed.already_true(&state))
             }
             // Not here — see the module doc.
             Objective::Deliver { .. } => 0,
@@ -445,7 +451,7 @@ impl Game {
         let defs = self.board_defs(None)?;
         Some(
             defs.iter()
-                .map(|def| self.contract_row(def, 0, None))
+                .map(|def| self.contract_row(def, 0, None, false))
                 .collect(),
         )
     }
@@ -465,7 +471,7 @@ impl Game {
         let defs = self.board_defs(Some(key))?;
         Some(
             defs.iter()
-                .map(|def| self.contract_row(def, 0, Some(key)))
+                .map(|def| self.contract_row(def, 0, Some(key), false))
                 .collect(),
         )
     }
@@ -797,6 +803,12 @@ impl Game {
                 // and cleared one, and `swap_remove` reshuffles every other
                 // slot with it.
                 posted: false,
+                // Live, with `zone` and `standing` rather than with the three
+                // above: a band moves on a deliberate act — a trade, a
+                // finished job, a raid — never as the player walks.
+                best_standing: crate::settlements::relations::best_band(
+                    self.world.resource::<crate::resources::Standings>(),
+                ),
             })
     }
 
@@ -817,7 +829,7 @@ impl Game {
             .resource::<ActiveContracts>()
             .active
             .iter()
-            .map(|held| self.contract_row(&held.def, held.progress, held.issuer))
+            .map(|held| self.contract_row(&held.def, held.progress, held.issuer, true))
             .collect()
     }
 
@@ -833,11 +845,11 @@ impl Game {
         let db = self.world.resource::<crate::contracts::ContractDb>();
         let widest = self.widest_pools();
         db.iter()
-            .map(|def| self.contract_row(def, 0, None))
+            .map(|def| self.contract_row(def, 0, None, false))
             .chain(
                 db.templates()
                     .filter_map(|t| t.widest(&widest))
-                    .map(|def| self.contract_row(&def, 0, None)),
+                    .map(|def| self.contract_row(&def, 0, None, false)),
             )
             .collect()
     }
@@ -911,7 +923,7 @@ impl Game {
     /// check, because `base_pos` is already `None` in every locale but this
     /// one, and no locale-dependent `Position` read, because `Position` is
     /// pinned to the anchor tile the whole time the party is in here.
-    pub fn broker_reach(&mut self) -> BrokerReach {
+    pub fn broker_reach(&self) -> BrokerReach {
         if !self.has_broker() {
             return BrokerReach::NoBroker;
         }
@@ -930,12 +942,16 @@ impl Game {
     }
 
     /// Whether the run has a Broker standing at all, wherever it is.
-    fn has_broker(&mut self) -> bool {
-        let mut query = self.world.query_filtered::<Entity, With<Structure>>();
-        let standing: Vec<Entity> = query.iter(&self.world).collect();
-        standing
-            .into_iter()
-            .any(|entity| self.issues_contracts(entity))
+    ///
+    /// Walked with `iter_entities`, as `standing_structures` above is, rather
+    /// than through a `query_filtered` that would take `&mut World` with it:
+    /// `broker_reach` is read from a menu-row closure every frame and from
+    /// `contract_row`, which is `&self` because the width census calls it.
+    fn has_broker(&self) -> bool {
+        self.world
+            .iter_entities()
+            .filter(|entity| entity.contains::<Structure>())
+            .any(|entity| self.issues_contracts(entity.id()))
     }
 
     /// The board's seed: the world seed, the sector and the epoch, folded
@@ -983,11 +999,17 @@ impl Game {
     }
 
     /// One contract, worded for a screen.
+    ///
+    /// `held` is what separates a job in hand from one on the board. It reaches
+    /// only `objective_hint`, whose `Deliver` arm has to tell "carry these to
+    /// the counter" from "you are standing at it" — and on an offer, picking
+    /// the row signs the job rather than handing anything over.
     fn contract_row(
         &self,
         def: &crate::contracts::ContractDef,
         progress: u32,
         issuer: Option<crate::settlements::SettlementKey>,
+        held: bool,
     ) -> crate::views::ContractRow {
         crate::views::ContractRow {
             issuer,
@@ -996,11 +1018,158 @@ impl Game {
             name: def.name.clone(),
             description: def.description.clone(),
             objective_line: self.objective_line(&def.objective),
+            hint: self.objective_hint(&def.objective, issuer, held),
             reward_line: self.reward_line(&def.reward),
             progress,
             target: def.objective.target(),
             tutorial: def.tutorial.is_some(),
         }
+    }
+
+    /// **How and where an objective is satisfied**, or `None` where the
+    /// objective is already its own instruction.
+    ///
+    /// A second derivation rather than more words on `objective_line`, for a
+    /// measured reason: the widest row the shipped assets can build leaves
+    /// 159.5px of `PopupSize::Large`'s 1243.2px body, and a character averages
+    /// 10.84px — fourteen of them. "to the Broker" spends every one, and a
+    /// town's name does not fit at all.
+    ///
+    /// Exhaustive on `Objective`, `cell_mark`'s rule: a job kind that cannot
+    /// be acted on without being told how must fail to compile here rather
+    /// than ship a blank line under itself.
+    ///
+    /// The `Deliver` arm is the one that reads the run, and it reads it for
+    /// the failure this whole derivation exists to close — a player who
+    /// compiled the items, shelved them, and watched nothing happen, because a
+    /// delivery is a keypress at the counter the job was signed at.
+    fn objective_hint(
+        &self,
+        objective: &Objective,
+        issuer: Option<crate::settlements::SettlementKey>,
+        held: bool,
+    ) -> Option<String> {
+        match objective {
+            // "Terminate 3 wild programs" names the whole errand.
+            Objective::Terminate { .. } => None,
+
+            // A deed decides for itself: the six that name the key they are
+            // performed with need nothing, and the seven that name a
+            // subsystem say where it is. See `Deed::hint`.
+            Objective::Perform { deed, .. } => deed.hint().map(str::to_string),
+
+            Objective::Deliver { item, .. } => {
+                let counter = self.contract_counter_name(issuer);
+                if !held {
+                    return Some(format!(
+                        "Handed over at {counter} - a job is delivered where it was signed."
+                    ));
+                }
+                if !self.at_contract_counter(issuer) {
+                    return Some(format!(
+                        "Carry them to {counter} and pick this row there to hand them \
+                         over. Putting them on a shelf does nothing."
+                    ));
+                }
+                let carrying = self.player_carrying(item);
+                Some(if carrying == 0 {
+                    format!("You are at {counter}, but carrying none of them.")
+                } else {
+                    format!(
+                        "You are at {counter} carrying {carrying} - pick this row to \
+                         hand them over."
+                    )
+                })
+            }
+
+            Objective::Hold { .. } => Some(
+                "Nothing to hand in - this one only asks that you have them in your \
+                 pack at once."
+                    .to_string(),
+            ),
+
+            Objective::Breach { .. } => Some(
+                "Breach from a Zone Portal at your base. A breach spends Portal \
+                 Fragments, which only bosses under the ground drop."
+                    .to_string(),
+            ),
+
+            Objective::Descend { depth } => Some(format!(
+                "Stack entrances stand out on the open ground. Go down {depth} frames \
+                 from one."
+            )),
+
+            Objective::Standing { .. } => Some(
+                "A town's opinion rises when you trade there, finish its jobs and clear \
+                 nests near it, and falls when you take from it."
+                    .to_string(),
+            ),
+
+            Objective::Build { .. } => Some(
+                "Deploy it from the base menu and the crew raises it - a build is a \
+                 request, not something your own hands finish."
+                    .to_string(),
+            ),
+        }
+    }
+
+    /// The one held delivery the player could hand over from the tile they are
+    /// standing on, worded — `None` when there is none.
+    ///
+    /// Read by `Game::attention`, and deliberately a *call* into the same two
+    /// halves the hint uses: `at_contract_counter` for the place and
+    /// `player_carrying` for the cargo. A second reading of either is how a
+    /// badge and the row it stands for come to disagree.
+    ///
+    /// The first match rather than a count, because `attention` is a list of
+    /// errands and "two deliveries are ready" is not a different errand from
+    /// one — the player is going to the same screen either way.
+    pub(crate) fn deliverable_now(&self) -> Option<String> {
+        self.world
+            .resource::<ActiveContracts>()
+            .active
+            .iter()
+            .find_map(|held| match &held.def.objective {
+                Objective::Deliver { item, .. }
+                    if self.at_contract_counter(held.issuer) && self.player_carrying(item) > 0 =>
+                {
+                    Some(format!("{} ready to hand over", held.def.name))
+                }
+                _ => None,
+            })
+    }
+
+    /// What to call the counter a contract is signed and delivered at - the
+    /// run's own Broker, or the town that posted it.
+    fn contract_counter_name(&self, issuer: Option<crate::settlements::SettlementKey>) -> String {
+        match issuer {
+            Some(key) => self.settlement_name(key),
+            None => "your Contract Broker".to_string(),
+        }
+    }
+
+    /// Whether the player is standing where this contract may be handed over.
+    ///
+    /// One question with one answer per row, because **the two reaches are
+    /// mutually exclusive by construction**: `settlement_reach` is false in
+    /// base space and `broker_reach` answers `AtBroker` only there. A town
+    /// that refuses service is not a counter either, the gate
+    /// `deliver_to_contract` applies.
+    fn at_contract_counter(&self, issuer: Option<crate::settlements::SettlementKey>) -> bool {
+        match issuer {
+            Some(key) => self.settlement_reach(key) && !self.standing_band(key).refuses_service(),
+            None => self.broker_reach() == BrokerReach::AtBroker,
+        }
+    }
+
+    /// Units of `item` in the player's pack.
+    fn player_carrying(&self, item: &ItemId) -> u32 {
+        self.world
+            .iter_entities()
+            .find(|entity| entity.contains::<crate::components::Player>())
+            .and_then(|entity| entity.get::<Inventory>())
+            .map(|inv| inv.count(item))
+            .unwrap_or(0)
     }
 
     /// What an objective asks, in the player's words. Item and species ids
@@ -1028,7 +1197,10 @@ impl Game {
                 format!("Deliver {count} {}", self.item_name(item))
             }
             Objective::Descend { depth } => format!("Stand {depth} frames down a Stack"),
-            Objective::Breach { zone } => format!("Reach sector {zone}"),
+            Objective::Breach { zone } => format!("Breach to sector {zone}"),
+            Objective::Standing { band } => {
+                format!("Reach {} terms with a town", band.label())
+            }
             Objective::Build { structure } => {
                 let name = self
                     .world
@@ -1039,17 +1211,24 @@ impl Game {
                 format!("Build a {name}")
             }
             Objective::Hold { item, count } => {
-                format!("Hold {count} {}", self.item_name(item))
+                format!("Carry {count} {} at once", self.item_name(item))
             }
             // Exhaustive on purpose: a new `Deed` fails to compile here
             // rather than shipping a row with no words on it.
-            Objective::Perform { deed } => match deed {
+            Objective::Perform { deed, .. } => match deed {
                 Deed::Examined => "Examine something with [x]".to_string(),
                 Deed::Tamed => "Decompile a wild program".to_string(),
                 Deed::TookFromContainer => "Take stock out of a machine with [c]".to_string(),
                 Deed::QueuedStandingOrder => "Place a standing work order".to_string(),
                 Deed::UnlockedPerk => "Spend a Perk Point".to_string(),
                 Deed::PostedStaff => "Set a machine to be kept staffed".to_string(),
+                Deed::ClearedNest => "Destroy a nest".to_string(),
+                Deed::RepelledRaid => "Shrug off a GC Entropy Sweep".to_string(),
+                Deed::ReturnedSortie => "Bring a squad home from a sortie".to_string(),
+                Deed::TradedWithTown => "Trade at a settlement".to_string(),
+                Deed::ExtractedProgram => "Break down a downed program".to_string(),
+                Deed::CollapsedStack => "Beat a Stack's guardian".to_string(),
+                Deed::FinishedResearch => "Finish a research project".to_string(),
             },
         }
     }

@@ -779,6 +779,7 @@ mod tests {
             id: feral_processes_engine::contracts::ContractId::from(name),
             name: name.to_string(),
             description: String::new(),
+            hint: None,
             objective_line: objective.to_string(),
             reward_line: String::new(),
             progress,

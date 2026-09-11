@@ -1,0 +1,9 @@
+(
+    id: "nest_clearance",
+    name: "Nest Clearance",
+    description: "Three nests inside the survey ring, all of them spawning faster than anything is killing. Take the nests down, not the programs coming out of them.",
+    objective: Perform(deed: ClearedNest, count: 3),
+    reward: [Credits(45), Item("core_fragment", 12), Xp(150)],
+    min_zone: 1,
+    repeatable: true,
+)

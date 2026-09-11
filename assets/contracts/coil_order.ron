@@ -1,7 +1,7 @@
 (
     id: "coil_order",
     name: "Coil Order",
-    description: "Half the sector's patch work is stalled for want of winding. Deliver eight Charge Coils.",
+    description: "Half the patch work in this sector is stalled for want of winding. Every crew out here is waiting on the same shipment, and the Broker would rather it were yours.",
     objective: Deliver(item: "charge_coil", count: 8),
     reward: [Credits(55), Xp(140)],
     min_zone: 2,

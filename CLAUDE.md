@@ -1260,6 +1260,11 @@ relying on one, and correct all three places if it has moved.
   `OffBase` / `AtBroker`; `board_defs` refuses on `NoBroker` alone, the two
   verbs require `AtBroker`, and the base menu's row test and the screen's
   header read the same value.
+- **A `Deed` is the extension point for a new job kind; an `Objective`
+  variant is for a parameterised one.**
+- **How and where a contract is satisfied is its own derivation** —
+  `Game::objective_hint`, because `objective_line` has fourteen characters
+  of headroom on the widest shipped row.
 - **A `starter` contract jumps the board queue, and only in sector 1.**
   `board_defs` fills its three slots from unfinished starters first — three
   uniform draws out of fourteen made a new run's first job a coin flip, and

@@ -683,6 +683,7 @@ impl Game {
             self.tick();
         }
 
+        self.note_deed(crate::contracts::Deed::ExtractedProgram);
         Ok(())
     }
     /// The Teardown Rig the player is standing beside, lowest tile first

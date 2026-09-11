@@ -1372,6 +1372,15 @@ pub enum AttentionKind {
     ResearchStalled,
     PerkPoints,
     RosterFull,
+    /// A held `Objective::Deliver` whose counter the player is standing at,
+    /// carrying some of what it asked for.
+    ///
+    /// The hint on the contracts screen only reaches a player who already
+    /// opened it; this is the half that reaches one who has not. It is the
+    /// only attention row that depends on **where the player is standing**,
+    /// which is also why it is not a threat: nothing is going wrong, there is
+    /// simply a keypress available that is not available anywhere else.
+    ContractDeliverable,
 }
 
 /// One thing that needs the player right now — see `Game::attention`.
@@ -2552,6 +2561,19 @@ pub struct ContractRow {
     pub description: String,
     /// What the objective asks, already worded.
     pub objective_line: String,
+    /// **How and where it is satisfied**, or `None` where the objective is its
+    /// own instruction — see `Game::objective_hint`.
+    ///
+    /// Its own field rather than more words on `objective_line`, because that
+    /// line has fourteen characters of headroom on the widest shipped row
+    /// before it runs off `PopupSize::Large` and a town's name does not fit in
+    /// them. Wrapped by the renderer the way `description` is.
+    ///
+    /// Live for a held contract and static for an offer: standing at the
+    /// counter is what turns "carry them to your Broker" into "you are
+    /// carrying 6, pick this row", and on an offer picking the row *signs*
+    /// rather than delivers.
+    pub hint: Option<String>,
     pub reward_line: String,
     /// 0 on an offer that has not been accepted.
     pub progress: u32,

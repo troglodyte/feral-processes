@@ -122,7 +122,12 @@ impl Specialty {
         use crate::contracts::Objective;
         match objective {
             Objective::Terminate { .. } => Specialty::Programs,
-            Objective::Deliver { .. } | Objective::Hold { .. } => Specialty::Materials,
+            // Standing sits with the two stock objectives because trade
+            // volume is what moves it: a Materials town is the one whose
+            // business a job about its own goodwill actually is.
+            Objective::Deliver { .. } | Objective::Hold { .. } | Objective::Standing { .. } => {
+                Specialty::Materials
+            }
             Objective::Descend { .. } | Objective::Perform { .. } => Specialty::Routines,
             Objective::Build { .. } | Objective::Breach { .. } => Specialty::Gear,
         }

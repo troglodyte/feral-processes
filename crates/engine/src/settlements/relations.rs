@@ -142,7 +142,15 @@ impl Relation {
 }
 
 /// How a town reads a standing value.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+///
+/// `Ord` is the ladder Hostile→Allied, which is what lets
+/// `Objective::Standing` ask for "this band or better" with a comparison
+/// rather than a table. Serialisable because a held contract stores its whole
+/// `ContractDef`, so the band travels in the save; the save is field-named
+/// RON, so it spells as the variant's own name and the order is not format.
+#[derive(
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, serde::Serialize, serde::Deserialize,
+)]
 pub enum Standing {
     Hostile,
     Cold,
@@ -184,6 +192,21 @@ const _: () =
 
 /// The one banding. Ordered from the bottom so the thresholds read as the
 /// ladder they are.
+/// The best band any town holds the player in, `Hostile` when none is known.
+///
+/// A free function over the resource rather than a `Game` method, for
+/// `party::role_of`'s reason: `contract_system` is a bevy system with no
+/// `Game` to ask, and two folds would eventually disagree about what an
+/// unvisited town counts as.
+pub fn best_band(standings: &crate::resources::Standings) -> Standing {
+    standings
+        .0
+        .values()
+        .map(|relation| band(relation.standing))
+        .max()
+        .unwrap_or(Standing::Hostile)
+}
+
 pub fn band(standing: i32) -> Standing {
     if standing <= SETTLEMENT_HOSTILE_STANDING {
         Standing::Hostile

@@ -3253,14 +3253,44 @@ fn every_deed_has_an_emit_site() {
         "the census must actually read the engine's source, or it passes vacuously"
     );
 
-    for deed in [
+    let every = [
         Deed::Examined,
         Deed::Tamed,
         Deed::TookFromContainer,
         Deed::QueuedStandingOrder,
         Deed::UnlockedPerk,
         Deed::PostedStaff,
-    ] {
+        Deed::ClearedNest,
+        Deed::RepelledRaid,
+        Deed::ReturnedSortie,
+        Deed::TradedWithTown,
+        Deed::ExtractedProgram,
+        Deed::CollapsedStack,
+        Deed::FinishedResearch,
+    ];
+    // `cell_mark`'s rule, applied to the census itself: the list above is
+    // hand-written, so a new variant would otherwise be checked by nothing
+    // and ship with no emit site against a green suite. This match is what
+    // fails to compile instead, and the arm it forces is the reminder.
+    for deed in every {
+        match deed {
+            Deed::Examined
+            | Deed::Tamed
+            | Deed::TookFromContainer
+            | Deed::QueuedStandingOrder
+            | Deed::UnlockedPerk
+            | Deed::PostedStaff
+            | Deed::ClearedNest
+            | Deed::RepelledRaid
+            | Deed::ReturnedSortie
+            | Deed::TradedWithTown
+            | Deed::ExtractedProgram
+            | Deed::CollapsedStack
+            | Deed::FinishedResearch => {}
+        }
+    }
+
+    for deed in every {
         let call = format!("note_deed(crate::contracts::Deed::{deed:?})");
         let short = format!("note_deed(Deed::{deed:?})");
         assert!(

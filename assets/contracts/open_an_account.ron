@@ -1,0 +1,8 @@
+(
+    id: "open_an_account",
+    name: "Open an Account",
+    description: "Find a settlement and put something across its counter — buy, sell, the Broker does not care which. He wants a trade on the books with somebody who is not him.",
+    objective: Perform(deed: TradedWithTown),
+    reward: [Credits(30), Xp(90)],
+    min_zone: 1,
+)

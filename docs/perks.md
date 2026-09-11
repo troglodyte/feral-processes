@@ -22,7 +22,7 @@ dearer but never stronger.
 |---|---|
 | perks | 18 |
 | prices | 2, 3 and 4 Perk Points |
-| one level of everything | 45 points |
+| one level of everything | 46 points |
 | points earned | 1 per player level, plus up to 5 from the [achievement ladder](achievements.md) |
 | affinity perks | 5 of 18, sharing two rates |
 
@@ -37,7 +37,7 @@ positionally, so this order is load-bearing: append, never reorder.
 | `KeenScavenger` | Keen Scavenger | 2 | +1pp mining success | systems::mining_success_chance |
 | `LowPowerMode` | Low Power Mode | 2 | -1pp Power drain, floor 0 | the hunger-decay multiplier |
 | `ExploitFocus` | Exploit Focus | 3 | -3pp of the target's HP penalty | taming::capture_chance |
-| `LeanCompiler` | Lean Compiler | 3 | -1 of each ingredient, floor 1 | Game::craft_recipes' costs |
+| `LeanCompiler` | Lean Compiler | 4 | -1 of each ingredient, floor 1 | Game::craft_recipes' costs |
 | `Attacker` | Attacker | 2 | +2 ATK, permanent | a direct Stats write at purchase |
 | `Defender` | Defender | 2 | +2 DEF, permanent | a direct Stats write at purchase |
 | `Buffer` | Buffer | 3 | +1% max Integrity, at least +10 | a direct Stats write, plus a full heal |
@@ -48,7 +48,7 @@ positionally, so this order is load-bearing: append, never reorder.
 | `DrainAffinity` | Siphon Protocol | 2 | +15% Drain damage | the player's own invocations only |
 | `Obfuscation` | Obfuscation | 3 | -10% to every Trace rise, floor 1 | Game::raise_trace |
 | `ProcessPool` | Process Pool | 3 | +1 tamed program you may own | Game::pet_capacity |
-| `Teardown` | Teardown | 4 | +1 work resource per kill | Game::award_loot |
+| `Teardown` | Teardown | 4 | +1 unit out of every teardown | Game::extraction_yield |
 | `Failover` | Failover | 2 | +1 Durability per repair interval | Game::total_repair_rate |
 | `TightenTolerances` | Tighten Tolerances | 3 | +5pp on a compiled copy's quality floor | Game::craft_quality_floor |
 | `TargetLock` | Target Lock | 3 | +2 Accuracy on every attack you make | Game::accuracy_bonus |
@@ -58,26 +58,30 @@ positionally, so this order is load-bearing: append, never reorder.
 ```
 PERK POINT PRICE
 
-4  Teardown
-3  Exploit Focus, Lean Compiler, Buffer, Obfuscation, Process Pool, Tighten Tolerances, Target Lock
+4  Lean Compiler, Teardown
+3  Exploit Focus, Buffer, Obfuscation, Process Pool, Tighten Tolerances, Target Lock
 2  Keen Scavenger, Low Power Mode, Attacker, Defender, Payload Tuning, Field Medic, Overclocker, Corruption Vector, Siphon Protocol, Failover
 
-one level of all 18: 45 points
+one level of all 18: 46 points
 ```
 
 What the perks at 3 have in common is that they change a *rate* rather than a
-number: Buffer scales with the Integrity you already have, Lean Compiler pays
-out on every craft for the rest of the run, Exploit Focus is worth more the
-healthier the program you are trying to take, Obfuscation is a proportion of
-whatever you were about to spend, Process Pool raises a ceiling every later
-program is measured against, and Tighten Tolerances moves the band every
-piece of gear you compile from here on rolls inside. The ones at 2 are flat.
+number: Buffer scales with the Integrity you already have, Exploit Focus is
+worth more the healthier the program you are trying to take, Obfuscation is a
+proportion of whatever you were about to spend, Process Pool raises a ceiling
+every later program is measured against, and Tighten Tolerances moves the band
+every piece of gear you compile from here on rolls inside. The ones at 2 are
+flat.
 
-Teardown is alone at 4 because it is the steepest thing in the catalogue
-relative to what it modifies: a kill drops 2-4 work resources, so a single
-level is worth between a third and a half again of every fight in the run.
+The two at 4 are the steepest things in the catalogue relative to what they
+modify. Lean Compiler takes an item off every line of every recipe, for the
+rest of the run. Teardown adds a unit to every teardown: a tool pulls 3 units
+out of a fresh common body, so a single level is a third again of every body
+you strip — and it pays at your own hands and at a Teardown Rig alike, which
+is the perk's whole shape now that a kill leaves a program rather than
+material.
 
-Note what 45 points means against how they arrive. A Perk Point is
+Note what 46 points means against how they arrive. A Perk Point is
 1 per player level and at most 5 more from a fully cleared
 profile, so buying one level of each is most of the first forty levels of a
 run. Perks are not a shopping list to complete; they are a shape to commit

@@ -17,7 +17,7 @@ the same one. Keen Scavenger reaches into the mining roll, Low Power Mode into
 the hunger-decay multiplier, Exploit Focus into the decompile chance's HP
 term, Lean Compiler into recipe costs, Attacker/Defender/Buffer write
 straight to your stats at purchase time, Obfuscation into what a Trace source
-costs, Process Pool into the roster capacity, Teardown into a kill's salvage,
+costs, Process Pool into the roster capacity, Teardown into a teardown's yield,
 Failover into the base-wide repair rate, Tighten Tolerances into the floor a
 compiled copy of gear rolls its quality off, Target Lock into the flat
 Accuracy every attack you make carries, and the five `*_affinity` perks
@@ -33,8 +33,8 @@ source always costs *something* — deliberately unlike Low Power Mode, which
 is allowed to stop hunger draining entirely, because Trace is the Stack's
 only escalation pressure. Process Pool adds roster slots through the same
 `pet_capacity` a Data Cache feeds, so what it buys survives losing the
-building. Teardown adds a flat amount to the work resource a defeated program
-drops. Failover adds to the base-wide repair rate, which means a base with no
+building. Teardown adds a flat amount to the units a tool pulls out of a downed
+program, at your own hands and at a Teardown Rig alike. Failover adds to the base-wide repair rate, which means a base with no
 Patch Node standing stops taking permanent sweep damage. Tighten Tolerances
 raises the floor a piece of gear you compile rolls its quality off, so it is
 worth exactly what a tier of the bench is worth and is the only input to that
@@ -103,7 +103,7 @@ say so in the `description` too — nothing keeps the two in sync for you.
     //   Obfuscation     cuts what every Trace source costs in the Stack,
     //                   floored so a source always costs something
     //   ProcessPool     raises how many tamed programs you may own
-    //   Teardown        raises the work resource a defeated program drops
+    //   Teardown        raises what a tool pulls out of a downed program
     //   Failover        repairs your structures with no Patch Node standing
     //   TightenTolerances raises the quality gear you compile rolls at
     //   TargetLock      raises the Accuracy of every attack you make

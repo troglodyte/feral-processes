@@ -2986,11 +2986,12 @@ pub const PROCESS_POOL_SLOTS_PER_LEVEL: usize = 1;
 /// discipline the retired roll followed.
 ///
 /// This is a permanent income *rate*, not a loop — nothing here mints value
-/// out of nothing, and it is bounded by how many fights the player takes,
+/// out of nothing, and it is bounded by how many bodies the player strips,
 /// which is what makes it the salvage perk rather than a trader one. It is
-/// still the steepest thing in this section relative to what it modifies
-/// (+33% to +50% at a single level), so it carries the highest price in the
-/// catalogue.
+/// still one of the two steepest things in this section relative to what it
+/// modifies (+1 on `TOOL_BASE_UNITS`' 3, so a third again on a fresh common
+/// body, decaying as tool tier, bench tier and grade raise the base), so it
+/// carries the highest price in the catalogue.
 pub const TEARDOWN_SALVAGE_PER_LEVEL: u32 = 1;
 
 /// Accuracy one level of `Perk::TargetLock` adds to every attack the player

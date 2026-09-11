@@ -615,10 +615,9 @@ relying on one, and correct all three places if it has moved.
   base space's.** `dispatch_sortie` and `return_sortie` each queue one
   `resources::TransitCue` per body — a glyph and the cells it walks —
   drained by `Game::take_transits`, `take_effects`' counterpart.
-- **`award_companion_xp` and `roll_work_resource_drop` are extractions, not
-  copies.** The first holds the growth roll, the cap, the XP buff, the tally
-  and the routine unlocks; the second holds a `Perk::Teardown` term added to
-  the roll rather than drawn for.
+- **`award_companion_xp` is an extraction, not a copy** — the growth roll,
+  the cap, the XP buff, the tally and the routine unlocks, in one place a
+  sortie's off-screen fight calls rather than restates.
 - **A caravan route is one record with a `standing` flag, and a one-off is
   the flag turned off** — `routes::Route`, `WorkOrder`'s shape.
 - **`Game::sever_route` clears `standing` and nothing else**, so the trip in

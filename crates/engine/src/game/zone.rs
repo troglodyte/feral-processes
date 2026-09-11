@@ -371,6 +371,63 @@ impl Game {
     ///   the frame behind it is re-carved and the memory of the old one —
     ///   which cells were seen, which caches were emptied, which lair was
     ///   cleared — describes a frame that no longer exists.
+    /// This run's enemy-strength band — `resources::EnemyStrength`.
+    pub fn enemy_strength(&self) -> crate::resources::EnemyStrength {
+        *self.world.resource::<crate::resources::EnemyStrength>()
+    }
+
+    /// The multiplier a spawn takes for sitting `steps` **zone steps** up
+    /// its own zone's curve.
+    ///
+    /// The one derivation of that ratio, shared by the two things that buy
+    /// steps — the distance ramp in `Game::field_stat_mult` and the
+    /// enemy-strength band — so the two cannot disagree about what a step is
+    /// worth. Expressed as a ratio on the zone ladder rather than a curve of
+    /// its own, which is what leaves `balance_sim`'s per-zone sweeps gating
+    /// both of them: `steps` of 1 at zone N is arithmetically zone N+1.
+    pub(crate) fn zone_curve_ratio(&self, steps: f32) -> f32 {
+        let zone = self.world.resource::<ZoneLevel>().stat_multiplier() as f32;
+        (zone + crate::tuning::ZONE_STAT_STEP as f32 * steps) / zone
+    }
+
+    /// Moves the run to `band` and re-stocks the ground already walked at
+    /// it — the same three calls `enter_next_zone` makes below, and for the
+    /// same reason: a difficulty term is baked into a body's `Stats` at
+    /// spawn, so without the re-stock the knob would only be felt on ground
+    /// the party had not reached yet.
+    ///
+    /// **Refused mid-fight.** `clear_local_wild` despawns bodies, and a body
+    /// sitting in `BattleState::groups` is exactly what `end_battle` exists
+    /// to stop anyone deleting — `BattleState::planned` indexes `Party`
+    /// positionally and the wild side is named by identity.
+    ///
+    /// Two things the re-stock deliberately does not reach, both of them
+    /// `clear_local_wild`'s own exclusions: a `NestGuardian` is tethered to
+    /// its nest and a `Nemesis` is a named individual, so each keeps the
+    /// stats it spawned with until it dies. And only chunks within
+    /// `POPULATION_CHUNK_MARGIN` are touched — ground walked into later has
+    /// never been populated and stocks at the new band anyway.
+    pub fn set_enemy_strength(&mut self, band: crate::resources::EnemyStrength) -> Result<(), String> {
+        if self.has_active_battle() {
+            return Err("Not in the middle of a fight.".to_string());
+        }
+        self.world.insert_resource(band);
+        self.world
+            .insert_resource(crate::resources::PopulatedChunks::default());
+        self.clear_local_wild();
+        self.ensure_local_population();
+        Ok(())
+    }
+
+    /// The band without the re-stock or the refusal — a fixture, and
+    /// `#[cfg(test)]` because it is one. `spawn_wild_creature`'s reason:
+    /// ungated it reads like the plain way to set the band, which is how a
+    /// caller ends up quietly skipping the re-stock.
+    #[cfg(test)]
+    pub(crate) fn force_enemy_strength(&mut self, band: crate::resources::EnemyStrength) {
+        self.world.insert_resource(band);
+    }
+
     pub(crate) fn enter_next_zone(&mut self) {
         self.notify(crate::notifications::NotificationKind::Breach);
 

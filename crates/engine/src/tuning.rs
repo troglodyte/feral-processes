@@ -478,6 +478,20 @@ pub const WORK_XP_LEVEL_CAP: u32 = 5;
 /// base, so neither gear nor zone outruns the other.
 pub const ZONE_STAT_STEP: i32 = 1;
 
+/// How many zone steps one rung of `resources::EnemyStrength` is worth.
+///
+/// The band is a **fractional zone step**, not a flat multiplier on stats,
+/// and that is the whole of why it is affordable. `ZONE_STAT_STEP` above is
+/// a linear addend, so a flat multiplier would be a geometric quantity
+/// riding a linear curve — the race that doc spends its length explaining
+/// the game does not run — and it would mean a different thing at every
+/// zone: x1.5 is half a zone at zone 1 and three zones at zone 6. As a step
+/// it means one thing everywhere, "the ground fights like it is N zones
+/// deeper", and `balance_sim` gates it for free, because zone N at one band
+/// up is arithmetically the zone N+1 fixture the sweeps already cover.
+/// `Game::field_stat_mult`'s cap makes the same argument for distance.
+pub const ENEMY_STRENGTH_BAND_STEP: f32 = 0.5;
+
 /// Radius of the zone-1 newbie ring, in tiles from
 /// `Game::distance_from_danger_origin` — the base platform's edge once a
 /// Home exists, `ZoneSpawnPoint` before then. Inside it, only species a

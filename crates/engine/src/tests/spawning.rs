@@ -1614,6 +1614,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         compass: Default::default(),
         game_over: None,
         mining: false,
+        enemy_strength: Default::default(),
         free_builds: crate::resources::FreeBuilds::default(),
         tick: 0,
         difficulty: DifficultyMode::Forgiving,

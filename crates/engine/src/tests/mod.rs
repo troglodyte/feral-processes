@@ -33,6 +33,7 @@ mod crafting;
 mod creation;
 mod depot_filter;
 mod descriptions;
+mod difficulty;
 mod disposition;
 mod easter_eggs;
 mod environment;

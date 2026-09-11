@@ -3282,7 +3282,7 @@ mod deed_sites {
 #[test]
 fn a_new_run_holds_the_first_mission_with_no_broker() {
     let dir = assets_with_fixture_chain("chain_first");
-    let mut game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
+    let game = Game::new(7, DifficultyMode::Forgiving, &dir).unwrap();
     let held: Vec<String> = game
         .active_contracts()
         .iter()

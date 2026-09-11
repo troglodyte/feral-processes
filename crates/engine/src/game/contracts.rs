@@ -83,9 +83,13 @@ pub fn contract_system(
             // whenever both fire, and `progress` is capped at `target`
             // below, so counting both is one branch fewer than telling them
             // apart for no observable difference.
-            Objective::Perform { deed } => {
+            // The standing half is worth one unit and only to a one-shot: it
+            // is credited *every tick the state holds*, which the `min` below
+            // caps harmlessly at a target of 1 and which would otherwise fill
+            // a three-deed job in three ticks with nobody doing anything.
+            Objective::Perform { deed, count } => {
                 feats.deeds.iter().filter(|d| *d == deed).count() as u32
-                    + u32::from(deed.already_true(&state))
+                    + u32::from(*count == 1 && deed.already_true(&state))
             }
             // Not here — see the module doc.
             Objective::Deliver { .. } => 0,
@@ -1191,7 +1195,7 @@ impl Game {
             }
             // Exhaustive on purpose: a new `Deed` fails to compile here
             // rather than shipping a row with no words on it.
-            Objective::Perform { deed } => match deed {
+            Objective::Perform { deed, .. } => match deed {
                 Deed::Examined => "Examine something with [x]".to_string(),
                 Deed::Tamed => "Decompile a wild program".to_string(),
                 Deed::TookFromContainer => "Take stock out of a machine with [c]".to_string(),

@@ -2,7 +2,7 @@
 //! progress, and the board a Contract Broker derives.
 
 use super::support::*;
-use crate::contracts::{ContractDb, ContractId, Objective, Reward};
+use crate::contracts::{ContractDb, ContractId, Deed, Objective, Reward};
 
 /// A temp directory of `.ron` files to load a `ContractDb` out of. Tagged as
 /// well as pid-stamped because these run in parallel inside one process.
@@ -2883,6 +2883,7 @@ fn a_deed_finishes_a_held_perform_contract() {
             "perform_test",
             Objective::Perform {
                 deed: crate::contracts::Deed::Examined,
+                count: 1,
             },
             vec![Reward::Xp(1)],
         ),
@@ -2918,6 +2919,7 @@ fn a_deed_of_another_kind_advances_nothing() {
             "perform_test",
             Objective::Perform {
                 deed: crate::contracts::Deed::PostedStaff,
+                count: 1,
             },
             vec![Reward::Xp(1)],
         ),
@@ -3034,6 +3036,7 @@ mod deed_sites {
                 "take_test",
                 Objective::Perform {
                     deed: Deed::TookFromContainer,
+                    count: 1,
                 },
                 vec![Reward::Xp(1)],
             ),
@@ -3172,6 +3175,7 @@ mod deed_sites {
                 "already_posted",
                 Objective::Perform {
                     deed: Deed::PostedStaff,
+                    count: 1,
                 },
                 vec![Reward::Xp(1)],
             ),
@@ -3203,6 +3207,7 @@ mod deed_sites {
                 "nothing_posted",
                 Objective::Perform {
                     deed: Deed::PostedStaff,
+                    count: 1,
                 },
                 vec![Reward::Xp(1)],
             ),
@@ -3236,6 +3241,7 @@ mod deed_sites {
                 "guard_only",
                 Objective::Perform {
                     deed: Deed::PostedStaff,
+                    count: 1,
                 },
                 vec![Reward::Xp(1)],
             ),
@@ -3856,4 +3862,176 @@ fn cargo_ready_to_hand_over_asks_for_attention() {
         asking(&mut game),
         "at the counter, carrying what it asked for: that is the moment"
     );
+}
+
+/// **A deed job can ask for more than one.**
+///
+/// `Perform` was the only counting-shaped objective pinned to a target of 1,
+/// which is what made every deed job a one-shot and left "clear three nests"
+/// inexpressible without a whole new `Objective` variant. `count` is additive
+/// behind `#[serde(default)]`, so no shipped file and no save needed touching.
+#[test]
+fn a_deed_job_counts() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def(
+            "sweep",
+            Objective::Perform {
+                deed: Deed::Examined,
+                count: 3,
+            },
+            vec![Reward::Xp(1)],
+        ),
+        0,
+    );
+    assert_eq!(
+        game.world
+            .resource::<ActiveContracts>()
+            .active
+            .iter()
+            .find(|c| c.def.id == ContractId::from("sweep"))
+            .unwrap()
+            .def
+            .objective
+            .target(),
+        3,
+        "the target is the count it asked for"
+    );
+
+    // Two deeds are not enough, which is the whole of what `count` buys.
+    for expected in 1..=2 {
+        game.world
+            .resource_mut::<crate::resources::RunFeats>()
+            .deeds
+            .push(Deed::Examined);
+        game.tick();
+        assert_eq!(
+            progress_of(&game, "sweep"),
+            expected,
+            "each deed is one unit of progress"
+        );
+    }
+
+    game.world
+        .resource_mut::<crate::resources::RunFeats>()
+        .deeds
+        .push(Deed::Examined);
+    game.tick();
+    assert!(
+        game.world
+            .resource::<ActiveContracts>()
+            .done
+            .contains(&ContractId::from("sweep")),
+        "the third finishes it"
+    );
+}
+
+/// **A standing condition satisfies a one-shot and never a count.**
+///
+/// `Deed::PostedStaff` is the one deed that is also a state the run can
+/// already be in, and `contract_system` credits that state as a unit of
+/// progress *every tick it holds* — harmless while the target was always 1 and
+/// the `min` capped it. Counted, it would finish a three-deed job in three
+/// ticks without the player doing anything, which is why the standing half is
+/// gated on the target being one.
+#[test]
+fn a_standing_condition_cannot_fill_a_counted_deed_job() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def(
+            "keep_working",
+            Objective::Perform {
+                deed: Deed::PostedStaff,
+                count: 3,
+            },
+            vec![Reward::Xp(1)],
+        ),
+        0,
+    );
+    // The condition the deed describes is already true, which is exactly the
+    // case `Deed::already_true` exists for.
+    deploy_broker(&mut game);
+    let machine = deploy(&mut game, "mining_node", 2, 0);
+    game.world
+        .entity_mut(machine)
+        .insert(crate::components::StandingJob {
+            work: true,
+            ..Default::default()
+        });
+
+    for _ in 0..6 {
+        game.tick();
+    }
+    assert_eq!(
+        progress_of(&game, "keep_working"),
+        0,
+        "standing in the state is not three separate deeds"
+    );
+}
+
+/// An authored `Perform` with no count is one, so no shipped file and no save
+/// written before the field existed needed touching.
+#[test]
+fn a_deed_job_with_no_count_asks_for_one() {
+    let (db, warnings) = load(
+        "deed_default",
+        &[(
+            "look.ron",
+            r#"(id: "look", name: "Look", description: "d",
+                objective: Perform(deed: Examined),
+                reward: [Xp(5)])"#,
+        )],
+    );
+    assert!(
+        warnings.is_empty(),
+        "it parses as it always did: {warnings:?}"
+    );
+    assert_eq!(
+        db.get(&ContractId::from("look"))
+            .unwrap()
+            .objective
+            .target(),
+        1
+    );
+}
+
+/// **A contract asking for zero of something is refused at load.**
+///
+/// `Objective::already_met`'s own doc has claimed this for as long as it has
+/// existed, and it was not true: nothing checked, and `progress >= target`
+/// makes a zero-count contract pay out the instant it is accepted. Checked now
+/// across every counting objective rather than only the new one, since one
+/// predicate covers all four and a rule documented but unenforced is worse
+/// than no rule.
+#[test]
+fn a_contract_asking_for_nothing_is_refused() {
+    let (db, warnings) = load(
+        "zero_counts",
+        &[
+            (
+                "kill.ron",
+                r#"(id: "kill", name: "K", description: "d",
+                    objective: Terminate(species: None, count: 0), reward: [Xp(5)])"#,
+            ),
+            (
+                "hand.ron",
+                r#"(id: "hand", name: "H", description: "d",
+                    objective: Deliver(item: "core_fragment", count: 0), reward: [Xp(5)])"#,
+            ),
+            (
+                "carry.ron",
+                r#"(id: "carry", name: "C", description: "d",
+                    objective: Hold(item: "core_fragment", count: 0), reward: [Xp(5)])"#,
+            ),
+            (
+                "look.ron",
+                r#"(id: "look", name: "L", description: "d",
+                    objective: Perform(deed: Examined, count: 0), reward: [Xp(5)])"#,
+            ),
+        ],
+    );
+    assert_eq!(db.iter().count(), 0, "all four are refused");
+    assert_eq!(warnings.len(), 4, "and each says so: {warnings:?}");
 }

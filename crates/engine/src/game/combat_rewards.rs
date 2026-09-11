@@ -1308,7 +1308,8 @@ impl Game {
             matches!(
                 def.objective,
                 crate::contracts::Objective::Perform {
-                    deed: crate::contracts::Deed::Tamed
+                    deed: crate::contracts::Deed::Tamed,
+                    ..
                 }
             )
         })

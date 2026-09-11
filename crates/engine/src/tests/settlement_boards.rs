@@ -115,6 +115,7 @@ fn every_specialty_is_courted_by_an_objective() {
         },
         Objective::Perform {
             deed: crate::contracts::Deed::Examined,
+            count: 1,
         },
     ];
     for specialty in [

@@ -159,7 +159,21 @@ pub enum Objective {
     /// vocabulary — six verbs behind one variant, because a variant each
     /// would grow every match on `Objective` and make the seventh verb a
     /// schema change.
-    Perform { deed: Deed },
+    ///
+    /// `count` is what makes a deed job gradable — "clear three nests" rather
+    /// than only "clear a nest". Additive behind `#[serde(default)]`, so no
+    /// shipped file and no save written before it existed needed touching, and
+    /// an authored `Perform(deed: Examined)` still asks for exactly one.
+    Perform {
+        deed: Deed,
+        #[serde(default = "one")]
+        count: u32,
+    },
+}
+
+/// A deed job asks for one unless it says otherwise.
+fn one() -> u32 {
+    1
 }
 
 /// Everything about the run a state-shaped objective can be asked against.
@@ -205,12 +219,30 @@ impl Objective {
     /// rule and no caller branches on the variant to ask "am I done".
     pub fn target(&self) -> u32 {
         match self {
-            Objective::Terminate { count, .. } | Objective::Deliver { count, .. } => *count,
+            Objective::Terminate { count, .. }
+            | Objective::Deliver { count, .. }
+            | Objective::Perform { count, .. } => *count,
             Objective::Descend { .. }
             | Objective::Breach { .. }
             | Objective::Build { .. }
-            | Objective::Hold { .. }
-            | Objective::Perform { .. } => 1,
+            | Objective::Hold { .. } => 1,
+        }
+    }
+
+    /// Whether this asks for zero of something, which completes the instant it
+    /// is accepted.
+    ///
+    /// Reads the **authored count**, not `target()`. `Hold` is why: it is
+    /// state-shaped, so its target is 1 whatever its count, and a
+    /// `Hold(count: 0)` asks whether the pack holds at least nothing — true
+    /// forever, and invisible to a check on the target.
+    pub fn asks_for_none(&self) -> bool {
+        match self {
+            Objective::Terminate { count, .. }
+            | Objective::Deliver { count, .. }
+            | Objective::Hold { count, .. }
+            | Objective::Perform { count, .. } => *count == 0,
+            Objective::Descend { .. } | Objective::Breach { .. } | Objective::Build { .. } => false,
         }
     }
 
@@ -243,7 +275,11 @@ impl Objective {
             // Five of the six deeds are events too and answer the same way.
             // The sixth, `PostedStaff`, is a standing condition — see
             // `Deed::already_true`.
-            Objective::Perform { deed } => deed.already_true(state),
+            // A counted deed job is never *already* met: the standing
+            // condition below is worth one unit, and one unit does not fill a
+            // job asking for three. See `contract_system`, which is where that
+            // unit is actually credited.
+            Objective::Perform { deed, count } => *count == 1 && deed.already_true(state),
             Objective::Descend { depth } => state.depth >= *depth,
             Objective::Breach { zone } => state.zone >= *zone,
             Objective::Build { structure } => state.standing.contains(structure),
@@ -771,6 +807,13 @@ fn complaint(def: &ContractDef) -> Option<String> {
         .any(|r| matches!(r, Reward::Credits(0) | Reward::Item(_, 0) | Reward::Xp(0)))
     {
         return Some("a reward of 0 pays nothing; give it at least 1 or delete it".to_string());
+    }
+    if def.objective.asks_for_none() {
+        return Some(
+            "a contract asking for zero of something completes the instant it is \
+             accepted; give it a count of at least 1"
+                .to_string(),
+        );
     }
     if def.tutorial.is_some() && def.starter {
         return Some(

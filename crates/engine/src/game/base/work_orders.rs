@@ -2410,6 +2410,12 @@ impl Game {
         }
         producers_of(self, &self.research_currency())
             .into_iter()
+            // `standing_wants`' gate, and it is inert for the shipped extractor:
+            // a Research Node needs no input, so `can_progress` is always true
+            // for it. It matters for a mod whose research-currency producer
+            // `assembles` — without it a body parks at a starved bench above the
+            // whole queue, which is C1's shape with a different cause.
+            .filter(|&machine| can_progress(self, machine))
             .map(|machine| (machine, TaskKind::GatherResource))
             .collect()
     }

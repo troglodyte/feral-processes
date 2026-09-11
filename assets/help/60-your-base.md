@@ -111,7 +111,12 @@ The rest of what a base does:
   benches turn it into, and a node's bill is always something the nodes before it taught you to make.
   A research tree is therefore a reason to keep the base running, not a timer to wait out.
 - Abandoning a project with `A` takes its work orders back out and keeps the progress it has already
-  earned, so coming back to a long one later costs nothing.
+  earned, so coming back to a long one later costs nothing. A node with work banked against it says
+  so on its own row.
+- A project that has earned all its Research Data and is waiting on goods says so on the base panel,
+  naming what it is short of. Worth knowing because a bill's work order is removed once the base is
+  holding the goods — if something else spends them before the project settles, that row is the only
+  thing that will tell you.
 - A Contract Broker posts work the sector is paying for. Read its board from anywhere; sign and
   deliver at the base.
 

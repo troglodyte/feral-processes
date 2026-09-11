@@ -105,11 +105,16 @@ fn the_piles_keep_one_order_however_they_fill() {
     assert_eq!(before, vec!["BB".to_string(), "CF".to_string()]);
 }
 
-/// The one pile no output buffer can ever hold. `deliver_payout` banks a
-/// Research Node's yield straight past the node's own `output`, so walking
-/// the buffers alone left the base's only banked product with no row at
-/// all — and `research_data.ron` had carried an `abbrev` of `R` for the
-/// strip's benefit the whole time it could not be drawn.
+/// The one pile no output buffer can ever hold. A banked item reaches no
+/// `output` at all, so walking the buffers alone left a banked product with no
+/// row — and `research_data.ron` had carried an `abbrev` of `R` for the strip's
+/// benefit the whole time it could not be drawn.
+///
+/// The research currency no longer travels this way — `deliver_payout` routes
+/// it into the active project ahead of the banked branch, and `Game::load`
+/// zeroes any bank a legacy save carries — so the pool here is written by hand.
+/// The *strip's* fold is still by `ItemDef::banked` and names no item, which is
+/// what a mod's own banked good needs, and is what this pins.
 #[test]
 fn a_banked_pool_is_a_pile_the_strip_lists() {
     let mut game = Game::new(35, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

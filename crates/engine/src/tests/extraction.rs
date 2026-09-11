@@ -957,7 +957,7 @@ fn extraction_options_preview_matches_what_extract_program_actually_grants() {
 /// themselves validate against real content, the same shape `research.rs`'s
 /// own `load` test fixture takes. Swapped onto a `Game` wholesale — no
 /// shipped research node names a tool yet (that is task 4's content), so
-/// there is no other way to exercise `unlock_research`'s tool-teaching loop
+/// there is no other way to exercise `grant_research_knowledge`'s tool-teaching loop
 /// in isolation.
 fn research_db_with_tool_unlocks(tag: &str, nodes: &[(&str, &[&str])]) -> ResearchDb {
     let dir = std::env::temp_dir().join(format!(

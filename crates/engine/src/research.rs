@@ -70,13 +70,13 @@ pub struct ResearchDef {
     #[serde(default)]
     pub unlocks_recipes: Vec<ResearchRecipe>,
     /// Abilities this node hands over, as routine items dropped into cargo
-    /// the moment it is researched (see `Game::unlock_research`). Researching
+    /// the moment it is researched (see `Game::settle_research`). Researching
     /// a routine and installing it are two separate acts. The abilities
     /// themselves are data in `assets/abilities/`.
     #[serde(default)]
     pub unlocks_abilities: Vec<crate::abilities::AbilityId>,
     /// Tools this node hands over the knowledge to forge, as tool ids added
-    /// to `resources::KnownTools` (see `Game::unlock_research`) —
+    /// to `resources::KnownTools` (see `Game::settle_research`) —
     /// `unlocks_abilities`'s own shape, mirrored rung for rung the way a
     /// tool mirrors a routine throughout (spec decision 6). The tools
     /// themselves are data in `assets/tools/`.

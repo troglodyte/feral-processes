@@ -512,6 +512,32 @@ pub(crate) fn deliver_payout(
     landed
 }
 
+/// The cycle line a completed extract announces, or `None` when the cycle
+/// landed nothing that the player could do anything about.
+///
+/// **A zero landing means two different things and they need different lines.**
+/// An ordinary node that landed nothing is clogged, and saying so is the only
+/// signal the player gets that a buffer is full — `deliver_payout` clamps
+/// against `output_room` and the difference is a number nothing else records.
+/// A Research Node that landed nothing has nowhere to *put* its yield: either
+/// the project it was feeding is already at its cost, or the player hand-posted
+/// a standing job with no project selected at all. "Your subroutine extracted 0
+/// Research Data", every fourteen ticks for the rest of the run, reads as the
+/// node being broken; `Game::attention` already carries the row that says what
+/// to do about it, and the base's own instruction is not news.
+fn cycle_line(
+    subject: &str,
+    landed: u32,
+    resource: &ItemId,
+    name: &str,
+    items: &ItemDb,
+) -> Option<String> {
+    if landed == 0 && items.research_currency() == Some(resource) {
+        return None;
+    }
+    Some(format!("{subject} {landed} {name}."))
+}
+
 /// A machine's identity for a record: its `StructureDef` id, its base-space
 /// tile and its tier. Extracted because three seams want the same three
 /// figures out of the same optional components, and a hand-written copy at
@@ -1433,10 +1459,15 @@ pub fn task_progress_system(
         } else {
             LevelGain::default()
         };
-        log.push_base_kind(
-            MessageKind::Loot,
-            format!("Your subroutine extracted {landed} {resource_name}."),
-        );
+        if let Some(line) = cycle_line(
+            "Your subroutine extracted",
+            landed,
+            &resource,
+            resource_name,
+            &item_db,
+        ) {
+            log.push_base_kind(MessageKind::Loot, line);
+        }
         // Its own `LevelUp` line rather than a tail on the payout above, so a
         // base level-up draws and prunes like the two field ones. Named by the
         // machine because this is a bevy system with no `Game` to ask
@@ -1667,10 +1698,9 @@ pub fn player_gather_system(
                 kind: machine_kind,
             },
         );
-        log.push_base_kind(
-            MessageKind::Loot,
-            format!("You extract {landed} {resource_name}."),
-        );
+        if let Some(line) = cycle_line("You extract", landed, &resource, resource_name, &item_db) {
+            log.push_base_kind(MessageKind::Loot, line);
+        }
     }
 }
 

@@ -102,7 +102,7 @@ impl ActiveResearch {
 
 /// Which routines the player has learned and may install, given a blank
 /// Routine Disk to burn one onto. Written by exactly two things:
-/// `Game::unlock_research` (a node's `unlocks_abilities`) and
+/// `Game::grant_research_knowledge` (a node's `unlocks_abilities`) and
 /// `Game::extract_routine`. Knowledge is permanent — installing spends a
 /// disk, never the knowledge.
 ///
@@ -114,7 +114,7 @@ pub struct KnownRoutines(pub BTreeSet<crate::abilities::AbilityId>);
 
 /// Which tools the player has researched and may forge — `KnownRoutines`'
 /// own rung of the tool acquisition chain (spec decision 6). Written by
-/// exactly one thing, `Game::unlock_research` (a node's `unlocks_tools`).
+/// exactly one thing, `Game::grant_research_knowledge` (a node's `unlocks_tools`).
 /// Knowledge is permanent; forging spends materials, never the knowledge.
 ///
 /// **Never holds `tuning::STARTER_TOOL_ID`.** The starter is known

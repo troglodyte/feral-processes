@@ -649,7 +649,7 @@ pub struct AbilityDef {
     /// rather than by this module listing them. Knowledge is the only thing
     /// in this game that duplicates — you learn a routine once and etch it
     /// forever — so keeping these out of `KnownRoutines` is the whole gate,
-    /// and `Game::etch_disk`, `Game::unlock_research` and
+    /// and `Game::etch_disk`, `Game::grant_research_knowledge` and
     /// `Game::extract_routine` are the three places that honour it.
     #[serde(default)]
     pub exclusive: bool,

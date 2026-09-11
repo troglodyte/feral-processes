@@ -235,12 +235,42 @@ pub(super) fn conversion_rows(conversions: &[String], columns: usize) -> Vec<Row
 }
 
 /// The one place a node's price reads as a price: the active project counts up
-/// to its cost, every other row just names it.
-fn price_tag(node: &ResearchStatus) -> String {
+/// to its cost, a node with work banked against it says so, and every other row
+/// just names it.
+///
+/// Shared with the graph view, which draws the same figure on its detail
+/// panel — two spellings of one project's price is the drift this repo keeps
+/// recording.
+///
+/// The middle arm is what makes abandoned work visible at all: `progress` is on
+/// every row precisely so a node set aside shows what it has already earned, and
+/// without it the only surface for that figure is the project the player is
+/// already looking at.
+///
+/// `currency` is the research currency's display name, resolved in the engine
+/// through `Game::item_name` — `Game::copy_name`'s rule: a renderer spelling an
+/// item itself is how two screens come to call one thing different things, and
+/// a mod may rename it.
+pub(super) fn price_tag(node: &ResearchStatus, currency: &str) -> String {
     match node.state {
-        ResearchState::Active => format!("{}/{} Research Data", node.progress, node.cost),
-        _ => format!("{} Research Data", node.cost),
+        ResearchState::Active => format!("{}/{} {currency}", node.progress, node.cost),
+        _ if node.progress > 0 => {
+            format!("{} {currency} ({} banked)", node.cost, node.progress)
+        }
+        _ => format!("{} {currency}", node.cost),
     }
+}
+
+/// What the base is working, as both views' header row.
+///
+/// Derived off the rows rather than off a second `Game` call, so the header and
+/// the list under it cannot disagree about which project is running.
+pub(super) fn research_header(nodes: &[ResearchStatus]) -> String {
+    nodes
+        .iter()
+        .find(|n| n.state == ResearchState::Active)
+        .map(|n| format!("Working on: {} ({}/{})", n.name, n.progress, n.cost))
+        .unwrap_or_else(|| "No research project — pick one".to_string())
 }
 
 /// The sentence saying why the base cannot work this node, wrapped under its
@@ -269,14 +299,13 @@ pub(super) fn block_rows(blocked_by: Option<&String>, columns: usize) -> Vec<Row
 
 /// The research picker's rows, in the shape `perks_menu_rows` documents and
 /// for the same reason: nothing may follow the last `Row::Item`.
-pub(super) fn research_menu_rows(nodes: &[ResearchStatus], selected: usize) -> Vec<Row> {
-    let active = nodes
-        .iter()
-        .find(|n| n.state == ResearchState::Active)
-        .map(|n| format!("Working on: {} ({}/{})", n.name, n.progress, n.cost))
-        .unwrap_or_else(|| "No research project — pick one".to_string());
+pub(super) fn research_menu_rows(
+    nodes: &[ResearchStatus],
+    selected: usize,
+    currency: &str,
+) -> Vec<Row> {
     let mut rows = vec![
-        Row::TextColored(active, CYAN),
+        Row::TextColored(research_header(nodes), CYAN),
         text_row("Pick a row's key to work it. A to abandon. G for the tree. Esc to close"),
         text_row(""),
     ];
@@ -286,7 +315,7 @@ pub(super) fn research_menu_rows(nodes: &[ResearchStatus], selected: usize) -> V
             "[{}] {} - {}{tag}",
             menu_shortcut(i),
             node.name,
-            price_tag(node)
+            price_tag(node, currency)
         );
         rows.push(colored_item_row(label, i == selected, row_color(node)));
         rows.extend(block_rows(
@@ -316,8 +345,9 @@ pub(super) fn draw_research_menu(
     painter: &Painter,
     m: &Metrics,
 ) {
+    let currency = game.item_name(&game.research_currency()).to_string();
     let nodes = game.research_nodes();
-    let rows = research_menu_rows(&nodes, selected);
+    let rows = research_menu_rows(&nodes, selected, &currency);
     draw_popup("Research", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -426,7 +456,7 @@ mod tests {
             recommended: false,
         };
 
-        let rows = research_menu_rows(&[node], 0);
+        let rows = research_menu_rows(&[node], 0, "Research Data");
 
         let conversion = rows
             .iter()
@@ -695,7 +725,14 @@ mod tests {
         );
 
         let screens = [
-            ("Research", research_menu_rows(&nodes, 0)),
+            (
+                "Research",
+                research_menu_rows(
+                    &nodes,
+                    0,
+                    &game.item_name(&game.research_currency()).to_string(),
+                ),
+            ),
             (
                 "Perks",
                 perks_menu_rows(

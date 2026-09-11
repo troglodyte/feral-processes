@@ -96,7 +96,8 @@ fn tab_of(kind: AttentionKind) -> InfoTab {
     match kind {
         AttentionKind::StructureDamaged
         | AttentionKind::IdleStructures
-        | AttentionKind::NoResearchProject => InfoTab::Base,
+        | AttentionKind::NoResearchProject
+        | AttentionKind::ResearchStalled => InfoTab::Base,
         AttentionKind::PerkPoints | AttentionKind::RosterFull => InfoTab::Crew,
     }
 }

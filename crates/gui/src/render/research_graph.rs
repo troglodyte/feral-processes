@@ -358,21 +358,24 @@ pub(super) fn draw_research_graph(
     // the panel fill across the whole window, then the border.
     painter.rect(0.0, 0.0, screen_w, screen_h, PANEL_BG);
     painter.rect_lines(0.0, 0.0, screen_w, screen_h, 2.0, BORDER);
-    let research_currency = game.research_currency();
-    let held = game.banked(&research_currency);
+    let currency = game.item_name(&game.research_currency()).to_string();
     let graph = game.research_graph();
     let nodes = game.research_nodes();
     let geo = geometry(screen_w, screen_h, &graph, m);
 
+    // The same sentence the list's header carries, through the same
+    // derivation — `research_header` — because a player flipping between the
+    // two views must not be told two different things about one project. It
+    // used to read the bank, which `Game::load` now zeroes and nothing fills.
     painter.ui(
-        format!("Research Data: {held}"),
+        super::progression::research_header(&nodes),
         m.pad,
         m.line_height,
         m.font_size,
         Color::new(0.25, 0.85, 0.85, 1.0),
     );
     painter.ui(
-        "G list  arrows move  Enter research  Esc close",
+        "G list  arrows move  Enter work  A abandon  Esc close",
         geo.panel.x,
         m.line_height,
         m.small(),
@@ -484,8 +487,11 @@ pub(super) fn draw_research_graph(
         painter,
         m,
     );
+    // `price_tag`, shared with the list: the active project counts up to its
+    // cost and every other row names it, and the two views cannot word one
+    // project's price differently.
     cy = draw_row(
-        &super::popup::text_row(format!("{} Research Data", node.cost)),
+        &super::popup::text_row(super::progression::price_tag(node, &currency)),
         geo.panel.x,
         geo.panel.w,
         cy,
@@ -493,6 +499,13 @@ pub(super) fn draw_research_graph(
         painter,
         m,
     );
+    // Why this base could never work the node, wrapped — the list's
+    // `block_rows`, so the graph cannot offer a row `select_research` refuses
+    // without ever saying why. Above the bill, because it is the reason the
+    // bill is academic.
+    for row in super::progression::block_rows(node.blocked_by.as_ref(), panel_columns) {
+        cy = draw_row(&row, geo.panel.x, geo.panel.w, cy, max_y, painter, m);
+    }
     for row in material_rows(&node.materials, panel_columns)
         .iter()
         .chain(
@@ -937,6 +950,47 @@ mod tests {
         assert!(
             text.contains(want_conversion.split(" into ").next().unwrap()),
             "the panel draws the conversion: {want_conversion:?}"
+        );
+    }
+
+    /// The graph is a *view* of the research screen, not a second screen, so
+    /// everything the list tells the player it has to tell them too: which
+    /// project is running, how far along it is, and why a row it offers would be
+    /// refused. It used to read `Game::banked` for its header — a figure
+    /// `Game::load` now zeroes and nothing fills — and drew neither progress nor
+    /// the block sentence, so it offered rows `select_research` turns down
+    /// without ever saying why.
+    #[test]
+    fn the_graph_says_what_the_list_says_about_a_project() {
+        let mut game = Game::new(935, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let nodes = game.research_nodes();
+        let blocked = nodes
+            .iter()
+            .position(|n| n.blocked_by.is_some())
+            .expect("a base with no plant standing blocks every node it offers");
+        let want = nodes[blocked].blocked_by.clone().unwrap();
+        let m = ui_metrics(720.0);
+
+        let (_, shapes) = with_painter(|p| draw_research_graph(&mut game, blocked, None, p, &m));
+        let text = painted_text(&shapes).join(" ");
+
+        assert!(
+            text.contains("No research project"),
+            "the header says what the base is working, not what it has banked: {text:?}"
+        );
+        // Wrapped on the panel, so the first few words are what to look for.
+        let opening: String = want
+            .split_whitespace()
+            .take(4)
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(
+            text.contains(&opening),
+            "the panel carries the sentence that would refuse this row ({opening:?})"
+        );
+        assert!(
+            text.contains("A abandon"),
+            "and the footer offers the key the list offers: {text:?}"
         );
     }
 

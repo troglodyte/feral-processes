@@ -7,11 +7,14 @@
     // "RD" is the derivation, and it is Routine Disk's by rights. A banked
     // currency reads fine on its initial alone.
     //
-    // `banked: true` stays: it is what keeps a Research Node's payout out of
-    // every `Stock` buffer, which is still exactly what is wanted — the payout
-    // is routed into the active project ahead of the banked branch in
-    // `systems::deliver_payout`, and `ItemDb::validate` requires the
-    // `ResearchCurrency` role to exist.
+    // `banked: true` stays, but not for the reason it was written: the payout
+    // is routed into the active project *ahead of* the banked branch in
+    // `systems::deliver_payout`, so the flag is no longer what keeps it out of
+    // a `Stock` buffer. What it still buys is `work_orders::chain_break`
+    // refusing to let anyone order against it, the cargo filters that keep it
+    // off every "what do I have" screen, the flat payout, and the trade
+    // filters. `ItemDb::validate` also requires the `ResearchCurrency` role to
+    // exist. Getting the reason right is what stops someone deleting the flag.
     abbrev: Some("R"),
     banked: true,
 )

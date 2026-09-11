@@ -34,6 +34,23 @@ restates them is one nobody reads.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## Unreleased
+
+**A research project no longer starves the bill it filed.** The want raised for
+a Research Node outlived the progress it was earning, so on a one-node,
+one-program base it held the only body on a node paying zero while the material
+orders it had just filed went unworked and the project could never complete.
+
+**The graph view says what the list says.** It read a bank this release deleted,
+and showed neither a project's progress nor the sentence that would refuse the
+row it was offering.
+
+**A stalled project asks for the player, and a saturated one stops talking.** A
+project waiting on goods now names what it is short of on the base panel; a
+Research Node with nowhere to put its yield no longer logs a zero payout every
+fourteen ticks. The research screen also drew its blocked sentence under rows
+that could not be picked at all, and opening the picker is ~7x cheaper.
+
 ## 0.13.159
 
 **Research is one project the base works, not a bank you spend.** Picking a

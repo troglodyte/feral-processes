@@ -3618,3 +3618,49 @@ fn a_hold_contract_stays_offerable_whatever_is_in_the_pack() {
         "what is in the pack is not a board input"
     );
 }
+
+/// **A contract asks in the game's own vocabulary.**
+///
+/// Two of the seven objective lines used words the rest of the game does not.
+/// `Breach` said "Reach sector 3" — *reach* is a verb nothing else in the game
+/// spends, so it named no gesture the player could go and make, while *breach*
+/// is what the Zone Portal, the base menu and the sweep notification all call
+/// it. `Hold` said "Hold 4 Core Fragment", which reads as a second kind of
+/// handing-in rather than as the one objective that asks for nothing at all
+/// beyond having them.
+///
+/// Asserted on the whole string rather than with `contains`, since the failure
+/// being closed is a *word choice* and a substring check passes against the
+/// phrasing it is meant to reject.
+#[test]
+fn an_objective_line_asks_in_the_games_own_vocabulary() {
+    let mut game = fresh();
+    give(
+        &mut game,
+        def("breach", Objective::Breach { zone: 3 }, vec![Reward::Xp(1)]),
+        0,
+    );
+    give(
+        &mut game,
+        def(
+            "hold",
+            Objective::Hold {
+                item: crate::items::ItemId::from("core_fragment"),
+                count: 4,
+            },
+            vec![Reward::Xp(1)],
+        ),
+        0,
+    );
+
+    let rows = game.active_contracts();
+    let line = |id: &str| {
+        rows.iter()
+            .find(|r| r.id == ContractId::from(id))
+            .map(|r| r.objective_line.clone())
+            .expect("both contracts are in hand")
+    };
+
+    assert_eq!(line("breach"), "Breach to sector 3");
+    assert_eq!(line("hold"), "Carry 4 Core Fragment at once");
+}

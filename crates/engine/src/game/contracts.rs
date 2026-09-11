@@ -1028,7 +1028,7 @@ impl Game {
                 format!("Deliver {count} {}", self.item_name(item))
             }
             Objective::Descend { depth } => format!("Stand {depth} frames down a Stack"),
-            Objective::Breach { zone } => format!("Reach sector {zone}"),
+            Objective::Breach { zone } => format!("Breach to sector {zone}"),
             Objective::Build { structure } => {
                 let name = self
                     .world
@@ -1039,7 +1039,7 @@ impl Game {
                 format!("Build a {name}")
             }
             Objective::Hold { item, count } => {
-                format!("Hold {count} {}", self.item_name(item))
+                format!("Carry {count} {} at once", self.item_name(item))
             }
             // Exhaustive on purpose: a new `Deed` fails to compile here
             // rather than shipping a row with no words on it.

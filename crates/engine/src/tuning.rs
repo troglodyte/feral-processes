@@ -2671,6 +2671,11 @@ pub const RAID_MIN_BASE_STAFF: usize = 5;
 /// `Game::environment_biome_at`'s neutral terrain — deliberately its own
 /// constant rather than a shared "is the opening sector" predicate, since
 /// the two answer to different tuning and only coincide today.
+///
+/// `Game::enter_next_zone` reads it too, to raise
+/// `NotificationKind::SweepsBegin` on the breach that lands here — so
+/// retuning this moves the warning with the gate rather than leaving a
+/// screen announcing sweeps in a sector that has none.
 pub const RAID_MIN_ZONE: u32 = 2;
 
 /// Damage a raid deals to a structure's `Durability` when it has no

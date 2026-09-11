@@ -3798,3 +3798,62 @@ fn an_obvious_objective_is_left_without_a_hint() {
         "'Terminate 3 wild programs' is its own instruction"
     );
 }
+
+/// **A delivery you can make right now asks for the player's attention.**
+///
+/// The hint on the contracts screen only helps a player who already opened it.
+/// This is the other half: standing at the counter with cargo a held job wants
+/// is a thing that needs doing, and `Game::attention` is the one derivation of
+/// what needs doing — the same machinery that says "2 nodes without a program".
+///
+/// Three states asserted, not one: the row has to appear *because* the cargo
+/// and the counter are both there, which a single positive assertion cannot
+/// tell from a row that is always on.
+#[test]
+fn cargo_ready_to_hand_over_asks_for_attention() {
+    let mut game = fresh();
+    let item = crate::items::ItemId::from("core_fragment");
+    give(
+        &mut game,
+        def(
+            "raw",
+            Objective::Deliver {
+                item: item.clone(),
+                count: 6,
+            },
+            vec![Reward::Xp(1)],
+        ),
+        0,
+    );
+
+    let asking = |game: &mut Game| {
+        game.attention()
+            .into_iter()
+            .any(|row| row.kind == crate::views::AttentionKind::ContractDeliverable)
+    };
+
+    assert!(
+        !asking(&mut game),
+        "away from the counter it is an errand, not an interruption"
+    );
+
+    deploy_broker(&mut game);
+    let player = game.player_entity();
+    game.world
+        .get_mut::<crate::components::Inventory>(player)
+        .unwrap()
+        .take(item.clone(), u32::MAX);
+    assert!(
+        !asking(&mut game),
+        "at the counter with nothing to hand over, there is nothing to do"
+    );
+
+    game.world
+        .get_mut::<crate::components::Inventory>(player)
+        .unwrap()
+        .add(item, 6);
+    assert!(
+        asking(&mut game),
+        "at the counter, carrying what it asked for: that is the moment"
+    );
+}

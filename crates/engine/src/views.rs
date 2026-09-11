@@ -1372,6 +1372,15 @@ pub enum AttentionKind {
     ResearchStalled,
     PerkPoints,
     RosterFull,
+    /// A held `Objective::Deliver` whose counter the player is standing at,
+    /// carrying some of what it asked for.
+    ///
+    /// The hint on the contracts screen only reaches a player who already
+    /// opened it; this is the half that reaches one who has not. It is the
+    /// only attention row that depends on **where the player is standing**,
+    /// which is also why it is not a threat: nothing is going wrong, there is
+    /// simply a keypress available that is not available anywhere else.
+    ContractDeliverable,
 }
 
 /// One thing that needs the player right now — see `Game::attention`.

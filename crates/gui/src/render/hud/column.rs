@@ -97,7 +97,10 @@ fn tab_of(kind: AttentionKind) -> InfoTab {
         AttentionKind::StructureDamaged
         | AttentionKind::IdleStructures
         | AttentionKind::NoResearchProject
-        | AttentionKind::ResearchStalled => InfoTab::Base,
+        | AttentionKind::ResearchStalled
+        // The contracts screen is a base-menu row, and the chip names the
+        // top-level map key that opens it.
+        | AttentionKind::ContractDeliverable => InfoTab::Base,
         AttentionKind::PerkPoints | AttentionKind::RosterFull => InfoTab::Crew,
     }
 }

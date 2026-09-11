@@ -1092,6 +1092,32 @@ impl Game {
         }
     }
 
+    /// The one held delivery the player could hand over from the tile they are
+    /// standing on, worded — `None` when there is none.
+    ///
+    /// Read by `Game::attention`, and deliberately a *call* into the same two
+    /// halves the hint uses: `at_contract_counter` for the place and
+    /// `player_carrying` for the cargo. A second reading of either is how a
+    /// badge and the row it stands for come to disagree.
+    ///
+    /// The first match rather than a count, because `attention` is a list of
+    /// errands and "two deliveries are ready" is not a different errand from
+    /// one — the player is going to the same screen either way.
+    pub(crate) fn deliverable_now(&self) -> Option<String> {
+        self.world
+            .resource::<ActiveContracts>()
+            .active
+            .iter()
+            .find_map(|held| match &held.def.objective {
+                Objective::Deliver { item, .. }
+                    if self.at_contract_counter(held.issuer) && self.player_carrying(item) > 0 =>
+                {
+                    Some(format!("{} ready to hand over", held.def.name))
+                }
+                _ => None,
+            })
+    }
+
     /// What to call the counter a contract is signed and delivered at - the
     /// run's own Broker, or the town that posted it.
     fn contract_counter_name(&self, issuer: Option<crate::settlements::SettlementKey>) -> String {

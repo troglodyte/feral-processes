@@ -16,8 +16,8 @@ Routines reach you five ways.
   your free slot and known outright, so you can etch it onto a disk later like anything else you
   know. See [your character](your-character).
 - Innately. A species grants its own kit, unlocking a routine at a level named in its file.
-- Research. A Research Node pays the Research Data half of the tree and your benches pay the rest —
-  every node costs goods too. Several of its branches teach routines outright.
+- Research. Pick a node and the base works it: your Research Nodes feed it the Research Data and
+  your benches make the goods it asks for. Several of its branches teach routines outright.
 - Routine Disks. Etch a blank disk with something you already know from the party menu, then install
   the disk into a slot on yourself or on any program you own. Uninstalling returns nothing — the
   disk is spent at the install.

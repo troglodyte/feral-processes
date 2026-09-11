@@ -940,17 +940,25 @@ mod tests {
         );
     }
 
-    /// A box's colour is `progression::row_color`, so the five states read on
-    /// the graph exactly as they read in the list.
+    /// A box's colour is `progression::row_color`, so the states read on the
+    /// graph exactly as they read in the list.
+    ///
+    /// Amber is "a wall you clear yourself", which is two things now: a node
+    /// behind a prerequisite, and one the base could never work — a bill naming
+    /// a machine nothing has deployed. Counting only the first would fail the
+    /// moment a fresh run has no plant standing, which is every fresh run.
     #[test]
     fn a_boxs_outline_takes_the_lists_row_colour() {
         let mut game = Game::new(934, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
         let nodes = game.research_nodes();
         let locked = nodes
             .iter()
-            .filter(|n| matches!(n.state, ResearchState::Locked { min_zone: None, .. }))
+            .filter(|n| {
+                matches!(n.state, ResearchState::Locked { min_zone: None, .. })
+                    || (n.state == ResearchState::Available && n.blocked_by.is_some())
+            })
             .count();
-        assert!(locked > 0, "a fresh run has prereq-locked nodes to draw");
+        assert!(locked > 0, "a fresh run has amber nodes to draw");
         let m = ui_metrics(720.0);
         let (_, shapes) = with_painter(|p| draw_research_graph(&mut game, 0, None, p, &m));
         assert_eq!(

@@ -17,7 +17,7 @@ You leave a zone through a Zone Portal. Deploy one and walk onto it.
 
 Fragments do not survive the crossing. Portal Fragments and Core Fragments are cleared as you step
 through, so every zone has to fund its own exit; there is no farming zone 1 rich and chain-breaching
-on the stockpile. Credits cross, and so does Research Data.
+on the stockpile. Credits cross, and so does the progress on the project your base is working.
 
 Everything else travels with you. Your party, every deployed structure, the platform floor under
 them, your gear, your supplies and your fusion tiers all rematerialise around the new entry point in

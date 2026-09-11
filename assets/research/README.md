@@ -28,13 +28,20 @@ Core Fragments.
     name: "Weapon Fabrication",
     description: "A bench for weapon and module work. Unlocks the Fabricator.",
 
-    // Research Data spent to unlock this node.
+    // Research Data a project on this node has to accumulate before it
+    // completes. Research Nodes feed it in while the node is the base's active
+    // project; nothing is spent at selection.
     cost: 18,
 
     // Optional; defaults to none. Goods consumed alongside `cost`, as
-    // (item id, quantity) pairs. Paid from the player's pack, topped up
-    // from the shelves of any container standing beside them, and refused
-    // whole — nothing is spent unless the entire bill can be paid.
+    // (item id, quantity) pairs. Selecting the node files one High-band work
+    // order per line, so the base makes them the way it makes anything else;
+    // the bill is then paid off the base's own shelves — every Depot and every
+    // machine output buffer, never the player's pack — and paid whole, so
+    // nothing is spent unless the entire bill can be covered.
+    //
+    // A line nothing standing in the base could ever make refuses the
+    // selection outright, with the same sentence the work-order screen shows.
     materials: [("logic_wafer", 6), ("bytecode_block", 8)],
 
     // Optional; defaults to 0, meaning available from turn one. The zone the

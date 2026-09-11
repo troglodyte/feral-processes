@@ -624,6 +624,51 @@ mod tests {
         assert_eq!(drawn, expected);
     }
 
+    /// The blocked sentence is the one row on this screen whose length is not
+    /// bounded by the assets: `work_orders::chain_break`'s longest shape runs to
+    /// 158 characters against a `PopupSize::Large` body of roughly 114, so it
+    /// has to wrap or its tail is drawn outside the box in silence.
+    ///
+    /// Measured against a synthetic sentence rather than the shipped tree, and
+    /// deliberately: `the_widest_progression_row_fits_the_popup_it_is_drawn_in`
+    /// below reads a fresh `Game`, where no Research Node is standing and every
+    /// row is blocked by the short "no Research Node" sentence instead — so it
+    /// cannot see this case at all. What is under test here is the wrap, not the
+    /// prose, which is why the input is written out.
+    #[test]
+    fn a_blocked_rows_sentence_is_wrapped_inside_the_popup() {
+        let sentence = "Nothing is making Bytecode Block within the Disk Press's reach — it can \
+                        only take what a neighbour has finished, or what a worker can fetch off \
+                        a Depot shelf."
+            .to_string();
+        assert!(
+            sentence.chars().count() > 150,
+            "the fixture has to be the long shape, or it proves nothing"
+        );
+        let rows = block_rows(
+            Some(&sentence),
+            DESCRIBE_WRAP_COLUMNS - DESCRIPTION_INDENT.chars().count(),
+        );
+        assert!(!rows.is_empty(), "a blocked node draws its reason");
+
+        with_painter(|p| {
+            let m = ui_metrics(900.0);
+            let room = 1440.0 * 0.88 - m.pad * 2.0;
+            for row in &rows {
+                let Row::Item { text, .. } = row else {
+                    panic!("a block row is a Row::Item, popup_layout's reason");
+                };
+                // `draw_row`'s own two columns for the selection caret.
+                let drawn = p.measure_ui_advance(&format!("  {text}"), m.font_size);
+                assert!(
+                    drawn <= room,
+                    "a blocked node's reason overflows its popup by {:.0}px:\n{text}",
+                    drawn - room
+                );
+            }
+        });
+    }
+
     /// `draw_row` clamps a row vertically and nothing clamps it
     /// horizontally, so a row wider than its popup runs off the right edge
     /// in silence. Both pickers print a description under every entry, and

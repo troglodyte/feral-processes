@@ -45,7 +45,7 @@ Two things are worth knowing before you spend a body.
   gone and the time is spent whether or not anything came out, which is what makes a slot spent on
   it a gamble rather than a guarantee.
 - Research Data never comes out of a body, through any tool. Research is earned by running a
-  Research Node, and a downed program is not a shortcut past it.
+  Research Node on a project you picked, and a downed program is not a shortcut past it.
 
 Research Teardown and you can build a Teardown Rig, which does the same work while you are
 somewhere else. **The rig holds its own tool.** Stand beside it and press F to fit one out of your

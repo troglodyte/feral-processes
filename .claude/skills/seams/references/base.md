@@ -657,7 +657,49 @@
   `task_progress_system` announces `Running` while a cycle is still ramping.
 - **A banked resource can never clog, so a Research Node has no "full"
   state.** Its four reachable statuses are `Idle`, `Unstaffed`, `Stranded`,
-  `Running`.
+  `Running`. **A node with no research project selected reads `Idle` and
+  nothing new** — `Game::research_wants` simply raises no want, the scheduler
+  posts nobody, and `idle_machine_system` answers. A fifth status for "there
+  is nothing to work towards" would be a second writer of the same cell and a
+  new variant every census has to learn.
+- **Research is one project at a time, and `Game::select_research` is the one
+  door — every refusal before anything is filed.** Six of them, asserted **per
+  refusal** because a single test over one of six passes against the five that
+  never write anyway. Two are not obvious. "No Research Node deployed" cannot
+  be `work_orders::chain_break`: that function refuses every banked item by
+  construction and names the research currency in its own doc as the example,
+  so it would refuse the currency whatever plant was standing — it is
+  `producers_of(self, &research_currency()).is_empty()` instead. And each
+  material line *is* `chain_break`, quoted **verbatim**: the same sentence the
+  work-order screen shows, and two spellings of one refusal is the drift this
+  repo keeps recording, so the test asserts equality against a live
+  `chain_break` call rather than hardcoded prose. Both together are
+  `Game::research_block`, which also fills `ResearchStatus::blocked_by` —
+  `Game::orderable_items`' rule, so the row the screen marks blocked and the
+  refusal the player is handed cannot disagree. The refusal needs a
+  **reachability** test of its own or it can ship permanent with every refusal
+  test still green. Completion is `Game::settle_research`, and its two gates
+  are one `&&`: the short-circuit is what stops a half-researched project
+  spending its materials, and the unlock side effects are **extracted** into
+  `grant_research_knowledge` rather than copied into the second path.
+- **A research project's materials are ordinary work orders, and
+  `WorkOrder::for_research` is provenance rather than a plan.** The flag says
+  *who asked* and nothing about which machines run it — the module header's
+  rule survives. `#[serde(default)]` and **not** `#[serde(skip)]` like
+  `announced_stalled` above it, because a project abandoned after a reload has
+  to take its orders with it; a skipped field is invisible to a RON round trip,
+  so that is asserted by a **save→load** test. `withdraw_research_orders` is a
+  `retain` on the **flag and never the item** — a player's own order for the
+  same material has to survive — and it logs nothing, because
+  `cancel_work_order`'s line would be a lie about who cancelled it.
+  `research_wants` sits **between `fuel_wants` and `settle_orders`**: the
+  priority is the position in that list, and the player's own pick outranks the
+  queue they filed and forgot. It returns `standing_wants`' `(Entity,
+  TaskKind)` and not `settle_orders`' depth pairs, since a Research Node is the
+  top of its own line. **Do not touch `queue_is_empty`** — when a project ends
+  on a base with nothing else queued the body stays standing at the node, which
+  is the documented run-dry behaviour and is what puts it in place for the next
+  project; a test pins it so nobody "fixes" it.
 - **Departure lives in `haul_step_system`, not the clogged branch**, because
   it has to know whether a depot exists — a base with no depot must behave
   exactly as it did before depots shipped. `hauling::consumer_beside` is the

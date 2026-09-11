@@ -587,3 +587,63 @@ fn a_hint_names_its_own_counter_and_goes_live_at_it() {
         hint(&game, "town_job")
     );
 }
+
+/// **A job can ask you to get on good terms with a town.**
+///
+/// The one parameterised `Objective` this round adds, and the only one that
+/// could not have been a `Deed`: a band is a *degree*, and a deed carries no
+/// parameters. It is also the only thing on the board aimed at the settlement
+/// subsystem at all, which until now the Broker could not name.
+///
+/// Any town, not the issuer's: `Objective::already_met` is answered from an
+/// `ObjectiveState` that deliberately does not know whose job it is, and a
+/// second reader — `Game::offerable` — shares it.
+#[test]
+fn a_standing_job_is_met_by_any_town_reaching_the_band() {
+    let mut game = game();
+    let key = town_next_to_player(&mut game);
+    set_standing(&mut game, key, 0);
+
+    let accepted_tick = game.current_tick();
+    game.world
+        .resource_mut::<ActiveContracts>()
+        .active
+        .push(crate::resources::ActiveContract {
+            def: crate::contracts::ContractDef {
+                id: crate::contracts::ContractId::from("goodwill"),
+                name: "Goodwill".to_string(),
+                description: String::new(),
+                objective: Objective::Standing {
+                    band: crate::settlements::Standing::Warm,
+                },
+                reward: vec![crate::contracts::Reward::Xp(10)],
+                min_zone: 0,
+                repeatable: false,
+                starter: false,
+                tutorial: None,
+            },
+            progress: 0,
+            accepted_tick,
+            issuer: None,
+        });
+
+    game.tick();
+    assert!(
+        !game
+            .world
+            .resource::<ActiveContracts>()
+            .done
+            .contains(&crate::contracts::ContractId::from("goodwill")),
+        "a Neutral town does not settle a job asking for Warm"
+    );
+
+    set_standing(&mut game, key, crate::tuning::SETTLEMENT_WARM_STANDING);
+    game.tick();
+    assert!(
+        game.world
+            .resource::<ActiveContracts>()
+            .done
+            .contains(&crate::contracts::ContractId::from("goodwill")),
+        "reaching the band settles it"
+    );
+}

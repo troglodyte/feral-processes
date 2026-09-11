@@ -143,6 +143,56 @@ impl Deed {
             | Deed::FinishedResearch => false,
         }
     }
+
+    /// Where this is done, or `None` where the deed's own objective line
+    /// already says.
+    ///
+    /// The first six each name the key they are performed with — "Examine
+    /// something with [x]" is the whole errand — which is why
+    /// `Game::objective_hint` answers `None` for `Perform` as a variant and
+    /// asks here instead. The seven added after them name a *subsystem*, and
+    /// "Break down a downed program" tells a player who has never built a
+    /// Teardown Rig exactly nothing.
+    ///
+    /// Exhaustive, `cell_mark`'s rule: a new deed has to decide.
+    pub fn hint(&self) -> Option<&'static str> {
+        match self {
+            Deed::Examined
+            | Deed::Tamed
+            | Deed::TookFromContainer
+            | Deed::QueuedStandingOrder
+            | Deed::UnlockedPerk
+            | Deed::PostedStaff => None,
+            Deed::ClearedNest => Some(
+                "A nest is the thing the programs come out of. Attack the nest itself, \
+                 not what it spawns.",
+            ),
+            Deed::RepelledRaid => Some(
+                "A sweep lands no damage at all when your defences outweigh it, so this \
+                 wants a Shield standing rather than a base that merely survives.",
+            ),
+            Deed::ReturnedSortie => Some(
+                "Build a Relay, send a squad out from its board, and wait for them to \
+                 walk back in.",
+            ),
+            Deed::TradedWithTown => Some(
+                "Settlements stand out on the open ground, not in your base. Walk into \
+                 one and put something across the counter, buying or selling.",
+            ),
+            Deed::ExtractedProgram => Some(
+                "A downed program goes on the rack. A Teardown Rig with a tool fitted is \
+                 what breaks one down.",
+            ),
+            Deed::CollapsedStack => Some(
+                "Go down a Stack until you find the guardian holding it up. Beating it \
+                 takes the way back out with it.",
+            ),
+            Deed::FinishedResearch => Some(
+                "Pick a project at a Research Node, then keep the node staffed and its \
+                 materials coming until it lands.",
+            ),
+        }
+    }
 }
 
 /// What a contract asks for.
@@ -167,6 +217,14 @@ pub enum Objective {
     Breach { zone: u32 },
     /// One of these is deployed.
     Build { structure: StructureId },
+    /// Some town holds the player at this band or better.
+    ///
+    /// **Any** town, not the issuer's: `already_met` is answered from an
+    /// `ObjectiveState` that deliberately does not know whose job it is, and
+    /// `Game::offerable` shares that reader. A band is a degree rather than a
+    /// thing done, which is the whole of why this could not be a `Deed` — a
+    /// deed carries no parameters, on purpose.
+    Standing { band: crate::settlements::Standing },
     /// This many of an item are in the player's pack **at once**.
     ///
     /// Not `Deliver`: nothing is handed over and nothing is spent, so it
@@ -222,6 +280,15 @@ pub struct ObjectiveState {
     /// `post_worker` writes no `StandingJob`, so this stays false for a body
     /// the base placed by itself.
     pub posted: bool,
+    /// The best band any town holds the player in — `relations::best_band`.
+    ///
+    /// Live on both readers, sitting with `zone` and `standing` rather than
+    /// with `depth`, `carried` and `posted`. The three neutralised ones move
+    /// as the player *walks or opens a screen*, which is what would make a
+    /// seed-derived board gain and lose slots underfoot; a band moves only on
+    /// a deliberate act — a trade, a finished job, a raid — exactly as
+    /// building a structure does.
+    pub best_standing: crate::settlements::Standing,
 }
 
 impl ObjectiveState {
@@ -249,6 +316,7 @@ impl Objective {
             Objective::Descend { .. }
             | Objective::Breach { .. }
             | Objective::Build { .. }
+            | Objective::Standing { .. }
             | Objective::Hold { .. } => 1,
         }
     }
@@ -266,7 +334,10 @@ impl Objective {
             | Objective::Deliver { count, .. }
             | Objective::Hold { count, .. }
             | Objective::Perform { count, .. } => *count == 0,
-            Objective::Descend { .. } | Objective::Breach { .. } | Objective::Build { .. } => false,
+            Objective::Descend { .. }
+            | Objective::Breach { .. }
+            | Objective::Build { .. }
+            | Objective::Standing { .. } => false,
         }
     }
 
@@ -307,6 +378,7 @@ impl Objective {
             Objective::Descend { depth } => state.depth >= *depth,
             Objective::Breach { zone } => state.zone >= *zone,
             Objective::Build { structure } => state.standing.contains(structure),
+            Objective::Standing { band } => state.best_standing >= *band,
             Objective::Hold { item, count } => state.count(item) >= *count,
         }
     }

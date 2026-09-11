@@ -1,0 +1,8 @@
+(
+    id: "hold_the_line",
+    name: "Hold the Line",
+    description: "Every base out here eventually gets swept. The Broker will pay to hear that yours took one and did not lose a single point of structure doing it.",
+    objective: Perform(deed: RepelledRaid),
+    reward: [Credits(70), Item("power_cell", 3), Xp(180)],
+    min_zone: 2,
+)

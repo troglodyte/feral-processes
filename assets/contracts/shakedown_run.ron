@@ -1,0 +1,8 @@
+(
+    id: "shakedown_run",
+    name: "Shakedown Run",
+    description: "Send a squad out through a Relay and get them back on their own feet. What the site pays out is yours; the Broker only wants to know the route runs.",
+    objective: Perform(deed: ReturnedSortie),
+    reward: [Credits(55), Xp(160)],
+    min_zone: 2,
+)

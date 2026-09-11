@@ -1,0 +1,8 @@
+(
+    id: "paid_in_findings",
+    name: "Paid in Findings",
+    description: "Pick a project at a Research Node and see it through to the end. The Broker wants the write-up; you keep whatever the work unlocked.",
+    objective: Perform(deed: FinishedResearch),
+    reward: [Credits(60), Item("logic_wafer", 4), Xp(170)],
+    min_zone: 2,
+)

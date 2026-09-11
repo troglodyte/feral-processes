@@ -55,6 +55,7 @@ pub fn contract_system(
     // structure, and both facts below are read off the same iteration.
     structures: Query<(&Structure, Option<&crate::components::StandingJob>)>,
     player: Query<&Inventory, With<crate::components::Player>>,
+    standings: Res<crate::resources::Standings>,
 ) {
     let state = crate::contracts::ObjectiveState {
         depth: contract_depth(&locale),
@@ -68,6 +69,7 @@ pub fn contract_system(
         posted: structures
             .iter()
             .any(|(_, job)| job.is_some_and(|j| j.work)),
+        best_standing: crate::settlements::relations::best_band(&standings),
     };
 
     for contract in &mut held.active {
@@ -801,6 +803,12 @@ impl Game {
                 // and cleared one, and `swap_remove` reshuffles every other
                 // slot with it.
                 posted: false,
+                // Live, with `zone` and `standing` rather than with the three
+                // above: a band moves on a deliberate act — a trade, a
+                // finished job, a raid — never as the player walks.
+                best_standing: crate::settlements::relations::best_band(
+                    self.world.resource::<crate::resources::Standings>(),
+                ),
             })
     }
 
@@ -1042,10 +1050,13 @@ impl Game {
         held: bool,
     ) -> Option<String> {
         match objective {
-            // Both are their own instruction: "Terminate 3 wild programs"
-            // names the whole errand, and every deed line already names the
-            // key it is performed with.
-            Objective::Terminate { .. } | Objective::Perform { .. } => None,
+            // "Terminate 3 wild programs" names the whole errand.
+            Objective::Terminate { .. } => None,
+
+            // A deed decides for itself: the six that name the key they are
+            // performed with need nothing, and the seven that name a
+            // subsystem say where it is. See `Deed::hint`.
+            Objective::Perform { deed, .. } => deed.hint().map(str::to_string),
 
             Objective::Deliver { item, .. } => {
                 let counter = self.contract_counter_name(issuer);
@@ -1087,6 +1098,12 @@ impl Game {
                 "Stack entrances stand out on the open ground. Go down {depth} frames \
                  from one."
             )),
+
+            Objective::Standing { .. } => Some(
+                "A town's opinion rises when you trade there, finish its jobs and clear \
+                 nests near it, and falls when you take from it."
+                    .to_string(),
+            ),
 
             Objective::Build { .. } => Some(
                 "Deploy it from the base menu and the crew raises it - a build is a \
@@ -1181,6 +1198,9 @@ impl Game {
             }
             Objective::Descend { depth } => format!("Stand {depth} frames down a Stack"),
             Objective::Breach { zone } => format!("Breach to sector {zone}"),
+            Objective::Standing { band } => {
+                format!("Reach {} terms with a town", band.label())
+            }
             Objective::Build { structure } => {
                 let name = self
                     .world
@@ -1203,7 +1223,7 @@ impl Game {
                 Deed::UnlockedPerk => "Spend a Perk Point".to_string(),
                 Deed::PostedStaff => "Set a machine to be kept staffed".to_string(),
                 Deed::ClearedNest => "Destroy a nest".to_string(),
-                Deed::RepelledRaid => "Hold off a GC Entropy Sweep without a scratch".to_string(),
+                Deed::RepelledRaid => "Shrug off a GC Entropy Sweep".to_string(),
                 Deed::ReturnedSortie => "Bring a squad home from a sortie".to_string(),
                 Deed::TradedWithTown => "Trade at a settlement".to_string(),
                 Deed::ExtractedProgram => "Break down a downed program".to_string(),

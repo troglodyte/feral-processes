@@ -1,0 +1,9 @@
+(
+    id: "salvage_rights",
+    name: "Salvage Rights",
+    description: "Two downed programs, broken down at a Teardown Rig rather than left on the rack. Whatever comes out is yours to keep — the Broker is buying the practice, not the parts.",
+    objective: Perform(deed: ExtractedProgram, count: 2),
+    reward: [Credits(50), Item("blank_substrate", 2), Xp(140)],
+    min_zone: 2,
+    repeatable: true,
+)

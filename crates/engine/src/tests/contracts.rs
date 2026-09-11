@@ -310,7 +310,7 @@ fn a_shipped_delivery_never_asks_for_the_bank() {
 #[test]
 fn every_objective_variant_ships_at_least_once() {
     let (contracts, _) = shipped_contracts();
-    let mut seen = [false; 7];
+    let mut seen = [false; 8];
     for def in contracts.iter() {
         let slot = match &def.objective {
             Objective::Terminate { .. } => 0,
@@ -320,6 +320,7 @@ fn every_objective_variant_ships_at_least_once() {
             Objective::Build { .. } => 4,
             Objective::Hold { .. } => 5,
             Objective::Perform { .. } => 6,
+            Objective::Standing { .. } => 7,
         };
         seen[slot] = true;
     }
@@ -2797,6 +2798,7 @@ fn hold_is_met_by_what_the_player_is_carrying() {
         count: 12,
     };
     let mut state = crate::contracts::ObjectiveState {
+        best_standing: crate::settlements::Standing::Hostile,
         depth: 0,
         zone: 1,
         standing: Vec::new(),
@@ -2833,6 +2835,7 @@ fn hold_is_not_met_by_an_empty_pack() {
         count: 1,
     };
     let state = crate::contracts::ObjectiveState {
+        best_standing: crate::settlements::Standing::Hostile,
         depth: 0,
         zone: 1,
         standing: Vec::new(),

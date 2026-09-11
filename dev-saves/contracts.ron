@@ -1,6 +1,14 @@
 (
     seed: 2799354544,
-    tick: 6944,
+    // The board is derived from (world seed, zone, epoch) and the epoch is
+    // this tick over CONTRACT_REFRESH_CYCLES, so which three contracts are on
+    // offer is a property of this number. It is tuned so one of them is a
+    // *rolled* one, which is what `the_contracts_template_starts_at_a_board_
+    // it_can_take_from` holds and the half a playtest cannot reach any other
+    // way. Adding contracts to the pool reshuffles the draw: if that test goes
+    // red, walk this tick forward in steps of CONTRACT_REFRESH_CYCLES until it
+    // passes again rather than weakening the assertion.
+    tick: 8944,
     difficulty: Forgiving,
     player: (
         position: (0, 0),

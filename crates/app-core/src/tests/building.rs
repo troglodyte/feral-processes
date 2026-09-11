@@ -928,7 +928,7 @@ fn choose_build_row(app: &mut App, id: &str) {
 }
 
 /// A Depot costs no program — `Game::structure_needs_program` exempts any
-/// structure that declares `costs_no_program` — so picking a direction for
+/// structure that runs no job — so picking a direction for
 /// one files the order on the spot instead of opening a picker.
 ///
 /// **Routed off the engine's own answer, not a second derivation here.**

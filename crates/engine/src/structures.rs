@@ -302,22 +302,6 @@ pub struct StructureDef {
     /// hauler ignores.
     #[serde(default)]
     pub stores: bool,
-    /// If set, raising or upgrading this structure commits no tamed program
-    /// — see `StructureDef::needs_program`. The materials, the crew and the
-    /// ticks are unchanged; only the body is waived.
-    ///
-    /// **The one place a structure says this, and it is data.** It waived
-    /// itself off `stores` for exactly one release, which made a hauler's
-    /// target and a free build the same statement: a modded shelf was free
-    /// whether its author meant it or not, and a structure that wanted the
-    /// exemption without being a haul target — a Zone Portal, spent the
-    /// moment it is walked through — had nowhere to say so. The Home is
-    /// still exempt by `category()` rather than by this flag, because a
-    /// fresh run must be able to found one even if `home.ron` is edited.
-    /// `#[serde(default)]` so existing structure files (including mods)
-    /// written before this field existed still parse, as costing a program.
-    #[serde(default)]
-    pub costs_no_program: bool,
     /// If set, this structure automatically builds the named item from
     /// ingredients pulled out of its orthogonal neighbours' output buffers,
     /// once a program is assigned to it. Unlike `work`, which produces from
@@ -607,22 +591,26 @@ impl StructureDef {
 
     /// Whether raising or upgrading this structure costs a tamed program.
     ///
-    /// **Two exemptions, and the second is authored.** The Home is exempt at
-    /// every tier: a fresh run owns zero programs and the first is granted
-    /// only as an achievements reward, so a Home that cost one would be
-    /// unfoundable — and that half is derived from `category()` rather than
-    /// from the flag below, so an edited `home.ron` cannot make a new run
-    /// unable to open a base. Everything else says it for itself with
-    /// `costs_no_program`: the shelves, because a shelf is not worth a body,
-    /// and the Zone Portal, because it is despawned the moment it is walked
-    /// through and takes the committed program with it.
+    /// **A body is spent on a machine that will take a body** — the cost
+    /// follows `runs_a_job` exactly, so an extractor, an assembler and a rig
+    /// charge one and nothing else does. A Shield, a Patch Node, a Relay, a
+    /// shelf and the Zone Portal are all free, and they are free for one
+    /// reason rather than each for its own: there is nothing at them for a
+    /// committed program to stand at. That replaced an authored
+    /// `costs_no_program` flag, which made the exemption content — a seventh
+    /// depot file that forgot the line silently cost a program, and a modded
+    /// ornament had to remember to say it.
+    ///
+    /// The Home is exempt a second time, by `category()`, because an edited
+    /// `home.ron` that declared `work:` would otherwise leave a fresh run —
+    /// which owns zero programs — unable to found a base at all.
     ///
     /// On the def rather than only on `Game`, because the build menu holds
     /// defs and not ids and would otherwise restate the rule — the copy that
     /// drifts. `Game::structure_needs_program` is the id-shaped door onto
     /// this one, and calls it.
     pub fn needs_program(&self) -> bool {
-        self.category() != StructureCategory::Home && !self.costs_no_program
+        self.category() != StructureCategory::Home && self.runs_a_job()
     }
 
     /// Which group this structure lists under. Checked in this order because

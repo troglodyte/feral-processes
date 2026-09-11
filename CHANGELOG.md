@@ -42,6 +42,26 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.164
+
+**Deploying a Shield, a Patch Node, a Repair Bay or a Relay no longer costs
+you a program.** Filing a build order used to commit one tamed program to
+almost everything you could put up, including the eleven structures no
+program is ever posted to — so defending or repairing the base cost a body
+that then had nothing to do inside it. Eleven structures are now free of it:
+Shield, Patch Node, Repair Bay, Relay, Data Cache, Sandbox, Recharger Node,
+Log Analyzer Bay, Line Driver, iso Market and Contract Broker. Materials, the
+crew who raise them and the ticks they take are unchanged.
+
+**A build costs a program exactly when the structure runs a job**, which is
+what the nodes, the benches and the Teardown Rig do — the body is spent on
+the machine a body will afterwards be posted to. Depots, the Quarantine Rack
+and the Zone Portal were already free, and are now free for the same reason
+rather than each for a reason of its own. Structure mods get this without
+authoring anything: a decorative or defensive structure of your own costs no
+program because it runs no job, and the flag that used to say so is gone.
+
+
 ## 0.13.163
 
 **Every research node now says what it hands over before it says what it

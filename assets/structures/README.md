@@ -130,22 +130,10 @@ is skipped with a warning logged in-game rather than crashing startup.
     // Depot holds 50, and the researchable ladder above it runs to Mk6.
     //
     // This flag says one thing only: a hauler may empty into it. The shipped
-    // shelves are also free to build, but they say that themselves with
-    // `costs_no_program` below rather than reading it off this one.
+    // shelves are also free to build, but that is not this flag saying so —
+    // a build costs a program only when the structure runs a job (`work`,
+    // `assembles` or `strips`), and a shelf runs none.
     stores: true,
-
-    // Optional; defaults to false. Waives the build's program cost. Every
-    // structure but the Home commits one tamed program when the order is
-    // filed; a structure with this set commits nobody. The materials, the
-    // crew who raise it and the ticks they take are unchanged — only the
-    // body is waived.
-    //
-    // Set on the shipped Depot ladder, because a shelf is not worth a body,
-    // and on the Zone Portal, because a Portal is despawned the moment it is
-    // walked through and would take the committed program with it. The Home
-    // does not need it: it is exempt by being the Home, so a mod that edits
-    // `home.ron` cannot leave a fresh run unable to found a base.
-    costs_no_program: true,
 
     // Optional; can be left out entirely (defaults to no assembling). If
     // set, this structure automatically builds `item` out of ingredients it
@@ -614,6 +602,24 @@ is skipped with a warning logged in-game rather than crashing startup.
 
 The filename doesn't matter to the loader (only the `id` field does), but
 name it after the structure for readability, e.g. `data_cache.ron`.
+
+## The program cost
+
+Filing a build order commits one tamed program — the body goes into the
+machine and does not come back. **A structure costs one exactly when it runs
+a job**, which is when it declares `work`, `assembles` or `strips`: a program
+is spent on the thing a program will afterwards be posted to. Everything
+else is free of it. A Shield, a Patch Node, a Relay, a Data Cache, a shelf
+and the Zone Portal all cost materials, crew and ticks like any other build,
+and no body at all.
+
+There is no field for this and nothing to author — the rule is read off the
+three above. The Home is free a second time over, by being the Home, so a
+mod that edits `home.ron` can never leave a fresh run (which owns zero
+programs) unable to found a base.
+
+Cancelling an order gives the program back, resurrected off the snapshot the
+order was holding, with everything about it intact.
 
 ## Research gating
 

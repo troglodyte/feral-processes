@@ -258,8 +258,9 @@ impl App {
             return;
         };
         // A structure that costs no program — the Home, and anything that
-        // declares `costs_no_program` — takes this direct path rather than
-        // detouring through a picker that has nothing to confirm.
+        // runs no job for a program to be posted to — takes this direct path
+        // rather than detouring through a picker that has nothing to
+        // confirm.
         //
         // **Asked of the engine rather than re-derived here.** This used to
         // read `def.category() == StructureCategory::Home`, which was itself

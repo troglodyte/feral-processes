@@ -255,6 +255,9 @@ relying on one, and correct all three places if it has moved.
 
 - **A deploy is a *request*, and the Home is the only build the player's own
   hands finish.**
+- **A build costs a tamed program exactly when the structure runs a job**, so
+  a Shield, a shelf and the Zone Portal are free of it for one reason rather
+  than each for its own.
 - **The Home is free, and the anchor lands on the tile the party founded
   from while the Home itself still stands on `BASE_EXIT_CELL`** —
   `Game::move_anchor_to` is the one writer, and founding is its only caller

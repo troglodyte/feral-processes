@@ -689,7 +689,7 @@ mod tests {
                     panic!("a block row is a Row::Item, popup_layout's reason");
                 };
                 // `draw_row`'s own two columns for the selection caret.
-                let drawn = p.measure_ui_advance(&format!("  {text}"), m.font_size);
+                let drawn = p.measure_ui_advance(format!("  {text}"), m.font_size);
                 assert!(
                     drawn <= room,
                     "a blocked node's reason overflows its popup by {:.0}px:\n{text}",
@@ -727,11 +727,7 @@ mod tests {
         let screens = [
             (
                 "Research",
-                research_menu_rows(
-                    &nodes,
-                    0,
-                    &game.item_name(&game.research_currency()).to_string(),
-                ),
+                research_menu_rows(&nodes, 0, game.item_name(&game.research_currency())),
             ),
             (
                 "Perks",

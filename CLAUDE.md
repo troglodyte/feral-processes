@@ -1308,7 +1308,7 @@ relying on one, and correct all three places if it has moved.
 ```sh
 cargo test --workspace     # 5394 tests
 cargo run                  # the game; `default-run` in crates/launcher
-cargo clippy --workspace
+cargo clippy --workspace --all-targets   # --all-targets or test code is unlinted
 cargo fmt
 
 # Edit a save for testing: dump to RON, edit, pack back. `warp` runs the
@@ -1532,8 +1532,11 @@ Rules to follow whenever the schema changes:
 
 ## Rust idioms
 
-- Run `cargo fmt` and `cargo clippy` after every change; fix warnings and
-  deprecations rather than silencing them.
+- Run `cargo fmt` and `cargo clippy --workspace --all-targets` after every
+  change; fix warnings and deprecations rather than silencing them.
+  **`--all-targets` is load-bearing** — a bare `cargo clippy --workspace`
+  leaves every test module unlinted, which is how three warnings sat in
+  `structures.rs` and `render/progression.rs` across two releases.
 - Prefer `Result`/`?` propagation over panics in engine code. `unwrap()` /
   `expect()` are for tests, truly-infallible invariants, or startup config
   that should abort anyway.

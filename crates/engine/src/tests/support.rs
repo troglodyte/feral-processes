@@ -1215,22 +1215,31 @@ pub(super) fn base_with_a_research_node(game: &mut Game) -> Entity {
             .collect();
     // Sorted so the tiles these land on do not depend on set iteration order.
     needed.sort();
-    let mut placed: Vec<String> = vec!["research_node".to_string()];
-    let mut lane = 0;
+    let mut kinds: Vec<String> = Vec::new();
     for item in needed {
         let Some(def) = crate::game::base::work_orders::makeable_by(game, &item) else {
             continue;
         };
-        if placed.contains(&def.id) {
-            continue;
+        if !kinds.contains(&def.id) {
+            kinds.push(def.id);
         }
-        // Spread along one row so nothing lands on the Research Node or on
-        // another producer's tile.
-        spawn_machine_at(game, &def.id, 10 + lane * 2, 10);
-        placed.push(def.id);
-        lane += 1;
     }
-    spawn_machine_at(game, "depot", 10 + lane * 2, 10);
+    // The shelf `feeders_for` falls back to when no producer is a neighbour.
+    kinds.push("depot".to_string());
+    // **Laid floor, or none of this is reachable.** The starting pocket is four
+    // cells across, which does not hold a Research Node plus a producer per
+    // shipped bill; a machine off the floor is one `can_walk_to_post` refuses,
+    // so the scheduler posts nobody and the base reads as having no work — the
+    // failure looks like a scheduler bug and is a fixture that stood its
+    // machines in the rock.
+    for (lane, kind) in kinds.into_iter().enumerate() {
+        let (x, y) = (2 + lane as i32 * 2, 4);
+        for step in 0..=y {
+            game.floor_cell(x, step);
+            game.floor_cell(x - 1, step);
+        }
+        spawn_machine_at(game, &kind, x, y);
+    }
     node
 }
 

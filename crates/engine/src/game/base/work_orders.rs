@@ -2363,8 +2363,8 @@ impl Game {
             .retain(|order| !order.for_research);
     }
 
-    /// Every deployed Research Node while a project is active, and nothing
-    /// at all when none is.
+    /// Every deployed Research Node while a project is active **and still has
+    /// progress left to earn**, and nothing at all otherwise.
     ///
     /// This is what staffs a Research Node — there is no `StandingJob` behind
     /// it and no new `MachineStatus`: with no project selected the want
@@ -2373,6 +2373,17 @@ impl Game {
     /// banked resource can never clog, so a Research Node has no full state"
     /// true through this feature.
     ///
+    /// **The saturation gate is the load-bearing half.** Research sits above
+    /// `settle_orders` in the ladder, so a want raised here outranks the
+    /// project's own material orders — and once progress reaches the node's
+    /// `cost`, `systems::deliver_payout` lands nothing (see
+    /// `ActiveResearch::credit`). Without the gate a base whose staff is no
+    /// larger than its Research Node count held every body on a node producing
+    /// zero while `truncate(staff.len())` cut the bill it had just filed, and
+    /// the project could never complete. `Stock`'s clog has no equivalent here
+    /// to stall the cycle and hand the body on, because a banked resource never
+    /// fills a buffer.
+    ///
     /// `producers_of` already sorts by tile, so the result is deterministic
     /// without a second sort. `TaskKind::GatherResource` and an `Entity` —
     /// the shape `standing_wants` and `build_wants` return, not the
@@ -2380,12 +2391,21 @@ impl Game {
     /// Node is the top of its own line and has no recipe tree behind it to
     /// measure a depth against.
     fn research_wants(&self) -> Vec<(Entity, TaskKind)> {
-        if self
+        let research = self.world.resource::<resources::ActiveResearch>();
+        let Some(id) = research.id.as_ref() else {
+            return Vec::new();
+        };
+        let earned = research.progress.get(id).copied().unwrap_or(0);
+        // A node the `ResearchDb` no longer knows reads as nothing left to
+        // earn, which frees the body rather than parking it forever on a
+        // project that can never resolve — `ActiveContract`'s reason for
+        // storing its whole def, arrived at from the other side.
+        let goal = self
             .world
-            .resource::<resources::ActiveResearch>()
-            .id
-            .is_none()
-        {
+            .resource::<ResearchDb>()
+            .get(id)
+            .map_or(0, |def| def.cost);
+        if earned >= goal {
             return Vec::new();
         }
         producers_of(self, &self.research_currency())

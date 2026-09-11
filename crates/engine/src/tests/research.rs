@@ -113,16 +113,21 @@ fn progress_saturates_at_the_nodes_cost() {
         .unwrap()
         .cost;
 
-    // Well past it, and with no bill on the shelves so the project cannot
-    // complete and clear the entry out from under the assertion.
+    // Sampled every tick rather than read once at the end: the base can make
+    // this bill, so the project completes and `settle_research` drops the entry
+    // — a single read afterwards would be asserting on a zero and passing for
+    // the wrong reason.
     for _ in 0..2_000 {
         game.tick();
+        assert!(
+            research_progress(&game, "automation") <= cost,
+            "progress must saturate at the cost rather than run away past it"
+        );
     }
 
-    assert_eq!(
-        research_progress(&game, "automation"),
-        cost,
-        "progress must saturate at the cost rather than run away past it"
+    assert!(
+        game.is_researched("automation"),
+        "and the fixture has to get there, or the ceiling was never approached"
     );
 }
 
@@ -1598,4 +1603,68 @@ fn a_research_node_with_no_project_asks_for_attention() {
     game.select_research("automation").unwrap();
 
     assert!(!asked(&mut game), "and stops once the base has a project");
+}
+
+/// The whole loop, end to end on the base a player actually has: one Research
+/// Node, one program, no shortcuts. The project earns its progress, the base
+/// makes its bill, and it completes.
+///
+/// The bug this exists to catch: `research_wants` raised a want for every
+/// deployed Research Node for as long as a project was active, **including
+/// after its progress had saturated**. Sitting above `settle_orders`, that want
+/// held the base's only body on a node producing nothing — `deliver_payout`
+/// returns 0 once progress reaches `cost` — while the material orders the
+/// project had just filed were cut by `truncate(staff.len())` and never worked.
+/// The project could not complete, and the only ways out were abandoning it,
+/// demolishing a node, or finding a second program.
+///
+/// Every other completion test shortcuts both halves (`fill_research_progress`
+/// plus `shelve_research_bill`), which is exactly why none of them saw it.
+#[test]
+fn a_one_program_base_can_finish_a_project_on_its_own() {
+    let mut game = Game::new(901, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    spawn_tamed(&mut game, 10, 3);
+    game.select_research("automation").unwrap();
+
+    for _ in 0..4000 {
+        game.tick();
+    }
+
+    assert!(
+        game.is_researched("automation"),
+        "a base with one body has to be able to finish what it started \
+         (progress {}, orders still standing {:?})",
+        research_progress(&game, "automation"),
+        game.work_orders()
+            .iter()
+            .map(|o| (o.item.clone(), o.qty))
+            .collect::<Vec<_>>()
+    );
+}
+
+/// And the half that says why it works: a project with its progress already in
+/// stops holding a body at the node, because there is nothing left to feed it.
+#[test]
+fn a_saturated_project_frees_its_research_node() {
+    let mut game = Game::new(902, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    let worker = spawn_tamed(&mut game, 10, 3);
+    game.select_research("automation").unwrap();
+    game.tick();
+    assert_eq!(
+        game.world.get::<Task>(worker).map(|t| t.target),
+        Some(node),
+        "the fixture is vacuous unless the body starts on the node"
+    );
+
+    fill_research_progress(&mut game, "automation");
+    game.tick();
+
+    assert!(
+        game.world
+            .get::<Task>(worker)
+            .is_none_or(|t| t.target != node),
+        "a node with nothing left to feed must not hold the base's only body"
+    );
 }

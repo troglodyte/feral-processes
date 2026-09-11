@@ -116,6 +116,11 @@ pub(super) struct GraphGeometry {
     lanes: Vec<usize>,
     /// Content-space distance between one slot and the next.
     pitch_y: f32,
+    /// Content-space room around the whole tree. A box's outline is drawn
+    /// *on* its rect and the pane clips at its own edge, so without this a
+    /// box flush against a clamped view loses the outer half of its stroke:
+    /// the top row drew with no top and the first column with no left side.
+    margin: f32,
     content_w: f32,
     content_h: f32,
 }
@@ -124,7 +129,12 @@ impl GraphGeometry {
     /// The box for a cell at `(tier, slot)`, in content space.
     pub fn content_rect(&self, tier: usize, slot: usize) -> Rect {
         let x = self.tier_x.get(tier).copied().unwrap_or(0.0);
-        Rect::new(x, slot as f32 * self.pitch_y, self.cell_w, self.cell_h)
+        Rect::new(
+            self.margin + x,
+            self.margin + slot as f32 * self.pitch_y,
+            self.cell_w,
+            self.cell_h,
+        )
     }
 
     /// Where the viewport sits while `(tier, slot)` is selected: that cell
@@ -157,7 +167,7 @@ impl GraphGeometry {
     /// spread across the gutter rather than pinned to its middle, which is
     /// the whole of what stops nine edges reading as one vertical bar.
     pub fn lane_x(&self, tier: usize, lane: usize) -> f32 {
-        let left = self.tier_x.get(tier).copied().unwrap_or(0.0) + self.cell_w;
+        let left = self.margin + self.tier_x.get(tier).copied().unwrap_or(0.0) + self.cell_w;
         let gutter = self.gutter_w.get(tier).copied().unwrap_or(0.0);
         let lanes = self.lanes.get(tier).copied().unwrap_or(0);
         // Evenly across the gutter, so neither the first nor the last lane
@@ -224,6 +234,7 @@ pub(super) fn geometry(
     let cell_w = m.font_size as f32 * CELL_FONTS;
     let cell_h = m.line_height * CELL_LINES + m.pad;
     let lane_pitch = m.inset;
+    let margin = m.inset;
 
     // A gutter is a base plus a lane per edge crossing it.
     let counts = lane_counts(graph);
@@ -238,12 +249,17 @@ pub(super) fn geometry(
         x += cell_w + gutter_w.get(tier).copied().unwrap_or(0.0);
     }
     // The trailing gutter is not content: the last column ends at its box.
-    let content_w = tier_x.last().map(|last| last + cell_w).unwrap_or(0.0);
+    // The margin is, at both ends, or a clamped view clips the outline off
+    // the first and last of everything.
+    let content_w = tier_x
+        .last()
+        .map(|last| last + cell_w + margin * 2.0)
+        .unwrap_or(0.0);
     let pitch_y = cell_h + lane_pitch * 2.0;
     let content_h = if graph.widest == 0 {
         0.0
     } else {
-        (graph.widest - 1) as f32 * pitch_y + cell_h
+        (graph.widest - 1) as f32 * pitch_y + cell_h + margin * 2.0
     };
 
     GraphGeometry {
@@ -255,6 +271,7 @@ pub(super) fn geometry(
         gutter_w,
         lanes: counts,
         pitch_y,
+        margin,
         content_w,
         content_h,
     }
@@ -549,6 +566,46 @@ mod tests {
             geo.panel.x + geo.panel.w <= 1280.0 + 0.01,
             "and the panel must not run off the window"
         );
+    }
+
+    /// A box's outline is drawn *on* its rect and a clip cuts at the pane's
+    /// edge, so a box flush against that edge loses the outer half of its
+    /// stroke — the top row came out with no top and the first column with
+    /// no left side. The content carries a margin wide enough for a stroke
+    /// so that a clamped view still draws a whole box.
+    #[test]
+    fn a_box_against_the_clip_edge_keeps_its_whole_outline() {
+        let g = shipped_graph();
+        let m = ui_metrics(720.0);
+        let geo = geometry(1280.0, 720.0, &g, &m);
+        for cell in &g.cells {
+            let offset = geo.offset(cell.tier, cell.slot);
+            let r = geo.cell_rect(cell.tier, cell.slot, offset);
+            assert!(
+                r.y - geo.pane.y >= 1.0,
+                "{} at slot {} draws its top edge on the clip: {} against {}",
+                cell.id,
+                cell.slot,
+                r.y,
+                geo.pane.y
+            );
+            assert!(
+                r.x - geo.pane.x >= 1.0,
+                "{} at tier {} draws its left edge on the clip",
+                cell.id,
+                cell.tier
+            );
+            assert!(
+                (geo.pane.y + geo.pane.h) - (r.y + r.h) >= 1.0,
+                "{} draws its bottom edge on the clip",
+                cell.id
+            );
+            assert!(
+                (geo.pane.x + geo.pane.w) - (r.x + r.w) >= 1.0,
+                "{} draws its right edge on the clip",
+                cell.id
+            );
+        }
     }
 
     /// The view clamps at both ends rather than scrolling into blank space:

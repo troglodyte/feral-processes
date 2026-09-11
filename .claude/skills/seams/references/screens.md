@@ -347,10 +347,22 @@
   `1 + max(parents)` and has no fixpoint on a cycle, which is why
   `ResearchDb::load_dir` now drops one — both members are permanently
   unresearchable anyway, the same condition it already dropped a dangling
-  prereq for. **The fit is a correctness property**: the whole tree is
-  visible at once, no pan and no scroll, so a box's label draws at
+  prereq for. **The pane pans, and what is a correctness property is that
+  the *selected* node is in view** — "the whole tree fits at 1280x720" was
+  the rule until the view was widened, and the trap it left behind is that
+  a box sized off the pane shrinks as a mod adds nodes. A box is sized off
+  the font instead (`CELL_FONTS` x `Metrics::font_size`), so a 20x30 modded
+  tree scrolls further and draws the same box; the viewport is **derived
+  from the selection and never stored**, because a stored offset is a second
+  cursor to keep in step with the first. A label still draws at
   `Metrics::small()` — `text::wrap` splits on whitespace only, so the
   longest unbreakable shipped word is `Self-Execution` at 14 and not
-  `Fabrication` at 11, and 14 does not fit six across at the body font at
-  1280x720. On a failure the knob is `PANEL_FRACTION` or `GUTTER_X`, never
-  the assertion.
+  `Fabrication` at 11. On a failure the knob is `CELL_FONTS` or
+  `PANEL_FRACTION`, never the assertion. **The gutter is the other trap**:
+  every elbow used to take the midpoint of its span, so all nine edges into
+  tier 3 drew their vertical run on one x and read as a single bar with
+  stubs. A gutter is now sized by the edges crossing it and each gets its
+  own lane, and a parent's lines leave from points spread down its edge
+  rather than all from its middle — `assign_lanes` and `anchor_y`, both
+  held by tests, because the failure is invisible to anything that only
+  counts shapes.

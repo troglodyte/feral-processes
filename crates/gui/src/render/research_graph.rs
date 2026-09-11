@@ -1,14 +1,23 @@
 //! The research tree drawn as a flow chart — the second view of
 //! `Mode::Research`, toggled with `G`.
 //!
-//! The whole tree is visible at once: there is no pan and no scroll, so
-//! "fits" is a correctness property of this screen rather than a polish
-//! one, and the geometry is a pure function of the window and the tree's
-//! shape so it can be held to a measured assertion.
+//! **The tree is larger than the pane and the pane pans.** Boxes are a fixed
+//! readable size and the viewport follows the cursor, rather than the tree
+//! being divided into the pane and every box shrinking as a mod adds nodes.
+//! That trades one correctness property for another: "the whole tree fits at
+//! 1280x720" is gone, and "the selected node is always fully in view" is what
+//! replaces it. The geometry is still a pure function of the window, the
+//! tree's shape and which node is selected, so both halves stay measurable.
+//!
+//! The viewport is **derived from the selection, never stored** — there is no
+//! scroll offset to keep in step with the cursor, and no key of its own. The
+//! cost is that the view recentres on every move instead of sitting still
+//! until the selection nears an edge; the benefit is that a cursor and a
+//! viewport cannot disagree about where the tree is.
 
 use crate::paint::{Color, Painter, Rect};
 use crate::text::Metrics;
-use feral_processes_engine::{Game, ResearchGraph};
+use feral_processes_engine::{Game, ResearchGraph, ResearchId};
 
 use super::popup::{DESCRIPTION_INDENT, description_rows_at, draw_row};
 use super::progression::{conversion_rows, material_rows, row_color};
@@ -16,34 +25,144 @@ use super::{BORDER, PANEL_BG, RED, SELECT_BG, TEXT_DIM};
 
 /// Fraction of the window width the detail panel takes.
 const PANEL_FRACTION: f32 = 0.30;
-/// Horizontal room between two tiers' boxes — where the edges are drawn, so
-/// it is an elbow's whole budget and not decoration.
-const GUTTER_X: f32 = 16.0;
-const GUTTER_Y: f32 = 16.0;
-/// A name wraps onto at most two lines. A third would not fit `cell_h` at
-/// nine slots, and eliding is what a modded name gets instead.
+/// A box's height in `line_height`s: two label lines and its cost.
+const CELL_LINES: f32 = 3.0;
+/// A box's width in UI font sizes. 11 puts about twenty monospace cells of
+/// `small()` text inside the padding, against the fourteen `Self-Execution`
+/// needs — the slack is what a modded name spends before it is elided.
+const CELL_FONTS: f32 = 11.0;
+/// A name wraps onto at most two lines. A third would not fit `cell_h`, and
+/// eliding is what a modded name gets instead.
 const LABEL_LINES: usize = 2;
 
+/// One edge's route across a gutter: which lane it takes, and how many
+/// lanes that gutter is carrying.
+///
+/// **Every edge makes its vertical run in the gutter immediately right of
+/// its source**, even the one shipped edge that spans two tiers — that one's
+/// last horizontal run passes under the intervening tier's boxes, which is
+/// what it did when there was one lane and is why boxes are drawn last.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct EdgeRoute {
+    pub from: ResearchId,
+    pub to: ResearchId,
+    /// The gutter right of tier `gutter`.
+    pub gutter: usize,
+    pub lane: usize,
+}
+
+/// How many edges make their vertical run in the gutter right of each tier.
+///
+/// This is what sizes a gutter, so the crowded one gets room and the sparse
+/// one does not waste it: the shipped tree runs 8, 5, 9, 6 and 3 edges
+/// through its five gutters.
+fn lane_counts(graph: &ResearchGraph) -> Vec<usize> {
+    let mut counts = vec![0usize; graph.tiers.saturating_sub(1)];
+    for (from, to) in &graph.edges {
+        let (Some(a), Some(b)) = (graph.cell(from), graph.cell(to)) else {
+            continue;
+        };
+        if b.tier > a.tier && a.tier < counts.len() {
+            counts[a.tier] += 1;
+        }
+    }
+    counts
+}
+
+/// Every edge with the lane it takes, in a deterministic order.
+///
+/// Sorted by the slots it joins, so a parent's fan stays bundled and two
+/// edges never swap lanes between frames. Ids break the tie, because two
+/// edges can join the same pair of slots across a tier-skipping gap.
+pub(super) fn assign_lanes(graph: &ResearchGraph) -> Vec<EdgeRoute> {
+    let mut routed: Vec<(usize, usize, usize, &ResearchId, &ResearchId)> = graph
+        .edges
+        .iter()
+        .filter_map(|(from, to)| {
+            let (a, b) = (graph.cell(from)?, graph.cell(to)?);
+            (b.tier > a.tier).then_some((a.tier, a.slot, b.slot, from, to))
+        })
+        .collect();
+    routed.sort_by(|l, r| (l.0, l.1, l.2, l.3, l.4).cmp(&(r.0, r.1, r.2, r.3, r.4)));
+    let mut lane_in: Vec<usize> = vec![0; graph.tiers];
+    routed
+        .into_iter()
+        .map(|(gutter, _, _, from, to)| {
+            let lane = lane_in[gutter];
+            lane_in[gutter] += 1;
+            EdgeRoute {
+                from: from.clone(),
+                to: to.clone(),
+                gutter,
+                lane,
+            }
+        })
+        .collect()
+}
+
 pub(super) struct GraphGeometry {
-    /// The box field, left of the panel.
+    /// The viewport onto the box field, left of the panel. Screen space.
     pub pane: Rect,
-    /// The detail panel down the right.
+    /// The detail panel down the right. Screen space.
     pub panel: Rect,
     pub cell_w: f32,
     pub cell_h: f32,
-    pitch_x: f32,
+    /// Content-space left edge of each tier's column.
+    tier_x: Vec<f32>,
+    /// Content-space width of the gutter right of each tier.
+    gutter_w: Vec<f32>,
+    /// How many lanes each gutter carries — what `lane_x` divides by, so a
+    /// lane's share of its gutter is the same figure that sized it.
+    lanes: Vec<usize>,
+    /// Content-space distance between one slot and the next.
     pitch_y: f32,
+    content_w: f32,
+    content_h: f32,
 }
 
 impl GraphGeometry {
-    /// The box for a cell at `(tier, slot)`, in screen pixels.
-    pub fn cell_rect(&self, tier: usize, slot: usize) -> Rect {
-        Rect::new(
-            self.pane.x + tier as f32 * self.pitch_x,
-            self.pane.y + slot as f32 * self.pitch_y,
-            self.cell_w,
-            self.cell_h,
+    /// The box for a cell at `(tier, slot)`, in content space.
+    pub fn content_rect(&self, tier: usize, slot: usize) -> Rect {
+        let x = self.tier_x.get(tier).copied().unwrap_or(0.0);
+        Rect::new(x, slot as f32 * self.pitch_y, self.cell_w, self.cell_h)
+    }
+
+    /// Where the viewport sits while `(tier, slot)` is selected: that cell
+    /// centred, then clamped so the view never runs off the content. An
+    /// axis whose content already fits reads 0 rather than a negative
+    /// offset that would float the tree away from its own corner.
+    pub fn offset(&self, tier: usize, slot: usize) -> (f32, f32) {
+        let r = self.content_rect(tier, slot);
+        let span = |centre: f32, view: f32, content: f32| {
+            (centre - view * 0.5).clamp(0.0, (content - view).max(0.0))
+        };
+        (
+            span(r.x + r.w * 0.5, self.pane.w, self.content_w),
+            span(r.y + r.h * 0.5, self.pane.h, self.content_h),
         )
+    }
+
+    /// The box for a cell at `(tier, slot)`, in screen pixels at `offset`.
+    pub fn cell_rect(&self, tier: usize, slot: usize, offset: (f32, f32)) -> Rect {
+        let r = self.content_rect(tier, slot);
+        Rect::new(
+            self.pane.x + r.x - offset.0,
+            self.pane.y + r.y - offset.1,
+            r.w,
+            r.h,
+        )
+    }
+
+    /// Content-space x of one lane of the gutter right of `tier`. Lanes are
+    /// spread across the gutter rather than pinned to its middle, which is
+    /// the whole of what stops nine edges reading as one vertical bar.
+    pub fn lane_x(&self, tier: usize, lane: usize) -> f32 {
+        let left = self.tier_x.get(tier).copied().unwrap_or(0.0) + self.cell_w;
+        let gutter = self.gutter_w.get(tier).copied().unwrap_or(0.0);
+        let lanes = self.lanes.get(tier).copied().unwrap_or(0);
+        // Evenly across the gutter, so neither the first nor the last lane
+        // grazes the box it runs beside.
+        left + gutter * (lane as f32 + 1.0) / (lanes as f32 + 1.0)
     }
 
     /// How many characters of a label fit one line of a box at `small`.
@@ -52,6 +171,27 @@ impl GraphGeometry {
     /// repo before.
     pub fn label_columns(&self, painter: &Painter, m: &Metrics) -> usize {
         columns_for(painter, self.cell_w - m.pad * 2.0, m.small())
+    }
+
+    /// What the viewport is not showing, in whole columns and rows, as
+    /// `(left, right, above, below)`.
+    pub fn hidden(&self, offset: (f32, f32)) -> (usize, usize, usize, usize) {
+        let cols = |x: f32| (x / self.pitch_x_at()).floor().max(0.0) as usize;
+        let rows = |y: f32| (y / self.pitch_y).floor().max(0.0) as usize;
+        (
+            cols(offset.0),
+            cols((self.content_w - self.pane.w - offset.0).max(0.0)),
+            rows(offset.1),
+            rows((self.content_h - self.pane.h - offset.1).max(0.0)),
+        )
+    }
+
+    /// The mean column pitch — gutters vary by lane count, so there is no
+    /// single one, and this is only ever used to say "about this many
+    /// columns are off to the left".
+    fn pitch_x_at(&self) -> f32 {
+        let tiers = self.tier_x.len().max(1) as f32;
+        (self.content_w / tiers).max(1.0)
     }
 }
 
@@ -77,25 +217,46 @@ pub(super) fn geometry(
     let split = screen_w * (1.0 - PANEL_FRACTION);
     let pane = Rect::new(m.pad, body_y, (split - m.pad * 2.0).max(1.0), body_h);
     let panel = Rect::new(split, body_y, (screen_w - split - m.pad).max(1.0), body_h);
-    // An empty `assets/research/` is a supported install, and a NaN rect
-    // propagates into egui silently.
-    let pitch_x = if graph.tiers == 0 {
-        pane.w
+
+    // A box is sized off the font, not off the pane: a mod that doubles the
+    // tree's width scrolls further, and every box stays as legible as the
+    // shipped tree's.
+    let cell_w = m.font_size as f32 * CELL_FONTS;
+    let cell_h = m.line_height * CELL_LINES + m.pad;
+    let lane_pitch = m.inset;
+
+    // A gutter is a base plus a lane per edge crossing it.
+    let counts = lane_counts(graph);
+    let gutter_w: Vec<f32> = counts
+        .iter()
+        .map(|lanes| m.pad * 2.0 + *lanes as f32 * lane_pitch)
+        .collect();
+    let mut tier_x = Vec::with_capacity(graph.tiers);
+    let mut x = 0.0;
+    for tier in 0..graph.tiers {
+        tier_x.push(x);
+        x += cell_w + gutter_w.get(tier).copied().unwrap_or(0.0);
+    }
+    // The trailing gutter is not content: the last column ends at its box.
+    let content_w = tier_x.last().map(|last| last + cell_w).unwrap_or(0.0);
+    let pitch_y = cell_h + lane_pitch * 2.0;
+    let content_h = if graph.widest == 0 {
+        0.0
     } else {
-        pane.w / graph.tiers as f32
+        (graph.widest - 1) as f32 * pitch_y + cell_h
     };
-    let pitch_y = if graph.widest == 0 {
-        pane.h
-    } else {
-        pane.h / graph.widest as f32
-    };
+
     GraphGeometry {
         pane,
         panel,
-        cell_w: (pitch_x - GUTTER_X).max(1.0),
-        cell_h: (pitch_y - GUTTER_Y).max(1.0),
-        pitch_x,
+        cell_w,
+        cell_h,
+        tier_x,
+        gutter_w,
+        lanes: counts,
         pitch_y,
+        content_w,
+        content_h,
     }
 }
 
@@ -118,6 +279,43 @@ pub(super) fn box_label(name: &str, columns: usize) -> Vec<String> {
             }
         })
         .collect()
+}
+
+/// What the pane is not showing, and the keys that reach it.
+///
+/// `battle.rs::scroll_hint`'s shape and its reason: "there is more over
+/// there" is only useful next to the way to get to it, and here the way is
+/// the same arrow keys that move the cursor — the view has no key of its
+/// own because it has no state of its own.
+pub(super) fn view_hint(hidden: (usize, usize, usize, usize)) -> Option<String> {
+    let (left, right, above, below) = hidden;
+    let mut parts = Vec::new();
+    if left + right > 0 {
+        parts.push(match (left, right) {
+            (0, r) => format!("{r} more right"),
+            (l, 0) => format!("{l} more left"),
+            (l, r) => format!("{l} left, {r} right"),
+        });
+    }
+    if above + below > 0 {
+        parts.push(match (above, below) {
+            (0, b) => format!("{b} more below"),
+            (a, 0) => format!("{a} more above"),
+            (a, b) => format!("{a} above, {b} below"),
+        });
+    }
+    (!parts.is_empty()).then(|| format!("Arrows — {}", parts.join(", ")))
+}
+
+/// Where each of `count` lines meets a box's edge: spread down it rather
+/// than stacked on its middle, so a parent with four children emits four
+/// lines from four points.
+fn anchor_y(r: &Rect, index: usize, count: usize) -> f32 {
+    r.y + r.h * (index as f32 + 1.0) / (count as f32 + 1.0)
+}
+
+fn intersects(a: &Rect, b: &Rect) -> bool {
+    a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
 }
 
 /// An edge that does not end at the selected node.
@@ -170,49 +368,89 @@ pub(super) fn draw_research_graph(
         return;
     };
     let selected_id = node.id.clone();
+    let offset = graph
+        .cell(&selected_id)
+        .map(|c| geo.offset(c.tier, c.slot))
+        .unwrap_or((0.0, 0.0));
 
-    // Edges first, so a box paints over a line rather than the other way
-    // round.
-    for (from, to) in &graph.edges {
-        let (Some(a), Some(b)) = (graph.cell(from), graph.cell(to)) else {
-            continue;
-        };
-        let ra = geo.cell_rect(a.tier, a.slot);
-        let rb = geo.cell_rect(b.tier, b.slot);
-        let live = *to == selected_id;
-        let color = if live { EDGE_LIVE } else { EDGE_DIM };
-        let thickness = if live { 2.0 } else { 1.0 };
-        let ay = ra.y + ra.h * 0.5;
-        let by = rb.y + rb.h * 0.5;
-        let mid = ra.x + ra.w + (rb.x - (ra.x + ra.w)) * 0.5;
-        painter.line(ra.x + ra.w, ay, mid, ay, thickness, color);
-        painter.line(mid, ay, mid, by, thickness, color);
-        painter.line(mid, by, rb.x, by, thickness, color);
-    }
+    let routes = assign_lanes(&graph);
+    // How many lines each box emits and receives, so an anchor can be
+    // spread down its edge instead of pinned to its middle.
+    let fan_out = |id: &str| routes.iter().filter(|r| r.from == id).count();
+    let fan_in = |id: &str| routes.iter().filter(|r| r.to == id).count();
 
-    let columns = geo.label_columns(painter, m);
-    for cell in &graph.cells {
-        let Some(node) = nodes.iter().find(|n| n.id == cell.id) else {
-            continue;
-        };
-        let r = geo.cell_rect(cell.tier, cell.slot);
-        if node.id == selected_id {
-            painter.rect(r.x, r.y, r.w, r.h, SELECT_BG);
+    painter.clipped(geo.pane.x, geo.pane.y, geo.pane.w, geo.pane.h, |p| {
+        // Edges first, so a box paints over a line rather than the other way
+        // round.
+        for route in &routes {
+            let (Some(a), Some(b)) = (graph.cell(&route.from), graph.cell(&route.to)) else {
+                continue;
+            };
+            let ra = geo.cell_rect(a.tier, a.slot, offset);
+            let rb = geo.cell_rect(b.tier, b.slot, offset);
+            let lane = geo.pane.x + geo.lane_x(route.gutter, route.lane) - offset.0;
+            let span = Rect::new(
+                ra.x.min(lane).min(rb.x),
+                ra.y.min(rb.y),
+                (ra.x.max(rb.x + rb.w).max(lane) - ra.x.min(lane).min(rb.x)).max(1.0),
+                (ra.y.max(rb.y) - ra.y.min(rb.y) + ra.h).max(1.0),
+            );
+            if !intersects(&span, &geo.pane) {
+                continue;
+            }
+            let out_of = fan_out(&route.from);
+            let into = fan_in(&route.to);
+            let out_index = routes
+                .iter()
+                .filter(|r| r.from == route.from)
+                .position(|r| r == route)
+                .unwrap_or(0);
+            let in_index = routes
+                .iter()
+                .filter(|r| r.to == route.to)
+                .position(|r| r == route)
+                .unwrap_or(0);
+            let ay = anchor_y(&ra, out_index, out_of);
+            let by = anchor_y(&rb, in_index, into);
+            let live = route.to == selected_id;
+            let color = if live { EDGE_LIVE } else { EDGE_DIM };
+            let thickness = if live { 2.0 } else { 1.0 };
+            p.line(ra.x + ra.w, ay, lane, ay, thickness, color);
+            p.line(lane, ay, lane, by, thickness, color);
+            p.line(lane, by, rb.x, by, thickness, color);
         }
-        painter.rect_lines(r.x, r.y, r.w, r.h, 1.0, row_color(node));
-        let mut y = r.y + m.line_height;
-        for line in box_label(&node.name, columns) {
-            painter.ui(line, r.x + m.pad, y, m.small(), row_color(node));
-            y += m.line_height;
+
+        let columns = geo.label_columns(p, m);
+        for cell in &graph.cells {
+            let Some(node) = nodes.iter().find(|n| n.id == cell.id) else {
+                continue;
+            };
+            let r = geo.cell_rect(cell.tier, cell.slot, offset);
+            if !intersects(&r, &geo.pane) {
+                continue;
+            }
+            if node.id == selected_id {
+                p.rect(r.x, r.y, r.w, r.h, SELECT_BG);
+            } else {
+                // A box is opaque, or an edge routed under it shows through
+                // and reads as an edge that ends nowhere.
+                p.rect(r.x, r.y, r.w, r.h, PANEL_BG);
+            }
+            p.rect_lines(r.x, r.y, r.w, r.h, 1.0, row_color(node));
+            let mut y = r.y + m.line_height;
+            for line in box_label(&node.name, columns) {
+                p.ui(line, r.x + m.pad, y, m.small(), row_color(node));
+                y += m.line_height;
+            }
+            p.ui(
+                format!("{}", node.cost),
+                r.x + m.pad,
+                (r.y + r.h - m.pad).max(y),
+                m.small(),
+                TEXT_DIM,
+            );
         }
-        painter.ui(
-            format!("{}", node.cost),
-            r.x + m.pad,
-            (r.y + r.h - m.pad).max(y),
-            m.small(),
-            TEXT_DIM,
-        );
-    }
+    });
 
     // The panel, out of the list's own row builders — a second wording of a
     // node's bill or conversions is the copy that drifts.
@@ -250,11 +488,15 @@ pub(super) fn draw_research_graph(
         cy = draw_row(row, geo.panel.x, geo.panel.w, cy, max_y, painter, m);
     }
 
+    // The footer carries the refusal when there is one and the view hint
+    // otherwise: a refusal is transient and the more urgent of the two, and
+    // two strings on one row is how a message gets overdrawn.
     if let Some(refusal) = refusal {
         painter.ui(refusal, m.pad, screen_h - m.pad, m.font_size, RED);
+    } else if let Some(hint) = view_hint(geo.hidden(offset)) {
+        painter.ui(hint, m.pad, screen_h - m.pad, m.small(), TEXT_DIM);
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::super::test_support::test_assets_dir;
@@ -269,26 +511,32 @@ mod tests {
             .research_graph()
     }
 
-    /// The whole tree is visible at once — there is no pan and no scroll —
-    /// so "fits" is a correctness property of this screen and not a polish
-    /// one. 1280x720 is the smallest window the rest of the UI is held to.
+    /// The pane pans, so "the whole tree fits" is no longer true and no
+    /// longer the property to hold. **This is what replaces it**: whichever
+    /// node the cursor is on is fully inside the pane, so no arrow key can
+    /// move the selection somewhere the player cannot see it.
+    ///
+    /// 1280x720 is the smallest window the rest of the UI is held to.
     #[test]
-    fn the_whole_shipped_tree_fits_the_graph_pane_at_1280x720() {
+    fn the_selected_node_is_always_fully_in_view_at_1280x720() {
         let g = shipped_graph();
         let m = ui_metrics(720.0);
         let geo = geometry(1280.0, 720.0, &g, &m);
         assert!(geo.cell_w > 0.0 && geo.cell_h > 0.0);
         for cell in &g.cells {
-            let r = geo.cell_rect(cell.tier, cell.slot);
+            let offset = geo.offset(cell.tier, cell.slot);
+            let r = geo.cell_rect(cell.tier, cell.slot, offset);
             assert!(
-                r.x >= geo.pane.x && r.x + r.w <= geo.pane.x + geo.pane.w + 0.01,
-                "{} at tier {} runs outside the pane horizontally",
+                r.x >= geo.pane.x - 0.01 && r.x + r.w <= geo.pane.x + geo.pane.w + 0.01,
+                "{} at tier {} is not in view horizontally: {:?} against {:?}",
                 cell.id,
-                cell.tier
+                cell.tier,
+                (r.x, r.w),
+                (geo.pane.x, geo.pane.w)
             );
             assert!(
-                r.y >= geo.pane.y && r.y + r.h <= geo.pane.y + geo.pane.h + 0.01,
-                "{} at slot {} runs outside the pane vertically",
+                r.y >= geo.pane.y - 0.01 && r.y + r.h <= geo.pane.y + geo.pane.h + 0.01,
+                "{} at slot {} is not in view vertically",
                 cell.id,
                 cell.slot
             );
@@ -300,6 +548,102 @@ mod tests {
         assert!(
             geo.panel.x + geo.panel.w <= 1280.0 + 0.01,
             "and the panel must not run off the window"
+        );
+    }
+
+    /// The view clamps at both ends rather than scrolling into blank space:
+    /// selecting the first tier puts the tree's own left edge at the pane's,
+    /// and selecting the last puts its right edge at the pane's right.
+    #[test]
+    fn the_view_never_scrolls_past_the_content() {
+        let g = shipped_graph();
+        let m = ui_metrics(720.0);
+        let geo = geometry(1280.0, 720.0, &g, &m);
+        for cell in &g.cells {
+            let (x, y) = geo.offset(cell.tier, cell.slot);
+            assert!(
+                x >= 0.0 && y >= 0.0,
+                "{} scrolled before the origin",
+                cell.id
+            );
+            assert!(
+                x <= (geo.content_w - geo.pane.w).max(0.0) + 0.01,
+                "{} scrolled past the right edge",
+                cell.id
+            );
+            assert!(
+                y <= (geo.content_h - geo.pane.h).max(0.0) + 0.01,
+                "{} scrolled past the bottom edge",
+                cell.id
+            );
+        }
+        let first = g.cell("automation").expect("a tier 0 node");
+        assert_eq!(geo.offset(first.tier, first.slot).0, 0.0);
+        let last = g
+            .cells
+            .iter()
+            .find(|c| c.tier == g.tiers - 1)
+            .expect("a node in the last tier");
+        assert!(
+            (geo.offset(last.tier, last.slot).0 - (geo.content_w - geo.pane.w)).abs() < 0.01,
+            "the last tier clamps against the content's right edge"
+        );
+    }
+
+    /// The bug this view was reported for: every elbow in a gutter shared
+    /// one `mid`, so the nine edges into tier 3 drew as a single vertical
+    /// bar with stubs. Each edge now gets its own lane.
+    #[test]
+    fn no_two_edges_in_a_gutter_share_a_lane() {
+        let g = shipped_graph();
+        let m = ui_metrics(720.0);
+        let geo = geometry(1280.0, 720.0, &g, &m);
+        let routes = assign_lanes(&g);
+        assert_eq!(routes.len(), g.edges.len(), "every edge is routed");
+        for gutter in 0..g.tiers.saturating_sub(1) {
+            let lanes: Vec<f32> = routes
+                .iter()
+                .filter(|r| r.gutter == gutter)
+                .map(|r| geo.lane_x(r.gutter, r.lane))
+                .collect();
+            for (i, a) in lanes.iter().enumerate() {
+                for b in &lanes[i + 1..] {
+                    assert!(
+                        (a - b).abs() > 1.0,
+                        "gutter {gutter} draws two vertical runs at {a} and {b}"
+                    );
+                }
+            }
+            // And they stay inside the gutter they were sized for.
+            let left = geo.content_rect(gutter, 0).x + geo.cell_w;
+            let right = geo.content_rect(gutter + 1, 0).x;
+            for x in &lanes {
+                assert!(
+                    *x > left && *x < right,
+                    "a lane at {x} escaped its gutter ({left}..{right})"
+                );
+            }
+        }
+    }
+
+    /// A parent with four children emits four lines from four points on its
+    /// edge, not four from its middle — which is the other half of what made
+    /// the fan unreadable.
+    #[test]
+    fn a_parents_lines_leave_from_distinct_points() {
+        let r = Rect::new(0.0, 0.0, 100.0, 80.0);
+        let ys: Vec<f32> = (0..4).map(|i| anchor_y(&r, i, 4)).collect();
+        for pair in ys.windows(2) {
+            assert!(pair[1] > pair[0], "anchors must descend the edge: {ys:?}");
+        }
+        assert!(
+            ys.iter().all(|y| *y > r.y && *y < r.y + r.h),
+            "every anchor stays on the edge: {ys:?}"
+        );
+        assert_eq!(
+            anchor_y(&r, 0, 1),
+            r.y + r.h * 0.5,
+            "a lone line is centred"
         );
     }
 
@@ -373,11 +717,12 @@ mod tests {
         );
     }
 
-    /// A modded tree deeper and wider than the shipped one squeezes; it does
-    /// not scroll and it does not produce a negative box. Panning is the
-    /// feature to add if a mod ever needs it.
+    /// A modded tree deeper and wider than the shipped one **scrolls rather
+    /// than squeezing** — this is the whole point of sizing a box off the
+    /// font instead of off the pane. A 20x30 tree draws the same box the
+    /// shipped 6x9 one does; what grows is the content behind the viewport.
     #[test]
-    fn a_far_larger_tree_squeezes_rather_than_overflowing() {
+    fn a_far_larger_tree_scrolls_rather_than_squeezing() {
         let mut g = ResearchGraph::default();
         for tier in 0..20 {
             for slot in 0..30 {
@@ -392,12 +737,23 @@ mod tests {
         g.widest = 30;
         let m = ui_metrics(720.0);
         let geo = geometry(1280.0, 720.0, &g, &m);
-        assert!(geo.cell_w > 0.0, "a squeezed box is still a box");
-        assert!(geo.cell_h > 0.0);
+        let shipped = geometry(1280.0, 720.0, &shipped_graph(), &m);
+        assert_eq!(
+            (geo.cell_w, geo.cell_h),
+            (shipped.cell_w, shipped.cell_h),
+            "a box does not shrink because the tree got bigger"
+        );
+        assert!(
+            geo.content_w > shipped.content_w && geo.content_h > shipped.content_h,
+            "the content grows instead"
+        );
+        // And every cell of it is still reachable: selecting it brings it
+        // into view, which is the property that replaced "it all fits".
         for cell in &g.cells {
-            let r = geo.cell_rect(cell.tier, cell.slot);
-            assert!(r.x + r.w <= geo.pane.x + geo.pane.w + 0.01);
-            assert!(r.y + r.h <= geo.pane.y + geo.pane.h + 0.01);
+            let offset = geo.offset(cell.tier, cell.slot);
+            let r = geo.cell_rect(cell.tier, cell.slot, offset);
+            assert!(r.x >= geo.pane.x - 0.01 && r.x + r.w <= geo.pane.x + geo.pane.w + 0.01);
+            assert!(r.y >= geo.pane.y - 0.01 && r.y + r.h <= geo.pane.y + geo.pane.h + 0.01);
         }
     }
 
@@ -415,15 +771,19 @@ mod tests {
     use crate::paint::{painted_fills, painted_rect_stroke_count, painted_text};
     use feral_processes_engine::ResearchState;
 
-    /// Every node in the tree is drawn, because the whole point of this view
-    /// is that the shape is visible at once. Asserted on a name from each of
-    /// the six tiers rather than all 34, so a failure names where it broke.
+    /// Every tier is *reachable*, which is what "the shape is visible" means
+    /// now that the pane pans: a node off the side of the viewport is culled
+    /// rather than drawn, and selecting it brings it in.
+    ///
+    /// Asserted a tier at a time rather than over all 34 nodes, so a failure
+    /// names where it broke — and by *selecting* a node in each tier, since
+    /// with the cursor parked at tier 0 the far end of the tree is off-screen
+    /// by construction.
     #[test]
-    fn every_tier_is_drawn() {
+    fn every_tier_is_drawn_when_the_cursor_reaches_it() {
         let mut game = Game::new(932, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let nodes = game.research_nodes();
         let m = ui_metrics(720.0);
-        let (_, shapes) = with_painter(|p| draw_research_graph(&mut game, 0, None, p, &m));
-        let text = painted_text(&shapes).join("\n");
         for name in [
             "Automation",
             "Cache Coherence",
@@ -432,8 +792,65 @@ mod tests {
             "Cortex",
             "Mesh Plating",
         ] {
-            assert!(text.contains(name), "{name} is not on the screen");
+            let selected = nodes
+                .iter()
+                .position(|n| n.name.contains(name))
+                .unwrap_or_else(|| panic!("{name} is a shipped node"));
+            let (_, shapes) =
+                with_painter(|p| draw_research_graph(&mut game, selected, None, p, &m));
+            let text = painted_text(&shapes).join("\n");
+            assert!(
+                text.contains(name),
+                "{name} is not on the screen with its own node selected"
+            );
         }
+    }
+
+    /// Culling is not an optimisation here, it is what keeps a box from
+    /// painting over the detail panel: the far end of a panned tree must not
+    /// be drawn at all when the cursor is at the near end.
+    #[test]
+    fn the_far_end_of_the_tree_is_culled_rather_than_drawn() {
+        let mut game = Game::new(932, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let m = ui_metrics(720.0);
+        let (_, shapes) = with_painter(|p| draw_research_graph(&mut game, 0, None, p, &m));
+        let text = painted_text(&shapes).join("\n");
+        assert!(
+            !text.contains("Mesh Plating"),
+            "the last tier is five columns right of the first and cannot be on screen with it"
+        );
+    }
+
+    /// The footer says what the viewport is not showing, `battle.rs`'s
+    /// `scroll_hint` convention — "there is more over there" is only useful
+    /// beside the way to reach it.
+    #[test]
+    fn the_footer_names_what_is_off_screen() {
+        assert_eq!(
+            view_hint((0, 0, 0, 0)),
+            None,
+            "a tree that fits says nothing"
+        );
+        let hint = view_hint((2, 1, 0, 3)).expect("a panned view raises a hint");
+        assert!(hint.contains("Arrows"), "the hint names the key: {hint}");
+        assert!(hint.contains("2 left, 1 right"), "{hint}");
+        assert!(hint.contains("3 more below"), "{hint}");
+    }
+
+    /// The hint and a refusal share the footer row, so only one may be
+    /// drawn — and the refusal is the one that wins.
+    #[test]
+    fn a_refusal_takes_the_footer_from_the_view_hint() {
+        let mut game = Game::new(934, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        let m = ui_metrics(720.0);
+        let (_, shapes) =
+            with_painter(|p| draw_research_graph(&mut game, 0, Some("Not enough data."), p, &m));
+        let text = painted_text(&shapes).join("\n");
+        assert!(text.contains("Not enough data."), "the refusal is drawn");
+        assert!(
+            !text.contains("Arrows —"),
+            "the view hint must not share the row with it"
+        );
     }
 
     /// The panel describes the node under the highlight with the *same*

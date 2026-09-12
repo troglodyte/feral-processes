@@ -1,0 +1,15 @@
+(
+    id: "fork_program",
+    name: "Fork Program",
+    // The cheap half of the pair. One body, at the best tier the Scheduler
+    // allows — so this is the quality side of the quality-for-numbers trade
+    // and pays no `rarity_penalty`. Priced near Symlink: a whole extra
+    // combatant for the rest of the fight is most of what a charge is for,
+    // and the cooldown is what stops a long fight being fought entirely by
+    // bodies you did not bring to it.
+    description: "Forks one temporary program that fights beside you until the battle ends",
+    target: WholeParty,
+    effect: Summon(count: 1),
+    cooldown: 4,
+    power_cost: 20.0,
+)

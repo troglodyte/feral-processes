@@ -1472,6 +1472,14 @@ impl Game {
                 AbilityEffect::Decompile => unreachable!(
                     "Decompile never reaches use_ability; resolve_one_action handles it directly"
                 ),
+                // `Decompile`'s reason, exactly: a summon is not resolved
+                // over recipients either, and where the bodies are seated is
+                // each combat model's own answer — `resolve_one_action` here
+                // and `run_tactical_routine` on a battle map both branch
+                // around `use_ability` for it.
+                AbilityEffect::Summon { .. } => unreachable!(
+                    "Summon never reaches use_ability; each combat model seats its own bodies"
+                ),
                 // The two paths that pick an ability for `use_ability` to run
                 // — `battle_special_options` (player) and `wild_routine_ready`
                 // (a carrier's retaliation) — both exclude a field-only

@@ -203,6 +203,47 @@ way deleting the Currency item does.
     //     `decompile.ron` uses; there is no reason to declare a second
     //     ability with this effect.
     //
+    //   Summon(count: 1)
+    //   Summon(count: 2, extra: 1, rarity_penalty: 1)
+    //     Forks temporary programs onto the invoker's side of the fight.
+    //     They fight for the length of that battle and are gone when it
+    //     ends — every one of them, whether or not it survived, and however
+    //     the fight ended.
+    //
+    //     A forked program is **not** a companion. It never joins the
+    //     roster, never counts against your roster slots, earns no
+    //     experience, takes no gear, does not appear in a save, and cannot
+    //     be recovered if it goes down. What it *is*, is a wild program's
+    //     species, stat block and moves, fighting for you.
+    //
+    //     `count` is the fewest bodies an invocation fields and `extra` is
+    //     how many more it may roll on top of that, so the count lands in
+    //     `count ..= count + extra`. `extra` defaults to 0, which is a fixed
+    //     count. It is deliberately **not** the `spread` field the damage
+    //     effects use — that one is a *centred* half-width, and a body count
+    //     has no reason to be centred.
+    //
+    //     How strong each body is comes from three places and none of them
+    //     are authored here: the player's own level within the zone's band,
+    //     a flat handicap that keeps a fork below a real companion, and the
+    //     rarity tier it rolls. That last one is the only axis a file can
+    //     touch, through `rarity_penalty` — the number of tiers to lower the
+    //     ceiling by. Without the Scheduler perk every fork is Ordinary
+    //     whatever this says, so a penalty is felt only once a player has
+    //     invested in forking at all; with it, a routine that fields more
+    //     bodies can be made to field worse ones.
+    //
+    //     Requires `target: WholeParty` — anything else is skipped at load
+    //     with a warning, the same as a non-finite number. The effect is not
+    //     resolved over recipients at all (each combat model seats the
+    //     bodies itself), so a target naming an enemy or a single ally would
+    //     be a lie on the screen rather than a shape the game could honour.
+    //
+    //     `cooldown` and `power_cost` both apply and both should be steep: a
+    //     whole extra combatant for the rest of a fight is among the
+    //     strongest things a routine can buy. This is what `fork_program.ron`
+    //     and `fork_cluster.ron` use.
+    //
     //   FieldBuff(kind: Regen, power: 3, duration: 40)
     //   FieldBuff(kind: Atk, power: 4)
     //     The field-only marker: an ability carrying this effect never

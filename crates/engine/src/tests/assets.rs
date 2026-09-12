@@ -736,6 +736,7 @@ fn every_shipped_integrity_routine_rolls_a_band() {
             | E::Phase
             | E::Jump
             | E::Symlink
+            | E::Summon { .. }
             | E::Cloak { .. } => continue,
         };
         checked += 1;
@@ -786,6 +787,7 @@ fn every_shipped_routine_that_rolls_to_hit_is_aimed_and_no_other_is() {
             | E::Phase
             | E::Jump
             | E::Symlink
+            | E::Summon { .. }
             | E::Cloak { .. } => false,
         };
         if rolls_to_hit {
@@ -948,10 +950,22 @@ fn without_version_tag(name: &str) -> &str {
 /// badly-named file happily, and a mod is free to ignore it. What the test
 /// guards is the shipped set, where a new file that skips the suffix would
 /// otherwise read as a different kind of thing from its 40 neighbours.
+///
+/// **A `Summon` is excluded, because its `target` is not a scope.** The
+/// effect is seated by the combat model rather than resolved over
+/// recipients, and `WholeParty` is the ally-facing target
+/// `summon_target_mismatch` pins it to so that a picker never opens on it —
+/// it names nobody. Suffixing one "Party" would be telling the player it
+/// lands on their party, which is the one thing it does not do.
 #[test]
 fn every_shipped_ability_name_ends_in_the_scope_it_targets() {
     let game = Game::new(3303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
+    for def in game
+        .world
+        .resource::<crate::abilities::AbilityDb>()
+        .all()
+        .filter(|d| !matches!(d.effect, crate::abilities::AbilityEffect::Summon { .. }))
+    {
         let expected = scope_word(def.target);
         let base = without_version_tag(&def.name);
         assert!(
@@ -993,6 +1007,7 @@ fn every_shipped_routine_states_whether_it_breaks_a_cloak() {
             | E::FieldBuff { .. }
             | E::Phase
             | E::Jump
+            | E::Summon { .. }
             | E::Symlink => false,
         };
         assert_eq!(
@@ -1083,7 +1098,11 @@ fn every_battle_ability_family_is_contiguous_from_single_upward() {
         .world
         .resource::<crate::abilities::AbilityDb>()
         .all()
-        .filter(|d| !d.effect.field_only() && !d.exclusive)
+        .filter(|d| {
+            !d.effect.field_only()
+                && !d.exclusive
+                && !matches!(d.effect, crate::abilities::AbilityEffect::Summon { .. })
+        })
     {
         scopes
             .entry(family(def))
@@ -4555,4 +4574,73 @@ fn no_research_gated_recipe_is_offered_on_the_creation_shelf() {
             row.price
         );
     }
+}
+
+/// The two shipped fork routines. `every_runnable_routine_is_priced_in_power`
+/// already holds the price above zero; what this adds is the *shape* — one
+/// body against two-or-three, and the rung of quality the second pays for
+/// the numbers.
+#[test]
+fn the_two_fork_routines_ship_as_one_body_and_a_cluster() {
+    use crate::abilities::AbilityEffect;
+    let game = Game::new(4401, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let db = game.world.resource::<crate::abilities::AbilityDb>();
+
+    let one = db.get("fork_program").expect("fork_program ships");
+    assert!(matches!(
+        one.effect,
+        AbilityEffect::Summon {
+            count: 1,
+            extra: 0,
+            rarity_penalty: 0
+        }
+    ));
+
+    let many = db.get("fork_cluster").expect("fork_cluster ships");
+    let AbilityEffect::Summon {
+        count,
+        extra,
+        rarity_penalty,
+    } = many.effect
+    else {
+        panic!("fork_cluster is a Summon");
+    };
+    assert_eq!((count, count + extra), (2, 3), "two or three bodies");
+    assert_eq!(
+        rarity_penalty, 1,
+        "a rung worse than fork_program at every rank"
+    );
+
+    assert!(
+        many.power_cost > one.power_cost,
+        "the cluster is the expensive one: {} against {}",
+        many.power_cost,
+        one.power_cost
+    );
+    for def in [one, many] {
+        assert_eq!(
+            def.target,
+            crate::abilities::AbilityTarget::WholeParty,
+            "{:?} is centred on the invoker",
+            def.id
+        );
+        assert!(def.cooldown > 0, "{:?} needs a cooldown", def.id);
+    }
+}
+
+/// The empty-catalogue property every data-driven subsystem here holds:
+/// deleting both files leaves the game exactly as it was, rather than
+/// leaving a dangling reference behind.
+#[test]
+fn deleting_the_fork_routines_leaves_the_game_as_it_was() {
+    let dir = scratch_assets_dir("no_forks");
+    copy_shipped_assets(&dir, &[]);
+    for file in ["fork_program.ron", "fork_cluster.ron"] {
+        std::fs::remove_file(dir.join("abilities").join(file)).unwrap();
+    }
+    let game = Game::new(4402, DifficultyMode::Forgiving, &dir).unwrap();
+    let db = game.world.resource::<crate::abilities::AbilityDb>();
+    assert!(db.get("fork_program").is_none());
+    assert!(db.get("fork_cluster").is_none());
+    assert!(db.all().count() > 0, "every other routine is still there");
 }

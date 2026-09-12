@@ -480,7 +480,14 @@ pub(super) fn draw_turn_strip(view: &TacticalView, pane: Rect, painter: &Painter
 /// the two that commit and cancel it appear nowhere else. Taken here rather
 /// than branched on at `draw_playing_base`, so which bar a screen gets is
 /// one derivation a test can ask rather than a condition in a renderer.
-pub(super) fn action_bar(mode: Mode, view: &TacticalView) -> Vec<(String, String)> {
+///
+/// **And `auto` is an argument because it is app-core's**, not the engine's:
+/// `TacticalView::player_turn` still says the party's turn is the player's
+/// while auto-attack spends it, which is the whole shape of that feature. It
+/// is read before `player_turn` because it outranks it — a board being driven
+/// end to end has one thing worth saying at every instant of it, and "the
+/// wild side is moving" is not it.
+pub(super) fn action_bar(mode: Mode, view: &TacticalView, auto: bool) -> Vec<(String, String)> {
     if mode == Mode::TacticalAim {
         // Movement first because it is what the player is doing; `fitting`
         // drops from the end, and Esc is the row that may go — a cursor
@@ -491,6 +498,9 @@ pub(super) fn action_bar(mode: Mode, view: &TacticalView) -> Vec<(String, String
             ("Enter".to_string(), "confirm".to_string()),
             ("Esc".to_string(), "cancel".to_string()),
         ];
+    }
+    if auto {
+        return vec![("any key".to_string(), "stop auto-attack".to_string())];
     }
     if !view.player_turn {
         return vec![(String::new(), "the wild side is moving".to_string())];
@@ -510,9 +520,16 @@ pub(super) fn action_bar(mode: Mode, view: &TacticalView) -> Vec<(String, String
         // shared `s` stop reading as the same key.
         ("s".to_string(), "special".to_string()),
         ("E".to_string(), "end turn".to_string()),
+        // Last, because `strip::fitting` drops from the end and this is the
+        // row that may go — but it does not go at 1280x720, which is
+        // `the_action_bar_fits_the_log_pane`'s measurement and not a hope.
+        ("A".to_string(), "auto-attack".to_string()),
     ];
     if view.acted {
-        rows.retain(|(k, _)| k == "E");
+        // The auto row survives a spent turn: arming it is not an action, and
+        // a turn with nothing left to spend is exactly when a player decides
+        // they would rather watch the rest.
+        rows.retain(|(k, _)| k == "E" || k == "A");
     }
     rows
 }
@@ -871,7 +888,7 @@ mod tests {
         let mut view = game.tactical_view().expect("the fight is open");
         view.player_turn = true;
         view.acted = false;
-        let open = action_bar(Mode::TacticalBattle, &view);
+        let open = action_bar(Mode::TacticalBattle, &view, false);
         assert!(open.iter().any(|(k, _)| k == "a"));
         assert!(open.iter().any(|(k, _)| k == "E"));
         assert!(
@@ -884,10 +901,13 @@ mod tests {
         );
 
         view.acted = true;
-        let spent = action_bar(Mode::TacticalBattle, &view);
+        let spent = action_bar(Mode::TacticalBattle, &view, false);
+        // `A` stays: arming auto-attack is not an action and is not refused on
+        // a spent turn — and a turn with nothing left to spend is exactly when
+        // a player decides they would rather watch the rest of the fight.
         assert_eq!(
             spent.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>(),
-            vec!["E"],
+            vec!["E", "A"],
             "a spent turn still offered an action"
         );
     }
@@ -908,12 +928,18 @@ mod tests {
         // sentence — measuring that would pass against any width at all.
         view.player_turn = true;
         view.acted = false;
-        // Both bars: the cursor's is its own content at its own width, and
-        // a census over one of them passes against the other overflowing.
-        for mode in [Mode::TacticalBattle, Mode::TacticalAim] {
-            let actions = action_bar(mode, &view);
+        // Three bars: the cursor's is its own content at its own width, a
+        // census over one of them passes against the other overflowing, and
+        // the board's bar is one row longer while auto-attack is on offer —
+        // which is the row that has to be measured rather than assumed to fit.
+        for (mode, auto) in [
+            (Mode::TacticalBattle, false),
+            (Mode::TacticalBattle, true),
+            (Mode::TacticalAim, false),
+        ] {
+            let actions = action_bar(mode, &view, auto);
             assert!(
-                actions.len() >= 3,
+                auto || actions.len() >= 3,
                 "not a full bar for {mode:?}: {actions:?}"
             );
             for (w, h) in [(1280.0, 720.0), (1920.0, 1080.0)] {
@@ -935,15 +961,44 @@ mod tests {
                     assert_eq!(
                         taken.len(),
                         whole.len(),
-                        "{mode:?}'s bar dropped a key at {w}x{h} — slack {slack:.1}px: {drawn:?}"
+                        "{mode:?}'s bar (auto {auto}) dropped a key at {w}x{h} — slack {slack:.1}px: {drawn:?}"
                     );
                     assert!(
                         slack >= 0.0,
-                        "{mode:?}'s bar overhangs its pane by {slack:.1}px"
+                        "{mode:?}'s bar (auto {auto}) overhangs its pane by {slack:.1}px"
                     );
                 });
             }
         }
+    }
+
+    /// The bar is the only place auto-attack is discoverable, and while it is
+    /// running it is the only thing the bar has to say: every action key on it
+    /// would stop it rather than do what it names.
+    #[test]
+    fn the_action_bar_offers_auto_attack_and_says_when_it_is_running() {
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open");
+        view.player_turn = true;
+        view.acted = false;
+
+        let offered = action_bar(Mode::TacticalBattle, &view, false);
+        assert!(
+            offered.iter().any(|(k, _)| k == "A"),
+            "auto-attack is bound to nothing the player can see: {offered:?}"
+        );
+
+        let running = action_bar(Mode::TacticalBattle, &view, true);
+        for action in ["a", "d", "s", "E"] {
+            assert!(
+                !running.iter().any(|(k, _)| k == action),
+                "{action:?} would stop auto-attack rather than act, so the bar must not offer it: {running:?}"
+            );
+        }
+        assert!(
+            running.iter().any(|(_, l)| l.contains("auto-attack")),
+            "a running auto-attack went unsaid: {running:?}"
+        );
     }
 
     /// The cursor is a different screen from the board, and offering the
@@ -956,7 +1011,7 @@ mod tests {
         view.player_turn = true;
         view.acted = false;
 
-        let rows = action_bar(Mode::TacticalAim, &view);
+        let rows = action_bar(Mode::TacticalAim, &view, false);
 
         assert!(
             rows.iter().any(|(k, _)| k == "Enter"),
@@ -981,7 +1036,7 @@ mod tests {
         let mut game = fighting();
         let mut view = game.tactical_view().expect("the fight is open");
         view.player_turn = false;
-        let rows = action_bar(Mode::TacticalBattle, &view);
+        let rows = action_bar(Mode::TacticalBattle, &view, false);
         assert!(rows.iter().all(|(k, _)| k.is_empty()));
     }
 

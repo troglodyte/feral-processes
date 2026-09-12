@@ -517,3 +517,115 @@ fn d_does_nothing_on_a_wild_bodys_turn() {
         "[d] spent a turn that was not the player's"
     );
 }
+
+/// The round a fight is in, or `None` once it has closed.
+fn tactical_round(app: &mut App) -> Option<u32> {
+    Some(app.game.as_mut()?.tactical_view()?.round)
+}
+
+/// What the acting body has left to spend, for a test asserting that a key
+/// spent nothing.
+fn tactical_allowance(app: &mut App) -> u32 {
+    app.game
+        .as_mut()
+        .expect("the fixture has a game")
+        .tactical_view()
+        .expect("the fight is open")
+        .allowance
+}
+
+/// The whole feature: a whole round goes by with no key pressed.
+///
+/// `the_clock_does_not_run_on_the_players_own_turn` is the other half — the
+/// same advance without `[A]` leaves the player's turn exactly where it was,
+/// so this cannot be passing on a clock that would have run anyway.
+#[test]
+fn auto_attack_spends_the_partys_own_turn_without_a_keypress() {
+    let mut app = fighting(9130);
+    wait_for_the_player(&mut app);
+    let opened = tactical_round(&mut app).expect("the fight is open");
+
+    app.handle_key(GameKey::Char('A'));
+
+    let mut moved_on = false;
+    for _ in 0..64 {
+        app.advance_tactical(TACTICAL_HANDOVER_SECONDS);
+        moved_on = tactical_round(&mut app).is_none_or(|round| round > opened);
+        if moved_on {
+            break;
+        }
+    }
+    assert!(
+        moved_on,
+        "the round never turned over, so the party's turn was never spent"
+    );
+}
+
+/// **The stop is read before the wait, not after it.** A player reaching for
+/// the keyboard while a hostile is mid-walk means to take over, and the wait
+/// that swallows keys during a wild turn would otherwise swallow that too —
+/// leaving the only way to stop auto-attack a key pressed inside a window the
+/// player cannot see the boundaries of.
+#[test]
+fn auto_attack_arms_and_stops_while_the_wild_side_is_moving() {
+    let mut app = fighting(9131);
+    open_on_a_wild_turn(&mut app);
+
+    app.handle_key(GameKey::Char('A'));
+    assert!(app.tactical_auto, "[A] did not arm on a wild body's turn");
+
+    app.handle_key(GameKey::Char('A'));
+    assert!(!app.tactical_auto, "a key did not stop it");
+}
+
+/// The key that stops the robot must not also move the body it was driving.
+#[test]
+fn the_key_that_stops_auto_attack_spends_nothing() {
+    let mut app = fighting(9132);
+    wait_for_the_player(&mut app);
+    app.handle_key(GameKey::Char('A'));
+    let cell = acting_cell(&mut app);
+    let allowance = tactical_allowance(&mut app);
+
+    app.handle_key(GameKey::Left);
+
+    assert!(!app.tactical_auto, "a direction key did not stop it");
+    assert_eq!(
+        acting_cell(&mut app),
+        cell,
+        "the stopping key walked a body"
+    );
+    assert_eq!(
+        tactical_allowance(&mut app),
+        allowance,
+        "the stopping key spent movement"
+    );
+    assert!(
+        app.tactical_player_turn(),
+        "the stopping key gave the turn away"
+    );
+}
+
+/// Per fight, so the next one starts hands-on however the last one ended.
+#[test]
+fn auto_attack_is_off_once_the_fight_is_over() {
+    let mut app = fighting(9133);
+    wait_for_the_player(&mut app);
+    app.handle_key(GameKey::Char('A'));
+
+    for _ in 0..200 {
+        if app.mode != Mode::TacticalBattle {
+            break;
+        }
+        // A frame long enough to owe many beats: the loop spends every one it
+        // has paid for, so this runs the fight rather than watching it.
+        app.advance_tactical(100.0);
+    }
+
+    assert_eq!(
+        app.mode,
+        Mode::BattleResult,
+        "the auto fight never resolved"
+    );
+    assert!(!app.tactical_auto, "auto-attack outlived the fight");
+}

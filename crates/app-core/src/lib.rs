@@ -2357,6 +2357,19 @@ pub struct App {
     /// saved**, for its reason: a fight is not serialized, so neither is
     /// what a fight is part-way through.
     pub tactical_carry: f32,
+    /// Whether the party's own turns are being spent for the player.
+    ///
+    /// **The engine is not told.** `Game::tactical_awaits_input` still answers
+    /// `true` for every party body, because every party body really is the
+    /// player's to command — this is app-core deciding to answer for one, and
+    /// `Game::tactical_auto_beat` is the door it answers through. So the whole
+    /// feature is this flag, the key that clears it, and which beat door
+    /// `advance_tactical` reaches for.
+    ///
+    /// Transient and per fight, for `tactical_carry`'s reason above and one
+    /// more: a fight the player did not open hands-off is a fight they can
+    /// lose a companion in before they have read the board.
+    pub tactical_auto: bool,
     /// Where the Excavation plan's cursor is aimed, in **base-space**
     /// coordinates. `None` outside `Mode::Excavate` — opening the mode puts
     /// it on the party's own cell and leaving clears it.

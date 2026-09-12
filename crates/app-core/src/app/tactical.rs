@@ -39,6 +39,26 @@ impl App {
     /// side already walks them; the player was the one body on the board
     /// that could not.
     pub(crate) fn handle_tactical_key(&mut self, key: GameKey) {
+        // **Above the wait below, and above every action.** Auto-attack is a
+        // mode rather than an action, so arming and stopping it are the two
+        // things this screen answers whoever holds the turn — a stop that only
+        // landed on the player's own turn would have the player hunting for a
+        // window they cannot see the edges of, and an `[A]` that did the same
+        // would read as the key being broken.
+        //
+        // The stopping key is **swallowed**: it is the key that stops a robot
+        // mid-swing, and spending it as a step would walk the body the player
+        // was reaching in to save.
+        if self.tactical_auto {
+            self.tactical_auto = false;
+            self.status_line = Some("Auto-attack off.".to_string());
+            return;
+        }
+        if key == GameKey::Char('A') {
+            self.tactical_auto = true;
+            self.status_line = Some("Auto-attack on. Any key stops it.".to_string());
+            return;
+        }
         // A wild body is mid-turn. Its turns are the pacing loop's to
         // spend, and a key pressed into one would act for a body that is
         // not the player's — so the whole handler waits.
@@ -208,7 +228,7 @@ impl App {
             self.tactical_carry = 0.0;
             return;
         }
-        if self.tactical_player_turn() {
+        if self.tactical_player_turn() && !self.tactical_auto {
             // Held at zero rather than accumulated, so the first wild body
             // to act after the player's turn waits a full beat and the
             // handover is legible.
@@ -216,16 +236,27 @@ impl App {
             return;
         }
         self.tactical_carry += dt;
+        // Read before the loop's `&mut self.game` borrow.
+        let auto = self.tactical_auto;
         loop {
             let beat = self.tactical_beat();
             if self.tactical_carry < beat {
                 return;
             }
             self.tactical_carry -= beat;
+            // **The flag picks the door, not whose turn it is.** Auto-attack
+            // means one door for the whole board, so the party's turns are
+            // paced by the three waits the wild side's already are and a round
+            // reads at one speed. The narrower door stays for the fight the
+            // player is fighting, where a party body's turn is theirs and this
+            // loop must not touch it.
             let spent = self
                 .game
                 .as_mut()
-                .map(|g| g.tactical_ai_beat())
+                .map(|g| match auto {
+                    true => g.tactical_auto_beat(),
+                    false => g.tactical_ai_beat(),
+                })
                 .unwrap_or(AiBeat::Idle);
             if spent == AiBeat::Idle {
                 return;
@@ -335,6 +366,8 @@ impl App {
         self.pending_tactical = None;
         self.tactical_cursor = None;
         self.tactical_carry = 0.0;
+        // Per fight: the next one opens hands-on however this one ended.
+        self.tactical_auto = false;
         self.mode = Mode::BattleResult;
         self.restart_reveal();
         self.check_game_over();

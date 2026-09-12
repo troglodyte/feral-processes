@@ -946,6 +946,10 @@ relying on one, and correct all three places if it has moved.
   bounds-checked because of it.**
 - **Walking into a hostile is a swing, and its two gates are `Hostile` and
   `Game::tactical_awaits_input`** — neither a new predicate.
+- **Auto-attack is app-core answering for the party, not the engine
+  reclassifying it** — `Game::tactical_auto_beat` lifts `tactical_ai_beat`'s
+  `Hostile` gate and changes nothing else, and `App::tactical_auto` is cleared
+  by any key and by the fight ending.
 
 ### Items, gear and economy
 

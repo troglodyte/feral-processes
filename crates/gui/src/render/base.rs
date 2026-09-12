@@ -217,11 +217,12 @@ pub(super) fn draw_playing_base(
     // The keybar's content for as long as a fight is open, built before the
     // `game` borrow like every other read on this list.
     let mode = app.mode;
+    let tactical_auto = app.tactical_auto;
     let tactical_actions: Option<Vec<(String, String)>> = app
         .game
         .as_mut()
         .and_then(|g| g.tactical_view())
-        .map(|v| tactical::action_bar(mode, &v));
+        .map(|v| tactical::action_bar(mode, &v, tactical_auto));
     let Some(game) = &mut app.game else { return };
 
     let stock_rows = game.base_stock();

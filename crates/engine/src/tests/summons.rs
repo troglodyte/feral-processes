@@ -16,7 +16,7 @@ fn game(seed: u32) -> Game {
 
 fn fork_one(game: &mut Game) -> Entity {
     let player = game.player_entity();
-    let bodies = game.fork_programs(player, 1);
+    let bodies = game.fork_programs(player, 1, 0);
     assert_eq!(bodies.len(), 1, "one body was asked for");
     bodies[0]
 }
@@ -242,14 +242,14 @@ mod non_boss_pool {
         let mut b = game(29);
         let a_species: Vec<String> = {
             let player = a.player_entity();
-            a.fork_programs(player, 4)
+            a.fork_programs(player, 4, 0)
                 .into_iter()
                 .map(|e| a.world.get::<Creature>(e).unwrap().species.clone())
                 .collect()
         };
         let b_species: Vec<String> = {
             let player = b.player_entity();
-            b.fork_programs(player, 4)
+            b.fork_programs(player, 4, 0)
                 .into_iter()
                 .map(|e| b.world.get::<Creature>(e).unwrap().species.clone())
                 .collect()
@@ -262,6 +262,108 @@ mod non_boss_pool {
                 .len()
                 > 1,
             "four draws off a flat pool should not all land on one species: {a_species:?}"
+        );
+    }
+}
+
+/// What a fork is worth: the tier it rolls, the ceiling that holds it, and
+/// the player's own level reaching it.
+mod strength {
+    use super::*;
+    use crate::components::{Perks, Rarity};
+    use crate::perks::Perk;
+
+    fn scheduled(game: &mut Game, rank: usize) {
+        let player = game.player_entity();
+        game.world.entity_mut(player).insert(Perks {
+            points: 0,
+            unlocked: vec![Perk::Scheduler; rank],
+        });
+    }
+
+    /// `count` forks rolled one at a time, each swept before the next, so
+    /// the sample is of the roll and not of one invocation's worth of them.
+    fn tiers(game: &mut Game, count: usize, penalty: u32) -> Vec<Rarity> {
+        let player = game.player_entity();
+        let mut seen = Vec::new();
+        for _ in 0..count {
+            for body in game.fork_programs(player, 1, penalty) {
+                seen.push(game.world.get::<Rarity>(body).copied().unwrap_or_default());
+                game.world.despawn(body);
+            }
+        }
+        seen
+    }
+
+    /// A single fork passes against a broken window by luck; two hundred
+    /// do not.
+    #[test]
+    fn an_unscheduled_fork_is_always_ordinary() {
+        let mut game = game(31);
+        scheduled(&mut game, 0);
+        let rolled = tiers(&mut game, 200, 0);
+        assert!(
+            rolled.iter().all(|&r| r == Rarity::Ordinary),
+            "the window is shut at rank 0: {rolled:?}"
+        );
+    }
+
+    /// Both halves matter — the first proves the window opened, the second
+    /// proves the ceiling holds it.
+    #[test]
+    fn one_rank_reaches_silver_and_stops_there() {
+        let mut game = game(37);
+        scheduled(&mut game, 1);
+        let rolled = tiers(&mut game, 200, 0);
+        assert!(
+            rolled.contains(&Rarity::Silver),
+            "a bought rank should be visible over 200 rolls: {rolled:?}"
+        );
+        assert!(
+            rolled.iter().all(|&r| r <= Rarity::Silver),
+            "rank 1's ceiling is Silver: {rolled:?}"
+        );
+    }
+
+    #[test]
+    fn a_penalty_lowers_the_ceiling_a_rung() {
+        let mut game = game(41);
+        scheduled(&mut game, 2);
+        let plain = tiers(&mut game, 200, 0);
+        assert!(
+            plain.contains(&Rarity::Gold),
+            "rank 2 unpenalised reaches Gold: {plain:?}"
+        );
+
+        let mut game = super::game(41);
+        scheduled(&mut game, 2);
+        let penalised = tiers(&mut game, 200, 1);
+        assert!(
+            penalised.iter().all(|&r| r <= Rarity::Silver),
+            "a rarity_penalty of 1 is a rung off the ceiling: {penalised:?}"
+        );
+        assert!(
+            penalised.contains(&Rarity::Silver),
+            "and only off the ceiling — the window is still open: {penalised:?}"
+        );
+    }
+
+    /// Driven by setting the level rather than by fighting: the term under
+    /// test is `party_band_progress`, which reads `Experience::level`.
+    #[test]
+    fn a_fork_grows_with_the_players_own_level() {
+        let hp_at = |level: u32| {
+            let mut game = game(43);
+            let player = game.player_entity();
+            set_level(&mut game, player, level);
+            let body = game.fork_programs(player, 1, 0)[0];
+            game.world.get::<Stats>(body).unwrap().max_hp
+        };
+        assert!(
+            hp_at(8) > hp_at(1),
+            "the level term is live: {} at 1, {} at 8",
+            hp_at(1),
+            hp_at(8)
         );
     }
 }

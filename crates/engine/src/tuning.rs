@@ -5132,6 +5132,28 @@ pub const SUMMON_SENTINEL: (i32, i32) = (1 << 21, 1 << 21);
 /// axes at once rather than a window still opening under a fixed ceiling.
 pub const SUMMON_RARITY_WINDOW_PER_RANK: f64 = 8.0;
 
+/// The flat handicap every forked program carries, whatever it rolled.
+///
+/// Borrowed from `SETTLEMENT_GIFT_STAT_MULT`, the existing precedent for
+/// handicapping a program the player did not earn in a fight, and **a guess
+/// rather than a measurement**: `balance_sim` models no abilities and no
+/// perks, so it gates none of this. The instruments are `dev-arenas/` and a
+/// played session.
+///
+/// It is what makes an unscheduled fork worth less than a companion: at
+/// `Ordinary` the whole ladder runs 0.60 through to 1.29 at `Prismatic`, so
+/// even a fully invested fork is bounded — and temporary.
+pub const SUMMON_STAT_MULT: f32 = 0.6;
+
+/// How many zone steps of the player's own progress through this zone's
+/// level band a forked program is worth, via `Game::zone_curve_ratio`.
+///
+/// One step: a fork at the top of the band is scaled as a spawn one zone
+/// deeper would be, and at the bottom of it as one of this zone. Expressed
+/// in zone steps rather than as a bespoke curve because that is the ladder
+/// `balance_sim` already sweeps.
+pub const SUMMON_LEVEL_STAT_STEPS: f32 = 1.0;
+
 #[cfg(test)]
 mod tests {
     use super::*;

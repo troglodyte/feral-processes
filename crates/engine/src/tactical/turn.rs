@@ -451,7 +451,58 @@ impl Game {
         {
             return false;
         }
+        // The seventh refusal, and it lands here with the rest for the same
+        // reason: a board with no free cell beside the invoker has nowhere
+        // to put a body, and spending the Power, the cooldown and the turn
+        // to seat nobody is exactly the wasted round the other six refuse.
+        if matches!(ability.effect, AbilityEffect::Summon { .. }) && !self.board_has_room(actor) {
+            return false;
+        }
         self.run_tactical_routine(actor, &ability, aim, 0);
+        true
+    }
+
+    /// Whether a free walkable cell can still be found for a body seated
+    /// beside `invoker` — `seat_summon_on_board`'s question, asked ahead of
+    /// the spend rather than discovered inside it.
+    fn board_has_room(&self, invoker: Entity) -> bool {
+        let battle = self.world.resource::<TacticalBattle>();
+        let Some(from) = battle.cell_of(invoker) else {
+            return false;
+        };
+        let taken: std::collections::BTreeSet<(i32, i32)> =
+            battle.bodies().map(|(_, cell)| cell).collect();
+        crate::tactical::deploy::nearest_free(&battle.board, &taken, from).is_some()
+    }
+
+    /// Places a forked body beside `invoker` and splices it into the turn
+    /// order behind the cursor. Reports whether there was room.
+    ///
+    /// `deploy::nearest_free` is already exactly the breadth-first search
+    /// for this — the deployment ranks find their cells with it — so the
+    /// only thing this adds is building `taken` from the bodies already on
+    /// the board rather than from a rank being laid out.
+    ///
+    /// Sidedness needs **nothing**: `tactical_sides` is relative to the
+    /// actor, which is why `tactical_drive_turn` works at all. A body with
+    /// no `Hostile` is on the player's side by omission, exactly as a
+    /// companion is.
+    pub(crate) fn seat_summon_on_board(&mut self, invoker: Entity, body: Entity) -> bool {
+        let Some(at) = ({
+            let battle = self.world.resource::<TacticalBattle>();
+            battle.cell_of(invoker).and_then(|from| {
+                let taken: std::collections::BTreeSet<(i32, i32)> =
+                    battle.bodies().map(|(_, cell)| cell).collect();
+                crate::tactical::deploy::nearest_free(&battle.board, &taken, from)
+            })
+        }) else {
+            return false;
+        };
+        let mut battle = self.world.resource_mut::<TacticalBattle>();
+        if !battle.place(body, at) {
+            return false;
+        }
+        battle.insert_after_cursor(body);
         true
     }
 
@@ -509,6 +560,34 @@ impl Game {
                 && self.decompile_body(target, player)
             {
                 self.world.resource_mut::<TacticalBattle>().remove(target);
+            }
+        } else if let AbilityEffect::Summon {
+            count,
+            extra,
+            rarity_penalty,
+        } = ability.effect
+        {
+            // A capture's branch for a capture's reason: this is not
+            // resolved over `reach::recipients` either, and where the bodies
+            // stand is this model's own answer. The group model's Special
+            // site is the other half.
+            // The same dissolve the group model's site runs: a set replaces
+            // a set, and killing rather than removing leaves the reap below
+            // to take the bodies off the board.
+            self.dissolve_summons();
+            let rolled = if extra == 0 {
+                count
+            } else {
+                let mut rng = self.world.resource_mut::<crate::resources::GameRng>();
+                rand::RngExt::random_range(&mut rng.0, count..=count + extra)
+            };
+            for body in self.fork_programs(actor, rolled, rarity_penalty) {
+                if !self.seat_summon_on_board(actor, body) {
+                    // Out of room part-way through a cluster. The bodies
+                    // already seated stay; this one is swept with them at
+                    // teardown, exactly as an unseated one would be.
+                    break;
+                }
             }
         } else {
             let shape = ability.tactical_shape();

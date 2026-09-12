@@ -174,12 +174,25 @@ impl Game {
     /// neither the player nor a hostile, and the fight would either hang
     /// waiting for a key nobody may press or move a companion by itself.
     ///
-    /// **Every party body is the player's to command**, so the gate is
-    /// `Hostile` and not `Player`: a companion standing on a battle map
-    /// waits for input exactly as the player does.
+    /// **Every party body is the player's to command with one exception**,
+    /// so the gate is `Hostile` or `Summoned` and not `Player`: a companion
+    /// standing on a battle map waits for input exactly as the player does,
+    /// and a forked program is the first party body that drives itself.
+    ///
+    /// Read the exception as the feature rather than as a bug: a fork is
+    /// fielded by a routine, not brought to the fight, and asking the player
+    /// to command one would make `fork_cluster` three more turns of
+    /// bookkeeping a round. Sidedness needs nothing — `tactical_sides` is
+    /// already relative to the actor, which is why `tactical_drive_turn`
+    /// works at all.
     fn tactical_ai_actor(&self) -> Option<Entity> {
         let actor = self.world.get_resource::<TacticalBattle>()?.actor()?;
-        self.world.get::<Hostile>(actor).is_some().then_some(actor)
+        (self.world.get::<Hostile>(actor).is_some()
+            || self
+                .world
+                .get::<crate::components::Summoned>(actor)
+                .is_some())
+        .then_some(actor)
     }
 
     /// Whether the fight is waiting on a key rather than on the AI.

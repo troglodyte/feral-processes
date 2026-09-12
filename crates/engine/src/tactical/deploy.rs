@@ -92,7 +92,7 @@ fn fan(i: u32) -> i32 {
 /// `want` is clamped onto the board first: a long rank on a diagonal
 /// bearing runs its outer bodies off the edge, and a search that starts
 /// outside has nowhere to start from.
-fn nearest_free(
+pub(crate) fn nearest_free(
     board: &Board,
     taken: &BTreeSet<(i32, i32)>,
     want: (i32, i32),

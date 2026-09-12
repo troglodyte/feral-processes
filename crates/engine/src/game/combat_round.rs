@@ -1151,13 +1151,15 @@ impl Game {
         self.world.resource_mut::<BattleState>().planned.push(None);
     }
 
-    /// Kills the standing set of forked bodies, leaving them in their slots.
+    /// Kills the standing set of forked bodies, wherever they are standing.
     ///
-    /// **Killed, not removed.** Taking one out of `Party` mid-battle is
-    /// exactly what the slot-indexing seam forbids; leaving a dead body in
-    /// its slot is what already happens to a companion that dies mid-fight,
-    /// and the existing deferred reap carries it to teardown. Nor despawned:
-    /// `Party` still references it.
+    /// **Killed, not removed**, and model-blind for that reason: taking one
+    /// out of `Party` mid-battle is exactly what the slot-indexing seam
+    /// forbids, and leaving a dead body where it stands is what already
+    /// happens to a companion that dies mid-fight — each model's existing
+    /// reap carries it from there. Nor despawned: `Party` still references
+    /// it in the group model, and the board still holds a cell for it in
+    /// the other.
     pub(crate) fn dissolve_summons(&mut self) {
         let standing: Vec<Entity> = {
             let mut query = self

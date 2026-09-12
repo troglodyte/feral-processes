@@ -201,6 +201,8 @@
             "decompile",
             "repair_loop",
             "cascade_overflow",
+            "fork_program",
+            "fork_cluster",
         ],
         field_buffs: [],
         sorties: [],

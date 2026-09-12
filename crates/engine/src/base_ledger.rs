@@ -112,10 +112,11 @@ pub enum Event {
 /// Core Fragments came from a Mining Node against kills, base rock and
 /// caches, and a record with no source answers none of it.
 ///
-/// An enum rather than a `&str` at each of the seventeen call sites, for
+/// An enum rather than a `&str` at each call site, for
 /// `MachineStatus::as_str`'s reason: the wire strings are written once, a
-/// mistyped tag cannot silently create an eighteenth source, and the match
-/// is exhaustive so a new variant has to be given a name.
+/// mistyped tag cannot silently invent a source no analysis would notice
+/// was wrong, and the match is exhaustive so a new variant has to be given
+/// a name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LootSource {
     /// A fight's spoils: gear, a work resource, a Stack boss's fragments.
@@ -136,6 +137,14 @@ pub enum LootSource {
     /// A tool carrier the player forged — `Game::forge_tool`, `Etch`'s own
     /// sibling on the tool side of the acquisition chain.
     Forge,
+    /// What a demolished structure was *holding* — a Depot's shelf, a
+    /// machine's buffers. Distinct from `Refund`: that is a share of the
+    /// build cost handed back, minted by the demolition itself, while this
+    /// is stock the base already owned and had already acquired once
+    /// through some other source. Folding the two would make a demolition
+    /// read as a materials windfall on any analysis of where a run's
+    /// resources come from.
+    Salvage,
     /// A downed program taken apart with a tool — `Game::extract_program`.
     /// Distinct from `Kill`: the program already left the fight as its own
     /// carried object (`items::DownedProgram`), so what a tool draws out of
@@ -153,6 +162,7 @@ impl LootSource {
             LootSource::Contract => "contract",
             LootSource::Trade => "trade",
             LootSource::Refund => "refund",
+            LootSource::Salvage => "salvage",
             LootSource::Etch => "etch",
             LootSource::Forge => "forge",
             LootSource::Extract => "extract",

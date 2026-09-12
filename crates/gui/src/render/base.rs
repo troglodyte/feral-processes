@@ -504,7 +504,7 @@ fn draw_surface_map(
     // Hoisted out of the tile loop: it is one reading of one reserve, and the
     // whole grid is drawn against the same one.
     let floor = vignette_floor(status.power);
-    let (off_x, off_y) = fx.camera_offset(center, painter.delta());
+    let (off_x, off_y) = fx.camera_offset(center, painter.delta(), Some(crate::fx::CAMERA_MAX_LAG));
     let tiles = game.view_tiles_at(center, hw, hh);
     let entities: Vec<_> = game
         .view_entities_at(center, hw, hh)

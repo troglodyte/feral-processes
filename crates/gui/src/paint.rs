@@ -710,6 +710,24 @@ pub(crate) fn painted_line_count(shapes: &[egui::epaint::ClippedShape]) -> usize
         .count()
 }
 
+/// How many line segments `with_painter` recorded in exactly `color`.
+///
+/// `painted_line_count`'s companion for a caller that has to tell one kind of
+/// line from another rather than ask whether any were drawn: the battle map
+/// paints the reach field's boundary and a blow's streak with the same
+/// operation, and a bare count cannot say which it saw.
+#[cfg(test)]
+pub(crate) fn painted_line_count_in(shapes: &[egui::epaint::ClippedShape], color: Color) -> usize {
+    let want = to_egui(color);
+    shapes
+        .iter()
+        .filter(|cs| match &cs.shape {
+            egui::Shape::LineSegment { stroke, .. } => stroke.color == want,
+            _ => false,
+        })
+        .count()
+}
+
 /// How many rect *outlines* `with_painter` recorded in exactly `color`.
 ///
 /// `painted_rect_fill_count`'s companion, and not a widening of it: an

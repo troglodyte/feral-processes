@@ -35,6 +35,22 @@ const BOLT_BEAT_FRACTION: f64 = 1.0 / 3.0;
 pub const BOLT_SECONDS: f64 =
     (1.0 / feral_processes_app_core::TACTICAL_TURNS_PER_SECOND as f64) * BOLT_BEAT_FRACTION;
 
+/// How long the battle camera stays on a body after it has stopped acting,
+/// as a fraction of one tactical turn beat.
+///
+/// **Derived from the turn rate rather than restated**, `BOLT_SECONDS`'s rule
+/// and for its reason: a fight hands the turn on inside the same call that
+/// resolves the blow, so the hold has to end before the *next* body acts, and
+/// a figure in seconds cannot follow a retune of the pace there.
+///
+/// At 0.55 of the beat it outlasts `HIT_FLASH_SECONDS` — so the blow is still
+/// lit when the hold begins to expire, which is the whole point of holding —
+/// and leaves the rest of the beat for the pan to land before the next body
+/// moves.
+const CAMERA_DWELL_BEAT_FRACTION: f64 = 0.55;
+pub const CAMERA_DWELL_SECONDS: f64 =
+    (1.0 / feral_processes_app_core::TACTICAL_TURNS_PER_SECOND as f64) * CAMERA_DWELL_BEAT_FRACTION;
+
 /// How thick the streak is drawn, and how long its lit head is as a fraction
 /// of the whole flight. A head rather than a full line, so the eye reads a
 /// direction rather than a static beam.
@@ -90,7 +106,7 @@ const CAMERA_DECAY: f32 = 12.0;
 /// tile would expose blank space at the trailing edge. Clamping here also means
 /// a teleport — breaching a zone, taking a portal — arrives as a snap rather
 /// than a long pan across unrelated terrain, with no separate threshold for it.
-const CAMERA_MAX_LAG: f32 = 1.0;
+pub(crate) const CAMERA_MAX_LAG: f32 = 1.0;
 
 /// How long a body takes to cross one cell of base space on its way out
 /// through the anchor, and how far apart a squad's bodies set off.
@@ -281,9 +297,15 @@ fn ghost_step(ghost: f32, current: f32, dt: f32) -> f32 {
 /// decelerates into place instead of arriving at full speed, and expressed as
 /// a decay over `dt` so the glide lasts the same wall-clock time whatever the
 /// framerate.
-fn camera_step(cam: f32, target: f32, dt: f32) -> f32 {
+/// `max_lag` is `None` for a caller with no trailing edge to protect — see
+/// `CAMERA_MAX_LAG`, whose argument is the surface map's extra ring of tiles
+/// and applies to nothing else.
+fn camera_step(cam: f32, target: f32, dt: f32, max_lag: Option<f32>) -> f32 {
     let eased = cam + (target - cam) * (1.0 - (-CAMERA_DECAY * dt).exp());
-    eased.clamp(target - CAMERA_MAX_LAG, target + CAMERA_MAX_LAG)
+    match max_lag {
+        Some(lag) => eased.clamp(target - lag, target + lag),
+        None => eased,
+    }
 }
 
 fn shield_pulse_alpha(time: f64) -> f32 {
@@ -489,6 +511,21 @@ struct Bolt {
     start: f64,
 }
 
+/// Which body the battle camera is aimed at, and how long it may stay there.
+///
+/// `release` is pushed forward on every frame the same body is still acting,
+/// so the dwell is measured from the hand-over without anything having to
+/// notice one happened: the hold expires `CAMERA_DWELL_SECONDS` after the
+/// last frame this body held the turn. `seen` is the frame it was last asked
+/// at, which is how a board coming back on screen is told from a board that
+/// never left it.
+struct CameraHold {
+    key: u64,
+    cell: (i32, i32),
+    release: f64,
+    seen: f64,
+}
+
 struct FloatingNumber {
     text: String,
     x: f32,
@@ -521,6 +558,7 @@ pub struct Fx {
     floats: Vec<FloatingNumber>,
     bars: HashMap<u64, BarTracking>,
     camera: Option<(f32, f32)>,
+    camera_hold: Option<CameraHold>,
     log_flash_until: f64,
     last_log_line: Option<LogLine>,
 }
@@ -536,6 +574,7 @@ impl Fx {
             floats: Vec::new(),
             bars: HashMap::new(),
             camera: None,
+            camera_hold: None,
             log_flash_until: 0.0,
             last_log_line: None,
         }
@@ -859,7 +898,12 @@ impl Fx {
     /// The player is drawn as an ordinary entity at its own world position,
     /// so it drifts off centre while the camera catches up without needing a
     /// case of its own.
-    pub fn camera_offset(&mut self, player: (i32, i32), dt: f32) -> (f32, f32) {
+    pub fn camera_offset(
+        &mut self,
+        player: (i32, i32),
+        dt: f32,
+        max_lag: Option<f32>,
+    ) -> (f32, f32) {
         let target = (player.0 as f32, player.1 as f32);
         // Effects-off means an instant camera, as it does an instant HP bar.
         // The position is still tracked so re-enabling doesn't glide in from
@@ -872,11 +916,74 @@ impl Fx {
         // a world doesn't pan in from the origin.
         let previous = self.camera.unwrap_or(target);
         let cam = (
-            camera_step(previous.0, target.0, dt),
-            camera_step(previous.1, target.1, dt),
+            camera_step(previous.0, target.0, dt, max_lag),
+            camera_step(previous.1, target.1, dt, max_lag),
         );
         self.camera = Some(cam);
         (cam.0 - target.0, cam.1 - target.1)
+    }
+
+    /// Which cell the **battle** camera should be aimed at, given whose turn
+    /// it is and where that body stands.
+    ///
+    /// Not simply the acting body's cell, because a fight hands the turn on
+    /// inside the same call that resolves the blow: aimed at the live answer
+    /// the camera leaves the attacker while its streak is still in flight and
+    /// its hit flash still lit, so the one thing the screen exists to show
+    /// happens off screen.
+    ///
+    /// **Two arms, not three.** A body that is still acting and a body being
+    /// latched onto fresh want the same write — follow the cell, push the
+    /// release out — and the difference between them is only which key was
+    /// there before. Following the cell is what keeps a *walk* centred: its
+    /// steps are `TACTICAL_STEPS_PER_SECOND` apart, and a hold would fall
+    /// behind one.
+    ///
+    /// Effects-off means an instant camera here too, so the dwell is skipped
+    /// rather than shortened: with no streak and no flash drawn there is
+    /// nothing to hold the camera for, and the hold would read as lag.
+    pub fn battle_center(&mut self, acting: Option<(Entity, (i32, i32))>) -> Option<(i32, i32)> {
+        // A gap wider than the dwell means no battle map was drawn last
+        // frame, so this is a fight *opening* rather than one already on
+        // screen: both the hold and the camera's easing belong to a board
+        // that is gone, and easing in from wherever the surface map left the
+        // camera is a long pan across unrelated ground.
+        if self
+            .camera_hold
+            .as_ref()
+            .is_none_or(|hold| self.now - hold.seen > CAMERA_DWELL_SECONDS)
+        {
+            self.camera_hold = None;
+            self.camera = None;
+        }
+        let Some((entity, cell)) = acting else {
+            return self.camera_hold.as_ref().map(|hold| hold.cell);
+        };
+        let key = entity.to_bits();
+        let (now, dwell) = (self.now, self.enabled);
+        match &mut self.camera_hold {
+            // A different body, and the one before it is still owed its hold.
+            Some(hold) if hold.key != key && dwell && now < hold.release => {
+                hold.seen = now;
+                Some(hold.cell)
+            }
+            Some(hold) => {
+                hold.key = key;
+                hold.cell = cell;
+                hold.release = now + CAMERA_DWELL_SECONDS;
+                hold.seen = now;
+                Some(cell)
+            }
+            None => {
+                self.camera_hold = Some(CameraHold {
+                    key,
+                    cell,
+                    release: now + CAMERA_DWELL_SECONDS,
+                    seen: now,
+                });
+                Some(cell)
+            }
+        }
     }
 
     /// Drops every bar tracker, so the next battle seeds its ghosts fresh
@@ -1245,7 +1352,7 @@ mod tests {
 
     #[test]
     fn camera_step_eases_toward_the_target_without_arriving_in_one_frame() {
-        let cam = camera_step(0.0, 1.0, 0.016);
+        let cam = camera_step(0.0, 1.0, 0.016, Some(CAMERA_MAX_LAG));
         assert!(cam > 0.0, "the camera should move");
         assert!(cam < 1.0, "the camera should lag, not snap");
     }
@@ -1254,10 +1361,10 @@ mod tests {
     /// 144Hz machine than on a 30Hz one. The exponential form must not.
     #[test]
     fn camera_step_covers_the_same_ground_however_the_frames_are_sliced() {
-        let coarse = camera_step(0.0, 1.0, 0.1);
+        let coarse = camera_step(0.0, 1.0, 0.1, Some(CAMERA_MAX_LAG));
         let mut fine = 0.0;
         for _ in 0..10 {
-            fine = camera_step(fine, 1.0, 0.01);
+            fine = camera_step(fine, 1.0, 0.01, Some(CAMERA_MAX_LAG));
         }
         assert!(
             (coarse - fine).abs() < 1e-4,
@@ -1269,7 +1376,7 @@ mod tests {
     fn camera_step_converges_on_the_target() {
         let mut cam = 0.0;
         for _ in 0..200 {
-            cam = camera_step(cam, 5.0, 0.016);
+            cam = camera_step(cam, 5.0, 0.016, Some(CAMERA_MAX_LAG));
         }
         assert!((cam - 5.0).abs() < 1e-3, "settled at {cam}");
     }
@@ -1280,31 +1387,55 @@ mod tests {
     #[test]
     fn camera_step_never_falls_further_behind_than_the_extra_ring_covers() {
         assert_eq!(
-            camera_step(0.0, 40.0, 0.016).max(0.0),
+            camera_step(0.0, 40.0, 0.016, Some(CAMERA_MAX_LAG)).max(0.0),
             40.0 - CAMERA_MAX_LAG
         );
-        assert_eq!(camera_step(0.0, -40.0, 0.016), -40.0 + CAMERA_MAX_LAG);
+        assert_eq!(
+            camera_step(0.0, -40.0, 0.016, Some(CAMERA_MAX_LAG)),
+            -40.0 + CAMERA_MAX_LAG
+        );
+    }
+
+    /// ...and a caller with no trailing edge to protect gets a real glide.
+    ///
+    /// The battle map is that caller: it walks the whole board and skips
+    /// what falls outside the pane, so there is no ring to run out of. Under
+    /// the clamp a body on the far side of the board is one tile away after
+    /// a single frame, which is a cut rather than a pan — the point of the
+    /// `None` arm, and the thing a clamp left in by habit would undo
+    /// silently.
+    #[test]
+    fn camera_step_glides_when_no_lag_is_given() {
+        let unclamped = camera_step(0.0, 40.0, 0.016, None);
+        assert!(
+            unclamped < 40.0 - CAMERA_MAX_LAG,
+            "an unclamped step arrived within the clamp's own distance: {unclamped}"
+        );
+        assert!(unclamped > 0.0, "an unclamped step did not move at all");
     }
 
     #[test]
     fn the_cameras_first_frame_seeds_at_the_player_rather_than_panning_in() {
         let mut fx = Fx::new();
-        assert_eq!(fx.camera_offset((120, -80), 0.016), (0.0, 0.0));
+        assert_eq!(
+            fx.camera_offset((120, -80), 0.016, Some(CAMERA_MAX_LAG)),
+            (0.0, 0.0)
+        );
     }
 
     #[test]
     fn the_camera_trails_the_player_after_a_step_and_then_catches_up() {
         let mut fx = Fx::new();
-        fx.camera_offset((0, 0), 0.016);
+        fx.camera_offset((0, 0), 0.016, Some(CAMERA_MAX_LAG));
 
-        let (ox, oy) = fx.camera_offset((1, 0), 0.016);
+        let (ox, oy) = fx.camera_offset((1, 0), 0.016, Some(CAMERA_MAX_LAG));
         assert!(ox < 0.0, "the camera should still be behind: {ox}");
         assert_eq!(oy, 0.0, "an axis that didn't move must not drift");
 
         for _ in 0..200 {
-            fx.camera_offset((1, 0), 0.016);
+            fx.camera_offset((1, 0), 0.016, Some(CAMERA_MAX_LAG));
         }
-        let (ox, _) = fx.camera_offset((1, 0), 0.016);
+        let (ox, _) = fx.camera_offset((1, 0), 0.016, Some(CAMERA_MAX_LAG));
         assert!(ox.abs() < 1e-3, "the camera should settle: {ox}");
     }
 
@@ -1314,12 +1445,15 @@ mod tests {
     fn the_camera_snaps_while_effects_are_disabled() {
         let mut fx = Fx::new();
         fx.enabled = false;
-        fx.camera_offset((0, 0), 0.016);
-        assert_eq!(fx.camera_offset((30, 30), 0.016), (0.0, 0.0));
+        fx.camera_offset((0, 0), 0.016, Some(CAMERA_MAX_LAG));
+        assert_eq!(
+            fx.camera_offset((30, 30), 0.016, Some(CAMERA_MAX_LAG)),
+            (0.0, 0.0)
+        );
 
         fx.enabled = true;
         assert_eq!(
-            fx.camera_offset((30, 30), 0.016),
+            fx.camera_offset((30, 30), 0.016, Some(CAMERA_MAX_LAG)),
             (0.0, 0.0),
             "re-enabling must not reveal a camera left behind at the origin"
         );

@@ -8,7 +8,7 @@ use crate::species::SpeciesDb;
 use crate::tactical::TacticalBattle;
 use crate::tactical::reach::allowance;
 use crate::tactical::turn::StepOutcome;
-use crate::tests::support::{generic_species, test_assets_dir};
+use crate::tests::support::{equip_weapon, generic_species, test_assets_dir};
 use crate::tuning::{DEFAULT_BASE_SPEED, PLAYER_BASE_SPEED, TACTICAL_MOVE_MAX};
 use bevy_ecs::prelude::Entity;
 
@@ -2043,4 +2043,57 @@ fn a_body_is_walking_only_between_its_first_step_and_its_last() {
         !game.tactical_walking(),
         "the turn ended with a walk still owed"
     );
+}
+
+/// The player unarmed swings at arm's length, and nothing else.
+#[test]
+fn an_unarmed_body_swings_at_arms_length() {
+    let game = game();
+    let player = game.player_entity();
+    assert_eq!(
+        game.swing_range(player),
+        crate::tuning::TACTICAL_MELEE_RANGE
+    );
+}
+
+/// A species carrying a `ranged` move reaches past arm's length.
+#[test]
+fn a_ranged_species_reaches_past_arms_length() {
+    let mut game = game();
+    let shooter = body(&mut game, "drone");
+    assert_eq!(
+        game.swing_range(shooter),
+        crate::tuning::TACTICAL_RANGED_MOVE_RANGE,
+        "Drone's Recon Ping is `ranged: true`"
+    );
+}
+
+/// A species with no ranged move stays at arm's length.
+#[test]
+fn a_melee_species_stays_at_arms_length() {
+    let mut game = game();
+    let bruiser = body(&mut game, "construct");
+    assert_eq!(
+        game.swing_range(bruiser),
+        crate::tuning::TACTICAL_MELEE_RANGE,
+        "Construct authors no ranged move"
+    );
+}
+
+/// A worn weapon **replaces** the species figure rather than being maxed
+/// against it — `Game::attack_range`'s precedent, where worn damage replaces
+/// a natural band outright. A ranged program holding a melee blade swings at
+/// arm's length, because the weapon is what it is swinging.
+#[test]
+fn a_worn_weapon_replaces_the_species_range() {
+    let mut game = game();
+    let shooter = body(&mut game, "drone");
+    equip_weapon(&mut game, shooter, "shim_blade");
+    assert_eq!(
+        game.swing_range(shooter),
+        crate::tuning::TACTICAL_MELEE_RANGE
+    );
+
+    equip_weapon(&mut game, shooter, "plasma_router");
+    assert_eq!(game.swing_range(shooter), 3);
 }

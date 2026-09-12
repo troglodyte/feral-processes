@@ -2903,6 +2903,26 @@ pub(crate) fn wear(game: &mut Game, wearer: Entity, item: &str) {
         .unwrap_or_else(|e| panic!("equipping {item}: {e}"));
 }
 
+/// Hangs a plain copy of `item` in `wearer`'s weapon slot directly.
+///
+/// `wear`'s blunt sibling, and the two are not interchangeable. That one
+/// goes through `Game::equip`, which refuses mid-fight and refuses a wearer
+/// the player does not own; this one is for the cases that door exists to
+/// stop — arming a hostile, or arming anybody once a fight is already open.
+/// `gear_bonus` reads `Equipment` live, so what is worn here is worth
+/// exactly what an equipped copy is worth.
+pub(crate) fn equip_weapon(game: &mut Game, wearer: Entity, item: &str) {
+    let worn = crate::components::EquippedItem {
+        copy: crate::items::GearCopy::plain(crate::items::ItemId(item.into())),
+        level: 1,
+    };
+    let mut body = game.world.entity_mut(wearer);
+    body.insert_if_new(crate::components::Equipment::default());
+    body.get_mut::<crate::components::Equipment>()
+        .expect("just inserted")
+        .weapon = Some(worn);
+}
+
 /// Reseeds `resources::GameRng` so the next `battle::resolve_attack` lands a
 /// plain hit — not a crit, not a fumble — whoever is swinging at whom.
 ///

@@ -2617,7 +2617,7 @@ fn an_unknown_species_quotes_no_gear() {
 
 // ---------------------------------------------------------------------------
 // Phase 5, task 2: `extract_program`'s `Gear` branch and the shipped
-// Harness Puller tool that takes it.
+// Gear Puller tool that takes it.
 // ---------------------------------------------------------------------------
 
 /// The shipped Gear tool, installed into the player's one slot. `Tools` is
@@ -2890,7 +2890,7 @@ fn a_successful_gear_pull_logs_the_event_exactly_once() {
          summary sentence plus a Salvage: tally; got {loot_lines:?}"
     );
     assert!(
-        loot_lines[0].text.contains("Harness Puller"),
+        loot_lines[0].text.contains("Gear Puller"),
         "the single line must be the branch's own summary sentence, not \
          record_drop's \"Salvage:\" header; got {:?}",
         loot_lines[0].text

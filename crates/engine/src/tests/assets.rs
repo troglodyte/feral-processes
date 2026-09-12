@@ -2675,8 +2675,18 @@ fn the_manual_binds_the_excavation_plan_key() {
 /// Restricted to what the strip actually lists — `Material` and `Currency`,
 /// the two categories `Game::base_stock` keeps. Etched disks are excluded
 /// through `ItemId::etched_ability`, the existing derivation: every disk
-/// derives the same family tag by construction, and none of them can reach
-/// a `Stock` in the first place.
+/// derives the same family tag, "ED", by construction, and no `abbrev` could
+/// be authored on a synthesised def to settle it. That exclusion is a known
+/// gap and not a proof — a disk put into a Depot *does* reach the strip — but
+/// it is one the family shares with itself rather than with anything a
+/// content author wrote.
+///
+/// Tool carriers are **not** excluded, and the difference is that their tags
+/// are already distinct: `ItemDef::tag` reads the first two words' initials,
+/// so "Gear Puller Carrier" derives its tool's "GP" and not a shared
+/// "Carrier" tag. A carrier colliding with an authored item is a real
+/// collision on the strip, settled on the authored item's `abbrev` —
+/// `guard_page.ron` conceded "GP" for exactly this reason.
 #[test]
 fn no_two_shipped_stock_items_share_a_tag() {
     let game = Game::new(921, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

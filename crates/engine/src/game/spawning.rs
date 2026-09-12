@@ -404,6 +404,46 @@ impl Game {
         )
     }
 
+    /// Forks `count` temporary programs onto the player's side of the fight
+    /// `invoker` is in, and returns them. **It seats them nowhere** — each
+    /// combat model does its own seating, for `Decompile`'s reason.
+    ///
+    /// A fork is a wild spawn with `Hostile` and `WanderAi` stripped —
+    /// `adopt_program`'s two removals — and deliberately **not**
+    /// `roster_parts()`. That omission is the whole containment story; see
+    /// `components::Summoned`. The one thing added beyond the marker is a
+    /// `PowerReserve`, because `ability_unavailable` reads the reserve off
+    /// the entity in question and a body without one could never run the
+    /// moves it was spawned to run.
+    ///
+    /// Spawned at `SUMMON_SENTINEL` rather than at the invoker's tile:
+    /// nothing reads a combatant's `Position` in either model, and an
+    /// off-map coordinate is what keeps a body that somehow outlived
+    /// teardown out of the zone.
+    pub(crate) fn fork_programs(&mut self, invoker: Entity, count: u32) -> Vec<Entity> {
+        let mut bodies = Vec::new();
+        for _ in 0..count {
+            let Some(body) = self.spawn_wild_creature_scaled(
+                "scrapper",
+                crate::tuning::SUMMON_SENTINEL.0,
+                crate::tuning::SUMMON_SENTINEL.1,
+                1.0,
+                false,
+            ) else {
+                continue;
+            };
+            self.world
+                .entity_mut(body)
+                .remove::<(Hostile, WanderAi)>()
+                .insert((crate::components::Summoned, PowerReserve::default()));
+            let label = self.creature_label(body);
+            let who = self.creature_label(invoker);
+            self.log(format!("{who} forks {label} into the fight."));
+            bodies.push(body);
+        }
+        bodies
+    }
+
     pub(crate) fn adopt_program(
         &mut self,
         species_id: &str,

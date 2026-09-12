@@ -1181,6 +1181,22 @@ pub struct Cloaked {
     pub remaining: u32,
 }
 
+/// Marks a body forked into a fight by a `Summon` routine — a wild spawn
+/// fighting on your side for the length of one battle.
+///
+/// Battle-scoped for `Cloaked`'s reason: `Game::finish_fight` sweeps every
+/// holder unconditionally, living or not, so a marked body can never reach
+/// a save and this cost no `SAVE_FORMAT_VERSION` bump.
+///
+/// Containment is otherwise entirely by *omission* — a fork never passes
+/// through `Game::roster_parts`, so it carries no `Tamed`, no `Experience`
+/// and no `ProgramId`, and is invisible to the roster, the base, the save
+/// and `award_companion_xp` with no exclusion written anywhere. This marker
+/// is read only where a check is genuinely needed: the teardown sweep, the
+/// `bench_or_dissolve` skip, and `Game::tactical_ai_actor`'s gate.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Summoned;
+
 /// Battle-scoped: when a reach weapon's swing may next be a wide one.
 ///
 /// Battle-scoped for `Cloaked`'s reason and with `Cloaked`'s consequence —

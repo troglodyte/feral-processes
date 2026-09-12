@@ -5107,6 +5107,21 @@ pub const TACTICAL_AI_CROWDING_WEIGHT: f32 = 0.5;
 /// lets a test pin the choice without moving the seeded stream.
 pub const TACTICAL_AI_TEMPERATURE: f32 = 0.5;
 
+// ─────────────────────────────────────────────────────────────────────────
+// Battle summons
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Where a forked program is spawned before either combat model seats it.
+///
+/// `SORTIE_SENTINEL`'s idea, not a copy of it: the two are siblings, each
+/// an off-map coordinate for bodies that exist only inside a call that will
+/// account for them. A fork's `Position` is read nowhere once it is in a
+/// fight — the group model has no board, and the tactical model keeps its
+/// own coordinates in `TacticalBattle` — so this is where one stands for
+/// exactly as long as it takes to seat it, and where a body that somehow
+/// outlived `finish_fight`'s sweep would be found instead of in the zone.
+pub const SUMMON_SENTINEL: (i32, i32) = (1 << 21, 1 << 21);
+
 #[cfg(test)]
 mod tests {
     use super::*;

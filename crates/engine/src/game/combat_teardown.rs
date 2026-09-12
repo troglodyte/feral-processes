@@ -5,6 +5,7 @@
 //! exists at all: `BattleState::planned` indexes `Party` positionally, so a
 //! member killed mid-fight cannot leave the roster until the fight does.
 
+use crate::components::Summoned;
 use crate::resources::LairFight;
 use crate::tactical::TacticalBattle;
 use crate::tuning::{FLEE_COUNTERATTACK_CHANCE, JACK_OUT_LUCK_MAX, JACK_OUT_LUCK_MIN, MAX_NEMESES};
@@ -393,6 +394,19 @@ impl Game {
         };
         for stray in strays {
             self.world.despawn(stray);
+        }
+        // Beside the stray sweep and unconditional where that one is
+        // filtered: `resolve_sortie_battle`'s rule that nothing of a fight's
+        // temporary cast may outlive the call. A fork is never `Tamed` and
+        // can never be decompiled into the roster, so there is nothing here
+        // worth sparing — and all five ways a fight can end come through
+        // here, which is what makes one sweep enough.
+        let forks: Vec<Entity> = {
+            let mut query = self.world.query_filtered::<Entity, With<Summoned>>();
+            query.iter(&self.world).collect()
+        };
+        for fork in forks {
+            self.world.despawn(fork);
         }
         // Below the stray sweep and above `BattleState`'s removal a few
         // lines down — see `mark_nemeses`'s own doc for why that window is

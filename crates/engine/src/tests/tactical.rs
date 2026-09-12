@@ -2789,3 +2789,99 @@ fn a_hostile_mid_walk_does_not_bump() {
         "a hostile swung at its own side by walking into it"
     );
 }
+
+/// The door auto-attack drives the player's own side through, and the one
+/// thing it has to be that `tactical_ai_beat` is not: willing to spend the
+/// turn of a body the player commands.
+///
+/// Both halves, because "the auto door drove something" passes against a
+/// door that is merely the AI's under a second name.
+#[test]
+fn the_auto_door_drives_a_party_body_the_ai_door_declines() {
+    use crate::tactical::ai::AiBeat;
+
+    let mut game = game();
+    tactical_fight(&mut game, 1, 200);
+    let player = game.player_entity();
+    assert!(wait_for_turn(&mut game, player), "the fight ended early");
+
+    assert_eq!(
+        game.tactical_ai_beat(),
+        AiBeat::Idle,
+        "the AI door spent a turn that was the player's"
+    );
+    for _ in 0..=TACTICAL_MOVE_MAX {
+        if game.tactical_auto_beat() == AiBeat::Acted {
+            break;
+        }
+    }
+    assert_ne!(
+        game.tactical_actor(),
+        Some(player),
+        "the auto door spent the turn without handing it on"
+    );
+}
+
+/// A fight nobody touches resolves, and it resolves by the hostile being
+/// beaten rather than by a party body wandering off the edge.
+///
+/// **The departure is the failure this rules out.** A step off the board is a
+/// jack-out, so a driven party body that ever chose an edge cell would end
+/// the fight with the hostile still standing — and the player's run would
+/// leave a fight it was winning because nobody pressed a key.
+#[test]
+fn an_auto_driven_fight_is_won_rather_than_walked_out_of() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 10);
+
+    for _ in 0..4000 {
+        if !game.has_active_battle() {
+            break;
+        }
+        game.tactical_auto_beat();
+    }
+
+    assert!(!game.has_active_battle(), "the auto fight never resolved");
+    assert!(
+        game.world.get::<Stats>(pack[0]).is_none_or(|s| s.hp <= 0),
+        "the fight ended with the hostile still up, so somebody walked out"
+    );
+}
+
+/// Auto-attack is basic attacks and nothing else, and the cooldown is how
+/// that is visible: `run_tactical_routine` arms one, a swing arms nothing,
+/// and the AI's routine picker bypasses `ability_unavailable` — so a party
+/// body driven through that branch would invoke, for free, whatever it was
+/// carrying.
+///
+/// Power is deliberately not the instrument: a round on a battle map spends a
+/// world tick, and the tick drains Power by itself.
+#[test]
+fn an_auto_driven_party_body_swings_and_never_invokes() {
+    use crate::components::AbilityCooldowns;
+    use crate::tactical::ai::AiBeat;
+    use crate::tests::support::HOSTILE_SWEEP;
+
+    let mut game = game();
+    tactical_fight(&mut game, 1, 200);
+    let player = game.player_entity();
+    only_routine(&mut game, player, HOSTILE_SWEEP);
+    assert!(wait_for_turn(&mut game, player), "the fight ended early");
+    assert!(
+        game.wild_routine_ready(player).is_some(),
+        "the fixture left nothing to invoke, so nothing is being tested"
+    );
+
+    for _ in 0..=TACTICAL_MOVE_MAX {
+        if game.tactical_auto_beat() == AiBeat::Acted {
+            break;
+        }
+    }
+
+    assert!(
+        game.world
+            .get::<AbilityCooldowns>(player)
+            .is_none_or(|c| !c.0.contains_key(HOSTILE_SWEEP)),
+        "an auto-driven turn armed a routine's cooldown, so it invoked rather than swung"
+    );
+}

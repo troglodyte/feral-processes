@@ -234,6 +234,31 @@ impl Game {
         self.run_tactical_beat(actor, TACTICAL_AI_TEMPERATURE)
     }
 
+    /// Spends one beat of the acting body's turn **whichever side it is on**.
+    ///
+    /// `tactical_ai_beat`'s door with the `Hostile` gate lifted, and the
+    /// third onto one `run_tactical_beat` — the fight the player watches
+    /// resolve itself has to be the fight they would have fought by hand.
+    /// What it exists for is auto-attack: a player who has asked for one owes
+    /// the party's turns to somebody, and this is who.
+    ///
+    /// **It does not make a party body the AI's.** `tactical_awaits_input`
+    /// still answers `true` for one, which is what keeps "every party body is
+    /// the player's to command" true of the engine — the decision to answer
+    /// for it is app-core's, taken a key at a time, and revoked the same way.
+    ///
+    /// A party body driven here **swings and never invokes**, and that is
+    /// `run_tactical_beat`'s own gate rather than a second rule: the routine
+    /// branch is `Hostile`-only because `run_tactical_routine` charges Power
+    /// through a door that never asks `ability_unavailable`, so the
+    /// alternative is a party that invokes whatever it carries for free.
+    pub fn tactical_auto_beat(&mut self) -> AiBeat {
+        let Some(actor) = self.tactical_actor() else {
+            return AiBeat::Idle;
+        };
+        self.run_tactical_beat(actor, TACTICAL_AI_TEMPERATURE)
+    }
+
     /// Whether the acting body is part-way through a walk it has committed
     /// to, and so owes a step rather than a turn.
     ///
@@ -385,11 +410,18 @@ impl Game {
         let dir = (next.0 - from.0, next.1 - from.1);
         match self.tactical_step(dir) {
             StepOutcome::Moved => true,
-            // `Struck` is unreachable from here — the bump is gated on
-            // `tactical_awaits_input`, which is false for every body this
-            // loop drives — and is grouped with the refusals rather than
+            // `Struck` is unreachable from here — `reach::movement_field`
+            // treats every body as a wall, so a committed path never names an
+            // occupied cell, and nothing on this board moves between one
+            // body's beats — and is grouped with the refusals rather than
             // given an arm of its own: if it ever did fire, the action is
             // spent and the rest of the walk is owed to nobody.
+            //
+            // **Not `tactical_awaits_input`, which used to be the reason.**
+            // That is false for every body the *AI* door drives and true for
+            // every body `tactical_auto_beat` drives, so auto-attack would
+            // have left the claim resting on a predicate that no longer says
+            // it.
             //
             // `get_resource_mut`, because a departure closes the fight and
             // takes the resource with it.

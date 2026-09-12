@@ -9,7 +9,8 @@ The board is drawn where the world map was, and a strip inside it names the
 round and every body in the order they act, fastest first. An arrow bounces
 over the head of whoever is acting — blue for one of yours, red for one of
 theirs. Everyone on your side is yours to command — a companion's turn is
-your turn, not something you watch.
+your turn, not something you watch, unless you hand the side over with A
+below.
 
 On your turn:
 
@@ -24,6 +25,11 @@ On your turn:
   screen calls specials. Pick one and the cursor opens again, showing the
   cells it will cover.
 - E — end the turn without spending it.
+- A — hand the whole side over and watch. Everyone of yours closes and
+  attacks on their own, at the pace the wild side moves at, and nobody runs a
+  routine — basic attempts only. Any key at all takes control back, and it is
+  off again as soon as the fight ends, so a fight you want to watch is one you
+  ask for each time.
 
 Move first and act second. The action ends the turn, so once you have
 attacked or run something the only key left is the one that hands it on.

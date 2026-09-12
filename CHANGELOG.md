@@ -42,6 +42,24 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.169
+
+**Wild programs scale with your party now, in how hard they hit and how many
+of them turn up.** The field only ever read the sector you were in and how
+far out you had walked, so a party that had levelled through a sector met the
+same programs on the way back out that they had met on the way in, and a full
+five-strong party met exactly the pack a lone runner did. What a spawn takes
+now includes how far through the sector's own level band you have climbed and
+how many companions are standing with you — and because the band resets when
+you breach, the ground you have just arrived on still fights like the
+newcomer you are.
+
+Each program rolls its own share of that, so the field is a *spread* rather
+than a mirror. The easy fights stay on the map and harder ones appear above
+them, which is the difference between the world getting more dangerous and
+the world simply refusing to let you get stronger. The ramp out from your
+spawn point is unchanged and adds on top, as does the enemy-strength setting.
+
 ## 0.13.168
 
 **The Teardown perk says what it actually does.** Its line in the picker read

@@ -421,10 +421,24 @@ impl Game {
     /// off-map coordinate is what keeps a body that somehow outlived
     /// teardown out of the zone.
     pub(crate) fn fork_programs(&mut self, invoker: Entity, count: u32) -> Vec<Entity> {
+        let pool: Vec<String> = self
+            .world
+            .resource::<SpeciesDb>()
+            .non_boss_ids()
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        if pool.is_empty() {
+            return Vec::new();
+        }
         let mut bodies = Vec::new();
         for _ in 0..count {
+            let species = {
+                let mut rng = self.world.resource_mut::<GameRng>();
+                pool[rng.0.random_range(0..pool.len())].clone()
+            };
             let Some(body) = self.spawn_wild_creature_scaled(
-                "scrapper",
+                &species,
                 crate::tuning::SUMMON_SENTINEL.0,
                 crate::tuning::SUMMON_SENTINEL.1,
                 1.0,

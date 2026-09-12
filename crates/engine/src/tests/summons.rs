@@ -191,3 +191,77 @@ mod retier {
         );
     }
 }
+
+/// The pool a fork draws its species from.
+mod non_boss_pool {
+    use super::*;
+    use crate::species::SpeciesDb;
+
+    fn db(game: &Game) -> &SpeciesDb {
+        game.world.resource::<SpeciesDb>()
+    }
+
+    #[test]
+    fn the_pool_holds_every_ordinary_species_and_no_apex_one() {
+        let game = game(21);
+        let db = db(&game);
+        let ids = db.non_boss_ids();
+        assert!(!ids.is_empty(), "the shipped catalogue is not empty");
+        for id in &ids {
+            assert!(
+                !db.get(id).expect("an id the pool returned").is_boss,
+                "{id} is apex and has no business being forked"
+            );
+        }
+        let apex = db.all().filter(|s| s.is_boss).count();
+        assert_eq!(
+            ids.len(),
+            db.all().count() - apex,
+            "every non-apex species is in the pool"
+        );
+    }
+
+    #[test]
+    fn the_pool_is_sorted_and_stable() {
+        let game = game(23);
+        let first = db(&game).non_boss_ids();
+        let second = db(&game).non_boss_ids();
+        assert!(
+            first.is_sorted(),
+            "an unsorted pool is an RNG-stream shift between runs"
+        );
+        assert_eq!(first, second);
+    }
+
+    /// The one that would actually catch an unsorted pool. `is_sorted` alone
+    /// passes against a `HashMap` that happens to iterate in order on this
+    /// run; two `Game`s on one seed forking different species does not.
+    #[test]
+    fn one_seed_forks_one_species() {
+        let mut a = game(29);
+        let mut b = game(29);
+        let a_species: Vec<String> = {
+            let player = a.player_entity();
+            a.fork_programs(player, 4)
+                .into_iter()
+                .map(|e| a.world.get::<Creature>(e).unwrap().species.clone())
+                .collect()
+        };
+        let b_species: Vec<String> = {
+            let player = b.player_entity();
+            b.fork_programs(player, 4)
+                .into_iter()
+                .map(|e| b.world.get::<Creature>(e).unwrap().species.clone())
+                .collect()
+        };
+        assert_eq!(a_species, b_species);
+        assert!(
+            a_species
+                .iter()
+                .collect::<std::collections::HashSet<_>>()
+                .len()
+                > 1,
+            "four draws off a flat pool should not all land on one species: {a_species:?}"
+        );
+    }
+}

@@ -2282,3 +2282,77 @@ fn the_group_model_rolls_over_every_move() {
     }
     assert!(saw_melee && saw_ranged, "the unconstrained roll narrowed");
 }
+
+/// A hostile of `species` standing beside the player, with a fight opened
+/// around it. `tactical_pack` takes the *first* species in the db, so a test
+/// that needs a particular one spawns its own.
+fn fight_against(game: &mut Game, species: &str) -> Entity {
+    let player = game.player_entity();
+    let at = *game
+        .world
+        .get::<Position>(player)
+        .expect("the player stands somewhere");
+    let wild = game
+        .world
+        .spawn((
+            Creature {
+                species: species.to_string(),
+            },
+            Hostile,
+            Position {
+                x: at.x + 1,
+                y: at.y,
+            },
+            Stats {
+                hp: 20,
+                max_hp: 20,
+                atk: 4,
+                mitigation: 0,
+            },
+            StatusEffects::default(),
+        ))
+        .id();
+    game.open_tactical_battle(vec![wild]);
+    wild
+}
+
+/// A reaching hostile swings from where it stands instead of closing, and
+/// the move it swings with is the reaching half of its pair.
+#[test]
+fn a_reaching_hostile_swings_without_closing() {
+    let mut game = game();
+    let wild = fight_against(&mut game, "drone");
+    let player = game.player_entity();
+    assert!(wait_for_turn(&mut game, wild), "the hostile never acted");
+    place_bodies(&mut game, player, (0, 0), wild, (2, 0));
+    {
+        let battle = &mut *game.world.resource_mut::<TacticalBattle>();
+        for x in 0..6 {
+            for y in 0..4 {
+                battle
+                    .board
+                    .put(x, y, crate::tactical::map::BattleCell::Open);
+            }
+        }
+    }
+
+    assert!(game.tactical_ai_turn(), "the hostile's turn was not run");
+    // The *distance* and not the cell: holding the band is what is being
+    // asserted, and a body that sidesteps to another cell two out has held
+    // it exactly as well as one that stood still.
+    let held = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(wild)
+        .expect("the hostile left the board");
+    assert_eq!(
+        crate::tactical::reach::distance((0, 0), held),
+        crate::tuning::TACTICAL_RANGED_MOVE_RANGE,
+        "the reaching hostile closed instead of holding its band, ending at {held:?}"
+    );
+    assert!(
+        log_texts(&game).iter().any(|l| l.contains("Recon Ping")),
+        "the reaching hostile never swung its reaching move: {:?}",
+        log_texts(&game)
+    );
+}

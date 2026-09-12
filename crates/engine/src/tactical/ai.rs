@@ -32,7 +32,7 @@ use crate::tactical::turn::StepOutcome;
 use crate::tactical::{TacticalBattle, reach};
 use crate::tuning::{
     ENEMY_ROUTINE_MIN_COOLDOWN, TACTICAL_AI_CLOSING_WEIGHT, TACTICAL_AI_CROWDING_WEIGHT,
-    TACTICAL_AI_REACH_SCORE, TACTICAL_AI_TEMPERATURE, TACTICAL_FIELD_RADIUS, TACTICAL_MELEE_RANGE,
+    TACTICAL_AI_REACH_SCORE, TACTICAL_AI_TEMPERATURE, TACTICAL_FIELD_RADIUS,
 };
 
 /// What the acting body means to do this turn.
@@ -40,10 +40,16 @@ use crate::tuning::{
 /// Decided before the walk, because `Intent::band` is the whole of what
 /// tells closing apart from holding off.
 enum Intent {
-    /// The basic attack `tactical_attack` swings, which is adjacent-only
-    /// whatever the species' `ranged` flag says — that flag is the group
-    /// model's answer to reach, and standing next to somebody is this one's.
-    Swing,
+    /// The basic attack `tactical_attack` swings, carrying the range
+    /// `Game::swing_range` answered for the body about to act.
+    ///
+    /// Carried on the variant rather than read inside `band()` because the
+    /// band is decided **before the walk** and `band` takes no actor — and
+    /// because a range read at swing time would let a body plan a standoff
+    /// and then draw the melee half of its move pair.
+    Swing {
+        range: u32,
+    },
     Routine(AbilityDef),
 }
 
@@ -51,9 +57,9 @@ impl Intent {
     /// The spread of distances this intent wants to be at.
     fn band(&self) -> AbilityRange {
         match self {
-            Intent::Swing => AbilityRange {
+            Intent::Swing { range } => AbilityRange {
                 min: 0,
-                max: TACTICAL_MELEE_RANGE,
+                max: *range,
             },
             Intent::Routine(def) => def.tactical_range(),
         }
@@ -67,7 +73,7 @@ impl Intent {
     /// census of which effects are kind.
     fn helpful(&self) -> bool {
         match self {
-            Intent::Swing => false,
+            Intent::Swing { .. } => false,
             Intent::Routine(def) => matches!(
                 def.target,
                 AbilityTarget::OneAlly | AbilityTarget::WholeParty
@@ -290,7 +296,9 @@ impl Game {
         // it.
         let intent = match self.wild_routine_ready(actor) {
             Some(def) if self.world.get::<Hostile>(actor).is_some() => Intent::Routine(def),
-            _ => Intent::Swing,
+            _ => Intent::Swing {
+                range: self.swing_range(actor),
+            },
         };
         if !self.world.resource::<TacticalBattle>().walk_planned() {
             self.walk_to_best_cell(actor, &intent, &targets, &allies, temperature);
@@ -301,7 +309,7 @@ impl Game {
 
         match intent {
             Intent::Routine(def) => self.run_tactical_intent(actor, def, &targets),
-            Intent::Swing => self.swing_at_best_neighbour(actor, &targets),
+            Intent::Swing { .. } => self.swing_at_best_neighbour(actor, &targets),
         }
         // **Only if the action did not already hand it on.** The action ends
         // the turn, so `tactical_attack` and `tactical_use_routine` both end
@@ -529,7 +537,7 @@ impl Game {
         best.map(|(aim, _)| aim)
     }
 
-    /// Swings at the adjacent target with the least Integrity left.
+    /// Swings at the reachable target with the least Integrity left.
     ///
     /// Deliberately not `battle::slot_aggro_weight`: a slot is the group
     /// model's answer to who is exposed, and on a battle map being reachable
@@ -537,13 +545,19 @@ impl Game {
     /// there. What is left to decide is which of the bodies now in reach to
     /// finish, and the wounded one is worth more than a fresh one.
     fn swing_at_best_neighbour(&mut self, actor: Entity, targets: &[(i32, i32)]) {
+        // Before the resource borrow, since `swing_range` also takes `&self`.
+        let range = self.swing_range(actor);
         let battle = self.world.resource::<TacticalBattle>();
         let Some(from) = battle.cell_of(actor) else {
             return;
         };
         let mut reachable: Vec<(i32, i32, Entity)> = targets
             .iter()
-            .filter(|&&cell| distance(from, cell) <= TACTICAL_MELEE_RANGE)
+            .filter(|&&cell| distance(from, cell) <= range)
+            // Asked here as well as at the gate, so a body does not spend its
+            // turn swinging at something it cannot see and calling that its
+            // action.
+            .filter(|&&cell| line_of_sight(&battle.board, from, cell))
             .filter_map(|&cell| battle.occupant(cell).map(|e| (cell.1, cell.0, e)))
             .collect();
         // By Integrity, then by the board's reading order, so a tie is broken
@@ -583,6 +597,24 @@ mod tests {
         assert_eq!(shortfall((0, 0), (4, 0), STANDOFF), 0, "inside the band");
         assert_eq!(shortfall((0, 0), (9, 0), STANDOFF), 3, "three cells out");
         assert_eq!(shortfall((0, 0), (1, 0), MELEE), 0, "adjacent is melee");
+    }
+
+    /// A reaching body's band is its own range, not the melee constant — the
+    /// whole of what makes it hold off rather than walk into arm's length.
+    #[test]
+    fn a_reaching_bodys_band_is_its_own_range() {
+        let swing = Intent::Swing { range: 2 };
+        assert_eq!(swing.band(), AbilityRange { min: 0, max: 2 });
+        assert_eq!(
+            shortfall((0, 0), (2, 0), swing.band()),
+            0,
+            "two cells is inside a range-2 band"
+        );
+        assert_eq!(
+            shortfall((0, 0), (4, 0), swing.band()),
+            2,
+            "four cells is two short of the band"
+        );
     }
 
     /// A standoff routine's carrier prefers the cell that holds the band over

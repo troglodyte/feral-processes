@@ -15,9 +15,15 @@
 //! spends a hostile's turn one `AiBeat` at a time; this decides how long
 //! each one is on screen, and a cell of an approach is not worth as long as
 //! the blow at the end of it.
+//!
+//! **And the hand-over is paced separately again**, because what has to fit
+//! inside it is not a reading time but the camera: the blow held on screen
+//! long enough to read, then the pan to whoever is next. See
+//! `TACTICAL_HANDOVER_SECONDS`.
 
 use crate::{
-    App, GameKey, Mode, TACTICAL_STEPS_PER_SECOND, TACTICAL_TURNS_PER_SECOND, TacticalIntent,
+    App, GameKey, Mode, TACTICAL_HANDOVER_SECONDS, TACTICAL_STEPS_PER_SECOND,
+    TACTICAL_TURNS_PER_SECOND, TacticalIntent,
 };
 use feral_processes_engine::battle::SpecialOption;
 use feral_processes_engine::tactical::ai::AiBeat;
@@ -231,11 +237,24 @@ impl App {
     }
 
     /// How long the wild side waits before its next beat.
+    ///
+    /// Three waits, each derived from the fight rather than remembered — a
+    /// cell of a walk, the hand-over before a body has spent anything, and
+    /// the pause between arriving and striking. The middle one is the one
+    /// the camera lives in: `Game::tactical_turn_opening` is true exactly
+    /// between one body's action and the next body's first beat, which is
+    /// the span `Fx::battle_center` holds the blow on screen and pans out of.
     fn tactical_beat(&self) -> f32 {
-        match self.game.as_ref().is_some_and(|g| g.tactical_walking()) {
-            true => 1.0 / TACTICAL_STEPS_PER_SECOND,
-            false => 1.0 / TACTICAL_TURNS_PER_SECOND,
+        let Some(game) = self.game.as_ref() else {
+            return 1.0 / TACTICAL_TURNS_PER_SECOND;
+        };
+        if game.tactical_walking() {
+            return 1.0 / TACTICAL_STEPS_PER_SECOND;
         }
+        if game.tactical_turn_opening() {
+            return TACTICAL_HANDOVER_SECONDS;
+        }
+        1.0 / TACTICAL_TURNS_PER_SECOND
     }
 
     /// One press of a direction.

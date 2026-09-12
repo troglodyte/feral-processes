@@ -36,20 +36,36 @@ pub const BOLT_SECONDS: f64 =
     (1.0 / feral_processes_app_core::TACTICAL_TURNS_PER_SECOND as f64) * BOLT_BEAT_FRACTION;
 
 /// How long the battle camera stays on a body after it has stopped acting,
-/// as a fraction of one tactical turn beat.
+/// as a fraction of the hand-over it has to fit inside.
 ///
-/// **Derived from the turn rate rather than restated**, `BOLT_SECONDS`'s rule
-/// and for its reason: a fight hands the turn on inside the same call that
-/// resolves the blow, so the hold has to end before the *next* body acts, and
-/// a figure in seconds cannot follow a retune of the pace there.
+/// **Derived rather than restated**, `BOLT_SECONDS`'s rule and for its
+/// reason: a fight hands the turn on inside the same call that resolves the
+/// blow, so the hold — and the pan after it — have to end before the *next*
+/// body acts, and a figure in seconds cannot follow a retune of the pace
+/// there.
 ///
-/// At 0.55 of the beat it outlasts `HIT_FLASH_SECONDS` — so the blow is still
-/// lit when the hold begins to expire, which is the whole point of holding —
-/// and leaves the rest of the beat for the pan to land before the next body
-/// moves.
-const CAMERA_DWELL_BEAT_FRACTION: f64 = 0.55;
+/// **Derived from `TACTICAL_HANDOVER_SECONDS` and not the turn beat**, which
+/// is what it used to read: the beat is the wait between a body arriving and
+/// striking, and the camera has nothing to do in it. Against a 0.625s beat
+/// the hold could only reach 0.344s, of which `HIT_FLASH_SECONDS` spent
+/// 0.30 — 44ms of stillness, which is not a pause anybody sees.
+///
+/// At 0.62 of the hand-over the hold outlasts the flash by a quarter of a
+/// second and still leaves the pan room to land, which
+/// `the_hold_and_the_pan_both_fit_inside_the_hand_over` checks against the
+/// real easing rather than against an estimate of it.
+const CAMERA_DWELL_HANDOVER_FRACTION: f64 = 0.62;
 pub const CAMERA_DWELL_SECONDS: f64 =
-    (1.0 / feral_processes_app_core::TACTICAL_TURNS_PER_SECOND as f64) * CAMERA_DWELL_BEAT_FRACTION;
+    feral_processes_app_core::TACTICAL_HANDOVER_SECONDS as f64 * CAMERA_DWELL_HANDOVER_FRACTION;
+/// A hold that ends inside the flash it is there to show is the bug this
+/// whole mechanism exists to fix, so it is a build failure. That the *pan*
+/// also lands in time is measured instead — see
+/// `the_hold_and_the_pan_both_fit_inside_the_hand_over` — because its length
+/// falls out of `CAMERA_DECAY` and is not a constant to compare against.
+const _: () = assert!(
+    CAMERA_DWELL_SECONDS > HIT_FLASH_SECONDS,
+    "the camera leaves the attacker while the blow is still lit"
+);
 
 /// How thick the streak is drawn, and how long its lit head is as a fraction
 /// of the whole flight. A head rather than a full line, so the eye reads a
@@ -1393,6 +1409,46 @@ mod tests {
         assert_eq!(
             camera_step(0.0, -40.0, 0.016, Some(CAMERA_MAX_LAG)),
             -40.0 + CAMERA_MAX_LAG
+        );
+    }
+
+    /// The hold reads the blow and the pan lands, both inside the hand-over.
+    ///
+    /// **Three figures that have to be read together and live in two
+    /// crates**, which is exactly the shape that drifts: the hold is a
+    /// fraction of `TACTICAL_HANDOVER_SECONDS` in app-core, the flash it has
+    /// to outlast is `HIT_FLASH_SECONDS` here, and the pan's length is not a
+    /// constant at all — it falls out of `CAMERA_DECAY`. So the pan is
+    /// *measured*, by easing the real function across the widest board the
+    /// game ships in the time the hold leaves over, rather than compared
+    /// against a number somebody worked out once.
+    ///
+    /// Raising the dwell fraction without raising the hand-over fails this,
+    /// which is the whole point of having it: the next body would begin its
+    /// turn with the camera still travelling. That the hold outlasts the
+    /// flash is a `const` assertion beside the constant instead.
+    #[test]
+    fn the_hold_and_the_pan_both_fit_inside_the_hand_over() {
+        use feral_processes_app_core::TACTICAL_HANDOVER_SECONDS;
+        use feral_processes_engine::tuning::TACTICAL_BOARD_LARGE;
+
+        let left = TACTICAL_HANDOVER_SECONDS as f64 - CAMERA_DWELL_SECONDS;
+        assert!(left > 0.0, "the hold outlasts the hand-over that covers it");
+
+        // The worst pan there is: corner to corner of the largest board, at
+        // the frame rate, with no lag clamp — the battle map's own call.
+        let target = TACTICAL_BOARD_LARGE as f32;
+        let dt = 1.0 / 60.0;
+        let mut cam = 0.0;
+        let mut elapsed = 0.0;
+        while elapsed < left {
+            cam = camera_step(cam, target, dt, None);
+            elapsed += dt as f64;
+        }
+        assert!(
+            target - cam < 0.5,
+            "the pan is still {:.2} tiles out when the next body acts",
+            target - cam
         );
     }
 

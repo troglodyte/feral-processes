@@ -937,9 +937,11 @@ relying on one, and correct all three places if it has moved.
 - **A body is spliced into tactical initiative *behind* the cursor, never
   ahead of it** — `TacticalBattle::insert_after_cursor` takes no index
   because `turn + 1` is the only safe one.
-- **The battle camera is held on the body that acted and the dwell is a
-  fraction of the turn beat**, because the turn is handed on inside the call
-  that resolves the blow.
+- **The battle camera is held on the body that acted**, because the turn is
+  handed on inside the call that resolves the blow.
+- **A battle map has three pacing waits, and the hand-over is the camera's**
+  — `TACTICAL_HANDOVER_SECONDS`, which `CAMERA_DWELL_SECONDS` is a fraction
+  of and `Game::tactical_turn_opening` is the derivation of.
 - **The battle map passes no lag clamp, and the turn arrow and aim cursor are
   bounds-checked because of it.**
 - **Walking into a hostile is a swing, and its two gates are `Hostile` and

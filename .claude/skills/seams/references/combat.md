@@ -1096,9 +1096,28 @@
   **walk** centred, since its steps are six a second and a hold would fall a
   cell behind. That collapses to **two match arms**: a body still acting and
   a body being latched onto fresh want the identical write.
-  `CAMERA_DWELL_SECONDS` is 0.55 of the turn beat on `BOLT_SECONDS`' rule —
-  0.344s against `HIT_FLASH_SECONDS` 0.30, so the blow is still lit when the
-  hold expires and the pan has the rest of the beat to land. The `seen`
+  `CAMERA_DWELL_SECONDS` is derived on `BOLT_SECONDS`' rule, but **from
+  `TACTICAL_HANDOVER_SECONDS` and not from the turn beat** — and that
+  correction is the seam's second half. Tied to the beat the hold could only
+  reach 0.344s, of which `HIT_FLASH_SECONDS` spent 0.30: 44ms of stillness,
+  which is not a pause anybody sees. Raising the fraction alone is the wrong
+  fix and the arithmetic says so — a 0.55s hold puts the pan's landing at
+  0.80s against a body that acts at 0.625s, so the fix that put a blow on
+  screen puts the *following* one off it. Stretching
+  `TACTICAL_TURNS_PER_SECOND` buys the room and charges twice, since every
+  wild turn spends a hand-over **and** a beat between arriving and striking.
+  So the hand-over is its own figure (0.9s, hold 0.558s, 0.258s of stillness,
+  pan landing by 0.81s) and **the third wait is derived, not remembered**,
+  which is what keeps `advance_tactical`'s "no second piece of pacing state"
+  claim true: `Game::tactical_turn_opening` is `!walk_planned() && spent()
+  == 0 && !acted()`, exactly the state between one body's action and the
+  next body's first beat — `walk_planned` and not `walking`, because
+  `Some(vec![])` is a body that has arrived. Two of the three invariants are
+  **`const _: () = assert!(…)`** beside their constants rather than tests,
+  clippy's `assertions_on_constants` being right and a build failure being
+  stronger; the pan fitting cannot be, because its length falls out of
+  `CAMERA_DECAY`, so that one eases the real `camera_step` across the widest
+  board in the time the hold leaves over. The `seen`
   field is what tells a board coming back on screen from one that never
   left it, without which the second fight of a session pans in from wherever
   the surface map left the camera. **The pan cost two bounds checks**:

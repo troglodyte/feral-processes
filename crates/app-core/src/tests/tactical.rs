@@ -3,7 +3,8 @@
 
 use super::support::test_app;
 use crate::{
-    App, GameKey, Mode, TACTICAL_STEPS_PER_SECOND, TACTICAL_TURNS_PER_SECOND, TacticalIntent,
+    App, GameKey, Mode, TACTICAL_HANDOVER_SECONDS, TACTICAL_STEPS_PER_SECOND,
+    TACTICAL_TURNS_PER_SECOND, TacticalIntent,
 };
 
 /// An app standing in a fight opened by walking into a lone wild program.
@@ -187,11 +188,15 @@ fn the_wild_side_is_paced_against_the_clock() {
         "a beat was spent inside a frame that had not paid for one"
     );
 
-    app.advance_tactical(1.0 / TACTICAL_TURNS_PER_SECOND);
+    // The hand-over and not the turn beat: this body has just been handed
+    // the turn and has spent nothing, which is the wait the camera's hold
+    // and pan live inside. The turn beat is what it will owe between
+    // arriving and striking.
+    app.advance_tactical(TACTICAL_HANDOVER_SECONDS);
     assert_ne!(
         acting_cell(&mut app),
         before,
-        "a full beat spent nothing at all"
+        "a full hand-over spent nothing at all"
     );
 }
 
@@ -208,7 +213,7 @@ fn one_beat_moves_a_wild_body_exactly_one_cell() {
     open_on_a_wild_turn(&mut app);
 
     let before = acting_cell(&mut app);
-    app.advance_tactical(1.0 / TACTICAL_TURNS_PER_SECOND);
+    app.advance_tactical(TACTICAL_HANDOVER_SECONDS);
     let after = acting_cell(&mut app);
 
     assert_eq!(
@@ -218,9 +223,47 @@ fn one_beat_moves_a_wild_body_exactly_one_cell() {
     );
 }
 
+/// The hand-over is its own wait, and a turn beat is not one.
+///
+/// **The third rate, and the one the camera lives in.** gui holds the view
+/// on the body that just acted for long enough to read the blow and then
+/// pans to whoever is next, and both have to land before that body moves —
+/// `the_hold_and_the_pan_both_fit_inside_the_hand_over` is the other half of
+/// this, measured against the real easing. Stretching
+/// `TACTICAL_TURNS_PER_SECOND` to buy the room would have charged for it
+/// twice, since every wild turn spends a hand-over *and* a beat between
+/// arriving and striking.
+///
+/// Both halves, because "the hand-over is enough" passes against a
+/// hand-over that has quietly become the turn beat again. That the two are
+/// ordered at all is a `const` assertion beside the constant, so it cannot
+/// be a test that somebody deletes.
+#[test]
+fn a_freshly_handed_turn_waits_the_hand_over_and_not_a_turn_beat() {
+    let mut app = fighting(9111);
+    open_on_a_wild_turn(&mut app);
+    let before = acting_cell(&mut app);
+
+    app.advance_tactical(1.0 / TACTICAL_TURNS_PER_SECOND);
+    assert_eq!(
+        acting_cell(&mut app),
+        before,
+        "a body that had just been handed the turn set off on a turn beat"
+    );
+
+    // The carry accumulates, so this is the remainder of the hand-over and
+    // not a second full one.
+    app.advance_tactical(TACTICAL_HANDOVER_SECONDS - 1.0 / TACTICAL_TURNS_PER_SECOND + 0.001);
+    assert_ne!(
+        acting_cell(&mut app),
+        before,
+        "a full hand-over spent nothing at all"
+    );
+}
+
 /// A body mid-walk is paced against the faster of the two rates, so a long
 /// approach does not take five seconds — and a body that has not set off yet
-/// still waits a full turn beat, which is what makes the handover legible.
+/// waits the whole hand-over, which is what makes the handover legible.
 #[test]
 fn a_walking_body_steps_at_the_step_rate_and_not_the_turn_rate() {
     let mut app = fighting(9112);

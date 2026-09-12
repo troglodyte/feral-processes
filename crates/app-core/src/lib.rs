@@ -633,6 +633,32 @@ pub const REVEAL_LINES_PER_SECOND: f32 = 4.0;
 /// has to reach it and the player has to see where it went.
 pub const TACTICAL_TURNS_PER_SECOND: f32 = 1.6;
 
+/// How long the fight waits before the next body does anything at all.
+///
+/// **A separate figure from the beat above, because it has a separate job.**
+/// The beat is the pause between a body *arriving* and *striking* — time to
+/// read the approach before the blow. This is the hand-over, and what has to
+/// fit inside it is the camera: `Fx::battle_center` holds it on the body that
+/// just acted for long enough to read the blow, and then has to pan to the
+/// next one. Both have to finish before that body moves, or the fix that put
+/// a blow on screen puts the following one off it.
+///
+/// Stretching the beat instead would have bought the same room and charged
+/// for it twice — the wait between arriving and striking is already the right
+/// length, and every wild turn spends one of each.
+///
+/// gui's `CAMERA_DWELL_SECONDS` is derived from this rather than restated, so
+/// the hold cannot come to outlast the wait that covers it.
+pub const TACTICAL_HANDOVER_SECONDS: f32 = 0.9;
+/// The ordering is the claim, so it is a build failure and not a test: a
+/// hand-over that had quietly collapsed back onto the beat would leave every
+/// assertion about it passing, since the beat is enough for everything except
+/// the camera.
+const _: () = assert!(
+    TACTICAL_HANDOVER_SECONDS > 1.0 / TACTICAL_TURNS_PER_SECOND,
+    "the hand-over must outlast the beat between arriving and striking"
+);
+
 /// How many cells a second a body walking a battle map crosses.
 ///
 /// The turn beat above is what a body waits *before* it sets off and after

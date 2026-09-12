@@ -2368,6 +2368,37 @@ fn every_shipped_reach_weapon_authors_a_recharge() {
     );
 }
 
+/// A range outside the window is refused at load, so a shipped weapon
+/// sitting outside it would be a weapon that silently is not in the game at
+/// all — one warning nobody reads, and a recipe that builds nothing.
+#[test]
+fn every_authored_weapon_range_is_inside_its_window() {
+    let game = Game::new(3317, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut authored = 0;
+    for def in game.item_defs() {
+        let Some(range) = def.range else { continue };
+        authored += 1;
+        assert!(
+            (1..=crate::tuning::TACTICAL_WEAPON_RANGE_MAX).contains(&range),
+            "{} authors range {range}, outside 1..={}",
+            def.id.as_str(),
+            crate::tuning::TACTICAL_WEAPON_RANGE_MAX
+        );
+        assert!(
+            matches!(
+                def.equipment,
+                Some((crate::items::EquipmentSlot::Weapon, _))
+            ),
+            "{} authors a range and is not a weapon",
+            def.id.as_str()
+        );
+    }
+    assert!(
+        authored >= 7,
+        "the shipped reaching weapons stopped authoring a range: {authored}"
+    );
+}
+
 /// Belt and braces over `ItemDef::unreachable_reach`, asserted against the
 /// shipped tree rather than a temp file: the loader's refusals are what
 /// stop a *mod* shipping an incoherent reach, and this is what stops one

@@ -5024,6 +5024,29 @@ pub const TACTICAL_MOVE_SPEED_STEP: i32 = 2;
 /// positioning this model is built on optional.
 pub const TACTICAL_MELEE_RANGE: u32 = 1;
 
+/// The furthest a weapon may author a swing, in cells.
+///
+/// Three, which is half `TACTICAL_DEPLOY_GAP`: a weapon that reached the far
+/// side's deployment from the near side's would make the approach this model
+/// is built on optional, and a ceiling is what keeps a mod from authoring
+/// one. Refused at load past this rather than clamped — a weapon quietly
+/// swinging shorter than its file says reads as a nerf rather than a bad
+/// value.
+pub const TACTICAL_WEAPON_RANGE_MAX: u32 = 3;
+
+/// How far a species' `ranged` basic attack reaches on a battle map.
+///
+/// Two, and the number is load-bearing. Every shipped species carries
+/// exactly two moves and fourteen of seventeen carry exactly one
+/// `ranged: true` — only Construct, Scrapper and Sentinel are pure melee.
+/// At three, nearly every wild body on the board becomes a shooter and the
+/// closing this whole model is built on stops mattering. Two is one cell of
+/// standoff: real, and closed by a single step.
+///
+/// Not to be confused with `MoveDef::ranged`'s *group*-model meaning, which
+/// is a yes-or-no about the front line and is untouched by this.
+pub const TACTICAL_RANGED_MOVE_RANGE: u32 = 2;
+
 /// How far a routine that reaches a whole side may be aimed, in cells.
 ///
 /// Six, which is `TACTICAL_DEPLOY_GAP`: an area routine reaches the far

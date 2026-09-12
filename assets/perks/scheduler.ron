@@ -1,0 +1,6 @@
+(
+    id: Scheduler,
+    name: "Scheduler",
+    description: "Forked processes are given a better priority class. Each level widens the rarity a fork_program or fork_cluster invocation may roll, and raises its ceiling by one tier. Unscheduled, a fork is always Ordinary.",
+    cost: 3,
+)

@@ -5122,6 +5122,16 @@ pub const TACTICAL_AI_TEMPERATURE: f32 = 0.5;
 /// outlived `finish_fight`'s sweep would be found instead of in the zone.
 pub const SUMMON_SENTINEL: (i32, i32) = (1 << 21, 1 << 21);
 
+/// How much of `spawning::rarity_mass()` each rank of `Perk::Scheduler`
+/// opens as a forked program's chance of coming out above `Ordinary`.
+///
+/// A multiple of the wild rare rate rather than a probability of its own,
+/// so a retune of the rarity ladder carries this with it. At this figure
+/// the four ranks the ceiling allows land at roughly 29%, 59%, 88% and
+/// saturated — which is what makes rank 4 the end of the ladder on both
+/// axes at once rather than a window still opening under a fixed ceiling.
+pub const SUMMON_RARITY_WINDOW_PER_RANK: f64 = 8.0;
+
 #[cfg(test)]
 mod tests {
     use super::*;

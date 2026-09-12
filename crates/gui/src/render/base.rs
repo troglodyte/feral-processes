@@ -1360,7 +1360,7 @@ mod tests {
     #[test]
     fn a_recovering_program_wears_a_bouncing_mark_and_nothing_else_does() {
         let mut fx = Fx::new();
-        fx.begin_frame(0.0, Vec::new(), Vec::new(), false);
+        fx.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), false);
 
         assert!(
             recovery_mark_at(&fx, &patient_view(true)).is_some(),
@@ -1375,7 +1375,7 @@ mod tests {
         let ys: Vec<f32> = [0.0, 0.15, 0.3, 0.45, 0.6, 0.75]
             .into_iter()
             .map(|now| {
-                fx.begin_frame(now, Vec::new(), Vec::new(), false);
+                fx.begin_frame(now, Vec::new(), Vec::new(), Vec::new(), false);
                 recovery_mark_at(&fx, &busy).expect("the mark is drawn every frame")
             })
             .collect();
@@ -1395,7 +1395,7 @@ mod tests {
     #[test]
     fn the_recovery_mark_is_painted_in_the_healthy_role_and_not_the_threat_one() {
         let mut fx = Fx::new();
-        fx.begin_frame(0.0, Vec::new(), Vec::new(), false);
+        fx.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), false);
 
         let shapes = recovery_mark_shapes(&fx, &patient_view(true));
         let painted: Vec<Color> = crate::paint::painted_map_glyphs(&shapes)
@@ -2648,7 +2648,7 @@ mod tests {
         let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets())
             .expect("the shipped assets must load");
         let mut fx = Fx::new();
-        fx.begin_frame(at, Vec::new(), Vec::new(), false);
+        fx.begin_frame(at, Vec::new(), Vec::new(), Vec::new(), false);
         let (tile_px, glyph_px) = crate::text::map_cell(1);
         let (_, shapes) = with_painter(|p| {
             let status = game.player_status();
@@ -2761,7 +2761,7 @@ mod tests {
 
         let mut fx = Fx::new();
         fx.enabled = animated;
-        fx.begin_frame(at, Vec::new(), Vec::new(), false);
+        fx.begin_frame(at, Vec::new(), Vec::new(), Vec::new(), false);
         let (tile_px, glyph_px) = crate::text::map_cell(1);
         let (_, shapes) = with_painter(|p| {
             let status = game.player_status();

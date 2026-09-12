@@ -237,6 +237,23 @@ pub(super) fn draw_tactical_map(
         );
     }
 
+    // Over the bodies, because a blow travelling to a body passes in front
+    // of it, and because a streak under a glyph is invisible at three cells.
+    fx.draw_bolts(
+        painter,
+        |cell| {
+            tile_origin_px(
+                cell,
+                center,
+                (half_w, half_h),
+                (off_x, off_y),
+                tile_px,
+                pane,
+            )
+        },
+        tile_px,
+    );
+
     // Last, so the cursor is never under a body it is pointing at.
     if let Some(cell) = cursor {
         let (px, py) = tile_origin_px(
@@ -690,6 +707,46 @@ mod tests {
         }
     }
 
+    /// A blow in flight is drawn in the pane, and it is drawn *by the map*
+    /// — asserted through the real `draw_tactical_map` rather than by
+    /// calling `draw_bolts` itself, which would pass with the call site
+    /// deleted.
+    #[test]
+    fn a_bolt_in_flight_is_drawn_over_the_battle_map() {
+        use crate::paint::painted_line_count;
+
+        let mut game = fighting();
+        let view = game.tactical_view().expect("the fight is open");
+
+        let mut bare = Fx::new();
+        bare.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), true);
+        let (_, quiet) =
+            with_painter(|p| draw_tactical_map(&view, None, &[], &mut bare, p, pane(), 32.0, 24));
+
+        let mut fx = Fx::new();
+        fx.begin_frame(
+            0.0,
+            Vec::new(),
+            Vec::new(),
+            vec![feral_processes_engine::BoltCue {
+                from: view.bodies[0].cell,
+                to: view.bodies[1].cell,
+                color: feral_processes_engine::components::GlyphColor::Cyan,
+            }],
+            true,
+        );
+        let (_, lit) =
+            with_painter(|p| draw_tactical_map(&view, None, &[], &mut fx, p, pane(), 32.0, 24));
+
+        assert!(
+            painted_line_count(&lit) > painted_line_count(&quiet),
+            "a live bolt painted no line the same frame without one did not: \
+             {} vs {}",
+            painted_line_count(&lit),
+            painted_line_count(&quiet)
+        );
+    }
+
     /// ...and it bounces.
     ///
     /// **Eight frames spanning the bob's full cycle**, for
@@ -714,7 +771,7 @@ mod tests {
         let ys: Vec<f32> = (0..8)
             .map(|i| {
                 let mut fx = Fx::new();
-                fx.begin_frame(i as f64 / 8.0, Vec::new(), Vec::new(), true);
+                fx.begin_frame(i as f64 / 8.0, Vec::new(), Vec::new(), Vec::new(), true);
                 let (_, shapes) = with_painter(|p| {
                     draw_tactical_map(&view, None, &[], &mut fx, p, pane(), 32.0, 24)
                 });

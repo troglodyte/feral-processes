@@ -16,12 +16,30 @@ use crate::paint::{Color, Painter};
 use crate::render::hud::palette;
 use crate::text::Metrics;
 use feral_processes_engine::components::GlyphColor;
-use feral_processes_engine::{EffectKind, Entity, LogLine, MessageKind, TransitCue, VisualEffect};
+use feral_processes_engine::{
+    BoltCue, EffectKind, Entity, LogLine, MessageKind, TransitCue, VisualEffect,
+};
 
 /// Alpha a tile flash starts at, before fading linearly to nothing. Chosen
 /// to read against the dim tile backgrounds without hiding the glyph.
 pub const PEAK_FLASH_ALPHA: f32 = 0.55;
 pub const HIT_FLASH_SECONDS: f64 = 0.30;
+/// How long a blow's streak takes to cross from the swinger to what it hit.
+///
+/// **Derived from the tactical turn rate rather than restated**, so a retune
+/// of the pace cannot leave a streak still in flight when the next body
+/// acts — which reads as two attacks landing at once. A third of a beat:
+/// long enough to follow across three cells, short enough to leave a clear
+/// gap before the next turn.
+const BOLT_BEAT_FRACTION: f64 = 1.0 / 3.0;
+pub const BOLT_SECONDS: f64 =
+    (1.0 / feral_processes_app_core::TACTICAL_TURNS_PER_SECOND as f64) * BOLT_BEAT_FRACTION;
+
+/// How thick the streak is drawn, and how long its lit head is as a fraction
+/// of the whole flight. A head rather than a full line, so the eye reads a
+/// direction rather than a static beam.
+const BOLT_THICKNESS_PX: f32 = 2.5;
+const BOLT_HEAD_FRACTION: f32 = 0.35;
 /// Longer than a hit — a structure vanishing from the map is worth a beat.
 ///
 /// This is the spark burst's lifetime too, since the debris is derived from
@@ -459,6 +477,18 @@ struct Walker {
     start: f64,
 }
 
+/// A blow in flight, drawn from a `BoltCue` the engine queued and forgot.
+///
+/// **No stagger, where a `Walker` has one.** A squad files out of the base
+/// one behind the other; a sweep's streaks all leave the same swinger in the
+/// same instant, and staggering them would read as several attacks.
+struct Bolt {
+    from: (i32, i32),
+    to: (i32, i32),
+    color: GlyphColor,
+    start: f64,
+}
+
 struct FloatingNumber {
     text: String,
     x: f32,
@@ -487,6 +517,7 @@ pub struct Fx {
     now: f64,
     flashes: Vec<TileFlash>,
     walkers: Vec<Walker>,
+    bolts: Vec<Bolt>,
     floats: Vec<FloatingNumber>,
     bars: HashMap<u64, BarTracking>,
     camera: Option<(f32, f32)>,
@@ -501,6 +532,7 @@ impl Fx {
             now: 0.0,
             flashes: Vec::new(),
             walkers: Vec::new(),
+            bolts: Vec::new(),
             floats: Vec::new(),
             bars: HashMap::new(),
             camera: None,
@@ -518,6 +550,7 @@ impl Fx {
         now: f64,
         effects: Vec<VisualEffect>,
         transits: Vec<TransitCue>,
+        bolts: Vec<BoltCue>,
         in_battle: bool,
     ) {
         self.now = now;
@@ -537,11 +570,20 @@ impl Fx {
                     start: now + index as f64 * TRANSIT_STAGGER_SECONDS,
                 });
             }
+            for cue in bolts {
+                self.bolts.push(Bolt {
+                    from: cue.from,
+                    to: cue.to,
+                    color: cue.color,
+                    start: now,
+                });
+            }
         }
         self.flashes
             .retain(|f| now - f.start < effect_duration(f.kind));
         self.walkers
             .retain(|w| now - w.start < walk_seconds(w.path.len()));
+        self.bolts.retain(|b| now - b.start < BOLT_SECONDS);
         self.floats.retain(|f| now - f.start < FLOAT_SECONDS);
         if !in_battle {
             self.clear_bars();
@@ -672,6 +714,39 @@ impl Fx {
                 glyph_px,
                 palette::glyph(walker.color),
             );
+        }
+    }
+
+    /// Every blow currently in flight, as a lit head running from the body
+    /// that swung to the body it landed on.
+    ///
+    /// `to_px` answers a cell's **top-left**, so the streak is offset half a
+    /// tile to run centre to centre — a line drawn corner to corner leaves
+    /// the glyph it came from and arrives beside the one it hit. Not
+    /// `Painter::map`'s measured-ink baseline, which `draw_walkers` needs
+    /// and this does not: a line has no ink to centre.
+    pub fn draw_bolts(
+        &self,
+        painter: &Painter,
+        to_px: impl Fn((i32, i32)) -> (f32, f32),
+        tile_px: f32,
+    ) {
+        let half = tile_px / 2.0;
+        for bolt in &self.bolts {
+            let along = ((self.now - bolt.start) / BOLT_SECONDS).clamp(0.0, 1.0) as f32;
+            let (ax, ay) = to_px(bolt.from);
+            let (bx, by) = to_px(bolt.to);
+            let (ax, ay) = (ax + half, ay + half);
+            let (bx, by) = (bx + half, by + half);
+            let tail = (along - BOLT_HEAD_FRACTION).max(0.0);
+            let point = |t: f32| (ax + (bx - ax) * t, ay + (by - ay) * t);
+            let (hx, hy) = point(along);
+            let (tx, ty) = point(tail);
+            let base = palette::glyph(bolt.color);
+            // Fades as it travels, so the eye is pulled to the arrival
+            // rather than left looking at a beam.
+            let color = Color::new(base.r, base.g, base.b, base.a * (1.0 - along * 0.4));
+            painter.line(tx, ty, hx, hy, BOLT_THICKNESS_PX, color);
         }
     }
 
@@ -915,10 +990,11 @@ mod tests {
         };
 
         let mut fx = Fx::new();
-        fx.begin_frame(0.0, Vec::new(), vec![cue.clone()], false);
+        fx.begin_frame(0.0, Vec::new(), vec![cue.clone()], Vec::new(), false);
         // Half a cell in, so the body is between (0, 0) and (1, 0).
         fx.begin_frame(
             TRANSIT_SECONDS_PER_CELL * 0.5,
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             false,
@@ -944,12 +1020,84 @@ mod tests {
         // Past the end of the walk it is retired rather than parked on the
         // last cell — an away program has left, and one that is home is
         // drawn by the map itself.
-        fx.begin_frame(walk_seconds(3) + 1.0, Vec::new(), Vec::new(), false);
+        fx.begin_frame(
+            walk_seconds(3) + 1.0,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            false,
+        );
         let (_, shapes) = crate::paint::with_painter(|p| fx.draw_walkers(p, CELL, 16, to_px));
         assert!(
             !crate::paint::painted_text(&shapes).iter().any(|t| t == "W"),
             "a finished walk must leave nothing behind"
         );
+    }
+
+    /// A bolt is gone before the next body acts. One tactical beat is
+    /// `1.0 / TACTICAL_TURNS_PER_SECOND`; a streak still on screen when the
+    /// next swing lands reads as two attacks at once.
+    #[test]
+    fn a_bolt_expires_inside_one_tactical_beat() {
+        assert!(
+            BOLT_SECONDS < 1.0 / feral_processes_app_core::TACTICAL_TURNS_PER_SECOND as f64,
+            "a bolt outlives the beat it was fired in"
+        );
+    }
+
+    /// It is drawn while it lives and not once it has expired.
+    #[test]
+    fn a_bolt_is_drawn_while_it_lives_and_not_after() {
+        let mut fx = Fx::new();
+        let cue = BoltCue {
+            from: (0, 0),
+            to: (3, 0),
+            color: GlyphColor::Cyan,
+        };
+        fx.begin_frame(0.0, Vec::new(), Vec::new(), vec![cue], true);
+        let to_px = |(x, y): (i32, i32)| (x as f32 * 16.0, y as f32 * 16.0);
+        let (_, shapes) = crate::paint::with_painter(|p| fx.draw_bolts(p, to_px, 16.0));
+        assert!(
+            crate::paint::painted_line_count(&shapes) > 0,
+            "a live bolt drew nothing"
+        );
+
+        fx.begin_frame(
+            BOLT_SECONDS + 0.01,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            true,
+        );
+        let (_, shapes) = crate::paint::with_painter(|p| fx.draw_bolts(p, to_px, 16.0));
+        assert_eq!(
+            crate::paint::painted_line_count(&shapes),
+            0,
+            "an expired bolt is still drawing"
+        );
+    }
+
+    /// A disabled `Fx` still drains the queue and draws nothing — the same
+    /// contract every other cue has, and what stops the engine's queue
+    /// sitting at its cap for a player who turned effects off.
+    #[test]
+    fn a_disabled_fx_draws_no_bolt() {
+        let mut fx = Fx::new();
+        fx.enabled = false;
+        fx.begin_frame(
+            0.0,
+            Vec::new(),
+            Vec::new(),
+            vec![BoltCue {
+                from: (0, 0),
+                to: (2, 0),
+                color: GlyphColor::Cyan,
+            }],
+            true,
+        );
+        let to_px = |(x, y): (i32, i32)| (x as f32 * 16.0, y as f32 * 16.0);
+        let (_, shapes) = crate::paint::with_painter(|p| fx.draw_bolts(p, to_px, 16.0));
+        assert_eq!(crate::paint::painted_line_count(&shapes), 0);
     }
 
     /// Both alert kinds start the log pane's border flash. A tantrum is the
@@ -969,7 +1117,7 @@ mod tests {
 
         for kind in [MessageKind::Raid, MessageKind::Tantrum] {
             let mut fx = Fx::new();
-            fx.begin_frame(1.0, Vec::new(), Vec::new(), false);
+            fx.begin_frame(1.0, Vec::new(), Vec::new(), Vec::new(), false);
             fx.observe_log(Some(&line(kind)));
             assert!(
                 fx.log_flash_until > fx.now,
@@ -978,7 +1126,7 @@ mod tests {
         }
 
         let mut fx = Fx::new();
-        fx.begin_frame(1.0, Vec::new(), Vec::new(), false);
+        fx.begin_frame(1.0, Vec::new(), Vec::new(), Vec::new(), false);
         fx.observe_log(Some(&line(MessageKind::Info)));
         assert!(
             fx.log_flash_until <= fx.now,
@@ -1250,7 +1398,7 @@ mod tests {
     #[test]
     fn a_marks_phase_does_not_depend_on_where_it_is_standing() {
         let mut fx = Fx::new();
-        fx.begin_frame(0.3, Vec::new(), Vec::new(), false);
+        fx.begin_frame(0.3, Vec::new(), Vec::new(), Vec::new(), false);
         let worker = Entity::from_raw_u32(7).unwrap();
         let before = fx.staffed_bob(worker);
         // Same entity, same frame — the only thing a step changes is the
@@ -1456,7 +1604,7 @@ mod tests {
     #[test]
     fn the_staffed_mark_holds_still_while_effects_are_disabled() {
         let mut fx = Fx::new();
-        fx.begin_frame(0.3, Vec::new(), Vec::new(), false);
+        fx.begin_frame(0.3, Vec::new(), Vec::new(), Vec::new(), false);
         fx.enabled = false;
         assert_eq!(fx.staffed_bob(Entity::from_raw_u32(4).unwrap()), 0.0);
     }
@@ -1559,7 +1707,7 @@ mod tests {
     #[test]
     fn clouds_are_off_when_effects_are() {
         let mut fx = Fx::new();
-        fx.begin_frame(40.0, Vec::new(), Vec::new(), false);
+        fx.begin_frame(40.0, Vec::new(), Vec::new(), Vec::new(), false);
         fx.enabled = false;
         for w in [(0, 0), (7, 7), (-13, 2)] {
             assert_eq!(fx.cloud_shade(w), 1.0);
@@ -1569,9 +1717,9 @@ mod tests {
     #[test]
     fn clouds_move_with_the_frame_clock() {
         let mut fx = Fx::new();
-        fx.begin_frame(0.0, Vec::new(), Vec::new(), false);
+        fx.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), false);
         let before: Vec<f32> = cloud_field(0.0);
-        fx.begin_frame(45.0, Vec::new(), Vec::new(), false);
+        fx.begin_frame(45.0, Vec::new(), Vec::new(), Vec::new(), false);
         let after: Vec<f32> = cloud_field(45.0);
         assert!(
             before != after,

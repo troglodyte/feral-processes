@@ -377,6 +377,16 @@ impl Game {
         // deleted before anything could reveal them — a dead companion
         // reads its death line and then its detachment.
         for program in dead {
+            // `bench_or_dissolve` never asks whether the body it is handed
+            // is `Tamed` — it detaches, benches or dissolves whatever it
+            // gets. A fork is none of those things: it would announce a
+            // downed program the player never had, and `detach_from_play`
+            // would take it out of `Party` mid-teardown, which is the
+            // removal the slot-indexing seam forbids. The sweep a few lines
+            // down is what a fork's ending is.
+            if self.world.get::<Summoned>(program).is_some() {
+                continue;
+            }
             self.bench_or_dissolve(program);
         }
         // A Stack pack that outlived the fight — the party jacked out —

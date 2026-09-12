@@ -79,6 +79,12 @@ impl Game {
         self.snapshot_roster();
         self.log_kind(MessageKind::Round, format!("── round {round} ──"));
         let player = self.world.resource::<BattleState>().player;
+        // Above the clone, deliberately: a fork is not the player's to
+        // command, so `slot_is_commanded` leaves its slot unplanned and
+        // nothing else would ever fill it. Written into `BattleState` first
+        // so the clone below carries it and the ordinary party path in the
+        // action loop resolves it like any other slot.
+        self.plan_summons();
         let plan = self.world.resource::<BattleState>().planned.clone();
         // Captured alongside the plan, and for the plan's sake: the indices
         // in it are only meaningful against the groups as they stood when
@@ -322,6 +328,25 @@ impl Game {
                             && let Some(group) = self.retarget(group)
                         {
                             self.attempt_decompile(group, player);
+                        }
+                    } else if let AbilityEffect::Summon {
+                        count,
+                        extra,
+                        rarity_penalty,
+                    } = ability.effect
+                    {
+                        // `Decompile`'s branch for `Decompile`'s reason: a
+                        // summon is not resolved over recipients, and where
+                        // the bodies go is this model's own answer.
+                        self.dissolve_summons();
+                        let rolled = if extra == 0 {
+                            count
+                        } else {
+                            let mut rng = self.world.resource_mut::<GameRng>();
+                            rng.0.random_range(count..=count + extra)
+                        };
+                        for body in self.fork_programs(entity, rolled, rarity_penalty) {
+                            self.seat_summon_in_group(body);
                         }
                     } else {
                         let recipients = self.ability_recipients(entity, ability.target, &target);
@@ -1104,6 +1129,130 @@ impl Game {
             .filter_map(|slot| self.actor_entity(battle::Actor::Party(slot)))
             .filter(|&e| self.creature_alive(e))
             .collect()
+    }
+
+    /// Seats a forked body in the abstract model: `Party` **and** `planned`,
+    /// together and never one without the other.
+    ///
+    /// `planned` is sized once at `begin_battle` as `Party.len() + 1`, but
+    /// `roll_initiative` reads `Party.0.len()` **live**. So a body pushed to
+    /// `Party` alone draws an initiative rung and then never acts —
+    /// `plan.get(slot)` is `None` — while `living_party`, `battle_rows`,
+    /// `battle_active_slot` and hostile targeting all iterate `planned.len()`
+    /// and cannot see it at all. It would be invisible and inert, and
+    /// nothing would fail.
+    ///
+    /// Appending is safe where removal is not: the seam forbids *removal*,
+    /// which shifts every slot behind it, and `actor_entity` maps
+    /// `Actor::Party(i)` to `Party.0[i - 1]`, so an append leaves every
+    /// existing index exactly where it was.
+    pub(crate) fn seat_summon_in_group(&mut self, body: Entity) {
+        self.world.resource_mut::<Party>().0.push(body);
+        self.world.resource_mut::<BattleState>().planned.push(None);
+    }
+
+    /// Kills the standing set of forked bodies, leaving them in their slots.
+    ///
+    /// **Killed, not removed.** Taking one out of `Party` mid-battle is
+    /// exactly what the slot-indexing seam forbids; leaving a dead body in
+    /// its slot is what already happens to a companion that dies mid-fight,
+    /// and the existing deferred reap carries it to teardown. Nor despawned:
+    /// `Party` still references it.
+    pub(crate) fn dissolve_summons(&mut self) {
+        let standing: Vec<Entity> = {
+            let mut query = self
+                .world
+                .query_filtered::<Entity, With<crate::components::Summoned>>();
+            query
+                .iter(&self.world)
+                .filter(|&e| self.creature_alive(e))
+                .collect()
+        };
+        for body in standing {
+            if let Some(mut stats) = self.world.get_mut::<Stats>(body) {
+                stats.hp = 0;
+            }
+        }
+    }
+
+    /// Writes a turn into every living forked slot, at the top of the round
+    /// that will resolve it.
+    ///
+    /// Companions have no AI in this model — every other party slot is
+    /// player-commanded, and `arena::run` is the only thing that ever plans
+    /// one by itself. A fork is the first party body that decides for
+    /// itself, so `slot_is_commanded` keeps the cursor off it and this fills
+    /// the gap that leaves.
+    fn plan_summons(&mut self) {
+        let slots: Vec<(usize, Entity)> = {
+            let Some(battle) = self.world.get_resource::<BattleState>() else {
+                return;
+            };
+            (0..battle.planned.len())
+                .filter(|&slot| battle.planned[slot].is_none())
+                .filter_map(|slot| {
+                    self.actor_entity(battle::Actor::Party(slot))
+                        .map(|e| (slot, e))
+                })
+                .filter(|&(_, e)| {
+                    self.world.get::<crate::components::Summoned>(e).is_some()
+                        && self.creature_alive(e)
+                })
+                .collect()
+        };
+        for (slot, body) in slots {
+            let action = self.choose_summon_action(body);
+            self.world.resource_mut::<BattleState>().planned[slot] = Some(action);
+        }
+    }
+
+    /// What a forked body does with its turn: a uniform pick over the
+    /// routines it can actually run right now, plus its basic swing.
+    ///
+    /// Deliberately **not** `Game::choose_wild_action`. That is the trained
+    /// policy, and its features speak group indices and aggro slots from the
+    /// hostile side — pointing it at the wild side is `tactical_sides`'
+    /// relative-to-the-actor problem without `tactical_sides`' payoff, and
+    /// `combat_policy.rs`'s weights are pinned against a design boundary
+    /// this would quietly cross.
+    ///
+    /// Equal weights rather than a scored choice, and no constant to tune:
+    /// a fork is a handicapped body fielded for a fight, and how cleverly it
+    /// spends its turns is not an axis the feature sells. Group 0 is the
+    /// front engaged group for as long as any group stands, and
+    /// `resolve_one_action` re-reads it.
+    fn choose_summon_action(&mut self, body: Entity) -> BattleAction {
+        let ready: Vec<(usize, AbilityDef)> = self
+            .actor_abilities(body)
+            .into_iter()
+            .enumerate()
+            .filter(|(_, def)| !def.effect.field_only() && !def.is_passive())
+            .filter(|(_, def)| !matches!(def.effect, AbilityEffect::Decompile))
+            // A fork forking is a fork bomb: `dissolve_summons` would kill
+            // the body that ran it halfway through its own turn.
+            .filter(|(_, def)| !matches!(def.effect, AbilityEffect::Summon { .. }))
+            .filter(|(_, def)| self.ability_unavailable(body, def).is_none())
+            .collect();
+        let pick = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_range(0..=ready.len())
+        };
+        let Some((index, def)) = ready.into_iter().nth(pick) else {
+            return BattleAction::Attack { group: 0 };
+        };
+        BattleAction::Special {
+            ability: index,
+            target: match def.target {
+                AbilityTarget::OneEnemyGroupFront | AbilityTarget::WholeEnemyGroup => {
+                    battle::SpecialTarget::EnemyGroup { group: 0 }
+                }
+                AbilityTarget::AllEnemies => battle::SpecialTarget::AllEnemies,
+                AbilityTarget::WholeParty => battle::SpecialTarget::WholeParty,
+                // Slot 0 is the player, who is always in the fight — a fork
+                // tending an ally tends the one body that cannot be absent.
+                AbilityTarget::OneAlly => battle::SpecialTarget::Ally { slot: 0 },
+            },
+        }
     }
 
     /// The inverse of `actor_entity(battle::Actor::Party(slot))`: which party

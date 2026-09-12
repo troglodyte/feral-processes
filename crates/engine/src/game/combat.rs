@@ -773,17 +773,35 @@ impl Game {
             .is_some_and(|entity| self.creature_alive(entity))
     }
 
+    /// Whether `slot` is one the player is asked to plan a turn for.
+    ///
+    /// `slot_can_act` plus the one exception: a forked program acts, but it
+    /// is not yours to command — `plan_summons` writes its turn at the top
+    /// of the round it will take. Without this the cursor would stop on it
+    /// and wait for an order nobody meant to give.
+    ///
+    /// The predicate rather than `slot_can_act` at every planning gate,
+    /// because there are four of them and a fifth that forgot would ask for
+    /// a fork's orders in one screen and not the others.
+    pub(crate) fn slot_is_commanded(&self, slot: usize) -> bool {
+        self.slot_can_act(slot)
+            && self
+                .actor_entity(battle::Actor::Party(slot))
+                .is_some_and(|e| self.world.get::<crate::components::Summoned>(e).is_none())
+    }
+
     /// The party slot currently awaiting an action, or `None` when every
     /// slot that can still act has one.
     pub fn battle_active_slot(&self) -> Option<usize> {
         let battle = self.world.get_resource::<BattleState>()?;
         (0..battle.planned.len())
-            .find(|&slot| battle.planned[slot].is_none() && self.slot_can_act(slot))
+            .find(|&slot| battle.planned[slot].is_none() && self.slot_is_commanded(slot))
     }
 
     pub fn battle_round_ready(&self) -> bool {
         self.world.get_resource::<BattleState>().is_some_and(|b| {
-            (0..b.planned.len()).all(|slot| b.planned[slot].is_some() || !self.slot_can_act(slot))
+            (0..b.planned.len())
+                .all(|slot| b.planned[slot].is_some() || !self.slot_is_commanded(slot))
         })
     }
 
@@ -885,7 +903,7 @@ impl Game {
             .filter(|&slot| battle.planned[slot].is_none())
             .collect();
         for slot in open {
-            if !self.slot_can_act(slot) {
+            if !self.slot_is_commanded(slot) {
                 continue;
             }
             self.battle_set_action(slot, action.clone())?;

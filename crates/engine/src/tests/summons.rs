@@ -367,3 +367,240 @@ mod strength {
         );
     }
 }
+
+/// Seating a fork in the group model: `Party` and `planned` together, and
+/// the three silent failures on either side of that.
+mod group_model {
+    use super::*;
+    use crate::battle::{BattleAction, SpecialTarget};
+    use crate::components::Summoned;
+    use crate::resources::Party;
+
+    fn log_texts(game: &Game) -> Vec<String> {
+        game.message_log(crate::MESSAGE_LOG_CAP)
+            .into_iter()
+            .map(|l| l.text)
+            .collect()
+    }
+
+    /// A fight with one hostile and one fork already seated, returning the
+    /// hostile and the fork.
+    fn fight_with_a_fork(game: &mut Game) -> (Entity, Entity) {
+        let player = game.player_entity();
+        let pos = *game.world.get::<Position>(player).unwrap();
+        let wild = spawn_wild_without_routine(game, "scrapper", pos.x, pos.y);
+        // Enough Integrity that the fight does not end before anyone acts.
+        if let Some(mut stats) = game.world.get_mut::<Stats>(wild) {
+            stats.max_hp = 4000;
+            stats.hp = 4000;
+        }
+        insert_battle(game, player, vec![wild]);
+        let body = game.fork_programs(player, 1, 0)[0];
+        game.seat_summon_in_group(body);
+        (wild, body)
+    }
+
+    /// Asserting only that it exists passes against the inert bug this seam
+    /// is about — a body pushed to `Party` alone draws an initiative rung
+    /// and then never acts, and nothing fails.
+    #[test]
+    fn a_seated_fork_draws_a_row_and_takes_a_turn() {
+        let mut game = game(101);
+        let (wild, body) = fight_with_a_fork(&mut game);
+
+        let view = game.battle_view().expect("a fight is running");
+        assert_eq!(
+            view.party.len(),
+            game.world.resource::<Party>().0.len() + 1,
+            "battle_rows iterates planned, so a fork missing from it is invisible"
+        );
+
+        let before = game.world.get::<Stats>(wild).unwrap().hp;
+        // The player braces, so anything that lands on the hostile this
+        // round was the fork's doing.
+        resolve_round_with(&mut game, BattleAction::Defend);
+        let after = game.world.get::<Stats>(wild).unwrap().hp;
+        assert!(
+            after < before,
+            "the fork should have acted: {before} -> {after}"
+        );
+        assert!(
+            game.world.get::<Stats>(body).is_some(),
+            "and still be standing"
+        );
+    }
+
+    /// The other half of acting: a fork is a body the rest of the fight can
+    /// see, on both sides.
+    #[test]
+    fn a_seated_fork_is_a_body_both_sides_can_reach() {
+        let mut game = game(103);
+        let (_, body) = fight_with_a_fork(&mut game);
+        assert!(
+            game.living_party().contains(&body),
+            "living_party iterates planned"
+        );
+        let slot = game
+            .party_slot_of(body)
+            .expect("a seated fork occupies a party slot");
+        assert!(
+            game.ability_recipients(
+                game.player_entity(),
+                crate::abilities::AbilityTarget::WholeParty,
+                &SpecialTarget::WholeParty
+            )
+            .contains(&body),
+            "a WholeParty heal covers it; it is in slot {slot}"
+        );
+    }
+
+    /// Re-invoking replaces the standing set. A replaced body is *killed*,
+    /// never removed — removal shifts every slot behind it, which is the
+    /// thing `BattleState::planned` indexing `Party` positionally forbids.
+    #[test]
+    fn re_invoking_replaces_the_standing_set_without_shrinking_the_party() {
+        let mut game = game(107);
+        let (_, first) = fight_with_a_fork(&mut game);
+        let len_before = game.world.resource::<Party>().0.len();
+
+        game.dissolve_summons();
+        assert!(
+            !game.creature_alive(first),
+            "the replaced body is dead where it stands"
+        );
+        assert_eq!(
+            game.world.resource::<Party>().0.len(),
+            len_before,
+            "nothing leaves Party mid-battle"
+        );
+        assert!(
+            game.world.resource::<Party>().0.contains(&first),
+            "and it is still referenced by the slot it held"
+        );
+
+        let player = game.player_entity();
+        let second = game.fork_programs(player, 1, 0)[0];
+        game.seat_summon_in_group(second);
+        assert_eq!(game.world.resource::<Party>().0.len(), len_before + 1);
+    }
+
+    /// `bench_or_dissolve` never asks whether the body it is handed is
+    /// `Tamed` — it detaches, benches or dissolves whatever it gets. Run on
+    /// a fork it announces a downed program the player never had, and
+    /// `detach_from_play` writes "leaves your battle party" about a body
+    /// that was never theirs to lose.
+    #[test]
+    fn a_dead_fork_is_not_benched_as_a_downed_program() {
+        let mut game = game(109);
+        let (wild, body) = fight_with_a_fork(&mut game);
+        let name = game.creature_label(body);
+        if let Some(mut stats) = game.world.get_mut::<Stats>(body) {
+            stats.hp = 0;
+        }
+
+        game.end_battle(game.player_entity(), Some(wild));
+
+        let mut queued = Vec::new();
+        while let Some(note) = game.take_notification() {
+            queued.push(note.title);
+        }
+        assert!(
+            !queued.iter().any(|t| t == "Program Down"),
+            "a new game has no Repair Bay, so an unskipped bench would announce one: {queued:?}"
+        );
+        let leaving = format!("{name} leaves your battle party.");
+        assert!(
+            !log_texts(&game).contains(&leaving),
+            "a fork ending is not a companion being lost: {:#?}",
+            log_texts(&game)
+        );
+    }
+
+    /// The Permadeath half of the same skip: `dissolve_tamed_program`
+    /// announces the same detachment and then despawns the body out from
+    /// under the `Party` slot still naming it.
+    #[test]
+    fn a_dead_fork_is_not_dissolved_as_a_tamed_program() {
+        let mut game = Game::new(111, DifficultyMode::Permadeath, &test_assets_dir()).unwrap();
+        let (wild, body) = fight_with_a_fork(&mut game);
+        let name = game.creature_label(body);
+        if let Some(mut stats) = game.world.get_mut::<Stats>(body) {
+            stats.hp = 0;
+        }
+
+        game.end_battle(game.player_entity(), Some(wild));
+
+        let leaving = format!("{name} leaves your battle party.");
+        assert!(
+            !log_texts(&game).contains(&leaving),
+            "a fork is dissolved by the sweep, not detached as a companion: {:#?}",
+            log_texts(&game)
+        );
+    }
+
+    /// `finish_hostile` keys the payout on the victim rather than the
+    /// killer, so this should pass with no new code — and a fork with no
+    /// `Experience` is already invisible to `award_companion_xp`.
+    #[test]
+    fn a_fork_earns_nothing_and_its_kills_still_pay_the_player() {
+        let mut game = game(113);
+        let player = game.player_entity();
+        let pos = *game.world.get::<Position>(player).unwrap();
+        let wild = spawn_wild_without_routine(&mut game, "scrapper", pos.x, pos.y);
+        if let Some(mut stats) = game.world.get_mut::<Stats>(wild) {
+            stats.max_hp = 1;
+            stats.hp = 1;
+        }
+        insert_battle(&mut game, player, vec![wild]);
+        let body = game.fork_programs(player, 1, 0)[0];
+        game.seat_summon_in_group(body);
+        assert!(
+            game.world
+                .get::<crate::components::Experience>(body)
+                .is_none(),
+            "nothing to award to"
+        );
+
+        let xp_before = game
+            .world
+            .get::<crate::components::Experience>(player)
+            .map(|e| e.xp)
+            .unwrap_or(0);
+        // The player braces, so the kill is the fork's.
+        resolve_round_with(&mut game, BattleAction::Defend);
+        assert!(!game.creature_alive(wild), "the fork finished it");
+        let xp_after = game
+            .world
+            .get::<crate::components::Experience>(player)
+            .map(|e| e.xp)
+            .unwrap_or(0);
+        assert!(
+            xp_after > xp_before
+                || game
+                    .world
+                    .get::<crate::components::Experience>(player)
+                    .map(|e| e.level)
+                    .unwrap_or(1)
+                    > 1,
+            "a kill pays the player whoever landed it: {xp_before} -> {xp_after}"
+        );
+    }
+
+    /// The engine plans a fork's turn, so the player is never asked for one.
+    #[test]
+    fn a_fork_is_never_a_slot_the_player_is_asked_to_command() {
+        let mut game = game(117);
+        let (_, body) = fight_with_a_fork(&mut game);
+        let slot = game.party_slot_of(body).expect("it holds a slot");
+        assert_ne!(game.battle_active_slot(), Some(slot));
+        let _ = game.battle_set_action(0, BattleAction::Defend);
+        assert!(
+            game.battle_round_ready(),
+            "with the player's own slot planned the round is ready"
+        );
+        assert!(
+            game.world.get::<Summoned>(body).is_some(),
+            "and the fork is still the one that was not asked"
+        );
+    }
+}

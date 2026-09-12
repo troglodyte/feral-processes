@@ -165,7 +165,7 @@ impl Game {
         // The ramp `spawn_nest_guardian` takes, for its reason: a patrol out
         // on the frontier would otherwise be weaker than the ordinary
         // wildlife it is standing among.
-        let mult = self.field_stat_mult(x, y);
+        let mult = self.rolled_field_stat_mult(x, y);
         let member = self.spawn_wild_creature_scaled(&species, x, y, mult, false)?;
         self.world.entity_mut(member).insert(TownPatrol { town });
         Some(member)

@@ -375,6 +375,64 @@ pub const fn zone_level_cap(zone: u32) -> u32 {
     }
 }
 
+/// The **floor** of `zone`'s level band — the level a party arrives in it
+/// at, where `zone_level_cap` is the level they leave it at.
+///
+/// The pair is what `Game::party_band_progress` measures across, and zone 1
+/// is the case that needs saying: `zone_level_cap(0)` answers
+/// `ZONE_LEVEL_CAP_FLOOR` rather than 1, because the cap's own floor clamps
+/// it — so reusing it here would open a brand-new run at *full* band
+/// progress and hand a level-1 player a zone step of extra difficulty on
+/// their first fight. Level 1 is the literal because a run starts there,
+/// not because the formula degenerates to it.
+pub const fn zone_band_floor(zone: u32) -> u32 {
+    if zone <= 1 {
+        1
+    } else {
+        zone_level_cap(zone - 1)
+    }
+}
+
+/// How many zone steps a **full** band of levelling is worth to the ground's
+/// stats — `Game::party_stat_steps`, scaled by
+/// `Game::party_band_progress`.
+///
+/// A fractional zone step, `ENEMY_STRENGTH_BAND_STEP`'s rule: the party term
+/// is the fifth thing that buys a step, after zone, distance, depth and the
+/// enemy-strength band, and it adds at the same seam rather than compounding
+/// on top of one. Expressed that way it means one thing at every zone — "the
+/// ground fights like it is N zones deeper" — and `balance_sim` gates it for
+/// free, since zone N one step up **is** the zone N+1 fixture the sweeps
+/// already cover.
+///
+/// **At 1.0 or below that free gating holds and above it does not**, which
+/// is what `the_party_stat_term_stays_inside_balance_sims_reach` refuses.
+/// The other bound is not here at all: the term is scaled by band progress
+/// and `Game::level_cap` is the only ceiling on a level, so the party's own
+/// cap is what stops this running away. There is deliberately no clamp of
+/// its own to find and "simplify" out.
+pub const PARTY_LEVEL_STAT_STEPS: f32 = 1.0;
+
+/// How many **fielded companions** buy one escalation step on the two group
+/// curves — `Game::party_count_steps`.
+///
+/// The spawner was blind to party size until this landed: a solo player and
+/// a five-strong party met the same pack. `MAX_PARTY_SIZE` is 5, so this
+/// tops out at two steps.
+pub const PARTY_SIZE_STEP_MEMBERS: u32 = 2;
+
+/// How many escalation steps a **full** band of levelling buys on the two
+/// group curves, floored to a whole step — the count half of what
+/// `PARTY_LEVEL_STAT_STEPS` does to stats.
+///
+/// Separate from the stat term rather than shared with it, because the two
+/// axes reach different code: stats fold in caller-side at
+/// `Game::field_stat_mult` and `Game::stack_depth_multiplier`, while count
+/// folds in at `Game::group_steps` — which must stay clear of
+/// `Game::danger_steps`, whose third reader is the species danger-band
+/// window.
+pub const PARTY_LEVEL_COUNT_STEPS: u32 = 1;
+
 /// Fraction of in-level XP knocked back by a "setback" penalty (a flatline,
 /// a Forgiving-mode reboot, or a forced jack-out mid-battle) — see
 /// `progression::apply_setback_xp_penalty`. Deliberately mild: it erodes
@@ -5091,6 +5149,42 @@ mod tests {
             steps.iter().all(|&s| s == ZONE_STAT_STEP),
             "the zone curve compounds somewhere: {steps:?}"
         );
+    }
+
+    /// The party term is gated by `balance_sim` **for free** only while a
+    /// full band of levelling is worth at most one zone step: zone N one
+    /// step up is arithmetically the zone N+1 fixture the sweeps already
+    /// cover, which is `ENEMY_STRENGTH_BAND_STEP`'s and the distance ramp's
+    /// argument both. Above one step the far field of zone N is a fixture
+    /// nothing sweeps, and this needs a bound of its own before it may move.
+    #[test]
+    fn the_party_stat_term_stays_inside_balance_sims_reach() {
+        assert!(
+            PARTY_LEVEL_STAT_STEPS <= ZONE_STAT_STEP as f32,
+            "PARTY_LEVEL_STAT_STEPS is {PARTY_LEVEL_STAT_STEPS}, past one zone step — \
+             give it a balance_sim bound of its own before raising it"
+        );
+    }
+
+    /// `zone_band_floor` must be the previous zone's ceiling, and zone 1's
+    /// must be level 1. Reusing `zone_level_cap(zone - 1)` at zone 1 answers
+    /// `ZONE_LEVEL_CAP_FLOOR` — the cap clamps its own line — which would
+    /// open a brand-new run at full band progress.
+    #[test]
+    fn a_zones_level_band_starts_where_the_last_one_ended() {
+        assert_eq!(zone_band_floor(1), 1, "a run starts at level 1");
+        for zone in 2..=16u32 {
+            assert_eq!(
+                zone_band_floor(zone),
+                zone_level_cap(zone - 1),
+                "zone {zone}'s band must open where zone {} closed",
+                zone - 1
+            );
+            assert!(
+                zone_level_cap(zone) > zone_band_floor(zone),
+                "zone {zone}'s band must have width, or progress is undefined"
+            );
+        }
     }
 
     /// `Game::max_group_size` clamps its distance exponent to

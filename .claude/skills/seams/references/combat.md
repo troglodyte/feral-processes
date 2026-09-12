@@ -247,6 +247,41 @@
   all: `arena::encounter` must not move with a map coordinate, and
   `game::sortie` already prices its own risk through `habitat_pools`'
   `step_bonus`.
+- **The party is the fifth thing that buys a difficulty step, and it must
+  stay out of `danger_steps`.** `tuning::zone_band_floor` pairs with
+  `zone_level_cap` to give a zone a **level band**;
+  `Game::party_band_progress` is the player's level as a 0..1 fraction
+  across it, so a breach resets it and levelling is still worth something —
+  a world that tracks the party exactly is a treadmill. `party_stat_steps`
+  (progress times `PARTY_LEVEL_STAT_STEPS`) is one more addend inside
+  `zone_curve_ratio`, at `field_stat_mult` and
+  `stack_depth_multiplier_sharing`; it reaches the Stack where the distance
+  ramp deliberately does not, because it is a property of the *party* and
+  not of where the spawn was placed. **The trap is the count half's obvious
+  home.** `danger_steps` is literally the scalar the two group curves read,
+  but it has a *third* reader — the species danger-band window in
+  `habitat_pools` and `pick_lair_species` — so a party term folded in there
+  changes **what** you meet and eventually opens apex bosses because you
+  levelled, the shape the distance bullet above already refuses. Hence
+  `Game::group_steps`, a separate sum whose two callers are the census, with
+  `MAX_GROUP_SIZE_STEPS` clamping the **sum**: bounded per half the total
+  reaches twice it, and that ceiling is what stops
+  `GROUP_SIZE_DISTANCE_GROWTH.pow` running away. **Each spawn rolls its own
+  share.** `roll_party_share` is a uniform `0..=1`, so a developed party
+  meets a spread from the ground's baseline up to their level rather than a
+  field levelled in lockstep. It could not live inside `field_stat_mult` or
+  `stack_depth_multiplier` because both have non-spawn readers —
+  `stack_market` prices a **quote** off the second — so each has a pure door
+  and a `&mut self` rolled one, and both fold sites stay caller-side, which
+  is what leaves
+  `a_spawns_stats_come_from_its_escalation_and_never_from_its_tile` true.
+  **`roll_party_share` takes no draw at all when the term is zero**, and
+  that omission is what keeps every seeded fixture still — `roll_affix`'s
+  rule on an empty pool. There is deliberately **no clamp of its own**:
+  `Game::level_cap` is the only bound a level-driven term can have, and
+  `PARTY_LEVEL_STAT_STEPS` is the knob, held at or under one zone step by
+  `the_party_stat_term_stays_inside_balance_sims_reach` — above that the far
+  field of zone N is a fixture `balance_sim` does not sweep.
 - **A basic attack is an `AbilityDef`, and combat names `MoveDef` nowhere.**
   `species::basic_attack_ability` is the one conversion; `moves:` stays the
   authored shape so no species file or mod needed editing, and

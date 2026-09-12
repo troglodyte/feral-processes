@@ -8,7 +8,7 @@ use crate::species::SpeciesDb;
 use crate::tactical::TacticalBattle;
 use crate::tactical::reach::allowance;
 use crate::tactical::turn::StepOutcome;
-use crate::tests::support::{generic_species, test_assets_dir};
+use crate::tests::support::{equip_weapon, generic_species, test_assets_dir};
 use crate::tuning::{DEFAULT_BASE_SPEED, PLAYER_BASE_SPEED, TACTICAL_MOVE_MAX};
 use bevy_ecs::prelude::Entity;
 
@@ -2043,4 +2043,375 @@ fn a_body_is_walking_only_between_its_first_step_and_its_last() {
         !game.tactical_walking(),
         "the turn ended with a walk still owed"
     );
+}
+
+/// The player unarmed swings at arm's length, and nothing else.
+#[test]
+fn an_unarmed_body_swings_at_arms_length() {
+    let game = game();
+    let player = game.player_entity();
+    assert_eq!(
+        game.swing_range(player),
+        crate::tuning::TACTICAL_MELEE_RANGE
+    );
+}
+
+/// A species carrying a `ranged` move reaches past arm's length.
+#[test]
+fn a_ranged_species_reaches_past_arms_length() {
+    let mut game = game();
+    let shooter = body(&mut game, "drone");
+    assert_eq!(
+        game.swing_range(shooter),
+        crate::tuning::TACTICAL_RANGED_MOVE_RANGE,
+        "Drone's Recon Ping is `ranged: true`"
+    );
+}
+
+/// A species with no ranged move stays at arm's length.
+#[test]
+fn a_melee_species_stays_at_arms_length() {
+    let mut game = game();
+    let bruiser = body(&mut game, "construct");
+    assert_eq!(
+        game.swing_range(bruiser),
+        crate::tuning::TACTICAL_MELEE_RANGE,
+        "Construct authors no ranged move"
+    );
+}
+
+/// A worn weapon **replaces** the species figure rather than being maxed
+/// against it — `Game::attack_range`'s precedent, where worn damage replaces
+/// a natural band outright. A ranged program holding a melee blade swings at
+/// arm's length, because the weapon is what it is swinging.
+#[test]
+fn a_worn_weapon_replaces_the_species_range() {
+    let mut game = game();
+    let shooter = body(&mut game, "drone");
+    equip_weapon(&mut game, shooter, "shim_blade");
+    assert_eq!(
+        game.swing_range(shooter),
+        crate::tuning::TACTICAL_MELEE_RANGE
+    );
+
+    equip_weapon(&mut game, shooter, "plasma_router");
+    assert_eq!(game.swing_range(shooter), 3);
+}
+
+/// Stands `player` and `other` on chosen cells inside an open fight.
+///
+/// `move_to` rather than `place` — both are already seated by the time a
+/// fight is open, and `place` refuses a body that is on the board.
+fn place_bodies(
+    game: &mut Game,
+    player: Entity,
+    at: (i32, i32),
+    other: Entity,
+    theirs: (i32, i32),
+) {
+    place_one(game, player, at);
+    place_one(game, other, theirs);
+}
+
+fn place_one(game: &mut Game, body: Entity, cell: (i32, i32)) {
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .move_to(body, cell),
+        "{cell:?} would not take a body"
+    );
+}
+
+/// Puts sight-blocking cover on one cell. `Cover` and not `Blocked` —
+/// `blocks_sight` is true of exactly one kind, and the two are deliberately
+/// not complements.
+fn block_cell(game: &mut Game, cell: (i32, i32)) {
+    game.world.resource_mut::<TacticalBattle>().board.put(
+        cell.0,
+        cell.1,
+        crate::tactical::map::BattleCell::Cover,
+    );
+}
+
+/// Opens a fight and hands the turn to the player, with the board's own
+/// furniture cleared off the cells a test is about to use.
+fn ranged_fight(game: &mut Game, count: usize) -> Vec<Entity> {
+    let pack = tactical_fight(game, count, 20);
+    let player = game.player_entity();
+    assert!(wait_for_turn(game, player), "the player never got a turn");
+    {
+        let battle = &mut *game.world.resource_mut::<TacticalBattle>();
+        for x in 0..6 {
+            for y in 0..3 {
+                battle
+                    .board
+                    .put(x, y, crate::tactical::map::BattleCell::Open);
+            }
+        }
+    }
+    pack
+}
+
+/// A swing at exactly the weapon's range lands. Its other half is below, and
+/// the two are one pair — at the bound and one past it.
+#[test]
+fn a_swing_lands_at_exactly_its_range() {
+    let mut game = game();
+    let pack = ranged_fight(&mut game, 1);
+    let player = game.player_entity();
+    equip_weapon(&mut game, player, "plasma_router"); // range 3
+    place_bodies(&mut game, player, (0, 0), pack[0], (3, 0));
+    assert!(
+        game.tactical_attack(pack[0]),
+        "three cells is inside range 3"
+    );
+}
+
+/// One cell past the range is refused.
+#[test]
+fn a_swing_one_cell_past_its_range_is_refused() {
+    let mut game = game();
+    let pack = ranged_fight(&mut game, 1);
+    let player = game.player_entity();
+    equip_weapon(&mut game, player, "plasma_router"); // range 3
+    place_bodies(&mut game, player, (0, 0), pack[0], (4, 0));
+    assert!(!game.tactical_attack(pack[0]), "four cells is past range 3");
+}
+
+/// Cover blocks a swing. Delete the `line_of_sight` check and this must
+/// fail — a test that passes with the fix removed is not coverage.
+#[test]
+fn a_ranged_swing_is_blocked_by_cover() {
+    let mut game = game();
+    let pack = ranged_fight(&mut game, 1);
+    let player = game.player_entity();
+    equip_weapon(&mut game, player, "plasma_router");
+    place_bodies(&mut game, player, (0, 0), pack[0], (2, 0));
+    block_cell(&mut game, (1, 0));
+    assert!(
+        !game.tactical_attack(pack[0]),
+        "cover did not stop the swing"
+    );
+}
+
+/// The same swing with the cover gone lands — so the test above is measuring
+/// the cover and not the placement.
+#[test]
+fn the_same_swing_lands_once_the_cover_is_gone() {
+    let mut game = game();
+    let pack = ranged_fight(&mut game, 1);
+    let player = game.player_entity();
+    equip_weapon(&mut game, player, "plasma_router");
+    place_bodies(&mut game, player, (0, 0), pack[0], (2, 0));
+    assert!(game.tactical_attack(pack[0]));
+}
+
+/// An adjacent swing is untouched by the sight check — `line_of_sight`
+/// excludes its endpoints, so for neighbours its loop is empty.
+#[test]
+fn an_adjacent_swing_is_unaffected_by_the_sight_check() {
+    let mut game = game();
+    let pack = ranged_fight(&mut game, 1);
+    let player = game.player_entity();
+    place_bodies(&mut game, player, (0, 0), pack[0], (1, 0));
+    assert!(game.tactical_attack(pack[0]));
+}
+
+/// A sweep fired from range still sweeps. The shape is cast from the actor
+/// toward the aim whatever the distance, so a reach weapon that quietly went
+/// single-target at range would read as a nerf rather than a bug.
+#[test]
+fn a_reach_weapon_still_sweeps_when_fired_from_range() {
+    let mut game = game();
+    let pack = ranged_fight(&mut game, 2);
+    let player = game.player_entity();
+    equip_weapon(&mut game, player, "scatter_lance"); // range 2, WholeEnemyGroup
+    place_bodies(&mut game, player, (0, 0), pack[0], (2, 0));
+    place_one(&mut game, pack[1], (2, 1));
+    let before = hp_of(&game, pack[1]);
+    crate::tests::support::force_the_next_attack_to_land(&mut game);
+    assert!(game.tactical_attack(pack[0]));
+    assert!(
+        hp_of(&game, pack[1]) < before,
+        "the neighbour was not caught by a sweep fired from two cells"
+    );
+}
+
+/// A body standing at two cells fires the ranged half of its pair, never the
+/// melee half — the AI decides its intent before it walks, and a roll that
+/// could draw a move it cannot fire makes a planned standoff a coin flip.
+#[test]
+fn a_body_at_range_rolls_only_a_move_that_reaches() {
+    let mut game = game();
+    let shooter = body(&mut game, "drone");
+    for _ in 0..20 {
+        let rolled = game
+            .roll_species_move_in_range(shooter, Some(2))
+            .expect("Drone has moves");
+        assert!(rolled.ranged, "rolled {} at two cells", rolled.name);
+    }
+}
+
+/// Adjacent, either half of the pair is fair game — which is the variety
+/// `swing_move` exists for.
+#[test]
+fn a_body_adjacent_may_roll_either_move() {
+    let mut game = game();
+    let shooter = body(&mut game, "drone");
+    let mut saw_melee = false;
+    for _ in 0..40 {
+        let rolled = game
+            .roll_species_move_in_range(shooter, Some(1))
+            .expect("Drone has moves");
+        saw_melee |= !rolled.ranged;
+    }
+    assert!(saw_melee, "the melee half was never drawn in forty rolls");
+}
+
+/// The group model passes `None` and is untouched.
+#[test]
+fn the_group_model_rolls_over_every_move() {
+    let mut game = game();
+    let shooter = body(&mut game, "drone");
+    let mut saw_melee = false;
+    let mut saw_ranged = false;
+    for _ in 0..40 {
+        let rolled = game.roll_species_move(shooter).expect("Drone has moves");
+        saw_melee |= !rolled.ranged;
+        saw_ranged |= rolled.ranged;
+    }
+    assert!(saw_melee && saw_ranged, "the unconstrained roll narrowed");
+}
+
+/// A hostile of `species` standing beside the player, with a fight opened
+/// around it. `tactical_pack` takes the *first* species in the db, so a test
+/// that needs a particular one spawns its own.
+fn fight_against(game: &mut Game, species: &str) -> Entity {
+    let player = game.player_entity();
+    let at = *game
+        .world
+        .get::<Position>(player)
+        .expect("the player stands somewhere");
+    let wild = game
+        .world
+        .spawn((
+            Creature {
+                species: species.to_string(),
+            },
+            Hostile,
+            Position {
+                x: at.x + 1,
+                y: at.y,
+            },
+            Stats {
+                hp: 20,
+                max_hp: 20,
+                atk: 4,
+                mitigation: 0,
+            },
+            StatusEffects::default(),
+        ))
+        .id();
+    game.open_tactical_battle(vec![wild]);
+    wild
+}
+
+/// A reaching hostile swings from where it stands instead of closing, and
+/// the move it swings with is the reaching half of its pair.
+#[test]
+fn a_reaching_hostile_swings_without_closing() {
+    let mut game = game();
+    let wild = fight_against(&mut game, "drone");
+    let player = game.player_entity();
+    assert!(wait_for_turn(&mut game, wild), "the hostile never acted");
+    place_bodies(&mut game, player, (0, 0), wild, (2, 0));
+    {
+        let battle = &mut *game.world.resource_mut::<TacticalBattle>();
+        for x in 0..6 {
+            for y in 0..4 {
+                battle
+                    .board
+                    .put(x, y, crate::tactical::map::BattleCell::Open);
+            }
+        }
+    }
+
+    assert!(game.tactical_ai_turn(), "the hostile's turn was not run");
+    // The *distance* and not the cell: holding the band is what is being
+    // asserted, and a body that sidesteps to another cell two out has held
+    // it exactly as well as one that stood still.
+    let held = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(wild)
+        .expect("the hostile left the board");
+    assert_eq!(
+        crate::tactical::reach::distance((0, 0), held),
+        crate::tuning::TACTICAL_RANGED_MOVE_RANGE,
+        "the reaching hostile closed instead of holding its band, ending at {held:?}"
+    );
+    assert!(
+        log_texts(&game).iter().any(|l| l.contains("Recon Ping")),
+        "the reaching hostile never swung its reaching move: {:?}",
+        log_texts(&game)
+    );
+}
+
+/// One streak per body actually swung at, from the swinger's cell to each
+/// recipient's — so a reach weapon's sweep fires one at every body its shape
+/// caught.
+#[test]
+fn a_swing_queues_one_bolt_per_body_it_lands_on() {
+    let mut game = game();
+    let pack = ranged_fight(&mut game, 1);
+    let player = game.player_entity();
+    equip_weapon(&mut game, player, "plasma_router");
+    place_bodies(&mut game, player, (0, 0), pack[0], (3, 0));
+    assert!(game.tactical_attack(pack[0]));
+
+    let bolts = game.take_bolts();
+    assert_eq!(bolts.len(), 1, "one body swung at, one streak");
+    assert_eq!(bolts[0].from, (0, 0));
+    assert_eq!(bolts[0].to, (3, 0));
+}
+
+/// A sweep fires one at every body its shape caught, not one at the aim.
+#[test]
+fn a_sweep_queues_a_bolt_per_body_it_swept() {
+    let mut game = game();
+    let pack = ranged_fight(&mut game, 2);
+    let player = game.player_entity();
+    equip_weapon(&mut game, player, "scatter_lance");
+    place_bodies(&mut game, player, (0, 0), pack[0], (2, 0));
+    place_one(&mut game, pack[1], (2, 1));
+    assert!(game.tactical_attack(pack[0]));
+
+    let bolts = game.take_bolts();
+    assert_eq!(bolts.len(), 2, "two bodies swept, two streaks: {bolts:?}");
+    assert!(bolts.iter().all(|b| b.from == (0, 0)));
+}
+
+/// Draining is a drain — a second call comes back empty, so a frontend
+/// cannot draw one streak twice.
+#[test]
+fn taking_the_bolts_empties_the_queue() {
+    let mut game = game();
+    let pack = ranged_fight(&mut game, 1);
+    let player = game.player_entity();
+    place_bodies(&mut game, player, (0, 0), pack[0], (1, 0));
+    assert!(game.tactical_attack(pack[0]));
+    assert_eq!(game.take_bolts().len(), 1);
+    assert!(game.take_bolts().is_empty());
+}
+
+/// An adjacent swing queues one too — the streak is one rule at every
+/// distance, and at one cell it is the melee feedback.
+#[test]
+fn an_adjacent_swing_queues_a_bolt_too() {
+    let mut game = game();
+    let pack = ranged_fight(&mut game, 1);
+    let player = game.player_entity();
+    place_bodies(&mut game, player, (0, 0), pack[0], (1, 0));
+    assert!(game.tactical_attack(pack[0]));
+    assert_eq!(game.take_bolts().len(), 1);
 }

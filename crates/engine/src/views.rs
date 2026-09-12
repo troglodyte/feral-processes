@@ -415,6 +415,16 @@ pub struct WornDetailView {
     /// band rates below its single-target peer and this is what the player
     /// reads instead.
     pub reach: Option<String>,
+    /// How far this weapon may be swung from, as the inspect page says it,
+    /// or `None` for one that swings at arm's length.
+    ///
+    /// Absent rather than "Range: 1 cell": every blade in the game would
+    /// carry that row, and a row on everything is a row nobody reads.
+    ///
+    /// Formatted in the engine for `reach`'s reason — a read-only screen's
+    /// row count is app-core's, and a per-row transform in the renderer
+    /// opens the page on a row that is not drawn.
+    pub range: Option<String>,
     /// The wearer's Accuracy **with this copy in its slot** — what the slot
     /// already holds is taken back off first, so inspecting the piece you
     /// are wearing reports the accuracy you actually have.

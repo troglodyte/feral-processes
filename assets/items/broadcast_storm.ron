@@ -5,5 +5,6 @@
     value: Some(70),
     equipment: Some((Weapon, (atk: 3, damage: (min: 4, max: 8), accuracy: 1))),
     reach: Some((target: AllEnemies, recharge: 5)),
+    range: Some(3),
     droppable: Some([("cipher", 0.05), ("rootkit", 0.04)]),
 )

@@ -956,3 +956,69 @@ fn a_save_written_without_build_quality_loads_it_neutral() {
         "a machine with no stored figure must cycle at its def's shipped rate"
     );
 }
+
+/// A blow in flight has nothing to say to a reloaded save, and the property
+/// is an **omission** — `BoltQueue` carries no `Serialize` and is in no
+/// `SaveData` field — so the assertion is on the reloaded `Game`'s own drain
+/// rather than on the file's text.
+#[test]
+fn no_bolt_survives_a_save_and_load() {
+    let mut game = Game::new(4214, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let at = *game
+        .world
+        .get::<crate::components::Position>(player)
+        .expect("the player stands somewhere");
+    let wild = game
+        .world
+        .spawn((
+            crate::components::Creature {
+                species: "drone".to_string(),
+            },
+            crate::components::Hostile,
+            crate::components::Position {
+                x: at.x + 1,
+                y: at.y,
+            },
+            crate::components::Stats {
+                hp: 20,
+                max_hp: 20,
+                atk: 1,
+                mitigation: 0,
+            },
+            crate::components::StatusEffects::default(),
+        ))
+        .id();
+    game.open_tactical_battle(vec![wild]);
+    for _ in 0..16 {
+        if game.tactical_actor() == Some(player) {
+            break;
+        }
+        game.tactical_end_turn();
+    }
+    {
+        let battle = &mut *game.world.resource_mut::<crate::tactical::TacticalBattle>();
+        battle
+            .board
+            .put(0, 0, crate::tactical::map::BattleCell::Open);
+        battle
+            .board
+            .put(1, 0, crate::tactical::map::BattleCell::Open);
+        assert!(battle.move_to(player, (0, 0)));
+        assert!(battle.move_to(wild, (1, 0)));
+    }
+    assert!(game.tactical_attack(wild), "the swing was refused");
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_bolt_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        loaded.take_bolts().is_empty(),
+        "a blow in flight was written into the save"
+    );
+}

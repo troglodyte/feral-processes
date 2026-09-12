@@ -732,6 +732,53 @@ impl TransitQueue {
     }
 }
 
+/// A blow travelling from the body that swung it to the body it landed on,
+/// for a frontend to draw as a streak.
+///
+/// **In `TacticalBattle` cells and not world coordinates**, which is why
+/// this is its own value rather than a fifth `EffectKind`: `VisualEffect`'s
+/// whole shape is a *world* tile, and pushing a board cell into that queue
+/// would pin a flash to an unrelated tile out in the zone — exactly the
+/// convenience the `Position` seam refuses.
+///
+/// **No kind field.** The streak travels `from` → `to` by one rule, and at
+/// one cell that is a short flick across a single square — which is the
+/// melee feedback, for free, and keeps a renderer from restating the melee
+/// threshold to choose between two draws.
+///
+/// The colour is carried because it is the swinger's, and the swinger may be
+/// dead by the time this is drawn: a fumble's Recoil rung can kill the body
+/// that swung, and a lookup would then have nothing to ask.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BoltCue {
+    pub from: (i32, i32),
+    pub to: (i32, i32),
+    pub color: GlyphColor,
+}
+
+/// Bolts queued since the last `Game::take_bolts` — `TransitQueue`'s
+/// counterpart on a battle map, capped and drained the same way, and
+/// **deliberately not serialized**: a blow in flight has nothing to say to a
+/// reloaded save.
+#[derive(Resource, Default)]
+pub struct BoltQueue {
+    cues: Vec<BoltCue>,
+}
+
+impl BoltQueue {
+    pub(crate) fn push(&mut self, cue: BoltCue) {
+        self.cues.push(cue);
+        if self.cues.len() > EFFECT_QUEUE_CAP {
+            let excess = self.cues.len() - EFFECT_QUEUE_CAP;
+            self.cues.drain(0..excess);
+        }
+    }
+
+    pub fn take(&mut self) -> Vec<BoltCue> {
+        std::mem::take(&mut self.cues)
+    }
+}
+
 #[derive(Resource, Default)]
 pub struct GameOver {
     pub reason: Option<String>,

@@ -918,6 +918,16 @@ relying on one, and correct all three places if it has moved.
   crossing over, and it is worth what the turn order says it is worth** —
   `DEFEND_AGGRO_WEIGHT` weights a slot a battle map has none of, and the
   round-cadence buff leaves a body on the last rung bracing against nobody.
+- **`Game::swing_range` is the one door for how far a body swings, and its
+  three readers are calls rather than copies** — holding a weapon at all
+  replaces the species figure, and the range is a property of the body rather
+  than of the move it rolls.
+- **A swing needs line of sight, checked unconditionally** because
+  `line_of_sight` excludes its endpoints and so is already a no-op for
+  neighbours.
+- **A `BoltCue` lives in `TacticalBattle` cells and is its own queue, never a
+  fifth `EffectKind`**, with no `kind` field because one travel rule at every
+  distance is also the melee feedback.
 
 ### Items, gear and economy
 

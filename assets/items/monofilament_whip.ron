@@ -4,5 +4,6 @@
     description: "Researched weapon. A filament one molecule wide, and the hardest hit at its tier.",
     value: Some(60),
     equipment: Some((Weapon, (atk: 4, damage: (min: 5, max: 15)))),
+    range: Some(2),
     droppable: Some([("wintermute", 0.6)]),
 )

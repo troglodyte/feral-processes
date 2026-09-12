@@ -405,9 +405,10 @@ any non-finite `taming_potency`, `consume.power`, or
     // to 0 — a wide swing on every swing is a straight throughput
     // multiplier. `0` is legal and simply means "always ready".
     //
-    // The reach is **breadth and never distance**: it does not extend how
-    // far the weapon reaches, and a battle map's adjacency rule is
-    // untouched. On a battle map the sweep is **full friendly fire** — a
+    // The reach is **breadth and never distance**: how far the weapon may be
+    // swung from is `range:` below, and a reach weapon that authors no
+    // `range` still swings at arm's length. On a battle map the sweep is
+    // **full friendly fire** — a
     // companion standing beside the target is caught, and that is the price
     // of aiming a shape.
     //
@@ -424,6 +425,34 @@ any non-finite `taming_potency`, `consume.power`, or
         target: WholeEnemyGroup,
         recharge: 2,
     )),
+
+    // Optional; can be left out entirely (defaults to arm's length). **How
+    // far from the wielder this weapon may be swung**, in cells, on a
+    // tactical battle map. Absent means one cell — an adjacent body, which
+    // is what every weapon that does not author this reaches.
+    //
+    // `range:` is distance where `reach:` above is breadth, and the two are
+    // independent: a single-target weapon may reach three cells, and a
+    // sweeping one may swing only at arm's length. A swing fired from range
+    // still sweeps — the shape is cast from the wielder toward the body
+    // aimed at, whatever the distance between them.
+    //
+    // **Read on a battle map alone.** The group model has no geometry to
+    // spend a distance on, so this changes nothing about a group fight; and
+    // a swing at range needs line of sight, so cover stops one exactly as it
+    // stops an aimed routine.
+    //
+    // A weapon's range **replaces** the wielder's own figure rather than
+    // adding to it: a program whose species shoots two cells swings at arm's
+    // length while it is holding a blade, because the weapon is what it is
+    // swinging.
+    //
+    // Two faults are refused at load, and the file is skipped with a warning
+    // like any other malformed one: a `range` on an item that is not a
+    // `Weapon`, and a value outside `1..=3`. Refused rather than clamped — a
+    // weapon quietly swinging shorter than its file says reads as a nerf
+    // rather than a bad value.
+    range: Some(2),
 
     // Optional; defaults to false. Marks this item as a **rest charge**: one
     // unit is spent by resting anywhere outside the player's base. Inside

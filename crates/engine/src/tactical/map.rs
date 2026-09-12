@@ -217,6 +217,16 @@ impl Board {
         }
     }
 
+    /// Puts `kind` on one cell of an already-generated board, for tests that
+    /// need a known cell under a known body. `from_rows` is the other half —
+    /// use that where the whole layout matters and this where one cell does,
+    /// since a fight opened by the engine runs on a *generated* board that no
+    /// amount of reseeding will put cover on a chosen square of.
+    #[cfg(test)]
+    pub(crate) fn put(&mut self, x: i32, y: i32, kind: BattleCell) {
+        self.set(x, y, kind);
+    }
+
     /// A board written out by hand, one string per row, for tests that need
     /// a known layout rather than a generated one: `.` open, `~` rough, `#`
     /// cover, `X` blocked. Square, because `Board` has one `side`.

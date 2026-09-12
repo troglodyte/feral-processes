@@ -42,6 +42,29 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.172
+
+**Some weapons can now be swung from across the battle map, and every blow
+is drawn travelling to what it hits.** On a battle map a swing has always
+meant standing next to somebody, whatever the weapon and whatever the program
+holding it. Seven weapons reach further now — the Arc Lance, Scatter Lance,
+Interrupt Coil and Monofilament Whip two cells, the Plasma Router, Siege
+Compiler and Broadcast Storm three — and a weapon's own page states the range
+it swings from, beside the row saying what a wide swing lands on.
+
+A wild program with a ranged move reaches two cells as well, and will now
+hold that distance instead of walking into arm's length first. Cover stops a
+swing at range exactly as it stops an aimed routine, so a body behind a block
+is out of reach until one of you moves; standing next to somebody is
+unaffected, because there is nothing between you. A weapon replaces whatever
+its wielder could do bare-handed, so a program that shoots two cells swings
+at arm's length while it is holding a blade.
+
+Every basic attack now draws a streak from the swinger to each body it lands
+on, at any distance — a wide swing fires one at every body it caught. At one
+cell it is a short flick across a single square, which is the melee feedback
+the map never had.
+
 ## 0.13.171
 
 **Guard Page reads `[GU]` on the base stock strip now, and the manual calls

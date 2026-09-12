@@ -208,6 +208,22 @@ pub struct ItemDef {
     /// def every load, so this reaches no save field.
     #[serde(default)]
     pub reach: Option<crate::items::WeaponReach>,
+    /// How far from the swinger this weapon may be swung, in cells. Absent
+    /// means arm's length — `tuning::TACTICAL_MELEE_RANGE`.
+    ///
+    /// **`reach`'s sibling and not part of it.** That field is *breadth* —
+    /// what a swing lands on past the body it is aimed at — and folding
+    /// distance into it would force a single-target weapon that reaches
+    /// three cells to author a `target` and a `recharge` it does not want.
+    ///
+    /// On the def rather than in `equipment`'s `EquipmentStats` for
+    /// `reach`'s own reason: `Game::copy_bonus`'s four scaling axes must not
+    /// touch it, and `EquipmentStats::is_empty`/`has_upside` destructure.
+    ///
+    /// Read in tactical fights alone, through `Game::swing_range` — the
+    /// group model has no geometry to spend it on.
+    #[serde(default)]
+    pub range: Option<u32>,
     /// Overrides the two-letter tag the base stock strip lists this item
     /// under. `#[serde(default)]` and almost always absent: `ItemDef::tag`
     /// derives one from the name, so a mod gets a tag for free. Authored
@@ -365,6 +381,25 @@ impl ItemDef {
         }
         None
     }
+
+    /// Why this item's `range` cannot be honoured, if it can't.
+    ///
+    /// `unreachable_reach`'s sibling, skipping the whole file the same way,
+    /// and refused rather than clamped for the reason
+    /// `TACTICAL_WEAPON_RANGE_MAX` states.
+    fn unreachable_range(&self) -> Option<String> {
+        let range = self.range?;
+        if !matches!(self.equipment, Some((EquipmentSlot::Weapon, _))) {
+            return Some("range: only a weapon swings".into());
+        }
+        if !(1..=crate::tuning::TACTICAL_WEAPON_RANGE_MAX).contains(&range) {
+            return Some(format!(
+                "range: {range} is outside 1..={}",
+                crate::tuning::TACTICAL_WEAPON_RANGE_MAX
+            ));
+        }
+        None
+    }
 }
 
 #[derive(Resource, Default)]
@@ -412,6 +447,10 @@ impl ItemDb {
                         continue;
                     }
                     if let Some(reason) = def.unreachable_reach() {
+                        warnings.push(format!("skipped invalid item file {path:?}: {reason}"));
+                        continue;
+                    }
+                    if let Some(reason) = def.unreachable_range() {
                         warnings.push(format!("skipped invalid item file {path:?}: {reason}"));
                         continue;
                     }
@@ -513,9 +552,10 @@ impl ItemDb {
                     grid_fuel: None,
                     // A disk *installs* its routine; it is not worn, so
                     // there is nothing for a worn grant to hang off. Nor
-                    // is it swung, so it declares no reach either.
+                    // is it swung, so it declares no reach or range either.
                     grants: None,
                     reach: None,
+                    range: None,
                     upgrade: None,
                     // A disk is installed, not slept against.
                     enables_rest: false,
@@ -595,6 +635,7 @@ impl ItemDb {
                     // it is not swung.
                     grants: None,
                     reach: None,
+                    range: None,
                     upgrade: None,
                     enables_rest: false,
                     // `ItemDef::tag` takes the first two words' initials,
@@ -1193,6 +1234,47 @@ mod tests {
             warnings.iter().any(|w| w.contains("droppable")),
             "{warnings:?}"
         );
+    }
+
+    /// Each refusal is its own test — one test over one path passes against
+    /// an implementation that refuses only that path.
+    #[test]
+    fn a_range_on_something_that_is_not_a_weapon_is_refused() {
+        let (db, warnings) =
+            load_fixture(&[("bad.ron", r#"(id: "bad", name: "Bad", range: Some(2))"#)]);
+        assert_eq!(db.all().count(), 0, "the whole file is refused");
+        assert!(warnings.iter().any(|w| w.contains("range")), "{warnings:?}");
+    }
+
+    #[test]
+    fn a_range_of_zero_is_refused() {
+        let (db, warnings) = load_fixture(&[(
+            "bad.ron",
+            r#"(id: "bad", name: "Bad", equipment: Some((Weapon, (atk: 1))), range: Some(0))"#,
+        )]);
+        assert_eq!(db.all().count(), 0, "the whole file is refused");
+        assert!(warnings.iter().any(|w| w.contains("range")), "{warnings:?}");
+    }
+
+    #[test]
+    fn a_range_past_the_ceiling_is_refused() {
+        let ron = format!(
+            r#"(id: "bad", name: "Bad", equipment: Some((Weapon, (atk: 1))), range: Some({}))"#,
+            crate::tuning::TACTICAL_WEAPON_RANGE_MAX + 1
+        );
+        let (db, warnings) = load_fixture(&[("bad.ron", &ron)]);
+        assert_eq!(db.all().count(), 0, "the whole file is refused");
+        assert!(warnings.iter().any(|w| w.contains("range")), "{warnings:?}");
+    }
+
+    #[test]
+    fn a_range_inside_the_window_on_a_weapon_is_accepted() {
+        let (db, warnings) = load_fixture(&[(
+            "good.ron",
+            r#"(id: "good", name: "Good", equipment: Some((Weapon, (atk: 1))), range: Some(2))"#,
+        )]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(db.get("good").unwrap().range, Some(2));
     }
 
     #[test]

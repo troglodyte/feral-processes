@@ -213,11 +213,10 @@ impl Game {
 
     /// The acting body swings at `target`.
     ///
-    /// Melee and adjacent only. Shapes, ranges and the routines that use
-    /// them are the next phase; this is the `Single` case they generalise,
-    /// and it is what lets a fight be fought to its end.
+    /// Reaches as far as `Game::swing_range` says the swinger does, and
+    /// needs line of sight to get there.
     ///
-    /// **A cloaked target is refused**, alongside the adjacency check and by
+    /// **A cloaked target is refused**, alongside the range check and by
     /// the same `false` — one of the five doors that name a body. There is no
     /// never-empty rule here: this is a pick of one body rather than a pool
     /// to draw from, and a body that cannot be aimed at is exactly what the
@@ -241,24 +240,35 @@ impl Game {
         let (Some(from), Some(at)) = (battle.cell_of(actor), battle.cell_of(target)) else {
             return false;
         };
-        if actor == target || (from.0 - at.0).abs() > 1 || (from.1 - at.1).abs() > 1 {
+        if actor == target || reach::distance(from, at) > self.swing_range(actor) {
             return false;
+        }
+        // **Unconditional, with no melee branch.** `line_of_sight` excludes
+        // its endpoints, so for neighbours its loop is empty and this is
+        // already a no-op — one rule, and no second place
+        // `TACTICAL_MELEE_RANGE` has to be restated. Cover earns a second
+        // job for free.
+        {
+            let battle = self.world.resource::<TacticalBattle>();
+            if !reach::line_of_sight(&battle.board, from, at) {
+                return false;
+            }
         }
         if self.is_cloaked(target) {
             return false;
         }
 
         let round_before = self.world.resource::<TacticalBattle>().round;
-        let (move_name, natural) = self.swing_move(actor);
+        let (move_name, natural) = self.swing_move_at(actor, Some(reach::distance(from, at)));
         let range = self.attack_range(actor, natural);
 
         // A reach weapon sweeps its shape, converted by this model's own
         // converter: `reach::recipients` reads the aim as a *destination*
         // for a blast and a *bearing* for a line or a cone, which is its
         // existing rule and needs no special handling here. The aim is the
-        // cell of the adjacent body already being swung at, and the
-        // adjacency gate above is untouched — a reach is breadth and never
-        // distance.
+        // cell of the body already being swung at at whatever distance, and
+        // the range gate above is untouched — a reach is breadth and the
+        // weapon's own `range` is distance.
         //
         // One swing a turn here, so there is no once-per-turn problem to
         // solve: `party_member_attacks`' `Option::take` has no counterpart.
@@ -288,6 +298,14 @@ impl Game {
             );
         }
 
+        // The swinger's own hue, read once: a fumble's Recoil rung can kill
+        // the body that swung, and a lookup inside the loop would then have
+        // nothing to ask.
+        let bolt_color = self
+            .world
+            .get::<crate::components::Glyph>(actor)
+            .map(|g| g.color)
+            .unwrap_or(crate::components::GlyphColor::White);
         for (index, body) in bodies.into_iter().enumerate() {
             // `party_member_swing`'s guard, and its reason: a fumble's
             // Recoil or Opening rung damages the swinger, so it really can
@@ -295,6 +313,18 @@ impl Game {
             // the narrow path stops behaving as it always has.
             if index > 0 && !self.creature_alive(actor) {
                 break;
+            }
+            // **Before the blow lands**, so a body that dies to it still gets
+            // its streak drawn — the cue names its cell, and `remove` takes
+            // that cell with it.
+            if let Some(to) = self.world.resource::<TacticalBattle>().cell_of(body) {
+                self.world
+                    .resource_mut::<crate::resources::BoltQueue>()
+                    .push(crate::resources::BoltCue {
+                        from,
+                        to,
+                        color: bolt_color,
+                    });
             }
             let outcome =
                 self.resolve_and_apply_attack(actor, body, crate::battle::Swing::plain(range));

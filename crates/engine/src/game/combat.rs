@@ -65,6 +65,60 @@ impl Game {
         }
     }
 
+    /// How far from itself `actor` may swing its basic attack, in cells.
+    ///
+    /// **The one door, and its three readers are calls rather than copies.**
+    /// `tactical_attack`'s gate, `Intent::Swing`'s band and
+    /// `swing_at_best_neighbour`'s filter each hard-coded
+    /// `TACTICAL_MELEE_RANGE` before this existed, which is exactly the
+    /// drift a shared doc comment cannot hold: a body whose band says two
+    /// and whose filter says one walks into position and then passes.
+    ///
+    /// A property of the **body**, never of the move it happens to roll. The
+    /// AI decides its intent before it walks, so a range read off a move
+    /// drawn at swing time lets a body plan a standoff and then draw the
+    /// melee half of its pair.
+    ///
+    /// **Holding a weapon at all replaces the species figure**, and a weapon
+    /// that authors no range is arm's length — so a ranged program holding a
+    /// melee blade swings at arm's length, because the weapon is what it is
+    /// swinging. Deliberately *not* `attack_range`'s rule, which falls
+    /// through to the natural band when a weapon authors no damage: a weapon
+    /// with no damage would leave its wielder disarmed, where a weapon with
+    /// no range simply is a melee weapon.
+    ///
+    /// **Read in tactical fights alone.** The group model has no geometry to
+    /// spend it on, which is `AbilityDef::tactical_shape`'s rule; `ranged`
+    /// keeps its separate group-model meaning untouched.
+    pub(crate) fn swing_range(&self, actor: Entity) -> u32 {
+        if let Some(worn) = self
+            .world
+            .get::<Equipment>(actor)
+            .and_then(|e| e.weapon.as_ref())
+        {
+            return self
+                .world
+                .resource::<ItemDb>()
+                .get(worn.copy.item.as_str())
+                .and_then(|def| def.range)
+                .unwrap_or(crate::tuning::TACTICAL_MELEE_RANGE);
+        }
+        self.world
+            .get::<Creature>(actor)
+            .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
+            .and_then(|species| {
+                species
+                    .basic_attacks()
+                    .iter()
+                    .map(|a| match a.ranged {
+                        true => crate::tuning::TACTICAL_RANGED_MOVE_RANGE,
+                        false => crate::tuning::TACTICAL_MELEE_RANGE,
+                    })
+                    .max()
+            })
+            .unwrap_or(crate::tuning::TACTICAL_MELEE_RANGE)
+    }
+
     /// Holds `actor`'s next `recharge` rounds of swings narrow.
     ///
     /// `insert_if_new` then write, `Game::equip`'s idiom for `Equipment`: a

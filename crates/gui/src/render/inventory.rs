@@ -633,6 +633,17 @@ pub(super) fn gear_inspect_rows(game: &Game, inspect: &GearInspect) -> Vec<Row> 
                     .map(text_row),
             );
         }
+        // How far it may be swung from, in the reach row's style and beside
+        // it — the two are one pair, breadth and distance, and `copy_power`
+        // prices neither. Absent on a melee weapon, which is what keeps the
+        // pair from costing every blade in the game two rows.
+        if let Some(line) = &worn.range {
+            rows.extend(
+                wrap_text(line, DESCRIBE_WRAP_COLUMNS)
+                    .into_iter()
+                    .map(text_row),
+            );
+        }
         // Indented under the stats they are folded into, and with no blank
         // line above them: this page has no scroll, and a separator here
         // would cost a row the cap below cannot spare. Only equipment rolls

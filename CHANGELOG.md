@@ -42,6 +42,18 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.176
+
+**You can hand a battle map over and watch it play out: press A and everyone
+on your side closes and attacks on their own.** A fight you have already won
+on paper still cost a keypress a body a round, with no way to say "just
+finish it" — so the easy fights were the tiring ones. Your side now moves at
+the pace the wild side moves at and runs no routines at all, only basic
+attempts, so nothing is spent that you were saving. Any key at all takes
+control back mid-fight, and it switches itself off as soon as the fight ends
+— a hands-off fight is one you ask for each time, and a fight that opens
+while you are not looking is never resolved for you.
+
 ## 0.13.175
 
 **The view now sits still on the body that just swung for a quarter of a

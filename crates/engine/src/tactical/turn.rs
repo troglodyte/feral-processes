@@ -259,7 +259,7 @@ impl Game {
         }
 
         let round_before = self.world.resource::<TacticalBattle>().round;
-        let (move_name, natural) = self.swing_move(actor);
+        let (move_name, natural) = self.swing_move_at(actor, Some(reach::distance(from, at)));
         let range = self.attack_range(actor, natural);
 
         // A reach weapon sweeps its shape, converted by this model's own

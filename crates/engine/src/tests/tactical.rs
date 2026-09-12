@@ -2236,3 +2236,49 @@ fn a_reach_weapon_still_sweeps_when_fired_from_range() {
         "the neighbour was not caught by a sweep fired from two cells"
     );
 }
+
+/// A body standing at two cells fires the ranged half of its pair, never the
+/// melee half — the AI decides its intent before it walks, and a roll that
+/// could draw a move it cannot fire makes a planned standoff a coin flip.
+#[test]
+fn a_body_at_range_rolls_only_a_move_that_reaches() {
+    let mut game = game();
+    let shooter = body(&mut game, "drone");
+    for _ in 0..20 {
+        let rolled = game
+            .roll_species_move_in_range(shooter, Some(2))
+            .expect("Drone has moves");
+        assert!(rolled.ranged, "rolled {} at two cells", rolled.name);
+    }
+}
+
+/// Adjacent, either half of the pair is fair game — which is the variety
+/// `swing_move` exists for.
+#[test]
+fn a_body_adjacent_may_roll_either_move() {
+    let mut game = game();
+    let shooter = body(&mut game, "drone");
+    let mut saw_melee = false;
+    for _ in 0..40 {
+        let rolled = game
+            .roll_species_move_in_range(shooter, Some(1))
+            .expect("Drone has moves");
+        saw_melee |= !rolled.ranged;
+    }
+    assert!(saw_melee, "the melee half was never drawn in forty rolls");
+}
+
+/// The group model passes `None` and is untouched.
+#[test]
+fn the_group_model_rolls_over_every_move() {
+    let mut game = game();
+    let shooter = body(&mut game, "drone");
+    let mut saw_melee = false;
+    let mut saw_ranged = false;
+    for _ in 0..40 {
+        let rolled = game.roll_species_move(shooter).expect("Drone has moves");
+        saw_melee |= !rolled.ranged;
+        saw_ranged |= rolled.ranged;
+    }
+    assert!(saw_melee && saw_ranged, "the unconstrained roll narrowed");
+}

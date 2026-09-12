@@ -491,10 +491,28 @@ impl Game {
     /// player only because `Party` is indexed that way in the abstract
     /// model; a body on a tactical battle map has no slot at all.
     pub(crate) fn swing_move(&mut self, entity: Entity) -> (String, battle::DamageRange) {
+        self.swing_move_at(entity, None)
+    }
+
+    /// `swing_move` for a body swinging from `distance` cells away.
+    ///
+    /// The narrowing falls back to the unconstrained roll when nothing
+    /// reaches, rather than answering the raw-signal-burst line: a body the
+    /// gate has already let swing must have *something* to swing, and a
+    /// modded species whose only reaching move was filtered out would
+    /// otherwise narrate a fumble it did not make.
+    pub(crate) fn swing_move_at(
+        &mut self,
+        entity: Entity,
+        distance: Option<u32>,
+    ) -> (String, battle::DamageRange) {
         if entity == self.player_entity() {
             return ("data strike".to_string(), PLAYER_UNARMED_DAMAGE);
         }
-        match self.roll_species_move(entity) {
+        let rolled = self
+            .roll_species_move_in_range(entity, distance)
+            .or_else(|| self.roll_species_move(entity));
+        match rolled {
             Some(mv) => (mv.name.clone(), mv.attack_parts().0),
             None => ("a raw signal burst".to_string(), PLAYER_UNARMED_DAMAGE),
         }
@@ -601,12 +619,44 @@ impl Game {
     /// A uniformly-random basic attack from `entity`'s species, or `None`
     /// if it has no `Creature` component or no attacks at all.
     pub(crate) fn roll_species_move(&mut self, entity: Entity) -> Option<AbilityDef> {
+        self.roll_species_move_in_range(entity, None)
+    }
+
+    /// One of `entity`'s species moves that could actually be fired from
+    /// `distance` cells away, drawn at random.
+    ///
+    /// `None` is the **group model's** distance: it has no geometry, so it
+    /// draws from every move exactly as it always has. Only a battle map
+    /// passes a number.
+    ///
+    /// One `random_range` draw whatever the candidate count, so the seeded
+    /// stream's *position* is unchanged by this narrowing — the value drawn
+    /// may differ, which is an ordinary retune signal and not a stream
+    /// shift.
+    pub(crate) fn roll_species_move_in_range(
+        &mut self,
+        entity: Entity,
+        distance: Option<u32>,
+    ) -> Option<AbilityDef> {
         let species_id = self.world.get::<Creature>(entity)?.species.clone();
-        let moves = self
+        let all = self
             .world
             .resource::<SpeciesDb>()
             .get(&species_id)
             .map(|s| s.basic_attacks())?;
+        let moves: Vec<AbilityDef> = match distance {
+            None => all,
+            Some(d) => all
+                .into_iter()
+                .filter(|mv| {
+                    let reaches = match mv.ranged {
+                        true => crate::tuning::TACTICAL_RANGED_MOVE_RANGE,
+                        false => crate::tuning::TACTICAL_MELEE_RANGE,
+                    };
+                    d <= reaches
+                })
+                .collect(),
+        };
         if moves.is_empty() {
             return None;
         }

@@ -439,6 +439,9 @@ relying on one, and correct all three places if it has moved.
   lets it be one `(item, qty)` pair.
 - **Destroying a structure has two paths** — `damage_structure` and
   `remove_structure`.
+- **A demolition hands back what the structure was *holding* — both `Stock`
+  maps and a rack's shelf — and a sweep does not**, the one deliberate
+  exception to the rule above.
 - **A trader's buyback shelf is keyed by `(kind, tile)`, not by `Entity`**,
   so it outlives the building.
 - **A downed program lives in three places now, and the rack is the only one

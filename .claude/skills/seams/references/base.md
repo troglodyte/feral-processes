@@ -731,6 +731,34 @@
 - **Destroying a structure has two paths** — `damage_structure` and
   `remove_structure`. Anything that must happen as a structure comes down
   needs wiring into both.
+- **A demolition hands back what the structure was *holding*, and a sweep
+  does not** — the one deliberate exception to the rule above, so a reader
+  who knows it does not read the omission as the bug it usually is.
+  `remove_structure` drains `Stock` through `drain_stock` and a rack's shelf
+  through `return_racked_programs`; `damage_structure` destroys both. The
+  argument is that a GC Entropy Sweep is a *loss*, and handing the shelf back
+  makes losing a building partly a payday — so salvage follows the 30% build
+  refund, which is already demolish-only, rather than following
+  `return_rig_tool` and `return_carried_program`, which fire on both paths.
+  **Both `Stock` maps**: a machine's `input` is ingredients a hauler walked
+  over and set down, the same units the player paid for as the `output`
+  beside them, and draining only the visible half is the same omission one
+  level down. **`LootSource::Salvage` rather than `Refund`**, because a
+  refund is build cost the demolition mints while salvage is stock the base
+  already acquired once through some other source — folded together,
+  demolishing a full Depot reads as a materials windfall on any analysis of
+  where a run's resources come from. Inserting the variant mid-enum is safe
+  only because `LootSource` derives no serde and reaches the wire solely
+  through `as_str()`, unlike `Perk`, whose variant order *is* save format.
+  The two are merged again for the one "You recover ..." sentence: which
+  half was build cost is a distinction only the ledger has a use for.
+  **`return_racked_programs` deliberately skips `return_carried_program`'s
+  first rung** — a Home cascade demolishes every rack, so a sideways move
+  into another rack would make a program's survival depend on despawn order
+  inside the target loop. It keeps the third: `DownedPrograms` is capped
+  where `Inventory` is an unbounded `Vec`, so this return can genuinely
+  refuse and says "is lost with the machine" rather than going quiet.
+  Verified by deletion, the bar that entry sets for a fourth site.
 - **A downed program lives in three places now, and the rack is the only one
   that is not a queue.** `DownedPrograms` on the player, `Racked` on a
   Quarantine Rack, `Hopper` on a rig — plus `CarryingProgram` on a body

@@ -239,11 +239,18 @@ impl App {
     }
 
     /// One press of a direction.
+    ///
+    /// Four outcomes and nothing to choose between them: a step, a departure
+    /// that closed the fight, a swing at whatever stood in the way, and a
+    /// refusal all owe the same settle — which is what
+    /// `after_tactical_action` is. The match is kept rather than dropped
+    /// because `StepOutcome` is exhaustive here, so a fifth answer has to be
+    /// read by somebody before it compiles.
     fn tactical_step(&mut self, dir: (i32, i32)) {
         let Some(game) = &mut self.game else { return };
         match game.tactical_step(dir) {
             StepOutcome::Moved => {}
-            StepOutcome::Departed | StepOutcome::Refused => {}
+            StepOutcome::Departed | StepOutcome::Struck | StepOutcome::Refused => {}
         }
         self.after_tactical_action();
     }

@@ -2609,3 +2609,183 @@ mod summons {
         );
     }
 }
+
+/// Walking into a hostile is a swing, not a refusal.
+///
+/// The board's own bump, `move_player`'s ladder one space over: an occupied
+/// cell used to answer `Refused`, so an arrow key pressed at the body the
+/// whole turn was spent closing on did nothing at all and the player had to
+/// find `a` to finish the approach.
+///
+/// Every stream must spend the action; a landing blow is *searched for*
+/// rather than owed, on `bracing_reduces_what_the_next_swing_lands`' rule —
+/// `force_the_next_attack_to_land` cannot pin a tactical swing, because the
+/// move is rolled first and eats the forced roll, and every matchup has a
+/// miss chance by design.
+#[test]
+fn walking_into_a_hostile_swings_at_it() {
+    // The fight built fresh and bumped on `stream`: what the step answered,
+    // what the blow cost, and whether the action went with it.
+    let bump = |stream: u64| -> (StepOutcome, i32, bool) {
+        let mut game = game();
+        let pack = tactical_fight(&mut game, 1, 40);
+        let player = game.player_entity();
+        assert!(wait_for_turn(&mut game, player), "the fight ended early");
+        let at = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(player)
+            .expect("the player stands on the board");
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(pack[0], (at.0 + 1, at.1)),
+            "the cell beside the player is taken"
+        );
+        let before = game
+            .world
+            .get::<Stats>(pack[0])
+            .expect("the hostile is alive")
+            .hp;
+
+        crate::tests::support::reseed_rng(&mut game, stream);
+        let outcome = game.tactical_step((1, 0));
+        // Read as "the turn is no longer the player's" rather than off
+        // `acted`: the action *ends* the turn, so `tactical_attack` hands it
+        // on and `acted` is then answering about whoever came next. A fight
+        // that ended inside the blow took the resource with it, which spent
+        // the turn as surely.
+        let spent = game.tactical_actor() != Some(player);
+        let after = game.world.get::<Stats>(pack[0]).map(|s| s.hp).unwrap_or(0);
+        (outcome, before - after, spent)
+    };
+
+    let (outcome, _, spent) = bump(0);
+    assert_eq!(
+        outcome,
+        StepOutcome::Struck,
+        "a step into a hostile was not a swing"
+    );
+    assert!(spent, "the bump spent no action");
+
+    let cost = (0..512u64)
+        .map(bump)
+        .find(|&(_, cost, _)| cost > 0)
+        .map(|(_, cost, _)| cost)
+        .expect("no stream in 0..512 landed the bump");
+    assert!(cost > 0, "the bump landed no blow");
+}
+
+/// ...and the player does not move onto the cell it swung at.
+///
+/// A bump that both swung and stepped would put two bodies on one cell,
+/// which `reach::movement_field`'s occupancy rule has no way to express.
+#[test]
+fn a_bump_spends_the_action_and_not_the_step() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 40);
+    let player = game.player_entity();
+    assert!(wait_for_turn(&mut game, player), "the fight ended early");
+    let at = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(player)
+        .expect("the player stands on the board");
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .move_to(pack[0], (at.0 + 1, at.1));
+
+    assert_eq!(game.tactical_step((1, 0)), StepOutcome::Struck);
+    assert_eq!(
+        game.world.resource::<TacticalBattle>().cell_of(player),
+        Some(at),
+        "the player walked onto the body it swung at"
+    );
+}
+
+/// Walking into one of your own is still refused.
+///
+/// Friendly fire is full and legal through the aim cursor — that is what a
+/// shape is worth aiming for — but an arrow key is not an aim, and a bump
+/// that attacked whatever was in the way would make crossing your own line
+/// a coin flip. The gate is `Hostile` and nothing else.
+#[test]
+fn walking_into_a_companion_is_refused_rather_than_a_swing() {
+    let mut game = game();
+    tactical_fight(&mut game, 1, 40);
+    let player = game.player_entity();
+    assert!(wait_for_turn(&mut game, player), "the fight ended early");
+    let at = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(player)
+        .expect("the player stands on the board");
+
+    // A body of the player's own, stood next to them.
+    let friend = body(&mut game, "nothing-in-particular");
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .place(friend, (at.0 + 1, at.1)),
+        "the cell beside the player is taken"
+    );
+    let before = game
+        .world
+        .get::<Stats>(friend)
+        .expect("the companion is alive")
+        .hp;
+
+    assert_eq!(game.tactical_step((1, 0)), StepOutcome::Refused);
+    assert_eq!(
+        game.world.get::<Stats>(friend).map(|s| s.hp),
+        Some(before),
+        "a bump into one of your own landed a blow"
+    );
+    assert!(
+        !game.world.resource::<TacticalBattle>().acted(),
+        "a refused bump spent the turn's action"
+    );
+}
+
+/// A hostile's own approach is never turned into a swing by a step.
+///
+/// `Game::tactical_step` is the door the AI's walk goes through — the whole
+/// point of that seam — so a bump that fired for anybody would let a hostile
+/// spend its action part-way along a path it planned, and spend it on
+/// whatever of its own side happened to be standing in the way.
+/// `tactical_awaits_input` is the gate for that reason and not a new
+/// predicate: it is false for exactly the bodies the beat loop drives.
+///
+/// Two hostiles, deliberately. A hostile stepping into the *player* is
+/// refused by the `Hostile` gate alone, so a test written that way passes
+/// with this one deleted.
+#[test]
+fn a_hostile_mid_walk_does_not_bump() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 2, 40);
+    assert!(wait_for_turn(&mut game, pack[0]), "the fight ended early");
+    let at = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(pack[0])
+        .expect("the hostile stands on the board");
+    let beside = (at.0 + 1, at.1);
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .move_to(pack[1], beside),
+        "the cell beside the hostile is taken"
+    );
+    let before = game
+        .world
+        .get::<Stats>(pack[1])
+        .expect("the second hostile is alive")
+        .hp;
+
+    assert_eq!(game.tactical_step((1, 0)), StepOutcome::Refused);
+    assert_eq!(
+        game.world.get::<Stats>(pack[1]).map(|s| s.hp),
+        Some(before),
+        "a hostile swung at its own side by walking into it"
+    );
+}

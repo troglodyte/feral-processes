@@ -132,6 +132,19 @@ pub enum Perk {
     /// are bought, so this asymptotes rather than terminating the way a
     /// four-level knob would.
     TargetLock,
+    /// Widens the window a forked program's rarity is rolled on, and raises
+    /// the ceiling it may reach — `summon_rarity_window` and
+    /// `summon_tier_ceiling`, read by `Game::fork_programs`.
+    ///
+    /// At rank 0 the window is **zero**, so an unperked fork is always
+    /// `Ordinary`. That is what "below average" means mechanically, and the
+    /// whole feature's balance rests on it: a fork is a handicapped body you
+    /// get for free until you have paid for it not to be.
+    ///
+    /// Repeatable like every perk, and bounded without a constant to forget:
+    /// `Rarity::ALL` is finite, so after four ranks there is no rung above
+    /// `Prismatic` left to buy and the ceiling stops climbing on its own.
+    Scheduler,
 }
 
 impl Perk {
@@ -139,7 +152,7 @@ impl Perk {
     /// A perk with no `.ron` entry is dropped from that list by
     /// `PerkDb::catalogue` — this is what *can* be bought, not what is
     /// currently on offer.
-    pub fn all() -> [Perk; 18] {
+    pub fn all() -> [Perk; 19] {
         [
             Perk::KeenScavenger,
             Perk::LowPowerMode,
@@ -159,6 +172,7 @@ impl Perk {
             Perk::Failover,
             Perk::TightenTolerances,
             Perk::TargetLock,
+            Perk::Scheduler,
         ]
     }
 
@@ -295,6 +309,35 @@ pub fn repair_rate_bonus(perks: Option<&crate::components::Perks>) -> u32 {
 /// benefit short of a guaranteed landing however many levels are bought.
 pub fn accuracy_bonus(perks: Option<&crate::components::Perks>) -> i32 {
     crate::tuning::TARGET_LOCK_ACCURACY_PER_LEVEL * level(perks, Perk::TargetLock) as i32
+}
+
+/// The chance a forked program comes out above `Rarity::Ordinary` at all,
+/// from `Perk::Scheduler`.
+///
+/// Measured as a multiple of `spawning::rarity_mass()` rather than authored
+/// as a probability of its own, which is the extension point that function
+/// documents: a caller wanting a different rare rate narrows the range it
+/// draws from instead of authoring a second table. So a retune of the rare
+/// ladder moves this with it, and the *proportions* between the rungs stay
+/// the shipped ones — only how often the roll clears Ordinary moves.
+///
+/// Zero at rank 0, deliberately and load-bearingly — see the variant's doc.
+pub fn summon_rarity_window(perks: Option<&crate::components::Perks>) -> f64 {
+    crate::game::spawning::rarity_mass()
+        * crate::tuning::SUMMON_RARITY_WINDOW_PER_RANK
+        * level(perks, Perk::Scheduler) as f64
+}
+
+/// The highest rung a forked program may reach, from `Perk::Scheduler`.
+///
+/// Self-capping: `Rarity::ALL` is finite, so the index clamp is the whole
+/// of what bounds a repeatable perk here. `Ordinary` at rank 0 is the
+/// second half of the window being shut — a fork cannot come out rare
+/// through either door until a rank is bought.
+pub fn summon_tier_ceiling(perks: Option<&crate::components::Perks>) -> crate::components::Rarity {
+    use crate::components::Rarity;
+    let rank = level(perks, Perk::Scheduler) as usize;
+    Rarity::ALL[rank.min(Rarity::ALL.len() - 1)]
 }
 
 /// What the player's affinity perk for `kind` is worth, raw — the caller
@@ -778,6 +821,9 @@ mod tests {
             Perk::Teardown => salvage_bonus(one) > salvage_bonus(none),
             Perk::Failover => repair_rate_bonus(one) > repair_rate_bonus(none),
             Perk::TargetLock => accuracy_bonus(one) > accuracy_bonus(none),
+            // The window and not the ceiling: this helper asserts a rank is
+            // strictly *greater*, and `Rarity` is not ordered arithmetic.
+            Perk::Scheduler => summon_rarity_window(one) > summon_rarity_window(none),
             Perk::DamageAffinity
             | Perk::HealAffinity
             | Perk::BuffAffinity

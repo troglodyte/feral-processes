@@ -42,6 +42,30 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.173
+
+**Two new routines fork a temporary program that fights beside you for the
+length of one battle.** Fork Program fields one body; Fork Cluster fields two
+or three, each a tier below what the first would have managed. Both work in
+a group fight and on a battle map, and both are priced steeply in Power with
+a cooldown behind them — a whole extra combatant for the rest of a fight is
+among the strongest things a routine can buy.
+
+A forked program is not a companion. It draws its species from the whole
+catalogue, takes its own stat block and moves with it, and fights on your
+side without being commanded — but it never joins your roster, takes no
+gear, earns no experience, costs you no roster slot, and is gone when the
+battle ends however that battle ended. Its kills still pay you.
+
+**A new repeatable perk, Scheduler, is what makes forking worth investing
+in.** Unscheduled, every fork comes out Ordinary — reliably below what you
+could field yourself. Each rank widens the tier a fork may roll and raises
+its ceiling by one, topping out at Prismatic after four; Fork Cluster stays a
+rung behind Fork Program at every rank, so the trade between numbers and
+quality appears the moment you buy into it and not before.
+
+Modders get a new `Summon` ability effect — see `assets/abilities/README.md`.
+
 ## 0.13.172
 
 **Some weapons can now be swung from across the battle map, and every blow

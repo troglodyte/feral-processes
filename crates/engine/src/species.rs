@@ -1134,6 +1134,21 @@ impl SpeciesDb {
             .collect()
     }
 
+    /// Every species that is not apex, by id — the flat pool a forked
+    /// program draws from, unfiltered by biome or danger band because a
+    /// fork is not a spawn of anywhere.
+    ///
+    /// Sorted for `NeedDb::iter`'s reason and not for tidiness: `HashMap`
+    /// iteration order is randomized per instance, so an unsorted pool is
+    /// an RNG-stream shift between two runs of the same seed, and the
+    /// symptom surfaces as an intermittent failure somewhere unrelated.
+    pub fn non_boss_ids(&self) -> Vec<&str> {
+        self.sorted_matches(|s| !s.is_boss)
+            .into_iter()
+            .map(|s| s.id.as_str())
+            .collect()
+    }
+
     fn sorted_matches(&self, keep: impl Fn(&SpeciesDef) -> bool) -> Vec<&SpeciesDef> {
         let mut matches: Vec<&SpeciesDef> = self.species.values().filter(|s| keep(s)).collect();
         matches.sort_by(|a, b| a.id.cmp(&b.id));

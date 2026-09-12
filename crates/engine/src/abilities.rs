@@ -495,6 +495,32 @@ pub enum AbilityEffect {
         /// refuses a `0`: it is a routine that spends Power and does nothing.
         duration: u32,
     },
+    /// Forks temporary programs onto the invoker's side of the fight —
+    /// `Game::fork_programs` spawns them and each combat model seats what it
+    /// is handed.
+    ///
+    /// **`Decompile`'s shape.** Like a capture this is not resolved over
+    /// recipients, so `Game::use_ability` carries an `unreachable!` arm and
+    /// the work happens at each model's Special site instead. `target` must
+    /// be `WholeParty` — `summon_target_mismatch` pins it at load.
+    ///
+    /// The count rolls `count ..= count + extra`. Deliberately **not**
+    /// `spread`, which is a *centred* half-width on `Damage`/`Heal`/`Drain`:
+    /// a body count has no reason to be centred, and the shipped pair wants
+    /// exactly 2..=3.
+    Summon {
+        /// The fewest bodies an invocation fields.
+        count: u32,
+        /// How many more it may roll on top of `count`. `0` is a fixed
+        /// count and spends no draw.
+        #[serde(default)]
+        extra: u32,
+        /// Rungs lowered off `perks::summon_tier_ceiling` — what a routine
+        /// fielding more bodies pays for them. `0` is no handicap, which is
+        /// what makes the one-body shape the shortest to author.
+        #[serde(default)]
+        rarity_penalty: u32,
+    },
 }
 
 impl AbilityEffect {
@@ -536,11 +562,17 @@ impl AbilityEffect {
             // `Cloak` joins them: its `duration` is a count against a fixed
             // ceiling, not a magnitude, so there is nothing here to scale
             // either — see the variant's own doc.
+            //
+            // `Summon` joins them: what a fork is worth is decided by the
+            // player's own level, `SUMMON_STAT_MULT` and the Scheduler, and
+            // `count` is a body count rather than a magnitude — there is
+            // nothing here for an affinity to scale either.
             AbilityEffect::Cleanse
             | AbilityEffect::Decompile
             | AbilityEffect::Phase
             | AbilityEffect::Jump
             | AbilityEffect::Symlink
+            | AbilityEffect::Summon { .. }
             | AbilityEffect::Cloak { .. } => None,
             AbilityEffect::FieldBuff { kind, .. } => kind.affinity_kind(),
         }
@@ -570,6 +602,9 @@ impl AbilityEffect {
             | AbilityEffect::FieldBuff { .. }
             | AbilityEffect::Phase
             | AbilityEffect::Jump
+            // Fielding more of your own side names nobody on theirs, which
+            // is the act a cloak is waiting for.
+            | AbilityEffect::Summon { .. }
             | AbilityEffect::Symlink => false,
         }
     }
@@ -899,6 +934,29 @@ impl AbilityDef {
         None
     }
 
+    /// `Summon` is seated by the combat model that ran it rather than
+    /// resolved over recipients, so its `target` is never read as a picker —
+    /// it is centred on the invoker and fields bodies on their own side.
+    /// `WholeParty` is the ally-facing target that says so, and anything
+    /// else is a stated target the invocation never honours: it would arm
+    /// the cooldown and spend Power in `resolve_one_action` and then seat
+    /// exactly the same bodies, which is a lie on the screen rather than a
+    /// wasted round. Pinned here for `decompile_target_mismatch`'s reason,
+    /// which is the one place the convention is checked.
+    ///
+    /// Deliberately **not** a new `AbilityTarget` variant: its four methods
+    /// are exhaustive on `cell_mark`'s rule, and a summon target is an
+    /// invented answer every abstract match in three crates would have to
+    /// reject.
+    fn summon_target_mismatch(&self) -> Option<&'static str> {
+        if matches!(self.effect, AbilityEffect::Summon { .. })
+            && self.target != AbilityTarget::WholeParty
+        {
+            return Some("effect: Summon requires target: WholeParty");
+        }
+        None
+    }
+
     /// A `FieldBuff` effect paired with a `target` its `kind`'s
     /// `FieldScope` can't reach. A `Run`-scoped kind always lands on the
     /// player (`FieldBuffKind::scope`, `Game::arm_field_buff`), so anything
@@ -1158,6 +1216,10 @@ impl AbilityDb {
                         warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
                         continue;
                     }
+                    if let Some(reason) = def.summon_target_mismatch() {
+                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
+                        continue;
+                    }
                     if let Some(reason) = def.field_buff_target_mismatch() {
                         warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
                         continue;
@@ -1356,6 +1418,23 @@ pub fn effect_label(def: &AbilityDef, level: u32, affinity: f32) -> String {
         }
         AbilityEffect::Cleanse => "Clears the recipient's status condition".to_string(),
         AbilityEffect::Decompile => "Attempts a capture, spending a catalyst".to_string(),
+        AbilityEffect::Summon {
+            count,
+            extra,
+            rarity_penalty,
+        } => {
+            let bodies = if *extra == 0 {
+                format!("{count}")
+            } else {
+                format!("{count}-{}", count + extra)
+            };
+            let handicap = if *rarity_penalty == 0 {
+                String::new()
+            } else {
+                ", each a tier below what you could field alone".to_string()
+            };
+            format!("Forks {bodies} temporary programs into the fight{handicap}")
+        }
         AbilityEffect::FieldBuff {
             kind,
             power,
@@ -1551,6 +1630,74 @@ mod tests {
         );
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("Decompile"), "{}", warnings[0]);
+    }
+
+    /// `Summon` is seated by the model it was run in, not resolved over
+    /// recipients — `Decompile`'s shape and `Decompile`'s reason. It is
+    /// centred on the invoker, so anything but `WholeParty` is a stated
+    /// target the invocation never reaches, and like the `Decompile`
+    /// mismatch above it would arm the cooldown and waste the round.
+    #[test]
+    fn a_summon_effect_paired_with_a_non_party_target_is_skipped() {
+        let mismatched = r#"(
+            id: "test_bad_summon",
+            name: "Bad Summon",
+            description: "d",
+            target: AllEnemies,
+            effect: Summon(count: 1),
+        )"#;
+        let (db, warnings) = load("bad_summon", &[("test_sweep", VALID), ("bad", mismatched)]);
+        assert!(db.get("test_sweep").is_some(), "the valid file still loads");
+        assert!(
+            db.get("test_bad_summon").is_none(),
+            "the mismatched pairing must not load"
+        );
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("Summon"), "{}", warnings[0]);
+    }
+
+    /// The moddability rule: a bad file is skipped with a warning, never a
+    /// panic that takes startup down with it.
+    #[test]
+    fn a_malformed_summon_file_is_skipped_with_a_warning() {
+        let malformed = r#"(
+            id: "test_broken_summon",
+            name: "Broken",
+            description: "d",
+            target: WholeParty,
+            effect: Summon(count: "not a number"),
+        )"#;
+        let (db, warnings) = load(
+            "malformed_summon",
+            &[("test_sweep", VALID), ("broken", malformed)],
+        );
+        assert!(db.get("test_sweep").is_some(), "the valid file still loads");
+        assert!(db.get("test_broken_summon").is_none());
+        assert_eq!(warnings.len(), 1);
+    }
+
+    /// `extra` and `rarity_penalty` both default, so the one-body shape a
+    /// mod is most likely to author is the shortest one to write.
+    #[test]
+    fn a_summon_authors_its_extra_and_penalty_by_omission() {
+        let minimal = r#"(
+            id: "test_min_summon",
+            name: "Minimal",
+            description: "d",
+            target: WholeParty,
+            effect: Summon(count: 1),
+        )"#;
+        let (db, warnings) = load("min_summon", &[("min", minimal)]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let def = db.get("test_min_summon").expect("it loads");
+        assert!(matches!(
+            def.effect,
+            AbilityEffect::Summon {
+                count: 1,
+                extra: 0,
+                rarity_penalty: 0
+            }
+        ));
     }
 
     /// `Trickle` is `Run`-scoped (`FieldBuffKind::scope`) — it always lands

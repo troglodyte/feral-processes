@@ -165,7 +165,7 @@ fn bracing_slots(game: &Game, plan: PartyPlan) -> Vec<usize> {
     };
     candidates
         .into_iter()
-        .filter(|&slot| game.slot_can_act(slot))
+        .filter(|&slot| game.slot_is_commanded(slot))
         .collect()
 }
 

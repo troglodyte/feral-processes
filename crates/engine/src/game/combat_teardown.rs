@@ -5,6 +5,7 @@
 //! exists at all: `BattleState::planned` indexes `Party` positionally, so a
 //! member killed mid-fight cannot leave the roster until the fight does.
 
+use crate::components::Summoned;
 use crate::resources::LairFight;
 use crate::tactical::TacticalBattle;
 use crate::tuning::{FLEE_COUNTERATTACK_CHANCE, JACK_OUT_LUCK_MAX, JACK_OUT_LUCK_MIN, MAX_NEMESES};
@@ -376,6 +377,16 @@ impl Game {
         // deleted before anything could reveal them — a dead companion
         // reads its death line and then its detachment.
         for program in dead {
+            // `bench_or_dissolve` never asks whether the body it is handed
+            // is `Tamed` — it detaches, benches or dissolves whatever it
+            // gets. A fork is none of those things: it would announce a
+            // downed program the player never had, and `detach_from_play`
+            // would take it out of `Party` mid-teardown, which is the
+            // removal the slot-indexing seam forbids. The sweep a few lines
+            // down is what a fork's ending is.
+            if self.world.get::<Summoned>(program).is_some() {
+                continue;
+            }
             self.bench_or_dissolve(program);
         }
         // A Stack pack that outlived the fight — the party jacked out —
@@ -393,6 +404,19 @@ impl Game {
         };
         for stray in strays {
             self.world.despawn(stray);
+        }
+        // Beside the stray sweep and unconditional where that one is
+        // filtered: `resolve_sortie_battle`'s rule that nothing of a fight's
+        // temporary cast may outlive the call. A fork is never `Tamed` and
+        // can never be decompiled into the roster, so there is nothing here
+        // worth sparing — and all five ways a fight can end come through
+        // here, which is what makes one sweep enough.
+        let forks: Vec<Entity> = {
+            let mut query = self.world.query_filtered::<Entity, With<Summoned>>();
+            query.iter(&self.world).collect()
+        };
+        for fork in forks {
+            self.world.despawn(fork);
         }
         // Below the stray sweep and above `BattleState`'s removal a few
         // lines down — see `mark_nemeses`'s own doc for why that window is
@@ -553,8 +577,27 @@ impl Game {
 
     /// Promotes `entity` one rung up the rarity ladder and fully recharges
     /// it, returning the tier it lands on. The only caller is
-    /// `mark_nemeses`, on a living `Hostile` — see `spawning.rs`'s "Rarity
-    /// multiplies here and exactly here" comment for the other site.
+    /// `mark_nemeses`, on a living `Hostile`.
+    ///
+    /// `Rarity::ALL`'s own top is the ceiling: past `Prismatic` the step is
+    /// `1.0` and this is a no-op on stats, though the grudge that got the
+    /// program here keeps rising regardless — that increment lives in the
+    /// loop above, not here.
+    pub(crate) fn promote_rarity(&mut self, entity: Entity) -> Rarity {
+        let old = self
+            .world
+            .get::<Rarity>(entity)
+            .copied()
+            .unwrap_or_default();
+        let new = Rarity::ALL
+            .get(old.rank() as usize + 1)
+            .copied()
+            .unwrap_or(old);
+        self.retier_rarity(entity, new)
+    }
+
+    /// Moves an already-spawned `entity` to `new` and fully recharges it,
+    /// returning the tier it lands on. Works in **either** direction.
     ///
     /// `Rarity` is a *receipt* for a multiplier already baked into `Stats`
     /// at spawn (`spawn_wild_creature_scaled`), not a value anything may
@@ -567,26 +610,27 @@ impl Game {
     /// `CreatureSave`) with the same reasoning — this is the second and
     /// last place a rarity multiplier is allowed to touch `Stats`.
     ///
-    /// `Rarity::ALL`'s own top is the ceiling: past `Prismatic` the step is
-    /// `1.0` and this is a no-op on stats, though the grudge that got the
-    /// program here keeps rising regardless — that increment lives in the
-    /// loop above, not here.
+    /// The step being a ratio is what makes a downward move need no code of
+    /// its own: `Ordinary / Gold` is the exact reciprocal of `Gold /
+    /// Ordinary`, and a fork rolled below its routine's ceiling is retiered
+    /// down from whatever the spawn rolled.
+    ///
+    /// **A known asymmetry, preserved rather than fixed:** this scales
+    /// `mitigation`, which `spawn_wild_creature_scaled` deliberately leaves
+    /// unscaled. That is the nemesis behaviour the ladder has always had,
+    /// `MAX_MITIGATION_PERCENT` bounds it, and changing it here would be an
+    /// unrelated retune riding whatever feature touched this next.
     ///
     /// The recharge is folded in rather than left to a second call, because
-    /// nothing in this feature ever wants a promotion without the heal that
-    /// follows it — `hp = max_hp` raises HP, which is why this stays clear
-    /// of `apply_damage`'s rule that it is the only path allowed to lower
-    /// it.
-    pub(crate) fn promote_rarity(&mut self, entity: Entity) -> Rarity {
+    /// no caller ever wants a re-tier without the heal that follows it —
+    /// `hp = max_hp` raises HP, which is why this stays clear of
+    /// `apply_damage`'s rule that it is the only path allowed to lower it.
+    pub(crate) fn retier_rarity(&mut self, entity: Entity, new: Rarity) -> Rarity {
         let old = self
             .world
             .get::<Rarity>(entity)
             .copied()
             .unwrap_or_default();
-        let new = Rarity::ALL
-            .get(old.rank() as usize + 1)
-            .copied()
-            .unwrap_or(old);
         let step = new.stat_mult() / old.stat_mult();
         if let Some(mut stats) = self.world.get_mut::<Stats>(entity) {
             stats.max_hp = (stats.max_hp as f32 * step).round() as i32;

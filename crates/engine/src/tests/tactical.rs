@@ -2415,3 +2415,197 @@ fn an_adjacent_swing_queues_a_bolt_too() {
     assert!(game.tactical_attack(pack[0]));
     assert_eq!(game.take_bolts().len(), 1);
 }
+
+/// Seating a forked program on a battle map: beside the invoker, behind the
+/// cursor, and gone whichever way the fight ends.
+mod summons {
+    use super::*;
+    use crate::components::Summoned;
+
+    /// A fight with `count` hostiles and one fork already seated beside the
+    /// player.
+    fn fight_with_a_fork(game: &mut Game, count: usize) -> Entity {
+        tactical_fight(game, count, 40);
+        let player = game.player_entity();
+        let body = game.fork_programs(player, 1, 0)[0];
+        assert!(
+            game.seat_summon_on_board(player, body),
+            "there is room beside the player"
+        );
+        body
+    }
+
+    #[test]
+    fn a_fork_lands_on_a_free_walkable_cell_beside_its_invoker() {
+        let mut game = game();
+        let body = fight_with_a_fork(&mut game, 2);
+        let battle = game.world.resource::<TacticalBattle>();
+        let player = battle
+            .cell_of(game.player_entity())
+            .expect("the player stands somewhere");
+        let at = battle.cell_of(body).expect("the fork was placed");
+        assert!(battle.board.walkable(at.0, at.1));
+        assert_eq!(
+            battle.bodies().filter(|&(_, cell)| cell == at).count(),
+            1,
+            "and on nobody else's cell"
+        );
+        assert!(
+            (at.0 - player.0).abs() <= 1 && (at.1 - player.1).abs() <= 1,
+            "beside the invoker: {at:?} against {player:?}"
+        );
+    }
+
+    /// *A count of turns taken is conserved under a cursor shift and would
+    /// pass against the bug*, so this compares the order **by identity**.
+    #[test]
+    fn splicing_a_fork_costs_nobody_else_a_turn() {
+        let mut game = game();
+        tactical_fight(&mut game, 3, 40);
+        let before: Vec<Entity> = game
+            .world
+            .resource::<TacticalBattle>()
+            .initiative()
+            .to_vec();
+        // Somewhere in the middle of the order, so an insertion ahead of the
+        // cursor would have somewhere to go wrong.
+        game.tactical_end_turn();
+        let cursor = game
+            .world
+            .resource::<TacticalBattle>()
+            .actor()
+            .expect("somebody is acting");
+
+        let player = game.player_entity();
+        let body = game.fork_programs(player, 1, 0)[0];
+        assert!(game.seat_summon_on_board(player, body));
+
+        let after: Vec<Entity> = game
+            .world
+            .resource::<TacticalBattle>()
+            .initiative()
+            .to_vec();
+        let spliced: Vec<Entity> = after.iter().copied().filter(|&e| e != body).collect();
+        assert_eq!(spliced, before, "nobody else moved in the order");
+        assert_eq!(
+            game.world.resource::<TacticalBattle>().actor(),
+            Some(cursor),
+            "and the cursor still names the body that was acting"
+        );
+        let at = after.iter().position(|&e| e == body).expect("it is in");
+        let on = after.iter().position(|&e| e == cursor).expect("so is it");
+        assert_eq!(at, on + 1, "immediately behind the cursor: it acts next");
+    }
+
+    /// A fork drives itself, which is the first exception to "every party
+    /// body is the player's to command".
+    #[test]
+    fn a_fork_takes_its_own_turn_without_waiting_for_input() {
+        let mut game = game();
+        let body = fight_with_a_fork(&mut game, 2);
+        assert!(wait_for_turn(&mut game, body));
+        assert!(
+            !game.tactical_awaits_input(),
+            "the fight would hang waiting for a key nobody may press"
+        );
+        assert!(game.tactical_ai_turn(), "and the AI drove it");
+    }
+
+    /// The two endings only a battle map can reach. Task 1's sweep covers
+    /// the group model's teardown, but a jack-out and a walk off the edge
+    /// have never run it.
+    #[test]
+    fn no_fork_survives_a_jack_out() {
+        let mut game = game();
+        let body = fight_with_a_fork(&mut game, 2);
+        let player = game.player_entity();
+        assert!(wait_for_turn(&mut game, player));
+        let edge = western_edge(&game);
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(player, edge)
+        );
+
+        assert_eq!(game.tactical_step((-1, 0)), StepOutcome::Departed);
+        assert!(game.world.get_resource::<TacticalBattle>().is_none());
+        assert!(
+            game.world.get::<Stats>(body).is_none(),
+            "a jack-out is one of the five endings, and the sweep covers it"
+        );
+    }
+
+    #[test]
+    fn a_fork_that_walks_off_the_edge_is_still_swept_at_the_end() {
+        let mut game = game();
+        let body = fight_with_a_fork(&mut game, 1);
+        assert!(wait_for_turn(&mut game, body));
+        let edge = western_edge(&game);
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(body, edge)
+        );
+        assert_eq!(game.tactical_step((-1, 0)), StepOutcome::Departed);
+        assert!(
+            game.world.get::<Stats>(body).is_some(),
+            "breaking off is not dying"
+        );
+        assert!(
+            game.world.get::<Summoned>(body).is_some(),
+            "and it is still a fork"
+        );
+
+        // Now the player walks out too, so the fight tears down around a
+        // body that is no longer on the board at all.
+        let player = game.player_entity();
+        assert!(wait_for_turn(&mut game, player));
+        let edge = western_edge(&game);
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(player, edge)
+        );
+        assert_eq!(game.tactical_step((-1, 0)), StepOutcome::Departed);
+        assert!(
+            game.world.get::<Stats>(body).is_none(),
+            "the sweep is over every holder, not over the board"
+        );
+    }
+
+    /// Every refusal before anything is spent — `commit_caravan_basket`'s
+    /// rule, which `tactical_use_routine` already states for its six.
+    #[test]
+    fn a_fork_with_nowhere_to_stand_is_refused_and_spends_nothing() {
+        let mut game = game();
+        tactical_fight(&mut game, 2, 40);
+        let player = game.player_entity();
+        // Fill the board, so `nearest_free` has nothing to answer with.
+        let cells: Vec<(i32, i32)> = {
+            let battle = game.world.resource::<TacticalBattle>();
+            (0..battle.board.side)
+                .flat_map(|x| (0..battle.board.side).map(move |y| (x, y)))
+                .filter(|&(x, y)| battle.board.walkable(x, y))
+                .filter(|&at| battle.occupant(at).is_none())
+                .collect()
+        };
+        for at in cells {
+            let filler = game.world.spawn(()).id();
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .place(filler, at);
+        }
+
+        let body = game.fork_programs(player, 1, 0)[0];
+        assert!(
+            !game.seat_summon_on_board(player, body),
+            "there is nowhere for it to stand"
+        );
+        assert!(
+            game.world
+                .resource::<TacticalBattle>()
+                .cell_of(body)
+                .is_none()
+        );
+    }
+}

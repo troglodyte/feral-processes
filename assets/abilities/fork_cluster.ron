@@ -1,0 +1,15 @@
+(
+    id: "fork_cluster",
+    name: "Fork Cluster",
+    // The wide half. Two or three bodies instead of one, each a rung below
+    // what Fork Program would have fielded at the same Scheduler rank —
+    // which is what makes the two worth carrying together rather than one
+    // superseding the other. The handicap only bites once a rank is bought:
+    // at rank 0 both routines field Ordinary bodies, so the trade appears
+    // the moment the perk does and not before.
+    description: "Forks two or three temporary programs that fight beside you until the battle ends, each a tier below what you could field alone",
+    target: WholeParty,
+    effect: Summon(count: 2, extra: 1, rarity_penalty: 1),
+    cooldown: 5,
+    power_cost: 38.0,
+)

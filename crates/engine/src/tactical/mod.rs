@@ -191,6 +191,22 @@ impl TacticalBattle {
         self.wrap();
     }
 
+    /// Splices `body` into the turn order immediately behind the cursor.
+    ///
+    /// **The cursor names a body, not a position** — which is why `remove`
+    /// above decrements `turn` when it takes something out ahead of it.
+    /// Insertion carries the same trap mirrored: inserting *ahead* of the
+    /// cursor shifts every later entry down one and somebody acts twice.
+    ///
+    /// `turn + 1` is the only index that is safe wherever the cursor sits,
+    /// and it reads right at the keyboard: you call it, it acts next. It is
+    /// also why this takes no index — there is exactly one correct answer
+    /// and a caller choosing would be a caller getting it wrong.
+    pub fn insert_after_cursor(&mut self, body: Entity) {
+        let at = (self.turn + 1).min(self.initiative.len());
+        self.initiative.insert(at, body);
+    }
+
     /// Seats the turn order, fastest first. Called once, when the fight
     /// opens.
     pub fn set_initiative(&mut self, order: Vec<Entity>) {

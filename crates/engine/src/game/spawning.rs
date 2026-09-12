@@ -151,6 +151,29 @@ pub(crate) fn rarity_for_roll(roll: f64) -> Rarity {
 /// range it draws from instead of authoring a second table: the caravan's
 /// standout rows do exactly that. A copy of this sum is the thing that
 /// silently stops matching when a rung is added.
+/// A forked program's tier: `rarity_for_roll` drawn against a window the
+/// Scheduler opens, then clamped to the ceiling that perk allows.
+///
+/// The window is a *probability of clearing `Ordinary` at all*, converted
+/// to a draw range the way the caravan's standout rows do it — narrowing
+/// the range rather than swapping the table, so every rung is raised by the
+/// same factor and their proportions stay the shipped ones. A window of
+/// zero short-circuits and **spends no draw**, which is what keeps an
+/// unperked run's seeded stream where it was.
+pub(crate) fn roll_summon_tier(rng: &mut StdRng, window: f64, ceiling: Rarity) -> Rarity {
+    if window <= 0.0 || ceiling == Rarity::Ordinary {
+        return Rarity::Ordinary;
+    }
+    let mass = rarity_mass();
+    let span = (mass / window).max(mass);
+    let rolled = rarity_for_roll(rng.random_range(0.0..span));
+    if rolled.rank() > ceiling.rank() {
+        ceiling
+    } else {
+        rolled
+    }
+}
+
 pub(crate) fn rarity_mass() -> f64 {
     Rarity::ALL.into_iter().map(rarity_spawn_chance).sum()
 }
@@ -402,6 +425,95 @@ impl Game {
             // later cannot reshuffle an existing roster.
             crate::disposition::Disposition::seed(id),
         )
+    }
+
+    /// Forks `count` temporary programs onto the player's side of the fight
+    /// `invoker` is in, and returns them. **It seats them nowhere** — each
+    /// combat model does its own seating, for `Decompile`'s reason.
+    ///
+    /// A fork is a wild spawn with `Hostile` and `WanderAi` stripped —
+    /// `adopt_program`'s two removals — and deliberately **not**
+    /// `roster_parts()`. That omission is the whole containment story; see
+    /// `components::Summoned`. The one thing added beyond the marker is a
+    /// `PowerReserve`, because `ability_unavailable` reads the reserve off
+    /// the entity in question and a body without one could never run the
+    /// moves it was spawned to run.
+    ///
+    /// Spawned at `SUMMON_SENTINEL` rather than at the invoker's tile:
+    /// nothing reads a combatant's `Position` in either model, and an
+    /// off-map coordinate is what keeps a body that somehow outlived
+    /// teardown out of the zone.
+    ///
+    /// **The three multipliers are composed here, caller-side**, which is
+    /// what leaves `a_spawns_stats_come_from_its_escalation_and_never_from_its_tile`
+    /// true and why there is no `(x, y)`-derived term inside the spawner.
+    /// `rarity_penalty` lowers `perks::summon_tier_ceiling` by that many
+    /// rungs, so a routine fielding more bodies fields worse ones at every
+    /// rank — the quality-for-numbers trade appears the moment the perk
+    /// does and not before.
+    pub(crate) fn fork_programs(
+        &mut self,
+        invoker: Entity,
+        count: u32,
+        rarity_penalty: u32,
+    ) -> Vec<Entity> {
+        let pool: Vec<String> = self
+            .world
+            .resource::<SpeciesDb>()
+            .non_boss_ids()
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        if pool.is_empty() {
+            return Vec::new();
+        }
+        // "Your level", in the game's own currency: `party_band_progress` is
+        // the **player's** level as a 0..1 fraction of this zone's band, so a
+        // fork a companion invokes still scales off the player. Expressed as
+        // a ratio on the zone ladder, which is what leaves `balance_sim`
+        // gating it — `steps` of 1 at zone N is arithmetically zone N+1.
+        let level_mult = self
+            .zone_curve_ratio(self.party_band_progress() * crate::tuning::SUMMON_LEVEL_STAT_STEPS);
+        let depth_mult = level_mult * crate::tuning::SUMMON_STAT_MULT;
+        let perks = self.world.get::<Perks>(self.player_entity()).cloned();
+        let window = crate::perks::summon_rarity_window(perks.as_ref());
+        let ceiling = crate::perks::summon_tier_ceiling(perks.as_ref());
+        // The ceiling a penalty leaves, floored at Ordinary: `Rarity::ALL`'s
+        // own bottom, so a penalty deeper than the rank bought is inert
+        // rather than an index underflow.
+        let ceiling =
+            Rarity::ALL[(ceiling.rank() as usize).saturating_sub(rarity_penalty as usize)];
+        let mut bodies = Vec::new();
+        for _ in 0..count {
+            let (species, tier) = {
+                let mut rng = self.world.resource_mut::<GameRng>();
+                let species = pool[rng.0.random_range(0..pool.len())].clone();
+                (species, roll_summon_tier(&mut rng.0, window, ceiling))
+            };
+            let Some(body) = self.spawn_wild_creature_scaled(
+                &species,
+                crate::tuning::SUMMON_SENTINEL.0,
+                crate::tuning::SUMMON_SENTINEL.1,
+                depth_mult,
+                false,
+            ) else {
+                continue;
+            };
+            // Not a spawn parameter: rarity is baked into `Stats` inside the
+            // spawner and `Rarity`'s doc says nothing else may apply the
+            // multiplier. `retier_rarity` is the one exception, because it
+            // moves by the *ratio* between the two tiers.
+            self.retier_rarity(body, tier);
+            self.world
+                .entity_mut(body)
+                .remove::<(Hostile, WanderAi)>()
+                .insert((crate::components::Summoned, PowerReserve::default()));
+            let label = self.creature_label(body);
+            let who = self.creature_label(invoker);
+            self.log(format!("{who} forks {label} into the fight."));
+            bodies.push(body);
+        }
+        bodies
     }
 
     pub(crate) fn adopt_program(

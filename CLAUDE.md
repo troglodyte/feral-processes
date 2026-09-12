@@ -928,6 +928,15 @@ relying on one, and correct all three places if it has moved.
 - **A `BoltCue` lives in `TacticalBattle` cells and is its own queue, never a
   fifth `EffectKind`**, with no `kind` field because one travel rule at every
   distance is also the melee feedback.
+- **A summon's containment is omission and not a check** — it never passes
+  through `roster_parts()`, and the two places that *are* checks
+  (`finish_fight`'s sweep and its `bench_or_dissolve` skip) are both code
+  that never asks about `Tamed`.
+- **A summon is pushed to `Party` and `planned` together**, and `plan_summons`
+  fills the turn `slot_is_commanded` keeps the player's cursor off.
+- **A body is spliced into tactical initiative *behind* the cursor, never
+  ahead of it** — `TacticalBattle::insert_after_cursor` takes no index
+  because `turn + 1` is the only safe one.
 
 ### Items, gear and economy
 
@@ -1329,7 +1338,7 @@ relying on one, and correct all three places if it has moved.
 ## Build & test
 
 ```sh
-cargo test --workspace     # 5394 tests
+cargo test --workspace     # 5580 tests
 cargo run                  # the game; `default-run` in crates/launcher
 cargo clippy --workspace --all-targets   # --all-targets or test code is unlinted
 cargo fmt

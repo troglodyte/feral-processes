@@ -1082,3 +1082,69 @@
   out one behind the other, but a sweep's streaks all leave the same swinger
   in the same instant. See
   `seam:a-boltcue-lives-in-tacticalbattle-cells-and-is-its-own-queue`.
+
+- **A summon's containment is omission, not a check — it never passes through
+  `roster_parts()`.** `Game::fork_programs` spawns through
+  `spawn_wild_creature_scaled` and strips `Hostile`/`WanderAi`,
+  `adopt_program`'s two removals, and stops there. No `Tamed` is what makes
+  it invisible to `pet_count`, `base_staff`, the labour scheduler, `rest`,
+  memories, needs and the save; no `Experience` is what makes
+  `award_companion_xp` skip it with no exclusion written; no `ProgramId` is
+  what leaves no orphaned memories to reconcile on load. The rejected
+  alternative — a `Tamed` program carrying a `temporary` flag — inverts
+  that: every one of those eight subsystems needs a new exclusion, and each
+  one compiles fine when forgotten. It gains exactly two things,
+  `components::Summoned` (battle-scoped on `Cloaked`'s precedent, so no
+  `SAVE_FORMAT_VERSION` bump) and a `PowerReserve`, because
+  `ability_unavailable` reads the reserve off the entity in question and a
+  body without one could never run the moves it was spawned to run. Two
+  places genuinely are checks, both because the code they sit in never asks
+  about `Tamed`: `finish_fight`'s `With<Summoned>` sweep — unconditional,
+  living or not, `resolve_sortie_battle`'s rule, and enough on its own
+  because all five endings funnel through `finish_fight` — and the
+  `bench_or_dissolve` skip in the same function's dead loop, without which
+  a dead fork announces a downed program the player never had and
+  `detach_from_play` `retain`s it out of `Party` mid-teardown, which is the
+  removal the slot seam forbids. See
+  `seam:a-summons-containment-is-omission-not-a-check`.
+- **A summon is pushed to `Party` and `planned` together, and the failure
+  mode is silence.** `planned` is sized once at `begin_battle` as
+  `Party.len() + 1` while `roll_initiative` reads `Party.0.len()` **live**,
+  so a body pushed to `Party` alone draws an initiative rung and then never
+  acts (`plan.get(slot)` is `None`) while `living_party`, `battle_rows`,
+  `battle_active_slot` and hostile targeting all iterate `planned.len()` and
+  cannot see it — invisible, inert, and nothing fails. A test asserting only
+  that the body exists passes against it, so assert on it *acting*.
+  Appending is safe where removal is not: the seam forbids removal, which
+  shifts every slot behind it, which is why `dissolve_summons` **kills**
+  rather than removes and is model-blind — a dead body left in its slot is
+  what already happens to a companion that dies mid-fight, and each model's
+  reap carries it from there. The other half is that a fork acts but is not
+  the player's to command: `slot_is_commanded` (one predicate at four
+  planning gates, not the check repeated) keeps the cursor off it and
+  `plan_summons` fills the gap at the top of `battle_resolve_round`, above
+  the `planned` clone. `choose_summon_action` is deliberately not
+  `choose_wild_action` — that is the trained policy, whose features speak
+  group indices and aggro slots from the hostile side, and whose weights are
+  pinned against a design boundary this would cross. See
+  `seam:a-summon-is-pushed-to-party-and-planned-together`.
+- **A body is spliced into tactical initiative behind the cursor, never
+  ahead of it.** `TacticalBattle::insert_after_cursor` always inserts at
+  `turn + 1` and takes no index, because there is exactly one correct answer
+  and a caller choosing would be a caller getting it wrong. The cursor names
+  a body rather than a position — `remove`'s three cases above are this trap
+  in the other direction — so inserting ahead of it shifts every later entry
+  down one and somebody acts twice with nothing on screen saying why. The
+  test has to compare the order **by identity** across a mid-round splice:
+  *a count of turns taken is conserved under a cursor shift* and passes
+  against the bug. Placement is `deploy::nearest_free`, already exactly the
+  search wanted, with `taken` built from `TacticalBattle::bodies()`; the
+  seventh refusal in `tactical_use_routine` is what keeps a board with no
+  room from spending anything. `tactical_ai_actor`'s gate widened to
+  `Hostile` **or** `Summoned` — the first exception to "every party body is
+  the player's to command", stated in its doc or the next reader reads the
+  gate as a bug — and sidedness needed nothing, since `tactical_sides` is
+  already relative to the actor. One asymmetry left standing: a fork on a
+  battle map swings rather than invoking, because `run_tactical_beat`'s
+  routine intent is still gated on `Hostile`. See
+  `seam:a-body-is-spliced-into-initiative-behind-the-cursor-never-ahead`.

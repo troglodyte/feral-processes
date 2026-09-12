@@ -5107,6 +5107,53 @@ pub const TACTICAL_AI_CROWDING_WEIGHT: f32 = 0.5;
 /// lets a test pin the choice without moving the seeded stream.
 pub const TACTICAL_AI_TEMPERATURE: f32 = 0.5;
 
+// ─────────────────────────────────────────────────────────────────────────
+// Battle summons
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Where a forked program is spawned before either combat model seats it.
+///
+/// `SORTIE_SENTINEL`'s idea, not a copy of it: the two are siblings, each
+/// an off-map coordinate for bodies that exist only inside a call that will
+/// account for them. A fork's `Position` is read nowhere once it is in a
+/// fight — the group model has no board, and the tactical model keeps its
+/// own coordinates in `TacticalBattle` — so this is where one stands for
+/// exactly as long as it takes to seat it, and where a body that somehow
+/// outlived `finish_fight`'s sweep would be found instead of in the zone.
+pub const SUMMON_SENTINEL: (i32, i32) = (1 << 21, 1 << 21);
+
+/// How much of `spawning::rarity_mass()` each rank of `Perk::Scheduler`
+/// opens as a forked program's chance of coming out above `Ordinary`.
+///
+/// A multiple of the wild rare rate rather than a probability of its own,
+/// so a retune of the rarity ladder carries this with it. At this figure
+/// the four ranks the ceiling allows land at roughly 29%, 59%, 88% and
+/// saturated — which is what makes rank 4 the end of the ladder on both
+/// axes at once rather than a window still opening under a fixed ceiling.
+pub const SUMMON_RARITY_WINDOW_PER_RANK: f64 = 8.0;
+
+/// The flat handicap every forked program carries, whatever it rolled.
+///
+/// Borrowed from `SETTLEMENT_GIFT_STAT_MULT`, the existing precedent for
+/// handicapping a program the player did not earn in a fight, and **a guess
+/// rather than a measurement**: `balance_sim` models no abilities and no
+/// perks, so it gates none of this. The instruments are `dev-arenas/` and a
+/// played session.
+///
+/// It is what makes an unscheduled fork worth less than a companion: at
+/// `Ordinary` the whole ladder runs 0.60 through to 1.29 at `Prismatic`, so
+/// even a fully invested fork is bounded — and temporary.
+pub const SUMMON_STAT_MULT: f32 = 0.6;
+
+/// How many zone steps of the player's own progress through this zone's
+/// level band a forked program is worth, via `Game::zone_curve_ratio`.
+///
+/// One step: a fork at the top of the band is scaled as a spawn one zone
+/// deeper would be, and at the bottom of it as one of this zone. Expressed
+/// in zone steps rather than as a bespoke curve because that is the ladder
+/// `balance_sim` already sweeps.
+pub const SUMMON_LEVEL_STAT_STEPS: f32 = 1.0;
+
 #[cfg(test)]
 mod tests {
     use super::*;

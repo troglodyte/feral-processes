@@ -419,7 +419,9 @@ fn the_original_seven_perks_keep_their_positions() {
     assert_eq!(all[16], Perk::TightenTolerances);
     // And again for the accuracy perk appended after that.
     assert_eq!(all[17], Perk::TargetLock);
-    assert_eq!(all.len(), 18);
+    // And again for the summon perk appended after that.
+    assert_eq!(all[18], Perk::Scheduler);
+    assert_eq!(all.len(), 19);
 }
 
 /// `Perk::TargetLock` reaches the roll, and reaches the player alone.
@@ -849,4 +851,48 @@ fn a_capped_companions_overflow_is_not_spent_and_does_not_panic() {
         player_points,
         "and its overflow does not leak into the player's Perk Points"
     );
+}
+
+/// The Scheduler: the two queries, and the self-cap that bounds a
+/// repeatable perk with no constant to forget.
+mod scheduler {
+    use crate::components::{Perks, Rarity};
+    use crate::perks::{Perk, summon_rarity_window, summon_tier_ceiling};
+
+    fn at(rank: usize) -> Perks {
+        Perks {
+            points: 0,
+            unlocked: vec![Perk::Scheduler; rank],
+        }
+    }
+
+    #[test]
+    fn the_window_is_shut_at_rank_zero_and_open_at_rank_one() {
+        assert_eq!(
+            summon_rarity_window(Some(&at(0))),
+            0.0,
+            "an unperked fork is always Ordinary, and that is what \"below average\" means"
+        );
+        assert_eq!(summon_rarity_window(None), 0.0, "no perks at all is rank 0");
+        assert!(summon_rarity_window(Some(&at(1))) > 0.0);
+        assert!(summon_rarity_window(Some(&at(2))) > summon_rarity_window(Some(&at(1))));
+    }
+
+    #[test]
+    fn the_ceiling_climbs_one_rung_a_rank() {
+        assert_eq!(summon_tier_ceiling(Some(&at(0))), Rarity::Ordinary);
+        assert_eq!(summon_tier_ceiling(None), Rarity::Ordinary);
+        assert_eq!(summon_tier_ceiling(Some(&at(1))), Rarity::Silver);
+        assert_eq!(summon_tier_ceiling(Some(&at(2))), Rarity::Gold);
+    }
+
+    /// The index clamp is the thing under test: `Rarity::ALL` being finite
+    /// is what bounds this perk, and an off-by-one here is an index panic
+    /// in the middle of a fight.
+    #[test]
+    fn the_ceiling_saturates_at_the_top_of_the_ladder() {
+        assert_eq!(summon_tier_ceiling(Some(&at(4))), Rarity::Prismatic);
+        assert_eq!(summon_tier_ceiling(Some(&at(10))), Rarity::Prismatic);
+        assert_eq!(summon_tier_ceiling(Some(&at(500))), Rarity::Prismatic);
+    }
 }

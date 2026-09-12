@@ -2356,3 +2356,62 @@ fn a_reaching_hostile_swings_without_closing() {
         log_texts(&game)
     );
 }
+
+/// One streak per body actually swung at, from the swinger's cell to each
+/// recipient's — so a reach weapon's sweep fires one at every body its shape
+/// caught.
+#[test]
+fn a_swing_queues_one_bolt_per_body_it_lands_on() {
+    let mut game = game();
+    let pack = ranged_fight(&mut game, 1);
+    let player = game.player_entity();
+    equip_weapon(&mut game, player, "plasma_router");
+    place_bodies(&mut game, player, (0, 0), pack[0], (3, 0));
+    assert!(game.tactical_attack(pack[0]));
+
+    let bolts = game.take_bolts();
+    assert_eq!(bolts.len(), 1, "one body swung at, one streak");
+    assert_eq!(bolts[0].from, (0, 0));
+    assert_eq!(bolts[0].to, (3, 0));
+}
+
+/// A sweep fires one at every body its shape caught, not one at the aim.
+#[test]
+fn a_sweep_queues_a_bolt_per_body_it_swept() {
+    let mut game = game();
+    let pack = ranged_fight(&mut game, 2);
+    let player = game.player_entity();
+    equip_weapon(&mut game, player, "scatter_lance");
+    place_bodies(&mut game, player, (0, 0), pack[0], (2, 0));
+    place_one(&mut game, pack[1], (2, 1));
+    assert!(game.tactical_attack(pack[0]));
+
+    let bolts = game.take_bolts();
+    assert_eq!(bolts.len(), 2, "two bodies swept, two streaks: {bolts:?}");
+    assert!(bolts.iter().all(|b| b.from == (0, 0)));
+}
+
+/// Draining is a drain — a second call comes back empty, so a frontend
+/// cannot draw one streak twice.
+#[test]
+fn taking_the_bolts_empties_the_queue() {
+    let mut game = game();
+    let pack = ranged_fight(&mut game, 1);
+    let player = game.player_entity();
+    place_bodies(&mut game, player, (0, 0), pack[0], (1, 0));
+    assert!(game.tactical_attack(pack[0]));
+    assert_eq!(game.take_bolts().len(), 1);
+    assert!(game.take_bolts().is_empty());
+}
+
+/// An adjacent swing queues one too — the streak is one rule at every
+/// distance, and at one cell it is the melee feedback.
+#[test]
+fn an_adjacent_swing_queues_a_bolt_too() {
+    let mut game = game();
+    let pack = ranged_fight(&mut game, 1);
+    let player = game.player_entity();
+    place_bodies(&mut game, player, (0, 0), pack[0], (1, 0));
+    assert!(game.tactical_attack(pack[0]));
+    assert_eq!(game.take_bolts().len(), 1);
+}

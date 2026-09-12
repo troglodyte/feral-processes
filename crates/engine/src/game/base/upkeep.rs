@@ -209,6 +209,19 @@ impl Game {
             .take()
     }
 
+    /// Drains every `BoltCue` queued since the last call — `take_transits`'
+    /// counterpart on a battle map.
+    ///
+    /// A frontend that draws no bolts must still call it, or the queue sits
+    /// at its cap forever. A cue names *board* cells, so one drawn anywhere
+    /// but the tactical pane is the same cross-space aliasing `take_transits`
+    /// warns about one space over.
+    pub fn take_bolts(&mut self) -> Vec<crate::resources::BoltCue> {
+        self.world
+            .resource_mut::<crate::resources::BoltQueue>()
+            .take()
+    }
+
     /// Queues `kind` at `structure`'s tile, if it has one. Raid targets are
     /// selected by `With<Durability>`, which doesn't imply `Position` —
     /// a flash on the wrong tile would be worse than none, so a positionless

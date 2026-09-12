@@ -113,15 +113,15 @@ pub use perks::{Perk, PerkDb, PerkDef};
 use research::{ResearchDb, ResearchDef};
 pub use research::{ResearchId, ResearchRecipe};
 use resources::{
-    AnchorEntity, BattleRewards, BattleState, BattleTimeline, BuybackLedger, ClosingRoster,
-    CurrentStack, EffectQueue, GameClock, GameOver, GameRng, KnownRoutines, KnownTools, Locale,
-    MessageLog, Party, PlayerEntity, Research, RosterFrame, StackMemory, TransitQueue,
-    WieldedProgram, XpTally, ZoneLevel, ZoneSpawnPoint,
+    AnchorEntity, BattleRewards, BattleState, BattleTimeline, BoltQueue, BuybackLedger,
+    ClosingRoster, CurrentStack, EffectQueue, GameClock, GameOver, GameRng, KnownRoutines,
+    KnownTools, Locale, MessageLog, Party, PlayerEntity, Research, RosterFrame, StackMemory,
+    TransitQueue, WieldedProgram, XpTally, ZoneLevel, ZoneSpawnPoint,
 };
 pub use resources::{
-    DifficultyMode, EffectKind, EnemyStrength, HandCraftProgress, LabourDemand, LogEntry, LogLine,
-    MESSAGE_LOG_CAP, MessageKind, MessageSource, SlotShift, SwingOutcome, TransitCue, VisualEffect,
-    condense,
+    BoltCue, DifficultyMode, EffectKind, EnemyStrength, HandCraftProgress, LabourDemand, LogEntry,
+    LogLine, MESSAGE_LOG_CAP, MessageKind, MessageSource, SlotShift, SwingOutcome, TransitCue,
+    VisualEffect, condense,
 };
 use species::{Affinities, SpeciesDb, SpeciesDef, SpeciesId};
 use structures::{StructureDb, StructureDef, StructureId, TradeDef};

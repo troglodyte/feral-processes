@@ -298,6 +298,14 @@ impl Game {
             );
         }
 
+        // The swinger's own hue, read once: a fumble's Recoil rung can kill
+        // the body that swung, and a lookup inside the loop would then have
+        // nothing to ask.
+        let bolt_color = self
+            .world
+            .get::<crate::components::Glyph>(actor)
+            .map(|g| g.color)
+            .unwrap_or(crate::components::GlyphColor::White);
         for (index, body) in bodies.into_iter().enumerate() {
             // `party_member_swing`'s guard, and its reason: a fumble's
             // Recoil or Opening rung damages the swinger, so it really can
@@ -305,6 +313,18 @@ impl Game {
             // the narrow path stops behaving as it always has.
             if index > 0 && !self.creature_alive(actor) {
                 break;
+            }
+            // **Before the blow lands**, so a body that dies to it still gets
+            // its streak drawn — the cue names its cell, and `remove` takes
+            // that cell with it.
+            if let Some(to) = self.world.resource::<TacticalBattle>().cell_of(body) {
+                self.world
+                    .resource_mut::<crate::resources::BoltQueue>()
+                    .push(crate::resources::BoltCue {
+                        from,
+                        to,
+                        color: bolt_color,
+                    });
             }
             let outcome =
                 self.resolve_and_apply_attack(actor, body, crate::battle::Swing::plain(range));

@@ -567,8 +567,27 @@ impl Game {
 
     /// Promotes `entity` one rung up the rarity ladder and fully recharges
     /// it, returning the tier it lands on. The only caller is
-    /// `mark_nemeses`, on a living `Hostile` — see `spawning.rs`'s "Rarity
-    /// multiplies here and exactly here" comment for the other site.
+    /// `mark_nemeses`, on a living `Hostile`.
+    ///
+    /// `Rarity::ALL`'s own top is the ceiling: past `Prismatic` the step is
+    /// `1.0` and this is a no-op on stats, though the grudge that got the
+    /// program here keeps rising regardless — that increment lives in the
+    /// loop above, not here.
+    pub(crate) fn promote_rarity(&mut self, entity: Entity) -> Rarity {
+        let old = self
+            .world
+            .get::<Rarity>(entity)
+            .copied()
+            .unwrap_or_default();
+        let new = Rarity::ALL
+            .get(old.rank() as usize + 1)
+            .copied()
+            .unwrap_or(old);
+        self.retier_rarity(entity, new)
+    }
+
+    /// Moves an already-spawned `entity` to `new` and fully recharges it,
+    /// returning the tier it lands on. Works in **either** direction.
     ///
     /// `Rarity` is a *receipt* for a multiplier already baked into `Stats`
     /// at spawn (`spawn_wild_creature_scaled`), not a value anything may
@@ -581,26 +600,27 @@ impl Game {
     /// `CreatureSave`) with the same reasoning — this is the second and
     /// last place a rarity multiplier is allowed to touch `Stats`.
     ///
-    /// `Rarity::ALL`'s own top is the ceiling: past `Prismatic` the step is
-    /// `1.0` and this is a no-op on stats, though the grudge that got the
-    /// program here keeps rising regardless — that increment lives in the
-    /// loop above, not here.
+    /// The step being a ratio is what makes a downward move need no code of
+    /// its own: `Ordinary / Gold` is the exact reciprocal of `Gold /
+    /// Ordinary`, and a fork rolled below its routine's ceiling is retiered
+    /// down from whatever the spawn rolled.
+    ///
+    /// **A known asymmetry, preserved rather than fixed:** this scales
+    /// `mitigation`, which `spawn_wild_creature_scaled` deliberately leaves
+    /// unscaled. That is the nemesis behaviour the ladder has always had,
+    /// `MAX_MITIGATION_PERCENT` bounds it, and changing it here would be an
+    /// unrelated retune riding whatever feature touched this next.
     ///
     /// The recharge is folded in rather than left to a second call, because
-    /// nothing in this feature ever wants a promotion without the heal that
-    /// follows it — `hp = max_hp` raises HP, which is why this stays clear
-    /// of `apply_damage`'s rule that it is the only path allowed to lower
-    /// it.
-    pub(crate) fn promote_rarity(&mut self, entity: Entity) -> Rarity {
+    /// no caller ever wants a re-tier without the heal that follows it —
+    /// `hp = max_hp` raises HP, which is why this stays clear of
+    /// `apply_damage`'s rule that it is the only path allowed to lower it.
+    pub(crate) fn retier_rarity(&mut self, entity: Entity, new: Rarity) -> Rarity {
         let old = self
             .world
             .get::<Rarity>(entity)
             .copied()
             .unwrap_or_default();
-        let new = Rarity::ALL
-            .get(old.rank() as usize + 1)
-            .copied()
-            .unwrap_or(old);
         let step = new.stat_mult() / old.stat_mult();
         if let Some(mut stats) = self.world.get_mut::<Stats>(entity) {
             stats.max_hp = (stats.max_hp as f32 * step).round() as i32;

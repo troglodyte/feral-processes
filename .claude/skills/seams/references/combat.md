@@ -1030,3 +1030,55 @@
   swing, because `swing_move` rolls the move first and eats the forced roll
   — reseed through `reseed_rng` immediately before the swing instead. See
   `seam:a-brace-on-a-board-is-the-group-models-and-only-the` for the argument.
+
+- **`Game::swing_range` is the one door for how far a body swings, and its
+  three readers are calls rather than copies.** All three hard-coded
+  `TACTICAL_MELEE_RANGE` before it existed — `tactical_attack`'s gate,
+  `Intent::Swing`'s band and `swing_at_best_neighbour`'s target filter — and
+  **nothing fails to compile when one drifts**: a body whose band says two
+  and whose filter says one walks into position and then passes its turn,
+  which reads as the AI being stupid rather than as a bug. Three decisions
+  under it. **Holding a weapon at all replaces the species figure**, and a
+  weapon that authors no `range` swings at arm's length, so a ranged program
+  holding a melee blade is melee — deliberately *not* `attack_range`'s rule,
+  which falls through to the natural band, because a weapon with no *damage*
+  would leave its wielder disarmed where a weapon with no range simply **is**
+  a melee weapon. (The design spec's one-line formula paraphrases it the
+  other way round; its prose and the shipped test do not.) It is a property
+  of the **body and never of the move it rolls** — the AI picks its intent
+  before it walks, so a range read at swing time lets a body plan a standoff
+  and then draw the melee half of its pair, which is why `Intent::Swing`
+  carries the range on the variant rather than reading it inside `band()`,
+  which takes no actor. And it is **read in tactical fights alone**:
+  `MoveDef::ranged` keeps its separate group-model meaning untouched.
+  `TACTICAL_RANGED_MOVE_RANGE = 2` is load-bearing — fourteen of seventeen
+  shipped species carry exactly one `ranged: true` move, so at three nearly
+  every wild body becomes a shooter and the closing this model is built on
+  stops mattering. `TACTICAL_WEAPON_RANGE_MAX = 3` is refused at load rather
+  than clamped: a weapon quietly swinging shorter than its file says reads as
+  a nerf. **The sight check is unconditional with no melee branch** —
+  `line_of_sight` excludes its endpoints, so for neighbours its loop is empty
+  and the check is already a no-op, which is what keeps
+  `TACTICAL_MELEE_RANGE` from being restated a fourth time. See
+  `seam:game-swing-range-is-the-one-door-for-how-far-a-body-swings`.
+- **A `BoltCue` lives in `TacticalBattle` cells and is its own queue, never a
+  fifth `EffectKind`.** `VisualEffect`'s whole shape is a *world* tile, and a
+  board cell pushed into `EffectQueue` pins a flash to an unrelated tile out
+  in the zone — the `Position` seam's convenience in a new place, where the
+  grid-of-cells shape makes the wrong thing compile *and draw*. `TransitCue`
+  refused the same fold one space over and is the precedent. **No `kind`
+  field**: the streak travels `from` → `to` by one rule at every distance,
+  and at one cell that is a short flick across a single square, which *is*
+  the melee feedback — a kind field would make a renderer restate the melee
+  threshold to pick between two draws, the third copy the door above exists
+  to prevent. **The colour is carried and not looked up**, because a fumble's
+  Recoil rung can kill the body that swung and a lookup would have nothing to
+  ask. Pushed **before** `resolve_and_apply_attack` and inside the recipients
+  loop, so a body that dies to the blow still gets its streak and a sweep
+  fires one per body it caught. gui's `BOLT_SECONDS` is **derived** from
+  `TACTICAL_TURNS_PER_SECOND` rather than restated, or a retune of the pace
+  leaves a streak in flight when the next body acts and reads as two attacks
+  at once; and it takes **no stagger** where `Walker` has one — a squad files
+  out one behind the other, but a sweep's streaks all leave the same swinger
+  in the same instant. See
+  `seam:a-boltcue-lives-in-tacticalbattle-cells-and-is-its-own-queue`.

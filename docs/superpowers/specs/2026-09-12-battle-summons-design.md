@@ -150,11 +150,11 @@ Two asset files in `assets/abilities/`:
 
 | file | count | extra | rarity_penalty | fields |
 |---|---|---|---|---|
-| `fork.ron` | 1 | 0 | 0 | one body |
-| `fork_bomb.ron` | 2 | 1 | 1 | two or three, each a rung worse |
+| `fork_program.ron` | 1 | 0 | 0 | one body |
+| `fork_cluster.ron` | 2 | 1 | 1 | two or three, each a rung worse |
 
 Both priced in Power — `every_runnable_routine_is_priced_in_power` has no
-exceptions list — with `fork_bomb` heavily so. Both carry a cooldown.
+exceptions list — with `fork_cluster` heavily so. Both carry a cooldown.
 
 ## Species
 
@@ -244,8 +244,8 @@ That finiteness is the answer to the standing hazard that perks are uncapped
 and repeatable: there is no rung above Prismatic to buy, so the ladder bounds
 itself without a constant to forget.
 
-`rarity_penalty` lowers the ceiling by its own number of rungs, so `fork_bomb`
-is a rung behind `fork` at every rank — which means the quality-for-numbers
+`rarity_penalty` lowers the ceiling by its own number of rungs, so `fork_cluster`
+is a rung behind `fork_program` at every rank — which means the quality-for-numbers
 trade appears the moment the perk does, and not before.
 
 **Two queries in `perks.rs`**, both `Option<&Perks>` family since the subject is
@@ -259,9 +259,10 @@ rank 0.
 `Rarity` is already `Ordinary → Silver → Gold → Platinum → Prismatic`, so the
 silver/gold vocabulary needs nothing invented.
 
-- Routines: **`fork`** and **`fork_bomb`**. Process-forking is the right
-  register for this setting, and a fork bomb is precisely "spawn many processes
-  at once".
+- Routines: **`fork_program`** and **`fork_cluster`**. Process-forking is the
+  right register for this setting, and the pair says which one fields more
+  bodies without reading the numbers. "Cluster" rather than "pool", since
+  `Perk::ProcessPool` already owns that word.
 - Perk: **Scheduler** — what decides the priority class a forked process gets.
 
 Deliberately not "daemon", per the no-occult-naming rule.
@@ -291,7 +292,7 @@ the end costs nothing.
 | `tactical/ai.rs` | `tactical_ai_actor` gate widened to `Summoned` |
 | `perks.rs` | `Perk` variant, two queries, census arm, `all()` length |
 | `tuning.rs` | `SUMMON_STAT_MULT`, `SUMMON_LEVEL_STAT_STEPS`, window-per-rank |
-| `assets/abilities/` | `fork.ron`, `fork_bomb.ron` |
+| `assets/abilities/` | `fork_program.ron`, `fork_cluster.ron` |
 | `assets/abilities/README.md` | the `Summon` effect's schema |
 | `assets/perks/` | Scheduler catalogue entry |
 
@@ -314,7 +315,7 @@ Behaviour, not shape. The ones that carry the design:
    again.
 7. At perk rank 0 the tier is **always** Ordinary over many rolls; rank 1
    reaches Silver and never Gold.
-8. `fork_bomb` bodies are one rung below `fork` bodies at the same rank.
+8. `fork_cluster` bodies are one rung below `fork_program` bodies at the same rank.
 9. A summon earns no XP and its kills still pay the player — `finish_hostile`
    keys the payout on the victim, not the killer.
 10. `retier_rarity` downward is the exact inverse of upward on the same body.

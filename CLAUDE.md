@@ -701,6 +701,9 @@ relying on one, and correct all three places if it has moved.
   step.** `Game::field_stat_mult` ramps from the opening ring's edge to
   exactly the next zone's doorstep, computed by the caller and never inside
   the spawner.
+- **The party is the fifth thing that buys a difficulty step, each spawn
+  rolls its own share of it, and it lands on `Game::group_steps` rather than
+  `danger_steps`, whose third reader is the species window.**
 - **A basic attack is an `AbilityDef`, and combat names `MoveDef` nowhere.**
   `species::basic_attack_ability` is the one conversion; `moves:` stays the
   authored shape so no species file or mod needed editing, and

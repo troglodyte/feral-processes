@@ -26,7 +26,7 @@ pub enum DifficultyMode {
 /// A band is worth `tuning::ENEMY_STRENGTH_BAND_STEP` **zone steps**, not a
 /// flat multiplier on stats; that constant carries the argument. Read in
 /// exactly two places, both of them a caller computing a
-/// `SpawnEscalation::stat_mult` — `Game::field_stat_mult` on the surface and
+/// `SpawnEscalation::stat_mult` — `Game::rolled_field_stat_mult` on the surface and
 /// `Game::stack_depth_multiplier` underground — so the invariant that a
 /// spawn's stats come from its escalation and never from its tile is
 /// untouched.

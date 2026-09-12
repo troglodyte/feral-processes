@@ -90,7 +90,7 @@ fn a_breach_spawns_the_next_tiers_wild_creatures() {
         // that one has already netted off the base's reach, and probing with
         // it would net the reach off a second time.
         let d = (pos.x - origin.0).abs().max((pos.y - origin.1).abs());
-        let ramp_at = |dist: i32| game.field_stat_mult(origin.0 + dist.max(0), origin.1);
+        let ramp_at = |dist: i32| game.field_stat_mult(origin.0 + dist.max(0), origin.1, 1.0);
         let (ramp_lo, ramp_hi) = (ramp_at(d - scatter), ramp_at(d + scatter));
         //
         // The rare-spawn tier is the one other factor, and folding it in per

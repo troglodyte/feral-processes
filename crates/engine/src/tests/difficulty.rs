@@ -66,11 +66,11 @@ fn standard_leaves_the_field_ramp_exactly_as_it_was() {
         let here = ZoneLevel(zone).stat_multiplier() as f32;
         let next = ZoneLevel(zone + 1).stat_multiplier() as f32;
         assert_eq!(
-            g.field_stat_mult(sx, sy),
+            g.field_stat_mult(sx, sy, 1.0),
             1.0,
             "zone {zone}'s ring moved at Standard"
         );
-        let far = g.field_stat_mult(sx + OPENING_RING_TILES + DANGER_RAMP_TILES, sy);
+        let far = g.field_stat_mult(sx + OPENING_RING_TILES + DANGER_RAMP_TILES, sy, 1.0);
         assert!(
             (here * far - next).abs() < 1e-4,
             "zone {zone}'s far field moved at Standard"
@@ -92,7 +92,7 @@ fn a_band_is_a_number_of_zone_steps_on_the_existing_curve() {
             g.force_enemy_strength(band);
             // Inside the ring, where the distance ramp contributes nothing,
             // the band is the only term.
-            let reached = here * g.field_stat_mult(sx, sy);
+            let reached = here * g.field_stat_mult(sx, sy, 1.0);
             let want = here + crate::tuning::ZONE_STAT_STEP as f32 * band.zone_steps();
             assert!(
                 (reached - want).abs() < 1e-4,
@@ -114,7 +114,7 @@ fn the_band_and_the_distance_ramp_add_rather_than_compound() {
     for zone in 1..=8u32 {
         g.world.insert_resource(ZoneLevel(zone));
         let here = ZoneLevel(zone).stat_multiplier() as f32;
-        let reached = here * g.field_stat_mult(far, sy);
+        let reached = here * g.field_stat_mult(far, sy, 1.0);
         let want = ZoneLevel(zone + 2).stat_multiplier() as f32;
         assert!(
             (reached - want).abs() < 1e-4,
@@ -148,7 +148,7 @@ fn a_higher_band_spawns_a_stronger_body() {
     let spawn = |g: &mut Game| -> (i32, i32) {
         g.world
             .insert_resource(GameRng(rand::rngs::StdRng::seed_from_u64(7717)));
-        let mult = g.field_stat_mult(sx, sy);
+        let mult = g.field_stat_mult(sx, sy, 1.0);
         let e = g
             .spawn_wild_creature_scaled("glitch", sx, sy, mult, false)
             .expect("glitch ships in the test assets");

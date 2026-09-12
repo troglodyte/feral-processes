@@ -49,7 +49,7 @@ pub(crate) fn trace_group_ceiling(base: u32, group_mult: u32, cap: u32) -> u32 {
 #[derive(Clone, Copy)]
 pub(crate) struct SpawnEscalation {
     /// Multiplier on each member's stats — `Game::stack_depth_multiplier`
-    /// underground, `Game::field_stat_mult` on the surface, and 1.0 for the
+    /// underground, `Game::rolled_field_stat_mult` on the surface, and 1.0 for the
     /// two callers that take neither (see `surface()`).
     pub(crate) stat_mult: f32,
     /// Multiplier on the group-size ceiling — `TRACE_GROUP_MULT`'s band
@@ -217,7 +217,7 @@ impl Game {
     /// **A test fixture, and `#[cfg(test)]` because it is one.** It was the
     /// surface spawn door until the field ramp landed, and every real caller
     /// now passes a multiplier — the ambient spawner and nest guardians take
-    /// `Game::field_stat_mult`, the Stack takes its depth. Left ungated it is
+    /// `Game::rolled_field_stat_mult`, the Stack takes its depth. Left ungated it is
     /// dead code that reads like the plain way to spawn something, which is
     /// how a new call site ends up quietly opting out of the ramp.
     #[cfg(test)]
@@ -482,8 +482,10 @@ impl Game {
         let (gx, gy) = self.scatter_open_tile(nest_x, nest_y, NEST_TETHER_RADIUS);
         // The ramp, not `spawn_wild_creature`'s bare 1.0: a nest out on the
         // frontier surrounded by ramped programs would otherwise field a
-        // guardian weaker than everything guarding nothing around it.
-        let mult = self.field_stat_mult(gx, gy);
+        // guardian weaker than everything guarding nothing around it. The
+        // rolled door, so a guardian takes its own share of the party term
+        // exactly as the wildlife around it does.
+        let mult = self.rolled_field_stat_mult(gx, gy);
         let guardian = self.spawn_wild_creature_scaled(species_id, gx, gy, mult, false)?;
         self.world
             .entity_mut(guardian)
@@ -543,13 +545,142 @@ impl Game {
     ///
     /// Spends no `GameRng`, so putting a spawn site onto the ramp shifts no
     /// seeded stream.
-    pub(crate) fn field_stat_mult(&self, x: i32, y: i32) -> f32 {
+    /// `field_stat_mult` with a **spawn's own share** of the party term
+    /// rolled rather than taken in full — the door every surface spawn goes
+    /// through, and the only one that draws.
+    ///
+    /// The roll is kept out of `field_stat_mult` itself because a door that
+    /// answers differently on every call is exactly what a reader must not
+    /// see. `stack_depth_multiplier` makes the same split for the same
+    /// reason and `stack_market` is the caller that proves it — the
+    /// asymmetry between the two is only that underground the plain door
+    /// has real readers and up here it has none, so the surface pair takes
+    /// the share as a parameter rather than carrying a wrapper nothing
+    /// calls.
+    pub(crate) fn rolled_field_stat_mult(&mut self, x: i32, y: i32) -> f32 {
+        let share = self.roll_party_share();
+        self.field_stat_mult(x, y, share)
+    }
+
+    pub(crate) fn field_stat_mult(&self, x: i32, y: i32, party_share: f32) -> f32 {
         let out = (self.distance_from_danger_origin(x, y) - OPENING_RING_TILES).max(0);
         let t = (out as f32 / DANGER_RAMP_TILES as f32).min(1.0);
         // The band is the *same addend at the same seam* as the ramp, so the
         // two add rather than compound: at the far field one band up is two
-        // zone steps out, one bought by walking and one by the knob.
-        self.zone_curve_ratio(t + self.enemy_strength().zone_steps())
+        // zone steps out, one bought by walking and one by the knob. The
+        // party term is the fifth thing summed here and adds the same way.
+        self.zone_curve_ratio(
+            t + self.enemy_strength().zone_steps() + self.party_stat_steps() * party_share,
+        )
+    }
+
+    /// What share of the party's own term **this** spawn takes: a uniform
+    /// draw in `0..=1`, so a developed party meets a *spread* running from
+    /// the ground's own baseline up to their own level rather than a field
+    /// where every program has been levelled in lockstep with them.
+    ///
+    /// The spread is the whole point. A world that tracks the party exactly
+    /// is a treadmill — every fight is the same fight and a level buys
+    /// nothing you can feel. Rolling the share leaves the *easy* fights on
+    /// the map and adds hard ones above them, so what levelling changes is
+    /// the top of the range rather than all of it.
+    ///
+    /// **No draw at all when the party term is zero**, and that omission is
+    /// load-bearing rather than an optimisation: a fresh run and every
+    /// seeded test fixture would otherwise take a draw per spawn and shift
+    /// the whole stream. `Game::roll_affix` spends nothing on an empty pool
+    /// for the same reason.
+    pub(crate) fn roll_party_share(&mut self) -> f32 {
+        if self.party_stat_steps() <= 0.0 {
+            return 0.0;
+        }
+        let mut rng = self.world.resource_mut::<GameRng>();
+        rng.0.random_range(0.0..=1.0)
+    }
+
+    /// How far up its own zone's level band the party has climbed, 0 at the
+    /// band's floor and 1 at `Game::level_cap`.
+    ///
+    /// The band is `tuning::zone_band_floor`..`tuning::zone_level_cap`, so a
+    /// breach resets this to 0 however developed the party is — which is the
+    /// half that keeps levelling worth something. Without it the world
+    /// tracks the player perfectly and a level buys nothing, which is the
+    /// standing objection to scaling difficulty to the party at all.
+    ///
+    /// Reads the **player's** level and not the roster's. Gear is not a term
+    /// either: `GEAR_LEVEL_STEP` is already matched to `ZONE_STAT_STEP`, so
+    /// equipment rides the same curve and counting it here would price it
+    /// twice.
+    ///
+    /// Clamped at both ends. Below the floor is reachable the tick after a
+    /// breach; above the cap is reachable only from a save written under a
+    /// different cap, and neither should read as anything but the end of the
+    /// band it passed.
+    pub(crate) fn party_band_progress(&self) -> f32 {
+        let zone = self.world.resource::<ZoneLevel>().0;
+        let floor = crate::tuning::zone_band_floor(zone);
+        let ceiling = crate::tuning::zone_level_cap(zone);
+        if ceiling <= floor {
+            return 0.0;
+        }
+        let level = self
+            .world
+            .get::<Experience>(self.player_entity())
+            .map(|e| e.level)
+            .unwrap_or(1);
+        (level.saturating_sub(floor) as f32 / (ceiling - floor) as f32).clamp(0.0, 1.0)
+    }
+
+    /// What the party's own development is worth **in zone steps** to a
+    /// spawn's stats — the fifth contributor to the sum
+    /// `Game::zone_curve_ratio` reduces, after zone, distance, depth and the
+    /// enemy-strength band.
+    ///
+    /// Folded in at two sites and both are caller-side, which is what leaves
+    /// `a_spawns_stats_come_from_its_escalation_and_never_from_its_tile`
+    /// true: `rolled_field_stat_mult` on the surface and
+    /// `rolled_stack_depth_multiplier`
+    /// underground. It reaches the Stack where the distance ramp
+    /// deliberately does not, and the asymmetry is the point — distance is a
+    /// property of *where the spawn is* and every Stack spawn is placed at
+    /// the surface entrance tile, while this is a property of the party and
+    /// means the same thing wherever they are standing.
+    ///
+    /// Spends no `GameRng`, so a developed party shifts no seeded stream.
+    pub(crate) fn party_stat_steps(&self) -> f32 {
+        self.party_band_progress() * crate::tuning::PARTY_LEVEL_STAT_STEPS
+    }
+
+    /// What the party is worth **in escalation steps** to how many programs
+    /// show up — fielded companions plus band progress, each floored to a
+    /// whole step.
+    ///
+    /// **This is deliberately not part of `Game::danger_steps`.** That
+    /// scalar has three readers, and the third is the species danger-band
+    /// window in `habitat_pools`: `TIER_ENTRY_STEPS` is 2 and
+    /// `APEX_ENTRY_STEP` is further still, so a party term folded in there
+    /// would change *what you meet* and eventually open apex bosses because
+    /// you levelled — the shape that collapses the zone ladder. Zone and
+    /// depth decide what a spawn is; the party decides how many of them.
+    /// `Game::group_steps` is the sum, and its two callers are the census.
+    pub(crate) fn party_count_steps(&self) -> u32 {
+        let fielded = self.world.resource::<crate::resources::Party>().0.len() as u32;
+        fielded / crate::tuning::PARTY_SIZE_STEP_MEMBERS
+            + (self.party_band_progress() * crate::tuning::PARTY_LEVEL_COUNT_STEPS as f32) as u32
+    }
+
+    /// The step count the two **group** curves read: what the place is worth
+    /// (`danger_steps`) plus what the party is worth
+    /// (`party_count_steps`), clamped to `MAX_GROUP_SIZE_STEPS`.
+    ///
+    /// The clamp moved here from `danger_steps` rather than being applied
+    /// twice: bounding each half separately lets the sum reach
+    /// `2 * MAX_GROUP_SIZE_STEPS`, and that ceiling is what stops
+    /// `GROUP_SIZE_DISTANCE_GROWTH.pow` from running away.
+    pub(crate) fn group_steps(&self, depth: Option<u32>) -> u32 {
+        self.danger_steps(depth)
+            .saturating_add(self.party_count_steps())
+            .min(MAX_GROUP_SIZE_STEPS)
     }
 
     /// What an ambient surface spawn at `(x, y)` escalates by:
@@ -562,9 +693,9 @@ impl Game {
     /// gets the ramp is therefore a census of this function's callers, which
     /// is the readable form of the question; `surface()` staying "no
     /// escalation at all" is what makes that census mean anything.
-    pub(crate) fn field_escalation(&self, x: i32, y: i32) -> SpawnEscalation {
+    pub(crate) fn field_escalation(&mut self, x: i32, y: i32) -> SpawnEscalation {
         SpawnEscalation {
-            stat_mult: self.field_stat_mult(x, y),
+            stat_mult: self.rolled_field_stat_mult(x, y),
             ..SpawnEscalation::surface()
         }
     }
@@ -751,7 +882,7 @@ impl Game {
     pub(crate) fn max_group_size(&self, depth: Option<u32>) -> u32 {
         let cap = zone_group_cap(self.world.resource::<ZoneLevel>().0);
         GROUP_SIZE_DISTANCE_GROWTH
-            .pow(self.danger_steps(depth))
+            .pow(self.group_steps(depth))
             .min(cap)
     }
 
@@ -771,7 +902,7 @@ impl Game {
     /// shipped species, including the four that `beatable_by_a_fresh_player`
     /// clears one-on-one.
     pub(crate) fn max_enemy_groups(&self, depth: Option<u32>) -> usize {
-        (self.danger_steps(depth) as usize + 1).min(MAX_ENEMY_GROUPS)
+        (self.group_steps(depth) as usize + 1).min(MAX_ENEMY_GROUPS)
     }
 
     /// Whether `(x, y)` is in the pocket a brand-new run opens in: zone 1,

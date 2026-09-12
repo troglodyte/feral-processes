@@ -3145,7 +3145,7 @@ fn the_field_ramp_is_flat_inside_the_opening_ring() {
     let (sx, sy) = danger_origin(&game);
     for d in 0..=OPENING_RING_TILES {
         assert_eq!(
-            game.field_stat_mult(sx + d, sy),
+            game.field_stat_mult(sx + d, sy, 1.0),
             1.0,
             "the ring must stay exactly baseline, {d} tiles out"
         );
@@ -3164,13 +3164,13 @@ fn the_field_ramp_tops_out_at_exactly_the_next_zones_doorstep() {
         game.world.insert_resource(ZoneLevel(zone));
         let here = ZoneLevel(zone).stat_multiplier() as f32;
         let next = ZoneLevel(zone + 1).stat_multiplier() as f32;
-        let reached = here * game.field_stat_mult(sx + far, sy);
+        let reached = here * game.field_stat_mult(sx + far, sy, 1.0);
         assert!(
             (reached - next).abs() < 1e-4,
             "zone {zone}'s far field reached x{reached}, not zone {}'s x{next}",
             zone + 1
         );
-        let beyond = here * game.field_stat_mult(sx + far * 4, sy);
+        let beyond = here * game.field_stat_mult(sx + far * 4, sy, 1.0);
         assert!(
             (beyond - next).abs() < 1e-4,
             "the ramp is capped at one zone step; four times out reached x{beyond}"
@@ -3346,5 +3346,266 @@ fn rolled_potential_puts_both_build_rolls_in_range() {
     assert!(
         rolls.iter().any(|(a, e)| a != e),
         "the two build rolls are the same draw"
+    );
+}
+
+// ---- The party term -------------------------------------------------
+//
+// The fifth thing that buys a difficulty step, after zone, distance, depth
+// and the `EnemyStrength` band. It is a property of the *party* rather than
+// of the place, which is why it reaches the Stack where the distance ramp
+// deliberately does not — and why it must stay out of `danger_steps`, whose
+// third reader is the species danger-band window.
+
+/// The band is `[zone_band_floor, zone_level_cap]`, and progress across it
+/// is the 0..1 fraction the strength term is scaled by. Zone 1's floor is
+/// level 1 and cannot be `zone_level_cap(0)`, which answers
+/// `ZONE_LEVEL_CAP_FLOOR` rather than 1 — a fresh run would open at full
+/// progress.
+#[test]
+fn party_band_progress_runs_from_zero_at_the_bands_floor_to_one_at_its_cap() {
+    let mut game = Game::new(7101, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+
+    game.world.insert_resource(ZoneLevel(1));
+    assert_eq!(
+        game.party_band_progress(),
+        0.0,
+        "a fresh level-1 run sits at its band's floor"
+    );
+
+    game.world.get_mut::<Experience>(player).unwrap().level = crate::tuning::zone_level_cap(1);
+    assert_eq!(
+        game.party_band_progress(),
+        1.0,
+        "the zone's level cap is the top of its band"
+    );
+
+    // A breach raises the ceiling and the floor together, so the party
+    // arrives at the bottom of the new band however developed they are.
+    game.world.insert_resource(ZoneLevel(2));
+    assert_eq!(
+        game.party_band_progress(),
+        0.0,
+        "a breach resets progress — zone 2's floor is zone 1's cap"
+    );
+
+    game.world.get_mut::<Experience>(player).unwrap().level = crate::tuning::zone_level_cap(2);
+    assert_eq!(game.party_band_progress(), 1.0, "and fills again");
+}
+
+/// The level cap is the only bound on the strength term, so progress may
+/// never exceed 1 even if a save carries a level above its zone's cap.
+#[test]
+fn party_band_progress_is_clamped_at_both_ends() {
+    let mut game = Game::new(7102, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.insert_resource(ZoneLevel(2));
+
+    game.world.get_mut::<Experience>(player).unwrap().level = 1;
+    assert_eq!(
+        game.party_band_progress(),
+        0.0,
+        "below the band's floor still reads as the floor"
+    );
+
+    game.world.get_mut::<Experience>(player).unwrap().level = crate::tuning::zone_level_cap(9);
+    assert_eq!(
+        game.party_band_progress(),
+        1.0,
+        "above the band's cap still reads as the cap"
+    );
+}
+
+/// The strength half: the party term is one more addend at the seam
+/// `field_stat_mult` already sums, so a party at their zone's cap meets
+/// ground `PARTY_LEVEL_STAT_STEPS` zone steps tougher than a party that
+/// just breached into it.
+#[test]
+fn field_stat_mult_rises_as_the_party_fills_its_zone_band() {
+    let mut game = Game::new(7103, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.insert_resource(ZoneLevel(2));
+    game.world.get_mut::<Experience>(player).unwrap().level = crate::tuning::zone_band_floor(2);
+
+    let (x, y) = (0, 0);
+    let fresh = game.field_stat_mult(x, y, 1.0);
+
+    game.world.get_mut::<Experience>(player).unwrap().level = crate::tuning::zone_level_cap(2);
+    let capped = game.field_stat_mult(x, y, 1.0);
+
+    assert!(
+        capped > fresh,
+        "a developed party should meet tougher ground: {fresh} -> {capped}"
+    );
+    assert!(
+        (capped - fresh - game.zone_curve_ratio(crate::tuning::PARTY_LEVEL_STAT_STEPS)
+            + game.zone_curve_ratio(0.0))
+        .abs()
+            < 1e-5,
+        "the term is exactly PARTY_LEVEL_STAT_STEPS zone steps at a full band"
+    );
+}
+
+/// A fresh run is untouched, which is what keeps `beatable_by_a_fresh_player`
+/// meaningful — it is computed against unscaled species.
+#[test]
+fn a_fresh_run_takes_no_party_term_at_all() {
+    let game = Game::new(7104, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert_eq!(game.party_stat_steps(), 0.0);
+    assert_eq!(game.party_count_steps(), 0);
+}
+
+/// **The seam.** `danger_steps` has three readers, and the third is the
+/// species danger-band window (`habitat_pools`, via `TIER_ENTRY_STEPS` and
+/// `APEX_ENTRY_STEP`). A party term folded in there would open higher bands
+/// and apex bosses because the party levelled — "the shape that collapses
+/// the zone ladder". So the party term lands on `group_steps`, which only
+/// the two count curves read.
+#[test]
+fn the_party_term_moves_the_count_curves_and_never_the_species_window() {
+    let mut game = Game::new(7105, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.insert_resource(ZoneLevel(3));
+    game.world.get_mut::<Experience>(player).unwrap().level = crate::tuning::zone_band_floor(3);
+
+    let window = game.danger_steps(None);
+    let groups = game.max_enemy_groups(None);
+
+    game.world.get_mut::<Experience>(player).unwrap().level = crate::tuning::zone_level_cap(3);
+
+    assert_eq!(
+        game.danger_steps(None),
+        window,
+        "the species window must not move with the party's level"
+    );
+    assert!(
+        game.max_enemy_groups(None) > groups,
+        "but how many of them show up must: {groups} -> {}",
+        game.max_enemy_groups(None)
+    );
+}
+
+/// The count half's other input: fighting four-strong should not meet the
+/// same pack a solo player does. `PARTY_SIZE_STEP_MEMBERS` companions buy
+/// one step, which doubles the group ceiling and opens one more group.
+#[test]
+fn fielded_companions_buy_escalation_steps() {
+    let mut game = Game::new(7106, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world.insert_resource(ZoneLevel(2));
+
+    assert_eq!(game.party_count_steps(), 0, "solo buys nothing");
+
+    for _ in 0..crate::tuning::PARTY_SIZE_STEP_MEMBERS {
+        let creature = game
+            .spawn_wild_creature("scrapper", 40, 40)
+            .expect("scrapper is a shipped species");
+        game.world.resource_mut::<Party>().0.push(creature);
+    }
+    assert_eq!(
+        game.party_count_steps(),
+        1,
+        "{} companions buy one step",
+        crate::tuning::PARTY_SIZE_STEP_MEMBERS
+    );
+}
+
+/// `MAX_GROUP_SIZE_STEPS` still bounds the sum, not just the place's half.
+#[test]
+fn the_party_term_stays_under_the_step_ceiling() {
+    let mut game = Game::new(7107, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.insert_resource(ZoneLevel(9));
+    game.world.get_mut::<Experience>(player).unwrap().level = crate::tuning::zone_level_cap(9);
+    for _ in 0..crate::tuning::MAX_PARTY_SIZE {
+        let creature = game
+            .spawn_wild_creature("scrapper", 40, 40)
+            .expect("scrapper is a shipped species");
+        game.world.resource_mut::<Party>().0.push(creature);
+    }
+
+    assert!(
+        game.group_steps(None) <= MAX_GROUP_SIZE_STEPS,
+        "the sum is clamped, not just danger_steps"
+    );
+}
+
+/// Both halves are pure derivations off stored state, so putting a party on
+/// the ramp shifts no seeded stream — `field_stat_mult`'s own property, one
+/// term along.
+#[test]
+fn the_party_term_spends_no_gamerng_draw() {
+    assert!(
+        rng_unadvanced_by(7108, |game| {
+            let player = game.player_entity();
+            game.world.get_mut::<Experience>(player).unwrap().level = 4;
+            let _ = game.party_stat_steps();
+            let _ = game.party_count_steps();
+            let _ = game.field_stat_mult(30, 30, 1.0);
+            let _ = game.max_group_size(None);
+            let _ = game.max_enemy_groups(None);
+        }),
+        "the party term must not move the shared GameRng stream"
+    );
+}
+
+/// A developed party meets a *spread*, not a field levelled in lockstep
+/// with them: every spawn's share of the party term is a fresh uniform
+/// draw, so the ground's own baseline stays reachable and what levelling
+/// moves is the top of the range.
+#[test]
+fn a_spawns_share_of_the_party_term_is_rolled_and_spans_the_whole_range() {
+    let mut game = Game::new(7109, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    game.world.insert_resource(ZoneLevel(2));
+    game.world.get_mut::<Experience>(player).unwrap().level = crate::tuning::zone_level_cap(2);
+
+    let floor = game.field_stat_mult(0, 0, 0.0);
+    let ceiling = game.field_stat_mult(0, 0, 1.0);
+    assert!(ceiling > floor, "the party term has room to roll in");
+
+    let rolled: Vec<f32> = (0..200)
+        .map(|_| game.rolled_field_stat_mult(0, 0))
+        .collect();
+    assert!(
+        rolled.iter().all(|&m| (floor..=ceiling).contains(&m)),
+        "every roll must land between the ground's baseline and the party's own level"
+    );
+    let spread = rolled.iter().cloned().fold(f32::MIN, f32::max)
+        - rolled.iter().cloned().fold(f32::MAX, f32::min);
+    assert!(
+        spread > (ceiling - floor) * 0.5,
+        "200 draws should cover most of the range, not cluster: spread {spread}"
+    );
+}
+
+/// **The omission that keeps every seeded fixture still.** A party with no
+/// term to roll takes no draw at all, so a fresh run's stream is bit-for-bit
+/// what it was before this feature existed — `Game::roll_affix`'s rule on an
+/// empty pool.
+#[test]
+fn a_fresh_party_spends_no_draw_on_its_share() {
+    assert!(
+        rng_unadvanced_by(7110, |game| {
+            for _ in 0..50 {
+                let _ = game.roll_party_share();
+                let _ = game.rolled_field_stat_mult(30, 30);
+            }
+        }),
+        "a level-1 party has no share to roll and must not touch the stream"
+    );
+}
+
+/// ...and once there *is* a term, the draw is real.
+#[test]
+fn a_developed_party_does_spend_a_draw_on_its_share() {
+    assert!(
+        !rng_unadvanced_by(7111, |game| {
+            let player = game.player_entity();
+            game.world.get_mut::<Experience>(player).unwrap().level =
+                crate::tuning::zone_level_cap(1);
+            let _ = game.roll_party_share();
+        }),
+        "a developed party's share is a real draw"
     );
 }

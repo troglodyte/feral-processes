@@ -907,16 +907,37 @@ impl Game {
     /// market's quote is priced off: a price that moved because the party
     /// had been noisy would change while the player was reading it.
     pub(crate) fn stack_depth_multiplier(&self) -> f32 {
+        self.stack_depth_multiplier_sharing(1.0)
+    }
+
+    /// `stack_depth_multiplier` with a **spawn's own share** of the party
+    /// term rolled rather than taken in full — `rolled_field_stat_mult`'s
+    /// counterpart, and the door every underground spawn goes through.
+    ///
+    /// The split is not symmetry for its own sake: `stack_market` prices a
+    /// quote off the plain multiplier and `stack_features` reads it for a
+    /// cache's payout, and a figure the player is reading must not change
+    /// under them.
+    pub(crate) fn rolled_stack_depth_multiplier(&mut self) -> f32 {
+        let share = self.roll_party_share();
+        self.stack_depth_multiplier_sharing(share)
+    }
+
+    fn stack_depth_multiplier_sharing(&self, party_share: f32) -> f32 {
         match self.stack_pos() {
             None => 1.0,
             // The enemy-strength band composes here as a factor, where
             // `trace_stat_mult` already does — the Stack's own curve is a
             // depth ladder rather than the zone one, so the band arrives as
-            // the ratio it is worth on the surface.
+            // the ratio it is worth on the surface. The party term rides
+            // the same factor: it is a property of the party rather than of
+            // the place, so unlike the distance ramp it reaches down here.
             Some(pos) => {
                 stack::depth_stat_multiplier(pos.depth)
                     * self.trace_stat_mult()
-                    * self.zone_curve_ratio(self.enemy_strength().zone_steps())
+                    * self.zone_curve_ratio(
+                        self.enemy_strength().zone_steps() + self.party_stat_steps() * party_share,
+                    )
             }
         }
     }
@@ -924,9 +945,9 @@ impl Game {
     /// Everything an underground spawn escalates by, gathered in one place
     /// so the two callers that conjure a pack down here — an ambush and a
     /// lair guardian — cannot disagree about it.
-    pub(crate) fn stack_escalation(&self, depth: u32) -> SpawnEscalation {
+    pub(crate) fn stack_escalation(&mut self, depth: u32) -> SpawnEscalation {
         SpawnEscalation {
-            stat_mult: self.stack_depth_multiplier(),
+            stat_mult: self.rolled_stack_depth_multiplier(),
             group_mult: self.trace_group_mult(),
             depth: Some(depth),
         }

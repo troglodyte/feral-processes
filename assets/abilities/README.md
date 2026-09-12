@@ -595,8 +595,16 @@ Four shapes:
 | `Radius(radius: r)` | everything within `r` of the aimed cell |
 
 `Line` and `Cone` are cast *from the invoker* and are stopped by anything
-that blocks sight — a `Cover` cell. `Radius` is centred on the aim and is
-stopped by nothing.
+that blocks sight — a `Cover` cell. `Radius` is centred on the aim and drops
+any cell it cannot see **from that aim**, since the blast lands there and
+reaches out from there; a body standing *in* the cover is caught rather than
+shielded, because a sight line excludes its own endpoints.
+
+**Sight is also checked before a routine is aimed at all.** A `Single` and a
+`Radius` are thrown *at* a cell, so a cell the invoker cannot see is refused
+outright and nothing is spent. A `Line` and a `Cone` are aimed as a
+*direction* and truncate themselves at cover, so an aim beyond a wall is
+legal and merely shortens them.
 
 **Recipients inside the shape take the effect whichever side they are on.**
 Friendly fire is full and deliberate: a blast wide enough to catch three

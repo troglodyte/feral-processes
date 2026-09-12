@@ -471,6 +471,20 @@ impl Game {
         if !reach::in_range(from, aim, ability.tactical_range()) {
             return false;
         }
+        // The other half of "may this be aimed there", and a refusal rather
+        // than a fizzle: an unseen aim that merely covered nobody would still
+        // spend the Power, the cooldown and the turn. `reach::aim_in_sight` is
+        // which shapes read terrain at their aim — a `Line` and a `Cone` are
+        // aimed as a direction and truncate themselves at cover, so this
+        // refuses neither.
+        if !reach::aim_in_sight(
+            &self.world.resource::<TacticalBattle>().board,
+            from,
+            aim,
+            ability.tactical_shape(),
+        ) {
+            return false;
+        }
         // A capture is aimed at something hostile, and the refusal lands
         // here with the other five rather than inside the effect: aimed at
         // one of your own it would spend the catalyst and the turn, and on

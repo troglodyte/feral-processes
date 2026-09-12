@@ -42,6 +42,17 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.175
+
+**The view now sits still on the body that just swung for a quarter of a
+second after the blow finishes, instead of a twentieth.** The wait before the
+next body moves was the same wait a body takes between arriving somewhere and
+striking — long enough to cover the blow and the slide to whoever is next,
+with almost nothing left over, so the view started travelling the instant the
+flash cleared. That hand-over is now its own length and a longer one; the
+pause between arriving and striking is unchanged, and so is the speed a body
+walks at.
+
 ## 0.13.174
 
 **In a tactical fight the view now stays on whoever is swinging until the

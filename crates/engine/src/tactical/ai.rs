@@ -246,6 +246,21 @@ impl Game {
             .is_some_and(|battle| battle.walking())
     }
 
+    /// Whether the acting body has not yet spent anything on its turn, so
+    /// what a driver owes it is the *hand-over* wait rather than the pause
+    /// between arriving and striking.
+    ///
+    /// `tactical_walking`'s sibling and derived the same way, off the fight
+    /// rather than remembered: a body that has planned a walk carries a
+    /// `Some` — `Some(vec![])` once it has arrived — and a body that has
+    /// swung carries `acted`, so all three states are told apart without a
+    /// driver having to hold what the last beat did.
+    pub fn tactical_turn_opening(&self) -> bool {
+        self.world
+            .get_resource::<TacticalBattle>()
+            .is_some_and(|battle| !battle.walk_planned() && battle.spent() == 0 && !battle.acted())
+    }
+
     /// Runs the acting body's turn **whichever side it is on**, and reports
     /// whether there was one.
     ///

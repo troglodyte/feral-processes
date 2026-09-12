@@ -1755,7 +1755,7 @@ mod tests {
                             unlocks: Some(
                                 "Unlocks: Deep Scan Party, Trace Analysis Party, Stealth \
                                  Protocol Party, Salvage Routine Party, Core Tap, \
-                                 Harness Puller"
+                                 Gear Puller"
                                     .to_string(),
                             ),
                             // The deepest shipped node states three

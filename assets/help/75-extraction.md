@@ -20,7 +20,7 @@ keep the knowledge, so anything you have researched can be forged again.
   Core Tap draws out the compiled core. Each reaches into a different band of what a body is worth.
 - The Routine Reader reads the program for what it was running and teaches you one, favouring the
   earliest thing it knows that you do not. It hands over knowledge, never a disk.
-- The Harness Puller takes the worn kit. It rolls that program's own gear chances, and what lands
+- The Gear Puller takes the worn kit. It rolls that program's own gear chances, and what lands
   is a real find — it can be rare, it can carry names, and it rolls for quality exactly like a
   piece that dropped at a kill.
 
@@ -31,17 +31,17 @@ same tool than an Ordinary you barely left standing.
 The Tools row on the party menu is where you forge, install and pull. The store's own screen is
 where you spend a program: pick the body, and every installed tool is listed with what it would
 draw out before you commit to one. Material tools quote units. The Reader names the pool it would
-draw from. The Harness Puller quotes the odds per item, and those odds are the ones it actually
+draw from. The Gear Puller quotes the odds per item, and those odds are the ones it actually
 rolls — the screen and the pull read the same figure.
 
 A Compiler changes both halves of that. Standing one anywhere makes every extraction quicker, and
 every tier you upgrade it past the first makes the same tool draw more out of the same body — more
-material through a material tool, better odds through the Harness Puller. It is worth building
+material through a material tool, better odds through the Gear Puller. It is worth building
 before it is worth upgrading, and worth upgrading for a long time after that.
 
 Two things are worth knowing before you spend a body.
 
-- A Harness Puller that rolls nothing pays nothing. There is no consolation scrap. The program is
+- A Gear Puller that rolls nothing pays nothing. There is no consolation scrap. The program is
   gone and the time is spent whether or not anything came out, which is what makes a slot spent on
   it a gamble rather than a guarantee.
 - Research Data never comes out of a body, through any tool. Research is earned by running a
@@ -64,7 +64,7 @@ to pull it out entirely, which stops the rig until something else is fitted.
   machine makes.
 - If the buffer has no room for a whole body's worth, the rig holds that program rather than paying
   part of it. Clear the buffer and it picks up where it left off.
-- The Routine Reader and the Harness Puller stay work for your hands. One teaches you something and
+- The Routine Reader and the Gear Puller stay work for your hands. One teaches you something and
   the other pays a piece of gear, and neither is a material a buffer could hold, so the rig will not
   take either one.
 
@@ -72,7 +72,7 @@ A Teardown Rig is also an extraction bench, so building one makes your own teard
 and upgrading it pays them richer — the same way a Compiler does.
 
 Gear pulled this way is added to what the world already drops, not moved out of it. Kills, nest
-caches, Stack caches and the surface boss all still pay exactly as they did, so a Harness Puller is
+caches, Stack caches and the surface boss all still pay exactly as they did, so a Gear Puller is
 a second door rather than a relocation of the first.
 
 Read on: [supplies and salvage](supplies), [your base](your-base), [getting stronger](getting-stronger),

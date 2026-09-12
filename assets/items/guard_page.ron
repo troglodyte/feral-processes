@@ -2,6 +2,12 @@
     id: "guard_page",
     name: "Guard Page",
     description: "A trap from the edge of someone else's address space. +12% Mitigation, and one upgrade slot.",
+    // "GP" is the derivation, and `synthesise_tool_carriers` mints "Gear
+    // Puller Carrier" off the tool of that name, which derives it too. A
+    // carrier's `abbrev` is hardcoded `None` and `ToolDef` has no field to
+    // author one from, so the collision can only be settled here. "GU" is
+    // what `ItemDef::tag` would derive from "Guard" alone.
+    abbrev: Some("GU"),
     value: Some(45),
     droppable: Some([("wintermute", 0.25), ("overseer", 0.2), ("rootkit", 0.05), ("cipher", 0.04)]),
     upgrade: Some((def_percent: 12.0)),

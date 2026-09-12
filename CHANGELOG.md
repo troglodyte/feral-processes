@@ -42,6 +42,20 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.171
+
+**Guard Page reads `[GU]` on the base stock strip now, and the manual calls
+the Gear Puller by its name.** Renaming the Harness Puller two releases ago
+left two loose ends behind it. A Gear Puller Carrier put on a Depot shelf
+tagged `[GP]` — the same two letters Guard Page had carried all along — so
+the strip showed two piles under one tag and said nothing about which of
+them was filling. A tag is derived from an item's name, and a carrier takes
+the name of the tool inside it, so the authored item is the only one of the
+two that can be told to use different letters; Guard Page took `[GU]`.
+
+The manual's extraction page had also gone on calling the tool a Harness
+Puller throughout, which is a thing the game no longer has.
+
 ## 0.13.170
 
 **Demolishing a building now hands back everything it was holding.** A Depot

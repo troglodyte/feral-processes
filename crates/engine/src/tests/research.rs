@@ -1942,7 +1942,7 @@ fn a_research_node_reports_everything_it_hands_over() {
         "routines lead, in the order the node authored them: {line:?}"
     );
     assert!(
-        line.contains("Core Tap") && line.contains("Harness Puller"),
+        line.contains("Core Tap") && line.contains("Gear Puller"),
         "tools are named too, after the routines: {line:?}"
     );
 }

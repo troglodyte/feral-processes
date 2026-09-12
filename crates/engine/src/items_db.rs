@@ -519,10 +519,14 @@ impl ItemDb {
                     upgrade: None,
                     // A disk is installed, not slept against.
                     enables_rest: false,
-                    // Every disk derives the same family tag, "ED", and that
-                    // is harmless rather than a collision: nothing puts a
-                    // disk into a `Stock`, so no disk can reach the base
-                    // stock strip that tags are for.
+                    // Every disk derives the same family tag, "ED" — the
+                    // one place `ItemDef::tag`'s per-item promise does not
+                    // hold. Two disks sitting in one Depot do draw two "ED"
+                    // rows on the stock strip, so this is a known gap rather
+                    // than the impossibility it was once documented as;
+                    // `no_two_shipped_stock_items_share_a_tag` excludes the
+                    // family because no per-disk `abbrev` could be authored
+                    // for a derived item anyway.
                     abbrev: None,
                 },
             );
@@ -593,11 +597,17 @@ impl ItemDb {
                     reach: None,
                     upgrade: None,
                     enables_rest: false,
-                    // Every carrier derives the same family tag from
-                    // "Carrier", harmless for `synthesise_etched_disks`'s
-                    // reason: excluded from `game::caravan`'s stock pool,
-                    // a carrier can never reach the base stock strip tags
-                    // are for.
+                    // `ItemDef::tag` takes the first two words' initials,
+                    // so a carrier derives its *tool's* tag rather than a
+                    // shared "Carrier" one — distinct per tool, which is
+                    // what the strip wants. And a carrier does reach that
+                    // strip: being off `game::caravan`'s stock pool only
+                    // stops one being *bought*, and a forged one put into a
+                    // Depot lists as `Material` like any other cargo. A
+                    // collision with an authored item is therefore settled
+                    // on that item's own `abbrev` — `guard_page.ron` is the
+                    // one shipped case — because there is no `ToolDef` field
+                    // to author this one from.
                     abbrev: None,
                 },
             );

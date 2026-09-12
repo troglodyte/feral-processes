@@ -82,6 +82,21 @@ const TURN_ARROW_GAP: f32 = 2.0;
 /// something it does not know.
 const REACH_WASH_ALPHA: f32 = 0.13;
 
+/// How thickly the reach field's outer edge is drawn.
+///
+/// **The boundary is what makes the field findable, and the wash above is
+/// what makes it readable.** At 0.13 of one hue over a near-black tile the
+/// wash is legible only to somebody already looking at the right part of the
+/// board; raising it far enough to catch the eye is the thing its own comment
+/// refuses, since the terrain kind underneath is the other half of what a
+/// cell is worth stepping to. A line at full strength spends no ink inside
+/// the field at all.
+///
+/// Drawn along the field's **boundary** and not around each of its cells:
+/// every cell outlined whole is a grid of boxes, which reads as sixty marks
+/// rather than as one area, and the eye has to count them to find the edge.
+const REACH_EDGE_PX: f32 = 1.5;
+
 /// The three points of that arrow, given the top-left of the acting body's
 /// tile and how far this frame's bob has lifted it.
 ///
@@ -95,8 +110,7 @@ fn turn_arrow(px: f32, py: f32, tile_px: f32, lift: f32) -> [(f32, f32); 3] {
     [(cx - half, base), (cx + half, base), (cx, point)]
 }
 
-/// Draws the whole battle map, and reports where the acting body stands so
-/// the caller can hang the turn strip and the compass-slot readout off it.
+/// Draws the whole battle map.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn draw_tactical_map(
     view: &TacticalView,
@@ -113,8 +127,33 @@ pub(super) fn draw_tactical_map(
     // The camera follows whoever is acting — the "watch" override's job,
     // done here off the view rather than through `App::watch_center`,
     // which reads a world `Position` a body on a battle map does not have.
-    let center = acting_cell(view).unwrap_or((view.board.side / 2, view.board.side / 2));
-    let (off_x, off_y) = fx.camera_offset(center, painter.delta());
+    //
+    // **Through `Fx::battle_center` and not off the view directly.** A turn
+    // is handed on inside the same call that resolves the blow, so the acting
+    // body *is* the next one the instant an attack lands; aimed at that, the
+    // camera walks away from the attacker while its streak is still in flight
+    // and its hit flash still lit. The dwell lives in `Fx` because it is
+    // state across frames, which a renderer has none of.
+    let center = fx
+        .battle_center(acting_body(view).map(|body| (body.entity, body.cell)))
+        .unwrap_or((view.board.side / 2, view.board.side / 2));
+    // **No lag clamp, unlike the surface map.** `CAMERA_MAX_LAG` buys that
+    // map a trailing edge its one extra ring of tiles can cover; this loop
+    // walks the whole board and skips what falls outside the pane, so there
+    // is no blank edge to expose — and at one tile the move between two
+    // bodies standing apart is a teleport rather than a pan.
+    let (off_x, off_y) = fx.camera_offset(center, painter.delta(), None);
+    // Every draw below is gated on this. The camera is held on the body that
+    // acted *last*, so the acting body, the arrow over its head and a cursor
+    // opened on its cell can each be an arbitrary distance off centre while
+    // the pan runs — and the pane is a region of a shared screen, so
+    // anything drawn outside it lands on the HUD.
+    let on_pane = |px: f32, py: f32| {
+        px < pane.x + pane.w
+            && py < pane.y + pane.h
+            && px + tile_px > pane.x
+            && py + tile_px > pane.y
+    };
 
     painter.rect(
         pane.x,
@@ -133,11 +172,7 @@ pub(super) fn draw_tactical_map(
             tile_px,
             pane,
         );
-        if px >= pane.x + pane.w
-            || py >= pane.y + pane.h
-            || px + tile_px <= pane.x
-            || py + tile_px <= pane.y
-        {
+        if !on_pane(px, py) {
             continue;
         }
         painter.rect(px, py, tile_px - 1.0, tile_px - 1.0, cell_color(kind));
@@ -163,6 +198,31 @@ pub(super) fn draw_tactical_map(
                 tile_px - 1.0,
                 Color::new(c.r, c.g, c.b, REACH_WASH_ALPHA),
             );
+            // The field's own edge, drawn a side at a time: a side whose
+            // neighbour is reachable too is interior and is left alone. The
+            // holes get outlined as well — a body and a `Blocked` cell are
+            // both walls in `reach::movement_field`, so a gap in the field
+            // is a cell that genuinely cannot be stepped on, and saying so
+            // is the same answer as the outer edge gives.
+            let far = tile_px - 1.0;
+            for (dx, dy, from, to) in [
+                (0, -1, (0.0, 0.0), (far, 0.0)),
+                (0, 1, (0.0, far), (far, far)),
+                (-1, 0, (0.0, 0.0), (0.0, far)),
+                (1, 0, (far, 0.0), (far, far)),
+            ] {
+                if view.reachable.contains(&(cell.0 + dx, cell.1 + dy)) {
+                    continue;
+                }
+                painter.line(
+                    px + from.0,
+                    py + from.1,
+                    px + to.0,
+                    py + to.1,
+                    REACH_EDGE_PX,
+                    palette::PLAN,
+                );
+            }
         }
         // What the aim would land on. Over the reach wash, because a routine
         // resolves wherever it is aimed whether or not the body could walk
@@ -188,11 +248,7 @@ pub(super) fn draw_tactical_map(
             tile_px,
             pane,
         );
-        if px >= pane.x + pane.w
-            || py >= pane.y + pane.h
-            || px + tile_px <= pane.x
-            || py + tile_px <= pane.y
-        {
+        if !on_pane(px, py) {
             continue;
         }
         draw_body(body, painter, px, py, tile_px, glyph_px);
@@ -215,9 +271,11 @@ pub(super) fn draw_tactical_map(
     // lifts only, because that rest position is `TURN_ARROW_GAP` off the
     // body's head and a down-swing would spend it.
     //
-    // No pane-bounds check, unlike the loops above: `center` is this body's
-    // own cell, so it is drawn within `Fx`'s one tile of camera lag of the
-    // middle of the pane and can never be at an edge to hang off.
+    // Bounds-checked like the loops above, and it was not always: `center`
+    // used to be this body's own cell within one tile of camera lag, so the
+    // arrow could never reach an edge to hang off. `Fx::battle_center` holds
+    // the camera on the body that acted *last*, which is exactly what makes
+    // the acting body's own tile reachable from anywhere on the board.
     if let Some(body) = acting_body(view) {
         let (px, py) = tile_origin_px(
             body.cell,
@@ -227,14 +285,16 @@ pub(super) fn draw_tactical_map(
             tile_px,
             pane,
         );
-        painter.poly(
-            &turn_arrow(px, py, tile_px, fx.staffed_bob(body.entity)),
-            if body.is_hostile {
-                palette::THREAT
-            } else {
-                palette::PLAN
-            },
-        );
+        if on_pane(px, py) {
+            painter.poly(
+                &turn_arrow(px, py, tile_px, fx.staffed_bob(body.entity)),
+                if body.is_hostile {
+                    palette::THREAT
+                } else {
+                    palette::PLAN
+                },
+            );
+        }
     }
 
     // Over the bodies, because a blow travelling to a body passes in front
@@ -254,7 +314,9 @@ pub(super) fn draw_tactical_map(
         tile_px,
     );
 
-    // Last, so the cursor is never under a body it is pointing at.
+    // Last, so the cursor is never under a body it is pointing at — and
+    // bounds-checked for the arrow's reason: it opens on the acting body's
+    // own cell, which the camera need not be looking at yet.
     if let Some(cell) = cursor {
         let (px, py) = tile_origin_px(
             cell,
@@ -264,7 +326,9 @@ pub(super) fn draw_tactical_map(
             tile_px,
             pane,
         );
-        painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, palette::EMPHASIS);
+        if on_pane(px, py) {
+            painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, palette::EMPHASIS);
+        }
     }
 }
 
@@ -277,11 +341,6 @@ pub(super) fn draw_tactical_map(
 fn acting_body(view: &TacticalView) -> Option<&TacticalBody> {
     let acting = view.order.get(view.active?)?.entity;
     view.bodies.iter().find(|b| b.entity == acting)
-}
-
-/// Where the body whose turn it is stands.
-pub(super) fn acting_cell(view: &TacticalView) -> Option<(i32, i32)> {
-    acting_body(view).map(|b| b.cell)
 }
 
 /// One body: its art or its glyph, its con read, and what is left of it.
@@ -601,7 +660,7 @@ mod tests {
         let mut game = fighting();
         let view = game.tactical_view().expect("the fight is open");
         let mut fx = Fx::new();
-        let cell = acting_cell(&view).expect("somebody is acting");
+        let cell = acting_body(&view).expect("somebody is acting").cell;
         let (_, with) = with_painter(|p| {
             draw_tactical_map(&view, Some(cell), &[], &mut fx, p, pane(), 32.0, 24)
         });
@@ -924,6 +983,226 @@ mod tests {
         view.player_turn = false;
         let rows = action_bar(Mode::TacticalBattle, &view);
         assert!(rows.iter().all(|(k, _)| k.is_empty()));
+    }
+
+    /// Where one body's glyph was drawn, for a caller comparing the framing
+    /// of two frames.
+    ///
+    /// The glyph and not the tile under it: a cell's own rect is one of
+    /// several hundred identical boxes, and a body's ink is the only thing on
+    /// this grid that can be named.
+    fn glyph_box(shapes: &[bevy_egui::egui::epaint::ClippedShape], glyph: char) -> Option<Rect> {
+        crate::paint::painted_text_boxes(shapes)
+            .into_iter()
+            .find(|(_, text, _)| text == &glyph.to_string())
+            .map(|(_, _, r)| r)
+    }
+
+    /// The camera stays on the body that just acted, and moves once the blow
+    /// has been read.
+    ///
+    /// **The whole point of the dwell.** `Game::hand_on_turn` fires inside
+    /// the same call that resolves an attack, so the acting body is the next
+    /// one the instant a blow lands; a camera aimed at that walks off the
+    /// attacker while the streak is still in flight.
+    ///
+    /// Measured by where an *unrelated* body's glyph lands, which moves only
+    /// when the framing does — the held frame must be pixel-identical to the
+    /// one before it, and the frame past the dwell must not be.
+    #[test]
+    fn the_camera_holds_the_body_that_just_acted_and_then_moves() {
+        let mut game = fighting();
+        let view = game.tactical_view().expect("the fight is open");
+        let acting = view.active.expect("somebody is acting");
+        let next = (acting + 1) % view.order.len();
+        let (first, second) = (view.order[acting].entity, view.order[next].entity);
+        assert_ne!(first, second, "the order has one rung, so this is vacuous");
+        let cell_of = |e| {
+            view.bodies
+                .iter()
+                .find(|b| b.entity == e)
+                .expect("a body in the order stands on the board")
+                .cell
+        };
+        assert_ne!(
+            cell_of(first),
+            cell_of(second),
+            "both bodies stand on one cell, so no framing could differ"
+        );
+        // The framing is read off the body that *acted*: it is drawn in all
+        // three frames and is where the camera is supposed to stay. Its
+        // glyph has to be the only one of its kind on the board, or another
+        // body wearing it answers instead.
+        let glyph = view
+            .bodies
+            .iter()
+            .find(|b| b.entity == first)
+            .expect("the acting body stands on the board")
+            .glyph;
+        assert_eq!(
+            view.bodies.iter().filter(|b| b.glyph == glyph).count(),
+            1,
+            "two bodies wear {glyph:?}, so a glyph box cannot name one of them"
+        );
+
+        let mut handed_on = view.clone();
+        handed_on.active = Some(next);
+
+        let mut fx = Fx::new();
+        let frame = |fx: &mut Fx, at: f64, v: &TacticalView| {
+            fx.begin_frame(at, Vec::new(), Vec::new(), Vec::new(), true);
+            let (_, shapes) =
+                with_painter(|p| draw_tactical_map(v, None, &[], fx, p, pane(), 32.0, 24));
+            shapes
+        };
+
+        let acted = frame(&mut fx, 0.0, &view);
+        let held = frame(&mut fx, 0.02, &handed_on);
+        let released = frame(&mut fx, crate::fx::CAMERA_DWELL_SECONDS + 0.01, &handed_on);
+
+        let (a, b, c) = (
+            glyph_box(&acted, glyph),
+            glyph_box(&held, glyph),
+            glyph_box(&released, glyph),
+        );
+        assert!(a.is_some(), "the body that acted was not drawn at all");
+        assert_eq!(
+            a, b,
+            "the camera moved off the body that acted before the blow could be read"
+        );
+        assert_ne!(
+            b, c,
+            "the camera never left the body that acted, so the dwell is a freeze"
+        );
+    }
+
+    /// Nothing is drawn outside the map pane, even mid-pan.
+    ///
+    /// The acting body's tile used to be within one tile of pane centre by
+    /// construction, so the arrow over its head and the aim cursor on its
+    /// cell were both drawn unchecked. Holding the camera on the body that
+    /// acted *last* makes that tile reachable from anywhere on the board,
+    /// and the pane is a region of a shared screen: a mark drawn outside it
+    /// lands on the HUD.
+    #[test]
+    fn nothing_is_drawn_outside_the_pane_while_the_camera_pans() {
+        use crate::paint::{painted_poly_points, painted_rect_stroke_boxes};
+
+        let mut game = fighting();
+        let view = game.tactical_view().expect("the fight is open");
+        let acting = view.active.expect("somebody is acting");
+        // A pane three tiles across, so a body a few cells off centre is
+        // unambiguously outside it.
+        let tight = Rect::new(40.0, 40.0, 200.0, 200.0);
+        let far = (view.board.side - 1, view.board.side - 1);
+
+        let mut far_away = view.clone();
+        let acting_entity = far_away.order[acting].entity;
+        for body in &mut far_away.bodies {
+            if body.entity == acting_entity {
+                body.cell = far;
+            }
+        }
+
+        let mut fx = Fx::new();
+        // Latch the camera on the board's middle, then hand the turn to a
+        // body standing in the far corner inside the dwell.
+        let mut middle = view.clone();
+        for body in &mut middle.bodies {
+            if body.entity == acting_entity {
+                body.cell = (view.board.side / 2, view.board.side / 2);
+            }
+        }
+        fx.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), true);
+        with_painter(|p| draw_tactical_map(&middle, None, &[], &mut fx, p, tight, 32.0, 24));
+
+        fx.begin_frame(0.02, Vec::new(), Vec::new(), Vec::new(), true);
+        let (_, shapes) = with_painter(|p| {
+            draw_tactical_map(&far_away, Some(far), &[], &mut fx, p, tight, 32.0, 24)
+        });
+
+        let inside = |x: f32, y: f32| {
+            x >= tight.x - 1.0
+                && y >= tight.y - 1.0
+                && x <= tight.x + tight.w + 1.0
+                && y <= tight.y + tight.h + 1.0
+        };
+        for colour in [palette::THREAT, palette::PLAN] {
+            for tri in painted_poly_points(&shapes, colour) {
+                for (x, y) in tri {
+                    assert!(
+                        inside(x, y),
+                        "an arrow point landed at {x},{y}, outside the pane"
+                    );
+                }
+            }
+        }
+        for r in painted_rect_stroke_boxes(&shapes, palette::EMPHASIS) {
+            assert!(
+                inside(r.min.x, r.min.y) && inside(r.max.x, r.max.y),
+                "the aim cursor was drawn at {r:?}, outside the pane"
+            );
+        }
+    }
+
+    /// The reach field is *outlined*, and the outline is its boundary rather
+    /// than a box around every cell.
+    ///
+    /// The wash alone is 0.13 of one hue over a near-black tile, which is
+    /// legible only to somebody already looking at the right part of the
+    /// board; the border at full strength is what makes it findable at a
+    /// glance. Counted against the field's own perimeter rather than
+    /// asserted to be non-zero, because outlining every reachable cell whole
+    /// draws lines too and is the failure this is written against.
+    ///
+    /// A pane wide enough for the whole board, deliberately: the draw loop
+    /// skips a cell outside it, so a tighter pane would make the expected
+    /// count depend on where the acting body happens to stand.
+    #[test]
+    fn the_reach_field_is_outlined_along_its_boundary() {
+        use crate::paint::painted_line_count_in;
+
+        let mut game = fighting();
+        let view = game.tactical_view().expect("the fight is open");
+        assert!(
+            !view.reachable.is_empty(),
+            "the acting body can reach nowhere, so this test would be vacuous"
+        );
+        let wide = Rect::new(0.0, 0.0, 1400.0, 1000.0);
+        let mut fx = Fx::new();
+        let (_, shapes) =
+            with_painter(|p| draw_tactical_map(&view, None, &[], &mut fx, p, wide, 32.0, 24));
+
+        let expected: usize = view
+            .reachable
+            .iter()
+            .map(|&(x, y)| {
+                [(0, -1), (0, 1), (-1, 0), (1, 0)]
+                    .iter()
+                    .filter(|&&(dx, dy)| !view.reachable.contains(&(x + dx, y + dy)))
+                    .count()
+            })
+            .sum();
+        assert_eq!(
+            painted_line_count_in(&shapes, palette::PLAN),
+            expected,
+            "the boundary drawn is not the field's own perimeter"
+        );
+    }
+
+    /// ...and nothing is outlined when the acting body can reach nowhere, so
+    /// the census above cannot be passing on a border drawn unconditionally.
+    #[test]
+    fn an_empty_reach_field_is_not_outlined() {
+        use crate::paint::painted_line_count_in;
+
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open");
+        view.reachable.clear();
+        let mut fx = Fx::new();
+        let (_, shapes) =
+            with_painter(|p| draw_tactical_map(&view, None, &[], &mut fx, p, pane(), 32.0, 24));
+        assert_eq!(painted_line_count_in(&shapes, palette::PLAN), 0);
     }
 
     /// The reach wash is drawn off `reachable` alone, so the wild side's

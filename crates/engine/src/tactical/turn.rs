@@ -20,13 +20,17 @@ use crate::world::WorldMap;
 
 /// What one press of a direction did.
 ///
-/// Three answers rather than a `bool` because walking off the edge is not a
-/// refused step and not an ordinary one either — see `Game::tactical_step`.
+/// Four answers rather than a `bool` because three of them are not ordinary
+/// steps: walking off the edge leaves the fight, walking into something
+/// hostile swings at it, and neither is a refusal — see
+/// `Game::tactical_step`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StepOutcome {
     Moved,
     /// The body walked off the board and out of the fight.
     Departed,
+    /// The cell held something hostile, so the step was spent as a swing.
+    Struck,
     Refused,
 }
 
@@ -157,6 +161,23 @@ impl Game {
     /// express it is to walk out — so the edge is not a wall, and the body
     /// leaves the board, the turn order and the fight together.
     ///
+    /// **Walking into something hostile is a swing.** `move_player`'s ladder
+    /// one space over: an occupied cell answered `Refused`, so an arrow key
+    /// pressed at the body a whole turn had been spent closing on did
+    /// nothing at all. The swing is `Game::tactical_attack` and not a second
+    /// spelling of one, so the range, the sight line, a reach weapon's
+    /// sweep, the cloak refusal and the hand-on all come from there — which
+    /// also means a bump **ends the turn**, because the action is what a
+    /// swing costs.
+    ///
+    /// Two gates on it, and neither is a new predicate. `Hostile`, because
+    /// friendly fire is legal through the aim cursor but an arrow key is not
+    /// an aim, and a bump that hit whatever was in the way would make
+    /// crossing your own line a coin flip. And `tactical_awaits_input`,
+    /// which is false for exactly the bodies the AI's beat loop drives —
+    /// this is the door that loop's walk goes through, so without it a
+    /// hostile could spend its action part-way along a path it planned.
+    ///
     /// Refused once the body has acted, because the action ends the turn.
     pub fn tactical_step(&mut self, dir: (i32, i32)) -> StepOutcome {
         let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
@@ -179,6 +200,21 @@ impl Game {
         if !inside {
             self.depart_tactical(actor);
             return StepOutcome::Departed;
+        }
+        // Above the movement gates below it, deliberately: a swing is priced
+        // in the action and not in steps, so a body that has walked its whole
+        // allowance can still finish the approach it spent it on.
+        let bumped = battle.occupant(to).filter(|&target| {
+            self.world.get::<Hostile>(target).is_some() && self.tactical_awaits_input()
+        });
+        if let Some(target) = bumped {
+            return match self.tactical_attack(target) {
+                true => StepOutcome::Struck,
+                // Out of reach, behind cover, or cloaked —
+                // `tactical_attack`'s own refusals, and the cell is occupied
+                // either way, so there is no step to fall through to.
+                false => StepOutcome::Refused,
+            };
         }
         let Some(cost) = cost else {
             return StepOutcome::Refused;

@@ -937,6 +937,13 @@ relying on one, and correct all three places if it has moved.
 - **A body is spliced into tactical initiative *behind* the cursor, never
   ahead of it** — `TacticalBattle::insert_after_cursor` takes no index
   because `turn + 1` is the only safe one.
+- **The battle camera is held on the body that acted and the dwell is a
+  fraction of the turn beat**, because the turn is handed on inside the call
+  that resolves the blow.
+- **The battle map passes no lag clamp, and the turn arrow and aim cursor are
+  bounds-checked because of it.**
+- **Walking into a hostile is a swing, and its two gates are `Hostile` and
+  `Game::tactical_awaits_input`** — neither a new predicate.
 
 ### Items, gear and economy
 

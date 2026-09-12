@@ -370,9 +370,15 @@ impl Game {
         let dir = (next.0 - from.0, next.1 - from.1);
         match self.tactical_step(dir) {
             StepOutcome::Moved => true,
+            // `Struck` is unreachable from here — the bump is gated on
+            // `tactical_awaits_input`, which is false for every body this
+            // loop drives — and is grouped with the refusals rather than
+            // given an arm of its own: if it ever did fire, the action is
+            // spent and the rest of the walk is owed to nobody.
+            //
             // `get_resource_mut`, because a departure closes the fight and
             // takes the resource with it.
-            StepOutcome::Departed | StepOutcome::Refused => {
+            StepOutcome::Departed | StepOutcome::Refused | StepOutcome::Struck => {
                 if let Some(mut battle) = self.world.get_resource_mut::<TacticalBattle>() {
                     battle.commit_walk(Vec::new());
                 }

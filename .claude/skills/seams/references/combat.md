@@ -1083,6 +1083,68 @@
   in the same instant. See
   `seam:a-boltcue-lives-in-tacticalbattle-cells-and-is-its-own-queue`.
 
+- **The battle camera is held on the body that acted, and the dwell is
+  derived from the turn beat.** `Game::hand_on_turn` fires inside the same
+  call that resolves an attack, so `TacticalView::active` already names the
+  *next* body the instant the swing lands — and the camera was aimed at
+  `acting_cell(view)`, the live answer, which put every blow off screen with
+  its streak still in flight. Aiming it there again is the "simplification"
+  to refuse: it reads as deleting pointless indirection. `Fx::battle_center`
+  holds a `CameraHold` instead, and its `release` is pushed forward on every
+  frame the same body is still acting, so the dwell is measured from the
+  hand-over without anything having to notice one — which also keeps a
+  **walk** centred, since its steps are six a second and a hold would fall a
+  cell behind. That collapses to **two match arms**: a body still acting and
+  a body being latched onto fresh want the identical write.
+  `CAMERA_DWELL_SECONDS` is 0.55 of the turn beat on `BOLT_SECONDS`' rule —
+  0.344s against `HIT_FLASH_SECONDS` 0.30, so the blow is still lit when the
+  hold expires and the pan has the rest of the beat to land. The `seen`
+  field is what tells a board coming back on screen from one that never
+  left it, without which the second fight of a session pans in from wherever
+  the surface map left the camera. **The pan cost two bounds checks**:
+  `camera_step` takes its clamp as a parameter because `CAMERA_MAX_LAG`'s
+  argument is the surface map's one extra ring of tiles and applies to
+  nothing else, and at one tile every hand-over was a cut — but the turn
+  arrow and the aim cursor were both drawn *unchecked*, on the grounds that
+  the acting body was within one tile of pane centre by construction, and
+  the map pane is a region of a shared screen. The dwell's own test trap:
+  read off a third "witness" body it is **vacuous**, because a lone-hostile
+  fight has two or three bodies and the player is usually one of the two in
+  the order, so the glyph box is `None` in both frames and `assert_eq!` of
+  two `None`s passes. See
+  `seam:the-battle-camera-is-held-on-the-body-that-acted`.
+- **Walking into a hostile is a swing, and both of its gates are doors that
+  already existed.** `move_player`'s bump ladder one space over: an occupied
+  cell answered `Refused`, so an arrow key pressed at the body a whole turn
+  had been spent closing on did nothing. The swing is `tactical_attack` and
+  not a second spelling of one, so the range, the sight check, a reach
+  weapon's sweep, the cloak refusal, the reap and the hand-on all come from
+  there — and two things fall out rather than being written: a bump **ends
+  the turn**, because the action is what a swing costs, and a bump into a
+  cloaked body is refused and then falls through to the occupied-cell
+  refusal, so it leaks nothing that seam has not already conceded. It is
+  read **above** the movement gates, because a swing is priced in the action
+  and a body that has walked its whole allowance can still finish the
+  approach it spent it on. The gates are `Hostile` — friendly fire through
+  the aim cursor is full and legal, but an arrow key is not an aim, and a
+  bump that hit whatever was in the way makes crossing your own line a coin
+  flip — and `tactical_awaits_input`, which is false for exactly the bodies
+  the beat loop drives: `tactical_step` is the door that loop's walk goes
+  through, so without it a hostile spends its action part-way along a path
+  it planned, on its own side. Asked inside `tactical_step` it is
+  caller-independent, since the acting body *is* the stepping body, which is
+  what keeps it from becoming the third predicate `TacticalView::player_turn`
+  already was. `StepOutcome::Struck` is a fourth variant rather than a
+  `Moved` that lies; its arm in `step_along_walk` is grouped with the
+  refusals, because the gate makes it unreachable and a fired one has spent
+  the action anyway. **The test trap, found by mutation**: a hostile stepping
+  into the *player* passes with the second gate deleted, because the player
+  is not `Hostile` and the first gate already refuses it — it has to field
+  two hostiles. And a landing bump cannot be forced (the move is rolled
+  first) or cloned (`Game` is not `Clone`), so it is found by rebuilding the
+  fight per stream. See
+  `seam:walking-into-a-hostile-is-a-swing-and-both-gates-are`.
+
 - **A summon's containment is omission, not a check — it never passes through
   `roster_parts()`.** `Game::fork_programs` spawns through
   `spawn_wild_creature_scaled` and strips `Hostile`/`WanderAi`,

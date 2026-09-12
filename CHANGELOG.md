@@ -42,6 +42,30 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.174
+
+**In a tactical fight the view now stays on whoever is swinging until the
+blow has landed, then slides to the next body.** It used to jump the moment
+an attack resolved, because the turn is handed on inside the same step that
+resolves it — so the streak, the flash and the damage all played out on a
+part of the board you were no longer looking at. The view now waits out the
+blow before it moves, and moves by panning rather than cutting.
+
+**The squares you can still step to are outlined.** They were already
+tinted, faintly enough that you had to know where to look to see it; the
+tint stays, because it has to leave the ground underneath readable, and the
+edge of the reachable area is now drawn as a line you can find at a glance.
+Squares you cannot enter — the one an enemy is standing on, a blocked
+one — show as holes in it.
+
+**Walking into an enemy attacks it with your weapon.** Pressing a direction
+at something in the way did nothing at all before, so the last step of a
+charge you had spent the whole turn making had to be finished by opening the
+attack menu and aiming back at the square you were already facing. The bump
+is an ordinary attack in every respect, which includes ending your turn.
+Walking into one of your own is still refused — hitting your own side stays
+something you have to aim at deliberately.
+
 ## 0.13.173
 
 **Two new routines fork a temporary program that fights beside you for the

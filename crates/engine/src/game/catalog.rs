@@ -527,6 +527,7 @@ impl Game {
             stats,
             power: self.copy_power(copy),
             reach: self.reach_line(&copy.item),
+            range: self.range_line(&copy.item),
             accuracy,
             hit_chance: crate::battle::hit_chance(accuracy, nominal.evasion),
             nominal,
@@ -548,6 +549,17 @@ impl Game {
             n => format!("once every {n} rounds"),
         };
         Some(format!("Wide swing: {}, {cadence}", reach.target.phrase()))
+    }
+
+    /// What a weapon's range is, as the inspect page says it.
+    ///
+    /// Read off the def rather than through `Game::swing_range`, which
+    /// answers for a *body* and would report a species figure for a weapon
+    /// nobody is holding — `reach_line`'s own split between what a weapon
+    /// *is* and what this instant's swing would do.
+    fn range_line(&self, item: &ItemId) -> Option<String> {
+        let range = self.world.resource::<ItemDb>().get(item.as_str())?.range?;
+        Some(format!("Range: {range} cells"))
     }
 
     /// A signed one-line summary of a gear bonus — `"14–21 DMG +3 ATK"`,

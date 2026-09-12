@@ -462,3 +462,33 @@ fn the_gear_page_says_what_a_wide_swing_lands_on() {
         "an ordinary weapon has no row to spend on a reach it does not have"
     );
 }
+
+/// A weapon that reaches says so on its own page — a range the player can
+/// only discover by being refused a swing is a mechanic with no surface.
+#[test]
+fn a_reaching_weapons_page_states_its_range() {
+    let game = Game::new(4111, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worn = game
+        .gear_detail(
+            &GearCopy::plain(ItemId::from("plasma_router")),
+            game.player_entity(),
+        )
+        .worn
+        .expect("a weapon is wearable");
+    assert_eq!(worn.range.as_deref(), Some("Range: 3 cells"));
+}
+
+/// A melee weapon states nothing — an "arm's length" row on every blade in
+/// the game is a row that stops being read.
+#[test]
+fn a_melee_weapons_page_states_no_range() {
+    let game = Game::new(4112, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let worn = game
+        .gear_detail(
+            &GearCopy::plain(ItemId::from("shim_blade")),
+            game.player_entity(),
+        )
+        .worn
+        .expect("a weapon is wearable");
+    assert!(worn.range.is_none());
+}

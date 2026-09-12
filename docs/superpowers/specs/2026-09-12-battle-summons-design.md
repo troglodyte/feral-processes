@@ -1,6 +1,6 @@
 # Battle summons: forked programs
 
-**Status:** designed, not implemented
+**Status:** implemented in 0.13.173
 
 Two routines fork a temporary program that fights beside you for the length of
 one battle and is gone when it ends. One fields a single body, one fields two

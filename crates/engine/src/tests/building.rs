@@ -4034,3 +4034,226 @@ fn a_program_that_cannot_be_restored_is_said_rather_than_lost_quietly() {
             .collect::<Vec<_>>()
     );
 }
+
+// ── What a demolition hands back ────────────────────────────────────────
+//
+// `remove_structure` returned the build-cost refund, the rig's tool and an
+// in-transit carrier, and destroyed everything a structure was *holding*.
+// A Depot's shelf is the case that reads worst — the whole point of the
+// building is to hold things — but a machine's buffers are the same units
+// and the same omission.
+
+/// Deliberately spawns a Depot with a hand-filled `output`, since the
+/// question is only what demolition does with what is standing on the shelf.
+fn depot_holding(game: &mut Game, item: &ItemId, qty: u32) -> Entity {
+    let depot = spawn_machine_at(game, "depot", 1, 0);
+    game.world
+        .get_mut::<Stock>(depot)
+        .unwrap()
+        .output
+        .insert(item.clone(), qty);
+    depot
+}
+
+fn carried(game: &Game, item: &ItemId) -> u32 {
+    let player = game.player_entity();
+    game.world.get::<Inventory>(player).unwrap().count(item)
+}
+
+#[test]
+fn demolishing_a_depot_returns_its_shelf_to_the_pack() {
+    let mut game = Game::new(7301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let cell = ItemId::from(ids::POWER_CELL);
+    let depot = depot_holding(&mut game, &cell, 40);
+
+    let before = carried(&game, &cell);
+    game.remove_structure(depot).unwrap();
+
+    assert_eq!(
+        carried(&game, &cell) - before,
+        40,
+        "a demolished Depot's shelf should come back to the pack, not evaporate"
+    );
+}
+
+/// `Stock` has two maps and both hold units the player paid for — a Lathe's
+/// `input` is ingredients a hauler walked over, not bookkeeping.
+#[test]
+fn demolishing_a_machine_returns_both_of_its_buffers() {
+    let mut game = Game::new(7302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let cell = ItemId::from(ids::POWER_CELL);
+    let frag = ItemId::from(ids::PORTAL_FRAGMENT);
+    let lathe = spawn_machine_at(&mut game, "lathe", 1, 0);
+    {
+        let mut stock = game.world.get_mut::<Stock>(lathe).unwrap();
+        stock.input.insert(cell.clone(), 5);
+        stock.output.insert(frag.clone(), 3);
+    }
+
+    let (cell_before, frag_before) = (carried(&game, &cell), carried(&game, &frag));
+    game.remove_structure(lathe).unwrap();
+
+    assert_eq!(
+        carried(&game, &cell) - cell_before,
+        5,
+        "the input buffer's units should come back too"
+    );
+    assert_eq!(
+        carried(&game, &frag) - frag_before,
+        3,
+        "the output buffer's units should come back too"
+    );
+}
+
+/// The deliberate half of the rule. A sweep is a loss, and handing the shelf
+/// back would make losing a building partly a payday — the 30% build refund
+/// is demolish-only for the same reason.
+#[test]
+fn a_sweep_destroys_a_depots_shelf_rather_than_returning_it() {
+    let mut game = Game::new(7303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let cell = ItemId::from(ids::POWER_CELL);
+    let depot = depot_holding(&mut game, &cell, 40);
+    game.world
+        .entity_mut(depot)
+        .insert(crate::components::Durability { hp: 10, max_hp: 10 });
+
+    let before = carried(&game, &cell);
+    game.damage_structure(depot, 10, "Depot");
+
+    assert!(
+        game.world.get::<Stock>(depot).is_none(),
+        "the fixture must actually destroy the Depot or this asserts nothing"
+    );
+    assert_eq!(
+        carried(&game, &cell),
+        before,
+        "a GC Entropy Sweep destroys what the Depot was holding; only a \
+         deliberate demolition hands it back"
+    );
+}
+
+/// The Home cascade takes every other structure with it, and the refund
+/// already cascades uniformly — so the shelves must too, or founding a
+/// second base costs the player everything the first one was holding.
+#[test]
+fn a_home_cascade_returns_every_demolished_shelf() {
+    let mut game = Game::new(7304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let cell = ItemId::from(ids::POWER_CELL);
+    depot_holding(&mut game, &cell, 40);
+    let second = spawn_machine_at(&mut game, "depot", 0, 1);
+    game.world
+        .get_mut::<Stock>(second)
+        .unwrap()
+        .output
+        .insert(cell.clone(), 15);
+    let home = game
+        .view_entities(10, 10)
+        .into_iter()
+        .find(|e| e.is_home)
+        .unwrap()
+        .entity;
+
+    let before = carried(&game, &cell);
+    game.remove_structure(home).unwrap();
+
+    assert_eq!(
+        carried(&game, &cell) - before,
+        55,
+        "both demolished Depots' shelves should come back, not just the first"
+    );
+}
+
+/// A rack's shelf is instanced and goes to `DownedPrograms`, not `Inventory`
+/// — and that store is capped where the pack is not.
+#[test]
+fn demolishing_a_quarantine_rack_returns_its_programs() {
+    use crate::components::Racked;
+    use crate::items::DownedProgram;
+    let mut game = Game::new(7305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let rack = spawn_machine_at(&mut game, "quarantine_rack", 1, 0);
+    let shelved = DownedProgram {
+        species: "scrapper".to_string(),
+        level: 4,
+        rarity: crate::components::Rarity::Ordinary,
+        boss: false,
+        condition: 70,
+        carried: None,
+    };
+    game.world
+        .entity_mut(rack)
+        .insert(Racked(vec![shelved.clone(), shelved]));
+
+    let player = game.player_entity();
+    let before = game
+        .world
+        .get::<crate::components::DownedPrograms>(player)
+        .map_or(0, |s| s.0.len());
+    game.remove_structure(rack).unwrap();
+    let after = game
+        .world
+        .get::<crate::components::DownedPrograms>(player)
+        .map_or(0, |s| s.0.len());
+
+    assert_eq!(
+        after - before,
+        2,
+        "a demolished rack's programs should come back to the player's store"
+    );
+}
+
+/// `DownedPrograms` is capped, so unlike the pack this return really can
+/// refuse — and it has to say so rather than going quiet.
+/// `return_carried_program`'s third rung, at the second site that owes it.
+#[test]
+fn a_full_store_is_told_what_a_demolished_rack_could_not_return() {
+    use crate::components::{DownedPrograms, Racked};
+    use crate::items::DownedProgram;
+    let mut game = Game::new(7306, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    let shelved = DownedProgram {
+        species: "scrapper".to_string(),
+        level: 4,
+        rarity: crate::components::Rarity::Ordinary,
+        boss: false,
+        condition: 70,
+        carried: None,
+    };
+    let player = game.player_entity();
+    game.world.entity_mut(player).insert(DownedPrograms(
+        std::iter::repeat_n(shelved.clone(), crate::tuning::MAX_DOWNED_PROGRAMS).collect(),
+    ));
+    let rack = spawn_machine_at(&mut game, "quarantine_rack", 1, 0);
+    game.world
+        .entity_mut(rack)
+        .insert(Racked(vec![shelved.clone()]));
+
+    game.remove_structure(rack).unwrap();
+
+    assert_eq!(
+        game.world.get::<DownedPrograms>(player).unwrap().0.len(),
+        crate::tuning::MAX_DOWNED_PROGRAMS,
+        "a full store must not overflow"
+    );
+    assert!(
+        game.message_history(200)
+            .iter()
+            .any(|m| m.text.contains("lost with the machine")),
+        "what the store could not take must be announced, not dropped in \
+         silence: {:?}",
+        game.message_history(200)
+            .iter()
+            .map(|m| m.text.clone())
+            .collect::<Vec<_>>()
+    );
+}

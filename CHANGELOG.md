@@ -42,6 +42,28 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.170
+
+**Demolishing a building now hands back everything it was holding.** A Depot
+came down with its whole shelf inside it and the units were simply gone — no
+warning, no line in the log, and no confirmation step outside the one
+demolishing a Home already had. The same went for the stock in a machine's
+buffers and for the programs standing on a Quarantine Rack. Demolition
+already gave back a share of the build cost, a rig's fitted tool, and a
+program a hauler happened to be carrying at the time, so what the building
+was actually holding was the one thing it destroyed.
+
+All of it comes back to your pack now, the ingredients waiting in a machine's
+input hopper included. A rack's programs come back the same way, and when
+there is no room left for them you are told which ones could not be taken
+rather than losing them quietly. Demolishing a Home still brings every other
+structure down with it, and now returns all of their contents too.
+
+**A GC Entropy Sweep still destroys what it takes down**, and that is
+deliberate. Losing a building to a sweep is a loss; only a demolition you
+chose hands the contents back, which is the rule the build-cost refund has
+always followed.
+
 ## 0.13.169
 
 **Wild programs scale with your party now, in how hard they hit and how many

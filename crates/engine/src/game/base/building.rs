@@ -479,6 +479,80 @@ impl Game {
         }
     }
 
+    /// Empties `target`'s `Stock` and reports what came off it, so the
+    /// caller can fold it into the one "You recover ..." sentence a
+    /// demolition already writes.
+    ///
+    /// **Both maps.** A machine's `input` is ingredients a hauler walked
+    /// over and set down; they are the same units the player paid for as
+    /// the `output` beside them, and dropping only the visible half is the
+    /// same omission one level down.
+    ///
+    /// Drains rather than reading, because the entity is about to be
+    /// despawned and a half-emptied `Stock` would be a second way to
+    /// describe the same cell.
+    fn drain_stock(&mut self, target: Entity) -> Vec<(ItemId, u32)> {
+        let Some(mut stock) = self.world.get_mut::<Stock>(target) else {
+            return Vec::new();
+        };
+        let mut taken: Vec<(ItemId, u32)> = Vec::new();
+        for (item, qty) in std::mem::take(&mut stock.input)
+            .into_iter()
+            .chain(std::mem::take(&mut stock.output))
+        {
+            if qty == 0 {
+                continue;
+            }
+            match taken.iter_mut().find(|(i, _)| *i == item) {
+                Some((_, total)) => *total += qty,
+                None => taken.push((item, qty)),
+            }
+        }
+        taken
+    }
+
+    /// Hands a demolished rack's shelf back to the player's own store.
+    ///
+    /// `return_carried_program`'s third rung at the second site that owes
+    /// it: `DownedPrograms` is capped where `Inventory` is not, so this
+    /// return can genuinely refuse, and what it cannot take is announced
+    /// rather than dropped in silence.
+    ///
+    /// **It does not try another rack first, and that is the difference
+    /// from `return_carried_program`.** A Home cascade demolishes every
+    /// rack in the base, so a sideways move would depend on despawn order
+    /// for whether a program survived; and a player demolishing one rack
+    /// beside another asked for their things back, not for them to be
+    /// shuffled next door.
+    fn return_racked_programs(&mut self, rack: Entity) {
+        let Some(shelf) = self
+            .world
+            .get_mut::<crate::components::Racked>(rack)
+            .map(|mut r| std::mem::take(&mut r.0))
+        else {
+            return;
+        };
+        let player = self.player_entity();
+        for held in shelf {
+            let room = self
+                .world
+                .get::<crate::components::DownedPrograms>(player)
+                .is_some_and(|h| h.0.len() < crate::tuning::MAX_DOWNED_PROGRAMS);
+            let label = self.downed_program_label(&held);
+            if room {
+                if let Some(mut store) = self
+                    .world
+                    .get_mut::<crate::components::DownedPrograms>(player)
+                {
+                    store.0.push(held);
+                }
+                self.log_base(format!("{label} comes back to your pack."));
+            } else {
+                self.log_base(format!("{label} is lost with the machine."));
+            }
+        }
+    }
+
     pub(crate) fn spawn_structure(
         &mut self,
         def: &StructureDef,
@@ -1079,6 +1153,9 @@ impl Game {
         let removed_count = targets.len();
 
         let mut refund: Vec<(ItemId, u32)> = Vec::new();
+        // Kept apart from `refund` only so the two can be granted under
+        // their own `LootSource`; they are merged again for the sentence.
+        let mut salvage: Vec<(ItemId, u32)> = Vec::new();
         for &target in &targets {
             let Some(target_kind) = self.world.get::<Structure>(target).map(|s| s.kind.clone())
             else {
@@ -1122,6 +1199,17 @@ impl Game {
                 self.return_carried_program(worker);
                 self.world.entity_mut(worker).remove::<(Task, Carrying)>();
             }
+            // What the building was *holding*, as against the share of its
+            // build cost accumulated above: a Depot's shelf, a machine's
+            // buffers, a rack's programs. Deliberately demolish-only — a
+            // sweep destroys these, as it destroys the refund.
+            for (item, qty) in self.drain_stock(target) {
+                match salvage.iter_mut().find(|(i, _)| *i == item) {
+                    Some((_, total)) => *total += qty,
+                    None => salvage.push((item, qty)),
+                }
+            }
+            self.return_racked_programs(target);
             // The rig's own tool is carried in exactly as a program is, and
             // comes back out the same way. `Game::return_rig_tool`.
             self.return_rig_tool(target);
@@ -1145,10 +1233,23 @@ impl Game {
         for (item, qty) in &refund {
             self.grant_loot(item.clone(), *qty, LootSource::Refund);
         }
-        let refund_note = if refund.is_empty() {
+        for (item, qty) in &salvage {
+            self.grant_loot(item.clone(), *qty, LootSource::Salvage);
+        }
+        // One sentence over both: the player is being told what landed in
+        // their pack, and which half of it was build cost and which was
+        // shelf stock is a distinction only the ledger has a use for.
+        let mut recovered: Vec<(ItemId, u32)> = refund;
+        for (item, qty) in salvage {
+            match recovered.iter_mut().find(|(i, _)| *i == item) {
+                Some((_, total)) => *total += qty,
+                None => recovered.push((item, qty)),
+            }
+        }
+        let refund_note = if recovered.is_empty() {
             String::new()
         } else {
-            let parts: Vec<String> = refund
+            let parts: Vec<String> = recovered
                 .iter()
                 .map(|(item, qty)| format!("{qty} {}", self.item_name(item)))
                 .collect();

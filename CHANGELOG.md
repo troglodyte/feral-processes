@@ -42,6 +42,19 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.179
+
+**A program's sheet no longer carries the "zone 1 — you're in 2" line under
+its name.** The line was there to warn you that a companion had fallen behind
+the sector you were standing in, but the number it led with was already the
+digit on the program's own name — "Drone 1" — so most of the row restated what
+a glance up had just told you, and what was left was a subtraction it made you
+do yourself. It was rewritten first to name what would close the gap, which
+fixed the repetition without making the row worth the space, and then removed.
+
+Nothing about falling behind has changed: a program's tier is still on its
+name, and a Recompile Kernel still brings it current.
+
 ## 0.13.178
 
 **A machine, a build site and a wall being cut now show how far along the

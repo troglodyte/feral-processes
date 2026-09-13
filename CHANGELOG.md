@@ -42,6 +42,23 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.177
+
+**On a battle map a routine can no longer be thrown through a wall.** An
+attack has always needed a clear line to what it is aimed at, but a routine
+only checked the distance — and since every area routine is thrown up to six
+squares, that meant any blast in the game landed in full through solid cover,
+yours and theirs alike. A blast is now refused outright when you cannot see
+the square you are throwing it at, and nothing is spent: no Power, no
+cooldown, and the turn is still yours. What it covers once it lands is
+measured from where it lands, so it no longer reaches around a corner either
+— though anything standing *in* the cover is caught by it rather than
+sheltered.
+
+A wedge or a line is unaffected. Those are aimed as a direction rather than at
+a square, and they already stopped at the first thing they could not see
+through, so aiming one past a wall simply makes it shorter.
+
 ## 0.13.176
 
 **You can hand a battle map over and watch it play out: press A and everyone

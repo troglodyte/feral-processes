@@ -1991,28 +1991,26 @@ fn a_full_machine_with_nowhere_to_unload_reads_as_stranded() {
     assert_eq!(stranded(&mut game, node), Some(true));
 }
 
-/// The manifest is where a player finds out their companion is behind the
-/// zone they are standing in. The tag on its name says "1"; without the
-/// player's own zone beside it that number means nothing, which is why the
-/// view carries the pair rather than the tier alone.
+/// How many of a program's bounded upgrade slots are spent, on the manifest
+/// and on the party menu's own row — two surfaces, one count, so they cannot
+/// disagree about what is left.
+///
+/// The program's *zone tier* was asserted here too until the header tag that
+/// read it was removed: the tier is already the digit on the program's name
+/// (`Game::zone_tagged_name`), so the manifest carried the pair only to print
+/// it a second time.
 #[test]
-fn the_manifest_shows_a_programs_zone_tier_against_the_players_own() {
+fn the_manifest_shows_how_many_upgrade_slots_a_program_has_spent() {
     let mut game = Game::new(640, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let pet = spawn_tamed(&mut game, 10, 3);
     game.world
         .entity_mut(pet)
         .insert((ZonePortal(1), Refactors(2)));
-    game.world.resource_mut::<crate::resources::ZoneLevel>().0 = 4;
 
     let ManifestSubject::Program(view) = game.manifest(pet).unwrap().subject else {
         panic!("a creature is a Program subject");
     };
 
-    assert_eq!(
-        (view.zone_tier, view.player_zone),
-        (1, 4),
-        "three doublings behind the ground it is standing on, and the screen has to say so"
-    );
     assert_eq!(
         (view.refactors, view.max_refactors),
         (2, crate::tuning::MAX_COMPANION_REFACTORS),

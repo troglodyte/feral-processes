@@ -2011,8 +2011,6 @@ impl Game {
                 level_cap: self.level_cap(),
                 talents_spent: self.talent_points(entity).spent,
                 talents_earned: self.talent_points(entity).earned,
-                zone_tier: self.zone_tier(entity),
-                player_zone: self.world.resource::<ZoneLevel>().0,
                 habitats: species.habitats.clone(),
                 moves: species.moves.clone(),
                 work_resource: species.work_resource.clone(),

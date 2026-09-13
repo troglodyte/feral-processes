@@ -2361,16 +2361,6 @@ pub struct ProgramManifest {
     /// derived; neither is stored anywhere.
     pub talents_spent: u32,
     pub talents_earned: u32,
-    /// The zone tier this program is scaled to (`components::ZonePortal`),
-    /// beside the zone the player is currently standing in.
-    ///
-    /// This pair is the whole reason the manifest carries either. Nothing on
-    /// screen otherwise tells a player in zone 4 that the Scrapper they have
-    /// carried since the opening ring is three doublings behind the ground
-    /// under it — the tag on its name says "1" and means nothing without the
-    /// number to compare it to.
-    pub zone_tier: u32,
-    pub player_zone: u32,
     pub habitats: Vec<Biome>,
     pub moves: Vec<MoveDef>,
     pub work_resource: Option<ItemId>,

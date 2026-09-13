@@ -25,6 +25,9 @@ fn marks(app: &mut App) -> Vec<(i32, i32)> {
         .as_mut()
         .expect("a fixture with a game")
         .marked_cells()
+        .into_iter()
+        .map(|m| m.pos)
+        .collect()
 }
 
 fn tick(app: &App) -> u64 {

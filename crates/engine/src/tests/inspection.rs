@@ -1796,6 +1796,130 @@ fn a_worked_machine_and_its_worker_never_both_wear_the_mark() {
     }
 }
 
+/// A machine's bar is its own production cycle, and a guard's post has no
+/// bar at all: nothing about a guard accumulates, so a meter read off one
+/// would sit empty forever beside a post that is doing exactly its job.
+#[test]
+fn a_machines_bar_is_its_own_cycle_and_a_guarded_one_has_none() {
+    let mut game = Game::new(1412, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 24);
+    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    place_now(&mut game, "mining_node", 3, 0).unwrap();
+    let nodes: Vec<Entity> = game
+        .structure_report()
+        .into_iter()
+        .filter(|s| s.kind == "mining_node")
+        .map(|s| s.entity)
+        .collect();
+    let (worked, guarded) = (nodes[0], nodes[1]);
+
+    let worker = spawn_tamed_on_map(&mut game, 6, 6);
+    let guard = spawn_tamed_on_map(&mut game, 6, 7);
+    game.assign_cronjob(worker, worked).unwrap();
+    game.assign_guard(guard, guarded).unwrap();
+    park_at_post(&mut game, worker, worked);
+    for _ in 0..3 {
+        game.tick();
+    }
+
+    let bar = |game: &mut Game, e: Entity| {
+        game.view_entities(40, 40)
+            .into_iter()
+            .find(|v| v.entity == e)
+            .expect("the structure is standing")
+            .job_progress
+    };
+
+    // Read against the worker's own meter rather than a hardcoded fraction:
+    // two spellings of one figure is the drift this repo keeps recording.
+    let (done, needed) = {
+        let task = game
+            .world
+            .get::<Task>(worker)
+            .expect("the worker is posted");
+        (task.progress, task.required)
+    };
+    assert!(needed > 0, "a cycle with no length is not a fixture");
+    // Or the assertion below holds against a bar pinned at zero, which is
+    // the one value a broken derivation is most likely to report.
+    assert!(
+        done > 0,
+        "three ticks at the post have to have moved the meter"
+    );
+    assert_eq!(
+        bar(&mut game, worked),
+        Some(done as f32 / needed as f32),
+        "a worked machine's bar is the cycle its own program is turning"
+    );
+    assert_eq!(
+        bar(&mut game, guarded),
+        None,
+        "a guard's meter never moves, so its post has no bar to draw"
+    );
+}
+
+/// An unstaffed machine has no bar. The bar says *somebody is working on
+/// this*, which is the question the outline's grey `Idle` cannot answer: a
+/// machine with nobody on it has no cycle running to be part-way through.
+#[test]
+fn an_unstaffed_machine_has_no_bar() {
+    let mut game = Game::new(1413, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 12);
+    place_now(&mut game, "mining_node", 1, 0).unwrap();
+    let node = game
+        .structure_report()
+        .into_iter()
+        .find(|s| s.kind == "mining_node")
+        .expect("the node was just deployed")
+        .entity;
+
+    assert_eq!(
+        game.view_entities(40, 40)
+            .into_iter()
+            .find(|v| v.entity == node)
+            .expect("the node is standing")
+            .job_progress,
+        None
+    );
+}
+
+/// A build site's bar is `BuildOrderRow::percent`, called rather than
+/// restated — the map's bar, the examine line and any future order list all
+/// have to round one job exactly one way.
+#[test]
+fn a_build_sites_bar_is_the_percent_its_own_row_reports() {
+    let mut game = Game::new(1414, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    place_home(&mut game);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(ItemId::from(ids::CORE_FRAGMENT), 12);
+    let program = spawn_tamed_on_map(&mut game, 6, 6);
+    // A second body: committing the last program the player owns is refused.
+    spawn_tamed_on_map(&mut game, 6, 7);
+    game.place_structure("mining_node", 1, 0, Some(program))
+        .expect("a filed request is the fixture");
+
+    let view = game
+        .view_entities(40, 40)
+        .into_iter()
+        .find(|v| v.build.is_some())
+        .expect("the request stands on its cell");
+    let row = view.build.as_ref().expect("filtered on it just above");
+    assert_eq!(view.job_progress, Some(row.percent() as f32 / 100.0));
+}
+
 /// A machine whose output is full while nothing in the base can take a load
 /// is at a dead end: its worker will never leave, so the mark that would
 /// have walked away stays put. The flag is what lets a frontend say so.

@@ -495,20 +495,43 @@ impl Game {
         }
     }
 
-    /// Every marked cell, in `(x, y)` order.
+    /// Every marked cell and how far through it the crew is, in `(x, y)`
+    /// order — see `views::DigMark`.
     ///
     /// Sorted rather than handed back in query order for the reason `Stock`
     /// keys by `BTreeMap`: bevy's iteration order is not stable, and the
-    /// renderer draws these in the order it gets them.
-    pub fn marked_cells(&mut self) -> Vec<(i32, i32)> {
-        let mut query = self.world.query::<(&DigSite, &Position)>();
-        let mut cells: Vec<(i32, i32)> = query
-            .iter(&self.world)
-            .filter(|(d, _)| d.marked)
-            .map(|(_, p)| (p.x, p.y))
+    /// renderer draws these in the order it gets them. By `pos` alone, since
+    /// the meter beside it is an `f32` and has no business in an ordering.
+    ///
+    /// **The meter is the wall's own `Durability`, not the digger's `Task`.**
+    /// A digger's `Task::progress` is the swing *cadence* and resets to zero
+    /// every swing, so a bar drawn off it would sweep full and empty again
+    /// between chips while the cut itself barely moved.
+    pub fn marked_cells(&mut self) -> Vec<DigMark> {
+        let solid: Vec<(Position, u32, u32)> = {
+            let mut query = self.world.query::<(&DigSite, &Position, &Durability)>();
+            query
+                .iter(&self.world)
+                .filter(|(d, ..)| d.marked)
+                .map(|(_, p, dur)| (*p, dur.hp, dur.max_hp))
+                .collect()
+        };
+        let grid = self.world.resource::<BaseGrid>();
+        let mut marks: Vec<DigMark> = solid
+            .into_iter()
+            .map(|(p, hp, max_hp)| DigMark {
+                pos: (p.x, p.y),
+                // Only a cell that still *is* a wall has a wall left to
+                // report. A marked `Open` cell is the other half of the one
+                // dig verb — floor it — and carries its old wall's `max_hp`
+                // against an `hp` of zero, which would read as a finished
+                // bar sitting on a job that has not started.
+                cut: (grid.is_solid(p.x, p.y) && max_hp > 0)
+                    .then(|| 1.0 - hp as f32 / max_hp as f32),
+            })
             .collect();
-        cells.sort_unstable();
-        cells
+        marks.sort_unstable_by_key(|m| m.pos);
+        marks
     }
 
     /// Whether base-space `(x, y)` is marked. A cell with no `DigSite` is

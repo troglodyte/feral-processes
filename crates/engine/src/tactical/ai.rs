@@ -578,7 +578,13 @@ impl Game {
         for dy in -reach_max..=reach_max {
             for dx in -reach_max..=reach_max {
                 let aim = (from.0 + dx, from.1 + dy);
-                if !battle.board.in_bounds(aim.0, aim.1) || !reach::in_range(from, aim, band) {
+                if !battle.board.in_bounds(aim.0, aim.1)
+                    || !reach::in_range(from, aim, band)
+                    // The same gate the player's own door applies, asked here
+                    // rather than inside the effect for the same reason the
+                    // range is: an aim it may not take is not a candidate.
+                    || !reach::aim_in_sight(&battle.board, from, aim, shape)
+                {
                     continue;
                 }
                 let mut worth = 0;

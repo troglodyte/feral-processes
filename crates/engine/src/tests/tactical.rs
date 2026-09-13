@@ -2885,3 +2885,140 @@ fn an_auto_driven_party_body_swings_and_never_invokes() {
         "an auto-driven turn armed a routine's cooldown, so it invoked rather than swung"
     );
 }
+
+/// A board with one cell of cover between the two halves, and the two bodies
+/// placed either side of it.
+///
+/// Hand-written rather than generated: where the cover falls is what is being
+/// tested, and `map::generate` puts it wherever the seed says.
+fn across_cover(game: &mut Game, wild: Entity) -> ((i32, i32), (i32, i32)) {
+    use crate::tactical::map::Board;
+
+    let player = game.player_entity();
+    let mut battle = game.world.resource_mut::<TacticalBattle>();
+    battle.board = Board::from_rows(&[
+        ".......", ".......", ".......", "...#...", ".......", ".......", ".......",
+    ]);
+    assert!(battle.move_to(player, (3, 1)), "the player would not stand");
+    assert!(battle.move_to(wild, (3, 5)), "the hostile would not stand");
+    ((3, 1), (3, 5))
+}
+
+/// **A routine may not be thrown at what the thrower cannot see.** The swing
+/// has always checked sight; a routine checked only range, and since every
+/// shipped area routine derives a six-cell throw, that meant every blast in
+/// the game landed in full through a solid wall.
+///
+/// The same routine at a visible cell is run immediately afterwards, from the
+/// same fight and the same turn — so the refusal cannot be passing on Power,
+/// a cooldown or a range the fixture got wrong.
+#[test]
+fn a_blast_may_not_be_thrown_through_cover() {
+    use crate::components::AbilityCooldowns;
+    use crate::tests::support::HOSTILE_SWEEP;
+
+    let mut game = game();
+    let wild = tactical_fight(&mut game, 1, 200)[0];
+    let (_, behind) = across_cover(&mut game, wild);
+    let player = game.player_entity();
+    only_routine(&mut game, player, HOSTILE_SWEEP);
+    assert!(wait_for_turn(&mut game, player), "the fight ended early");
+    let hp = hp_of(&game, wild);
+
+    assert!(
+        !game.tactical_use_routine(0, behind),
+        "a blast was thrown through cover"
+    );
+
+    assert_eq!(hp_of(&game, wild), hp, "the refused blast still landed");
+    assert!(
+        game.world
+            .get::<AbilityCooldowns>(player)
+            .is_none_or(|c| !c.0.contains_key(HOSTILE_SWEEP)),
+        "the refused blast armed its cooldown"
+    );
+    assert_eq!(
+        game.tactical_actor(),
+        Some(player),
+        "the refused blast spent the turn"
+    );
+    assert!(
+        game.tactical_use_routine(0, (3, 2)),
+        "the same blast was refused at a cell in plain view, so the fixture \
+         proves nothing about sight"
+    );
+}
+
+/// The hostile side is held to the same rule, and the AI's aim is where that
+/// lands: `best_aim` walks every cell in range and scores who the shape would
+/// cover, so without the gate it picks the party's own cell through a wall.
+///
+/// A `Single` shape at range, because the blast half is already closed by
+/// `shape_cells` — a `Radius` thrown through cover now covers nobody, so it
+/// scores zero and is skipped whether or not the aim itself is gated. A shot
+/// is the case that needs the gate.
+///
+/// The instrument is the **cooldown** and not the player's Integrity: a shot
+/// that fired and missed leaves Integrity untouched too, so a test reading
+/// damage would pass against a hostile firing through walls all day. The
+/// hostile is then moved into plain sight and driven again, so a refusal that
+/// was really the fixture failing to arm anything cannot pass either.
+#[test]
+fn a_hostile_will_not_shoot_through_cover() {
+    use crate::abilities::{AbilityDb, AbilityRange, AbilityShape};
+    use crate::components::AbilityCooldowns;
+
+    let mut game = game();
+    let wild = tactical_fight(&mut game, 1, 200)[0];
+    across_cover(&mut game, wild);
+
+    // A shipped single-target attack given the reach of a thrown one, and
+    // stripped of its trigger: the shipped file authors no `range:` and so
+    // derives arm's length, where no cell can lie between the two bodies and
+    // sight can never be blocked at all.
+    let mut def = game
+        .world
+        .resource::<AbilityDb>()
+        .get("siphon_cycles")
+        .expect("the shipped routine is loaded")
+        .clone();
+    def.id = "reaching_shot".to_string();
+    def.shape = Some(AbilityShape::Single);
+    def.range = Some(AbilityRange { min: 0, max: 6 });
+    def.triggers = None;
+    game.world.resource_mut::<AbilityDb>().insert(def);
+    only_routine(&mut game, wild, "reaching_shot");
+
+    let fired = |game: &Game| {
+        game.world
+            .get::<AbilityCooldowns>(wild)
+            .is_some_and(|c| c.0.contains_key("reaching_shot"))
+    };
+    let drive = |game: &mut Game| {
+        assert!(wait_for_turn(game, wild), "the fight ended early");
+        // Pinned where it stands: left to walk it would step around the cover
+        // and shoot from somewhere it can see, which is the rule working
+        // rather than being skipped — and not what this measures.
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .commit_walk(Vec::new());
+        game.tactical_ai_beat()
+    };
+
+    drive(&mut game);
+    assert!(!fired(&game), "the hostile shot the player through a wall");
+
+    // In plain view of the player, two cells short of the cover.
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .move_to(wild, (3, 2)),
+        "the hostile would not stand in the open"
+    );
+    drive(&mut game);
+    assert!(
+        fired(&game),
+        "the hostile would not shoot from a cell in plain view either, so the \
+         refusal above says nothing about sight"
+    );
+}

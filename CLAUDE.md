@@ -925,6 +925,11 @@ relying on one, and correct all three places if it has moved.
 - **A swing needs line of sight, checked unconditionally** because
   `line_of_sight` excludes its endpoints and so is already a no-op for
   neighbours.
+- **A routine needs it too, and `reach::aim_in_sight` is the census of which
+  shapes read terrain at their aim** — a `Single` and a `Radius` are thrown at
+  a cell and refused when it cannot be seen, a `Line` and a `Cone` are aimed
+  as a direction and truncate themselves, and a `Radius`' splash is clipped
+  from the aim inside `shape_cells`.
 - **A `BoltCue` lives in `TacticalBattle` cells and is its own queue, never a
   fifth `EffectKind`**, with no `kind` field because one travel rule at every
   distance is also the melee feedback.

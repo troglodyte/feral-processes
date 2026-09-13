@@ -195,6 +195,30 @@ pub fn line_of_sight(board: &Board, from: (i32, i32), to: (i32, i32)) -> bool {
     true
 }
 
+/// Whether a body at `from` may aim `shape` at `aim` at all, sight-wise.
+///
+/// **The aim half of the rule; `shape_cells` holds the other half.** This
+/// answers "may this be thrown at that cell", and each shape's own arm there
+/// answers "what does it reach once it has been". Two questions rather than
+/// one, because a blast that lands where it was aimed still has to decide
+/// what it touches from *there*.
+///
+/// Exhaustive on `AbilityShape` — `derived_shape`'s rule — because the whole
+/// point is a census of which shapes read terrain at their aim, and a fifth
+/// shape reached through a `_` arm would ship able to fire through a wall.
+///
+/// A `Line` and a `Cone` are aimed as a **direction**: their cells are walked
+/// out from the invoker and stop at the first thing they cannot see through,
+/// so an aim beyond cover merely shortens them. Refusing it would refuse a
+/// legal wedge. A `Single` and a `Radius` are thrown *at* somewhere, and
+/// somewhere you cannot see is what this exists to refuse.
+pub fn aim_in_sight(board: &Board, from: (i32, i32), aim: (i32, i32), shape: AbilityShape) -> bool {
+    match shape {
+        AbilityShape::Single | AbilityShape::Radius { .. } => line_of_sight(board, from, aim),
+        AbilityShape::Line { .. } | AbilityShape::Cone { .. } => true,
+    }
+}
+
 /// Every cell a routine of this `shape`, run from `from` and aimed at `aim`,
 /// covers.
 ///
@@ -204,12 +228,13 @@ pub fn line_of_sight(board: &Board, from: (i32, i32), to: (i32, i32)) -> bool {
 /// and a `Cone` are cast away from the body casting them and start one cell
 /// out.
 ///
-/// Terrain is read by two of the four. `Line` stops at the first cell that
-/// blocks sight and `Cone` drops any cell it cannot see, both through
-/// `Board::blocks_sight` — a `Cover` cell, and nothing else. `Radius` is
-/// stopped by nothing, because a blast that had to see its own far side
-/// would need a second sight rule per cell in it, and `Single` names one
-/// cell that was already in range.
+/// Terrain is read by three of the four. `Line` stops at the first cell that
+/// blocks sight and `Cone` drops any cell it cannot see, both walked out from
+/// the invoker; `Radius` drops any cell it cannot see **from the aim**, since
+/// that is where the blast lands and reaches out from. All three go through
+/// `Board::blocks_sight` — a `Cover` cell, and nothing else. `Single` names
+/// one cell, and whether that cell may be aimed at is `aim_in_sight`'s
+/// question rather than this function's.
 pub fn shape_cells(
     board: &Board,
     from: (i32, i32),
@@ -223,7 +248,11 @@ pub fn shape_cells(
             let mut cells = Vec::new();
             for y in (aim.1 - r)..=(aim.1 + r) {
                 for x in (aim.0 - r)..=(aim.0 + r) {
-                    if board.in_bounds(x, y) {
+                    // Seen **from the aim**, not from the invoker: the blast
+                    // happens where it lands, so that is where it reaches out
+                    // from. A body standing in the cover is caught rather than
+                    // shielded, because a sight line excludes its endpoints.
+                    if board.in_bounds(x, y) && line_of_sight(board, aim, (x, y)) {
                         cells.push((x, y));
                     }
                 }
@@ -616,6 +645,60 @@ mod tests {
         assert!(line_of_sight(&board, (3, 3), (3, 2)));
     }
 
+    /// Which shapes read terrain **at the aim point**, and which are aimed
+    /// *through* it.
+    ///
+    /// A shot and a blast are thrown at somewhere, so they need to see it. A
+    /// `Line` and a `Cone` are aimed as a *direction* and truncate themselves
+    /// at cover — refusing their aim would refuse a wedge the wall merely
+    /// shortens, which is a different rule from the one being added.
+    #[test]
+    fn a_shot_and_a_blast_must_see_where_they_are_aimed_and_a_wedge_need_not() {
+        let board = walled();
+        // (3, 4) sits behind the wall from (3, 1): the cells between them
+        // include the cover at (3, 3).
+        let through = |shape| aim_in_sight(&board, (3, 1), (3, 4), shape);
+        assert!(!through(AbilityShape::Single), "a shot went through cover");
+        assert!(
+            !through(AbilityShape::Radius { radius: 2 }),
+            "a blast was thrown through cover"
+        );
+        assert!(
+            through(AbilityShape::Line { length: 6 }),
+            "a line is aimed as a direction and stops itself"
+        );
+        assert!(
+            through(AbilityShape::Cone {
+                length: 4,
+                degrees: 90
+            }),
+            "a cone is aimed as a direction and drops what it cannot see"
+        );
+
+        assert!(
+            aim_in_sight(&board, (3, 1), (3, 2), AbilityShape::Single),
+            "a shot at a cell in plain view was refused"
+        );
+    }
+
+    /// A blast reaches what it can see **from where it lands**, so it no
+    /// longer reaches through a wall — and still catches a body standing *in*
+    /// the cover, since the endpoints of a sight line are excluded.
+    #[test]
+    fn a_blast_does_not_cover_what_its_own_centre_cannot_see() {
+        let board = walled();
+        let cells = shape_cells(&board, (3, 1), (3, 2), AbilityShape::Radius { radius: 2 });
+        assert!(cells.contains(&(3, 2)), "a blast must cover its own centre");
+        assert!(
+            cells.contains(&(3, 3)),
+            "a body standing in the cover is inside the blast, not behind it"
+        );
+        assert!(
+            !cells.contains(&(3, 4)),
+            "the blast reached through the wall: {cells:?}"
+        );
+    }
+
     #[test]
     fn a_line_runs_from_the_caster_and_stops_at_what_it_cannot_see_through() {
         let board = walled();
@@ -685,14 +768,20 @@ mod tests {
         assert!(!cells.contains(&(3, 4)), "the cone reached through cover");
     }
 
-    /// A blast is stopped by nothing — no sight rule, and none of the four
-    /// cell kinds excluded.
+    /// **No cell kind is excluded from a blast** — cover and a chasm inside it
+    /// are hit rather than stopping it, and neither is skipped the way an
+    /// unwalkable cell is skipped by a walk.
+    ///
+    /// Radius 1 deliberately, so this says nothing about the sight rule:
+    /// every cell it covers is the aim's own neighbour, and a sight line
+    /// excludes its endpoints. What clips a blast at range is
+    /// `a_blast_does_not_cover_what_its_own_centre_cannot_see`.
     #[test]
-    fn a_blast_reaches_behind_cover_and_over_a_chasm() {
+    fn a_blast_covers_cover_and_a_chasm_inside_its_own_reach() {
         let board = walled();
         let cells = shape_cells(&board, (0, 0), (3, 4), AbilityShape::Radius { radius: 1 });
-        assert!(cells.contains(&(3, 3)), "the blast stopped at cover");
-        assert!(cells.contains(&(3, 5)), "the blast stopped at a chasm");
+        assert!(cells.contains(&(3, 3)), "the blast skipped cover");
+        assert!(cells.contains(&(3, 5)), "the blast skipped a chasm");
         assert_eq!(cells.len(), 9);
     }
 

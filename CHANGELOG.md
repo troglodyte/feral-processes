@@ -42,6 +42,24 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.178
+
+**A machine, a build site and a wall being cut now show how far along the
+work on them is.** The base could tell you a machine was running and that
+somebody was posted to it, but never how close it was to finishing — so a
+cycle three ticks from paying out and one that had just started looked
+identical, and the only way to tell was to stand there and wait. Every cell
+the crew is working now carries a small bar along its bottom edge: a
+machine's production cycle filling and turning over, a request being raised,
+a marked wall coming down.
+
+The bar wears the colour that cell is already using, so it says how far
+without saying anything new. A stalled machine's bar freezes in the same
+yellow its outline is already showing, which reads as the cycle being stuck
+rather than as a second thing to work out. A post with nobody on it has no
+bar at all, and neither does a guard's — nothing about standing guard
+advances.
+
 ## 0.13.177
 
 **On a battle map a routine can no longer be thrown through a wall.** An

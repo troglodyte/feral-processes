@@ -306,3 +306,38 @@
   arena dimmed would hide the one thing the screen exists to show — which
   will read as a dropped multiplication to anyone holding the surface map's
   rule, and is not.
+
+- **A tile's bottom edge is the progress bar's, and the bottom-corner marks
+  lift above it.** The map tile had exactly one free channel left when
+  progress bars shipped, and this is the accounting: the top edge is the
+  rarity bar, the top-left the con earmark, the top-right a nemesis, the
+  bottom-right a town patrol, the bottom-left the staffed mark, the centre
+  the glyph (or the build caret, or the recovery `+`), all four edges as
+  lines the status outline, and the background wash a structure's
+  `Durability`. The bottom edge was free only because the difficulty bar
+  that used to run along it retired when the con read moved onto the glyph's
+  own ink — a stale doc comment in `game/inspection.rs` still claimed that
+  bar existed, which is how a free channel looked spoken for. **Two
+  alternatives were rejected**: merging the bar into the staffed mark breaks
+  "exactly one mark per posted program", since that mark walks off with the
+  worker while progress belongs to the machine standing still; a vertical
+  bar on the left edge reads as a malformed `outline_open`. What shipped
+  mirrors the top edge — `RARITY_BAR_PX` owns it and the two top-corner
+  marks drop below, so `PROGRESS_BAR_PX` owns the bottom and
+  `staffed_mark_rect` / `patrol_mark_rect` take `progress_bar_rect(..).y` as
+  their floor rather than restating its height. **Two traps.** The bar is
+  held clear of the tile's bottom *and* drawn **after** `outline_open`: that
+  bottom wall is two pixels thick along `py + tile_px - 1` and is painted
+  after the tile's fills, so a bar flush to the edge is covered by the
+  outline of the very machine it belongs to — silently, and only on the
+  machines that have a status. And it carries **no hue of its own**:
+  `marks::cell_bar` hands back `machine_color` for a machine and the caret's
+  `ORANGE` for a site, and the plan pass passes `palette::PLAN`, so a
+  starved machine's frozen bar agrees with its own outline instead of
+  saying "work" on a sixth channel the player has to learn. What feeds it is
+  derived and never stored — `EntityView::job_progress` (an exhaustive
+  `TaskKind` match, or `BuildOrderRow::percent` *called*) and
+  `views::DigMark::cut`, which is the wall's `Durability` and deliberately
+  **not** the digger's `Task`: that meter is the swing cadence and resets
+  every chip, so a bar off it sweeps full and empty while the cut barely
+  moves.

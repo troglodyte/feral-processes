@@ -4,6 +4,7 @@ use super::marks::*;
 use super::stack::draw_stack;
 use super::terrain::*;
 use super::*;
+use feral_processes_engine::views::DigMark;
 use feral_processes_engine::views::drawn_on_surface_map;
 
 /// A pending build site's slab and its edge.
@@ -1061,6 +1062,18 @@ fn draw_surface_map(
             if let Some(color) = machine_status.map(machine_color) {
                 outline_open(painter, px, py, tile_px - 1.0, color, linked_edges);
             }
+            // How far along the work on this cell is — see
+            // `EntityView::job_progress`. **After the outline**, which is
+            // drawn along `tile_px - 1.0` and two pixels thick: painted
+            // before it, the bar of a machine with a status is covered by
+            // that machine's own bottom wall.
+            //
+            // Which occupant owns the bar and what hue it wears is
+            // `cell_bar`, extracted so the precedence between a machine and
+            // a request standing on the same cell is testable.
+            if let Some((done, color)) = cell_bar(structure, building) {
+                draw_progress_bar(painter, Some(done), px, py, tile_px, color, vig);
+            }
             // "Someone is on this job", on a channel of its own rather than
             // sharing the outline with machine state. It was a yellow outline
             // until machines took that channel over, at which point a machine
@@ -1189,13 +1202,16 @@ pub(super) struct PlanCursor {
 #[allow(clippy::too_many_arguments)]
 fn draw_excavation_plan(
     painter: &Painter,
-    marked: &[(i32, i32)],
+    marked: &[DigMark],
     plan: Option<PlanCursor>,
     at: impl Fn((i32, i32)) -> (f32, f32),
     tile_px: f32,
     pane: Rect,
 ) {
     let size = tile_px - 1.0;
+    // Answers where the cell landed, or `None` when it was culled — the
+    // marks loop below needs the origin to put a cut meter on, and culling
+    // is the one thing it must not have to repeat.
     let tile = |world: (i32, i32), fill: Option<Color>, outline: Option<(f32, Color)>| {
         let (px, py) = at(world);
         if px >= pane.x + pane.w
@@ -1203,7 +1219,7 @@ fn draw_excavation_plan(
             || px + tile_px <= pane.x
             || py + tile_px <= pane.y
         {
-            return;
+            return None;
         }
         if let Some(fill) = fill {
             painter.rect(px, py, size, size, fill);
@@ -1211,12 +1227,20 @@ fn draw_excavation_plan(
         if let Some((thickness, color)) = outline {
             painter.rect_lines(px, py, size, size, thickness, color);
         }
+        Some((px, py))
     };
     // The plan itself, drawn under the cursor: a wash rather than a glyph,
     // because the cell underneath is already saying whether it is rock, cut
     // or floor and the mark is a second reading on top of that one.
-    for &cell in marked {
-        tile(cell, Some(MARK_FILL), Some((1.0, MARK_EDGE)));
+    for mark in marked {
+        // The wash says a cell is planned; the bar says how much of the wall
+        // is already gone. `palette::PLAN` at full alpha rather than one of
+        // the washes, for `CUTTING_OUTLINE`'s reason — this is the job
+        // happening, not the plan sitting on the ground. No vignette: the
+        // whole pass is drawn flat over the tiles.
+        if let Some((px, py)) = tile(mark.pos, Some(MARK_FILL), Some((1.0, MARK_EDGE))) {
+            draw_progress_bar(painter, mark.cut, px, py, tile_px, hud::palette::PLAN, 1.0);
+        }
     }
     let Some(plan) = plan else { return };
     // The box the anchor is spanning, brighter than a committed mark: this
@@ -1308,6 +1332,7 @@ mod tests {
             structure_attended: false,
             recovering,
             build: None,
+            job_progress: None,
             output_stranded: false,
             hp_fraction: None,
             level: None,
@@ -3422,6 +3447,217 @@ mod tests {
         assert!(
             vignette(400.0, 0.0, 400.0, 300.0, empty) < vignette(400.0, 0.0, 400.0, 300.0, full),
             "an empty reserve must darken the edge"
+        );
+    }
+
+    /// The bottom edge belongs to the progress bar, exactly as the top edge
+    /// belongs to the rarity bar — so the two bottom-corner marks lift above
+    /// it the way the two top-corner marks drop below that one. Without the
+    /// lift a worked machine's bar is drawn straight through its own
+    /// "somebody is on this job" mark.
+    #[test]
+    fn the_bottom_corner_marks_clear_the_progress_bar() {
+        for tile_px in [24.0_f32, 32.0, 48.0, 64.0] {
+            let (px, py) = (100.0_f32, 200.0_f32);
+            let bar = progress_bar_rect(px, py, tile_px);
+            let staffed = staffed_mark_rect(px, py, tile_px, 0.0);
+            let patrol = patrol_mark_rect(px, py, tile_px);
+
+            assert!(
+                staffed.y + staffed.h <= bar.y,
+                "at tile_px={tile_px} the staffed mark's bottom ({}) reaches \
+                 into the bar's row (starts at {})",
+                staffed.y + staffed.h,
+                bar.y
+            );
+            assert!(
+                patrol.y + patrol.h <= bar.y,
+                "at tile_px={tile_px} the patrol mark's bottom ({}) reaches \
+                 into the bar's row (starts at {})",
+                patrol.y + patrol.h,
+                bar.y
+            );
+        }
+    }
+
+    /// The bar sits *inside* the status outline. `outline_open` draws a
+    /// machine's bottom wall 2 px thick along `py + tile_px - 1`, and it is
+    /// drawn after the tile's fills — a bar flush to that edge is painted
+    /// over by the outline of the very machine it belongs to.
+    #[test]
+    fn the_progress_bar_sits_inside_the_status_outline() {
+        for tile_px in [24.0_f32, 32.0, 48.0, 64.0] {
+            let (px, py) = (0.0_f32, 0.0_f32);
+            let bar = progress_bar_rect(px, py, tile_px);
+            let wall = py + tile_px - 1.0;
+
+            assert!(
+                bar.y + bar.h < wall - 1.0,
+                "at tile_px={tile_px} the bar's bottom ({}) is under the \
+                 outline's bottom wall",
+                bar.y + bar.h
+            );
+            assert!(bar.x > px, "the bar touches the tile's left edge");
+            assert!(
+                bar.x + bar.w < px + tile_px - 1.0,
+                "the bar touches the tile's right edge"
+            );
+            assert!(bar.w > 0.0 && bar.h > 0.0, "the bar must have real size");
+        }
+    }
+
+    /// Every rectangle `draw_progress_bar` painted this frame, widest last.
+    fn bar_widths(progress: Option<f32>) -> Vec<f32> {
+        let (_, shapes) = with_painter(|p| {
+            draw_progress_bar(p, progress, 0.0, 0.0, CELL, hud::palette::HEALTHY, 1.0)
+        });
+        let mut widths: Vec<f32> = shapes
+            .iter()
+            .filter_map(|cs| match &cs.shape {
+                bevy_egui::egui::Shape::Rect(r) => Some(r.rect.width()),
+                _ => None,
+            })
+            .collect();
+        widths.sort_by(|a, b| a.partial_cmp(b).expect("no NaN widths"));
+        widths
+    }
+
+    /// Three states, and the empty one is the reason there is a track at
+    /// all: a bar with nothing in it still has to say *a job is running
+    /// here*, which a zero-width fill on bare tile cannot.
+    #[test]
+    fn a_bar_draws_a_track_it_never_overflows_and_nothing_at_all_with_no_job() {
+        let track = progress_bar_rect(0.0, 0.0, CELL).w;
+
+        assert_eq!(bar_widths(None), Vec::<f32>::new(), "no job, no bar");
+        assert_eq!(
+            bar_widths(Some(0.0)),
+            vec![track],
+            "a cycle just begun is a track with no fill"
+        );
+        assert_eq!(
+            bar_widths(Some(1.0)),
+            vec![track, track],
+            "a full cycle fills its track exactly"
+        );
+        let half = bar_widths(Some(0.5));
+        assert_eq!(half.len(), 2, "a part-done cycle is a track and a fill");
+        assert!(
+            half[0] > 0.0 && half[0] < track,
+            "half a cycle is neither empty nor full: {half:?}"
+        );
+    }
+
+    /// A figure out of range is clamped rather than drawn off the tile: the
+    /// engine clamps its own, and nothing in the compiler holds a second
+    /// caller to it.
+    #[test]
+    fn a_bar_is_clamped_to_its_track() {
+        let track = progress_bar_rect(0.0, 0.0, CELL).w;
+        assert_eq!(bar_widths(Some(4.0)), vec![track, track]);
+        assert_eq!(bar_widths(Some(-1.0)), vec![track]);
+    }
+
+    /// A structure as the map sees one, running a cycle or not.
+    fn machine_view(status: Option<MachineStatus>, job_progress: Option<f32>) -> EntityView {
+        EntityView {
+            glyph: 'n',
+            is_tamed: false,
+            is_structure: true,
+            machine_status: status,
+            job_progress,
+            ..patient_view(false)
+        }
+    }
+
+    /// Which occupant owns the bar, and the hue it wears. The precedence is
+    /// the half a hand-written copy would get wrong: a machine with an
+    /// upgrade on order carries that request's row *and* is still producing,
+    /// and it is the machine the cell is drawing.
+    #[test]
+    fn a_machine_owns_its_cells_bar_over_a_request_standing_on_it() {
+        let running = machine_view(Some(MachineStatus::Running), Some(0.4));
+        let starved = machine_view(Some(MachineStatus::Starved), Some(0.4));
+        let idle = machine_view(Some(MachineStatus::Idle), None);
+        let site = EntityView {
+            is_structure: false,
+            job_progress: Some(0.25),
+            ..patient_view(false)
+        };
+
+        assert_eq!(
+            cell_bar(Some(&running), None),
+            Some((0.4, hud::palette::HEALTHY)),
+            "a running machine's bar wears the hue its own outline does"
+        );
+        assert_eq!(
+            cell_bar(Some(&starved), None),
+            Some((0.4, hud::palette::WARN)),
+            "a stalled cycle is frozen, not hidden, and says so in its colour"
+        );
+        assert_eq!(
+            cell_bar(Some(&idle), None),
+            None,
+            "nobody is working here, so there is no bar"
+        );
+        assert_eq!(
+            cell_bar(None, Some(&site)),
+            Some((0.25, ORANGE)),
+            "a site the crew has not raised yet wears its caret's orange"
+        );
+        assert_eq!(
+            cell_bar(Some(&running), Some(&site)),
+            Some((0.4, hud::palette::HEALTHY)),
+            "a machine with an upgrade on order is still producing, and the \
+             cell is drawing the machine"
+        );
+        assert_eq!(cell_bar(None, None), None);
+    }
+
+    /// The plan pass draws the wash for every mark and a cut meter for the
+    /// ones that still have a wall — and the cull the meter rides has to go
+    /// on culling the wash with it.
+    #[test]
+    fn a_marked_wall_wears_its_cut_and_a_floor_it_mark_does_not() {
+        let pane = Rect::new(0.0, 0.0, 200.0, 200.0);
+        let rects = |marks: &[DigMark]| {
+            let (_, shapes) = with_painter(|p| {
+                draw_excavation_plan(
+                    p,
+                    marks,
+                    None,
+                    |w| (w.0 as f32 * CELL, w.1 as f32 * CELL),
+                    CELL,
+                    pane,
+                )
+            });
+            shapes
+                .iter()
+                .filter(|cs| matches!(cs.shape, bevy_egui::egui::Shape::Rect(_)))
+                .count()
+        };
+
+        let floor_it = rects(&[DigMark {
+            pos: (1, 1),
+            cut: None,
+        }]);
+        let part_cut = rects(&[DigMark {
+            pos: (1, 1),
+            cut: Some(0.5),
+        }]);
+        assert!(floor_it > 0, "every mark draws its wash");
+        assert_eq!(
+            part_cut,
+            floor_it + 2,
+            "a wall part-way down adds a track and a fill and nothing else"
+        );
+        assert_eq!(
+            rects(&[DigMark {
+                pos: (99, 99),
+                cut: Some(0.5)
+            }]),
+            0,
+            "a mark off the pane is culled, meter and all"
         );
     }
 

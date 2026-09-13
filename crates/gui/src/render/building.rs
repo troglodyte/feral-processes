@@ -1622,6 +1622,7 @@ mod tests {
             wears_job_mark: false,
             position_is_honest: true,
             structure_attended: false,
+            job_progress: None,
             recovering: false,
             build: None,
             output_stranded: false,

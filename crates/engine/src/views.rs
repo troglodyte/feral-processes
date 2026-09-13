@@ -975,12 +975,15 @@ pub struct EntityView {
     /// not hostile, which is what stops the map drawing a con bar under a
     /// companion.
     ///
-    /// **Its own channel, not the glyph's.** This used to *replace* `color`
-    /// for a hostile, so a tile could say either what a program is or how
-    /// dangerous it is, never both — and a boss or a nemesis gave up the
-    /// danger read entirely to a reserved hue. The map draws it as a bar
-    /// along the bottom edge, the mirror of the `rarity` bar along the top,
-    /// and identity rides corner marks. Three readings, three channels.
+    /// **Its own reading, and the map decides where it lands.** This used to
+    /// *replace* `color` for a hostile, so a tile could say either what a
+    /// program is or how dangerous it is, never both — and a boss or a
+    /// nemesis gave up the danger read entirely to a reserved hue.
+    /// `render/base.rs`'s `ConRead` spends the glyph's own ink on it wherever
+    /// that ink is free and folds it into a top-left earmark where it is
+    /// not, `rarity` keeps the top edge and identity rides corner marks.
+    /// **Not the bottom edge**, which the con bar held once and
+    /// `job_progress` holds now.
     pub difficulty: Option<GlyphColor>,
     pub label: String,
     pub is_player: bool,
@@ -1147,6 +1150,33 @@ pub struct EntityView {
     /// anything that runs no job and so has no state to be in. Lets the map
     /// colour a machine's outline by what it is doing.
     pub machine_status: Option<MachineStatus>,
+    /// How far along the work being done on this cell is, 0.0..=1.0, or
+    /// `None` where no work is being done on it at all.
+    ///
+    /// **A quantity on a channel that only ever carried a yes or a no.**
+    /// `machine_status` above says *what state* a machine is in and
+    /// `structure_attended` says *whether anyone is on it*; neither says how
+    /// far through the job is, which is the one thing a base at work has no
+    /// way to show.
+    ///
+    /// Two kinds of cell answer, and each answer is a *call* rather than a
+    /// second formula:
+    ///
+    /// - a structure whose posted program is turning its production cycle —
+    ///   `Task::progress` against `Task::required`. Only the one `TaskKind`
+    ///   whose meter is a machine's own cycle counts: a guard's never moves,
+    ///   a digger's is the swing cadence rather than the cut (that one is
+    ///   `Game::marked_cells`), and a builder's is unused, a site's progress
+    ///   living on `BuildSite::progress`.
+    /// - a build site — `BuildOrderRow::percent`, which is already the one
+    ///   derivation of how far along a request is.
+    ///
+    /// **One bar to a cell, and a machine's own cycle wins.** A machine with
+    /// a pending upgrade carries that site's row in `build` below and is
+    /// still producing; the tile draws the machine, and its glyph and
+    /// outline are about the machine, so its bar is too. The upgrade's own
+    /// figure is on the examine page.
+    pub job_progress: Option<f32>,
     /// The build request this entity *is*, or `None` for everything that is
     /// not one — see `views::BuildOrderRow`.
     ///
@@ -1202,6 +1232,24 @@ pub struct EntityView {
 /// two places use the same rule has to be a call, not a comment.
 pub fn drawn_on_surface_map(is_tamed: bool, position_is_honest: bool) -> bool {
     !is_tamed || position_is_honest
+}
+
+/// One cell of the Excavation plan — see `Game::marked_cells`.
+///
+/// **A struct rather than the bare coordinate it used to be**, because a
+/// mark now carries how far through the wall the crew is and the renderer
+/// draws that beside the wash. A tuple would have left the two figures
+/// telling apart only by position.
+///
+/// `cut` is the fraction of the wall already taken down, 0.0..=1.0, and
+/// `None` on a cell that is no longer a wall: a marked `Open` cell is the
+/// other half of the one dig verb — floor it — and has no cut left to be
+/// part-way through.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DigMark {
+    /// **Base-space** coordinates.
+    pub pos: (i32, i32),
+    pub cut: Option<f32>,
 }
 
 /// One work order on the status screen — see `Game::work_order_report`.

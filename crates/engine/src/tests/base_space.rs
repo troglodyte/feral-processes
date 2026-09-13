@@ -2466,12 +2466,76 @@ fn marked_cells_is_sorted() {
     let mut game = game_at_the_frontier(3256);
     game.toggle_mark_box((7, 7), (5, 5));
 
-    let cells = game.marked_cells();
+    let cells: Vec<(i32, i32)> = game.marked_cells().into_iter().map(|m| m.pos).collect();
 
     let mut sorted = cells.clone();
     sorted.sort_unstable();
     assert_eq!(cells, sorted, "marked_cells came back in query order");
     assert_eq!(cells.len(), 9, "a 3x3 box of solid rock is nine marks");
+}
+
+/// A mark carries how far through the wall the crew is, so the map can draw
+/// it. The meter is the wall's own `Durability` and **not the digger's
+/// `Task`**: that one is the swing *cadence* and resets to zero every swing,
+/// so a bar drawn off it would sweep full and empty again between chips
+/// while the cut itself barely moved.
+#[test]
+fn a_marks_cut_is_the_wall_it_has_left_and_not_the_swing_cadence() {
+    let mut game = game_at_the_frontier_cutting(3257);
+    game.toggle_mark_box(WALL, WALL);
+
+    let cut_at = |game: &mut Game| {
+        game.marked_cells()
+            .into_iter()
+            .find(|m| m.pos == WALL)
+            .expect("the wall was just marked")
+            .cut
+    };
+
+    assert_eq!(
+        cut_at(&mut game),
+        Some(0.0),
+        "an untouched wall is all wall"
+    );
+
+    let player = game.player_entity();
+    let swings = swings_for(&game, player, WALL);
+    assert!(swings > 2, "a wall this thin cannot show a part-cut state");
+    game.move_player(1, 0);
+
+    let cut = cut_at(&mut game).expect("a solid wall has a meter");
+    assert!(
+        cut > 0.0 && cut < 1.0,
+        "one swing of {swings} has to read as part-cut, not {cut}"
+    );
+}
+
+/// A mark on an already-open cell means *floor it*, and that half of the one
+/// dig verb has no meter: the wall is already gone, so there is no cut left
+/// to report and a bar reading either end of it would be a lie.
+#[test]
+fn a_floor_it_mark_has_no_cut_to_report() {
+    let mut game = game_at_the_frontier_cutting(3258);
+    game.toggle_mark_box(WALL, WALL);
+
+    let player = game.player_entity();
+    let swings = swings_for(&game, player, WALL);
+    for _ in 0..swings {
+        game.move_player(1, 0);
+    }
+    assert!(
+        matches!(cell(&game, WALL), Some(base_grid::BaseCell::Open { .. })),
+        "the fixture must have cut the wall through"
+    );
+
+    assert_eq!(
+        game.marked_cells()
+            .into_iter()
+            .find(|m| m.pos == WALL)
+            .expect("the mark survives the cut")
+            .cut,
+        None
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -3402,7 +3466,7 @@ fn a_boxed_in_mark_does_not_starve_a_reachable_one() {
     }
     mark(&mut game, WALL);
     assert!(
-        game.marked_cells().first() != Some(&WALL),
+        game.marked_cells().first().map(|m| m.pos) != Some(WALL),
         "precondition: the buried cells must sort ahead of the reachable one"
     );
 
@@ -3444,7 +3508,7 @@ fn an_unroutable_mark_does_not_starve_a_reachable_one() {
     }
     mark(&mut game, WALL);
     assert!(
-        game.marked_cells().first() != Some(&WALL),
+        game.marked_cells().first().map(|m| m.pos) != Some(WALL),
         "precondition: the sealed cells must sort ahead of the reachable one"
     );
 

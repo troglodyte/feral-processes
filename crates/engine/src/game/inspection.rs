@@ -981,6 +981,31 @@ impl Game {
         self.build_views(hits)
     }
 
+    /// Whether a `Task`'s meter is the *machine's* production cycle — the one
+    /// thing a bar drawn on a structure's tile can be about.
+    ///
+    /// Exhaustive on `TaskKind`, `cell_mark`'s rule and for its reason:
+    /// spelled as `!= Guard` it would answer true for every kind added after
+    /// it, and each new kind would ship a bar quietly reading somebody else's
+    /// meter.
+    fn task_meters_a_machine(kind: TaskKind) -> bool {
+        match kind {
+            // A machine's own worker, ticking toward one unit of output.
+            TaskKind::GatherResource => true,
+            // Nothing about a guard accumulates: its meter never moves, so a
+            // bar off it would sit empty forever beside a post that is doing
+            // exactly its job.
+            TaskKind::Guard => false,
+            // Both of these meter something that is not the job the cell is
+            // showing. A digger's is the swing *cadence* and resets every
+            // swing — the cut itself is the wall's `Durability`, which is
+            // what `Game::marked_cells` reports. A builder's is unused: a
+            // site's progress lives on `BuildSite::progress`, and
+            // `BuildOrderRow::percent` is the derivation of it.
+            TaskKind::Excavate | TaskKind::Construct => false,
+        }
+    }
+
     /// The `EntityView` for each of `hits`, whatever selected them.
     fn build_views(&mut self, hits: Vec<(Entity, Position, Glyph)>) -> Vec<EntityView> {
         let worker_by_structure: HashMap<Entity, Entity> = {
@@ -988,6 +1013,23 @@ impl Game {
             tasks
                 .iter(&self.world)
                 .map(|(worker, task)| (task.target, worker))
+                .collect()
+        };
+        // The production cycle each structure's posted program is turning —
+        // keyed the way `worker_by_structure` is, and filtered down to the
+        // one `TaskKind` whose meter is a *machine's own* cycle.
+        //
+        // A third map rather than a wider value on the first: that one
+        // deliberately collapses a machine's worker and its guard into
+        // whichever the query reached last, and a guard has no cycle to
+        // report, so a machine that happened to be reached through its guard
+        // would lose its bar for as long as the pairing held.
+        let cycle_by_structure: HashMap<Entity, (u32, u32)> = {
+            let mut tasks = self.world.query::<&Task>();
+            tasks
+                .iter(&self.world)
+                .filter(|task| Self::task_meters_a_machine(task.kind))
+                .map(|task| (task.target, (task.progress, task.required)))
                 .collect()
         };
         // Structures with a posted program standing at them right now.
@@ -1087,10 +1129,11 @@ impl Game {
                 let hp_fraction = stats.map(|s| s.hp_fraction());
                 // Every glyph on the map carries its species' authored hue —
                 // what this program *is*. How dangerous it is, is a second
-                // reading on a channel of its own: the map draws it as a bar
-                // along the bottom edge, the mirror of the rarity bar along
-                // the top. `None` for anything that is not hostile, so the
-                // bar cannot draw over a companion.
+                // reading, and the map spends the glyph's own ink on it
+                // wherever it can (`render/base.rs`'s `ConRead`), falling
+                // back to a corner earmark where it cannot. `None` for
+                // anything that is not hostile, so neither can land on a
+                // companion.
                 let color = glyph.color;
                 let difficulty = is_hostile
                     .then(|| stats.map(|s| difficulty_color(s.power(), player_power)))
@@ -1126,6 +1169,37 @@ impl Game {
                                 .map(|def| def.sprite_name().to_string())
                         })
                     });
+                // A site's own row when this *is* a site, and the row of the
+                // request standing on this cell when it is a machine being
+                // upgraded: an upgrade site carries no glyph, so
+                // `view_entities` never selects it and the pending row would
+                // otherwise be visible nowhere. Found by tile, through
+                // `iter_entities` rather than a query, for the borrow reason
+                // `build_order_row` states above.
+                let build = self.build_order_row(entity).or_else(|| {
+                    if !is_structure {
+                        return None;
+                    }
+                    let site = self.world.iter_entities().find(|e| {
+                        e.get::<BuildSite>().is_some()
+                            && e.get::<Position>()
+                                .is_some_and(|p| p.x == pos.x && p.y == pos.y)
+                    })?;
+                    self.build_order_row(site.id())
+                });
+                // See `EntityView::job_progress`: a machine's own cycle wins
+                // over a pending upgrade's row, so the arms are in this
+                // order, and a cycle with no length has nothing to report
+                // rather than a division by zero.
+                let job_progress = match cycle_by_structure.get(&entity) {
+                    Some(&(done, needed)) if is_structure && needed > 0 => {
+                        Some((done as f32 / needed as f32).clamp(0.0, 1.0))
+                    }
+                    // A build site is not a `Structure`, so this arm is only
+                    // ever a site's own row and never an upgrade's.
+                    _ if !is_structure => build.as_ref().map(|row| row.percent() as f32 / 100.0),
+                    _ => None,
+                };
                 EntityView {
                     entity,
                     pos: (pos.x, pos.y),
@@ -1163,24 +1237,8 @@ impl Game {
                     fusions: self.fusion_count(entity),
                     rarity: self.rarity_of(entity),
                     machine_status,
-                    // A site's own row when this *is* a site, and the row of
-                    // the request standing on this cell when it is a machine
-                    // being upgraded: an upgrade site carries no glyph, so
-                    // `view_entities` never selects it and the pending row
-                    // would otherwise be visible nowhere. Found by tile,
-                    // through `iter_entities` rather than a query, for the
-                    // borrow reason `build_order_row` states above.
-                    build: self.build_order_row(entity).or_else(|| {
-                        if !is_structure {
-                            return None;
-                        }
-                        let site = self.world.iter_entities().find(|e| {
-                            e.get::<BuildSite>().is_some()
-                                && e.get::<Position>()
-                                    .is_some_and(|p| p.x == pos.x && p.y == pos.y)
-                        })?;
-                        self.build_order_row(site.id())
-                    }),
+                    job_progress,
+                    build,
                     linked_edges: linked_edges.remove(&entity).unwrap_or_default(),
                 }
             })

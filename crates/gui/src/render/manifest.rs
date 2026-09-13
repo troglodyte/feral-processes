@@ -222,17 +222,6 @@ fn draw_header(view: &ManifestView, rect: Rect, painter: &Painter, m: &Metrics) 
             if p.refactors > 0 {
                 tags.push(format!("upgraded {}/{}", p.refactors, p.max_refactors));
             }
-            // Only when it is behind, the way `fused` only shows once it has
-            // been. A program level with the zone needs no telling; one that
-            // is three doublings back has nothing else on the page saying so,
-            // and the bare zone tag on its name reads as decoration without
-            // the player's own number beside it.
-            if p.zone_tier < p.player_zone {
-                tags.push(format!(
-                    "zone {} — you're in {}",
-                    p.zone_tier, p.player_zone
-                ));
-            }
             if p.is_companion {
                 tags.push("in party".to_string());
             } else if let Some(activity) = &p.activity {
@@ -1026,8 +1015,6 @@ mod tests {
             level_cap: 6,
             talents_spent: 0,
             talents_earned: 0,
-            zone_tier: 1,
-            player_zone: 1,
             habitats: vec![],
             moves: vec![],
             work_resource: Some("core_fragment".into()),
@@ -2014,9 +2001,8 @@ mod tests {
     ///
     /// The worst case is built here rather than sampled from a real `Game`,
     /// because it is a program that is simultaneously high-level, excellently
-    /// rolled, maxed on both permanent ceilings, far behind the zone, and
-    /// posted to a long-named structure — reachable, but not something a
-    /// fixture would stumble into.
+    /// rolled, maxed on both permanent ceilings, and posted to a long-named
+    /// structure — reachable, but not something a fixture would stumble into.
     #[test]
     fn the_widest_header_tag_line_fits_the_header() {
         let tags = [
@@ -2024,7 +2010,6 @@ mod tests {
             "Excellent (99%)".to_string(),
             format!("fused {MAX_FUSIONS}/{MAX_FUSIONS}"),
             format!("upgraded {MAX_COMPANION_REFACTORS}/{MAX_COMPANION_REFACTORS}"),
-            "zone 1 — you're in 9".to_string(),
             // The longest activity string a program can report, against the
             // longest-named structure that accepts one.
             "hauling to Recharger Node".to_string(),
@@ -2032,21 +2017,27 @@ mod tests {
         ];
         let line = tags.join("   ");
 
-        with_painter(|p| {
-            let m = ui_metrics(900.0);
-            let l = manifest_layout(1440.0, 900.0, 4, &[], &m);
-            // The glyph portrait and a pad sit left of the text; the tag line
-            // starts there and has the rest of the header to run into.
-            let portrait = p.measure_map("@", m.title() * 2).width + m.pad;
-            let room = l.header.w - portrait;
-            let drawn = p.measure_ui_advance(&line, m.font_size);
-            assert!(
-                drawn <= room,
-                "the manifest header's tags overflow it by {:.0}px \
-                 ({drawn:.0} drawn into {room:.0} of room):\n{line}",
-                drawn - room
-            );
-        });
+        // Both shipped window sizes. The header is a fraction of the window,
+        // so the *small* one is the worst case — and it was the one this
+        // census did not measure at all until someone went looking for the
+        // headroom a longer tag would have needed.
+        for (w, h) in [(1280.0, 720.0), (1440.0, 900.0)] {
+            with_painter(|p| {
+                let m = ui_metrics(h);
+                let l = manifest_layout(w, h, 4, &[], &m);
+                // The glyph portrait and a pad sit left of the text; the tag
+                // line starts there and has the rest of the header to run into.
+                let portrait = p.measure_map("@", m.title() * 2).width + m.pad;
+                let room = l.header.w - portrait;
+                let drawn = p.measure_ui_advance(&line, m.font_size);
+                assert!(
+                    drawn <= room,
+                    "at {w}x{h} the manifest header's tags overflow it by \
+                     {:.0}px ({drawn:.0} drawn into {room:.0} of room):\n{line}",
+                    drawn - room
+                );
+            });
+        }
     }
 
     /// **The player's sheet is headed by their own name and their class**,

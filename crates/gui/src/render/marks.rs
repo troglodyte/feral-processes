@@ -27,6 +27,21 @@ const STAFFED_MARK_INSET: f32 = 2.0;
 /// names the Bay, not the body.
 const RECOVERY_MARK: char = '+';
 
+/// The progress bar's height, and how far it is held off the tile's edges.
+///
+/// **The bottom edge belongs to the bar the way the top edge belongs to the
+/// rarity bar**, which is what the two bottom-corner marks lifting above it
+/// mirrors — `nemesis_mark_rect` and `difficulty_mark_points` already drop
+/// below `RARITY_BAR_PX` for exactly this reason at the other end.
+///
+/// The inset is doing a second job here that it is not doing on the marks.
+/// `outline_open` draws a machine's bottom wall two pixels thick along
+/// `py + tile_px - 1` and draws it *after* the tile's fills, so a bar flush
+/// to that edge is painted over by the outline of the very machine it
+/// belongs to. Held clear, the bar reads as a gauge sitting inside the box.
+const PROGRESS_BAR_PX: f32 = 3.0;
+const PROGRESS_BAR_INSET: f32 = 2.0;
+
 /// An identity mark's side, as a fraction of the tile — the shape a
 /// nemesis and a boss both wear, in opposite corners, and how far it sits
 /// off the tile's edges. Smaller than `STAFFED_MARK` and placed in the
@@ -85,9 +100,12 @@ pub(super) fn nemesis_mark_rect(px: f32, py: f32, tile_px: f32) -> Rect {
 /// unit-testable without a `Painter`.
 pub(super) fn patrol_mark_rect(px: f32, py: f32, tile_px: f32) -> Rect {
     let size = (tile_px - 1.0) * IDENTITY_MARK;
+    // `staffed_mark_rect`'s floor, and its reason: the bottom edge is the
+    // progress bar's.
+    let floor = progress_bar_rect(px, py, tile_px).y;
     Rect::new(
         px + tile_px - 1.0 - IDENTITY_MARK_INSET - size,
-        py + tile_px - 1.0 - IDENTITY_MARK_INSET - size,
+        floor - IDENTITY_MARK_INSET - size,
         size,
         size,
     )
@@ -153,6 +171,93 @@ pub(super) fn draw_difficulty_mark(
     );
 }
 
+/// Which of a tile's two occupants owns the progress bar, and the hue it
+/// wears — or nothing at all where no work is being done on this cell.
+///
+/// **A machine's own cycle wins over a pending upgrade's row**, which is the
+/// same precedence the engine applies in `EntityView::job_progress` and the
+/// same one the tile loop applies to the glyph: a machine being upgraded is
+/// still producing, and the cell is drawing the machine.
+///
+/// **No hue of its own** — each case takes the colour that cell already
+/// wears for this job, so the bar adds a quantity to a reading the tile is
+/// already giving. A machine takes `machine_color`, so a starved one's
+/// frozen bar agrees with its own outline instead of contradicting it; a
+/// site the crew has not raised yet takes its caret's orange, the slab
+/// itself being deliberately colourless.
+///
+/// Extracted rather than left inline for `staffed_mark_rect`'s reason: the
+/// map's tile loop is far too big to reach with a test, and the precedence
+/// is the half of this that a copy would get wrong.
+pub(super) fn cell_bar(
+    structure: Option<&EntityView>,
+    building: Option<&EntityView>,
+) -> Option<(f32, Color)> {
+    structure
+        .and_then(|ev| Some((ev.job_progress?, machine_color(ev.machine_status?))))
+        .or_else(|| building.and_then(|ev| Some((ev.job_progress?, ORANGE))))
+}
+
+/// Where a cell's progress bar sits — the full width of the tile's bottom
+/// edge, held clear of the status outline and of both bottom-corner marks.
+///
+/// A free function for `nemesis_mark_rect`'s reason: the geometry is
+/// unit-testable without a `Painter`, and it is what `staffed_mark_rect` and
+/// `patrol_mark_rect` read to find their own floor, so the three cannot
+/// drift into each other's pixels.
+pub(super) fn progress_bar_rect(px: f32, py: f32, tile_px: f32) -> Rect {
+    let size = tile_px - 1.0;
+    Rect::new(
+        px + PROGRESS_BAR_INSET,
+        py + size - PROGRESS_BAR_INSET - PROGRESS_BAR_PX,
+        size - 2.0 * PROGRESS_BAR_INSET,
+        PROGRESS_BAR_PX,
+    )
+}
+
+/// How far along the work on this cell is, or nothing at all where no work
+/// is being done on it — see `EntityView::job_progress`.
+///
+/// **A track and a fill, and the track is why an empty bar is still drawn.**
+/// A cycle that has just turned over has to go on saying *a job is running
+/// here*, which a zero-width fill on bare tile cannot; `palette::BAR_TROUGH`
+/// is the role the rest of the HUD already spends on exactly that.
+///
+/// **No hue of its own.** The caller passes the colour the cell already
+/// wears for this job — a machine's `machine_color`, a build site's caret
+/// orange, a dig mark's plan blue — so the bar adds a quantity to a reading
+/// the tile is already giving rather than opening a channel that has to be
+/// learned.
+///
+/// Clamped here as well as at the engine's end: nothing in the compiler
+/// holds a second caller to a range, and an unclamped figure draws off the
+/// tile in silence.
+pub(super) fn draw_progress_bar(
+    painter: &Painter,
+    progress: Option<f32>,
+    px: f32,
+    py: f32,
+    tile_px: f32,
+    color: Color,
+    vig: f32,
+) {
+    let Some(done) = progress else {
+        return;
+    };
+    let bar = progress_bar_rect(px, py, tile_px);
+    painter.rect(
+        bar.x,
+        bar.y,
+        bar.w,
+        bar.h,
+        at_level(hud::palette::BAR_TROUGH, vig),
+    );
+    let filled = bar.w * done.clamp(0.0, 1.0);
+    if filled > 0.0 {
+        painter.rect(bar.x, bar.y, filled, bar.h, at_level(color, vig));
+    }
+}
+
 /// Where the "someone is on this job" mark sits, `lift` px up from its
 /// resting place — `Fx::staffed_bob` while a machine is worked, zero at rest
 /// and for a stranded mark, which blinks in place instead.
@@ -162,9 +267,14 @@ pub(super) fn draw_difficulty_mark(
 /// which is exactly the copy that drifts when the bottom edge changes.
 pub(super) fn staffed_mark_rect(px: f32, py: f32, tile_px: f32, lift: f32) -> Rect {
     let size = (tile_px - 1.0) * STAFFED_MARK;
+    // The bar owns the bottom edge, so the mark's floor is the bar's top and
+    // not the tile's. A worked machine wears both at once — the mark says
+    // somebody is on this and the bar says how far through — so sharing the
+    // pixels would have drawn each through the other.
+    let floor = progress_bar_rect(px, py, tile_px).y;
     Rect::new(
         px + STAFFED_MARK_INSET,
-        py + tile_px - 1.0 - STAFFED_MARK_INSET - size - lift,
+        floor - STAFFED_MARK_INSET - size - lift,
         size,
         size,
     )

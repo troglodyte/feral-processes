@@ -1239,6 +1239,9 @@ relying on one, and correct all three places if it has moved.
   palette is `pub(crate)`** — a raid's flash is painted by the effects
   layer, and a structure taking a hit is what the `THREAT` reservation
   exists for.
+- **A tile's bottom edge belongs to the progress bar, and the bottom-corner
+  marks lift above it the way the top-corner ones drop below the rarity
+  bar** — drawn after `outline_open`, and in the hue the cell already wears.
 - **The expanded log pane is an overlay drawn last, and `map_pane` is
   derived from the *collapsed* log at every window size.**
 - **One strip to a border, and the vitals get the contested one** —

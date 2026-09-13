@@ -975,12 +975,15 @@ pub struct EntityView {
     /// not hostile, which is what stops the map drawing a con bar under a
     /// companion.
     ///
-    /// **Its own channel, not the glyph's.** This used to *replace* `color`
-    /// for a hostile, so a tile could say either what a program is or how
-    /// dangerous it is, never both — and a boss or a nemesis gave up the
-    /// danger read entirely to a reserved hue. The map draws it as a bar
-    /// along the bottom edge, the mirror of the `rarity` bar along the top,
-    /// and identity rides corner marks. Three readings, three channels.
+    /// **Its own reading, and the map decides where it lands.** This used to
+    /// *replace* `color` for a hostile, so a tile could say either what a
+    /// program is or how dangerous it is, never both — and a boss or a
+    /// nemesis gave up the danger read entirely to a reserved hue.
+    /// `render/base.rs`'s `ConRead` spends the glyph's own ink on it wherever
+    /// that ink is free and folds it into a top-left earmark where it is
+    /// not, `rarity` keeps the top edge and identity rides corner marks.
+    /// **Not the bottom edge**, which the con bar held once and
+    /// `job_progress` holds now.
     pub difficulty: Option<GlyphColor>,
     pub label: String,
     pub is_player: bool,

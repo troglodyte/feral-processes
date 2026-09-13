@@ -1129,10 +1129,11 @@ impl Game {
                 let hp_fraction = stats.map(|s| s.hp_fraction());
                 // Every glyph on the map carries its species' authored hue —
                 // what this program *is*. How dangerous it is, is a second
-                // reading on a channel of its own: the map draws it as a bar
-                // along the bottom edge, the mirror of the rarity bar along
-                // the top. `None` for anything that is not hostile, so the
-                // bar cannot draw over a companion.
+                // reading, and the map spends the glyph's own ink on it
+                // wherever it can (`render/base.rs`'s `ConRead`), falling
+                // back to a corner earmark where it cannot. `None` for
+                // anything that is not hostile, so neither can land on a
+                // companion.
                 let color = glyph.color;
                 let difficulty = is_hostile
                     .then(|| stats.map(|s| difficulty_color(s.power(), player_power)))

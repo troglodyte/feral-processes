@@ -425,7 +425,17 @@ impl Game {
             durability.hp = durability.max_hp;
         }
         durability.hp = durability.hp.saturating_sub(dmg);
-        if durability.hp > 0 {
+        let still_standing = durability.hp > 0;
+        // One cue a swing, here rather than in either caller — that is what
+        // makes the player's bump and a digger's cycle sound alike, and it is
+        // the same argument as the damage sharing `swing_damage`. Above the
+        // break/no-break split deliberately: the swing that opens a cell is
+        // still one swing, and the break has its own line to announce itself
+        // with.
+        self.world
+            .resource_mut::<crate::resources::EffectQueue>()
+            .push((x, y), EffectKind::Mine);
+        if still_standing {
             if by_player {
                 self.log(format!("You cut into the entropy for {dmg} damage."));
             }

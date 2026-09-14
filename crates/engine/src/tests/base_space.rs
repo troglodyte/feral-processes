@@ -3342,6 +3342,100 @@ fn a_crew_program_swings_its_own_species_band_at_rock() {
     );
 }
 
+/// Every mining cue queued since the last drain, by cell.
+///
+/// Filtered rather than compared whole: a swing spends a tick, and a tick
+/// is free to queue a raid's own effects alongside. The assertion is about
+/// this cue, not about the queue.
+fn mining_cues(game: &mut Game) -> Vec<(i32, i32)> {
+    game.take_effects()
+        .into_iter()
+        .filter(|e| e.kind == EffectKind::Mine)
+        .map(|e| e.pos)
+        .collect()
+}
+
+/// Mining is the one base-space verb with nothing of its own to animate —
+/// the cell wears a progress bar and no glyph moves — so the cue is the
+/// whole of the feedback that a swing landed.
+///
+/// Queued from `Game::strike_rock` and not from either of its callers,
+/// which is what makes the player's bump and a posted digger's cycle sound
+/// alike: the two share the one place rock takes damage.
+#[test]
+fn a_swing_at_rock_queues_a_mining_cue() {
+    let mut game = game_at_the_frontier_cutting(3244);
+    game.take_effects();
+
+    game.move_player(1, 0);
+
+    assert_eq!(
+        mining_cues(&mut game),
+        vec![WALL],
+        "the player's bump into rock queued no mining cue"
+    );
+}
+
+/// The negative half, and what keeps the cue keyed to a swing rather than to
+/// a keypress: a disarmed bump is refused for exactly as slice 1 refused it
+/// — no tick, nothing damaged — so it has to be silent too.
+#[test]
+fn a_bump_that_does_not_cut_is_silent() {
+    let mut game = game_at_the_frontier(3245);
+    game.take_effects();
+
+    game.move_player(1, 0);
+
+    assert!(
+        mining_cues(&mut game).is_empty(),
+        "a bump that cut nothing sounded like a swing"
+    );
+}
+
+/// Swinger-blind, which is the whole reason the cue sits in `strike_rock`
+/// rather than in `move_in_base`: a crew cutting is the base's own sound,
+/// and nothing about it is keyed to the player standing there to hear it.
+#[test]
+fn a_crew_swing_queues_the_same_cue() {
+    let mut game = game_at_the_frontier(3246);
+    let worker = spawn_tamed(&mut game, 30, 3);
+    game.take_effects();
+
+    game.strike_rock(worker, WALL.0, WALL.1);
+
+    assert_eq!(
+        mining_cues(&mut game),
+        vec![WALL],
+        "a crew program's swing queued no mining cue"
+    );
+}
+
+/// A swing that breaks through is still one swing and still one cue. The
+/// break has its own base-news line, and a second clip on top of the last
+/// swing of a wall would be the only double cue in the game.
+#[test]
+fn breaking_through_queues_one_cue_and_not_two() {
+    let mut game = game_at_the_frontier_cutting(3247);
+    let player = game.player_entity();
+    let swings = swings_for(&game, player, WALL);
+    for _ in 0..swings - 1 {
+        game.strike_rock(player, WALL.0, WALL.1);
+    }
+    assert!(
+        cell(&game, WALL).is_none(),
+        "precondition: the wall must still be standing before the last swing"
+    );
+    game.take_effects();
+
+    game.strike_rock(player, WALL.0, WALL.1);
+
+    assert_eq!(
+        mining_cues(&mut game),
+        vec![WALL],
+        "the swing that opened the cell queued a second cue"
+    );
+}
+
 /// A refusal is news to the player standing there, not to the base's own
 /// record of what it did. `lay_tile`'s other two refusals are reported by
 /// the `Err` alone, and this one wrote the base log as well — so every

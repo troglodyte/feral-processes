@@ -42,6 +42,28 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.180
+
+**Cutting rock in your base makes a sound now, and a dig crew cutting makes
+it too.** Mining was the one thing you could do down there that the game
+never acknowledged: a swing into the entropy played the footstep cue, because
+a bump into a wall reaches the world as a step like any other and nothing
+downstream could tell the two apart. Swinging now plays a short, soft chip
+instead, and the footstep is dropped for that press rather than layered under
+it.
+
+What the ear counts is a **tick of cutting**, not a swing that lands damage.
+That distinction is the whole of why a crew is audible at all: a crew spends
+twelve ticks per swing where you spend one, so a cue on the damage alone left
+your programs chipping once every six seconds while the bar on the cell they
+were working moved the whole time. Holding a direction into a wall drives the
+world at about eleven ticks a second and sounds like it; a crew working at the
+world's own pace sounds twice a second. The difference between the two is the
+clock, not a choice about the sound.
+
+A crew laying floor over a cell it already cut stays silent — that is the
+other half of the same job, and it is not mining.
+
 ## 0.13.179
 
 **A program's sheet no longer carries the "zone 1 — you're in 2" line under

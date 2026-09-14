@@ -3342,6 +3342,220 @@ fn a_crew_program_swings_its_own_species_band_at_rock() {
     );
 }
 
+/// Every mining cue queued since the last drain, by cell.
+///
+/// Filtered rather than compared whole: a swing spends a tick, and a tick
+/// is free to queue a raid's own effects alongside. The assertion is about
+/// this cue, not about the queue.
+fn mining_cues(game: &mut Game) -> Vec<(i32, i32)> {
+    game.take_effects()
+        .into_iter()
+        .filter(|e| e.kind == EffectKind::Mine)
+        .map(|e| e.pos)
+        .collect()
+}
+
+/// Mining is the one base-space verb with nothing of its own to animate —
+/// the cell wears a progress bar and no glyph moves — so the cue is the
+/// whole of the feedback that a swing landed.
+///
+/// Queued from `Game::strike_rock` and not from either of its callers,
+/// which is what makes the player's bump and a posted digger's cycle sound
+/// alike: the two share the one place rock takes damage.
+#[test]
+fn a_swing_at_rock_queues_a_mining_cue() {
+    let mut game = game_at_the_frontier_cutting(3244);
+    game.take_effects();
+
+    game.move_player(1, 0);
+
+    assert_eq!(
+        mining_cues(&mut game),
+        vec![WALL],
+        "the player's bump into rock queued no mining cue"
+    );
+}
+
+/// The negative half, and what keeps the cue keyed to a swing rather than to
+/// a keypress: a disarmed bump is refused for exactly as slice 1 refused it
+/// — no tick, nothing damaged — so it has to be silent too.
+#[test]
+fn a_bump_that_does_not_cut_is_silent() {
+    let mut game = game_at_the_frontier(3245);
+    game.take_effects();
+
+    game.move_player(1, 0);
+
+    assert!(
+        mining_cues(&mut game).is_empty(),
+        "a bump that cut nothing sounded like a swing"
+    );
+}
+
+/// Swinger-blind, which is the whole reason the cue sits in `strike_rock`
+/// rather than in `move_in_base`: a crew cutting is the base's own sound,
+/// and nothing about it is keyed to the player standing there to hear it.
+#[test]
+fn a_crew_swing_queues_the_same_cue() {
+    let mut game = game_at_the_frontier(3246);
+    let worker = spawn_tamed(&mut game, 30, 3);
+    game.take_effects();
+
+    game.strike_rock(worker, WALL.0, WALL.1);
+
+    assert_eq!(
+        mining_cues(&mut game),
+        vec![WALL],
+        "a crew program's swing queued no mining cue"
+    );
+}
+
+/// A game with one program posted on a dig job at `at`, and the program.
+///
+/// Shaped after `a_digger_drops_a_post_whose_mark_was_cleared`: the site is
+/// spawned by a first swing, because `strike_rock` creates it lazily rather
+/// than marking doing it.
+fn a_posted_digger(seed: u32, at: (i32, i32)) -> (Game, Entity) {
+    let mut game = game_at_the_frontier(seed);
+    let player = game.player_entity();
+    game.toggle_mark_box(at, at);
+    game.strike_rock(player, at.0, at.1);
+    let site = game
+        .dig_site_at(at.0, at.1)
+        .expect("a marked, struck wall has a dig site");
+    let digger = spawn_tamed(&mut game, 30, 3);
+    game.world.entity_mut(digger).insert((
+        Position {
+            x: at.0 - 1,
+            y: at.1,
+        },
+        Task {
+            kind: TaskKind::Excavate,
+            target: site,
+            progress: 0,
+            required: crate::tuning::BASE_DIG_TICKS_PER_SWING,
+        },
+    ));
+    (game, digger)
+}
+
+/// A crew cycle is `BASE_DIG_TICKS_PER_SWING` ticks long, so a cue on the
+/// swing alone is one chip every six real seconds while the cell's own
+/// progress bar moves every tick.
+///
+/// Both sides cue on **a tick of cutting** instead. The player's bump spends
+/// one tick and lands a swing; a crew spends twelve ticks for the same
+/// swing. That difference is the whole of why a player hammering sounds
+/// faster than a crew working, and it is the simulation's difference rather
+/// than a presentation one.
+#[test]
+fn a_crew_cues_every_tick_it_cuts_and_not_just_when_the_swing_lands() {
+    let ticks = crate::tuning::BASE_DIG_TICKS_PER_SWING;
+    let (mut game, _digger) = a_posted_digger(3248, WALL);
+    game.take_effects();
+
+    for _ in 0..ticks {
+        game.run_dig_crew();
+    }
+
+    let cues = mining_cues(&mut game);
+    assert_eq!(
+        cues.len(),
+        ticks as usize,
+        "a {ticks}-tick cycle sounded {} time(s)",
+        cues.len()
+    );
+    assert!(
+        cues.iter().all(|&pos| pos == WALL),
+        "a cue landed off the cell being cut: {cues:?}"
+    );
+}
+
+/// Exactly one cue on the tick the swing lands, and not two. That tick is
+/// cued by `strike_rock` rather than by the progress counter — every other
+/// tick of the cycle is the other way round — so the seam between the two
+/// push sites is the one place a tick could double up.
+#[test]
+fn the_tick_a_crew_swing_lands_cues_once() {
+    let ticks = crate::tuning::BASE_DIG_TICKS_PER_SWING;
+    let (mut game, _digger) = a_posted_digger(3249, WALL);
+    for _ in 0..ticks - 1 {
+        game.run_dig_crew();
+    }
+    game.take_effects();
+
+    game.run_dig_crew();
+
+    assert_eq!(
+        mining_cues(&mut game),
+        vec![WALL],
+        "the landing tick cued twice — once for the progress tick and once \
+         for the swing"
+    );
+}
+
+/// Flooring is the other half of the one dig verb, and it is not mining. A
+/// crew laying substrate over a cut cell has to be silent, or the cue means
+/// "the crew is busy" rather than "rock is being cut".
+#[test]
+fn a_crew_laying_floor_is_silent() {
+    let cut = WALL;
+    let mut game = game_with_a_cut_cell(3250, cut);
+    game.toggle_mark_box(cut, cut);
+    let site = game
+        .dig_site_at(cut.0, cut.1)
+        .expect("marking an open cell spawns a site to floor");
+    let digger = spawn_tamed(&mut game, 30, 3);
+    game.world.entity_mut(digger).insert((
+        Position {
+            x: cut.0 - 1,
+            y: cut.1,
+        },
+        Task {
+            kind: TaskKind::Excavate,
+            target: site,
+            progress: 0,
+            required: crate::tuning::BASE_DIG_TICKS_PER_SWING,
+        },
+    ));
+    game.take_effects();
+
+    for _ in 0..crate::tuning::BASE_DIG_TICKS_PER_SWING * 2 {
+        game.run_dig_crew();
+    }
+
+    assert!(
+        mining_cues(&mut game).is_empty(),
+        "laying floor sounded like cutting rock"
+    );
+}
+
+/// A swing that breaks through is still one swing and still one cue. The
+/// break has its own base-news line, and a second clip on top of the last
+/// swing of a wall would be the only double cue in the game.
+#[test]
+fn breaking_through_queues_one_cue_and_not_two() {
+    let mut game = game_at_the_frontier_cutting(3247);
+    let player = game.player_entity();
+    let swings = swings_for(&game, player, WALL);
+    for _ in 0..swings - 1 {
+        game.strike_rock(player, WALL.0, WALL.1);
+    }
+    assert!(
+        cell(&game, WALL).is_none(),
+        "precondition: the wall must still be standing before the last swing"
+    );
+    game.take_effects();
+
+    game.strike_rock(player, WALL.0, WALL.1);
+
+    assert_eq!(
+        mining_cues(&mut game),
+        vec![WALL],
+        "the swing that opened the cell queued a second cue"
+    );
+}
+
 /// A refusal is news to the player standing there, not to the base's own
 /// record of what it did. `lay_tile`'s other two refusals are reported by
 /// the `Err` alone, and this one wrote the base log as well — so every

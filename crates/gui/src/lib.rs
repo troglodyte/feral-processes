@@ -32,7 +32,9 @@ use bevy_egui::{
     EguiContexts, EguiPlugin, EguiPreUpdateSet, EguiPrimaryContextPass, EguiUserTextures,
 };
 
-use feral_processes_app_core::{App, GameKey, Mode, PointerButton, PointerHit, PointerPhase};
+use feral_processes_app_core::{
+    App, GameKey, Mode, PointerButton, PointerHit, PointerPhase, SoundEvent,
+};
 use fx::Fx;
 use keys::{KeyRepeat, TextGate};
 use paint::{Color, Painter};
@@ -581,9 +583,9 @@ fn frame(
         fe.perf_on = !fe.perf_on;
     }
 
-    for event in fe.app.take_sounds() {
-        sounds.play(&mut commands, event, fe.volume);
-    }
+    // Held rather than played here: `frame_cues` below has to be able to
+    // drop one of them, and it cannot do that once the clip is in flight.
+    let queued = fe.app.take_sounds();
 
     if fe.app.quit {
         exit.write(AppExit::Success);
@@ -602,20 +604,10 @@ fn frame(
         ),
         None => (Vec::new(), Vec::new(), Vec::new(), None),
     };
-    // **Before `begin_frame` consumes the vector**, and **at most one cue a
-    // frame** however many blows are in it: several base beats can land in
-    // one frame and one cue per blow is a machine-gun. Played whether or not
-    // `Fx` is enabled — sound is not a visual effect — and directly rather
-    // than through `pending_sounds`, which was drained above.
-    if effects
-        .iter()
-        .any(|e| e.kind == feral_processes_engine::EffectKind::Brawl)
-    {
-        sounds.play(
-            &mut commands,
-            feral_processes_app_core::SoundEvent::Hit,
-            fe.volume,
-        );
+    // **Before `begin_frame` consumes the vector**, and played whether or
+    // not `Fx` is enabled — sound is not a visual effect.
+    for event in frame_cues(queued, &effects) {
+        sounds.play(&mut commands, event, fe.volume);
     }
     fe.fx.begin_frame(now, effects, transits, bolts, in_battle);
     fe.fx.observe_log(last_log.as_ref());
@@ -644,6 +636,49 @@ fn frame(
     Ok(())
 }
 
+/// Which cues this frame plays: what `App` queued for the key the player
+/// pressed, plus whatever the engine's effect queue is carrying that has a
+/// sound.
+///
+/// Two kinds of effect sound, and **at most one cue each however many
+/// landed**. Several base beats resolve in one frame — a brawl's blows, a
+/// crew's swings — and a clip per blow is a machine-gun.
+///
+/// The one interaction between the two sources is `Step`. A bump into
+/// base-space rock is a swing (`Game::move_in_base`), but it reaches the
+/// engine as `Game::move_player` like any other step, so
+/// `App::after_world_action` queues `Step` for it and cannot tell the
+/// difference. Dropping it here is what keeps the player's own swing from
+/// sounding like a footstep with a chip on top.
+///
+/// What that costs is one swallowed footstep in a frame where the crew cuts
+/// while the player walks somewhere else — inaudible, against app-core
+/// otherwise re-deriving `move_in_base`'s wall branch to answer something
+/// the engine already knows. A brawl deliberately does *not* suppress it:
+/// two programs fighting across the base has nothing to do with the step the
+/// player just took.
+fn frame_cues(
+    queued: Vec<SoundEvent>,
+    effects: &[feral_processes_engine::resources::VisualEffect],
+) -> Vec<SoundEvent> {
+    use feral_processes_engine::EffectKind;
+
+    let sounded = |kind: EffectKind| effects.iter().any(|e| e.kind == kind);
+    let mining = sounded(EffectKind::Mine);
+    let mut cues: Vec<SoundEvent> = queued
+        .into_iter()
+        .filter(|cue| !(mining && *cue == SoundEvent::Step))
+        .collect();
+    if mining {
+        cues.push(SoundEvent::Mine);
+    }
+    // A brawl has no clip of its own — see `EffectKind::Brawl`.
+    if sounded(EffectKind::Brawl) {
+        cues.push(SoundEvent::Hit);
+    }
+    cues
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -653,6 +688,77 @@ mod tests {
     use feral_processes_engine::stack::{CellKind, Dir, FrameSpec, generate};
     use feral_processes_engine::{DifficultyMode, Game, save};
     use std::path::PathBuf;
+
+    fn effect(kind: EffectKind) -> VisualEffect {
+        VisualEffect { pos: (2, 3), kind }
+    }
+
+    /// The player's bump into rock queues `Step` from app-core and a mining
+    /// cue from the engine, for the one keypress. Both played, the swing
+    /// sounds like a footstep with a chip laid over it.
+    #[test]
+    fn a_mining_cue_replaces_the_step_the_same_keypress_queued() {
+        assert_eq!(
+            frame_cues(vec![SoundEvent::Step], &[effect(EffectKind::Mine)]),
+            vec![SoundEvent::Mine],
+        );
+    }
+
+    /// However many diggers finished a cycle on this frame. A clip per swing
+    /// is `EffectKind::Brawl`'s machine-gun.
+    #[test]
+    fn a_whole_crews_swings_are_one_cue() {
+        assert_eq!(
+            frame_cues(
+                Vec::new(),
+                &[
+                    effect(EffectKind::Mine),
+                    effect(EffectKind::Mine),
+                    effect(EffectKind::Mine),
+                ]
+            ),
+            vec![SoundEvent::Mine],
+        );
+    }
+
+    /// Only `Step` is dropped, and only by mining. A frame where the player
+    /// takes a hit while the crew cuts still has to report the hit — that is
+    /// the cue the game spends on losing Integrity.
+    #[test]
+    fn a_mining_cue_silences_nothing_but_the_step() {
+        let cues = frame_cues(
+            vec![SoundEvent::Hit, SoundEvent::Step, SoundEvent::Victory],
+            &[effect(EffectKind::Mine)],
+        );
+        assert_eq!(
+            cues,
+            vec![SoundEvent::Hit, SoundEvent::Victory, SoundEvent::Mine],
+        );
+    }
+
+    /// Two programs fighting across the base has nothing to do with the step
+    /// the player just took, so the brawl cue is additive where mining's is a
+    /// replacement.
+    #[test]
+    fn a_brawl_sounds_alongside_the_step_rather_than_instead_of_it() {
+        assert_eq!(
+            frame_cues(vec![SoundEvent::Step], &[effect(EffectKind::Brawl)]),
+            vec![SoundEvent::Step, SoundEvent::Hit],
+        );
+    }
+
+    /// The pass-through case, and what keeps the four above from being
+    /// satisfied by a function that always answers the same thing.
+    #[test]
+    fn a_frame_with_no_sounding_effect_plays_exactly_what_was_queued() {
+        assert_eq!(
+            frame_cues(
+                vec![SoundEvent::Step],
+                &[effect(EffectKind::Hit), effect(EffectKind::Destroyed)]
+            ),
+            vec![SoundEvent::Step],
+        );
+    }
 
     fn assets_dir() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets")

@@ -621,6 +621,21 @@ pub enum EffectKind {
     /// have never had, which is a change to a shipped feature nobody asked
     /// for.
     Brawl,
+    /// A swing landed on base-space rock — the player's bump or a posted
+    /// digger's cycle alike, since both go through `Game::strike_rock`.
+    ///
+    /// **Draws nothing**, which makes it the one kind here that is purely a
+    /// sound. The struck cell already reports itself: it wears a progress
+    /// bar for as long as there is anything left to cut, and a flash on top
+    /// of a bar that is already moving is noise. `effect_duration` returning
+    /// zero for this is what enforces it — `Fx::begin_frame`'s own retain
+    /// drops the flash on the frame it was pushed.
+    ///
+    /// It rides this queue rather than a sound queue of its own because this
+    /// is the one channel the engine already has for a tick-driven
+    /// base-space cue, and a new `Resource` beside it would shift bevy's
+    /// query iteration order for the sake of one clip.
+    Mine,
 }
 
 /// One open fight between two base programs.

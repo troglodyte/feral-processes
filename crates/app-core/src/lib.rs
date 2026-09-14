@@ -845,6 +845,17 @@ pub enum SoundEvent {
     Victory,
     /// The run ended in `Mode::GameOver`.
     Defeat,
+    /// A swing landed on base-space rock — the player's own bump or a
+    /// posted digger's cycle.
+    ///
+    /// **The one variant `App` never pushes.** It comes off the engine's
+    /// effect queue (`resources::EffectKind::Mine`), because mining happens
+    /// on a tick and a crew cuts with nobody touching a key. That is not a
+    /// new arrangement: `EffectKind::Brawl` already reaches a frontend the
+    /// same way and plays `Hit`. What is new is needing a clip of its own,
+    /// which is the only reason the variant exists rather than the cue
+    /// reusing one.
+    Mine,
 }
 
 /// Which pane of the HUD's info column is open.

@@ -408,6 +408,10 @@ fn spark_burst(kind: EffectKind) -> (u32, f32) {
         EffectKind::Hit | EffectKind::Brawl => (HIT_SPARKS, HIT_SPARK_REACH),
         EffectKind::Destroyed => (DESTROYED_SPARKS, DESTROYED_SPARK_REACH),
         EffectKind::Deflected => (0, 0.0),
+        // Sound only — see `EffectKind::Mine`. Zero here *and* zero in
+        // `effect_duration`, since `Deflected` shows that no sparks alone
+        // still leaves a flash.
+        EffectKind::Mine => (0, 0.0),
     }
 }
 
@@ -488,6 +492,11 @@ fn effect_duration(kind: EffectKind) -> f64 {
     match kind {
         EffectKind::Hit | EffectKind::Deflected | EffectKind::Brawl => HIT_FLASH_SECONDS,
         EffectKind::Destroyed => DESTROYED_FLASH_SECONDS,
+        // Zero is how a kind opts out of being drawn at all: `begin_frame`
+        // pushes the flash and then retains on `now - start < duration`, so
+        // a zero-length flash is gone on the frame it arrived. The struck
+        // cell's own progress bar is the picture.
+        EffectKind::Mine => 0.0,
     }
 }
 
@@ -496,6 +505,10 @@ fn effect_color(kind: EffectKind) -> Color {
         EffectKind::Hit | EffectKind::Brawl => FLASH_RED,
         EffectKind::Deflected => FLASH_CYAN,
         EffectKind::Destroyed => FLASH_WHITE,
+        // Never reached: a zero-length flash is dropped before anything
+        // asks what colour it is. Answering `FLASH_RED` anyway rather than
+        // panicking, since a cue turning into a crash is the worse failure.
+        EffectKind::Mine => FLASH_RED,
     }
 }
 
@@ -1680,6 +1693,63 @@ mod tests {
             assert!(spread >= previous, "went backwards at t={i}: {spread}");
             previous = spread;
         }
+    }
+
+    /// A mining cue is sound and nothing else. It rides the effects queue
+    /// because that is the one channel the engine has for a tick-driven
+    /// base-space event, so the thing to hold is that riding it draws
+    /// nothing: a flash on a cell that is already wearing a progress bar is
+    /// noise, and a crew cutting all night would strobe the base.
+    ///
+    /// Asserted through `tile_flash` rather than on `effect_duration`
+    /// directly — zero duration is the mechanism, and what matters is that
+    /// the mechanism reaches the screen.
+    #[test]
+    fn a_mining_cue_leaves_no_flash_on_the_cell_it_struck() {
+        let mut fx = Fx::new();
+        let cell = (4, -2);
+
+        fx.begin_frame(
+            1.0,
+            vec![VisualEffect {
+                pos: cell,
+                kind: EffectKind::Mine,
+            }],
+            Vec::new(),
+            Vec::new(),
+            false,
+        );
+
+        assert_eq!(
+            fx.tile_flash(cell),
+            None,
+            "a mining cue lit the cell it was queued on"
+        );
+    }
+
+    /// The control for the test above: the same call with a kind that *does*
+    /// draw must light the cell. Without this, deleting the push in
+    /// `begin_frame` altogether would leave that test green.
+    #[test]
+    fn a_hit_on_the_same_cell_does_flash() {
+        let mut fx = Fx::new();
+        let cell = (4, -2);
+
+        fx.begin_frame(
+            1.0,
+            vec![VisualEffect {
+                pos: cell,
+                kind: EffectKind::Hit,
+            }],
+            Vec::new(),
+            Vec::new(),
+            false,
+        );
+
+        assert!(
+            fx.tile_flash(cell).is_some(),
+            "the control case stopped flashing, so the Mine assertion proves nothing"
+        );
     }
 
     /// Sparks are spread evenly and *then* jittered, so a burst can never

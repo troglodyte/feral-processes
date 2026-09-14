@@ -368,6 +368,27 @@ impl Game {
             .wall_at(seed, x, y)
     }
 
+    /// One tick of cutting at `(x, y)`, for the ear.
+    ///
+    /// **The unit is a tick of work, not a swing**, and that is what makes
+    /// the player's bump and a posted digger sound like the same activity: a
+    /// bump spends one tick and lands a swing, while a crew spends
+    /// `BASE_DIG_TICKS_PER_SWING` of them for the same swing. Cueing the
+    /// swing alone left a crew chipping once every six real seconds with the
+    /// cell's own progress bar moving every tick, which read as the sound
+    /// being broken rather than as the crew being unhurried.
+    ///
+    /// Two callers, because the two sides reach a tick of cutting
+    /// differently — `strike_rock` for the tick a swing lands on,
+    /// `run_dig_crew` for the eleven that only move the meter. Exactly one
+    /// of them fires per tick; `the_tick_a_crew_swing_lands_cues_once` is
+    /// the seam between them.
+    fn cue_mining(&mut self, x: i32, y: i32) {
+        self.world
+            .resource_mut::<crate::resources::EffectQueue>()
+            .push((x, y), EffectKind::Mine);
+    }
+
     /// One swing at the solid base-space cell `(x, y)`, spawning the
     /// `DigSite` that records the wall's progress if this is the first.
     ///
@@ -425,7 +446,12 @@ impl Game {
             durability.hp = durability.max_hp;
         }
         durability.hp = durability.hp.saturating_sub(dmg);
-        if durability.hp > 0 {
+        let still_standing = durability.hp > 0;
+        // Above the break/no-break split deliberately: the swing that opens
+        // a cell is still one tick of cutting, and the break has its own
+        // line to announce itself with.
+        self.cue_mining(x, y);
+        if still_standing {
             if by_player {
                 self.log(format!("You cut into the entropy for {dmg} damage."));
             }
@@ -713,20 +739,29 @@ impl Game {
                 continue;
             };
             task.progress += 1;
-            if task.progress < task.required {
+            let landed = task.progress >= task.required;
+            if landed {
+                task.progress = 0;
+            }
+            // Read per tick rather than once the cycle completes, because
+            // which half of the one dig verb this is decides whether the
+            // tick makes a sound: cutting is mining and flooring is not.
+            let cutting = self
+                .world
+                .resource::<BaseGrid>()
+                .is_solid(target.x, target.y);
+            if cutting && !landed {
+                self.cue_mining(target.x, target.y);
+            }
+            if !landed {
                 continue;
             }
-            task.progress = 0;
             // Which of the two halves of the one verb this is, decided by the
             // cell rather than by anything stored on the job: marked solid
             // means cut it, marked `Open` means floor it. A cut cell is still
             // this body's job on the next cycle, because the mark outlives
             // the cut.
-            if self
-                .world
-                .resource::<BaseGrid>()
-                .is_solid(target.x, target.y)
-            {
+            if cutting {
                 self.strike_rock(worker, target.x, target.y);
             } else {
                 self.crew_lays_tile(target.x, target.y);

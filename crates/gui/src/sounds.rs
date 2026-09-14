@@ -27,6 +27,7 @@ pub struct SoundBank {
     flee: Handle<AudioSource>,
     victory: Handle<AudioSource>,
     defeat: Handle<AudioSource>,
+    mine: Handle<AudioSource>,
 }
 
 impl SoundBank {
@@ -45,6 +46,7 @@ impl SoundBank {
             flee: add(include_bytes!("../../../assets/sounds/flee.wav")),
             victory: add(include_bytes!("../../../assets/sounds/victory.wav")),
             defeat: add(include_bytes!("../../../assets/sounds/defeat.wav")),
+            mine: add(include_bytes!("../../../assets/sounds/mine.wav")),
         }
     }
 
@@ -66,6 +68,7 @@ impl SoundBank {
             SoundEvent::Flee => &self.flee,
             SoundEvent::Victory => &self.victory,
             SoundEvent::Defeat => &self.defeat,
+            SoundEvent::Mine => &self.mine,
         };
         commands.spawn((
             AudioPlayer::new(source.clone()),

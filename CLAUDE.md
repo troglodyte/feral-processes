@@ -1359,7 +1359,7 @@ relying on one, and correct all three places if it has moved.
 ## Build & test
 
 ```sh
-cargo test --workspace     # 5580 tests
+cargo test --workspace     # 5628 tests
 cargo run                  # the game; `default-run` in crates/launcher
 cargo clippy --workspace --all-targets   # --all-targets or test code is unlinted
 cargo fmt

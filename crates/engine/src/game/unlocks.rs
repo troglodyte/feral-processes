@@ -815,6 +815,12 @@ impl Game {
         // Stack. A plain `log()` is `MessageKind::Info`, which
         // `retain_outcomes_since_battle` prunes.
         self.log_base(format!("Research complete: {}.", def.name));
+        let unlocks = self.research_unlocks(&def);
+        self.notify_filled(
+            crate::notifications::NotificationKind::ResearchComplete,
+            &[("name", &def.name), ("description", &def.description)],
+            unlocks,
+        );
         self.note_deed(crate::contracts::Deed::FinishedResearch);
         self.grant_research_knowledge(&def);
         {

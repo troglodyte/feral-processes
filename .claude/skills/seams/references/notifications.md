@@ -42,10 +42,16 @@
   not fall out is a burst**: `handle_notification_key` pops the next itself,
   since `after_tick` runs on a *tick* and a dismissal is not one, so the
   second notice would read as a swallowed keypress.
-- **The screen has no scroll and draws no popup**, so height is a layout
-  constraint (`the_tallest_shipped_notification_fits_its_screen`, walking
-  `all()`, verified by mutation) and it belongs in `needs_status_banner` and
-  `ALL_MODES`. Art is the **sprite seam unchanged** — substitutes for the
+- **The screen has no scroll and is a fixed panel, not a `draw_popup`** —
+  `PANEL_FRACTION` of the window each way, so every notice opens the same box
+  and the map stays in view around it. Height is a layout constraint
+  measured against that *panel*, never the window
+  (`the_tallest_shipped_notification_fits_its_screen`, walking `all()`,
+  verified by mutation), and the renderer and all four censuses call one
+  `block_height` — the censuses used to restate the sum, which is how a
+  layout change would have left them green against a screen no longer
+  drawn. A `detail` wraps, since an unlock list is as long as the node
+  makes it. The screen belongs in `needs_status_banner` and `ALL_MODES`. Art is the **sprite seam unchanged** — substitutes for the
   glyph, never beside it, both halves asserted — and `def.sprite` is that
   live hook, not an unused field.
 - **The low-Power notice is a state read once a tick, not a hook on a

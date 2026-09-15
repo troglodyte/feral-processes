@@ -42,6 +42,17 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.193
+
+**On the Work Orders screen, `<` and `>` move the highlighted order up and
+down the queue, and the queue is worked from the top down.** Before, the
+only say over what the base worked first was the High/Normal/Low choice
+made when an order was filed, and changing your mind meant cancelling and
+refiling. That choice and its `[P]` key are gone: a new order joins the
+bottom, a research project's material bill still files at the top, and an
+order that cannot be worked yet hands its programs on to the next one down.
+Saves with orders filed under the old choice load unchanged.
+
 ## 0.13.192
 
 **The box in the map's top-left corner now shows the research project the

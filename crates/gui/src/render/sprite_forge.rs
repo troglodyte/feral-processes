@@ -623,17 +623,19 @@ mod tests {
     /// shipped subjects must fit inside 1280x720 with no scroll, since this
     /// screen has none — the `memory-page-has-no-scroll` precedent.
     ///
-    /// 51 is Task 4's own pinned count
-    /// (`sprite_subjects_is_every_species_and_structure_plus_player_and_anchor`);
-    /// asserted again here so a shrinking asset tree can't silently make
-    /// this census easier than the one it is meant to hold.
+    /// 50 is Task 4's own pinned count
+    /// (`sprite_subjects_is_every_species_and_structure_plus_player_and_anchor`),
+    /// one lower than its original 51 now that the Home's `sprite:` field
+    /// names "anchor" and de-duplicates away; asserted again here so a
+    /// shrinking asset tree can't silently make this census easier than the
+    /// one it is meant to hold.
     #[test]
     fn the_picker_shows_every_subject_with_no_scroll_at_1280x720() {
         let mut app = sprite_forge_app();
         let subjects = app.sprite_subjects();
         assert_eq!(
             subjects.len(),
-            51,
+            50,
             "the shipped subject count moved — re-check this census's premise"
         );
 

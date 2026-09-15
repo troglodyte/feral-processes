@@ -214,6 +214,18 @@ pub(super) fn draw_playing_base(
             .unwrap_or_default(),
         _ => Vec::new(),
     };
+    // Before the `game` borrow, `tactical_preview`'s rule and its own
+    // reason: `tactical_placeable_cells` is empty for every shape but
+    // `Radius` (the engine's own gate), so this needs no shape check here —
+    // it is a call, not a second "is this a splash" test.
+    let tactical_placeable: Vec<(i32, i32)> = match (app.tactical_cursor, app.pending_tactical) {
+        (Some(_), Some(feral_processes_app_core::TacticalIntent::Routine(index))) => app
+            .game
+            .as_mut()
+            .map(|g| g.tactical_placeable_cells(index))
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    };
     let in_tactical = app.game.as_ref().is_some_and(|g| g.in_tactical_battle());
     // The keybar's content for as long as a fight is open, built before the
     // `game` borrow like every other read on this list.
@@ -268,6 +280,7 @@ pub(super) fn draw_playing_base(
             &view,
             tactical_cursor,
             &tactical_preview,
+            &tactical_placeable,
             fx,
             painter,
             regions.map_pane,

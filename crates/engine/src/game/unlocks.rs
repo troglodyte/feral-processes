@@ -748,6 +748,36 @@ impl Game {
         Ok(())
     }
 
+    /// The running project as the corner over the map reads it, `Idle` when a
+    /// Research Node stands with nothing selected, or `None` when there is
+    /// neither — a base with no lab has nothing to say about research.
+    ///
+    /// A running project is read out whether or not its node still stands:
+    /// the project is `ActiveResearch`'s, and a demolished node is exactly
+    /// when the player needs reminding it is still selected. The stall is a
+    /// **call** to `research_material_shortfall`, the one place it is decided.
+    pub fn research_readout(&self) -> Option<ResearchReadout> {
+        let research = self.world.resource::<ActiveResearch>();
+        let Some(id) = research.id.as_ref() else {
+            return (!crate::game::base::work_orders::producers_of(
+                self,
+                &self.research_currency(),
+            )
+            .is_empty())
+            .then_some(ResearchReadout::Idle);
+        };
+        let def = self.world.resource::<ResearchDb>().get(id);
+        let name = def.map_or_else(|| id.clone(), |d| d.name.clone());
+        if let Some(short_of) = self.research_material_shortfall() {
+            return Some(ResearchReadout::Stalled { name, short_of });
+        }
+        Some(ResearchReadout::Earning {
+            name,
+            earned: research.progress.get(id).copied().unwrap_or(0),
+            cost: def.map_or(0, |d| d.cost),
+        })
+    }
+
     /// The first material line the active project is short of, once it has all
     /// the progress it needs — or `None` while it is still earning, or while the
     /// base can pay.

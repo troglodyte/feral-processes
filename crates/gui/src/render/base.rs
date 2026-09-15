@@ -247,6 +247,7 @@ pub(super) fn draw_playing_base(
     let Some(game) = &mut app.game else { return };
 
     let stock_rows = game.base_stock();
+    let research = game.research_readout();
     // One call, shared by every surface that reads it — the status bar's
     // badge here, and the info column's tab markers and collapsed bars once
     // phase 4's column lands. A second derivation is what would make "a
@@ -374,7 +375,13 @@ pub(super) fn draw_playing_base(
         // **In this branch alone**, after the frame so it sits over the map:
         // the Stack's frame map owns this corner underground, and a
         // tactical board is the fight.
-        hud::stock_block::draw_stock_block(regions.map_pane, &stock_rows, painter, m);
+        hud::stock_block::draw_stock_block(
+            regions.map_pane,
+            research.as_ref(),
+            &stock_rows,
+            painter,
+            m,
+        );
     }
     // **After the frame, so it sits over the map rather than under it**, and
     // outside the branch because it is the same block in both — though
@@ -1560,6 +1567,11 @@ mod tests {
             text.iter().any(|t| t == STOCKED_NAME),
             "the block does not name what the base holds: {text:?}"
         );
+        let heading = |h: &str| text.iter().position(|t| t == h);
+        assert!(
+            heading("RESEARCHING") < heading("BASE STOCK") && heading("RESEARCHING").is_some(),
+            "the idle Research Node is not read out above the stock: {text:?}"
+        );
     }
 
     /// The Stack's frame map owns that corner. Same stock as the base-space
@@ -1579,7 +1591,9 @@ mod tests {
         let mut app = super::test_support::playing_app_around(game);
         let text = drawn_text(&mut app);
         assert!(
-            !text.iter().any(|t| t == "BASE STOCK" || t == STOCKED_NAME),
+            !text
+                .iter()
+                .any(|t| t == "BASE STOCK" || t == "RESEARCHING" || t == STOCKED_NAME),
             "the stock block drew over the Stack view: {text:?}"
         );
     }
@@ -1611,7 +1625,9 @@ mod tests {
         let mut app = super::test_support::playing_app_around(game);
         let text = drawn_text(&mut app);
         assert!(
-            !text.iter().any(|t| t == "BASE STOCK" || t == STOCKED_NAME),
+            !text
+                .iter()
+                .any(|t| t == "BASE STOCK" || t == "RESEARCHING" || t == STOCKED_NAME),
             "the stock block drew over the battle map: {text:?}"
         );
     }

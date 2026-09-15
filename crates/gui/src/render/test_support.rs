@@ -264,7 +264,7 @@ pub(super) enum StandingIn {
 }
 
 /// A game whose base is holding something: a Depot with `STOCKED_ITEM` on
-/// its output shelf, written into the save for
+/// its output shelf and an idle Research Node, written into the save for
 /// `app_in_base_with_a_compiler`'s reason — nothing public stands one up
 /// and fills it.
 ///
@@ -304,6 +304,25 @@ pub(super) fn game_with_base_stock(seed: u32, standing: StandingIn) -> Game {
         tier: None,
         stock_input: Vec::new(),
         stock_output: vec![(STOCKED_ITEM.into(), 140)],
+        standing_work: false,
+        standing_guard: false,
+        denied_items: Vec::new(),
+        power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        build_quality: 1.0,
+        racked: Vec::new(),
+        hopper: Vec::new(),
+        hopper_progress: 0,
+        standing_tool: None,
+    });
+    // And a Research Node with no project, so the same corner has a research
+    // line to hide in the two places it is not drawn.
+    data.structures.push(save::StructureSave {
+        kind: "research_node".to_string(),
+        position: (5, 0),
+        durability: None,
+        tier: None,
+        stock_input: Vec::new(),
+        stock_output: Vec::new(),
         standing_work: false,
         standing_guard: false,
         denied_items: Vec::new(),

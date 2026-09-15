@@ -1981,3 +1981,72 @@ fn a_research_node_reports_everything_it_hands_over() {
         "tools are named too, after the routines: {line:?}"
     );
 }
+
+/// The corner over the map names the running project. No Research Node and
+/// no project is nothing to say; a node standing idle says so, because an
+/// idle lab is the state the readout exists to catch.
+#[test]
+fn the_research_readout_follows_the_project() {
+    let mut game = Game::new(741, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert_eq!(game.research_readout(), None, "no node, no project");
+
+    base_with_a_research_node(&mut game);
+    assert_eq!(game.research_readout(), Some(ResearchReadout::Idle));
+
+    game.select_research("automation").unwrap();
+    let row = game
+        .research_nodes()
+        .into_iter()
+        .find(|n| n.id == "automation")
+        .unwrap();
+    assert_eq!(
+        game.research_readout(),
+        Some(ResearchReadout::Earning {
+            name: row.name.clone(),
+            earned: 0,
+            cost: row.cost,
+        })
+    );
+}
+
+/// Full progress and an unpaid bill is the stall `research_material_shortfall`
+/// already names, and the readout names the same item rather than a figure
+/// that has stopped moving.
+#[test]
+fn a_project_waiting_on_its_bill_reads_as_stalled_on_the_material() {
+    let mut game = Game::new(742, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    game.select_research("automation").unwrap();
+    fill_research_progress(&mut game, "automation");
+
+    let short_of = game
+        .research_material_shortfall()
+        .expect("precondition: nothing on the shelves pays the bill");
+    let Some(ResearchReadout::Stalled {
+        name,
+        short_of: named,
+    }) = game.research_readout()
+    else {
+        panic!("expected a stall, got {:?}", game.research_readout());
+    };
+    assert_eq!(named, short_of);
+    assert!(!name.is_empty());
+}
+
+/// A project whose node was demolished is still the project: the readout
+/// follows `ActiveResearch`, and only the idle line needs a node standing.
+#[test]
+fn the_running_project_is_read_out_with_no_node_standing() {
+    let mut game = Game::new(743, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    game.select_research("automation").unwrap();
+    let nodes = crate::game::base::work_orders::producers_of(&game, &game.research_currency());
+    for node in nodes {
+        game.world.despawn(node);
+    }
+
+    assert!(matches!(
+        game.research_readout(),
+        Some(ResearchReadout::Earning { .. })
+    ));
+}

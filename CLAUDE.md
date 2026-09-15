@@ -303,8 +303,8 @@ relying on one, and correct all three places if it has moved.
   assembler's pull and a supplier's fuel walking the same four tiles.
 - **A raid's flash is base-space too, and `render/base.rs` gates both draw
   sites on `base_pos`.**
-- **What the base is holding is a list over the map pane's top-left corner,
-  drawn on the surface map and in base space alone.**
+- **What the base is researching and holding is one box over the map pane's
+  top-left corner, drawn on the surface map and in base space alone.**
 - **Base space carries its own seed, and it is not `WorldMap::seed()`.**
   `BaseGrid::seed` is minted once at `Game::new`; the two stay separate
   because base space and the zone surface are different subsystems, not

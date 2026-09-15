@@ -329,6 +329,14 @@
   left the bar standing — and a menu now hides it; that was accepted for
   full names over a glossary of tags. `ItemDef::tag`/`abbrev` survive for
   the base pane's PRODUCTION rows, held unique by their census.
+  **The running research heads the same box**, from
+  `Game::research_readout` — `Idle` needs a Research Node standing, a
+  running project is read out whether or not one does, and `Stalled` is a
+  *call* to `research_material_shortfall` rather than a second test for it.
+  One box and one budget, not two stacked blocks, and the research section
+  is never cut short — only stock rows are counted. The note line gets its
+  own `NOTE_COLUMN_CHARS`: "needs " spends six cells of a name column, so
+  cut to `NAME_COLUMN_CHARS` it ellipsised an ordinary material name.
 - **Base space carries its own seed, and it is not `WorldMap::seed()`.**
   `BaseGrid::seed` is minted at `Game::new` and saved with the grid. The
   world is persistent now — one `WorldMap`, never reseeded — so the two

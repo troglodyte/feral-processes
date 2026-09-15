@@ -80,9 +80,13 @@ const TURN_ARROW_GAP: f32 = 2.0;
 
 /// How heavily a cell the acting body can still step to is washed — and, in
 /// `AIM` rather than `PLAN`, a cell a `Radius` routine's centre could legally
-/// land on. One constant for both: the two fields are never on screen for
-/// the same reason at once (stepping against throwing), so a viewer never
-/// has to weigh one wash's strength against the other's.
+/// land on. One constant for both, and that is safe **only** because the two
+/// fields never draw on the same cell at once: `draw_tactical_map` suppresses
+/// the reach field entirely while `placeable` is non-empty, so the yellow
+/// outline *replaces* the blue one for as long as a splash is being aimed
+/// rather than sitting over it. The two drawing at once was the first cut of
+/// this feature's own bug — two washes stacked read as a colour nobody
+/// authored, not as "you may both step here and throw there".
 ///
 /// Under the aim preview's own 0.22 so a shaped routine reads over it, and
 /// faint enough that the terrain under it stays legible: the wash says a
@@ -117,6 +121,56 @@ fn turn_arrow(px: f32, py: f32, tile_px: f32, lift: f32) -> [(f32, f32); 3] {
     let point = py - TURN_ARROW_GAP - lift;
     let base = point - tile_px * TURN_ARROW_HEIGHT;
     [(cx - half, base), (cx + half, base), (cx, point)]
+}
+
+/// Washes and outlines one cell of a field — the reach field and the
+/// placeable field are the same shape drawn in different colours, so this is
+/// the one place that shape is written.
+///
+/// Draws nothing when `cell` is not itself in `field`. The wash is a flat
+/// tint at `REACH_WASH_ALPHA`; the boundary is drawn a side at a time and
+/// only where the neighbour on that side is *not* in `field` — a body and a
+/// `Blocked` cell are both walls in `reach::movement_field`, so a gap in the
+/// field is a cell that genuinely cannot be reached, and outlining it is the
+/// same answer the field's outer edge gives.
+fn draw_cell_field(
+    painter: &Painter,
+    field: &[(i32, i32)],
+    cell: (i32, i32),
+    px: f32,
+    py: f32,
+    tile_px: f32,
+    color: Color,
+) {
+    if !field.contains(&cell) {
+        return;
+    }
+    painter.rect(
+        px,
+        py,
+        tile_px - 1.0,
+        tile_px - 1.0,
+        Color::new(color.r, color.g, color.b, REACH_WASH_ALPHA),
+    );
+    let far = tile_px - 1.0;
+    for (dx, dy, from, to) in [
+        (0, -1, (0.0, 0.0), (far, 0.0)),
+        (0, 1, (0.0, far), (far, far)),
+        (-1, 0, (0.0, 0.0), (0.0, far)),
+        (1, 0, (far, 0.0), (far, far)),
+    ] {
+        if field.contains(&(cell.0 + dx, cell.1 + dy)) {
+            continue;
+        }
+        painter.line(
+            px + from.0,
+            py + from.1,
+            px + to.0,
+            py + to.1,
+            REACH_EDGE_PX,
+            color,
+        );
+    }
 }
 
 /// Draws the whole battle map.
@@ -199,76 +253,29 @@ pub(super) fn draw_tactical_map(
         // few lines down by the arrow bobbing over that body's head, in
         // `PLAN` against `THREAT`. Tinting the wash by side too would put
         // one answer on two channels and make neither the place to read it.
-        if view.reachable.contains(&cell) {
-            let c = palette::PLAN;
-            painter.rect(
+        //
+        // **Suppressed while `placeable` is showing.** The request this
+        // outline shipped for was "the same as the movement outline, but
+        // yellow" — a replacement, not a second field stacked on the first.
+        // Drawing both while aiming a splash washed every reachable cell
+        // twice and read as a colour nobody authored.
+        if placeable.is_empty() {
+            draw_cell_field(
+                painter,
+                &view.reachable,
+                cell,
                 px,
                 py,
-                tile_px - 1.0,
-                tile_px - 1.0,
-                Color::new(c.r, c.g, c.b, REACH_WASH_ALPHA),
+                tile_px,
+                palette::PLAN,
             );
-            // The field's own edge, drawn a side at a time: a side whose
-            // neighbour is reachable too is interior and is left alone. The
-            // holes get outlined as well — a body and a `Blocked` cell are
-            // both walls in `reach::movement_field`, so a gap in the field
-            // is a cell that genuinely cannot be stepped on, and saying so
-            // is the same answer as the outer edge gives.
-            let far = tile_px - 1.0;
-            for (dx, dy, from, to) in [
-                (0, -1, (0.0, 0.0), (far, 0.0)),
-                (0, 1, (0.0, far), (far, far)),
-                (-1, 0, (0.0, 0.0), (0.0, far)),
-                (1, 0, (far, 0.0), (far, far)),
-            ] {
-                if view.reachable.contains(&(cell.0 + dx, cell.1 + dy)) {
-                    continue;
-                }
-                painter.line(
-                    px + from.0,
-                    py + from.1,
-                    px + to.0,
-                    py + to.1,
-                    REACH_EDGE_PX,
-                    palette::PLAN,
-                );
-            }
         }
-        // Where a `Radius` routine's centre may legally land — the reach
-        // field's own wash-and-boundary style, tinted `AIM` rather than
-        // `PLAN`. `placeable` is already empty for every shape but `Radius`
-        // (`Game::tactical_placeable_cells`'s own gate), so this block draws
+        // Where a `Radius` routine's centre may legally land. `placeable` is
+        // already empty for every shape but `Radius`
+        // (`Game::tactical_placeable_cells`'s own gate), so this draws
         // nothing while aiming a swing, a `Single` routine or a directional
         // one, and nothing outside `Mode::TacticalAim` at all.
-        if placeable.contains(&cell) {
-            let c = palette::AIM;
-            painter.rect(
-                px,
-                py,
-                tile_px - 1.0,
-                tile_px - 1.0,
-                Color::new(c.r, c.g, c.b, REACH_WASH_ALPHA),
-            );
-            let far = tile_px - 1.0;
-            for (dx, dy, from, to) in [
-                (0, -1, (0.0, 0.0), (far, 0.0)),
-                (0, 1, (0.0, far), (far, far)),
-                (-1, 0, (0.0, 0.0), (0.0, far)),
-                (1, 0, (far, 0.0), (far, far)),
-            ] {
-                if placeable.contains(&(cell.0 + dx, cell.1 + dy)) {
-                    continue;
-                }
-                painter.line(
-                    px + from.0,
-                    py + from.1,
-                    px + to.0,
-                    py + to.1,
-                    REACH_EDGE_PX,
-                    palette::AIM,
-                );
-            }
-        }
+        draw_cell_field(painter, placeable, cell, px, py, tile_px, palette::AIM);
         // What the aim would land on. Over the reach wash, because a routine
         // resolves wherever it is aimed whether or not the body could walk
         // there.
@@ -1414,6 +1421,55 @@ mod tests {
             draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
         });
         assert_eq!(painted_line_count_in(&shapes, palette::AIM), 0);
+    }
+
+    /// The placeable field *replaces* the reach field rather than stacking
+    /// on it — the request this outline shipped for was "the same as the
+    /// movement outline, but yellow", not a second wash on top of the first.
+    ///
+    /// Both halves in one test: the reach field's wash and boundary paint
+    /// nothing while `placeable` is non-empty, and paint exactly what
+    /// `the_reach_wash_is_drawn_for_either_side` and `the_reach_field_is_
+    /// outlined_along_its_boundary` already establish once it is empty again
+    /// — so a fix that only ever suppresses, or only ever restores, is
+    /// still caught.
+    #[test]
+    fn a_placeable_field_suppresses_the_reach_field() {
+        use crate::paint::{painted_line_count_in, painted_rect_fill_count};
+
+        let mut game = fighting();
+        let view = game.tactical_view().expect("the fight is open");
+        assert!(
+            !view.reachable.is_empty(),
+            "the acting body can reach nowhere, so this test would be vacuous"
+        );
+        let c = palette::PLAN;
+        let wash = Color::new(c.r, c.g, c.b, REACH_WASH_ALPHA);
+        let placeable = view.reachable.clone();
+
+        let mut fx = Fx::new();
+        let (_, aiming) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &placeable, &mut fx, p, pane(), 32.0, 24)
+        });
+        assert_eq!(
+            painted_rect_fill_count(&aiming, wash),
+            0,
+            "the movement wash painted while a placeable field was showing"
+        );
+        assert_eq!(
+            painted_line_count_in(&aiming, palette::PLAN),
+            0,
+            "the movement boundary painted while a placeable field was showing"
+        );
+
+        let mut fx = Fx::new();
+        let (_, not_aiming) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        assert!(
+            painted_rect_fill_count(&not_aiming, wash) > 0,
+            "the movement wash stayed suppressed once placeable went back to empty"
+        );
     }
 
     /// The reach wash is drawn off `reachable` alone, so the wild side's

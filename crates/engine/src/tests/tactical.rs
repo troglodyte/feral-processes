@@ -2,7 +2,7 @@
 
 use crate::Experience;
 use crate::Game;
-use crate::components::{Creature, Hostile, Position, Stats, StatusEffects};
+use crate::components::{Creature, Hostile, Position, Rarity, Stats, StatusEffects};
 use crate::resources::{BattleState, DifficultyMode, Party};
 use crate::species::SpeciesDb;
 use crate::tactical::TacticalBattle;
@@ -1112,6 +1112,26 @@ fn a_tactical_view_stands_every_body_where_the_board_does() {
             .iter()
             .all(|b| b.difficulty.is_none() || b.is_hostile)
     );
+}
+
+/// A body's rare-spawn tier rides into the view too, or the tactical board
+/// has no way to draw the bar the surface map already puts on it — see
+/// `render/marks.rs::draw_rarity_bar`.
+#[test]
+fn a_tactical_bodys_rarity_rides_into_the_view() {
+    let mut game = game();
+    let pack = tactical_pack(&mut game, 1, 10);
+    let hostile = pack[0];
+    game.world.entity_mut(hostile).insert(Rarity::Gold);
+    game.open_tactical_battle(pack);
+
+    let view = game.tactical_view().expect("a fight is open");
+    let body = view
+        .bodies
+        .iter()
+        .find(|b| b.entity == hostile)
+        .expect("the spawned body is on the board");
+    assert_eq!(body.rarity, Rarity::Gold, "the view dropped the tier");
 }
 
 #[test]

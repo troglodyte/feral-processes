@@ -984,14 +984,12 @@ fn draw_surface_map(
             // Keyed off `actor` and never `structure`: a structure has no
             // tier, and the actor is what owns this channel. Vignette but
             // not the tile shade, matching the glyph's rule above.
-            if let Some(bar) = actor.and_then(|ev| rarity_color(ev.rarity)) {
-                painter.rect(
-                    px,
-                    py,
-                    tile_px - 1.0,
-                    RARITY_BAR_PX,
-                    Color::new(bar.r * vig, bar.g * vig, bar.b * vig, bar.a),
-                );
+            //
+            // Through `marks::draw_rarity_bar`, shared with the tactical
+            // board so a silver or gold body reads the same colour on both
+            // grids.
+            if let Some(ev) = actor {
+                draw_rarity_bar(painter, ev.rarity, px, py, tile_px, vig);
             }
             // The con read's **fallback** home, a wedge folded into the
             // top-left corner — `ConRead::Earmark` and nothing else, so a

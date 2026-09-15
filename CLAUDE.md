@@ -868,6 +868,9 @@ relying on one, and correct all three places if it has moved.
 - **A hostile decides what it will do before it decides where to stand, and
   the closing term is a shortfall to the *band*, never a distance to the
   target.**
+- **Staying put is the default: a body walks only to a cell that beats its
+  own on `cell_merit` (reach and closing), and crowding chooses among those
+  cells but is never itself a reason to move.**
 - **One draw an AI turn, spent on the cell, and none at temperature zero** —
   the aim and the swing target are argmaxes, and the candidates are sorted
   before they are scored.

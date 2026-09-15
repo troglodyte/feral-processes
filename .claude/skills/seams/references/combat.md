@@ -773,6 +773,31 @@
   and aggro slots, and what replaces a slot here is where a body stands —
   which is also why the swing takes the wounded neighbour rather than
   consulting `battle::slot_aggro_weight`. See `seam:a-hostile-decides-what-it-will-do-before-it-decides-where`.
+- **Staying put is the default: a body walks only to a cell that beats its
+  own on `cell_merit`, and crowding is never itself a reason to move.**
+  `walk_to_best_cell` offered every cell in the movement field to the
+  softmax, and a body already in reach tied with every other cell that
+  reached — softmax over a tie is a uniform draw, and even the argmax
+  (`max_by` keeps the *last* maximum) left for the last tied cell in reading
+  order. So a hostile beside the player sidestepped nearly every turn, and
+  the crowding term pushed it further, off a packmate. The fix is a
+  candidate filter, not a margin on the score: `cell_merit` is the reach
+  bonus and the closing term, `cell_score` is that minus crowding, and only
+  cells strictly better than the body's own on merit are offered — its own
+  cell alone when there are none. **A score margin cannot do it**: one
+  closing step is worth `TACTICAL_AI_CLOSING_WEIGHT` and crowding is
+  `TACTICAL_AI_CROWDING_WEIGHT` per ally, unbounded in pack size, so no
+  margin both lets a body on rough ground close one cell and stops a crowded
+  one shuffling. **The hold still spends its draw** (`sample_scored` over a
+  one-cell list), so a turn costs one draw whichever way it goes. In band
+  but blind is not in reach — `hits` asks sight — so a body behind cover
+  still steps around. Neither "an area routine hitting more bodies" nor
+  "out of danger" is priced by `cell_merit` (`hits` is `any`, and nothing
+  models threat), so neither moves a body; adding either is a new term, not
+  a loosening of the filter. Held by `a_hostile_already_in_reach_holds_its_cell`,
+  with `a_hostile_out_of_reach_still_closes` and
+  `a_hostile_in_range_but_blind_steps_into_sight` failing against an
+  always-hold mutation. See `seam:staying-put-is-the-default`.
 - **One draw a turn, spent on the cell, and none at temperature zero.** The
   aim and the swing target are argmaxes on purpose: a second draw lets a
   hostile fumble an aim it spent its whole walk earning, which reads as

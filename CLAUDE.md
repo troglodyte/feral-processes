@@ -966,8 +966,7 @@ relying on one, and correct all three places if it has moved.
 - **`Game::decision_temperature` is the one door every tactical AI entry
   point reads**, and `tactical_ai_turn_at` is a test hook, not a fifth door.
 - **A tamper ages on the tampered body's own hand-on, never in
-  `tick_one_combatant`.** A one-turn entry run on a body that has already
-  acted would otherwise expire unseen.
+  `tick_one_combatant`.**
 - **A profiled hostile's forecast is a call into the planner its turn
   runs**: `tactical_intent`, `scored_cells` and `chosen_target`, with
   `argmax_scored` shared with `sample_scored`.

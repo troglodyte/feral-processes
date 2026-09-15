@@ -608,8 +608,9 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
         },
         Mode::GameOver => draw_game_over(app, refusal, painter, &m),
         // Drawn over the map rather than over black: the run is still there
-        // behind the notice, and the scrim lets it show through faintly.
-        // A `None` refusal because this screen draws no popup to put one in
+        // behind the notice, and it stays in view around the panel.
+        // A `None` refusal because this screen is not a `draw_popup`, so it
+        // has no status line to put one in
         // — `needs_status_banner` names it, so a refusal raised underneath
         // still reaches the strip along the bottom.
         Mode::Notification => {

@@ -304,6 +304,7 @@ fn every_notification_kind_is_fired_by_a_named_site() {
             NotificationKind::LevelCapReached => {
                 "Game::award_player_xp, the level that lands on the cap"
             }
+            NotificationKind::ResearchComplete => "Game::settle_research",
         }
     }
 
@@ -343,7 +344,8 @@ fn tutorials_latch_and_milestones_do_not() {
             | NotificationKind::OnboardingComplete
             | NotificationKind::OnboardingMission
             | NotificationKind::SettlementGrown
-            | NotificationKind::LevelCapReached => Repeat::Always,
+            | NotificationKind::LevelCapReached
+            | NotificationKind::ResearchComplete => Repeat::Always,
         };
         assert_eq!(kind.def().repeat, expected, "{kind}");
     }

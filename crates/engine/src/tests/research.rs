@@ -543,6 +543,41 @@ fn a_project_completes_on_progress_and_a_bill_the_base_pays() {
     );
 }
 
+/// A finished project says so on the notification screen, not only in the
+/// base log: research runs while the party is anywhere, and a log line is
+/// what gets scrolled past. Named, described and listing what it opened, the
+/// last through the same `Game::research_unlocks` sentence the research
+/// screen draws.
+#[test]
+fn a_completed_project_raises_a_notification_naming_what_it_unlocks() {
+    let mut game = Game::new(62, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    shelve_research_bill(&mut game, "automation", 8, 8);
+    game.select_research("automation").unwrap();
+    fill_research_progress(&mut game, "automation");
+    let row = game
+        .research_nodes()
+        .into_iter()
+        .find(|n| n.id == "automation")
+        .unwrap();
+    while game.take_notification().is_some() {}
+
+    game.tick();
+
+    let note = std::iter::from_fn(|| game.take_notification())
+        .find(|n| n.title == "Research Complete")
+        .expect("completing a project raises its notification");
+    assert!(note.body.contains(&row.name), "{:?}", note.body);
+    assert!(note.body.contains(&row.description), "{:?}", note.body);
+    assert!(
+        !note.body.contains('{'),
+        "an unfilled hole: {:?}",
+        note.body
+    );
+    let unlocks = row.unlocks.expect("automation unlocks something");
+    assert_eq!(note.detail.as_deref(), Some(unlocks.as_str()));
+}
+
 /// The first half of the pair, on its own: full progress and empty shelves
 /// completes nothing and consumes nothing.
 #[test]

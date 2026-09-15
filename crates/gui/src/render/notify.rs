@@ -1,31 +1,89 @@
-//! The full-screen notification: one moment, centred, dismissed by Esc.
+//! The notification: one moment, in a panel centred over the map, dismissed
+//! by Esc.
 //!
-//! The only screen in the game that is neither a popup over the map nor a
-//! pane of it. It draws through `Painter` alone — the drawing seam is not
-//! widened here and no new operation was needed for it.
+//! Not a `draw_popup`: that panel sizes itself to a row list and pages it,
+//! and this one is a fixed fraction of the window holding a centred block of
+//! prose. It draws through `Painter` alone — the drawing seam is not widened
+//! here and no new operation was needed for it.
 
 use feral_processes_engine::notifications::Notification;
 use feral_processes_engine::text;
 
-use super::{Metrics, glyph_color};
-use crate::paint::{Color, Painter};
+use super::{BORDER, Metrics, PANEL_BG, glyph_color};
+use crate::paint::{Color, Painter, Rect};
 
 /// Rows of the window's height the art is given, measured from the top of
 /// the block. The whole block is then centred vertically, so this is a
 /// proportion of the block and not of the window.
 const ART_CELLS: f32 = 4.0;
 
-/// How wide the prose is allowed to run, as a fraction of the window. Long
-/// measure is what makes a paragraph hard to read; the popup screens get
-/// this for free from `draw_popup`'s panel, and this screen has no panel.
-const BODY_WIDTH_FRACTION: f32 = 0.62;
+/// How much of the window the panel takes, each way. Fixed rather than
+/// fitted to the text, so every notice opens the same box and the map
+/// stays visible around all of them.
+const PANEL_FRACTION: f32 = 0.75;
 
-/// Drawn behind everything. Not `Painter::clear`'s black: the map is already
-/// painted underneath by the caller, and letting it show through faintly is
-/// what says the run is still there behind the notice.
-const SCRIM: Color = Color::new(0.02, 0.02, 0.03, 0.92);
+/// How wide the prose is allowed to run, as a fraction of the panel. Long
+/// measure is what makes a paragraph hard to read, and the panel is wider
+/// than a comfortable paragraph.
+const BODY_WIDTH_FRACTION: f32 = 0.84;
 
-/// Draws `note` over the whole window.
+/// Drawn behind the panel. Light enough that the run shows through around
+/// the notice, dark enough that the map does not compete with it.
+const SCRIM: Color = Color::new(0.02, 0.02, 0.03, 0.55);
+
+const HINT: &str = "Press Esc to continue";
+
+/// The panel for a `w` x `h` window, centred.
+fn panel_rect(w: f32, h: f32) -> Rect {
+    let (pw, ph) = (w * PANEL_FRACTION, h * PANEL_FRACTION);
+    Rect::new((w - pw) / 2.0, (h - ph) / 2.0, pw, ph)
+}
+
+/// How many UI cells the prose wraps at inside `panel`. Measured in UI cells
+/// because the body is UI text — the map face is only ever used here for
+/// the one glyph.
+fn body_columns(painter: &Painter, panel: Rect, body_size: u16) -> usize {
+    let columns = (panel.w * BODY_WIDTH_FRACTION) / painter.measure_ui_advance("M", body_size);
+    (columns.floor() as usize).max(20)
+}
+
+/// `body` and `detail` wrapped for `panel`. A detail wraps too: it is drawn
+/// from live game state, and an unlock list is as long as the node makes it.
+fn wrapped(note_body: &str, detail: Option<&str>, columns: usize) -> (Vec<String>, Vec<String>) {
+    let detail = detail.map_or_else(Vec::new, |d| text::wrap(d, columns));
+    (wrapped_body(note_body, columns), detail)
+}
+
+/// The height of the centred block, art to hint. **The one sum** — the
+/// renderer centres on it and every height census below measures it, so a
+/// census cannot pass against a layout the screen no longer draws.
+fn block_height(
+    painter: &Painter,
+    m: &Metrics,
+    title: &str,
+    body_lines: usize,
+    detail_lines: usize,
+) -> f32 {
+    let title_h = painter.measure_ui(title, m.title() + 6).height;
+    // Zero for the common case of no detail, so the block does not grow for
+    // a notification that has nothing to report.
+    let detail_h = if detail_lines == 0 {
+        0.0
+    } else {
+        m.gap + detail_lines as f32 * m.line_height
+    };
+    let hint_h = painter.measure_ui(HINT, m.small()).height;
+    m.line_height * ART_CELLS
+        + m.gap
+        + title_h
+        + m.gap
+        + body_lines as f32 * m.line_height
+        + detail_h
+        + m.gap * 2.0
+        + hint_h
+}
+
+/// Draws `note` in a panel over the map.
 ///
 /// Takes no refusal argument, unlike every popup: this screen has no verb
 /// that can be refused. It is registered in `needs_status_banner` instead,
@@ -34,39 +92,26 @@ const SCRIM: Color = Color::new(0.02, 0.02, 0.03, 0.92);
 pub(super) fn draw_notification(note: &Notification, painter: &Painter, m: &Metrics) {
     let (w, h) = (painter.screen_w(), painter.screen_h());
     painter.rect(0.0, 0.0, w, h, SCRIM);
+    let panel = panel_rect(w, h);
+    painter.rect(panel.x, panel.y, panel.w, panel.h, PANEL_BG);
+    painter.rect_lines(panel.x, panel.y, panel.w, panel.h, 2.0, BORDER);
 
     let color = glyph_color(note.color);
     let art_size = m.line_height * ART_CELLS;
     let title_size = m.title() + 6;
     let body_size = m.font_size;
+    let centre_x = |width: f32| panel.x + (panel.w - width) / 2.0;
 
-    // Measured in UI cells, because the body is UI text — the map face is
-    // only ever used here for the one glyph.
-    let columns =
-        ((w * BODY_WIDTH_FRACTION) / painter.measure_ui_advance("M", body_size)).floor() as usize;
-    let lines = wrapped_body(&note.body, columns.max(20));
-
-    let title_h = painter.measure_ui(&note.title, title_size).height;
-    let body_h = lines.len() as f32 * m.line_height;
-    // Zero for the common case of no detail, so the block this screen
-    // centres around does not grow for a notification that has nothing to
-    // report — `Game::complete_contract` is the one caller that ever sets
-    // it.
-    let detail_h = note
-        .detail
-        .as_deref()
-        .map_or(0.0, |d| m.gap + painter.measure_ui(d, body_size).height);
-    let hint = "Press Esc to continue";
-    let hint_h = painter.measure_ui(hint, m.small()).height;
-
-    let block = art_size + m.gap + title_h + m.gap + body_h + detail_h + m.gap * 2.0 + hint_h;
-    let mut y = ((h - block) / 2.0).max(m.pad);
+    let columns = body_columns(painter, panel, body_size);
+    let (lines, detail) = wrapped(&note.body, note.detail.as_deref(), columns);
+    let block = block_height(painter, m, &note.title, lines.len(), detail.len());
+    let mut y = panel.y + ((panel.h - block) / 2.0).max(m.pad);
 
     // A sprite fills its square from a **top-left**; a glyph is drawn from a
     // *baseline* and centred against measured ink. Reading the two as one
     // convention is a half-cell offset, so they are laid out separately here
     // rather than sharing a `y`.
-    let art_x = (w - art_size) / 2.0;
+    let art_x = centre_x(art_size);
     let drew_sprite = note
         .sprite
         .as_deref()
@@ -77,7 +122,7 @@ pub(super) fn draw_notification(note: &Notification, painter: &Painter, m: &Metr
         let dims = painter.measure_map(&glyph, size);
         painter.map(
             &glyph,
-            (w - dims.width) / 2.0,
+            centre_x(dims.width),
             y + (art_size + dims.height) / 2.0,
             size,
             color,
@@ -85,38 +130,40 @@ pub(super) fn draw_notification(note: &Notification, painter: &Painter, m: &Metr
     }
     y += art_size + m.gap;
 
-    let title_w = painter.measure_ui(&note.title, title_size).width;
+    let title = painter.measure_ui(&note.title, title_size);
     painter.ui(
         &note.title,
-        (w - title_w) / 2.0,
-        y + title_h,
+        centre_x(title.width),
+        y + title.height,
         title_size,
         color,
     );
-    y += title_h + m.gap;
+    y += title.height + m.gap;
 
     // Left-aligned inside a centred column, not centred per line: ragged
     // both edges is what a centred paragraph is, and it is unreadable at
     // this length.
-    let left = (w - w * BODY_WIDTH_FRACTION) / 2.0;
+    let left = centre_x(panel.w * BODY_WIDTH_FRACTION);
     for line in &lines {
         y += m.line_height;
         painter.ui(line, left, y, body_size, super::TEXT);
     }
 
     // The notification's own colour, not the body's `TEXT`: this is the
-    // payout, meant to read as a figure rather than as more prose — the
-    // reason it is a separate line under the body rather than folded into
-    // it.
-    if let Some(detail) = &note.detail {
-        y += m.gap + painter.measure_ui(detail, body_size).height;
-        let detail_w = painter.measure_ui(detail, body_size).width;
-        painter.ui(detail, (w - detail_w) / 2.0, y, body_size, color);
+    // payout or the unlock list, meant to read as a figure rather than as
+    // more prose — the reason it is a separate block under the body rather
+    // than folded into it. Centred per line, since it is rarely more than one.
+    if !detail.is_empty() {
+        y += m.gap;
+        for line in &detail {
+            y += m.line_height;
+            let width = painter.measure_ui(line, body_size).width;
+            painter.ui(line, centre_x(width), y, body_size, color);
+        }
     }
-    y += m.gap * 2.0 + hint_h;
-
-    let hint_w = painter.measure_ui(hint, m.small()).width;
-    painter.ui(hint, (w - hint_w) / 2.0, y, m.small(), super::TEXT_DIM);
+    let hint = painter.measure_ui(HINT, m.small());
+    y += m.gap * 2.0 + hint.height;
+    painter.ui(HINT, centre_x(hint.width), y, m.small(), super::TEXT_DIM);
 }
 
 /// Wraps the body at `columns`, keeping blank lines between paragraphs.
@@ -158,6 +205,13 @@ mod tests {
             .map(|row| row.reward_line)
             .max_by_key(|line| line.chars().count())
             .expect("the shipped assets define contracts")
+    }
+
+    /// The panel at the smallest window the game is built for. `with_painter`
+    /// opens at 1440x900; the size under test is 1280x720, the tighter case,
+    /// and only the painter's text measurement is borrowed from it.
+    fn smallest_panel() -> Rect {
+        panel_rect(1280.0, 720.0)
     }
 
     /// Every notification the engine can raise, paired with its copy. The
@@ -207,35 +261,18 @@ mod tests {
             "the census measured no payout — the shipped contracts have to reach here"
         );
         crate::paint::with_painter(|p| {
-            // `with_painter` opens at 1440x900; the height under test is the
-            // 720 the metrics were taken at, which is the tighter case.
-            let h = 720.0;
-            let w = 1280.0;
-            let columns = ((w * BODY_WIDTH_FRACTION) / p.measure_ui_advance("M", m.font_size))
-                .floor() as usize;
-            let detail_h = m.gap + p.measure_ui(&detail, m.font_size).height;
-            assert!(
-                detail_h > m.gap,
-                "the detail census measured nothing — {detail:?} has no height"
-            );
+            let panel = smallest_panel();
+            let columns = body_columns(p, panel, m.font_size);
             for (kind, def) in shipped() {
-                let lines = wrapped_body(def.body, columns.max(20));
-                let title_h = p.measure_ui(def.title, m.title() + 6).height;
-                let hint_h = p.measure_ui("Press Esc to continue", m.small()).height;
-                let block = m.line_height * ART_CELLS
-                    + m.gap
-                    + title_h
-                    + m.gap
-                    + lines.len() as f32 * m.line_height
-                    + detail_h
-                    + m.gap * 2.0
-                    + hint_h;
+                let (lines, detail) = wrapped(def.body, Some(&detail), columns);
+                let block = block_height(p, &m, def.title, lines.len(), detail.len());
                 assert!(
-                    block + 2.0 * m.pad < h,
+                    block + 2.0 * m.pad < panel.h,
                     "{} is {block}px of notification (with the widest shipped contract \
-                     payout as its detail) in a {h}px window ({} lines) — this screen has \
+                     payout as its detail) in a {}px panel ({} lines) — this screen has \
                      no scroll, so give it one or cut the body",
                     kind,
+                    panel.h,
                     lines.len()
                 );
             }
@@ -273,35 +310,26 @@ mod tests {
 
         let m = crate::text::ui_metrics(720.0);
         crate::paint::with_painter(|p| {
-            let h = 720.0;
-            let w = 1280.0;
-            let columns = ((w * BODY_WIDTH_FRACTION) / p.measure_ui_advance("M", m.font_size))
-                .floor() as usize;
+            let panel = smallest_panel();
+            let columns = body_columns(p, panel, m.font_size);
             for mission in &missions {
                 let body = template
                     .body
                     .replace("{name}", &mission.name)
                     .replace("{objective}", &mission.objective_line)
                     .replace("{description}", &mission.description);
-                let lines = wrapped_body(&body, columns.max(20));
-                let title_h = p.measure_ui(&mission.name, m.title() + 6).height;
-                let hint_h = p.measure_ui("Press Esc to continue", m.small()).height;
-                let block = m.line_height * ART_CELLS
-                    + m.gap
-                    + title_h
-                    + m.gap
-                    + lines.len() as f32 * m.line_height
-                    + m.gap * 2.0
-                    + hint_h;
+                let (lines, _) = wrapped(&body, None, columns);
+                let block = block_height(p, &m, &mission.name, lines.len(), 0);
                 assert!(
-                    block + 2.0 * m.pad < h,
-                    "{}'s briefing is {block}px in a {h}px window ({} lines) — this \
+                    block + 2.0 * m.pad < panel.h,
+                    "{}'s briefing is {block}px in a {}px panel ({} lines) — this \
                      screen has no scroll, so cut the mission's description",
                     mission.id,
+                    panel.h,
                     lines.len()
                 );
                 assert!(
-                    p.measure_ui_advance(&mission.name, m.title() + 6) < w - 2.0 * m.pad,
+                    p.measure_ui_advance(&mission.name, m.title() + 6) < panel.w - 2.0 * m.pad,
                     "{}'s name is too wide for a title, which does not wrap",
                     mission.id
                 );
@@ -339,10 +367,8 @@ mod tests {
 
         let m = crate::text::ui_metrics(720.0);
         crate::paint::with_painter(|p| {
-            let h = 720.0;
-            let w = 1280.0;
-            let columns = ((w * BODY_WIDTH_FRACTION) / p.measure_ui_advance("M", m.font_size))
-                .floor() as usize;
+            let panel = smallest_panel();
+            let columns = body_columns(p, panel, m.font_size);
             for row in &rows {
                 let kind = if row.tutorial {
                     NotificationKind::OnboardingComplete
@@ -359,24 +385,60 @@ mod tests {
                     !body.contains('{'),
                     "{kind} has a hole this census does not fill: {body:?}"
                 );
-                let lines = wrapped_body(&body, columns.max(20));
-                let title_h = p.measure_ui(def.title, m.title() + 6).height;
-                let hint_h = p.measure_ui("Press Esc to continue", m.small()).height;
-                let detail_h = m.gap + p.measure_ui(&row.reward_line, m.font_size).height;
-                let block = m.line_height * ART_CELLS
-                    + m.gap
-                    + title_h
-                    + m.gap
-                    + lines.len() as f32 * m.line_height
-                    + detail_h
-                    + m.gap * 2.0
-                    + hint_h;
+                let (lines, detail) = wrapped(&body, Some(&row.reward_line), columns);
+                let block = block_height(p, &m, def.title, lines.len(), detail.len());
                 assert!(
-                    block + 2.0 * m.pad < h,
-                    "{}'s completion screen is {block}px in a {h}px window ({} lines) — this \
+                    block + 2.0 * m.pad < panel.h,
+                    "{}'s completion screen is {block}px in a {}px panel ({} lines) — this \
                      screen has no scroll, so shorten the contract's name or its objective \
                      wording",
                     row.id,
+                    panel.h,
+                    lines.len()
+                );
+            }
+        });
+    }
+
+    /// **The research alert is a template too**, filled from the finished
+    /// project's own name and description, with its unlock list as the
+    /// detail. Every shipped node is measured as filled, since the census
+    /// above measures `{description}` where the screen draws a paragraph.
+    ///
+    /// The fix for a failure here is to shorten that node's `description`,
+    /// which the research screen draws too. There is no scroll to give it.
+    #[test]
+    fn every_research_alert_fits_its_screen_once_filled() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(59, DifficultyMode::Forgiving, assets).expect("shipped assets");
+        let nodes = game.research_nodes();
+        assert!(
+            nodes.iter().any(|n| n.unlocks.is_some()),
+            "the census must reach a detail, or its widest case passes vacuously"
+        );
+        let def = NotificationKind::ResearchComplete.def();
+
+        let m = crate::text::ui_metrics(720.0);
+        crate::paint::with_painter(|p| {
+            let panel = smallest_panel();
+            let columns = body_columns(p, panel, m.font_size);
+            for node in &nodes {
+                let body = def
+                    .body
+                    .replace("{name}", &node.name)
+                    .replace("{description}", &node.description);
+                assert!(
+                    !body.contains('{'),
+                    "the research alert has a hole this census does not fill: {body:?}"
+                );
+                let (lines, detail) = wrapped(&body, node.unlocks.as_deref(), columns);
+                let block = block_height(p, &m, def.title, lines.len(), detail.len());
+                assert!(
+                    block + 2.0 * m.pad < panel.h,
+                    "{}'s research alert is {block}px in a {}px panel ({} lines) — this \
+                     screen has no scroll, so shorten the node's description",
+                    node.id,
+                    panel.h,
                     lines.len()
                 );
             }
@@ -392,8 +454,9 @@ mod tests {
             for (kind, def) in shipped() {
                 let width = p.measure_ui_advance(def.title, m.title() + 6);
                 assert!(
-                    width < 1280.0 - 2.0 * m.pad,
-                    "{kind} has a {width}px title in a 1280px window"
+                    width < smallest_panel().w - 2.0 * m.pad,
+                    "{kind} has a {width}px title in a {}px panel",
+                    smallest_panel().w
                 );
             }
         });
@@ -507,6 +570,56 @@ mod tests {
             assert!(
                 art.join(format!("{name}.png")).exists(),
                 "{kind} names the sprite {name:?}, which is not in assets/sprites/"
+            );
+        }
+    }
+
+    /// The notice is a panel over the map, not the whole window: bordered,
+    /// three quarters of the window each way, and centred — so a quarter of
+    /// the map stays in view around it.
+    #[test]
+    fn the_notice_is_a_centred_panel_three_quarters_of_the_window() {
+        let m = crate::text::ui_metrics(900.0);
+        let (_, shapes) = crate::paint::with_sprites(crate::paint::SpriteTable::default(), |p| {
+            draw_notification(&note(), p, &m)
+        });
+
+        let boxes = crate::paint::painted_rect_stroke_boxes(&shapes, BORDER);
+        assert_eq!(boxes.len(), 1, "one bordered panel: {boxes:?}");
+        let b = boxes[0];
+        let near = |a: f32, e: f32| (a - e).abs() <= 2.0;
+        assert!(
+            near(b.width(), 1440.0 * 0.75) && near(b.height(), 900.0 * 0.75),
+            "the panel is 75% of the 1440x900 window each way: {b:?}"
+        );
+        assert!(
+            near(b.min.x, 1440.0 * 0.125) && near(b.min.y, 900.0 * 0.125),
+            "and centred: {b:?}"
+        );
+    }
+
+    /// Everything the notice says is inside its panel — the glyph, title,
+    /// body, detail and hint all centre on the panel and not on the window.
+    #[test]
+    fn every_line_of_the_notice_lands_inside_its_panel() {
+        let mut note = note();
+        note.body = "A body long enough to be worth wrapping. ".repeat(6);
+        note.detail = Some("Unlocks: A Very Long Structure Name, ".repeat(8));
+        let m = crate::text::ui_metrics(900.0);
+        let (_, shapes) = crate::paint::with_sprites(crate::paint::SpriteTable::default(), |p| {
+            draw_notification(&note, p, &m)
+        });
+
+        let panel = panel_rect(1440.0, 900.0);
+        let texts = crate::paint::painted_text_boxes(&shapes);
+        assert!(texts.len() > 4, "the fixture must wrap: {texts:?}");
+        for (_, text, r) in texts {
+            assert!(
+                r.x >= panel.x
+                    && r.y >= panel.y
+                    && r.x + r.w <= panel.x + panel.w
+                    && r.y + r.h <= panel.y + panel.h,
+                "{text:?} at {r:?} spills out of the panel {panel:?}"
             );
         }
     }

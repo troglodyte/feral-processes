@@ -1,4 +1,4 @@
-//! The full-screen notification's one behavioural rule: it takes the screen
+//! The notification's one behavioural rule: it takes the screen
 //! from the map and from nowhere else.
 
 use crate::tests::support::*;

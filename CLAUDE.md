@@ -1189,9 +1189,11 @@ relying on one, and correct all three places if it has moved.
   notify from.
 - **`DownedProgram` is gated on `StructureDef::recovery` standing, not on
   the Bay's id**, and fires from `bench_or_dissolve`'s Forgiving arm.
-- **The screen has no scroll and draws no popup**, so height is a layout
-  constraint (`the_tallest_shipped_notification_fits_its_screen`, verified
-  by mutation) and it belongs in `needs_status_banner` and `ALL_MODES`.
+- **The screen has no scroll and is a fixed 75% panel, not a
+  `draw_popup`**, so height is a layout constraint measured against the
+  *panel* through the renderer's own `block_height`
+  (`the_tallest_shipped_notification_fits_its_screen`, verified by mutation)
+  and it belongs in `needs_status_banner` and `ALL_MODES`.
 
 ### Species and data
 

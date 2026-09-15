@@ -1,4 +1,4 @@
-//! What takes the whole screen for a moment.
+//! What stops play for a moment, in a panel over the map.
 //!
 //! One variant per notification, and the prose beside it. A notification is
 //! **not content** — it is a hook into a particular moment in a particular
@@ -169,6 +169,14 @@ pub enum NotificationKind {
     /// above, so a body promising new research would be false at seven of
     /// the ten ceilings. Hence "may".
     LevelCapReached,
+    /// A research project is finished and paid for — `Game::settle_research`.
+    ///
+    /// **`Always`**: every project is news, and the tree has thirty-odd.
+    /// Templated off the project's own def, and what it opened rides
+    /// `detail` rather than a hole: it is `Game::research_unlocks`' sentence,
+    /// derived from live defs, and `None` for a node that opens nothing —
+    /// which a hole in the body could only fill with a blank paragraph.
+    ResearchComplete,
 }
 
 /// One notification's authored copy.
@@ -201,7 +209,7 @@ impl NotificationKind {
     /// scroll to forgive. `Perk::all`'s shape and its reason: a walk over
     /// the whole enum is what makes a census non-vacuous, and the array
     /// length fails to compile when a variant is added without being listed.
-    pub fn all() -> [NotificationKind; 15] {
+    pub fn all() -> [NotificationKind; 16] {
         [
             NotificationKind::BaseFounding,
             NotificationKind::FirstDescent,
@@ -218,6 +226,7 @@ impl NotificationKind {
             NotificationKind::OnboardingMission,
             NotificationKind::SettlementGrown,
             NotificationKind::LevelCapReached,
+            NotificationKind::ResearchComplete,
         ]
     }
 
@@ -409,6 +418,17 @@ impl NotificationKind {
                 color: GlyphColor::Yellow,
                 repeat: Repeat::Always,
             },
+            NotificationKind::ResearchComplete => NotificationDef {
+                title: "Research Complete",
+                body: "{name}\n\n{description}",
+                sprite: None,
+                // The Research Node's own glyph and hue, `SweepsBegin`'s
+                // reason: the screen and the machine that did the work agree
+                // on what to look for.
+                glyph: 'R',
+                color: GlyphColor::Cyan,
+                repeat: Repeat::Always,
+            },
         }
     }
 
@@ -444,6 +464,7 @@ impl NotificationKind {
             NotificationKind::OnboardingMission => "onboarding_mission",
             NotificationKind::SettlementGrown => "milestone_settlement_grown",
             NotificationKind::LevelCapReached => "milestone_level_cap",
+            NotificationKind::ResearchComplete => "milestone_research_complete",
         }
     }
 }

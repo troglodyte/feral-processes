@@ -5,7 +5,7 @@
     // Party one: the wearer sheds what landed on them, and nobody else's
     // problem is solved. That gap is the whole reason `watchdog` can stay
     // exclusive while this ships on a common piece of armour.
-    description: "Whatever lands on the wearer is walled off before it settles",
+    description: "When a status condition lands on the wearer, it is cleared at once",
     target: OneAlly,
     effect: Cleanse,
     cooldown: 4,

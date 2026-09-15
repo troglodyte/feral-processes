@@ -1,7 +1,7 @@
 (
     id: "dispatch",
     name: "Dispatch Protocol",
-    description: "Routing that holds past the sector's edge: idle base programs sent out to fight a site on their own.",
+    description: "Send idle base programs out on expeditions to fight on their own while you do something else.",
     cost: 45,
     materials: [("bytecode_block", 18), ("charge_coil", 10)],
     min_zone: 2,

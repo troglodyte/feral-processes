@@ -12,7 +12,7 @@
     // and so meaningless here, but not from its cooldown: a party being
     // wiped drops somebody every round, and a cheaper cooldown would let
     // this fire on every one of them.
-    description: "When one of yours goes down, everything hostile takes the fallout",
+    description: "When one of your party goes down, every hostile program takes damage",
     target: AllEnemies,
     effect: Damage(power: 14, spread: 4),
     cooldown: 4,

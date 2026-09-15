@@ -1,7 +1,7 @@
 (
     id: "address_translation",
     name: "Address Translation",
-    description: "Write to the substrate's own page tables instead of walking around them: a step through one wall, and a jump to any address in the frame that kills you if nothing is mapped there.",
+    description: "Two movement routines: step through the wall in front of you, or jump to any spot on the current Stack frame — but land inside solid rock and you die. Write one onto a Routine Disk to run it.",
     cost: 140,
     materials: [("routine_disk", 18), ("logic_wafer", 18), ("bytecode_block", 16)],
     min_zone: 3,

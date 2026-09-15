@@ -1,7 +1,7 @@
 (
     id: "cortex",
     name: "Cortex Hacking",
-    description: "A module that speaks to a hostile program in its own dialect, compiled at a Fabricator. Also the reader that goes through a downed process for the routines it was running and keeps one.",
+    description: "A module that makes decompiling hostile programs more likely to succeed, made at a Fabricator. Also a tool that pulls a routine out of a downed program so you can keep it.",
     cost: 125,
     materials: [("trace_sniffer", 6), ("logic_wafer", 12)],
     min_zone: 3,

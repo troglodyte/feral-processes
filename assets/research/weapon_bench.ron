@@ -1,7 +1,7 @@
 (
     id: "weapon_bench",
     name: "Weapon Fabrication",
-    description: "A bench for weapon and module work, building modules out of Logic Wafers.",
+    description: "The bench where weapons and modules are made. It also turns Logic Wafers into Trace Sniffers.",
     cost: 24,
     materials: [("logic_wafer", 6), ("bytecode_block", 8)],
     // The Fabricator eats Logic Wafers, which are transcribed from Raw

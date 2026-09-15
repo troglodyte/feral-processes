@@ -1,7 +1,7 @@
 (
     id: "deep_analysis",
     name: "Deep Analysis",
-    description: "Field routines that bend the odds of a whole run rather than a single fight, compiled into cargo. Also the two extraction tools: one draws the compiled core out of a downed process, the other pulls the worn gear off it.",
+    description: "Map routines that last until you next rest: better capture odds, more XP, fewer surprise fights and more drops. Also two tools for downed programs: one pulls out materials, one pulls off its gear.",
     cost: 130,
     materials: [("routine_disk", 16), ("logic_wafer", 16)],
     min_zone: 3,

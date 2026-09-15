@@ -1,7 +1,7 @@
 (
     id: "capacitance",
     name: "Capacitance",
-    description: "Bank a whole reserve in one cell. Compiled at a Winding Node.",
+    description: "Stronger power cells: one refills your whole Power reserve, the other keeps topping it up for a long time. Made at a Winding Node.",
     cost: 90,
     materials: [("power_cell", 24), ("bytecode_block", 12)],
     min_zone: 3,

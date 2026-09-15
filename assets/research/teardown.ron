@@ -1,7 +1,7 @@
 (
     id: "teardown",
     name: "Teardown",
-    description: "A rig that strips downed programs without you standing over it.",
+    description: "A machine that breaks downed programs down into items for you. Fit it with a tool first.",
     cost: 12,
     materials: [("bytecode_block", 8)],
     requires: ["automation"],

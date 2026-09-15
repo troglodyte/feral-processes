@@ -10,7 +10,7 @@
     // difficulty, so a routine paying out there only ever pays a player who
     // has already lost far more than the payout is worth — and the only way
     // to use the item would be to let a program die. See `PassiveTrigger`.
-    description: "Driven low, the wearer dumps what it was holding into the nearest hostile",
+    description: "When the wearer drops below a third of its Integrity, it hits the nearest hostile",
     target: OneEnemyGroupFront,
     effect: Damage(power: 9, spread: 2),
     cooldown: 3,

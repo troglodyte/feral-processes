@@ -1,7 +1,7 @@
 (
     id: "bit_rot_v2",
     name: "Bit Rot Single v2.0",
-    description: "Leak one target for 4 a round over 3 rounds",
+    description: "One target leaks 4 Integrity a round for 3 rounds",
     target: OneEnemyGroupFront,
     effect: Debuff(kind: Bleed, power: 4, duration: 3),
     cooldown: 2,

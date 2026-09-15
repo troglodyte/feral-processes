@@ -675,9 +675,9 @@ fn tamper_next_draw(game: &mut Game) -> u64 {
     game.world.resource_mut::<GameRng>().0.random::<u64>()
 }
 
-/// `marooned`, with its hostile Cold Sampled directly rather than through a
-/// cast — `decision_temperature`'s read is the door under test, not
-/// `apply_tamper`'s.
+/// `marooned`, with its hostile Cold Sampled directly rather than by
+/// running the routine — `decision_temperature`'s read is the door under
+/// test, not `apply_tamper`'s.
 fn cold_marooned() -> (Game, Entity) {
     let (mut game, wild) = marooned();
     let mut tampered = Tampered::default();

@@ -15,6 +15,7 @@
 use bevy_ecs::prelude::Entity;
 
 use crate::Game;
+use crate::abilities::AbilityShape;
 use crate::components::{
     Creature, Experience, Glyph, GlyphColor, Hostile, Player, PlayerIdentity, Rarity, Stats,
 };
@@ -196,6 +197,53 @@ impl Game {
         };
         let battle = self.world.resource::<TacticalBattle>();
         reach::shape_cells(&battle.board, from, aim, ability.tactical_shape())
+    }
+
+    /// Where a `Radius` routine's centre may legally be placed, aimed from
+    /// the acting body — every cell in range that the actor can also see.
+    ///
+    /// **A call into the same two doors `tactical_use_routine`'s refusal
+    /// reads**, `reach::in_range` then `reach::aim_in_sight`, never a second
+    /// derivation of what "legal to aim at" means — so the outline this
+    /// feeds and the refusal a click past its edge gets cannot disagree.
+    /// `index` indexes `actor_abilities`, `tactical_shape_cells`'s rule.
+    ///
+    /// Empty for every shape but `Radius`. A `Single` is thrown at a cell
+    /// too, but it resolves onto whoever is standing there rather than a
+    /// centre the player chooses freely, so there is nothing to outline that
+    /// a highlighted occupant would not already show; a `Line` or a `Cone`
+    /// is aimed as a *direction* and has no "legal centre" at all —
+    /// `aim_in_sight`'s own rule, restated by the gate below rather than
+    /// left to fall out of a range check that would pass every cell on the
+    /// board.
+    pub fn tactical_placeable_cells(&mut self, index: usize) -> Vec<(i32, i32)> {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return Vec::new();
+        };
+        let Some(actor) = battle.actor() else {
+            return Vec::new();
+        };
+        let Some(from) = battle.cell_of(actor) else {
+            return Vec::new();
+        };
+        let Some(ability) = self.actor_abilities(actor).into_iter().nth(index) else {
+            return Vec::new();
+        };
+        let shape = ability.tactical_shape();
+        if !matches!(shape, AbilityShape::Radius { .. }) {
+            return Vec::new();
+        }
+        let range = ability.tactical_range();
+        let battle = self.world.resource::<TacticalBattle>();
+        let board = &battle.board;
+        board
+            .cells()
+            .filter_map(|(cell, _)| {
+                (reach::in_range(from, cell, range)
+                    && reach::aim_in_sight(board, from, cell, shape))
+                .then_some(cell)
+            })
+            .collect()
     }
 
     fn body_view(&self, entity: Entity, cell: (i32, i32), player_power: i32) -> TacticalBody {

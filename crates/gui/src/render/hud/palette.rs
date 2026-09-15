@@ -80,6 +80,17 @@ pub(crate) const WARN: Color = rgb(0xb8943f);
 /// washes sat 0.11 from it — close enough that a cell the player had marked
 /// and a machine that had stalled read as the same news.
 pub(crate) const PLAN: Color = rgb(0x4a7fd0);
+/// yellow — **where a thrown routine's centre may legally land**, drawn on
+/// the battle map only while one is being aimed.
+///
+/// A third yellow beside [`ATTENTION`] and [`WARN`], safe for the reason
+/// [`PLAN`]'s doc above is not: that wash sits on the map for as long as a
+/// dig box stays marked, competing with a stalled machine's [`ATTENTION`]
+/// for the same glance across the whole base. This one exists only for the
+/// seconds a routine is being aimed, on a grid that draws neither role —
+/// nothing tactical.rs paints is [`ATTENTION`] or [`WARN`] — so there is no
+/// second thing on screen a splash's landing zone could be mistaken for.
+pub(crate) const AIM: Color = rgb(0xd6c542);
 /// br cyan — pane titles on their borders.
 pub(crate) const PANE_TITLE: Color = rgb(0x56d4dd);
 /// br cyan — the player's `@`, and an upgradeable item.

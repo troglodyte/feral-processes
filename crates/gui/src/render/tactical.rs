@@ -78,7 +78,15 @@ const TURN_ARROW_WIDTH: f32 = 0.44;
 const TURN_ARROW_HEIGHT: f32 = 0.30;
 const TURN_ARROW_GAP: f32 = 2.0;
 
-/// How heavily a cell the acting body can still step to is washed.
+/// How heavily a cell the acting body can still step to is washed — and, in
+/// `AIM` rather than `PLAN`, a cell a `Radius` routine's centre could legally
+/// land on. One constant for both, and that is safe **only** because the two
+/// fields never draw on the same cell at once: `draw_tactical_map` suppresses
+/// the reach field entirely while `placeable` is non-empty, so the yellow
+/// outline *replaces* the blue one for as long as a splash is being aimed
+/// rather than sitting over it. The two drawing at once was the first cut of
+/// this feature's own bug — two washes stacked read as a colour nobody
+/// authored, not as "you may both step here and throw there".
 ///
 /// Under the aim preview's own 0.22 so a shaped routine reads over it, and
 /// faint enough that the terrain under it stays legible: the wash says a
@@ -86,7 +94,8 @@ const TURN_ARROW_GAP: f32 = 2.0;
 /// something it does not know.
 const REACH_WASH_ALPHA: f32 = 0.13;
 
-/// How thickly the reach field's outer edge is drawn.
+/// How thickly the reach field's outer edge is drawn — the placeable
+/// field's too, `REACH_WASH_ALPHA`'s reason.
 ///
 /// **The boundary is what makes the field findable, and the wash above is
 /// what makes it readable.** At 0.13 of one hue over a near-black tile the
@@ -114,12 +123,63 @@ fn turn_arrow(px: f32, py: f32, tile_px: f32, lift: f32) -> [(f32, f32); 3] {
     [(cx - half, base), (cx + half, base), (cx, point)]
 }
 
+/// Washes and outlines one cell of a field — the reach field and the
+/// placeable field are the same shape drawn in different colours, so this is
+/// the one place that shape is written.
+///
+/// Draws nothing when `cell` is not itself in `field`. The wash is a flat
+/// tint at `REACH_WASH_ALPHA`; the boundary is drawn a side at a time and
+/// only where the neighbour on that side is *not* in `field` — a body and a
+/// `Blocked` cell are both walls in `reach::movement_field`, so a gap in the
+/// field is a cell that genuinely cannot be reached, and outlining it is the
+/// same answer the field's outer edge gives.
+fn draw_cell_field(
+    painter: &Painter,
+    field: &[(i32, i32)],
+    cell: (i32, i32),
+    px: f32,
+    py: f32,
+    tile_px: f32,
+    color: Color,
+) {
+    if !field.contains(&cell) {
+        return;
+    }
+    painter.rect(
+        px,
+        py,
+        tile_px - 1.0,
+        tile_px - 1.0,
+        Color::new(color.r, color.g, color.b, REACH_WASH_ALPHA),
+    );
+    let far = tile_px - 1.0;
+    for (dx, dy, from, to) in [
+        (0, -1, (0.0, 0.0), (far, 0.0)),
+        (0, 1, (0.0, far), (far, far)),
+        (-1, 0, (0.0, 0.0), (0.0, far)),
+        (1, 0, (far, 0.0), (far, far)),
+    ] {
+        if field.contains(&(cell.0 + dx, cell.1 + dy)) {
+            continue;
+        }
+        painter.line(
+            px + from.0,
+            py + from.1,
+            px + to.0,
+            py + to.1,
+            REACH_EDGE_PX,
+            color,
+        );
+    }
+}
+
 /// Draws the whole battle map.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn draw_tactical_map(
     view: &TacticalView,
     cursor: Option<(i32, i32)>,
     preview: &[(i32, i32)],
+    placeable: &[(i32, i32)],
     fx: &mut Fx,
     painter: &Painter,
     pane: Rect,
@@ -193,41 +253,29 @@ pub(super) fn draw_tactical_map(
         // few lines down by the arrow bobbing over that body's head, in
         // `PLAN` against `THREAT`. Tinting the wash by side too would put
         // one answer on two channels and make neither the place to read it.
-        if view.reachable.contains(&cell) {
-            let c = palette::PLAN;
-            painter.rect(
+        //
+        // **Suppressed while `placeable` is showing.** The request this
+        // outline shipped for was "the same as the movement outline, but
+        // yellow" — a replacement, not a second field stacked on the first.
+        // Drawing both while aiming a splash washed every reachable cell
+        // twice and read as a colour nobody authored.
+        if placeable.is_empty() {
+            draw_cell_field(
+                painter,
+                &view.reachable,
+                cell,
                 px,
                 py,
-                tile_px - 1.0,
-                tile_px - 1.0,
-                Color::new(c.r, c.g, c.b, REACH_WASH_ALPHA),
+                tile_px,
+                palette::PLAN,
             );
-            // The field's own edge, drawn a side at a time: a side whose
-            // neighbour is reachable too is interior and is left alone. The
-            // holes get outlined as well — a body and a `Blocked` cell are
-            // both walls in `reach::movement_field`, so a gap in the field
-            // is a cell that genuinely cannot be stepped on, and saying so
-            // is the same answer as the outer edge gives.
-            let far = tile_px - 1.0;
-            for (dx, dy, from, to) in [
-                (0, -1, (0.0, 0.0), (far, 0.0)),
-                (0, 1, (0.0, far), (far, far)),
-                (-1, 0, (0.0, 0.0), (0.0, far)),
-                (1, 0, (far, 0.0), (far, far)),
-            ] {
-                if view.reachable.contains(&(cell.0 + dx, cell.1 + dy)) {
-                    continue;
-                }
-                painter.line(
-                    px + from.0,
-                    py + from.1,
-                    px + to.0,
-                    py + to.1,
-                    REACH_EDGE_PX,
-                    palette::PLAN,
-                );
-            }
         }
+        // Where a `Radius` routine's centre may legally land. `placeable` is
+        // already empty for every shape but `Radius`
+        // (`Game::tactical_placeable_cells`'s own gate), so this draws
+        // nothing while aiming a swing, a `Single` routine or a directional
+        // one, and nothing outside `Mode::TacticalAim` at all.
+        draw_cell_field(painter, placeable, cell, px, py, tile_px, palette::AIM);
         // What the aim would land on. Over the reach wash, because a routine
         // resolves wherever it is aimed whether or not the body could walk
         // there.
@@ -623,8 +671,9 @@ mod tests {
         let mut game = fighting();
         let view = game.tactical_view().expect("the fight is open");
         let mut fx = Fx::new();
-        let (_, shapes) =
-            with_painter(|p| draw_tactical_map(&view, None, &[], &mut fx, p, pane(), 32.0, 24));
+        let (_, shapes) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
         let painted = painted_text(&shapes);
         for body in &view.bodies {
             assert!(
@@ -661,8 +710,9 @@ mod tests {
                 }
             }
             let mut fx = Fx::new();
-            let (_, shapes) =
-                with_painter(|p| draw_tactical_map(&view, None, &[], &mut fx, p, pane(), 32.0, 24));
+            let (_, shapes) = with_painter(|p| {
+                draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            });
             crate::paint::painted_map_glyphs(&shapes)
                 .into_iter()
                 .find(|(text, _)| text == &subject.glyph.to_string())
@@ -701,8 +751,9 @@ mod tests {
                 }
             }
             let mut fx = Fx::new();
-            let (_, shapes) =
-                with_painter(|p| draw_tactical_map(&view, None, &[], &mut fx, p, pane(), 32.0, 24));
+            let (_, shapes) = with_painter(|p| {
+                draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            });
             painted_rect_fill_count(&shapes, gold)
         };
 
@@ -725,11 +776,12 @@ mod tests {
         let mut fx = Fx::new();
         let cell = acting_body(&view).expect("somebody is acting").cell;
         let (_, with) = with_painter(|p| {
-            draw_tactical_map(&view, Some(cell), &[], &mut fx, p, pane(), 32.0, 24)
+            draw_tactical_map(&view, Some(cell), &[], &[], &mut fx, p, pane(), 32.0, 24)
         });
         let mut fx = Fx::new();
-        let (_, without) =
-            with_painter(|p| draw_tactical_map(&view, None, &[], &mut fx, p, pane(), 32.0, 24));
+        let (_, without) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
         assert!(
             with.len() > without.len(),
             "the cursor painted nothing at all"
@@ -810,8 +862,9 @@ mod tests {
                 .unwrap_or_else(|| panic!("the fixture fields no hostile == {hostile} body"));
             view.active = Some(rung);
             let mut fx = Fx::new();
-            let (_, shapes) =
-                with_painter(|p| draw_tactical_map(&view, None, &[], &mut fx, p, pane(), 32.0, 24));
+            let (_, shapes) = with_painter(|p| {
+                draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+            });
 
             let (mine, theirs) = if hostile {
                 (palette::THREAT, palette::PLAN)
@@ -843,8 +896,9 @@ mod tests {
 
         let mut bare = Fx::new();
         bare.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), true);
-        let (_, quiet) =
-            with_painter(|p| draw_tactical_map(&view, None, &[], &mut bare, p, pane(), 32.0, 24));
+        let (_, quiet) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut bare, p, pane(), 32.0, 24)
+        });
 
         let mut fx = Fx::new();
         fx.begin_frame(
@@ -858,8 +912,9 @@ mod tests {
             }],
             true,
         );
-        let (_, lit) =
-            with_painter(|p| draw_tactical_map(&view, None, &[], &mut fx, p, pane(), 32.0, 24));
+        let (_, lit) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
 
         assert!(
             painted_line_count(&lit) > painted_line_count(&quiet),
@@ -896,7 +951,7 @@ mod tests {
                 let mut fx = Fx::new();
                 fx.begin_frame(i as f64 / 8.0, Vec::new(), Vec::new(), Vec::new(), true);
                 let (_, shapes) = with_painter(|p| {
-                    draw_tactical_map(&view, None, &[], &mut fx, p, pane(), 32.0, 24)
+                    draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
                 });
                 arrows(&painted_poly_points(&shapes, side))
                     .first()
@@ -1154,7 +1209,7 @@ mod tests {
         let frame = |fx: &mut Fx, at: f64, v: &TacticalView| {
             fx.begin_frame(at, Vec::new(), Vec::new(), Vec::new(), true);
             let (_, shapes) =
-                with_painter(|p| draw_tactical_map(v, None, &[], fx, p, pane(), 32.0, 24));
+                with_painter(|p| draw_tactical_map(v, None, &[], &[], fx, p, pane(), 32.0, 24));
             shapes
         };
 
@@ -1216,11 +1271,11 @@ mod tests {
             }
         }
         fx.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), true);
-        with_painter(|p| draw_tactical_map(&middle, None, &[], &mut fx, p, tight, 32.0, 24));
+        with_painter(|p| draw_tactical_map(&middle, None, &[], &[], &mut fx, p, tight, 32.0, 24));
 
         fx.begin_frame(0.02, Vec::new(), Vec::new(), Vec::new(), true);
         let (_, shapes) = with_painter(|p| {
-            draw_tactical_map(&far_away, Some(far), &[], &mut fx, p, tight, 32.0, 24)
+            draw_tactical_map(&far_away, Some(far), &[], &[], &mut fx, p, tight, 32.0, 24)
         });
 
         let inside = |x: f32, y: f32| {
@@ -1273,7 +1328,7 @@ mod tests {
         let wide = Rect::new(0.0, 0.0, 1400.0, 1000.0);
         let mut fx = Fx::new();
         let (_, shapes) =
-            with_painter(|p| draw_tactical_map(&view, None, &[], &mut fx, p, wide, 32.0, 24));
+            with_painter(|p| draw_tactical_map(&view, None, &[], &[], &mut fx, p, wide, 32.0, 24));
 
         let expected: usize = view
             .reachable
@@ -1302,9 +1357,119 @@ mod tests {
         let mut view = game.tactical_view().expect("the fight is open");
         view.reachable.clear();
         let mut fx = Fx::new();
-        let (_, shapes) =
-            with_painter(|p| draw_tactical_map(&view, None, &[], &mut fx, p, pane(), 32.0, 24));
+        let (_, shapes) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
         assert_eq!(painted_line_count_in(&shapes, palette::PLAN), 0);
+    }
+
+    /// The placeable field — where a `Radius` routine's centre may legally
+    /// land — is outlined the same way the reach field is: along its
+    /// boundary, tinted `AIM` rather than `PLAN`.
+    ///
+    /// `view.reachable` stands in for the placeable set here: `draw_
+    /// tactical_map` takes it as its own parameter and never reads
+    /// `TacticalView` for it, so any non-empty cell set proves the same
+    /// boundary rule, and reusing the field this file's own reach test
+    /// already establishes is non-empty keeps the fixture from inventing a
+    /// second one.
+    #[test]
+    fn the_placeable_field_is_outlined_along_its_boundary() {
+        use crate::paint::painted_line_count_in;
+
+        let mut game = fighting();
+        let view = game.tactical_view().expect("the fight is open");
+        assert!(
+            !view.reachable.is_empty(),
+            "the acting body can reach nowhere, so this test would be vacuous"
+        );
+        let placeable = view.reachable.clone();
+        let wide = Rect::new(0.0, 0.0, 1400.0, 1000.0);
+        let mut fx = Fx::new();
+        let (_, shapes) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &placeable, &mut fx, p, wide, 32.0, 24)
+        });
+
+        let expected: usize = placeable
+            .iter()
+            .map(|&(x, y)| {
+                [(0, -1), (0, 1), (-1, 0), (1, 0)]
+                    .iter()
+                    .filter(|&&(dx, dy)| !placeable.contains(&(x + dx, y + dy)))
+                    .count()
+            })
+            .sum();
+        assert_eq!(
+            painted_line_count_in(&shapes, palette::AIM),
+            expected,
+            "the boundary drawn is not the placeable field's own perimeter"
+        );
+    }
+
+    /// The state every call site but the one above passes — no routine being
+    /// aimed, or one aimed that is not a `Radius` shape — draws nothing in
+    /// `AIM`: `Game::tactical_placeable_cells` is already empty then, and
+    /// `render/base.rs` hands this function exactly what that call returns.
+    #[test]
+    fn an_empty_placeable_set_is_not_outlined() {
+        use crate::paint::painted_line_count_in;
+
+        let mut game = fighting();
+        let view = game.tactical_view().expect("the fight is open");
+        let mut fx = Fx::new();
+        let (_, shapes) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        assert_eq!(painted_line_count_in(&shapes, palette::AIM), 0);
+    }
+
+    /// The placeable field *replaces* the reach field rather than stacking
+    /// on it — the request this outline shipped for was "the same as the
+    /// movement outline, but yellow", not a second wash on top of the first.
+    ///
+    /// Both halves in one test: the reach field's wash and boundary paint
+    /// nothing while `placeable` is non-empty, and paint exactly what
+    /// `the_reach_wash_is_drawn_for_either_side` and `the_reach_field_is_
+    /// outlined_along_its_boundary` already establish once it is empty again
+    /// — so a fix that only ever suppresses, or only ever restores, is
+    /// still caught.
+    #[test]
+    fn a_placeable_field_suppresses_the_reach_field() {
+        use crate::paint::{painted_line_count_in, painted_rect_fill_count};
+
+        let mut game = fighting();
+        let view = game.tactical_view().expect("the fight is open");
+        assert!(
+            !view.reachable.is_empty(),
+            "the acting body can reach nowhere, so this test would be vacuous"
+        );
+        let c = palette::PLAN;
+        let wash = Color::new(c.r, c.g, c.b, REACH_WASH_ALPHA);
+        let placeable = view.reachable.clone();
+
+        let mut fx = Fx::new();
+        let (_, aiming) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &placeable, &mut fx, p, pane(), 32.0, 24)
+        });
+        assert_eq!(
+            painted_rect_fill_count(&aiming, wash),
+            0,
+            "the movement wash painted while a placeable field was showing"
+        );
+        assert_eq!(
+            painted_line_count_in(&aiming, palette::PLAN),
+            0,
+            "the movement boundary painted while a placeable field was showing"
+        );
+
+        let mut fx = Fx::new();
+        let (_, not_aiming) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        assert!(
+            painted_rect_fill_count(&not_aiming, wash) > 0,
+            "the movement wash stayed suppressed once placeable went back to empty"
+        );
     }
 
     /// The reach wash is drawn off `reachable` alone, so the wild side's
@@ -1327,12 +1492,14 @@ mod tests {
 
         view.player_turn = true;
         let mut fx = Fx::new();
-        let (_, mine) =
-            with_painter(|p| draw_tactical_map(&view, None, &[], &mut fx, p, pane(), 32.0, 24));
+        let (_, mine) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
         view.player_turn = false;
         let mut fx = Fx::new();
-        let (_, theirs) =
-            with_painter(|p| draw_tactical_map(&view, None, &[], &mut fx, p, pane(), 32.0, 24));
+        let (_, theirs) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
 
         let ours = painted_rect_fill_count(&mine, wash);
         assert!(ours > 0, "the party's own reach wash painted nothing");

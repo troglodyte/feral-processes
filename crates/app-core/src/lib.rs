@@ -1334,7 +1334,7 @@ pub enum Mode {
     /// **The map screen with a different tile source**, not a screen of its
     /// own: it falls through `draw`'s wildcard arm to `draw_playing_base`
     /// like `Mode::Playing` does, so the info column, the log pane and the
-    /// stock strip are the ones the player already reads. What differs is
+    /// status bar are the ones the player already reads. What differs is
     /// that `Game::tactical_view` supplies the tiles.
     ///
     /// Arrows step the acting body, a lowercase letter picks an action, and

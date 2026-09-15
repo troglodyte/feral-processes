@@ -1572,7 +1572,7 @@ fn a_save_written_before_this_change_loads_with_no_project() {
 }
 
 /// An old save's banked Research Data is dropped on load, with a line saying
-/// so. The stock strip folds in every `ItemDef::banked` pool **by the flag**, so
+/// so. The stock block folds in every `ItemDef::banked` pool **by the flag**, so
 /// a leftover pool would sit across the top of every base screen for the rest of
 /// the run with nothing to spend it on. The fold itself stays — it names no
 /// item, and a mod may ship another banked one.

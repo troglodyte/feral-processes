@@ -224,24 +224,22 @@ pub struct ItemDef {
     /// group model has no geometry to spend it on.
     #[serde(default)]
     pub range: Option<u32>,
-    /// Overrides the two-letter tag the base stock strip lists this item
-    /// under. `#[serde(default)]` and almost always absent: `ItemDef::tag`
-    /// derives one from the name, so a mod gets a tag for free. Authored
-    /// only where two names would derive the same two letters — the strip
-    /// has room for the tag and nothing else, so two items sharing one is
-    /// a readout that lies about which pile is filling.
+    /// Overrides the two-letter tag the base pane's PRODUCTION rows list this
+    /// item under. `#[serde(default)]` and almost always absent:
+    /// `ItemDef::tag` derives one from the name, so a mod gets a tag for
+    /// free. Authored only where two names would derive the same two
+    /// letters, so a column of tags never shows one twice.
     #[serde(default)]
     pub abbrev: Option<String>,
 }
 
 impl ItemDef {
-    /// The short tag the base stock strip lists this item under.
+    /// The short tag the base pane's PRODUCTION rows list this item under.
     ///
     /// Derived rather than authored, for `category`'s reason: a modded item
     /// gets one without its author adding a field. Initials of the name's
-    /// words, or the first two letters of a one-word name, capped at two
-    /// because the strip's whole point is fitting a base's worth of piles
-    /// on one row. `abbrev` overrides it where a collision needs settling.
+    /// words, or the first two letters of a one-word name, capped at two.
+    /// `abbrev` overrides it where a collision needs settling.
     ///
     /// Shorter than two letters where the name gives nothing more — a
     /// one-letter name is a one-letter tag, not a panic.
@@ -562,7 +560,7 @@ impl ItemDb {
                     // Every disk derives the same family tag, "ED" — the
                     // one place `ItemDef::tag`'s per-item promise does not
                     // hold. Two disks sitting in one Depot do draw two "ED"
-                    // rows on the stock strip, so this is a known gap rather
+                    // PRODUCTION rows, so this is a known gap rather
                     // than the impossibility it was once documented as;
                     // `no_two_shipped_stock_items_share_a_tag` excludes the
                     // family because no per-disk `abbrev` could be authored
@@ -961,7 +959,7 @@ mod tests {
         );
     }
 
-    /// The stock strip's tag is derived from the name so a modded item gets
+    /// An item's tag is derived from the name so a modded item gets
     /// one without its author adding a field, and authored only where two
     /// names would derive the same two letters.
     #[test]

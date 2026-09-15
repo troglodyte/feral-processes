@@ -30,8 +30,7 @@
 //! **The vitals strip does not fit at every window size and does not pretend
 //! to.** It is one row on a border with no wrap and no clip, so its segments
 //! carry a fixed priority and the ones that do not fit are dropped from the
-//! end, measured. That is `stock::fits`' rule applied to segments instead of
-//! piles.
+//! end, measured. That is `strip::fitting`'s rule.
 //!
 //! **The gutter is the honest half of the handoff's five channels.** That
 //! reference names `FIELD` `GAIN` `BASE` `DEFEND` `IDLE`, which this game has

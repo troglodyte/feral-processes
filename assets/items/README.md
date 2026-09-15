@@ -25,17 +25,14 @@ any non-finite `taming_potency`, `consume.power`, or
     description: "Restores 25 Power. The staple of staying on the Grid.",
 
     // Optional; almost always leave it out. The short tag this item is
-    // listed under on the base stock strip, the one-row readout of what the
-    // base's machines and depots are holding. Left out, it is derived from
-    // `name`: the initials of its words, or the first two letters of a
-    // one-word name, uppercased and capped at two characters — "Core
-    // Fragment" becomes `CF`.
+    // listed under in the base pane's PRODUCTION rows, beside its name. Left
+    // out, it is derived from `name`: the initials of its words, or the
+    // first two letters of a one-word name, uppercased and capped at two
+    // characters — "Core Fragment" becomes `CF`.
     //
-    // Author one only to settle a collision. The strip carries the tag and
-    // the quantity and nothing else, so two items tagging the same is a
-    // readout that lies about which pile is filling. Only items that reach
-    // a machine or depot buffer are listed, so a weapon or a consumable
-    // never needs one. One or two characters; nothing refuses a modded
+    // Author one only to settle a collision, so a column of tags never
+    // shows the same one twice. Only items that reach a machine or depot
+    // buffer are listed, so a weapon or a consumable never needs one. One or two characters; nothing refuses a modded
     // collision — the shipped set is held unique by its own census, and
     // yours is yours to settle.
     abbrev: Some("R"),

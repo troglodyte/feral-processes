@@ -247,3 +247,92 @@ pub(super) fn app_in_base_with_a_compiler(seed: u32) -> App {
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
     app
 }
+
+/// The item `game_with_base_stock` shelves, and the name the map should
+/// print for it.
+pub(super) const STOCKED_ITEM: &str = "bytecode_block";
+pub(super) const STOCKED_NAME: &str = "Bytecode Block";
+
+/// Where `game_with_base_stock` leaves the party standing.
+pub(super) enum StandingIn {
+    /// A founded base, the party parked on its anchor.
+    Base,
+    /// The first frame of the Stack under the party's surface tile.
+    Stack,
+    /// Wherever a fresh run starts, on the zone surface.
+    Surface,
+}
+
+/// A game whose base is holding something: a Depot with `STOCKED_ITEM` on
+/// its output shelf, written into the save for
+/// `app_in_base_with_a_compiler`'s reason — nothing public stands one up
+/// and fills it.
+///
+/// The locale is part of the same edit so a test comparing two places reads
+/// the *same* stock in each, which is what keeps "not drawn here" from
+/// passing on a base that simply holds nothing.
+pub(super) fn game_with_base_stock(seed: u32, standing: StandingIn) -> Game {
+    let assets_dir = test_assets_dir();
+    let mut game = new_game(seed);
+    if matches!(standing, StandingIn::Base) {
+        game.place_structure("home", 0, 0, None)
+            .expect("a fresh run can afford its first Home");
+        while game.take_notification().is_some() {}
+    }
+    let path = scratch_path("base_stock", seed);
+    let _cleanup = RemoveOnDrop(&path);
+    game.save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    match standing {
+        StandingIn::Base => data.locale = Locale::Base { x: 0, y: 0 },
+        StandingIn::Stack => {
+            data.locale = Locale::Stack {
+                depth: 1,
+                frames: 2,
+                x: 0,
+                y: 0,
+                facing: feral_processes_engine::stack::Dir::North,
+                entrance: data.player.position,
+            }
+        }
+        StandingIn::Surface => {}
+    }
+    data.structures.push(save::StructureSave {
+        kind: "depot".to_string(),
+        position: (3, 0),
+        durability: None,
+        tier: None,
+        stock_input: Vec::new(),
+        stock_output: vec![(STOCKED_ITEM.into(), 140)],
+        standing_work: false,
+        standing_guard: false,
+        denied_items: Vec::new(),
+        power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        build_quality: 1.0,
+        racked: Vec::new(),
+        hopper: Vec::new(),
+        hopper_progress: 0,
+        standing_tool: None,
+    });
+    save::save_to_file(&path, &data).unwrap();
+    Game::load(&path, &assets_dir).unwrap()
+}
+
+/// An `App` in `Mode::Playing` around `game`, with scratch paths no other
+/// fixture shares.
+pub(super) fn playing_app_around(game: Game) -> App {
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+    let unique = NEXT.fetch_add(1, Ordering::Relaxed);
+    let tmp = std::env::temp_dir().join(format!("feral_processes_gui_around_{unique}"));
+    let mut app = App::new(
+        test_assets_dir(),
+        tmp.join("saves"),
+        tmp.join("history.log"),
+        tmp.join("profile.ron"),
+        arenas_dir(),
+        tmp.join("telemetry.jsonl"),
+    );
+    app.game = Some(game);
+    app.mode = feral_processes_app_core::Mode::Playing;
+    app
+}

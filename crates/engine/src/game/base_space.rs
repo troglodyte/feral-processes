@@ -774,7 +774,7 @@ impl Game {
     ///
     /// **Out of the base's own stores first, the player's pack second.** The
     /// crew is base labour, and the store it spends from is the one the base
-    /// fills — `stock::spend_from_base` over the same buffers the stock strip
+    /// fills — `stock::spend_from_base` over the same buffers the stock block
     /// counts, so a strip reading `BS 12` is a strip saying the crew can
     /// pave. The pack is the fallback rather than the source: what the player
     /// is carrying stays theirs to lay by hand, and this is a cost the base

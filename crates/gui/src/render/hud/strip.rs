@@ -69,7 +69,7 @@ pub(in crate::render) fn sep() -> Piece {
 /// Flattens the longest prefix of `segments` that fits `avail`, separators
 /// included.
 ///
-/// **This is `stock::fits`' rule applied to segments**: a strip is one row on
+/// **The rule for anything drawn in a row**: a strip is one row on
 /// a border with no wrap and no clip, so what does not fit is dropped from
 /// the end, measured, rather than drawn off the pane in silence. Both the
 /// vitals strip and the keybar degrade this way, which is why the rule lives

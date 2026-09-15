@@ -2765,12 +2765,11 @@ impl BuildOrderRow {
     }
 }
 
-/// One pile the base is holding, as the stock strip lists it — see/// One pile the base is holding, as the stock strip lists it — see
+/// One pile the base is holding, as the stock block lists it — see
 /// `Game::base_stock`.
 ///
-/// Carries the tag *and* the name: the strip draws the tag alone, and the
-/// name is what a caller with room shows instead of teaching the player a
-/// glossary.
+/// Carries the tag *and* the name: the stock block over the map draws the
+/// name, and the base pane's PRODUCTION rows draw both.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StockRow {
     pub item: ItemId,

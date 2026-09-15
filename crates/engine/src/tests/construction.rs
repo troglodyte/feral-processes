@@ -125,7 +125,7 @@ fn the_crew_fetches_the_materials_and_raises_the_structure() {
 /// The party is sent out of base space entirely, so the pack is not a
 /// source at all — a builder walks over to *you*, and there has to be a
 /// pair of hands there to take from. What is left is a Depot holding the
-/// materials, which is what the stock strip counts.
+/// materials, which is what the stock block counts.
 #[test]
 fn a_builder_draws_from_a_base_shelf_with_the_party_away() {
     let mut game = base(1103);

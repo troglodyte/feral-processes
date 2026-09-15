@@ -206,7 +206,7 @@ fn flank_colors(row: &[StackCellView], i: usize) -> (Option<Color>, Option<Color
 /// Draws the corridor into `pane`.
 ///
 /// The pane takes its origin from the caller rather than sitting at the
-/// window's, because the base stock strip claims a row above it. Every
+/// window's, because the status bar claims a row above it. Every
 /// piece of the projection derives from `slice`, so that origin is stated
 /// once here and the whole corridor follows it.
 pub(super) fn draw_stack(view: &StackView, painter: &Painter, pane: Rect, m: &Metrics, power: f32) {

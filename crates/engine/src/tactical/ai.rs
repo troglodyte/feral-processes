@@ -320,13 +320,6 @@ impl Game {
     /// nothing more — what it will do is already on the board. Read off the
     /// board as it stands, so it is exact at the moment the turn begins and
     /// moves as the party acts before then. Read-only: no draw, no write.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "the tactical view reads the forecast from Task 8 on"
-        )
-    )]
     pub(crate) fn tactical_forecast(&self, body: Entity) -> Option<Forecast> {
         let battle = self.world.get_resource::<TacticalBattle>()?;
         let profiled = self

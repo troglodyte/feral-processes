@@ -25,8 +25,9 @@ use crate::resources::{DifficultyMode, Party, Sorties};
 use crate::species::{SpeciesDb, SpeciesDef};
 use crate::tactical::ai::{AiBeat, ForecastAction};
 use crate::tactical::map::{BattleCell, Board};
+use crate::tactical::view::{DecoyView, TamperTag};
 use crate::tactical::{Decoy, TacticalBattle, reach};
-use crate::tuning::{ENEMY_ROUTINE_MIN_COOLDOWN, TACTICAL_MOVE_MAX};
+use crate::tuning::{ENEMY_ROUTINE_MIN_COOLDOWN, TACTICAL_AI_TEMPERATURE, TACTICAL_MOVE_MAX};
 use bevy_ecs::prelude::Entity;
 
 fn game(seed: u32) -> Game {
@@ -2084,4 +2085,151 @@ fn a_decoy_out_of_reach_is_no_forecast_target() {
         "nothing was in reach to strike"
     );
     assert_eq!(decoy_cells(&game), vec![far]);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Task 8: the view carries tags, forecasts, hijacks and decoys.
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Every `Tampered` slot on a row is a `TamperTag`, in `TamperSlot` order —
+/// Temperature, Profiled, Injected, Hallucinating — and Temperature itself
+/// splits into `Hot`/`Cold` at the tuning constant, `<=` reading Cold.
+#[test]
+fn the_turn_row_carries_each_tamper_as_a_tag() {
+    let (mut cold, wild) = marooned_with(&[
+        TamperKind::Temperature(0.0),
+        TamperKind::Profiled,
+        TamperKind::Injected,
+        TamperKind::Hallucinating { decoys: 3 },
+    ]);
+    let view = cold.tactical_view().expect("a fight is open");
+    let row = view
+        .order
+        .iter()
+        .find(|r| r.entity == wild)
+        .expect("the tampered hostile has a rung in the strip");
+    assert_eq!(
+        row.tags,
+        vec![
+            TamperTag::Cold,
+            TamperTag::Profiled,
+            TamperTag::Injected,
+            TamperTag::Hallucinating,
+        ]
+    );
+
+    let (mut hot, wild) = marooned_with(&[TamperKind::Temperature(TACTICAL_AI_TEMPERATURE + 0.1)]);
+    let view = hot.tactical_view().expect("a fight is open");
+    let row = view
+        .order
+        .iter()
+        .find(|r| r.entity == wild)
+        .expect("the tampered hostile has a rung in the strip");
+    assert_eq!(
+        row.tags,
+        vec![TamperTag::Hot],
+        "above the constant reads Hot"
+    );
+
+    let (mut at_constant, wild) =
+        marooned_with(&[TamperKind::Temperature(TACTICAL_AI_TEMPERATURE)]);
+    let view = at_constant.tactical_view().expect("a fight is open");
+    let row = view
+        .order
+        .iter()
+        .find(|r| r.entity == wild)
+        .expect("the tampered hostile has a rung in the strip");
+    assert_eq!(
+        row.tags,
+        vec![TamperTag::Cold],
+        "the constant itself must read Cold, the <= boundary"
+    );
+}
+
+/// A profiled hostile's row carries the same forecast `Game::tactical_forecast`
+/// answers directly — the view is a call into the planner, never a second
+/// derivation of it.
+#[test]
+fn a_profiled_hostile_s_row_carries_its_forecast() {
+    let (mut game, wild) = marooned_with(&[TamperKind::Temperature(0.0), TamperKind::Profiled]);
+    let forecast = game
+        .tactical_forecast(wild)
+        .expect("fixture: a cold, profiled hostile has a forecast before its turn");
+    let expected_action = match &forecast.action {
+        ForecastAction::Swing => "swing".to_string(),
+        ForecastAction::Routine(id) => game.ability_display_name(id),
+    };
+
+    let view = game.tactical_view().expect("a fight is open");
+    let row = view
+        .order
+        .iter()
+        .find(|r| r.entity == wild)
+        .expect("the profiled hostile has a rung in the strip");
+    let carried = row
+        .forecast
+        .as_ref()
+        .expect("a profiled hostile's row must carry a forecast");
+    assert_eq!(carried.action, expected_action);
+    assert_eq!(carried.walk, forecast.walk);
+    assert_eq!(carried.target, forecast.target);
+}
+
+/// A companion taken over by a Temperature or Injected entry says so on its
+/// own row, and an ordinary companion's row does not.
+#[test]
+fn a_hijacked_companion_s_row_says_so() {
+    let mut game = game(9803);
+    let companion = body(&mut game, &generic_species().id);
+    game.world.resource_mut::<Party>().0.push(companion);
+    tactical_fight(&mut game, 1, 400);
+
+    let mut tampered = Tampered::default();
+    tampered.apply(TamperKind::Temperature(0.0), 1, false);
+    game.world.entity_mut(companion).insert(tampered);
+
+    let player = game.player_entity();
+    let view = game.tactical_view().expect("a fight is open");
+    let companion_row = view
+        .order
+        .iter()
+        .find(|r| r.entity == companion)
+        .expect("the companion has a rung in the strip");
+    assert!(
+        companion_row.taken_over,
+        "a companion under a live Temperature entry must read as taken over"
+    );
+    let player_row = view
+        .order
+        .iter()
+        .find(|r| r.entity == player)
+        .expect("the player has a rung in the strip");
+    assert!(
+        !player_row.taken_over,
+        "the player is never taken over, tampered or not"
+    );
+}
+
+/// Every decoy on the board reaches the view, both sides' alike.
+#[test]
+fn the_view_carries_the_decoys() {
+    let (mut game, wild) = marooned();
+    hallucinate(&mut game, wild, &[(1, 1), (2, 2)]);
+
+    let raw: Vec<DecoyView> = game
+        .world
+        .resource::<TacticalBattle>()
+        .decoys()
+        .iter()
+        .map(|d| DecoyView {
+            cell: d.cell,
+            glyph: d.glyph,
+            color: d.color,
+            of_player: d.of_player,
+        })
+        .collect();
+    assert_eq!(raw.len(), 2, "fixture: two decoys were placed");
+
+    let view = game.tactical_view().expect("a fight is open");
+    assert_eq!(view.decoys, raw);
 }

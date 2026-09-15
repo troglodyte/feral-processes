@@ -42,6 +42,15 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.185
+
+**On a battle map, a program that can already hit its target stays where it
+is.** Enemies, and your own party on auto-attack, used to take a step almost
+every turn even when they were already in range and could see their target,
+so a fight read as everyone shuffling about for no reason. A body now moves
+only when it has to: its target is out of reach, or something is blocking its
+line of sight.
+
 ## 0.13.184
 
 **Research nodes and routines now say in plain words what they do.** The

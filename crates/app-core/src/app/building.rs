@@ -615,7 +615,9 @@ impl App {
     }
 
     /// Enter on the trailing row queues another order; Backspace drops the
-    /// highlighted one.
+    /// highlighted one; `<` and `>` move it up and down the queue, which is
+    /// the whole of an order's priority — the party screen's keys for the
+    /// party line, and its rule that the highlight follows the move.
     ///
     /// Cancelling needs no confirmation because it **unwinds nothing** —
     /// there are no per-machine targets to roll back and no reserved stock
@@ -627,6 +629,26 @@ impl App {
             return;
         }
         let rows = self.work_order_rows();
+        let shift = match key {
+            GameKey::Char('<') | GameKey::Char(',') => Some(SlotShift::Forward),
+            GameKey::Char('>') | GameKey::Char('.') => Some(SlotShift::Back),
+            _ => None,
+        };
+        if let Some(shift) = shift {
+            let index = self.menu_selected;
+            if rows.get(index).is_some_and(|row| row.order.is_some())
+                && let Some(game) = &mut self.game
+            {
+                match game.move_work_order(index, shift) {
+                    Ok(to) => {
+                        self.status_line = None;
+                        self.menu_selected = to;
+                    }
+                    Err(e) => self.status_line = Some(e),
+                }
+            }
+            return;
+        }
         if key == GameKey::Backspace {
             if self.menu_selected < rows.len() && rows[self.menu_selected].order.is_some() {
                 let index = self.menu_selected;
@@ -673,16 +695,14 @@ impl App {
             // as a level the base holds forever, from a page that had gone
             // back to saying nothing about it.
             self.standing_order = false;
-            self.order_priority = OrderPriority::default();
             self.mode = Mode::WorkOrderQuantity;
         }
     }
 
     /// Digits and Enter, the shape `Mode::CraftQuantity` already uses, plus
-    /// `[S]` for a standing order and `[P]` for its band — the
-    /// careful-compile toggle's shape one screen over, both cleared on the
-    /// way in for the same reason. Keys rather than digits, which belong to
-    /// the quantity.
+    /// `[S]` for a standing order — the careful-compile toggle's shape one
+    /// screen over, cleared on the way in for the same reason. A key rather
+    /// than a digit, which belongs to the quantity.
     pub(crate) fn handle_work_order_quantity_key(&mut self, key: GameKey) {
         match key {
             GameKey::Esc => {
@@ -699,9 +719,6 @@ impl App {
             GameKey::Char('s') | GameKey::Char('S') => {
                 self.standing_order = !self.standing_order;
             }
-            GameKey::Char('p') | GameKey::Char('P') => {
-                self.order_priority = self.order_priority.cycled();
-            }
             GameKey::Enter => {
                 let Some(item) = self.pending_order.take() else {
                     self.mode = Mode::WorkOrders;
@@ -713,8 +730,7 @@ impl App {
                     WorkOrder::level(item, qty)
                 } else {
                     WorkOrder::batch(item, qty)
-                }
-                .with_priority(self.order_priority);
+                };
                 if let Some(game) = &mut self.game {
                     self.status_line = game.queue_work_order(order).err();
                 }

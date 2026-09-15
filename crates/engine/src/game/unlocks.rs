@@ -651,8 +651,8 @@ impl Game {
     }
 
     /// Makes `id` the one project the base is working: Research Nodes start
-    /// feeding it and its material bill is filed as ordinary High-band work
-    /// orders.
+    /// feeding it and its material bill is filed as ordinary work orders at
+    /// the top of the queue.
     ///
     /// Every refusal lands **before anything is written** —
     /// `commit_caravan_basket`'s rule. `require_base` is in the ladder for
@@ -707,11 +707,7 @@ impl Game {
             // `chain_break` the same question, so this cannot fail, and a
             // future divergence surfaces as a missing order rather than a
             // silent one.
-            let _ = self.queue_work_order(
-                WorkOrder::batch(item.clone(), *need)
-                    .with_priority(crate::game::base::work_orders::OrderPriority::High)
-                    .with_research(),
-            );
+            let _ = self.queue_work_order(WorkOrder::batch(item.clone(), *need).with_research());
         }
         self.log_base(format!("Research project started: {}.", def.name));
         Ok(())

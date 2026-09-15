@@ -825,69 +825,68 @@ fn the_standing_flag_does_not_outlive_its_order() {
     assert!(!app.standing_order, "and a fresh order opens as a batch");
 }
 
-/// `[P]` raises first, because raising is what the feature is for: before
-/// bands the only control over the base's attention was cancel-and-refile,
-/// which lands the order you care about at the bottom.
-#[test]
-fn the_priority_key_cycles_the_band_and_the_filed_order_carries_it() {
-    let mut app = app_inside_a_small_base(254, false);
-    open_order_quantity_page(&mut app);
-    assert_eq!(
-        app.order_priority,
-        OrderPriority::Normal,
-        "an order is ordinary unless asked"
-    );
-
-    app.handle_key(GameKey::Char('p'));
-    assert_eq!(app.order_priority, OrderPriority::High, "[P] raises");
-    app.handle_key(GameKey::Char('p'));
-    assert_eq!(
-        app.order_priority,
-        OrderPriority::Low,
-        "and wraps past the top"
-    );
-    app.handle_key(GameKey::Char('p'));
-    assert_eq!(
-        app.order_priority,
-        OrderPriority::Normal,
-        "and back round to where it started"
-    );
-
-    app.handle_key(GameKey::Char('p'));
-    app.handle_key(GameKey::Char('3'));
-    app.handle_key(GameKey::Enter);
-
-    let orders = app.game.as_ref().unwrap().work_orders();
-    assert_eq!(orders.len(), 1, "the order is filed");
-    assert_eq!(
-        orders[0].priority,
-        OrderPriority::High,
-        "and carries the band the page was showing"
-    );
+/// Two orders filed straight into the queue, told apart by quantity, with
+/// the work orders screen open on them.
+fn app_with_two_orders(seed: u32) -> App {
+    let mut app = app_inside_a_small_base(seed, false);
+    let item = app.orderable_items()[0].0.clone();
+    let game = app.game.as_mut().unwrap();
+    for qty in [1, 2] {
+        game.queue_work_order(WorkOrder::batch(item.clone(), qty))
+            .unwrap();
+    }
+    open_via_menu(&mut app, 'b', "Work orders");
+    assert_eq!(app.mode, Mode::WorkOrders);
+    app
 }
 
-/// The band is the page's, like the standing flag beside it: a High left
-/// set would jump the queue with an order nobody asked to prioritise.
+fn queued_quantities(app: &App) -> Vec<u32> {
+    app.game
+        .as_ref()
+        .unwrap()
+        .work_orders()
+        .iter()
+        .map(|o| o.qty)
+        .collect()
+}
+
+/// The party screen's keys, and its rule: the highlight moves with the
+/// order, so repeated presses walk one order along rather than swapping the
+/// same pair back and forth.
 #[test]
-fn the_priority_band_does_not_outlive_its_order() {
-    let mut app = app_inside_a_small_base(255, false);
-    open_order_quantity_page(&mut app);
-    app.handle_key(GameKey::Char('p'));
-    assert_eq!(
-        app.order_priority,
-        OrderPriority::High,
-        "precondition: the band is raised"
-    );
+fn angle_brackets_move_the_highlighted_order_and_the_highlight_follows() {
+    let mut app = app_with_two_orders(254);
+    app.menu_selected = 1;
 
-    app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::WorkOrderPick);
-    app.handle_key(GameKey::Char('1'));
+    app.handle_key(GameKey::Char('<'));
+    assert_eq!(queued_quantities(&app), vec![2, 1], "< moves it up");
+    assert_eq!(app.menu_selected, 0, "and the highlight goes with it");
 
-    assert_eq!(app.mode, Mode::WorkOrderQuantity);
-    assert_eq!(
-        app.order_priority,
-        OrderPriority::Normal,
-        "and a fresh order opens ordinary"
+    app.handle_key(GameKey::Char('.'));
+    assert_eq!(queued_quantities(&app), vec![1, 2], ". moves it back down");
+    assert_eq!(app.menu_selected, 1);
+}
+
+/// At the top there is nowhere to go, and the screen says so rather than
+/// doing nothing; the trailing "new order" row names no order and ignores
+/// the key.
+#[test]
+fn an_order_at_the_top_refuses_to_move_up() {
+    let mut app = app_with_two_orders(255);
+    app.menu_selected = 0;
+    app.handle_key(GameKey::Char('<'));
+    assert_eq!(queued_quantities(&app), vec![1, 2]);
+    assert_eq!(app.menu_selected, 0);
+    assert!(app.status_line.is_some(), "the refusal is shown");
+
+    app.status_line = None;
+    app.menu_selected = 2;
+    app.handle_key(GameKey::Char('>'));
+    assert_eq!(queued_quantities(&app), vec![1, 2]);
+    assert_eq!(app.menu_selected, 2);
+    assert!(
+        app.status_line.is_none(),
+        "the new-order row has nothing to move"
     );
 }
 

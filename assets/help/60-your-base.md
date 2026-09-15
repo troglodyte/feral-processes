@@ -64,8 +64,9 @@ Recharger Node or a Line Driver fuelled, then work orders, then standing jobs, t
 two burn a Power Cell to stay on the Grid, and a program will walk one over from a shelf ahead of
 almost anything else — on a base short of hands, that means a machine stands idle while the lights
 stay on. A work order is an item and a quantity and nothing else — say what you want and
-the base works out which machines make it, who stands on each, and what has to be fetched. Cancelling
-one unwinds nothing.
+the base works out which machines make it, who stands on each, and what has to be fetched. The queue
+is worked from the top down, and an order that cannot move yet hands its bodies to the next one; <
+and > move the highlighted order up and down. Cancelling one unwinds nothing.
 
 The rest of what a base does:
 
@@ -107,7 +108,7 @@ The rest of what a base does:
   every Research Node you have deployed staffs itself and starts feeding it; with nothing picked they
   stand idle, which the base panel will tell you about. The tree is what unlocks the benches, the
   recipes and several routines.
-- Picking a node also files its material bill as work orders, at high priority, so the base makes the
+- Picking a node also files its material bill as work orders, at the top of the queue, so the base makes the
   goods the same way it makes anything else. The project completes when it has both the Research Data
   and the whole bill, and the bill is paid off your shelves — any Depot, any machine buffer, wherever
   in the base it is sitting. What you are carrying is yours and is never spent on it.

@@ -8,8 +8,8 @@ use feral_processes_app_core::{BaseStaffRow, PendingBuild, ProgramRole, WorkOrde
 use feral_processes_engine::components::BuildGoal;
 use feral_processes_engine::structures::StructureId;
 use feral_processes_engine::{
-    BaseOutputReport, BaseOutputRow, BuildCandidate, BuildEffect, LabourDemand, OrderPriority,
-    OrderState, WorkProfile, program_tier_required,
+    BaseOutputReport, BaseOutputRow, BuildCandidate, BuildEffect, LabourDemand, OrderState,
+    WorkProfile, program_tier_required,
 };
 
 /// One buildable structure as the build menu needs it: everything that
@@ -743,6 +743,11 @@ pub(super) fn draw_staffing_menu(
     );
 }
 
+/// The list is the priority, so the keys line says so: nothing else on the
+/// screen tells a player that moving an order changes what the base works.
+const WORK_ORDERS_KEYS: &str =
+    "Top is worked first. < > move, Enter queues, Backspace drops, Esc closes";
+
 /// The work order queue and its status: what the base has been told to
 /// hold, how close it is, and which machine each order is waiting on.
 ///
@@ -762,9 +767,7 @@ pub(super) fn draw_work_orders(
     if let Some(header) = labour_header(demand) {
         rows.push(text_row(header));
     }
-    rows.push(text_row(
-        "Enter to queue an order, Backspace to drop one, Esc to close",
-    ));
+    rows.push(text_row(WORK_ORDERS_KEYS));
     if rows_in.is_empty() {
         rows.push(text_row("(nothing the base can make yet)"));
     }
@@ -876,17 +879,6 @@ fn state_tag(state: OrderState) -> &'static str {
     }
 }
 
-/// What a band means, spelled out rather than named: "Normal" alone says
-/// nothing about where the order lands, and where it lands is the whole of
-/// what the band does.
-fn priority_line(priority: OrderPriority) -> &'static str {
-    match priority {
-        OrderPriority::High => "high — files above the ordinary orders",
-        OrderPriority::Normal => "normal — files behind the orders already queued",
-        OrderPriority::Low => "low — files below everything, worked with what is left",
-    }
-}
-
 /// Picking what to order — `Game::orderable_items`, which asks the same
 /// chain question the queue refuses on, so nothing here can be rejected.
 pub(super) fn draw_work_order_pick(
@@ -918,23 +910,18 @@ pub(super) fn draw_work_order_pick(
     );
 }
 
-const WORK_ORDER_QUANTITY_KEYS: &str =
-    "[S] Standing order   [P] Priority   Digits then Enter   Esc to go back";
+const WORK_ORDER_QUANTITY_KEYS: &str = "[S] Standing order   Digits then Enter   Esc to go back";
 
 /// How many of it. The same two-page shape the compile flow uses.
 ///
 /// `PopupSize::Large`, as `draw_craft_quantity` is: the sentences on it are
 /// prose rather than menu rows, and the widest already ran 8px past a small
 /// box before this page gained a toggle to explain.
-/// Eight for `draw_arena_result`'s reason: the refusal is a parameter,
-/// not something a draw function reaches for.
-#[allow(clippy::too_many_arguments)]
 pub(super) fn draw_work_order_quantity(
     game: &Game,
     item: Option<ItemId>,
     typed: &str,
     standing: bool,
-    priority: OrderPriority,
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
@@ -944,7 +931,7 @@ pub(super) fn draw_work_order_quantity(
         .map(|i| game.item_name(i).to_string())
         .unwrap_or_default();
     let shown = if typed.is_empty() { "1" } else { typed };
-    let rows: Vec<Row> = work_order_quantity_lines(&name, shown, standing, priority)
+    let rows: Vec<Row> = work_order_quantity_lines(&name, shown, standing)
         .into_iter()
         .map(text_row)
         .collect();
@@ -962,12 +949,7 @@ pub(super) fn draw_work_order_quantity(
 /// built out of text rows has no scroll and `draw_row` never clips one
 /// horizontally, so a sentence that outgrows the popup body is lost in
 /// silence and only a headless measurement catches it.
-fn work_order_quantity_lines(
-    name: &str,
-    shown: &str,
-    standing: bool,
-    priority: OrderPriority,
-) -> Vec<String> {
+fn work_order_quantity_lines(name: &str, shown: &str, standing: bool) -> Vec<String> {
     vec![
         format!("How many {name} should the base hold?"),
         String::new(),
@@ -981,8 +963,6 @@ fn work_order_quantity_lines(
                 "off — one batch, and the order is done with"
             }
         ),
-        String::new(),
-        format!("Priority: {}", priority_line(priority)),
         String::new(),
         // `base_holding` sums machine and depot buffers only, so a player
         // carrying forty of the thing still reads 0/20 on the queue screen.
@@ -2944,6 +2924,11 @@ mod work_order_tests {
             }
         }
 
+        assert!(
+            WORK_ORDERS_KEYS.chars().count() <= ROW_WRAP_COLUMNS,
+            "the keys line runs past the {ROW_WRAP_COLUMNS} column body"
+        );
+
         // The shortfall header, measured here rather than in its own test
         // because it is drawn into this same popup and is unwrapped for the
         // same reason a head line is. Three digits everywhere is past any
@@ -3007,16 +2992,8 @@ mod work_order_tests {
         let name = "Recompiled Kernel Substrate Blank";
         crate::paint::with_painter(|p| {
             let box_w = p.screen_w() * 0.88;
-            let bands = [
-                OrderPriority::High,
-                OrderPriority::Normal,
-                OrderPriority::Low,
-            ];
-            for (standing, priority) in [true, false]
-                .into_iter()
-                .flat_map(|s| bands.map(|b| (s, b)))
-            {
-                for line in work_order_quantity_lines(name, "9999", standing, priority) {
+            for standing in [true, false] {
+                for line in work_order_quantity_lines(name, "9999", standing) {
                     let text_w = p.measure_ui_advance(&line, m.font_size);
                     assert!(
                         text_w + 2.0 * m.pad < box_w,

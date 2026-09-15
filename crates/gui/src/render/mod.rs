@@ -1081,7 +1081,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             app.pending_order.clone(),
             &app.order_quantity_input,
             app.standing_order,
-            app.order_priority,
             refusal,
             painter,
             m,

@@ -40,8 +40,8 @@ Core Fragments.
     cost: 18,
 
     // Optional; defaults to none. Goods consumed alongside `cost`, as
-    // (item id, quantity) pairs. Selecting the node files one High-band work
-    // order per line, so the base makes them the way it makes anything else;
+    // (item id, quantity) pairs. Selecting the node files one work order per
+    // line at the top of the queue, so the base makes them the way it makes anything else;
     // the bill is then paid off the base's own shelves — every Depot and every
     // machine output buffer, never the player's pack — and paid whole, so
     // nothing is spent unless the entire bill can be covered.

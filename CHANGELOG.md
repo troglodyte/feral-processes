@@ -42,6 +42,15 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.186
+
+**When you aim an area routine on a battle map, a yellow outline shows every
+cell its centre can land on.** Before, you moved the aim cursor blind and only
+found out a cell was out of range or out of sight when the routine was
+refused. The outline is worked out from the same range and line-of-sight rules
+that refuse a bad aim, so it cannot promise a cell the routine will reject.
+While it is up, it takes the place of the blue movement outline.
+
 ## 0.13.185
 
 **On a battle map, a program that can already hit its target stays where it

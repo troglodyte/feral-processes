@@ -1026,6 +1026,25 @@ fn a_hostile_s_routine_is_floored_even_when_its_file_authors_no_cooldown() {
     );
 }
 
+/// A fight with its one hostile marooned in the far corner, where no
+/// allowance closes on anybody, so its turn is a walk and nothing else —
+/// and, with the corner open on more than one side, more than one candidate
+/// cell scores.
+pub(super) fn marooned() -> (Game, Entity) {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 40);
+    let wild = pack[0];
+    assert!(wait_for_turn(&mut game, wild), "the hostile never acted");
+    let side = game.world.resource::<TacticalBattle>().board.side;
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .move_to(wild, (side - 1, side - 1)),
+        "the far corner must be standable"
+    );
+    (game, wild)
+}
+
 /// Where a hostile chooses to stand is one draw a turn, and none at all at
 /// temperature zero — `sample_scored` answers the argmax before it touches
 /// the RNG. That is what lets a test pin the choice without moving the
@@ -1036,23 +1055,6 @@ fn a_hostile_s_routine_is_floored_even_when_its_file_authors_no_cooldown() {
 /// to hit and this is a claim about the *walk*.
 #[test]
 fn choosing_a_cell_at_zero_temperature_does_not_move_the_seeded_stream() {
-    /// A fight with its one hostile marooned in the far corner, where no
-    /// allowance closes on anybody, so its turn is a walk and nothing else.
-    fn marooned() -> (Game, Entity) {
-        let mut game = game();
-        let pack = tactical_fight(&mut game, 1, 40);
-        let wild = pack[0];
-        assert!(wait_for_turn(&mut game, wild), "the hostile never acted");
-        let side = game.world.resource::<TacticalBattle>().board.side;
-        assert!(
-            game.world
-                .resource_mut::<TacticalBattle>()
-                .move_to(wild, (side - 1, side - 1)),
-            "the far corner must be standable"
-        );
-        (game, wild)
-    }
-
     fn next_draw(game: &mut Game) -> u64 {
         use rand::RngExt;
         game.world

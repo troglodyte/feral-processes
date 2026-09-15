@@ -23,7 +23,7 @@ use bevy_ecs::prelude::Entity;
 
 use crate::Game;
 use crate::abilities::{AbilityDef, AbilityRange, AbilityTarget};
-use crate::components::{Hostile, Stats};
+use crate::components::{Hostile, Stats, Tampered};
 use crate::policy;
 use crate::resources::GameRng;
 use crate::tactical::map::Board;
@@ -167,13 +167,32 @@ fn cell_merit(board: &Board, cell: (i32, i32), band: AbilityRange, targets: &[(i
 }
 
 impl Game {
+    /// `TACTICAL_AI_TEMPERATURE`, or `body`'s own `Tampered` temperature when
+    /// it carries one — a Cold Sample or Heat Injection overriding the
+    /// tuning constant for exactly the body it landed on.
+    ///
+    /// **The one door.** Every production call site in this file reads this
+    /// rather than the constant, so a later call site cannot miss a Cold
+    /// Sample by reading around it. `tactical_ai_turn_at` stays the explicit
+    /// test hook it always was — it takes a temperature as an argument
+    /// rather than asking this.
+    pub(crate) fn decision_temperature(&self, body: Entity) -> f32 {
+        self.world
+            .get::<Tampered>(body)
+            .and_then(Tampered::temperature)
+            .unwrap_or(TACTICAL_AI_TEMPERATURE)
+    }
+
     /// Runs the acting body's whole turn, and reports whether it did.
     ///
     /// `false` means the turn is not one this file drives — no fight open,
     /// nobody acting, or the body belongs to the player. A driver reads that
     /// as "wait for input".
     pub fn tactical_ai_turn(&mut self) -> bool {
-        self.tactical_ai_turn_at(TACTICAL_AI_TEMPERATURE)
+        let Some(actor) = self.tactical_ai_actor() else {
+            return false;
+        };
+        self.tactical_ai_turn_at(self.decision_temperature(actor))
     }
 
     /// The acting body, when it is this file's to drive.
@@ -241,7 +260,7 @@ impl Game {
         let Some(actor) = self.tactical_ai_actor() else {
             return AiBeat::Idle;
         };
-        self.run_tactical_beat(actor, TACTICAL_AI_TEMPERATURE)
+        self.run_tactical_beat(actor, self.decision_temperature(actor))
     }
 
     /// Spends one beat of the acting body's turn **whichever side it is on**.
@@ -266,7 +285,7 @@ impl Game {
         let Some(actor) = self.tactical_actor() else {
             return AiBeat::Idle;
         };
-        self.run_tactical_beat(actor, TACTICAL_AI_TEMPERATURE)
+        self.run_tactical_beat(actor, self.decision_temperature(actor))
     }
 
     /// Whether the acting body is part-way through a walk it has committed
@@ -315,7 +334,7 @@ impl Game {
         let Some(actor) = self.tactical_actor() else {
             return false;
         };
-        self.run_tactical_turn(actor, TACTICAL_AI_TEMPERATURE);
+        self.run_tactical_turn(actor, self.decision_temperature(actor));
         true
     }
 

@@ -9,7 +9,7 @@ use super::support::{
     spawn_wild_without_routine, test_assets_dir,
 };
 use super::tactical::{
-    body, free_neighbour, only_routine, place_one, tactical_fight, wait_for_turn,
+    body, free_neighbour, marooned, only_routine, place_one, tactical_fight, wait_for_turn,
 };
 use crate::Game;
 use crate::abilities::{
@@ -17,9 +17,12 @@ use crate::abilities::{
 };
 use crate::battle::BattleAction;
 use crate::components::{AbilityCooldowns, Position, PowerReserve, Routines, Stats, Tampered};
-use crate::resources::{DifficultyMode, Party, Sorties};
+use crate::resources::{DifficultyMode, GameRng, Party, Sorties};
 use crate::tactical::TacticalBattle;
+use crate::tactical::ai::AiBeat;
 use crate::tactical::map::BattleCell;
+use crate::tuning::TACTICAL_MOVE_MAX;
+use bevy_ecs::prelude::Entity;
 
 fn game(seed: u32) -> Game {
     Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
@@ -660,5 +663,142 @@ fn tampered_is_gone_when_the_fight_ends() {
     assert!(
         game.world.get::<Tampered>(companion).is_none(),
         "Tampered must not survive the fight ending"
+    );
+}
+
+/// The next value `GameRng` yields — the "did this turn draw" probe every
+/// test below shares, matching `choosing_a_cell_at_zero_temperature_does_
+/// not_move_the_seeded_stream`'s own comparison: a turn that drew nothing
+/// leaves the stream's next value equal to a virgin game's first one.
+fn tamper_next_draw(game: &mut Game) -> u64 {
+    use rand::RngExt;
+    game.world.resource_mut::<GameRng>().0.random::<u64>()
+}
+
+/// `marooned`, with its hostile Cold Sampled directly rather than through a
+/// cast — `decision_temperature`'s read is the door under test, not
+/// `apply_tamper`'s.
+fn cold_marooned() -> (Game, Entity) {
+    let (mut game, wild) = marooned();
+    let mut tampered = Tampered::default();
+    tampered.apply(TamperKind::Temperature(0.0), 3, false);
+    game.world.entity_mut(wild).insert(tampered);
+    (game, wild)
+}
+
+/// Spec test 1: a body under `Temperature(0.0)` takes the argmax and draws
+/// nothing from `GameRng` over its turn; the same body without it draws.
+///
+/// **(M)** Mutation check: hardcoding `decision_temperature` to always
+/// answer `tuning::TACTICAL_AI_TEMPERATURE` (ignoring `Tampered`) makes the
+/// cold hostile's turn draw like the untampered one, and the first
+/// `assert_eq!` fails. Verified and restored — see the commit body.
+#[test]
+fn a_cold_sampled_hostile_draws_nothing_over_its_turn() {
+    let (mut cold, _) = cold_marooned();
+    let (mut virgin, _) = marooned();
+    assert!(
+        cold.tactical_ai_turn(),
+        "the cold hostile's turn was not run"
+    );
+    assert_eq!(
+        tamper_next_draw(&mut cold),
+        tamper_next_draw(&mut virgin),
+        "a Cold Sample argmax turn must draw nothing from GameRng"
+    );
+
+    let (mut warm, _) = marooned();
+    let (mut warm_virgin, _) = marooned();
+    assert!(
+        warm.tactical_ai_turn(),
+        "the untampered hostile's turn was not run"
+    );
+    assert_ne!(
+        tamper_next_draw(&mut warm),
+        tamper_next_draw(&mut warm_virgin),
+        "the untampered twin must still draw over its turn"
+    );
+}
+
+/// Spec test 2: every tactical AI call site reads `decision_temperature`.
+/// The same "drew nothing" assertion from the test above, run through each
+/// of the four production doors `decision_temperature` unified.
+///
+/// **(M)** Mutation check: reverting any one of the four call sites in
+/// `tactical/ai.rs` back to the bare `TACTICAL_AI_TEMPERATURE` constant
+/// makes exactly that door's `assert_eq!` fail, the other three staying
+/// green. Verified per site and restored — see the commit body.
+#[test]
+fn every_tactical_ai_door_reads_the_temperature_door() {
+    let virgin_draw = {
+        let (mut game, _) = marooned();
+        tamper_next_draw(&mut game)
+    };
+
+    let (mut via_turn, _) = cold_marooned();
+    assert!(
+        via_turn.tactical_ai_turn(),
+        "tactical_ai_turn did not run the cold hostile's turn"
+    );
+    assert_eq!(
+        tamper_next_draw(&mut via_turn),
+        virgin_draw,
+        "tactical_ai_turn must read decision_temperature"
+    );
+
+    let (mut via_beat, _) = cold_marooned();
+    for _ in 0..=TACTICAL_MOVE_MAX {
+        if via_beat.tactical_ai_beat() == AiBeat::Acted {
+            break;
+        }
+    }
+    assert_eq!(
+        tamper_next_draw(&mut via_beat),
+        virgin_draw,
+        "tactical_ai_beat must read decision_temperature"
+    );
+
+    let (mut via_auto, _) = cold_marooned();
+    for _ in 0..=TACTICAL_MOVE_MAX {
+        if via_auto.tactical_auto_beat() == AiBeat::Acted {
+            break;
+        }
+    }
+    assert_eq!(
+        tamper_next_draw(&mut via_auto),
+        virgin_draw,
+        "tactical_auto_beat must read decision_temperature"
+    );
+
+    let (mut via_drive, _) = cold_marooned();
+    assert!(
+        via_drive.tactical_drive_turn(),
+        "tactical_drive_turn did not run the cold hostile's turn"
+    );
+    assert_eq!(
+        tamper_next_draw(&mut via_drive),
+        virgin_draw,
+        "tactical_drive_turn must read decision_temperature"
+    );
+}
+
+/// Guards against a `decision_temperature` that zeroes every tampered body
+/// rather than reading its entry: a Heat-tampered hostile must still draw.
+#[test]
+fn heat_leaves_the_draw_in_place() {
+    let (mut heat, wild) = marooned();
+    let mut tampered = Tampered::default();
+    tampered.apply(TamperKind::Temperature(2.0), 3, false);
+    heat.world.entity_mut(wild).insert(tampered);
+
+    let (mut virgin, _) = marooned();
+    assert!(
+        heat.tactical_ai_turn(),
+        "the heat-tampered hostile's turn was not run"
+    );
+    assert_ne!(
+        tamper_next_draw(&mut heat),
+        tamper_next_draw(&mut virgin),
+        "a Heat-tampered turn must still draw from GameRng"
     );
 }

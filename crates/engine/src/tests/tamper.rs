@@ -17,8 +17,12 @@ use crate::abilities::{
     AbilityDb, AbilityDef, AbilityEffect, AbilityTarget, TamperKind, TamperSlot,
 };
 use crate::battle::BattleAction;
-use crate::components::{AbilityCooldowns, Position, PowerReserve, Routines, Stats, Tampered};
+use crate::components::{
+    AbilityCooldowns, Creature, Position, PowerReserve, Routines, Stats, Tampered,
+};
+use crate::items::ItemId;
 use crate::resources::{DifficultyMode, Party, Sorties};
+use crate::species::{SpeciesDb, SpeciesDef};
 use crate::tactical::TacticalBattle;
 use crate::tactical::ai::AiBeat;
 use crate::tactical::map::BattleCell;
@@ -848,28 +852,66 @@ fn an_injected_hostile_swings_at_a_packmate() {
     );
 }
 
+/// A species whose `equipment_drop` chance is 1.0, minted off whatever
+/// species `tactical_fight` already spawns — `extraction.rs`'s `..template`
+/// pattern for `SpeciesDb::insert` — so a kill's loot assertion does not
+/// depend on a shipped drop table that may or may not land inside a test's
+/// lifetime. `random_bool(1.0)` always accepts regardless of where in the
+/// stream it falls, which is what makes the drop itself deterministic even
+/// though the rarity `grant_gear_drop` rolls afterward is not (see the
+/// caller's own comment on that).
+fn guaranteed_looter_species(game: &Game) -> SpeciesDef {
+    let template = game
+        .species_defs()
+        .into_iter()
+        .next()
+        .expect("at least one shipped species");
+    SpeciesDef {
+        id: "task4_guaranteed_looter".to_string(),
+        equipment_drop: Some((ItemId::from(crate::items::ids::CORE_FRAGMENT), 1.0)),
+        ..template
+    }
+}
+
 /// **(M)** Spec test 5's other half: a hostile killed by an injected
 /// packmate's swing pays exactly what any hostile death pays —
 /// `reap_tactical_dead`'s `Hostile` check names the victim, never the
-/// attacker, but only if the injected body ever gets to swing at it at all.
+/// attacker, but only if the injected body ever gets to swing at it at all —
+/// XP and loot alike.
 ///
 /// Compared against the identical kill struck by the player: `kill_xp` is a
-/// pure function of the victim's own Integrity ceiling, so the two must
-/// agree — an attacker-keyed XP formula is the gap this pins shut.
+/// pure function of the victim's own Integrity ceiling, so the two XP totals
+/// must agree — an attacker-keyed XP formula is the gap this pins shut. The
+/// two kills' *loot* is compared by item and quantity, not by the full
+/// `GearCopy` `award_loot` records: `grant_gear_drop` rolls the rarity from
+/// `GameRng` at whatever position the stream happens to be in, and an
+/// AI-driven turn spends a walk-decision draw and a move-selection draw the
+/// player's own direct `tactical_attack` call does not, so the two runs read
+/// different rarities off an identical, deterministic (`chance: 1.0`) drop —
+/// comparing the roll would be asserting on incidental stream position,
+/// which is unsound (see the `rng-stream-shift` memory entries), not on the
+/// invariant this test is for.
 ///
 /// Mutation check: reverting `acts_for_hostiles` leaves the injected body
 /// walking toward the unreachable player instead of swinging at its
-/// packmate, so the packmate never dies and `fight_rewards_mut` never
-/// fills — the `is_none()` Stats assertion and the XP assertion both fail.
-/// Verified and restored — see the commit body.
+/// packmate, so the packmate never dies and `fight_rewards_mut` never fills —
+/// the `is_none()` Stats assertion and the XP assertion both fail. Separately,
+/// commenting out `award_loot`'s `record_drop` call makes the loot assertion
+/// fail on its own while the XP assertions stay green, proving it is not
+/// riding on the kill assertion above it. Both verified and restored — see
+/// the commit body.
 #[test]
 fn a_packmate_killed_by_an_injected_hostile_pays() {
-    let paid_xp = {
+    let (paid_xp, paid_drops) = {
         let mut game = game(9701);
+        let looter = guaranteed_looter_species(&game);
+        let looter_id = looter.id.clone();
+        game.world.resource_mut::<SpeciesDb>().insert(looter);
         let pack = tactical_fight(&mut game, 2, 40);
         open_ground(&mut game, &pack, &[(0, 0), (0, 1)]);
         let injected = pack[0];
         let packmate = pack[1];
+        game.world.get_mut::<Creature>(packmate).unwrap().species = looter_id;
         game.world.get_mut::<Stats>(packmate).unwrap().hp = 1;
         inject(&mut game, injected);
 
@@ -884,20 +926,30 @@ fn a_packmate_killed_by_an_injected_hostile_pays() {
             game.world.get::<Stats>(packmate).is_none(),
             "the packmate must have died to the blow"
         );
-        game.fight_rewards_mut()
-            .expect("the fight is still open with the injected hostile left standing")
-            .player
-            .xp
+        let rewards = game
+            .fight_rewards_mut()
+            .expect("the fight is still open with the injected hostile left standing");
+        (rewards.player.xp, drop_totals(&rewards.drops))
     };
     assert!(paid_xp > 0, "the kill must pay the player XP");
+    assert!(
+        paid_drops
+            .iter()
+            .any(|(item, qty)| item.as_str() == crate::items::ids::CORE_FRAGMENT && *qty > 0),
+        "a packmate killed by an injected hostile must still pay loot: {paid_drops:?}"
+    );
 
     // The identical body, killed by the player's own swing instead —
     // `finish_hostile` must not price the two differently.
     let mut by_player = game(9701);
+    let looter = guaranteed_looter_species(&by_player);
+    let looter_id = looter.id.clone();
+    by_player.world.resource_mut::<SpeciesDb>().insert(looter);
     let by_pack = tactical_fight(&mut by_player, 2, 40);
     open_ground(&mut by_player, &by_pack, &[(0, 0), (0, 1)]);
     let player = by_player.player_entity();
     let victim = by_pack[1];
+    by_player.world.get_mut::<Creature>(victim).unwrap().species = looter_id;
     by_player.world.get_mut::<Stats>(victim).unwrap().hp = 1;
     let beside = free_neighbour(&by_player, (0, 1));
     place_one(&mut by_player, player, beside);
@@ -905,15 +957,29 @@ fn a_packmate_killed_by_an_injected_hostile_pays() {
     force_the_next_attack_to_land(&mut by_player);
     assert!(by_player.tactical_attack(victim));
 
-    let player_paid_xp = by_player
+    let rewards = by_player
         .fight_rewards_mut()
-        .expect("the fight is still open with the other hostile left standing")
-        .player
-        .xp;
+        .expect("the fight is still open with the other hostile left standing");
+    let player_paid_xp = rewards.player.xp;
+    let player_paid_drops = drop_totals(&rewards.drops);
     assert_eq!(
         paid_xp, player_paid_xp,
         "a packmate's kill must pay the same XP as the player's own"
     );
+    assert_eq!(
+        paid_drops, player_paid_drops,
+        "a packmate's kill must pay the same item and quantity as the player's own"
+    );
+}
+
+/// `(item, quantity)` off a `BattleRewards::drops` tally, dropping the rolled
+/// rarity/affix/quality — see `a_packmate_killed_by_an_injected_hostile_pays`'s
+/// own doc for why those three are not comparable across two runs.
+fn drop_totals(drops: &[(crate::items::GearCopy, u32)]) -> Vec<(ItemId, u32)> {
+    drops
+        .iter()
+        .map(|(copy, qty)| (copy.item.clone(), *qty))
+        .collect()
 }
 
 /// Spec test 6: an injected hostile's own Heal routine is helpful, and

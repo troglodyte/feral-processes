@@ -644,6 +644,10 @@ impl Game {
     /// side. For an injected actor `acts_for_hostiles` answers `false`, so a
     /// Heal lands on the party it now calls its own and a Damage penalises a
     /// packmate exactly the way it used to penalise a companion.
+    ///
+    /// The aggressive branch's `!targets.is_empty()` guard is unreachable in
+    /// practice: `run_tactical_beat` already returns before this is called
+    /// once `tactical_sides` answers an empty `targets`.
     fn best_aim(
         &self,
         actor: Entity,

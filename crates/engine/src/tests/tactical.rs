@@ -2436,6 +2436,127 @@ fn an_adjacent_swing_queues_a_bolt_too() {
     assert_eq!(game.take_bolts().len(), 1);
 }
 
+// --- A body's own hit or heal on a battle map --------------------------
+//
+// `Game::apply_damage` and `Game::restore_hp` are the two doors, so the
+// engine side of the whole feature is a queue push inside each — see
+// `TacticalFxQueue`. The stream is searched for rather than pinned,
+// `bracing_reduces_what_the_next_swing_lands`'s rule: a swing has a miss
+// chance by design, so a fixed seed would read as flaky the day the combat
+// tables move.
+
+/// A landed blow cues a hit at the defender's own board cell — the same
+/// door `apply_damage` always damages a creature through, reached here by
+/// an ordinary melee swing.
+#[test]
+fn a_landed_swing_queues_a_hit_cue_at_the_defenders_cell() {
+    fn attempt(seed: u64) -> (Game, Entity) {
+        let mut game = game();
+        let pack = ranged_fight(&mut game, 1);
+        let player = game.player_entity();
+        let target = pack[0];
+        place_bodies(&mut game, player, (0, 0), target, (1, 0));
+        crate::tests::support::reseed_rng(&mut game, seed);
+        game.tactical_attack(target);
+        (game, target)
+    }
+
+    let (mut game, _target) = (0..512u64)
+        .map(attempt)
+        .find(|(game, target)| hp_of(game, *target) < 20)
+        .expect("no stream in 0..512 landed the swing");
+
+    // The cell `place_bodies` seated the defender on, read back rather than
+    // re-derived from `TacticalBattle::cell_of` after the swing: a hard
+    // enough blow reaps the defender off the board entirely, and the cue's
+    // own cell was captured before that could happen.
+    let cues = game.take_tactical_fx();
+    assert_eq!(
+        cues,
+        vec![crate::resources::TacticalFxCue {
+            pos: (1, 0),
+            kind: crate::resources::TacticalFxKind::Hit,
+        }],
+        "a landed blow must cue exactly one hit at the defender's cell"
+    );
+}
+
+/// A miss or a zero-damage call cues nothing — `apply_damage`'s own gate on
+/// `dealt > 0`, exercised directly so the case does not depend on finding an
+/// unlucky stream.
+#[test]
+fn a_hit_with_nothing_dealt_cues_no_tactical_fx() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 20);
+    let target = pack[0];
+    assert_eq!(
+        game.apply_damage(target, 0),
+        0,
+        "fixture: zero damage must land as zero"
+    );
+    assert!(
+        game.take_tactical_fx().is_empty(),
+        "zero damage must not have cued a hit"
+    );
+}
+
+/// A heal on a body standing on the board cues a `+` at its cell — full
+/// friendly fire's own fixture, since `mirror_restore` is what proved
+/// `restore_hp` reaches a hostile standing inside a player-centred patch.
+#[test]
+fn a_heal_queues_a_heal_cue_at_the_recipients_cell() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 40);
+    let player = game.player_entity();
+    only_routine(&mut game, player, "mirror_restore");
+    assert!(wait_for_turn(&mut game, player));
+
+    let at = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(player)
+        .expect("the player was not seated");
+    let beside = free_neighbour(&game, at);
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .move_to(pack[0], beside)
+    );
+    game.world.get_mut::<Stats>(pack[0]).unwrap().hp = 10;
+
+    assert!(
+        game.tactical_use_routine(0, at),
+        "a patch aimed at the caster's own cell was refused"
+    );
+
+    let cues = game.take_tactical_fx();
+    assert!(
+        cues.contains(&crate::resources::TacticalFxCue {
+            pos: beside,
+            kind: crate::resources::TacticalFxKind::Heal,
+        }),
+        "the healed hostile's cell must carry a heal cue: {cues:?}"
+    );
+}
+
+/// A heal that restores nothing — a full-health recipient — cues nothing,
+/// `restore_hp`'s own gate on `restored > 0`.
+#[test]
+fn a_heal_that_restores_nothing_cues_no_tactical_fx() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 40);
+    let target = pack[0];
+    assert_eq!(
+        game.restore_hp(target, 10),
+        0,
+        "fixture: a full-health target must have nothing to restore"
+    );
+    assert!(
+        game.take_tactical_fx().is_empty(),
+        "a no-op heal must not have cued anything"
+    );
+}
+
 /// Seating a forked program on a battle map: beside the invoker, behind the
 /// cursor, and gone whichever way the fight ends.
 mod summons {

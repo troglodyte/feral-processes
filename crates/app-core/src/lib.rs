@@ -1353,6 +1353,16 @@ pub enum Mode {
     /// Enter commits, Esc goes back — and, like it, it draws **no popup**,
     /// so it owes `needs_status_banner` a row or its refusals are silent.
     TacticalAim,
+    /// Where a tactical fight ends — won, jacked out of, or survived. A
+    /// popup of the fight's results (`Game::battle_outcomes`) over the board
+    /// it was fought on, frozen as it ended (`Game::tactical_result_view`,
+    /// since `TacticalBattle` is gone by now), waiting for any key.
+    ///
+    /// **Not `Mode::BattleResult`**, which is the group model's own battle
+    /// screen, and deliberately not `is_battle`: a tactical fight narrated
+    /// its lines as it resolved, so there is nothing to reveal and no key
+    /// for a reveal to swallow.
+    TacticalResult,
     Transfer,
     /// One Depot's allow/deny list, opened with `[F]` from the transfer
     /// picker — see `App::depot_filter`.
@@ -1955,6 +1965,7 @@ impl Mode {
             Mode::TacticalBattle
             | Mode::TacticalRoutine
             | Mode::TacticalAim
+            | Mode::TacticalResult
             | Mode::MainMenu
             | Mode::Achievements
             | Mode::Options

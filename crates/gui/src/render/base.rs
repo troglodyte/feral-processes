@@ -226,14 +226,22 @@ pub(super) fn draw_playing_base(
             .unwrap_or_default(),
         _ => Vec::new(),
     };
-    let in_tactical = app.game.as_ref().is_some_and(|g| g.in_tactical_battle());
-    // The keybar's content for as long as a fight is open, built before the
-    // `game` borrow like every other read on this list.
     let mode = app.mode;
+    // A finished tactical fight's results are a popup over the board it was
+    // fought on, and `TacticalBattle` went with the fight — so on that
+    // screen the board is the copy the engine kept, and it counts as a
+    // fight for everything the map pane gates on one.
+    let finished_fight = mode == Mode::TacticalResult;
+    let in_tactical = finished_fight || app.game.as_ref().is_some_and(|g| g.in_tactical_battle());
+    // The keybar's content for as long as a fight is open, built before the
+    // `game` borrow like every other read on this list. None on the results
+    // screen: the popup says how to leave, and the frozen board's actor-less
+    // view would read as the wild side still moving.
     let tactical_auto = app.tactical_auto;
     let tactical_actions: Option<Vec<(String, String)>> = app
         .game
         .as_mut()
+        .filter(|_| !finished_fight)
         .and_then(|g| g.tactical_view())
         .map(|v| tactical::action_bar(mode, &v, tactical_auto));
     let Some(game) = &mut app.game else { return };
@@ -275,7 +283,12 @@ pub(super) fn draw_playing_base(
     // fight is surface-only, so it can never be open at the same time as a
     // Stack view, and the order says which grid wins rather than leaving it
     // to two conditions agreeing.
-    if let Some(view) = game.tactical_view() {
+    let board = if finished_fight {
+        game.tactical_result_view()
+    } else {
+        game.tactical_view()
+    };
+    if let Some(view) = board {
         tactical::draw_tactical_map(
             &view,
             tactical_cursor,

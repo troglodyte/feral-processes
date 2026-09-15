@@ -1132,8 +1132,17 @@ impl Fx {
             self.camera_hold = None;
             self.camera = None;
         }
+        // Nobody acting is a board still on screen — a finished fight's,
+        // under its results popup — so the hold is refreshed rather than
+        // left to lapse: a lapsed hold reads as a board that went away, and
+        // the camera swings to the middle of the board while the results
+        // are being read.
         let Some((entity, cell)) = acting else {
-            return self.camera_hold.as_ref().map(|hold| hold.cell);
+            let now = self.now;
+            return self.camera_hold.as_mut().map(|hold| {
+                hold.seen = now;
+                hold.cell
+            });
         };
         let key = entity.to_bits();
         let (now, dwell) = (self.now, self.enabled);

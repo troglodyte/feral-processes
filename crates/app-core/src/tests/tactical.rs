@@ -6,6 +6,7 @@ use crate::{
     App, GameKey, Mode, TACTICAL_HANDOVER_SECONDS, TACTICAL_STEPS_PER_SECOND,
     TACTICAL_TURNS_PER_SECOND, TacticalIntent,
 };
+use feral_processes_engine::{MESSAGE_LOG_CAP, MessageKind};
 
 /// An app standing in a fight opened by walking into a lone wild program.
 ///
@@ -606,13 +607,11 @@ fn the_key_that_stops_auto_attack_spends_nothing() {
     );
 }
 
-/// Per fight, so the next one starts hands-on however the last one ended.
-#[test]
-fn auto_attack_is_off_once_the_fight_is_over() {
-    let mut app = fighting(9133);
-    wait_for_the_player(&mut app);
+/// Runs the fight to its end with auto-attack, as the player would by
+/// arming it and watching.
+fn finish_by_auto(app: &mut App) {
+    wait_for_the_player(app);
     app.handle_key(GameKey::Char('A'));
-
     for _ in 0..200 {
         if app.mode != Mode::TacticalBattle {
             break;
@@ -621,11 +620,79 @@ fn auto_attack_is_off_once_the_fight_is_over() {
         // has paid for, so this runs the fight rather than watching it.
         app.advance_tactical(100.0);
     }
+}
+
+/// Per fight, so the next one starts hands-on however the last one ended.
+#[test]
+fn auto_attack_is_off_once_the_fight_is_over() {
+    let mut app = fighting(9133);
+    finish_by_auto(&mut app);
 
     assert_eq!(
         app.mode,
-        Mode::BattleResult,
+        Mode::TacticalResult,
         "the auto fight never resolved"
     );
     assert!(!app.tactical_auto, "auto-attack outlived the fight");
+}
+
+/// A tactical fight ends in a popup over the board it was fought on, never
+/// on the group model's battle screen.
+#[test]
+fn a_finished_tactical_fight_opens_its_results_over_the_board() {
+    let mut app = fighting(9134);
+    finish_by_auto(&mut app);
+
+    assert_eq!(app.mode, Mode::TacticalResult);
+    let game = app.game.as_ref().expect("the run is still live");
+    assert!(
+        game.tactical_result_view().is_some(),
+        "the results have no board to be drawn over"
+    );
+    assert!(
+        !game.battle_outcomes().is_empty(),
+        "the results popup has nothing to list"
+    );
+    // Its lines were narrated as the fight resolved, so nothing is held back
+    // to swallow the key that dismisses it.
+    assert!(
+        !app.is_revealing(),
+        "the results are paced like a group fight's"
+    );
+}
+
+/// Any key leaves for the map, and leaving is what prunes the blow-by-blow —
+/// the one thing every exit from a results screen owes it.
+#[test]
+fn any_key_leaves_the_tactical_results_and_drops_the_blows() {
+    let mut app = fighting(9135);
+    finish_by_auto(&mut app);
+    assert_eq!(app.mode, Mode::TacticalResult);
+    assert!(
+        log_kinds(&app).contains(&MessageKind::PartyDamage),
+        "no swing was logged, so the prune has nothing to prove"
+    );
+
+    app.handle_key(GameKey::Char(' '));
+
+    assert_eq!(app.mode, Mode::Playing);
+    let kinds = log_kinds(&app);
+    assert!(
+        !kinds.contains(&MessageKind::PartyDamage),
+        "the blow-by-blow followed the player onto the map"
+    );
+    assert!(
+        kinds.contains(&MessageKind::Outcome),
+        "the results were pruned with the narration"
+    );
+}
+
+fn log_kinds(app: &App) -> Vec<MessageKind> {
+    app.game
+        .as_ref()
+        .expect("the run is still live")
+        .message_log(MESSAGE_LOG_CAP)
+        .iter()
+        .map(|line| line.kind)
+        .collect()
 }

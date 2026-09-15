@@ -304,6 +304,7 @@ impl App {
             Mode::ArenaPick => self.handle_arena_pick_key(key),
             Mode::ArenaResult => self.handle_arena_result_key(key),
             Mode::BattleResult => self.handle_battle_result_key(key),
+            Mode::TacticalResult => self.handle_tactical_result_key(),
             Mode::SpritePicker => self.handle_sprite_picker_key(key),
             Mode::SpriteEditor => self.handle_sprite_editor_key(key),
         }

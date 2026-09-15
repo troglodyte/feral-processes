@@ -352,12 +352,12 @@ impl App {
         self.settle_tactical_end();
     }
 
-    /// Leaves for the results page if the fight is over, and reports whether
-    /// it did.
+    /// Leaves for the results popup if the fight is over, and reports
+    /// whether it did.
     ///
     /// **`has_active_battle` and not the tactical resource alone.** A fight
-    /// that ended took `TacticalBattle` with it, and the screen the player
-    /// is owed is the same results page every other fight ends on.
+    /// that ended took `TacticalBattle` with it, and the board the popup is
+    /// drawn over is the copy `Game::tactical_result_view` kept.
     fn settle_tactical_end(&mut self) -> bool {
         let over = self.game.as_ref().is_some_and(|g| !g.has_active_battle());
         if !over {
@@ -368,9 +368,16 @@ impl App {
         self.tactical_carry = 0.0;
         // Per fight: the next one opens hands-on however this one ended.
         self.tactical_auto = false;
-        self.mode = Mode::BattleResult;
-        self.restart_reveal();
+        self.mode = Mode::TacticalResult;
         self.check_game_over();
         true
+    }
+
+    /// Any key leaves the results popup for the map. No arrow carve-out, as
+    /// `handle_battle_result_key` has: that screen scrolls a log pane, and
+    /// this one lists results alone.
+    pub(crate) fn handle_tactical_result_key(&mut self) {
+        self.leave_battle_result();
+        self.mode = Mode::Playing;
     }
 }

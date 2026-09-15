@@ -9,9 +9,9 @@
 use bevy_ecs::prelude::Entity;
 
 use crate::Game;
-use crate::abilities::{self, AbilityDef, AbilityEffect};
+use crate::abilities::{self, AbilityDef, AbilityEffect, AbilityShape};
 use crate::components::AbilityCooldowns;
-use crate::components::{Hostile, Stats};
+use crate::components::{Hostile, Player, Stats};
 use crate::game::combat_teardown::FightVerdict;
 use crate::resources::{GameClock, Party, ZoneLevel};
 use crate::tactical::map::{BattleSpec, generate};
@@ -508,6 +508,21 @@ impl Game {
         if matches!(ability.effect, AbilityEffect::Summon { .. }) && !self.board_has_room(actor) {
             return false;
         }
+        // The eighth refusal, and a tamper's own: it names the other side,
+        // and the player is never on it. A shaped tamper already drops the
+        // player in `Game::apply_tamper`; a `Single` aim has nothing else to
+        // drop it there, so it needs the refusal here or it would spend the
+        // Power, the cooldown and the turn tampering with nobody.
+        if matches!(ability.effect, AbilityEffect::Tamper { .. })
+            && ability.tactical_shape() == AbilityShape::Single
+            && self
+                .world
+                .resource::<TacticalBattle>()
+                .occupant(aim)
+                .is_some_and(|body| self.world.get::<Player>(body).is_some())
+        {
+            return false;
+        }
         self.run_tactical_routine(actor, &ability, aim, 0);
         true
     }
@@ -639,6 +654,12 @@ impl Game {
                     break;
                 }
             }
+        } else if let AbilityEffect::Tamper { kind, duration } = ability.effect {
+            // `Decompile`'s reason and `Summon`'s: seated by the one combat
+            // model that can resolve it rather than through `use_ability`'s
+            // recipient loop, which carries the `unreachable!` arm this
+            // branch is what makes actually unreachable.
+            self.apply_tamper(actor, ability, kind, duration, aim);
         } else {
             let shape = ability.tactical_shape();
             let recipients =
@@ -679,6 +700,16 @@ impl Game {
     /// `battle_resolve_round`'s last two lines, at the same cadence — see
     /// `tactical_round_upkeep`.
     fn hand_on_turn(&mut self, actor: Entity, round_before: u32) {
+        // **First, and only while `actor` is alive.** Duration counts the
+        // tampered body's own turns — `components::Tampered`'s reason for
+        // ageing here rather than in `Game::tick_one_combatant` — so this is
+        // the one place that turn is known to have happened. Guarded on
+        // being alive so a body that died to its own action this turn (a
+        // fumble's recoil, a blast on its own cell) doesn't age a turn it
+        // no longer has a next one to reach.
+        if self.creature_alive(actor) {
+            self.age_tamper(actor);
+        }
         let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return;
         };

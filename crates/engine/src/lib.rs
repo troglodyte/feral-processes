@@ -76,8 +76,8 @@ use components::{
     Nemesis, Nest, NestGuardian, POWER_MAX, Perks, Player, PlayerIdentity, Position, Potential,
     PowerReserve, ProgramId, PurchasedTiers, Pursuing, Rarity, ReachCharge, Refactors,
     ResourceNode, Routines, StackSpawn, StandingJob, Stats, StatusEffects, StatusKind, Stock,
-    Stranded, Structure, StructureTier, SurfaceLink, Talents, Tamed, Task, TaskKind, Temporary,
-    TownPatrol, WanderAi, ZonePortal,
+    Stranded, Structure, StructureTier, SurfaceLink, Talents, Tamed, Tampered, Task, TaskKind,
+    Temporary, TownPatrol, WanderAi, ZonePortal,
 };
 pub use game::base::transfer::TransferBasket;
 pub use game::base::work_orders::WorkOrder;

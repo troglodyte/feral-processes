@@ -362,7 +362,11 @@ impl AffinityKind {
 /// routine landed on an already-tampered body overwrites the same slot
 /// instead of opening a second one, so the two effects can never coexist on
 /// one body the way, say, `Profiled` and `Injected` can.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+///
+/// **No serde derive.** `Ord` is what `Tampered`'s `BTreeMap` needs to key
+/// on this; `Tampered` itself carries no serde derive and appears nowhere in
+/// `save.rs`, so there is nothing here for a mod or a save to round-trip.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TamperSlot {
     Temperature,
     Profiled,

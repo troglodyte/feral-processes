@@ -20,7 +20,7 @@ fn game() -> Game {
 
 /// A body of `species`, standing nowhere in particular. Only its species
 /// and its speed matter here.
-fn body(game: &mut Game, species: &str) -> Entity {
+pub(super) fn body(game: &mut Game, species: &str) -> Entity {
     game.world
         .spawn((
             Creature {
@@ -591,7 +591,7 @@ fn a_tactical_fight_counts_as_an_active_battle() {
 
 /// A free walkable cell next to `cell`, for a test that needs two bodies
 /// standing beside each other rather than wherever deployment put them.
-fn free_neighbour(game: &Game, cell: (i32, i32)) -> (i32, i32) {
+pub(super) fn free_neighbour(game: &Game, cell: (i32, i32)) -> (i32, i32) {
     let battle = game.world.resource::<TacticalBattle>();
     [
         (1, 0),
@@ -617,7 +617,7 @@ fn hp_of(game: &Game, body: Entity) -> i32 {
 }
 
 /// Installs `routine` as the acting body's only one, so its index is zero.
-fn only_routine(game: &mut Game, body: Entity, routine: &str) {
+pub(super) fn only_routine(game: &mut Game, body: Entity, routine: &str) {
     game.world
         .entity_mut(body)
         .insert(crate::components::Routines(vec![routine.to_string()]));
@@ -2208,7 +2208,7 @@ fn place_bodies(
     place_one(game, other, theirs);
 }
 
-fn place_one(game: &mut Game, body: Entity, cell: (i32, i32)) {
+pub(super) fn place_one(game: &mut Game, body: Entity, cell: (i32, i32)) {
     assert!(
         game.world
             .resource_mut::<TacticalBattle>()

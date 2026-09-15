@@ -5,14 +5,21 @@
 //! battle.
 
 use super::support::{
-    battle_with_a_pack_of, insert_battle, spawn_wild_without_routine, test_assets_dir,
+    battle_with_a_pack_of, force_the_next_attack_to_land, generic_species, insert_battle,
+    spawn_wild_without_routine, test_assets_dir,
 };
-use super::tactical::{tactical_fight, wait_for_turn};
+use super::tactical::{
+    body, free_neighbour, only_routine, place_one, tactical_fight, wait_for_turn,
+};
 use crate::Game;
-use crate::abilities::{AbilityDb, AbilityDef, AbilityEffect, AbilityTarget, TamperKind};
+use crate::abilities::{
+    AbilityDb, AbilityDef, AbilityEffect, AbilityTarget, TamperKind, TamperSlot,
+};
 use crate::battle::BattleAction;
-use crate::components::{Position, Routines, Stats};
-use crate::resources::{DifficultyMode, Sorties};
+use crate::components::{AbilityCooldowns, Position, PowerReserve, Routines, Stats, Tampered};
+use crate::resources::{DifficultyMode, Party, Sorties};
+use crate::tactical::TacticalBattle;
+use crate::tactical::map::BattleCell;
 
 fn game(seed: u32) -> Game {
     Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap()
@@ -308,5 +315,350 @@ fn a_dispatched_squads_only_tamper_routine_is_never_run() {
     assert!(
         record.battles_done > 0,
         "a battle must have fired, or this proves nothing"
+    );
+}
+
+/// Clears every cell within `radius` of `at` to `Open`, so a test can place
+/// bodies without a procedurally generated obstacle refusing the move.
+fn clear_area(game: &mut Game, at: (i32, i32), radius: i32) {
+    let battle = &mut *game.world.resource_mut::<TacticalBattle>();
+    for dx in -radius..=radius {
+        for dy in -radius..=radius {
+            let (x, y) = (at.0 + dx, at.1 + dy);
+            if battle.board.in_bounds(x, y) {
+                battle.board.put(x, y, BattleCell::Open);
+            }
+        }
+    }
+}
+
+/// Spec test 9's first half: a radius tamper catches a companion and both
+/// hostiles standing beside the player, and skips the player standing beside
+/// them too.
+#[test]
+fn a_tamper_lands_on_every_body_in_its_radius_but_the_player() {
+    let mut game = game(9600);
+    let pack = tactical_fight(&mut game, 2, 40);
+    let player = game.player_entity();
+    assert!(wait_for_turn(&mut game, player));
+    let at = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(player)
+        .expect("the player was not seated");
+    clear_area(&mut game, at, 2);
+
+    let companion = body(&mut game, &generic_species().id);
+    game.world.resource_mut::<Party>().0.push(companion);
+    let beside_hostile_0 = free_neighbour(&game, at);
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .move_to(pack[0], beside_hostile_0)
+    );
+    let beside_hostile_1 = free_neighbour(&game, at);
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .move_to(pack[1], beside_hostile_1)
+    );
+    let beside_companion = free_neighbour(&game, at);
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .place(companion, beside_companion)
+    );
+
+    only_routine(&mut game, player, "heat_injection");
+    assert!(
+        game.tactical_use_routine(0, at),
+        "Heat Injection aimed at the player's own cell must land"
+    );
+
+    assert!(
+        game.world.get::<Tampered>(player).is_none(),
+        "the player must never carry a Tampered entry"
+    );
+    for &caught in &[pack[0], pack[1], companion] {
+        let tampered = game
+            .world
+            .get::<Tampered>(caught)
+            .expect("a body standing in the blast must be tampered");
+        assert_eq!(
+            tampered.temperature(),
+            Some(2.0),
+            "Heat Injection authors Temperature(2.0)"
+        );
+    }
+}
+
+/// Spec test 9's other half: a `Single` tamper aimed at the player is
+/// refused before Power, the cooldown, or the turn are spent.
+#[test]
+fn a_single_tamper_at_the_player_is_refused_before_anything_is_spent() {
+    let mut game = game(9601);
+    tactical_fight(&mut game, 1, 40);
+    let player = game.player_entity();
+    only_routine(&mut game, player, "prompt_injection");
+    assert!(wait_for_turn(&mut game, player));
+    let at = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(player)
+        .expect("the player was not seated");
+    let power_before = game.world.get::<PowerReserve>(player).unwrap().get();
+
+    assert!(
+        !game.tactical_use_routine(0, at),
+        "a single-target tamper aimed at the player must be refused"
+    );
+
+    assert_eq!(
+        game.world.get::<PowerReserve>(player).unwrap().get(),
+        power_before,
+        "a refusal must not spend Power"
+    );
+    assert!(
+        game.world
+            .get::<AbilityCooldowns>(player)
+            .is_none_or(|c| c.0.is_empty()),
+        "a refusal must not arm a cooldown"
+    );
+    let battle = game.world.resource::<TacticalBattle>();
+    assert!(!battle.acted(), "a refusal must not spend the turn");
+    assert_eq!(
+        battle.actor(),
+        Some(player),
+        "a refusal must leave the turn with the player"
+    );
+}
+
+/// Reapplying a kind refreshes its slot rather than stacking a second entry,
+/// and two different kinds coexist on the same body.
+#[test]
+fn reapplying_a_kind_refreshes_and_heat_replaces_cold() {
+    let mut game = game(9602);
+    let pack = tactical_fight(&mut game, 1, 400);
+    let hostile = pack[0];
+    let player = game.player_entity();
+    game.world.entity_mut(player).insert(Routines(vec![
+        "cold_sample".to_string(),
+        "heat_injection".to_string(),
+        "inference_probe".to_string(),
+    ]));
+
+    assert!(wait_for_turn(&mut game, player));
+    let player_at = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(player)
+        .expect("the player was not seated");
+    // Default deployment opens the two sides `TACTICAL_DEPLOY_GAP` cells
+    // apart, which is past every one of these routines' range — brought
+    // beside the player instead, the way `a_heal_queues_a_heal_cue_...` does.
+    clear_area(&mut game, player_at, 1);
+    let at = free_neighbour(&game, player_at);
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .move_to(hostile, at)
+    );
+    assert!(game.tactical_use_routine(0, at), "cold_sample must land");
+    // Back to the player: the hostile's own pass ages whatever it is
+    // carrying by one of its turns, `Tampered`'s ordinary case.
+    assert!(wait_for_turn(&mut game, player));
+    assert!(game.tactical_use_routine(1, at), "heat_injection must land");
+    assert!(wait_for_turn(&mut game, player));
+    assert!(
+        game.tactical_use_routine(2, at),
+        "inference_probe must land"
+    );
+
+    let tampered = game
+        .world
+        .get::<Tampered>(hostile)
+        .expect("the hostile must still be tampered");
+    assert_eq!(
+        tampered.temperature(),
+        Some(2.0),
+        "heat_injection must have replaced cold_sample's entry rather than stacked"
+    );
+    assert!(
+        tampered.has(TamperSlot::Profiled),
+        "Profiled must coexist with Temperature"
+    );
+    assert_eq!(
+        tampered.slots().count(),
+        2,
+        "exactly the two slots just applied, no more"
+    );
+}
+
+/// **(M)** Spec test 11: a `duration: 1` Injection cast on a hostile that has
+/// already had its turn this round is still live at the start of its next
+/// one, and is gone the moment that next turn is handed on.
+///
+/// Mutation check: moving the age call from `hand_on_turn` into
+/// `Game::tick_one_combatant` (a once-per-round age, the wrong cadence) made
+/// this fail — the injected entry was gone before the hostile's next turn
+/// ever began, because the round wrapped and ran upkeep before that turn
+/// started. Restored afterward.
+#[test]
+fn a_one_turn_injection_on_a_body_that_has_acted_is_live_on_its_next_turn() {
+    let mut game = game(9603);
+    let pack = tactical_fight(&mut game, 1, 40);
+    let hostile = pack[0];
+    let player = game.player_entity();
+    let player_at = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(player)
+        .expect("the player was not seated");
+    // Brought within prompt_injection's range 0–3 — default deployment opens
+    // the two sides `TACTICAL_DEPLOY_GAP` (6) cells apart.
+    clear_area(&mut game, player_at, 1);
+    let at = free_neighbour(&game, player_at);
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .move_to(hostile, at)
+    );
+
+    // Let the hostile's own turn pass this round before it is tampered.
+    assert!(wait_for_turn(&mut game, hostile));
+    game.tactical_end_turn();
+
+    assert!(wait_for_turn(&mut game, player));
+    only_routine(&mut game, player, "prompt_injection");
+    assert!(
+        game.tactical_use_routine(0, at),
+        "prompt_injection must land"
+    );
+
+    assert_eq!(
+        game.tactical_actor(),
+        Some(hostile),
+        "with only two bodies, the hostile's next turn must be current"
+    );
+    assert!(
+        game.world
+            .get::<Tampered>(hostile)
+            .is_some_and(|t| t.has(TamperSlot::Injected)),
+        "Injected must still be live at the start of the hostile's next turn"
+    );
+
+    game.tactical_end_turn();
+    assert!(
+        game.world.get::<Tampered>(hostile).is_none(),
+        "Injected must wear off exactly when the tampered turn is handed on"
+    );
+}
+
+/// Decision 5: a companion's own radius tamper can catch itself, and the
+/// hand-on that applied it must not also spend the entry's first turn.
+#[test]
+fn a_self_applied_entry_is_not_aged_by_the_turn_that_applied_it() {
+    let mut game = game(9604);
+    let companion = body(&mut game, &generic_species().id);
+    game.world
+        .entity_mut(companion)
+        .insert(PowerReserve::default());
+    game.world.resource_mut::<Party>().0.push(companion);
+    let pack = tactical_fight(&mut game, 1, 400);
+    let hostile = pack[0];
+    let player = game.player_entity();
+
+    // Isolate the three bodies so Heat Injection's radius, aimed at the
+    // companion's own cell, catches nobody else.
+    place_one(&mut game, player, (0, 0));
+    place_one(&mut game, hostile, (13, 13));
+    let isolated = (6, 6);
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .board
+        .put(isolated.0, isolated.1, BattleCell::Open);
+    place_one(&mut game, companion, isolated);
+
+    only_routine(&mut game, companion, "heat_injection");
+    assert!(wait_for_turn(&mut game, companion));
+    assert!(
+        game.tactical_use_routine(0, isolated),
+        "the companion's self-aimed Heat Injection must land"
+    );
+
+    let entry = game
+        .world
+        .get_mut::<Tampered>(companion)
+        .and_then(|mut t| t.remove(TamperSlot::Temperature))
+        .expect("the self-applied entry must still be live");
+    assert_eq!(
+        entry.remaining, 2,
+        "the turn that applied the entry must not also have aged it"
+    );
+}
+
+/// Spec test 12's component half: `Tampered` does not survive the fight it
+/// was written in, won through the normal door.
+#[test]
+fn tampered_is_gone_when_the_fight_ends() {
+    let mut game = game(9605);
+    let companion = body(&mut game, &generic_species().id);
+    game.world.resource_mut::<Party>().0.push(companion);
+    let pack = tactical_fight(&mut game, 1, 1);
+    let hostile = pack[0];
+    let player = game.player_entity();
+
+    assert!(wait_for_turn(&mut game, player));
+    let at = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(player)
+        .expect("the player was not seated");
+    clear_area(&mut game, at, 1);
+    let n1 = free_neighbour(&game, at);
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .move_to(hostile, n1)
+    );
+    let n2 = free_neighbour(&game, at);
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .move_to(companion, n2)
+    );
+
+    only_routine(&mut game, player, "heat_injection");
+    assert!(
+        game.tactical_use_routine(0, at),
+        "Heat Injection must catch both neighbours"
+    );
+    assert!(
+        game.world.get::<Tampered>(hostile).is_some(),
+        "fixture: the hostile must be tampered before it dies"
+    );
+    assert!(
+        game.world.get::<Tampered>(companion).is_some(),
+        "fixture: the companion must be tampered before the fight ends"
+    );
+
+    assert!(wait_for_turn(&mut game, player));
+    force_the_next_attack_to_land(&mut game);
+    assert!(
+        game.tactical_attack(hostile),
+        "the killing blow must land on a 1 HP hostile"
+    );
+
+    assert!(
+        game.world.get_resource::<TacticalBattle>().is_none(),
+        "fixture: the fight must have ended"
+    );
+    assert!(
+        game.world.get::<Tampered>(player).is_none(),
+        "Tampered must not survive the fight ending"
+    );
+    assert!(
+        game.world.get::<Tampered>(companion).is_none(),
+        "Tampered must not survive the fight ending"
     );
 }

@@ -1450,6 +1450,65 @@ mod tests {
         );
     }
 
+    /// **The mark floats above the patient it belongs to, and does not sit
+    /// on top of it.** `eb6183ef` moved the mark from the Bay onto the
+    /// patient but kept the Bay's own centring formula — the same baseline
+    /// the patient's own glyph draws at — so the two painted over each
+    /// other and, next to a Repair Bay one tile away, read as an
+    /// indicator on the *Bay* rather than a mark on the body being healed.
+    /// Pinned against the patient's own glyph, drawn through the tile
+    /// loop's own centring formula, so a regression back to the shared
+    /// baseline fails here rather than in play.
+    #[test]
+    fn the_recovery_mark_floats_clear_above_the_patients_own_glyph() {
+        let mut fx = Fx::new();
+        fx.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), false);
+        let busy = patient_view(true);
+        let own_glyph = busy.glyph.to_string();
+
+        // The patient's own glyph, drawn through the exact formula the tile
+        // loop's `ch` path uses — centred in the cell, no lift.
+        let (_, glyph_shapes) = with_painter(|p| {
+            let dims = p.measure_map(&own_glyph, CELL_GLYPH_PX);
+            p.map(
+                &own_glyph,
+                (CELL - dims.width) / 2.0,
+                (CELL + dims.height) / 2.0,
+                CELL_GLYPH_PX,
+                hud::palette::HEALTHY,
+            );
+        });
+        let glyph_top = glyph_shapes
+            .iter()
+            .find_map(|cs| match &cs.shape {
+                bevy_egui::egui::Shape::Text(t) if t.galley.text() == own_glyph => Some(t.pos.y),
+                _ => None,
+            })
+            .expect("the patient's own glyph is drawn");
+
+        let (mark_dims, mark_shapes) = with_painter(|p| {
+            let dims = p.measure_map("+", CELL_GLYPH_PX);
+            draw_recovery_mark(
+                p,
+                Some(&busy),
+                &fx,
+                Rect::new(0.0, 0.0, CELL, CELL),
+                CELL_GLYPH_PX,
+                1.0,
+            );
+            dims
+        });
+        let mark_top = mark_y(&mark_shapes).expect("the mark is drawn");
+        let mark_bottom = mark_top + mark_dims.height;
+
+        assert!(
+            mark_bottom <= glyph_top + 0.01,
+            "the mark's ink (top {mark_top}, bottom {mark_bottom}) must sit \
+             entirely above the patient's own glyph (top {glyph_top}), not \
+             overlap it"
+        );
+    }
+
     /// A fresh `App` with a game already in progress, for a test that draws
     /// `draw_playing_base` directly rather than one of its pieces. `game` is
     /// assigned by hand instead of walking `App::handle_key` through the new

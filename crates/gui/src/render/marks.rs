@@ -296,13 +296,24 @@ pub(super) fn staffed_mark_rect(px: f32, py: f32, tile_px: f32, lift: f32) -> Re
 /// is Integrity climbing, which is the bar fill's own green and the one
 /// thing this map ever paints in it.
 ///
-/// It rides `Fx::centred_bob`, the build caret's curve: the caret's argument
-/// applies unchanged here — the rest position is the middle of the tile with
-/// room on both sides, where `staffed_bob`'s upward-only form would sit the
-/// mark high in the cell for its whole cycle. Sharing the curve is also what
-/// keeps a base with a build site and a mending body in it reading as one map
-/// rather than two animations, and the phase key being the *entity* spreads
-/// two patients out of step.
+/// **Anchored above the patient's own glyph, not on it.** The shipped Bay's
+/// `radius: 0` and `hauling::step_to_post`'s structure-tiles block mean the
+/// patient stands *beside* the Bay, never on it — `a_downed_program_at_a_bay`
+/// places it one tile off — so this was never actually a mark on the Bay's
+/// own ink. It reads as one anyway when the mark shares the tile loop's own
+/// centring formula: at rest a `+` at the same baseline as the patient's own
+/// glyph paints on top of it, hiding what is being healed and leaving only a
+/// green mark floating next to the Bay. `map`'s `y` is a **baseline**, and a
+/// font's own ascent already carries a glyph's ink well clear above it, so
+/// planting that baseline at the same top band `nemesis_mark_rect` and
+/// `difficulty_mark_points` already keep clear of `RARITY_BAR_PX` — with no
+/// further push down for the mark's own measured height — is what leaves the
+/// patient's centred glyph, well below, untouched.
+///
+/// It still rides `Fx::centred_bob`, the build caret's curve — the same
+/// rate, the same entity phase, so a base with a build site and a mending
+/// body in it still reads as one map rather than two animations, and two
+/// patients still bounce out of step.
 pub(super) fn draw_recovery_mark(
     painter: &Painter,
     actor: Option<&EntityView>,
@@ -320,7 +331,7 @@ pub(super) fn draw_recovery_mark(
     painter.map(
         &glyph,
         cell.x + (cell.w - dims.width) / 2.0,
-        cell.y + (cell.h + dims.height) / 2.0 - lift,
+        cell.y + RARITY_BAR_PX + IDENTITY_MARK_INSET - lift,
         glyph_px,
         at_level(hud::palette::HEALTHY, vig),
     );

@@ -3042,3 +3042,97 @@ fn a_hostile_will_not_shoot_through_cover() {
          refusal above says nothing about sight"
     );
 }
+
+/// The outline this feeds `render/tactical.rs` cannot disagree with the
+/// refusal `tactical_use_routine` gives at the keyboard: a cell out of
+/// range and a cell out of sight are both excluded, and a cell the action
+/// accepts is included.
+///
+/// `bus_fault` (`AllEnemies`) derives a six-cell range and a two-cell
+/// radius — wide enough that a hand-written board can hold an out-of-range
+/// corner, a cell behind cover, and a cell in plain view all inside one
+/// fixture.
+#[test]
+fn placeable_cells_match_what_the_routine_accepts_and_refuses() {
+    use crate::tactical::map::Board;
+    use crate::tests::support::HOSTILE_SWEEP;
+
+    let mut game = game();
+    let wild = tactical_fight(&mut game, 1, 200)[0];
+    let player = game.player_entity();
+    only_routine(&mut game, player, HOSTILE_SWEEP);
+
+    {
+        let mut battle = game.world.resource_mut::<TacticalBattle>();
+        battle.board = Board::from_rows(&[
+            ".........",
+            ".........",
+            ".........",
+            ".#.......",
+            ".........",
+            ".........",
+            ".........",
+            ".........",
+            ".........",
+        ]);
+        assert!(battle.move_to(player, (1, 1)), "the player would not stand");
+        assert!(battle.move_to(wild, (1, 6)), "the hostile would not stand");
+    }
+    assert!(wait_for_turn(&mut game, player), "the fight ended early");
+
+    let out_of_range = (8, 8); // Chebyshev 7 from (1,1); the range caps at 6.
+    let behind_cover = (1, 6); // straight down column 1, past the `#` at (1,3).
+    let in_the_open = (1, 2); // one cell down, nothing between.
+
+    let placeable = game.tactical_placeable_cells(0);
+    assert!(
+        !placeable.is_empty(),
+        "an empty set would prove nothing about the ones excluded below"
+    );
+
+    assert!(
+        !placeable.contains(&out_of_range),
+        "an out-of-range cell was offered as a legal centre"
+    );
+    assert!(
+        !game.tactical_use_routine(0, out_of_range),
+        "the action accepted a cell the outline would have refused"
+    );
+
+    assert!(
+        !placeable.contains(&behind_cover),
+        "a cell behind cover was offered as a legal centre"
+    );
+    assert!(
+        !game.tactical_use_routine(0, behind_cover),
+        "the action accepted a cell the outline would have refused"
+    );
+
+    assert!(
+        placeable.contains(&in_the_open),
+        "a cell in range and in plain view was left off the outline"
+    );
+    assert!(
+        game.tactical_use_routine(0, in_the_open),
+        "the outline offered a cell the action then refused"
+    );
+}
+
+/// A `Single` shape resolves onto whoever is standing at the aimed cell
+/// rather than a centre the player chooses freely, and a `Line`/`Cone` is
+/// aimed as a direction — neither has a "legal centre" to outline, so both
+/// are left alone rather than forced into a cell set that would read as
+/// every cell in range.
+#[test]
+fn placeable_cells_are_empty_for_a_single_target_routine() {
+    let mut game = game();
+    tactical_fight(&mut game, 1, 40);
+    let player = game.player_entity();
+    only_routine(&mut game, player, "priority_boost");
+    assert!(wait_for_turn(&mut game, player), "the fight ended early");
+
+    assert!(
+        game.tactical_placeable_cells(0).is_empty(),
+        "a Single shape has no centre to outline"
+    );
+}

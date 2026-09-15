@@ -435,6 +435,14 @@ is skipped with a warning logged in-game rather than crashing startup.
     // the same board.
     dispatches_sorties: true,
 
+    // Optional; can be left out entirely (defaults to false). If true, this
+    // structure is an Index Terminal: standing beside it, the transfer window
+    // (`c`) reaches every Depot in the base — to take from and to put into —
+    // rather than only the Depots beside you. Machine output shelves and
+    // Quarantine Racks still have to be walked to, and each Depot's own filter
+    // still applies. `[F]` sets up only a Depot beside you.
+    indexes_storage: true,
+
     // Optional; can be left out entirely (defaults to no trading). If set,
     // this structure is a trading post: the player can "trade" (`t`) with
     // it to sell any inventory item (except the trade currency itself), or

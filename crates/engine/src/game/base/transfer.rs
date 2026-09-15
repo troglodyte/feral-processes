@@ -87,7 +87,7 @@ impl Game {
         // second explicit sort that could drift from the log line's.
         let mut rows: std::collections::BTreeMap<ItemId, TransferRow> =
             std::collections::BTreeMap::new();
-        for structure in self.adjacent_stock() {
+        for structure in self.reachable_stock() {
             let stock = self.world.get::<Stock>(structure).unwrap();
             for (item, qty) in stock.output.iter() {
                 if *qty == 0 || *item == currency {
@@ -103,7 +103,7 @@ impl Game {
                     .on_shelves += qty;
             }
         }
-        let puttable = !self.adjacent_depots().is_empty();
+        let puttable = !self.reachable_depots().is_empty();
         let player = self.player_entity();
         if let Some(inv) = self.world.get::<Inventory>(player) {
             for (item, qty) in inv.items.iter() {
@@ -278,7 +278,7 @@ impl Game {
     /// room line reading 0 beside a Mining Node, which claims the base is
     /// full when it has no shelf at all.
     pub fn transfer_room(&self) -> Option<u32> {
-        if self.adjacent_depots().is_empty() {
+        if self.reachable_depots().is_empty() {
             return None;
         }
         Some(self.deposit_room())
@@ -490,7 +490,7 @@ impl Game {
         if self.require_base().is_err() {
             return;
         }
-        if self.adjacent_stock().is_empty() {
+        if self.reachable_stock().is_empty() {
             self.log_base("There is nothing here to take from or put into.");
         } else {
             self.log_base("There is nothing to move here.");

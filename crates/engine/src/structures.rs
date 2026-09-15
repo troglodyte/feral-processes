@@ -421,6 +421,16 @@ pub struct StructureDef {
     /// structure file, including any mod, keeps parsing.
     #[serde(default)]
     pub dispatches_sorties: bool,
+    /// Whether standing beside this structure reaches every Depot in the
+    /// base rather than only the ones beside the party — see
+    /// `Game::reachable_depots`. Machine buffers and racks stay walk-up.
+    ///
+    /// `dispatches_sorties`' shape and for its reason: a flag rather than
+    /// the engine naming the shipped id, so a mod's second terminal is a
+    /// file. `#[serde(default)]` so every existing structure file keeps
+    /// parsing.
+    #[serde(default)]
+    pub indexes_storage: bool,
     /// If true, walking onto this structure breaches into the next zone
     /// (see `Game::enter_next_zone`) instead of just blocking movement.
     /// `build_cost` is treated as a *per-zone-level* rate for this

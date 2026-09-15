@@ -87,6 +87,9 @@ The rest of what a base does:
   to the machine it came from if none will take it, so two Depots with opposite lists sort the base
   between them. Denying something already on the shelf leaves it there; a filter says what may come
   in, never what has to leave.
+- An Index Terminal, once Memory Mapping is researched, puts every Depot in the base into that
+  same window. Stand beside it and press c: the Depots come in from wherever they stand, both to
+  take from and to put into. Machines still have to be walked to.
 - A structure upgrades to whichever is lower, its own maximum tier or the zone you are in — so a
   structure stopped at its ceiling in zone 1 starts moving again after a breach. Pick the upgrade
   row off the base menu and then point at the machine: it has to be the tile right beside you, north,

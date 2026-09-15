@@ -42,6 +42,15 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.191
+
+**Researching Memory Mapping unlocks the Index Terminal: stand beside one
+and press c to take from or put into every Depot in the base, wherever it
+stands.** The transfer window used to reach only the Depots touching you,
+so a base with its storage spread out meant a walk to each shelf. Machine
+shelves and Quarantine Racks still have to be walked to, and each Depot's
+own filter still decides what it will take.
+
 ## 0.13.190
 
 **When a research project finishes, a "Research Complete" notice names it,

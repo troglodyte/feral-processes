@@ -1,15 +1,14 @@
-//! `AbilityEffect::Tamper`: the schema, the load checks, and the effect
-//! hidden everywhere it cannot run yet. Nothing seats one — that is a later
-//! task — so what is tested here is the shape of the five shipped routines
-//! and every place that must never offer or choose one outside a tactical
-//! battle.
+//! `AbilityEffect::Tamper`: the schema, the load checks, the effect hidden
+//! everywhere it cannot run, and what each kind does on a battle map once it
+//! lands — temperature, injection, taking a companion over, and a
+//! Hallucination's decoys.
 
 use super::support::{
     battle_with_a_pack_of, force_the_next_attack_to_land, generic_species, insert_battle,
     spawn_wild_without_routine, test_assets_dir,
 };
 use super::tactical::{
-    body, free_neighbour, marooned, next_draw, only_routine, open_ground, place_one,
+    body, free_neighbour, log_texts, marooned, next_draw, only_routine, open_ground, place_one,
     tactical_fight, wait_for_turn,
 };
 use crate::Game;
@@ -18,15 +17,16 @@ use crate::abilities::{
 };
 use crate::battle::BattleAction;
 use crate::components::{
-    AbilityCooldowns, Creature, Position, PowerReserve, Routines, Stats, Tampered,
+    AbilityCooldowns, ActiveStatus, Creature, GlyphColor, Position, PowerReserve, Routines, Stats,
+    StatusEffects, StatusKind, Tampered,
 };
 use crate::items::ItemId;
 use crate::resources::{DifficultyMode, Party, Sorties};
 use crate::species::{SpeciesDb, SpeciesDef};
-use crate::tactical::TacticalBattle;
 use crate::tactical::ai::AiBeat;
-use crate::tactical::map::BattleCell;
-use crate::tuning::TACTICAL_MOVE_MAX;
+use crate::tactical::map::{BattleCell, Board};
+use crate::tactical::{Decoy, TacticalBattle, reach};
+use crate::tuning::{ENEMY_ROUTINE_MIN_COOLDOWN, TACTICAL_MOVE_MAX};
 use bevy_ecs::prelude::Entity;
 
 fn game(seed: u32) -> Game {
@@ -1186,5 +1186,580 @@ fn an_injected_companion_swings_at_the_party() {
     assert!(
         game.world.get::<Stats>(player).unwrap().hp < hp_before,
         "the injected companion must swing at the party"
+    );
+}
+
+/// A decoy the party placed on `cell` — the owner a player's Hallucination
+/// writes, and the one a hostile sees.
+fn party_decoy(cell: (i32, i32)) -> Decoy {
+    Decoy {
+        cell,
+        owner_hostile: false,
+        glyph: '@',
+        color: GlyphColor::Cyan,
+        of_player: true,
+    }
+}
+
+/// A party-owned decoy on each of `cells` and a live `Hallucinating` entry
+/// on `body`, written directly — `inject`'s reason: what is under test below
+/// is what a hallucinating body does, not how `apply_tamper` seats one.
+fn hallucinate(game: &mut Game, body: Entity, cells: &[(i32, i32)]) {
+    {
+        let mut battle = game.world.resource_mut::<TacticalBattle>();
+        for &cell in cells {
+            battle.place_decoy(party_decoy(cell));
+        }
+    }
+    let mut tampered = Tampered::default();
+    tampered.apply(TamperKind::Hallucinating { decoys: 3 }, 3, false);
+    game.world.entity_mut(body).insert(tampered);
+}
+
+fn decoy_cells(game: &Game) -> Vec<(i32, i32)> {
+    game.world
+        .resource::<TacticalBattle>()
+        .decoys()
+        .iter()
+        .map(|d| d.cell)
+        .collect()
+}
+
+fn hallucinating(game: &Game, body: Entity) -> bool {
+    game.world
+        .get::<Tampered>(body)
+        .is_some_and(|t| t.has(TamperSlot::Hallucinating))
+}
+
+fn lines_containing(game: &Game, needle: &str) -> usize {
+    log_texts(game)
+        .iter()
+        .filter(|l| l.contains(needle))
+        .count()
+}
+
+/// Spec test 7's placement half, and Decision 3: the aim cell is taken by
+/// the hostile it was aimed at, so the three decoys fill the nearest free
+/// cells of the radius, nearest the aim first and then in reading order —
+/// and the entry lands on the hostile alone.
+#[test]
+fn hallucination_places_its_decoys_on_the_nearest_free_cells() {
+    let mut game = game(9900);
+    let pack = tactical_fight(&mut game, 1, 40);
+    let hostile = pack[0];
+    let player = game.player_entity();
+    open_ground(&mut game, &pack, &[(4, 6)]);
+    only_routine(&mut game, player, "hallucination");
+    assert!(wait_for_turn(&mut game, player));
+
+    assert!(
+        game.tactical_use_routine(0, (4, 6)),
+        "Hallucination aimed at the hostile must run"
+    );
+
+    let decoys = game.world.resource::<TacticalBattle>().decoys().to_vec();
+    assert_eq!(
+        decoys.iter().map(|d| d.cell).collect::<Vec<_>>(),
+        vec![(3, 5), (4, 5), (5, 5)],
+        "the aim cell is occupied, so the ring one out fills in (y, x) order"
+    );
+    assert!(
+        decoys.iter().all(|d| !d.owner_hostile && d.of_player),
+        "every decoy is the player's own: {decoys:?}"
+    );
+    assert!(
+        hallucinating(&game, hostile),
+        "the hostile under the blast must be hallucinating"
+    );
+    assert!(
+        game.world.get::<Tampered>(player).is_none(),
+        "the player invoked it and must carry nothing"
+    );
+    assert_eq!(
+        lines_containing(&game, "starts seeing decoys"),
+        1,
+        "the take-hold line fires once, for the one body that took it"
+    );
+}
+
+/// Decision 3's other half: with no free cell in the radius nothing is
+/// placed, and so nobody is told they are seeing anything.
+#[test]
+fn hallucination_with_no_free_cell_tampers_nobody() {
+    let mut game = game(9901);
+    let pack = tactical_fight(&mut game, 1, 40);
+    let hostile = pack[0];
+    let player = game.player_entity();
+    open_ground(&mut game, &pack, &[(4, 6)]);
+    game.world.resource_mut::<TacticalBattle>().board = Board::from_rows(&[
+        ".........",
+        ".........",
+        ".........",
+        ".........",
+        "..XX.XX..",
+        "..XXXXX..",
+        "..XX.XX..",
+        "..XXXXX..",
+        "..XXXXX..",
+    ]);
+    // (4, 4) is the player's and (4, 6) the hostile's; every other cell of
+    // the radius around the aim cannot be stood on.
+    only_routine(&mut game, player, "hallucination");
+    assert!(wait_for_turn(&mut game, player));
+
+    assert!(game.tactical_use_routine(0, (4, 6)));
+
+    assert!(decoy_cells(&game).is_empty(), "no cell was free");
+    assert!(
+        game.world.get::<Tampered>(hostile).is_none(),
+        "with no decoy placed, nobody may hallucinate"
+    );
+    assert_eq!(lines_containing(&game, "starts seeing decoys"), 0);
+}
+
+/// Spec test 8's first half: a companion caught in the party's own
+/// Hallucination is unaffected, because the party ignores its own decoys.
+#[test]
+fn a_companion_in_the_party_s_own_hallucination_carries_no_entry() {
+    let mut game = game(9902);
+    let companion = body(&mut game, &generic_species().id);
+    game.world.resource_mut::<Party>().0.push(companion);
+    let pack = tactical_fight(&mut game, 1, 40);
+    let hostile = pack[0];
+    let player = game.player_entity();
+    open_ground(&mut game, &pack, &[(4, 6)]);
+    place_one(&mut game, companion, (5, 6));
+    only_routine(&mut game, player, "hallucination");
+    assert!(wait_for_turn(&mut game, player));
+
+    assert!(game.tactical_use_routine(0, (4, 6)));
+
+    assert!(
+        hallucinating(&game, hostile),
+        "fixture: the hostile beside it must have taken the entry"
+    );
+    assert!(
+        game.world.get::<Tampered>(companion).is_none(),
+        "a companion in its own side's Hallucination must carry no entry"
+    );
+    assert_eq!(
+        lines_containing(&game, "starts seeing decoys"),
+        1,
+        "and the take-hold line must not name it"
+    );
+}
+
+/// **(M)** Spec test 7: a hallucinating hostile's only target is its nearest
+/// decoy, so it walks toward that rather than toward the player a twin run
+/// closes on.
+///
+/// Mutation check: dropping the decoy override from `tactical_sides` sends
+/// the tampered hostile at the player exactly as its twin — it ends no
+/// nearer the decoy and as near the player. Verified and restored.
+#[test]
+fn a_hallucinating_hostile_walks_toward_its_nearest_decoy() {
+    let start = (4, 0);
+    let decoy = (0, 0);
+    let run = |tampered: bool| {
+        let mut game = game(9903);
+        let pack = tactical_fight(&mut game, 1, 40);
+        let hostile = pack[0];
+        let centre = open_ground(&mut game, &pack, &[start]);
+        if tampered {
+            hallucinate(&mut game, hostile, &[decoy]);
+        }
+        assert!(wait_for_turn(&mut game, hostile));
+        assert!(
+            game.tactical_ai_turn_at(0.0),
+            "the hostile's turn was not run"
+        );
+        let at = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(hostile)
+            .expect("the hostile left the board");
+        (at, centre)
+    };
+    let (tampered_at, player_at) = run(true);
+    let (twin_at, _) = run(false);
+
+    assert!(
+        reach::distance(tampered_at, decoy) < reach::distance(start, decoy),
+        "the hallucinating hostile must close on its decoy: {start:?} -> {tampered_at:?}"
+    );
+    assert!(
+        reach::distance(tampered_at, decoy) < reach::distance(twin_at, decoy),
+        "and end nearer it than the untampered twin: {tampered_at:?} vs {twin_at:?}"
+    );
+    assert!(
+        reach::distance(tampered_at, player_at) >= reach::distance(twin_at, player_at),
+        "and no nearer the player than the twin: {tampered_at:?} vs {twin_at:?}"
+    );
+}
+
+/// **(M)** Spec test 7: a hallucinating hostile beside its decoy swings
+/// through it — the decoy is gone, nobody lost Integrity, and the turn moved
+/// on. A second decoy far off keeps the entry alive, so this is the strike
+/// alone.
+///
+/// Mutation check: removing the `tactical_strike_decoy` call from
+/// `swing_at_best_neighbour` leaves the near decoy standing. Verified and
+/// restored.
+#[test]
+fn striking_a_decoy_destroys_it_and_spends_the_turn() {
+    let mut game = game(9904);
+    let pack = tactical_fight(&mut game, 1, 40);
+    let hostile = pack[0];
+    let player = game.player_entity();
+    open_ground(&mut game, &pack, &[(0, 0)]);
+    hallucinate(&mut game, hostile, &[(1, 0), (8, 8)]);
+    assert!(wait_for_turn(&mut game, hostile));
+    let player_hp = game.world.get::<Stats>(player).unwrap().hp;
+    let hostile_hp = game.world.get::<Stats>(hostile).unwrap().hp;
+    game.take_bolts();
+
+    assert!(game.tactical_ai_turn_at(0.0));
+
+    assert_eq!(
+        decoy_cells(&game),
+        vec![(8, 8)],
+        "the near decoy was struck"
+    );
+    assert_eq!(game.world.get::<Stats>(player).unwrap().hp, player_hp);
+    assert_eq!(game.world.get::<Stats>(hostile).unwrap().hp, hostile_hp);
+    assert_ne!(
+        game.tactical_actor(),
+        Some(hostile),
+        "the strike must have spent the turn"
+    );
+    assert_eq!(lines_containing(&game, "swing passes through a decoy"), 1);
+    assert!(
+        game.take_bolts().iter().any(|b| b.to == (1, 0)),
+        "a strike draws the melee feedback at the decoy's cell"
+    );
+    assert!(
+        hallucinating(&game, hostile),
+        "a decoy is still standing, so the entry must be too"
+    );
+}
+
+/// `tactical_strike_decoy`'s refusals, each on its own and each before
+/// anything moves — the decoy, the action and the turn.
+#[test]
+fn every_decoy_strike_refusal_lands_before_anything_moves() {
+    let mut no_fight = game(9905);
+    assert!(!no_fight.tactical_strike_decoy((0, 0)), "no fight is open");
+
+    let mut game = game(9905);
+    let pack = tactical_fight(&mut game, 1, 40);
+    let hostile = pack[0];
+    open_ground(&mut game, &pack, &[(0, 0)]);
+    // A drone swings at two cells, so a sight line has a cell to cross.
+    game.world.get_mut::<Creature>(hostile).unwrap().species = "drone".to_string();
+    assert_eq!(game.swing_range(hostile), 2, "fixture: a drone reaches two");
+    assert!(wait_for_turn(&mut game, hostile));
+
+    let untouched = |game: &Game, decoys: &[(i32, i32)], why: &str| {
+        let battle = game.world.resource::<TacticalBattle>();
+        assert_eq!(
+            battle.decoys().iter().map(|d| d.cell).collect::<Vec<_>>(),
+            decoys,
+            "{why}: a decoy moved"
+        );
+        assert!(!battle.acted(), "{why}: the action was spent");
+        assert_eq!(battle.actor(), Some(hostile), "{why}: the turn moved on");
+    };
+
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .place_decoy(party_decoy((1, 0)));
+    assert!(!game.tactical_strike_decoy((1, 0)), "not hallucinating");
+    untouched(&game, &[(1, 0)], "not hallucinating");
+
+    hallucinate(&mut game, hostile, &[]);
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .place_decoy(Decoy {
+            owner_hostile: true,
+            ..party_decoy((0, 1))
+        });
+    assert!(!game.tactical_strike_decoy((0, 1)), "its own side's decoy");
+    untouched(&game, &[(1, 0), (0, 1)], "its own side's decoy");
+    assert!(!game.tactical_strike_decoy((1, 1)), "an empty cell");
+    untouched(&game, &[(1, 0), (0, 1)], "an empty cell");
+
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .place_decoy(party_decoy((3, 0)));
+    assert!(!game.tactical_strike_decoy((3, 0)), "beyond swing range");
+    untouched(&game, &[(1, 0), (0, 1), (3, 0)], "beyond swing range");
+
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .place_decoy(party_decoy((0, 2)));
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .board
+        .put(0, 1, BattleCell::Cover);
+    assert!(!game.tactical_strike_decoy((0, 2)), "behind cover");
+    untouched(&game, &[(1, 0), (0, 1), (3, 0), (0, 2)], "behind cover");
+
+    game.world.resource_mut::<TacticalBattle>().mark_acted();
+    assert!(!game.tactical_strike_decoy((1, 0)), "already acted");
+    let battle = game.world.resource::<TacticalBattle>();
+    assert_eq!(battle.decoys().len(), 4, "already acted: a decoy moved");
+    assert_eq!(
+        battle.actor(),
+        Some(hostile),
+        "already acted: the turn moved on"
+    );
+}
+
+/// Spec test 7's routine half: a routine run by a hallucinating body passes
+/// through every decoy in its shape and still lands on the real bodies
+/// there.
+#[test]
+fn a_routine_over_a_decoy_destroys_it_and_still_lands_on_real_bodies() {
+    let mut game = game(9906);
+    let pack = tactical_fight(&mut game, 2, 40);
+    let (healer, wounded) = (pack[0], pack[1]);
+    open_ground(&mut game, &pack, &[(1, 1), (2, 1)]);
+    game.world.get_mut::<Stats>(wounded).unwrap().hp = 10;
+    hallucinate(&mut game, healer, &[(1, 2), (0, 1)]);
+    let def = game
+        .world
+        .resource::<AbilityDb>()
+        .get("mirror_restore")
+        .cloned()
+        .expect("mirror_restore ships");
+    assert!(wait_for_turn(&mut game, healer));
+
+    game.run_tactical_routine(healer, &def, (1, 1), ENEMY_ROUTINE_MIN_COOLDOWN);
+
+    assert!(
+        decoy_cells(&game).is_empty(),
+        "both decoys stood in the patch"
+    );
+    assert!(
+        game.world.get::<Stats>(wounded).unwrap().hp > 10,
+        "the real body in the patch must still have been mended"
+    );
+    assert_eq!(
+        lines_containing(&game, &format!("{} passes through a decoy", def.name)),
+        1,
+        "one line per routine, however many decoys it passed through"
+    );
+}
+
+/// `best_aim` for a hallucinating body scores its decoys, not the party it
+/// cannot see: with the player in range too, the aim goes where the decoys
+/// are.
+#[test]
+fn a_hallucinating_hostile_aims_its_routine_at_its_decoys() {
+    let mut game = game(9907);
+    let pack = tactical_fight(&mut game, 1, 40);
+    let hostile = pack[0];
+    open_ground(&mut game, &pack, &[(0, 0)]);
+    only_routine(&mut game, hostile, "throttle");
+    hallucinate(&mut game, hostile, &[(3, 0), (3, 1)]);
+    assert!(wait_for_turn(&mut game, hostile));
+
+    assert!(game.tactical_ai_turn_at(0.0));
+
+    assert!(
+        game.world
+            .get::<AbilityCooldowns>(hostile)
+            .is_some_and(|c| c.0.contains_key("throttle")),
+        "fixture: the hostile must have run its routine"
+    );
+    assert!(
+        decoy_cells(&game).is_empty(),
+        "the aim must have covered both decoys rather than the player"
+    );
+}
+
+/// **(M)** Spec test 7's last clause: the strike that takes the last decoy
+/// ends the entry there and then, two turns before `remaining` would have.
+///
+/// Mutation check: removing the `settle_decoys` call from `hand_on_turn`
+/// leaves the entry live at `remaining: 2`. Verified and restored — with the
+/// hostile seated first, since a wrap's upkeep reap settles as well and hid
+/// the mutation when it was last in the order.
+#[test]
+fn with_no_decoys_left_the_entry_goes_at_once() {
+    let mut game = game(9908);
+    let pack = tactical_fight(&mut game, 1, 40);
+    let hostile = pack[0];
+    let player = game.player_entity();
+    open_ground(&mut game, &pack, &[(0, 0)]);
+    hallucinate(&mut game, hostile, &[(1, 0)]);
+    // Seated first, so its hand-on does not wrap the round: the upkeep's reap
+    // settles decoys too, and would otherwise answer for the hand-on's own.
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .set_initiative(vec![hostile, player]);
+
+    assert!(game.tactical_ai_turn_at(0.0));
+
+    assert!(
+        decoy_cells(&game).is_empty(),
+        "fixture: the decoy was struck"
+    );
+    assert!(
+        !hallucinating(&game, hostile),
+        "with no decoy left, the entry must be gone before its duration ran out"
+    );
+    assert_eq!(lines_containing(&game, "sees clearly again"), 1);
+}
+
+/// **(M)** Spec test 8: a party body's walk and swing never see the party's
+/// own decoys, even one nearer than the hostile it is fighting. (Its aim
+/// cannot be reached at all — `run_tactical_beat` offers a routine to a
+/// `Hostile` alone.)
+///
+/// Mutation check: making `sees_decoy` answer `true` for every body and
+/// every decoy hands the companion its own decoy as its target — it stands
+/// beside it, its strike is refused, and the hostile is never swung at.
+/// Verified and restored.
+#[test]
+fn the_party_s_walk_swing_and_aim_ignore_its_own_decoys() {
+    let mut game = game(9909);
+    let companion = body(&mut game, &generic_species().id);
+    game.world.resource_mut::<Party>().0.push(companion);
+    let pack = tactical_fight(&mut game, 1, 400);
+    let hostile = pack[0];
+    open_ground(&mut game, &pack, &[(0, 2)]);
+    place_one(&mut game, companion, (2, 2));
+    // The hostile is hallucinating too, or `settle_decoys` would drop a decoy
+    // nobody sees at the first hand-on and the companion would have nothing
+    // to ignore.
+    hallucinate(&mut game, hostile, &[(2, 3)]);
+    assert!(wait_for_turn(&mut game, companion));
+    game.take_bolts();
+
+    let mut acted = false;
+    for _ in 0..=TACTICAL_MOVE_MAX {
+        if game.tactical_auto_beat() == AiBeat::Acted {
+            acted = true;
+            break;
+        }
+    }
+    assert!(acted, "the companion's turn never finished");
+
+    let at = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(companion)
+        .expect("the companion left the board");
+    assert_eq!(
+        reach::distance(at, (0, 2)),
+        1,
+        "the companion must have walked to the hostile: {at:?}"
+    );
+    assert!(
+        game.take_bolts().iter().any(|b| b.to == (0, 2)),
+        "the companion must have swung at the hostile"
+    );
+    assert_eq!(
+        decoy_cells(&game),
+        vec![(2, 3)],
+        "its own decoy is untouched"
+    );
+}
+
+/// Decoys are in no list `movement_field`, `line_of_sight` or `recipients`
+/// reads: a body walks onto one, a swing crosses one, and a shape over one
+/// lands on nobody.
+#[test]
+fn decoys_block_neither_movement_nor_sight() {
+    let mut game = game(9910);
+    let pack = tactical_fight(&mut game, 1, 40);
+    let hostile = pack[0];
+    let player = game.player_entity();
+    open_ground(&mut game, &pack, &[(4, 2)]);
+    game.world.get_mut::<Creature>(hostile).unwrap().species = "drone".to_string();
+    {
+        let mut battle = game.world.resource_mut::<TacticalBattle>();
+        battle.place_decoy(party_decoy((4, 3)));
+        battle.place_decoy(Decoy {
+            owner_hostile: true,
+            ..party_decoy((5, 4))
+        });
+    }
+
+    assert!(wait_for_turn(&mut game, player));
+    {
+        let allowance = game.movement_allowance(player);
+        let battle = game.world.resource::<TacticalBattle>();
+        let field = reach::movement_field(battle, player, allowance);
+        assert!(field.contains_key(&(5, 4)), "a decoy's cell is walkable");
+        assert!(field.contains_key(&(6, 4)), "and so is the cell past it");
+        assert!(
+            reach::recipients(
+                battle,
+                player,
+                (5, 4),
+                crate::abilities::AbilityShape::Single
+            )
+            .is_empty(),
+            "a shape over a decoy lands on nobody"
+        );
+    }
+    assert_eq!(
+        game.tactical_step((1, 0)),
+        crate::tactical::turn::StepOutcome::Moved,
+        "a body steps onto a decoy's cell"
+    );
+    place_one(&mut game, player, (4, 4));
+
+    assert!(wait_for_turn(&mut game, hostile));
+    assert!(
+        game.tactical_attack(player),
+        "a swing crosses the decoy between the drone and the player"
+    );
+}
+
+/// Spec test 12's other half: decoys go the moment the last body that could
+/// see them dies — here to a Bleed in the round's upkeep, which no hand-on
+/// follows — and the fight ending takes the list with it.
+#[test]
+fn decoys_are_gone_when_the_fight_ends() {
+    let mut game = game(9911);
+    let pack = tactical_fight(&mut game, 2, 1);
+    let (bleeding, other) = (pack[0], pack[1]);
+    let player = game.player_entity();
+    open_ground(&mut game, &pack, &[(0, 0), (8, 0)]);
+    hallucinate(&mut game, bleeding, &[(1, 0)]);
+    game.world
+        .get_mut::<StatusEffects>(bleeding)
+        .unwrap()
+        .active = Some(ActiveStatus {
+        kind: StatusKind::Bleed,
+        remaining: 4,
+        power: 20,
+        landed_this_round: false,
+    });
+
+    let round = game.world.resource::<TacticalBattle>().round;
+    while game.world.resource::<TacticalBattle>().round == round {
+        game.tactical_end_turn();
+    }
+    assert!(
+        game.world.get::<Stats>(bleeding).is_none_or(|s| s.hp <= 0),
+        "fixture: the Bleed must have killed the hallucinating hostile"
+    );
+    assert!(
+        decoy_cells(&game).is_empty(),
+        "no living body can see the decoy, so it must be gone"
+    );
+
+    hallucinate(&mut game, other, &[(7, 0)]);
+    assert!(wait_for_turn(&mut game, player));
+    place_one(&mut game, other, (5, 4));
+    force_the_next_attack_to_land(&mut game);
+    assert!(game.tactical_attack(other), "the last hostile must fall");
+    assert!(
+        game.world.get_resource::<TacticalBattle>().is_none(),
+        "the fight is over and its decoys went with it"
     );
 }

@@ -123,7 +123,7 @@ fn a_species_file_can_author_a_movement_figure() {
     assert_eq!(authored.movement, Some(5));
 }
 
-fn log_texts(game: &Game) -> Vec<String> {
+pub(super) fn log_texts(game: &Game) -> Vec<String> {
     game.message_log(crate::MESSAGE_LOG_CAP)
         .into_iter()
         .map(|l| l.text)

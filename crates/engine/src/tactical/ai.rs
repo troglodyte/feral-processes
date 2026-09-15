@@ -557,6 +557,18 @@ impl Game {
         if sides.targets.is_empty() {
             sides.targets = hidden;
         }
+        // **A hallucinating body fights the decoy it sees nearest, and only
+        // that.** It walks at it, swings at it or aims at it through the same
+        // scoring a body gets — `walk_to_best_cell` closes on `targets`
+        // whatever stands there. `allies` is untouched: the decoy changes
+        // what it is fighting, not where there is room to stand.
+        //
+        // With no decoy it sees, `settle_decoys` has already taken the entry,
+        // so this falls through to the real sides — never an empty list,
+        // which `run_tactical_beat` reads as nothing to fight.
+        if let Some(decoy) = self.nearest_seen_decoy(actor) {
+            sides.targets = vec![decoy];
+        }
         sides
     }
 
@@ -672,6 +684,14 @@ impl Game {
     /// The aggressive branch's `!targets.is_empty()` guard is unreachable in
     /// practice: `run_tactical_beat` already returns before this is called
     /// once `tactical_sides` answers an empty `targets`.
+    ///
+    /// **A hallucinating body aims at its decoys instead.** An aggressive
+    /// routine scores +1 for every decoy it sees in the shape, −1 for every
+    /// body on its own side, and nothing for the other side's bodies, which
+    /// it cannot see for the decoys — so the blast goes where the fakes are
+    /// and still refuses to go through a packmate. A helpful routine is aimed
+    /// exactly as it always was: the decoys are something to fight, not
+    /// something to mend.
     fn best_aim(
         &self,
         actor: Entity,
@@ -685,6 +705,7 @@ impl Game {
         let helpful = Intent::Routine(def.clone()).helpful();
         let reach_max = i32::try_from(band.max).unwrap_or(0);
         let acting_side = self.acts_for_hostiles(actor);
+        let hallucinating = !helpful && self.is_hallucinating(actor);
 
         let mut best: Option<((i32, i32), i32)> = None;
         for dy in -reach_max..=reach_max {
@@ -700,14 +721,32 @@ impl Game {
                     continue;
                 }
                 let mut worth = 0;
+                if hallucinating {
+                    worth += reach::shape_cells(&battle.board, from, aim, shape)
+                        .into_iter()
+                        .filter(|&cell| self.sees_decoy_at(actor, cell))
+                        .count() as i32;
+                }
                 for body in reach::recipients(battle, actor, aim, shape) {
                     let body_is_hostile = self.world.get::<Hostile>(body).is_some();
-                    let wanted = if helpful {
-                        body == actor || body_is_hostile == acting_side
+                    worth += if helpful {
+                        if body == actor || body_is_hostile == acting_side {
+                            1
+                        } else {
+                            -1
+                        }
+                    } else if body_is_hostile == acting_side {
+                        -1
+                    } else if hallucinating {
+                        // The other side is hidden behind the decoys, so a
+                        // body standing among them is neither a reason to aim
+                        // there nor one not to.
+                        0
+                    } else if !targets.is_empty() {
+                        1
                     } else {
-                        !targets.is_empty() && body_is_hostile != acting_side
+                        -1
                     };
-                    worth += if wanted { 1 } else { -1 };
                 }
                 if worth <= 0 {
                     continue;
@@ -730,6 +769,17 @@ impl Game {
     /// there. What is left to decide is which of the bodies now in reach to
     /// finish, and the wounded one is worth more than a fresh one.
     fn swing_at_best_neighbour(&mut self, actor: Entity, targets: &[(i32, i32)]) {
+        // A target this body sees a decoy on is struck through the door that
+        // takes a cell — for a hallucinating body that is its only target —
+        // and a strike out of reach is simply refused, leaving the turn to be
+        // ended by `run_tactical_beat` like any swing that found nothing.
+        if let Some(&cell) = targets
+            .iter()
+            .find(|&&cell| self.sees_decoy_at(actor, cell))
+        {
+            self.tactical_strike_decoy(cell);
+            return;
+        }
         // Before the resource borrow, since `swing_range` also takes `&self`.
         let range = self.swing_range(actor);
         let battle = self.world.resource::<TacticalBattle>();

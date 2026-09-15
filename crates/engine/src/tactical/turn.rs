@@ -662,9 +662,28 @@ impl Game {
             self.apply_tamper(actor, ability, kind, duration, aim);
         } else {
             let shape = ability.tactical_shape();
+            // Taken **before** the routine resolves: it can kill its own
+            // invoker, and neither the cell it ran from nor the side it was on
+            // can be asked of a body the reap has taken off the board.
+            let passing = self.is_hallucinating(actor).then(|| {
+                let battle = self.world.resource::<TacticalBattle>();
+                let cells = battle
+                    .cell_of(actor)
+                    .map(|from| reach::shape_cells(&battle.board, from, aim, shape))
+                    .unwrap_or_default();
+                let line = format!(
+                    "{}'s {} passes through a decoy.",
+                    self.tamper_label(actor),
+                    ability.name
+                );
+                (self.world.get::<Hostile>(actor).is_some(), cells, line)
+            });
             let recipients =
                 reach::recipients(self.world.resource::<TacticalBattle>(), actor, aim, shape);
             self.use_ability(ability, actor, &name, &recipients);
+            if let Some((actor_hostile, cells, line)) = passing {
+                self.pass_through_decoys(actor_hostile, &cells, line);
+            }
         }
 
         // A routine can drop a body anywhere on the board — that is what
@@ -699,7 +718,7 @@ impl Game {
     /// The upkeep is the one the group model's round spends in
     /// `battle_resolve_round`'s last two lines, at the same cadence — see
     /// `tactical_round_upkeep`.
-    fn hand_on_turn(&mut self, actor: Entity, round_before: u32) {
+    pub(crate) fn hand_on_turn(&mut self, actor: Entity, round_before: u32) {
         // **First, and only while `actor` is alive.** Duration counts the
         // tampered body's own turns — `components::Tampered`'s reason for
         // ageing here rather than in `Game::tick_one_combatant` — so this is
@@ -710,6 +729,11 @@ impl Game {
         if self.creature_alive(actor) {
             self.age_tamper(actor);
         }
+        // After the ageing, so a Hallucination that has just run out stops
+        // holding its decoys up in the same hand-on — and after any strike or
+        // routine this turn, so a body that took its last decoy sees clearly
+        // before the next body acts rather than when its duration says.
+        self.settle_decoys();
         let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return;
         };
@@ -832,6 +856,10 @@ impl Game {
     /// the party fighting on, but the player is the one holding the fight
     /// open, so their leaving closes it exactly as `battle_flee` does.
     fn settle_tactical(&mut self, wild: Option<Entity>) -> bool {
+        // Every reap and every departure comes through here, including the
+        // reap in the round's upkeep that no hand-on follows — so a decoy
+        // never outlives the last body it was fooling by a turn.
+        self.settle_decoys();
         let player = self.player_entity();
         let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return false;

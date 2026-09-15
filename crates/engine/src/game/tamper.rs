@@ -1,11 +1,17 @@
 //! `AbilityEffect::Tamper`'s other half: writing a `Tampered` entry and
 //! ageing it away. `Game::run_tactical_routine` is the one caller of
 //! `apply_tamper`; `tactical/turn.rs::hand_on_turn` is the one caller of
-//! `age_tamper`. Nothing reads an entry for a decision yet — that is Tasks
-//! 3–5.
+//! `age_tamper`.
+//!
+//! A Hallucination's decoys live here too: where they are seated, what a
+//! body sees of them, the door that strikes one, and `settle_decoys`, which
+//! clears what nobody can see any more. The decisions that read them are
+//! `tactical/ai.rs`'s.
 
-use crate::abilities::TamperKind;
-use crate::tactical::{TacticalBattle, reach};
+use crate::abilities::{TamperKind, TamperSlot};
+use crate::components::{Glyph, GlyphColor};
+use crate::resources::{BoltCue, BoltQueue};
+use crate::tactical::{Decoy, TacticalBattle, reach};
 use crate::tuning::TACTICAL_AI_TEMPERATURE;
 use crate::*;
 
@@ -18,9 +24,9 @@ impl Game {
     /// full friendly fire catches a companion — dropped here rather than
     /// filtered by a caller, since every caller shares the one rule.
     ///
-    /// **`Hallucinating` is a stub.** Nothing is inserted for it yet — Task
-    /// 6 seats the decoys `TacticalBattle` will hold. The take-hold line
-    /// still fires for every recipient, the fiction ahead of the mechanic.
+    /// **`Hallucinating` goes through `hallucinate`**, which seats the decoys
+    /// first and writes the entry only on the side opposing `actor` — and on
+    /// nobody at all when no decoy found a cell.
     ///
     /// `fresh` is `recipient == actor`: a companion's own radius can catch
     /// its caster, and `TamperEntry`'s first `age` has to know not to spend
@@ -42,11 +48,13 @@ impl Game {
         .filter(|&e| self.world.get::<Player>(e).is_none())
         .collect();
 
-        for recipient in recipients {
-            if !matches!(kind, TamperKind::Hallucinating { .. }) {
+        if let TamperKind::Hallucinating { decoys } = kind {
+            self.hallucinate(actor, ability, &recipients, decoys, duration, aim);
+        } else {
+            for recipient in recipients {
                 self.write_tamper_entry(recipient, kind, duration, recipient == actor);
+                self.log_tamper_take_hold(recipient, kind);
             }
-            self.log_tamper_take_hold(recipient, kind);
         }
 
         if ability.effect.breaks_cloak() {
@@ -90,10 +98,261 @@ impl Game {
         }
     }
 
+    /// Seats `count` decoys of `actor`'s side over the free cells of
+    /// `ability`'s shape at `aim`, then writes the entry on every recipient
+    /// standing on the other side — Decision 3.
+    ///
+    /// **Free cells only, nearest the aim first, then reading order.** The aim
+    /// is usually a body, and a decoy under a body's own feet would be struck
+    /// at distance zero without a step; so the aim leads only when it is
+    /// free. **No `GameRng`** — a tactical fight's budget is one draw an AI
+    /// turn, and this is not one.
+    ///
+    /// **The entry goes on the other side alone**, by literal `Hostile`: a
+    /// companion caught in the party's own Hallucination ignores the party's
+    /// decoys, so an entry on it would be a `HALL` tag that changes nothing.
+    /// With no cell free nothing is seated, and nobody is told they are
+    /// seeing anything.
+    fn hallucinate(
+        &mut self,
+        actor: Entity,
+        ability: &AbilityDef,
+        recipients: &[Entity],
+        count: u32,
+        duration: u32,
+        aim: (i32, i32),
+    ) {
+        let owner_hostile = self.world.get::<Hostile>(actor).is_some();
+        let Some(cells) = ({
+            let battle = self.world.resource::<TacticalBattle>();
+            battle.cell_of(actor).map(|from| {
+                let mut cells: Vec<(i32, i32)> =
+                    reach::shape_cells(&battle.board, from, aim, ability.tactical_shape())
+                        .into_iter()
+                        .filter(|&c| {
+                            battle.board.walkable(c.0, c.1)
+                                && battle.occupant(c).is_none()
+                                && !battle.decoys().iter().any(|d| d.cell == c)
+                        })
+                        .collect();
+                cells.sort_by_key(|&(x, y)| (reach::distance((x, y), aim), y, x));
+                cells.truncate(count as usize);
+                cells
+            })
+        }) else {
+            return;
+        };
+        if cells.is_empty() {
+            return;
+        }
+
+        let (glyph, color) = self
+            .world
+            .get::<Glyph>(actor)
+            .map(|g| (g.ch, g.color))
+            .unwrap_or(('@', GlyphColor::White));
+        let of_player = actor == self.player_entity();
+        {
+            let mut battle = self.world.resource_mut::<TacticalBattle>();
+            for cell in cells {
+                battle.place_decoy(Decoy {
+                    cell,
+                    owner_hostile,
+                    glyph,
+                    color,
+                    of_player,
+                });
+            }
+        }
+
+        let kind = TamperKind::Hallucinating { decoys: count };
+        for &recipient in recipients {
+            if self.world.get::<Hostile>(recipient).is_some() == owner_hostile {
+                continue;
+            }
+            self.write_tamper_entry(recipient, kind, duration, false);
+            self.log_tamper_take_hold(recipient, kind);
+        }
+    }
+
+    /// Whether `body` carries a live `Hallucinating` entry.
+    pub(crate) fn is_hallucinating(&self, body: Entity) -> bool {
+        self.world
+            .get::<Tampered>(body)
+            .is_some_and(|t| t.has(TamperSlot::Hallucinating))
+    }
+
+    /// Whether `body` sees `decoy`: it is hallucinating, and the decoy was
+    /// placed by the side it is not on.
+    ///
+    /// **The one predicate for what a body sees.** The walk, the swing, the
+    /// aim and `settle_decoys` all read this, and it reads `Decoy::opposes`,
+    /// so a party body can never be handed its own side's decoy by one of
+    /// them reading the owner a different way.
+    pub(crate) fn sees_decoy(&self, body: Entity, decoy: &Decoy) -> bool {
+        self.is_hallucinating(body) && decoy.opposes(self.world.get::<Hostile>(body).is_some())
+    }
+
+    /// The decoy `body` sees nearest it, by the distance a swing is measured
+    /// in (`reach::distance`, Chebyshev), ties to reading order — the cell a
+    /// hallucinating body's `tactical_sides` makes its only target.
+    pub(crate) fn nearest_seen_decoy(&self, body: Entity) -> Option<(i32, i32)> {
+        let battle = self.world.get_resource::<TacticalBattle>()?;
+        let from = battle.cell_of(body)?;
+        battle
+            .decoys()
+            .iter()
+            .filter(|d| self.sees_decoy(body, d))
+            .map(|d| d.cell)
+            .min_by_key(|&(x, y)| (reach::distance(from, (x, y)), y, x))
+    }
+
+    /// Whether `body` sees a decoy on `cell`.
+    pub(crate) fn sees_decoy_at(&self, body: Entity, cell: (i32, i32)) -> bool {
+        self.world
+            .get_resource::<TacticalBattle>()
+            .is_some_and(|battle| {
+                battle
+                    .decoys()
+                    .iter()
+                    .any(|d| d.cell == cell && self.sees_decoy(body, d))
+            })
+    }
+
+    /// The acting body swings at the decoy on `cell`, and reports whether it
+    /// did.
+    ///
+    /// **A door that takes a cell rather than an entity**, because a decoy is
+    /// not one — `tactical_attack`'s sibling, holding the same range and
+    /// sight gates so a decoy is struck from exactly where a body on that
+    /// cell could have been. Decoys never block sight, so the line is the
+    /// board's alone.
+    ///
+    /// Every refusal lands before anything moves: no fight or actor, an
+    /// action already spent, an actor that is not hallucinating (Decision 6
+    /// — a body that cannot see a decoy cannot aim at one), no decoy it sees
+    /// on `cell`, out of `swing_range`, or no line of sight.
+    ///
+    /// Nothing is damaged, so there is no reap; the hand-on settles the
+    /// decoys, which is what ends the entry when this was the last one.
+    pub(crate) fn tactical_strike_decoy(&mut self, cell: (i32, i32)) -> bool {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return false;
+        };
+        let Some(actor) = battle.actor() else {
+            return false;
+        };
+        if battle.acted() || !self.sees_decoy_at(actor, cell) {
+            return false;
+        }
+        let Some(from) = battle.cell_of(actor) else {
+            return false;
+        };
+        if reach::distance(from, cell) > self.swing_range(actor)
+            || !reach::line_of_sight(&battle.board, from, cell)
+        {
+            return false;
+        }
+
+        let round_before = battle.round;
+        // The side that placed a decoy this body sees is the one it is not on.
+        let decoy_owner = self.world.get::<Hostile>(actor).is_none();
+        let color = self
+            .world
+            .get::<Glyph>(actor)
+            .map(|g| g.color)
+            .unwrap_or(GlyphColor::White);
+        self.world.resource_mut::<BoltQueue>().push(BoltCue {
+            from,
+            to: cell,
+            color,
+        });
+        self.world
+            .resource_mut::<TacticalBattle>()
+            .take_decoy_at(cell, decoy_owner);
+        let label = self.tamper_label(actor);
+        self.log(format!("{label}'s swing passes through a decoy."));
+        self.world.resource_mut::<TacticalBattle>().mark_acted();
+        self.hand_on_turn(actor, round_before);
+        true
+    }
+
+    /// Takes every decoy `actor` sees on `cells` off the board, logging one
+    /// line for the lot — what a routine run by a hallucinating body does to
+    /// the decoys in its shape, on top of whatever it did to the real bodies
+    /// there.
+    ///
+    /// `actor_hostile` is read by the caller before the routine resolved,
+    /// since the routine may have killed its own invoker.
+    pub(crate) fn pass_through_decoys(
+        &mut self,
+        actor_hostile: bool,
+        cells: &[(i32, i32)],
+        line: String,
+    ) {
+        let Some(mut battle) = self.world.get_resource_mut::<TacticalBattle>() else {
+            return;
+        };
+        let before = battle.decoys().len();
+        battle.retain_decoys(|d| !(d.opposes(actor_hostile) && cells.contains(&d.cell)));
+        if battle.decoys().len() < before {
+            self.log(line);
+        }
+    }
+
+    /// Clears what nobody can see any more.
+    ///
+    /// 1. **A hallucinating body with no decoy it sees left sees clearly**,
+    ///    and its entry goes now rather than at the end of its duration.
+    /// 2. **Then every decoy no living hallucinating body sees is dropped**,
+    ///    so a decoy never outlives the last body it was fooling.
+    ///
+    /// In that order, because the first can empty the set the second reads.
+    /// Called from `hand_on_turn` after ageing — an entry that expired, or a
+    /// decoy struck or passed through, is settled before the next body acts —
+    /// and from `settle_tactical`, which every reap and every departure
+    /// reaches, so a death in the round's upkeep settles with no hand-on
+    /// after it.
+    pub(crate) fn settle_decoys(&mut self) {
+        let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
+            return;
+        };
+        let watchers: Vec<Entity> = battle
+            .bodies()
+            .map(|(body, _)| body)
+            .filter(|&body| self.creature_alive(body) && self.is_hallucinating(body))
+            .collect();
+
+        let mut clear = Vec::new();
+        let mut seeing = Vec::new();
+        for body in watchers {
+            match battle.decoys().iter().any(|d| self.sees_decoy(body, d)) {
+                true => seeing.push(self.world.get::<Hostile>(body).is_some()),
+                false => clear.push(body),
+            }
+        }
+        for body in clear {
+            let Some(mut tampered) = self.world.get_mut::<Tampered>(body) else {
+                continue;
+            };
+            let Some(entry) = tampered.remove(TamperSlot::Hallucinating) else {
+                continue;
+            };
+            if tampered.is_empty() {
+                self.world.entity_mut(body).remove::<Tampered>();
+            }
+            self.log_tamper_wear_off(body, entry.kind);
+        }
+
+        self.world
+            .resource_mut::<TacticalBattle>()
+            .retain_decoys(|d| seeing.iter().any(|&hostile| d.opposes(hostile)));
+    }
+
     /// `entity_label` for a hostile, `creature_label` for a companion —
     /// `tick_combatant_upkeep`'s own split. The player is never a subject
     /// here: `apply_tamper` drops it before either log fires.
-    fn tamper_label(&self, body: Entity) -> String {
+    pub(crate) fn tamper_label(&self, body: Entity) -> String {
         if self.world.get::<Hostile>(body).is_some() {
             self.entity_label(body)
         } else {

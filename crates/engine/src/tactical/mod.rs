@@ -24,8 +24,47 @@ use std::collections::HashMap;
 
 use bevy_ecs::prelude::{Entity, Resource};
 
+use crate::components::GlyphColor;
 use crate::resources::BattleRewards;
 use crate::tactical::map::{BattleSpec, Board};
+
+/// A cell a Hallucination has told the other side a body stands on.
+///
+/// **Not an entity and not part of any `Tampered` entry.** A decoy outlives
+/// being struck at by one body and is shared by every hallucinating body on
+/// the other side, so it belongs to the fight rather than to anyone in it —
+/// and it is nothing `reach::movement_field`, `line_of_sight` or
+/// `recipients` can see, because none of them read this list.
+///
+/// `owner_hostile` is the invoker's literal `Hostile`-ness, and a body sees a
+/// decoy only when it is hallucinating and stands on the other side of that
+/// line — `Game::sees_decoy`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Decoy {
+    pub cell: (i32, i32),
+    pub owner_hostile: bool,
+    /// The invoker's own glyph and hue, so the fake reads as the body that
+    /// ran it.
+    pub glyph: char,
+    pub color: GlyphColor,
+    /// The player's `@` is drawn in the `PLAYER` role rather than its
+    /// `GlyphColor`, so a decoy of the player has to say so or it draws in the
+    /// hue the player merely spawned with.
+    pub of_player: bool,
+}
+
+impl Decoy {
+    /// Whether a hallucinating body on the `hostile` side sees this decoy —
+    /// the other side's, never its own.
+    ///
+    /// **The one expression of "opposing".** `Game::sees_decoy` asks it of a
+    /// living body; a routine passing through asks it of a side read before
+    /// the routine could kill its invoker. Two spellings would be two places a
+    /// party body could be handed its own decoy.
+    pub fn opposes(&self, hostile: bool) -> bool {
+        self.owner_hostile != hostile
+    }
+}
 
 /// A tactical fight's spatial state: the map it is fought on and where
 /// every body stands.
@@ -102,6 +141,9 @@ pub struct TacticalBattle {
     /// snapshot for its reason: by the time a fight is won the question is
     /// unanswerable.
     pub(crate) outmatched: bool,
+    /// Every decoy a Hallucination has placed and nobody has struck through
+    /// yet, in placement order — `bodies`' reason for a `Vec`.
+    decoys: Vec<Decoy>,
 }
 
 impl TacticalBattle {
@@ -119,6 +161,7 @@ impl TacticalBattle {
             walk: None,
             round: 1,
             outmatched: false,
+            decoys: Vec::new(),
         }
     }
 
@@ -307,6 +350,32 @@ impl TacticalBattle {
     /// Every body and where it stands, in placement order.
     pub fn bodies(&self) -> impl Iterator<Item = (Entity, (i32, i32))> + '_ {
         self.bodies.iter().copied()
+    }
+
+    /// Adds a decoy. The caller has already chosen a free cell — see
+    /// `Game::apply_tamper`.
+    pub(crate) fn place_decoy(&mut self, decoy: Decoy) {
+        self.decoys.push(decoy);
+    }
+
+    /// Every decoy standing, in placement order.
+    pub(crate) fn decoys(&self) -> &[Decoy] {
+        &self.decoys
+    }
+
+    /// Takes the decoy `owner_hostile`'s side placed on `cell` off the board,
+    /// if there is one.
+    pub(crate) fn take_decoy_at(&mut self, cell: (i32, i32), owner_hostile: bool) -> Option<Decoy> {
+        let idx = self
+            .decoys
+            .iter()
+            .position(|d| d.cell == cell && d.owner_hostile == owner_hostile)?;
+        Some(self.decoys.remove(idx))
+    }
+
+    /// Keeps only the decoys `keep` answers `true` for.
+    pub(crate) fn retain_decoys(&mut self, keep: impl FnMut(&Decoy) -> bool) {
+        self.decoys.retain(keep);
     }
 }
 

@@ -24,7 +24,7 @@ and never in `tick_one_combatant`. The group model hides the effect behind
 **Tech Stack:** Rust, `bevy_ecs` 0.19 (standalone, engine only), bevy + bevy_egui
 (gui, through `Painter`), RON assets.
 
-**Spec:** [`docs/superpowers/specs/2026-09-15-ai-tamper-routines-design.md`](../specs/2026-09-15-ai-tamper-routines-design.md).
+**Spec:** [`docs/superpowers/archive/specs/2026-09-15-ai-tamper-routines-design.md`](../archive/specs/2026-09-15-ai-tamper-routines-design.md).
 Read it before Task 1. The plan argues from it and does not repeat its reasons.
 
 ## Global Constraints

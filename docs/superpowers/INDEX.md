@@ -276,6 +276,16 @@ branch is a claim that a rebase or a competing merge can invalidate.
 | `2026-09-10-invisibility-routine-design` | A body no picker may name until it acts | `components::Cloaked`, `Game::break_cloak` and `AbilityEffect::Cloak` resolve in `crates/engine`; `assets/abilities/detach.ron` |
 | `2026-09-10-weapon-reach-design` | A weapon whose swing lands on more than one body | `items::WeaponReach`, `Game::swing_reach` and `components::ReachCharge` resolve in `crates/engine`; `assets/items/scatter_lance.ron`, `assets/items/broadcast_storm.ron`. Its one `///` citation moved with it, on the branch — no fourth exception |
 
+## The spec archived on 2026-09-15
+
+Archived **on landing** (of the last plan task, on `feat/ai-tamper-routines`,
+ahead of the branch's own merge) — nothing in `crates/` or `assets/` cites
+its path, so it moved on its own.
+
+| Spec | What it designed | Evidence |
+| --- | --- | --- |
+| `2026-09-15-ai-tamper-routines-design` | Five battle-map routines that tamper with the hostile AI's decision-maker (temperature, forecast, side, sight), plus flavour routines, gear and a research node | `AbilityEffect::Tamper`, `TamperKind`, `components::Tampered`, `Game::decision_temperature`, `Game::acts_for_hostiles`, `Game::taken_over`, `Decoy`/`Game::sees_decoy`/`tactical_strike_decoy`, `Game::tactical_forecast` all resolve in `crates/engine`; the tamper block and decoy drawing resolve in `crates/gui`; `assets/research/model_inspection.ron` and eleven routine `.ron` files in `assets/abilities/`. Not yet played at the keyboard — see the plan's closing note |
+
 ## Four rows that need a footnote
 
 - **`2026-07-21-inventory-capacity`** — built, then *deliberately reverted*.

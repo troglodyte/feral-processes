@@ -1,6 +1,6 @@
 # Tamper routines: attacking the enemy's decision-maker
 
-**Status:** designed, not implemented
+**Status:** implemented
 
 TODO #92 asked for "AI related skills, routines, tools, items". The shipped
 vocabulary is systems and security — segfault, row hammer, kernel panic — and

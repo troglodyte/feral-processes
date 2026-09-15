@@ -42,6 +42,16 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.189
+
+**When a fight on a battle map ends, a "Fight Over" popup lists the outcome,
+the salvage and the XP over the board the fight ended on, and any key
+returns to the map.** A tactical fight used to finish by switching to the
+full-screen battle page the other combat model uses, so the board vanished
+the moment the last blow landed. Now the board stays where the fight left
+it, with nobody left to act and the camera held still, and the results show
+at once instead of scrolling in a line at a time.
+
 ## 0.13.188
 
 **What the base is holding is now a list down the top-left corner of the map,

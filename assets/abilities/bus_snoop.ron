@@ -11,7 +11,7 @@
     // Overseer rather than Wintermute, whose `deadman` is already an
     // Everyone-scope damage routine; a boss's drops roll independently, so
     // a fourth costs the other three nothing.
-    description: "Damage the whole field and keep nearly half of everything it gives up",
+    description: "Damage the whole field and restore nearly half of it to yourself",
     target: AllEnemies,
     effect: Drain(power: 9, spread: 2, heal_fraction: 0.45),
     cooldown: 5,

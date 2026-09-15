@@ -32,7 +32,7 @@ Core Fragments.
     // `unlocks_structures` that sets `assembles` — derived from the recipe
     // itself.
     name: "Weapon Fabrication",
-    description: "A bench for weapon and module work, building modules out of Logic Wafers.",
+    description: "The bench where weapons and modules are made. It also turns Logic Wafers into Trace Sniffers.",
 
     // Research Data a project on this node has to accumulate before it
     // completes. Research Nodes feed it in while the node is the base's active

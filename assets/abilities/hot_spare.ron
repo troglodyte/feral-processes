@@ -11,7 +11,7 @@
     // Heals less than `core_dump` hits, because a heal on the way down is
     // worth more than damage: it buys the round the crisis is supposed to
     // be survivable in.
-    description: "Driven low, the wearer brings its spare capacity online",
+    description: "When the wearer drops below a third of its Integrity, it heals itself",
     target: OneAlly,
     effect: Heal(power: 8, spread: 2),
     cooldown: 3,

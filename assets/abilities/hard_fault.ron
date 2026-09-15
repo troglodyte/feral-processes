@@ -6,7 +6,7 @@
     // why it is priced at a five-round cooldown and why nobody can write
     // one — Hard Lock Everyone, the ordinary routine nearest this, is a
     // debuff without the duration.
-    description: "Fault every hostile process at once — two rounds of nothing",
+    description: "Stall every hostile program for 2 rounds",
     target: AllEnemies,
     effect: Debuff(kind: Stun, power: 0, duration: 2),
     cooldown: 5,

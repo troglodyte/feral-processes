@@ -1,7 +1,7 @@
 (
     id: "symlink",
     name: "Symlink Party",
-    description: "Resolve a link back to the base anchor from anywhere, the Stack included",
+    description: "Return the party to your base from anywhere, even inside the Stack",
     target: WholeParty,
     effect: Symlink,
     power_cost: 25.0,

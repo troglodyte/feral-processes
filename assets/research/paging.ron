@@ -1,7 +1,7 @@
 (
     id: "paging",
     name: "Paging",
-    description: "Address a shelf rather than walking it end to end — twice what your first Depot holds.",
+    description: "A bigger Depot, with twice the room of your first one.",
     cost: 50,
     materials: [("bytecode_block", 16), ("charge_coil", 6)],
     min_zone: 2,

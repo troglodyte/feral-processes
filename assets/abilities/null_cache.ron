@@ -6,7 +6,7 @@
     // of it. Half the power of leech_array doubled twice over, which is
     // deliberately a sustain routine rather than a damage one: it is what
     // lets a party grind a deep frame without a Patch.
-    description: "Drain a whole group and take back every point of it",
+    description: "Damage every member of one group and restore all of it to yourself",
     target: WholeEnemyGroup,
     effect: Drain(power: 12, spread: 3, heal_fraction: 1.0),
     cooldown: 3,

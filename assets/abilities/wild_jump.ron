@@ -1,7 +1,7 @@
 (
     id: "wild_jump",
     name: "Wild Jump Party",
-    description: "Jump to any cell of this frame — solid ground kills you",
+    description: "Jump to any cell of this frame — land inside solid rock and you die",
     target: WholeParty,
     effect: Jump,
     power_cost: 20.0,

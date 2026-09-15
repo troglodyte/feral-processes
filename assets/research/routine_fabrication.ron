@@ -1,7 +1,7 @@
 (
     id: "routine_fabrication",
     name: "Routine Fabrication",
-    description: "Blank media a routine can be written onto, and the whole chain of benches that makes it.",
+    description: "The chain of machines that makes blank Routine Disks. You need a disk to install any routine you learn.",
     cost: 26,
     materials: [("bytecode_block", 12), ("charge_coil", 4)],
     requires: ["automation"],

@@ -1,7 +1,7 @@
 (
     id: "mesh_plating",
     name: "Mesh Plating",
-    description: "One hardening pass that covers every process you brought instead of one at a time, compiled into cargo.",
+    description: "Hardened Shell for your whole party at once, instead of one ally at a time. Write it onto a Routine Disk to run it.",
     cost: 120,
     materials: [("routine_disk", 16), ("logic_wafer", 16)],
     min_zone: 3,

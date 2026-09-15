@@ -1,7 +1,7 @@
 (
     id: "fortification",
     name: "Fortification",
-    description: "Automated perimeter defense and self-repair.",
+    description: "Base defenses: a Shield that softens GC Entropy Sweeps against your buildings, and a node that slowly repairs damaged buildings.",
     cost: 18,
     materials: [("bytecode_block", 8), ("power_cell", 8)],
     recommended: true,

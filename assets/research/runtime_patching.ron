@@ -1,7 +1,7 @@
 (
     id: "runtime_patching",
     name: "Runtime Patching",
-    description: "Patch an ally back together mid-fight.",
+    description: "A battle routine that heals one ally. Write it onto a Routine Disk to run it.",
     cost: 60,
     materials: [("routine_disk", 12), ("logic_wafer", 10)],
     min_zone: 2,

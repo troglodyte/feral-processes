@@ -1,7 +1,7 @@
 (
     id: "buffer_overrun",
     name: "Buffer Overrun Party",
-    description: "Step through one wall ahead, into the cell beyond",
+    description: "Step through the wall in front of you, into the cell beyond",
     target: WholeParty,
     effect: Phase,
     power_cost: 12.0,

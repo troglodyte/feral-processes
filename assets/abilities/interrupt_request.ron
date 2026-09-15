@@ -11,7 +11,7 @@
     // the harder reason: `RoundStart` fires on every round there is. Priced
     // low as well as slow, because it costs the holder neither a turn nor a
     // routine slot — the item is what was spent.
-    description: "The moment the round opens, an unmasked interrupt lands on the nearest hostile",
+    description: "At the start of a round, light damage to the nearest hostile",
     target: OneEnemyGroupFront,
     effect: Damage(power: 5, spread: 1),
     cooldown: 4,

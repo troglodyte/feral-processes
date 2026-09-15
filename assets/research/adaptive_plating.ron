@@ -1,7 +1,7 @@
 (
     id: "adaptive_plating",
     name: "Adaptive Plating",
-    description: "Field routines that harden a process before the fight starts, compiled into cargo.",
+    description: "Routines you run on the map before a fight. Each toughens or strengthens one ally until you next rest. Write one onto a Routine Disk to run it.",
     cost: 70,
     materials: [("routine_disk", 12), ("logic_wafer", 12)],
     min_zone: 2,

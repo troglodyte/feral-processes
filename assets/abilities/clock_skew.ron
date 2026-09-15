@@ -6,7 +6,7 @@
     // four-round cooldown is deliberately under half uptime: a rider the
     // player can rely on every round stops being something they read the
     // fight around.
-    description: "The round opens a fraction out of step, and the nearest hostile pays the drift",
+    description: "At the start of a round, the nearest hostile starts leaking for 2 rounds",
     target: OneEnemyGroupFront,
     effect: Debuff(kind: Bleed, power: 2, duration: 2),
     cooldown: 4,

@@ -195,7 +195,7 @@ impl Game {
     /// Priced per battle *and* per body, because both are what provisions
     /// have to cover. Denominated in the **build currency**, which is
     /// role-derived rather than named in Rust and is what the base's shelves
-    /// actually hold — the figure the stock strip is already showing.
+    /// actually hold — the figure the stock block is already showing.
     pub fn sortie_provision_cost(&self, battles: u32, squad: usize) -> Vec<(ItemId, u32)> {
         let units = crate::tuning::SORTIE_PROVISION_PER_BATTLE * battles * squad as u32;
         vec![(self.currency(), units)]

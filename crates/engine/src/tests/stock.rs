@@ -1,5 +1,5 @@
-//! The base stock strip: what the base's machines and depots are holding,
-//! as the one-row readout draws it.
+//! The base stock block: what the base's machines and depots are holding,
+//! as the list over the map draws it.
 
 use super::support::*;
 use crate::items::ids;

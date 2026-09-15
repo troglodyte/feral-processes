@@ -276,7 +276,7 @@ fn draw_toast(text: &str, p: &Painter) {
 
 /// Draws the frame-timing readout, on top of everything else.
 ///
-/// Bottom-right rather than anywhere along the top: the stock strip claims a
+/// Bottom-right rather than anywhere along the top: the status bar claims a
 /// row off the top of the window and `draw_toast` is centred on that same
 /// row, so the top edge is the one place this cannot sit without hiding
 /// something the player asked to see.
@@ -926,7 +926,7 @@ mod tests {
     /// can be wrong are being absent and being somewhere it hides something.
     ///
     /// The corner is the half worth pinning: the top of the window carries
-    /// the stock strip and the volume toast, so a later edit moving these
+    /// the status bar and the volume toast, so a later edit moving these
     /// figures up there would cover a row the player asked to see, and
     /// nothing else in the suite would notice.
     #[test]
@@ -972,42 +972,6 @@ mod tests {
         fx.begin_frame(now, effects, transits, bolts, tactical_fx, in_battle);
         fx.observe_log(last_log.as_ref());
         paint::with_painter(|p| render::draw(app, fx, p));
-    }
-
-    /// The stock strip is only worth its row if it is actually on the
-    /// screen. Wired in `draw_playing_base` rather than per mode, so it
-    /// reaches every screen that draws the world behind it — asserted here
-    /// through the real `render::draw` rather than by calling the strip
-    /// itself, which would pass with the call site deleted.
-    #[test]
-    fn the_playing_screen_carries_the_stock_strip() {
-        let mut app = app_in_base(4243);
-        let mut fx = Fx::new();
-        let (_, shapes) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p));
-        assert!(
-            paint::painted_text(&shapes)
-                .iter()
-                .any(|t| t.starts_with("base stock")),
-            "the playing screen draws no stock strip at all"
-        );
-    }
-
-    /// The whole reason the strip sits at the top of the window rather than
-    /// in the log pane: `draw_popup` caps a panel at 85% of the window and
-    /// centres it, so a menu buries the log pane and leaves the strip
-    /// standing. A player deciding what to build is exactly who wants to
-    /// know what the base is holding.
-    #[test]
-    fn the_stock_strip_outlives_a_menu_popup() {
-        let mut app = app_in_base(4244);
-        app.mode = Mode::BaseMenu;
-        let mut fx = Fx::new();
-        let (_, shapes) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p));
-        let painted = paint::painted_text(&shapes);
-        assert!(
-            painted.iter().any(|t| t.starts_with("base stock")),
-            "a menu buried the strip: {painted:?}"
-        );
     }
 
     /// A raid's tile flash is a *base-space* cue and must be drawn in base

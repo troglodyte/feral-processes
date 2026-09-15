@@ -2711,10 +2711,9 @@ fn the_manual_binds_the_excavation_plan_key() {
     assert!(says, "no help page binds the m key to the Excavation plan");
 }
 
-/// Two piles cannot share a tag on the base stock strip. The strip is one
-/// row of `[TAG] qty` pairs and carries nothing else — no name, no colour
-/// distinction — so a duplicate tag is a readout that lies about which pile
-/// is filling, and it fails silently: both rows draw, both look right.
+/// Two piles cannot share a tag in the base pane's PRODUCTION rows, where a
+/// column of tags is read down for the pile that is filling, and a duplicate
+/// fails silently: both rows draw, both look right.
 ///
 /// `ItemDef::tag` derives from the name, so a collision is a content
 /// accident rather than a code fault, which is why this is a census over the
@@ -2763,7 +2762,7 @@ fn no_two_shipped_stock_items_share_a_tag() {
         );
         if let Some(other) = seen.insert(tag.clone(), def.name.clone()) {
             panic!(
-                "\"{other}\" and \"{}\" both tag as [{tag}] on the stock strip — \
+                "\"{other}\" and \"{}\" both tag as [{tag}] in the PRODUCTION rows — \
                  settle it with an `abbrev` on one of them",
                 def.name
             );

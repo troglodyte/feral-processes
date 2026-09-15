@@ -358,6 +358,10 @@ pub(super) fn draw_playing_base(
             painter,
             m,
         );
+        // **In this branch alone**, after the frame so it sits over the map:
+        // the Stack's frame map owns this corner underground, and a
+        // tactical board is the fight.
+        hud::stock_block::draw_stock_block(regions.map_pane, &stock_rows, painter, m);
     }
     // **After the frame, so it sits over the map rather than under it**, and
     // outside the branch because it is the same block in both — though
@@ -438,7 +442,6 @@ pub(super) fn draw_playing_base(
             zone: status.zone,
             position: game.base_pos().unwrap_or(status.position),
             tick: game.current_tick(),
-            stock: &stock_rows,
             power: game.base_power(),
             attention: &attention,
         },
@@ -1517,6 +1520,86 @@ mod tests {
             "the mark's ink (top {mark_top}, bottom {mark_bottom}) must sit \
              entirely above the patient's own glyph (top {glyph_top}), not \
              overlap it"
+        );
+    }
+
+    /// What `render::draw` paints for `app`, as plain text runs.
+    fn drawn_text(app: &mut feral_processes_app_core::App) -> Vec<String> {
+        let mut fx = Fx::new();
+        let (_, shapes) = with_painter(|p| crate::render::draw(app, &mut fx, p));
+        painted_text(&shapes)
+    }
+
+    /// Through the real `render::draw` rather than `draw_stock_block`, which
+    /// would pass with the call site deleted — and with the item's *name*,
+    /// the half the status bar's two-letter tag never printed.
+    #[test]
+    fn the_base_stock_is_listed_over_the_map_in_base_space() {
+        use super::test_support::{STOCKED_NAME, StandingIn, game_with_base_stock};
+        let mut app =
+            super::test_support::playing_app_around(game_with_base_stock(5101, StandingIn::Base));
+        let text = drawn_text(&mut app);
+        assert!(
+            text.iter().any(|t| t == "BASE STOCK"),
+            "no stock block over the map: {text:?}"
+        );
+        assert!(
+            text.iter().any(|t| t == STOCKED_NAME),
+            "the block does not name what the base holds: {text:?}"
+        );
+    }
+
+    /// The Stack's frame map owns that corner. Same stock as the base-space
+    /// test, so this cannot pass on a base that simply holds nothing.
+    #[test]
+    fn the_base_stock_is_not_listed_underground() {
+        use super::test_support::{STOCKED_NAME, StandingIn, game_with_base_stock};
+        let game = game_with_base_stock(5102, StandingIn::Stack);
+        assert!(
+            game.stack_view().is_some(),
+            "precondition: the party is in the Stack"
+        );
+        assert!(
+            game.base_stock().iter().any(|r| r.name == STOCKED_NAME),
+            "precondition: the base holds something to hide"
+        );
+        let mut app = super::test_support::playing_app_around(game);
+        let text = drawn_text(&mut app);
+        assert!(
+            !text.iter().any(|t| t == "BASE STOCK" || t == STOCKED_NAME),
+            "the stock block drew over the Stack view: {text:?}"
+        );
+    }
+
+    /// A tactical board is the fight.
+    #[test]
+    fn the_base_stock_is_not_listed_on_a_battle_map() {
+        use super::test_support::{STOCKED_NAME, StandingIn, game_with_base_stock};
+        let game = (0..200u32)
+            .find_map(|seed| {
+                let mut game = game_with_base_stock(seed, StandingIn::Surface);
+                let mut profile = game.profile().clone();
+                profile.tactical_battles = true;
+                game.install_profile(profile);
+                let at = game.player_status().position;
+                let target = game
+                    .view_entities(12, 12)
+                    .into_iter()
+                    .filter(|e| e.is_hostile && !e.is_tamed && !e.is_structure)
+                    .find(|e| (e.pos.0 - at.0).abs() + (e.pos.1 - at.1).abs() == 1)?;
+                game.move_player(target.pos.0 - at.0, target.pos.1 - at.1);
+                game.in_tactical_battle().then_some(game)
+            })
+            .expect("no seed under 200 put a lone wild program next to the player");
+        assert!(
+            game.base_stock().iter().any(|r| r.name == STOCKED_NAME),
+            "precondition: the base holds something to hide"
+        );
+        let mut app = super::test_support::playing_app_around(game);
+        let text = drawn_text(&mut app);
+        assert!(
+            !text.iter().any(|t| t == "BASE STOCK" || t == STOCKED_NAME),
+            "the stock block drew over the battle map: {text:?}"
         );
     }
 

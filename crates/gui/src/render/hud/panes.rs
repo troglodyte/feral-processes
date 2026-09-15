@@ -96,7 +96,7 @@ fn row_height(row: &Row, m: &Metrics) -> f32 {
 
 /// The longest prefix of `rows` that fits `avail`, and how many were cut.
 ///
-/// **`stock::fits`' rule on the vertical axis.** A pane has no scrollbar to
+/// **`strip::fitting`'s rule on the vertical axis.** A pane has no scrollbar to
 /// defer a row to, so the overflow is reported rather than dropped — the
 /// caller spends a row saying how many did not fit, which is what stops the
 /// column lying about what the base is doing. A trailing [`Row::Rule`] is

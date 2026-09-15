@@ -297,26 +297,38 @@
   numbers, usually the party's own tile. Suppressed rather than moved to the
   anchor: the log pane's flash and the `Raid` line already carry the news.
   `VisualEffect` has **no** space tag on purpose — one variant is not an axis.
-- **What the base is holding is one row across the top of every screen that
-  draws the world behind it.** `Game::base_stock` reads the same buffers
-  `base_holding` sums, through `stock::output_buffers` — a second walk makes
-  the strip an opinion about the base rather than a readout of it — **plus
-  every `ItemDef::banked` pool**, which is the one thing those buffers can
-  never hold. Folded in by the flag and never by name, and `output_buffers`
-  is **not** widened — an order for a banked item is refused on the grounds
-  that no shelf holds it. **A row exists if the base holds any of it *or* is
-  set up to make it** — `stock::producible` seeds a 0 for every deployed
-  structure's `work.produces` **and** its `assembles.item`, because an
-  assembler declares no `work` block at all. Deliberately not "any structure"
-  (a Depot makes nothing and would seed a row for every item in the game) and
-  not the researched recipe list (a bench recipe compiles into the *player's*
-  pack, so its row could never move off zero). A banked pool the player has
-  none of is not seeded. Ordered by item id, never by quantity; a claim about
-  the base and not about where the party stands, so it needs no
-  `require_surface`. `ItemDef::tag` derives two letters from the name and
-  `abbrev` settles the one shipped collision, held by a census. The width is
-  **measured**, `stock::fits`, for the status column's reason: an over-wide
-  row is drawn off the panel in silence, so what does not fit is counted.
+- **What the base is holding is a list over the map pane's top-left corner,
+  drawn on the surface map and in base space alone.** `Game::base_stock`
+  reads the same buffers `base_holding` sums, through
+  `stock::output_buffers` — a second walk makes the list an opinion about
+  the base rather than a readout of it — **plus every `ItemDef::banked`
+  pool**, which is the one thing those buffers can never hold. Folded in by
+  the flag and never by name, and `output_buffers` is **not** widened — an
+  order for a banked item is refused on the grounds that no shelf holds it.
+  **A row exists if the base holds any of it *or* is set up to make it** —
+  `stock::producible` seeds a 0 for every deployed structure's
+  `work.produces` **and** its `assembles.item`, because an assembler
+  declares no `work` block at all. Deliberately not "any structure" (a Depot
+  makes nothing and would seed a row for every item in the game) and not the
+  researched recipe list (a bench recipe compiles into the *player's* pack,
+  so its row could never move off zero). A banked pool the player has none
+  of is not seeded. Ordered by item id, never by quantity; a claim about the
+  base and not about where the party stands, so it needs no
+  `require_surface`. The draw is `hud::stock_block`, `compass_block`'s
+  sibling and built its way: a block inside the pane, from
+  `layout::strip_inset` because THREAT's quad hangs into it. **Both budgets
+  are measured** — a name past `NAME_COLUMN_CHARS` is cut with an ellipsis
+  and rows past `HEIGHT_FRACTION` of the pane are counted as `+N more` —
+  because `Painter` never clips horizontally and an over-wide name is drawn
+  across the map in silence. **The gate is placement, not a check**: the
+  call sits in `draw_playing_base`'s surface branch, because the Stack's
+  frame-map inset owns that corner and a tactical board is the fight; the
+  two negative tests fail with the call hoisted out of the branch, so keep
+  them non-vacuous by stocking the base first. **The trade was a popup**:
+  it rode the status bar for one reason — a centred menu buries the map and
+  left the bar standing — and a menu now hides it; that was accepted for
+  full names over a glossary of tags. `ItemDef::tag`/`abbrev` survive for
+  the base pane's PRODUCTION rows, held unique by their census.
 - **Base space carries its own seed, and it is not `WorldMap::seed()`.**
   `BaseGrid::seed` is minted at `Game::new` and saved with the grid. The
   world is persistent now — one `WorldMap`, never reseeded — so the two

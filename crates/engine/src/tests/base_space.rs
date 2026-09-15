@@ -2659,7 +2659,7 @@ fn a_crew_floors_a_marked_cell_after_cutting_it() {
 }
 
 /// **The crew is base labour and pays out of the base's own stores** — the
-/// same buffers the stock strip counts, and the same ones `base_holding`
+/// same buffers the stock block counts, and the same ones `base_holding`
 /// reads. Paying out of the player's pack alone left a crew standing on a
 /// cut it had just finished while a Depot four tiles away held the
 /// substrate, and it said nothing about it: the store the base filled was

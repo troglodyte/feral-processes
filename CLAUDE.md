@@ -40,7 +40,7 @@ graphics library. The ~3,000 lines in `crates/gui/src/render/` draw through
 — and know nothing about the backend. That is what made the macroquad→Bevy swap
 touch five files and no drawing code. Don't reintroduce direct backend calls
 in `render/`. **The panes take their origin from the caller** — a `Rect`,
-not a width and a height — because the stock strip claims a row off the top
+not a width and a height — because the status bar claims a row off the top
 of the window. That is affordable only because each view states the origin
 once: `stack::slice` for the whole corridor projection, `tile_origin_px` for
 the surface map, `inset_rect` for the frame inset. A literal `0.0` in either
@@ -303,8 +303,8 @@ relying on one, and correct all three places if it has moved.
   assembler's pull and a supplier's fuel walking the same four tiles.
 - **A raid's flash is base-space too, and `render/base.rs` gates both draw
   sites on `base_pos`.**
-- **What the base is holding is one row across the top of every screen that
-  draws the world behind it.**
+- **What the base is holding is a list over the map pane's top-left corner,
+  drawn on the surface map and in base space alone.**
 - **Base space carries its own seed, and it is not `WorldMap::seed()`.**
   `BaseGrid::seed` is minted once at `Game::new`; the two stay separate
   because base space and the zone surface are different subsystems, not
@@ -479,7 +479,7 @@ relying on one, and correct all three places if it has moved.
 - **A cost the *base* incurs is walked to and carried; a cost the *player*
   incurs is paid from their pack.** The crew's tile is fetched off a shelf
   by a body that walks there and carries it back — the same `Carrying` a
-  hauler uses, over the same buffers the stock strip counts.
+  hauler uses, over the same buffers the stock block counts.
 - **A dry floor job is not a want either — `build_wants`' deadlock rule
   crossed over**, `Game::dig_wants` asking `build_is_workable`'s question on
   the half of the one dig verb that spends anything.

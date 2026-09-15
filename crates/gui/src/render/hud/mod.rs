@@ -25,4 +25,5 @@ pub(super) mod map_frame;
 pub(crate) mod palette;
 pub(super) mod panes;
 pub(super) mod status_bar;
+pub(super) mod stock_block;
 pub(super) mod strip;

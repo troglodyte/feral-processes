@@ -4,10 +4,10 @@
 //! Three questions read the same set of buffers — how much of one item the
 //! whole base has (`work_orders::base_holding`), how much of it a hauler
 //! could fetch from a Depot (`work_orders::depot_holding`), and what the
-//! stock strip lists across the top of every non-battle screen
-//! (`Game::base_stock`). They ask different things of it, but "which
-//! buffers are the base's" has to be one answer or the strip becomes a
-//! second opinion about the base rather than a readout of it.
+//! stock block lists over the map (`Game::base_stock`). They ask different
+//! things of it, but "which buffers are the base's" has to be one answer or
+//! the block becomes a second opinion about the base rather than a readout
+//! of it.
 //!
 //! An **output** buffer, never an input one: `Stock`'s asymmetry is the
 //! whole of a chain's directionality (see `CLAUDE.md`), and an ingredient
@@ -70,9 +70,9 @@ pub(crate) fn producible(game: &Game) -> impl Iterator<Item = &ItemId> {
 /// much it got.
 ///
 /// **The spending half of `output_buffers`**, and deliberately the same set:
-/// `work_orders::base_holding` counts these buffers and the stock strip
+/// `work_orders::base_holding` counts these buffers and the stock block
 /// lists them, so a cost the base pays out of a *narrower* set would make
-/// the strip say the base can afford something it then refuses to buy. The
+/// the block say the base can afford something it then refuses to buy. The
 /// player's own pack is not in it — that is `Inventory`, and every cost the
 /// *player* incurs is paid from there.
 ///
@@ -186,8 +186,8 @@ pub(crate) fn spend_bill_from_base(
 ///
 /// **Not the inverse of `spend_from_base`, and deliberately narrower.** A
 /// cost is drawn from every output buffer in the base, because that is what
-/// the stock strip counts and a strip that promised more than the base
-/// would spend is a strip lying about the base. A *refund* goes to Depots
+/// the stock block counts and a block that promised more than the base
+/// would spend is a block lying about the base. A *refund* goes to Depots
 /// alone: a unit pushed into a Mining Node's output buffer is
 /// indistinguishable from a unit that node produced, and would be hauled
 /// away and counted as a cycle's yield. The dig crew's substrate draw
@@ -238,7 +238,7 @@ pub(crate) fn return_to_depots(game: &mut Game, item: &ItemId, qty: u32) -> u32 
 
 impl Game {
     /// What the base's machines and depots are holding, one row per item,
-    /// as the stock strip lists it.
+    /// as the stock block lists it.
     ///
     /// Keyed by `ItemId` in a `BTreeMap` for `Stock`'s own reason: the
     /// order has to be the same every tick. A strip that re-sorted as

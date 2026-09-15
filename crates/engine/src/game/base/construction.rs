@@ -35,8 +35,8 @@ use crate::{Game, tuning};
 ///
 /// **Two variants because there are two stores, not because there are two
 /// kinds of shelf.** Every deployed structure's output buffer is one store
-/// — the same set `stock::spend_from_base` drains and the stock strip
-/// counts, so a strip reading `BS 12` is a strip saying the base can build
+/// — the same set `stock::spend_from_base` drains and the stock block
+/// counts, so a block reading `Blank Substrate 12` is a block saying the base can build
 /// — and the player's pack is the other. A Depot has no privilege here: a
 /// Mining Node's own shelf is as fetchable as a Depot's, which is what
 /// keeps "the base is holding it" one answer rather than two.
@@ -610,7 +610,7 @@ impl Game {
     /// Anything that fits nowhere is **logged rather than dropped in
     /// silence**. It is reachable — a base with no Depot, the party away and
     /// a build cancelled — and a player who is not told simply sees the
-    /// stock strip fall.
+    /// stock block fall.
     pub(crate) fn return_material(&mut self, item: &ItemId, qty: u32) {
         let landed = stock::return_to_depots(self, item, qty);
         let mut spare = qty - landed;

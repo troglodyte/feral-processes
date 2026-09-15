@@ -1427,10 +1427,9 @@ impl Game {
         // the position is derived from the `done` list the save carries.
         game.ensure_tutorial_held();
         // A run saved before research became a project carries a bank of the
-        // research currency with nothing left to spend it on. The stock strip
+        // research currency with nothing left to spend it on. The stock block
         // folds in every `ItemDef::banked` pool **by the flag**, so a leftover
-        // pool would sit across the top of every base screen for the rest of
-        // the run — the fold itself stays, because it names no item and a mod
+        // pool would sit over the map for the rest of the run — the fold itself stays, because it names no item and a mod
         // may ship another banked one.
         let stranded = game.banked(&game.research_currency());
         if stranded > 0 {

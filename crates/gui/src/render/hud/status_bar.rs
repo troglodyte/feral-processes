@@ -1,51 +1,39 @@
 //! The status bar: one row across the top of every screen that draws the
 //! world behind it.
 //!
-//! Three zones. The **left** says who and where you are — identity, zone,
+//! Two zones. The **left** says who and where you are — identity, zone,
 //! position, tick — and then the base's grid, which is the one fact here
-//! that is not about the player's own body. It rides the left block rather
-//! than the centre **because the left block is measured first**: the centre
-//! is the elastic zone and drops piles from the end when the window is
-//! narrow, and a readout that vanishes exactly when the screen is crowded is
-//! not a readout. The stock strip loses a pile to make room; the grid never
-//! does. The **centre** is what the base is holding, which is the
-//! stock strip this bar absorbed rather than reimplemented: `stock::fits` is
-//! still the one answer to how many piles fit, and it is simply handed a
-//! narrower budget than the whole window. The **right** carries the attention
-//! badge — the first row of `Game::attention` and its keycap, or
+//! that is not about the player's own body. The **right** carries the
+//! attention badge — the first row of `Game::attention` and its keycap, or
 //! `ALL NOMINAL` when nothing holds. It is one of that call's three
 //! readouts, alongside the info column's tab markers and its collapsed
 //! bars, and it derives nothing of its own.
 //!
-//! The centre is the only elastic zone. The identity block is measured and
-//! subtracted first and the badge zone is reserved at a fixed fraction, so
-//! the badge appearing does not re-lay the bar out.
+//! What the base is holding used to be a centre zone here, one row of
+//! two-letter tags. It is `stock_block` now, a list over the map's top-left
+//! corner, because a tag the player has to learn is not a readout.
 //!
-//! The row has no wrap and no clip — `Painter` clips vertically and never
-//! horizontally — so what does not fit is **counted**, not drawn off the
-//! end. That is `stock::fits`' rule and the reason this module has a width
-//! census.
+//! The badge zone is reserved at a fixed fraction of the bar. The row has no wrap and no clip — `Painter`
+//! clips vertically and never horizontally — so what does not fit is
+//! **counted** or shed, not drawn off the end, and this module has a width
+//! census for it.
 
-use feral_processes_engine::{AttentionRow, StockRow};
+use feral_processes_engine::AttentionRow;
 
 use super::{palette, strip};
 use crate::paint::{Color, Painter, Rect, TextRun};
-use crate::render::stock;
 use crate::text::Metrics;
 
 /// Between one field of the identity block and the next.
 const SEP: &str = " · ";
 /// The share of the bar held back for the attention badge.
 const BADGE_FRAC: f32 = 0.22;
-/// Between the identity block and the first stock pile.
-const ZONE_GAP: &str = "   ";
 
 /// What the bar reads, gathered by the caller before the `Game` borrow.
 pub(in crate::render) struct StatusBarState<'a> {
     pub zone: u32,
     pub position: (i32, i32),
     pub tick: u64,
-    pub stock: &'a [StockRow],
     /// `Game::base_power`, as `(draw, supply)` — the base's grid, in the
     /// order the `B` roster's own header states it.
     ///
@@ -102,14 +90,6 @@ fn grid_color((draw, supply): (u32, u32)) -> Color {
     }
 }
 
-/// The plain text of the identity block — what gets measured.
-fn identity_text(state: &StatusBarState) -> String {
-    identity_runs(state)
-        .into_iter()
-        .map(|(t, _, _)| t)
-        .collect()
-}
-
 /// The badge, as coloured pieces: the leading condition upper-cased, its
 /// keycap, and a dim `+N` for the rest — or `ALL NOMINAL` when nothing
 /// holds.
@@ -143,13 +123,6 @@ fn badge_pieces(attention: &[AttentionRow]) -> Vec<strip::Piece> {
     pieces
 }
 
-/// How much room the stock piles have, once the identity block and the
-/// reserved badge zone have taken theirs.
-fn stock_avail(at: Rect, identity_w: f32, painter: &Painter, m: &Metrics) -> f32 {
-    let gap = painter.measure_ui_advance(ZONE_GAP, m.font_size);
-    (at.w - m.inset * 2.0 - identity_w - gap - at.w * BADGE_FRAC).max(0.0)
-}
-
 pub(in crate::render) fn draw_status_bar(
     at: Rect,
     state: &StatusBarState,
@@ -178,70 +151,11 @@ pub(in crate::render) fn draw_status_bar(
         .collect();
     painter.ui_runs(&runs, at.x + m.inset, baseline, m.font_size);
 
-    // Above the stock half's early return, for the identity block's reason
-    // one zone along: whether anything needs the player is not conditional
-    // on the base holding cargo.
     draw_badge(at, state.attention, baseline, painter, m);
-
-    // Drawn unconditionally, and before any early return the stock half
-    // might want: the identity block is not conditional on the base holding
-    // anything, and `draw_stock_strip` used to return early on an empty
-    // base.
-    let identity_w = painter.measure_ui_advance(identity_text(state), m.font_size);
-    let gap = painter.measure_ui_advance(ZONE_GAP, m.font_size);
-    let stock_x = at.x + m.inset + identity_w + gap;
-    let avail = stock_avail(at, identity_w, painter, m);
-
-    if state.stock.is_empty() {
-        painter.ui(
-            "base stock: none",
-            stock_x,
-            baseline,
-            m.font_size,
-            palette::FAINT,
-        );
-        return;
-    }
-
-    let pieces = stock::pieces(state.stock);
-    let shown = stock::fits(&pieces, avail, painter, m);
-    let mut stock_runs: Vec<TextRun> = Vec::new();
-    let pair_gap = "   ".to_string();
-    let tail;
-    for (i, (tag, qty)) in pieces.iter().take(shown).enumerate() {
-        if i > 0 {
-            stock_runs.push(TextRun {
-                text: &pair_gap,
-                bold: false,
-                color: palette::FAINT,
-            });
-        }
-        stock_runs.push(TextRun {
-            text: tag,
-            bold: false,
-            color: palette::FIELD_LABEL,
-        });
-        stock_runs.push(TextRun {
-            text: qty,
-            bold: false,
-            color: palette::BODY,
-        });
-    }
-    let dropped = pieces.len() - shown;
-    if dropped > 0 {
-        tail = format!("   +{dropped}");
-        stock_runs.push(TextRun {
-            text: &tail,
-            bold: false,
-            color: palette::FAINT,
-        });
-    }
-    painter.ui_runs(&stock_runs, stock_x, baseline, m.font_size);
 }
 
 /// Right-aligns the badge inside its reserved zone. What does not fit is
-/// dropped from the end through `strip::fitting`, never clipped — the row's
-/// rule, and `stock::fits`' before it.
+/// dropped from the end, never clipped — the row's rule.
 fn draw_badge(at: Rect, attention: &[AttentionRow], baseline: f32, painter: &Painter, m: &Metrics) {
     // Piece by piece rather than all or nothing, so a long condition sheds
     // its `+N` and then its keycap rather than vanishing entirely. Not
@@ -279,8 +193,15 @@ mod tests {
     use super::*;
     use crate::paint::{painted_text, with_painter};
     use crate::text::ui_metrics;
-    use feral_processes_engine::items::ItemId;
     use feral_processes_engine::{AttentionKind, AttentionRow};
+
+    /// The plain text of the identity block — what gets measured.
+    fn identity_text(state: &StatusBarState) -> String {
+        identity_runs(state)
+            .into_iter()
+            .map(|(t, _, _)| t)
+            .collect()
+    }
 
     fn nagging(kind: AttentionKind, text: &str, threat: bool) -> AttentionRow {
         AttentionRow {
@@ -291,37 +212,15 @@ mod tests {
         }
     }
 
-    fn stock_rows(piles: &[(String, u32)]) -> Vec<StockRow> {
-        piles
-            .iter()
-            .map(|(tag, qty)| StockRow {
-                item: ItemId::from(tag.as_str()),
-                tag: tag.clone(),
-                name: tag.clone(),
-                qty: *qty,
-            })
-            .collect()
-    }
-
-    /// Far more piles than the shipped set holds, each wide enough to be
-    /// awkward.
-    fn crowded() -> Vec<StockRow> {
-        let piles: Vec<(String, u32)> = (0..60)
-            .map(|i| (format!("W{i}"), 999_999 - i as u32))
-            .collect();
-        stock_rows(&piles)
-    }
-
     /// The identity block at its widest plausible values, so the census is
     /// not passing on a short one. The grid figure is part of that block and
     /// so is given wide numbers too — a two-digit-over-two-digit grid is the
     /// realistic case, and the census may not be measured on it.
-    fn wide_state(stock: &[StockRow]) -> StatusBarState<'_> {
+    fn wide_state() -> StatusBarState<'static> {
         StatusBarState {
             zone: 16,
             position: (-9999, -9999),
             tick: 9_999_999,
-            stock,
             power: (188, 188),
             attention: &[],
         }
@@ -333,7 +232,6 @@ mod tests {
             zone: 3,
             position: (0, 0),
             tick: 4210,
-            stock: &[],
             power,
             attention: &[],
         }
@@ -351,58 +249,20 @@ mod tests {
     }
 
     /// The one thing this row must never do. It is a single line with no
-    /// wrap and no clip, so a line wider than its rect is not cut off — it
-    /// is drawn past the edge and the piles at the end simply are not
-    /// there, silently.
+    /// wrap and no clip, so an identity block wider than the room the badge
+    /// leaves it is not cut off — it is drawn under the badge. Measured at
+    /// the smallest window the HUD is laid out for.
     #[test]
-    fn the_status_bar_never_draws_wider_than_its_rect() {
-        let m = ui_metrics(900.0);
-        let rows = crowded();
-        let state = wide_state(&rows);
+    fn the_identity_block_fits_beside_the_badge_zone() {
+        let m = ui_metrics(720.0);
+        let state = wide_state();
+        let at = Rect::new(0.0, 0.0, 1280.0, m.line_height + m.inset);
         with_painter(|p| {
-            let at = Rect::new(0.0, 0.0, p.screen_w(), m.line_height + m.inset);
-            let identity_w = p.measure_ui_advance(identity_text(&state), m.font_size);
-            let avail = stock_avail(at, identity_w, p, &m);
-            let pieces = stock::pieces(state.stock);
-            let shown = stock::fits(&pieces, avail, p, &m);
-            assert!(shown > 0, "something has to fit");
-            assert!(shown < pieces.len(), "the fixture must overflow the row");
-
-            let gap = p.measure_ui_advance(ZONE_GAP, m.font_size);
-            let drawn = p.measure_ui_advance(stock::line(&pieces, shown), m.font_size);
-            let used = m.inset + identity_w + gap + drawn;
+            let used = m.inset + p.measure_ui_advance(identity_text(&state), m.font_size);
             assert!(
                 used <= at.w - at.w * BADGE_FRAC,
-                "bar uses {used} of {} with the badge zone reserved",
+                "identity uses {used} of {} with the badge zone reserved",
                 at.w - at.w * BADGE_FRAC
-            );
-        });
-    }
-
-    /// The identity block has to actually take its space, and this has to
-    /// measure *that* term rather than any other.
-    ///
-    /// The obvious form — comparing against the whole window — passes on
-    /// the badge reservation alone, so it stays green with the identity
-    /// term deleted from `stock_avail` and is worth nothing. The baseline
-    /// is therefore a budget that has already given the badge zone up, so
-    /// the identity block is the only difference left between them.
-    #[test]
-    fn the_left_zone_survives_a_crowded_base() {
-        let m = ui_metrics(900.0);
-        let rows = crowded();
-        let state = wide_state(&rows);
-        with_painter(|p| {
-            let at = Rect::new(0.0, 0.0, p.screen_w(), m.line_height + m.inset);
-            let pieces = stock::pieces(state.stock);
-            let gap = p.measure_ui_advance(ZONE_GAP, m.font_size);
-            let without_identity = at.w - m.inset * 2.0 - gap - at.w * BADGE_FRAC;
-            let baseline = stock::fits(&pieces, without_identity, p, &m);
-            let identity_w = p.measure_ui_advance(identity_text(&state), m.font_size);
-            let in_bar = stock::fits(&pieces, stock_avail(at, identity_w, p, &m), p, &m);
-            assert!(
-                in_bar < baseline,
-                "identity block took no space: {in_bar} piles fit either way"
             );
         });
     }
@@ -453,13 +313,10 @@ mod tests {
         }
     }
 
-    /// Guards against an early return copied from `draw_stock_strip`, which
-    /// returns after writing its empty-base line and would take the whole
-    /// identity block with it.
     #[test]
-    fn an_empty_base_still_names_itself() {
+    fn the_bar_names_where_the_party_is() {
         let m = ui_metrics(900.0);
-        let state = wide_state(&[]);
+        let state = wide_state();
         let (_, shapes) = with_painter(|p| {
             let at = Rect::new(0.0, 0.0, p.screen_w(), m.line_height + m.inset);
             draw_status_bar(at, &state, p, &m);
@@ -470,8 +327,7 @@ mod tests {
         assert!(text.contains("16"), "zone number missing from {text:?}");
         assert!(text.contains("tick"), "tick missing from {text:?}");
         // Through the real draw path, not just `identity_runs`: the segment
-        // is only useful if it survives to the painter on the screen the
-        // stock strip has nothing to say on.
+        // is only useful if it survives to the painter.
         assert!(text.contains("[GRID]"), "grid missing from {text:?}");
         assert!(
             text.contains("188/188"),
@@ -548,7 +404,7 @@ mod tests {
     }
 
     /// The row has no wrap and no clip, so a badge wider than its zone is
-    /// drawn over the stock piles rather than cut off.
+    /// drawn over the identity block rather than cut off.
     #[test]
     fn the_badge_stays_inside_its_zone() {
         let m = ui_metrics(720.0);
@@ -561,10 +417,9 @@ mod tests {
                 )
             })
             .collect();
-        let stock = crowded();
         let state = StatusBarState {
             attention: &rows,
-            ..wide_state(&stock)
+            ..wide_state()
         };
         let at = Rect::new(0.0, 0.0, 1280.0, m.line_height + m.inset);
         let avail = at.w * BADGE_FRAC - m.inset;
@@ -588,37 +443,6 @@ mod tests {
                 p.measure_ui_advance(&drawn, m.font_size) <= avail,
                 "the badge drew {:.1}px into a {avail:.1}px zone: {drawn:?}",
                 p.measure_ui_advance(&drawn, m.font_size)
-            );
-        });
-    }
-
-    /// The claim the module doc has been making since phase 1 with nothing
-    /// checking it: the badge appearing does not re-lay the bar out.
-    #[test]
-    fn the_badge_does_not_move_the_stock_strip() {
-        let m = ui_metrics(900.0);
-        let stock = stock_rows(&[("CF".to_string(), 12)]);
-        let rows = [nagging(
-            AttentionKind::IdleStructures,
-            "4 nodes without a program",
-            false,
-        )];
-        let calm = wide_state(&stock);
-        let nagged = StatusBarState {
-            attention: &rows,
-            ..wide_state(&stock)
-        };
-        with_painter(|p| {
-            let at = Rect::new(0.0, 0.0, p.screen_w(), m.line_height + m.inset);
-            let identity_w = p.measure_ui_advance(identity_text(&calm), m.font_size);
-            assert_eq!(
-                stock_avail(at, identity_w, p, &m),
-                stock_avail(
-                    at,
-                    p.measure_ui_advance(identity_text(&nagged), m.font_size),
-                    p,
-                    &m
-                )
             );
         });
     }

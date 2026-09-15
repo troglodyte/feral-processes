@@ -71,7 +71,6 @@ mod settlement_market;
 pub(crate) mod sprite_forge;
 mod stack;
 mod stack_market;
-mod stock;
 mod structure_manifest;
 mod tactical;
 mod talents;
@@ -790,9 +789,8 @@ fn cost_display(game: &Game, cost: &[(ItemId, u32)], inventory: &[InventoryRow])
 /// a Depot and none in hand read `(0/18)` beside a structure the crew could
 /// have started on the moment it was filed.
 ///
-/// The base half is `Game::base_stock`, the same walk the stock strip across
-/// the top of this very screen draws, so the two figures a player can see at
-/// once cannot disagree.
+/// The base half is `Game::base_stock`, the same walk the stock block over
+/// the map lists, so the two figures cannot disagree.
 fn build_cost_display(
     game: &Game,
     cost: &[(ItemId, u32)],

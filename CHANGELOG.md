@@ -42,6 +42,16 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.184
+
+**Research nodes and routines now say in plain words what they do.** The
+research menu described its nodes in the setting's jargon — Capacitance was
+"Bank a whole reserve in one cell", Address Translation "Write to the
+substrate's own page tables" — and several routines read as flavour rather
+than an effect, like Clock Skew's "the nearest hostile pays the drift". Every
+research node and 25 routines were rewritten to say what you get: what a piece
+of gear is for, when a passive fires, how long a leak or a stall lasts.
+
 ## 0.13.183
 
 **Your Home no longer draws as a bare `H`: it wears the same portal art as

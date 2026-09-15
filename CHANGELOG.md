@@ -42,6 +42,17 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.187
+
+**On a battle map, a body that takes a hit flashes red and throws off sparks,
+and a body that is healed gets a green `+` that bounces over its head.** A
+landed blow used to show only as a number going down in the log and on the
+turn strip, so in a busy fight it was hard to see who had just been struck or
+patched up. A hit now plays the same red flash and debris a GC Entropy Sweep
+plays on a structure, on the tile of the body that was hit, and a heal shows a
+`+` that bounces twice and fades. A miss, or a heal on a body already at full
+Integrity, shows nothing.
+
 ## 0.13.186
 
 **When you aim an area routine on a battle map, a yellow outline shows every

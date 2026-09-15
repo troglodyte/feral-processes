@@ -42,6 +42,15 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.182
+
+**On a battle map you can tell which enemy is the silver or gold one.** A rare
+program wears a coloured bar along the top of its tile on the surface map, but
+the moment a fight went tactical that bar vanished, so a silver or gold spawn
+looked exactly like the ordinary ones beside it. The battle board now draws
+the same bar, and the difficulty earmark in the tile's corner drops below it
+the way it already does on the surface map.
+
 ## 0.13.181
 
 **A program mending beside a Repair Bay wears its green `+` above its head,

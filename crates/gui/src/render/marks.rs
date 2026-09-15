@@ -280,8 +280,8 @@ pub(super) fn staffed_mark_rect(px: f32, py: f32, tile_px: f32, lift: f32) -> Re
     )
 }
 
-/// The bouncing green `+` a program wears while a Repair Bay is mending it,
-/// or nothing at all for every other cell on the map.
+/// The green `+` a program wears while a Repair Bay is mending it, or
+/// nothing at all for every other cell on the map.
 ///
 /// **The gate lives in here rather than at the call site**, so a test can
 /// hold both halves: a body being mended draws the mark and everything else
@@ -290,37 +290,35 @@ pub(super) fn staffed_mark_rect(px: f32, py: f32, tile_px: f32, lift: f32) -> Re
 /// `Bays::serving` the heal runs through, so the mark cannot claim a
 /// recovery the heal is not performing.
 ///
-/// **`palette::HEALTHY`, and the colour moved with the mark.** On the Bay it
-/// was `THREAT`, which stretched that role's reservation — hostility and
-/// inbound harm — over a building doing the player a favour. On the body it
-/// is Integrity climbing, which is the bar fill's own green and the one
-/// thing this map ever paints in it.
+/// **`palette::HEALTHY`.** It was `THREAT` while the mark sat on the Bay —
+/// that role's reservation is hostility and inbound harm, and a red `+`
+/// over rising Integrity reads as the harm rather than the cure. On the
+/// body it is Integrity climbing, which is the bar fill's own green and the
+/// one thing this map ever paints in it.
 ///
-/// It rides `Fx::centred_bob`, the build caret's curve: the caret's argument
-/// applies unchanged here — the rest position is the middle of the tile with
-/// room on both sides, where `staffed_bob`'s upward-only form would sit the
-/// mark high in the cell for its whole cycle. Sharing the curve is also what
-/// keeps a base with a build site and a mending body in it reading as one map
-/// rather than two animations, and the phase key being the *entity* spreads
-/// two patients out of step.
+/// **Static, not bounced.** It shipped riding `Fx::centred_bob`, the build
+/// caret's curve, and the motion is reverted: a healing program is not a
+/// caret asking to be raised, and a Bay full of bodies bouncing in place
+/// read as more alarm than the building earns for doing the player a
+/// favour. Centred in the tile with no time source read at all — a
+/// reintroduced bounce would have to thread a new parameter back through
+/// every call site to draw one.
 pub(super) fn draw_recovery_mark(
     painter: &Painter,
     actor: Option<&EntityView>,
-    fx: &Fx,
     cell: Rect,
     glyph_px: u16,
     vig: f32,
 ) {
-    let Some(ev) = actor.filter(|ev| ev.recovering) else {
+    if !actor.is_some_and(|ev| ev.recovering) {
         return;
-    };
+    }
     let glyph = RECOVERY_MARK.to_string();
     let dims = painter.measure_map(&glyph, glyph_px);
-    let lift = fx.centred_bob(ev.entity);
     painter.map(
         &glyph,
         cell.x + (cell.w - dims.width) / 2.0,
-        cell.y + (cell.h + dims.height) / 2.0 - lift,
+        cell.y + (cell.h + dims.height) / 2.0,
         glyph_px,
         at_level(hud::palette::HEALTHY, vig),
     );

@@ -938,9 +938,9 @@ fn draw_surface_map(
                 );
             }
             // A body a Bay is mending, drawn on the same layer as the build
-            // caret and for the same reason: it is a mark that needs the
-            // middle of the tile and a vertical offset, and the glyph path
-            // above has neither to give it.
+            // caret. It no longer bounces — see `draw_recovery_mark` — but
+            // stays a separate call because the `ch` path above is
+            // conditional on `!drew_sprite` and this mark is not.
             //
             // **`actor` and not `structure`** — the mark says *this program
             // is being repaired*, so it rides the patient. Which is also the
@@ -963,7 +963,6 @@ fn draw_surface_map(
                 draw_recovery_mark(
                     painter,
                     actor,
-                    fx,
                     Rect::new(px, py, tile_px, tile_px),
                     glyph_px,
                     vig,
@@ -1352,15 +1351,11 @@ mod tests {
         })
     }
 
-    fn recovery_mark_shapes(
-        fx: &Fx,
-        ev: &EntityView,
-    ) -> Vec<bevy_egui::egui::epaint::ClippedShape> {
+    fn recovery_mark_shapes(ev: &EntityView) -> Vec<bevy_egui::egui::epaint::ClippedShape> {
         let (_, shapes) = with_painter(|p| {
             draw_recovery_mark(
                 p,
                 Some(ev),
-                fx,
                 Rect::new(0.0, 0.0, CELL, CELL),
                 CELL_GLYPH_PX,
                 1.0,
@@ -1369,45 +1364,54 @@ mod tests {
         shapes
     }
 
-    fn recovery_mark_at(fx: &Fx, ev: &EntityView) -> Option<f32> {
-        mark_y(&recovery_mark_shapes(fx, ev))
+    fn recovery_mark_at(ev: &EntityView) -> Option<f32> {
+        mark_y(&recovery_mark_shapes(ev))
     }
 
-    /// The whole of what this mark ships, in the three states that matter:
-    /// it is drawn on a program a Bay is mending, it is drawn on *nothing*
-    /// else, and it moves.
+    /// The whole of what this mark ships, in the two states that matter: it
+    /// is drawn on a program a Bay is mending, and it is drawn on *nothing*
+    /// else.
     ///
-    /// The motion is not decoration and is asserted rather than assumed —
-    /// `draw_recovery_mark` reads `Fx::centred_bob`, and a mark pinned to the
-    /// middle of the tile would paint an identical shape every frame and pass
-    /// a test that only looked for the glyph. Sampled across a spread of
-    /// frame times rather than at one hand-picked half period, so retuning
-    /// the bob's rate cannot turn this into a failure that means nothing.
+    /// **Pinned to the exact centre, not sampled across frames.** The mark
+    /// shipped riding `Fx::centred_bob` and that bounce was reverted —
+    /// `draw_recovery_mark` reads no time source at all now, so nothing
+    /// short of widening its signature again could move it off this one
+    /// value, which is exactly what a sampled-across-time assertion could no
+    /// longer tell apart from "never moved".
     #[test]
-    fn a_recovering_program_wears_a_bouncing_mark_and_nothing_else_does() {
-        let mut fx = Fx::new();
-        fx.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), false);
-
+    fn a_recovering_program_wears_a_static_mark_and_nothing_else_does() {
         assert!(
-            recovery_mark_at(&fx, &patient_view(true)).is_some(),
+            recovery_mark_at(&patient_view(true)).is_some(),
             "a program a Bay is mending must wear the mark"
         );
         assert!(
-            recovery_mark_at(&fx, &patient_view(false)).is_none(),
+            recovery_mark_at(&patient_view(false)).is_none(),
             "a program that is not recovering must draw nothing at all"
         );
 
         let busy = patient_view(true);
-        let ys: Vec<f32> = [0.0, 0.15, 0.3, 0.45, 0.6, 0.75]
-            .into_iter()
-            .map(|now| {
-                fx.begin_frame(now, Vec::new(), Vec::new(), Vec::new(), false);
-                recovery_mark_at(&fx, &busy).expect("the mark is drawn every frame")
-            })
-            .collect();
+        let y = recovery_mark_at(&busy).expect("the mark is drawn");
+
+        // The reference is an independent `painter.map` call at the tile's
+        // own centre with no lift subtracted — the same baseline-to-top
+        // conversion applies to both, so the two are comparable without
+        // this test needing to know `paint.rs`'s private `baseline_offset`.
+        // A reintroduced bounce would separate them.
+        let (_, ref_shapes) = with_painter(|p| {
+            let dims = p.measure_map("+", CELL_GLYPH_PX);
+            p.map(
+                "+",
+                (CELL - dims.width) / 2.0,
+                (CELL + dims.height) / 2.0,
+                CELL_GLYPH_PX,
+                hud::palette::HEALTHY,
+            );
+        });
+        let reference_y = mark_y(&ref_shapes).expect("reference mark drawn");
+
         assert!(
-            ys.iter().any(|y| (y - ys[0]).abs() > 0.5),
-            "the mark must bounce, not sit still: {ys:?}"
+            (y - reference_y).abs() < 0.01,
+            "the mark must sit at the tile's centre with no lift: got {y}, expected {reference_y}"
         );
     }
 
@@ -1420,10 +1424,7 @@ mod tests {
     /// be, so a revert to the old colour fails here rather than in play.
     #[test]
     fn the_recovery_mark_is_painted_in_the_healthy_role_and_not_the_threat_one() {
-        let mut fx = Fx::new();
-        fx.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), false);
-
-        let shapes = recovery_mark_shapes(&fx, &patient_view(true));
+        let shapes = recovery_mark_shapes(&patient_view(true));
         let painted: Vec<Color> = crate::paint::painted_map_glyphs(&shapes)
             .into_iter()
             .filter(|(text, _)| text == "+")

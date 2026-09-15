@@ -42,6 +42,16 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.192
+
+**The box in the map's top-left corner now shows the research project the
+base is working, above BASE STOCK — its data earned against what it needs,
+or the material it is stuck waiting for, or "none" when a Research Node
+stands with nothing selected.** Which project was running, and whether it
+had stalled, used to be visible only by opening the research screen from
+the base menu. A project that has all its data but cannot pay its material
+bill names that material instead of a figure that has stopped moving.
+
 ## 0.13.191
 
 **Researching Memory Mapping unlocks the Index Terminal: stand beside one

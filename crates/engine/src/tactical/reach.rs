@@ -325,11 +325,30 @@ pub fn recipients(
     let Some(from) = battle.cell_of(actor) else {
         return Vec::new();
     };
+    recipients_from(battle, actor, from, aim, shape)
+}
+
+/// `recipients` with `actor` supposed to be standing on `from` rather than
+/// where the board has it — who the routine would land on once the walk it
+/// has not yet taken is over.
+///
+/// A forecast asks from the destination, and the answer differs from
+/// `recipients`' twice over: a `Line` or `Cone` leaves from `from`, and the
+/// invoker is caught by its own blast where it *will* stand, not where it
+/// stands now.
+pub fn recipients_from(
+    battle: &TacticalBattle,
+    actor: Entity,
+    from: (i32, i32),
+    aim: (i32, i32),
+    shape: AbilityShape,
+) -> Vec<Entity> {
     let covered: HashSet<(i32, i32)> = shape_cells(&battle.board, from, aim, shape)
         .into_iter()
         .collect();
     battle
         .bodies()
+        .map(|(entity, cell)| (entity, if entity == actor { from } else { cell }))
         .filter(|(_, cell)| covered.contains(cell))
         .map(|(entity, _)| entity)
         .collect()

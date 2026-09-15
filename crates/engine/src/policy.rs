@@ -224,6 +224,21 @@ pub fn write_file(path: &Path, w: &PolicyWeights) -> std::io::Result<()> {
     std::fs::write(path, text)
 }
 
+/// The index `sample_scored` answers at a temperature at or below zero.
+///
+/// **Its own function so a forecast can ask it without an RNG to hand**, and
+/// the one `sample_scored` calls rather than a copy beside it: `max_by`
+/// keeps the *last* of equal scores, and a forecast that broke a tie the
+/// other way would name a cell the turn never walks to.
+pub fn argmax_scored(scores: &[f32]) -> usize {
+    scores
+        .iter()
+        .enumerate()
+        .max_by(|(_, a), (_, b)| a.total_cmp(b))
+        .map(|(i, _)| i)
+        .unwrap_or(0)
+}
+
 /// Picks an index into `scores`, softmax-weighted at `temperature`.
 ///
 /// The maximum score is subtracted before `exp`, so a weight the trainer
@@ -237,14 +252,7 @@ pub fn write_file(path: &Path, w: &PolicyWeights) -> std::io::Result<()> {
 pub fn sample_scored<R: rand::Rng>(scores: &[f32], temperature: f32, rng: &mut R) -> usize {
     use rand::RngExt;
     assert!(!scores.is_empty(), "sample_scored needs a candidate");
-    let argmax = || {
-        scores
-            .iter()
-            .enumerate()
-            .max_by(|(_, a), (_, b)| a.total_cmp(b))
-            .map(|(i, _)| i)
-            .unwrap_or(0)
-    };
+    let argmax = || argmax_scored(scores);
     if temperature <= 0.0 {
         return argmax();
     }

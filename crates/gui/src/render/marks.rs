@@ -63,6 +63,32 @@ const IDENTITY_MARK_INSET: f32 = 2.0;
 /// replaced, so the channel keeps the weight it had.
 pub(super) const CON_MARK: f32 = 0.34;
 
+/// A rare-spawn tier's bar along a tile's top edge — the surface map's own
+/// channel for "how rare", shared with the tactical board so a silver or
+/// gold body reads the same colour on both grids rather than being drawn
+/// from a second copy of this arithmetic (`render/base.rs` used to inline
+/// it, and `render/tactical.rs` drew nothing at all).
+///
+/// Paints nothing for `Rarity::Ordinary`, `rarity_color`'s own "no reading"
+/// case — the same channel-optional shape `draw_difficulty_mark` and
+/// `draw_recovery_mark` already follow.
+///
+/// `vig` multiplies the way every other mark's does; the tactical board has
+/// no vignette of its own, so it always passes `1.0`.
+pub(super) fn draw_rarity_bar(
+    painter: &Painter,
+    rarity: Rarity,
+    px: f32,
+    py: f32,
+    tile_px: f32,
+    vig: f32,
+) {
+    let Some(bar) = rarity_color(rarity) else {
+        return;
+    };
+    painter.rect(px, py, tile_px - 1.0, RARITY_BAR_PX, at_level(bar, vig));
+}
+
 /// Where the nemesis mark sits on a tile — the top-right corner, dropped
 /// below `RARITY_BAR_PX` so it never overlaps the bar running the width of
 /// the top edge, and inset from both remaining edges for the same reason

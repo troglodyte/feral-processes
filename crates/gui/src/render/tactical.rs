@@ -7,7 +7,8 @@
 //! loop, because a battle map has no biomes, no structures, no build sites
 //! and no haul marks. The rules the two genuinely share — `ConRead::of` for
 //! the con read, `glyph_color` for a body's hue, `Painter::sprite` for its
-//! art — are called here rather than restated.
+//! art, `marks::draw_rarity_bar` for a rare-spawn tier's bar — are called
+//! here rather than restated.
 //!
 //! No vignette. The surface map dims with the player's Power because the
 //! world is seen through a failing signal; a battle map is a discrete arena
@@ -17,9 +18,11 @@
 use feral_processes_engine::tactical::map::BattleCell;
 use feral_processes_engine::tactical::view::{TacticalBody, TacticalView};
 
+use super::RARITY_BAR_PX;
 use super::base::{ConRead, tile_origin_px};
 use super::hud::layout::strip_inset;
 use super::hud::palette;
+use super::marks::draw_rarity_bar;
 use super::popup::{PopupSize, draw_popup, item_row, spent_item_row, text_row};
 use crate::fx::Fx;
 use crate::paint::{Color, Painter, Rect};
@@ -62,11 +65,12 @@ const CLOAKED_ALPHA: f32 = 0.35;
 /// edge at rest.
 ///
 /// **It hangs *above* the tile rather than sitting in it**, which is what
-/// keeps it out of every channel a tile already spends: the con earmark owns
-/// the top-left corner, the HP bar the bottom edge, and the middle is the
-/// glyph or the sprite this arrow exists to point at. Drawn inside the cell
-/// it would have to be small enough to dodge all three, and an arrow that
-/// small is not the thing a player finds by glancing.
+/// keeps it out of every channel a tile already spends: the rarity bar owns
+/// the top edge, the con earmark the top-left corner below it, the HP bar
+/// the bottom edge, and the middle is the glyph or the sprite this arrow
+/// exists to point at. Drawn inside the cell it would have to be small
+/// enough to dodge all four, and an arrow that small is not the thing a
+/// player finds by glancing.
 ///
 /// The gap is what the bob swings out of: the arrow's rest position is its
 /// *lowest*, so a lift can never carry it down onto the body.
@@ -379,10 +383,15 @@ fn draw_body(
         let ty = py + (tile_px + dims.height) / 2.0;
         painter.map(&glyph, tx, ty, glyph_px, con.glyph_ink(ink, 1.0));
     }
+    // The rare-spawn tier's own bar — see `marks::draw_rarity_bar`. Drawn
+    // before the earmark below, which drops clear of it exactly as the
+    // surface map's does.
+    draw_rarity_bar(painter, body.rarity, px, py, tile_px, 1.0);
     if let Some(rung) = con.earmark() {
         let c = super::glyph_color(rung);
         let leg = tile_px * 0.28;
-        painter.poly(&[(px, py), (px + leg, py), (px, py + leg)], c);
+        let y = py + RARITY_BAR_PX;
+        painter.poly(&[(px, y), (px + leg, y), (px, y + leg)], c);
     }
     if let Some(fraction) = body.hp_fraction {
         let h = (tile_px * 0.09).max(2.0);
@@ -671,6 +680,43 @@ mod tests {
         );
     }
 
+    /// A rare-spawn tier draws a bar along the tile's top edge — through
+    /// `marks::draw_rarity_bar`, the surface map's own function, so a silver
+    /// or gold body reads the same colour on both grids rather than being
+    /// redrawn from a second copy of `rarity_color`.
+    #[test]
+    fn a_rare_bodys_tile_wears_the_rarity_bar() {
+        use feral_processes_engine::components::Rarity;
+
+        let mut game = fighting();
+        let view = game.tactical_view().expect("the fight is open");
+        let subject = view.bodies[0].entity;
+        let gold = crate::render::rarity_color(Rarity::Gold).expect("gold has a colour");
+
+        let bar_count = |rarity: Rarity| {
+            let mut view = view.clone();
+            for body in &mut view.bodies {
+                if body.entity == subject {
+                    body.rarity = rarity;
+                }
+            }
+            let mut fx = Fx::new();
+            let (_, shapes) =
+                with_painter(|p| draw_tactical_map(&view, None, &[], &mut fx, p, pane(), 32.0, 24));
+            painted_rect_fill_count(&shapes, gold)
+        };
+
+        assert_eq!(
+            bar_count(Rarity::Ordinary),
+            0,
+            "an ordinary body must draw no rarity bar"
+        );
+        assert!(
+            bar_count(Rarity::Gold) > bar_count(Rarity::Ordinary),
+            "a gold body's tile drew no rarity bar — the player can't tell it apart on the board"
+        );
+    }
+
     /// The cursor is drawn last, so it is never under a body it points at.
     #[test]
     fn the_cursor_is_drawn_over_the_bodies() {
@@ -716,9 +762,10 @@ mod tests {
     /// the top of its bounce alike.
     ///
     /// **Geometry and not a screenshot**: what this is really asserting is
-    /// that the arrow spends none of the three channels a tile already has
-    /// — the top-left earmark, the bottom HP bar, and the glyph in the
-    /// middle — and the whole of that is the shape sitting above `py`.
+    /// that the arrow spends none of the four channels a tile already has
+    /// — the top-edge rarity bar, the top-left earmark, the bottom HP bar,
+    /// and the glyph in the middle — and the whole of that is the shape
+    /// sitting above `py`.
     #[test]
     fn the_turn_arrow_hangs_clear_of_the_body_it_points_at() {
         let tile = 32.0;

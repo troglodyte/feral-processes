@@ -42,6 +42,17 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.188
+
+**What the base is holding is now a list down the top-left corner of the map,
+with each item's full name and amount.** It used to be a single row of
+two-letter tags across the status bar, like `[CG] 12`, which you had to learn
+before you could read it. The list uses small type, cuts long names short with
+`…`, and counts anything past half the map's height as `+N more`. It shows on
+the surface and in base space. In the Stack it is hidden, because the frame
+map sits in that corner, and it is hidden on a battle map too. An open menu
+now covers it, where the old status-bar row stayed visible.
+
 ## 0.13.187
 
 **On a battle map, a body that takes a hit flashes red and throws off sparks,

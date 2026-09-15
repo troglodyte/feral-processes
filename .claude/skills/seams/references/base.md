@@ -595,16 +595,22 @@
   depot buffers only. **`queue_work_order` takes the whole order**, built by
   `WorkOrder::batch` or `WorkOrder::level` — a batch and a level are
   different errands, not one errand with a flag.
-- **A work order's band is an insert position, not a second sort.**
-  `queue_work_order` inserts after the last order of equal-or-higher
-  `OrderPriority` and nothing reads the field again. A sort at scheduling
-  time makes Vec order and effective order diverge, and `cancel_work_order`
-  takes a **raw Vec index** while the screen indexes straight into
-  `work_order_report`. **After** the last equal order, not before the first,
-  or ties stop breaking by insertion order. `OrderPriority` is not `Ord` on
-  purpose (`High < Normal` reads backwards); a private `rank()` does the
-  comparing. `[P]` sets it at filing and raises first; there is no reorder
-  verb, and refiling restores the band.
+- **A work order's priority is its position in the queue, and
+  `Game::move_work_order` is the one way to change it.** There is no band
+  and no sort at scheduling time — the `OrderPriority` bands that preceded
+  this were retired for exactly that reason: a label decided once at filing
+  went stale the moment anything else moved, and a sort would make Vec order
+  and effective order diverge while `cancel_work_order`, `move_work_order`
+  and the screen all take a **raw Vec index** into `work_order_report`.
+  `queue_work_order` appends a player's order and inserts a research
+  project's **after the leading run of `for_research` orders**, not at 0, or
+  a bill files upside down; that run is the one project's alone because
+  `select_research` refuses while a project is active and abandoning
+  withdraws its lines. A move is a neighbour swap that returns the new
+  index so the screen's highlight follows (the party line's `<`/`>` rule),
+  and it touches nothing else — the stall latch rides inside the order. An
+  old save's `priority:` field is ignored, not migrated: nothing carries
+  `deny_unknown_fields`.
 - **`schedule_base_labour` decides the whole assignment by priority and then
   diffs it.** Filling greedily around existing postings leaves a body on a
   standing job while an order goes unworked. The diff is the anti-thrash rule.

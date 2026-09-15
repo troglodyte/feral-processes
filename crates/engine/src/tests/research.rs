@@ -869,10 +869,12 @@ fn building_the_missing_machine_makes_the_same_selection_succeed() {
         .expect("a Research Node is all that was missing");
 }
 
-/// Selecting files one High-band order per material line, marked as the
-/// project's own — the provenance that lets them be withdrawn again.
+/// Selecting files one order per material line, marked as the project's
+/// own — the provenance that lets them be withdrawn again — and **on top of
+/// the queue**, ahead of anything the player had already filed, in the
+/// bill's own order.
 #[test]
-fn selecting_files_one_high_order_per_material_line() {
+fn selecting_files_one_order_per_material_line_at_the_top() {
     let mut game = Game::new(731, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     base_with_a_research_node(&mut game);
     let bill = game
@@ -883,20 +885,25 @@ fn selecting_files_one_high_order_per_material_line() {
         .materials
         .clone();
     assert!(!bill.is_empty(), "the fixture node must author a bill");
+    let (first_item, _) = &bill[0];
+    game.queue_work_order(WorkOrder::batch(first_item.clone(), 1))
+        .unwrap();
 
     game.select_research("automation").unwrap();
 
-    let filed: Vec<(ItemId, u32, OrderPriority, bool)> = game
+    let filed: Vec<(ItemId, u32, bool)> = game
         .work_orders()
         .iter()
-        .map(|o| (o.item.clone(), o.qty, o.priority, o.for_research))
+        .map(|o| (o.item.clone(), o.qty, o.for_research))
         .collect();
+    let mut expected: Vec<(ItemId, u32, bool)> = bill
+        .iter()
+        .map(|(item, need)| (item.clone(), *need, true))
+        .collect();
+    expected.push((first_item.clone(), 1, false));
     assert_eq!(
-        filed,
-        bill.iter()
-            .map(|(item, need)| (item.clone(), *need, OrderPriority::High, true))
-            .collect::<Vec<_>>(),
-        "one High order per line, every one of them the project's"
+        filed, expected,
+        "the project's lines lead, in bill order, above the player's own"
     );
 }
 

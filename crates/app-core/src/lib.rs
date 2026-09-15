@@ -88,10 +88,10 @@ use feral_processes_engine::{
     AchievementRow, BattleView, BrokerReach, CaravanReach, CharacterChoice, ContractRefusal,
     ContractRow, CreationCatalogue, DepotFilterView, DifficultyMode, DispatchReach, Entity,
     EntityView, FieldRoutinePick, FieldRoutineTarget, FieldRoutineTargetView, Game,
-    HandCraftProgress, LogEntry, LogLine, MESSAGE_LOG_CAP, MessageSource, OrderPriority,
-    ProgramSaleOption, RigToolView, RouteDestination, RouteRefusal, RouteReport, SlotShift,
-    SortieRefusal, SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket,
-    TransferCarrier, TransferRow, WorkOrder, WorkOrderReport, WorkProfile, condense,
+    HandCraftProgress, LogEntry, LogLine, MESSAGE_LOG_CAP, MessageSource, ProgramSaleOption,
+    RigToolView, RouteDestination, RouteRefusal, RouteReport, SlotShift, SortieRefusal,
+    SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket, TransferCarrier, TransferRow,
+    WorkOrder, WorkOrderReport, WorkProfile, condense,
 };
 
 /// Radius (in tiles) scanned for the build/work menus, independent of the
@@ -2593,10 +2593,6 @@ pub struct App {
     /// outlived its page would turn the next batch into a standing order on
     /// a screen that had gone back to saying nothing about it.
     pub standing_order: bool,
-    /// Which band the pending order files in — see `OrderPriority`. Cleared
-    /// beside `standing_order`, or a High left set would jump the queue with
-    /// an order nobody asked to prioritise.
-    pub order_priority: OrderPriority,
     /// The trading post picked in `Mode::Trade`, awaiting a line-item pick
     /// from `Mode::TradeAction`.
     pub pending_trade_structure: Option<Entity>,

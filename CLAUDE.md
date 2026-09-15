@@ -383,9 +383,9 @@ relying on one, and correct all three places if it has moved.
   is no sort and no score.
 - **A satisfied standing order is skipped, not removed** — `index += 1`, the
   branch a stalled order already takes.
-- **A work order's band is an insert position, not a second sort.**
-  `queue_work_order` inserts after the last order of equal-or-higher
-  `OrderPriority` and nothing reads the field again.
+- **A work order's priority is its position in the queue, and
+  `Game::move_work_order` is the one way to change it** — `queue_work_order`
+  appends a player's order and files a research project's on top.
 - **`schedule_base_labour` decides the whole assignment by priority and then
   diffs it.** Filling greedily around existing postings leaves a body on a
   standing job while an order goes unworked.

@@ -2197,7 +2197,7 @@ fn an_order_saved_before_standing_orders_loads_as_one_shot() {
 }
 
 // ---------------------------------------------------------------------
-// Work order queue, phase 3: priority bands
+// Work order queue, phase 3: the list is the priority
 // ---------------------------------------------------------------------
 
 /// What the queue is holding, in the order the scheduler will walk it.
@@ -2208,39 +2208,22 @@ fn queued_items(game: &Game) -> Vec<String> {
         .collect()
 }
 
-/// Priority is an **insert position**, not a second sort — so a High order
-/// is above a Normal one in the Vec itself, which is the only ordering
-/// `settle_orders`, `cancel_work_order` and the screen all read.
-#[test]
-fn a_high_order_files_above_a_normal_one() {
-    let mut game = Game::new(79, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    stand_in_base(&mut game);
-    lay_disk_line(&mut game);
-    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 5))
-        .unwrap();
-    game.queue_work_order(
-        WorkOrder::batch(ItemId::from("routine_disk"), 3).with_priority(OrderPriority::High),
-    )
-    .unwrap();
-
-    assert_eq!(
-        queued_items(&game),
-        vec!["routine_disk".to_string(), ids::CORE_FRAGMENT.to_string()],
-        "the High order jumps the Normal one already standing"
-    );
-}
-
-/// Ties break by insertion order, which is what inserting *after* the last
-/// order of equal priority buys rather than before the first.
-#[test]
-fn two_orders_of_one_band_keep_their_insertion_order() {
-    let mut game = Game::new(80, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    stand_in_base(&mut game);
-    lay_disk_line(&mut game);
+/// Three orders on the fixture's disk line, filed in this order.
+fn three_orders(game: &mut Game) {
+    stand_in_base(game);
+    lay_disk_line(game);
     for item in [ids::CORE_FRAGMENT, "blank_substrate", "routine_disk"] {
         game.queue_work_order(WorkOrder::batch(ItemId::from(item), 3))
             .unwrap();
     }
+}
+
+/// A new order goes to the bottom: the top of the list is what the base
+/// works first, and filing something is not a claim that it matters most.
+#[test]
+fn orders_queue_in_the_order_they_were_filed() {
+    let mut game = Game::new(80, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    three_orders(&mut game);
 
     assert_eq!(
         queued_items(&game),
@@ -2249,95 +2232,95 @@ fn two_orders_of_one_band_keep_their_insertion_order() {
             "blank_substrate".to_string(),
             "routine_disk".to_string()
         ],
-        "one band is still a queue"
+        "each new order lands at the bottom"
     );
 }
 
-/// The other end of the same rule.
+/// Moving an order swaps it with its neighbour and answers where it now
+/// sits, so the screen's highlight can follow it.
 #[test]
-fn a_low_order_files_below_everything() {
+fn moving_an_order_swaps_it_with_its_neighbour() {
     let mut game = Game::new(81, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    stand_in_base(&mut game);
-    lay_disk_line(&mut game);
-    game.queue_work_order(
-        WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 5).with_priority(OrderPriority::Low),
-    )
-    .unwrap();
-    game.queue_work_order(WorkOrder::batch(ItemId::from("routine_disk"), 3))
-        .unwrap();
+    three_orders(&mut game);
 
+    assert_eq!(game.move_work_order(2, SlotShift::Forward), Ok(1));
     assert_eq!(
         queued_items(&game),
-        vec!["routine_disk".to_string(), ids::CORE_FRAGMENT.to_string()],
-        "a Normal order filed later still outranks a Low one filed first"
+        vec![
+            ids::CORE_FRAGMENT.to_string(),
+            "routine_disk".to_string(),
+            "blank_substrate".to_string()
+        ],
+        "moved up one place"
+    );
+
+    assert_eq!(game.move_work_order(0, SlotShift::Back), Ok(1));
+    assert_eq!(
+        queued_items(&game),
+        vec![
+            "routine_disk".to_string(),
+            ids::CORE_FRAGMENT.to_string(),
+            "blank_substrate".to_string()
+        ],
+        "and down one place"
     );
 }
 
-/// `cancel_work_order` takes a raw Vec index and the screen indexes
-/// straight into `work_order_report`, so the two must keep naming the same
-/// row after a band has inserted one mid-queue. This is the whole reason
-/// the band is an insert position rather than a sort at scheduling time.
+/// Off either end, or naming no order at all, is refused and moves nothing.
 #[test]
-fn cancelling_still_drops_the_row_the_screen_names() {
+fn an_order_cannot_move_past_either_end() {
     let mut game = Game::new(82, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    stand_in_base(&mut game);
-    lay_disk_line(&mut game);
-    game.queue_work_order(WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 5))
-        .unwrap();
-    game.queue_work_order(WorkOrder::batch(ItemId::from("blank_substrate"), 3))
-        .unwrap();
-    game.queue_work_order(
-        WorkOrder::batch(ItemId::from("routine_disk"), 3).with_priority(OrderPriority::High),
-    )
-    .unwrap();
+    three_orders(&mut game);
+    let before = queued_items(&game);
+
+    assert!(game.move_work_order(0, SlotShift::Forward).is_err());
+    assert!(game.move_work_order(2, SlotShift::Back).is_err());
+    assert!(game.move_work_order(3, SlotShift::Forward).is_err());
+    assert_eq!(queued_items(&game), before, "a refused move moves nothing");
+}
+
+/// The order that moved up is the one the scheduler reaches first: two
+/// orders on one line want the same machine, and `settle_orders` keeps the
+/// first occurrence.
+#[test]
+fn the_order_moved_to_the_top_is_the_one_the_report_leads_with() {
+    let mut game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    three_orders(&mut game);
+    game.move_work_order(2, SlotShift::Forward).unwrap();
+    game.move_work_order(1, SlotShift::Forward).unwrap();
 
     let report = game.work_order_report();
-    let second = report[1].item.clone();
-    game.cancel_work_order(1).unwrap();
-
+    assert_eq!(report[0].item, ItemId::from("routine_disk"));
+    game.cancel_work_order(0).unwrap();
     assert!(
-        !game.work_orders().iter().any(|o| o.item == second),
-        "the index the screen showed named the row it dropped"
-    );
-    assert_eq!(
-        queued_items(&game),
-        vec!["routine_disk".to_string(), "blank_substrate".to_string()],
-        "and nothing else moved"
+        !game
+            .work_orders()
+            .iter()
+            .any(|o| o.item == ItemId::from("routine_disk")),
+        "the index the screen showed still names the row it drops"
     );
 }
 
-/// A save written before the field existed loads every order as Normal.
-/// Stripped from the file rather than round-tripped, for the reason the
-/// standing flag's twin test gives.
+/// A save written while orders still carried a band loads: the field is
+/// ignored and the queue keeps the order it was written in.
 #[test]
-fn an_order_saved_before_priority_loads_as_normal() {
-    let mut game = Game::new(83, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    stand_in_base(&mut game);
-    lay_disk_line(&mut game);
-    game.queue_work_order(
-        WorkOrder::batch(ItemId::from(ids::CORE_FRAGMENT), 5).with_priority(OrderPriority::High),
-    )
-    .unwrap();
+fn an_order_saved_with_a_priority_band_still_loads() {
+    let mut game = Game::new(84, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    three_orders(&mut game);
 
-    let path = save_path("priority_default");
+    let path = save_path("priority_retired");
     game.save(&path).unwrap();
     let written = std::fs::read_to_string(&path).unwrap();
-    let older = written.replace("priority: High,", "");
+    let older = written.replace("standing: false,", "standing: false, priority: High,");
     assert_ne!(
         older, written,
-        "the field has to be in the file for removing it to mean anything"
+        "the band has to be in the file for ignoring it to mean anything"
     );
     std::fs::write(&path, &older).unwrap();
     let loaded = Game::load(&path, &test_assets_dir()).unwrap();
     let _ = std::fs::remove_file(&path);
 
-    let orders = loaded.work_orders();
-    assert_eq!(orders.len(), 1, "the order itself still loads");
-    assert_eq!(
-        orders[0].priority,
-        OrderPriority::Normal,
-        "an order filed before bands existed is an ordinary one"
-    );
+    assert_eq!(queued_items(&loaded), queued_items(&game));
 }
 
 // ---------------------------------------------------------------------

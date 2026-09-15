@@ -80,7 +80,7 @@ use components::{
     TownPatrol, WanderAi, ZonePortal,
 };
 pub use game::base::transfer::TransferBasket;
-pub use game::base::work_orders::{OrderPriority, WorkOrder};
+pub use game::base::work_orders::WorkOrder;
 pub use game::caravan::CaravanReach;
 /// The depth-rule derivation itself, re-exported so app-core's build-program
 /// picker can filter on the same tier the engine will demand at commit —

@@ -1813,8 +1813,9 @@ fn scatter(game: &mut Game, body: Entity, rng: &mut rand::rngs::StdRng) {
 /// `BoltCue`'s `to`.
 ///
 /// Mutation check: making `tactical_forecast` pick its destination with
-/// `sample_scored` at 0.5 over a clone of `GameRng` instead of
-/// `argmax_scored` makes the destinations disagree. Verified and restored —
+/// `sample_scored` at 0.5 over a local `StdRng::seed_from_u64(0)` (`StdRng`
+/// is not `Clone`, so not a copy of `GameRng`) instead of `argmax_scored`
+/// makes the destinations disagree. Verified and restored —
 /// see the commit body.
 #[test]
 fn a_cold_profiled_hostile_does_what_its_forecast_said() {
@@ -1996,4 +1997,91 @@ fn a_hostile_mid_turn_has_no_forecast() {
         "fixture: the hostile is still mid-turn"
     );
     assert_eq!(game.tactical_forecast(wild), None);
+}
+
+/// A hostile carrying Cold, Profiled and Hallucinating, with `decoys`
+/// placed on an open board and the turn handed to it.
+fn cold_profiled_hallucinating(seed: u32, at: (i32, i32), decoys: &[(i32, i32)]) -> (Game, Entity) {
+    let mut game = game(seed);
+    let pack = tactical_fight(&mut game, 1, 1_000);
+    let hostile = pack[0];
+    open_ground(&mut game, &pack, &[at]);
+    hallucinate(&mut game, hostile, decoys);
+    let mut tampered = game
+        .world
+        .get_mut::<Tampered>(hostile)
+        .expect("hallucinating");
+    tampered.apply(TamperKind::Temperature(0.0), 3, false);
+    tampered.apply(TamperKind::Profiled, 3, false);
+    assert!(wait_for_turn(&mut game, hostile));
+    game.take_bolts();
+    (game, hostile)
+}
+
+/// **(M)** A hallucinating hostile's target is the decoy nearest where its
+/// walk *ends*, and the forecast has to ask from there too. From (0, 0) the
+/// nearer decoy is (3, 0), so that is what the walk closes on; the walk ends
+/// at (5, 2), where (6, 3) is nearer, and that is what the turn strikes.
+///
+/// Mutation check: handing `chosen_target` the sides read from the start
+/// cell rather than `tactical_sides_from(destination)` makes the forecast
+/// name (3, 0). Verified and restored — see the commit body.
+#[test]
+fn a_hallucinating_forecast_names_the_decoy_nearest_where_the_walk_ends() {
+    let near_start = (3, 0);
+    let near_end = (6, 3);
+    let (mut game, hostile) = cold_profiled_hallucinating(9970, (0, 0), &[near_start, near_end]);
+
+    let forecast = game
+        .tactical_forecast(hostile)
+        .expect("a profiled hostile has a forecast");
+    let destination = *forecast
+        .walk
+        .last()
+        .expect("fixture: the hostile must walk");
+    assert!(
+        reach::distance((0, 0), near_start) < reach::distance((0, 0), near_end)
+            && reach::distance(destination, near_end) < reach::distance(destination, near_start),
+        "fixture: the nearest decoy must change along the walk to {destination:?}"
+    );
+    assert_eq!(forecast.target, Some(near_end));
+
+    assert!(game.tactical_ai_turn(), "the hostile's turn was not run");
+    assert_eq!(
+        game.take_bolts().first().map(|b| b.to),
+        forecast.target,
+        "the turn must strike the decoy the forecast named"
+    );
+    assert_eq!(decoy_cells(&game), vec![near_start]);
+}
+
+/// A decoy the hostile cannot reach this turn is nothing to act on, so the
+/// forecast names no target — rather than one the strike door then refuses.
+///
+/// Mutation check: dropping the `swing_reaches` gate from `best_swing`'s
+/// decoy arm makes the forecast name (8, 8). Verified and restored.
+#[test]
+fn a_decoy_out_of_reach_is_no_forecast_target() {
+    let far = (8, 8);
+    let (mut game, hostile) = cold_profiled_hallucinating(9971, (0, 0), &[far]);
+    {
+        // Walled in, so the walk cannot close on anything.
+        let board = &mut game.world.resource_mut::<TacticalBattle>().board;
+        for (x, y) in [(1, 0), (0, 1), (1, 1)] {
+            board.put(x, y, BattleCell::Blocked);
+        }
+    }
+
+    let forecast = game
+        .tactical_forecast(hostile)
+        .expect("a profiled hostile has a forecast");
+    assert!(forecast.walk.is_empty(), "{:?}", forecast.walk);
+    assert_eq!(forecast.target, None);
+
+    assert!(game.tactical_ai_turn(), "the hostile's turn was not run");
+    assert!(
+        game.take_bolts().is_empty(),
+        "nothing was in reach to strike"
+    );
+    assert_eq!(decoy_cells(&game), vec![far]);
 }

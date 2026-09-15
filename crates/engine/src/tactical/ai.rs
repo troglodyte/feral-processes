@@ -366,8 +366,16 @@ impl Game {
         // From where the walk ends rather than from the chosen cell: an empty
         // path is a body that acts from where it stands, whatever it picked.
         let destination = walk.last().copied().unwrap_or(from);
+        // The sides are asked again from the destination, as the turn asks
+        // them again on the beat that acts: a hallucinating body's target is
+        // the decoy nearest where it *stands*, and that changes along a walk.
         let target = self
-            .chosen_target(body, destination, &intent, &sides)
+            .chosen_target(
+                body,
+                destination,
+                &intent,
+                &self.tactical_sides_from(body, Some(destination)),
+            )
             .and_then(|target| match target {
                 TurnTarget::Body(entity) => battle.cell_of(entity),
                 TurnTarget::Decoy(cell) | TurnTarget::Aim(cell) => Some(cell),
@@ -658,6 +666,14 @@ impl Game {
     /// stopped closing, stopped swinging and stood still until the caps
     /// expired.
     fn tactical_sides(&self, actor: Entity) -> Sides {
+        let from = self.world.resource::<TacticalBattle>().cell_of(actor);
+        self.tactical_sides_from(actor, from)
+    }
+
+    /// `tactical_sides` with `actor` supposed to be standing on `from` — the
+    /// only half that reads where it stands is the nearest decoy, and a body
+    /// with no cell sees none.
+    fn tactical_sides_from(&self, actor: Entity, from: Option<(i32, i32)>) -> Sides {
         let battle = self.world.resource::<TacticalBattle>();
         let acting_side = self.acts_for_hostiles(actor);
         let mut sides = Sides::default();
@@ -686,7 +702,7 @@ impl Game {
         // With no decoy it sees, `settle_decoys` has already taken the entry,
         // so this falls through to the real sides — never an empty list,
         // which `run_tactical_beat` reads as nothing to fight.
-        if let Some(decoy) = self.nearest_seen_decoy(actor) {
+        if let Some(decoy) = from.and_then(|from| self.nearest_seen_decoy(actor, from)) {
             sides.targets = vec![decoy];
         }
         sides
@@ -975,22 +991,25 @@ impl Game {
         range: u32,
         targets: &[(i32, i32)],
     ) -> Option<TurnTarget> {
+        let battle = self.world.resource::<TacticalBattle>();
         // A target this body sees a decoy on is struck through the door that
-        // takes a cell — for a hallucinating body that is its only target.
+        // takes a cell — for a hallucinating body that is its only target —
+        // and only when that door's own reach would take the strike, so a
+        // decoy out of reach is nothing to act on rather than a named target
+        // the door then refuses.
         if let Some(&cell) = targets
             .iter()
             .find(|&&cell| self.sees_decoy_at(actor, cell))
         {
-            return Some(TurnTarget::Decoy(cell));
+            return reach::swing_reaches(&battle.board, from, cell, self.swing_range(actor))
+                .then_some(TurnTarget::Decoy(cell));
         }
-        let battle = self.world.resource::<TacticalBattle>();
         let mut reachable: Vec<(i32, i32, Entity)> = targets
             .iter()
-            .filter(|&&cell| distance(from, cell) <= range)
-            // Asked here as well as at the gate, so a body does not spend its
-            // turn swinging at something it cannot see and calling that its
-            // action.
-            .filter(|&&cell| line_of_sight(&battle.board, from, cell))
+            // Sight is asked here as well as at the gate, so a body does not
+            // spend its turn swinging at something it cannot see and calling
+            // that its action.
+            .filter(|&&cell| reach::swing_reaches(&battle.board, from, cell, range))
             .filter_map(|&cell| battle.occupant(cell).map(|e| (cell.1, cell.0, e)))
             .collect();
         // By Integrity, then by the board's reading order, so a tie is broken

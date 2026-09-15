@@ -193,12 +193,16 @@ impl Game {
         self.is_hallucinating(body) && decoy.opposes(self.world.get::<Hostile>(body).is_some())
     }
 
-    /// The decoy `body` sees nearest it, by the distance a swing is measured
-    /// in (`reach::distance`, Chebyshev), ties to reading order — the cell a
-    /// hallucinating body's `tactical_sides` makes its only target.
-    pub(crate) fn nearest_seen_decoy(&self, body: Entity) -> Option<(i32, i32)> {
+    /// The decoy `body` sees nearest `from`, by the distance a swing is
+    /// measured in (`reach::distance`, Chebyshev), ties to reading order — the
+    /// cell a hallucinating body's `tactical_sides` makes its only target.
+    ///
+    /// **Measured from a cell rather than from the body's own**, because the
+    /// nearest decoy changes along a walk: the turn asks from where the body
+    /// stands on each beat, and a forecast has to ask from where the walk
+    /// will end.
+    pub(crate) fn nearest_seen_decoy(&self, body: Entity, from: (i32, i32)) -> Option<(i32, i32)> {
         let battle = self.world.get_resource::<TacticalBattle>()?;
-        let from = battle.cell_of(body)?;
         battle
             .decoys()
             .iter()
@@ -248,9 +252,7 @@ impl Game {
         let Some(from) = battle.cell_of(actor) else {
             return false;
         };
-        if reach::distance(from, cell) > self.swing_range(actor)
-            || !reach::line_of_sight(&battle.board, from, cell)
-        {
+        if !reach::swing_reaches(&battle.board, from, cell, self.swing_range(actor)) {
             return false;
         }
 

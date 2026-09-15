@@ -107,6 +107,15 @@ pub fn movement_field(
     field
 }
 
+/// Whether a swing of `range` from `from` reaches `to`: in range, and in
+/// sight.
+///
+/// **The one definition the decoy strike door and the AI's choice of decoy
+/// share**, so the AI never names a decoy the door would refuse it.
+pub fn swing_reaches(board: &Board, from: (i32, i32), to: (i32, i32), range: u32) -> bool {
+    distance(from, to) <= range && line_of_sight(board, from, to)
+}
+
 /// The cells a body at `from` walks through to reach `to`, in the order it
 /// enters them — `to` last, and the cell it is standing on left out, so the
 /// length is the number of steps the walk costs it in turns of the pacing

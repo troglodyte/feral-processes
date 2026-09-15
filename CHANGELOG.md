@@ -42,6 +42,16 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.183
+
+**Your Home no longer draws as a bare `H`: it wears the same portal art as
+the base's doorway out on the zone map.** The Home is the base's way in and
+out, and the game already calls the anchor outside "the home portal", but
+inside the base it showed as a plain letter that looked like nothing else you
+had seen. It now uses the anchor's `#` and its sprite, so the two sides of the
+same doorway look alike. In the icon designer that art is now one row shared
+by both, so editing it changes both.
+
 ## 0.13.182
 
 **On a battle map you can tell which enemy is the silver or gold one.** A rare

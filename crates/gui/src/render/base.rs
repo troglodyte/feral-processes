@@ -2908,7 +2908,10 @@ mod tests {
     #[test]
     fn a_structure_with_art_draws_its_sprite_and_not_its_glyph() {
         let mut table = SpriteTable::default();
-        table.insert("home", bevy_egui::egui::TextureId::User(7));
+        // Home's `sprite:` field names "anchor" — the same art the base
+        // anchor draws on the zone map outside, see `assets/structures/
+        // home.ron`.
+        table.insert("anchor", bevy_egui::egui::TextureId::User(7));
 
         let (under, _) = drawn_base_with_sprites(table.clone(), 0);
         assert_eq!(
@@ -2921,8 +2924,8 @@ mod tests {
 
         assert!(images >= 1, "the Home's art must paint a sprite");
         assert!(
-            !glyphs.iter().any(|g| g == "H"),
-            "the 'H' must give way to the sprite, not sit under it: {glyphs:?}"
+            !glyphs.iter().any(|g| g == "#"),
+            "the '#' must give way to the sprite, not sit under it: {glyphs:?}"
         );
     }
 
@@ -2934,7 +2937,7 @@ mod tests {
 
         assert_eq!(images, 0, "an empty table must paint no texture");
         assert!(
-            glyphs.iter().any(|g| g == "H"),
+            glyphs.iter().any(|g| g == "#"),
             "the glyph is what is left when no sprite is loaded: {glyphs:?}"
         );
     }
@@ -2963,7 +2966,7 @@ mod tests {
             crate::sprites::DRAWN_ICON_KEY,
             bevy_egui::egui::TextureId::User(9),
         );
-        table.insert("home", bevy_egui::egui::TextureId::User(7));
+        table.insert("anchor", bevy_egui::egui::TextureId::User(7));
 
         let mut fx = Fx::new();
         let (tile_px, glyph_px) = crate::text::map_cell(1);
@@ -3019,7 +3022,7 @@ mod tests {
             .expect("the party steps inside, standing on the Home");
 
         let mut table = SpriteTable::default();
-        table.insert("home", bevy_egui::egui::TextureId::User(7));
+        table.insert("anchor", bevy_egui::egui::TextureId::User(7));
 
         let mut fx = Fx::new();
         let (tile_px, glyph_px) = crate::text::map_cell(1);

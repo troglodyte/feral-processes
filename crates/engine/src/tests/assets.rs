@@ -3722,15 +3722,16 @@ fn species_sprite_name_falls_back_to_the_id_when_the_override_names_the_drawn_ic
 #[test]
 fn structure_sprite_name_falls_back_to_the_id_and_honours_an_override() {
     let game = Game::new(3402, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // Not `.next()`: the Home sorts first by `category()` alone (its own
+    // `StructureCategory::Home`) and, as of the Home's own `sprite: Some
+    // ("anchor")`, is no longer one of the un-overridden majority this test
+    // means to exercise — `.find` reaches past it to a def that still
+    // relies on the id-fallback convention.
     let mut structure = game
         .structure_defs()
         .into_iter()
-        .next()
-        .expect("the shipped structure catalogue is not empty");
-    assert!(
-        structure.sprite.is_none(),
-        "no shipped structure authors a sprite override yet"
-    );
+        .find(|s| s.sprite.is_none())
+        .expect("some shipped structure still relies on the id-fallback convention");
     assert_eq!(structure.sprite_name(), structure.id.as_str());
 
     structure.sprite = Some("custom_structure_sprite".to_string());
@@ -3818,11 +3819,12 @@ fn a_def_file_without_a_sprite_key_still_parses() {
 /// no file on disk is the ordinary, silent case (`Painter::sprite` draws the
 /// glyph instead), and this census must not flag it.
 ///
-/// This passes vacuously today: zero shipped defs author an override (see
-/// `a_def_file_without_a_sprite_key_still_parses`'s sibling assertions
-/// above), so the loops below check nothing. That is correct — see the task
-/// report for how the failure branch was confirmed by hand, since a census
-/// nobody can make fail is not a census.
+/// Not vacuous: `depot_mk2` through `depot_mk6` override to `"depot"` and
+/// the Home overrides to `"anchor"` (see `assets/structures/home.ron`), so
+/// the structure loop below does walk real overrides against real files —
+/// see the task report for how the failure branch was confirmed by hand
+/// before those existed, since a census nobody can make fail is not a
+/// census.
 #[test]
 fn every_shipped_sprite_override_resolves_to_a_real_file() {
     let game = Game::new(3405, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

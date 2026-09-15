@@ -16,9 +16,12 @@ convention. `SpeciesDef::sprite_name()` and `StructureDef::sprite_name()`
 both fall back to `id` unless the def's own optional `sprite:` field
 overrides it (see the schema in `assets/species/README.md` and
 `assets/structures/README.md`) — an escape hatch for when the filename you
-want isn't the id, not the normal way a species or structure gets art. No
-shipped def uses the override: name the file after the id and it is found
-with no `.ron` change at all.
+want isn't the id, not the normal way a species or structure gets art.
+Naming the file after the id is still how nearly every shipped def gets its
+art, with no `.ron` change at all; the override is for the rare case where
+several defs deliberately share one piece of art, such as `depot_mk2`
+through `depot_mk6` all pointing at `depot`, or the Home pointing at
+`anchor` because it is that portal's other side.
 
 A file whose stem starts with `@` is never scanned, at any name — `@` is a
 legal filename character on every platform this ships to, and `"@drawn"`

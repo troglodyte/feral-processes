@@ -2,8 +2,13 @@
     id: "home",
     name: "Home",
     description: "Anchors your base, supplies a modest amount of grid energy.",
-    glyph: 'H',
-    color: Green,
+    // Same glyph, colour and sprite as the anchor it stands under on the
+    // zone map (`Game::new`'s `BaseAnchor` spawn, `'#'`/Gray) — the Home is
+    // that portal's other side, and the `BaseFounding` notification already
+    // calls it "the home portal" and shows the anchor's own art for it.
+    glyph: '#',
+    color: Gray,
+    sprite: Some("anchor"),
     build_cost: [],
     work: None,
     raidable: false,

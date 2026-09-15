@@ -1045,6 +1045,17 @@ pub(super) fn marooned() -> (Game, Entity) {
     (game, wild)
 }
 
+/// The next value `GameRng` yields — the "did this turn draw" probe shared
+/// by every test that pins a turn to argmax and by `tamper.rs`'s temperature
+/// tests, which read it as `tamper_next_draw` before this was lifted here.
+pub(super) fn next_draw(game: &mut Game) -> u64 {
+    use rand::RngExt;
+    game.world
+        .resource_mut::<crate::resources::GameRng>()
+        .0
+        .random::<u64>()
+}
+
 /// Where a hostile chooses to stand is one draw a turn, and none at all at
 /// temperature zero — `sample_scored` answers the argmax before it touches
 /// the RNG. That is what lets a test pin the choice without moving the
@@ -1055,14 +1066,6 @@ pub(super) fn marooned() -> (Game, Entity) {
 /// to hit and this is a claim about the *walk*.
 #[test]
 fn choosing_a_cell_at_zero_temperature_does_not_move_the_seeded_stream() {
-    fn next_draw(game: &mut Game) -> u64 {
-        use rand::RngExt;
-        game.world
-            .resource_mut::<crate::resources::GameRng>()
-            .0
-            .random::<u64>()
-    }
-
     let (mut ran, _) = marooned();
     let (mut untouched, _) = marooned();
     assert!(
@@ -3244,7 +3247,7 @@ fn a_hostile_will_not_shoot_through_cover() {
 /// A nine-cell open board with the player in the middle and the pack stood
 /// where the test says, the player on enough Integrity to outlast every turn
 /// a test drives.
-fn open_ground(game: &mut Game, pack: &[Entity], cells: &[(i32, i32)]) -> (i32, i32) {
+pub(super) fn open_ground(game: &mut Game, pack: &[Entity], cells: &[(i32, i32)]) -> (i32, i32) {
     use crate::tactical::map::Board;
 
     let player = game.player_entity();

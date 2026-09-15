@@ -22,7 +22,7 @@
 use bevy_ecs::prelude::Entity;
 
 use crate::Game;
-use crate::abilities::{AbilityDef, AbilityRange, AbilityTarget};
+use crate::abilities::{AbilityDef, AbilityRange, AbilityTarget, TamperSlot};
 use crate::components::{Hostile, Stats, Tampered};
 use crate::policy;
 use crate::resources::GameRng;
@@ -181,6 +181,26 @@ impl Game {
             .get::<Tampered>(body)
             .and_then(Tampered::temperature)
             .unwrap_or(TACTICAL_AI_TEMPERATURE)
+    }
+
+    /// Which side `actor`'s own decision-making treats as its own — not
+    /// necessarily `Hostile(actor)`.
+    ///
+    /// **The one door onto allegiance in this file.** `tactical_sides` and
+    /// `best_aim` both read this rather than `Hostile` directly, so an
+    /// injected body's flipped reading lands in one place and a later tamper
+    /// that also flips a side has the same door to go through.
+    ///
+    /// An injected hostile's policy runs as if it stood on the party's
+    /// side: `Hostile(actor) != Injected(actor)` is true only when the two
+    /// disagree, which is exactly the case a `prompt_injection` lands.
+    fn acts_for_hostiles(&self, actor: Entity) -> bool {
+        let hostile = self.world.get::<Hostile>(actor).is_some();
+        let injected = self
+            .world
+            .get::<Tampered>(actor)
+            .is_some_and(|tampered| tampered.has(TamperSlot::Injected));
+        hostile != injected
     }
 
     /// Runs the acting body's whole turn, and reports whether it did.
@@ -466,13 +486,21 @@ impl Game {
     /// Everyone `actor` is fighting, and everyone standing with it — cells
     /// rather than entities, because that is all the scoring reads.
     ///
-    /// Sidedness is `Hostile` and nothing else, so the party's own bodies and
-    /// the player are one list. The acting body is in neither.
+    /// Sidedness is `acts_for_hostiles`, not a bare `Hostile` read, so the
+    /// party's own bodies and the player are one list — for an untampered
+    /// actor the two are the same question.
     ///
     /// Read **relative to `actor`** rather than as "hostiles are the enemy":
     /// the arena drives both sides through this, and the absolute reading
     /// hands a party body its own side to swing at. For a hostile actor the
     /// two readings are the same list, which is why no seeded fight moved.
+    ///
+    /// **An injected body's own side is swapped by that same relativity.**
+    /// `acts_for_hostiles` answers `false` for one, so its packmates land in
+    /// `targets` and the party lands in `allies` with no branch here at
+    /// all — the flip is entirely `acting_side`'s, and every other body
+    /// still reads `Hostile` as it always has, which is what keeps an
+    /// uninjected packmate treating the injected one as its own.
     ///
     /// **A cloaked body leaves `targets`**, which is what keeps it out of
     /// `best_aim`'s scoring and out of `swing_at_best_neighbour` — the fifth
@@ -487,7 +515,7 @@ impl Game {
     /// expired.
     fn tactical_sides(&self, actor: Entity) -> Sides {
         let battle = self.world.resource::<TacticalBattle>();
-        let acting_side = self.world.get::<Hostile>(actor).is_some();
+        let acting_side = self.acts_for_hostiles(actor);
         let mut sides = Sides::default();
         let mut hidden: Vec<(i32, i32)> = Vec::new();
         for (body, cell) in battle.bodies() {
@@ -609,6 +637,13 @@ impl Game {
     /// one body: **its own side counts against it**, because
     /// `reach::recipients` never reads `Hostile` and a blast aimed through a
     /// packmate lands on the packmate.
+    ///
+    /// **"Wanted" is read through `acts_for_hostiles`, actor-relative like
+    /// `tactical_sides`.** A helpful routine wants the actor itself or a body
+    /// on the actor's own side; an aggressive one wants a body on the other
+    /// side. For an injected actor `acts_for_hostiles` answers `false`, so a
+    /// Heal lands on the party it now calls its own and a Damage penalises a
+    /// packmate exactly the way it used to penalise a companion.
     fn best_aim(
         &self,
         actor: Entity,
@@ -621,6 +656,7 @@ impl Game {
         let shape = def.tactical_shape();
         let helpful = Intent::Routine(def.clone()).helpful();
         let reach_max = i32::try_from(band.max).unwrap_or(0);
+        let acting_side = self.acts_for_hostiles(actor);
 
         let mut best: Option<((i32, i32), i32)> = None;
         for dy in -reach_max..=reach_max {
@@ -637,10 +673,11 @@ impl Game {
                 }
                 let mut worth = 0;
                 for body in reach::recipients(battle, actor, aim, shape) {
+                    let body_is_hostile = self.world.get::<Hostile>(body).is_some();
                     let wanted = if helpful {
-                        body == actor || self.world.get::<Hostile>(body).is_some()
+                        body == actor || body_is_hostile == acting_side
                     } else {
-                        !targets.is_empty() && self.world.get::<Hostile>(body).is_none()
+                        !targets.is_empty() && body_is_hostile != acting_side
                     };
                     worth += if wanted { 1 } else { -1 };
                 }

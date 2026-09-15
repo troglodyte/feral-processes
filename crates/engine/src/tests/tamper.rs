@@ -9,7 +9,8 @@ use super::support::{
     spawn_wild_without_routine, test_assets_dir,
 };
 use super::tactical::{
-    body, free_neighbour, marooned, only_routine, place_one, tactical_fight, wait_for_turn,
+    body, free_neighbour, marooned, next_draw, only_routine, open_ground, place_one,
+    tactical_fight, wait_for_turn,
 };
 use crate::Game;
 use crate::abilities::{
@@ -17,7 +18,7 @@ use crate::abilities::{
 };
 use crate::battle::BattleAction;
 use crate::components::{AbilityCooldowns, Position, PowerReserve, Routines, Stats, Tampered};
-use crate::resources::{DifficultyMode, GameRng, Party, Sorties};
+use crate::resources::{DifficultyMode, Party, Sorties};
 use crate::tactical::TacticalBattle;
 use crate::tactical::ai::AiBeat;
 use crate::tactical::map::BattleCell;
@@ -666,15 +667,6 @@ fn tampered_is_gone_when_the_fight_ends() {
     );
 }
 
-/// The next value `GameRng` yields — the "did this turn draw" probe every
-/// test below shares, matching `choosing_a_cell_at_zero_temperature_does_
-/// not_move_the_seeded_stream`'s own comparison: a turn that drew nothing
-/// leaves the stream's next value equal to a virgin game's first one.
-fn tamper_next_draw(game: &mut Game) -> u64 {
-    use rand::RngExt;
-    game.world.resource_mut::<GameRng>().0.random::<u64>()
-}
-
 /// `marooned`, with its hostile Cold Sampled directly rather than by
 /// running the routine — `decision_temperature`'s read is the door under
 /// test, not `apply_tamper`'s.
@@ -702,8 +694,8 @@ fn a_cold_sampled_hostile_draws_nothing_over_its_turn() {
         "the cold hostile's turn was not run"
     );
     assert_eq!(
-        tamper_next_draw(&mut cold),
-        tamper_next_draw(&mut virgin),
+        next_draw(&mut cold),
+        next_draw(&mut virgin),
         "a Cold Sample argmax turn must draw nothing from GameRng"
     );
 
@@ -714,8 +706,8 @@ fn a_cold_sampled_hostile_draws_nothing_over_its_turn() {
         "the untampered hostile's turn was not run"
     );
     assert_ne!(
-        tamper_next_draw(&mut warm),
-        tamper_next_draw(&mut warm_virgin),
+        next_draw(&mut warm),
+        next_draw(&mut warm_virgin),
         "the untampered twin must still draw over its turn"
     );
 }
@@ -732,7 +724,7 @@ fn a_cold_sampled_hostile_draws_nothing_over_its_turn() {
 fn every_tactical_ai_door_reads_the_temperature_door() {
     let virgin_draw = {
         let (mut game, _) = marooned();
-        tamper_next_draw(&mut game)
+        next_draw(&mut game)
     };
 
     let (mut via_turn, _) = cold_marooned();
@@ -741,7 +733,7 @@ fn every_tactical_ai_door_reads_the_temperature_door() {
         "tactical_ai_turn did not run the cold hostile's turn"
     );
     assert_eq!(
-        tamper_next_draw(&mut via_turn),
+        next_draw(&mut via_turn),
         virgin_draw,
         "tactical_ai_turn must read decision_temperature"
     );
@@ -753,7 +745,7 @@ fn every_tactical_ai_door_reads_the_temperature_door() {
         }
     }
     assert_eq!(
-        tamper_next_draw(&mut via_beat),
+        next_draw(&mut via_beat),
         virgin_draw,
         "tactical_ai_beat must read decision_temperature"
     );
@@ -765,7 +757,7 @@ fn every_tactical_ai_door_reads_the_temperature_door() {
         }
     }
     assert_eq!(
-        tamper_next_draw(&mut via_auto),
+        next_draw(&mut via_auto),
         virgin_draw,
         "tactical_auto_beat must read decision_temperature"
     );
@@ -776,7 +768,7 @@ fn every_tactical_ai_door_reads_the_temperature_door() {
         "tactical_drive_turn did not run the cold hostile's turn"
     );
     assert_eq!(
-        tamper_next_draw(&mut via_drive),
+        next_draw(&mut via_drive),
         virgin_draw,
         "tactical_drive_turn must read decision_temperature"
     );
@@ -797,8 +789,233 @@ fn heat_leaves_the_draw_in_place() {
         "the heat-tampered hostile's turn was not run"
     );
     assert_ne!(
-        tamper_next_draw(&mut heat),
-        tamper_next_draw(&mut virgin),
+        next_draw(&mut heat),
+        next_draw(&mut virgin),
         "a Heat-tampered turn must still draw from GameRng"
+    );
+}
+
+/// Writes a live `TamperKind::Injected` entry directly, the way the tests
+/// below want it — `decision_temperature`'s tests' own reason for reading
+/// `Tampered` rather than running `prompt_injection`: what is under test is
+/// `acts_for_hostiles`, not `apply_tamper`.
+fn inject(game: &mut Game, body: Entity) {
+    let mut tampered = Tampered::default();
+    tampered.apply(TamperKind::Injected, 5, false);
+    game.world.entity_mut(body).insert(tampered);
+}
+
+/// **(M)** Spec test 5: an injected hostile's own packmate becomes its
+/// target, with the player left out of reach so a swing at the player is
+/// the only alternative reading available.
+///
+/// Mutation check: reverting `acts_for_hostiles` to `Hostile(actor)` alone
+/// (ignoring `Injected`) makes the injected body read its packmate as an
+/// ally again — `tactical_sides` hands it the unreachable player as its only
+/// target, so its turn walks and never swings, and the packmate's Integrity
+/// assertion fails. Verified and restored — see the commit body.
+#[test]
+fn an_injected_hostile_swings_at_a_packmate() {
+    let mut game = game(9700);
+    let pack = tactical_fight(&mut game, 2, 40);
+    open_ground(&mut game, &pack, &[(0, 0), (0, 1)]);
+    let injected = pack[0];
+    let packmate = pack[1];
+    inject(&mut game, injected);
+
+    assert!(wait_for_turn(&mut game, injected));
+    let packmate_cell = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(packmate)
+        .expect("the packmate was not seated");
+    let hp_before = game.world.get::<Stats>(packmate).unwrap().hp;
+    force_the_next_attack_to_land(&mut game);
+
+    assert!(
+        game.tactical_ai_turn(),
+        "the injected hostile's turn was not run"
+    );
+
+    assert!(
+        game.world.get::<Stats>(packmate).unwrap().hp < hp_before,
+        "the packmate's Integrity must have fallen"
+    );
+    let bolts = game.take_bolts();
+    assert!(
+        bolts.iter().any(|b| b.to == packmate_cell),
+        "the swing's bolt must land on the packmate's cell: {bolts:?}"
+    );
+}
+
+/// **(M)** Spec test 5's other half: a hostile killed by an injected
+/// packmate's swing pays exactly what any hostile death pays —
+/// `reap_tactical_dead`'s `Hostile` check names the victim, never the
+/// attacker, but only if the injected body ever gets to swing at it at all.
+///
+/// Compared against the identical kill struck by the player: `kill_xp` is a
+/// pure function of the victim's own Integrity ceiling, so the two must
+/// agree — an attacker-keyed XP formula is the gap this pins shut.
+///
+/// Mutation check: reverting `acts_for_hostiles` leaves the injected body
+/// walking toward the unreachable player instead of swinging at its
+/// packmate, so the packmate never dies and `fight_rewards_mut` never
+/// fills — the `is_none()` Stats assertion and the XP assertion both fail.
+/// Verified and restored — see the commit body.
+#[test]
+fn a_packmate_killed_by_an_injected_hostile_pays() {
+    let paid_xp = {
+        let mut game = game(9701);
+        let pack = tactical_fight(&mut game, 2, 40);
+        open_ground(&mut game, &pack, &[(0, 0), (0, 1)]);
+        let injected = pack[0];
+        let packmate = pack[1];
+        game.world.get_mut::<Stats>(packmate).unwrap().hp = 1;
+        inject(&mut game, injected);
+
+        assert!(wait_for_turn(&mut game, injected));
+        force_the_next_attack_to_land(&mut game);
+        assert!(
+            game.tactical_ai_turn(),
+            "the injected hostile's turn was not run"
+        );
+
+        assert!(
+            game.world.get::<Stats>(packmate).is_none(),
+            "the packmate must have died to the blow"
+        );
+        game.fight_rewards_mut()
+            .expect("the fight is still open with the injected hostile left standing")
+            .player
+            .xp
+    };
+    assert!(paid_xp > 0, "the kill must pay the player XP");
+
+    // The identical body, killed by the player's own swing instead —
+    // `finish_hostile` must not price the two differently.
+    let mut by_player = game(9701);
+    let by_pack = tactical_fight(&mut by_player, 2, 40);
+    open_ground(&mut by_player, &by_pack, &[(0, 0), (0, 1)]);
+    let player = by_player.player_entity();
+    let victim = by_pack[1];
+    by_player.world.get_mut::<Stats>(victim).unwrap().hp = 1;
+    let beside = free_neighbour(&by_player, (0, 1));
+    place_one(&mut by_player, player, beside);
+    assert!(wait_for_turn(&mut by_player, player));
+    force_the_next_attack_to_land(&mut by_player);
+    assert!(by_player.tactical_attack(victim));
+
+    let player_paid_xp = by_player
+        .fight_rewards_mut()
+        .expect("the fight is still open with the other hostile left standing")
+        .player
+        .xp;
+    assert_eq!(
+        paid_xp, player_paid_xp,
+        "a packmate's kill must pay the same XP as the player's own"
+    );
+}
+
+/// Spec test 6: an injected hostile's own Heal routine is helpful, and
+/// `acts_for_hostiles` flips which side counts as "wanted" for it too — the
+/// party, not its own kind.
+///
+/// `mirror_restore` is `WholeParty`, which derives range 0–0 — aimable only
+/// at the invoker's own cell. The walk-scoring `cell_merit` shares with a
+/// Swing reads that band as ground to *close on the packmate*, not as "stand
+/// here and heal" — a pre-existing property of the model, not something this
+/// task changes — so the healer is boxed in by `Blocked` neighbours to keep
+/// it from spending the whole turn marching toward its one tracked "enemy"
+/// instead of ever reaching the `Routine` branch that runs the heal.
+#[test]
+fn an_injected_healer_aims_its_heal_at_the_party() {
+    let mut game = game(9702);
+    let companion = body(&mut game, &generic_species().id);
+    game.world.resource_mut::<Party>().0.push(companion);
+    let pack = tactical_fight(&mut game, 2, 40);
+    let healer = pack[0];
+    let packmate = pack[1];
+    let healer_at = (1, 1);
+    open_ground(&mut game, &pack, &[healer_at, (7, 7)]);
+    only_routine(&mut game, healer, "mirror_restore");
+    inject(&mut game, healer);
+    {
+        let mut battle = game.world.resource_mut::<TacticalBattle>();
+        for (dx, dy) in [
+            (-1, -1),
+            (-1, 0),
+            (-1, 1),
+            (0, -1),
+            (0, 1),
+            (1, -1),
+            (1, 0),
+            (1, 1),
+        ] {
+            battle
+                .board
+                .put(healer_at.0 + dx, healer_at.1 + dy, BattleCell::Blocked);
+        }
+    }
+    // Two cells off the healer — inside `TACTICAL_PARTY_RADIUS` (3) but
+    // outside the blocked ring, so its placement is untouched by it.
+    place_one(&mut game, companion, (healer_at.0, healer_at.1 + 2));
+    game.world.get_mut::<Stats>(companion).unwrap().hp = 4;
+    game.world.get_mut::<Stats>(packmate).unwrap().hp = 20;
+
+    assert!(wait_for_turn(&mut game, healer));
+    assert!(
+        game.tactical_ai_turn(),
+        "the injected healer's turn was not run"
+    );
+
+    assert!(
+        game.world.get::<Stats>(companion).unwrap().hp > 4,
+        "the companion's Integrity must have risen"
+    );
+    assert_eq!(
+        game.world.get::<Stats>(healer).unwrap().hp,
+        40,
+        "the healer's own Integrity must not have changed"
+    );
+    assert_eq!(
+        game.world.get::<Stats>(packmate).unwrap().hp,
+        20,
+        "no hostile's Integrity may have risen — the packmate stands outside the blast"
+    );
+}
+
+/// An uninjected packmate's own reading of the fight is untouched: it still
+/// swings at the player and leaves the injected packmate alone, even though
+/// that packmate is now aiming the other way.
+#[test]
+fn an_uninjected_packmate_still_treats_the_injected_one_as_its_own() {
+    let mut game = game(9703);
+    let pack = tactical_fight(&mut game, 2, 40);
+    // The uninjected one adjacent to the player; the injected one far
+    // enough away that it is never a candidate the walk would close on.
+    open_ground(&mut game, &pack, &[(0, 0), (3, 4)]);
+    let injected = pack[0];
+    let uninjected = pack[1];
+    inject(&mut game, injected);
+
+    let player = game.player_entity();
+    let player_hp_before = game.world.get::<Stats>(player).unwrap().hp;
+    let injected_hp_before = game.world.get::<Stats>(injected).unwrap().hp;
+
+    assert!(wait_for_turn(&mut game, uninjected));
+    force_the_next_attack_to_land(&mut game);
+    assert!(
+        game.tactical_ai_turn(),
+        "the uninjected hostile's turn was not run"
+    );
+
+    assert!(
+        game.world.get::<Stats>(player).unwrap().hp < player_hp_before,
+        "the uninjected packmate must still swing at the player"
+    );
+    assert_eq!(
+        game.world.get::<Stats>(injected).unwrap().hp,
+        injected_hp_before,
+        "the uninjected packmate must not swing at its own injected packmate"
     );
 }

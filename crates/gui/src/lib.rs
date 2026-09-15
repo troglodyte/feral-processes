@@ -595,21 +595,23 @@ fn frame(
     // Effects are drained every frame whether or not they'll be drawn,
     // so a disabled `Fx` can't leave the engine's queue at its cap.
     let in_battle = fe.app.mode.is_battle();
-    let (effects, transits, bolts, last_log) = match &mut fe.app.game {
+    let (effects, transits, bolts, tactical_fx, last_log) = match &mut fe.app.game {
         Some(game) => (
             game.take_effects(),
             game.take_transits(),
             game.take_bolts(),
+            game.take_tactical_fx(),
             game.message_log(1).pop(),
         ),
-        None => (Vec::new(), Vec::new(), Vec::new(), None),
+        None => (Vec::new(), Vec::new(), Vec::new(), Vec::new(), None),
     };
     // **Before `begin_frame` consumes the vector**, and played whether or
     // not `Fx` is enabled — sound is not a visual effect.
     for event in frame_cues(queued, &effects) {
         sounds.play(&mut commands, event, fe.volume);
     }
-    fe.fx.begin_frame(now, effects, transits, bolts, in_battle);
+    fe.fx
+        .begin_frame(now, effects, transits, bolts, tactical_fx, in_battle);
     fe.fx.observe_log(last_log.as_ref());
 
     // Timed whether or not the readout is on: a meter fed only while it is
@@ -957,16 +959,17 @@ mod tests {
     /// does, then draw whatever mode the app is now in.
     fn draw_a_frame(app: &mut App, fx: &mut Fx, now: f64) {
         let in_battle = app.mode.is_battle();
-        let (effects, transits, bolts, last_log) = match &mut app.game {
+        let (effects, transits, bolts, tactical_fx, last_log) = match &mut app.game {
             Some(game) => (
                 game.take_effects(),
                 game.take_transits(),
                 game.take_bolts(),
+                game.take_tactical_fx(),
                 game.message_log(1).pop(),
             ),
-            None => (Vec::new(), Vec::new(), Vec::new(), None),
+            None => (Vec::new(), Vec::new(), Vec::new(), Vec::new(), None),
         };
-        fx.begin_frame(now, effects, transits, bolts, in_battle);
+        fx.begin_frame(now, effects, transits, bolts, tactical_fx, in_battle);
         fx.observe_log(last_log.as_ref());
         paint::with_painter(|p| render::draw(app, fx, p));
     }
@@ -1041,6 +1044,7 @@ mod tests {
             }],
             Vec::new(),
             Vec::new(),
+            Vec::new(),
             false,
         );
         let flash = fx
@@ -1065,6 +1069,7 @@ mod tests {
             }],
             Vec::new(),
             Vec::new(),
+            Vec::new(),
             false,
         );
         let flash = fx
@@ -1082,7 +1087,7 @@ mod tests {
         // the guard has to be on both — a rect count alone would leave the
         // sparks free to keep landing on open ground.
         let mut quiet = Fx::new();
-        quiet.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), false);
+        quiet.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
         let (_, bare) = paint::with_painter(|p| render::draw(&mut app, &mut quiet, p));
         assert_eq!(
             paint::painted_line_count(&shapes),
@@ -1112,10 +1117,10 @@ mod tests {
         };
         let painted = |app: &mut App| {
             let mut fx = Fx::new();
-            fx.begin_frame(0.0, Vec::new(), vec![cue()], Vec::new(), false);
+            fx.begin_frame(0.0, Vec::new(), vec![cue()], Vec::new(), Vec::new(), false);
             // A frame in, so the body is off its first cell and being drawn
             // by the interpolating pass rather than sitting on a tile.
-            fx.begin_frame(0.06, Vec::new(), Vec::new(), Vec::new(), false);
+            fx.begin_frame(0.06, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
             let (_, shapes) = paint::with_painter(|p| render::draw(app, &mut fx, p));
             paint::painted_text(&shapes)
                 .iter()

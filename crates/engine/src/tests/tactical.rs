@@ -3042,3 +3042,118 @@ fn a_hostile_will_not_shoot_through_cover() {
          refusal above says nothing about sight"
     );
 }
+
+/// A nine-cell open board with the player in the middle and the pack stood
+/// where the test says, the player on enough Integrity to outlast every turn
+/// a test drives.
+fn open_ground(game: &mut Game, pack: &[Entity], cells: &[(i32, i32)]) -> (i32, i32) {
+    use crate::tactical::map::Board;
+
+    let player = game.player_entity();
+    if let Some(mut stats) = game.world.get_mut::<Stats>(player) {
+        stats.hp = 10_000;
+        stats.max_hp = 10_000;
+    }
+    let centre = (4, 4);
+    let mut battle = game.world.resource_mut::<TacticalBattle>();
+    battle.board = Board::from_rows(&[
+        ".........",
+        ".........",
+        ".........",
+        ".........",
+        ".........",
+        ".........",
+        ".........",
+        ".........",
+        ".........",
+    ]);
+    // Parked out of the way first, so no body is refused a cell another has
+    // not left yet.
+    for (i, &body) in pack.iter().enumerate() {
+        assert!(battle.move_to(body, (i as i32, 8)), "a body would not park");
+    }
+    assert!(battle.move_to(player, centre), "the player would not stand");
+    for (&body, &cell) in pack.iter().zip(cells) {
+        assert!(battle.move_to(body, cell), "{cell:?} would not take a body");
+    }
+    centre
+}
+
+/// **Staying put is the default.** A hostile that can already swing at the
+/// player from where it stands spends its turn swinging, not shuffling to
+/// another cell that swings exactly as well — which is what it did while
+/// every cell beside the player tied and the softmax drew among all of them.
+///
+/// A packmate stands beside it on purpose: crowding is the term that would
+/// otherwise talk it into a sidestep, and crowding alone is not a reason to
+/// move. Several turns at the shipped temperature, because one draw landing
+/// back on its own cell would pass a single turn.
+#[test]
+fn a_hostile_already_in_reach_holds_its_cell() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 2, 10_000);
+    let wild = pack[0];
+    open_ground(&mut game, &pack, &[(3, 4), (3, 3)]);
+
+    for turn in 0..6 {
+        assert!(wait_for_turn(&mut game, wild), "the fight ended early");
+        assert!(game.tactical_ai_turn(), "the hostile's turn was not run");
+        assert_eq!(
+            cell_of(&game, wild),
+            Some((3, 4)),
+            "turn {turn}: a hostile already in reach walked anyway"
+        );
+    }
+}
+
+/// Holding is not freezing: a hostile out of reach still closes.
+#[test]
+fn a_hostile_out_of_reach_still_closes() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 10_000);
+    let wild = pack[0];
+    let player = open_ground(&mut game, &pack, &[(0, 4)]);
+    assert!(wait_for_turn(&mut game, wild), "the fight ended early");
+    let before = crate::tactical::reach::distance(player, (0, 4));
+
+    assert!(game.tactical_ai_turn(), "the hostile's turn was not run");
+
+    let after = crate::tactical::reach::distance(
+        player,
+        cell_of(&game, wild).expect("the hostile left the board"),
+    );
+    assert!(
+        after < before,
+        "the hostile stood {before} cells off and stayed at {after}"
+    );
+}
+
+/// In range is not the same as able to act: a reaching hostile in band but
+/// behind cover has a reason to move, and moves to a cell it can see from.
+#[test]
+fn a_hostile_in_range_but_blind_steps_into_sight() {
+    let mut game = game();
+    let wild = fight_against(&mut game, "drone");
+    let player = open_ground(&mut game, &[wild], &[(4, 2)]);
+    block_cell(&mut game, (4, 3));
+    assert_eq!(
+        game.swing_range(wild),
+        2,
+        "the fixture stands the drone at exactly its reach"
+    );
+    assert!(wait_for_turn(&mut game, wild), "the fight ended early");
+
+    assert!(game.tactical_ai_turn(), "the hostile's turn was not run");
+
+    let stood = cell_of(&game, wild).expect("the hostile left the board");
+    let battle = game.world.resource::<TacticalBattle>();
+    assert_ne!(
+        stood,
+        (4, 2),
+        "a hostile that could not see its target held"
+    );
+    assert!(
+        crate::tactical::reach::line_of_sight(&battle.board, stood, player),
+        "the hostile moved to {stood:?}, which cannot see the player either"
+    );
+}

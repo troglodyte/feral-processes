@@ -135,6 +135,22 @@ fn cell_score(
     targets: &[(i32, i32)],
     allies: &[(i32, i32)],
 ) -> f32 {
+    let crowd = allies
+        .iter()
+        .filter(|&&a| distance(cell, a) <= TACTICAL_FIELD_RADIUS)
+        .count();
+    cell_merit(board, cell, band, targets) - TACTICAL_AI_CROWDING_WEIGHT * crowd as f32
+}
+
+/// The part of `cell_score` that is a reason to walk: the reach bonus and
+/// the closing term, without crowding.
+///
+/// **Split out because crowding is a tie-break and never a reason on its
+/// own.** A body only considers cells that beat where it already stands on
+/// this figure — see `Game::walk_to_best_cell` — so a hostile that can
+/// already act holds its ground, and crowding only chooses among cells a
+/// body had some other reason to walk to.
+fn cell_merit(board: &Board, cell: (i32, i32), band: AbilityRange, targets: &[(i32, i32)]) -> f32 {
     // Line of sight is asked only of a cell that is already in band, so a
     // cell behind cover scores as one that has closed but cannot fire —
     // better than standing further back, worse than stepping around.
@@ -146,14 +162,8 @@ fn cell_score(
         .map(|&t| shortfall(cell, t, band))
         .min()
         .unwrap_or(0);
-    let crowd = allies
-        .iter()
-        .filter(|&&a| distance(cell, a) <= TACTICAL_FIELD_RADIUS)
-        .count();
 
-    (if hits { TACTICAL_AI_REACH_SCORE } else { 0.0 })
-        - TACTICAL_AI_CLOSING_WEIGHT * gap as f32
-        - TACTICAL_AI_CROWDING_WEIGHT * crowd as f32
+    (if hits { TACTICAL_AI_REACH_SCORE } else { 0.0 }) - TACTICAL_AI_CLOSING_WEIGHT * gap as f32
 }
 
 impl Game {
@@ -515,10 +525,29 @@ impl Game {
             return;
         }
         let band = intent.band();
+        // **Staying put is the default.** The candidates are the cells that
+        // are strictly better than this one on reach or closing, and the
+        // cell it stands on only when there are none. Offered every cell
+        // instead, a body already in reach drew among all the cells that
+        // reached as well as its own did — softmax over a tie is a uniform
+        // draw — and sidestepped nearly every turn for no reason a player
+        // could see.
+        //
+        // The hold still goes through the draw below, so a turn spends one
+        // draw whichever way it goes and holding does not reshuffle every
+        // roll after it.
+        let standing = cell_merit(&battle.board, from, band, targets);
+        let mut cells: Vec<(i32, i32)> = field
+            .keys()
+            .copied()
+            .filter(|&cell| cell_merit(&battle.board, cell, band, targets) > standing)
+            .collect();
+        if cells.is_empty() {
+            cells.push(from);
+        }
         // Sorted, because `movement_field` answers a `HashMap` and iteration
         // order over one is not stable between runs: two equally-scored
         // cells must not resolve differently in a seeded fight.
-        let mut cells: Vec<(i32, i32)> = field.keys().copied().collect();
         cells.sort_by_key(|&(x, y)| (y, x));
         let scores: Vec<f32> = cells
             .iter()

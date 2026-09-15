@@ -77,6 +77,28 @@ pub struct ResearchStatus {
     pub(crate) unlocks_abilities: Vec<crate::abilities::AbilityId>,
 }
 
+/// What the corner over the map says about research — see
+/// `Game::research_readout`.
+///
+/// Three states because the corner draws three different things, and a
+/// progress figure on a stalled project is a number that has stopped moving
+/// with nothing saying why.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ResearchReadout {
+    /// A Research Node stands and no project is selected.
+    Idle,
+    /// The project is still earning its Research Data.
+    Earning {
+        name: String,
+        earned: u32,
+        cost: u32,
+    },
+    /// The project has all its data and is waiting on `short_of`, the first
+    /// material line the base cannot pay — `research_material_shortfall`'s
+    /// answer, named.
+    Stalled { name: String, short_of: String },
+}
+
 /// One line of a research node's material bill — see
 /// `ResearchDef::materials`.
 ///

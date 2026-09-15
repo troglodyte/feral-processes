@@ -336,7 +336,8 @@
 
 - **The tactical modes are deliberately not `is_battle`.** They are fights,
   so the classification reads wrong, and the exhaustive match makes whoever
-  adds a fourth pick a side. `Mode::is_battle` gates two things and both
+  adds one pick a side — `Mode::TacticalResult`, the fourth, is out for the
+  same reason. `Mode::is_battle` gates two things and both
   want `false` here. It gates the **reveal** — `App::unrevealed` returns
   zero unless `mode.is_battle()` — and the reveal exists because the
   abstract model narrates a whole round at once and has to let it land a

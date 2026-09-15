@@ -22,7 +22,7 @@
 use bevy_ecs::prelude::Entity;
 
 use crate::Game;
-use crate::abilities::{AbilityDef, AbilityRange, AbilityTarget, TamperSlot};
+use crate::abilities::{AbilityDef, AbilityId, AbilityRange, AbilityTarget, TamperSlot};
 use crate::components::{Hostile, Stats, Tampered};
 use crate::policy;
 use crate::resources::GameRng;
@@ -116,6 +116,29 @@ enum TurnTarget {
     Body(Entity),
     Decoy((i32, i32)),
     Aim((i32, i32)),
+}
+
+/// What a `Profiled` hostile will do with its next turn, published so the
+/// player can play around it.
+///
+/// **A call into the planner the turn runs**, never a restatement — see
+/// `Game::tactical_forecast`.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Forecast {
+    pub action: ForecastAction,
+    /// The cells the body will walk through, destination last. Empty above
+    /// temperature zero, and when it will hold its ground.
+    pub walk: Vec<(i32, i32)>,
+    /// The cell its action will land on. `None` above temperature zero, and
+    /// when nothing will be in reach from where the walk ends.
+    pub target: Option<(i32, i32)>,
+}
+
+/// Which action a forecast names.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ForecastAction {
+    Swing,
+    Routine(AbilityId),
 }
 
 /// How far outside `band` a body at `from` is from `to`, in cells. Zero when
@@ -275,6 +298,85 @@ impl Game {
                 .is_some()
             || self.taken_over(actor))
         .then_some(actor)
+    }
+
+    /// What `body` will do with its next turn, when it is a `Profiled`
+    /// hostile that has not started one — `None` otherwise, and `None` with
+    /// nothing to fight.
+    ///
+    /// **A call into the planner the turn runs, never a restatement**:
+    /// `tactical_intent`, `scored_cells` and `chosen_target` are what
+    /// `run_tactical_beat` spends, and `argmax_scored` is the index
+    /// `sample_scored` answers at temperature zero. A forecast that kept its
+    /// own copy would be right until the AI was retuned, and the copy that
+    /// drifts is the one the player trusts.
+    ///
+    /// **The action is always named; the walk and target only at temperature
+    /// zero.** The intent is decided before any draw, so it is honest at every
+    /// temperature. Above zero the cell is a draw, and a drawn path that is
+    /// wrong one time in three teaches the player the forecast lies.
+    ///
+    /// **Withdrawn mid-turn**, because a body part-way through a walk plans
+    /// nothing more — what it will do is already on the board. Read off the
+    /// board as it stands, so it is exact at the moment the turn begins and
+    /// moves as the party acts before then. Read-only: no draw, no write.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "the tactical view reads the forecast from Task 8 on"
+        )
+    )]
+    pub(crate) fn tactical_forecast(&self, body: Entity) -> Option<Forecast> {
+        let battle = self.world.get_resource::<TacticalBattle>()?;
+        let profiled = self
+            .world
+            .get::<Tampered>(body)
+            .is_some_and(|tampered| tampered.has(TamperSlot::Profiled));
+        if self.world.get::<Hostile>(body).is_none() || !profiled {
+            return None;
+        }
+        if battle.actor() == Some(body) && (battle.walk_planned() || battle.acted()) {
+            return None;
+        }
+        let from = battle.cell_of(body)?;
+        let sides = self.tactical_sides(body);
+        if sides.targets.is_empty() {
+            return None;
+        }
+        let intent = self.tactical_intent(body);
+        let action = match &intent {
+            Intent::Swing { .. } => ForecastAction::Swing,
+            Intent::Routine(def) => ForecastAction::Routine(def.id.clone()),
+        };
+        if self.decision_temperature(body) > 0.0 {
+            return Some(Forecast {
+                action,
+                walk: Vec::new(),
+                target: None,
+            });
+        }
+
+        let (cells, scores) = self.scored_cells(body, &intent, &sides);
+        let walk = if cells.is_empty() {
+            Vec::new()
+        } else {
+            self.path_for(body, cells[policy::argmax_scored(&scores)])
+        };
+        // From where the walk ends rather than from the chosen cell: an empty
+        // path is a body that acts from where it stands, whatever it picked.
+        let destination = walk.last().copied().unwrap_or(from);
+        let target = self
+            .chosen_target(body, destination, &intent, &sides)
+            .and_then(|target| match target {
+                TurnTarget::Body(entity) => battle.cell_of(entity),
+                TurnTarget::Decoy(cell) | TurnTarget::Aim(cell) => Some(cell),
+            });
+        Some(Forecast {
+            action,
+            walk,
+            target,
+        })
     }
 
     /// Whether the fight is waiting on a key rather than on the AI.

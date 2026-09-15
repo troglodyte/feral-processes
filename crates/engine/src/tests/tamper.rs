@@ -23,7 +23,7 @@ use crate::components::{
 use crate::items::ItemId;
 use crate::resources::{DifficultyMode, Party, Sorties};
 use crate::species::{SpeciesDb, SpeciesDef};
-use crate::tactical::ai::AiBeat;
+use crate::tactical::ai::{AiBeat, ForecastAction};
 use crate::tactical::map::{BattleCell, Board};
 use crate::tactical::{Decoy, TacticalBattle, reach};
 use crate::tuning::{ENEMY_ROUTINE_MIN_COOLDOWN, TACTICAL_MOVE_MAX};
@@ -1762,4 +1762,238 @@ fn decoys_are_gone_when_the_fight_ends() {
         game.world.get_resource::<TacticalBattle>().is_none(),
         "the fight is over and its decoys went with it"
     );
+}
+
+/// `marooned`, with its hostile carrying `kinds` — the forecast tests' own
+/// fixture, since what is under test is `tactical_forecast`'s reading of
+/// `Tampered` rather than the routines that write it.
+fn marooned_with(kinds: &[TamperKind]) -> (Game, Entity) {
+    let (mut game, wild) = marooned();
+    let mut tampered = Tampered::default();
+    for &kind in kinds {
+        tampered.apply(kind, 3, false);
+    }
+    game.world.entity_mut(wild).insert(tampered);
+    (game, wild)
+}
+
+fn stunned(game: &Game, body: Entity) -> bool {
+    game.world
+        .get::<StatusEffects>(body)
+        .and_then(|s| s.active.as_ref())
+        .is_some_and(|a| a.kind == StatusKind::Stun)
+}
+
+/// Stands `body` on a random cell that will take it. Bounded, so a board
+/// with no room fails rather than hangs.
+fn scatter(game: &mut Game, body: Entity, rng: &mut rand::rngs::StdRng) {
+    use rand::RngExt;
+    let side = game.world.resource::<TacticalBattle>().board.side;
+    for _ in 0..10_000 {
+        let cell = (rng.random_range(0..side), rng.random_range(0..side));
+        if game
+            .world
+            .resource_mut::<TacticalBattle>()
+            .move_to(body, cell)
+        {
+            return;
+        }
+    }
+    panic!("no cell on the board would take a body");
+}
+
+/// **(M)** Spec test 3: a Cold Sampled, Profiled hostile's turn walks to the
+/// forecast's destination and lands on the forecast's target — swept over
+/// seeded boards, so the claim is about the planner and not one layout.
+///
+/// Every body but the subject ends its turns without acting, so the board
+/// the forecast was read off is the board the turn runs on. A third of the
+/// hostiles carry only `deadlock`, a Single Stun, so a routine's aim is
+/// observable as the Stun on whoever stands there; a swing's is the first
+/// `BoltCue`'s `to`.
+///
+/// Mutation check: making `tactical_forecast` pick its destination with
+/// `sample_scored` at 0.5 over a clone of `GameRng` instead of
+/// `argmax_scored` makes the destinations disagree. Verified and restored —
+/// see the commit body.
+#[test]
+fn a_cold_profiled_hostile_does_what_its_forecast_said() {
+    use rand::{RngExt, SeedableRng};
+
+    const BOARDS: u64 = 24;
+    let (mut compared, mut skipped, mut unreachable) = (0, 0, 0);
+    let (mut swings, mut routines, mut walked) = (0, 0, 0);
+    for i in 0..BOARDS {
+        let mut rng = rand::rngs::StdRng::seed_from_u64(i);
+        let mut game = game(9950 + i as u32);
+        let player = game.player_entity();
+        if let Some(mut stats) = game.world.get_mut::<Stats>(player) {
+            stats.hp = 10_000;
+            stats.max_hp = 10_000;
+        }
+        let companion = body(&mut game, &generic_species().id);
+        // `body` spawns no `StatusEffects`, and a Stun has nowhere to land
+        // without one — the companion would read as a routine that missed.
+        game.world
+            .entity_mut(companion)
+            .insert(StatusEffects::default());
+        game.world.resource_mut::<Party>().0.push(companion);
+        let count = rng.random_range(1..=3);
+        let pack = tactical_fight(&mut game, count, 1_000);
+        for &hostile in &pack {
+            if rng.random_range(0..3) == 0 {
+                only_routine(&mut game, hostile, "deadlock");
+            }
+        }
+        for body in [player, companion].into_iter().chain(pack.iter().copied()) {
+            scatter(&mut game, body, &mut rng);
+        }
+        let subject = pack[rng.random_range(0..count)];
+        let mut tampered = Tampered::default();
+        tampered.apply(TamperKind::Temperature(0.0), 3, false);
+        tampered.apply(TamperKind::Profiled, 3, false);
+        game.world.entity_mut(subject).insert(tampered);
+
+        assert!(wait_for_turn(&mut game, subject), "board {i}: no turn");
+        game.take_bolts();
+        let start = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(subject)
+            .expect("the subject stands on the board");
+        let Some(forecast) = game.tactical_forecast(subject) else {
+            skipped += 1;
+            continue;
+        };
+        let bodies: Vec<Entity> = game
+            .world
+            .resource::<TacticalBattle>()
+            .bodies()
+            .map(|(e, _)| e)
+            .collect();
+
+        assert!(game.tactical_ai_turn(), "board {i}: the turn was not run");
+        let end = game
+            .world
+            .resource::<TacticalBattle>()
+            .cell_of(subject)
+            .expect("the subject left the board");
+        assert_eq!(
+            Some(end),
+            Some(forecast.walk.last().copied().unwrap_or(start)),
+            "board {i}: the turn ended somewhere the forecast did not walk to"
+        );
+
+        match &forecast.action {
+            ForecastAction::Swing => {
+                swings += 1;
+                let bolts = game.take_bolts();
+                assert_eq!(
+                    bolts.first().map(|b| b.to),
+                    forecast.target,
+                    "board {i}: the swing landed somewhere the forecast did not name"
+                );
+            }
+            ForecastAction::Routine(id) => {
+                routines += 1;
+                assert_eq!(id, "deadlock", "board {i}");
+                let battle = game.world.resource::<TacticalBattle>();
+                let hit: Vec<(i32, i32)> = bodies
+                    .iter()
+                    .filter(|&&e| stunned(&game, e))
+                    .filter_map(|&e| battle.cell_of(e))
+                    .collect();
+                assert_eq!(
+                    hit,
+                    forecast.target.into_iter().collect::<Vec<_>>(),
+                    "board {i}: the routine stalled someone the forecast did not name"
+                );
+            }
+        }
+        if forecast.target.is_none() {
+            unreachable += 1;
+        }
+        if !forecast.walk.is_empty() {
+            walked += 1;
+        }
+        compared += 1;
+    }
+    println!(
+        "forecast sweep: {compared} compared ({unreachable} with nothing in reach, \
+         {walked} walked), {skipped} skipped; {swings} swings, {routines} routines"
+    );
+    assert!(
+        compared >= 18,
+        "only {compared} of {BOARDS} boards were compared, so the sweep proves nothing"
+    );
+    assert!(
+        walked > 0 && compared - unreachable > 0,
+        "the sweep must compare a walk and a target: {walked} walked, \
+         {unreachable} of {compared} with nothing in reach"
+    );
+    assert!(
+        swings > 0 && routines > 0,
+        "the sweep must compare both actions: {swings} swings, {routines} routines"
+    );
+}
+
+/// Spec test 4: above temperature zero the walk is a draw, so the forecast
+/// names the action and nothing else. The Cold twin's non-empty walk is what
+/// makes the empty one here the temperature gate rather than a hostile that
+/// had nowhere to go.
+#[test]
+fn above_zero_the_forecast_names_the_action_and_nothing_else() {
+    let (warm, wild) = marooned_with(&[TamperKind::Profiled]);
+    let forecast = warm
+        .tactical_forecast(wild)
+        .expect("a profiled hostile has a forecast");
+    assert_eq!(forecast.action, ForecastAction::Swing);
+    assert!(forecast.walk.is_empty(), "{:?}", forecast.walk);
+    assert_eq!(forecast.target, None);
+
+    let (cold, wild) = marooned_with(&[TamperKind::Temperature(0.0), TamperKind::Profiled]);
+    let forecast = cold
+        .tactical_forecast(wild)
+        .expect("a profiled hostile has a forecast");
+    assert!(
+        !forecast.walk.is_empty(),
+        "fixture: the marooned hostile must walk at temperature zero"
+    );
+}
+
+/// A forecast is what `Profiled` buys: without it, nothing — Cold alone
+/// included, and a profiled companion too, which the AI does not drive.
+#[test]
+fn an_unprofiled_hostile_has_no_forecast() {
+    let (cold, wild) = marooned_with(&[TamperKind::Temperature(0.0)]);
+    assert_eq!(cold.tactical_forecast(wild), None);
+    let (virgin, wild) = marooned();
+    assert_eq!(virgin.tactical_forecast(wild), None);
+
+    let mut game = game(9960);
+    let companion = body(&mut game, &generic_species().id);
+    game.world.resource_mut::<Party>().0.push(companion);
+    tactical_fight(&mut game, 1, 40);
+    let mut tampered = Tampered::default();
+    tampered.apply(TamperKind::Profiled, 3, false);
+    game.world.entity_mut(companion).insert(tampered);
+    assert_eq!(game.tactical_forecast(companion), None);
+}
+
+/// Decision 4: the forecast is exact at the moment a turn begins, so it is
+/// offered before the first beat and withdrawn once the walk is planned.
+#[test]
+fn a_hostile_mid_turn_has_no_forecast() {
+    let (mut game, wild) = marooned_with(&[TamperKind::Temperature(0.0), TamperKind::Profiled]);
+    assert!(
+        game.tactical_forecast(wild).is_some(),
+        "fixture: before its first beat the hostile has a forecast"
+    );
+    assert_eq!(game.tactical_ai_beat(), AiBeat::Stepped);
+    assert_eq!(
+        game.world.resource::<TacticalBattle>().actor(),
+        Some(wild),
+        "fixture: the hostile is still mid-turn"
+    );
+    assert_eq!(game.tactical_forecast(wild), None);
 }

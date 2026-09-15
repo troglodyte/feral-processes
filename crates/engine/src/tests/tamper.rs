@@ -1085,3 +1085,106 @@ fn an_uninjected_packmate_still_treats_the_injected_one_as_its_own() {
         "the uninjected packmate must not swing at its own injected packmate"
     );
 }
+
+/// **(M)** Spec test 10, half A: a companion under a live `Temperature`
+/// entry is the AI's for the length of its turn, and control returns the
+/// instant the entry ages out.
+///
+/// Mutation check: dropping the `taken_over` arm from `tactical_ai_actor`
+/// makes the first `assert!` below fail — `tactical_awaits_input` reads
+/// `true` for the companion's turn exactly as an untampered one would,
+/// because nothing else in the gate answers for a `Temperature` entry on a
+/// non-`Hostile` body. Verified and restored — see the commit body.
+#[test]
+fn a_heat_caught_companion_stops_awaiting_input_and_returns_when_it_ends() {
+    let mut game = game(9800);
+    let companion = body(&mut game, &generic_species().id);
+    game.world.resource_mut::<Party>().0.push(companion);
+    tactical_fight(&mut game, 1, 400);
+
+    let mut tampered = Tampered::default();
+    tampered.apply(TamperKind::Temperature(0.0), 1, false);
+    game.world.entity_mut(companion).insert(tampered);
+
+    assert!(wait_for_turn(&mut game, companion));
+    assert!(
+        !game.tactical_awaits_input(),
+        "a heat-caught companion must not await input"
+    );
+
+    let mut acted = false;
+    for _ in 0..=TACTICAL_MOVE_MAX {
+        if game.tactical_ai_beat() == AiBeat::Acted {
+            acted = true;
+            break;
+        }
+    }
+    assert!(acted, "the AI never finished the companion's turn");
+    assert!(
+        game.world.get::<Tampered>(companion).is_none(),
+        "duration: 1 must have expired on this turn's own hand-on"
+    );
+
+    assert!(wait_for_turn(&mut game, companion));
+    assert!(
+        game.tactical_awaits_input(),
+        "control must return once the entry has ended"
+    );
+}
+
+/// Spec test 10, half B: `Profiled` alone never takes a companion over —
+/// only `Temperature` and `Injected` do.
+#[test]
+fn a_profiled_companion_is_still_commanded() {
+    let mut game = game(9801);
+    let companion = body(&mut game, &generic_species().id);
+    game.world.resource_mut::<Party>().0.push(companion);
+    tactical_fight(&mut game, 1, 40);
+
+    let mut tampered = Tampered::default();
+    tampered.apply(TamperKind::Profiled, 3, false);
+    game.world.entity_mut(companion).insert(tampered);
+
+    assert!(wait_for_turn(&mut game, companion));
+    assert!(
+        game.tactical_awaits_input(),
+        "a profiled companion is still the player's to command"
+    );
+}
+
+/// Spec test 10, half C: an injected companion reads the party as its own
+/// target, the same flip `an_injected_hostile_swings_at_a_packmate` proves
+/// for the wild side.
+#[test]
+fn an_injected_companion_swings_at_the_party() {
+    let mut game = game(9802);
+    let companion = body(&mut game, &generic_species().id);
+    game.world.resource_mut::<Party>().0.push(companion);
+    let pack = tactical_fight(&mut game, 2, 40);
+    // The pack parked out of reach — an injected companion's own kind reads
+    // as its ally now, so keeping them close would prove nothing about who
+    // it actually swings at.
+    let centre = open_ground(&mut game, &pack, &[(0, 0), (0, 1)]);
+    let player = game.player_entity();
+    let beside_player = free_neighbour(&game, centre);
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .move_to(companion, beside_player)
+    );
+    inject(&mut game, companion);
+
+    let hp_before = game.world.get::<Stats>(player).unwrap().hp;
+    assert!(wait_for_turn(&mut game, companion));
+    force_the_next_attack_to_land(&mut game);
+
+    assert!(
+        game.tactical_ai_turn(),
+        "the injected companion's turn was not run"
+    );
+
+    assert!(
+        game.world.get::<Stats>(player).unwrap().hp < hp_before,
+        "the injected companion must swing at the party"
+    );
+}

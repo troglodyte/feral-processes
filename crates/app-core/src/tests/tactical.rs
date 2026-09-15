@@ -1,7 +1,7 @@
 //! The three screens a tactical fight is fought through, and the loop that
 //! paces the wild side.
 
-use super::support::test_app;
+use super::support::{app_with_companions_in_the_party, install_player_routines, test_app};
 use crate::{
     App, GameKey, Mode, TACTICAL_HANDOVER_SECONDS, TACTICAL_STEPS_PER_SECOND,
     TACTICAL_TURNS_PER_SECOND, TacticalIntent,
@@ -695,4 +695,126 @@ fn log_kinds(app: &App) -> Vec<MessageKind> {
         .iter()
         .map(|line| line.kind)
         .collect()
+}
+
+/// A tactical fight with a companion in the party and the player carrying
+/// `heat_injection` as its only routine — `fighting_app`'s bump-into-a-lone-
+/// wild-program sweep, on top of `app_with_companions_in_the_party` rather
+/// than a bare `test_app`, since what this fixture is for needs both.
+fn taken_over_ready_app(start_seed: u32) -> App {
+    for seed in start_seed..start_seed + 200 {
+        let mut app = app_with_companions_in_the_party(seed, 1);
+        install_player_routines(&mut app, &["heat_injection"]);
+        // `fighting_app`'s own toggle, applied last so neither save round
+        // trip above undoes it.
+        app.profile.tactical_battles = true;
+        let mut game = app.game.take().expect("the fixture has a game");
+        game.install_profile(app.profile.clone());
+        app.game = Some(game);
+
+        let game = app.game.as_mut().expect("the fixture has a game");
+        let player = game.player_status().position;
+        let target = game
+            .view_entities(12, 12)
+            .into_iter()
+            .filter(|e| e.is_hostile && !e.is_tamed && !e.is_structure)
+            .find(|e| (e.pos.0 - player.0).abs() + (e.pos.1 - player.1).abs() == 1);
+        let Some(target) = target else { continue };
+        app.handle_key(match (target.pos.0 - player.0, target.pos.1 - player.1) {
+            (1, 0) => GameKey::Right,
+            (-1, 0) => GameKey::Left,
+            (0, 1) => GameKey::Down,
+            _ => GameKey::Up,
+        });
+        if app.mode == Mode::TacticalBattle {
+            let _ = app.take_sounds();
+            return app;
+        }
+    }
+    panic!("no seed put a lone wild program next to a companion-carrying player");
+}
+
+/// Spec test 10's app-core half: `advance_tactical` already beats with
+/// `tactical_ai_beat` whenever `tactical_player_turn()` is false, so a
+/// taken-over companion needs no change there — this is the confirmation.
+/// The player runs Heat Injection at its own cell, catching the companion
+/// standing beside it (`deploy::plan` seats a two-body party one cell
+/// apart), and with `tactical_auto` off `advance_tactical` still plays the
+/// tampered companion's turn on a bare `dt`.
+#[test]
+fn a_taken_over_companion_plays_without_a_key() {
+    let mut app = taken_over_ready_app(9840);
+    wait_for_the_player(&mut app);
+    let companion = {
+        let view = app
+            .game
+            .as_mut()
+            .expect("the fixture has a game")
+            .tactical_view()
+            .expect("the fight is open");
+        view.bodies
+            .iter()
+            .find(|b| !b.is_player && !b.is_hostile)
+            .expect("a companion is seated")
+            .entity
+    };
+
+    app.handle_key(GameKey::Char('s'));
+    assert_eq!(
+        app.mode,
+        Mode::TacticalRoutine,
+        "the player's only routine did not open the picker"
+    );
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(
+        app.mode,
+        Mode::TacticalAim,
+        "picking the only routine did not open the aim cursor"
+    );
+    // The cursor opens on the acting body's own cell — the player's — which
+    // is already Heat Injection's self-cast: never on the player, always on
+    // whoever stands beside it.
+    app.handle_key(GameKey::Enter);
+    assert_eq!(
+        app.mode,
+        Mode::TacticalBattle,
+        "Heat Injection aimed at the player's own cell must land"
+    );
+
+    for _ in 0..64 {
+        match acting_entity(&mut app) {
+            Some(actor) if actor == companion => break,
+            Some(_) => {
+                if !app
+                    .game
+                    .as_mut()
+                    .expect("the fixture has a game")
+                    .tactical_ai_turn()
+                {
+                    app.game
+                        .as_mut()
+                        .expect("the fixture has a game")
+                        .tactical_end_turn();
+                }
+            }
+            None => panic!("the fight ended before the companion's turn came round"),
+        }
+    }
+    assert_eq!(
+        acting_entity(&mut app),
+        Some(companion),
+        "the turn never came round to the companion"
+    );
+    assert!(
+        !app.tactical_player_turn(),
+        "a taken-over companion must not await a key"
+    );
+
+    app.advance_tactical(10.0);
+
+    assert_ne!(
+        acting_entity(&mut app),
+        Some(companion),
+        "advance_tactical must play the companion's turn on dt alone, with no key pressed for it"
+    );
 }

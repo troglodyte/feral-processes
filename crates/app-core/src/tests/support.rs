@@ -1101,6 +1101,30 @@ pub(crate) fn teach_player_routines(app: &mut App, routines: &[&str]) {
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
 }
 
+/// Installs `routines` into the player's own slots on an existing fixture —
+/// `player.routines`, the *equipped* set a fight can actually run, rather
+/// than `teach_player_routines`'s `known_routines` catalogue an Install
+/// screen offers. For a test that needs a companion already in the party
+/// (`app_with_companions_in_the_party`) standing beside a player who can run
+/// a tactical routine, since `app_with_player_routines` builds its own fresh
+/// fixture rather than editing one that already carries other state.
+pub(crate) fn install_player_routines(app: &mut App, routines: &[&str]) {
+    static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let unique = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+    let assets_dir = test_assets_dir();
+    let path = std::env::temp_dir().join(format!("feral_processes_appcore_installed_{unique}.sav"));
+    let _cleanup = RemoveOnDrop(&path);
+    let game = app.game.as_mut().expect("a fixture with a game");
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.player.routines = routines.iter().map(|r| r.to_string()).collect();
+    save::save_to_file(&path, &data).unwrap();
+
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+}
+
 /// Empties the player's routine slots on an existing fixture, through the
 /// save the way `stand_in_base_at` does.
 ///

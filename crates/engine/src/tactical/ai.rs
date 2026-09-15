@@ -203,6 +203,24 @@ impl Game {
         hostile != injected
     }
 
+    /// Whether `body` is a companion the AI drives rather than the player —
+    /// the design's "going mad": a `Temperature` or `Injected` entry takes it
+    /// over for as long as the entry lasts, whether or not `App::tactical_auto`
+    /// is on.
+    ///
+    /// Never the player and never `Hostile`, which is already the AI's every
+    /// other way. `Profiled` and `Hallucinating` do not take a body over —
+    /// only the two kinds that also bend a decision: which cell to draw and
+    /// which side to swing at.
+    pub(crate) fn taken_over(&self, body: Entity) -> bool {
+        if self.world.get::<Hostile>(body).is_some() || body == self.player_entity() {
+            return false;
+        }
+        self.world.get::<Tampered>(body).is_some_and(|tampered| {
+            tampered.temperature().is_some() || tampered.has(TamperSlot::Injected)
+        })
+    }
+
     /// Runs the acting body's whole turn, and reports whether it did.
     ///
     /// `false` means the turn is not one this file drives — no fight open,
@@ -223,15 +241,18 @@ impl Game {
     /// neither the player nor a hostile, and the fight would either hang
     /// waiting for a key nobody may press or move a companion by itself.
     ///
-    /// **Every party body is the player's to command with one exception**,
-    /// so the gate is `Hostile` or `Summoned` and not `Player`: a companion
-    /// standing on a battle map waits for input exactly as the player does,
-    /// and a forked program is the first party body that drives itself.
+    /// **Every party body is the player's to command with two exceptions**,
+    /// so the gate is `Hostile`, `Summoned` or `taken_over` and not `Player`:
+    /// a companion standing on a battle map waits for input exactly as the
+    /// player does, unless a fork fielded it (it is the first party body
+    /// that drives itself) or a Temperature or Injected entry has taken it
+    /// over for the length of that entry.
     ///
-    /// Read the exception as the feature rather than as a bug: a fork is
+    /// Read the fork exception as the feature rather than as a bug: it is
     /// fielded by a routine, not brought to the fight, and asking the player
     /// to command one would make `fork_cluster` three more turns of
-    /// bookkeeping a round. Sidedness needs nothing — `tactical_sides` is
+    /// bookkeeping a round. The taken-over exception is the design's own —
+    /// see `taken_over`'s doc. Sidedness needs nothing — `tactical_sides` is
     /// already relative to the actor, which is why `tactical_drive_turn`
     /// works at all.
     fn tactical_ai_actor(&self) -> Option<Entity> {
@@ -240,7 +261,8 @@ impl Game {
             || self
                 .world
                 .get::<crate::components::Summoned>(actor)
-                .is_some())
+                .is_some()
+            || self.taken_over(actor))
         .then_some(actor)
     }
 
@@ -285,11 +307,12 @@ impl Game {
 
     /// Spends one beat of the acting body's turn **whichever side it is on**.
     ///
-    /// `tactical_ai_beat`'s door with the `Hostile` gate lifted, and the
-    /// third onto one `run_tactical_beat` — the fight the player watches
-    /// resolve itself has to be the fight they would have fought by hand.
-    /// What it exists for is auto-attack: a player who has asked for one owes
-    /// the party's turns to somebody, and this is who.
+    /// `tactical_ai_beat`'s door with its `Hostile`/`Summoned`/taken-over
+    /// gate lifted entirely, and the third onto one `run_tactical_beat` —
+    /// the fight the player watches resolve itself has to be the fight they
+    /// would have fought by hand. What it exists for is auto-attack: a
+    /// player who has asked for one owes the party's turns to somebody, and
+    /// this is who.
     ///
     /// **It does not make a party body the AI's.** `tactical_awaits_input`
     /// still answers `true` for one, which is what keeps "every party body is
@@ -338,12 +361,13 @@ impl Game {
     /// Runs the acting body's turn **whichever side it is on**, and reports
     /// whether there was one.
     ///
-    /// `tactical_ai_actor`'s gate is `Hostile` because every party body is
-    /// the player's to command — so a fight with nobody at the keyboard
-    /// cannot be resolved through the door above, which is the whole of why
-    /// this one exists. **Its only caller is `arena::run`**: called from a
-    /// real fight it would walk a companion by itself, which is exactly the
-    /// failure that gate is there to prevent.
+    /// `tactical_ai_actor`'s gate is `Hostile`, `Summoned` or taken-over
+    /// because every other party body is the player's to command — so a
+    /// fight with nobody at the keyboard cannot be resolved through the door
+    /// above, which is the whole of why this one exists. **Its only caller
+    /// is `arena::run`**: called from a real fight it would walk a
+    /// companion by itself, which is exactly the failure that gate is
+    /// there to prevent.
     ///
     /// A party body **swings and never invokes**, which is not a policy
     /// invented for the tester: `PartyPlan::AllAttack` is the group model's

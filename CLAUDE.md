@@ -759,9 +759,10 @@ relying on one, and correct all three places if it has moved.
 - **A won fight says so, and it is the only ending that needed telling.**
   `settle_rewards` heads the results with "You won!", read off
   `BattleState::groups` being empty — telemetry's own definition.
-- **A finished fight keeps the battle screen; it does not hand off to a
-  summary page.** It reads: the final round's blows, the outcome, the
-  salvage, the XP.
+- **A finished group fight keeps the battle screen, and a finished tactical
+  fight is a popup over its own board** — `Mode::TacticalResult` drawing
+  `ClosingRoster::board`, the copy `finish_fight` takes because
+  `TacticalBattle` goes with the fight.
 - **A battle does not end when the player's HP hits zero**, and three things
   heal them before anyone outside can look.
 - **A fight's rewards are granted per kill and announced once.** Moving the

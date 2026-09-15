@@ -103,7 +103,34 @@ pub struct TacticalView {
     pub reachable: Vec<(i32, i32)>,
 }
 
+impl TacticalView {
+    /// The board with nothing left to act: no actor, no reach and no turn
+    /// waiting on a key, so a finished fight's board draws no turn arrow
+    /// and no reach wash offering a move there is no fight left to spend.
+    pub fn frozen(self) -> Self {
+        Self {
+            active: None,
+            player_turn: false,
+            allowance: 0,
+            reachable: Vec::new(),
+            ..self
+        }
+    }
+}
+
 impl Game {
+    /// The board the last fight ended on, when it was a tactical one — what
+    /// a finished tactical fight's results are drawn over, `TacticalBattle`
+    /// being gone. See `ClosingRoster::board`.
+    pub fn tactical_result_view(&self) -> Option<TacticalView> {
+        self.world
+            .resource::<crate::resources::BattleTimeline>()
+            .closing
+            .as_ref()?
+            .board
+            .clone()
+    }
+
     /// Whether a tactical fight is open.
     ///
     /// The router's counterpart to `Game::in_battle`, and what app-core

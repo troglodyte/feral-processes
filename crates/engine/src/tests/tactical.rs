@@ -8,7 +8,9 @@ use crate::species::SpeciesDb;
 use crate::tactical::TacticalBattle;
 use crate::tactical::reach::allowance;
 use crate::tactical::turn::StepOutcome;
-use crate::tests::support::{equip_weapon, generic_species, test_assets_dir};
+use crate::tests::support::{
+    equip_weapon, generic_species, insert_battle, spawn_wild_on_player_tile, test_assets_dir,
+};
 use crate::tuning::{DEFAULT_BASE_SPEED, PLAYER_BASE_SPEED, TACTICAL_MOVE_MAX};
 use bevy_ecs::prelude::Entity;
 
@@ -1621,31 +1623,7 @@ fn a_capture_refuses_a_body_of_your_own() {
 #[test]
 fn a_finished_tactical_fight_leaves_a_results_roster() {
     let mut game = game();
-    let pack = tactical_fight(&mut game, 1, 1);
-    let player = game.player_entity();
-    let target = pack[0];
-
-    for _ in 0..64 {
-        if game.world.get_resource::<TacticalBattle>().is_none() {
-            break;
-        }
-        if !wait_for_turn(&mut game, player) {
-            break;
-        }
-        let Some(at) = game.world.resource::<TacticalBattle>().cell_of(target) else {
-            break;
-        };
-        if let Some(beside) = beside(&game, at) {
-            game.world
-                .resource_mut::<TacticalBattle>()
-                .move_to(player, beside);
-        }
-        game.tactical_attack(target);
-    }
-    assert!(
-        game.world.get_resource::<TacticalBattle>().is_none(),
-        "the fight is still open"
-    );
+    win_a_lone_tactical_fight(&mut game);
 
     let view = game
         .battle_result_view()
@@ -1658,6 +1636,103 @@ fn a_finished_tactical_fight_leaves_a_results_roster() {
     assert!(
         view.groups.is_empty(),
         "the board was cleared and the results still list a hostile"
+    );
+}
+
+/// The results popup is drawn over the board the fight ended on, and
+/// `finish_fight` removes `TacticalBattle` — so without a copy taken there,
+/// the map pane has nothing to draw under it but the surface.
+#[test]
+fn a_finished_tactical_fight_leaves_its_board_frozen() {
+    let mut game = game();
+    win_a_lone_tactical_fight(&mut game);
+
+    let board = game
+        .tactical_result_view()
+        .expect("a finished tactical fight left no board to draw under its results");
+    assert!(
+        board
+            .bodies
+            .iter()
+            .any(|body| body.entity == game.player_entity()),
+        "the frozen board lost the player"
+    );
+    assert!(
+        board.bodies.iter().all(|body| !body.is_hostile),
+        "a won fight's board still stands a hostile on it"
+    );
+    // Nothing is acting on a finished board: a turn arrow or a reach wash
+    // there offers a move there is no fight left to spend.
+    assert_eq!(board.active, None, "the frozen board still names an actor");
+    assert!(
+        board.reachable.is_empty(),
+        "the frozen board still washes reach"
+    );
+    assert!(!board.player_turn, "the frozen board still awaits input");
+}
+
+/// The popup lists what the fight came to, and nothing of the blow-by-blow:
+/// the same lines `prune_battle_narration` keeps, read before it runs.
+#[test]
+fn a_finished_tactical_fight_reports_only_its_outcomes() {
+    let mut game = game();
+    win_a_lone_tactical_fight(&mut game);
+
+    let outcomes = game.battle_outcomes();
+    assert!(
+        outcomes.iter().any(|entry| entry.text == "You won!"),
+        "the outcome lines never say the fight was won: {outcomes:?}"
+    );
+    assert!(
+        outcomes
+            .iter()
+            .all(|entry| entry.kind.survives_battle_prune()),
+        "a narration line reached the outcomes: {outcomes:?}"
+    );
+}
+
+/// A group fight after a tactical one must not inherit its board.
+#[test]
+fn a_group_fight_leaves_no_frozen_board() {
+    let mut game = game();
+    win_a_lone_tactical_fight(&mut game);
+    let player = game.player_entity();
+    let wild = spawn_wild_on_player_tile(&mut game);
+    insert_battle(&mut game, player, vec![wild]);
+    game.end_battle(player, None);
+    assert!(
+        game.tactical_result_view().is_none(),
+        "a group fight's results drew the last tactical board"
+    );
+}
+
+/// Fights a one-body tactical pack to its end, the player walking into reach
+/// of it every turn.
+fn win_a_lone_tactical_fight(game: &mut Game) {
+    let pack = tactical_fight(game, 1, 1);
+    let player = game.player_entity();
+    let target = pack[0];
+
+    for _ in 0..64 {
+        if game.world.get_resource::<TacticalBattle>().is_none() {
+            break;
+        }
+        if !wait_for_turn(game, player) {
+            break;
+        }
+        let Some(at) = game.world.resource::<TacticalBattle>().cell_of(target) else {
+            break;
+        };
+        if let Some(beside) = beside(game, at) {
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(player, beside);
+        }
+        game.tactical_attack(target);
+    }
+    assert!(
+        game.world.get_resource::<TacticalBattle>().is_none(),
+        "the fight is still open"
     );
 }
 

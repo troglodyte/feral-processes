@@ -20,14 +20,16 @@ use feral_processes_engine::tactical::view::{TacticalBody, TacticalView};
 
 use super::RARITY_BAR_PX;
 use super::base::{ConRead, tile_origin_px};
+use super::history::history_rows;
 use super::hud::layout::strip_inset;
 use super::hud::palette;
 use super::marks::draw_rarity_bar;
-use super::popup::{PopupSize, draw_popup, item_row, spent_item_row, text_row};
+use super::popup::{PopupSize, Row, draw_popup, item_row, spent_item_row, text_row};
 use crate::fx::Fx;
 use crate::paint::{Color, Painter, Rect};
 use crate::text::Metrics;
 use feral_processes_app_core::{Mode, menu_shortcut};
+use feral_processes_engine::LogEntry;
 use feral_processes_engine::battle::SpecialOption;
 
 /// The ground, by kind. Brightness and nothing else carries passability,
@@ -658,6 +660,43 @@ pub(super) fn draw_tactical_routines(
     );
 }
 
+/// A finished tactical fight's results, drawn as a popup over the board it
+/// was fought on — see `Mode::TacticalResult`.
+pub(super) fn draw_tactical_result(
+    outcomes: &[LogEntry],
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    draw_popup(
+        "Fight Over",
+        PopupSize::Large,
+        &tactical_result_rows(outcomes),
+        refusal,
+        painter,
+        m,
+    );
+}
+
+/// The popup's rows: one per folded result, through the history screen's
+/// own row builder so a result reads the same there and here.
+///
+/// Items and not text rows, because `draw_popup` pages an item span and
+/// nothing else — a salvage tally and an XP line per fighter can outrun the
+/// box, and a text-row page loses its tail in silence. Nothing is selected:
+/// the page opens on its first line, and every line is in the log pane
+/// once the popup is gone.
+pub(super) fn tactical_result_rows(outcomes: &[LogEntry]) -> Vec<Row> {
+    let mut rows = if outcomes.is_empty() {
+        vec![text_row("The fight is over.")]
+    } else {
+        history_rows(outcomes, usize::MAX)
+    };
+    rows.push(text_row(""));
+    rows.push(text_row("[any key] continue"));
+    rows
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -715,6 +754,55 @@ mod tests {
                 body.glyph
             );
         }
+    }
+
+    /// A finished tactical fight ends in a popup over its own board, and
+    /// never on the group model's battle screen — the bug this screen fixed.
+    #[test]
+    fn a_finished_fight_draws_its_results_over_the_board() {
+        let mut game = fighting();
+        for _ in 0..4000 {
+            if !game.has_active_battle() {
+                break;
+            }
+            game.tactical_auto_beat();
+        }
+        assert!(!game.has_active_battle(), "the fight never resolved");
+        assert!(
+            game.tactical_result_view().is_some(),
+            "the fight left no board"
+        );
+        let outcomes = game.battle_outcomes();
+        let first = outcomes
+            .first()
+            .expect("the fight reported nothing")
+            .text
+            .clone();
+
+        let mut app = crate::render::test_support::playing_app_around(game);
+        app.mode = Mode::TacticalResult;
+        let mut fx = Fx::new();
+        let (_, shapes) = with_painter(|p| crate::render::draw(&mut app, &mut fx, p));
+        let painted = painted_text(&shapes);
+
+        assert!(
+            painted.iter().any(|t| t == "Fight Over"),
+            "no results popup was drawn"
+        );
+        assert!(
+            painted.iter().any(|t| t.contains(first.as_str())),
+            "the popup does not list the fight's first result, {first:?}"
+        );
+        // The ground's own fill and not a body's glyph: the player's `@` is
+        // drawn by the surface map too, so a glyph passes with no board.
+        assert!(
+            painted_rect_fill_count(&shapes, cell_color(BattleCell::Open)) > 0,
+            "the board the fight ended on is not under the popup"
+        );
+        assert!(
+            !painted.iter().any(|t| t.starts_with("Hostile programs")),
+            "the fight ended on the group model's battle screen"
+        );
     }
 
     /// A cloaked body fades, and an uncloaked one does not.
@@ -1264,6 +1352,57 @@ mod tests {
             .into_iter()
             .find(|(_, text, _)| text == &glyph.to_string())
             .map(|(_, _, r)| r)
+    }
+
+    /// A finished fight's board has nobody acting, and its results popup is
+    /// read for as long as the player likes — so the camera stays where the
+    /// fight left it rather than letting the hold lapse and swinging to the
+    /// middle of the board under the popup.
+    #[test]
+    fn a_frozen_board_keeps_the_camera_where_the_fight_left_it() {
+        let mut game = fighting();
+        let view = game.tactical_view().expect("the fight is open");
+        let acting = acting_body(&view).expect("somebody is acting");
+        let middle = (view.board.side / 2, view.board.side / 2);
+        assert_ne!(
+            acting.cell, middle,
+            "the acting body stands mid-board, so no framing could differ"
+        );
+        let glyph = acting.glyph;
+        assert_eq!(
+            view.bodies.iter().filter(|b| b.glyph == glyph).count(),
+            1,
+            "two bodies wear {glyph:?}, so a glyph box cannot name one of them"
+        );
+        let frozen = view.clone().frozen();
+
+        let mut fx = Fx::new();
+        let frame = |fx: &mut Fx, at: f64, v: &TacticalView| {
+            fx.begin_frame(at, Vec::new(), Vec::new(), Vec::new(), Vec::new(), true);
+            let (_, shapes) =
+                with_painter(|p| draw_tactical_map(v, None, &[], &[], fx, p, pane(), 32.0, 24));
+            shapes
+        };
+
+        let fought = frame(&mut fx, 0.0, &view);
+        let mut t = 0.0;
+        // Frame by frame, as a player reading the popup draws it, well past
+        // the dwell that would release a hold nobody refreshes.
+        while t < crate::fx::CAMERA_DWELL_SECONDS * 10.0 {
+            t += 0.016;
+            frame(&mut fx, t, &frozen);
+        }
+        let read = frame(&mut fx, t + 0.016, &frozen);
+
+        assert!(
+            glyph_box(&fought, glyph).is_some(),
+            "the acting body was not drawn at all"
+        );
+        assert_eq!(
+            glyph_box(&fought, glyph),
+            glyph_box(&read, glyph),
+            "the camera left the fight's last framing while its results were read"
+        );
     }
 
     /// The camera stays on the body that just acted, and moves once the blow

@@ -8,6 +8,7 @@
 use crate::components::Summoned;
 use crate::resources::LairFight;
 use crate::tactical::TacticalBattle;
+use crate::tactical::view::TacticalView;
 use crate::tuning::{FLEE_COUNTERATTACK_CHANCE, JACK_OUT_LUCK_MAX, JACK_OUT_LUCK_MIN, MAX_NEMESES};
 use crate::*;
 
@@ -326,11 +327,15 @@ impl Game {
         // winning the fight is the one thing the results page most needs to
         // report. A copy, not a live read — the entities are gone by the
         // time anything draws it.
+        // Taken here for the same reason, and because `TacticalBattle` goes
+        // with `BattleState` at the bottom.
+        let board = self.tactical_view().map(TacticalView::frozen);
         let closing = self.closing_rows().map(|(groups, party)| ClosingRoster {
             groups,
             party,
             round: verdict.rounds,
             player_decompiler: self.player_decompiler_bonuses().skill,
+            board,
         });
         self.world.resource_mut::<BattleTimeline>().closing = closing;
         // Beside the `closing` capture and for the same reason: the reap

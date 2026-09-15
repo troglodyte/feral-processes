@@ -123,6 +123,13 @@ impl Game {
         self.world.resource::<MessageLog>().since_round().to_vec()
     }
 
+    /// What the last fight came to — its results, folded — read before
+    /// `prune_battle_narration` has run. The tactical results popup lists
+    /// these over a map whose log pane still holds the blow-by-blow.
+    pub fn battle_outcomes(&self) -> Vec<LogEntry> {
+        crate::resources::condense(&self.world.resource::<MessageLog>().outcomes_since_battle())
+    }
+
     /// Changes every time the pane's contents reset — a new round, or a new
     /// battle. A frontend pacing the narration restarts when this moves.
     pub fn battle_log_generation(&self) -> u64 {

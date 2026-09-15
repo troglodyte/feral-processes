@@ -650,11 +650,11 @@ impl App {
             self.history_written = true;
             self.seal_run();
         }
-        // The other exit from `Mode::BattleResult`: a run that ends on the
+        // The other exit from both results screens: a run that ends on the
         // losing round never gets a key press on the results screen, so
         // without this the fight's blow-by-blow would sit in the log the
         // history screen reads.
-        if self.mode == Mode::BattleResult {
+        if matches!(self.mode, Mode::BattleResult | Mode::TacticalResult) {
             self.leave_battle_result();
         }
         self.mode = Mode::GameOver;

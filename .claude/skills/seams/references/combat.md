@@ -435,7 +435,22 @@
   salvage, the XP. `BattleTimeline::closing` is captured at the **top** of
   `end_battle`, the only moment a companion that died winning still exists.
   Its hostile half is empty on a win and populated on a jack-out, both
-  deliberately.
+  deliberately. **A tactical fight is the exception, and it is its own
+  mode rather than a branch in `draw_battle`.** Handed to
+  `Mode::BattleResult` it drew the group model's screen over a fight fought
+  on a map, and reusing that mode with a board check
+  would still be `is_battle` — the reveal and a swallowed key, for lines the
+  player already watched land. `Mode::TacticalResult` lists
+  `Game::battle_outcomes` (the prune's own predicate,
+  `MessageKind::survives_battle_prune`, read without pruning) over
+  `Game::tactical_result_view`. Three things hold it up: the board is
+  `TacticalView::frozen` — no actor, no reach — or it draws a turn arrow and
+  a reach wash for a fight that is over; `Fx::battle_center`'s nobody-acting
+  arm **refreshes** the hold's `seen`, or the hold lapses after
+  `CAMERA_DWELL_SECONDS` and the camera swings to mid-board under the popup;
+  and the gui test asserts the battle ground's fill, never a body's glyph,
+  because the surface map draws the player's `@` too and a glyph check
+  passed with no board at all.
 - **A battle does not end when the player's HP hits zero**, and three things
   heal them before anyone outside can look. "Did the player win" is read off
   the *opponents*. A level-up full-heals, so an HP fraction sampled after the
@@ -449,8 +464,9 @@
   screen, not when the fight ends.** `Game::prune_battle_narration` is the
   door and `App::leave_battle_result` the one caller; run inside `end_battle`
   it deleted the decisive round before anything could reveal it.
-  `Mode::BattleResult` has one key handler and nothing ticks there, so there
-  are exactly two exits to get right. `keep_battle_narration` is unaffected,
+  `Mode::BattleResult` and `Mode::TacticalResult` each have one key handler
+  and nothing ticks on either, so there are three exits to get right — the
+  two keys and `check_game_over`, which names both modes. `keep_battle_narration` is unaffected,
   still `arena`'s alone.
 - **There is one way into a staged arena fight, `arena::stage`**, and one
   reader of what one cost, `arena::Watch`. An app-core copy of the outcome

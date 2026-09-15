@@ -488,8 +488,9 @@ impl App {
     }
 
     /// Drops the finished fight's narration, keeping its results. The one
-    /// thing every exit from `Mode::BattleResult` owes the map, so both of
-    /// them call this rather than the engine directly.
+    /// thing every exit from `Mode::BattleResult` and `Mode::TacticalResult`
+    /// owes the map, so all of them call this rather than the engine
+    /// directly.
     pub(crate) fn leave_battle_result(&mut self) {
         if let Some(game) = &mut self.game {
             game.prune_battle_narration();

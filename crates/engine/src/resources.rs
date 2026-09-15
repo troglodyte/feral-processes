@@ -285,6 +285,22 @@ pub enum MessageKind {
     Tantrum,
 }
 
+impl MessageKind {
+    /// Whether a line of this kind outlives the end of a fight — see
+    /// `MessageLog::retain_outcomes_since_battle`, which prunes by it, and
+    /// `MessageLog::outcomes_since_battle`, which lists by it.
+    pub fn survives_battle_prune(self) -> bool {
+        matches!(
+            self,
+            MessageKind::Outcome
+                | MessageKind::Loot
+                | MessageKind::LevelUp
+                | MessageKind::Raid
+                | MessageKind::Complete
+        )
+    }
+}
+
 /// Which of the two things the player is doing produced a line: running the
 /// base, or being out in the world. Deliberately a second axis rather than
 /// more `MessageKind` variants — kind is read by three consumers that mean
@@ -493,6 +509,21 @@ impl MessageLog {
         }
     }
 
+    /// The lines `retain_outcomes_since_battle` would keep from the last
+    /// battle's range, read without pruning anything — what a tactical
+    /// fight's results popup lists while the map's log pane still holds the
+    /// blow-by-blow under it. Empty before the run's first battle.
+    pub fn outcomes_since_battle(&self) -> Vec<LogLine> {
+        let Some(start) = self.index_of(self.battle_start) else {
+            return Vec::new();
+        };
+        self.lines[start..]
+            .iter()
+            .filter(|line| line.kind.survives_battle_prune())
+            .cloned()
+            .collect()
+    }
+
     /// Drops the blow-by-blow from the battle range, keeping what the player
     /// should still be reading once the map is back: the battle's results,
     /// and any world news that landed mid-fight. `Raid` is kept because the
@@ -508,15 +539,7 @@ impl MessageLog {
         };
         let mut index = 0;
         self.lines.retain(|line| {
-            let keep = index < start
-                || matches!(
-                    line.kind,
-                    MessageKind::Outcome
-                        | MessageKind::Loot
-                        | MessageKind::LevelUp
-                        | MessageKind::Raid
-                        | MessageKind::Complete
-                );
+            let keep = index < start || line.kind.survives_battle_prune();
             index += 1;
             keep
         });
@@ -1411,6 +1434,11 @@ pub struct ClosingRoster {
     pub party: Vec<crate::views::PartySlotView>,
     pub round: u32,
     pub player_decompiler: i32,
+    /// The battle map as the fight ended, when it was a tactical one — what
+    /// the results popup is drawn over. `None` for a group fight, and
+    /// rebuilt with the rest of the roster every fight, so a group fight
+    /// after a tactical one cannot draw the old board.
+    pub board: Option<crate::tactical::view::TacticalView>,
 }
 
 impl BattleTimeline {

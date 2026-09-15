@@ -88,6 +88,10 @@ impl Game {
             .find(|def| {
                 !matches!(def.effect, AbilityEffect::Decompile)
                     && !def.effect.field_only()
+                    // No AI ever chooses a tamper routine, hostile or
+                    // party — a carrier's retaliation is the wild side's
+                    // own AI, and it has no scoring for one yet.
+                    && !def.effect.tactical_only()
                     && !def.is_passive()
             })
             .cloned()

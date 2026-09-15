@@ -1,0 +1,11 @@
+(
+    id: "hallucination",
+    name: "Hallucination Group",
+    description: "Seeds one hostile group with decoys it mistakes for real",
+    target: WholeEnemyGroup,
+    effect: Tamper(kind: Hallucinating(decoys: 3), duration: 3),
+    cooldown: 5,
+    power_cost: 14.0,
+    shape: Some(Radius(radius: 2)),
+    range: Some((min: 0, max: 5)),
+)

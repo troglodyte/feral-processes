@@ -658,6 +658,10 @@ impl Game {
             .into_iter()
             .filter(|d| !d.effect.field_only() && !d.is_passive())
             .filter(|d| !matches!(d.effect, crate::abilities::AbilityEffect::Decompile))
+            // No AI ever chooses a tamper routine — this off-screen fight is
+            // model-blind through `use_ability`, which has no seat for one
+            // outside a real tactical battle.
+            .filter(|d| !d.effect.tactical_only())
             .find(|d| self.ability_unavailable(actor, d).is_none());
         match choice {
             Some(ability) => {

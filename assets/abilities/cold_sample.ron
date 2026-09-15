@@ -1,0 +1,11 @@
+(
+    id: "cold_sample",
+    name: "Cold Sample Single",
+    description: "Pins one target's decisions at the argmax for 3 rounds",
+    target: OneEnemyGroupFront,
+    effect: Tamper(kind: Temperature(0.0), duration: 3),
+    cooldown: 3,
+    power_cost: 6.0,
+    shape: Some(Single),
+    range: Some((min: 0, max: 5)),
+)

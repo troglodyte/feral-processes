@@ -1233,6 +1233,10 @@ impl Game {
             // A fork forking is a fork bomb: `dissolve_summons` would kill
             // the body that ran it halfway through its own turn.
             .filter(|(_, def)| !matches!(def.effect, AbilityEffect::Summon { .. }))
+            // Tactical-only, `AbilityEffect::tactical_only`'s reason: a fork
+            // in the group model has no hostile AI to tamper with, and
+            // picking one would reach `use_ability`'s `unreachable!` arm.
+            .filter(|(_, def)| !def.effect.tactical_only())
             .filter(|(_, def)| self.ability_unavailable(body, def).is_none())
             .collect();
         let pick = {
@@ -1644,6 +1648,14 @@ impl Game {
                         "AbilityEffect::field_only; battle_special_options and wild_routine_ready both exclude it"
                     )
                 }
+                // `Decompile`'s reason, and `Summon`'s: seated by the one
+                // combat model that can resolve it rather than through this
+                // recipient loop. `Game::run_tactical_routine` is what
+                // actually applies a Tamper — the four tactical-only
+                // exclusions above are what make this arm unreachable.
+                AbilityEffect::Tamper { .. } => unreachable!(
+                    "AbilityEffect::tactical_only; run_tactical_routine seats a Tamper directly"
+                ),
             }
         }
         // **After the action resolves**, so the swing's own line is logged

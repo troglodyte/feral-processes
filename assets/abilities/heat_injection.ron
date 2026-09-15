@@ -1,0 +1,11 @@
+(
+    id: "heat_injection",
+    name: "Heat Injection Group",
+    description: "Randomizes one hostile group's decisions for 2 rounds",
+    target: WholeEnemyGroup,
+    effect: Tamper(kind: Temperature(2.0), duration: 2),
+    cooldown: 4,
+    power_cost: 12.0,
+    shape: Some(Radius(radius: 1)),
+    range: Some((min: 0, max: 4)),
+)

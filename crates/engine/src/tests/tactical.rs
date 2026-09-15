@@ -132,7 +132,7 @@ fn log_texts(game: &Game) -> Vec<String> {
 
 /// A tactical fight opened around `count` hostiles standing next to the
 /// player, each on `hp`.
-fn tactical_fight(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
+pub(super) fn tactical_fight(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
     let pack = tactical_pack(game, count, hp);
     game.open_tactical_battle(pack.clone());
     pack
@@ -179,7 +179,7 @@ fn tactical_pack(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
 
 /// Hands turns on until it is `who`'s again, or the fight ends. Bounded, so
 /// a model that stops handing the turn on fails rather than hangs.
-fn wait_for_turn(game: &mut Game, who: Entity) -> bool {
+pub(super) fn wait_for_turn(game: &mut Game, who: Entity) -> bool {
     for _ in 0..64 {
         match game.tactical_actor() {
             None => return false,

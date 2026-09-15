@@ -71,8 +71,35 @@ const _: () = assert!(
 /// How thick the streak is drawn, and how long its lit head is as a fraction
 /// of the whole flight. A head rather than a full line, so the eye reads a
 /// direction rather than a static beam.
-const BOLT_THICKNESS_PX: f32 = 2.5;
+///
+/// `pub(crate)` because `tactical.rs`'s forecast draws in the same
+/// thickness — a profiled hostile's projected walk is `BoltCue`'s line
+/// vocabulary, not a second-guessed weight.
+pub(crate) const BOLT_THICKNESS_PX: f32 = 2.5;
 const BOLT_HEAD_FRACTION: f32 = 0.35;
+
+/// The two cell centres a line between them runs through.
+///
+/// `to_px` answers a cell's **top-left**, so both ends offset by half a
+/// tile to meet glyph centre to glyph centre — a line drawn corner to
+/// corner would leave the glyph it came from and arrive beside the one it
+/// hit. Shared by a landing blow's streak, which draws only the head of
+/// this segment, and a forecast's projected walk in `tactical.rs`, which
+/// draws it whole: the offset is geometry neither owns, and a copy of it
+/// is the one that drifts if the two are ever drawn at a different tile
+/// size.
+pub(crate) fn cell_centers(
+    to_px: impl Fn((i32, i32)) -> (f32, f32),
+    tile_px: f32,
+    from: (i32, i32),
+    to: (i32, i32),
+) -> ((f32, f32), (f32, f32)) {
+    let half = tile_px / 2.0;
+    let (ax, ay) = to_px(from);
+    let (bx, by) = to_px(to);
+    ((ax + half, ay + half), (bx + half, by + half))
+}
+
 /// Longer than a hit — a structure vanishing from the map is worth a beat.
 ///
 /// This is the spark burst's lifetime too, since the debris is derived from
@@ -946,13 +973,9 @@ impl Fx {
         to_px: impl Fn((i32, i32)) -> (f32, f32),
         tile_px: f32,
     ) {
-        let half = tile_px / 2.0;
         for bolt in &self.bolts {
             let along = ((self.now - bolt.start) / BOLT_SECONDS).clamp(0.0, 1.0) as f32;
-            let (ax, ay) = to_px(bolt.from);
-            let (bx, by) = to_px(bolt.to);
-            let (ax, ay) = (ax + half, ay + half);
-            let (bx, by) = (bx + half, by + half);
+            let ((ax, ay), (bx, by)) = cell_centers(&to_px, tile_px, bolt.from, bolt.to);
             let tail = (along - BOLT_HEAD_FRACTION).max(0.0);
             let point = |t: f32| (ax + (bx - ax) * t, ay + (by - ay) * t);
             let (hx, hy) = point(along);

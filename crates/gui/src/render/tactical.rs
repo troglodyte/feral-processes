@@ -16,7 +16,7 @@
 //! exists to show.
 
 use feral_processes_engine::tactical::map::BattleCell;
-use feral_processes_engine::tactical::view::{TacticalBody, TacticalView};
+use feral_processes_engine::tactical::view::{TacticalBody, TacticalView, TamperTag, TurnRow};
 
 use super::RARITY_BAR_PX;
 use super::base::{ConRead, tile_origin_px};
@@ -25,7 +25,7 @@ use super::hud::layout::strip_inset;
 use super::hud::palette;
 use super::marks::draw_rarity_bar;
 use super::popup::{PopupSize, Row, draw_popup, item_row, spent_item_row, text_row};
-use crate::fx::Fx;
+use crate::fx::{BOLT_THICKNESS_PX, Fx, cell_centers};
 use crate::paint::{Color, Painter, Rect};
 use crate::text::Metrics;
 use feral_processes_app_core::{Mode, menu_shortcut};
@@ -50,17 +50,22 @@ fn sprite_inset(tile_px: f32, glyph_px: u16) -> f32 {
     (tile_px - glyph_px as f32) / 2.0
 }
 
-/// How much of its ink a cloaked body keeps — see `components::Cloaked`.
+/// How much ink a cloaked body or a Hallucination decoy draws with — see
+/// `components::Cloaked` and `tactical::Decoy`. One constant for both: they
+/// mean the same thing, *not really there*.
 ///
-/// One multiply at the draw site fades **both** halves: `Painter::sprite`'s
-/// tint multiplies, and `ConRead::glyph_ink` carries the authored alpha
-/// through, so a body's art and its glyph dim together with no sixteenth
-/// `Painter` operation and no change to `paint.rs`.
+/// One multiply at the draw site fades **both** halves of a cloaked body:
+/// `Painter::sprite`'s tint multiplies, and `ConRead::glyph_ink` carries the
+/// authored alpha through, so a body's art and its glyph dim together with
+/// no sixteenth `Painter` operation and no change to `paint.rs`. A decoy
+/// draws through `painter.map` alone — see `Painter::sprite`'s own doc for
+/// why nothing masquerading as a body may take that door.
 ///
 /// Faded rather than hidden: a cloaked body is still a wall in
 /// `reach::movement_field`, so the cell it stands on is already a tell, and
-/// a tell is the right amount of information.
-const CLOAKED_ALPHA: f32 = 0.35;
+/// a tell is the right amount of information. A decoy is faded for the same
+/// reason a cloaked body is — the player is meant to notice it is not real.
+const FADED_ALPHA: f32 = 0.35;
 
 /// The arrow that hangs over whoever is acting: its width and its height as
 /// fractions of a tile, and how far its point is held off the tile's top
@@ -300,6 +305,37 @@ pub(super) fn draw_tactical_map(
         }
     }
 
+    // A Hallucination's fakes, **before** the bodies: a hallucinating body
+    // may stand on its own decoy's cell (decision 3, "every decoy goes on a
+    // free cell" — free of *other* bodies, not of the caster once it walks),
+    // and the body drawn on top is the one a swing can actually hit.
+    for decoy in &view.decoys {
+        let (px, py) = tile_origin_px(
+            decoy.cell,
+            center,
+            (half_w, half_h),
+            (off_x, off_y),
+            tile_px,
+            pane,
+        );
+        if !on_pane(px, py) {
+            continue;
+        }
+        let base = if decoy.of_player {
+            palette::PLAYER
+        } else {
+            super::glyph_color(decoy.color)
+        };
+        let ink = Color::new(base.r, base.g, base.b, base.a * FADED_ALPHA);
+        let glyph = decoy.glyph.to_string();
+        let dims = painter.measure_map(&glyph, glyph_px);
+        let tx = px + (tile_px - dims.width) / 2.0;
+        let ty = py + (tile_px + dims.height) / 2.0;
+        // `painter.map`, never `sprite` — a decoy is a fake glyph, not a
+        // fake body, and `sprite`'s tint is authored for near-white art.
+        painter.map(&glyph, tx, ty, glyph_px, ink);
+    }
+
     for body in &view.bodies {
         let (px, py) = tile_origin_px(
             body.cell,
@@ -313,6 +349,51 @@ pub(super) fn draw_tactical_map(
             continue;
         }
         draw_body(body, painter, px, py, tile_px, glyph_px);
+    }
+
+    // A profiled hostile's published plan, over the bodies so a walk
+    // crossing a body's tile still reads. `Game::tactical_forecast` is
+    // exact only at the moment the turn begins — see its own doc — so this
+    // is read straight off `TurnRow::forecast` rather than re-derived here.
+    for row in &view.order {
+        let Some(forecast) = &row.forecast else {
+            continue;
+        };
+        if forecast.walk.is_empty() {
+            continue;
+        }
+        let Some(body) = view.bodies.iter().find(|b| b.entity == row.entity) else {
+            continue;
+        };
+        let to_px = |cell: (i32, i32)| {
+            tile_origin_px(
+                cell,
+                center,
+                (half_w, half_h),
+                (off_x, off_y),
+                tile_px,
+                pane,
+            )
+        };
+        let mut from = body.cell;
+        for &step in &forecast.walk {
+            let (tpx, tpy) = to_px(step);
+            if on_pane(tpx, tpy) {
+                let ((ax, ay), (bx, by)) = cell_centers(to_px, tile_px, from, step);
+                // `PLAN`, never `THREAT` (that role is the wild side's
+                // inbound harm, not a preview of it) and not `AIM` (the
+                // player's own cursor) — a third thing, what the AI is
+                // telegraphing.
+                painter.line(ax, ay, bx, by, BOLT_THICKNESS_PX, palette::PLAN);
+            }
+            from = step;
+        }
+        if let Some(target) = forecast.target {
+            let (px, py) = to_px(target);
+            if on_pane(px, py) {
+                painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, palette::PLAN);
+            }
+        }
     }
 
     // Whose turn it is, hung over that body's head and bouncing.
@@ -448,7 +529,7 @@ fn draw_body(
         authored
     };
     if body.cloaked {
-        ink.a *= CLOAKED_ALPHA;
+        ink.a *= FADED_ALPHA;
     }
     let inset = sprite_inset(tile_px, glyph_px);
     // **The sprite call's own answer**, never `sprite.is_some()`: a name the
@@ -551,11 +632,108 @@ pub(super) fn draw_turn_strip(view: &TacticalView, pane: Rect, painter: &Painter
             gx,
             baseline,
             size,
+            // `WARN` before `PLAYER`: a taken-over companion is still on the
+            // party's side of the initiative order (`is_hostile` is false),
+            // but its rung is the AI's for as long as the entry lasts, and
+            // that is worth a colour of its own — `WARN` rather than
+            // `THREAT`, since the party still wins this fight together.
             if row.is_hostile {
                 super::glyph_color(row.color)
+            } else if row.taken_over {
+                palette::WARN
             } else {
                 palette::PLAYER
             },
+        );
+    }
+
+    draw_tamper_block(view, pane, x + w, y + h, w, painter, m);
+}
+
+/// A rung's own tag text, decision 7's exhaustive vocabulary — `cell_mark`'s
+/// rule, so a sixth `TamperTag` fails to compile here rather than drawing a
+/// blank word.
+fn tamper_tag_text(tag: TamperTag) -> &'static str {
+    match tag {
+        TamperTag::Hot => "HOT",
+        TamperTag::Cold => "COLD",
+        TamperTag::Profiled => "PROF",
+        TamperTag::Injected => "INJ",
+        TamperTag::Hallucinating => "HALL",
+    }
+}
+
+/// One rung's own line in the tamper block, decision 7's format —
+/// `<glyph> TAG TAG ▸ <routine name>` — or `None` for a rung with nothing
+/// to say: no active `Tampered` slot, no live forecast, and not taken over.
+///
+/// A free function rather than inlined in `draw_tamper_block`, so the width
+/// census below builds the exact line production draws instead of a second
+/// copy of the format.
+fn tamper_line(row: &TurnRow) -> Option<String> {
+    if row.tags.is_empty() && row.forecast.is_none() && !row.taken_over {
+        return None;
+    }
+    let mut words = vec![row.glyph.to_string()];
+    words.extend(row.tags.iter().map(|&tag| tamper_tag_text(tag).to_string()));
+    if row.taken_over {
+        words.push("HIJACK".to_string());
+    }
+    if let Some(forecast) = &row.forecast {
+        words.push(format!("▸ {}", forecast.action));
+    }
+    Some(words.join(" "))
+}
+
+/// The tamper block, decision 7: one line per rung that carries a tag, a
+/// forecast or a hijack, beneath the strip and in initiative order.
+///
+/// `strip_right`/`strip_bottom`/`strip_w` are the strip's own box, read
+/// rather than a literal: the block re-anchors to the strip's right edge and
+/// starts one gap below its bottom. `pane` is the map pane itself, for the
+/// same off-screen guard `draw_turn_strip` applies to its own box.
+///
+/// **Does not scroll**, per decision 7 — its height is however many lines
+/// the initiative order asks for, and
+/// `the_widest_tamper_line_fits_the_map_pane` is what keeps a single line
+/// from ever demanding more width than the pane has to give.
+fn draw_tamper_block(
+    view: &TacticalView,
+    pane: Rect,
+    strip_right: f32,
+    strip_bottom: f32,
+    strip_w: f32,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let lines: Vec<String> = view.order.iter().filter_map(tamper_line).collect();
+    if lines.is_empty() {
+        return;
+    }
+    let pad = m.line_height * 0.35;
+    let size = m.small();
+    let widest = lines
+        .iter()
+        .map(|l| painter.measure_ui_advance(l, size))
+        .fold(0.0_f32, f32::max);
+    let w = (pad * 2.0 + widest).max(strip_w);
+    let h = pad * 2.0 + m.line_height * lines.len() as f32;
+    // Right-aligned on the strip's own right edge, so the two read as one
+    // fixture rather than two boxes that happen to sit near each other.
+    let x = strip_right - w;
+    let y = strip_bottom + m.gap;
+    if x < pane.x + strip_inset(m) || y + h > pane.y + pane.h {
+        return;
+    }
+    painter.rect(x, y, w, h, Color::new(0.04, 0.06, 0.08, 0.88));
+    painter.rect_lines(x, y, w, h, 1.0, palette::PANE_BORDER);
+    for (i, line) in lines.iter().enumerate() {
+        painter.ui(
+            line,
+            x + pad,
+            y + pad + m.line_height * i as f32 + size as f32 * 0.8,
+            size,
+            palette::LABEL,
         );
     }
 }
@@ -845,9 +1023,113 @@ mod tests {
         let faded = alpha_of(true);
         assert!(plain > 0.9, "an uncloaked body drew faded already: {plain}");
         assert!(
-            (faded - plain * CLOAKED_ALPHA).abs() < 0.02,
+            (faded - plain * FADED_ALPHA).abs() < 0.02,
             "a cloaked body drew at alpha {faded}, not {} — one multiply at the draw site",
-            plain * CLOAKED_ALPHA
+            plain * FADED_ALPHA
+        );
+    }
+
+    /// A Hallucination's fake draws the invoker's own glyph at `FADED_ALPHA`
+    /// — one constant with the cloak fade above, because a decoy means the
+    /// same thing a cloaked body does: not really there.
+    ///
+    /// **(M)** Dropping the `* FADED_ALPHA` multiply at the decoy draw site
+    /// makes this fail the same way removing the cloak's own multiply would
+    /// fail the test above.
+    #[test]
+    fn a_decoy_draws_the_invokers_glyph_faded() {
+        use feral_processes_engine::components::GlyphColor;
+        use feral_processes_engine::tactical::view::DecoyView;
+
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open");
+        let occupied: std::collections::HashSet<(i32, i32)> =
+            view.bodies.iter().map(|b| b.cell).collect();
+        let free = view
+            .board
+            .cells()
+            .find(|(cell, kind)| *kind != BattleCell::Blocked && !occupied.contains(cell))
+            .map(|(cell, _)| cell)
+            .expect("the board has a free cell for a decoy");
+        view.decoys = vec![DecoyView {
+            cell: free,
+            glyph: 'Q',
+            color: GlyphColor::Red,
+            of_player: false,
+        }];
+        let mut fx = Fx::new();
+        let (_, shapes) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        let (_, color) = crate::paint::painted_map_glyphs(&shapes)
+            .into_iter()
+            .find(|(text, _)| text == "Q")
+            .expect("the decoy was not drawn at all");
+        assert!(
+            (color.a - FADED_ALPHA).abs() < 0.02,
+            "a decoy drew at alpha {}, not {FADED_ALPHA}",
+            color.a
+        );
+    }
+
+    /// A profiled hostile's forecast draws its walk as a run of `PLAN`
+    /// segments and marks its target — and an empty walk, which is every
+    /// forecast above temperature zero (`Game::tactical_forecast`'s own
+    /// rule), draws none.
+    #[test]
+    fn the_forecast_draws_its_walk_and_marks_its_target() {
+        use feral_processes_engine::tactical::view::ForecastView;
+
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open");
+        // The movement wash outlines `reachable` in PLAN too — clearing it
+        // isolates the forecast's own lines from the acting body's ordinary
+        // reach field.
+        view.reachable.clear();
+        let subject = view.order[0].entity;
+        let from = view
+            .bodies
+            .iter()
+            .find(|b| b.entity == subject)
+            .expect("the first rung stands on the board")
+            .cell;
+        let steps = vec![(from.0 + 1, from.1), (from.0 + 2, from.1)];
+
+        let draw = |forecast: Option<ForecastView>| {
+            let mut view = view.clone();
+            for row in &mut view.order {
+                if row.entity == subject {
+                    row.forecast = forecast.clone();
+                }
+            }
+            let mut fx = Fx::new();
+            with_painter(|p| draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24))
+                .1
+        };
+
+        let quiet = draw(Some(ForecastView {
+            action: "swing".to_string(),
+            walk: Vec::new(),
+            target: None,
+        }));
+        assert_eq!(
+            crate::paint::painted_line_count_in(&quiet, palette::PLAN),
+            0,
+            "a forecast with no walk drew a PLAN line anyway"
+        );
+
+        let planned = draw(Some(ForecastView {
+            action: "swing".to_string(),
+            walk: steps.clone(),
+            target: Some(steps[1]),
+        }));
+        assert!(
+            crate::paint::painted_line_count_in(&planned, palette::PLAN) > 0,
+            "a planned walk drew no PLAN line"
+        );
+        assert!(
+            crate::paint::painted_rect_stroke_count(&planned, palette::PLAN) > 0,
+            "the forecast's target went unmarked"
         );
     }
 
@@ -1179,6 +1461,103 @@ mod tests {
             painted.iter().any(|t| t.contains("ROUND")),
             "the turn strip drew no round: {painted:?}"
         );
+    }
+
+    /// A hijacked companion's own rung wears `WARN`, not `PLAYER` — its side
+    /// of the initiative order (`is_hostile`) does not change, but its turn
+    /// is the AI's for as long as the entry lasts.
+    #[test]
+    fn a_hijacked_companion_s_rung_is_drawn_in_warn() {
+        let mut game = fighting();
+        let mut view = game.tactical_view().expect("the fight is open");
+        let idx = view
+            .order
+            .iter()
+            .position(|r| !r.is_hostile)
+            .expect("a party rung stands in the initiative order");
+        view.order[idx].taken_over = true;
+        let glyph = view.order[idx].glyph;
+        assert_eq!(
+            view.order.iter().filter(|r| r.glyph == glyph).count(),
+            1,
+            "two rungs wear {glyph:?}, so a glyph box cannot name one of them"
+        );
+
+        let m = ui_metrics(720.0);
+        let (_, shapes) = with_painter(|p| draw_turn_strip(&view, pane(), p, &m));
+        let (_, color) = crate::paint::painted_map_glyphs(&shapes)
+            .into_iter()
+            .find(|(text, _)| text == &glyph.to_string())
+            .expect("the hijacked rung was not drawn");
+        let close = |a: Color, b: Color| {
+            (a.r - b.r).abs() < 0.01 && (a.g - b.g).abs() < 0.01 && (a.b - b.b).abs() < 0.01
+        };
+        assert!(
+            close(color, palette::WARN),
+            "a taken-over companion's rung drew {color:?}, not WARN"
+        );
+    }
+
+    /// The width census: the widest line the tamper block can ever draw —
+    /// every tag, `HIJACK`, and the longest shipped routine's own display
+    /// name — fits the map pane less two `strip_inset`s.
+    ///
+    /// **(M)** Adding a sixth long tag to the fixture line (without widening
+    /// the pane) makes this fail, which is the mutation this census exists
+    /// to catch.
+    #[test]
+    fn the_widest_tamper_line_fits_the_map_pane() {
+        use crate::render::hud::layout;
+        use feral_processes_engine::abilities::AbilityDb;
+
+        let dir =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/abilities");
+        let (db, warnings) = AbilityDb::load_dir(&dir).expect("the abilities load");
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let longest = db
+            .all()
+            .map(|d| d.name.as_str())
+            .max_by_key(|name| name.len())
+            .expect("at least one routine ships");
+
+        let mut game = fighting();
+        let entity = game.tactical_view().expect("the fight is open").order[0].entity;
+        let row = TurnRow {
+            entity,
+            glyph: 'W',
+            color: feral_processes_engine::components::GlyphColor::White,
+            label: String::new(),
+            is_hostile: false,
+            hp_fraction: None,
+            tags: vec![
+                TamperTag::Hot,
+                TamperTag::Cold,
+                TamperTag::Profiled,
+                TamperTag::Injected,
+                TamperTag::Hallucinating,
+            ],
+            forecast: Some(feral_processes_engine::tactical::view::ForecastView {
+                action: longest.to_string(),
+                walk: Vec::new(),
+                target: None,
+            }),
+            taken_over: true,
+        };
+        let line = tamper_line(&row).expect("a row wearing every tag says something");
+
+        let m = ui_metrics(900.0);
+        with_painter(|p| {
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let map_pane = layout::regions(1280.0, 720.0, char_w, &m, false).map_pane;
+            let budget = map_pane.w - strip_inset(&m) * 2.0;
+            let width = p.measure_ui_advance(&line, m.small());
+            assert!(
+                width <= budget,
+                "the widest tamper line overflows the map pane by {:.1}px \
+                 ({width:.1}px into a {budget:.1}px budget): {line:?}",
+                width - budget
+            );
+        });
     }
 
     /// The action bar says what is left to spend, and drops the two keys

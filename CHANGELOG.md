@@ -42,6 +42,15 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.181
+
+**A program mending beside a Repair Bay wears its green `+` above its head,
+not over its face.** The mark was drawn at the same height as the program's
+own letter, so the two painted on top of each other: what you saw was a bare
+green `+` standing next to the Bay with nothing recognisable under it, which
+read as a mark on the building. The `+` still bobs, but it now rests in the
+top of the tile, clear of the program it belongs to.
+
 ## 0.13.180
 
 **Cutting rock in your base makes a sound now, and a dig crew cutting makes

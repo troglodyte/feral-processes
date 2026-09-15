@@ -809,3 +809,183 @@ fn given_goods_land_in_output_and_the_base_can_see_them() {
         "and the next take could pull it straight back out"
     );
 }
+
+/// A structure with no `Stock` of its own at an absolute tile — an Index
+/// Terminal, or a mod's flagged fixture.
+fn bare(game: &mut Game, kind: &str, x: i32, y: i32) -> Entity {
+    game.world
+        .spawn((
+            Structure {
+                kind: kind.to_string(),
+            },
+            Position { x, y },
+        ))
+        .id()
+}
+
+fn pack_count(game: &Game, id: &str) -> u32 {
+    game.world
+        .get::<Inventory>(game.player_entity())
+        .unwrap()
+        .count(&ItemId::from(id))
+}
+
+/// The case the terminal exists for: a Depot across the base is on the
+/// offer, and a take pulls from it, while the party stands at the terminal.
+#[test]
+fn beside_a_terminal_a_distant_depot_is_offered_and_taken_from() {
+    let mut game = Game::new(1790, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    bare(&mut game, "storage_terminal", p.x + 1, p.y);
+    let far = stocked(
+        &mut game,
+        "depot",
+        p.x + 10,
+        p.y + 4,
+        50,
+        &[(ids::CORE_FRAGMENT, 7)],
+    );
+    set_inventory(&mut game, &[]);
+
+    assert_eq!(row(&game, ids::CORE_FRAGMENT).on_shelves, 7);
+    game.transfer_items(&TransferBasket::items(
+        &[(ItemId::from(ids::CORE_FRAGMENT), 5)],
+        &[],
+    ));
+    assert_eq!(pack_count(&game, ids::CORE_FRAGMENT), 5);
+    assert_eq!(
+        game.world.get::<Stock>(far).unwrap().output[&ItemId::from(ids::CORE_FRAGMENT)],
+        2
+    );
+}
+
+/// Without a terminal the same Depot is out of reach — the widening is the
+/// terminal's, not a change to what adjacency means.
+#[test]
+fn without_a_terminal_a_distant_depot_stays_out_of_reach() {
+    let mut game = Game::new(1791, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    stocked(
+        &mut game,
+        "depot",
+        p.x + 10,
+        p.y + 4,
+        50,
+        &[(ids::CORE_FRAGMENT, 7)],
+    );
+    set_inventory(&mut game, &[(ids::POWER_CELL, 3)]);
+
+    assert!(game.transfer_offer().is_empty());
+    assert_eq!(game.transfer_room(), None);
+}
+
+/// A terminal across the base does nothing — it has to be beside the party.
+#[test]
+fn a_terminal_that_is_not_beside_the_party_widens_nothing() {
+    let mut game = Game::new(1792, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    bare(&mut game, "storage_terminal", p.x + 5, p.y);
+    stocked(
+        &mut game,
+        "depot",
+        p.x + 10,
+        p.y + 4,
+        50,
+        &[(ids::CORE_FRAGMENT, 7)],
+    );
+
+    assert!(game.transfer_offer().is_empty());
+    assert_eq!(game.transfer_room(), None);
+}
+
+/// Machines stay walk-up: collecting from a machine is its own errand, and
+/// a contract deed teaches it.
+#[test]
+fn a_terminal_does_not_reach_a_distant_machine_buffer() {
+    let mut game = Game::new(1793, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    bare(&mut game, "storage_terminal", p.x + 1, p.y);
+    stocked(
+        &mut game,
+        "mining_node",
+        p.x + 10,
+        p.y,
+        20,
+        &[(ids::CORE_FRAGMENT, 4)],
+    );
+    stocked(&mut game, "depot", p.x - 10, p.y, 50, &[]);
+    set_inventory(&mut game, &[]);
+
+    assert!(
+        game.transfer_offer()
+            .iter()
+            .all(|r| r.item != ItemId::from(ids::CORE_FRAGMENT)),
+        "the node's buffer is not on the offer"
+    );
+}
+
+/// Room is summed across every Depot the terminal reaches, and a put fills
+/// them in tile order past one whose filter refuses the item.
+#[test]
+fn a_put_at_a_terminal_fills_distant_depots_past_a_filter() {
+    let mut game = Game::new(1794, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    bare(&mut game, "storage_terminal", p.x, p.y + 1);
+    let refusing = stocked(&mut game, "depot", p.x - 12, p.y, 10, &[]);
+    let first = stocked(&mut game, "depot", p.x - 8, p.y, 4, &[]);
+    let second = stocked(&mut game, "depot", p.x + 9, p.y, 10, &[]);
+    game.set_depot_filter(refusing, &ItemId::from(ids::CORE_FRAGMENT), false);
+    set_inventory(&mut game, &[(ids::CORE_FRAGMENT, 9)]);
+
+    assert_eq!(game.transfer_room(), Some(14));
+    assert_eq!(row(&game, ids::CORE_FRAGMENT).can_put, 9);
+    game.transfer_items(&TransferBasket::items(
+        &[],
+        &[(ItemId::from(ids::CORE_FRAGMENT), 9)],
+    ));
+    let held = |e: Entity| {
+        game.world
+            .get::<Stock>(e)
+            .unwrap()
+            .output
+            .get(&ItemId::from(ids::CORE_FRAGMENT))
+            .copied()
+            .unwrap_or(0)
+    };
+    assert_eq!((held(refusing), held(first), held(second)), (0, 4, 5));
+}
+
+/// The reach is the flag's, never the shipped id's: a mod's second terminal
+/// under another name widens it the same way.
+#[test]
+fn any_structure_flagged_indexes_storage_is_a_terminal() {
+    let mut game = Game::new(1795, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut fixture = game
+        .world
+        .resource::<StructureDb>()
+        .get("storage_terminal")
+        .cloned()
+        .expect("the shipped terminal");
+    assert!(fixture.indexes_storage);
+    fixture.id = "zzz_terminal_fixture".to_string();
+    game.world.resource_mut::<StructureDb>().insert(fixture);
+
+    stand_in_base(&mut game);
+    let p = player_tile(&game);
+    bare(&mut game, "zzz_terminal_fixture", p.x - 1, p.y);
+    stocked(
+        &mut game,
+        "depot",
+        p.x + 10,
+        p.y,
+        50,
+        &[(ids::CORE_FRAGMENT, 3)],
+    );
+
+    assert_eq!(row(&game, ids::CORE_FRAGMENT).on_shelves, 3);
+}

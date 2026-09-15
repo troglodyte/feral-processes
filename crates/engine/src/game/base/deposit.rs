@@ -17,7 +17,19 @@ impl Game {
     /// `pub(crate)` so `game/base/transfer.rs` can ask whether there is a
     /// Depot at all, and so `tests/transfer.rs` can pin the order directly.
     pub(crate) fn adjacent_depots(&self) -> Vec<Entity> {
-        self.adjacent_stock()
+        self.only_depots(self.adjacent_stock())
+    }
+
+    /// The Depots a transfer puts into: `reachable_stock` under
+    /// `adjacent_depots`' own filter, so beside an Index Terminal that is
+    /// every Depot in the base. The Depot filter screen keeps
+    /// `adjacent_depots` — you configure the shelf you are standing at.
+    pub(crate) fn reachable_depots(&self) -> Vec<Entity> {
+        self.only_depots(self.reachable_stock())
+    }
+
+    fn only_depots(&self, cells: Vec<Entity>) -> Vec<Entity> {
+        cells
             .into_iter()
             .filter(|e| {
                 let Some(structure) = self.world.get::<Structure>(*e) else {
@@ -69,7 +81,7 @@ impl Game {
     /// per-item answer; this is the coarse half, and `TransferRow::can_put`
     /// is the exact one.
     fn depots_for_put(&self) -> Vec<Entity> {
-        let depots = self.adjacent_depots();
+        let depots = self.reachable_depots();
         let carried = self.puttable_carried();
         if carried.is_empty() {
             return depots;
@@ -103,15 +115,16 @@ impl Game {
     /// `TransferRow::can_put` is clamped to: a Depot refusing this item is
     /// not room for it however empty it stands.
     pub(crate) fn deposit_room_for(&self, item: &ItemId) -> u32 {
-        self.adjacent_depots()
+        self.reachable_depots()
             .into_iter()
             .filter(|e| self.depot_accepts(*e, item))
             .map(|e| self.world.get::<Stock>(e).unwrap().output_room())
             .sum()
     }
 
-    /// Moves an exact basket out of the pack and into the adjacent Depots,
-    /// reporting what actually landed, keyed and ordered by `ItemId`.
+    /// Moves an exact basket out of the pack and into `reachable_depots` —
+    /// the adjacent ones, or every one beside a terminal — reporting what
+    /// actually landed, keyed and ordered by `ItemId`.
     ///
     /// **It holds no guards of its own and it neither ticks nor logs.** Every
     /// caller must have checked game over, an active battle and
@@ -123,7 +136,7 @@ impl Game {
     /// and each Depot's own filter, `depot_accepts`.
     pub(crate) fn give_to_adjacent(&mut self, give: &[(ItemId, u32)]) -> Vec<(ItemId, u32)> {
         let player = self.player_entity();
-        let depots = self.adjacent_depots();
+        let depots = self.reachable_depots();
 
         let mut given: std::collections::BTreeMap<ItemId, u32> = std::collections::BTreeMap::new();
         for (item, qty) in give {

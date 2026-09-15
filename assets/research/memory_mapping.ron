@@ -1,0 +1,10 @@
+(
+    id: "memory_mapping",
+    name: "Memory Mapping",
+    description: "One address for every shelf in the base, so nothing stored has to be walked to.",
+    cost: 60,
+    materials: [("bytecode_block", 12), ("charge_coil", 8)],
+    min_zone: 2,
+    requires: ["paging"],
+    unlocks_structures: ["storage_terminal"],
+)

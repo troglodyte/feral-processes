@@ -1,0 +1,10 @@
+(
+    id: "storage_terminal",
+    name: "Index Terminal",
+    description: "Every Depot in the base, in one place. Walk up to it and press c to take from or put into any of them.",
+    glyph: 'I',
+    color: Cyan,
+    build_cost: [("core_fragment", 20), ("charge_coil", 2)],
+    work: None,
+    indexes_storage: true,
+)

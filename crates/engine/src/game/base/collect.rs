@@ -120,7 +120,61 @@ impl Game {
         found.into_iter().map(|(_, _, e)| e).collect()
     }
 
-    /// Moves an exact basket off the adjacent structures and reports what
+    /// What a transfer reaches: `adjacent_stock`, and **every Depot in the
+    /// base** as well while a structure flagged
+    /// `StructureDef::indexes_storage` stands beside the party. One `(x, y)`
+    /// order over the union, for `adjacent_stock`'s reason — it is which
+    /// Depot a partial take drains and a put fills first.
+    ///
+    /// Depots only. A machine's buffer across the base stays walk-up:
+    /// collecting from a machine is its own errand, and
+    /// `Deed::TookFromContainer` is there to teach it.
+    pub(crate) fn reachable_stock(&self) -> Vec<Entity> {
+        let adjacent = self.adjacent_stock();
+        if !self.indexes_storage_here() {
+            return adjacent;
+        }
+        let db = self.world.resource::<StructureDb>();
+        let mut found: Vec<(i32, i32, Entity)> = self
+            .world
+            .iter_entities()
+            .filter(|e| e.contains::<Stock>())
+            .filter(|e| {
+                adjacent.contains(&e.id())
+                    || e.get::<Structure>()
+                        .and_then(|s| db.get(&s.kind))
+                        .is_some_and(|d| d.stores)
+            })
+            .filter_map(|e| {
+                let p = e.get::<Position>()?;
+                Some((p.x, p.y, e.id()))
+            })
+            .collect();
+        found.sort();
+        found.into_iter().map(|(_, _, e)| e).collect()
+    }
+
+    /// Whether a structure flagged `StructureDef::indexes_storage` stands
+    /// orthogonally beside the party in base space — asked of the flag and
+    /// never of the shipped id, so a mod's second terminal is a file.
+    fn indexes_storage_here(&self) -> bool {
+        let Some((px, py)) = self.base_pos() else {
+            return false;
+        };
+        let db = self.world.resource::<StructureDb>();
+        self.world.iter_entities().any(|e| {
+            let (Some(structure), Some(p)) = (e.get::<Structure>(), e.get::<Position>()) else {
+                return false;
+            };
+            ORTHOGONAL
+                .iter()
+                .any(|(dx, dy)| (p.x, p.y) == (px + dx, py + dy))
+                && db.get(&structure.kind).is_some_and(|d| d.indexes_storage)
+        })
+    }
+
+    /// Moves an exact basket off the structures `reachable_stock` names —
+    /// the adjacent ones, plus every Depot beside a terminal — and reports what
     /// actually landed, keyed and ordered by `ItemId`.
     ///
     /// **It holds no guards of its own and it neither ticks nor logs.** Every
@@ -132,7 +186,7 @@ impl Game {
     /// through `hauling::take_from` alone.
     pub(crate) fn take_from_adjacent(&mut self, want: &[(ItemId, u32)]) -> Vec<(ItemId, u32)> {
         let player = self.player_entity();
-        let neighbours = self.adjacent_stock();
+        let neighbours = self.reachable_stock();
 
         let mut taken: std::collections::BTreeMap<ItemId, u32> = std::collections::BTreeMap::new();
         for (item, qty) in want {

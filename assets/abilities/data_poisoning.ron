@@ -1,0 +1,9 @@
+(
+    id: "data_poisoning",
+    name: "Data Poisoning Single",
+    description: "One target leaks 5 Integrity a round for 3 rounds",
+    target: OneEnemyGroupFront,
+    effect: Debuff(kind: Bleed, power: 5, duration: 3),
+    cooldown: 3,
+    power_cost: 8.0,
+)

@@ -1,0 +1,34 @@
+(
+    id: "model_inspection",
+    name: "Model Inspection",
+    description: "Everything Cortex Hacking taught you about reading a hostile program, turned into ways to feed it what it wants to see.",
+    cost: 160,
+    materials: [("trace_sniffer", 8), ("logic_wafer", 14)],
+    min_zone: 3,
+    requires: ["cortex"],
+    unlocks_abilities: [
+        "cold_sample",
+        "heat_injection",
+        "inference_probe",
+        "prompt_injection",
+        "hallucination",
+        "gradient_descent",
+        "backprop",
+        "dropout",
+        "dropout_group",
+        "fine_tune",
+        "data_poisoning",
+    ],
+    unlocks_recipes: [
+        (
+            result: "adversarial_patch",
+            cost: [("portal_fragment", 12), ("cache_grain", 3)],
+            requires_structure: Some("fabricator"),
+        ),
+        (
+            result: "attention_head",
+            cost: [("portal_fragment", 12), ("cache_grain", 3)],
+            requires_structure: Some("fabricator"),
+        ),
+    ],
+)

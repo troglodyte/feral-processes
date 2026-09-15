@@ -1,0 +1,10 @@
+(
+    id: "gradient_descent",
+    name: "Gradient Descent Single",
+    description: "Damage 5–9 to one target",
+    target: OneEnemyGroupFront,
+    effect: Damage(power: 7, spread: 2),
+    cooldown: 2,
+    accuracy: 6,
+    power_cost: 7.0,
+)

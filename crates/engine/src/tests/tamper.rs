@@ -2233,3 +2233,46 @@ fn the_view_carries_the_decoys() {
     let view = game.tactical_view().expect("a fight is open");
     assert_eq!(view.decoys, raw);
 }
+
+/// Content: `model_inspection` is where the feature actually reaches the
+/// player. Spec 15's own assertion — every `TamperSlot` has a route in
+/// through this node, and both gear recipes ride along with it.
+#[test]
+fn model_inspection_teaches_every_tamper_kind_and_both_gear_recipes() {
+    let game = game(9900);
+    let research = game.world.resource::<crate::research::ResearchDb>();
+    let node = research
+        .get("model_inspection")
+        .expect("model_inspection ships");
+    let abilities = game.world.resource::<AbilityDb>();
+
+    let taught_slots: std::collections::BTreeSet<TamperSlot> = node
+        .unlocks_abilities
+        .iter()
+        .filter_map(|id| abilities.get(id))
+        .filter_map(|def| match &def.effect {
+            AbilityEffect::Tamper { kind, .. } => Some(kind.slot()),
+            _ => None,
+        })
+        .collect();
+    let every_slot: std::collections::BTreeSet<TamperSlot> = [
+        TamperSlot::Temperature,
+        TamperSlot::Profiled,
+        TamperSlot::Injected,
+        TamperSlot::Hallucinating,
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(
+        taught_slots, every_slot,
+        "model_inspection must teach a routine into every Tampered slot"
+    );
+
+    let recipe_results: Vec<&ItemId> = node.unlocks_recipes.iter().map(|r| &r.result).collect();
+    for item in ["adversarial_patch", "attention_head"] {
+        assert!(
+            recipe_results.iter().any(|id| id.as_str() == item),
+            "model_inspection's recipes must produce {item}"
+        );
+    }
+}

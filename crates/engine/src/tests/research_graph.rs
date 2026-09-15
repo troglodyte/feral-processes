@@ -36,8 +36,8 @@ fn the_shipped_tree_has_the_shape_the_screen_is_sized_for() {
     assert_eq!(by_tier.get(&2).map(Vec::len), Some(5));
     assert_eq!(by_tier.get(&3).map(Vec::len), Some(9));
     assert_eq!(by_tier.get(&4).map(Vec::len), Some(6));
-    assert_eq!(by_tier.get(&5).map(Vec::len), Some(3));
-    assert_eq!(g.cells.len(), 35, "every shipped node gets a cell");
+    assert_eq!(by_tier.get(&5).map(Vec::len), Some(4));
+    assert_eq!(g.cells.len(), 36, "every shipped node gets a cell");
     assert_eq!(g.tiers, 6);
     assert_eq!(g.widest, 9, "tier 3 is the crowded one");
 }

@@ -1904,8 +1904,8 @@ fn every_zone_gated_gear_recipe_asks_for_a_zone_material() {
         }
     }
     assert_eq!(
-        checked, 10,
-        "expected every zone-gated recipe the tree unlocks — six of gear and \
+        checked, 12,
+        "expected every zone-gated recipe the tree unlocks — eight of gear and \
          four of Power cells; one that lost its recipe would drop out of this \
          scan unnoticed"
     );

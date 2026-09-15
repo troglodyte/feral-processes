@@ -480,6 +480,7 @@ impl Game {
         world.init_resource::<crate::resources::Brawls>();
         world.insert_resource(TransitQueue::default());
         world.insert_resource(BoltQueue::default());
+        world.insert_resource(TacticalFxQueue::default());
         world.insert_resource(GameOver::default());
         world.insert_resource(difficulty);
         world.insert_resource(Party::default());
@@ -1102,6 +1103,7 @@ impl Game {
         world.init_resource::<crate::resources::Brawls>();
         world.insert_resource(TransitQueue::default());
         world.insert_resource(BoltQueue::default());
+        world.insert_resource(TacticalFxQueue::default());
         world.insert_resource(GameOver::default());
         world.insert_resource(data.difficulty);
         world.insert_resource(Party::default());

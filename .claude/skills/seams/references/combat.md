@@ -1108,6 +1108,37 @@
   in the same instant. See
   `seam:a-boltcue-lives-in-tacticalbattle-cells-and-is-its-own-queue`.
 
+- **`TacticalFxQueue` is `BoltCue`'s pattern applied to a body's own hit or
+  heal, and it is cued inside `apply_damage`/`restore_hp` themselves.**
+  `Game::apply_damage` and `Game::restore_hp` (`game/combat_damage.rs`) are
+  already the two doors CLAUDE.md names for damaging and healing a
+  creature, so hooking `cue_tactical_fx` there — rather than at
+  `resolve_and_apply_attack`, `apply_fumble_rung`, the Heal/Drain arms of
+  `use_ability`, a Repair Bay tick, a sortie heal, and every other caller —
+  is what keeps the zero-gate (`dealt > 0` / `restored > 0`) a single
+  assertion instead of one a new call site can forget. `cue_tactical_fx`
+  itself is a no-op wherever `TacticalBattle::cell_of(target)` answers
+  `None`, which is every one of those other callers. **A `kind` field,
+  where `BoltCue` has none**: a hit and a heal draw nothing alike — a red
+  wash with a spark burst against a green mark that bounces — so
+  `TacticalFxKind::{Hit, Heal}` is the branch a shapeless cue would only
+  hand back to gui. **The gui side reuses rather than copies**:
+  `fx.rs`'s `tile_flash`/`draw_bursts` are each split into a private core
+  (`flash_in`/`draw_bursts_in`, taking a slice) plus two thin wrappers, so
+  a Hit cue drives `EffectKind::Hit`'s existing wash and spark burst
+  through a second list (`Fx::tactical_flashes`, board cells) rather than
+  a second implementation. A Heal has no match in `EffectKind`'s table at
+  all, so it gets its own list (`Fx::heal_marks`) and its own draw call
+  (`draw_heal_marks`), tinted `palette::HEALTHY` — no new role needed,
+  since a body's Integrity coming back is exactly what that role already
+  means — and lifted by `(PI * HEAL_MARK_BOUNCES * t).sin().abs()`, whose
+  `abs()` is what keeps the curve touching its rest position at the start,
+  the middle and the end rather than dipping below it. Both lists are
+  cleared, not merely left to expire, the moment `begin_frame`'s
+  `in_battle` goes false — board cell indices are reused between fights,
+  `clear_bars()`'s own reason. See
+  `seam:tacticalfxqueue-is-boltcues-pattern-for-a-bodys-own-hit-or`.
+
 - **The battle camera is held on the body that acted, and the dwell is
   derived from the turn beat.** `Game::hand_on_turn` fires inside the same
   call that resolves an attack, so `TacticalView::active` already names the

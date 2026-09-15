@@ -794,6 +794,52 @@ impl BoltQueue {
     }
 }
 
+/// A body took Integrity damage on a tactical battle map, or had it
+/// restored, cued at its own `TacticalBattle` cell — `BoltCue`'s reason for
+/// living outside `VisualEffect`: that one's whole shape is a *world* tile,
+/// and pushing a board cell into it would pin a flash to an unrelated tile
+/// out in the zone.
+///
+/// **A `kind` field, where `BoltCue` has none.** A hit and a heal draw
+/// nothing alike — a red wash with a spark burst against a green mark that
+/// bounces — so folding the two into one shapeless cue would only hand the
+/// renderer back the branch this field already is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TacticalFxKind {
+    Hit,
+    Heal,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TacticalFxCue {
+    pub pos: (i32, i32),
+    pub kind: TacticalFxKind,
+}
+
+/// Cues queued since the last `Game::take_tactical_fx` — `BoltQueue`'s
+/// counterpart for a body's own hit or heal rather than a blow in flight
+/// between two cells, capped and drained the same way. **Deliberately not
+/// serialized**: a flash or a bounce mid-frame has nothing to say to a
+/// reloaded save, `BoltQueue`'s reason exactly.
+#[derive(Resource, Default)]
+pub struct TacticalFxQueue {
+    cues: Vec<TacticalFxCue>,
+}
+
+impl TacticalFxQueue {
+    pub(crate) fn push(&mut self, pos: (i32, i32), kind: TacticalFxKind) {
+        self.cues.push(TacticalFxCue { pos, kind });
+        if self.cues.len() > EFFECT_QUEUE_CAP {
+            let excess = self.cues.len() - EFFECT_QUEUE_CAP;
+            self.cues.drain(0..excess);
+        }
+    }
+
+    pub fn take(&mut self) -> Vec<TacticalFxCue> {
+        std::mem::take(&mut self.cues)
+    }
+}
+
 #[derive(Resource, Default)]
 pub struct GameOver {
     pub reason: Option<String>,

@@ -222,6 +222,18 @@ impl Game {
             .take()
     }
 
+    /// Drains every `TacticalFxCue` queued since the last call — a body's
+    /// own hit or heal on a battle map, `take_bolts`' counterpart for the
+    /// blow itself rather than the streak that travelled to it.
+    ///
+    /// A frontend that draws none must still call it, or the queue sits at
+    /// its cap forever — `take_bolts`' reason exactly.
+    pub fn take_tactical_fx(&mut self) -> Vec<crate::resources::TacticalFxCue> {
+        self.world
+            .resource_mut::<crate::resources::TacticalFxQueue>()
+            .take()
+    }
+
     /// Queues `kind` at `structure`'s tile, if it has one. Raid targets are
     /// selected by `With<Durability>`, which doesn't imply `Position` —
     /// a flash on the wrong tile would be worse than none, so a positionless

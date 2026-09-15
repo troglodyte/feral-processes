@@ -936,6 +936,10 @@ relying on one, and correct all three places if it has moved.
 - **A `BoltCue` lives in `TacticalBattle` cells and is its own queue, never a
   fifth `EffectKind`**, with no `kind` field because one travel rule at every
   distance is also the melee feedback.
+- **`TacticalFxQueue` is `BoltCue`'s pattern for a body's own hit or heal,
+  cued once inside `apply_damage`/`restore_hp` rather than at each call
+  site** — a hit reuses `EffectKind::Hit`'s wash and burst in gui, a heal
+  draws through its own `Fx::heal_marks`.
 - **A summon's containment is omission and not a check** — it never passes
   through `roster_parts()`, and the two places that *are* checks
   (`finish_fight`'s sweep and its `bench_or_dissolve` skip) are both code

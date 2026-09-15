@@ -289,6 +289,13 @@ pub(super) fn draw_tactical_map(
                 Color::new(c.r, c.g, c.b, 0.22),
             );
         }
+        // A body's own hit, last of the tile's washes — `render/base.rs`'s
+        // own ordering for a raid flash, and the same call: a tactical hit
+        // reuses `EffectKind::Hit`'s wash and spark burst rather than
+        // inventing a second red.
+        if let Some(flash) = fx.tactical_tile_flash(cell) {
+            painter.rect(px, py, tile_px - 1.0, tile_px - 1.0, flash);
+        }
     }
 
     for body in &view.bodies {
@@ -365,6 +372,32 @@ pub(super) fn draw_tactical_map(
         },
         tile_px,
     );
+
+    // The struck body's own debris — `render/base.rs`'s spark burst, reused
+    // rather than restated, cued at the body's cell instead of a raided
+    // structure's world tile.
+    fx.draw_tactical_bursts(painter, tile_px, |cell| {
+        tile_origin_px(
+            cell,
+            center,
+            (half_w, half_h),
+            (off_x, off_y),
+            tile_px,
+            pane,
+        )
+    });
+
+    // A green `+` bouncing over anyone just healed.
+    fx.draw_heal_marks(painter, tile_px, glyph_px, |cell| {
+        tile_origin_px(
+            cell,
+            center,
+            (half_w, half_h),
+            (off_x, off_y),
+            tile_px,
+            pane,
+        )
+    });
 
     // Last, so the cursor is never under a body it is pointing at — and
     // bounds-checked for the arrow's reason: it opens on the acting body's
@@ -895,7 +928,7 @@ mod tests {
         let view = game.tactical_view().expect("the fight is open");
 
         let mut bare = Fx::new();
-        bare.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), true);
+        bare.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), true);
         let (_, quiet) = with_painter(|p| {
             draw_tactical_map(&view, None, &[], &[], &mut bare, p, pane(), 32.0, 24)
         });
@@ -910,6 +943,7 @@ mod tests {
                 to: view.bodies[1].cell,
                 color: feral_processes_engine::components::GlyphColor::Cyan,
             }],
+            Vec::new(),
             true,
         );
         let (_, lit) = with_painter(|p| {
@@ -922,6 +956,76 @@ mod tests {
              {} vs {}",
             painted_line_count(&lit),
             painted_line_count(&quiet)
+        );
+    }
+
+    /// A landed blow on a battle map washes the defender's own cell with
+    /// exactly the flash a raid draws on a structure — asserted through the
+    /// real `draw_tactical_map`, `a_bolt_in_flight_is_drawn_over_the_battle_
+    /// map`'s reason: calling `draw_tactical_bursts` or `tactical_tile_flash`
+    /// directly would pass with the call site inside the map deleted.
+    #[test]
+    fn a_tactical_hit_washes_the_defenders_cell() {
+        use feral_processes_engine::{TacticalFxCue, TacticalFxKind};
+
+        let mut game = fighting();
+        let view = game.tactical_view().expect("the fight is open");
+        let cell = view.bodies[0].cell;
+
+        let mut fx = Fx::new();
+        fx.begin_frame(
+            0.0,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            vec![TacticalFxCue {
+                pos: cell,
+                kind: TacticalFxKind::Hit,
+            }],
+            true,
+        );
+        let flash = fx
+            .tactical_tile_flash(cell)
+            .expect("a hit cue queued this frame is live");
+        let (_, shapes) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        assert_eq!(
+            painted_rect_fill_count(&shapes, flash),
+            1,
+            "a landed blow must wash the cell it landed on"
+        );
+    }
+
+    /// A heal on a battle map draws a `+` over the recipient's own cell —
+    /// the same real-map assertion the hit test above makes.
+    #[test]
+    fn a_tactical_heal_draws_a_plus_over_the_recipients_cell() {
+        use feral_processes_engine::{TacticalFxCue, TacticalFxKind};
+
+        let mut game = fighting();
+        let view = game.tactical_view().expect("the fight is open");
+        let cell = view.bodies[0].cell;
+
+        let mut fx = Fx::new();
+        fx.begin_frame(
+            0.0,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            vec![TacticalFxCue {
+                pos: cell,
+                kind: TacticalFxKind::Heal,
+            }],
+            true,
+        );
+        let (_, shapes) = with_painter(|p| {
+            draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
+        });
+        assert!(
+            painted_text(&shapes).iter().any(|t| t == "+"),
+            "a heal cue must draw a + over the healed body: {:?}",
+            painted_text(&shapes)
         );
     }
 
@@ -949,7 +1053,14 @@ mod tests {
         let ys: Vec<f32> = (0..8)
             .map(|i| {
                 let mut fx = Fx::new();
-                fx.begin_frame(i as f64 / 8.0, Vec::new(), Vec::new(), Vec::new(), true);
+                fx.begin_frame(
+                    i as f64 / 8.0,
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                    true,
+                );
                 let (_, shapes) = with_painter(|p| {
                     draw_tactical_map(&view, None, &[], &[], &mut fx, p, pane(), 32.0, 24)
                 });
@@ -1207,7 +1318,7 @@ mod tests {
 
         let mut fx = Fx::new();
         let frame = |fx: &mut Fx, at: f64, v: &TacticalView| {
-            fx.begin_frame(at, Vec::new(), Vec::new(), Vec::new(), true);
+            fx.begin_frame(at, Vec::new(), Vec::new(), Vec::new(), Vec::new(), true);
             let (_, shapes) =
                 with_painter(|p| draw_tactical_map(v, None, &[], &[], fx, p, pane(), 32.0, 24));
             shapes
@@ -1270,10 +1381,10 @@ mod tests {
                 body.cell = (view.board.side / 2, view.board.side / 2);
             }
         }
-        fx.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), true);
+        fx.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), true);
         with_painter(|p| draw_tactical_map(&middle, None, &[], &[], &mut fx, p, tight, 32.0, 24));
 
-        fx.begin_frame(0.02, Vec::new(), Vec::new(), Vec::new(), true);
+        fx.begin_frame(0.02, Vec::new(), Vec::new(), Vec::new(), Vec::new(), true);
         let (_, shapes) = with_painter(|p| {
             draw_tactical_map(&far_away, Some(far), &[], &[], &mut fx, p, tight, 32.0, 24)
         });

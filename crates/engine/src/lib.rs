@@ -116,12 +116,12 @@ use resources::{
     AnchorEntity, BattleRewards, BattleState, BattleTimeline, BoltQueue, BuybackLedger,
     ClosingRoster, CurrentStack, EffectQueue, GameClock, GameOver, GameRng, KnownRoutines,
     KnownTools, Locale, MessageLog, Party, PlayerEntity, Research, RosterFrame, StackMemory,
-    TransitQueue, WieldedProgram, XpTally, ZoneLevel, ZoneSpawnPoint,
+    TacticalFxQueue, TransitQueue, WieldedProgram, XpTally, ZoneLevel, ZoneSpawnPoint,
 };
 pub use resources::{
     BoltCue, DifficultyMode, EffectKind, EnemyStrength, HandCraftProgress, LabourDemand, LogEntry,
-    LogLine, MESSAGE_LOG_CAP, MessageKind, MessageSource, SlotShift, SwingOutcome, TransitCue,
-    VisualEffect, condense,
+    LogLine, MESSAGE_LOG_CAP, MessageKind, MessageSource, SlotShift, SwingOutcome, TacticalFxCue,
+    TacticalFxKind, TransitCue, VisualEffect, condense,
 };
 use species::{Affinities, SpeciesDb, SpeciesDef, SpeciesId};
 use structures::{StructureDb, StructureDef, StructureId, TradeDef};

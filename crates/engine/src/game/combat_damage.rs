@@ -6,6 +6,7 @@
 //! emits and the reap that clears the fallen out of their group in one file
 //! is what makes that claim checkable by reading rather than by grepping.
 
+use crate::tactical::TacticalBattle;
 use crate::*;
 
 impl Game {
@@ -313,6 +314,9 @@ impl Game {
         // all, and a cloak that survived being hit would be a body nothing
         // could ever reveal.
         self.break_cloak(target);
+        if dealt > 0 {
+            self.cue_tactical_fx(target, TacticalFxKind::Hit);
+        }
         dealt
     }
 
@@ -367,12 +371,35 @@ impl Game {
     /// to spare, which reads as the heal having been wasted by the game
     /// rather than by the player's timing.
     pub(crate) fn restore_hp(&mut self, target: Entity, amount: i32) -> i32 {
-        let Some(mut stats) = self.world.get_mut::<Stats>(target) else {
-            return 0;
+        let restored = {
+            let Some(mut stats) = self.world.get_mut::<Stats>(target) else {
+                return 0;
+            };
+            let before = stats.hp;
+            stats.hp = (stats.hp + amount).min(stats.max_hp);
+            stats.hp - before
         };
-        let before = stats.hp;
-        stats.hp = (stats.hp + amount).min(stats.max_hp);
-        stats.hp - before
+        if restored > 0 {
+            self.cue_tactical_fx(target, TacticalFxKind::Heal);
+        }
+        restored
+    }
+
+    /// Queues a hit or heal cue at `target`'s cell on a tactical battle map,
+    /// if it is on one — `TacticalBattle::cell_of` answers `None` everywhere
+    /// else, so a brawl, a raid defender or a Repair Bay's heal cues
+    /// nothing. Both `apply_damage` and `restore_hp` call this only once
+    /// they know how much actually landed, so a miss, a fumble that dealt no
+    /// damage or a heal on a full-health target never reaches it.
+    fn cue_tactical_fx(&mut self, target: Entity, kind: TacticalFxKind) {
+        let Some(pos) = self
+            .world
+            .get_resource::<TacticalBattle>()
+            .and_then(|battle| battle.cell_of(target))
+        else {
+            return;
+        };
+        self.world.resource_mut::<TacticalFxQueue>().push(pos, kind);
     }
 
     /// Cuts `dmg` by `target`'s total mitigation, in percentage points.

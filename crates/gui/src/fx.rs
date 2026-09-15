@@ -17,7 +17,8 @@ use crate::render::hud::palette;
 use crate::text::Metrics;
 use feral_processes_engine::components::GlyphColor;
 use feral_processes_engine::{
-    BoltCue, EffectKind, Entity, LogLine, MessageKind, TransitCue, VisualEffect,
+    BoltCue, EffectKind, Entity, LogLine, MessageKind, TacticalFxCue, TacticalFxKind, TransitCue,
+    VisualEffect,
 };
 
 /// Alpha a tile flash starts at, before fading linearly to nothing. Chosen
@@ -79,6 +80,18 @@ const BOLT_HEAD_FRACTION: f32 = 0.35;
 /// wreckage has to cover `DESTROYED_SPARK_REACH`. Shortening it does not
 /// make the burst snappier, it makes it faster and harder to see.
 pub const DESTROYED_FLASH_SECONDS: f64 = 0.70;
+
+/// How long a heal mark lives — it bounces and fades over the same span,
+/// since a bounce that outlasted its own fade would end on a visible snap
+/// rather than dying out with it.
+pub const HEAL_MARK_SECONDS: f64 = 0.9;
+/// How many times a heal mark bounces in its life. Two full arcs of one
+/// sine period each — `heal_mark_height`'s reason for taking `abs` rather
+/// than a bare sine, which would carry the mark *below* its rest position
+/// for the second half of every arc instead of bouncing off it.
+const HEAL_MARK_BOUNCES: f32 = 2.0;
+/// How high a heal mark bounces, as a fraction of a tile.
+const HEAL_MARK_HEIGHT: f32 = 0.55;
 
 /// How far a damaged structure's glyph is allowed to dim toward grey. Below
 /// this it stops reading as a structure at all.
@@ -467,6 +480,22 @@ fn spark_alpha(t: f32) -> f32 {
     (1.0 - t).clamp(0.0, 1.0)
 }
 
+/// How high a heal mark sits above its rest position at `t`, which runs
+/// 0..1 across `HEAL_MARK_SECONDS`. `abs` of a sine rather than the sine
+/// itself, so the curve touches the rest position at the start, the middle
+/// and the end and never dips below it — two arcs read as a bounce, where a
+/// signed sine would read as a mark swinging under the floor.
+fn heal_mark_height(t: f32) -> f32 {
+    HEAL_MARK_HEIGHT * (std::f32::consts::PI * HEAL_MARK_BOUNCES * t).sin().abs()
+}
+
+/// A heal mark fades linearly across its whole life, `draw_floats`' own
+/// curve — there is no separate hold, since two bounces already give the
+/// eye enough time to catch it.
+fn heal_mark_alpha(t: f32) -> f32 {
+    (1.0 - t).clamp(0.0, 1.0)
+}
+
 /// How long a walk of `cells` cells is on screen. Zero for a walk with
 /// nowhere to go, which is what retires it on the frame it arrives.
 fn walk_seconds(cells: usize) -> f64 {
@@ -515,6 +544,15 @@ fn effect_color(kind: EffectKind) -> Color {
 struct TileFlash {
     pos: (i32, i32),
     kind: EffectKind,
+    start: f64,
+}
+
+/// A green `+` bouncing over a body that was healed on a tactical battle
+/// map, drawn from a `TacticalFxCue` the engine queued and forgot —
+/// `TileFlash`'s counterpart for the one kind of tactical fx that draws
+/// nothing like a wash or a spark burst.
+struct HealMark {
+    pos: (i32, i32),
     start: f64,
 }
 
@@ -582,6 +620,8 @@ pub struct Fx {
     pub enabled: bool,
     now: f64,
     flashes: Vec<TileFlash>,
+    tactical_flashes: Vec<TileFlash>,
+    heal_marks: Vec<HealMark>,
     walkers: Vec<Walker>,
     bolts: Vec<Bolt>,
     floats: Vec<FloatingNumber>,
@@ -598,6 +638,8 @@ impl Fx {
             enabled: true,
             now: 0.0,
             flashes: Vec::new(),
+            tactical_flashes: Vec::new(),
+            heal_marks: Vec::new(),
             walkers: Vec::new(),
             bolts: Vec::new(),
             floats: Vec::new(),
@@ -613,12 +655,14 @@ impl Fx {
     /// takes in newly queued engine effects and walks, and retires expired
     /// ones. Both queues are always consumed, even when disabled, so the
     /// engine's cannot sit permanently at its cap.
+    #[allow(clippy::too_many_arguments)]
     pub fn begin_frame(
         &mut self,
         now: f64,
         effects: Vec<VisualEffect>,
         transits: Vec<TransitCue>,
         bolts: Vec<BoltCue>,
+        tactical_fx: Vec<TacticalFxCue>,
         in_battle: bool,
     ) {
         self.now = now;
@@ -646,15 +690,42 @@ impl Fx {
                     start: now,
                 });
             }
+            // Split by kind here rather than at the engine: a hit reuses
+            // `EffectKind::Hit`'s own wash and spark burst — the same red
+            // flash and debris a raid draws — while a heal has nothing in
+            // that table to reuse and gets its own list instead.
+            for cue in tactical_fx {
+                match cue.kind {
+                    TacticalFxKind::Hit => self.tactical_flashes.push(TileFlash {
+                        pos: cue.pos,
+                        kind: EffectKind::Hit,
+                        start: now,
+                    }),
+                    TacticalFxKind::Heal => self.heal_marks.push(HealMark {
+                        pos: cue.pos,
+                        start: now,
+                    }),
+                }
+            }
         }
         self.flashes
             .retain(|f| now - f.start < effect_duration(f.kind));
+        self.tactical_flashes
+            .retain(|f| now - f.start < effect_duration(f.kind));
+        self.heal_marks
+            .retain(|h| now - h.start < HEAL_MARK_SECONDS);
         self.walkers
             .retain(|w| now - w.start < walk_seconds(w.path.len()));
         self.bolts.retain(|b| now - b.start < BOLT_SECONDS);
         self.floats.retain(|f| now - f.start < FLOAT_SECONDS);
         if !in_battle {
             self.clear_bars();
+            // A battle map's own flashes and marks, cleared with the bars
+            // for the same reason: board cell indices are reused between
+            // fights, and a hit lingering past the fight it landed in would
+            // paint the wrong body's cell in whatever opens next.
+            self.tactical_flashes.clear();
+            self.heal_marks.clear();
         }
     }
 
@@ -674,21 +745,40 @@ impl Fx {
         }
     }
 
-    /// The tint to overlay on the tile at `pos`, if a flash is active there.
+    /// The tint to overlay on the tile at `pos`, if a flash is active there
+    /// in `flashes` — the shared core `tile_flash` and `tactical_tile_flash`
+    /// each call rather than restate, so a raid's wash and a tactical hit's
+    /// read from exactly one rule with two different lists behind it.
     /// Overlapping flashes take the newest, so a structure destroyed by the
     /// blow that damaged it shows the destruction rather than both at once.
-    pub fn tile_flash(&self, pos: (i32, i32)) -> Option<Color> {
-        let flash = self
-            .flashes
+    fn flash_in(flashes: &[TileFlash], now: f64, pos: (i32, i32)) -> Option<Color> {
+        let flash = flashes
             .iter()
             .filter(|f| f.pos == pos)
             .max_by(|a, b| a.start.total_cmp(&b.start))?;
-        let alpha = flash_alpha(self.now - flash.start, effect_duration(flash.kind));
+        let alpha = flash_alpha(now - flash.start, effect_duration(flash.kind));
         if alpha <= 0.0 {
             return None;
         }
         let c = effect_color(flash.kind);
         Some(Color::new(c.r, c.g, c.b, alpha))
+    }
+
+    /// The tint to overlay on the world tile at `pos`, if a raid or a base
+    /// brawl has a flash active there.
+    pub fn tile_flash(&self, pos: (i32, i32)) -> Option<Color> {
+        Self::flash_in(&self.flashes, self.now, pos)
+    }
+
+    /// The same wash, read off a tactical battle map's own flashes.
+    ///
+    /// **A separate list keyed by board cell, not `flashes` keyed by world
+    /// tile.** A hit on a body standing on a battle map is cued in
+    /// `TacticalBattle` cells (`BoltCue`'s reason), and a coordinate from
+    /// one space read against the other's list would answer for the wrong
+    /// tile whenever the two happened to share a pair of small integers.
+    pub fn tactical_tile_flash(&self, pos: (i32, i32)) -> Option<Color> {
+        Self::flash_in(&self.tactical_flashes, self.now, pos)
     }
 
     /// Draws the debris every live burst is currently throwing.
@@ -704,21 +794,24 @@ impl Fx {
     /// washes on one tile would merely muddy each other, but two lots of
     /// debris just read as more debris.
     ///
-    /// `to_px` maps a world tile to its top-left corner in the pane, since
-    /// sparks cross tile boundaries and so cannot be drawn from inside the
-    /// caller's tile loop.
-    pub fn draw_bursts(
-        &self,
+    /// `to_px` maps a cell to its top-left corner in the pane, since sparks
+    /// cross tile boundaries and so cannot be drawn from inside the
+    /// caller's tile loop. Shared by `draw_bursts` and
+    /// `draw_tactical_bursts`, the two callers reading a different list off
+    /// a different coordinate space through the same `to_px`.
+    fn draw_bursts_in(
+        flashes: &[TileFlash],
+        now: f64,
         painter: &Painter,
         tile_px: f32,
         to_px: impl Fn((i32, i32)) -> (f32, f32),
     ) {
-        for flash in &self.flashes {
+        for flash in flashes {
             let (count, reach) = spark_burst(flash.kind);
             if count == 0 {
                 continue;
             }
-            let t = ((self.now - flash.start) / effect_duration(flash.kind)) as f32;
+            let t = ((now - flash.start) / effect_duration(flash.kind)) as f32;
             if !(0.0..1.0).contains(&t) {
                 continue;
             }
@@ -745,6 +838,60 @@ impl Fx {
                     color,
                 );
             }
+        }
+    }
+
+    /// Draws the debris every live burst on the zone or base map is
+    /// currently throwing.
+    pub fn draw_bursts(
+        &self,
+        painter: &Painter,
+        tile_px: f32,
+        to_px: impl Fn((i32, i32)) -> (f32, f32),
+    ) {
+        Self::draw_bursts_in(&self.flashes, self.now, painter, tile_px, to_px);
+    }
+
+    /// The same debris, off a tactical battle map's own flashes — a body
+    /// struck on a board throws exactly the burst `EffectKind::Hit` throws
+    /// on a raided structure, called through `draw_bursts_in` rather than
+    /// restated.
+    pub fn draw_tactical_bursts(
+        &self,
+        painter: &Painter,
+        tile_px: f32,
+        to_px: impl Fn((i32, i32)) -> (f32, f32),
+    ) {
+        Self::draw_bursts_in(&self.tactical_flashes, self.now, painter, tile_px, to_px);
+    }
+
+    /// Draws every heal mark currently bouncing over a healed body's cell on
+    /// a tactical battle map: a green `+`, centred the way `draw_walkers`
+    /// centres a glyph on measured ink, lifted by `heal_mark_height` and
+    /// faded by `heal_mark_alpha`.
+    ///
+    /// `HEALTHY` rather than a new palette role — a body's Integrity coming
+    /// back is exactly what that role already means.
+    pub fn draw_heal_marks(
+        &self,
+        painter: &Painter,
+        tile_px: f32,
+        glyph_px: u16,
+        to_px: impl Fn((i32, i32)) -> (f32, f32),
+    ) {
+        const MARK: &str = "+";
+        for mark in &self.heal_marks {
+            let t = ((self.now - mark.start) / HEAL_MARK_SECONDS) as f32;
+            if !(0.0..1.0).contains(&t) {
+                continue;
+            }
+            let (ox, oy) = to_px(mark.pos);
+            let dims = painter.measure_map(MARK, glyph_px);
+            let x = ox + (tile_px - dims.width) / 2.0;
+            let y = oy + (tile_px + dims.height) / 2.0 - heal_mark_height(t) * tile_px;
+            let base = palette::HEALTHY;
+            let color = Color::new(base.r, base.g, base.b, heal_mark_alpha(t));
+            painter.map(MARK, x, y, glyph_px, color);
         }
     }
 
@@ -1126,10 +1273,18 @@ mod tests {
         };
 
         let mut fx = Fx::new();
-        fx.begin_frame(0.0, Vec::new(), vec![cue.clone()], Vec::new(), false);
+        fx.begin_frame(
+            0.0,
+            Vec::new(),
+            vec![cue.clone()],
+            Vec::new(),
+            Vec::new(),
+            false,
+        );
         // Half a cell in, so the body is between (0, 0) and (1, 0).
         fx.begin_frame(
             TRANSIT_SECONDS_PER_CELL * 0.5,
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -1158,6 +1313,7 @@ mod tests {
         // drawn by the map itself.
         fx.begin_frame(
             walk_seconds(3) + 1.0,
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -1190,7 +1346,7 @@ mod tests {
             to: (3, 0),
             color: GlyphColor::Cyan,
         };
-        fx.begin_frame(0.0, Vec::new(), Vec::new(), vec![cue], true);
+        fx.begin_frame(0.0, Vec::new(), Vec::new(), vec![cue], Vec::new(), true);
         let to_px = |(x, y): (i32, i32)| (x as f32 * 16.0, y as f32 * 16.0);
         let (_, shapes) = crate::paint::with_painter(|p| fx.draw_bolts(p, to_px, 16.0));
         assert!(
@@ -1200,6 +1356,7 @@ mod tests {
 
         fx.begin_frame(
             BOLT_SECONDS + 0.01,
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -1229,6 +1386,7 @@ mod tests {
                 to: (2, 0),
                 color: GlyphColor::Cyan,
             }],
+            Vec::new(),
             true,
         );
         let to_px = |(x, y): (i32, i32)| (x as f32 * 16.0, y as f32 * 16.0);
@@ -1253,7 +1411,7 @@ mod tests {
 
         for kind in [MessageKind::Raid, MessageKind::Tantrum] {
             let mut fx = Fx::new();
-            fx.begin_frame(1.0, Vec::new(), Vec::new(), Vec::new(), false);
+            fx.begin_frame(1.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
             fx.observe_log(Some(&line(kind)));
             assert!(
                 fx.log_flash_until > fx.now,
@@ -1262,7 +1420,7 @@ mod tests {
         }
 
         let mut fx = Fx::new();
-        fx.begin_frame(1.0, Vec::new(), Vec::new(), Vec::new(), false);
+        fx.begin_frame(1.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
         fx.observe_log(Some(&line(MessageKind::Info)));
         assert!(
             fx.log_flash_until <= fx.now,
@@ -1601,7 +1759,7 @@ mod tests {
     #[test]
     fn a_marks_phase_does_not_depend_on_where_it_is_standing() {
         let mut fx = Fx::new();
-        fx.begin_frame(0.3, Vec::new(), Vec::new(), Vec::new(), false);
+        fx.begin_frame(0.3, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
         let worker = Entity::from_raw_u32(7).unwrap();
         let before = fx.staffed_bob(worker);
         // Same entity, same frame — the only thing a step changes is the
@@ -1717,6 +1875,7 @@ mod tests {
             }],
             Vec::new(),
             Vec::new(),
+            Vec::new(),
             false,
         );
 
@@ -1741,6 +1900,7 @@ mod tests {
                 pos: cell,
                 kind: EffectKind::Hit,
             }],
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             false,
@@ -1864,7 +2024,7 @@ mod tests {
     #[test]
     fn the_staffed_mark_holds_still_while_effects_are_disabled() {
         let mut fx = Fx::new();
-        fx.begin_frame(0.3, Vec::new(), Vec::new(), Vec::new(), false);
+        fx.begin_frame(0.3, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
         fx.enabled = false;
         assert_eq!(fx.staffed_bob(Entity::from_raw_u32(4).unwrap()), 0.0);
     }
@@ -1967,7 +2127,7 @@ mod tests {
     #[test]
     fn clouds_are_off_when_effects_are() {
         let mut fx = Fx::new();
-        fx.begin_frame(40.0, Vec::new(), Vec::new(), Vec::new(), false);
+        fx.begin_frame(40.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
         fx.enabled = false;
         for w in [(0, 0), (7, 7), (-13, 2)] {
             assert_eq!(fx.cloud_shade(w), 1.0);
@@ -1977,9 +2137,9 @@ mod tests {
     #[test]
     fn clouds_move_with_the_frame_clock() {
         let mut fx = Fx::new();
-        fx.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), false);
+        fx.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
         let before: Vec<f32> = cloud_field(0.0);
-        fx.begin_frame(45.0, Vec::new(), Vec::new(), Vec::new(), false);
+        fx.begin_frame(45.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
         let after: Vec<f32> = cloud_field(45.0);
         assert!(
             before != after,

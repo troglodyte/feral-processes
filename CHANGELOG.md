@@ -42,6 +42,17 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.190
+
+**When a research project finishes, a "Research Complete" notice names it,
+describes it and lists what it unlocks — and every notice now opens in a
+panel three quarters the size of the window, with the map still in view
+around it.** A finished project used to announce itself only as a line in
+the base log, easy to scroll past while the party was somewhere else. And
+notices took over the whole window. Now the panel is the same size for
+every notice, and a long unlock list or payout wraps inside it instead of
+running off the edge.
+
 ## 0.13.189
 
 **When a fight on a battle map ends, a "Fight Over" popup lists the outcome,

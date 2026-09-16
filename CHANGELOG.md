@@ -42,6 +42,27 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.194
+
+**Researching Model Inspection teaches eleven routines that attack a
+hostile's judgement on the battle map: pin its choices to the obvious one,
+make them erratic, read its next move off the turn strip, turn it against
+its own pack, or fill the ground with decoys it chases instead of you.**
+A fight on a battle map has always been decided by a scored policy that
+picks an action, then a cell to act from, and nothing in the game reached
+that machinery — every routine spent its effort on Integrity, Power or a
+status. These do the opposite: Cold Sample takes the randomness out of a
+hostile's choice, Inference Probe publishes what it has already decided,
+and the two together make the next turn a thing you can read rather than
+guess. Prompt Injection flips which side it believes it is on for a turn,
+and whatever it kills pays out as any kill does. Hallucination seeds fakes
+only that side can see, and it walks to them and swings through them until
+they are gone. Heat Injection and Prompt Injection catch your own
+companions too, and a caught companion plays itself until it wears off.
+Six more routines and two modules, Adversarial Patch and Attention Head,
+come from the same node. The routines are battle-map only, and every file
+says so.
+
 ## 0.13.193
 
 **On the Work Orders screen, `<` and `>` move the highlighted order up and

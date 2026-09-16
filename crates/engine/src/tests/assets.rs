@@ -932,7 +932,10 @@ fn scope_word(target: crate::abilities::AbilityTarget) -> &'static str {
 }
 
 /// Strips a trailing ` vN.N` version tag, which is how two abilities in the
-/// same family at the same scope are told apart by magnitude.
+/// same family at the same scope are told apart by magnitude. A thin
+/// wrapper kept local to this test: `routine_tree::version` returns the
+/// parsed tag rather than the stripped name, which is what this file's own
+/// callers want.
 fn without_version_tag(name: &str) -> &str {
     let Some((base, tag)) = name.rsplit_once(' ') else {
         return name;
@@ -1056,27 +1059,6 @@ fn no_two_shipped_abilities_share_a_display_name() {
     }
 }
 
-/// The family an ability's display name declares — everything before the
-/// scope word, with any version tag already gone. `"Fork Bomb Group"` is
-/// `"Fork Bomb"`, and so is `"Fork Bomb Everyone"`.
-fn family(def: &crate::abilities::AbilityDef) -> String {
-    let base = without_version_tag(&def.name);
-    base.trim_end_matches(scope_word(def.target)).trim().into()
-}
-
-/// How far up the scope ladder a target reaches. The two sides share the
-/// ladder rather than having one each: one recipient, one group, the field
-/// — an ally-facing family simply has nowhere to go above rung 1, since
-/// `WholeParty` already *is* everyone on your side.
-fn scope_rank(target: crate::abilities::AbilityTarget) -> usize {
-    use crate::abilities::AbilityTarget::*;
-    match target {
-        OneAlly | OneEnemyGroupFront => 0,
-        WholeParty | WholeEnemyGroup => 1,
-        AllEnemies => 2,
-    }
-}
-
 /// A family occupies a contiguous run of scopes starting at Single. A hole
 /// is invisible in a directory listing — the files are named for flavour,
 /// so nothing about `bus_fault` sitting in `assets/abilities/` says it is
@@ -1106,7 +1088,7 @@ fn scope_rank(target: crate::abilities::AbilityTarget) -> usize {
 #[test]
 fn every_battle_ability_family_is_contiguous_from_single_upward() {
     let game = Game::new(3305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let mut scopes: std::collections::BTreeMap<String, std::collections::BTreeSet<usize>> =
+    let mut scopes: std::collections::BTreeMap<String, std::collections::BTreeSet<u8>> =
         std::collections::BTreeMap::new();
     for def in game
         .world
@@ -1120,12 +1102,12 @@ fn every_battle_ability_family_is_contiguous_from_single_upward() {
         })
     {
         scopes
-            .entry(family(def))
+            .entry(crate::routine_tree::family(def))
             .or_default()
-            .insert(scope_rank(def.target));
+            .insert(crate::routine_tree::scope_rank(def.target));
     }
     for (fam, ranks) in &scopes {
-        let expected: std::collections::BTreeSet<usize> = (0..ranks.len()).collect();
+        let expected: std::collections::BTreeSet<u8> = (0..ranks.len() as u8).collect();
         assert_eq!(
             ranks, &expected,
             "{fam:?} occupies scopes {ranks:?}; a family runs from Single upward with no gaps"

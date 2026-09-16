@@ -67,6 +67,7 @@ mod respec;
 mod respite;
 mod rig_tool;
 mod routes;
+mod routine_tree;
 mod routines;
 mod save_roundtrip;
 mod settlement_aid_reach;

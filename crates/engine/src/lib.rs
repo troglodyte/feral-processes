@@ -32,6 +32,7 @@ pub mod research;
 pub mod resources;
 pub mod rock;
 pub mod routes;
+pub mod routine_tree;
 pub mod save;
 pub mod settlements;
 pub mod sorties;

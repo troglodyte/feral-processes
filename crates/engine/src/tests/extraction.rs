@@ -2299,8 +2299,12 @@ fn a_routine_tool_teaches_a_routine_and_consumes_the_program() {
         "the program survived"
     );
     assert!(
-        pool.iter().any(|id| game.knows_routine(id)),
-        "nothing from the pool was learned"
+        pool.iter().any(|id| game
+            .world
+            .resource::<crate::resources::DiscoveredRoutines>()
+            .0
+            .contains(id)),
+        "nothing from the pool was discovered"
     );
 }
 
@@ -2373,7 +2377,12 @@ fn the_draw_favours_the_first_candidate_without_forcing_it() {
         let tool = routine_tool_id(&game);
         game.extract_program(0, &tool).expect("the extraction runs");
         for id in pool {
-            if game.knows_routine(&id) || held(&game, &ItemId::etched(&id)) > 0 {
+            let discovered = game
+                .world
+                .resource::<crate::resources::DiscoveredRoutines>()
+                .0
+                .contains(&id);
+            if discovered || held(&game, &ItemId::etched(&id)) > 0 {
                 *counts.entry(id.to_string()).or_default() += 1;
             }
         }
@@ -2397,6 +2406,82 @@ fn the_draw_favours_the_first_candidate_without_forcing_it() {
         "the first candidate is not favoured over a uniform draw \
          ({favoured} vs {rest}, need {favoured} > {}): {counts:?}",
         rest * 7 / 4
+    );
+}
+
+/// The tool door's discovery log line names no routine — extraction opens a
+/// family, it does not teach one, and the next rung may sit behind a sector
+/// the player has not reached (spec §3).
+#[test]
+fn the_routine_tool_log_line_does_not_name_the_routine() {
+    let mut game = new_test_game();
+    let program = test_program("scrapper", 30);
+    let pool = game.routine_candidates(&program);
+    give_downed_program(&mut game, program);
+    install_routine_tool(&mut game);
+    let tool = routine_tool_id(&game);
+
+    game.extract_program(0, &tool).expect("the extraction runs");
+
+    let recent: Vec<String> = game
+        .message_log(5)
+        .iter()
+        .map(|line| line.text.clone())
+        .collect();
+    assert!(
+        recent
+            .iter()
+            .any(|line| line.contains("Recovered an unfamiliar routine")),
+        "the verbatim discovery line must be logged: {recent:?}"
+    );
+    for id in &pool {
+        let name = game.ability_display_name(id);
+        assert!(
+            recent.iter().all(|line| !line.contains(&name)),
+            "{name} must not appear in the log: {recent:?}"
+        );
+    }
+}
+
+/// Every family a program's pool could offer already discovered is nothing
+/// left to recover — refused before the program, the tool or anything else
+/// moves.
+#[test]
+fn the_routine_tool_refuses_a_program_with_nothing_unfamiliar() {
+    let mut game = new_test_game();
+    let program = test_program("scrapper", 30);
+    let initial_pool = game.routine_candidates(&program);
+    assert!(
+        !initial_pool.is_empty(),
+        "fixture assumption: scrapper's kit offers something at level 30"
+    );
+    for id in &initial_pool {
+        game.world
+            .resource_mut::<crate::resources::DiscoveredRoutines>()
+            .0
+            .insert(id.clone());
+    }
+    assert!(
+        game.routine_candidates(&program).is_empty(),
+        "fixture assumption: every family is now discovered"
+    );
+    give_downed_program(&mut game, program);
+    install_routine_tool(&mut game);
+    let tool = routine_tool_id(&game);
+    let tools_before = game.installed_tools();
+
+    let err = game.extract_program(0, &tool).unwrap_err();
+
+    assert_eq!(err, "nothing unfamiliar to recover");
+    assert_eq!(
+        game.downed_program_rows().len(),
+        1,
+        "the program must survive a refused extraction"
+    );
+    assert_eq!(
+        game.installed_tools().len(),
+        tools_before.len(),
+        "the tool is untouched"
     );
 }
 

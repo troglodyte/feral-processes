@@ -284,9 +284,12 @@ impl Game {
         chances
     }
 
-    /// What a `Routines` tool could take out of `program`: every routine its
-    /// species declares at or below the program's own level, in the species
-    /// file's order, minus anything already known.
+    /// What a `Routines` tool could take out of a species/level/carried
+    /// combination: every routine the species declares at or below
+    /// `kit_level`, in the species file's order, plus `carried` at the head,
+    /// minus anything whose *family* is already discovered (todo #101 —
+    /// extraction discovers, it does not teach, so what gates a candidate
+    /// is `Game::family_discovered` rather than `knows_routine`).
     ///
     /// **Exclusive routines are excluded outright.** The tamed door
     /// (`extract_routine`) may hand one back as a disk because
@@ -295,7 +298,7 @@ impl Game {
     /// Nothing was consumed to put a routine in *this* pool: it is derived
     /// from `SpeciesDef::abilities`, so two downed programs of one species
     /// would mint two disks of something the whole exclusive pool exists to
-    /// keep at one. The Reader teaches knowledge; it does not press disks.
+    /// keep at one. The Reader discovers a family; it does not press disks.
     ///
     /// Unreachable on shipped assets — no shipped species kit names an
     /// exclusive routine, and `nothing_a_new_game_ships_with_teaches_an_
@@ -303,13 +306,13 @@ impl Game {
     /// about today's files, and this is the construction that holds for a
     /// mod's.
     ///
-    /// **`DownedProgram::carried` heads the pool**, ahead of the kit and
-    /// outside its level gate: it is what that individual was running, not
-    /// what its species hands out, so no level of its species declares it.
-    /// The head is where `ROUTINE_TOOL_FIRST_UNKNOWN_WEIGHT` lands, so a
-    /// program that got lucky at spawn is likeliest to teach the thing that
-    /// made it worth killing. It takes every filter below all the same —
-    /// known, exclusive, unresolvable, duplicated.
+    /// **`carried` heads the pool**, ahead of the kit and outside its level
+    /// gate: it is what one individual was running, not what its species
+    /// hands out, so no level of its species declares it. The head is where
+    /// `ROUTINE_TOOL_FIRST_UNKNOWN_WEIGHT` lands, so a program that got
+    /// lucky at spawn is likeliest to be worth reading out first. It takes
+    /// every filter below all the same — discovered, exclusive,
+    /// unresolvable, duplicated.
     ///
     /// The rest of the pool is `install_innate_routines`' own level gate,
     /// read off the same `SpeciesDef::abilities`: what a downed program
@@ -318,21 +321,36 @@ impl Game {
     ///
     /// Deduplicated, because a species may declare the same id at two levels
     /// and a pool with a repeat would weight it twice by accident.
-    pub fn routine_candidates(&self, program: &DownedProgram) -> Vec<AbilityId> {
-        let species = self.world.resource::<SpeciesDb>().get(&program.species);
-        let kit = species.map(|def| def.abilities.as_slice()).unwrap_or(&[]);
+    ///
+    /// Shared with a *live* wild creature's marker (`EntityView::
+    /// unseen_routine`, task 10): both ask this exact question of a species,
+    /// a level and a carried ability, so the two can never disagree about
+    /// what extraction would offer.
+    pub fn routine_candidate_ids(
+        &self,
+        kit_level: u32,
+        species: &SpeciesId,
+        carried: Option<&AbilityId>,
+    ) -> Vec<AbilityId> {
+        let species_def = self.world.resource::<SpeciesDb>().get(species);
+        let kit = species_def
+            .map(|def| def.abilities.as_slice())
+            .unwrap_or(&[]);
         let db = self.world.resource::<AbilityDb>();
         let mut pool: Vec<AbilityId> = Vec::new();
-        let offered = program.carried.iter().cloned().chain(
+        let offered = carried.cloned().into_iter().chain(
             kit.iter()
-                .filter(|declared| declared.level <= program.level)
+                .filter(|declared| declared.level <= kit_level)
                 .map(|declared| declared.id.clone()),
         );
         for id in offered {
-            if db.get(&id).is_none() {
+            let Some(ability_def) = db.get(&id) else {
+                continue;
+            };
+            if self.routine_is_exclusive(&id) {
                 continue;
             }
-            if self.knows_routine(&id) || self.routine_is_exclusive(&id) {
+            if self.family_discovered(&crate::routine_tree::family(ability_def)) {
                 continue;
             }
             if pool.contains(&id) {
@@ -341,6 +359,11 @@ impl Game {
             pool.push(id);
         }
         pool
+    }
+
+    /// `routine_candidate_ids` for a downed program — see that function.
+    pub fn routine_candidates(&self, program: &DownedProgram) -> Vec<AbilityId> {
+        self.routine_candidate_ids(program.level, &program.species, program.carried.as_ref())
     }
 
     /// A `Routines` tool's use: one routine off `program`, drawn from
@@ -362,7 +385,7 @@ impl Game {
     ) -> Result<(), String> {
         let pool = self.routine_candidates(program);
         if pool.is_empty() {
-            return Err("You already know everything that program can teach.".to_string());
+            return Err("nothing unfamiliar to recover".to_string());
         }
         let weights: Vec<u32> = pool
             .iter()
@@ -401,12 +424,9 @@ impl Game {
                     tool.name
                 ),
             ),
-            RoutineTaken::Learned => self.log_kind(
+            RoutineTaken::Discovered => self.log_kind(
                 MessageKind::Loot,
-                format!(
-                    "You read {label} out with the {}: you learn its {ability_name} routine.",
-                    tool.name
-                ),
+                "Recovered an unfamiliar routine — see routine research.".to_string(),
             ),
         }
 

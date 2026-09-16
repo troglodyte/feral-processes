@@ -305,7 +305,7 @@ fn extracting_an_exclusive_routine_returns_the_disk_and_teaches_nothing() {
 /// exclusive branch could have swallowed both cases and every test of the
 /// old behaviour would still pass through `install_routine_for_test`.
 #[test]
-fn extracting_an_ordinary_routine_still_teaches_and_yields_no_disk() {
+fn extracting_an_ordinary_routine_still_discovers_and_yields_no_disk() {
     let (mut game, medic) = game_with_two_ability_companion();
     build_extraction_bench(&mut game);
     let row = game.extractable_routines(medic).into_iter().next().unwrap();
@@ -318,8 +318,11 @@ fn extracting_an_ordinary_routine_still_teaches_and_yields_no_disk() {
     game.extract_routine(medic, 0).unwrap();
 
     assert!(
-        game.knows_routine(&ability),
-        "the ordinary branch stopped teaching"
+        game.world
+            .resource::<crate::resources::DiscoveredRoutines>()
+            .0
+            .contains(&ability),
+        "the ordinary branch stopped discovering"
     );
     assert_eq!(
         game.etched_disks_of(&ability),

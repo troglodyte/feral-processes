@@ -11,8 +11,10 @@ use crate::*;
 /// returning a shared string would make one of them wrong.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RoutineTaken {
-    /// Ordinary: the knowledge entered `KnownRoutines`. No disk.
-    Learned,
+    /// Ordinary: the ability entered `DiscoveredRoutines`, not
+    /// `KnownRoutines` (todo #101). No disk, and no name in the log line —
+    /// extraction opens the routine tree's family, it does not teach.
+    Discovered,
     /// Exclusive: the etched disk came back out, and nothing was learned.
     DiskPopped,
 }
@@ -612,7 +614,6 @@ impl Game {
     /// program is on the block.
     pub fn extractable_routines(&self, creature: Entity) -> Vec<ExtractableRoutineView> {
         let db = self.world.resource::<AbilityDb>();
-        let known = self.world.resource::<KnownRoutines>();
         self.world
             .get::<Routines>(creature)
             .map(|r| r.0.clone())
@@ -623,7 +624,7 @@ impl Game {
                 ability: def.id.clone(),
                 name: def.name.clone(),
                 description: def.description.clone(),
-                known: known.0.contains(&def.id),
+                known: !def.exclusive && self.family_discovered(&crate::routine_tree::family(def)),
             })
             .collect()
     }
@@ -650,23 +651,26 @@ impl Game {
     /// one at `index` in `extractable_routines`. Everything else installed
     /// on it is lost with it.
     ///
-    /// What comes out depends on whether the routine can be learned:
+    /// What comes out depends on whether the routine can be discovered:
     ///
-    /// - **Ordinary** — the *knowledge*. No disk comes out, and etching one
-    ///   still costs a blank. A routine the player already knows is refused
-    ///   rather than accepted as a no-op, checked before the program is
-    ///   despawned: knowledge does not stack, so taking it twice would
-    ///   destroy a program for nothing.
+    /// - **Ordinary** — a *discovery*, into `DiscoveredRoutines` rather than
+    ///   `KnownRoutines` (todo #101). No disk comes out, and the routine
+    ///   tree still has to be researched before it can be installed. A
+    ///   routine whose family is already discovered is refused rather than
+    ///   accepted as a no-op, checked before the program is despawned:
+    ///   discovery does not stack, so taking it twice would destroy a
+    ///   program for nothing.
     /// - **Exclusive** — the *disk*, popped back out intact, and nothing
-    ///   learned. This is the only way to move an exclusive routine off a
+    ///   discovered. This is the only way to move an exclusive routine off a
     ///   program, and it costs the whole program to do it. There is still
     ///   exactly one copy in the run afterwards, which is the invariant the
     ///   entire exclusive pool rests on.
     ///
-    /// The "already known" refusal is deliberately not applied to the
-    /// exclusive branch. An exclusive routine is never known, so the check
-    /// would never fire — and if it somehow did, refusing would strand a
-    /// disk on a program forever.
+    /// The "already familiar" refusal is deliberately not applied to the
+    /// exclusive branch. An exclusive routine's family is never discoverable
+    /// (`routine_tree::gets_node` excludes it), so the check would never
+    /// fire — and if it somehow did, refusing would strand a disk on a
+    /// program forever.
     pub fn extract_routine(&mut self, creature: Entity, index: usize) -> Result<(), String> {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
@@ -691,8 +695,11 @@ impl Game {
             .map(|row| row.ability.clone())
             .ok_or_else(|| "That program has no such routine.".to_string())?;
         let exclusive = self.routine_is_exclusive(&ability);
-        if !exclusive && self.knows_routine(&ability) {
-            return Err("You already know that routine.".into());
+        if !exclusive
+            && let Some(ability_def) = self.world.resource::<AbilityDb>().get(&ability).cloned()
+            && self.family_discovered(&crate::routine_tree::family(&ability_def))
+        {
+            return Err("that routine is already familiar".into());
         }
 
         let name = self.dissolve_tamed_program(creature);
@@ -701,9 +708,9 @@ impl Game {
             RoutineTaken::DiskPopped => self.log(format!(
                 "You break {name} down and pry its {ability_name} disk back out intact."
             )),
-            RoutineTaken::Learned => self.log(format!(
-                "You break {name} down and learn its {ability_name} routine."
-            )),
+            RoutineTaken::Discovered => {
+                self.log("Recovered an unfamiliar routine — see routine research.".to_string())
+            }
         }
         self.tick();
         Ok(())
@@ -727,18 +734,18 @@ impl Game {
     /// and the spec's amended section 4.
     ///
     /// `&str` rather than `&AbilityId` because that alias is `String`, and
-    /// both neighbours a caller has already gone through (`knows_routine`,
-    /// `routine_is_exclusive`) take `&str`.
+    /// `routine_is_exclusive`, which a caller has already gone through,
+    /// takes `&str`.
     pub(crate) fn take_routine(&mut self, ability: &str) -> RoutineTaken {
         if self.routine_is_exclusive(ability) {
             self.grant_loot(ItemId::etched(ability), 1, LootSource::Etch);
             RoutineTaken::DiskPopped
         } else {
             self.world
-                .resource_mut::<KnownRoutines>()
+                .resource_mut::<crate::resources::DiscoveredRoutines>()
                 .0
                 .insert(ability.to_string());
-            RoutineTaken::Learned
+            RoutineTaken::Discovered
         }
     }
 }

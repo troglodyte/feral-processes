@@ -542,7 +542,7 @@ fn extraction_needs_a_bench_built_somewhere_but_not_nearby() {
 }
 
 #[test]
-fn extracting_teaches_the_picked_routine_destroys_the_program_and_loses_the_rest() {
+fn extracting_discovers_the_picked_routine_destroys_the_program_and_loses_the_rest() {
     let (mut game, medic) = game_with_two_ability_companion();
     set_level(&mut game, medic, 5); // both of its unlocks installed
     spawn_structure_at(&mut game, "compiler", 30, 30);
@@ -551,19 +551,25 @@ fn extracting_teaches_the_picked_routine_destroys_the_program_and_loses_the_rest
     assert_eq!(offered.len(), 2, "both installed routines are on offer");
     assert!(
         offered.iter().all(|r| !r.known),
-        "neither is known yet, so neither row is marked"
+        "neither is familiar yet, so neither row is marked"
     );
     let kept = offered[1].ability.clone();
     let lost = offered[0].ability.clone();
 
     game.extract_routine(medic, 1).unwrap();
 
+    let discovered = |id: &str| {
+        game.world
+            .resource::<crate::resources::DiscoveredRoutines>()
+            .0
+            .contains(id)
+    };
     assert!(
-        game.knows_routine(&kept),
-        "the picked routine is learned, not stocked"
+        discovered(&kept),
+        "the picked routine is discovered, not stocked"
     );
     assert!(
-        !game.knows_routine(&lost),
+        !discovered(&lost),
         "everything else on the program is lost with it"
     );
     assert_eq!(
@@ -591,15 +597,17 @@ fn extraction_is_refused_for_a_program_you_dont_own_and_during_battle() {
     assert!(err.contains("right now"), "{err}");
 }
 
-/// Knowledge does not stack, so extracting a routine the player already
-/// knows would destroy a program for nothing. Refused before the despawn,
-/// not after.
+/// Discovery does not stack, so extracting a routine whose family is
+/// already familiar would destroy a program for nothing. Refused before the
+/// despawn, not after.
 #[test]
 fn extracting_a_routine_you_already_know_is_refused_and_the_program_survives() {
     let mut game = Game::new(34, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     spawn_structure_at(&mut game, "compiler", 30, 30);
     let pet = spawn_tamed(&mut game, 10, 3);
     let installed = game.extractable_routines(pet)[0].ability.clone();
+    // A known routine counts as its family being discovered too — see
+    // `Game::family_discovered`.
     teach_routine(&mut game, &installed);
 
     assert!(
@@ -607,10 +615,39 @@ fn extracting_a_routine_you_already_know_is_refused_and_the_program_survives() {
         "the picker must mark it before the player commits"
     );
     let err = game.extract_routine(pet, 0).unwrap_err();
-    assert!(err.contains("already know"), "{err}");
+    assert!(err.contains("familiar"), "{err}");
     assert!(
         game.world.get::<Stats>(pet).is_some(),
         "the program must survive a refused extraction"
+    );
+}
+
+/// The tamed door's discovery log line, `extract_routine`'s own version of
+/// the tool door's: it names no routine either.
+#[test]
+fn extracting_a_routine_logs_no_routine_name() {
+    let mut game = Game::new(35, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    spawn_structure_at(&mut game, "compiler", 30, 30);
+    let pet = spawn_tamed(&mut game, 10, 3);
+    let ability = game.extractable_routines(pet)[0].ability.clone();
+    let name = game.ability_display_name(&ability);
+
+    game.extract_routine(pet, 0).unwrap();
+
+    let recent: Vec<String> = game
+        .message_log(5)
+        .iter()
+        .map(|line| line.text.clone())
+        .collect();
+    assert!(
+        recent
+            .iter()
+            .any(|line| line.contains("Recovered an unfamiliar routine")),
+        "the verbatim discovery line must be logged: {recent:?}"
+    );
+    assert!(
+        recent.iter().all(|line| !line.contains(&name)),
+        "{name} must not appear in the log: {recent:?}"
     );
 }
 

@@ -472,11 +472,15 @@ fn crew_rows(d: &PaneData) -> Vec<Row> {
     if d.pets.is_empty() {
         out.push(text(vec![dim("  nobody on the roster")]));
     }
-    // Party first: the members standing beside you are what the pane is most
-    // often opened for, and `owned_pets` is not ordered.
-    let mut roster: Vec<&PetInfo> = d.pets.iter().collect();
-    roster.sort_by_key(|p| (p.party_slot.is_none(), p.party_slot, p.name.clone()));
-    for p in roster.iter().take(CREW_ROWS) {
+    // Party first: `Game::owned_pets` already delivers that — party in slot
+    // order, then a run per `ProgramRole`, then species and `ProgramId` —
+    // so this pane draws `d.pets` as given rather than re-sorting it. A
+    // local re-sort used to run here keyed on `p.name`, which for a
+    // handle-named program is `handles::of`'s permutation and reads as
+    // arbitrary; it also silently threw away the role grouping `owned_pets`
+    // establishes among the "not in party" rows, which all shared one key
+    // once the sort stopped naming a slot.
+    for p in d.pets.iter().take(CREW_ROWS) {
         let mark = if p.party_slot.is_some() {
             "\u{00bb} "
         } else {

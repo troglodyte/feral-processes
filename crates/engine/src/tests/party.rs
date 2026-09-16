@@ -305,8 +305,15 @@ fn owned_pets_lists_the_party_first_in_slot_order() {
 /// to show and used to arrive in bevy query order, which is to say in no
 /// order at all, across the fuse, extract, routines and manifest pickers that
 /// read the same list.
+///
+/// Not by `name`: a handle-named program's name is `handles::of`'s
+/// permutation, deliberately unrelated to id order, so sorting by it groups
+/// nothing and looked arbitrary at the keyboard. Species groups like with
+/// like instead, so a `CustomName` no longer moves a program in this list at
+/// all — see `owned_pets_sorts_everything_behind_the_party_by_species_then_
+/// id` for the species half.
 #[test]
-fn owned_pets_sorts_everything_behind_the_party_by_name() {
+fn owned_pets_sorts_everything_behind_the_party_by_id_within_a_species() {
     let mut game = Game::new(32, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let member = spawn_tamed(&mut game, 9, 2);
     let zeta = spawn_tamed(&mut game, 9, 2);
@@ -321,8 +328,36 @@ fn owned_pets_sorts_everything_behind_the_party_by_name() {
     let names: Vec<String> = game.owned_pets().into_iter().map(|p| p.name).collect();
     assert_eq!(
         names,
-        vec!["Middle", "Alpha", "Zeta"],
-        "the party member leads on its slot, the rest sort by name"
+        vec!["Middle", "Zeta", "Alpha"],
+        "the party member leads on its slot; behind it, one species ties and \
+         id — assignment order — settles it, not the (custom) name"
+    );
+}
+
+/// The species half of the tie-break above: two different species must not
+/// interleave by name or by id, they group.
+#[test]
+fn owned_pets_sorts_everything_behind_the_party_by_species_then_id() {
+    let mut game = Game::new(33, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // "Construct" first and "Cipher" second, so an id-only sort would get
+    // this backwards — id order alone is exactly what species is meant to
+    // group ahead of.
+    let construct_a = game
+        .adopt_program("construct", 4, 4, 1.0)
+        .expect("a shipped species");
+    let cipher = game
+        .adopt_program("cipher", 5, 5, 1.0)
+        .expect("a shipped species");
+    let construct_b = game
+        .adopt_program("construct", 6, 6, 1.0)
+        .expect("a shipped species");
+
+    let order: Vec<Entity> = game.owned_pets().into_iter().map(|p| p.entity).collect();
+    assert_eq!(
+        order,
+        vec![cipher, construct_a, construct_b],
+        "'Cipher' sorts before 'Construct' regardless of id, and id — \
+         assignment order — breaks the tie inside a species"
     );
 }
 

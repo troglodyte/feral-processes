@@ -540,23 +540,37 @@ impl Game {
                 .collect()
         };
         let slot_of = |entity: &Entity| party.iter().position(|p| p == entity);
-        // Grouped by role, then the party in slot order, then the name.
+        // Grouped by role, then the party in slot order, then species and
+        // id.
         //
         // The party leads because that order is mechanical: the front slot
         // draws the most fire (see `battle::slot_aggro_weight`) and the
         // companion screen exists to arrange it. Behind them the *role*
         // decides, so the roster is a run per `ProgramRole` and the screen can
         // head each run rather than mixing a program away on a sortie in
-        // among the base staff. Inside a run the name settles it, since bevy's
-        // query order is not stable and the four other screens reading this
-        // list — fuse, extract, routines, manifest — have no slot to show and
-        // were getting no order at all.
+        // among the base staff. Inside a run species groups like with like
+        // and `ProgramId` settles the tie, since bevy's query order is not
+        // stable and the four other screens reading this list — fuse,
+        // extract, routines, manifest — have no slot to show and were
+        // getting no order at all.
+        //
+        // Not `creature_label`: that starts with a handle for anything not
+        // custom-named, and a handle is `handles::of`'s permutation —
+        // deliberately unrelated to id order, so sorting by it groups
+        // nothing and reads as arbitrary. `ProgramId` is assignment order,
+        // which at least means "the one you caught first, sorts first."
         owned.sort_by_key(|e| {
+            let species = self
+                .world
+                .get::<Creature>(*e)
+                .map(|c| self.species_display_name(c));
+            let id = self.world.get::<ProgramId>(*e).copied();
             (
                 self.program_role(*e)
                     .map_or(u8::MAX, ProgramRole::roster_rank),
                 slot_of(e).unwrap_or(usize::MAX),
-                self.creature_label(*e),
+                species,
+                id,
             )
         });
         owned

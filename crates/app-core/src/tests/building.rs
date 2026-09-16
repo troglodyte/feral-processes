@@ -1420,26 +1420,27 @@ fn an_upgrade_picker_asks_about_the_structure_standing_there() {
 ///
 /// The roster is staged so `owned_pets`' order and `build_candidates`' order
 /// differ: `build_candidates` sorts best-first by the roll a Compiler
-/// upgrade reads (assembly, since a Compiler assembles), and the fixture
-/// gives the fixture's own (first-tamed) program the better roll.
+/// upgrade reads (assembly, since a Compiler assembles).
 ///
-/// **Which program is "first" and "second" no longer decides which order
-/// wins** — `owned_pets` breaks its tie on `creature_label`, which is a
-/// derived handle now rather than a species name, so its order is opaque
-/// from outside `handles::of`. What the roll assignment has to do is make
-/// `build_candidates`' pick (by roll) land on the *other* entity from
-/// whichever one `owned_pets` sorts first (by handle) — confirmed by the
-/// precondition below rather than assumed, since nothing else in this test
-/// can predict a handle's sort position.
+/// **Which program is "first" and "second" decides `owned_pets`' order
+/// again, for a reason rather than by coincidence.** Both programs share a
+/// species (the fixtures both draw `species_defs()[0]`), so `owned_pets`
+/// ties on it and breaks the tie on `ProgramId` — assignment order, so the
+/// fixture's own (first-tamed) program sorts first. The added program is
+/// given `MAX_INDIVIDUAL_ROLL` (1.2, strictly above the first program's
+/// 1.0), which is what makes it `build_candidates`' pick regardless of id —
+/// so the two lists are guaranteed to disagree by construction, not merely
+/// observed to.
 #[test]
 fn the_picker_spends_the_program_on_the_row_the_player_read() {
-    // The fixture's own (first-tamed) program builds well and the added one
-    // builds badly — the reverse of which program is "better" than before
-    // handles, chosen only because it is what makes the precondition below
-    // hold for these two programs' actual `ProgramId`s.
     let mut app = app_owning_one_deep_program_and_a_compiler(880, 2, 2);
     stand_beside_the_compiler(&mut app);
-    tame_program_at_zone_with_build_rolls(&mut app, 2, 0.5, 1.0);
+    tame_program_at_zone_with_build_rolls(
+        &mut app,
+        2,
+        feral_processes_engine::tuning::MAX_INDIVIDUAL_ROLL,
+        1.0,
+    );
 
     let (owned_first, top) = {
         let game = app.game.as_mut().unwrap();
@@ -1455,8 +1456,9 @@ fn the_picker_spends_the_program_on_the_row_the_player_read() {
     };
     assert_ne!(
         top, owned_first,
-        "precondition: the sorted list and owned_pets' order must actually differ, \
-         or the test passes against a handler indexing either one"
+        "the two lists were staged to disagree by construction — same species, \
+         a strictly better roll on the second program — so this should never \
+         trip; if it does, the staging assumption above is stale"
     );
 
     open_upgrade_picker(&mut app);

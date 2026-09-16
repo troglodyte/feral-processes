@@ -1742,7 +1742,13 @@ pub struct BuildQuality(pub f32);
 /// roster" looks like, the same way an absent `Rarity` reads as `Ordinary`.
 /// `0` is the unassigned sentinel a legacy save loads with; real ids start
 /// at 1 and `Game::load` mints one for every program carrying the sentinel.
-#[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+///
+/// `Ord` so `Game::owned_pets` can break a tie on it: sorting by the derived
+/// hex handle (`handles::of`) read as arbitrary, since the permutation that
+/// makes handles look unrelated is exactly what a stable, meaningful order
+/// needs to not do — id order is assignment order, which at least means
+/// "the one you caught first, sorts first."
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ProgramId(pub u32);
 
 /// What one owned program remembers. Minted empty at `Game::roster_parts`

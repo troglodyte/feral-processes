@@ -41,10 +41,11 @@ Each file is one kind:
 | `subject` | Which kind of thing a record of this def is about (below). |
 | `strike_cap` | How far reinforcement compounds before it stops. At least 1. |
 | `stack_decay` | Optional, default `1.0`. In `(0, 1]`: how much each strike past the first is worth relative to the one before it. `1.0` is plain linear stacking; below that, reinforcement still compounds but tapers off. |
+| `mood` | Optional, default `1.0`. In `[0, 1]`: the share of this def's intensity that reaches a program's Morale. `1.0` makes Morale and Opinion the same figure; lower values still show up in full when something asks this specific program's opinion of this specific subject, but count for less — or nothing, at `0.0` — toward the roster's collective mood. A `mood: 0.0` def must declare a `subject` something still reads an opinion about (`Program` or `BaseTile` today), or it is worth nothing anywhere. |
 
-The first seven are required. `stack_decay` was added later and carries a
-default, so a file written before it existed keeps parsing untouched — but
-none of the first seven may be omitted.
+The first seven are required. `stack_decay` and `mood` were added later and
+carry a default, so a file written before they existed keeps parsing
+untouched — but none of the first seven may be omitted.
 
 Two files claiming the same `id` is not an error; the alphabetically last one
 wins, which is deliberate (a mod's `zz_stranded_at.ron` overrides the shipped

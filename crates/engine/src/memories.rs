@@ -64,8 +64,8 @@ pub enum MemorySubjectKind {
     Activity,
 }
 
-/// `stack_decay`'s serde default: `1.0`, today's behaviour. Shared with
-/// `mood`, added alongside it in a later change.
+/// `stack_decay` and `mood`'s shared serde default — both are `1.0`,
+/// today's behaviour.
 fn one() -> f32 {
     1.0
 }
@@ -77,7 +77,7 @@ fn one() -> f32 {
 /// drawn. Any field added *later* must be `#[serde(default)]`, per the
 /// standing rule for `SpeciesDef`/`StructureDef`/`ItemDef`/`AbilityDef`, so a
 /// mod's existing files keep parsing untouched — but do not retroactively
-/// default these. `stack_decay` is that later kind.
+/// default these. `stack_decay` and `mood` are that later kind.
 #[derive(Clone, Debug, Deserialize)]
 pub struct MemoryDef {
     pub id: MemoryId,
@@ -100,6 +100,12 @@ pub struct MemoryDef {
     /// contributes less than the last. See `components::Memory::intensity_with`.
     #[serde(default = "one")]
     pub stack_decay: f32,
+    /// How much of this def's intensity reaches `Read::Morale`, in
+    /// `[0, 1]`. `Read::Opinion` always counts the full figure; `1.0` (the
+    /// default) makes the two reads identical, today's behaviour. See
+    /// `memories::Read` and `Game::morale`/`Game::opinion_of`.
+    #[serde(default = "one")]
+    pub mood: f32,
 }
 
 /// Every memory kind the game knows about, loaded from `assets/memories/`.
@@ -157,6 +163,22 @@ impl MemoryDb {
     }
 }
 
+/// Which of a def's two dials a fold applies — `Opinion` and `Morale` are
+/// two readings of the one store, never two stores.
+///
+/// **`evict` asks neither.** It weighs raw intensity regardless of `mood`,
+/// for the reason it already ignores `Disposition`: what a program keeps is
+/// bookkeeping, not feeling.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Read {
+    /// The full felt intensity — what a program actually thinks of a
+    /// subject.
+    Opinion,
+    /// Felt intensity scaled by `def.mood` — the share of a memory that
+    /// reaches the roster's collective mood.
+    Morale,
+}
+
 /// The signed sum of what `store` holds, restricted by `keep` — the one fold
 /// behind `Game::morale` and `Game::opinion_of`, lifted out of `Game` so a
 /// bevy system can ask the same question.
@@ -177,13 +199,21 @@ pub(crate) fn sum_intensity(
     db: &MemoryDb,
     now: u64,
     felt_as: crate::disposition::Disposition,
+    read: Read,
     keep: impl Fn(&Memory) -> bool,
 ) -> f32 {
     store
         .0
         .iter()
         .filter(|m| keep(m))
-        .filter_map(|m| Some(felt_as.felt(m.intensity(db.get(&m.def)?, now))))
+        .filter_map(|m| {
+            let def = db.get(&m.def)?;
+            let felt = felt_as.felt(m.intensity(def, now));
+            Some(match read {
+                Read::Opinion => felt,
+                Read::Morale => felt * def.mood,
+            })
+        })
         .sum()
 }
 

@@ -371,7 +371,7 @@ impl crate::Game {
     /// same asymmetry `remember` makes on the write side: hostiles, structures
     /// and the player are safe here without a branch at the call site.
     pub fn morale(&self, who: Entity) -> f32 {
-        self.memory_sum(who, |_| true)
+        self.memory_sum(who, crate::memories::Read::Morale, |_| true)
     }
 
     /// Every memory `who` currently holds, as the page draws them: strongest
@@ -382,6 +382,11 @@ impl crate::Game {
     /// `intensity` is `Memory::intensity` projected, not a second expression
     /// of the decay, which is the shape that has drifted in this repo four
     /// times.
+    ///
+    /// **This is still the morale page**, so a row's `intensity` is felt
+    /// intensity scaled by `def.mood`, the same `Read::Morale` `morale`
+    /// itself reads — the rows sum to the figure the page heads with, not to
+    /// the full opinion `opinion_of` would report.
     ///
     /// **`&self`, and it evicts nothing.** A read-only screen that rewrote
     /// the roster it is drawing would make what a program remembers depend on
@@ -426,7 +431,7 @@ impl crate::Game {
                     name: def.name.clone(),
                     blurb: def.blurb.clone(),
                     subject: self.subject_name(m),
-                    intensity: felt_as.felt(m.intensity(def, now)),
+                    intensity: felt_as.felt(m.intensity(def, now)) * def.mood,
                     age: age_phrase(now.saturating_sub(m.reinforced), def.half_life),
                 })
             })
@@ -496,21 +501,11 @@ impl crate::Game {
     /// A subject nothing has happened about sums an empty set and answers
     /// zero, which is a real answer and not a missing one.
     pub(crate) fn opinion_of(&self, who: Entity, subject: &MemorySubject) -> f32 {
-        self.memory_sum(who, |m| &m.subject == subject)
+        self.memory_sum(who, crate::memories::Read::Opinion, |m| {
+            &m.subject == subject
+        })
     }
 
-    /// The one fold both readers are, with the restriction handed in.
-    ///
-    /// `opinion_of` is a *restriction* of `morale` structurally rather than by
-    /// description: two folds could disagree about whether an unresolvable def
-    /// counts, and a comment claiming one mirrors the other is the shape that
-    /// has drifted in this repo four times.
-    ///
-    /// **An entry whose def no file defines is skipped**, contributing
-    /// nothing. That is where the empty-database property comes from — with
-    /// `assets/memories/` deleted every entry is unresolvable and every reader
-    /// answers zero, without a load-time purge and without the entries being
-    /// lost if the directory comes back.
     /// How hard what `who` remembers lands on it — its `Disposition`, or the
     /// neutral `Steady` for anything that has none.
     ///
@@ -527,7 +522,28 @@ impl crate::Game {
             .unwrap_or_default()
     }
 
-    fn memory_sum(&self, who: Entity, keep: impl Fn(&Memory) -> bool) -> f32 {
+    /// The one fold both readers are, with the restriction handed in.
+    ///
+    /// `opinion_of` is a *restriction* of `morale` structurally rather than by
+    /// description: two folds could disagree about whether an unresolvable def
+    /// counts, and a comment claiming one mirrors the other is the shape that
+    /// has drifted in this repo four times.
+    ///
+    /// **An entry whose def no file defines is skipped**, contributing
+    /// nothing. That is where the empty-database property comes from — with
+    /// `assets/memories/` deleted every entry is unresolvable and every reader
+    /// answers zero, without a load-time purge and without the entries being
+    /// lost if the directory comes back.
+    ///
+    /// `read` is the caller's own restriction too: `morale` passes
+    /// `Read::Morale` (mood-scaled), `opinion_of` passes `Read::Opinion` (the
+    /// full felt figure) — see `memories::Read`.
+    fn memory_sum(
+        &self,
+        who: Entity,
+        read: crate::memories::Read,
+        keep: impl Fn(&Memory) -> bool,
+    ) -> f32 {
         let Some(store) = self.world.get::<Memories>(who) else {
             return 0.0;
         };
@@ -536,6 +552,7 @@ impl crate::Game {
             self.world.resource::<MemoryDb>(),
             self.world.resource::<GameClock>().tick,
             self.felt_as(who),
+            read,
             keep,
         )
     }

@@ -88,6 +88,13 @@ is a named query on it, never a table of effects.
 `MemorySubject::Program` rows; with handles they finally name somebody, and
 the band is the row's tag. No new screen, and the page still has no scroll.
 
+**That page is measured in both directions and this change widens it.** Its
+width census builds `MEMORY_CAP_PER_PROGRAM` rows of the widest shipped def,
+and a Program row now carries a handle *and* a band tag that neither the
+census nor any shipped row has ever had to fit. Popup row width is testable
+headlessly — `paint::with_painter` measures real text — so the census is
+extended before the rows are, not after.
+
 **Its consequence is one line, in the one place the seam allows.**
 `drift_idle_staff`'s last rejection already declines a tile a program holds a
 grudge against; it gains a sibling that declines a tile **adjacent to a
@@ -121,7 +128,14 @@ about five lines.
 
 For each staff body, for each memory it holds whose def declares
 `spreads_as`, write the named hearsay def **about the same subject** to every
-staff body within `RUMOUR_REACH`, reusing `offshift::in_reach`.
+other staff body within `RUMOUR_REACH` of **the holder's own `Position`**,
+reusing `offshift::in_reach`.
+
+**Two recipients are skipped, and they are not the same skip.** The holder
+itself, `note_idling`'s `other != worker`; and **any recipient whose own
+`ProgramId` is the memory's subject** — without it, a program standing next to
+someone who resents it is handed a grudge against itself, which no reader
+would refuse and every reader would then fold into its own morale.
 
 **It draws no RNG.** `Game::remember` already draws none and writes no log
 line, and a deterministic spread keeps the seeded stream unshifted — the
@@ -198,6 +212,10 @@ constraint, not a difficulty knob.
 - At `MEMORY_CAP_PER_PROGRAM`, hearsay is evicted before firsthand.
 - The pass draws no `GameRng`: assert the stream is unmoved across a tick that
   spreads.
+- **A program is never handed a grudge against itself** by a rumour about it
+  spreading within its own reach.
+- The widened memories-page row still fits its panel, measured through
+  `paint::with_painter` rather than counted in characters.
 - With `assets/memories/` deleted, the pass writes nothing and nothing panics.
 
 **Censuses**

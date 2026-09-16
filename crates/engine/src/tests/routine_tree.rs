@@ -596,3 +596,50 @@ fn the_base_trees_output_is_unchanged_apart_from_the_deleted_nodes() {
         .count();
     assert_eq!(rows.len(), ron_file_count);
 }
+
+/// `field_ops` is one of the nine nodes task 3 deleted — a save made before
+/// that deletion (or before a mod's own tree change) could carry it as the
+/// active project forever, with no door that ever re-selects on its own.
+#[test]
+fn a_stale_active_research_clears_on_load_with_its_work_orders() {
+    let mut game = Game::new(9140, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world
+        .resource_mut::<crate::resources::ActiveResearch>()
+        .id = Some("field_ops".to_string());
+    game.world
+        .resource_mut::<crate::resources::WorkOrders>()
+        .0
+        .push(
+            crate::game::base::work_orders::WorkOrder::batch(
+                crate::items::ItemId::from("bytecode_block"),
+                1,
+            )
+            .with_research(),
+        );
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_stale_active_research_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).expect("a stale save must still load");
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        loaded
+            .world
+            .resource::<crate::resources::ActiveResearch>()
+            .id
+            .is_none(),
+        "a project naming a node the loaded tree no longer has must clear"
+    );
+    assert!(
+        loaded
+            .world
+            .resource::<crate::resources::WorkOrders>()
+            .0
+            .iter()
+            .all(|o| !o.for_research),
+        "its work orders must clear with it"
+    );
+}

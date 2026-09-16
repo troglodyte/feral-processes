@@ -1447,6 +1447,24 @@ impl Game {
                 "Your {stranded} banked {name} is written off — research runs on projects now."
             ));
         }
+        // A save's `active_research` can name a node the loaded tree no
+        // longer has — task 3 deleted nine, and a mod can delete or rename
+        // its own — and nothing ever re-selects on its own, so a stale
+        // project would stall forever with a Research Node staffed and
+        // earning nothing. Checked once, here, rather than left to
+        // `select_research`, which only ever refuses a *new* selection.
+        let active_stale = game
+            .world
+            .resource::<crate::resources::ActiveResearch>()
+            .id
+            .as_ref()
+            .is_some_and(|id| game.world.resource::<ResearchDb>().get(id).is_none());
+        if active_stale {
+            game.world
+                .resource_mut::<crate::resources::ActiveResearch>()
+                .id = None;
+            game.withdraw_research_orders();
+        }
         Ok(game)
     }
 

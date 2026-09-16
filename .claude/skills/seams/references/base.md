@@ -735,6 +735,26 @@
   on a base with nothing else queued the body stays standing at the node, which
   is the documented run-dry behaviour and is what puts it in place for the next
   project; a test pins it so nobody "fixes" it.
+- **A routine node is synthesised, never authored, and "researched" means
+  `KnownRoutines` contains it.** `routine_tree::synthesise_nodes` mints one
+  `ResearchDef` per eligible ability (`ItemDb::synthesise_etched_disks`'s own
+  shape) with `teaches: Some(ability)`, and `Game::node_researched` is the one
+  door: `is_researched`, `missing_prereqs` and `select_research`'s
+  already-researched refusal all read it instead of the `Research` set for a
+  `teaches` node. **`listed_research` must check "already known" before
+  "is the tree open"**, not after — checking `routine_tree_open` first hides
+  an already-known routine whenever the tree is closed, which breaks the one
+  case this ordering exists for: an old save can know Patch Party v1.0 while
+  `routine/hot_patch` (its own prerequisite) is still closed off, because
+  nothing on load ever re-researches `routine_fabrication`. `research_graph`
+  has to treat that kind of unlisted parent as absent in both its tier and
+  edge computation, or the Kahn pass never settles the child and a listed
+  node with a hidden parent gets no cell. **A whole version chain needs the
+  same zone gate as its root, not just the rung a spec table happened to
+  name** — `checksum_repair`/`cold_boot`/`mirror_restore`/`redundancy_sync`
+  all chain off `hot_patch`'s `research_zone: 2` and default to zone 1 if
+  left alone, which `no_research_node_is_gated_below_its_own_prerequisite`
+  catches as a gate that can never fire.
 - **Departure lives in `haul_step_system`, not the clogged branch**, because
   it has to know whether a depot exists — a base with no depot must behave
   exactly as it did before depots shipped. `hauling::consumer_beside` is the

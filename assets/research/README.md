@@ -25,7 +25,9 @@ Core Fragments.
     //
     // Above the description the menu draws one cyan line naming everything
     // the node hands over, by display name: the structures, the results of
-    // its recipes, the routines and the tools, in that order.
+    // its recipes, and the tools, in that order. A base-tree node never
+    // grants a routine directly any more — see "Routines are a separate
+    // tree" below.
     //
     // Below it, one cyan line per conversion the node makes possible — a
     // recipe in `unlocks_recipes` below, or a structure in
@@ -84,21 +86,45 @@ Core Fragments.
         requires_structure: Some("fabricator"),
     )],
 
-    // Optional; defaults to none. Ability ids this node teaches the player
-    // once unlocked — see assets/abilities/README.md. What it hands over is
-    // knowledge, not an item: the routine still has to be written into a
-    // slot (`m` in game), which burns one blank Routine Disk the base has to
-    // manufacture. Companions never gain anything from this list — their kit
-    // comes from their species file instead.
-    unlocks_abilities: ["hot_patch"],
-
     // Optional; defaults to none. Tool ids this node hands over the
-    // knowledge to forge — see assets/tools/README.md. `unlocks_abilities`'s
-    // own shape: what it hands over is knowledge, not an item, so a forged
-    // tool still has to be installed into a slot before it does anything.
+    // knowledge to forge — see assets/tools/README.md. What it hands over is
+    // knowledge, not an item, so a forged tool still has to be installed
+    // into a slot before it does anything.
     unlocks_tools: ["core_tap"],
+
+    // Optional; defaults to false. Set this on the one node that should open
+    // the routine research tree (the shipped tree sets it on
+    // `routine_fabrication`). Until a loaded node carrying it is researched,
+    // the routine tree lists nothing at all and researching any routine node
+    // is refused. If no loaded node carries it, the routine tree is open
+    // from the start — so deleting the flagged node (or the whole file) does
+    // not strand a run behind a gate nothing can ever open.
+    opens_routine_tree: true,
 )
 ```
+
+## Routines are a separate tree, and you cannot author one here
+
+Every non-passive, non-exclusive, non-permanent, non-summon ability gets its
+own research node automatically — one per ability, derived from the ability
+catalogue rather than written as a `.ron` file. See
+`assets/abilities/README.md` for what determines an ability's place in that
+tree (its family, its rung and its zone gate) and `../../docs/superpowers/
+specs/2026-09-16-routine-research-tree-design.md` for the design.
+
+A synthesised node's id is `"routine/<ability id>"`, which is not a legal id
+to give a file here — you cannot mint one, override one, or make a
+`requires` entry that resolves to one from this directory. Its `tree` field
+reads `Routines`; every node authored in this directory reads `Base`, the
+default, so nothing here has to change to keep meaning what it always meant.
+Its `teaches` field names the one ability it grants; a node in this
+directory never sets it, and a research node granting a routine through any
+means but its own synthesised node is retired — that is what
+`unlocks_abilities` used to do, and the field is gone. An old `.ron` file (or
+a `dev-saves/` template) still naming `unlocks_abilities` keeps loading —
+this parser, like every other in the game, drops an unknown field silently
+rather than refusing the file — it simply grants nothing through it any
+more.
 
 ## Rules
 
@@ -114,14 +140,9 @@ Core Fragments.
   `unlocks_structures`, is dropped at load time with a warning — it could
   never be reached or acted on. Dropping cascades: anything that required
   the dropped node goes too.
-- An unknown id in `unlocks_abilities` or `unlocks_tools` is treated more
-  gently: that id is dropped with a warning and the node itself still
-  loads, because a node's structures and recipes are innocent of a bad
-  ability or tool id.
-- Two nodes may name the same ability. Knowing a routine is a set membership,
-  so the second unlock is silently a no-op rather than a wasted purchase —
-  what limits how many copies you can install is Routine Disks, not how many
-  nodes taught you the id.
+- An unknown id in `unlocks_tools` is treated more gently: that id is
+  dropped with a warning and the node itself still loads, because a node's
+  structures and recipes are innocent of a bad tool id.
 - **A node must not be gated below its own prerequisite.** If `min_zone` is
   lower than that of anything in `requires`, the prereq lock always outlives
   the zone lock and the gate can never be the reason the node is unbuyable —

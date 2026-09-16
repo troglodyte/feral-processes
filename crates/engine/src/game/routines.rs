@@ -121,7 +121,23 @@ impl Game {
         })
     }
 
+    /// Whether `entity` is a program the player controls — `Tamed`, or the
+    /// player themselves. The one door `routine_view`'s concealment and the
+    /// wild death line's own name filter both read, rather than
+    /// `Game::program_role`, which narrows further to "and posted
+    /// somewhere": a wielded, sortied or staffed program is still the
+    /// player's own kit, never somebody else's to conceal.
+    pub(crate) fn program_is_owned(&self, entity: Entity) -> bool {
+        self.world.get::<Tamed>(entity).is_some() || self.world.get::<Player>(entity).is_some()
+    }
+
     /// `entity`'s slots in menu order, filled and empty alike.
+    ///
+    /// **A filled slot on a program the player does not own conceals
+    /// itself** when its family isn't discovered yet (spec §4
+    /// "Concealment") — `unseen` is set and the name, description and
+    /// ability id are all blanked, so a renderer reading any of the three
+    /// instead of the flag still can't leak it.
     pub fn routine_view(&self, entity: Entity) -> Vec<RoutineSlotView> {
         let db = self.world.resource::<AbilityDb>();
         let installed = self
@@ -129,15 +145,29 @@ impl Game {
             .get::<Routines>(entity)
             .map(|r| r.0.clone())
             .unwrap_or_default();
+        let owned = self.program_is_owned(entity);
         (0..self.routine_slots(entity))
             .map(
                 |index| match installed.get(index).and_then(|id| db.get(id)) {
+                    Some(def)
+                        if !owned && !self.family_discovered(&crate::routine_tree::family(def)) =>
+                    {
+                        RoutineSlotView {
+                            index,
+                            ability: None,
+                            name: String::new(),
+                            description: String::new(),
+                            fixed: self.routine_is_permanent(&def.id),
+                            unseen: true,
+                        }
+                    }
                     Some(def) => RoutineSlotView {
                         index,
                         ability: Some(def.id.clone()),
                         name: def.name.clone(),
                         description: def.description.clone(),
                         fixed: self.routine_is_permanent(&def.id),
+                        unseen: false,
                     },
                     None => RoutineSlotView {
                         index,
@@ -145,6 +175,7 @@ impl Game {
                         name: "(empty)".to_string(),
                         description: String::new(),
                         fixed: false,
+                        unseen: false,
                     },
                 },
             )

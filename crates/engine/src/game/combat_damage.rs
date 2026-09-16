@@ -435,11 +435,21 @@ impl Game {
     /// Emitted the moment its HP reaches 0, while the entity itself lives on
     /// until `end_battle` reaps it — see that method for why the removal has
     /// to wait.
+    ///
+    /// **Omits an unseen routine's name.** `Party` membership is not
+    /// ownership — a summon dies here without ever being `Tamed` — so an
+    /// unowned body's carried routine is filtered the same way
+    /// `routine_view` blanks one: `ExtractableRoutineView::known` already
+    /// *is* `family_discovered` (modulo the exclusive routines this line
+    /// will never actually see wild, per `routine_candidate_ids`'s own
+    /// doc), so this reuses it rather than re-deriving the family.
     fn announce_program_death(&mut self, program: Entity) {
         let name = self.creature_label(program);
+        let owned = self.program_is_owned(program);
         let routines: Vec<String> = self
             .extractable_routines(program)
             .into_iter()
+            .filter(|view| owned || view.known)
             .map(|def| def.name)
             .collect();
         let line = if routines.is_empty() {

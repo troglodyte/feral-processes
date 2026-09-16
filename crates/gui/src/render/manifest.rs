@@ -470,7 +470,19 @@ fn sections_for(game: &Game, view: &ManifestView) -> Vec<Section> {
             rows: section_rows(
                 view.routines
                     .iter()
-                    .map(|r| stat(format!("{}", r.index + 1), r.name.clone()))
+                    .map(|r| {
+                        // `r.unseen` rather than `r.name.is_empty()`: an
+                        // empty slot's name is "(empty)", never blank, so
+                        // the flag is the only door — reading the string
+                        // instead is exactly the leak `RoutineSlotView::
+                        // unseen`'s doc warns a renderer away from.
+                        let name = if r.unseen {
+                            "??? — a routine you haven't seen".to_string()
+                        } else {
+                            r.name.clone()
+                        };
+                        stat(format!("{}", r.index + 1), name)
+                    })
                     .collect(),
             ),
             full_width: false,
@@ -1228,6 +1240,7 @@ mod tests {
                 name: "(empty)".to_string(),
                 description: String::new(),
                 fixed: false,
+                unseen: false,
             }],
             equipment,
             subject: ManifestSubject::Program(Box::new(program)),
@@ -1922,6 +1935,45 @@ mod tests {
         );
     }
 
+    /// An unseen slot draws the concealment line — never the blanked name,
+    /// never the ability id — because `sections_for` reads nothing but the
+    /// `unseen` flag itself. Spec §4 "Concealment"'s inspect-sheet clause.
+    #[test]
+    fn an_unseen_routine_slot_draws_the_concealment_line() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let game = Game::new(
+            11,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            assets,
+        )
+        .expect("shipped assets load");
+        let program = plain_program(14, 12);
+        let mut view = program_view(program, Vec::new());
+        view.routines = vec![feral_processes_engine::RoutineSlotView {
+            index: 0,
+            ability: None,
+            name: String::new(),
+            description: String::new(),
+            fixed: false,
+            unseen: true,
+        }];
+
+        let sections = sections_for(&game, &view);
+        let routines = sections
+            .iter()
+            .find(|s| s.title == "ROUTINES")
+            .expect("one unseen slot still emits the ROUTINES box");
+        assert!(
+            routines.rows.iter().any(|r| matches!(
+                r,
+                SectionRow::Stat(_, value) if value == "??? — a routine you haven't seen"
+            )),
+            "an unseen slot must draw the concealment line, not its blanked \
+             fields: {:?}",
+            routines.rows
+        );
+    }
+
     /// A wild program wears nothing, so the box is absent rather than drawn
     /// empty — the same rule the player's page has always followed for a
     /// slot it isn't using.
@@ -2254,6 +2306,7 @@ mod tests {
             name: "(empty)".to_string(),
             description: String::new(),
             fixed: false,
+            unseen: false,
         }];
 
         // `full_width` too, and not just the titles: EQUIPMENT is a band on

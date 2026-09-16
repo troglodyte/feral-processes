@@ -5,6 +5,48 @@ use crate::classes::PlayerClass;
 use crate::components::Routines;
 use crate::*;
 
+// ---------------------------------------------------------------------------
+// Concealment — `RoutineSlotView::unseen`. See docs/superpowers/plans/
+// 2026-09-16-routine-research-tree.md, Task 9.
+// ---------------------------------------------------------------------------
+
+/// A wild carrier's slot is unseen and blank — `Game::routine_view`, the
+/// inspect sheet's own concealment (spec §4 "Concealment").
+#[test]
+fn a_wild_carriers_slot_is_unseen_and_blank() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 3, 3);
+    game.world
+        .entity_mut(wild)
+        .insert(Routines(vec!["hot_patch".to_string()]));
+
+    let slot = &game.routine_view(wild)[0];
+    assert!(slot.unseen, "an undiscovered family must read as unseen");
+    assert_eq!(slot.ability, None, "the ability id must be blanked too");
+    assert_eq!(slot.name, "", "the name must be blanked");
+    assert_eq!(slot.description, "", "the description must be blanked");
+}
+
+/// The identical routine on a tamed program is never concealed — ownership
+/// alone clears it, with nothing discovered and nothing else different.
+#[test]
+fn the_same_species_tamed_shows_its_real_name() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(pet)
+        .insert(Routines(vec!["hot_patch".to_string()]));
+
+    let slot = &game.routine_view(pet)[0];
+    assert!(
+        !slot.unseen,
+        "an owned program's own routine is never concealed"
+    );
+    assert_eq!(slot.ability.as_deref(), Some("hot_patch"));
+    assert_eq!(slot.name, "Patch Single v1.0");
+    assert!(!slot.description.is_empty());
+}
+
 /// The generic test species declares no abilities, so its kit is the
 /// fallback — which must be a real installed routine, not an empty list
 /// resolved at read time.
@@ -1351,5 +1393,45 @@ fn starter_rows_are_priced_through_the_class() {
         striker_heal.effect, medic_heal.effect,
         "a Striker and a Medic must read checksum_repair differently — the whole point of \
          pricing rows through `class`"
+    );
+}
+
+/// The death line omits an unseen routine's name for a body that dies while
+/// standing in `Party` without being `Tamed` — a summon, not a companion —
+/// spec §4 "Concealment"'s death-line clause. `Game::apply_damage` is the
+/// real door rather than a direct HP write, so `lower_hp`'s own kill
+/// detection is what fires the announcement, exactly as a battle would.
+#[test]
+fn the_death_line_omits_an_unseen_routines_name() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let summon = game
+        .world
+        .spawn((
+            Creature {
+                species: "scrapper".to_string(),
+            },
+            Position { x: 3, y: 3 },
+            Stats {
+                hp: 1,
+                max_hp: 1,
+                atk: 5,
+                mitigation: 0,
+            },
+            Routines(vec!["hot_patch".to_string()]),
+        ))
+        .id();
+    game.world.resource_mut::<Party>().0.push(summon);
+
+    game.apply_damage(summon, 5);
+
+    let logged = game.message_log(5);
+    let line = logged
+        .iter()
+        .find(|l| l.text.contains("crashes and is deleted"))
+        .expect("the death line must be logged");
+    assert!(
+        !line.text.contains("Patch Single v1.0"),
+        "an unseen routine's display name leaked into the death line: {}",
+        line.text
     );
 }

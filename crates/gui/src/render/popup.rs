@@ -1578,6 +1578,7 @@ mod tests {
                             name: name(i),
                             description: text(i),
                             fixed: false,
+                            unseen: false,
                         })
                         .collect::<Vec<_>>(),
                     selected,

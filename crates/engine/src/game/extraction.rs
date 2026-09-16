@@ -568,11 +568,7 @@ impl Game {
                         if pool.is_empty() {
                             crate::views::ExtractionPreview::NothingToLearn
                         } else {
-                            crate::views::ExtractionPreview::Routine(
-                                pool.iter()
-                                    .map(|id| self.ability_display_name(id))
-                                    .collect(),
-                            )
+                            crate::views::ExtractionPreview::Routine(pool.len())
                         }
                     }
                     ToolCategory::Gear => crate::views::ExtractionPreview::Chances(

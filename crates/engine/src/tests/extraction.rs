@@ -2491,8 +2491,12 @@ fn the_routine_tool_refuses_a_program_with_nothing_unfamiliar() {
 // branch can answer honestly. See the phase-3 plan's Task 5.
 // ---------------------------------------------------------------------------
 
+/// The preview's count agrees with the pool it draws from and — Task 9's
+/// concealment — holds no display name of a candidate: `ExtractionPreview::
+/// Routine` is a bare `usize` now, so there is no field left for a name to
+/// leak through.
 #[test]
-fn a_routine_tools_preview_names_the_pool_it_draws_from() {
+fn a_routine_tools_preview_counts_the_pool_and_names_none_of_it() {
     let mut game = new_test_game();
     let program = test_program("scrapper", 30);
     let pool = game.routine_candidates(&program);
@@ -2507,8 +2511,8 @@ fn a_routine_tools_preview_names_the_pool_it_draws_from() {
         .expect("the routine tool is installed");
 
     match option.preview {
-        views::ExtractionPreview::Routine(names) => {
-            assert_eq!(names.len(), pool.len(), "the pool and the preview disagree")
+        views::ExtractionPreview::Routine(count) => {
+            assert_eq!(count, pool.len(), "the pool and the preview disagree")
         }
         other => panic!("expected a routine preview, got {other:?}"),
     }

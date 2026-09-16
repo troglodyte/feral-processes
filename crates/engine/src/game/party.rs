@@ -242,18 +242,31 @@ impl Game {
     /// one (`Game::fuse_companions` or `Game::rename_companion`), else its species
     /// name (falling back to the raw species id if the species definition
     /// is somehow missing). `None` if `entity` isn't a `Creature` at all.
+    /// The naming ladder: `CustomName` › handle › species. An owned program
+    /// (anything carrying `ProgramId`) is named by its derived handle once
+    /// the player hasn't renamed it — see `handles::of` — and only a wild or
+    /// summoned body, which never passes through `roster_parts`, falls
+    /// through to its species name.
     pub(crate) fn creature_name(&self, entity: Entity) -> Option<String> {
         let c = self.world.get::<Creature>(entity)?;
         if let Some(custom) = self.world.get::<CustomName>(entity) {
             return Some(custom.0.clone());
         }
-        Some(
-            self.world
-                .resource::<SpeciesDb>()
-                .get(&c.species)
-                .map(|s| s.name.clone())
-                .unwrap_or_else(|| c.species.clone()),
-        )
+        if let Some(id) = self.world.get::<ProgramId>(entity) {
+            return Some(crate::handles::of(*id));
+        }
+        Some(self.species_display_name(c))
+    }
+
+    /// The species' display name, falling back to its raw id if the def
+    /// failed to load — `SpeciesDb::load_dir` skips a malformed file rather
+    /// than panicking, so this is the one place that fallback shows.
+    fn species_display_name(&self, c: &Creature) -> String {
+        self.world
+            .resource::<SpeciesDb>()
+            .get(&c.species)
+            .map(|s| s.name.clone())
+            .unwrap_or_else(|| c.species.clone())
     }
 
     /// `creature_name`, rare-tier prefixed and zone-tagged, falling back to
@@ -266,6 +279,12 @@ impl Game {
     /// roster carries the tier as its own short tag instead, outside the
     /// column. A `CustomName` gets the prefix too, which is right: renaming
     /// a program does not make it ordinary.
+    ///
+    /// A handle names an owned program, not what it *is*, so the species
+    /// rides along after it — `Overclocked 0x435eaD Scrapper 3` — the one
+    /// place this ladder's two derived pieces print together. A
+    /// `CustomName` is the player's own choice and stays bare; the species
+    /// is on the manifest for whoever wants it.
     pub fn creature_label(&self, entity: Entity) -> String {
         match self.creature_name(entity) {
             Some(name) => {
@@ -273,10 +292,28 @@ impl Game {
                     Some(tier) => format!("{tier} {name}"),
                     None => name,
                 };
+                let named = self.append_species_after_a_handle(entity, named);
                 self.zone_tagged_name(entity, named)
             }
             None => "Program".to_string(),
         }
+    }
+
+    /// The one place `creature_label` reaches past `creature_name`'s return
+    /// value: it has to tell a handle from a `CustomName` to know whether
+    /// the species belongs after it, and the name alone can't say that — a
+    /// custom name and a handle are both bare strings.
+    fn append_species_after_a_handle(&self, entity: Entity, named: String) -> String {
+        if self.world.get::<CustomName>(entity).is_some() {
+            return named;
+        }
+        let (Some(c), Some(_)) = (
+            self.world.get::<Creature>(entity),
+            self.world.get::<ProgramId>(entity),
+        ) else {
+            return named;
+        };
+        format!("{named} {}", self.species_display_name(c))
     }
 
     /// The rare-spawn tier of `entity`, or `Ordinary` for anything without

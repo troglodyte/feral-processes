@@ -1542,6 +1542,139 @@ fn a_renamed_program_keeps_its_name_across_a_save() {
     );
 }
 
+// The naming ladder — `CustomName` › handle › species. `creature_name` is
+// the short form; `creature_label` appends the species when the name it
+// picked was a handle, because a `CustomName` already says everything the
+// player wanted said.
+
+#[test]
+fn a_tamed_program_is_named_by_its_handle() {
+    let mut game = Game::new(4300, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    let id = *game.world.get::<ProgramId>(pet).unwrap();
+
+    assert_eq!(
+        game.creature_name(pet).as_deref(),
+        Some(crate::handles::of(id).as_str())
+    );
+}
+
+#[test]
+fn a_wild_creature_and_a_summon_keep_their_species_name() {
+    let mut game = Game::new(4301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species_name = generic_species().name;
+
+    let wild = game
+        .world
+        .spawn(Creature {
+            species: generic_species().id,
+        })
+        .id();
+    assert_eq!(
+        game.creature_name(wild).as_deref(),
+        Some(species_name.as_str())
+    );
+
+    // A summon (`Game::fork_programs`) is a wild spawn with `Hostile`/
+    // `WanderAi` stripped and `components::Summoned` added — deliberately
+    // never `roster_parts`, so it carries no `ProgramId` either, the same
+    // omission that keeps it out of the roster.
+    let summon = game
+        .world
+        .spawn((
+            Creature {
+                species: generic_species().id,
+            },
+            crate::components::Summoned,
+        ))
+        .id();
+    assert_eq!(
+        game.creature_name(summon).as_deref(),
+        Some(species_name.as_str())
+    );
+}
+
+#[test]
+fn a_custom_name_outranks_the_handle_and_drops_the_species_from_the_label() {
+    let mut game = Game::new(4302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.rename_companion(pet, Some("Hexed".to_string()))
+        .unwrap();
+
+    assert_eq!(game.creature_name(pet).as_deref(), Some("Hexed"));
+    assert_eq!(
+        game.creature_label(pet),
+        "Hexed",
+        "the player named it — no handle and no species belong in the label"
+    );
+}
+
+#[test]
+fn a_fused_child_has_a_handle_neither_parent_had() {
+    let mut game = Game::new(4303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let a = spawn_tamed(&mut game, 10, 3);
+    let b = spawn_tamed(&mut game, 10, 3);
+    let handle_a = game.creature_name(a).unwrap();
+    let handle_b = game.creature_name(b).unwrap();
+
+    game.fuse_companions(a, b, None).unwrap();
+
+    let mut query = game.world.query::<(Entity, &Tamed)>();
+    let child = query
+        .iter(&game.world)
+        .find(|(_, t)| t.owner == player)
+        .map(|(e, _)| e)
+        .expect("a fused creature should exist");
+    let child_id = *game.world.get::<ProgramId>(child).unwrap();
+    let child_name = game.creature_name(child).unwrap();
+
+    assert_eq!(child_name, crate::handles::of(child_id));
+    assert_ne!(child_name, handle_a, "fusion mints a fresh ProgramId");
+    assert_ne!(child_name, handle_b, "fusion mints a fresh ProgramId");
+}
+
+#[test]
+fn a_label_carries_the_species_after_a_handle() {
+    let mut game = Game::new(4304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(pet).insert(ZonePortal(3));
+    let id = *game.world.get::<ProgramId>(pet).unwrap();
+
+    let expected = format!("{} {} 3", crate::handles::of(id), generic_species().name);
+    assert_eq!(game.creature_label(pet), expected);
+}
+
+#[test]
+fn a_program_from_a_pre_handle_save_reads_a_handle() {
+    let mut game = Game::new(4305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // Entity identity is private to the `World` that allocated it (see
+    // `a_creatures_potential_survives_save_and_load`), so this is found
+    // again by its `Tamed` ownership after the round trip, never by the
+    // `Entity` returned here.
+    spawn_tamed(&mut game, 10, 3);
+
+    let dir = scratch_assets_dir("handle_save_roundtrip");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+    game.save(&path).unwrap();
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+
+    let player = loaded.player_entity();
+    let mut query = loaded.world.query::<(Entity, &Tamed)>();
+    let restored = query
+        .iter(&loaded.world)
+        .find(|(_, t)| t.owner == player)
+        .map(|(e, _)| e)
+        .expect("the tamed program should survive the round trip");
+    let restored_id = *loaded.world.get::<ProgramId>(restored).unwrap();
+
+    assert_eq!(
+        loaded.creature_name(restored).as_deref(),
+        Some(crate::handles::of(restored_id).as_str())
+    );
+}
+
 #[test]
 fn fusing_two_shinies_keeps_the_higher_rarity() {
     let mut game = Game::new(92, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

@@ -1324,7 +1324,7 @@
   `tick_one_combatant`.** Every other piece of in-fight state that ages per
   turn — statuses, buffs, cooldowns, the cloak — ages at round upkeep
   inside `tick_one_combatant`. A tamper does not, because a `duration: 1`
-  Prompt Injection cast on a hostile that has *already acted this round*
+  Prompt Injection landed on a hostile that has *already acted this round*
   would, under the round rule, age to zero at that same upkeep before the
   target ever took a turn under it — full Power and cooldown spent for zero
   observable effect. `Tampered::age()` runs instead from

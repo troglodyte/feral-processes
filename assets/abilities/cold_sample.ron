@@ -1,7 +1,7 @@
 (
     id: "cold_sample",
     name: "Cold Sample Single",
-    description: "Pins one target's decisions at the argmax for 3 rounds",
+    description: "Pins one target's decisions at the argmax for 3 rounds. Battle maps only.",
     target: OneEnemyGroupFront,
     effect: Tamper(kind: Temperature(0.0), duration: 3),
     cooldown: 3,

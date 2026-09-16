@@ -1,7 +1,7 @@
 (
     id: "prompt_injection",
     name: "Prompt Injection Single",
-    description: "Turns one target against its own side for 1 round",
+    description: "Turns one target against its own side for 1 round. Battle maps only.",
     target: OneEnemyGroupFront,
     effect: Tamper(kind: Injected, duration: 1),
     cooldown: 5,

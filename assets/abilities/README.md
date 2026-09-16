@@ -274,6 +274,16 @@ way deleting the Currency item does.
     //                       single cell has nowhere to put more than one
     //                       decoy.
     //
+    //     **`Hallucinating` dominates `Injected`**, so stacking the two on
+    //     one body wastes the second. A hallucinating body fights the
+    //     nearest decoy it sees and nothing else, and that choice is made
+    //     *after* the side split an injection flips — so an injected,
+    //     hallucinating hostile aims at a decoy exactly as an injected one
+    //     that could see none would have aimed at its own allies. Which
+    //     decoys a body sees is read off its literal side, which an
+    //     injection does not change. Both are worth running on one target
+    //     only once the Hallucination's entry has worn off.
+    //
     //     Temperature is the one kind that **overwrites** rather than
     //     stacks: a cold sample and a heat injection both answer
     //     `TamperSlot::Temperature`, so the second landed on an

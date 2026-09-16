@@ -394,6 +394,18 @@ pub enum TamperKind {
 }
 
 impl TamperKind {
+    /// Whether this kind makes its target *more* certain than an untampered
+    /// body — a `Temperature` at or below `tuning::TACTICAL_AI_TEMPERATURE`,
+    /// and nothing else.
+    ///
+    /// **Where the HOT/COLD line lives.** The strip's `TamperTag::of` and the
+    /// take-hold log line both split `Temperature` in two, and two spellings
+    /// of the threshold is a tag that could say COLD over a line that said
+    /// the sampler runs hot.
+    pub fn runs_cold(self) -> bool {
+        matches!(self, TamperKind::Temperature(t) if t <= crate::tuning::TACTICAL_AI_TEMPERATURE)
+    }
+
     /// Which `Tampered` slot this kind occupies — `TamperSlot`'s own doc.
     pub fn slot(self) -> TamperSlot {
         match self {
@@ -589,7 +601,7 @@ pub enum AbilityEffect {
         /// The tampered body's own turns before the entry expires — a
         /// count of that body's *turns*, not battle rounds. See
         /// `components::Tampered`'s own doc for why: aged per round, a
-        /// `duration: 1` cast mid-round on a body that already acted would
+        /// `duration: 1` landed mid-round on a body that already acted would
         /// expire before that body ever took the turn it was aimed at.
         duration: u32,
     },

@@ -122,6 +122,48 @@ fn a_tamper_routine_never_runs_on_the_map() {
     );
 }
 
+/// **Every tactical-only routine says so in its own description**, and so
+/// does the node that teaches them.
+///
+/// Tactical fights sit behind `profile.tactical_battles`, which is off until
+/// a player turns it on. `Game::battle_special_options` filters a
+/// tactical-only routine out of the group model's picker, so to a player who
+/// never enabled the toggle these five are simply absent with no explanation
+/// — and `ability_unavailable`'s `"battle map only"` string has no caller
+/// that reaches a screen. The description is the only place they are told,
+/// which is why this is a census and not a convention.
+///
+/// Walked off `tactical_only` rather than off a list of ids, so a sixth
+/// tamper routine shipped without the sentence fails the build.
+#[test]
+fn every_tactical_only_routine_says_it_is_battle_map_only() {
+    const SENTENCE: &str = "Battle maps only.";
+    let game = game(9502);
+    let db = game.world.resource::<AbilityDb>();
+    let mut checked = 0;
+    for def in db.all().filter(|d| d.effect.tactical_only()) {
+        assert!(
+            def.description.contains(SENTENCE),
+            "{} is battle-map only and never says so: {:?}",
+            def.id,
+            def.description
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 5, "the five tamper routines are what ships today");
+
+    let node = game
+        .world
+        .resource::<crate::research::ResearchDb>()
+        .get("model_inspection")
+        .expect("model_inspection ships");
+    assert!(
+        node.description.to_lowercase().contains("battle map"),
+        "the node that teaches them must say so too: {:?}",
+        node.description
+    );
+}
+
 /// One case per `tamper_faults` refusal, built by hand rather than round-
 /// tripped through a scratch `.ron` file.
 #[test]
@@ -503,7 +545,7 @@ fn reapplying_a_kind_refreshes_and_heat_replaces_cold() {
     );
 }
 
-/// **(M)** Spec test 11: a `duration: 1` Injection cast on a hostile that has
+/// **(M)** Spec test 11: a `duration: 1` Injection landed on a hostile that has
 /// already had its turn this round is still live at the start of its next
 /// one, and is gone the moment that next turn is handed on.
 ///
@@ -1283,10 +1325,41 @@ fn hallucination_places_its_decoys_on_the_nearest_free_cells() {
     );
 }
 
-/// Decision 3's other half: with no free cell in the radius nothing is
-/// placed, and so nobody is told they are seeing anything.
+/// Asserts that `game`'s acting `body` spent none of its turn: no Power, no
+/// cooldown, no action, and the turn still its own.
+///
+/// One helper rather than one copy per refusal, because "nothing was spent"
+/// is four separate reads and a refusal that forgot one of them would pass
+/// against three.
+fn nothing_was_spent(game: &Game, body: Entity, power_before: f32, what: &str) {
+    assert_eq!(
+        game.world.get::<PowerReserve>(body).unwrap().get(),
+        power_before,
+        "{what} must not spend Power"
+    );
+    assert!(
+        game.world
+            .get::<AbilityCooldowns>(body)
+            .is_none_or(|c| c.0.is_empty()),
+        "{what} must not arm a cooldown"
+    );
+    let battle = game.world.resource::<TacticalBattle>();
+    assert!(!battle.acted(), "{what} must not spend the turn");
+    assert_eq!(
+        battle.actor(),
+        Some(body),
+        "{what} must leave the turn with the body that asked"
+    );
+}
+
+/// Decision 3's other half, corrected by the whole-branch review: with no
+/// free cell in the radius there is nowhere to seat a decoy, so the routine
+/// is **refused** rather than run for nothing. `board_has_room` is the
+/// precedent — a `Summon` with nowhere to put a body refuses for exactly
+/// this reason, and spending 14 Power and a five-round cooldown to seat
+/// nobody is the same wasted round.
 #[test]
-fn hallucination_with_no_free_cell_tampers_nobody() {
+fn hallucination_with_no_free_cell_is_refused_before_anything_is_spent() {
     let mut game = game(9901);
     let pack = tactical_fight(&mut game, 1, 40);
     let hostile = pack[0];
@@ -1307,8 +1380,12 @@ fn hallucination_with_no_free_cell_tampers_nobody() {
     // the radius around the aim cannot be stood on.
     only_routine(&mut game, player, "hallucination");
     assert!(wait_for_turn(&mut game, player));
+    let power_before = game.world.get::<PowerReserve>(player).unwrap().get();
 
-    assert!(game.tactical_use_routine(0, (4, 6)));
+    assert!(
+        !game.tactical_use_routine(0, (4, 6)),
+        "a Hallucination with nowhere to seat a decoy must be refused"
+    );
 
     assert!(decoy_cells(&game).is_empty(), "no cell was free");
     assert!(
@@ -1316,6 +1393,122 @@ fn hallucination_with_no_free_cell_tampers_nobody() {
         "with no decoy placed, nobody may hallucinate"
     );
     assert_eq!(lines_containing(&game, "starts seeing decoys"), 0);
+    nothing_was_spent(&game, player, power_before, "a refused Hallucination");
+}
+
+/// The second half of the same review finding: decoys seated where no
+/// opposing body stands are seen by nobody, so `settle_decoys` drops every
+/// one of them inside the very `hand_on_turn` that ended the turn — the
+/// player would see them for no frames at all and get no line. Aiming a
+/// Hallucination at open ground as bait is exactly that, so it is refused
+/// too, and separately: a single test over one of the two passes against a
+/// door that only closed the other.
+#[test]
+fn hallucination_over_nobody_is_refused_before_anything_is_spent() {
+    let mut game = game(9903);
+    let pack = tactical_fight(&mut game, 1, 40);
+    let player = game.player_entity();
+    // The hostile parks in the far corner: (0, 0) is six cells from the aim
+    // and so outside the Radius(2), while the aim itself is two from the
+    // player and inside the routine's 0..=5 range.
+    open_ground(&mut game, &pack, &[(0, 0)]);
+    only_routine(&mut game, player, "hallucination");
+    assert!(wait_for_turn(&mut game, player));
+    let power_before = game.world.get::<PowerReserve>(player).unwrap().get();
+
+    assert!(
+        !game.tactical_use_routine(0, (4, 6)),
+        "a Hallucination covering no opposing body must be refused"
+    );
+
+    assert!(
+        decoy_cells(&game).is_empty(),
+        "a refusal must seat no decoy: {:?}",
+        decoy_cells(&game)
+    );
+    assert_eq!(lines_containing(&game, "starts seeing decoys"), 0);
+    nothing_was_spent(&game, player, power_before, "a refused Hallucination");
+}
+
+/// The other side of the two refusals above: with both a free cell and an
+/// opposing body under the shape, the routine still runs. Without this the
+/// pair could be satisfied by a door that refused every Hallucination.
+#[test]
+fn a_hallucination_with_a_cell_and_a_target_still_runs() {
+    let mut game = game(9904);
+    let pack = tactical_fight(&mut game, 1, 40);
+    let hostile = pack[0];
+    let player = game.player_entity();
+    open_ground(&mut game, &pack, &[(4, 6)]);
+    only_routine(&mut game, player, "hallucination");
+    assert!(wait_for_turn(&mut game, player));
+
+    assert!(
+        game.tactical_use_routine(0, (4, 6)),
+        "a Hallucination with room and a target must run"
+    );
+    assert!(
+        hallucinating(&game, hostile),
+        "the hostile under the blast must be hallucinating"
+    );
+}
+
+/// Seating a Hallucination's decoys spends **no** `GameRng` draw — the
+/// spec's requirement, and `hallucination_cells`' own doc: the whole
+/// placement is a filter and a sort over the board, and a tactical fight's
+/// budget is one draw an AI turn.
+///
+/// The twin-game probe rather than `support::rng_unadvanced_by`, for the
+/// reason `a_cold_sampled_hostile_draws_nothing_over_its_turn` uses it too:
+/// that fixture builds both games itself and runs the closure on only one,
+/// so the fight's own setup draws would land on one side of the comparison
+/// and never the other. Here both twins are set up identically and only one
+/// is asked to run the routine.
+///
+/// Measured at `Game::apply_tamper` and not at `tactical_use_routine`,
+/// deliberately: the door hands the turn on, and a round's upkeep and the
+/// next body's own turn draw for reasons that have nothing to do with where
+/// a decoy stands. What the spec asks about is the placement.
+///
+/// **(M)** Drawing a single `u64` off `GameRng` inside `hallucinate` before
+/// the decoys are seated makes this fail. Verified and restored.
+#[test]
+fn seating_a_hallucination_spends_no_rng_draw() {
+    let seated = |run: bool| {
+        let mut game = game(9905);
+        let pack = tactical_fight(&mut game, 1, 40);
+        let player = game.player_entity();
+        open_ground(&mut game, &pack, &[(4, 6)]);
+        let def = game
+            .world
+            .resource::<AbilityDb>()
+            .get("hallucination")
+            .expect("hallucination ships")
+            .clone();
+        if run {
+            game.apply_tamper(
+                player,
+                &def,
+                TamperKind::Hallucinating { decoys: 3 },
+                3,
+                (4, 6),
+            );
+            assert_eq!(decoy_cells(&game).len(), 3, "three decoys were seated");
+            assert!(
+                hallucinating(&game, pack[0]),
+                "the hostile under the blast must have taken the entry"
+            );
+        }
+        game
+    };
+
+    let mut touched = seated(true);
+    let mut untouched = seated(false);
+    assert_eq!(
+        next_draw(&mut touched),
+        next_draw(&mut untouched),
+        "seating a Hallucination's decoys moved the seeded stream"
+    );
 }
 
 /// Spec test 8's first half: a companion caught in the party's own

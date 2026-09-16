@@ -1,7 +1,7 @@
 (
     id: "model_inspection",
     name: "Model Inspection",
-    description: "Everything Cortex Hacking taught you about reading a hostile program, turned into ways to feed it what it wants to see.",
+    description: "Everything Cortex Hacking taught you about reading a hostile program, turned into ways to feed it what it wants to see. Five of the eleven are tamper routines, which run on battle maps only.",
     cost: 160,
     materials: [("trace_sniffer", 8), ("logic_wafer", 14)],
     min_zone: 3,

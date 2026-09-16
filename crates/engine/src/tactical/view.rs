@@ -26,7 +26,6 @@ use crate::tactical::TacticalBattle;
 use crate::tactical::ai::ForecastAction;
 use crate::tactical::map::Board;
 use crate::tactical::reach;
-use crate::tuning;
 use crate::views::PlayerLook;
 
 /// One body standing on the battle map.
@@ -75,10 +74,11 @@ pub struct TacticalBody {
 /// `HALL`).
 ///
 /// **`Temperature` splits in two and the other three don't**, because
-/// `Temperature` is the one kind whose value can cross
-/// `tuning::TACTICAL_AI_TEMPERATURE` — `Profiled`, `Injected` and
+/// `Temperature` is the one kind whose value can cross the line
+/// `TamperKind::runs_cold` draws — `Profiled`, `Injected` and
 /// `Hallucinating` are each a single fixed rule, not a number the strip
-/// would otherwise have to read the units of.
+/// would otherwise have to read the units of. The threshold itself is that
+/// method's, shared with the take-hold log line rather than restated here.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TamperTag {
     Hot,
@@ -91,7 +91,7 @@ pub enum TamperTag {
 impl TamperTag {
     fn of(kind: TamperKind) -> Self {
         match kind {
-            TamperKind::Temperature(t) if t <= tuning::TACTICAL_AI_TEMPERATURE => Self::Cold,
+            TamperKind::Temperature(_) if kind.runs_cold() => Self::Cold,
             TamperKind::Temperature(_) => Self::Hot,
             TamperKind::Profiled => Self::Profiled,
             TamperKind::Injected => Self::Injected,
@@ -132,9 +132,12 @@ pub struct TurnRow {
     pub taken_over: bool,
 }
 
-/// A Hallucination's fake, as a screen needs it — `tactical::Decoy` with
-/// `owner_hostile` collapsed into `of_player`, the same reduction
-/// `TacticalBody` already makes for a real body.
+/// A Hallucination's fake, as a screen needs it — `tactical::Decoy` less
+/// `owner_hostile`, which says which side a body has to be on to see the
+/// decoy and so answers nothing a renderer asks. `of_player` is `Decoy`'s
+/// own field and carries over unchanged: it is what says the fake wears the
+/// `PLAYER` role rather than the hue the player merely spawned with, the
+/// same reduction `TacticalBody` already makes for a real body.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DecoyView {
     pub cell: (i32, i32),

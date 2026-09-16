@@ -1,7 +1,7 @@
 (
     id: "hallucination",
     name: "Hallucination Group",
-    description: "Seeds one hostile group with decoys it mistakes for real",
+    description: "Seeds one hostile group with decoys it mistakes for real. Battle maps only.",
     target: WholeEnemyGroup,
     effect: Tamper(kind: Hallucinating(decoys: 3), duration: 3),
     cooldown: 5,

@@ -53,16 +53,25 @@ pub(crate) struct Decoy {
     pub of_player: bool,
 }
 
+/// Whether a body on the `hostile` side stands opposite something placed by
+/// the `owner_hostile` side.
+///
+/// **The one expression of "opposing".** `Decoy::opposes` asks it of a decoy
+/// and its watcher; `Game::hallucinate` asks it of an invoker and a
+/// recipient, and `Game::tactical_use_routine` asks the same question again
+/// before spending anything on the invocation. A free function rather than
+/// three inline `!=`s, because every one of them is a place a party body
+/// could come to be handed its own side's decoy.
+pub(crate) fn opposes(owner_hostile: bool, hostile: bool) -> bool {
+    owner_hostile != hostile
+}
+
 impl Decoy {
     /// Whether a hallucinating body on the `hostile` side sees this decoy —
-    /// the other side's, never its own.
-    ///
-    /// **The one expression of "opposing".** `Game::sees_decoy` asks it of a
-    /// living body; a routine passing through asks it of a side read before
-    /// the routine could kill its invoker. Two spellings would be two places a
-    /// party body could be handed its own decoy.
+    /// the other side's, never its own. A call into [`opposes`], which is
+    /// where that rule lives.
     pub fn opposes(&self, hostile: bool) -> bool {
-        self.owner_hostile != hostile
+        opposes(self.owner_hostile, hostile)
     }
 }
 
@@ -363,13 +372,23 @@ impl TacticalBattle {
         &self.decoys
     }
 
-    /// Takes the decoy `owner_hostile`'s side placed on `cell` off the board,
-    /// if there is one.
-    pub(crate) fn take_decoy_at(&mut self, cell: (i32, i32), owner_hostile: bool) -> Option<Decoy> {
+    /// Takes the decoy on `cell` that a body on the `striker_hostile` side
+    /// can see off the board, if there is one.
+    ///
+    /// Takes the **striker's** own side and asks [`Decoy::opposes`], rather
+    /// than taking the owner's side and comparing it: the caller already
+    /// established through `Game::sees_decoy_at` that this body sees a decoy
+    /// here, and that predicate reads `opposes` too — so the decoy removed is
+    /// the decoy seen by construction.
+    pub(crate) fn take_decoy_at(
+        &mut self,
+        cell: (i32, i32),
+        striker_hostile: bool,
+    ) -> Option<Decoy> {
         let idx = self
             .decoys
             .iter()
-            .position(|d| d.cell == cell && d.owner_hostile == owner_hostile)?;
+            .position(|d| d.cell == cell && d.opposes(striker_hostile))?;
         Some(self.decoys.remove(idx))
     }
 

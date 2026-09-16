@@ -11,8 +11,7 @@
 use crate::abilities::{TamperKind, TamperSlot};
 use crate::components::{Glyph, GlyphColor};
 use crate::resources::{BoltCue, BoltQueue};
-use crate::tactical::{Decoy, TacticalBattle, reach};
-use crate::tuning::TACTICAL_AI_TEMPERATURE;
+use crate::tactical::{Decoy, TacticalBattle, opposes, reach};
 use crate::*;
 
 impl Game {
@@ -39,14 +38,7 @@ impl Game {
         duration: u32,
         aim: (i32, i32),
     ) {
-        let shape = ability.tactical_shape();
-        let recipients: Vec<Entity> = {
-            let battle = self.world.resource::<TacticalBattle>();
-            reach::recipients(battle, actor, aim, shape)
-        }
-        .into_iter()
-        .filter(|&e| self.world.get::<Player>(e).is_none())
-        .collect();
+        let recipients = self.tamper_recipients(actor, ability, aim);
 
         if let TamperKind::Hallucinating { decoys } = kind {
             self.hallucinate(actor, ability, &recipients, decoys, duration, aim);
@@ -60,6 +52,64 @@ impl Game {
         if ability.effect.breaks_cloak() {
             self.break_cloak(actor);
         }
+    }
+
+    /// The bodies a tamper aimed at `aim` would write an entry on — every
+    /// body `ability`'s shape covers, less the player.
+    ///
+    /// **A `&self` derivation rather than a step of `apply_tamper`**, because
+    /// `tactical_use_routine` has to ask the same question before it spends
+    /// anything: a Hallucination that covers nobody on the other side is
+    /// refused there, and a refusal that asked a second copy of this could
+    /// disagree with what the effect then did.
+    pub(crate) fn tamper_recipients(
+        &self,
+        actor: Entity,
+        ability: &AbilityDef,
+        aim: (i32, i32),
+    ) -> Vec<Entity> {
+        let battle = self.world.resource::<TacticalBattle>();
+        reach::recipients(battle, actor, aim, ability.tactical_shape())
+            .into_iter()
+            .filter(|&e| self.world.get::<Player>(e).is_none())
+            .collect()
+    }
+
+    /// The cells a Hallucination run by `actor` and aimed at `aim` would seat
+    /// its `count` decoys on — Decision 3.
+    ///
+    /// **Free cells only, nearest the aim first, then reading order.** The aim
+    /// is usually a body, and a decoy under a body's own feet would be struck
+    /// at distance zero without a step; so the aim leads only when it is
+    /// free. **No `GameRng`** — a tactical fight's budget is one draw an AI
+    /// turn, and this is not one.
+    ///
+    /// Pure over the board, which is what lets `tactical_use_routine` refuse
+    /// an invocation that would seat nothing before it spends the Power, the
+    /// cooldown and the turn on it.
+    pub(crate) fn hallucination_cells(
+        &self,
+        actor: Entity,
+        ability: &AbilityDef,
+        aim: (i32, i32),
+        count: u32,
+    ) -> Vec<(i32, i32)> {
+        let battle = self.world.resource::<TacticalBattle>();
+        let Some(from) = battle.cell_of(actor) else {
+            return Vec::new();
+        };
+        let mut cells: Vec<(i32, i32)> =
+            reach::shape_cells(&battle.board, from, aim, ability.tactical_shape())
+                .into_iter()
+                .filter(|&c| {
+                    battle.board.walkable(c.0, c.1)
+                        && battle.occupant(c).is_none()
+                        && !battle.decoys().iter().any(|d| d.cell == c)
+                })
+                .collect();
+        cells.sort_by_key(|&(x, y)| (reach::distance((x, y), aim), y, x));
+        cells.truncate(count as usize);
+        cells
     }
 
     /// `Tampered`'s own `arm_cloak` — inserts the component fresh if
@@ -98,21 +148,21 @@ impl Game {
         }
     }
 
-    /// Seats `count` decoys of `actor`'s side over the free cells of
-    /// `ability`'s shape at `aim`, then writes the entry on every recipient
-    /// standing on the other side — Decision 3.
+    /// Seats `count` decoys of `actor`'s side over `hallucination_cells`,
+    /// then writes the entry on every recipient standing on the other side —
+    /// Decision 3.
     ///
-    /// **Free cells only, nearest the aim first, then reading order.** The aim
-    /// is usually a body, and a decoy under a body's own feet would be struck
-    /// at distance zero without a step; so the aim leads only when it is
-    /// free. **No `GameRng`** — a tactical fight's budget is one draw an AI
-    /// turn, and this is not one.
+    /// **The entry goes on the other side alone**, by literal `Hostile`
+    /// through `tactical::opposes`: a companion caught in the party's own
+    /// Hallucination ignores the party's decoys, so an entry on it would be a
+    /// `HALL` tag that changes nothing.
     ///
-    /// **The entry goes on the other side alone**, by literal `Hostile`: a
-    /// companion caught in the party's own Hallucination ignores the party's
-    /// decoys, so an entry on it would be a `HALL` tag that changes nothing.
-    /// With no cell free nothing is seated, and nobody is told they are
-    /// seeing anything.
+    /// **Both empty cases are silent here, and the player's door refuses them
+    /// before they can happen.** `tactical_use_routine` will not spend Power,
+    /// a cooldown or a turn on an aim that seats no decoy or covers no
+    /// opposing body. The early return and the loop that writes nothing stay
+    /// anyway, because the enemy AI reaches `run_tactical_routine` through
+    /// `wild_routine_ready`'s gate rather than through those refusals.
     fn hallucinate(
         &mut self,
         actor: Entity,
@@ -123,25 +173,7 @@ impl Game {
         aim: (i32, i32),
     ) {
         let owner_hostile = self.world.get::<Hostile>(actor).is_some();
-        let Some(cells) = ({
-            let battle = self.world.resource::<TacticalBattle>();
-            battle.cell_of(actor).map(|from| {
-                let mut cells: Vec<(i32, i32)> =
-                    reach::shape_cells(&battle.board, from, aim, ability.tactical_shape())
-                        .into_iter()
-                        .filter(|&c| {
-                            battle.board.walkable(c.0, c.1)
-                                && battle.occupant(c).is_none()
-                                && !battle.decoys().iter().any(|d| d.cell == c)
-                        })
-                        .collect();
-                cells.sort_by_key(|&(x, y)| (reach::distance((x, y), aim), y, x));
-                cells.truncate(count as usize);
-                cells
-            })
-        }) else {
-            return;
-        };
+        let cells = self.hallucination_cells(actor, ability, aim, count);
         if cells.is_empty() {
             return;
         }
@@ -167,7 +199,10 @@ impl Game {
 
         let kind = TamperKind::Hallucinating { decoys: count };
         for &recipient in recipients {
-            if self.world.get::<Hostile>(recipient).is_some() == owner_hostile {
+            if !opposes(
+                owner_hostile,
+                self.world.get::<Hostile>(recipient).is_some(),
+            ) {
                 continue;
             }
             self.write_tamper_entry(recipient, kind, duration, false);
@@ -257,8 +292,7 @@ impl Game {
         }
 
         let round_before = battle.round;
-        // The side that placed a decoy this body sees is the one it is not on.
-        let decoy_owner = self.world.get::<Hostile>(actor).is_none();
+        let actor_hostile = self.world.get::<Hostile>(actor).is_some();
         let color = self
             .world
             .get::<Glyph>(actor)
@@ -271,7 +305,7 @@ impl Game {
         });
         self.world
             .resource_mut::<TacticalBattle>()
-            .take_decoy_at(cell, decoy_owner);
+            .take_decoy_at(cell, actor_hostile);
         let label = self.tamper_label(actor);
         self.log(format!("{label}'s swing passes through a decoy."));
         self.world.resource_mut::<TacticalBattle>().mark_acted();
@@ -365,7 +399,7 @@ impl Game {
     fn log_tamper_take_hold(&mut self, recipient: Entity, kind: TamperKind) {
         let label = self.tamper_label(recipient);
         let line = match kind {
-            TamperKind::Temperature(t) if t <= TACTICAL_AI_TEMPERATURE => {
+            TamperKind::Temperature(_) if kind.runs_cold() => {
                 format!("{label}'s sampler runs cold.")
             }
             TamperKind::Temperature(_) => format!("{label}'s sampler runs hot."),

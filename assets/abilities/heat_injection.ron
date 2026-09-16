@@ -1,7 +1,7 @@
 (
     id: "heat_injection",
     name: "Heat Injection Group",
-    description: "Randomizes one hostile group's decisions for 2 rounds",
+    description: "Randomizes one hostile group's decisions for 2 rounds. Battle maps only.",
     target: WholeEnemyGroup,
     effect: Tamper(kind: Temperature(2.0), duration: 2),
     cooldown: 4,

@@ -9,13 +9,13 @@
 use bevy_ecs::prelude::Entity;
 
 use crate::Game;
-use crate::abilities::{self, AbilityDef, AbilityEffect, AbilityShape};
+use crate::abilities::{self, AbilityDef, AbilityEffect, AbilityShape, TamperKind};
 use crate::components::AbilityCooldowns;
 use crate::components::{Hostile, Player, Stats};
 use crate::game::combat_teardown::FightVerdict;
 use crate::resources::{GameClock, Party, ZoneLevel};
 use crate::tactical::map::{BattleSpec, generate};
-use crate::tactical::{TacticalBattle, deploy, reach};
+use crate::tactical::{TacticalBattle, deploy, opposes, reach};
 use crate::world::WorldMap;
 
 /// What one press of a direction did.
@@ -438,11 +438,15 @@ impl Game {
     /// **Every refusal lands before anything is spent** — the Power, the
     /// cooldown and the turn alike — which is `commit_caravan_basket`'s rule
     /// and the reason the price is charged only once the aim has been
-    /// checked. Six of them: no fight, nobody acting, the body has already
-    /// acted, no such routine, a routine that is not run in a fight at all
-    /// (a passive, or a field-only effect — `battle_special_options`' own
-    /// two exclusions), whatever `ability_unavailable` says, and an aim
-    /// outside the routine's range.
+    /// checked. Six of them are the door's own: no fight, nobody acting, the
+    /// body has already acted, no such routine, a routine that is not run in
+    /// a fight at all (a passive, or a field-only effect —
+    /// `battle_special_options`' own two exclusions), whatever
+    /// `ability_unavailable` says, and an aim outside the routine's range or
+    /// out of sight. The rest are an effect's own, each with its reason at
+    /// the site: a capture aimed at anything but a hostile, a `Summon` with
+    /// no room on the board, a `Single` tamper aimed at the player, and a
+    /// Hallucination that would seat no decoy or cover nobody.
     ///
     /// Reports whether the routine ran. The action ends the turn, so one
     /// that runs hands the turn on — unless it ended the fight.
@@ -522,6 +526,36 @@ impl Game {
                 .is_some_and(|body| self.world.get::<Player>(body).is_some())
         {
             return false;
+        }
+        // The ninth and tenth, and a Hallucination's own — `board_has_room`'s
+        // argument twice more. A radius with no free cell in it seats no
+        // decoy at all, and a radius covering nobody on the other side seats
+        // decoys that `settle_decoys` drops inside the very hand-on that
+        // ended the turn, since no living body can see them. Either way 14
+        // Power, a five-round cooldown and the turn buy nothing and say
+        // nothing, which is exactly what the eight above refuse.
+        //
+        // Both questions are asked of the derivations the effect itself then
+        // runs, rather than of a second copy of them.
+        if let AbilityEffect::Tamper {
+            kind: TamperKind::Hallucinating { decoys },
+            ..
+        } = &ability.effect
+        {
+            if self
+                .hallucination_cells(actor, &ability, aim, *decoys)
+                .is_empty()
+            {
+                return false;
+            }
+            let owner_hostile = self.world.get::<Hostile>(actor).is_some();
+            if !self
+                .tamper_recipients(actor, &ability, aim)
+                .into_iter()
+                .any(|body| opposes(owner_hostile, self.world.get::<Hostile>(body).is_some()))
+            {
+                return false;
+            }
         }
         self.run_tactical_routine(actor, &ability, aim, 0);
         true

@@ -561,6 +561,13 @@ impl crate::Game {
     /// write rather than at the read: the program a memory is about can be
     /// destroyed, and the screen still has to say who it was.
     ///
+    /// `creature_short_label`, not `creature_label`: the memories page has
+    /// no scroll and no horizontal clip, so a handle-named subject's species
+    /// suffix — the widest thing `creature_label` can add, and the least
+    /// necessary next to a subject line already carrying the def's own name
+    /// — is what `no_memory_row_overflows_its_popup` catches if it comes
+    /// back.
+    ///
     /// `None` for every non-`Program` subject and for a program already gone —
     /// a subject that has no name is not a failure, and the two are the same
     /// answer as far as a row is concerned.
@@ -573,7 +580,7 @@ impl crate::Game {
             .iter_entities()
             .find(|e| e.get::<ProgramId>() == Some(id))?
             .id();
-        Some(self.creature_label(entity))
+        Some(self.creature_short_label(entity))
     }
 }
 

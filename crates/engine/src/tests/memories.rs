@@ -1335,7 +1335,7 @@ fn a_remembered_name_survives_the_program_it_names() {
     let comrade = adopt(&mut game, "glitch", 5);
     let id = id_of(&game, program);
     let comrade_id = id_of(&game, comrade);
-    let name = game.creature_label(comrade);
+    let name = game.creature_short_label(comrade);
     set_tick(&mut game, 1_000);
     game.remember(
         program,
@@ -2137,7 +2137,7 @@ fn a_destroyed_programs_name_still_reaches_the_row() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let holder = adopt(&mut game, "scrapper", 4);
     let subject = adopt(&mut game, "glitch", 5);
-    let name = game.creature_label(subject);
+    let name = game.creature_short_label(subject);
     let id = id_of(&game, subject);
 
     assert_eq!(

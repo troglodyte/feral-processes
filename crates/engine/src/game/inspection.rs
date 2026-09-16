@@ -1240,6 +1240,7 @@ impl Game {
                     job_progress,
                     build,
                     linked_edges: linked_edges.remove(&entity).unwrap_or_default(),
+                    unseen_routine: self.unseen_routine(entity),
                 }
             })
             .collect();

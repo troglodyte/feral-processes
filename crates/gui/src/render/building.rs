@@ -1613,6 +1613,7 @@ mod tests {
             rarity: Rarity::Ordinary,
             machine_status: None,
             linked_edges: Vec::new(),
+            unseen_routine: false,
         }
     }
 

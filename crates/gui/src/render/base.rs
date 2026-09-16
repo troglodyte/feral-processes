@@ -128,6 +128,29 @@ impl ConRead {
     }
 }
 
+/// What the top-left corner draws this frame — the con earmark, or the Alt
+/// marker in its place while `reveal` is held over an `unseen_routine`
+/// tile (spec §4 "The Alt marker"). A free function for `ConRead::of`'s own
+/// reason: the tile loop is too big to reach with a test, and this is the
+/// whole of the gate a hand-written copy in that loop could get wrong.
+///
+/// Returns `(earmark, marker)` rather than one combined enum because the
+/// two draw through different calls (`draw_difficulty_mark` takes an
+/// `Option<GlyphColor>`, `draw_unseen_marker` takes nothing but position) —
+/// a third shape here would be a translation step between this and both of
+/// them.
+pub(super) fn corner_marker(
+    con: ConRead,
+    unseen_routine: bool,
+    reveal: bool,
+) -> (Option<GlyphColor>, bool) {
+    if reveal && unseen_routine {
+        (None, true)
+    } else {
+        (con.earmark(), false)
+    }
+}
+
 /// How bright a biome's pattern is against its own ground fill, and how
 /// bright the rim along the edge of the walkable world is against both.
 /// The ground stays at `GROUND_LEVEL` so terrain never competes with the
@@ -153,6 +176,7 @@ pub(super) fn draw_playing_base(
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
+    reveal: bool,
 ) {
     let (tile_px, glyph_px) = map_cell(app.zoom);
     let status_line = refusal.map(str::to_string);
@@ -359,6 +383,7 @@ pub(super) fn draw_playing_base(
             // somewhere: `base_pos` is `Some` only in base space, which is
             // exactly where the pinned `Position` is the wrong answer.
             watch.unwrap_or_else(|| game.base_pos().unwrap_or(status.position)),
+            reveal,
         );
         let hostiles = entities.iter().filter(|e| e.is_hostile).count();
         hud::map_frame::draw_map_frame(
@@ -504,6 +529,7 @@ fn draw_surface_map(
     status: &feral_processes_engine::PlayerStatus,
     plan: Option<PlanCursor>,
     center: (i32, i32),
+    reveal: bool,
 ) -> Vec<EntityView> {
     // Two rings wider than the pane can show. The first is the tile the
     // camera's sub-tile offset slides in from, without which the trailing
@@ -1034,7 +1060,19 @@ fn draw_surface_map(
             // the rarity bar, and form is what tells two readings there
             // apart when hue cannot. Painted after that bar and dropped
             // clear of it — see `difficulty_mark_points`.
-            draw_difficulty_mark(painter, con.earmark(), px, py, tile_px, vig);
+            //
+            // **The Alt marker borrows this same corner while `reveal` is
+            // held**, suppressing the earmark for that one frame rather
+            // than drawing over it — `draw_unseen_marker`'s doc has the
+            // argument for why the two must never share a tile.
+            // `corner_marker` is the whole gate, so this loop cannot drift
+            // from what it tests.
+            let unseen = actor.is_some_and(|ev| ev.unseen_routine);
+            let (earmark, marker) = corner_marker(con, unseen, reveal);
+            draw_difficulty_mark(painter, earmark, px, py, tile_px, vig);
+            if marker {
+                draw_unseen_marker(painter, px, py, glyph_px, vig);
+            }
             // A nemesis draws a mark on top of its glyph — belt and braces,
             // since a nemesis is worth noticing even at a glance that only
             // catches shape and not hue. Its own corner, so a nemesis that
@@ -1375,6 +1413,7 @@ mod tests {
             rarity: Rarity::Ordinary,
             machine_status: None,
             linked_edges: Vec::new(),
+            unseen_routine: false,
         }
     }
 
@@ -1546,7 +1585,7 @@ mod tests {
     /// What `render::draw` paints for `app`, as plain text runs.
     fn drawn_text(app: &mut feral_processes_app_core::App) -> Vec<String> {
         let mut fx = Fx::new();
-        let (_, shapes) = with_painter(|p| crate::render::draw(app, &mut fx, p));
+        let (_, shapes) = with_painter(|p| crate::render::draw(app, &mut fx, p, false));
         painted_text(&shapes)
     }
 
@@ -1697,7 +1736,7 @@ mod tests {
         let mut fx = Fx::new();
         let m = ui_metrics(900.0);
         let (_, shapes) = with_painter(|p| {
-            draw_playing_base(&mut app, &mut fx, None, p, &m);
+            draw_playing_base(&mut app, &mut fx, None, p, &m, false);
         });
         let dist = |a: Color, b: Color| (a.r - b.r).abs() + (a.g - b.g).abs() + (a.b - b.b).abs();
         let at = crate::paint::painted_map_glyphs(&shapes);
@@ -1828,7 +1867,7 @@ mod tests {
             let char_w = p.measure_ui_advance("M", m.font_size);
             let regions =
                 hud::layout::regions(p.screen_w(), p.screen_h(), char_w, &m, app.log_expanded);
-            draw_playing_base(&mut app, &mut fx, None, p, &m);
+            draw_playing_base(&mut app, &mut fx, None, p, &m, false);
             regions
         });
 
@@ -1890,7 +1929,7 @@ mod tests {
             let char_w = p.measure_ui_advance("M", m.font_size);
             let regions =
                 hud::layout::regions(p.screen_w(), p.screen_h(), char_w, &m, app.log_expanded);
-            draw_playing_base(&mut app, &mut fx, None, p, &m);
+            draw_playing_base(&mut app, &mut fx, None, p, &m, false);
             regions
         });
 
@@ -1943,7 +1982,7 @@ mod tests {
             let char_w = p.measure_ui_advance("M", m.font_size);
             let regions =
                 hud::layout::regions(p.screen_w(), p.screen_h(), char_w, &m, app.log_expanded);
-            draw_playing_base(&mut app, &mut fx, None, p, &m);
+            draw_playing_base(&mut app, &mut fx, None, p, &m, false);
             regions
         });
 
@@ -2043,7 +2082,7 @@ mod tests {
         let mut fx = Fx::new();
         let m = ui_metrics(900.0);
         let (_, shapes) = with_painter(|p| {
-            draw_playing_base(&mut app, &mut fx, None, p, &m);
+            draw_playing_base(&mut app, &mut fx, None, p, &m, false);
         });
         shapes
     }
@@ -2124,7 +2163,7 @@ mod tests {
             "the calm fixture has something to say"
         );
         let (_, shapes) = with_painter(|p| {
-            draw_playing_base(&mut calm, &mut fx, None, p, &m);
+            draw_playing_base(&mut calm, &mut fx, None, p, &m, false);
         });
         let text = painted_text(&shapes).join(" ");
         assert!(text.contains("ALL NOMINAL"), "no calm badge: {text:?}");
@@ -2158,7 +2197,7 @@ mod tests {
         nagged.info_tab = feral_processes_app_core::InfoTab::Base;
 
         let (_, shapes) = with_painter(|p| {
-            draw_playing_base(&mut nagged, &mut fx, None, p, &m);
+            draw_playing_base(&mut nagged, &mut fx, None, p, &m, false);
         });
         let text = painted_text(&shapes).join(" ");
         assert!(
@@ -2259,6 +2298,7 @@ mod tests {
                 &status,
                 None,
                 status.position,
+                false,
             );
         });
         (painted_images(&shapes).len(), painted_text(&shapes))
@@ -2307,6 +2347,7 @@ mod tests {
                 &status,
                 None,
                 status.position,
+                false,
             );
         });
         (painted_images(&shapes), painted_text(&shapes))
@@ -2571,6 +2612,7 @@ mod tests {
                 &status,
                 None,
                 status.position,
+                false,
             );
         });
         let dist = |a: Color, b: Color| (a.r - b.r).abs() + (a.g - b.g).abs() + (a.b - b.b).abs();
@@ -2619,6 +2661,7 @@ mod tests {
                 &status,
                 None,
                 status.position,
+                false,
             );
         });
         let dist = |a: Color, b: Color| (a.r - b.r).abs() + (a.g - b.g).abs() + (a.b - b.b).abs();
@@ -2706,6 +2749,17 @@ mod tests {
             .expect("seed 7's opening population must hold at least one wild creature")
     }
 
+    /// `a_wild_creature`, narrowed to one the Alt marker would flag — seed
+    /// 7's opening population always carries at least one species whose
+    /// level-1 kit is undiscovered, which is the common case a fresh run
+    /// starts in.
+    fn an_unseen_wild_creature(game: &mut Game) -> EntityView {
+        game.view_entities(64, 64)
+            .into_iter()
+            .find(|ev| ev.unseen_routine)
+            .expect("seed 7's opening population must hold an unseen carrier")
+    }
+
     /// `drawn_map`, centred on an arbitrary point instead of the player's
     /// own position. The creature-sprite tests need this: a fresh seed's
     /// population lands nowhere near spawn, and `draw_surface_map` already
@@ -2715,6 +2769,18 @@ mod tests {
         game: &mut Game,
         sprites: SpriteTable,
         center: (i32, i32),
+    ) -> (usize, Vec<String>) {
+        drawn_map_centered_on_revealed(game, sprites, center, false)
+    }
+
+    /// `drawn_map_centered_on` with `reveal` as an explicit argument — the
+    /// Alt marker's own tests need both states, and the plain helper above
+    /// stays `false` for every caller that isn't about the marker.
+    fn drawn_map_centered_on_revealed(
+        game: &mut Game,
+        sprites: SpriteTable,
+        center: (i32, i32),
+        reveal: bool,
     ) -> (usize, Vec<String>) {
         let mut fx = Fx::new();
         let (tile_px, glyph_px) = crate::text::map_cell(1);
@@ -2730,6 +2796,7 @@ mod tests {
                 &status,
                 None,
                 center,
+                reveal,
             );
         });
         (painted_images(&shapes).len(), painted_text(&shapes))
@@ -2870,6 +2937,7 @@ mod tests {
                 &status,
                 None,
                 status.position,
+                false,
             );
         });
         shapes
@@ -2983,6 +3051,7 @@ mod tests {
                 &status,
                 None,
                 status.position,
+                false,
             );
         });
         shapes
@@ -3020,6 +3089,7 @@ mod tests {
                 &status,
                 None,
                 status.position,
+                false,
             );
         });
         (painted_images(&shapes).len(), painted_text(&shapes))
@@ -3107,6 +3177,7 @@ mod tests {
                 &status,
                 None,
                 status.position,
+                false,
             );
         });
         let images = painted_images(&shapes);
@@ -3163,6 +3234,7 @@ mod tests {
                 &status,
                 None,
                 status.position,
+                false,
             );
         });
 
@@ -3985,7 +4057,7 @@ mod tests {
                 // that has arrived.
                 for _ in 0..2 {
                     draw_surface_map(
-                        game, &mut fx, p, pane, tile_px, glyph_px, &status, None, center,
+                        game, &mut fx, p, pane, tile_px, glyph_px, &status, None, center, false,
                     );
                 }
             });
@@ -4210,6 +4282,100 @@ mod tests {
         );
     }
 
+    /// The text the Alt marker was painted as this frame, or `None` if it
+    /// was not — `con_mark`'s own shape, but for a run of text rather than
+    /// a filled triangle.
+    fn unseen_marker_drawn(shapes: &[bevy_egui::egui::epaint::ClippedShape]) -> bool {
+        painted_text(shapes).iter().any(|t| t == "?")
+    }
+
+    /// **The property `corner_marker` exists for.** With `reveal` down, or
+    /// with nothing to reveal, the earmark alone lands in the corner — the
+    /// map before this feature existed. With both up, the marker takes the
+    /// corner and the earmark it would otherwise have carried is gone, on
+    /// every kind of con read an earmark can come from: a rung already on
+    /// the glyph (no earmark to begin with), a real earmark, and no con
+    /// read at all.
+    #[test]
+    fn corner_marker_hands_the_corner_to_the_earmark_unless_reveal_flags_an_unseen_tile() {
+        for con in [
+            ConRead::None,
+            ConRead::Glyph(GlyphColor::Red),
+            ConRead::Earmark(GlyphColor::Red),
+        ] {
+            assert_eq!(
+                corner_marker(con, false, true),
+                (con.earmark(), false),
+                "{con:?}: nothing to reveal, so the earmark alone stands"
+            );
+            assert_eq!(
+                corner_marker(con, true, false),
+                (con.earmark(), false),
+                "{con:?}: unseen but not asked for, so the earmark alone stands"
+            );
+            assert_eq!(
+                corner_marker(con, true, true),
+                (None, true),
+                "{con:?}: reveal held over an unseen tile must take the \
+                 corner and clear whatever the earmark would have drawn"
+            );
+        }
+    }
+
+    /// The paint-level twin of the test above: the earmark and the marker
+    /// are mutually exclusive on the canvas, not just in the tuple
+    /// `corner_marker` returns.
+    #[test]
+    fn the_marker_and_the_earmark_never_share_a_frame() {
+        let (_, revealed) = with_painter(|p| {
+            let (earmark, marker) = corner_marker(ConRead::Earmark(GlyphColor::Red), true, true);
+            draw_difficulty_mark(p, earmark, 0.0, 0.0, CELL, 1.0);
+            if marker {
+                draw_unseen_marker(p, 0.0, 0.0, CELL_GLYPH_PX, 1.0);
+            }
+        });
+        assert!(
+            unseen_marker_drawn(&revealed) && con_mark(&revealed).is_none(),
+            "reveal must draw the marker and suppress the earmark"
+        );
+
+        let (_, hidden) = with_painter(|p| {
+            let (earmark, marker) = corner_marker(ConRead::Earmark(GlyphColor::Red), true, false);
+            draw_difficulty_mark(p, earmark, 0.0, 0.0, CELL, 1.0);
+            if marker {
+                draw_unseen_marker(p, 0.0, 0.0, CELL_GLYPH_PX, 1.0);
+            }
+        });
+        assert!(
+            !unseen_marker_drawn(&hidden) && con_mark(&hidden).is_some(),
+            "without reveal the earmark alone must stand"
+        );
+    }
+
+    /// The full pipeline, not just the extracted gate: a real wild
+    /// creature the engine itself flags draws the marker with Alt held and
+    /// draws no marker without it.
+    #[test]
+    fn the_map_draws_the_alt_marker_only_while_reveal_is_held() {
+        let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets())
+            .expect("the shipped assets must load");
+        let creature = an_unseen_wild_creature(&mut game);
+
+        let (_, revealed) =
+            drawn_map_centered_on_revealed(&mut game, SpriteTable::default(), creature.pos, true);
+        assert!(
+            revealed.iter().any(|t| t == "?"),
+            "an unseen carrier must draw the marker while reveal is held: {revealed:?}"
+        );
+
+        let (_, hidden) =
+            drawn_map_centered_on_revealed(&mut game, SpriteTable::default(), creature.pos, false);
+        assert!(
+            !hidden.iter().any(|t| t == "?"),
+            "the marker must not draw without reveal: {hidden:?}"
+        );
+    }
+
     /// The four rungs `difficulty_color` can answer with.
     const RUNGS: [GlyphColor; 4] = [
         GlyphColor::Green,
@@ -4381,7 +4547,7 @@ mod compass_block_tests {
         let mut fx = Fx::new();
         let m = ui_metrics(900.0);
         let (_, shapes) = with_painter(|p| {
-            draw_playing_base(&mut app, &mut fx, None, p, &m);
+            draw_playing_base(&mut app, &mut fx, None, p, &m, false);
         });
         (shapes, arrow)
     }

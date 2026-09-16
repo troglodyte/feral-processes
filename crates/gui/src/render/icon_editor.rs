@@ -490,7 +490,7 @@ mod tests {
         open_the_editor(&mut app);
         let mut fx = Fx::new();
 
-        let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p));
+        let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false));
         let drawn = crate::paint::painted_text(&shapes);
         assert!(
             drawn.iter().any(|t| t.contains("Draw Your Icon")),

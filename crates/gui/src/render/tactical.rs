@@ -962,7 +962,7 @@ mod tests {
         let mut app = crate::render::test_support::playing_app_around(game);
         app.mode = Mode::TacticalResult;
         let mut fx = Fx::new();
-        let (_, shapes) = with_painter(|p| crate::render::draw(&mut app, &mut fx, p));
+        let (_, shapes) = with_painter(|p| crate::render::draw(&mut app, &mut fx, p, false));
         let painted = painted_text(&shapes);
 
         assert!(

@@ -1229,6 +1229,11 @@ pub struct EntityView {
     /// correctly-built line would look identical to a broken one. A missing
     /// join therefore always means the base is laid out wrong.
     pub linked_edges: Vec<(i32, i32)>,
+    /// Whether this (creature) entity is a wild program the Alt marker
+    /// should flag — `Game::unseen_routine`, computed through the same
+    /// candidate function `routine_candidates` calls so the two can never
+    /// promise different things. Always false for anything the player owns.
+    pub unseen_routine: bool,
 }
 
 /// Whether the surface map draws this entity at all — the rule stated once

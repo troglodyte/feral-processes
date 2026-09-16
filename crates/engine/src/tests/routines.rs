@@ -3,6 +3,7 @@
 use super::support::*;
 use crate::classes::PlayerClass;
 use crate::components::Routines;
+use crate::items::DownedProgram;
 use crate::*;
 
 // ---------------------------------------------------------------------------
@@ -45,6 +46,57 @@ fn the_same_species_tamed_shows_its_real_name() {
     assert_eq!(slot.ability.as_deref(), Some("hot_patch"));
     assert_eq!(slot.name, "Patch Single v1.0");
     assert!(!slot.description.is_empty());
+}
+
+/// `Game::unseen_routine` — the Alt marker's own derivation (spec §4 "The
+/// Alt marker", Task 10) — agrees with `routine_candidates`, the exact door
+/// extraction reads, in both the flagged and the cleared case, and is false
+/// on a tamed program regardless.
+#[test]
+fn unseen_routine_agrees_with_the_candidate_function_and_is_false_when_owned() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 3, 3);
+    game.world
+        .entity_mut(wild)
+        .insert(Routines(vec!["hot_patch".to_string()]));
+    let level = game.ability_user_level(wild);
+
+    let program = DownedProgram {
+        species: "scrapper".to_string(),
+        level,
+        rarity: Rarity::Ordinary,
+        boss: false,
+        condition: 100,
+        carried: Some("hot_patch".to_string()),
+    };
+    let expected = !game.routine_candidates(&program).is_empty();
+    assert!(expected, "the fixture must actually offer a candidate");
+    assert_eq!(
+        game.unseen_routine(wild),
+        expected,
+        "the marker must agree with the same candidate function extraction reads"
+    );
+
+    // Discovering the family clears both the candidate pool and the marker.
+    game.world
+        .resource_mut::<crate::resources::DiscoveredRoutines>()
+        .0
+        .insert("hot_patch".to_string());
+    assert!(game.routine_candidates(&program).is_empty());
+    assert!(
+        !game.unseen_routine(wild),
+        "a discovered family must clear the marker"
+    );
+
+    // A tamed program is never flagged, discovered or not.
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(pet)
+        .insert(Routines(vec!["hot_patch".to_string()]));
+    assert!(
+        !game.unseen_routine(pet),
+        "an owned program is never flagged"
+    );
 }
 
 /// The generic test species declares no abilities, so its kit is the

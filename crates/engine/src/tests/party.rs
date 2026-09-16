@@ -1617,22 +1617,41 @@ fn a_wild_creature_and_a_summon_keep_their_species_name() {
         Some(species_name.as_str())
     );
 
-    // A summon (`Game::fork_programs`) is a wild spawn with `Hostile`/
-    // `WanderAi` stripped and `components::Summoned` added — deliberately
-    // never `roster_parts`, so it carries no `ProgramId` either, the same
-    // omission that keeps it out of the roster.
-    let summon = game
-        .world
-        .spawn((
-            Creature {
-                species: generic_species().id,
-            },
-            crate::components::Summoned,
-        ))
-        .id();
+    // A summon goes through the real path, `Game::fork_programs`, rather
+    // than a hand-spawned `Creature` + `Summoned` tuple — that spawn is
+    // exactly the shape `fork_programs` builds and proves nothing about
+    // whether it still builds it. `fork_programs` rolls its own species off
+    // `GameRng`, so this reads the species back off the spawned body rather
+    // than assuming which one landed.
+    let player = game.player_entity();
+    let bodies = game.fork_programs(player, 1, 0);
+    assert_eq!(bodies.len(), 1, "one body was asked for");
+    let summon = bodies[0];
+    assert!(
+        game.world
+            .get::<crate::components::Summoned>(summon)
+            .is_some(),
+        "fork_programs is a wild spawn with Hostile/WanderAi stripped and \
+         components::Summoned added — the marker a hand-built fixture could \
+         only assert by assumption"
+    );
+    assert!(
+        game.world.get::<ProgramId>(summon).is_none(),
+        "a fork deliberately never passes through roster_parts, the same \
+         omission that keeps it out of the roster"
+    );
+    let summon_species = game.world.get::<Creature>(summon).unwrap().species.clone();
+    let summon_species_name = game
+        .species_defs()
+        .into_iter()
+        .find(|def| def.id == summon_species)
+        .expect("fork_programs only ever rolls a real, loaded species")
+        .name;
     assert_eq!(
         game.creature_name(summon).as_deref(),
-        Some(species_name.as_str())
+        Some(summon_species_name.as_str()),
+        "no ProgramId means no handle branch, so the summon falls through \
+         to its species name exactly like the hand-spawned wild body above"
     );
 }
 
@@ -1761,6 +1780,25 @@ fn a_program_from_a_pre_handle_save_reads_a_handle() {
     std::fs::create_dir_all(&*dir).unwrap();
     let path = dir.join("save.bin");
     game.save(&path).unwrap();
+
+    // A genuine pre-handle save, not merely a current-build round trip:
+    // `spawn_tamed`'s `roster_parts()` already minted a real, nonzero
+    // `ProgramId` the moment it spawned, long before `game.save` ever ran,
+    // so the file on disk at this point carries that id already and a load
+    // here would just trust it — exercising `Game::load`'s `else` arm, not
+    // the sentinel one. Zeroing `program_id` and `next_program_id` is what
+    // `a_legacy_save_mints_an_id_for_every_owned_program`
+    // (`tests/memories.rs`) uses to simulate a file written before either
+    // field existed — both are `#[serde(default)]` to `0` for exactly that
+    // reason (see `components::ProgramId`'s and `SaveData::next_program_id`'s
+    // own docs).
+    let mut data = crate::save::load_from_file(&path).unwrap();
+    for c in &mut data.creatures {
+        c.program_id = 0;
+    }
+    data.next_program_id = 0;
+    crate::save::save_to_file(&path, &data).unwrap();
+
     let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
 
     let player = loaded.player_entity();
@@ -1771,6 +1809,11 @@ fn a_program_from_a_pre_handle_save_reads_a_handle() {
         .map(|(e, _)| e)
         .expect("the tamed program should survive the round trip");
     let restored_id = *loaded.world.get::<ProgramId>(restored).unwrap();
+    assert_ne!(
+        restored_id.0, 0,
+        "Game::load must mint a fresh id for the sentinel rather than \
+         leaving it at 0"
+    );
 
     assert_eq!(
         loaded.creature_name(restored).as_deref(),

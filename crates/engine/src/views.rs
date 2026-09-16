@@ -831,6 +831,11 @@ pub struct PetInfo {
     pub glyph: char,
     pub color: GlyphColor,
     pub name: String,
+    /// `Game::creature_short_label` — no tier, no species. For a cell too
+    /// narrow for `name`'s full form; carry `rarity` alongside it (below)
+    /// to show the tier some other way, e.g. a row colour, rather than
+    /// parsing it back out of `name`.
+    pub short_name: String,
     pub level: u32,
     pub hp: i32,
     pub max_hp: i32,

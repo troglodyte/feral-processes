@@ -25,7 +25,7 @@ use super::palette;
 use super::strip::Piece;
 use crate::paint::{Painter, Rect, TextRun};
 use crate::render::field::{TagStyle, buff_entries};
-use crate::render::fusion_color;
+use crate::render::{fusion_color, tier_color};
 use crate::render::popup::Row as PopupRow;
 use crate::text::Metrics;
 
@@ -483,19 +483,24 @@ fn crew_rows(d: &PaneData) -> Vec<Row> {
             "  "
         };
         let hurt = p.hp * 2 < p.max_hp.max(1);
+        // `short_name`, not `name`: the UNIT cell is 14 characters, which a
+        // rare tier's text prefix alone would spend more than half of before
+        // the handle that actually tells two Overclocked programs apart
+        // gets drawn — see `Game::creature_short_label`. The tier reads as
+        // the row's colour instead, `tier_color`'s own reason to exist.
         out.push(with_tail(
             vec![
                 (
                     format!(
                         "{mark}{}{}",
-                        cell(&p.name, 14),
+                        cell(&p.short_name, 14),
                         cell(&p.level.to_string(), 4)
                     ),
-                    if p.party_slot.is_some() {
+                    tier_color(p.fusions, p.rarity).unwrap_or(if p.party_slot.is_some() {
                         palette::BODY
                     } else {
                         palette::FAINT
-                    },
+                    }),
                     false,
                 ),
                 (
@@ -672,6 +677,7 @@ mod tests {
             glyph: 'p',
             color: GlyphColor::Green,
             name: name.to_string(),
+            short_name: name.to_string(),
             level: 12,
             hp: 120,
             max_hp: 120,
@@ -1067,6 +1073,43 @@ mod tests {
                 }
             }
         });
+    }
+
+    /// The UNIT cell is 14 characters — under half of what `"Overclocked "`
+    /// alone (12) plus a real handle (8) would need — so before
+    /// `short_name` existed, two different Overclocked programs both
+    /// truncated to the identical `"Overclocked 0x"` in this pane. The
+    /// worst case: `Rarity::Gold` ("Overclocked") and a two-digit zone, the
+    /// widest tier word paired with the widest zone tag `creature_short_
+    /// label` can print. The handle is real, from `handles::of`, never a
+    /// pasted literal — `a_clipped_handle_named_row_reserves_exactly_
+    /// name_w_of_pixel_width` in `gui/src/render/battle.rs` is the pattern.
+    #[test]
+    fn a_crew_row_draws_its_handle_whole_at_the_widest_tier() {
+        use feral_processes_engine::components::ProgramId;
+        use feral_processes_engine::handles;
+
+        let handle = handles::of(ProgramId(1));
+        let short = format!("{handle} 12");
+        // `name` is the long, tier-prefixed form the pane must NOT draw —
+        // `"Overclocked "` alone is 12 of the cell's 14 characters, so
+        // drawing this instead of `short_name` clips the handle down to two
+        // hex digits, which is the bug this test exists to catch.
+        let long = format!("Overclocked {short} Scrapper");
+        let mut worst = pet(&long, None);
+        worst.short_name = short.clone();
+        worst.rarity = Rarity::Gold;
+        let pets = [worst];
+        let d = busy(&pets, &[], &[], &[], &[], &[]);
+
+        let rows = rows(InfoTab::Crew, &d);
+        let at = Rect::new(0.0, 0.0, 400.0, 400.0);
+        let (_, shapes) = with_painter(|p| draw_rows(at, &rows, 0, p, &ui_metrics(720.0)));
+        let text = painted_text(&shapes).join(" ");
+        assert!(
+            text.contains(&handle),
+            "the handle was clipped out of the CREW row: {text:?}"
+        );
     }
 
     /// Every tab summarises to something, and none of them to nothing — a

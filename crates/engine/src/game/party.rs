@@ -269,9 +269,17 @@ impl Game {
             .unwrap_or_else(|| c.species.clone())
     }
 
-    /// `creature_name`, rare-tier prefixed — shared by `creature_label` and
-    /// `creature_short_label`, the point where they stop being the same
-    /// string. `None` only when `entity` isn't a `Creature` at all.
+    /// `creature_name`, rare-tier prefixed — `creature_label`'s own step,
+    /// the point where it stops being just `creature_name`. `None` only
+    /// when `entity` isn't a `Creature` at all.
+    ///
+    /// `creature_short_label` deliberately does **not** call this: its
+    /// caller's cell is too narrow to spend on a text prefix at all, so the
+    /// tier rides along as a `Rarity` field instead (`views::PetInfo::
+    /// rarity`, `views::PartySlotView::rarity`) for the renderer to colour
+    /// or tag the row with — the same reason `PetInfo::rarity` is carried
+    /// beside `creature_label`'s own prefixed `name` rather than parsed back
+    /// out of it.
     ///
     /// The prefix goes here rather than in `zone_tagged_name` deliberately.
     /// That one is also called directly by `EnemyGroupView::species_name`
@@ -309,19 +317,23 @@ impl Game {
         }
     }
 
-    /// `creature_label` without the species: tier, name, zone. For a
-    /// surface with a fixed-width name cell, where the long label's species
-    /// suffix — the part of the string furthest from the identity a handle
-    /// already gives — would be the first thing a truncating cell clips,
-    /// and the widest one to clip *into* rather than past.
+    /// `creature_name`, zone-tagged: no tier, no species. The ladder's
+    /// narrowest rung, for a cell too tight to hold either — a handle alone
+    /// is 8 characters, and a tier prefix (`"Overclocked "`, 12) or a
+    /// species suffix would push a realistic name well past most fixed-width
+    /// name columns before the identity that matters (the handle) is even
+    /// drawn.
     ///
-    /// The one caller is the party battle roster's `NAME_W` cell
-    /// (`gui/src/render/battle.rs`), through `party_row`
-    /// (`game/combat_round.rs`) — the hostile roster's `EnemyGroupView`
-    /// reads the species directly instead, since a wild group's species is
-    /// the point of that row, not incidental to it.
+    /// Two callers, both fixed-width cells that carry `rarity` as a
+    /// separate field precisely so the tier can be read back without text:
+    /// the CREW pane's `UNIT` column (`gui/src/render/hud/panes.rs`, via
+    /// `views::PetInfo`) and the party battle roster's `NAME_W` cell
+    /// (`gui/src/render/battle.rs`, via `views::PartySlotView`, through
+    /// `party_row` in `game/combat_round.rs`) — the hostile roster's
+    /// `EnemyGroupView` reads the species directly instead, since a wild
+    /// group's species is the point of that row, not incidental to it.
     pub fn creature_short_label(&self, entity: Entity) -> String {
-        match self.tiered_name(entity) {
+        match self.creature_name(entity) {
             Some(named) => self.zone_tagged_name(entity, named),
             None => "Program".to_string(),
         }
@@ -562,6 +574,7 @@ impl Game {
                     glyph: glyph.map(|g| g.ch).unwrap_or('?'),
                     color: glyph.map(|g| g.color).unwrap_or(GlyphColor::White),
                     name: self.creature_label(entity),
+                    short_name: self.creature_short_label(entity),
                     level,
                     hp: stats.hp,
                     max_hp: stats.max_hp,

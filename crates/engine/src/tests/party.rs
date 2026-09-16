@@ -1663,7 +1663,7 @@ fn a_short_label_drops_the_species_a_long_label_carries() {
     assert_eq!(
         game.creature_short_label(pet),
         expected_short,
-        "the short label is tier, name and zone — no species"
+        "the short label is name and zone — no tier, no species"
     );
     assert_ne!(
         game.creature_short_label(pet),
@@ -1673,16 +1673,44 @@ fn a_short_label_drops_the_species_a_long_label_carries() {
 }
 
 #[test]
-fn a_short_label_still_carries_a_custom_name_and_tier() {
+fn a_short_label_still_carries_a_custom_name() {
     let mut game = Game::new(4307, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let pet = spawn_tamed(&mut game, 10, 3);
     game.rename_companion(pet, Some("Hexed".to_string()))
         .unwrap();
 
-    // A `CustomName` carries no species in either label, so the short and
-    // long forms agree once one is set.
+    // A `CustomName` carries no species and no tier in either label, so the
+    // short and long forms agree once one is set.
     assert_eq!(game.creature_short_label(pet), game.creature_label(pet));
     assert_eq!(game.creature_short_label(pet), "Hexed");
+}
+
+/// The whole reason `creature_short_label` stopped calling `tiered_name`:
+/// its caller's cell (the CREW pane's `UNIT` column, the battle roster's
+/// `NAME_W`) is too narrow to spend on a text prefix at all — the tier has
+/// to read as a colour or a trailing tag instead, off `Rarity` carried
+/// alongside the label rather than parsed back out of it.
+#[test]
+fn a_short_label_drops_the_tier_too() {
+    let mut game = Game::new(4308, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(pet).insert(Rarity::Gold);
+
+    let short = game.creature_short_label(pet);
+    assert_eq!(
+        short,
+        game.creature_name(pet).unwrap(),
+        "no zone, no tier: the short label is bare here"
+    );
+    assert!(
+        !short.contains(Rarity::Gold.label().unwrap()),
+        "the tier leaked into the short label: {short:?}"
+    );
+    assert_ne!(
+        short,
+        game.creature_label(pet),
+        "the long label still carries the tier the short one drops"
+    );
 }
 
 #[test]

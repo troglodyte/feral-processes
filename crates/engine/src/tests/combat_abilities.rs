@@ -509,10 +509,10 @@ fn researching_self_execution_grants_the_player_priority_boost() {
 /// tree, say. Knowledge is a set, so the second node teaches nothing new,
 /// and installing is still a separate, deliberate act that costs a disk.
 ///
-/// `teaches` is not something a shipped `.ron` file authors — only
-/// `routine_tree::synthesise_nodes` does — but nothing in the loader
-/// refuses it either, so a mod naming it on a hand-authored node is exactly
-/// this fixture.
+/// `teaches` is `#[serde(skip)]` — a `.ron` file cannot author it at all,
+/// only `routine_tree::synthesise_nodes` does — so this fixture builds the
+/// node in Rust and inserts it through `ResearchDb::insert_for_test` rather
+/// than through a modded file, the shape a real mod could never take.
 #[test]
 fn an_ability_granted_by_two_nodes_is_learned_once() {
     const ALSO_BOOST: &str = r#"(
@@ -520,7 +520,6 @@ fn an_ability_granted_by_two_nodes_is_learned_once() {
         name: "Redundant Routine",
         description: "Grants what the routine tree's own node already grants.",
         cost: 12,
-        teaches: Some("priority_boost"),
     )"#;
     let dir = modded_assets_dir(
         "dup_ability",
@@ -531,6 +530,15 @@ fn an_ability_granted_by_two_nodes_is_learned_once() {
         &[],
     );
     let mut game = Game::new(33, DifficultyMode::Forgiving, &dir).unwrap();
+    {
+        let mut db = game.world.resource_mut::<ResearchDb>();
+        let mut also_boost = db
+            .get("also_boost")
+            .expect("the fixture file loaded")
+            .clone();
+        also_boost.teaches = Some("priority_boost".to_string());
+        db.insert_for_test(also_boost);
+    }
     unlock_research_chain(&mut game, "routine/priority_boost");
     unlock_research_chain(&mut game, "also_boost");
 

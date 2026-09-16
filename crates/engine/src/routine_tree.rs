@@ -81,8 +81,9 @@ pub fn version(name: &str) -> (u32, u32) {
 /// Whether `id` is welded permanently into its slot — `decompile` alone.
 /// Keyed to `abilities::DECOMPILE_ABILITY_ID` rather than an
 /// asset-authored flag, for `Game::routine_is_permanent`'s own reason:
-/// permanence is not a property a file may claim.
-fn is_permanent(id: &str) -> bool {
+/// permanence is not a property a file may claim. `Game::routine_is_permanent`
+/// calls this rather than restating it, so there is one definition.
+pub(crate) fn is_permanent(id: &str) -> bool {
     id == crate::abilities::DECOMPILE_ABILITY_ID
 }
 
@@ -194,6 +195,7 @@ pub fn synthesise_nodes(abilities: &AbilityDb) -> Vec<ResearchDef> {
                 cost: crate::tuning::routine_research_cost(
                     scope_rank(def.target),
                     version(&def.name),
+                    zone,
                 ),
                 materials: Vec::new(),
                 min_zone: zone,

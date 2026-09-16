@@ -741,20 +741,25 @@
   shape) with `teaches: Some(ability)`, and `Game::node_researched` is the one
   door: `is_researched`, `missing_prereqs` and `select_research`'s
   already-researched refusal all read it instead of the `Research` set for a
-  `teaches` node. **`listed_research` must check "already known" before
-  "is the tree open"**, not after — checking `routine_tree_open` first hides
-  an already-known routine whenever the tree is closed, which breaks the one
-  case this ordering exists for: an old save can know Patch Party v1.0 while
-  `routine/hot_patch` (its own prerequisite) is still closed off, because
-  nothing on load ever re-researches `routine_fabrication`. `research_graph`
-  has to treat that kind of unlisted parent as absent in both its tier and
-  edge computation, or the Kahn pass never settles the child and a listed
-  node with a hidden parent gets no cell. **A whole version chain needs the
-  same zone gate as its root, not just the rung a spec table happened to
-  name** — `checksum_repair`/`cold_boot`/`mirror_restore`/`redundancy_sync`
-  all chain off `hot_patch`'s `research_zone: 2` and default to zone 1 if
-  left alone, which `no_research_node_is_gated_below_its_own_prerequisite`
-  catches as a gate that can never fire.
+  `teaches` node. **`listed_research` gates the whole filter on "is the tree
+  open", "already known" included** — a review (2026-09-16, todo #101) took
+  the spec's "Nothing is listed until the tree is open" literally over an
+  earlier pass's own reasoning, which let an already-known rung bypass a
+  closed tree so an old save could still see Patch Party v1.0 with
+  `routine_fabrication` unresearched. A closed tree now hides that rung too;
+  `the_closed_tree_lists_nothing_even_when_a_rung_is_known` pins it. The
+  "hidden parent" case `research_graph` has to treat as absent (in both its
+  tier and edge computation, or the Kahn pass never settles the child and a
+  listed node gets no cell) is still reachable with the tree **open**: a
+  known rung is listed unconditionally past a zone gate its own unknown
+  parent is still waiting on —
+  `a_known_child_with_a_hidden_parent_still_gets_a_graph_cell`. **A whole
+  version chain needs the same zone gate as its root, not just the rung a
+  spec table happened to name** — `checksum_repair`/`cold_boot`/
+  `mirror_restore`/`redundancy_sync` all chain off `hot_patch`'s
+  `research_zone: 2` and default to zone 1 if left alone, which
+  `no_research_node_is_gated_below_its_own_prerequisite` catches as a gate
+  that can never fire.
 - **Departure lives in `haul_step_system`, not the clogged branch**, because
   it has to know whether a depot exists — a base with no depot must behave
   exactly as it did before depots shipped. `hauling::consumer_beside` is the

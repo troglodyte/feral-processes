@@ -695,6 +695,11 @@ fn completing_a_routine_node_teaches_its_ability() {
             .contains(&ability),
         "completing must teach {ability}, not just mark the node"
     );
+    assert!(
+        !game.world.resource::<Research>().0.contains(&node_id),
+        "a routine node's completion must never touch `Research` — spec §1 \
+         'researched means known' is one record, not two"
+    );
 }
 
 /// Nothing in this feature may shift the seeded stream — a retune of what a

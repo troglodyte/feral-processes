@@ -85,17 +85,22 @@ pub struct ResearchDef {
     /// themselves are data in `assets/tools/`.
     #[serde(default)]
     pub unlocks_tools: Vec<ToolId>,
-    /// Which tree this node belongs to — `#[serde(default)]` to `Base`, so
-    /// no `.ron` file needs to change. A node synthesised by
-    /// `routine_tree::synthesise_nodes` carries `Routines` instead.
-    #[serde(default)]
+    /// Which tree this node belongs to — defaults to `Base`. `#[serde(skip)]`
+    /// rather than `#[serde(default)]`: `assets/research/README.md` already
+    /// says a `.ron` file may not author this, and `skip` is what makes that
+    /// true rather than merely documented — a `tree: Routines` line in a mod
+    /// file would otherwise parse and silently mint a base node nobody could
+    /// ever research. Only `routine_tree::synthesise_nodes` sets it, to
+    /// `Routines`.
+    #[serde(skip)]
     pub tree: ResearchTree,
     /// The one routine this node grants, for a synthesised node —
     /// `Game::node_researched` reads `KnownRoutines` instead of `Research`
-    /// when this is set, and `settle_research` writes there instead. No
-    /// `.ron` file authors this; a mod cannot mint a synthesised node by
-    /// hand, only by adding an ability.
-    #[serde(default)]
+    /// when this is set, and `settle_research` writes there instead.
+    /// `#[serde(skip)]` for `tree`'s own reason: a `.ron` file may not
+    /// author this, only `routine_tree::synthesise_nodes` does, by adding
+    /// an ability.
+    #[serde(skip)]
     pub teaches: Option<crate::abilities::AbilityId>,
     /// Marks the node that opens the routine tree — set on
     /// `routine_fabrication.ron`. Until a loaded node carrying this is
@@ -239,6 +244,16 @@ impl ResearchDb {
         }
 
         Ok((db, warnings))
+    }
+
+    /// Test-only door for a hand-built node, the replacement for authoring
+    /// one through a modded `.ron` fixture now that `tree` and `teaches`
+    /// are `#[serde(skip)]` — a file can no longer set either, so a test
+    /// that needs to must construct the `ResearchDef` in Rust and insert it
+    /// here instead.
+    #[cfg(test)]
+    pub(crate) fn insert_for_test(&mut self, def: ResearchDef) {
+        self.nodes.insert(def.id.clone(), def);
     }
 
     pub fn get(&self, id: &str) -> Option<&ResearchDef> {

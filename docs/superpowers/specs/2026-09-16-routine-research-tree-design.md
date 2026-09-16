@@ -194,7 +194,15 @@ implementation carries over the gates the current granting nodes impose:
 | `null_route` | `kernel_privileges` | 3 |
 | `hardened_shell`, `overclock`, `ablative_layer` | `adaptive_plating` | 2 |
 | `hot_patch` | `runtime_patching` | 2 |
+| `checksum_repair`, `cold_boot`, `mirror_restore`, `redundancy_sync` | (Patch's higher rungs) | 2 |
 | everything else, including `symlink`, `detach`, `priority_boost`, `repair_loop`, `trickle_charge` | — | 1 (default) |
+
+The four extra Patch rungs are not carried over from an old granting node —
+`hot_patch` was the only ability `runtime_patching` taught. They are gated
+to zone 2 anyway, because
+`no_research_node_is_gated_below_its_own_prerequisite` (`tests/assets.rs`)
+forces a whole version chain to carry at least its root's gate: a rung left
+at the zone-1 default would be a gate its own prerequisite can never fire.
 
 ### Cost
 

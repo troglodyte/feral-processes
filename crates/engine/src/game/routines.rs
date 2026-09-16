@@ -315,7 +315,7 @@ impl Game {
     /// facts, and a schema flag would let a mod mint a second routine nobody
     /// can ever remove.
     pub fn routine_is_permanent(&self, ability: &str) -> bool {
-        ability == crate::abilities::DECOMPILE_ABILITY_ID
+        crate::routine_tree::is_permanent(ability)
     }
 
     /// Every routine the player knows, name-sorted so the etch picker's

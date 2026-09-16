@@ -4,8 +4,10 @@ use crate::abilities::{AbilityDb, AbilityDef, AbilityEffect, AbilityTarget};
 use crate::research::ResearchTree;
 use crate::routine_tree::{family, gets_node, routine_prereq, scope_rank, version};
 use crate::species::SpeciesDb;
-use crate::tests::support::{set_zone, stand_in_base, test_assets_dir, unlock_research_chain};
-use crate::views::ResearchState;
+use crate::tests::support::{
+    base_with_a_research_node, set_zone, stand_in_base, test_assets_dir, unlock_research_chain,
+};
+use crate::views::{GraphDir, ResearchState};
 use crate::{DifficultyMode, Game};
 
 fn open_routine_tree(game: &mut Game) {
@@ -90,6 +92,26 @@ fn the_patch_family_chains_single_then_party_by_version() {
         routine_prereq(&db, redundancy_sync),
         Some("mirror_restore".to_string()),
         "Party v1.1 follows Party v1.0"
+    );
+}
+
+/// Spec §1 "Researched means known": a rung counts as satisfied when a
+/// *higher version at the same scope* is known, even though the lower one
+/// itself never was. Without this, a starter routine minted at Single v2.0
+/// would leave Patch Party v1.0 (whose own prerequisite is `hot_patch`,
+/// Single v1.0) stranded forever, since nobody would ever know v1.0 itself.
+#[test]
+fn rung_satisfied_counts_a_higher_version_at_the_same_scope() {
+    let db = shipped_abilities();
+    let mut known = std::collections::BTreeSet::new();
+    known.insert("checksum_repair".to_string()); // Patch Single v2.0
+    assert!(
+        crate::routine_tree::rung_satisfied(&db, &known, "hot_patch"),
+        "knowing Single v2.0 must satisfy the Single v1.0 rung"
+    );
+    assert!(
+        !crate::routine_tree::rung_satisfied(&db, &known, "mirror_restore"),
+        "a higher version at a DIFFERENT scope (Party) must not count — sanity check"
     );
 }
 
@@ -204,6 +226,194 @@ fn a_synthesised_nodes_tree_is_routines_and_a_ron_nodes_tree_is_base() {
     assert_eq!(base.tree, crate::research::ResearchTree::Base);
 }
 
+/// One assertion per row of the design spec's §2 "Zone gate" table
+/// (`docs/superpowers/specs/2026-09-16-routine-research-tree-design.md`),
+/// including the four extra Patch rungs the spec amended in alongside this
+/// test — `no_research_node_is_gated_below_its_own_prerequisite`
+/// (`tests/research.rs`) is what forces a whole version chain to carry at
+/// least its root's gate, so `checksum_repair`/`cold_boot`/
+/// `mirror_restore`/`redundancy_sync` are zone 2 too, though nothing ever
+/// granted them at that zone under the old base tree.
+#[test]
+fn every_row_of_the_spec_zone_gate_table_matches_the_shipped_assets() {
+    let db = shipped_abilities();
+    let zone_of = |id: &str| -> u32 {
+        let z = db
+            .get(id)
+            .unwrap_or_else(|| panic!("missing ability {id}"))
+            .research_zone;
+        if z == 0 { 1 } else { z }
+    };
+    let rows: &[(&str, u32)] = &[
+        ("deep_scan", 3),
+        ("trace_analysis", 3),
+        ("stealth_protocol", 3),
+        ("salvage_routine", 3),
+        ("buffer_overrun", 3),
+        ("wild_jump", 3),
+        // The eleven `model_inspection` routines.
+        ("backprop", 3),
+        ("dropout_group", 3),
+        ("hallucination", 3),
+        ("gradient_descent", 3),
+        ("inference_probe", 3),
+        ("dropout", 3),
+        ("cold_sample", 3),
+        ("data_poisoning", 3),
+        ("heat_injection", 3),
+        ("fine_tune", 3),
+        ("prompt_injection", 3),
+        ("hardened_shell_party", 3),
+        ("null_route", 3),
+        ("hardened_shell", 2),
+        ("overclock", 2),
+        ("ablative_layer", 2),
+        ("hot_patch", 2),
+        // The four extra Patch rungs, forced to hot_patch's own gate.
+        ("checksum_repair", 2),
+        ("cold_boot", 2),
+        ("mirror_restore", 2),
+        ("redundancy_sync", 2),
+        // Everything else defaults to zone 1.
+        ("symlink", 1),
+        ("detach", 1),
+        ("priority_boost", 1),
+        ("repair_loop", 1),
+        ("trickle_charge", 1),
+    ];
+    for (id, want) in rows {
+        assert_eq!(zone_of(id), *want, "{id}'s research_zone");
+    }
+}
+
+/// Spec §2 "The first discovery door": `routine_reader` moved off `cortex`
+/// (zone 3) onto `routine_fabrication`, so recovering from downed programs
+/// opens at the same moment as the routine tree rather than waiting for a
+/// deep-zone base node. `deep_analysis`'s `requires` follows it too — it
+/// used to hang off `field_ops`, one of the nine deleted nodes, and now
+/// roots directly off `routine_fabrication`.
+#[test]
+fn routine_reader_is_unlocked_by_routine_fabrication_and_deep_analysis_requires_it() {
+    let (_, research) = shipped_research();
+    let fabrication = research.get("routine_fabrication").unwrap();
+    assert!(
+        fabrication
+            .unlocks_tools
+            .iter()
+            .any(|t| t.as_str() == "routine_reader"),
+        "routine_fabrication must unlock routine_reader"
+    );
+    let cortex = research.get("cortex").unwrap();
+    assert!(
+        !cortex
+            .unlocks_tools
+            .iter()
+            .any(|t| t.as_str() == "routine_reader"),
+        "cortex must no longer unlock routine_reader"
+    );
+    let deep_analysis = research.get("deep_analysis").unwrap();
+    assert!(
+        deep_analysis
+            .requires
+            .iter()
+            .any(|r| r == "routine_fabrication"),
+        "deep_analysis must require routine_fabrication, the root the deleted \
+         field_ops chain hung from"
+    );
+}
+
+/// Every synthesised routine node's prerequisite chain must terminate at a
+/// parentless root that is itself a synthesised node — never a dangling id,
+/// and never a cycle. `routine_prereq` only ever names a peer that itself
+/// `gets_node`, so this ought to hold by construction; this census is the
+/// one place that construction is checked against the real shipped tree
+/// rather than trusted.
+#[test]
+fn every_synthesised_routine_node_is_reachable_from_a_parentless_root() {
+    let (_, research) = shipped_research();
+    let routines: Vec<&crate::research::ResearchDef> = research
+        .all()
+        .filter(|d| d.tree == ResearchTree::Routines)
+        .collect();
+    for start in &routines {
+        let mut current = start.id.clone();
+        let mut seen = std::collections::HashSet::new();
+        loop {
+            assert!(
+                seen.insert(current.clone()),
+                "{}'s prerequisite chain cycles back to {current}",
+                start.id
+            );
+            let def = research
+                .get(&current)
+                .unwrap_or_else(|| panic!("{}'s chain names a dangling id {current}", start.id));
+            match def.requires.as_slice() {
+                [] => break,
+                [only] => current = only.clone(),
+                many => panic!(
+                    "{} has {} prerequisites, but a routine node names at most one",
+                    def.id,
+                    many.len()
+                ),
+            }
+        }
+    }
+}
+
+/// Spec's own testing list, "Save": a save made before this feature
+/// existed carries no `discovered_routines` key at all, but a routine it
+/// already knew must read exactly as it does in a fresh save — listed,
+/// `Unlocked`, and its family discovered off `KnownRoutines` alone
+/// (`family_discovered`'s OR of `DiscoveredRoutines` and `KnownRoutines`).
+/// The round trip alone cannot prove this — a `#[serde(default)]` field
+/// passes a round trip even when the save on disk never carried it — so the
+/// key is stripped from the real file rather than trusted to skip itself.
+#[test]
+fn a_pre_change_save_knowing_a_group_rung_loads_it_unlocked_and_discovered() {
+    let mut game = Game::new(9160, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "routine_fabrication");
+    game.world
+        .resource_mut::<crate::resources::KnownRoutines>()
+        .0
+        .insert("hardened_shell_party".to_string());
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_pre_change_group_rung_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        text.contains("discovered_routines"),
+        "the fixture must actually have the key to strip, or this proves nothing"
+    );
+    // `DiscoveredRoutines` stays empty in this fixture (only `KnownRoutines`
+    // is seeded), so RON prints it on one line — `discovered_routines: [],`
+    // — unlike the multi-line non-empty form the sibling save test strips.
+    let stripped: String = text
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("discovered_routines"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::write(&path, stripped).unwrap();
+
+    let loaded = Game::load(&path, &test_assets_dir()).expect("a pre-feature save still loads");
+    let _ = std::fs::remove_file(&path);
+
+    assert!(
+        loaded.family_discovered("Hardened Shell"),
+        "a known rung must read as discovered with no DiscoveredRoutines entry at all"
+    );
+    assert!(loaded.is_researched("routine/hardened_shell_party"));
+    let rows = loaded.research_nodes(ResearchTree::Routines);
+    let row = rows
+        .iter()
+        .find(|n| n.id == "routine/hardened_shell_party")
+        .expect("a known node must still be listed");
+    assert_eq!(row.state, ResearchState::Unlocked);
+}
+
 #[test]
 fn min_zone_follows_research_zone_and_defaults_to_one() {
     let mut db = AbilityDb::default();
@@ -232,12 +442,19 @@ fn min_zone_follows_research_zone_and_defaults_to_one() {
 }
 
 #[test]
-fn routine_research_cost_is_monotonic_in_scope_and_version() {
+fn routine_research_cost_is_monotonic_in_scope_zone_and_version() {
     use crate::tuning::routine_research_cost;
-    assert!(routine_research_cost(1, (1, 0)) > routine_research_cost(0, (1, 0)));
-    assert!(routine_research_cost(2, (1, 0)) > routine_research_cost(1, (1, 0)));
-    assert!(routine_research_cost(0, (2, 0)) > routine_research_cost(0, (1, 0)));
-    assert!(routine_research_cost(0, (3, 0)) > routine_research_cost(0, (2, 0)));
+    assert!(routine_research_cost(1, (1, 0), 1) > routine_research_cost(0, (1, 0), 1));
+    assert!(routine_research_cost(2, (1, 0), 1) > routine_research_cost(1, (1, 0), 1));
+    assert!(routine_research_cost(0, (2, 0), 1) > routine_research_cost(0, (1, 0), 1));
+    assert!(routine_research_cost(0, (3, 0), 1) > routine_research_cost(0, (2, 0), 1));
+    assert!(routine_research_cost(0, (1, 0), 2) > routine_research_cost(0, (1, 0), 1));
+    assert!(routine_research_cost(0, (1, 0), 3) > routine_research_cost(0, (1, 0), 2));
+    assert_eq!(
+        routine_research_cost(0, (1, 0), 0),
+        routine_research_cost(0, (1, 0), 1),
+        "an ability authoring no research_zone (0) prices exactly as zone 1"
+    );
 }
 
 #[test]
@@ -437,6 +654,12 @@ fn researching_the_root_lists_exactly_its_two_children() {
         !listed.contains("routine/redundancy_sync"),
         "redundancy_sync's own prerequisite (mirror_restore) is still unresearched"
     );
+    assert!(
+        !listed.contains("routine/cold_boot"),
+        "cold_boot (Single v3.0) requires checksum_repair (Single v2.0), which is \
+         only discovered so far, not researched — a third rung must not leak in \
+         alongside the two real children"
+    );
 }
 
 #[test]
@@ -488,39 +711,102 @@ fn a_discovered_patch_in_zone_one_lists_hot_patch_as_locked() {
     );
 }
 
+/// Review decision (2026-09-16, todo #101): the spec's own "Nothing is
+/// listed until the tree is open" is taken literally — a closed tree hides
+/// even an already-known rung, reverting the "known bypasses tree-open"
+/// ordering an earlier pass shipped. See `.claude/skills/seams/references/
+/// base.md`'s routine-tree entry for the argument.
 #[test]
-fn a_known_child_with_a_hidden_parent_still_gets_a_graph_cell() {
+fn the_closed_tree_lists_nothing_even_when_a_rung_is_known() {
     let mut game = Game::new(9135, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    // The tree is deliberately left closed — an old save can know a rung
-    // without ever having researched `routine_fabrication` under the old
-    // tree, and `routine/hot_patch` (mirror_restore's own prerequisite)
-    // must not be listed while it is closed.
     game.world
         .resource_mut::<crate::resources::KnownRoutines>()
         .0
         .insert("mirror_restore".to_string());
     assert!(!game.routine_tree_open());
+    assert!(
+        listed_routine_ids(&game).is_empty(),
+        "a closed tree lists nothing at all, known rungs included"
+    );
+}
+
+/// The "hidden parent" case `research_graph` has to treat as absent
+/// (spec §2 "Visibility") is reachable with the tree **open**: a known
+/// rung is listed unconditionally once the tree is open, even past a zone
+/// gate its own (unknown) parent is still waiting on. "Hardened Shell" is
+/// always-visible (fixture assumption shared with
+/// `an_always_visible_family_lists_its_nodes_at_the_right_zone_and_none_below_it`),
+/// so at zone 1 its Single root (`hardened_shell`, gate zone 2) is hidden
+/// by the zone gate while a known Party rung stays listed regardless.
+#[test]
+fn a_known_child_with_a_hidden_parent_still_gets_a_graph_cell() {
+    let mut game = Game::new(9136, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    open_routine_tree(&mut game);
+    game.world
+        .resource_mut::<crate::resources::KnownRoutines>()
+        .0
+        .insert("hardened_shell_party".to_string());
     let listed = listed_routine_ids(&game);
     assert!(
-        listed.contains("routine/mirror_restore"),
-        "already known, listed unconditionally"
+        listed.contains("routine/hardened_shell_party"),
+        "already known, listed unconditionally once the tree is open"
     );
     assert!(
-        !listed.contains("routine/hot_patch"),
-        "the tree is closed for everything else"
+        !listed.contains("routine/hardened_shell"),
+        "its own prerequisite is still behind a zone gate the party hasn't met"
     );
 
     let graph = game.research_graph(ResearchTree::Routines);
     assert!(
-        graph.cells.iter().any(|c| c.id == "routine/mirror_restore"),
+        graph
+            .cells
+            .iter()
+            .any(|c| c.id == "routine/hardened_shell_party"),
         "a listed node with an unlisted parent must still get a cell"
     );
     assert!(
         !graph
             .edges
             .iter()
-            .any(|(_, to)| to == "routine/mirror_restore"),
+            .any(|(_, to)| to == "routine/hardened_shell_party"),
         "the hidden parent contributes no edge"
+    );
+
+    // A cell with no edges into it is still a cell the cursor can reach —
+    // `ResearchGraph::step` walks `cells` by tier and slot, not by edge, so
+    // the hidden parent cannot orphan it from keyboard navigation either.
+    // `routine/symlink` (always-visible, zone 1, its own root) lands at
+    // tier 0 alongside it, since the Kahn pass treats the unlisted parent
+    // as absent and lays this node out as if it were a root too.
+    let symlink_cell = graph
+        .cell("routine/symlink")
+        .expect("symlink is always-visible and must be listed");
+    let target_cell = graph
+        .cell("routine/hardened_shell_party")
+        .expect("checked above");
+    assert_eq!(
+        symlink_cell.tier, 0,
+        "fixture assumption: symlink is a root, tier 0"
+    );
+    assert_eq!(
+        target_cell.tier, 0,
+        "the hidden-parent node must land at tier 0 too"
+    );
+    let dir = if target_cell.slot >= symlink_cell.slot {
+        GraphDir::Down
+    } else {
+        GraphDir::Up
+    };
+    let mut cursor = "routine/symlink".to_string();
+    for _ in 0..graph.cells.len() {
+        if cursor == "routine/hardened_shell_party" {
+            break;
+        }
+        cursor = graph.step(&cursor, dir);
+    }
+    assert_eq!(
+        cursor, "routine/hardened_shell_party",
+        "stepping within tier 0 must be able to land on the hidden-parent node"
     );
 }
 
@@ -531,6 +817,13 @@ fn the_closed_tree_lists_nothing_and_select_research_refuses() {
     assert!(listed_routine_ids(&game).is_empty());
     let err = game.select_research("routine/symlink").unwrap_err();
     assert!(err.contains("Routine Fabrication"), "got: {err}");
+    assert!(
+        game.world
+            .resource::<crate::resources::ActiveResearch>()
+            .id
+            .is_none(),
+        "the closed-tree refusal must file nothing"
+    );
 }
 
 #[test]
@@ -576,6 +869,53 @@ fn with_no_flagged_node_loaded_the_tree_is_open() {
     assert!(
         game.routine_tree_open(),
         "no loaded node carries opens_routine_tree, so the tree is open from the start"
+    );
+}
+
+/// Review fix (2026-09-16, todo #101): `research_nodes(tree)` walks
+/// `listed_research(tree)`, so a project belonging to the *other* tree
+/// never shows as `ResearchState::Active` among either tree's own rows —
+/// there is no id collision between `routine/*` and a base `.ron` id to
+/// make it match by accident. A header built by scanning rows therefore
+/// used to read "No research project" on whichever screen was not running
+/// the active project. `Game::active_research_progress` is the unfiltered
+/// door both screens' headers must use instead.
+#[test]
+fn active_research_progress_is_unfiltered_by_tree_and_shows_on_the_other_screen() {
+    let mut game = Game::new(9150, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    base_with_a_research_node(&mut game);
+    open_routine_tree(&mut game);
+    game.select_research("routine/symlink").unwrap();
+
+    assert!(
+        game.research_nodes(ResearchTree::Base)
+            .iter()
+            .all(|n| n.state != ResearchState::Active),
+        "a routine project must not read Active among the base tree's own rows"
+    );
+
+    let (name, earned, cost) = game
+        .active_research_progress()
+        .expect("a routine project is running");
+    assert_eq!(name, "Symlink Party");
+    assert_eq!(earned, 0);
+    assert!(cost > 0);
+
+    // The cross-tree refusal already existed in `select_research`
+    // (unconditional on `ActiveResearch::id`, never asking which tree it
+    // belongs to) — pin it here alongside the row state, so a base row
+    // stays `Available` (never specially blocked just because the running
+    // project is the other tree's) exactly as an in-tree "another project
+    // active" row already does, and the refusal names the routine project.
+    let base_row = game
+        .research_nodes(ResearchTree::Base)
+        .into_iter()
+        .find(|n| n.state == ResearchState::Available)
+        .expect("some base node must still read Available with a routine project running");
+    let err = game.select_research(&base_row.id).unwrap_err();
+    assert_eq!(
+        err,
+        "The base is already working on Symlink Party — abandon it first."
     );
 }
 

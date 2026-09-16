@@ -347,7 +347,14 @@ impl Game {
             let Some(ability_def) = db.get(&id) else {
                 continue;
             };
-            if self.routine_is_exclusive(&id) {
+            // `gets_node` is the exact gate `synthesise_nodes` uses to
+            // decide which abilities get a research node at all — wider
+            // than the exclusive check this used to run alone, so a
+            // passive, permanent or summon ability a modded kit names is
+            // refused too. Discovering one would have no node to research
+            // toward, a dead end a shipped kit cannot reach (no shipped
+            // species names any of the three).
+            if !crate::routine_tree::gets_node(db, ability_def) {
                 continue;
             }
             if self.family_discovered(&crate::routine_tree::family(ability_def)) {

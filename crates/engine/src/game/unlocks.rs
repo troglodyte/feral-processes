@@ -349,32 +349,38 @@ impl Game {
         }
     }
 
+    /// Whether `def` is reachable at all once the routine tree is open —
+    /// already researched (an already-known routine is never hidden by a
+    /// later change to what carries or gates it, and can be known without
+    /// its own prerequisite being known: a Group rung known without its
+    /// Single root, spec §1's "researched means known") or
+    /// `routine_node_visible` says so. **Not** the whole listing predicate
+    /// on its own — `routine_tree_open` still has to gate it, which is
+    /// `listed_research` and `select_research`'s own job, since one needs
+    /// the tree-closed case folded into a single filter and the other needs
+    /// it as a distinct refusal with its own sentence.
+    fn routine_node_reachable(&self, def: &ResearchDef) -> bool {
+        self.node_researched(def) || self.routine_node_visible(def)
+    }
+
     /// The one filter both `research_nodes` and `research_graph` apply
     /// before computing anything else — spec §2 "Visibility". The base
     /// tree is every `tree == Base` node, unconditionally, exactly as
     /// before this feature. The routine tree is closed
-    /// (`routine_tree_open`) until researched open, and once open, a node
-    /// is listed when it is already researched — an already-known routine
-    /// is never hidden by a later change to what carries or gates it — or
-    /// when `routine_node_visible` says so.
+    /// (`routine_tree_open`) until researched open. Nothing is listed
+    /// until then — spec §2 "Visibility", taken literally: a closed tree
+    /// hides even an already-known rung
+    /// (`the_closed_tree_lists_nothing_even_when_a_rung_is_known`). Once
+    /// open, a node is listed when `routine_node_reachable` says so.
     fn listed_research(&self, tree: ResearchTree) -> Vec<&ResearchDef> {
         let db = self.world.resource::<ResearchDb>();
         if tree == ResearchTree::Base {
             return db.all().filter(|d| d.tree == ResearchTree::Base).collect();
         }
-        // The tree-open check gates *visibility*, not "already known" — an
-        // old save can know Patch Party v1.0 with the tree itself still
-        // closed (nothing stops a save carrying `KnownRoutines` predating
-        // this feature), and that known routine must stay listed regardless.
-        // Checking `routine_tree_open` first would hide it, which is
-        // exactly the "hidden parent" case `research_graph` has to treat as
-        // absent rather than let orphan a child with no cell.
         let tree_open = self.routine_tree_open();
         db.all()
             .filter(|d| d.tree == ResearchTree::Routines)
-            .filter(|def| {
-                self.node_researched(def) || (tree_open && self.routine_node_visible(def))
-            })
+            .filter(|def| tree_open && self.routine_node_reachable(def))
             .collect()
     }
 
@@ -814,7 +820,7 @@ impl Game {
                     self.routine_tree_opener_name()
                 ));
             }
-            if !self.node_researched(&def) && !self.routine_node_visible(&def) {
+            if !self.routine_node_reachable(&def) {
                 return Err("Unknown research.".to_string());
             }
         }
@@ -915,6 +921,28 @@ impl Game {
             earned: research.progress.get(id).copied().unwrap_or(0),
             cost: def.map_or(0, |d| d.cost),
         })
+    }
+
+    /// `(name, earned, cost)` for the base's one active project, or `None`
+    /// with nothing selected — **not filtered by `ResearchTree`.**
+    ///
+    /// `research_nodes(tree)` walks `listed_research(tree)`, so a project
+    /// belonging to the *other* tree never appears as `ResearchState::Active`
+    /// in either tree's rows — there is no id collision to make it match by
+    /// accident. A header built by scanning those rows (the picker's and the
+    /// graph's, before this existed) therefore read "No research project"
+    /// on whichever screen was not running the active project. This is the
+    /// one place both screens' headers read instead, so a routine project
+    /// names itself on the base screen and a base project names itself on
+    /// the routine screen.
+    pub fn active_research_progress(&self) -> Option<(String, u32, u32)> {
+        let research = self.world.resource::<ActiveResearch>();
+        let id = research.id.as_ref()?;
+        let def = self.world.resource::<ResearchDb>().get(id);
+        let name = def.map_or_else(|| id.clone(), |d| d.name.clone());
+        let cost = def.map_or(0, |d| d.cost);
+        let earned = research.progress.get(id).copied().unwrap_or(0);
+        Some((name, earned, cost))
     }
 
     /// The first material line the active project is short of, once it has all

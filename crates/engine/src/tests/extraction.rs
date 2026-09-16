@@ -7,7 +7,7 @@
 //! `docs/superpowers/specs/2026-09-04-program-extraction-design.md`.
 
 use super::support::*;
-use crate::components::{Hopper, HopperEntry, Tools};
+use crate::components::{Hopper, HopperEntry, PowerReserve, Tools};
 use crate::items::DownedProgram;
 use crate::tools::{ToolCategory, ToolDb, ToolDef, ToolId};
 use crate::*;
@@ -2260,6 +2260,63 @@ fn a_routine_already_known_leaves_the_pool() {
     );
 }
 
+/// `routine_candidate_ids` must filter through `routine_tree::gets_node` —
+/// the same gate `synthesise_nodes` uses to decide which abilities get a
+/// research node at all — not merely the narrower `routine_is_exclusive`
+/// check it used to run on its own. A **passive** ability
+/// (`triggers.is_some()`) gets no node, so a modded species kit naming one
+/// must never be offered: discovering it would have nowhere to research
+/// toward, a dead end no shipped kit can produce (no shipped species
+/// declares a passive in its `abilities:`).
+#[test]
+fn routine_candidate_ids_excludes_an_ability_with_no_research_node() {
+    const FIXTURE_PASSIVE: &str = r#"(
+        id: "fixture_passive",
+        name: "Fixture Passive Single",
+        description: "A passive test fixture — triggers rather than being run.",
+        target: OneEnemyGroupFront,
+        effect: Debuff(kind: Bleed, power: 1, duration: 1),
+        cooldown: 4,
+        power_cost: 0.0,
+        triggers: Some(RoundStart),
+    )"#;
+    const FIXTURE_SPECIES: &str = r#"(
+        id: "fixture_passive_carrier",
+        name: "Fixture Passive Carrier",
+        glyph: 'x',
+        color: Yellow,
+        base_hp: 80,
+        base_atk: 12,
+        base_mitigation: 3,
+        taming_difficulty: 0.45,
+        growth_multiplier: 1.25,
+        habitats: [OpenGrid],
+        base_speed: 10,
+        base_int: 7,
+        moves: [(name: "Ram", power: 8, spread: 2)],
+        work_resource: None,
+        can_nest: false,
+        abilities: [(id: "fixture_passive", level: 1)],
+        affinities: (),
+    )"#;
+    let dir = modded_assets_dir(
+        "passive_kit",
+        &[],
+        &[],
+        &[("fixture_passive_carrier.ron", FIXTURE_SPECIES)],
+        &[],
+        &[("fixture_passive.ron", FIXTURE_PASSIVE)],
+    );
+    let game = Game::new(9170, DifficultyMode::Forgiving, &dir).unwrap();
+    let program = test_program("fixture_passive_carrier", 1);
+    assert!(
+        !game
+            .routine_candidates(&program)
+            .contains(&"fixture_passive".to_string()),
+        "a passive ability must never be offered — it has no research node to discover toward"
+    );
+}
+
 /// The refusal, asserted the way every other refusal in this feature is:
 /// nothing spent. A program consumed for a routine the player already had is
 /// the exact waste `extract_routine`'s own "already known" check exists to
@@ -2469,6 +2526,8 @@ fn the_routine_tool_refuses_a_program_with_nothing_unfamiliar() {
     install_routine_tool(&mut game);
     let tool = routine_tool_id(&game);
     let tools_before = game.installed_tools();
+    let player = game.player_entity();
+    let power_before = game.world.get::<PowerReserve>(player).unwrap().get();
 
     let err = game.extract_program(0, &tool).unwrap_err();
 
@@ -2482,6 +2541,12 @@ fn the_routine_tool_refuses_a_program_with_nothing_unfamiliar() {
         game.installed_tools().len(),
         tools_before.len(),
         "the tool is untouched"
+    );
+    assert_eq!(
+        game.world.get::<PowerReserve>(player).unwrap().get(),
+        power_before,
+        "a refusal must spend nothing — not even the ticks that would have \
+         let power regenerate or drain"
     );
 }
 

@@ -1140,7 +1140,7 @@ fn fuse_companions_applies_a_custom_name_truncated_to_the_max_length() {
 }
 
 #[test]
-fn fuse_companions_with_no_name_or_blank_name_keeps_the_species_name() {
+fn fuse_companions_with_no_name_or_blank_name_keeps_the_handle() {
     let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     // `spawn_tamed` always uses this same species, and fusing two
     // same-level, same-species programs keeps it — capturing it directly
@@ -1152,14 +1152,17 @@ fn fuse_companions_with_no_name_or_blank_name_keeps_the_species_name() {
     game.fuse_companions(a, b, None).unwrap();
     let no_name = game.owned_pets();
     assert_eq!(no_name.len(), 1);
-    // Every fused program gets `ZonePortal(1)` (see `fuse_companions`),
-    // which `creature_label`/`PetInfo::name` always zone-tags — even at
-    // zone 1, per `entity_label`'s own test coverage — so the expected
-    // fallback name carries that same " 1" suffix, not the bare species name.
-    let expected_default_name = format!("{species_name} 1");
+    // The naming ladder is `CustomName` › handle › species: with no custom
+    // name, a fused child (which carries a fresh `ProgramId` like any other
+    // roster member) is named by its handle, and `creature_label` appends
+    // the species after it — zone-tagged, since every fused program gets
+    // `ZonePortal(1)` (see `fuse_companions`), zone-tagged even at zone 1
+    // per `entity_label`'s own test coverage.
+    let id = *game.world.get::<ProgramId>(no_name[0].entity).unwrap();
+    let expected_default_name = format!("{} {species_name} 1", crate::handles::of(id));
     assert_eq!(
         no_name[0].name, expected_default_name,
-        "no name given should fall back to the (zone-tagged) species name"
+        "no name given should fall back to the handle, with the species after it"
     );
 
     let c = spawn_tamed(&mut game, 10, 3);
@@ -1167,9 +1170,11 @@ fn fuse_companions_with_no_name_or_blank_name_keeps_the_species_name() {
     game.fuse_companions(c, d, Some("   ".to_string())).unwrap();
     let pets = game.owned_pets();
     let blank_named = pets.iter().find(|p| p.entity != no_name[0].entity).unwrap();
+    let blank_id = *game.world.get::<ProgramId>(blank_named.entity).unwrap();
+    let expected_blank_name = format!("{} {species_name} 1", crate::handles::of(blank_id));
     assert_eq!(
-        blank_named.name, expected_default_name,
-        "an all-whitespace name should also fall back to the species name, not become blank"
+        blank_named.name, expected_blank_name,
+        "an all-whitespace name should also fall back to the handle, not become blank"
     );
 }
 
@@ -1450,22 +1455,24 @@ fn rename_companion_sets_the_display_name() {
 }
 
 #[test]
-fn renaming_with_a_blank_name_restores_the_species_name() {
+fn renaming_with_a_blank_name_restores_the_handle() {
     let mut game = Game::new(4202, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species_name = generic_species().name;
     let pet = spawn_tamed(&mut game, 10, 3);
+    let id = *game.world.get::<ProgramId>(pet).unwrap();
     game.rename_companion(pet, Some("Hexed".to_string()))
         .unwrap();
 
-    // Blank is the only way back to the species name, so it clears rather
-    // than being refused as empty input — `sanitize_custom_name` returns
-    // `None` for it and this caller reads that as "drop the override".
+    // Blank is the only way back to the handle, so it clears rather than
+    // being refused as empty input — `sanitize_custom_name` returns `None`
+    // for it and this caller reads that as "drop the override". The naming
+    // ladder is `CustomName` › handle › species, so a tamed program (which
+    // carries a `ProgramId`) falls back to its handle, not its species.
     game.rename_companion(pet, Some("   ".to_string())).unwrap();
 
     assert_eq!(
         game.creature_name(pet).as_deref(),
-        Some(species_name.as_str()),
-        "a blank rename should fall back to the species name"
+        Some(crate::handles::of(id).as_str()),
+        "a blank rename should fall back to the handle"
     );
 }
 

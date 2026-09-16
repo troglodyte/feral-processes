@@ -48,9 +48,12 @@ the pattern: assert the stream is unmoved across a tick that does social
 work.
 
 **The empty catalogue stays a supported install.** Deleting
-`assets/memories/`, `assets/interactions/` or `assets/handles/` restores the
-game without that layer, never a broken one. No system and no screen may be
-gated on a pool being non-empty.
+`assets/memories/` restores the game without that layer, never a broken one.
+No system and no screen may be gated on a pool being non-empty.
+
+**The social layer need not be moddable** (decided 2026-09-16). Interaction
+defs and conversation templates may be Rust tables rather than asset
+directories.
 
 **A bond may steer where a body stands, never where it is posted** — with one
 exception, and it is an existing door: a `Sulking` program already refuses a
@@ -60,8 +63,8 @@ that is not sulking the rule is absolute. `schedule_base_labour` gains no
 memory term.
 
 **Every derived value stays derived.** Band, reputation, `Sociability` and
-situational thoughts are computed on read and saved nowhere. The only new
-save fields are the handle and the conversation records, both additive
+situational thoughts are computed on read and saved nowhere. The handle is
+derived too. The only new save field is the conversation records, additive
 behind `#[serde(default)]`: **no `SAVE_FORMAT_VERSION` bump anywhere in this
 roadmap.**
 
@@ -70,7 +73,7 @@ roadmap.**
 | | Sub-project | Needs | Size |
 |---|---|---|---|
 | **A** | Handles | — | small |
-| **B** | Memory schema | — | small |
+| **B** | Memory schema (`mood`, `stack_decay`) | — | small |
 | **C** | Bonds: band, witnessing, loss, avoidance | A, B | medium |
 | **D** | The SOCIAL tab | A, B, C | medium |
 | **E** | Interactions and conversations | A–D | large |
@@ -81,49 +84,12 @@ A and B land together as the first design. Each step is playable on its own:
 A + C is already the base shunning a named troublemaker, and D makes it
 visible.
 
-### A. Handles
+### A and B. Handles and the memory schema
 
-**`components::Handle(String)`, minted once at `Game::roster_parts`.**
-`creature_name` gains a middle rung: `CustomName`, then `Handle`, then the
-species name. Nothing wild, hostile or hand-built has one, because
-`roster_parts` is the only mint — `ProgramId`'s rule.
-
-- **`fuse_companions` is the second mint site and will not fail to compile.**
-  It hand-writes its component list; it takes the dominant parent's handle
-  beside the ring and talents it already keeps.
-- **The pool is `assets/handles/`**, loaded on `MemoryDb`'s terms. An empty
-  pool mints nothing.
-- **Stored, not derived.** `CreatureSave::handle: Option<String>`; a
-  pre-handle save mints one on load the way `ProgramId`'s `0` sentinel is
-  minted. Derived off `ProgramId`, a changed pool would rename every program
-  the player knows.
-- **Width is the constraint.** The status column holds 38.5 cells and the
-  widest buff row spends all but 3.8 of them. The pool is capped by a
-  character census, and its vocabulary is process-and-security, under the
-  occult-naming ban.
-
-### B. Memory schema
-
-Four optional `MemoryDef` fields, each defaulting to today's behaviour, plus
-their censuses. Data and fold only; no new trigger.
-
-- **`mood: f32`** (default `1.0`) — the morale share, above.
-- **A repeat factor** (default: linear) — each strike past the first is worth
-  a fraction of the one before, RimWorld's stacking. Still capped by
-  `strike_cap`. The intensity formula in `assets/memories/README.md` changes
-  with it.
-- **`spreads_as: Option<MemoryId>`** — the hearsay def.
-- **`known_for: Option<String>`** — the phrase a program is known for when
-  others' memories of this def dominate what they hold about it.
-
-**The eviction census is stricter than the first draft's.** `remember`'s
-eviction compares *current* intensity, so "hearsay is dropped before
-firsthand" holds only if a hearsay def at its full stack is still weaker than
-its source at a single strike. Hearsay at −3 × 3 strikes beats firsthand at
-−8 × 1. The census therefore compares the hearsay def's **maximum stacked
-magnitude** (after the repeat factor) against the source's **single-strike**
-valence, requires the same `MemorySubjectKind`, and requires the target to
-resolve and to name no `spreads_as` of its own.
+Designed in `2026-09-16-handles-and-memory-schema-design.md`. In short: a
+handle is a hex code derived from `ProgramId` (stored nowhere), and
+`MemoryDef` gains `mood:` and `stack_decay:`. **`spreads_as` lands with E and
+`known_for` with D**, beside their only readers.
 
 ### C. Bonds
 
@@ -245,11 +211,11 @@ never inserted into, so a passive-aggressive rung could only sit *above*
   sabotage witness).
 - `spreads_as`: resolves, same subject kind, no onward chain, maximum
   stacked magnitude below the source's single strike.
-- `mood` and the repeat factor within range; `known_for` within the SOCIAL
+- `mood` and `stack_decay` within range; `known_for` within the SOCIAL
   page's width.
 - Every interaction def: its template slots resolve, its exchange is within
   the line cap, its weights name real dispositions and bands.
-- Every shipped handle within the width cap.
+- The long name label within its surfaces' widths (A).
 - The SOCIAL page's height and row width, measured through the renderer.
 
 ## What was rejected
@@ -261,7 +227,8 @@ never inserted into, so a passive-aggressive rung could only sit *above*
   census.
 - **Same def, fewer strikes.** The screen could never say what was heard
   from what was seen.
-- **Deriving the handle from `ProgramId`.** A changed pool renames everyone.
+- **A stored handle from a word pool** (the first draft of A). Hex codes
+  need no pool, so deriving from `ProgramId` renames no one.
 - **A hop counter on the record.** The def chain already is one.
 - **A rolled spread**, and `GameRng` anywhere in the social layer.
 - **Opinion out of morale entirely** (RimWorld's split). A feud stops feeding

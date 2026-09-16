@@ -398,8 +398,14 @@ impl crate::Game {
     /// from at this end: with `assets/memories/` deleted the store is intact
     /// and the page is empty.
     ///
-    /// The order is by **magnitude**, `evict`'s rule mirrored rather than
-    /// described: a signed sort files every grudge below every fondness, so
+    /// The order is by **magnitude** of the row's own `intensity` —
+    /// `Read::Morale`-weighted (felt, then scaled by `def.mood`), **not**
+    /// `evict`'s rule. `evict` weighs raw `Memory::intensity` alone, with
+    /// neither `felt_as` nor `def.mood` in it (see its own doc) — the two
+    /// only ever agree while every def's `mood` is `1.0`, today's shipped
+    /// catalogue. A mod (or a future def) authoring `mood` below `1.0` can
+    /// sort a row below one `evict` would call weaker, or the reverse.
+    /// Either way, a signed sort files every grudge below every fondness, so
     /// the deepest scar a program carries would sit at the bottom of the page
     /// most often opened to read it.
     ///
@@ -431,7 +437,8 @@ impl crate::Game {
                     name: def.name.clone(),
                     blurb: def.blurb.clone(),
                     subject: self.subject_name(m),
-                    intensity: felt_as.felt(m.intensity(def, now)) * def.mood,
+                    intensity: crate::memories::Read::Morale
+                        .weigh(def, felt_as.felt(m.intensity(def, now))),
                     age: age_phrase(now.saturating_sub(m.reinforced), def.half_life),
                 })
             })

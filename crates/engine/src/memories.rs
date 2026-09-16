@@ -179,6 +179,20 @@ pub(crate) enum Read {
     Morale,
 }
 
+impl Read {
+    /// The one formula behind both readings, so a caller outside
+    /// `sum_intensity` — `Game::memory_report`'s row `intensity`, which is
+    /// deliberately the `Read::Morale` figure `morale` itself reads (see
+    /// that function's doc) — takes it as a call rather than restating
+    /// `felt * def.mood` a second time.
+    pub(crate) fn weigh(self, def: &MemoryDef, felt: f32) -> f32 {
+        match self {
+            Read::Opinion => felt,
+            Read::Morale => felt * def.mood,
+        }
+    }
+}
+
 /// The signed sum of what `store` holds, restricted by `keep` — the one fold
 /// behind `Game::morale` and `Game::opinion_of`, lifted out of `Game` so a
 /// bevy system can ask the same question.
@@ -209,10 +223,7 @@ pub(crate) fn sum_intensity(
         .filter_map(|m| {
             let def = db.get(&m.def)?;
             let felt = felt_as.felt(m.intensity(def, now));
-            Some(match read {
-                Read::Opinion => felt,
-                Read::Morale => felt * def.mood,
-            })
+            Some(read.weigh(def, felt))
         })
         .sum()
 }

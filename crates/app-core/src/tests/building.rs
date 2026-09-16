@@ -676,16 +676,21 @@ fn a_staff_row_carries_what_the_program_is_worth_at_a_post() {
     let mut app = app_owning_distant_programs_of(744, &["rootkit", "sprite"]);
 
     let rows = app.base_staff_rows();
-    let profile = |name: &str| {
+    // Picked by `EntityView::sprite` (the species id, unless a def
+    // overrides it — neither of these two does) rather than `label`: a
+    // program's label is now its derived handle, not its species, so a
+    // substring match on the display text can no longer tell rootkit's row
+    // from sprite's.
+    let profile = |species_id: &str| {
         rows.iter()
-            .find(|r| r.program.label.contains(name))
-            .unwrap_or_else(|| panic!("fixture spawns a {name}"))
+            .find(|r| r.program.sprite.as_deref() == Some(species_id))
+            .unwrap_or_else(|| panic!("fixture spawns a {species_id}"))
             .work
             .expect("a shipped species has a work profile")
     };
 
-    let rootkit = profile("Rootkit");
-    let sprite = profile("Sprite");
+    let rootkit = profile("rootkit");
+    let sprite = profile("sprite");
     assert_eq!(rootkit.speed, 9);
     assert_eq!(rootkit.analysis, 13);
     assert_eq!(rootkit.class, Some(AffinityClass::Leech));
@@ -1416,14 +1421,25 @@ fn an_upgrade_picker_asks_about_the_structure_standing_there() {
 /// The roster is staged so `owned_pets`' order and `build_candidates`' order
 /// differ: `build_candidates` sorts best-first by the roll a Compiler
 /// upgrade reads (assembly, since a Compiler assembles), and the fixture
-/// gives the *second* program the better roll.
+/// gives the fixture's own (first-tamed) program the better roll.
+///
+/// **Which program is "first" and "second" no longer decides which order
+/// wins** — `owned_pets` breaks its tie on `creature_label`, which is a
+/// derived handle now rather than a species name, so its order is opaque
+/// from outside `handles::of`. What the roll assignment has to do is make
+/// `build_candidates`' pick (by roll) land on the *other* entity from
+/// whichever one `owned_pets` sorts first (by handle) — confirmed by the
+/// precondition below rather than assumed, since nothing else in this test
+/// can predict a handle's sort position.
 #[test]
 fn the_picker_spends_the_program_on_the_row_the_player_read() {
-    // The fixture's own program builds badly and the added one builds well,
-    // so `build_candidates`' order is the reverse of `owned_pets`'.
+    // The fixture's own (first-tamed) program builds well and the added one
+    // builds badly — the reverse of which program is "better" than before
+    // handles, chosen only because it is what makes the precondition below
+    // hold for these two programs' actual `ProgramId`s.
     let mut app = app_owning_one_deep_program_and_a_compiler(880, 2, 2);
     stand_beside_the_compiler(&mut app);
-    tame_program_at_zone_with_build_rolls(&mut app, 2, 1.18, 1.0);
+    tame_program_at_zone_with_build_rolls(&mut app, 2, 0.5, 1.0);
 
     let (owned_first, top) = {
         let game = app.game.as_mut().unwrap();
@@ -1459,3 +1475,4 @@ fn the_picker_spends_the_program_on_the_row_the_player_read() {
         "row 1 named the better builder, so that is the program that must have been spent"
     );
 }
+

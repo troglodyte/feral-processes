@@ -40,10 +40,11 @@ Each file is one kind:
 | `half_life` | In **ticks**: how long until intensity halves. |
 | `subject` | Which kind of thing a record of this def is about (below). |
 | `strike_cap` | How far reinforcement compounds before it stops. At least 1. |
+| `stack_decay` | Optional, default `1.0`. In `(0, 1]`: how much each strike past the first is worth relative to the one before it. `1.0` is plain linear stacking; below that, reinforcement still compounds but tapers off. |
 
-All seven are required. Any field added in a later version will carry a
-default, so a file written today keeps parsing untouched — but none of these
-seven may be omitted.
+The first seven are required. `stack_decay` was added later and carries a
+default, so a file written before it existed keeps parsing untouched — but
+none of the first seven may be omitted.
 
 Two files claiming the same `id` is not an error; the alphabetically last one
 wins, which is deliberate (a mod's `zz_stranded_at.ron` overrides the shipped
@@ -54,8 +55,13 @@ def without deleting it).
 Intensity is **derived from the game clock**, never stored:
 
 ```
-valence * min(strikes, strike_cap) * 2^-(ticks since reinforced / half_life)
+valence * (1 + r + r^2 + … + r^(n-1)) * 2^-(ticks since reinforced / half_life)
 ```
+
+for `n = min(strikes, strike_cap)` and `r = stack_decay`. At the shipped
+default `r = 1.0` this is exactly `valence * n` — today's plain linear
+stacking — and below that it is a geometric sum, so a heavily reinforced
+memory still grows with every strike but by less each time.
 
 So nothing decays on a timer and a memory cannot drift out of step with the
 clock. `tuning::MEMORY_HALF_LIFE_MULTIPLIER` scales every `half_life` in the

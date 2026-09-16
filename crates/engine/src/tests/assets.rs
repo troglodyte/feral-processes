@@ -3020,6 +3020,31 @@ fn every_shipped_memory_def_is_well_formed() {
     }
 }
 
+/// `stack_decay` is a ratio in `(0, 1]`: at 1 it is inert (the linear
+/// stacking every def shipped with before this field existed), at or below 0
+/// it either divides by zero in `Memory::intensity_with`'s closed form or
+/// makes reinforcement grow rather than shrink.
+#[test]
+fn every_memory_stack_decay_is_in_range() {
+    use crate::memories::MemoryDb;
+
+    let (db, _) = MemoryDb::load_dir(&test_assets_dir().join("memories")).unwrap();
+    let mut checked = 0;
+    for def in db.all() {
+        checked += 1;
+        assert!(
+            def.stack_decay > 0.0 && def.stack_decay <= 1.0,
+            "{} has a stack_decay of {}, outside (0, 1]",
+            def.id.as_str(),
+            def.stack_decay
+        );
+    }
+    assert!(
+        checked > 0,
+        "the census must actually walk assets/memories, or it passes vacuously"
+    );
+}
+
 /// The game has one word for the defensive stat, and it is not `Defense`.
 ///
 /// `Stats::def` became `Stats::mitigation` in the combat model rewrite and

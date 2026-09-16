@@ -232,6 +232,7 @@ fn test_def(valence: f32, half_life: u64, strike_cap: u32) -> MemoryDef {
         half_life,
         subject: MemorySubjectKind::Nothing,
         strike_cap,
+        stack_decay: 1.0,
     }
 }
 
@@ -350,6 +351,64 @@ fn the_half_life_multiplier_scales_every_grudge_at_once() {
         (m.intensity(&def, 100) - normal).abs() < 1e-6,
         "`intensity` must be `intensity_with` at the shipped dial, or the dial \
          turns nothing"
+    );
+}
+
+/// `stack_decay: 1.0` is the shipped default, and it must be bit-identical
+/// to plain linear stacking — `valence * n`, `assert_eq!` rather than
+/// approximate, because the closed form's `r == 1.0` branch exists
+/// specifically to guarantee this.
+#[test]
+fn stack_decay_of_one_is_todays_linear_stacking() {
+    let def = test_def(4.0, 100, 10);
+    let now = 0;
+
+    for strikes in [1, 2, def.strike_cap] {
+        let m = memory_at(now, strikes);
+        assert_eq!(
+            m.intensity(&def, now),
+            def.valence * strikes as f32,
+            "{strikes} strikes at stack_decay 1.0 must equal valence * n exactly"
+        );
+    }
+}
+
+/// Below 1, each strike past the first is worth `stack_decay` times the one
+/// before — a geometric sum, not the linear one.
+#[test]
+fn stack_decay_shrinks_each_strike_after_the_first() {
+    let mut def = test_def(4.0, 100, 10);
+    def.stack_decay = 0.5;
+    let m = memory_at(0, 3);
+
+    // 1 + 0.5 + 0.25 = 1.75
+    let expected = 1.75 * def.valence;
+    assert!(
+        (m.intensity(&def, 0) - expected).abs() < 1e-5,
+        "three strikes at r=0.5: got {}, wanted {expected}",
+        m.intensity(&def, 0)
+    );
+}
+
+/// The cap still binds under a decayed stack: strikes past `strike_cap` read
+/// exactly as the cap does.
+#[test]
+fn stack_decay_still_stops_at_the_cap() {
+    let mut def = test_def(4.0, 100, 3);
+    def.stack_decay = 0.5;
+    let now = 0;
+
+    let at_cap = memory_at(now, 3).intensity(&def, now);
+    let past_cap = memory_at(now, 4).intensity(&def, now);
+    let past_cap_far = memory_at(now, 40).intensity(&def, now);
+
+    assert_eq!(
+        past_cap, at_cap,
+        "one strike past the cap must read as the cap"
+    );
+    assert_eq!(
+        past_cap_far, at_cap,
+        "many strikes past the cap must still read as the cap"
     );
 }
 

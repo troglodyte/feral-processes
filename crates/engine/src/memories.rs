@@ -64,14 +64,20 @@ pub enum MemorySubjectKind {
     Activity,
 }
 
+/// `stack_decay`'s serde default: `1.0`, today's behaviour. Shared with
+/// `mood`, added alongside it in a later change.
+fn one() -> f32 {
+    1.0
+}
+
 /// One memory kind.
 ///
-/// These seven fields are the initial schema and every one of them is
+/// The original seven fields are the initial schema and every one of them is
 /// **required**: a def missing any of them is a def that cannot be scored or
 /// drawn. Any field added *later* must be `#[serde(default)]`, per the
 /// standing rule for `SpeciesDef`/`StructureDef`/`ItemDef`/`AbilityDef`, so a
 /// mod's existing files keep parsing untouched — but do not retroactively
-/// default these.
+/// default these. `stack_decay` is that later kind.
 #[derive(Clone, Debug, Deserialize)]
 pub struct MemoryDef {
     pub id: MemoryId,
@@ -88,6 +94,12 @@ pub struct MemoryDef {
     pub subject: MemorySubjectKind,
     /// How far reinforcement compounds before it stops.
     pub strike_cap: u32,
+    /// How much each strike past the first is worth relative to the one
+    /// before it, in `(0, 1]`. `1.0` (the default) is today's plain linear
+    /// stacking; below that, reinforcement still compounds but each strike
+    /// contributes less than the last. See `components::Memory::intensity_with`.
+    #[serde(default = "one")]
+    pub stack_decay: f32,
 }
 
 /// Every memory kind the game knows about, loaded from `assets/memories/`.

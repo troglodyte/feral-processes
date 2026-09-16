@@ -2,12 +2,16 @@
 
 use super::support::*;
 use crate::*;
-use feral_processes_engine::{GraphDir, MessageKind};
+use feral_processes_engine::{GraphDir, MessageKind, ResearchTree};
 
 /// The id under the highlight, resolved the way the handlers do — through
 /// `research_nodes()`, whose order changes as the player buys things.
 fn selected_research_id(app: &App) -> String {
-    let nodes = app.game.as_ref().expect("a run").research_nodes();
+    let nodes = app
+        .game
+        .as_ref()
+        .expect("a run")
+        .research_nodes(ResearchTree::Base);
     nodes[app.menu_selected.min(nodes.len() - 1)].id.clone()
 }
 
@@ -16,7 +20,7 @@ fn active_project(app: &App) -> Option<String> {
     app.game
         .as_ref()
         .expect("a run")
-        .research_nodes()
+        .research_nodes(ResearchTree::Base)
         .into_iter()
         .find(|n| n.state == feral_processes_engine::ResearchState::Active)
         .map(|n| n.id)
@@ -182,7 +186,12 @@ fn an_arrow_in_the_graph_view_lands_where_step_says() {
         (GameKey::Left, GraphDir::Left),
     ] {
         let from = selected_research_id(&app);
-        let want = app.game.as_ref().unwrap().research_graph().step(&from, dir);
+        let want = app
+            .game
+            .as_ref()
+            .unwrap()
+            .research_graph(ResearchTree::Base)
+            .step(&from, dir);
         app.handle_key(key);
         assert_eq!(
             selected_research_id(&app),

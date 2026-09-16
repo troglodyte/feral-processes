@@ -1,10 +1,23 @@
 //! Deriving the routine research tree — family, rung and prerequisite.
 
 use crate::abilities::{AbilityDb, AbilityDef, AbilityEffect, AbilityTarget};
+use crate::research::ResearchTree;
 use crate::routine_tree::{family, gets_node, routine_prereq, scope_rank, version};
 use crate::species::SpeciesDb;
-use crate::tests::support::test_assets_dir;
+use crate::tests::support::{set_zone, stand_in_base, test_assets_dir, unlock_research_chain};
+use crate::views::ResearchState;
 use crate::{DifficultyMode, Game};
+
+fn open_routine_tree(game: &mut Game) {
+    unlock_research_chain(game, "routine_fabrication");
+}
+
+fn listed_routine_ids(game: &Game) -> std::collections::HashSet<String> {
+    game.research_nodes(ResearchTree::Routines)
+        .into_iter()
+        .map(|n| n.id)
+        .collect()
+}
 
 fn shipped_abilities() -> AbilityDb {
     let (db, warnings) = AbilityDb::load_dir(&test_assets_dir().join("abilities")).unwrap();
@@ -362,4 +375,224 @@ fn every_discoverable_family_has_at_least_one_carried_rung() {
             "{family:?} reads as discoverable but nothing carries any of its rungs"
         );
     }
+}
+
+// --- Visibility (task 5) ---
+//
+// The Patch family: hot_patch (Single v1.0, zone 1, root) -> checksum_repair
+// (Single v2.0) and mirror_restore (Party v1.0) -> redundancy_sync (Party
+// v1.1). checksum_repair/cold_boot/mirror_restore carry a wild_weight, so
+// the family is discoverable.
+
+#[test]
+fn an_undiscovered_family_lists_nothing() {
+    let mut game = Game::new(9130, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    open_routine_tree(&mut game);
+    let listed = listed_routine_ids(&game);
+    for id in [
+        "routine/hot_patch",
+        "routine/checksum_repair",
+        "routine/mirror_restore",
+        "routine/redundancy_sync",
+    ] {
+        assert!(!listed.contains(id), "{id} must be hidden until discovered");
+    }
+}
+
+#[test]
+fn discovering_one_rung_lists_only_the_root() {
+    let mut game = Game::new(9131, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    open_routine_tree(&mut game);
+    game.world
+        .resource_mut::<crate::resources::DiscoveredRoutines>()
+        .0
+        .insert("checksum_repair".to_string());
+    let listed = listed_routine_ids(&game);
+    assert!(listed.contains("routine/hot_patch"), "the root is revealed");
+    for id in [
+        "routine/checksum_repair",
+        "routine/mirror_restore",
+        "routine/redundancy_sync",
+    ] {
+        assert!(
+            !listed.contains(id),
+            "{id}'s own prerequisite is not researched yet, so it stays hidden"
+        );
+    }
+}
+
+#[test]
+fn researching_the_root_lists_exactly_its_two_children() {
+    let mut game = Game::new(9132, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    open_routine_tree(&mut game);
+    game.world
+        .resource_mut::<crate::resources::DiscoveredRoutines>()
+        .0
+        .insert("checksum_repair".to_string());
+    unlock_research_chain(&mut game, "routine/hot_patch");
+    let listed = listed_routine_ids(&game);
+    assert!(listed.contains("routine/checksum_repair"));
+    assert!(listed.contains("routine/mirror_restore"));
+    assert!(
+        !listed.contains("routine/redundancy_sync"),
+        "redundancy_sync's own prerequisite (mirror_restore) is still unresearched"
+    );
+}
+
+#[test]
+fn an_always_visible_family_lists_its_nodes_at_the_right_zone_and_none_below_it() {
+    let mut game = Game::new(9133, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    open_routine_tree(&mut game);
+    assert!(
+        !game.family_is_discoverable("Hardened Shell"),
+        "fixture assumption: nothing carries Hardened Shell"
+    );
+    assert!(
+        !listed_routine_ids(&game).contains("routine/hardened_shell"),
+        "zone 1: hardened_shell's own gate is zone 2"
+    );
+    set_zone(&mut game, 2);
+    let listed = listed_routine_ids(&game);
+    assert!(listed.contains("routine/hardened_shell"));
+    assert!(
+        !listed.contains("routine/hardened_shell_party"),
+        "zone 2: hardened_shell_party's own gate is zone 3"
+    );
+    set_zone(&mut game, 3);
+    assert!(listed_routine_ids(&game).contains("routine/hardened_shell_party"));
+}
+
+#[test]
+fn a_discovered_patch_in_zone_one_lists_hot_patch_as_locked() {
+    let mut game = Game::new(9134, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    open_routine_tree(&mut game);
+    game.world
+        .resource_mut::<crate::resources::DiscoveredRoutines>()
+        .0
+        .insert("mirror_restore".to_string());
+    let rows = game.research_nodes(ResearchTree::Routines);
+    let hot_patch = rows
+        .iter()
+        .find(|n| n.id == "routine/hot_patch")
+        .expect("discovered and its own (empty) prereq is trivially met");
+    assert!(
+        matches!(
+            hot_patch.state,
+            ResearchState::Locked {
+                min_zone: Some(2),
+                ..
+            }
+        ),
+        "got {:?}",
+        hot_patch.state
+    );
+}
+
+#[test]
+fn a_known_child_with_a_hidden_parent_still_gets_a_graph_cell() {
+    let mut game = Game::new(9135, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // The tree is deliberately left closed — an old save can know a rung
+    // without ever having researched `routine_fabrication` under the old
+    // tree, and `routine/hot_patch` (mirror_restore's own prerequisite)
+    // must not be listed while it is closed.
+    game.world
+        .resource_mut::<crate::resources::KnownRoutines>()
+        .0
+        .insert("mirror_restore".to_string());
+    assert!(!game.routine_tree_open());
+    let listed = listed_routine_ids(&game);
+    assert!(
+        listed.contains("routine/mirror_restore"),
+        "already known, listed unconditionally"
+    );
+    assert!(
+        !listed.contains("routine/hot_patch"),
+        "the tree is closed for everything else"
+    );
+
+    let graph = game.research_graph(ResearchTree::Routines);
+    assert!(
+        graph.cells.iter().any(|c| c.id == "routine/mirror_restore"),
+        "a listed node with an unlisted parent must still get a cell"
+    );
+    assert!(
+        !graph
+            .edges
+            .iter()
+            .any(|(_, to)| to == "routine/mirror_restore"),
+        "the hidden parent contributes no edge"
+    );
+}
+
+#[test]
+fn the_closed_tree_lists_nothing_and_select_research_refuses() {
+    let mut game = Game::new(9136, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    assert!(listed_routine_ids(&game).is_empty());
+    let err = game.select_research("routine/symlink").unwrap_err();
+    assert!(err.contains("Routine Fabrication"), "got: {err}");
+}
+
+#[test]
+fn select_research_refuses_an_unlisted_open_tree_node_and_files_nothing() {
+    let mut game = Game::new(9137, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    open_routine_tree(&mut game);
+    // Patch is discoverable and undiscovered, so hot_patch is unlisted even
+    // though the tree itself is open.
+    let err = game.select_research("routine/hot_patch").unwrap_err();
+    assert_eq!(err, "Unknown research.");
+    assert!(
+        game.world
+            .resource::<crate::resources::ActiveResearch>()
+            .id
+            .is_none(),
+        "nothing may be filed for a node the player was never shown"
+    );
+}
+
+#[test]
+fn with_no_flagged_node_loaded_the_tree_is_open() {
+    let body = std::fs::read_to_string(
+        crate::tests::support::test_assets_dir()
+            .join("research")
+            .join("routine_fabrication.ron"),
+    )
+    .unwrap();
+    assert!(
+        body.contains("opens_routine_tree"),
+        "fixture assumption: the shipped file carries the flag"
+    );
+    let stripped = body.replace("opens_routine_tree: true,", "");
+    let dir = crate::tests::support::modded_assets_dir(
+        "no_opener",
+        &[],
+        &[],
+        &[],
+        &[("routine_fabrication.ron", &stripped)],
+        &[],
+    );
+    let game = Game::new(9138, DifficultyMode::Forgiving, &dir).unwrap();
+    assert!(
+        game.routine_tree_open(),
+        "no loaded node carries opens_routine_tree, so the tree is open from the start"
+    );
+}
+
+#[test]
+fn the_base_trees_output_is_unchanged_apart_from_the_deleted_nodes() {
+    let game = Game::new(9139, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let rows = game.research_nodes(ResearchTree::Base);
+    assert!(!rows.is_empty());
+    assert!(
+        rows.iter().all(|n| n.teaches.is_none()),
+        "no base-tree row ever teaches a routine"
+    );
+    let research_dir = test_assets_dir().join("research");
+    let ron_file_count = std::fs::read_dir(&research_dir)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("ron"))
+        .count();
+    assert_eq!(rows.len(), ron_file_count);
 }

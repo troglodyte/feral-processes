@@ -617,14 +617,20 @@ fn extracting_a_routine_you_already_know_is_refused_and_the_program_survives() {
 #[test]
 fn researching_a_node_teaches_the_routine_rather_than_installing_or_stocking_it() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let node = game
-        .research_nodes()
-        .into_iter()
-        .find(|n| n.teaches.is_some())
+    // Read straight off the db, not `research_nodes`: a fresh game's
+    // routine tree is closed and nothing is discovered yet, so nothing is
+    // *listed* — but `unlock_research_chain` below researches straight
+    // through `settle_research`, bypassing `select_research`'s visibility
+    // gate entirely, exactly as it bypasses the zone and prerequisite
+    // gates other callers of this helper rely on.
+    let (node_id, ability) = game
+        .world
+        .resource::<ResearchDb>()
+        .all()
+        .find_map(|d| d.teaches.clone().map(|a| (d.id.clone(), a)))
         .expect("some shipped node grants an ability");
-    let ability = node.teaches.clone().unwrap();
 
-    unlock_research_chain(&mut game, &node.id);
+    unlock_research_chain(&mut game, &node_id);
 
     assert!(game.knows_routine(&ability), "the node teaches the routine");
     assert_eq!(

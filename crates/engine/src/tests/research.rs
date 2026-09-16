@@ -514,7 +514,7 @@ fn nothing_is_researched_at_the_start_of_a_game() {
     let game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     assert!(!game.is_researched("automation"));
     assert!(
-        game.research_nodes()
+        game.research_nodes(ResearchTree::Base)
             .iter()
             .all(|n| n.state != ResearchState::Unlocked),
         "a fresh game starts with an entirely locked tree"
@@ -556,7 +556,7 @@ fn a_completed_project_raises_a_notification_naming_what_it_unlocks() {
     game.select_research("automation").unwrap();
     fill_research_progress(&mut game, "automation");
     let row = game
-        .research_nodes()
+        .research_nodes(ResearchTree::Base)
         .into_iter()
         .find(|n| n.id == "automation")
         .unwrap();
@@ -662,12 +662,16 @@ fn completing_clears_the_project_drops_its_progress_row_and_withdraws_its_orders
 #[test]
 fn completing_a_routine_node_teaches_its_ability() {
     let mut game = Game::new(725, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let (node_id, ability) = game
-        .world
-        .resource::<ResearchDb>()
-        .all()
-        .find_map(|d| d.teaches.clone().map(|a| (d.id.clone(), a)))
-        .expect("the shipped tree teaches routines somewhere");
+    // `symlink` is Symlink Party's whole family, with no wild carrier and
+    // no species kit slot (see
+    // `routine_tree::hyperthread_is_discoverable_and_a_field_routine_
+    // family_is_not`), so it is always-visible rather than needing a
+    // discovery first — the one thing this test is not about.
+    let node_id = "routine/symlink".to_string();
+    let ability = "symlink".to_string();
+    // Opens the routine tree — `select_research` refuses every routine
+    // node until this is researched (spec §2 "Opening the tree").
+    unlock_research_chain(&mut game, "routine_fabrication");
     research_prereqs_of(&mut game, &node_id);
     let zone = game
         .world
@@ -731,7 +735,7 @@ fn selecting_research_fails_while_a_prerequisite_is_missing() {
 fn a_locked_node_reports_which_prerequisites_are_missing() {
     let game = Game::new(65, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = game
-        .research_nodes()
+        .research_nodes(ResearchTree::Base)
         .into_iter()
         .find(|n| n.id == "weapon_bench")
         .unwrap();
@@ -752,7 +756,7 @@ fn a_locked_node_reports_which_prerequisites_are_missing() {
 fn a_prerequisite_free_node_is_available_immediately() {
     let game = Game::new(66, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = game
-        .research_nodes()
+        .research_nodes(ResearchTree::Base)
         .into_iter()
         .find(|n| n.id == "automation")
         .unwrap();
@@ -824,7 +828,7 @@ fn a_second_project_is_refused_while_one_is_running() {
     let filed = game.work_orders().len();
 
     let second = game
-        .research_nodes()
+        .research_nodes(ResearchTree::Base)
         .into_iter()
         .find(|n| n.state == ResearchState::Available && n.blocked_by.is_none())
         .expect("a fresh base has a second node open to it");
@@ -961,13 +965,13 @@ fn research_nodes_lists_active_before_available_before_locked_before_unlocked() 
     unlock_research_chain(&mut game, "automation");
     base_with_a_research_node(&mut game);
     let open = game
-        .research_nodes()
+        .research_nodes(ResearchTree::Base)
         .into_iter()
         .find(|n| n.state == ResearchState::Available && n.blocked_by.is_none())
         .expect("something is open once Automation is in");
     game.select_research(&open.id).unwrap();
     let ranks: Vec<u8> = game
-        .research_nodes()
+        .research_nodes(ResearchTree::Base)
         .iter()
         .map(|n| match n.state {
             ResearchState::Active => 0,
@@ -996,7 +1000,7 @@ fn the_data_cache_is_buildable_without_any_research() {
 #[test]
 fn no_research_node_is_left_unlocking_nothing() {
     let game = Game::new(711, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    for node in game.research_nodes() {
+    for node in game.research_nodes(ResearchTree::Base) {
         let def = game
             .world
             .resource::<ResearchDb>()
@@ -1061,7 +1065,7 @@ fn research_prereqs_of(game: &mut Game, id: &str) {
 }
 
 fn research_state(game: &Game, id: &str) -> ResearchState {
-    game.research_nodes()
+    game.research_nodes(ResearchTree::Base)
         .into_iter()
         .find(|n| n.id == id)
         .map(|n| n.state)
@@ -1092,7 +1096,9 @@ fn a_zone_gated_node_is_still_listed() {
     let game = Game::new(716, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let gated = cheapest_gated_node(&game, 3);
     assert!(
-        game.research_nodes().iter().any(|n| n.id == gated.id),
+        game.research_nodes(ResearchTree::Base)
+            .iter()
+            .any(|n| n.id == gated.id),
         "{} must stay on the menu at zone 1 — it is what tells the player \
          there is a reason to breach",
         gated.id
@@ -1440,7 +1446,7 @@ fn a_materials_have_column_counts_a_depot_across_the_base() {
     set_inventory(&mut game, &[("core_fragment", 6), ("power_cell", 2)]);
 
     let bill = |game: &Game| {
-        game.research_nodes()
+        game.research_nodes(ResearchTree::Base)
             .into_iter()
             .find(|n| n.id == "billed")
             .unwrap()
@@ -1484,7 +1490,7 @@ fn the_active_project_is_the_first_row() {
         .progress
         .insert("automation".to_string(), 3);
 
-    let rows = game.research_nodes();
+    let rows = game.research_nodes(ResearchTree::Base);
 
     assert_eq!(rows[0].id, "automation");
     assert_eq!(rows[0].state, ResearchState::Active);
@@ -1501,7 +1507,7 @@ fn a_blocked_node_carries_the_sentence_that_would_refuse_it() {
     let refusal = game.select_research("automation").unwrap_err();
 
     let row = game
-        .research_nodes()
+        .research_nodes(ResearchTree::Base)
         .into_iter()
         .find(|n| n.id == "automation")
         .unwrap();
@@ -1570,7 +1576,7 @@ fn a_research_node_that_unlocks_no_conversion_reports_none() {
 }
 
 fn research_node(game: &Game, id: &str) -> ResearchStatus {
-    game.research_nodes()
+    game.research_nodes(ResearchTree::Base)
         .into_iter()
         .find(|n| n.id == id)
         .unwrap_or_else(|| panic!("{id:?} should be a shipped research node"))
@@ -2010,7 +2016,7 @@ fn the_research_readout_follows_the_project() {
 
     game.select_research("automation").unwrap();
     let row = game
-        .research_nodes()
+        .research_nodes(ResearchTree::Base)
         .into_iter()
         .find(|n| n.id == "automation")
         .unwrap();

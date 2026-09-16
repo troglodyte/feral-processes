@@ -17,7 +17,7 @@
 
 use crate::paint::{Color, Painter, Rect};
 use crate::text::Metrics;
-use feral_processes_engine::{Game, ResearchGraph, ResearchId};
+use feral_processes_engine::{Game, ResearchGraph, ResearchId, ResearchTree};
 
 use super::popup::{DESCRIPTION_INDENT, description_rows_at, draw_row};
 use super::progression::{conversion_rows, material_rows, row_color, unlock_rows};
@@ -359,8 +359,8 @@ pub(super) fn draw_research_graph(
     painter.rect(0.0, 0.0, screen_w, screen_h, PANEL_BG);
     painter.rect_lines(0.0, 0.0, screen_w, screen_h, 2.0, BORDER);
     let currency = game.item_name(&game.research_currency()).to_string();
-    let graph = game.research_graph();
-    let nodes = game.research_nodes();
+    let graph = game.research_graph(ResearchTree::Base);
+    let nodes = game.research_nodes(ResearchTree::Base);
     let geo = geometry(screen_w, screen_h, &graph, m);
 
     // The same sentence the list's header carries, through the same
@@ -539,7 +539,7 @@ mod tests {
     fn shipped_graph() -> ResearchGraph {
         Game::new(930, DifficultyMode::Forgiving, &test_assets_dir())
             .expect("the shipped asset tree builds a fresh game")
-            .research_graph()
+            .research_graph(ResearchTree::Base)
     }
 
     /// The pane pans, so "the whole tree fits" is no longer true and no
@@ -744,10 +744,10 @@ mod tests {
     #[test]
     fn no_shipped_node_name_is_elided_at_1280x720() {
         let game = Game::new(931, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        let g = game.research_graph();
+        let g = game.research_graph(ResearchTree::Base);
         let m = ui_metrics(720.0);
         let geo = geometry(1280.0, 720.0, &g, &m);
-        let nodes = game.research_nodes();
+        let nodes = game.research_nodes(ResearchTree::Base);
         with_painter(|p| {
             let columns = geo.label_columns(p, &m);
             for node in &nodes {
@@ -853,7 +853,7 @@ mod tests {
     #[test]
     fn every_tier_is_drawn_when_the_cursor_reaches_it() {
         let mut game = Game::new(932, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        let nodes = game.research_nodes();
+        let nodes = game.research_nodes(ResearchTree::Base);
         let m = ui_metrics(720.0);
         for name in [
             "Automation",
@@ -861,7 +861,7 @@ mod tests {
             "Segmentation",
             "Overclock",
             "Cortex",
-            "Mesh Plating",
+            "Model Inspection",
         ] {
             let selected = nodes
                 .iter()
@@ -887,7 +887,7 @@ mod tests {
         let (_, shapes) = with_painter(|p| draw_research_graph(&mut game, 0, None, p, &m));
         let text = painted_text(&shapes).join("\n");
         assert!(
-            !text.contains("Mesh Plating"),
+            !text.contains("Model Inspection"),
             "the last tier is five columns right of the first and cannot be on screen with it"
         );
     }
@@ -931,7 +931,7 @@ mod tests {
     #[test]
     fn the_panel_draws_the_selected_nodes_materials_and_conversions() {
         let mut game = Game::new(933, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        let nodes = game.research_nodes();
+        let nodes = game.research_nodes(ResearchTree::Base);
         let picked = nodes
             .iter()
             .position(|n| !n.materials.is_empty() && !n.conversions.is_empty())
@@ -964,7 +964,7 @@ mod tests {
     #[test]
     fn the_graph_says_what_the_list_says_about_a_project() {
         let mut game = Game::new(935, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        let nodes = game.research_nodes();
+        let nodes = game.research_nodes(ResearchTree::Base);
         let blocked = nodes
             .iter()
             .position(|n| n.blocked_by.is_some())
@@ -1005,7 +1005,7 @@ mod tests {
     #[test]
     fn a_boxs_outline_takes_the_lists_row_colour() {
         let mut game = Game::new(934, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        let nodes = game.research_nodes();
+        let nodes = game.research_nodes(ResearchTree::Base);
         let locked = nodes
             .iter()
             .filter(|n| {

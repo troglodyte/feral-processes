@@ -168,7 +168,9 @@ const BASE_ROWS: &[GroupEntry] = &[
             // `has_research_tree`, not `research_nodes`: this closure runs
             // every frame, and the full derivation counts every node's bill
             // against every shelf and walks every material chain.
-            app.game.as_ref().is_some_and(|g| g.has_research_tree())
+            app.game
+                .as_ref()
+                .is_some_and(|g| g.has_research_tree(feral_processes_engine::ResearchTree::Base))
         },
     },
     GroupEntry {

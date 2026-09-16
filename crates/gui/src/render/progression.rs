@@ -3,7 +3,9 @@
 use super::popup::*;
 use super::*;
 use feral_processes_engine::perks::{Perk, PerkDef};
-use feral_processes_engine::{ResearchMaterial, ResearchStatus, RespecQuote, RespecSubject};
+use feral_processes_engine::{
+    ResearchMaterial, ResearchStatus, ResearchTree, RespecQuote, RespecSubject,
+};
 
 /// The perk picker's rows. A perk's description is a *dim item row* rather
 /// than a `Row::Text`, and the help line sits in the header rather than under
@@ -372,7 +374,7 @@ pub(super) fn draw_research_menu(
     m: &Metrics,
 ) {
     let currency = game.item_name(&game.research_currency()).to_string();
-    let nodes = game.research_nodes();
+    let nodes = game.research_nodes(ResearchTree::Base);
     let rows = research_menu_rows(&nodes, selected, &currency);
     draw_popup("Research", PopupSize::Large, &rows, refusal, painter, m);
 }
@@ -782,7 +784,7 @@ mod tests {
     fn the_widest_progression_row_fits_the_popup_it_is_drawn_in() {
         let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
         let game = Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
-        let nodes = game.research_nodes();
+        let nodes = game.research_nodes(ResearchTree::Base);
         let perk_groups = game.perk_groups();
         let status = game.player_status();
         assert!(

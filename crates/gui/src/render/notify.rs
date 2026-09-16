@@ -189,7 +189,7 @@ mod tests {
     use super::*;
     use feral_processes_engine::components::GlyphColor;
     use feral_processes_engine::notifications::NotificationKind;
-    use feral_processes_engine::{DifficultyMode, Game};
+    use feral_processes_engine::{DifficultyMode, Game, ResearchTree};
 
     /// The longest payout a shipped contract can state, for the height
     /// census's worst case. Built from the real `assets/contracts/` through
@@ -411,7 +411,7 @@ mod tests {
     fn every_research_alert_fits_its_screen_once_filled() {
         let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
         let game = Game::new(59, DifficultyMode::Forgiving, assets).expect("shipped assets");
-        let nodes = game.research_nodes();
+        let nodes = game.research_nodes(ResearchTree::Base);
         assert!(
             nodes.iter().any(|n| n.unlocks.is_some()),
             "the census must reach a detail, or its widest case passes vacuously"

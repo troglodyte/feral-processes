@@ -1475,4 +1475,3 @@ fn the_picker_spends_the_program_on_the_row_the_player_read() {
         "row 1 named the better builder, so that is the program that must have been spent"
     );
 }
-

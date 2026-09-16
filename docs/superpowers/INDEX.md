@@ -7,16 +7,17 @@ answer to "did this ship, and where is its argument".
 
 ## The invariant
 
-**`archive/specs/` is implemented. `specs/` is not — with two named
+**`archive/specs/` is implemented. `specs/` is not — with three named
 exceptions.** Every archived spec shipped; the ones left in `specs/` are open,
 parked, partial or superseded, and each says which in its own header. Sorting
 the directory *is* the answer, so no sweep is needed next time.
 
-**The two exceptions are built and stay in `specs/` anyway**, because source
+**The three exceptions are built and stay in `specs/` anyway**, because source
 doc comments pin their paths and moving them would edit `crates/`:
-`2026-09-04-program-extraction-design` (seventeen `//!` and `///` citations)
-and `2026-09-04-dev-sprite-editor-design` (`sprite_forge.rs` and a seam
-argument in the memory graph).
+`2026-09-04-program-extraction-design` (seventeen `//!` and `///` citations),
+`2026-09-04-dev-sprite-editor-design` (`sprite_forge.rs` and a seam
+argument in the memory graph) and `2026-09-16-routine-research-tree-design`
+(`routine_tree.rs`, `tuning.rs` and its tests).
 
 **The debt this section recorded is paid.** There was a third —
 `2026-09-06-settlement-growth-design`, one `//!` line in
@@ -44,7 +45,7 @@ spec resolves to a release tag.
 | `2026-09-04-program-extraction-design` | **built**, unplayed; path-pinned | all five phases, 4 (§10) in `v0.13.114`; `StructureDef::strips` and `Game::run_teardown_rigs` resolve in `crates/engine` |
 | `2026-09-04-dev-sprite-editor-design` | **built**, unplayed; path-pinned | `crates/app-core/src/app/sprite_forge.rs` |
 | `2026-09-16-player-emulation-design` | approved, **unbuilt**; no plan yet; after #101 | `Game::kit_of` and `components::Emulation` exist nowhere |
-| `2026-09-16-routine-research-tree-design` | approved, **unbuilt**; plan in `plans/2026-09-16-routine-research-tree.md` | `ResearchTree` and `DiscoveredRoutines` exist nowhere |
+| `2026-09-16-routine-research-tree-design` | **built**; path-pinned | `v0.13.196`; `ResearchTree`, `DiscoveredRoutines` and `crates/engine/src/routine_tree.rs` resolve in `crates/engine` |
 | `2026-09-16-floor-finishes-design` | approved, **unbuilt**; no plan yet | `assets/floors/` and `FloorDb` exist nowhere |
 | `2026-08-31-stack-wanderers-design` | approved, **unbuilt** | `FrameWanderers` exists nowhere in `crates/` |
 | `2026-08-24-departure-memories-design` | brainstorm parked | no departure memory in `assets/memories/` |

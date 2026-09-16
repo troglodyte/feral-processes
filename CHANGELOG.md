@@ -42,6 +42,30 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.196
+
+**Routines are now researched on their own screen, "Routine research" in
+the base menu, one rung of a family at a time, and a family only appears
+there once you have recovered one of its routines from a downed
+program.** Nine base research nodes used to hand routines out wholesale;
+they are gone, and recovering a routine no longer teaches it outright —
+it discovers the family, which you then research. The screen opens once
+Routine Fabrication is researched, and a routine you already know counts
+as researched, so an existing save keeps everything it had.
+
+**A program you don't own no longer shows you the names of routines you
+have never seen — its sheet reads "??? — a routine you haven't seen" —
+and holding Alt on the map marks the wild programs carrying one with a
+`?`.** The extraction preview now counts the unfamiliar routines a
+program would yield rather than naming them, and a tool refuses a program
+with "nothing unfamiliar to recover" when there is nothing new to find.
+
+**Routine research is priced by how far the routine reaches, its version
+and the sector it unlocks in**, so an early single-target routine costs
+about 15 and a sector-3 routine that hits everyone about 135 — close to
+what the old nodes charged. The Patch family's later rungs now wait for
+sector 2 alongside Hot Patch.
+
 ## 0.13.195
 
 **Every program you own now goes by a handle of its own, like `0xed7631`,

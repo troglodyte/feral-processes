@@ -4352,6 +4352,41 @@ mod tests {
         );
     }
 
+    /// Regression: `Painter::map`'s `y` is a baseline (`paint.rs`'s own
+    /// module docs — top = y − ascent), and the marker used to pass
+    /// `py + RARITY_BAR_PX + IDENTITY_MARK_INSET` straight through as if it
+    /// were a top edge, floating most of the glyph's ink into the tile
+    /// *above*. This draws the marker at a non-zero tile origin — the
+    /// origin-zero fixtures above cannot distinguish "inside this tile"
+    /// from "inside the tile above", since both start at y = 0 — and checks
+    /// the drawn ink's own bounds land inside `[py, py + CELL]` and
+    /// `[px, px + CELL]`.
+    #[test]
+    fn the_unseen_marker_sits_inside_its_own_tile() {
+        let (px, py) = (100.0, 140.0);
+        let (_, shapes) = with_painter(|p| {
+            draw_unseen_marker(p, px, py, CELL_GLYPH_PX, 1.0);
+        });
+        let (_, text, ink) = crate::paint::painted_text_boxes(&shapes)
+            .into_iter()
+            .find(|(_, t, _)| t == "?")
+            .expect("the marker must draw the \"?\" glyph");
+        assert_eq!(text, "?");
+        assert!(
+            ink.y >= py && ink.y + ink.h <= py + CELL,
+            "the marker's ink (y={}, h={}) must stay inside its tile (py={py}, CELL={CELL}) \
+             instead of floating into the tile above",
+            ink.y,
+            ink.h
+        );
+        assert!(
+            ink.x >= px && ink.x + ink.w <= px + CELL,
+            "the marker's ink (x={}, w={}) must stay inside its tile (px={px}, CELL={CELL})",
+            ink.x,
+            ink.w
+        );
+    }
+
     /// The full pipeline, not just the extracted gate: a real wild
     /// creature the engine itself flags draws the marker with Alt held and
     /// draws no marker without it.

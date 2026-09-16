@@ -362,14 +362,18 @@ pub(super) fn draw_research_graph(
     let currency = game.item_name(&game.research_currency()).to_string();
     let graph = game.research_graph(tree);
     let nodes = game.research_nodes(tree);
+    let active = game.active_research_progress();
     let geo = geometry(screen_w, screen_h, &graph, m);
 
     // The same sentence the list's header carries, through the same
     // derivation — `research_header` — because a player flipping between the
     // two views must not be told two different things about one project. It
     // used to read the bank, which `Game::load` now zeroes and nothing fills.
+    // `active` and not `&nodes`: a project belonging to the *other* tree
+    // never shows as `ResearchState::Active` in `nodes`, so the header has
+    // to read the unfiltered project instead — `research_header`'s own doc.
     painter.ui(
-        super::progression::research_header(&nodes),
+        super::progression::research_header(active.as_ref()),
         m.pad,
         m.line_height,
         m.font_size,

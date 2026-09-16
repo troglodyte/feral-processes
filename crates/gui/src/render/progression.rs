@@ -284,13 +284,18 @@ pub(super) fn price_tag(node: &ResearchStatus, currency: &str) -> String {
 
 /// What the base is working, as both views' header row.
 ///
-/// Derived off the rows rather than off a second `Game` call, so the header and
-/// the list under it cannot disagree about which project is running.
-pub(super) fn research_header(nodes: &[ResearchStatus]) -> String {
-    nodes
-        .iter()
-        .find(|n| n.state == ResearchState::Active)
-        .map(|n| format!("Working on: {} ({}/{})", n.name, n.progress, n.cost))
+/// **Not derived off `nodes`.** `research_nodes(tree)` walks
+/// `listed_research(tree)`, so a project belonging to the *other* tree never
+/// shows as `ResearchState::Active` among either tree's own rows — there is
+/// no id collision between a synthesised `routine/*` id and a base `.ron`
+/// id to make it match by accident. Scanning `nodes` for `Active` therefore
+/// read "No research project" on whichever screen was not running the
+/// active project. `active: Option<(String, u32, u32)>` is
+/// `Game::active_research_progress()`, unfiltered by tree, so a routine
+/// project names itself on the base screen and vice versa.
+pub(super) fn research_header(active: Option<&(String, u32, u32)>) -> String {
+    active
+        .map(|(name, earned, cost)| format!("Working on: {name} ({earned}/{cost})"))
         .unwrap_or_else(|| "No research project — pick one".to_string())
 }
 
@@ -320,13 +325,17 @@ pub(super) fn block_rows(blocked_by: Option<&String>, columns: usize) -> Vec<Row
 
 /// The research picker's rows, in the shape `perks_menu_rows` documents and
 /// for the same reason: nothing may follow the last `Row::Item`.
+///
+/// `active` is `research_header`'s own argument, threaded through rather
+/// than derived from `nodes` — see that function's doc.
 pub(super) fn research_menu_rows(
     nodes: &[ResearchStatus],
     selected: usize,
     currency: &str,
+    active: Option<&(String, u32, u32)>,
 ) -> Vec<Row> {
     let mut rows = vec![
-        Row::TextColored(research_header(nodes), CYAN),
+        Row::TextColored(research_header(active), CYAN),
         text_row("Pick a row's key to work it. A to abandon. G for the tree. Esc to close"),
         text_row(""),
     ];
@@ -376,8 +385,12 @@ pub(super) fn draw_research_menu(
 ) {
     let currency = game.item_name(&game.research_currency()).to_string();
     let nodes = game.research_nodes(tree);
+    let active = game.active_research_progress();
     let (title, rows) = match tree {
-        ResearchTree::Base => ("Research", research_menu_rows(&nodes, selected, &currency)),
+        ResearchTree::Base => (
+            "Research",
+            research_menu_rows(&nodes, selected, &currency, active.as_ref()),
+        ),
         // The routine tree's own empty line: nothing is discovered and
         // nothing is visible, so there is nothing to number — a header and
         // an instruction line with no rows under them would read as a
@@ -390,7 +403,7 @@ pub(super) fn draw_research_menu(
         ),
         ResearchTree::Routines => (
             "Routine research",
-            research_menu_rows(&nodes, selected, &currency),
+            research_menu_rows(&nodes, selected, &currency, active.as_ref()),
         ),
     };
     draw_popup(title, PopupSize::Large, &rows, refusal, painter, m);
@@ -500,7 +513,7 @@ mod tests {
             recommended: false,
         };
 
-        let rows = research_menu_rows(&[node], 0, "Research Data");
+        let rows = research_menu_rows(&[node], 0, "Research Data", None);
         let at = |needle: &str| {
             rows.iter()
                 .position(|r| matches!(r, Row::Item { text, .. } if text.contains(needle)))
@@ -540,7 +553,7 @@ mod tests {
             recommended: false,
         };
 
-        let rows = research_menu_rows(&[node], 0, "Research Data");
+        let rows = research_menu_rows(&[node], 0, "Research Data", None);
 
         let conversion = rows
             .iter()
@@ -812,7 +825,7 @@ mod tests {
         let screens = [
             (
                 "Research",
-                research_menu_rows(&nodes, 0, game.item_name(&game.research_currency())),
+                research_menu_rows(&nodes, 0, game.item_name(&game.research_currency()), None),
             ),
             (
                 "Perks",
@@ -852,6 +865,22 @@ mod tests {
                 assert!(measured > 0, "the {screen} picker drew no rows to measure");
             }
         });
+    }
+
+    /// The header is `research_header`'s own argument now, not a scan of
+    /// `nodes` for `ResearchState::Active` — see the function's doc for why
+    /// that scan could never find a project belonging to the other tree.
+    /// `Game::active_research_progress` (tested at the engine level, where a
+    /// real cross-tree project can be set up through `select_research`) is
+    /// what feeds it; this pins the render-side half, that the header reads
+    /// whatever tuple it is handed regardless of what `nodes` contains.
+    #[test]
+    fn research_header_reads_the_active_tuple_and_not_the_node_list() {
+        assert_eq!(
+            research_header(Some(&("Symlink Party".to_string(), 3, 22))),
+            "Working on: Symlink Party (3/22)"
+        );
+        assert_eq!(research_header(None), "No research project — pick one");
     }
 
     /// A fresh run's routine tree is closed (`routine_fabrication` carries

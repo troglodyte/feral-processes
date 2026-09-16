@@ -521,6 +521,14 @@ way deleting the Currency item does.
     // A carrier uses its routine against you in battle, and hands it over
     // installed if you decompile it. Killing it destroys the routine.
     wild_weight: 8,
+
+    // Optional; defaults to 0, which reads as zone 1 (ungated). The zone
+    // the party must have reached before this ability's node in the
+    // routine research tree becomes available — see "The routine research
+    // tree" below and `../research/README.md`. Not read anywhere else: a
+    // routine's own field-runnable or battle-legal gating stays
+    // level-based, same as before this field existed.
+    research_zone: 2,
 )
 ```
 

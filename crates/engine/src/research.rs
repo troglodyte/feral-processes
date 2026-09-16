@@ -10,6 +10,17 @@ use crate::tools::{ToolDb, ToolId};
 
 pub type ResearchId = String;
 
+/// Which research tree a node belongs to — the base tree, authored in
+/// `.ron`, or the routine tree, synthesised from `AbilityDb` (see
+/// `routine_tree::synthesise_nodes`). `Base` is the default so every
+/// existing `.ron` node keeps loading with no file touched.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ResearchTree {
+    #[default]
+    Base,
+    Routines,
+}
+
 /// A craft recipe a research node unlocks. Recipe *data* lives in the
 /// research `.ron` files rather than in Rust so a mod can ship a structure,
 /// its research node and its recipes as pure data — `ItemId` itself stays a
@@ -82,6 +93,26 @@ pub struct ResearchDef {
     /// themselves are data in `assets/tools/`.
     #[serde(default)]
     pub unlocks_tools: Vec<ToolId>,
+    /// Which tree this node belongs to — `#[serde(default)]` to `Base`, so
+    /// no `.ron` file needs to change. A node synthesised by
+    /// `routine_tree::synthesise_nodes` carries `Routines` instead.
+    #[serde(default)]
+    pub tree: ResearchTree,
+    /// The one routine this node grants, for a synthesised node —
+    /// `Game::node_researched` reads `KnownRoutines` instead of `Research`
+    /// when this is set, and `settle_research` writes there instead. No
+    /// `.ron` file authors this; a mod cannot mint a synthesised node by
+    /// hand, only by adding an ability.
+    #[serde(default)]
+    pub teaches: Option<crate::abilities::AbilityId>,
+    /// Marks the node that opens the routine tree — set on
+    /// `routine_fabrication.ron`. Until a loaded node carrying this is
+    /// researched, the routine tree lists nothing and `select_research`
+    /// refuses every routine node. If no loaded node carries it, the tree
+    /// is open from the start, so a mod that deletes that node is not
+    /// stranded.
+    #[serde(default)]
+    pub opens_routine_tree: bool,
 }
 
 #[derive(Resource, Default)]
@@ -146,6 +177,15 @@ impl ResearchDb {
                 }
                 Err(e) => warnings.push(format!("skipped invalid research file {path:?}: {e}")),
             }
+        }
+
+        // Every routine gets a node here, derived from `abilities` rather
+        // than authored — see `routine_tree::synthesise_nodes`. Appended
+        // before the fixpoint validation loop below so a synthesised node's
+        // `requires` (another synthesised node's id) is validated exactly
+        // like an authored one's.
+        for def in crate::routine_tree::synthesise_nodes(abilities) {
+            db.nodes.insert(def.id.clone(), def);
         }
 
         loop {

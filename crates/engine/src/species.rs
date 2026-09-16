@@ -112,6 +112,7 @@ pub fn basic_attack_ability(species: &SpeciesId, index: usize, mv: &MoveDef) -> 
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
+        research_zone: 0,
         exclusive: false,
         starter: false,
         boss_drop: None,

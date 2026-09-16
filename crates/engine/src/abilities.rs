@@ -798,6 +798,20 @@ pub struct AbilityDef {
     pub accuracy: i32,
     #[serde(default)]
     pub wild_weight: u32,
+    /// The zone the player must have reached before this routine's
+    /// synthesised research node becomes available — `research::ResearchDef
+    /// ::min_zone` for a `routine_tree`-derived node. `#[serde(default)]`
+    /// to 0, which reads as zone 1 (ungated) through
+    /// `routine_tree::synthesise_nodes` rather than being a second spelling
+    /// of "ungated" the way `ResearchDef::min_zone` itself is not: an
+    /// ability file authoring nothing here means the same as authoring
+    /// `research_zone: 1`.
+    ///
+    /// Not read anywhere else — a routine's own field-runnable or
+    /// battle-legal gating stays level-based, exactly as it was before this
+    /// existed.
+    #[serde(default)]
+    pub research_zone: u32,
     /// Marks this routine **exclusive**: it never enters `KnownRoutines`, no
     /// research node or species may grant it, and no blank Routine Disk can
     /// be etched with it. Its etched disk is reachable exactly two ways — a

@@ -9,6 +9,7 @@
 //! now calls these instead, so the census and the schema cannot drift apart.
 
 use crate::abilities::{AbilityDb, AbilityDef, AbilityEffect, AbilityId, AbilityTarget};
+use crate::research::{ResearchDef, ResearchTree};
 
 /// The scope word an ability's `name` must end in, given what it targets.
 /// `OneAlly` and `OneEnemyGroupFront` share "Single" — one recipient either
@@ -134,4 +135,51 @@ pub fn routine_prereq(abilities: &AbilityDb, def: &AbilityDef) -> Option<Ability
         .filter(|d| scope_rank(d.target) == lower_scope)
         .min_by_key(|d| version(&d.name))
         .map(|d| d.id.clone())
+}
+
+/// The synthesised id for `ability`'s research node — `"routine/<id>"`,
+/// stable across a rename of the ability's display name.
+pub fn node_id(ability: &str) -> String {
+    format!("routine/{ability}")
+}
+
+/// One synthesised `ResearchDef` per `gets_node`-eligible ability —
+/// `ResearchDb::load_dir`'s counterpart to `ItemDb::synthesise_etched_disks`.
+/// A synthesised node carries no material bill (spec §2 "Cost"), and its
+/// `requires` names only the one prerequisite rung `routine_prereq` derives.
+pub fn synthesise_nodes(abilities: &AbilityDb) -> Vec<ResearchDef> {
+    abilities
+        .all()
+        .filter(|def| gets_node(abilities, def))
+        .map(|def| {
+            let requires = routine_prereq(abilities, def)
+                .map(|id| vec![node_id(&id)])
+                .unwrap_or_default();
+            let zone = if def.research_zone == 0 {
+                1
+            } else {
+                def.research_zone
+            };
+            ResearchDef {
+                id: node_id(&def.id),
+                name: def.name.clone(),
+                description: def.description.clone(),
+                cost: crate::tuning::routine_research_cost(
+                    scope_rank(def.target),
+                    version(&def.name),
+                ),
+                materials: Vec::new(),
+                min_zone: zone,
+                requires,
+                recommended: false,
+                unlocks_structures: Vec::new(),
+                unlocks_recipes: Vec::new(),
+                unlocks_abilities: Vec::new(),
+                unlocks_tools: Vec::new(),
+                tree: ResearchTree::Routines,
+                teaches: Some(def.id.clone()),
+                opens_routine_tree: false,
+            }
+        })
+        .collect()
 }

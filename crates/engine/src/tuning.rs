@@ -5154,6 +5154,52 @@ pub const SUMMON_STAT_MULT: f32 = 0.6;
 /// `balance_sim` already sweeps.
 pub const SUMMON_LEVEL_STAT_STEPS: f32 = 1.0;
 
+/// The flat floor of a synthesised routine node's cost — the Single, v1.0
+/// rung at the bottom of any family.
+///
+/// Fitted, not measured: `balance_sim` models no abilities, so there is no
+/// simulator to check a routine research cost against, only the costs the
+/// eleven routine-granting base nodes this feature moves away from used to
+/// charge (todo #101). Those bundled several abilities and a zone gate into
+/// one number, which this schema deliberately does not — `research_zone`
+/// carries the gate now, and cost carries only scope and version — so the
+/// fit below is a rough anchor to the *cheapest, ungated* rungs rather than
+/// a reconstruction of the old numbers:
+///
+/// | old node | ability | scope | version | zone | old cost |
+/// |---|---|---|---|---|---|
+/// | `self_exec` | `priority_boost` | Single | v1.0 | 1 | 14 |
+/// | `symbolic_links` | `symlink` | Party | v1.0 | 1 | 22 |
+/// | `process_detachment` | `detach` | Single | v1.0 | 1 | 46 |
+/// | `runtime_patching` | `hot_patch` | Single | v1.0 | 2 | 60 |
+/// | `mesh_plating` | `hardened_shell_party` | Party | v1.0 | 3 | 120 |
+/// | `kernel_privileges` | `null_route` | Everyone | v1.0 | 3 | 135 |
+///
+/// `self_exec` and `symbolic_links` are the only two zone-1 nodes granting
+/// exactly one ability, so they anchor `ROUTINE_RESEARCH_COST_BASE` and
+/// `ROUTINE_RESEARCH_SCOPE_STEP`. `ROUTINE_RESEARCH_VERSION_STEP` has no
+/// old-node precedent at all — no shipped node ever gated two versions of
+/// one scope separately — and is a guess of the same shape as the scope
+/// step.
+pub const ROUTINE_RESEARCH_COST_BASE: u32 = 15;
+
+/// Added once per rung of `routine_tree::scope_rank` above Single.
+pub const ROUTINE_RESEARCH_SCOPE_STEP: u32 = 20;
+
+/// Added once per major version above the family's first.
+pub const ROUTINE_RESEARCH_VERSION_STEP: u32 = 15;
+
+/// A synthesised routine node's Research Data cost — linear in both the
+/// scope rank and the major version, per CLAUDE.md's "every difficulty
+/// curve is linear." No material bill: see
+/// `docs/superpowers/specs/2026-09-16-routine-research-tree-design.md` §2
+/// "Cost" for why a derived node cannot carry one.
+pub fn routine_research_cost(scope_rank: u8, version: (u32, u32)) -> u32 {
+    ROUTINE_RESEARCH_COST_BASE
+        + ROUTINE_RESEARCH_SCOPE_STEP * scope_rank as u32
+        + ROUTINE_RESEARCH_VERSION_STEP * version.0.saturating_sub(1)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

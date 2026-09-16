@@ -49,6 +49,7 @@ fn tamper_def(kind: TamperKind, duration: u32) -> AbilityDef {
         power_cost: 1.0,
         accuracy: 0,
         wild_weight: 0,
+        research_zone: 0,
         exclusive: false,
         starter: false,
         ranged: false,

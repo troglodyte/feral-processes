@@ -830,7 +830,9 @@ impl Game {
     /// `creature_short_label`, not `creature_label`: this draws into the
     /// roster's fixed `NAME_W` cell (`gui/src/render/battle.rs`), which a
     /// handle-named companion's full long label — tier, handle, species and
-    /// zone — routinely overruns.
+    /// zone — routinely overruns. `rarity` carries the tier `creature_short_
+    /// label` itself drops, for the renderer to tag the cell with — the
+    /// hostile roster's `rarity_tag` on `EnemyGroupView::front_rarity`.
     fn party_row(
         &self,
         slot: usize,
@@ -846,6 +848,7 @@ impl Game {
             } else {
                 self.creature_short_label(entity)
             },
+            rarity: self.rarity_of(entity),
             hp: stats.hp,
             max_hp: stats.max_hp,
             atk: self.effective_atk(entity),

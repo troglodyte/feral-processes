@@ -1573,7 +1573,16 @@ pub struct PartySlotView {
     /// Index into `BattleState::planned` — 0 is the player.
     pub slot: usize,
     pub entity: Entity,
+    /// `Game::creature_short_label` — no tier, no species. The battle
+    /// roster's `NAME_W` cell (`gui/src/render/battle.rs`) has no room for
+    /// either; `rarity` below is what lets the renderer say the tier some
+    /// other way, a trailing tag, following `rarity_tag`'s pattern for the
+    /// hostile roster.
     pub name: String,
+    /// This slot's rare-spawn tier — see `components::Rarity`. Carried
+    /// separately from `name` for the reason `views::PetInfo::rarity` is:
+    /// the tier reads back without parsing it out of a string.
+    pub rarity: Rarity,
     pub hp: i32,
     pub max_hp: i32,
     pub atk: i32,

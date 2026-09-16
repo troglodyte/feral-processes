@@ -122,6 +122,19 @@ fn party_tail(gear: &str, power: &str, action: &str) -> String {
     )
 }
 
+/// The party roster's NAME cell: `Game::creature_short_label` (`p.name`,
+/// `game/party.rs`) with the tier trailing it as `rarity_tag`'s own text,
+/// the mirror of the hostile roster's `format!("{name}{}{}", …,
+/// rarity_tag(g.front_rarity))` above `draw_battle`. Extracted rather than
+/// inlined at the one call site — the hostile roster's version is not —
+/// because a party row's tier tag is the fix a review caught missing
+/// entirely: `p.name` drawn bare, with no tag at all, is the regression
+/// `a_party_roster_row_carries_its_rarity_tag` exists to catch, and it can
+/// only catch a call site that forgets to call this.
+fn party_name_cell(name: &str, rarity: Rarity) -> String {
+    format!("{name}{}", rarity_tag(rarity))
+}
+
 /// The POWER cell: what this member has left to spend on routines, or a dash
 /// for one holding no reserve at all. A dash rather than a copy of the
 /// player's number, which would read as five slots drawing on one pool.
@@ -419,7 +432,11 @@ pub(super) fn draw_battle(app: &mut App, fx: &mut Fx, painter: &Painter, m: &Met
             bar,
             &roster_row(
                 &format!("{}{} ", if active { ">" } else { " " }, p.slot + 1),
-                &p.name,
+                // The tier tag trails the name rather than prefixing it —
+                // `p.name` (`Game::creature_short_label`) is already
+                // `handle zone`, and clipping lands on the tag first, never
+                // on the handle.
+                &party_name_cell(&p.name, p.rarity),
                 &format!("{}/{}", p.hp, p.max_hp),
                 p.atk,
                 p.mitigation,
@@ -1081,28 +1098,44 @@ mod tests {
         assert_eq!(cell("Ünïcödé", 9).chars().count(), 9);
     }
 
-    /// A handle-named companion's `creature_short_label` (`game/party.rs`)
-    /// is tier + handle + zone — "Overclocked 0x435eaD 12" at its widest —
-    /// which still overruns `NAME_W` at 8 characters for the handle alone.
-    /// `cell`'s contract is a character count, not a pixel one, so what
-    /// actually protects the columns after NAME_W is that the UI font
-    /// advances every character a handle can print — hex digits, `0x`,
-    /// and the `…` a clipped one leaves behind — by the same width as any
+    /// `creature_short_label` (`game/party.rs`) dropped its tier prefix —
+    /// it is name and zone only, `"0x435eaD 12"` at its widest — and the
+    /// party row appends `rarity_tag` after it instead, the way the hostile
+    /// roster's `rarity_tag(g.front_rarity)` trails a group's name above.
+    /// Combined that still overruns `NAME_W`, but clipping now lands on the
+    /// *tag*: the identity a handle exists to give two Overclocked
+    /// companions survives whole, and only the decorative tier word after
+    /// it is cut. `cell`'s contract is a character count, not a pixel one,
+    /// so what actually protects the columns after NAME_W is that the UI
+    /// font advances every character a handle can print — hex digits, `0x`,
+    /// and the `…` a clipped tag leaves behind — by the same width as any
     /// other monospace glyph. `font_rasterization.rs` proves that for `…`
-    /// alone; this proves it holds for a real overlong handle-named row, so
-    /// a clipped row reserves exactly what a short one does and nothing
-    /// drifts. The handle comes from `handles::of`, never a pasted literal
-    /// — see `handles_are_pinned` for the one test allowed to do that.
+    /// alone; this proves it holds for a real overlong row, so a clipped
+    /// row reserves exactly what a short one does and nothing drifts. The
+    /// handle comes from `handles::of`, never a pasted literal — see
+    /// `handles_are_pinned` for the one test allowed to do that.
     #[test]
-    fn a_clipped_handle_named_row_reserves_exactly_name_w_of_pixel_width() {
-        use feral_processes_engine::components::ProgramId;
+    fn a_clipped_tier_tag_never_clips_the_handle_it_trails() {
+        use feral_processes_engine::components::{ProgramId, Rarity};
         use feral_processes_engine::handles;
 
-        let widest = format!("Overclocked {} 12", handles::of(ProgramId(1)));
+        let name = format!("{} 12", handles::of(ProgramId(1)));
+        // `party_name_cell`, not a hand-built format string: this is the
+        // exact call `draw_battle`'s party loop makes, so a call site that
+        // regressed to drawing `p.name` bare — the bug this test exists
+        // for — would fail here, not just the isolated `cell`/`rarity_tag`
+        // math.
+        let widest = party_name_cell(&name, Rarity::Gold);
         let clipped = cell(&widest, NAME_W);
         assert!(
             clipped.ends_with('…'),
-            "the widest realistic short label should overrun and clip: {clipped:?}"
+            "the widest realistic row (handle, zone and a tier tag) should \
+             still overrun and clip: {clipped:?}"
+        );
+        assert!(
+            clipped.starts_with(&name),
+            "the handle and zone must survive whole — only the trailing tag \
+             may clip: {clipped:?}"
         );
 
         let m = ui_metrics(900.0);
@@ -1111,10 +1144,35 @@ mod tests {
             let clipped_w = p.measure_ui_advance(clipped, m.label());
             assert_eq!(
                 short_w, clipped_w,
-                "a clipped handle-named row must reserve exactly the pixel \
-                 width a short one does, or every column after NAME_W drifts"
+                "a clipped row must reserve exactly the pixel width a short \
+                 one does, or every column after NAME_W drifts"
             );
         });
+    }
+
+    /// The regression `party_name_cell` was extracted to make impossible at
+    /// its one call site: a rare-tier companion drawing with no tag at all,
+    /// which is what `draw_battle` did before this fix — it passed `p.name`
+    /// straight through and never called `rarity_tag`.
+    #[test]
+    fn a_party_roster_row_carries_its_rarity_tag() {
+        use feral_processes_engine::components::Rarity;
+
+        assert_eq!(
+            party_name_cell("Glitch", Rarity::Ordinary),
+            "Glitch",
+            "an ordinary companion spends no tag"
+        );
+        let tagged = party_name_cell("Glitch", Rarity::Gold);
+        assert_ne!(tagged, "Glitch", "a rare tier must show up somewhere");
+        assert!(
+            tagged.contains(&Rarity::Gold.label().unwrap().to_uppercase()),
+            "expected the player-facing tier word in {tagged:?}"
+        );
+        assert!(
+            tagged.starts_with("Glitch"),
+            "the tag trails the name, never prefixes it: {tagged:?}"
+        );
     }
 }
 

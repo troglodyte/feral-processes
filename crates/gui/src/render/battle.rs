@@ -1080,6 +1080,42 @@ mod tests {
         assert_eq!(cell("Ünïcödé", 4).chars().count(), 4);
         assert_eq!(cell("Ünïcödé", 9).chars().count(), 9);
     }
+
+    /// A handle-named companion's `creature_short_label` (`game/party.rs`)
+    /// is tier + handle + zone — "Overclocked 0x435eaD 12" at its widest —
+    /// which still overruns `NAME_W` at 8 characters for the handle alone.
+    /// `cell`'s contract is a character count, not a pixel one, so what
+    /// actually protects the columns after NAME_W is that the UI font
+    /// advances every character a handle can print — hex digits, `0x`,
+    /// and the `…` a clipped one leaves behind — by the same width as any
+    /// other monospace glyph. `font_rasterization.rs` proves that for `…`
+    /// alone; this proves it holds for a real overlong handle-named row, so
+    /// a clipped row reserves exactly what a short one does and nothing
+    /// drifts. The handle comes from `handles::of`, never a pasted literal
+    /// — see `handles_are_pinned` for the one test allowed to do that.
+    #[test]
+    fn a_clipped_handle_named_row_reserves_exactly_name_w_of_pixel_width() {
+        use feral_processes_engine::components::ProgramId;
+        use feral_processes_engine::handles;
+
+        let widest = format!("Overclocked {} 12", handles::of(ProgramId(1)));
+        let clipped = cell(&widest, NAME_W);
+        assert!(
+            clipped.ends_with('…'),
+            "the widest realistic short label should overrun and clip: {clipped:?}"
+        );
+
+        let m = ui_metrics(900.0);
+        crate::paint::with_painter(|p| {
+            let short_w = p.measure_ui_advance(cell("You", NAME_W), m.label());
+            let clipped_w = p.measure_ui_advance(clipped, m.label());
+            assert_eq!(
+                short_w, clipped_w,
+                "a clipped handle-named row must reserve exactly the pixel \
+                 width a short one does, or every column after NAME_W drifts"
+            );
+        });
+    }
 }
 
 #[cfg(test)]

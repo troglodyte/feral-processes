@@ -269,16 +269,30 @@ impl Game {
             .unwrap_or_else(|| c.species.clone())
     }
 
-    /// `creature_name`, rare-tier prefixed and zone-tagged, falling back to
-    /// a generic label if `entity` isn't a `Creature`.
+    /// `creature_name`, rare-tier prefixed — shared by `creature_label` and
+    /// `creature_short_label`, the point where they stop being the same
+    /// string. `None` only when `entity` isn't a `Creature` at all.
     ///
     /// The prefix goes here rather than in `zone_tagged_name` deliberately.
     /// That one is also called directly by `EnemyGroupView::species_name`
-    /// (`game/combat_round.rs`), and the battle roster draws its name into a
-    /// fixed `NAME_W` cell that "Overclocked Scrapper 2" overflows — the
-    /// roster carries the tier as its own short tag instead, outside the
-    /// column. A `CustomName` gets the prefix too, which is right: renaming
-    /// a program does not make it ordinary.
+    /// (`game/combat_round.rs`), which carries its own tier as a bracketed
+    /// tag *after* the name instead — see `gui::render::rarity_tag` — so a
+    /// prefix baked in here would double it up for a wild group's row.
+    fn tiered_name(&self, entity: Entity) -> Option<String> {
+        let name = self.creature_name(entity)?;
+        Some(match self.rarity_of(entity).label() {
+            Some(tier) => format!("{tier} {name}"),
+            None => name,
+        })
+    }
+
+    /// `creature_name`, rare-tier prefixed, species-suffixed when the name
+    /// is a handle, and zone-tagged, falling back to a generic label if
+    /// `entity` isn't a `Creature`. The long form — logs, the roster, the
+    /// manifest header and popups with wrapping rows all read this one.
+    ///
+    /// A `CustomName` gets the prefix too, which is right: renaming a
+    /// program does not make it ordinary.
     ///
     /// A handle names an owned program, not what it *is*, so the species
     /// rides along after it — `Overclocked 0x435eaD Scrapper 3` — the one
@@ -286,15 +300,29 @@ impl Game {
     /// `CustomName` is the player's own choice and stays bare; the species
     /// is on the manifest for whoever wants it.
     pub fn creature_label(&self, entity: Entity) -> String {
-        match self.creature_name(entity) {
-            Some(name) => {
-                let named = match self.rarity_of(entity).label() {
-                    Some(tier) => format!("{tier} {name}"),
-                    None => name,
-                };
+        match self.tiered_name(entity) {
+            Some(named) => {
                 let named = self.append_species_after_a_handle(entity, named);
                 self.zone_tagged_name(entity, named)
             }
+            None => "Program".to_string(),
+        }
+    }
+
+    /// `creature_label` without the species: tier, name, zone. For a
+    /// surface with a fixed-width name cell, where the long label's species
+    /// suffix — the part of the string furthest from the identity a handle
+    /// already gives — would be the first thing a truncating cell clips,
+    /// and the widest one to clip *into* rather than past.
+    ///
+    /// The one caller is the party battle roster's `NAME_W` cell
+    /// (`gui/src/render/battle.rs`), through `party_row`
+    /// (`game/combat_round.rs`) — the hostile roster's `EnemyGroupView`
+    /// reads the species directly instead, since a wild group's species is
+    /// the point of that row, not incidental to it.
+    pub fn creature_short_label(&self, entity: Entity) -> String {
+        match self.tiered_name(entity) {
+            Some(named) => self.zone_tagged_name(entity, named),
             None => "Program".to_string(),
         }
     }

@@ -1653,6 +1653,39 @@ fn a_label_carries_the_species_after_a_handle() {
 }
 
 #[test]
+fn a_short_label_drops_the_species_a_long_label_carries() {
+    let mut game = Game::new(4306, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(pet).insert(ZonePortal(3));
+    let id = *game.world.get::<ProgramId>(pet).unwrap();
+
+    let expected_short = format!("{} 3", crate::handles::of(id));
+    assert_eq!(
+        game.creature_short_label(pet),
+        expected_short,
+        "the short label is tier, name and zone — no species"
+    );
+    assert_ne!(
+        game.creature_short_label(pet),
+        game.creature_label(pet),
+        "the long label carries the species the short one drops"
+    );
+}
+
+#[test]
+fn a_short_label_still_carries_a_custom_name_and_tier() {
+    let mut game = Game::new(4307, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.rename_companion(pet, Some("Hexed".to_string()))
+        .unwrap();
+
+    // A `CustomName` carries no species in either label, so the short and
+    // long forms agree once one is set.
+    assert_eq!(game.creature_short_label(pet), game.creature_label(pet));
+    assert_eq!(game.creature_short_label(pet), "Hexed");
+}
+
+#[test]
 fn a_program_from_a_pre_handle_save_reads_a_handle() {
     let mut game = Game::new(4305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     // Entity identity is private to the `World` that allocated it (see

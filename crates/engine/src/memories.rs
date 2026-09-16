@@ -108,6 +108,29 @@ pub struct MemoryDef {
     pub mood: f32,
 }
 
+impl MemoryDef {
+    /// A def whose `stack_decay` or `mood` falls outside its documented
+    /// range, if any — checked at load rather than trusted at read.
+    ///
+    /// `stack_decay` at or below `-1.0` is the sharp one:
+    /// `Memory::intensity_with` raises it to the strike count
+    /// (`r.powi(n)`), so a negative base alternates sign with parity and
+    /// past `-1.0` grows without bound, flipping a grudge into a fondness
+    /// (or the reverse) on some strikes rather than merely compounding
+    /// oddly. `mood` outside `[0, 1]` breaks `memories::Read`'s own
+    /// contract that `Read::Morale` is *a share of* `Read::Opinion`, never
+    /// more of it and never the opposite sign.
+    fn schema_fault(&self) -> Option<&'static str> {
+        if !(self.stack_decay > 0.0 && self.stack_decay <= 1.0) {
+            return Some("stack_decay");
+        }
+        if !(0.0..=1.0).contains(&self.mood) {
+            return Some("mood");
+        }
+        None
+    }
+}
+
 /// Every memory kind the game knows about, loaded from `assets/memories/`.
 ///
 /// See the module doc for why an empty database is a supported state rather
@@ -144,6 +167,12 @@ impl MemoryDb {
             let text = std::fs::read_to_string(&path)?;
             match ron::from_str::<MemoryDef>(&text) {
                 Ok(def) => {
+                    if let Some(field) = def.schema_fault() {
+                        warnings.push(format!(
+                            "skipped invalid memory file {path:?}: {field} is out of range"
+                        ));
+                        continue;
+                    }
                     db.defs.insert(def.id.clone(), def);
                 }
                 Err(e) => warnings.push(format!("skipped invalid memory file {path:?}: {e}")),
@@ -275,6 +304,73 @@ mod tests {
             "the good file still loads"
         );
         assert!(db.get(&MemoryId::from("broken")).is_none());
+    }
+
+    /// `-1.0` is the boundary `intensity_with`'s doc calls out — `r.powi(n)`
+    /// alternates sign and diverges past it, so a def at or below `-1.0`
+    /// must never reach a store.
+    #[test]
+    fn a_stack_decay_at_or_below_negative_one_is_skipped_and_warns() {
+        let bad = "(\n    id: \"flips\",\n    name: \"Flips\",\n    blurb: \"b\",\n    \
+                    valence: -6.0,\n    half_life: 3000,\n    subject: BaseTile,\n    \
+                    strike_cap: 3,\n    stack_decay: -1.0,\n)\n"
+            .to_string();
+        let (db, warnings) = load(&[("flips.ron", bad)]);
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(warnings[0].contains("flips.ron"), "{warnings:?}");
+        assert!(warnings[0].contains("stack_decay"), "{warnings:?}");
+        assert!(db.get(&MemoryId::from("flips")).is_none());
+    }
+
+    /// `stack_decay: 0.0` is excluded too — `(0, 1]` is half-open on
+    /// purpose, since a zero base makes `intensity_with`'s closed form
+    /// divide by `1.0 - 0.0` and evaluate `0.0.powi(0)`, which is `1.0` for
+    /// `n == 0` alone and `0.0` for every strike after — a cliff, not a
+    /// decay curve.
+    #[test]
+    fn a_stack_decay_of_zero_is_skipped_and_warns() {
+        let bad = "(\n    id: \"cliff\",\n    name: \"Cliff\",\n    blurb: \"b\",\n    \
+                    valence: -6.0,\n    half_life: 3000,\n    subject: BaseTile,\n    \
+                    strike_cap: 3,\n    stack_decay: 0.0,\n)\n"
+            .to_string();
+        let (db, warnings) = load(&[("cliff.ron", bad)]);
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(db.get(&MemoryId::from("cliff")).is_none());
+    }
+
+    /// `mood` outside `[0, 1]` breaks `memories::Read`'s contract that
+    /// `Morale` is a share of `Opinion` — never more of it, never the
+    /// opposite sign.
+    #[test]
+    fn a_mood_outside_zero_to_one_is_skipped_and_warns() {
+        let bad = "(\n    id: \"overfelt\",\n    name: \"Overfelt\",\n    blurb: \"b\",\n    \
+                    valence: -6.0,\n    half_life: 3000,\n    subject: BaseTile,\n    \
+                    strike_cap: 3,\n    mood: 1.5,\n)\n"
+            .to_string();
+        let (db, warnings) = load(&[("overfelt.ron", bad)]);
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(warnings[0].contains("overfelt.ron"), "{warnings:?}");
+        assert!(warnings[0].contains("mood"), "{warnings:?}");
+        assert!(db.get(&MemoryId::from("overfelt")).is_none());
+    }
+
+    /// The two boundaries the checks must not reject: `stack_decay: 1.0`
+    /// (today's default, plain linear stacking) and `mood` at either end of
+    /// `[0, 1]`.
+    #[test]
+    fn the_documented_boundaries_still_load() {
+        let a = "(\n    id: \"a\",\n    name: \"A\",\n    blurb: \"b\",\n    \
+                  valence: -6.0,\n    half_life: 3000,\n    subject: BaseTile,\n    \
+                  strike_cap: 3,\n    stack_decay: 1.0,\n    mood: 0.0,\n)\n"
+            .to_string();
+        let b = "(\n    id: \"b\",\n    name: \"B\",\n    blurb: \"b\",\n    \
+                  valence: -6.0,\n    half_life: 3000,\n    subject: BaseTile,\n    \
+                  strike_cap: 3,\n    stack_decay: 0.001,\n    mood: 1.0,\n)\n"
+            .to_string();
+        let (db, warnings) = load(&[("a.ron", a), ("b.ron", b)]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert!(db.get(&MemoryId::from("a")).is_some());
+        assert!(db.get(&MemoryId::from("b")).is_some());
     }
 
     /// Deleting `assets/memories/` is a supported way to play, so an absent

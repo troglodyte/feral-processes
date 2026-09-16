@@ -44,7 +44,7 @@ spec resolves to a release tag.
 | `2026-09-04-program-extraction-design` | **built**, unplayed; path-pinned | all five phases, 4 (§10) in `v0.13.114`; `StructureDef::strips` and `Game::run_teardown_rigs` resolve in `crates/engine` |
 | `2026-09-04-dev-sprite-editor-design` | **built**, unplayed; path-pinned | `crates/app-core/src/app/sprite_forge.rs` |
 | `2026-09-16-player-emulation-design` | approved, **unbuilt**; no plan yet; after #101 | `Game::kit_of` and `components::Emulation` exist nowhere |
-| `2026-09-16-routine-research-tree-design` | under review, **unbuilt**; no plan yet | `ResearchTree` and `DiscoveredRoutines` exist nowhere |
+| `2026-09-16-routine-research-tree-design` | approved, **unbuilt**; no plan yet | `ResearchTree` and `DiscoveredRoutines` exist nowhere |
 | `2026-09-16-floor-finishes-design` | approved, **unbuilt**; no plan yet | `assets/floors/` and `FloorDb` exist nowhere |
 | `2026-08-31-stack-wanderers-design` | approved, **unbuilt** | `FrameWanderers` exists nowhere in `crates/` |
 | `2026-08-24-departure-memories-design` | brainstorm parked | no departure memory in `assets/memories/` |

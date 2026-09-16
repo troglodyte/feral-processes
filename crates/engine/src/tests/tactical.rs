@@ -2491,6 +2491,46 @@ fn a_sweep_queues_a_bolt_per_body_it_swept() {
     assert!(bolts.iter().all(|b| b.from == (0, 0)));
 }
 
+/// A swing on a battle map is heard off its own queue, so a fight long enough
+/// to push the log past `MESSAGE_LOG_CAP` still sounds. The log is filled
+/// first because that is the fight that went silent: sound read the round's
+/// range by position, and a range pinned at the cap never grew.
+#[test]
+fn a_swing_is_heard_however_full_the_log_is() {
+    let mut game = game();
+    let pack = ranged_fight(&mut game, 1);
+    let player = game.player_entity();
+    place_bodies(&mut game, player, (0, 0), pack[0], (1, 0));
+    for i in 0..2 * crate::MESSAGE_LOG_CAP {
+        game.log(format!("filler {i}"));
+    }
+    game.take_swing_cues();
+
+    assert!(game.tactical_attack(pack[0]));
+
+    let swung = game
+        .message_log(crate::MESSAGE_LOG_CAP)
+        .iter()
+        .filter_map(|line| line.outcome)
+        .collect::<Vec<_>>();
+    assert_eq!(swung.len(), 1, "one swing logged");
+    assert_eq!(game.take_swing_cues(), swung);
+    assert!(game.take_swing_cues().is_empty(), "a drain is a drain");
+}
+
+/// The group model is heard through the reveal, which paces its cues to the
+/// narration, so a swing off the board must not queue a second copy.
+#[test]
+fn a_swing_off_the_board_queues_no_cue() {
+    let mut game = game();
+    game.log_swing(
+        crate::resources::MessageKind::PartyDamage,
+        crate::battle::AttackOutcome::Crit { dmg: 12 },
+        "you tear it clean through",
+    );
+    assert!(game.take_swing_cues().is_empty());
+}
+
 /// Draining is a drain — a second call comes back empty, so a frontend
 /// cannot draw one streak twice.
 #[test]

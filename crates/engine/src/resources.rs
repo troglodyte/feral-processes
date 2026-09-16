@@ -876,6 +876,37 @@ impl TacticalFxQueue {
     }
 }
 
+/// The band each swing on a battle map landed on, queued as it resolves —
+/// the sound half of `BoltCue`, with no cell because a cue is heard rather
+/// than drawn. Capped and drained the same way, and **deliberately not
+/// serialized** for `BoltQueue`'s reason.
+///
+/// **A queue and not the log** because the group model's way of hearing a
+/// swing — `App::advance_reveal` stepping through `Game::battle_log` by
+/// position — has nothing to step through on a battle map: that model never
+/// opens a round, so the range is the whole fight, and once
+/// `MESSAGE_LOG_CAP` drops lines off its front its length stops moving and
+/// every cue after that is silent. Filled by `Game::log_swing` only while a
+/// `TacticalBattle` is open, so the group model is never heard twice.
+#[derive(Resource, Default)]
+pub struct SwingCueQueue {
+    cues: Vec<SwingOutcome>,
+}
+
+impl SwingCueQueue {
+    pub(crate) fn push(&mut self, outcome: SwingOutcome) {
+        self.cues.push(outcome);
+        if self.cues.len() > EFFECT_QUEUE_CAP {
+            let excess = self.cues.len() - EFFECT_QUEUE_CAP;
+            self.cues.drain(0..excess);
+        }
+    }
+
+    pub fn take(&mut self) -> Vec<SwingOutcome> {
+        std::mem::take(&mut self.cues)
+    }
+}
+
 #[derive(Resource, Default)]
 pub struct GameOver {
     pub reason: Option<String>,

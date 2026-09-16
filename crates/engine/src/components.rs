@@ -1748,7 +1748,9 @@ pub struct BuildQuality(pub f32);
 /// makes handles look unrelated is exactly what a stable, meaningful order
 /// needs to not do — id order is assignment order, which at least means
 /// "the one you caught first, sorts first."
-#[derive(Component, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Component, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 pub struct ProgramId(pub u32);
 
 /// What one owned program remembers. Minted empty at `Game::roster_parts`

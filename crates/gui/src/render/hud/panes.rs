@@ -25,8 +25,8 @@ use super::palette;
 use super::strip::Piece;
 use crate::paint::{Painter, Rect, TextRun};
 use crate::render::field::{TagStyle, buff_entries};
-use crate::render::{fusion_color, tier_color};
 use crate::render::popup::Row as PopupRow;
+use crate::render::{fusion_color, tier_color};
 use crate::text::Metrics;
 
 /// Stock rows shown in the PRODUCTION block before the count takes over.

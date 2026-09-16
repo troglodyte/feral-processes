@@ -1380,9 +1380,7 @@ mod tests {
                 ring: 0,
                 talents: Vec::new(),
                 bought_stats: Default::default(),
-                routines: vec![
-                    feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string(),
-                ],
+                routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
                 field_buffs: Vec::new(),
                 nest_position: None,
                 patrol_position: None,

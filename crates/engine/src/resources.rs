@@ -213,6 +213,19 @@ pub struct KnownRoutines(pub BTreeSet<crate::abilities::AbilityId>);
 #[derive(Resource, Default)]
 pub struct KnownTools(pub BTreeSet<crate::tools::ToolId>);
 
+/// Which routine families the player has *discovered* — extracted at least
+/// one rung of, without necessarily having researched any (see
+/// `Game::take_routine`, todo #101). This is what opens a family in the
+/// routine research tree; researching climbs it from there.
+///
+/// Holds ability ids, not family names, so a display-name rename can't
+/// orphan a record — `Game::family_discovered` resolves the id back to a
+/// family at read time. A `BTreeSet` for `KnownRoutines`'s own reason: the
+/// save writes this set out, and a `HashSet`'s iteration order would make
+/// the encoded bytes differ run to run.
+#[derive(Resource, Default)]
+pub struct DiscoveredRoutines(pub BTreeSet<crate::abilities::AbilityId>);
+
 /// How many lines the log holds before dropping its oldest.
 ///
 /// Public because it is the whole of the history screen's reach: asking

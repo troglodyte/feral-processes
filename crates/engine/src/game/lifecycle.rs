@@ -497,6 +497,7 @@ impl Game {
         // the slot below, and knowledge is not what put it there — see
         // `resources::KnownTools`'s doc.
         world.init_resource::<KnownTools>();
+        world.init_resource::<crate::resources::DiscoveredRoutines>();
         world.insert_resource(BuybackLedger::default());
         world.insert_resource(crate::resources::CaravanMemory::default());
         world.insert_resource(ZoneLevel::default());
@@ -1115,6 +1116,9 @@ impl Game {
         });
         world.insert_resource(KnownRoutines(data.known_routines.into_iter().collect()));
         world.insert_resource(KnownTools(data.known_tools.into_iter().collect()));
+        world.insert_resource(crate::resources::DiscoveredRoutines(
+            data.discovered_routines.into_iter().collect(),
+        ));
         world.insert_resource(BuybackLedger({
             // The pre-0.8.9 shelves are drained into the current shape here
             // and read nowhere else, exactly as `fused_gear` is above.
@@ -2415,6 +2419,13 @@ impl Game {
             known_tools: self
                 .world
                 .resource::<KnownTools>()
+                .0
+                .iter()
+                .cloned()
+                .collect(),
+            discovered_routines: self
+                .world
+                .resource::<crate::resources::DiscoveredRoutines>()
                 .0
                 .iter()
                 .cloned()

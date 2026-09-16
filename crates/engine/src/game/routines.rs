@@ -201,6 +201,52 @@ impl Game {
         self.world.resource::<KnownRoutines>().0.contains(ability)
     }
 
+    /// Whether `family` has been discovered — any of its rungs is in
+    /// `DiscoveredRoutines` **or** `KnownRoutines`. The second half is what
+    /// makes a starter routine, and every routine already known in a save
+    /// written before this feature existed, read as discovered with no
+    /// write of its own: nothing needed extracting to already have it.
+    pub fn family_discovered(&self, family: &str) -> bool {
+        let discovered = &self
+            .world
+            .resource::<crate::resources::DiscoveredRoutines>()
+            .0;
+        let known = &self.world.resource::<KnownRoutines>().0;
+        self.world
+            .resource::<AbilityDb>()
+            .all()
+            .filter(|def| crate::routine_tree::family(def) == family)
+            .any(|def| discovered.contains(&def.id) || known.contains(&def.id))
+    }
+
+    /// Whether `family` has a carrier at all — a positive `wild_weight` on
+    /// any of its rungs, or a place in some species' kit. Computed at query
+    /// time rather than cached, because `ResearchDb` has no `SpeciesDb` to
+    /// derive it from at load — see spec §2 "Discoverable vs. always
+    /// visible". A family with no carrier is **always visible** instead:
+    /// nothing can ever discover it, so hiding it behind discovery would
+    /// make it unreachable.
+    pub fn family_is_discoverable(&self, family: &str) -> bool {
+        let abilities = self.world.resource::<AbilityDb>();
+        let rungs: Vec<&str> = abilities
+            .all()
+            .filter(|def| crate::routine_tree::family(def) == family)
+            .map(|def| def.id.as_str())
+            .collect();
+        if abilities
+            .all()
+            .any(|def| rungs.contains(&def.id.as_str()) && def.wild_weight > 0)
+        {
+            return true;
+        }
+        self.world.resource::<SpeciesDb>().all().any(|species| {
+            species
+                .abilities
+                .iter()
+                .any(|declared| rungs.contains(&declared.id.as_str()))
+        })
+    }
+
     /// Whether `ability` is an exclusive routine — one nobody can learn or
     /// etch, reachable only as an already-written disk off a boss or a Stack
     /// trader's shelf.

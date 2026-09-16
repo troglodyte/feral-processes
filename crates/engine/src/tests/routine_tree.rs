@@ -2,6 +2,7 @@
 
 use crate::abilities::{AbilityDb, AbilityDef, AbilityEffect, AbilityTarget};
 use crate::routine_tree::{family, gets_node, routine_prereq, scope_rank, version};
+use crate::species::SpeciesDb;
 use crate::tests::support::test_assets_dir;
 use crate::{DifficultyMode, Game};
 
@@ -224,4 +225,141 @@ fn routine_research_cost_is_monotonic_in_scope_and_version() {
     assert!(routine_research_cost(2, (1, 0)) > routine_research_cost(1, (1, 0)));
     assert!(routine_research_cost(0, (2, 0)) > routine_research_cost(0, (1, 0)));
     assert!(routine_research_cost(0, (3, 0)) > routine_research_cost(0, (2, 0)));
+}
+
+#[test]
+fn a_discovered_save_writes_and_a_pre_feature_save_loads_with_none() {
+    let mut game = Game::new(9110, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    game.world
+        .resource_mut::<crate::resources::DiscoveredRoutines>()
+        .0
+        .insert("hyperthread".to_string());
+
+    let path = std::env::temp_dir().join(format!(
+        "feral_processes_discovered_routines_roundtrip_{}.bin",
+        std::process::id()
+    ));
+    game.save(&path).unwrap();
+    let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+    assert!(
+        loaded
+            .world
+            .resource::<crate::resources::DiscoveredRoutines>()
+            .0
+            .contains("hyperthread"),
+        "a save round trip must carry a discovery over"
+    );
+
+    // A pre-feature save has no `discovered_routines:` line at all — strip
+    // it out of the real file rather than trusting a RON round trip, which
+    // a `#[serde(skip)]` would pass green even if the save on disk carried
+    // nothing (CLAUDE.md's own trap on this).
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        text.contains("discovered_routines"),
+        "the fixture must actually have the key to strip, or this proves nothing"
+    );
+    // The RON pretty-printer wraps a non-empty `Vec` across several lines
+    // (`discovered_routines: [` ... `"hyperthread",` ... `],`), so a
+    // single-line filter would leave the array's body dangling with no
+    // opening bracket. `in_block` skips every line from the opener through
+    // its matching `],`.
+    let mut in_block = false;
+    let stripped: String = text
+        .lines()
+        .filter(|l| {
+            let trimmed = l.trim_start();
+            if in_block {
+                if trimmed == "]," || trimmed == "]" {
+                    in_block = false;
+                }
+                return false;
+            }
+            if trimmed.starts_with("discovered_routines:") {
+                // Ends with `[` only for the multi-line, non-empty form;
+                // the empty form is `discovered_routines: [],` on one line.
+                in_block = trimmed.ends_with('[');
+                return false;
+            }
+            true
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::write(&path, stripped).unwrap();
+    let reloaded = Game::load(&path, &test_assets_dir()).expect("a pre-feature save still loads");
+    let _ = std::fs::remove_file(&path);
+    assert!(
+        reloaded
+            .world
+            .resource::<crate::resources::DiscoveredRoutines>()
+            .0
+            .is_empty(),
+        "a save written before this feature existed has discovered nothing"
+    );
+}
+
+#[test]
+fn knowing_a_rung_or_discovering_one_makes_its_family_discovered() {
+    let mut game = Game::new(9111, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert!(!game.family_discovered("Hyperthread"));
+
+    game.world
+        .resource_mut::<crate::resources::KnownRoutines>()
+        .0
+        .insert("priority_boost".to_string());
+    assert!(
+        game.family_discovered("Hyperthread"),
+        "a known rung counts as discovered even with nothing in DiscoveredRoutines"
+    );
+}
+
+#[test]
+fn hyperthread_is_discoverable_and_a_field_routine_family_is_not() {
+    let game = Game::new(9112, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    assert!(
+        game.family_is_discoverable("Hyperthread"),
+        "hyperthread (v2.0) carries a positive wild_weight"
+    );
+    assert!(
+        !game.family_is_discoverable("Symlink"),
+        "a field routine's family has no wild carrier and no species kit slot"
+    );
+}
+
+/// Independent derivation, so a bug in `family_is_discoverable`'s own OR of
+/// wild pool and species kit cannot mark a family discoverable that nothing
+/// in the shipped assets actually carries.
+#[test]
+fn every_discoverable_family_has_at_least_one_carried_rung() {
+    let game = Game::new(9113, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let abilities = game.world.resource::<AbilityDb>();
+    let species = game.world.resource::<SpeciesDb>();
+    let wild_ids: std::collections::HashSet<&str> = abilities
+        .wild_pool()
+        .into_iter()
+        .map(|(d, _)| d.id.as_str())
+        .collect();
+    let kit_ids: std::collections::HashSet<&str> = species
+        .all()
+        .flat_map(|s| s.abilities.iter())
+        .map(|a| a.id.as_str())
+        .collect();
+
+    let mut families: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for def in abilities.all() {
+        families.insert(crate::routine_tree::family(def));
+    }
+    for family in families {
+        if !game.family_is_discoverable(&family) {
+            continue;
+        }
+        let carried = abilities.all().any(|def| {
+            crate::routine_tree::family(def) == family
+                && (wild_ids.contains(def.id.as_str()) || kit_ids.contains(def.id.as_str()))
+        });
+        assert!(
+            carried,
+            "{family:?} reads as discoverable but nothing carries any of its rungs"
+        );
+    }
 }

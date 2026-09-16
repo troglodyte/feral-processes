@@ -42,6 +42,27 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.195
+
+**Every program you own now goes by a handle of its own, like `0xed7631`,
+instead of its species name, so two Wintermutes on the roster are no
+longer the same word twice.** Wild programs and summons keep their
+species name, and a name you give a program still wins over its handle.
+The handle is worked out from the program itself rather than stored, so a
+save from before this release shows handles the moment it loads. Logs and
+popups print the handle with the tier, species and sector around it. The
+battle roster moves the tier to a tag after the name so the handle is
+never cut off, and the CREW pane shows the handle and sector alone.
+Rosters now sort by species, then by when each program joined.
+
+**Memory files can now say how much a repeated event adds each time, and
+how much of a memory weighs on mood rather than on opinion.** The two new
+fields, `stack_decay` and `mood`, default to what every shipped memory
+already did, so no number in the game has changed. A memory file with
+either field out of range is skipped with a warning, as any malformed file
+is. `docs/base-staff-interactions.md` describes every way base staff
+behave, in plain English, for review.
+
 ## 0.13.194
 
 **Researching Model Inspection teaches eleven routines that attack a

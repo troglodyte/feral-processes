@@ -42,6 +42,16 @@ under this rule on 2026-09-11; the rest stand as written.
 Entries below `0.2.0` predate versioning and are kept as written, newest
 first, separated by a rule.
 
+## 0.13.197
+
+**Sound no longer cuts out partway through a tactical battle, and each
+blow on a battle map now sounds the moment it lands.** A tactical fight
+used to be heard through the pacing that scrolls a normal battle's
+narration, which lost its place once the message log reached its
+100-line limit, so a long fight went silent until the next one began.
+Battle-map blows now have a sound queue of their own; normal battles
+sound exactly as before.
+
 ## 0.13.196
 
 **Routines are now researched on their own screen, "Routine research" in

@@ -1,9 +1,0 @@
-(
-    id: "self_exec",
-    name: "Self-Execution",
-    description: "A battle routine that raises one ally's attack for a few rounds. Write it onto a Routine Disk to run it.",
-    cost: 14,
-    materials: [("routine_disk", 4), ("logic_wafer", 4)],
-    requires: ["routine_fabrication"],
-    unlocks_abilities: ["priority_boost"],
-)

@@ -5,4 +5,5 @@
     target: OneAlly,
     power_cost: 14.0,
     effect: FieldBuff(kind: Mitigation, power: 12),
+    research_zone: 2,
 )

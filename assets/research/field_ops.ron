@@ -1,9 +1,0 @@
-(
-    id: "field_ops",
-    name: "Field Operations",
-    description: "Two routines that work slowly over time: one repairs an ally, the other refills the party's Power. Write one onto a Routine Disk to run it.",
-    cost: 20,
-    materials: [("routine_disk", 6), ("logic_wafer", 6)],
-    requires: ["self_exec"],
-    unlocks_abilities: ["repair_loop", "trickle_charge"],
-)

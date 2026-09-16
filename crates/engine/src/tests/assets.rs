@@ -627,8 +627,8 @@ fn an_item_with_no_authored_value_falls_back_to_the_floor_price() {
 }
 
 /// The thirty-four hunt-only routines are reachable exactly one way: off a wild
-/// carrier. A species or research file naming one would quietly restore the
-/// "just target the species" loop this set exists to break.
+/// carrier. A species file naming one would quietly restore the "just
+/// target the species" loop this set exists to break.
 ///
 /// The count is a tripwire, not a target: the pool's size is a design
 /// decision and widening it dilutes every routine already in it, since
@@ -637,8 +637,15 @@ fn an_item_with_no_authored_value_falls_back_to_the_floor_price() {
 /// (the Row Hammer ladder, Skim and Segfault's new upper rungs) took the
 /// total authored weight from 185 to 212, so each existing entry now turns
 /// up about an eighth less often.
+///
+/// **The routine-tree half of this check is gone, not weakened.** Every
+/// ability — hunt-only included — gets a synthesised research node now
+/// (`routine_tree::synthesise_nodes`), and that is by design: researching a
+/// hunt-only routine's node still requires *discovering* it first, off a
+/// carrier, exactly as this test polices for a species kit. A node existing
+/// is not a second door in.
 #[test]
-fn no_species_or_research_file_grants_a_wild_only_ability() {
+fn no_species_file_grants_a_wild_only_ability() {
     let game = Game::new(3301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let wild_only: Vec<String> = game
         .world
@@ -656,16 +663,6 @@ fn no_species_or_research_file_grants_a_wild_only_ability() {
                 "species {:?} grants {:?}, which is meant to be findable only in the field",
                 species.id,
                 ability.id
-            );
-        }
-    }
-    for node in game.world.resource::<crate::research::ResearchDb>().all() {
-        for id in &node.unlocks_abilities {
-            assert!(
-                !wild_only.contains(id),
-                "research node {:?} unlocks {:?}, which is meant to be findable only in the field",
-                node.id,
-                id
             );
         }
     }
@@ -1536,8 +1533,7 @@ fn every_shipped_field_routine_can_actually_be_obtained() {
         .world
         .resource::<crate::research::ResearchDb>()
         .all()
-        .flat_map(|node| node.unlocks_abilities.iter())
-        .map(|id| id.as_str())
+        .filter_map(|node| node.teaches.as_deref())
         .chain(
             game.world
                 .resource::<SpeciesDb>()
@@ -4516,16 +4512,24 @@ fn every_research_material_is_reachable_through_that_nodes_own_prerequisites() {
     );
 }
 
-/// The other half: the shipped tree actually *has* bills. The census above
-/// passes vacuously against a tree with none, so a node whose `materials`
-/// line was deleted by hand would read as free rather than as a regression.
+/// The other half: the shipped **base** tree actually *has* bills. The
+/// census above passes vacuously against a tree with none, so a node whose
+/// `materials` line was deleted by hand would read as free rather than as a
+/// regression.
+///
+/// **Routine-tree nodes are excluded, by design rather than by omission.**
+/// A synthesised node carries no material bill at all (spec §2 "Cost") —
+/// there is nothing to check it against, since a derived node cannot
+/// satisfy the "a bill may only name what its own prerequisites can make"
+/// rule the way an authored node can.
 #[test]
-fn every_shipped_research_node_costs_materials() {
+fn every_shipped_base_research_node_costs_materials() {
     let game = Game::new(84, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let bare: Vec<&str> = game
         .world
         .resource::<crate::research::ResearchDb>()
         .all()
+        .filter(|d| d.tree == crate::research::ResearchTree::Base)
         .filter(|d| d.materials.is_empty())
         .map(|d| d.id.as_str())
         .collect();

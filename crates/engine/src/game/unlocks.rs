@@ -225,8 +225,46 @@ impl Game {
         Ok(())
     }
 
+    /// Whether `def` is researched. For a **routine** node (`teaches` is
+    /// `Some`) that means its ability is in `KnownRoutines`; for every other
+    /// node it means the node's own id is in `Research`. The one door
+    /// through which "researched" and "known" agree — see spec §1
+    /// "Researched means known" — so `is_researched`,
+    /// `missing_prereqs` and `select_research`'s already-researched
+    /// refusal cannot answer a routine node from two different stores.
+    pub fn node_researched(&self, def: &ResearchDef) -> bool {
+        match &def.teaches {
+            Some(ability) => self.knows_routine(ability),
+            None => self.world.resource::<Research>().0.contains(&def.id),
+        }
+    }
+
     pub fn is_researched(&self, id: &str) -> bool {
-        self.world.resource::<Research>().0.contains(id)
+        match self.world.resource::<ResearchDb>().get(id) {
+            Some(def) => self.node_researched(def),
+            None => false,
+        }
+    }
+
+    /// Whether prerequisite `id` is satisfied — `missing_prereqs`'s one test
+    /// per entry. A routine prerequisite is satisfied by its own ability
+    /// being known *or* by any higher version at the same scope in its
+    /// family already being known (`routine_tree::rung_satisfied`), so a
+    /// starter routine at Single v2.0 does not strand a Party v1.0 rung
+    /// waiting on a Single v1.0 nobody needs. Every other node reads
+    /// `is_researched` alone.
+    fn prereq_satisfied(&self, id: &str) -> bool {
+        let Some(def) = self.world.resource::<ResearchDb>().get(id) else {
+            return false;
+        };
+        match &def.teaches {
+            Some(ability) => {
+                let abilities = self.world.resource::<AbilityDb>();
+                let known = &self.world.resource::<KnownRoutines>().0;
+                crate::routine_tree::rung_satisfied(abilities, known, ability)
+            }
+            None => self.node_researched(def),
+        }
     }
 
     /// Display names of `def`'s prerequisites that aren't unlocked yet, in
@@ -235,7 +273,7 @@ impl Game {
         let db = self.world.resource::<ResearchDb>();
         def.requires
             .iter()
-            .filter(|id| !self.is_researched(id))
+            .filter(|id| !self.prereq_satisfied(id))
             .map(|id| {
                 db.get(id)
                     .map(|d| d.name.clone())
@@ -307,7 +345,6 @@ impl Game {
     /// leftover here would be a name only the engine could see.
     fn research_unlocks(&self, def: &crate::research::ResearchDef) -> Option<String> {
         let structures = self.world.resource::<StructureDb>();
-        let abilities = self.world.resource::<AbilityDb>();
         let tools = self.world.resource::<ToolDb>();
         let names: Vec<&str> = def
             .unlocks_structures
@@ -317,11 +354,6 @@ impl Game {
                 def.unlocks_recipes
                     .iter()
                     .map(|r| self.item_name(&r.result)),
-            )
-            .chain(
-                def.unlocks_abilities
-                    .iter()
-                    .filter_map(|id| abilities.get(id).map(|a| a.name.as_str())),
             )
             .chain(
                 def.unlocks_tools
@@ -423,7 +455,7 @@ impl Game {
                     unlocks: self.research_unlocks(def),
                     recommended: recommended.contains(&def.id),
                     #[cfg(test)]
-                    unlocks_abilities: def.unlocks_abilities.clone(),
+                    teaches: def.teaches.clone(),
                 }
             })
             .collect();
@@ -524,28 +556,17 @@ impl Game {
         }
     }
 
-    /// What completing a node hands over: the routines it teaches and the
-    /// tools it teaches you to forge.
+    /// What completing a node hands over besides the routine `settle_research`
+    /// already wrote into `KnownRoutines` for a `teaches` node: the tools it
+    /// teaches you to forge.
     ///
     /// Extracted rather than copied into the project path, because a doc
     /// comment cannot hold two copies of a formula in step and the copy that
     /// drifts is the one nobody runs — `CLAUDE.md` records this biting the
     /// repo four times.
     fn grant_research_knowledge(&mut self, def: &ResearchDef) {
-        // Knowledge, not items: what a node hands over is the ability to
-        // write this routine onto a blank disk the base has to manufacture.
-        for ability in &def.unlocks_abilities {
-            let name = self.ability_display_name(ability);
-            let fresh = self
-                .world
-                .resource_mut::<KnownRoutines>()
-                .0
-                .insert(ability.clone());
-            if fresh {
-                self.log(format!("You learn the {name} routine."));
-            }
-        }
-        // `unlocks_tools`' own version of the loop above — a tool mirrors a
+        // `unlocks_tools`' own version of the loop `unlocks_abilities` used to
+        // run here — a tool mirrors a
         // routine rung for rung (spec decision 6), including the
         // fresh-insert check: a second node naming an already-known tool
         // must not repeat the log line.
@@ -832,10 +853,23 @@ impl Game {
         {
             return;
         }
-        self.world
-            .resource_mut::<Research>()
-            .0
-            .insert(def.id.clone());
+        // "Researched means known" (spec §1): a routine node writes its
+        // ability into `KnownRoutines` and never touches `Research`, so a
+        // routine node's researched state has exactly one record.
+        match &def.teaches {
+            Some(ability) => {
+                self.world
+                    .resource_mut::<KnownRoutines>()
+                    .0
+                    .insert(ability.clone());
+            }
+            None => {
+                self.world
+                    .resource_mut::<Research>()
+                    .0
+                    .insert(def.id.clone());
+            }
+        }
         // `log_base`, matching selection and abandonment: completion is a base
         // event now and can fire while the party is four frames down the
         // Stack. A plain `log()` is `MessageKind::Info`, which

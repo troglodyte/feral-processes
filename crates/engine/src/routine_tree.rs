@@ -137,6 +137,33 @@ pub fn routine_prereq(abilities: &AbilityDb, def: &AbilityDef) -> Option<Ability
         .map(|d| d.id.clone())
 }
 
+/// Whether `ability`'s rung counts as met for prerequisite purposes: it is
+/// known, **or** any higher version at the same scope in its family is
+/// known. Without the second half, a new game's starter routine at Single
+/// v2.0 would leave a Party v1.0 rung waiting on a Single v1.0 nobody
+/// needs — see spec §1 "Researched means known".
+pub fn rung_satisfied(
+    abilities: &AbilityDb,
+    known: &std::collections::BTreeSet<AbilityId>,
+    ability: &str,
+) -> bool {
+    if known.contains(ability) {
+        return true;
+    }
+    let Some(def) = abilities.get(ability) else {
+        return false;
+    };
+    let fam = family(def);
+    let scope = scope_rank(def.target);
+    let ver = version(&def.name);
+    abilities.all().any(|d| {
+        known.contains(&d.id)
+            && family(d) == fam
+            && scope_rank(d.target) == scope
+            && version(&d.name) > ver
+    })
+}
+
 /// The synthesised id for `ability`'s research node — `"routine/<id>"`,
 /// stable across a rename of the ability's display name.
 pub fn node_id(ability: &str) -> String {
@@ -174,7 +201,6 @@ pub fn synthesise_nodes(abilities: &AbilityDb) -> Vec<ResearchDef> {
                 recommended: false,
                 unlocks_structures: Vec::new(),
                 unlocks_recipes: Vec::new(),
-                unlocks_abilities: Vec::new(),
                 unlocks_tools: Vec::new(),
                 tree: ResearchTree::Routines,
                 teaches: Some(def.id.clone()),

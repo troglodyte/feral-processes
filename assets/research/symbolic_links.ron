@@ -1,9 +1,0 @@
-(
-    id: "symbolic_links",
-    name: "Symbolic Links",
-    description: "A routine that takes your party straight home to base from anywhere, even deep in the Stack, so going down is never a one-way trip. Write it onto a Routine Disk to run it.",
-    cost: 22,
-    materials: [("routine_disk", 6), ("logic_wafer", 6)],
-    requires: ["self_exec"],
-    unlocks_abilities: ["symlink"],
-)

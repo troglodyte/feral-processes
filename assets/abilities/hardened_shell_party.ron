@@ -12,4 +12,5 @@
     target: WholeParty,
     power_cost: 32.0,
     effect: FieldBuff(kind: Mitigation, power: 12),
+    research_zone: 3,
 )

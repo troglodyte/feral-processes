@@ -484,7 +484,7 @@ fn the_player_has_no_abilities_until_they_research_one() {
 #[test]
 fn researching_self_execution_grants_the_player_priority_boost() {
     let mut game = Game::new(32, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    unlock_research_chain(&mut game, "self_exec");
+    unlock_research_chain(&mut game, "routine/priority_boost");
 
     give_disks(&mut game, 1);
     let player = game.player_entity();
@@ -508,14 +508,19 @@ fn researching_self_execution_grants_the_player_priority_boost() {
 /// Two nodes may legitimately name the same ability — a mod branching the
 /// tree, say. Knowledge is a set, so the second node teaches nothing new,
 /// and installing is still a separate, deliberate act that costs a disk.
+///
+/// `teaches` is not something a shipped `.ron` file authors — only
+/// `routine_tree::synthesise_nodes` does — but nothing in the loader
+/// refuses it either, so a mod naming it on a hand-authored node is exactly
+/// this fixture.
 #[test]
 fn an_ability_granted_by_two_nodes_is_learned_once() {
     const ALSO_BOOST: &str = r#"(
         id: "also_boost",
         name: "Redundant Routine",
-        description: "Grants what self_exec already grants.",
+        description: "Grants what the routine tree's own node already grants.",
         cost: 12,
-        unlocks_abilities: ["priority_boost"],
+        teaches: Some("priority_boost"),
     )"#;
     let dir = modded_assets_dir(
         "dup_ability",
@@ -526,7 +531,7 @@ fn an_ability_granted_by_two_nodes_is_learned_once() {
         &[],
     );
     let mut game = Game::new(33, DifficultyMode::Forgiving, &dir).unwrap();
-    unlock_research_chain(&mut game, "self_exec");
+    unlock_research_chain(&mut game, "routine/priority_boost");
     unlock_research_chain(&mut game, "also_boost");
 
     assert_eq!(
@@ -568,7 +573,8 @@ fn an_ability_granted_by_two_nodes_is_learned_once() {
 #[test]
 fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
     let mut game = Game::new(35, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    unlock_research_chain(&mut game, "runtime_patching");
+    unlock_research_chain(&mut game, "routine/hot_patch");
+    unlock_research_chain(&mut game, "routine/priority_boost");
     let player = game.player_entity();
     // Both grants need a slot to land in beside the decompile a new game
     // installs, and `PLAYER_ROUTINE_SLOT_BASE` buys only two.
@@ -583,7 +589,7 @@ fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
         .actor_abilities(player)
         .iter()
         .position(|a| a.id == "hot_patch")
-        .expect("runtime_patching grants hot_patch");
+        .expect("routine/hot_patch grants hot_patch");
     // Not 1: initiative is a roll (`roll_initiative`), and wild spawns now
     // draw from the same `GameRng` (see `Game::roll_wild_routine`), so which
     // side goes first in this round is no longer pinned by this seed alone.
@@ -633,7 +639,7 @@ fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
 fn a_player_special_spends_its_authored_power_cost() {
     fn round_cost(action: BattleAction) -> f32 {
         let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        unlock_research_chain(&mut game, "kernel_privileges");
+        unlock_research_chain(&mut game, "routine/null_route");
         let player = game.player_entity();
         give_disks(&mut game, 1);
         fit_routine(&mut game, player, "null_route");
@@ -649,7 +655,7 @@ fn a_player_special_spends_its_authored_power_cost() {
     }
 
     let mut probe = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    unlock_research_chain(&mut probe, "kernel_privileges");
+    unlock_research_chain(&mut probe, "routine/null_route");
     give_disks(&mut probe, 1);
     let probe_player = probe.player_entity();
     fit_routine(&mut probe, probe_player, "null_route");
@@ -657,7 +663,7 @@ fn a_player_special_spends_its_authored_power_cost() {
     let index = abilities
         .iter()
         .position(|a| a.id == "null_route")
-        .expect("kernel_privileges grants null_route");
+        .expect("routine/null_route grants null_route");
     let cost = crate::abilities::routine_power_cost(&abilities[index]);
     assert!(
         cost > 0.0,
@@ -683,7 +689,8 @@ fn a_player_special_spends_its_authored_power_cost() {
 #[test]
 fn a_save_round_trip_preserves_the_players_abilities() {
     let mut game = Game::new(40, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    unlock_research_chain(&mut game, "runtime_patching");
+    unlock_research_chain(&mut game, "routine/hot_patch");
+    unlock_research_chain(&mut game, "routine/priority_boost");
     let player = game.player_entity();
     // Both grants need a slot to land in beside the decompile a new game
     // installs, and `PLAYER_ROUTINE_SLOT_BASE` buys only two.

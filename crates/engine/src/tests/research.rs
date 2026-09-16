@@ -655,37 +655,42 @@ fn completing_clears_the_project_drops_its_progress_row_and_withdraws_its_orders
     );
 }
 
-/// The shared-helper regression. The routines and tools a node hands over are
-/// granted by `grant_research_knowledge`, which the project path calls rather
-/// than keeping a copy of — a copy is what drifts.
+/// The shared-helper regression. `settle_research` writes a routine node's
+/// ability straight into `KnownRoutines` (spec §1 "Researched means
+/// known"), and `grant_research_knowledge` — the tool half — is what the
+/// project path calls rather than keeping a copy of either.
 #[test]
-fn completing_grants_the_nodes_abilities_and_tools() {
+fn completing_a_routine_node_teaches_its_ability() {
     let mut game = Game::new(725, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let taught = game
+    let (node_id, ability) = game
         .world
         .resource::<ResearchDb>()
         .all()
-        .find(|d| !d.unlocks_abilities.is_empty())
-        .map(|d| (d.id.clone(), d.unlocks_abilities.clone()))
+        .find_map(|d| d.teaches.clone().map(|a| (d.id.clone(), a)))
         .expect("the shipped tree teaches routines somewhere");
-    research_prereqs_of(&mut game, &taught.0);
+    research_prereqs_of(&mut game, &node_id);
+    let zone = game
+        .world
+        .resource::<ResearchDb>()
+        .get(&node_id)
+        .map(|d| d.min_zone)
+        .unwrap_or(0);
+    set_zone(&mut game, zone);
     base_with_a_research_node(&mut game);
-    shelve_research_bill(&mut game, &taught.0, 8, 8);
-    game.select_research(&taught.0).unwrap();
-    fill_research_progress(&mut game, &taught.0);
+    shelve_research_bill(&mut game, &node_id, 8, 8);
+    game.select_research(&node_id).unwrap();
+    fill_research_progress(&mut game, &node_id);
 
     game.tick();
 
-    assert!(game.is_researched(&taught.0));
-    for ability in &taught.1 {
-        assert!(
-            game.world
-                .resource::<crate::resources::KnownRoutines>()
-                .0
-                .contains(ability),
-            "completing must teach {ability}, not just mark the node"
-        );
-    }
+    assert!(game.is_researched(&node_id));
+    assert!(
+        game.world
+            .resource::<crate::resources::KnownRoutines>()
+            .0
+            .contains(&ability),
+        "completing must teach {ability}, not just mark the node"
+    );
 }
 
 /// Nothing in this feature may shift the seeded stream — a retune of what a
@@ -1000,7 +1005,8 @@ fn no_research_node_is_left_unlocking_nothing() {
         assert!(
             !def.unlocks_structures.is_empty()
                 || !def.unlocks_recipes.is_empty()
-                || !def.unlocks_abilities.is_empty(),
+                || !def.unlocks_tools.is_empty()
+                || def.teaches.is_some(),
             "{} unlocks nothing and is dead weight in the tree",
             node.id
         );
@@ -1014,8 +1020,14 @@ fn cheapest_gated_node(game: &Game, zone: u32) -> ResearchDef {
     game.world
         .resource::<ResearchDb>()
         .all()
-        .find(|d| d.min_zone == zone)
-        .unwrap_or_else(|| panic!("the shipped tree should band something at zone {zone}"))
+        // Base tree only: these tests are about the base tree's own zone
+        // gating, and `ResearchDb::all()` now also carries one synthesised
+        // routine node per eligible ability, many of them roots of their
+        // own family with no prerequisite — exactly what
+        // `a_node_can_report_both_a_missing_prereq_and_its_zone` needs to
+        // *not* pick.
+        .find(|d| d.min_zone == zone && d.tree == crate::research::ResearchTree::Base)
+        .unwrap_or_else(|| panic!("the shipped base tree should band something at zone {zone}"))
         .clone()
 }
 
@@ -1978,14 +1990,10 @@ fn a_research_node_reports_everything_it_hands_over() {
     );
 
     let deep = research_node(&game, "deep_analysis");
-    let line = deep.unlocks.expect("a node that teaches routines says so");
-    assert!(
-        line.starts_with("Unlocks: Deep Scan"),
-        "routines lead, in the order the node authored them: {line:?}"
-    );
-    assert!(
-        line.contains("Core Tap") && line.contains("Gear Puller"),
-        "tools are named too, after the routines: {line:?}"
+    let line = deep.unlocks.expect("a node that teaches tools says so");
+    assert_eq!(
+        line, "Unlocks: Core Tap, Gear Puller",
+        "deep_analysis grants only tools now — its routines moved to the routine tree (todo #101)"
     );
 }
 

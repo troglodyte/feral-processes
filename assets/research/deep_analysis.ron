@@ -1,11 +1,10 @@
 (
     id: "deep_analysis",
     name: "Deep Analysis",
-    description: "Map routines that last until you next rest: better capture odds, more XP, fewer surprise fights and more drops. Also two tools for downed programs: one pulls out materials, one pulls off its gear.",
+    description: "Two tools for downed programs: one pulls out materials, one pulls off its gear.",
     cost: 130,
     materials: [("routine_disk", 16), ("logic_wafer", 16)],
     min_zone: 3,
-    requires: ["field_ops"],
-    unlocks_abilities: ["deep_scan", "trace_analysis", "stealth_protocol", "salvage_routine"],
+    requires: ["routine_fabrication"],
     unlocks_tools: ["core_tap", "harness_puller"],
 )

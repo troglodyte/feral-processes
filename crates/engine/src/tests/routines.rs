@@ -620,9 +620,9 @@ fn researching_a_node_teaches_the_routine_rather_than_installing_or_stocking_it(
     let node = game
         .research_nodes()
         .into_iter()
-        .find(|n| !n.unlocks_abilities.is_empty())
+        .find(|n| n.teaches.is_some())
         .expect("some shipped node grants an ability");
-    let ability = node.unlocks_abilities[0].clone();
+    let ability = node.teaches.clone().unwrap();
 
     unlock_research_chain(&mut game, &node.id);
 

@@ -5,4 +5,5 @@
     target: WholeParty,
     power_cost: 18.0,
     effect: FieldBuff(kind: CaptureBoost, power: 20),
+    research_zone: 3,
 )

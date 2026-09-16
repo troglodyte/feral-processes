@@ -45,8 +45,7 @@ fn nothing_a_new_game_ships_with_teaches_an_exclusive_routine() {
         .world
         .resource::<crate::research::ResearchDb>()
         .all()
-        .flat_map(|node| node.unlocks_abilities.iter())
-        .map(|id| id.as_str())
+        .filter_map(|node| node.teaches.as_deref())
         .chain(
             game.world
                 .resource::<SpeciesDb>()

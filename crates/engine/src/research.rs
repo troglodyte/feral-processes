@@ -80,16 +80,8 @@ pub struct ResearchDef {
     pub unlocks_structures: Vec<StructureId>,
     #[serde(default)]
     pub unlocks_recipes: Vec<ResearchRecipe>,
-    /// Abilities this node hands over, as routine items dropped into cargo
-    /// the moment it is researched (see `Game::settle_research`). Researching
-    /// a routine and installing it are two separate acts. The abilities
-    /// themselves are data in `assets/abilities/`.
-    #[serde(default)]
-    pub unlocks_abilities: Vec<crate::abilities::AbilityId>,
     /// Tools this node hands over the knowledge to forge, as tool ids added
-    /// to `resources::KnownTools` (see `Game::settle_research`) —
-    /// `unlocks_abilities`'s own shape, mirrored rung for rung the way a
-    /// tool mirrors a routine throughout (spec decision 6). The tools
+    /// to `resources::KnownTools` (see `Game::settle_research`). The tools
     /// themselves are data in `assets/tools/`.
     #[serde(default)]
     pub unlocks_tools: Vec<ToolId>,
@@ -129,11 +121,10 @@ impl ResearchDb {
     /// to a fixpoint. Malformed files are skipped with a warning rather than
     /// aborting the load, so one bad mod file can't crash startup.
     ///
-    /// An unknown id in `unlocks_abilities` or `unlocks_tools` is treated
-    /// more gently than an unknown structure: the id is dropped and the
-    /// node kept, because a node also unlocks structures and recipes, and
-    /// killing it over one bad ability or tool id would silently remove
-    /// content the modder never touched.
+    /// An unknown id in `unlocks_tools` is treated more gently than an
+    /// unknown structure: the id is dropped and the node kept, because a
+    /// node also unlocks structures and recipes, and killing it over one
+    /// bad tool id would silently remove content the modder never touched.
     pub fn load_dir(
         dir: &Path,
         structures: &StructureDb,
@@ -151,18 +142,9 @@ impl ResearchDb {
             match ron::from_str::<ResearchDef>(&text) {
                 Ok(mut def) => {
                     // `id` is cloned out first because `retain`'s closure
-                    // borrows it while `unlocks_abilities` is borrowed
+                    // borrows it while `unlocks_tools` is borrowed
                     // mutably — same shape as `SpeciesDb::load_dir`.
                     let id = def.id.clone();
-                    def.unlocks_abilities.retain(|ability| {
-                        let known = abilities.get(ability).is_some();
-                        if !known {
-                            warnings.push(format!(
-                                "research {id:?}: unknown ability {ability:?} — dropped"
-                            ));
-                        }
-                        known
-                    });
                     def.unlocks_tools.retain(|tool| {
                         let known = tools.get(tool.as_str()).is_some();
                         if !known {
@@ -311,8 +293,9 @@ mod tests {
 
     /// Writes `files` as `.ron` into a fresh temp dir and loads a `ResearchDb`
     /// from it against a `StructureDb` and an `AbilityDb` built from the real
-    /// assets — so `unlocks_structures` and `unlocks_abilities` validation
-    /// both run against real ids.
+    /// assets — so `unlocks_structures` and `unlocks_tools` validation both
+    /// run against real ids, and so every ability in the real set gets a
+    /// synthesised node alongside whatever `files` authors.
     fn load(tag: &str, files: &[(&str, &str)]) -> (ResearchDb, Vec<String>) {
         let dir = std::env::temp_dir().join(format!("feral_research_{}_{tag}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -346,10 +329,6 @@ mod tests {
         assert_eq!(def.cost, 8);
         assert!(def.requires.is_empty(), "requires defaults to empty");
         assert!(def.unlocks_recipes.is_empty(), "recipes default to empty");
-        assert!(
-            def.unlocks_abilities.is_empty(),
-            "unlocks_abilities defaults to empty"
-        );
         assert_eq!(def.min_zone, 0, "an absent min_zone means ungated");
         assert_eq!(def.unlocks_structures, vec!["compiler".to_string()]);
         assert!(warnings.is_empty(), "a valid node warns about nothing");
@@ -370,8 +349,15 @@ mod tests {
         assert!(warnings.is_empty(), "a valid node warns about nothing");
     }
 
+    /// An authored `.ron` file naming the retired `unlocks_abilities` field
+    /// keeps loading, and the field is silently dropped rather than
+    /// rejected — CLAUDE.md's rule for any unknown field, since nothing in
+    /// this parser sets `deny_unknown_fields`. A mod that still names it
+    /// (or a stale `dev-saves/` template) does not fail to load; it just
+    /// grants nothing through it any more, because a routine's only door
+    /// in is now a synthesised node's `teaches`.
     #[test]
-    fn a_node_may_unlock_abilities() {
+    fn a_node_naming_the_retired_unlocks_abilities_field_still_loads() {
         let node = r#"(
             id: "self_exec",
             name: "Self-Execution",
@@ -379,38 +365,12 @@ mod tests {
             cost: 12,
             unlocks_abilities: ["priority_boost"],
         )"#;
-        let (db, warnings) = load("grants_ability", &[("self_exec", node)]);
-        let def = db.get("self_exec").expect("valid node should load");
-        assert_eq!(def.unlocks_abilities, vec!["priority_boost".to_string()]);
-        assert!(warnings.is_empty(), "a valid node warns about nothing");
-    }
-
-    /// A node can also unlock structures and recipes, so one bad ability id
-    /// must not take the whole node — and everything else it grants — with
-    /// it. Mirrors how `SpeciesDb::load_dir` treats an unknown ability.
-    #[test]
-    fn an_unknown_ability_id_is_dropped_but_the_node_survives() {
-        let node = r#"(
-            id: "automation",
-            name: "Automation",
-            description: "Self-running compile jobs.",
-            cost: 8,
-            unlocks_structures: ["compiler"],
-            unlocks_abilities: ["priority_boost", "no_such_ability"],
-        )"#;
-        let (db, warnings) = load("unknown_ability", &[("automation", node)]);
-        let def = db.get("automation").expect("the node itself must survive");
-        assert_eq!(
-            def.unlocks_abilities,
-            vec!["priority_boost".to_string()],
-            "the unknown id is dropped and the known one kept"
+        let (db, warnings) = load("retired_field", &[("self_exec", node)]);
+        assert!(
+            db.get("self_exec").is_some(),
+            "the node itself must survive"
         );
-        assert_eq!(
-            def.unlocks_structures,
-            vec!["compiler".to_string()],
-            "the node's other unlocks are untouched"
-        );
-        assert_eq!(warnings.len(), 1, "the dropped id explains itself");
+        assert!(warnings.is_empty(), "an unknown field warns about nothing");
     }
 
     /// `unlocks_tools`' own version of the test above — a tool mirrors a
@@ -539,10 +499,27 @@ mod tests {
         // the `HashMap` with no warning from either side, and a node dropped
         // for naming an unknown prereq or structure disappears just as
         // quietly — both leave the loaded count short of the file count.
+        //
+        // `db.all()` also carries one synthesised routine node per
+        // `routine_tree::gets_node`-eligible ability now, so the base-tree
+        // count is filtered to `tree == Base` rather than read off `all()`
+        // directly.
         assert_eq!(
-            db.all().count(),
+            db.all().filter(|d| d.tree == ResearchTree::Base).count(),
             ron_file_count,
-            "every .ron file in assets/research should have loaded as a distinct node"
+            "every .ron file in assets/research should have loaded as a distinct Base node"
+        );
+        let synthesised = db
+            .all()
+            .filter(|d| d.tree == ResearchTree::Routines)
+            .count();
+        let eligible = abilities
+            .all()
+            .filter(|def| crate::routine_tree::gets_node(&abilities, def))
+            .count();
+        assert_eq!(
+            synthesised, eligible,
+            "one synthesised node per gets_node-eligible ability"
         );
         assert_eq!(
             db.get("cortex").map(|d| d.cost),
@@ -679,7 +656,16 @@ mod tests {
             "order",
             &[("cheap", cheap), ("b_mid", mid_b), ("a_mid", mid_a)],
         );
-        let ids: Vec<&str> = db.all().map(|d| d.id.as_str()).collect();
+        // `load` always brings in the real ability set's synthesised
+        // routine nodes alongside the three fixture files, so the fixture
+        // ids are picked back out in the order `all()` produced them rather
+        // than compared against the whole list.
+        let fixture_ids = ["cheap", "a_mid", "b_mid"];
+        let ids: Vec<&str> = db
+            .all()
+            .map(|d| d.id.as_str())
+            .filter(|id| fixture_ids.contains(id))
+            .collect();
         assert_eq!(
             ids,
             vec!["cheap", "a_mid", "b_mid"],

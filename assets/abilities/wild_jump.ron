@@ -5,4 +5,5 @@
     target: WholeParty,
     effect: Jump,
     power_cost: 20.0,
+    research_zone: 3,
 )

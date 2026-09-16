@@ -6,4 +6,5 @@
     effect: Debuff(kind: Stun, power: 0, duration: 1),
     cooldown: 3,
     power_cost: 7.0,
+    research_zone: 3,
 )

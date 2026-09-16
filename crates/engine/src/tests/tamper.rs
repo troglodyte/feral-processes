@@ -124,7 +124,10 @@ fn a_tamper_routine_never_runs_on_the_map() {
 }
 
 /// **Every tactical-only routine says so in its own description**, and so
-/// does the node that teaches them.
+/// does its synthesised routine-tree node — trivially, since
+/// `routine_tree::synthesise_nodes` copies a node's description straight off
+/// the ability's own (todo #101 moved these off `model_inspection`, which no
+/// longer teaches anything, into one node per routine).
 ///
 /// Tactical fights sit behind `profile.tactical_battles`, which is off until
 /// a player turns it on. `Game::battle_special_options` filters a
@@ -141,6 +144,7 @@ fn every_tactical_only_routine_says_it_is_battle_map_only() {
     const SENTENCE: &str = "Battle maps only.";
     let game = game(9502);
     let db = game.world.resource::<AbilityDb>();
+    let research = game.world.resource::<crate::research::ResearchDb>();
     let mut checked = 0;
     for def in db.all().filter(|d| d.effect.tactical_only()) {
         assert!(
@@ -149,20 +153,18 @@ fn every_tactical_only_routine_says_it_is_battle_map_only() {
             def.id,
             def.description
         );
+        let node = research
+            .get(&crate::routine_tree::node_id(&def.id))
+            .unwrap_or_else(|| panic!("{} should have a synthesised node", def.id));
+        assert!(
+            node.description.contains(SENTENCE),
+            "the node that teaches {} must say so too: {:?}",
+            def.id,
+            node.description
+        );
         checked += 1;
     }
     assert_eq!(checked, 5, "the five tamper routines are what ships today");
-
-    let node = game
-        .world
-        .resource::<crate::research::ResearchDb>()
-        .get("model_inspection")
-        .expect("model_inspection ships");
-    assert!(
-        node.description.to_lowercase().contains("battle map"),
-        "the node that teaches them must say so too: {:?}",
-        node.description
-    );
 }
 
 /// One case per `tamper_faults` refusal, built by hand rather than round-
@@ -2428,21 +2430,22 @@ fn the_view_carries_the_decoys() {
     assert_eq!(view.decoys, raw);
 }
 
-/// Content: `model_inspection` is where the feature actually reaches the
-/// player. Spec 15's own assertion — every `TamperSlot` has a route in
-/// through this node, and both gear recipes ride along with it.
+/// Content: the routine tree is where the feature actually reaches the
+/// player now, not `model_inspection` directly — todo #101 moved every one
+/// of the eleven abilities that node used to grant into its own synthesised
+/// node, gated at `research_zone: 3` exactly as the node was. Spec 15's own
+/// assertion still holds, just over the whole tree rather than one node:
+/// every `TamperSlot` has a route in, and `model_inspection` keeps both gear
+/// recipes.
 #[test]
-fn model_inspection_teaches_every_tamper_kind_and_both_gear_recipes() {
+fn the_routine_tree_teaches_every_tamper_kind_and_model_inspection_keeps_both_gear_recipes() {
     let game = game(9900);
     let research = game.world.resource::<crate::research::ResearchDb>();
-    let node = research
-        .get("model_inspection")
-        .expect("model_inspection ships");
     let abilities = game.world.resource::<AbilityDb>();
 
-    let taught_slots: std::collections::BTreeSet<TamperSlot> = node
-        .unlocks_abilities
-        .iter()
+    let taught_slots: std::collections::BTreeSet<TamperSlot> = research
+        .all()
+        .filter_map(|node| node.teaches.as_deref())
         .filter_map(|id| abilities.get(id))
         .filter_map(|def| match &def.effect {
             AbilityEffect::Tamper { kind, .. } => Some(kind.slot()),
@@ -2459,9 +2462,12 @@ fn model_inspection_teaches_every_tamper_kind_and_both_gear_recipes() {
     .collect();
     assert_eq!(
         taught_slots, every_slot,
-        "model_inspection must teach a routine into every Tampered slot"
+        "the routine tree must teach a routine into every Tampered slot"
     );
 
+    let node = research
+        .get("model_inspection")
+        .expect("model_inspection ships");
     let recipe_results: Vec<&ItemId> = node.unlocks_recipes.iter().map(|r| &r.result).collect();
     for item in ["adversarial_patch", "attention_head"] {
         assert!(

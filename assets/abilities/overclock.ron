@@ -5,4 +5,5 @@
     target: OneAlly,
     power_cost: 14.0,
     effect: FieldBuff(kind: Atk, power: 4),
+    research_zone: 2,
 )

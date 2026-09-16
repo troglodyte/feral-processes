@@ -7,4 +7,5 @@
     cooldown: 2,
     accuracy: 6,
     power_cost: 7.0,
+    research_zone: 3,
 )

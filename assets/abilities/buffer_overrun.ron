@@ -5,4 +5,5 @@
     target: WholeParty,
     effect: Phase,
     power_cost: 12.0,
+    research_zone: 3,
 )

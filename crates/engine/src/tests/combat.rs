@@ -804,7 +804,7 @@ fn the_player_is_offered_no_special_before_installing_a_routine() {
 #[test]
 fn installing_a_researched_routine_makes_the_players_special_available() {
     let mut game = Game::new(38, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    unlock_research_chain(&mut game, "self_exec");
+    unlock_research_chain(&mut game, "routine/priority_boost");
     let player = game.player_entity();
     // Exactly one routine installed, which is what the `detail` assertion
     // below is about — a lone ability reads as its own name. Decompile is

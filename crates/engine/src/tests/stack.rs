@@ -10,7 +10,7 @@ use crate::stack::{CellKind, Dir};
 use crate::tuning::{STACK_COLLAPSE_RELINK_TILES, STACK_MIN_LINK_TILES};
 use crate::*;
 
-/// The routine that is the way home. Granted by the `symbolic_links`
+/// The routine that is the way home. Granted by the `routine/symlink`
 /// research node and by nothing else, which is what makes leaving the Stack
 /// something a run earns rather than something it starts with.
 const SYMLINK: &str = "symlink";

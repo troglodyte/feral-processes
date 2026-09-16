@@ -1301,3 +1301,100 @@
   battle map swings rather than invoking, because `run_tactical_beat`'s
   routine intent is still gated on `Hostile`. See
   `seam:a-body-is-spliced-into-initiative-behind-the-cursor-never-ahead`.
+
+- **`Game::decision_temperature` is the one door every tactical AI entry
+  point reads, and `tactical_ai_turn_at` is a test hook, not a fifth
+  door.** Before this, `tuning::TACTICAL_AI_TEMPERATURE` was passed
+  literally at four call sites in `tactical/ai.rs`, each a place a fifth
+  site or a later refactor could read the constant directly and silently
+  miss a Cold Sample tamper. The mutation check,
+  `every_tactical_ai_door_reads_the_temperature_door`, repeats the same
+  Cold-tamper assertion through all four doors; reverting any one site to
+  the bare constant fails exactly that case. `tactical_ai_turn_at` stays a
+  test hook precisely because it is *not* one of the four — it lets a test
+  force a temperature with no `Tampered` component, and must never become a
+  production caller. `ENEMY_POLICY_TEMPERATURE` (the group model) is
+  untouched: the group model has no board for a hostile to be tampered on.
+  After the seam, `rg TACTICAL_AI_TEMPERATURE crates/engine/src/tactical`
+  should show only the door's own definition and the log line's HOT/COLD
+  comparison. See
+  `seam:decision-temperature-is-the-one-door-every-tactical-ai-entry-point-reads`.
+
+- **A tamper ages on the tampered body's own hand-on, never in
+  `tick_one_combatant`.** Every other piece of in-fight state that ages per
+  turn — statuses, buffs, cooldowns, the cloak — ages at round upkeep
+  inside `tick_one_combatant`. A tamper does not, because a `duration: 1`
+  Prompt Injection landed on a hostile that has *already acted this round*
+  would, under the round rule, age to zero at that same upkeep before the
+  target ever took a turn under it — full Power and cooldown spent for zero
+  observable effect. `Tampered::age()` runs instead from
+  `Game::hand_on_turn`, keyed to the tampered body's *own* turn being
+  handed on, which guarantees exactly one turn taken under the entry
+  regardless of when in the round it landed. The mutation check,
+  `a_one_turn_injection_on_a_body_that_has_acted_is_live_on_its_next_turn`,
+  fails the moment ageing moves back into `tick_one_combatant`. The one
+  exception is `TamperEntry::fresh`: a self-applied entry (a companion's
+  own radius tamper catching the invoker) skips its first ageing rather
+  than decrementing, or it would lose a turn the target never had. Every
+  path that ends a turn without going through `hand_on_turn` — a stunned
+  body's skipped turn, `run_tactical_beat`'s empty-targets branch — had to
+  be checked and routed through it, or an entry on that body freezes
+  forever instead of expiring. See
+  `seam:a-tamper-ages-on-the-tampered-bodys-own-hand-on-never-in-tick-one-combatant`.
+
+- **A profiled hostile's forecast is a call into the planner its turn
+  runs: `tactical_intent`, `scored_cells` and `chosen_target`, with
+  `argmax_scored` shared with `sample_scored`.** CLAUDE.md's "a mirror must
+  be a call, not a copy" rule applied here. Before this, the turn's
+  planning lived inline — a local `Intent` built fresh in
+  `run_tactical_beat`, the destination cell picked inside
+  `walk_to_best_cell`'s own body — with no reusable function a forecast
+  could call instead of restating. The extraction is a pure refactor
+  (Task 7 Part A: the full tactical suite stays green with zero test
+  edits) that pulls out `tactical_intent`, `scored_cells` and
+  `chosen_target`, parameterised on a `from` cell rather than reading the
+  actor's live position so they can be asked about a hypothetical
+  destination. `Game::tactical_forecast` then calls the same three: the
+  action always comes from `tactical_intent`; only at
+  `decision_temperature(body) <= 0.0` does it also call `scored_cells` and
+  take `argmax_scored` — never `sample_scored` — to name a destination and
+  target. `argmax_scored` was extracted out of `sample_scored`'s own
+  closure so the forecast and the real turn cannot disagree about
+  tie-breaking. The mutation check,
+  `a_cold_profiled_hostile_does_what_its_forecast_said`, sweeps 24 seeded
+  boards comparing the forecast against what the turn then actually does;
+  changing the forecast to call `sample_scored` at 0.5 with a cloned RNG —
+  a plausible-looking "just sample like a real turn" bug — fails it. The
+  forecast answers `None` for a body mid-turn (`!walk_planned() &&
+  !acted`), which is what makes "exact at the moment the turn begins" a
+  testable claim rather than a vague one. See
+  `seam:a-profiled-hostiles-forecast-is-a-call-into-the-planner-its-turn-runs`.
+
+- **`AbilityEffect::tactical_only` is the group model's filter, applied at
+  every chooser that is not a battle map, and `use_ability`'s `Tamper` arm
+  is `unreachable!` because of it.** A tamper routine only means something
+  against a hostile AI with a board, a cell and a walk to plan; the group
+  model has none of that. Rather than teach every group-model path to
+  special-case `Tamper`, `tactical_only()` is one exhaustive match (true
+  for `Tamper` alone) applied at `wild_routine_ready`,
+  `battle_special_options` (not `tactical_routine_options` — the filter
+  sits at the caller that needs it, not inside the shared
+  `special_options_for`), `choose_summon_action`, `wieldable_routines`,
+  `field_runnable` and the sortie's off-screen resolution. Because every
+  door in is closed, the branch inside `use_ability` that would actually
+  run a `Tamper` effect is provably unreachable there, and marking it
+  `unreachable!()` (beside `Decompile` and `Summon`) turns a hole in the
+  filter into a compile-clean panic on first hit instead of a silent
+  no-op — the effect resolves only through `run_tactical_routine`'s own
+  `Tamper` branch, the one caller with the battle-map context (a
+  `TacticalBattle`, a cell, a side) it needs. A sortie reaching
+  `use_ability` with a `Tamper` effect would hit the `unreachable!`, which
+  is why that test is the one that matters — everything upstream of it is
+  defense in depth, and the panic is the backstop that proves it held. The
+  same reasoning exempts the five tier-A tamper routines from
+  `every_battle_ability_family_is_contiguous_from_single_upward`: that
+  census exists for species-kit and hunt-pool content, a tamper routine is
+  research-taught and enters neither, so `Heat Injection Group` and
+  `Hallucination Group` may ship with no Single rung — one more `.filter`
+  clause beside `Summon`'s existing exemption. See
+  `seam:ability-effect-tactical-only-is-the-group-models-filter`.

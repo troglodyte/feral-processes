@@ -1,0 +1,7 @@
+(
+    id: "adversarial_patch",
+    name: "Adversarial Patch",
+    description: "Researched module. A pattern that makes a hostile's classifier look past you.",
+    value: Some(25),
+    equipment: Some((Module, (evasion: 3))),
+)

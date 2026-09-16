@@ -355,6 +355,68 @@ impl AffinityKind {
     }
 }
 
+/// Which of a `Tampered` body's slots a `TamperKind` occupies.
+///
+/// Heat and Cold both answer `Temperature` — that is the whole mechanism
+/// behind "reapplying refreshes rather than stacks": a second Temperature
+/// routine landed on an already-tampered body overwrites the same slot
+/// instead of opening a second one, so the two effects can never coexist on
+/// one body the way, say, `Profiled` and `Injected` can.
+///
+/// **No serde derive.** `Ord` is what `Tampered`'s `BTreeMap` needs to key
+/// on this; `Tampered` itself carries no serde derive and appears nowhere in
+/// `save.rs`, so there is nothing here for a mod or a save to round-trip.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum TamperSlot {
+    Temperature,
+    Profiled,
+    Injected,
+    Hallucinating,
+}
+
+/// What a `Tamper` routine (`AbilityEffect::Tamper`) does to the hostile
+/// AI's decision-making on a battle map — see the design doc's "The four
+/// hooks". Each kind carries only the number it needs: `Profiled` and
+/// `Injected` change a *rule* rather than a magnitude, so they carry
+/// nothing at all.
+///
+/// **`Temperature` is absolute, not a delta.** `Game::decision_temperature`
+/// returns it verbatim in place of the tuning constant, which is what makes
+/// `Temperature(0.0)` a guaranteed argmax rather than merely a colder one —
+/// a delta clamped at zero would get there too, but would make the authored
+/// number mean something different on every base temperature.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub enum TamperKind {
+    Temperature(f32),
+    Profiled,
+    Injected,
+    Hallucinating { decoys: u32 },
+}
+
+impl TamperKind {
+    /// Whether this kind makes its target *more* certain than an untampered
+    /// body — a `Temperature` at or below `tuning::TACTICAL_AI_TEMPERATURE`,
+    /// and nothing else.
+    ///
+    /// **Where the HOT/COLD line lives.** The strip's `TamperTag::of` and the
+    /// take-hold log line both split `Temperature` in two, and two spellings
+    /// of the threshold is a tag that could say COLD over a line that said
+    /// the sampler runs hot.
+    pub fn runs_cold(self) -> bool {
+        matches!(self, TamperKind::Temperature(t) if t <= crate::tuning::TACTICAL_AI_TEMPERATURE)
+    }
+
+    /// Which `Tampered` slot this kind occupies — `TamperSlot`'s own doc.
+    pub fn slot(self) -> TamperSlot {
+        match self {
+            TamperKind::Temperature(_) => TamperSlot::Temperature,
+            TamperKind::Profiled => TamperSlot::Profiled,
+            TamperKind::Injected => TamperSlot::Injected,
+            TamperKind::Hallucinating { .. } => TamperSlot::Hallucinating,
+        }
+    }
+}
+
 /// What an ability does to each of its recipients.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum AbilityEffect {
@@ -521,6 +583,28 @@ pub enum AbilityEffect {
         #[serde(default)]
         rarity_penalty: u32,
     },
+    /// Tampers with the hostile AI's decision-making — see `TamperKind`.
+    ///
+    /// **Battle-map only.** `tactical_only` answers true for this effect
+    /// alone, so the group model never offers or resolves one, and
+    /// `use_ability` carries an `unreachable!` arm for it exactly as it
+    /// does for `Decompile` and `Summon`: `Game::run_tactical_routine` is
+    /// what actually seats it, on the one model that has a hostile AI worth
+    /// tampering with.
+    ///
+    /// **Always lands.** No accuracy roll and no `chance` — the forecast a
+    /// tamper buys is the feature, and a Cold Sample that could fumble
+    /// would turn a guaranteed read into a gamble. The price is paid in the
+    /// cooldown and the Power cost instead.
+    Tamper {
+        kind: TamperKind,
+        /// The tampered body's own turns before the entry expires — a
+        /// count of that body's *turns*, not battle rounds. See
+        /// `components::Tampered`'s own doc for why: aged per round, a
+        /// `duration: 1` landed mid-round on a body that already acted would
+        /// expire before that body ever took the turn it was aimed at.
+        duration: u32,
+    },
 }
 
 impl AbilityEffect {
@@ -540,6 +624,39 @@ impl AbilityEffect {
                 | AbilityEffect::Jump
                 | AbilityEffect::Symlink
         )
+    }
+
+    /// Whether this effect only ever runs on a battle map — the opposite
+    /// axis from `field_only`, and true for `Tamper` alone.
+    ///
+    /// **Exhaustive rather than `_ => false`**, `breaks_cloak`'s rule: a
+    /// new effect must say whether the group model can resolve it, or it
+    /// ships reachable from a picker with nothing to run it against.
+    ///
+    /// Read by `Game::battle_special_options` (filtered at that caller, not
+    /// inside the `special_options_for` helper it shares with
+    /// `tactical_routine_options`, which must keep offering one),
+    /// `Game::wild_routine_ready`, `Game::choose_summon_action` and
+    /// `Game::swing_for_the_squad` — all four exclude a tactical-only
+    /// effect from the group model, which is what makes `use_ability`'s
+    /// `unreachable!` arm for `Tamper` actually unreachable.
+    pub fn tactical_only(&self) -> bool {
+        match self {
+            AbilityEffect::Tamper { .. } => true,
+            AbilityEffect::Damage { .. }
+            | AbilityEffect::Heal { .. }
+            | AbilityEffect::Buff { .. }
+            | AbilityEffect::Debuff { .. }
+            | AbilityEffect::Drain { .. }
+            | AbilityEffect::Cleanse
+            | AbilityEffect::Decompile
+            | AbilityEffect::FieldBuff { .. }
+            | AbilityEffect::Phase
+            | AbilityEffect::Jump
+            | AbilityEffect::Symlink
+            | AbilityEffect::Cloak { .. }
+            | AbilityEffect::Summon { .. } => false,
+        }
     }
 
     /// Which affinity category this effect's magnitude falls under, or
@@ -574,6 +691,10 @@ impl AbilityEffect {
             | AbilityEffect::Symlink
             | AbilityEffect::Summon { .. }
             | AbilityEffect::Cloak { .. } => None,
+            // A temperature is a temperature: nothing in a Tamper scales
+            // with the invoker's level or affinity, so there is no
+            // magnitude here for one to multiply.
+            AbilityEffect::Tamper { .. } => None,
             AbilityEffect::FieldBuff { kind, .. } => kind.affinity_kind(),
         }
     }
@@ -594,7 +715,10 @@ impl AbilityEffect {
             AbilityEffect::Damage { .. }
             | AbilityEffect::Drain { .. }
             | AbilityEffect::Debuff { .. }
-            | AbilityEffect::Decompile => true,
+            | AbilityEffect::Decompile
+            // A tamper names the other side, the act a cloak is waiting
+            // for — `Debuff`'s reason, exactly.
+            | AbilityEffect::Tamper { .. } => true,
             AbilityEffect::Heal { .. }
             | AbilityEffect::Buff { .. }
             | AbilityEffect::Cleanse
@@ -957,6 +1081,48 @@ impl AbilityDef {
         None
     }
 
+    /// A `Tamper` whose numbers or target the load can't honour. Grouped
+    /// into one function rather than five, `field_buff_duration_mismatch`'s
+    /// reason: these are five ways of authoring the same mistake — a
+    /// routine that spends Power and a cooldown to do something incoherent
+    /// — not five different kinds of mistake.
+    ///
+    /// `pub(crate)` rather than private like its siblings here: a `Tamper`
+    /// mistake is exactly the shape a fixture can build by hand with no
+    /// file on disk, so `tests::tamper` constructs `AbilityDef`s directly
+    /// and calls this rather than round-tripping through a scratch
+    /// directory.
+    pub(crate) fn tamper_faults(&self) -> Option<&'static str> {
+        let AbilityEffect::Tamper { kind, duration } = &self.effect else {
+            return None;
+        };
+        if *duration == 0 {
+            return Some("effect: Tamper needs a duration of at least one turn");
+        }
+        if let TamperKind::Temperature(temperature) = kind
+            && (!temperature.is_finite() || *temperature < 0.0)
+        {
+            return Some("effect.kind: Temperature must be finite and non-negative");
+        }
+        if let TamperKind::Hallucinating { decoys } = kind
+            && *decoys == 0
+        {
+            return Some("effect.kind: Hallucinating needs at least one decoy");
+        }
+        // A tamper names the other side — the same rule `Cloak` and the
+        // creature-scoped `FieldBuff` kinds hold to in the opposite
+        // direction (`cloak_mismatch`, `field_buff_target_mismatch`).
+        if self.target.is_ally_facing() {
+            return Some("target: a Tamper names the other side, never an ally-facing target");
+        }
+        if matches!(kind, TamperKind::Hallucinating { .. })
+            && !matches!(self.tactical_shape(), AbilityShape::Radius { .. })
+        {
+            return Some("effect.kind: Hallucinating requires a Radius shape");
+        }
+        None
+    }
+
     /// A `FieldBuff` effect paired with a `target` its `kind`'s
     /// `FieldScope` can't reach. A `Run`-scoped kind always lands on the
     /// player (`FieldBuffKind::scope`, `Game::arm_field_buff`), so anything
@@ -1220,6 +1386,10 @@ impl AbilityDb {
                         warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
                         continue;
                     }
+                    if let Some(reason) = def.tamper_faults() {
+                        warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
+                        continue;
+                    }
                     if let Some(reason) = def.field_buff_target_mismatch() {
                         warnings.push(format!("skipped invalid ability file {path:?}: {reason}"));
                         continue;
@@ -1462,6 +1632,22 @@ pub fn effect_label(def: &AbilityDef, level: u32, affinity: f32) -> String {
         AbilityEffect::Cloak { duration } => {
             format!("Hides one ally from targeting for {duration} rounds")
         }
+        // No `level`/`affinity` term, `Cloak`'s reason just above: nothing
+        // in a Tamper scales with the invoker.
+        AbilityEffect::Tamper { kind, duration } => match kind {
+            TamperKind::Temperature(temperature) => format!(
+                "Pins the target's decisions at temperature {temperature:.1} for {duration} rounds"
+            ),
+            TamperKind::Profiled => {
+                format!("Publishes the target's next move for {duration} rounds")
+            }
+            TamperKind::Injected => {
+                format!("Turns the target against its own side for {duration} rounds")
+            }
+            TamperKind::Hallucinating { decoys } => format!(
+                "Seeds {decoys} decoys the target's side mistakes for real, for {duration} rounds"
+            ),
+        },
     }
 }
 

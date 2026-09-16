@@ -43,16 +43,27 @@ N = [
  ("cortex",              "Cortex Hacking",       3, 125, ["neural_amp"],      ("recipe", ["cortex_hack", "fabricator", "12"]), ["routine_reader"]),
  ("overclock",           "Overclock Cores",      2,  45, ["weapon_bench"],    ("recipe", ["overclock_core", "fabricator", "6"])),
  ("monofilament",        "Monofilament Edge",    3, 110, ["overclock"],       ("recipe", ["monofilament_whip", "fabricator", "12"])),
+ # The first node to carry both grants at once: eleven routines as its
+ # `unlocks`, plus the two gear recipes riding beside them in the bonus
+ # `recipes` slot `tools` already set the precedent for.
+ ("model_inspection",    "Model Inspection",     3, 160, ["cortex"],
+  ("abilities", ["cold_sample", "heat_injection", "inference_probe", "prompt_injection",
+                 "hallucination", "gradient_descent", "backprop", "dropout",
+                 "dropout_group", "fine_tune", "data_poisoning"]),
+  [], [("adversarial_patch", "fabricator", "12"), ("attention_head", "fabricator", "12")]),
 ]
 # `tools` last so a 6-element tuple (a node granting none) simply stops
-# short — `zip` truncates, and the `setdefault` below fills it in.
-K = "id name zone cost req unlocks tools".split()
-# A node may grant a tool *as well as* its main payload, so `tools` is an
-# optional 7th element rather than a second `kind` — three nodes carry one
-# and every other tuple stays the length it was.
+# short — `zip` truncates, and the `setdefault` below fills it in. `recipes`
+# is the same idiom one slot further out: a bonus grant beside the node's
+# main `unlocks`, empty for every node but `model_inspection`.
+K = "id name zone cost req unlocks tools recipes".split()
+# A node may grant a tool, or a recipe, *as well as* its main payload, so
+# `tools` and `recipes` are optional trailing elements rather than a second
+# `kind` — most tuples stay the length they were.
 R = [dict(zip(K, r)) for r in N]
 for _r in R:
     _r.setdefault("tools", [])
+    _r.setdefault("recipes", [])
 BY = {r["id"]: r for r in R}
 
 # Every recipe node in the tree is priced in this one item, which is what
@@ -132,22 +143,36 @@ def table(header, rows, align):
     return "| " + " | ".join(header) + " |\n" + sep + "\n" + body
 
 
+def recipe_text(item, bench, price):
+    return f'recipe `{item}` at the {bench} — {price} `{RECIPE_CURRENCY}`'
+
+
 def unlock_text(r):
     kind, ids = r["unlocks"]
-    if kind == "recipe":
-        item, bench, price = ids
-        main = f'recipe `{item}` at the {bench} — {price} `{RECIPE_CURRENCY}`'
-    else:
-        main = ", ".join(f"`{i}`" for i in ids)
-    # Appended rather than folded into `kind`: a node's tool grant sits
-    # beside its main payload, and three of them have both.
+    main = recipe_text(*ids) if kind == "recipe" else ", ".join(f"`{i}`" for i in ids)
+    # Both bonus grants are appended rather than folded into `kind`: a
+    # node's tool or recipe grant sits beside its main payload.
     # One "tool" label for the whole list, not one per entry: `deep_analysis`
     # grants two and read "tool `core_tap`; tool `harness_puller`", which is
     # the only row in the tree that ever exercised this.
+    bits = [main]
+    if r["recipes"]:
+        bits.append("; ".join(recipe_text(*rec) for rec in r["recipes"]))
     tools = ", ".join(f"`{t}`" for t in r["tools"])
     label = "tool" if len(r["tools"]) == 1 else "tools"
-    return f"{main}; {label} {tools}" if tools else main
+    if tools:
+        bits.append(f"{label} {tools}")
+    return "; ".join(bits)
 
+
+# Every recipe grant in the tree, flattened: a node's own `("recipe", ...)`
+# `unlocks`, plus any bonus `recipes` riding beside a different primary
+# kind — `model_inspection`'s two. Kept as `(node, item, bench, price)`
+# rather than two censuses so the header stat and the table below can't
+# disagree about what "a recipe" counts.
+recipe_entries = [
+    (r, *r["unlocks"][1]) for r in R if r["unlocks"][0] == "recipe"
+] + [(r, item, bench, price) for r in R for (item, bench, price) in r["recipes"]]
 
 counts = {k: sum(1 for r in R if r["unlocks"][0] == k) for k in ("structures", "abilities", "recipe")}
 structures_unlocked = sum(len(r["unlocks"][1]) for r in R if r["unlocks"][0] == "structures")
@@ -203,7 +228,7 @@ earned.
 | total Research Data | {total_cost} |
 | cheapest / dearest node | {min(r["cost"] for r in R)} / {max(r["cost"] for r in R)} |
 | zone bands | {", ".join(f'{band_label(z)} ({sum(1 for r in R if r["zone"] == z)})' for z in BANDS)} |
-| unlocks | {structures_unlocked} structures, {abilities_unlocked} routines, {counts["recipe"]} gear recipes |
+| unlocks | {structures_unlocked} structures, {abilities_unlocked} routines, {len(recipe_entries)} gear recipes |
 
 ## What the zone gates
 
@@ -284,20 +309,21 @@ sharper divide than depth.
 
 A **routine** node hands you the knowledge outright: complete it and the
 routines are yours to install, no further materials involved. A **recipe** node hands
-you the right to *build* something, and every one of the six is priced in
+you the right to *build* something, and every one of the {len(recipe_entries)} is priced in
 `{RECIPE_CURRENCY}` — the item a Stack lair guardian drops and nothing else
 in the game does, and the same one that pays for a breach. So the recipe half
 of the tree is priced in descents: every node on it competes directly with
-the portal you are saving for.
+the portal you are saving for. `{BY["model_inspection"]["name"]}` is the one
+node that pays both ways — knowledge outright for its eleven routines, and a
+`{RECIPE_CURRENCY}` bill for the two recipes riding beside them.
 
 {table(["Recipe node", "Builds", "At", f"`{RECIPE_CURRENCY}`"],
-       [[r["name"], f'`{r["unlocks"][1][0]}`', r["unlocks"][1][1], r["unlocks"][1][2]]
-        for r in R if r["unlocks"][0] == "recipe"],
+       [[r["name"], f"`{item}`", bench, price] for (r, item, bench, price) in recipe_entries],
        ["l", "l", "l", "r"])}
 
 So researched gear is deliberately expensive twice: once in base uptime to
 learn it, and again in the currency you would otherwise have spent moving to
-the next sector. Every one of the six also names a bench it must be built at,
+the next sector. Every one of the {len(recipe_entries)} also names a bench it must be built at,
 which is a third gate — the research alone never puts the item in reach.
 
 ---

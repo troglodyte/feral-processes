@@ -179,6 +179,11 @@ impl Game {
         // left set, a reach weapon's first swing of the *next* fight would
         // be held narrow by a charge armed in this one.
         self.disarm_reach_charge(player);
+        // `Tampered` is battle-scoped for the same reason and with the same
+        // consequence as the two above — but the player is never a tamper
+        // *recipient*, so this clears nothing for them in practice and is
+        // here only so a reader doesn't have to know that to trust the loop.
+        self.detamper(player);
         // Every hostile still in the fight, not only the one passed in.
         // Survivors of a jack-out stay on the map, and a mirrored buff left
         // armed on one never ticks down — `effective_atk`/`effective_mitigation`
@@ -199,6 +204,7 @@ impl Game {
             }
             self.uncloak(hostile);
             self.disarm_reach_charge(hostile);
+            self.detamper(hostile);
         }
         let party = self.world.resource::<Party>().0.clone();
         for companion in party {
@@ -217,6 +223,7 @@ impl Game {
             }
             self.uncloak(companion);
             self.disarm_reach_charge(companion);
+            self.detamper(companion);
         }
     }
 
@@ -245,6 +252,16 @@ impl Game {
     fn disarm_reach_charge(&mut self, entity: Entity) {
         if let Ok(mut body) = self.world.get_entity_mut(entity) {
             body.remove::<ReachCharge>();
+        }
+    }
+
+    /// Drops `entity`'s `Tampered` entries — `uncloak`'s sibling and reason,
+    /// `get_entity_mut` included: a tactical fight is the only place this is
+    /// ever written, so left set it would follow a body out of one fight and
+    /// into the next.
+    fn detamper(&mut self, entity: Entity) {
+        if let Ok(mut body) = self.world.get_entity_mut(entity) {
+            body.remove::<Tampered>();
         }
     }
 

@@ -1280,11 +1280,16 @@ impl Game {
     /// May be empty, and that is a legitimate outcome rather than an error:
     /// every tamed program has innate routines, but nothing guarantees any
     /// of them are battle-legal. Such a program simply never procs.
+    ///
+    /// A tactical-only effect is the third exclusion: `AbilityEffect::
+    /// tactical_only`'s reason — no AI ever chooses a Tamper, and a proc
+    /// roll is exactly that.
     pub(crate) fn wieldable_routines(&self, entity: Entity) -> Vec<AbilityDef> {
         self.actor_abilities(entity)
             .into_iter()
             .filter(|d| !d.effect.field_only())
             .filter(|d| !matches!(d.effect, AbilityEffect::Decompile))
+            .filter(|d| !d.effect.tactical_only())
             .collect()
     }
 
@@ -1328,6 +1333,12 @@ impl Game {
         entity: Entity,
         ability: &AbilityDef,
     ) -> Option<String> {
+        // A tactical-only routine has nothing to resolve against outside a
+        // battle map — checked ahead of cooldown and Power, since neither
+        // of those questions matters if the fight itself is the wrong kind.
+        if ability.effect.tactical_only() && !self.in_tactical_battle() {
+            return Some("battle map only".to_string());
+        }
         let remaining = self
             .world
             .get::<AbilityCooldowns>(entity)
@@ -1373,11 +1384,22 @@ impl Game {
     /// `actor_abilities`. Filtering first would renumber every row after a
     /// dropped one, and `battle_set_action` resolves `index` straight back
     /// against the unfiltered list.
+    ///
+    /// **A tactical-only effect is filtered here, not inside
+    /// `special_options_for`.** That helper is shared with
+    /// `tactical_routine_options`, which must keep offering one — the whole
+    /// point of `Tamper` is to run on a battle map. `option.index` still
+    /// names a position in `actor_abilities`, so re-fetching that list to
+    /// check it costs nothing the shared helper didn't already pay.
     pub fn battle_special_options(&self, slot: usize) -> Vec<SpecialOption> {
         let Some(entity) = self.actor_entity(battle::Actor::Party(slot)) else {
             return Vec::new();
         };
+        let abilities = self.actor_abilities(entity);
         self.special_options_for(entity)
+            .into_iter()
+            .filter(|option| !abilities[option.index].effect.tactical_only())
+            .collect()
     }
 
     /// The routines the body acting on a battle map may run, as menu rows.

@@ -22,8 +22,8 @@
 use bevy_ecs::prelude::Entity;
 
 use crate::Game;
-use crate::abilities::{AbilityDef, AbilityRange, AbilityTarget};
-use crate::components::{Hostile, Stats};
+use crate::abilities::{AbilityDef, AbilityId, AbilityRange, AbilityTarget, TamperSlot};
+use crate::components::{Hostile, Stats, Tampered};
 use crate::policy;
 use crate::resources::GameRng;
 use crate::tactical::map::Board;
@@ -107,6 +107,40 @@ struct Sides {
     allies: Vec<(i32, i32)>,
 }
 
+/// What a turn's action lands on, decided from a cell the body stands on —
+/// or will stand on, once its walk is spent.
+///
+/// Three answers because there are three doors an action goes through: a
+/// swing at a body, a strike at a decoy, and a routine aimed at a cell.
+enum TurnTarget {
+    Body(Entity),
+    Decoy((i32, i32)),
+    Aim((i32, i32)),
+}
+
+/// What a `Profiled` hostile will do with its next turn, published so the
+/// player can play around it.
+///
+/// **A call into the planner the turn runs**, never a restatement — see
+/// `Game::tactical_forecast`.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Forecast {
+    pub action: ForecastAction,
+    /// The cells the body will walk through, destination last. Empty above
+    /// temperature zero, and when it will hold its ground.
+    pub walk: Vec<(i32, i32)>,
+    /// The cell its action will land on. `None` above temperature zero, and
+    /// when nothing will be in reach from where the walk ends.
+    pub target: Option<(i32, i32)>,
+}
+
+/// Which action a forecast names.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ForecastAction {
+    Swing,
+    Routine(AbilityId),
+}
+
 /// How far outside `band` a body at `from` is from `to`, in cells. Zero when
 /// it is inside it.
 ///
@@ -167,13 +201,70 @@ fn cell_merit(board: &Board, cell: (i32, i32), band: AbilityRange, targets: &[(i
 }
 
 impl Game {
+    /// `TACTICAL_AI_TEMPERATURE`, or `body`'s own `Tampered` temperature when
+    /// it carries one — a Cold Sample or Heat Injection overriding the
+    /// tuning constant for exactly the body it landed on.
+    ///
+    /// **The one door.** Every production call site in this file reads this
+    /// rather than the constant, so a later call site cannot miss a Cold
+    /// Sample by reading around it. `tactical_ai_turn_at` stays the explicit
+    /// test hook it always was — it takes a temperature as an argument
+    /// rather than asking this.
+    pub(crate) fn decision_temperature(&self, body: Entity) -> f32 {
+        self.world
+            .get::<Tampered>(body)
+            .and_then(Tampered::temperature)
+            .unwrap_or(TACTICAL_AI_TEMPERATURE)
+    }
+
+    /// Which side `actor`'s own decision-making treats as its own — not
+    /// necessarily `Hostile(actor)`.
+    ///
+    /// **The one door onto allegiance in this file.** `tactical_sides` and
+    /// `best_aim` both read this rather than `Hostile` directly, so an
+    /// injected body's flipped reading lands in one place and a later tamper
+    /// that also flips a side has the same door to go through.
+    ///
+    /// An injected hostile's policy runs as if it stood on the party's
+    /// side: `Hostile(actor) != Injected(actor)` is true only when the two
+    /// disagree, which is exactly the case a `prompt_injection` lands.
+    fn acts_for_hostiles(&self, actor: Entity) -> bool {
+        let hostile = self.world.get::<Hostile>(actor).is_some();
+        let injected = self
+            .world
+            .get::<Tampered>(actor)
+            .is_some_and(|tampered| tampered.has(TamperSlot::Injected));
+        hostile != injected
+    }
+
+    /// Whether `body` is a companion the AI drives rather than the player —
+    /// the design's "going mad": a `Temperature` or `Injected` entry takes it
+    /// over for as long as the entry lasts, whether or not `App::tactical_auto`
+    /// is on.
+    ///
+    /// Never the player and never `Hostile`, which is already the AI's every
+    /// other way. `Profiled` and `Hallucinating` do not take a body over —
+    /// only the two kinds that also bend a decision: which cell to draw and
+    /// which side to swing at.
+    pub(crate) fn taken_over(&self, body: Entity) -> bool {
+        if self.world.get::<Hostile>(body).is_some() || body == self.player_entity() {
+            return false;
+        }
+        self.world.get::<Tampered>(body).is_some_and(|tampered| {
+            tampered.temperature().is_some() || tampered.has(TamperSlot::Injected)
+        })
+    }
+
     /// Runs the acting body's whole turn, and reports whether it did.
     ///
     /// `false` means the turn is not one this file drives — no fight open,
     /// nobody acting, or the body belongs to the player. A driver reads that
     /// as "wait for input".
     pub fn tactical_ai_turn(&mut self) -> bool {
-        self.tactical_ai_turn_at(TACTICAL_AI_TEMPERATURE)
+        let Some(actor) = self.tactical_ai_actor() else {
+            return false;
+        };
+        self.tactical_ai_turn_at(self.decision_temperature(actor))
     }
 
     /// The acting body, when it is this file's to drive.
@@ -184,15 +275,18 @@ impl Game {
     /// neither the player nor a hostile, and the fight would either hang
     /// waiting for a key nobody may press or move a companion by itself.
     ///
-    /// **Every party body is the player's to command with one exception**,
-    /// so the gate is `Hostile` or `Summoned` and not `Player`: a companion
-    /// standing on a battle map waits for input exactly as the player does,
-    /// and a forked program is the first party body that drives itself.
+    /// **Every party body is the player's to command with two exceptions**,
+    /// so the gate is `Hostile`, `Summoned` or `taken_over` and not `Player`:
+    /// a companion standing on a battle map waits for input exactly as the
+    /// player does, unless a fork fielded it (it is the first party body
+    /// that drives itself) or a Temperature or Injected entry has taken it
+    /// over for the length of that entry.
     ///
-    /// Read the exception as the feature rather than as a bug: a fork is
+    /// Read the fork exception as the feature rather than as a bug: it is
     /// fielded by a routine, not brought to the fight, and asking the player
     /// to command one would make `fork_cluster` three more turns of
-    /// bookkeeping a round. Sidedness needs nothing — `tactical_sides` is
+    /// bookkeeping a round. The taken-over exception is the design's own —
+    /// see `taken_over`'s doc. Sidedness needs nothing — `tactical_sides` is
     /// already relative to the actor, which is why `tactical_drive_turn`
     /// works at all.
     fn tactical_ai_actor(&self) -> Option<Entity> {
@@ -201,8 +295,89 @@ impl Game {
             || self
                 .world
                 .get::<crate::components::Summoned>(actor)
-                .is_some())
+                .is_some()
+            || self.taken_over(actor))
         .then_some(actor)
+    }
+
+    /// What `body` will do with its next turn, when it is a `Profiled`
+    /// hostile that has not started one — `None` otherwise, and `None` with
+    /// nothing to fight.
+    ///
+    /// **A call into the planner the turn runs, never a restatement**:
+    /// `tactical_intent`, `scored_cells` and `chosen_target` are what
+    /// `run_tactical_beat` spends, and `argmax_scored` is the index
+    /// `sample_scored` answers at temperature zero. A forecast that kept its
+    /// own copy would be right until the AI was retuned, and the copy that
+    /// drifts is the one the player trusts.
+    ///
+    /// **The action is always named; the walk and target only at temperature
+    /// zero.** The intent is decided before any draw, so it is honest at every
+    /// temperature. Above zero the cell is a draw, and a drawn path that is
+    /// wrong one time in three teaches the player the forecast lies.
+    ///
+    /// **Withdrawn mid-turn**, because a body part-way through a walk plans
+    /// nothing more — what it will do is already on the board. Read off the
+    /// board as it stands, so it is exact at the moment the turn begins and
+    /// moves as the party acts before then. Read-only: no draw, no write.
+    pub(crate) fn tactical_forecast(&self, body: Entity) -> Option<Forecast> {
+        let battle = self.world.get_resource::<TacticalBattle>()?;
+        let profiled = self
+            .world
+            .get::<Tampered>(body)
+            .is_some_and(|tampered| tampered.has(TamperSlot::Profiled));
+        if self.world.get::<Hostile>(body).is_none() || !profiled {
+            return None;
+        }
+        if battle.actor() == Some(body) && (battle.walk_planned() || battle.acted()) {
+            return None;
+        }
+        let from = battle.cell_of(body)?;
+        let sides = self.tactical_sides(body);
+        if sides.targets.is_empty() {
+            return None;
+        }
+        let intent = self.tactical_intent(body);
+        let action = match &intent {
+            Intent::Swing { .. } => ForecastAction::Swing,
+            Intent::Routine(def) => ForecastAction::Routine(def.id.clone()),
+        };
+        if self.decision_temperature(body) > 0.0 {
+            return Some(Forecast {
+                action,
+                walk: Vec::new(),
+                target: None,
+            });
+        }
+
+        let (cells, scores) = self.scored_cells(body, &intent, &sides);
+        let walk = if cells.is_empty() {
+            Vec::new()
+        } else {
+            self.path_for(body, cells[policy::argmax_scored(&scores)])
+        };
+        // From where the walk ends rather than from the chosen cell: an empty
+        // path is a body that acts from where it stands, whatever it picked.
+        let destination = walk.last().copied().unwrap_or(from);
+        // The sides are asked again from the destination, as the turn asks
+        // them again on the beat that acts: a hallucinating body's target is
+        // the decoy nearest where it *stands*, and that changes along a walk.
+        let target = self
+            .chosen_target(
+                body,
+                destination,
+                &intent,
+                &self.tactical_sides_from(body, Some(destination)),
+            )
+            .and_then(|target| match target {
+                TurnTarget::Body(entity) => battle.cell_of(entity),
+                TurnTarget::Decoy(cell) | TurnTarget::Aim(cell) => Some(cell),
+            });
+        Some(Forecast {
+            action,
+            walk,
+            target,
+        })
     }
 
     /// Whether the fight is waiting on a key rather than on the AI.
@@ -241,16 +416,17 @@ impl Game {
         let Some(actor) = self.tactical_ai_actor() else {
             return AiBeat::Idle;
         };
-        self.run_tactical_beat(actor, TACTICAL_AI_TEMPERATURE)
+        self.run_tactical_beat(actor, self.decision_temperature(actor))
     }
 
     /// Spends one beat of the acting body's turn **whichever side it is on**.
     ///
-    /// `tactical_ai_beat`'s door with the `Hostile` gate lifted, and the
-    /// third onto one `run_tactical_beat` — the fight the player watches
-    /// resolve itself has to be the fight they would have fought by hand.
-    /// What it exists for is auto-attack: a player who has asked for one owes
-    /// the party's turns to somebody, and this is who.
+    /// `tactical_ai_beat`'s door with its `Hostile`/`Summoned`/taken-over
+    /// gate lifted entirely, and the third onto one `run_tactical_beat` —
+    /// the fight the player watches resolve itself has to be the fight they
+    /// would have fought by hand. What it exists for is auto-attack: a
+    /// player who has asked for one owes the party's turns to somebody, and
+    /// this is who.
     ///
     /// **It does not make a party body the AI's.** `tactical_awaits_input`
     /// still answers `true` for one, which is what keeps "every party body is
@@ -266,7 +442,7 @@ impl Game {
         let Some(actor) = self.tactical_actor() else {
             return AiBeat::Idle;
         };
-        self.run_tactical_beat(actor, TACTICAL_AI_TEMPERATURE)
+        self.run_tactical_beat(actor, self.decision_temperature(actor))
     }
 
     /// Whether the acting body is part-way through a walk it has committed
@@ -299,12 +475,13 @@ impl Game {
     /// Runs the acting body's turn **whichever side it is on**, and reports
     /// whether there was one.
     ///
-    /// `tactical_ai_actor`'s gate is `Hostile` because every party body is
-    /// the player's to command — so a fight with nobody at the keyboard
-    /// cannot be resolved through the door above, which is the whole of why
-    /// this one exists. **Its only caller is `arena::run`**: called from a
-    /// real fight it would walk a companion by itself, which is exactly the
-    /// failure that gate is there to prevent.
+    /// `tactical_ai_actor`'s gate is `Hostile`, `Summoned` or taken-over
+    /// because every other party body is the player's to command — so a
+    /// fight with nobody at the keyboard cannot be resolved through the door
+    /// above, which is the whole of why this one exists. **Its only caller
+    /// is `arena::run`**: called from a real fight it would walk a
+    /// companion by itself, which is exactly the failure that gate is
+    /// there to prevent.
     ///
     /// A party body **swings and never invokes**, which is not a policy
     /// invented for the tester: `PartyPlan::AllAttack` is the group model's
@@ -315,7 +492,7 @@ impl Game {
         let Some(actor) = self.tactical_actor() else {
             return false;
         };
-        self.run_tactical_turn(actor, TACTICAL_AI_TEMPERATURE);
+        self.run_tactical_turn(actor, self.decision_temperature(actor));
         true
     }
 
@@ -336,8 +513,8 @@ impl Game {
     /// back off `TacticalBattle` by every beat after it, which is what holds
     /// this to **one `GameRng` draw a turn** rather than one a cell.
     fn run_tactical_beat(&mut self, actor: Entity, temperature: f32) -> AiBeat {
-        let Sides { targets, allies } = self.tactical_sides(actor);
-        if targets.is_empty() {
+        let sides = self.tactical_sides(actor);
+        if sides.targets.is_empty() {
             self.tactical_end_turn();
             return AiBeat::Acted;
         }
@@ -345,34 +522,22 @@ impl Game {
             return AiBeat::Stepped;
         }
 
-        // `wild_routine_ready` and not `ability_unavailable`: a hostile holds
-        // no `PowerReserve` by design, so the player's gate refuses it every
-        // priced routine there is. See `Game::run_tactical_routine`.
-        //
-        // A party body is offered none of it — see `tactical_drive_turn`,
-        // the only way one reaches this at all.
-        //
         // Asked again on the beat that acts rather than carried across the
         // walk: it reads cooldowns and a routine list, neither of which a
         // walk moves, so the answer is the one the walk was scored against
         // and storing an `AbilityDef` on the fight would be a second copy of
         // it.
-        let intent = match self.wild_routine_ready(actor) {
-            Some(def) if self.world.get::<Hostile>(actor).is_some() => Intent::Routine(def),
-            _ => Intent::Swing {
-                range: self.swing_range(actor),
-            },
-        };
+        let intent = self.tactical_intent(actor);
         if !self.world.resource::<TacticalBattle>().walk_planned() {
-            self.walk_to_best_cell(actor, &intent, &targets, &allies, temperature);
+            self.walk_to_best_cell(actor, &intent, &sides, temperature);
             if self.step_along_walk(actor) {
                 return AiBeat::Stepped;
             }
         }
 
         match intent {
-            Intent::Routine(def) => self.run_tactical_intent(actor, def, &targets),
-            Intent::Swing { .. } => self.swing_at_best_neighbour(actor, &targets),
+            Intent::Routine(_) => self.run_tactical_intent(actor, &intent, &sides),
+            Intent::Swing { .. } => self.swing_at_best_neighbour(actor, &intent, &sides),
         }
         // **Only if the action did not already hand it on.** The action ends
         // the turn, so `tactical_attack` and `tactical_use_routine` both end
@@ -393,6 +558,25 @@ impl Game {
             self.tactical_end_turn();
         }
         AiBeat::Acted
+    }
+
+    /// What `actor` means to do with its turn: its ready routine, or a swing.
+    ///
+    /// Pure, and decided before any draw — which is what lets a forecast
+    /// name the action honestly at every temperature.
+    fn tactical_intent(&self, actor: Entity) -> Intent {
+        // `wild_routine_ready` and not `ability_unavailable`: a hostile holds
+        // no `PowerReserve` by design, so the player's gate refuses it every
+        // priced routine there is. See `Game::run_tactical_routine`.
+        //
+        // A party body is offered none of it — see `tactical_drive_turn`,
+        // the only way one reaches this at all.
+        match self.wild_routine_ready(actor) {
+            Some(def) if self.world.get::<Hostile>(actor).is_some() => Intent::Routine(def),
+            _ => Intent::Swing {
+                range: self.swing_range(actor),
+            },
+        }
     }
 
     /// Takes the next cell off `actor`'s committed walk and steps it there,
@@ -447,13 +631,21 @@ impl Game {
     /// Everyone `actor` is fighting, and everyone standing with it — cells
     /// rather than entities, because that is all the scoring reads.
     ///
-    /// Sidedness is `Hostile` and nothing else, so the party's own bodies and
-    /// the player are one list. The acting body is in neither.
+    /// Sidedness is `acts_for_hostiles`, not a bare `Hostile` read, so the
+    /// party's own bodies and the player are one list — for an untampered
+    /// actor the two are the same question.
     ///
     /// Read **relative to `actor`** rather than as "hostiles are the enemy":
     /// the arena drives both sides through this, and the absolute reading
     /// hands a party body its own side to swing at. For a hostile actor the
     /// two readings are the same list, which is why no seeded fight moved.
+    ///
+    /// **An injected body's own side is swapped by that same relativity.**
+    /// `acts_for_hostiles` answers `false` for one, so its packmates land in
+    /// `targets` and the party lands in `allies` with no branch here at
+    /// all — the flip is entirely `acting_side`'s, and every other body
+    /// still reads `Hostile` as it always has, which is what keeps an
+    /// uninjected packmate treating the injected one as its own.
     ///
     /// **A cloaked body leaves `targets`**, which is what keeps it out of
     /// `best_aim`'s scoring and out of `swing_at_best_neighbour` — the fifth
@@ -467,8 +659,16 @@ impl Game {
     /// stopped closing, stopped swinging and stood still until the caps
     /// expired.
     fn tactical_sides(&self, actor: Entity) -> Sides {
+        let from = self.world.resource::<TacticalBattle>().cell_of(actor);
+        self.tactical_sides_from(actor, from)
+    }
+
+    /// `tactical_sides` with `actor` supposed to be standing on `from` — the
+    /// only half that reads where it stands is the nearest decoy, and a body
+    /// with no cell sees none.
+    fn tactical_sides_from(&self, actor: Entity, from: Option<(i32, i32)>) -> Sides {
         let battle = self.world.resource::<TacticalBattle>();
-        let acting_side = self.world.get::<Hostile>(actor).is_some();
+        let acting_side = self.acts_for_hostiles(actor);
         let mut sides = Sides::default();
         let mut hidden: Vec<(i32, i32)> = Vec::new();
         for (body, cell) in battle.bodies() {
@@ -485,6 +685,18 @@ impl Game {
         }
         if sides.targets.is_empty() {
             sides.targets = hidden;
+        }
+        // **A hallucinating body fights the decoy it sees nearest, and only
+        // that.** It walks at it, swings at it or aims at it through the same
+        // scoring a body gets — `walk_to_best_cell` closes on `targets`
+        // whatever stands there. `allies` is untouched: the decoy changes
+        // what it is fighting, not where there is room to stand.
+        //
+        // With no decoy it sees, `settle_decoys` has already taken the entry,
+        // so this falls through to the real sides — never an empty list,
+        // which `run_tactical_beat` reads as nothing to fight.
+        if let Some(decoy) = from.and_then(|from| self.nearest_seen_decoy(actor, from)) {
+            sides.targets = vec![decoy];
         }
         sides
     }
@@ -505,8 +717,7 @@ impl Game {
         &mut self,
         actor: Entity,
         intent: &Intent,
-        targets: &[(i32, i32)],
-        allies: &[(i32, i32)],
+        sides: &Sides,
         temperature: f32,
     ) {
         // Committed on every path out, empty ones included: an unplanned walk
@@ -515,14 +726,45 @@ impl Game {
         self.world
             .resource_mut::<TacticalBattle>()
             .commit_walk(Vec::new());
+        let (cells, scores) = self.scored_cells(actor, intent, sides);
+        if cells.is_empty() {
+            return;
+        }
+
+        // One draw a turn, and none at all at temperature zero:
+        // `sample_scored` returns the argmax before it touches the RNG, so
+        // the branch that would have skipped it is the one this does not
+        // need.
+        let pick = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            policy::sample_scored(&scores, temperature, &mut rng.0)
+        };
+        let path = self.path_for(actor, cells[pick]);
+        self.world
+            .resource_mut::<TacticalBattle>()
+            .commit_walk(path);
+    }
+
+    /// The cells `actor` would choose among this turn, and what each is
+    /// worth — empty when it stands nowhere or can reach nowhere.
+    ///
+    /// **Pure, so the turn's draw and a forecast's argmax are taken over one
+    /// list.** Sorted before it is scored, so an index into the scores names
+    /// the same cell whoever reads it.
+    fn scored_cells(
+        &self,
+        actor: Entity,
+        intent: &Intent,
+        sides: &Sides,
+    ) -> (Vec<(i32, i32)>, Vec<f32>) {
         let allowance = self.movement_allowance(actor);
         let battle = self.world.resource::<TacticalBattle>();
         let field = reach::movement_field(battle, actor, allowance);
         let Some(from) = battle.cell_of(actor) else {
-            return;
+            return (Vec::new(), Vec::new());
         };
         if field.is_empty() {
-            return;
+            return (Vec::new(), Vec::new());
         }
         let band = intent.band();
         // **Staying put is the default.** The candidates are the cells that
@@ -533,14 +775,14 @@ impl Game {
         // draw — and sidestepped nearly every turn for no reason a player
         // could see.
         //
-        // The hold still goes through the draw below, so a turn spends one
-        // draw whichever way it goes and holding does not reshuffle every
-        // roll after it.
-        let standing = cell_merit(&battle.board, from, band, targets);
+        // The hold still goes through the draw, so a turn spends one draw
+        // whichever way it goes and holding does not reshuffle every roll
+        // after it.
+        let standing = cell_merit(&battle.board, from, band, &sides.targets);
         let mut cells: Vec<(i32, i32)> = field
             .keys()
             .copied()
-            .filter(|&cell| cell_merit(&battle.board, cell, band, targets) > standing)
+            .filter(|&cell| cell_merit(&battle.board, cell, band, &sides.targets) > standing)
             .collect();
         if cells.is_empty() {
             cells.push(from);
@@ -551,23 +793,22 @@ impl Game {
         cells.sort_by_key(|&(x, y)| (y, x));
         let scores: Vec<f32> = cells
             .iter()
-            .map(|&cell| cell_score(&battle.board, cell, band, targets, allies))
+            .map(|&cell| cell_score(&battle.board, cell, band, &sides.targets, &sides.allies))
             .collect();
+        (cells, scores)
+    }
 
-        // One draw a turn, and none at all at temperature zero:
-        // `sample_scored` returns the argmax before it touches the RNG, so
-        // the branch that would have skipped it is the one this does not
-        // need.
-        let pick = {
-            let mut rng = self.world.resource_mut::<GameRng>();
-            policy::sample_scored(&scores, temperature, &mut rng.0)
-        };
-        let cell = cells[pick];
+    /// The path `actor` walks to reach `to`, descended from the field
+    /// `movement_field` already answered, so which cells are legal and what
+    /// each costs is settled in one place.
+    fn path_for(&self, actor: Entity, to: (i32, i32)) -> Vec<(i32, i32)> {
+        let allowance = self.movement_allowance(actor);
         let battle = self.world.resource::<TacticalBattle>();
-        let path = reach::path_to(&battle.board, &field, from, cell);
-        self.world
-            .resource_mut::<TacticalBattle>()
-            .commit_walk(path);
+        let Some(from) = battle.cell_of(actor) else {
+            return Vec::new();
+        };
+        let field = reach::movement_field(battle, actor, allowance);
+        reach::path_to(&battle.board, &field, from, to)
     }
 
     /// Aims the routine `actor` has already committed to and runs it.
@@ -575,14 +816,50 @@ impl Game {
     /// The aim is a plain argmax and spends no randomness: the cell is where
     /// this turn's uncertainty lives, and a second draw on top of it would
     /// make a hostile miss aims it had already walked into position for.
-    fn run_tactical_intent(&mut self, actor: Entity, def: AbilityDef, targets: &[(i32, i32)]) {
-        let Some(aim) = self.best_aim(actor, &def, targets) else {
+    fn run_tactical_intent(&mut self, actor: Entity, intent: &Intent, sides: &Sides) {
+        let Intent::Routine(def) = intent else {
             return;
         };
-        self.run_tactical_routine(actor, &def, aim, ENEMY_ROUTINE_MIN_COOLDOWN);
+        let Some(TurnTarget::Aim(aim)) = self.target_from_here(actor, intent, sides) else {
+            return;
+        };
+        self.run_tactical_routine(actor, def, aim, ENEMY_ROUTINE_MIN_COOLDOWN);
     }
 
-    /// The cell to aim `def` at from where `actor` now stands, or `None` when
+    /// `chosen_target` asked from the cell `actor` stands on now — what the
+    /// acting beat reads, once the walk is spent.
+    fn target_from_here(
+        &self,
+        actor: Entity,
+        intent: &Intent,
+        sides: &Sides,
+    ) -> Option<TurnTarget> {
+        let from = self.world.resource::<TacticalBattle>().cell_of(actor)?;
+        self.chosen_target(actor, from, intent, sides)
+    }
+
+    /// What `actor`'s action would land on if it acted from `from`, or
+    /// `None` when nothing it could reach from there is worth it.
+    ///
+    /// **Takes the cell rather than reading the body's own**, so the turn
+    /// asks it from where the walk ended and a forecast asks it from where
+    /// the walk will end — one derivation, two moments.
+    fn chosen_target(
+        &self,
+        actor: Entity,
+        from: (i32, i32),
+        intent: &Intent,
+        sides: &Sides,
+    ) -> Option<TurnTarget> {
+        match intent {
+            Intent::Routine(def) => self
+                .best_aim(actor, from, def, &sides.targets)
+                .map(TurnTarget::Aim),
+            Intent::Swing { range } => self.best_swing(actor, from, *range, &sides.targets),
+        }
+    }
+
+    /// The cell to aim `def` at from `from`, or `None` when
     /// nothing it can reach is worth hitting.
     ///
     /// Scored on who the shape actually covers rather than on the aim point,
@@ -590,18 +867,39 @@ impl Game {
     /// one body: **its own side counts against it**, because
     /// `reach::recipients` never reads `Hostile` and a blast aimed through a
     /// packmate lands on the packmate.
+    ///
+    /// **"Wanted" is read through `acts_for_hostiles`, actor-relative like
+    /// `tactical_sides`.** A helpful routine wants the actor itself or a body
+    /// on the actor's own side; an aggressive one wants a body on the other
+    /// side. For an injected actor `acts_for_hostiles` answers `false`, so a
+    /// Heal lands on the party it now calls its own and a Damage penalises a
+    /// packmate exactly the way it used to penalise a companion.
+    ///
+    /// The aggressive branch's `!targets.is_empty()` guard is unreachable in
+    /// practice: `run_tactical_beat` already returns before this is called
+    /// once `tactical_sides` answers an empty `targets`.
+    ///
+    /// **A hallucinating body aims at its decoys instead.** An aggressive
+    /// routine scores +1 for every decoy it sees in the shape, −1 for every
+    /// body on its own side, and nothing for the other side's bodies, which
+    /// it cannot see for the decoys — so the blast goes where the fakes are
+    /// and still refuses to go through a packmate. A helpful routine is aimed
+    /// exactly as it always was: the decoys are something to fight, not
+    /// something to mend.
     fn best_aim(
         &self,
         actor: Entity,
+        from: (i32, i32),
         def: &AbilityDef,
         targets: &[(i32, i32)],
     ) -> Option<(i32, i32)> {
         let battle = self.world.resource::<TacticalBattle>();
-        let from = battle.cell_of(actor)?;
         let band = def.tactical_range();
         let shape = def.tactical_shape();
         let helpful = Intent::Routine(def.clone()).helpful();
         let reach_max = i32::try_from(band.max).unwrap_or(0);
+        let acting_side = self.acts_for_hostiles(actor);
+        let hallucinating = !helpful && self.is_hallucinating(actor);
 
         let mut best: Option<((i32, i32), i32)> = None;
         for dy in -reach_max..=reach_max {
@@ -617,13 +915,32 @@ impl Game {
                     continue;
                 }
                 let mut worth = 0;
-                for body in reach::recipients(battle, actor, aim, shape) {
-                    let wanted = if helpful {
-                        body == actor || self.world.get::<Hostile>(body).is_some()
+                if hallucinating {
+                    worth += reach::shape_cells(&battle.board, from, aim, shape)
+                        .into_iter()
+                        .filter(|&cell| self.sees_decoy_at(actor, cell))
+                        .count() as i32;
+                }
+                for body in reach::recipients_from(battle, actor, from, aim, shape) {
+                    let body_is_hostile = self.world.get::<Hostile>(body).is_some();
+                    worth += if helpful {
+                        if body == actor || body_is_hostile == acting_side {
+                            1
+                        } else {
+                            -1
+                        }
+                    } else if body_is_hostile == acting_side {
+                        -1
+                    } else if hallucinating {
+                        // The other side is hidden behind the decoys, so a
+                        // body standing among them is neither a reason to aim
+                        // there nor one not to.
+                        0
+                    } else if !targets.is_empty() {
+                        1
                     } else {
-                        !targets.is_empty() && self.world.get::<Hostile>(body).is_none()
+                        -1
                     };
-                    worth += if wanted { 1 } else { -1 };
                 }
                 if worth <= 0 {
                     continue;
@@ -645,20 +962,47 @@ impl Game {
     /// at all is that answer — the body that walked into range chose to be
     /// there. What is left to decide is which of the bodies now in reach to
     /// finish, and the wounded one is worth more than a fresh one.
-    fn swing_at_best_neighbour(&mut self, actor: Entity, targets: &[(i32, i32)]) {
-        // Before the resource borrow, since `swing_range` also takes `&self`.
-        let range = self.swing_range(actor);
+    fn swing_at_best_neighbour(&mut self, actor: Entity, intent: &Intent, sides: &Sides) {
+        // A strike out of reach is simply refused, leaving the turn to be
+        // ended by `run_tactical_beat` like any swing that found nothing.
+        match self.target_from_here(actor, intent, sides) {
+            Some(TurnTarget::Decoy(cell)) => {
+                self.tactical_strike_decoy(cell);
+            }
+            Some(TurnTarget::Body(target)) => {
+                self.tactical_attack(target);
+            }
+            Some(TurnTarget::Aim(_)) | None => {}
+        }
+    }
+
+    /// The swing `swing_at_best_neighbour` takes from `from`, at `range`.
+    fn best_swing(
+        &self,
+        actor: Entity,
+        from: (i32, i32),
+        range: u32,
+        targets: &[(i32, i32)],
+    ) -> Option<TurnTarget> {
         let battle = self.world.resource::<TacticalBattle>();
-        let Some(from) = battle.cell_of(actor) else {
-            return;
-        };
+        // A target this body sees a decoy on is struck through the door that
+        // takes a cell — for a hallucinating body that is its only target —
+        // and only when that door's own reach would take the strike, so a
+        // decoy out of reach is nothing to act on rather than a named target
+        // the door then refuses.
+        if let Some(&cell) = targets
+            .iter()
+            .find(|&&cell| self.sees_decoy_at(actor, cell))
+        {
+            return reach::swing_reaches(&battle.board, from, cell, self.swing_range(actor))
+                .then_some(TurnTarget::Decoy(cell));
+        }
         let mut reachable: Vec<(i32, i32, Entity)> = targets
             .iter()
-            .filter(|&&cell| distance(from, cell) <= range)
-            // Asked here as well as at the gate, so a body does not spend its
-            // turn swinging at something it cannot see and calling that its
-            // action.
-            .filter(|&&cell| line_of_sight(&battle.board, from, cell))
+            // Sight is asked here as well as at the gate, so a body does not
+            // spend its turn swinging at something it cannot see and calling
+            // that its action.
+            .filter(|&&cell| reach::swing_reaches(&battle.board, from, cell, range))
             .filter_map(|&cell| battle.occupant(cell).map(|e| (cell.1, cell.0, e)))
             .collect();
         // By Integrity, then by the board's reading order, so a tie is broken
@@ -670,9 +1014,9 @@ impl Game {
                 x,
             )
         });
-        if let Some(&(_, _, target)) = reachable.first() {
-            self.tactical_attack(target);
-        }
+        reachable
+            .first()
+            .map(|&(_, _, target)| TurnTarget::Body(target))
     }
 }
 

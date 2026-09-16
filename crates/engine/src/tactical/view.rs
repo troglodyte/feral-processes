@@ -15,13 +15,15 @@
 use bevy_ecs::prelude::Entity;
 
 use crate::Game;
-use crate::abilities::AbilityShape;
+use crate::abilities::{AbilityShape, TamperKind};
 use crate::components::{
     Creature, Experience, Glyph, GlyphColor, Hostile, Player, PlayerIdentity, Rarity, Stats,
+    Tampered,
 };
 use crate::game::inspection::difficulty_color;
 use crate::species::SpeciesDb;
 use crate::tactical::TacticalBattle;
+use crate::tactical::ai::ForecastAction;
 use crate::tactical::map::Board;
 use crate::tactical::reach;
 use crate::views::PlayerLook;
@@ -67,6 +69,50 @@ pub struct TacticalBody {
     pub cloaked: bool,
 }
 
+/// A `Tampered` slot's own tag, in the strip's short vocabulary — see the
+/// design doc's "What the player sees" (`HOT`, `COLD`, `PROF`, `INJ`,
+/// `HALL`).
+///
+/// **`Temperature` splits in two and the other three don't**, because
+/// `Temperature` is the one kind whose value can cross the line
+/// `TamperKind::runs_cold` draws — `Profiled`, `Injected` and
+/// `Hallucinating` are each a single fixed rule, not a number the strip
+/// would otherwise have to read the units of. The threshold itself is that
+/// method's, shared with the take-hold log line rather than restated here.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TamperTag {
+    Hot,
+    Cold,
+    Profiled,
+    Injected,
+    Hallucinating,
+}
+
+impl TamperTag {
+    fn of(kind: TamperKind) -> Self {
+        match kind {
+            TamperKind::Temperature(_) if kind.runs_cold() => Self::Cold,
+            TamperKind::Temperature(_) => Self::Hot,
+            TamperKind::Profiled => Self::Profiled,
+            TamperKind::Injected => Self::Injected,
+            TamperKind::Hallucinating { .. } => Self::Hallucinating,
+        }
+    }
+}
+
+/// A `Profiled` hostile's published intent — `Game::tactical_forecast`'s own
+/// doc for why this is never cached: it is built fresh every time the view
+/// is, so a cooldown ticked by round upkeep between now and the body's turn
+/// cannot leave a stale forecast on the strip.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ForecastView {
+    /// The routine's display name, or `"swing"` — resolved here, so no
+    /// renderer holds an `AbilityId` it would have to look up itself.
+    pub action: String,
+    pub walk: Vec<(i32, i32)>,
+    pub target: Option<(i32, i32)>,
+}
+
 /// One rung of the turn-order strip.
 #[derive(Clone, Debug)]
 pub struct TurnRow {
@@ -76,6 +122,28 @@ pub struct TurnRow {
     pub label: String,
     pub is_hostile: bool,
     pub hp_fraction: Option<f32>,
+    /// Every `Tampered` slot this body carries, in `TamperSlot` order.
+    pub tags: Vec<TamperTag>,
+    /// `Some` only for a `Profiled` hostile that has not started its turn —
+    /// see `Game::tactical_forecast`.
+    pub forecast: Option<ForecastView>,
+    /// Whether `Game::taken_over` reads this body as the AI's rather than
+    /// the player's for as long as its entry lasts.
+    pub taken_over: bool,
+}
+
+/// A Hallucination's fake, as a screen needs it — `tactical::Decoy` less
+/// `owner_hostile`, which says which side a body has to be on to see the
+/// decoy and so answers nothing a renderer asks. `of_player` is `Decoy`'s
+/// own field and carries over unchanged: it is what says the fake wears the
+/// `PLAYER` role rather than the hue the player merely spawned with, the
+/// same reduction `TacticalBody` already makes for a real body.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DecoyView {
+    pub cell: (i32, i32),
+    pub glyph: char,
+    pub color: GlyphColor,
+    pub of_player: bool,
 }
 
 /// A tactical fight, as a screen needs it.
@@ -101,18 +169,38 @@ pub struct TacticalView {
     pub round: u32,
     /// Every cell the acting body could still reach, its own included.
     pub reachable: Vec<(i32, i32)>,
+    /// Every Hallucination fake on the board, both sides'.
+    pub decoys: Vec<DecoyView>,
 }
 
 impl TacticalView {
     /// The board with nothing left to act: no actor, no reach and no turn
     /// waiting on a key, so a finished fight's board draws no turn arrow
     /// and no reach wash offering a move there is no fight left to spend.
+    ///
+    /// **Every AI-only field on a rung goes with it, and so do the
+    /// decoys.** A closing roster is a *result* screen, not a resumed
+    /// fight: a `Profiled` hostile's forecast, a hijacked companion's mark
+    /// and a Hallucination's fakes are all things the AI would still be
+    /// acting on, and none of them survive to a board with no actor left.
     pub fn frozen(self) -> Self {
+        let order = self
+            .order
+            .into_iter()
+            .map(|row| TurnRow {
+                tags: Vec::new(),
+                forecast: None,
+                taken_over: false,
+                ..row
+            })
+            .collect();
         Self {
             active: None,
             player_turn: false,
             allowance: 0,
             reachable: Vec::new(),
+            order,
+            decoys: Vec::new(),
             ..self
         }
     }
@@ -158,6 +246,16 @@ impl Game {
         let actor = battle.actor();
         let placed: Vec<(Entity, (i32, i32))> = battle.bodies().collect();
         let initiative: Vec<Entity> = battle.initiative().to_vec();
+        let decoys: Vec<DecoyView> = battle
+            .decoys()
+            .iter()
+            .map(|d| DecoyView {
+                cell: d.cell,
+                glyph: d.glyph,
+                color: d.color,
+                of_player: d.of_player,
+            })
+            .collect();
 
         let bodies: Vec<TacticalBody> = placed
             .iter()
@@ -194,6 +292,7 @@ impl Game {
             acted,
             round,
             reachable,
+            decoys,
         })
     }
 
@@ -312,6 +411,27 @@ impl Game {
 
     fn turn_row(&self, entity: Entity) -> TurnRow {
         let glyph = self.world.get::<Glyph>(entity).copied();
+        let tags = self
+            .world
+            .get::<Tampered>(entity)
+            .map(|tampered| {
+                tampered
+                    .slots()
+                    .map(|(_, kind)| TamperTag::of(kind))
+                    .collect()
+            })
+            .unwrap_or_default();
+        // Built live, never cached: round upkeep ticks cooldowns between now
+        // and this body's turn, and a forecast read once at battle start
+        // would go stale the moment anything changed.
+        let forecast = self.tactical_forecast(entity).map(|forecast| ForecastView {
+            action: match forecast.action {
+                ForecastAction::Swing => "swing".to_string(),
+                ForecastAction::Routine(id) => self.ability_display_name(&id),
+            },
+            walk: forecast.walk,
+            target: forecast.target,
+        });
         TurnRow {
             entity,
             glyph: glyph.map(|g| g.ch).unwrap_or('?'),
@@ -319,6 +439,9 @@ impl Game {
             label: self.entity_label(entity),
             is_hostile: self.world.get::<Hostile>(entity).is_some(),
             hp_fraction: self.world.get::<Stats>(entity).map(|s| s.hp_fraction()),
+            tags,
+            forecast,
+            taken_over: self.taken_over(entity),
         }
     }
 }

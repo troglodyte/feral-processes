@@ -75,7 +75,7 @@ way deleting the Currency item does.
     // spent on a downed member would be wasted.
     target: WholeEnemyGroup,
 
-    // What it does to each recipient. Exactly one of ten:
+    // What it does to each recipient. Exactly one of fourteen:
     //
     //   Damage(power: 6, spread: 2)
     //     Direct damage through the same resolution a move uses: an attack
@@ -243,6 +243,82 @@ way deleting the Currency item does.
     //     whole extra combatant for the rest of a fight is among the
     //     strongest things a routine can buy. This is what `fork_program.ron`
     //     and `fork_cluster.ron` use.
+    //
+    //   Tamper(kind: Temperature(0.0), duration: 3)
+    //   Tamper(kind: Profiled, duration: 3)
+    //   Tamper(kind: Injected, duration: 1)
+    //   Tamper(kind: Hallucinating(decoys: 3), duration: 3)
+    //     Reaches into a hostile's own decision-making on a battle map — the
+    //     opt-in tactical fight fought on a generated grid, never the
+    //     ordinary group model and never the Stack. `kind` is one of four:
+    //
+    //       Temperature(t)  Overwrites how randomly the target chooses its
+    //                       next action in place of the tuning constant
+    //                       every other body reads: `0.0` is a guaranteed
+    //                       argmax, a high value close to a coin flip. It
+    //                       is **absolute**, not a delta — `Temperature(0.0)`
+    //                       always means "certain" regardless of the
+    //                       target's own baseline. Must be finite and
+    //                       non-negative.
+    //       Profiled        Publishes the target's next action, walk and
+    //                       aim before its turn opens, read straight off
+    //                       the same planner the turn itself will run —
+    //                       nothing here is a guess.
+    //       Injected        Turns the target against its own side for the
+    //                       duration: it aims at its allies exactly as it
+    //                       would aim at the party.
+    //       Hallucinating(decoys: n)  Seeds the target's side with `n`
+    //                       decoys its AI reads as real bodies and may aim
+    //                       at; destroying one costs the aimer a turn and
+    //                       nothing else. Requires a `Radius` shape — a
+    //                       single cell has nowhere to put more than one
+    //                       decoy.
+    //
+    //     **`Hallucinating` dominates `Injected`**, so stacking the two on
+    //     one body wastes the second. A hallucinating body fights the
+    //     nearest decoy it sees and nothing else, and that choice is made
+    //     *after* the side split an injection flips — so an injected,
+    //     hallucinating hostile aims at a decoy exactly as an injected one
+    //     that could see none would have aimed at its own allies. Which
+    //     decoys a body sees is read off its literal side, which an
+    //     injection does not change. Both are worth running on one target
+    //     only once the Hallucination's entry has worn off.
+    //
+    //     Temperature is the one kind that **overwrites** rather than
+    //     stacks: a cold sample and a heat injection both answer
+    //     `TamperSlot::Temperature`, so the second landed on an
+    //     already-tampered body replaces the first instead of opening a
+    //     second slot — the same body cannot be simultaneously certain and
+    //     randomized. `Profiled`, `Injected` and `Hallucinating` each hold
+    //     a slot of their own, so all four can be live on one body at once.
+    //
+    //     **Never rolled.** No accuracy check and no `chance` — the
+    //     forecast a tamper buys is the feature, and a routine that could
+    //     miss would turn a guaranteed read into a gamble. The price is
+    //     paid in `cooldown` and `power_cost` alone.
+    //
+    //     **Never scaled.** `duration` is a round count against a fixed
+    //     ceiling, the same non-scaling `Cloak`'s own doc explains, and
+    //     there is no other magnitude here for level or affinity to
+    //     multiply.
+    //
+    //     **The player is never a recipient.** `target` must name the
+    //     other side — an ally-facing target is refused at load, the same
+    //     as a non-finite number — because a tamper is something you do to
+    //     a hostile's own mind, and the player doesn't have an AI to
+    //     confuse.
+    //
+    //     `duration` counts the tampered body's **own turns**, not battle
+    //     rounds: `components::Tampered` ages by one every time that body
+    //     hands its turn on, so a `duration: 1` landed on a body that has
+    //     already acted this round still reaches the turn it was aimed at,
+    //     rather than expiring before that body ever felt it.
+    //
+    //     Requires `duration` of at least one turn — a `duration: 0` would
+    //     spend Power and a cooldown to do nothing, refused at load like
+    //     every other incoherent shape here. This is what `cold_sample.ron`,
+    //     `heat_injection.ron`, `inference_probe.ron`, `prompt_injection.ron`
+    //     and `hallucination.ron` use.
     //
     //   FieldBuff(kind: Regen, power: 3, duration: 40)
     //   FieldBuff(kind: Atk, power: 4)
@@ -487,8 +563,25 @@ by hunt-only files. Adding a version tag to an existing name is fine and
 costs nothing (`sandbox` and `memory_leak` both picked one up when their
 families became ladders); **renaming an `id` is not**, per the rule above.
 
-Two tests in `crates/engine/src/tests/assets.rs` hold this over the
-shipped set — `every_shipped_ability_name_ends_in_the_scope_it_targets`
+A third census, `every_battle_ability_family_is_contiguous_from_single_upward`,
+holds a stronger rule over most of the set: a family may not ship a Group or
+wider rung without a cheaper Single one under it, so a player who meets the
+wide version in a species kit or off a wild carrier can always find the
+narrow one too. Field routines are already outside its count (they never
+appear in the battle picker at all, so "cheaper rung" is not a question that
+applies) and so is `exclusive` (it has no cheaper rung anywhere by design —
+a boss drop or a trader shelf, never a species or a research node — so the
+ladder the census protects cannot exist for it). A **tactical-only** effect
+(`AbilityEffect::tactical_only()`, true for `Tamper` alone today) joins them
+for a third reason: it is reachable only by research, never by a species kit
+or the hunt pool, so `Heat Injection Group` and `Hallucination Group` may
+ship with no Single rung at all. `Dropout` still needs one — `dropout`
+beside `dropout_group` — because a plain Stun is an ordinary group-model
+effect rather than a tactical-only one, so the census holds it to the same
+rule as `Hard Lock` and every other Stun family: it may not open at Group.
+
+Two more tests in `crates/engine/src/tests/assets.rs` hold the naming scheme
+itself over the shipped set — `every_shipped_ability_name_ends_in_the_scope_it_targets`
 and `no_two_shipped_abilities_share_a_display_name`. Neither looks at
 files outside this repo, so **a mod is free to ignore the scheme**; the
 loader has no opinion about `name` beyond it being a string.

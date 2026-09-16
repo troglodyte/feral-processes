@@ -20,7 +20,7 @@ fn game() -> Game {
 
 /// A body of `species`, standing nowhere in particular. Only its species
 /// and its speed matter here.
-fn body(game: &mut Game, species: &str) -> Entity {
+pub(super) fn body(game: &mut Game, species: &str) -> Entity {
     game.world
         .spawn((
             Creature {
@@ -123,7 +123,7 @@ fn a_species_file_can_author_a_movement_figure() {
     assert_eq!(authored.movement, Some(5));
 }
 
-fn log_texts(game: &Game) -> Vec<String> {
+pub(super) fn log_texts(game: &Game) -> Vec<String> {
     game.message_log(crate::MESSAGE_LOG_CAP)
         .into_iter()
         .map(|l| l.text)
@@ -132,7 +132,7 @@ fn log_texts(game: &Game) -> Vec<String> {
 
 /// A tactical fight opened around `count` hostiles standing next to the
 /// player, each on `hp`.
-fn tactical_fight(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
+pub(super) fn tactical_fight(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
     let pack = tactical_pack(game, count, hp);
     game.open_tactical_battle(pack.clone());
     pack
@@ -179,7 +179,7 @@ fn tactical_pack(game: &mut Game, count: usize, hp: i32) -> Vec<Entity> {
 
 /// Hands turns on until it is `who`'s again, or the fight ends. Bounded, so
 /// a model that stops handing the turn on fails rather than hangs.
-fn wait_for_turn(game: &mut Game, who: Entity) -> bool {
+pub(super) fn wait_for_turn(game: &mut Game, who: Entity) -> bool {
     for _ in 0..64 {
         match game.tactical_actor() {
             None => return false,
@@ -591,7 +591,7 @@ fn a_tactical_fight_counts_as_an_active_battle() {
 
 /// A free walkable cell next to `cell`, for a test that needs two bodies
 /// standing beside each other rather than wherever deployment put them.
-fn free_neighbour(game: &Game, cell: (i32, i32)) -> (i32, i32) {
+pub(super) fn free_neighbour(game: &Game, cell: (i32, i32)) -> (i32, i32) {
     let battle = game.world.resource::<TacticalBattle>();
     [
         (1, 0),
@@ -617,7 +617,7 @@ fn hp_of(game: &Game, body: Entity) -> i32 {
 }
 
 /// Installs `routine` as the acting body's only one, so its index is zero.
-fn only_routine(game: &mut Game, body: Entity, routine: &str) {
+pub(super) fn only_routine(game: &mut Game, body: Entity, routine: &str) {
     game.world
         .entity_mut(body)
         .insert(crate::components::Routines(vec![routine.to_string()]));
@@ -1026,6 +1026,36 @@ fn a_hostile_s_routine_is_floored_even_when_its_file_authors_no_cooldown() {
     );
 }
 
+/// A fight with its one hostile marooned in the far corner, where no
+/// allowance closes on anybody, so its turn is a walk and nothing else —
+/// and, with the corner open on more than one side, more than one candidate
+/// cell scores.
+pub(super) fn marooned() -> (Game, Entity) {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 40);
+    let wild = pack[0];
+    assert!(wait_for_turn(&mut game, wild), "the hostile never acted");
+    let side = game.world.resource::<TacticalBattle>().board.side;
+    assert!(
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .move_to(wild, (side - 1, side - 1)),
+        "the far corner must be standable"
+    );
+    (game, wild)
+}
+
+/// The next value `GameRng` yields — the "did this turn draw" probe shared
+/// by every test that pins a turn to argmax and by `tamper.rs`'s temperature
+/// tests, which read it as `tamper_next_draw` before this was lifted here.
+pub(super) fn next_draw(game: &mut Game) -> u64 {
+    use rand::RngExt;
+    game.world
+        .resource_mut::<crate::resources::GameRng>()
+        .0
+        .random::<u64>()
+}
+
 /// Where a hostile chooses to stand is one draw a turn, and none at all at
 /// temperature zero — `sample_scored` answers the argmax before it touches
 /// the RNG. That is what lets a test pin the choice without moving the
@@ -1036,31 +1066,6 @@ fn a_hostile_s_routine_is_floored_even_when_its_file_authors_no_cooldown() {
 /// to hit and this is a claim about the *walk*.
 #[test]
 fn choosing_a_cell_at_zero_temperature_does_not_move_the_seeded_stream() {
-    /// A fight with its one hostile marooned in the far corner, where no
-    /// allowance closes on anybody, so its turn is a walk and nothing else.
-    fn marooned() -> (Game, Entity) {
-        let mut game = game();
-        let pack = tactical_fight(&mut game, 1, 40);
-        let wild = pack[0];
-        assert!(wait_for_turn(&mut game, wild), "the hostile never acted");
-        let side = game.world.resource::<TacticalBattle>().board.side;
-        assert!(
-            game.world
-                .resource_mut::<TacticalBattle>()
-                .move_to(wild, (side - 1, side - 1)),
-            "the far corner must be standable"
-        );
-        (game, wild)
-    }
-
-    fn next_draw(game: &mut Game) -> u64 {
-        use rand::RngExt;
-        game.world
-            .resource_mut::<crate::resources::GameRng>()
-            .0
-            .random::<u64>()
-    }
-
     let (mut ran, _) = marooned();
     let (mut untouched, _) = marooned();
     assert!(
@@ -2208,7 +2213,7 @@ fn place_bodies(
     place_one(game, other, theirs);
 }
 
-fn place_one(game: &mut Game, body: Entity, cell: (i32, i32)) {
+pub(super) fn place_one(game: &mut Game, body: Entity, cell: (i32, i32)) {
     assert!(
         game.world
             .resource_mut::<TacticalBattle>()
@@ -3242,7 +3247,7 @@ fn a_hostile_will_not_shoot_through_cover() {
 /// A nine-cell open board with the player in the middle and the pack stood
 /// where the test says, the player on enough Integrity to outlast every turn
 /// a test drives.
-fn open_ground(game: &mut Game, pack: &[Entity], cells: &[(i32, i32)]) -> (i32, i32) {
+pub(super) fn open_ground(game: &mut Game, pack: &[Entity], cells: &[(i32, i32)]) -> (i32, i32) {
     use crate::tactical::map::Board;
 
     let player = game.player_entity();

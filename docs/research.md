@@ -1,7 +1,7 @@
 # Research tree
 
 Every shipped research node in feral-processes, charted from its own file in
-`assets/research/`. 26 of them.
+`assets/research/`. 27 of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
 `assets/research/*.ron` on 2026-08-17 and will drift the moment one of those
@@ -24,13 +24,13 @@ earned.
 
 | | |
 |---|---|
-| nodes | 26 |
+| nodes | 27 |
 | roots (need nothing) | 3 — Automation, Isometric Commerce, Power Grid |
 | deepest chain | 6 nodes |
-| total Research Data | 1497 |
-| cheapest / dearest node | 8 / 140 |
-| zone bands | from turn one (11), zone 2 (8), zone 3 (7) |
-| unlocks | 17 structures, 16 routines, 6 gear recipes |
+| total Research Data | 1657 |
+| cheapest / dearest node | 8 / 160 |
+| zone bands | from turn one (11), zone 2 (8), zone 3 (8) |
+| unlocks | 17 structures, 27 routines, 8 gear recipes |
 
 ## What the zone gates
 
@@ -44,7 +44,7 @@ ever opening a portal.
 |:---|---:|---:|:---|
 | from turn one | 11 | 192 | Automation, Power Grid, Teardown, Isometric Commerce, Self-Execution, Fortification, Field Operations, Symbolic Links, Reactive Armor, Weapon Fabrication, Routine Fabrication |
 | zone 2 | 8 | 435 | Cache Coherence, Dispatch Protocol, Firewall Plating, Overclock Cores, Neural Interfacing, Runtime Patching, Adaptive Plating, Program Refactoring |
-| zone 3 | 7 | 870 | Ablative Lattice, Monofilament Edge, Mesh Plating, Cortex Hacking, Deep Analysis, Kernel Privileges, Address Translation |
+| zone 3 | 8 | 1030 | Ablative Lattice, Monofilament Edge, Mesh Plating, Cortex Hacking, Deep Analysis, Kernel Privileges, Address Translation, Model Inspection |
 
 The gate and the tap compound without either knowing about the other.
 `Game::upgrade_ceiling` caps a Research Node at Mk1 in zone 1, Mk2 in zone 2,
@@ -73,6 +73,7 @@ Automation (8)
 |-- Weapon Fabrication (24)
 |   |-- Neural Interfacing (55)
 |   |   `-- Cortex Hacking (125)
+|   |       `-- Model Inspection (160)
 |   `-- Overclock Cores (45)
 |       `-- Monofilament Edge (110)
 |-- Routine Fabrication (26)
@@ -139,6 +140,7 @@ there is no node you can reach two ways.
 | Adaptive Plating | 2 | 70 | `field_ops` | `hardened_shell`, `overclock`, `ablative_layer` |
 | Deep Analysis | 3 | 130 | `field_ops` | `deep_scan`, `trace_analysis`, `stealth_protocol`, `salvage_routine`; tools `core_tap`, `harness_puller` |
 | Kernel Privileges | 3 | 135 | `runtime_patching` | `null_route` |
+| Model Inspection | 3 | 160 | `cortex` | `cold_sample`, `heat_injection`, `inference_probe`, `prompt_injection`, `hallucination`, `gradient_descent`, `backprop`, `dropout`, `dropout_group`, `fine_tune`, `data_poisoning`; recipe `adversarial_patch` at the fabricator — 12 `portal_fragment`; recipe `attention_head` at the fabricator — 12 `portal_fragment` |
 | Address Translation | 3 | 140 | `deep_analysis` | `buffer_overrun`, `wild_jump` |
 | Mesh Plating | 3 | 120 | `adaptive_plating` | `hardened_shell_party` |
 
@@ -159,34 +161,35 @@ Power Grid             10  #.......................................
 Isometric Commerce     14  ##......................................
 Teardown               20  ##......................................
 Fortification          28  ###.....................................
-Reactive Armor         32  ####....................................
-Weapon Fabrication     32  ####....................................
+Reactive Armor         32  ###.....................................
+Weapon Fabrication     32  ###.....................................
 Routine Fabrication    34  ####....................................
-Self-Execution         48  ######..................................
-Cache Coherence        50  ######..................................
-Dispatch Protocol      55  #######.................................
-Field Operations       68  ########................................
+Self-Execution         48  #####...................................
+Cache Coherence        50  #####...................................
+Dispatch Protocol      55  ######..................................
+Field Operations       68  #######.................................
 Symbolic Links         70  ########................................
-Firewall Plating       77  #########...............................
-Overclock Cores        77  #########...............................
-Program Refactoring    83  ##########..............................
-Neural Interfacing     87  ##########..............................
-Runtime Patching      108  #############...........................
-Adaptive Plating      138  ################........................
-Ablative Lattice      187  ######################..................
-Monofilament Edge     187  ######################..................
-Deep Analysis         198  #######################.................
-Cortex Hacking        212  #########################...............
-Kernel Privileges     243  #############################...........
-Mesh Plating          258  ###############################.........
-Address Translation   338  ########################################
+Firewall Plating       77  ########................................
+Overclock Cores        77  ########................................
+Program Refactoring    83  #########...............................
+Neural Interfacing     87  #########...............................
+Runtime Patching      108  ############............................
+Adaptive Plating      138  ###############.........................
+Ablative Lattice      187  ####################....................
+Monofilament Edge     187  ####################....................
+Deep Analysis         198  #####################...................
+Cortex Hacking        212  #######################.................
+Kernel Privileges     243  ##########################..............
+Mesh Plating          258  ############################............
+Address Translation   338  ####################################....
+Model Inspection      372  ########################################
 ```
 
-The shape to notice is the 7 end-of-branch nodes: Address Translation, Mesh Plating, Kernel Privileges, Cortex Hacking, Ablative Lattice, Monofilament Edge, Symbolic Links.
-Each carries 48-198 Research Data of prerequisites behind it before
-its own price is counted, and lands at 70-338 from a
+The shape to notice is the 7 end-of-branch nodes: Model Inspection, Address Translation, Mesh Plating, Kernel Privileges, Ablative Lattice, Monofilament Edge, Symbolic Links.
+Each carries 48-212 Research Data of prerequisites behind it before
+its own price is counted, and lands at 70-372 from a
 standing start — 2x the dearest single node in the
-tree (140) at the top end. The tree is not steep; it is long, and the
+tree (160) at the top end. The tree is not steep; it is long, and the
 zone bands are what stop that length being paid off in one sitting.
 
 ## Routines against recipes
@@ -196,11 +199,13 @@ sharper divide than depth.
 
 A **routine** node hands you the knowledge outright: complete it and the
 routines are yours to install, no further materials involved. A **recipe** node hands
-you the right to *build* something, and every one of the six is priced in
+you the right to *build* something, and every one of the 8 is priced in
 `portal_fragment` — the item a Stack lair guardian drops and nothing else
 in the game does, and the same one that pays for a breach. So the recipe half
 of the tree is priced in descents: every node on it competes directly with
-the portal you are saving for.
+the portal you are saving for. `Model Inspection` is the one
+node that pays both ways — knowledge outright for its eleven routines, and a
+`portal_fragment` bill for the two recipes riding beside them.
 
 | Recipe node | Builds | At | `portal_fragment` |
 |:---|:---|:---|---:|
@@ -210,10 +215,12 @@ the portal you are saving for.
 | Cortex Hacking | `cortex_hack` | fabricator | 12 |
 | Overclock Cores | `overclock_core` | fabricator | 6 |
 | Monofilament Edge | `monofilament_whip` | fabricator | 12 |
+| Model Inspection | `adversarial_patch` | fabricator | 12 |
+| Model Inspection | `attention_head` | fabricator | 12 |
 
 So researched gear is deliberately expensive twice: once in base uptime to
 learn it, and again in the currency you would otherwise have spent moving to
-the next sector. Every one of the six also names a bench it must be built at,
+the next sector. Every one of the 8 also names a bench it must be built at,
 which is a third gate — the research alone never puts the item in reach.
 
 ---
@@ -224,4 +231,3 @@ this page is regenerated -- edit the table at the top of
 [`docs/research-gen.py`](research-gen.py) and run
 `python3 docs/research-gen.py` from the repo root. The schema is documented in
 [`assets/research/README.md`](../assets/research/README.md).
-

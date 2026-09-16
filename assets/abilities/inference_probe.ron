@@ -1,0 +1,11 @@
+(
+    id: "inference_probe",
+    name: "Inference Probe Single",
+    description: "Publishes one target's next move for 3 rounds. Battle maps only.",
+    target: OneEnemyGroupFront,
+    effect: Tamper(kind: Profiled, duration: 3),
+    cooldown: 3,
+    power_cost: 5.0,
+    shape: Some(Single),
+    range: Some((min: 0, max: 6)),
+)

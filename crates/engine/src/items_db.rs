@@ -1050,6 +1050,8 @@ mod tests {
             ("ablative_plating", EquipmentSlot::Armor, 0, 12, 0),
             ("neural_amplifier", EquipmentSlot::Module, 0, 0, 2),
             ("cortex_hack", EquipmentSlot::Module, 0, 0, 3),
+            ("adversarial_patch", EquipmentSlot::Module, 0, 0, 0),
+            ("attention_head", EquipmentSlot::Module, 0, 0, 0),
             // Scavenged tier — no bench.
             ("shiv_routine", EquipmentSlot::Weapon, 1, 0, 0),
             ("kinetic_edge", EquipmentSlot::Weapon, 2, 0, 0),
@@ -1110,7 +1112,7 @@ mod tests {
             equipment.len(),
             "an equippable not in the table above is unpinned"
         );
-        assert_eq!(db.all().count(), 70);
+        assert_eq!(db.all().count(), 72);
     }
 
     #[test]

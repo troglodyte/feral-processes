@@ -86,6 +86,7 @@ mod summons;
 mod tactical;
 mod talents;
 mod taming;
+mod tamper;
 mod tantrums;
 mod taunt;
 mod telemetry;

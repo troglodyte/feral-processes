@@ -2,7 +2,7 @@ use bevy_ecs::prelude::{Component, Entity};
 use serde::{Deserialize, Serialize};
 
 use crate::MAX_CUSTOM_NAME_LEN;
-use crate::abilities::AbilityId;
+use crate::abilities::{AbilityId, TamperKind, TamperSlot};
 use crate::classes::PlayerClass;
 use crate::icon::PlayerIcon;
 use crate::items::{DownedProgram, EquipmentSlot, GearCopy, ItemId};
@@ -1179,6 +1179,112 @@ pub struct Cloaked {
     /// Battle rounds left. The cap is the ceiling on the situation; what
     /// usually ends a cloak first is `Game::break_cloak`.
     pub remaining: u32,
+}
+
+/// Battle-scoped: what a `Tamper` routine (`AbilityEffect::Tamper`) has done
+/// to this body's decision-making. At most one entry per `TamperSlot` —
+/// `TamperSlot`'s own doc is why Heat and Cold replace each other while
+/// `Profiled` and `Injected` coexist.
+///
+/// **Ticked down on the tampered body's own turn**, in
+/// `tactical/turn.rs::hand_on_turn`, and deliberately not in
+/// `Game::tick_one_combatant` with `Cloaked` and the rest — see
+/// `AbilityEffect::Tamper`'s doc for why a per-round age would silently
+/// expire a short entry before its target ever took the turn it was aimed
+/// at.
+///
+/// Battle-scoped for `Cloaked`'s reason: no serde derive, cleared in
+/// `game/combat_teardown.rs`, and so this cost no `SAVE_FORMAT_VERSION`
+/// bump.
+///
+/// **Absent means untampered.** Every mutator removes the component the
+/// moment its map empties, so `get::<Tampered>().is_none()` is the one
+/// question a reader needs to ask — `Cloaked`'s own convention, since that
+/// component is removed rather than zeroed for the same reason.
+#[derive(Component, Default, Debug, Clone)]
+pub struct Tampered {
+    entries: std::collections::BTreeMap<TamperSlot, TamperEntry>,
+}
+
+impl Tampered {
+    /// Writes `kind` into its slot, replacing whatever was there — refresh,
+    /// never stack, `TamperSlot`'s own rule.
+    ///
+    /// `fresh` marks an entry landed on the invoker's own body (a radius
+    /// tamper catching its caster). Its first `age` consumes the mark
+    /// instead of spending a turn the target never had — see `age`'s own
+    /// doc and the design's Decision 5.
+    pub fn apply(&mut self, kind: TamperKind, duration: u32, fresh: bool) {
+        self.entries.insert(
+            kind.slot(),
+            TamperEntry {
+                kind,
+                remaining: duration,
+                fresh,
+            },
+        );
+    }
+
+    /// The active `Temperature`, if any — `Game::decision_temperature`'s one
+    /// read.
+    pub fn temperature(&self) -> Option<f32> {
+        match self.entries.get(&TamperSlot::Temperature)?.kind {
+            TamperKind::Temperature(t) => Some(t),
+            _ => None,
+        }
+    }
+
+    pub fn has(&self, slot: TamperSlot) -> bool {
+        self.entries.contains_key(&slot)
+    }
+
+    pub fn remove(&mut self, slot: TamperSlot) -> Option<TamperEntry> {
+        self.entries.remove(&slot)
+    }
+
+    /// Ages every entry by one of the tampered body's own turns, returning
+    /// the kinds that just expired.
+    ///
+    /// A `fresh` entry spends this call consuming the mark rather than its
+    /// count: applied on the same turn it lands (the invoker's own radius
+    /// catching itself), the first `age` it sees is the hand-on of the very
+    /// turn that applied it, and a decrement there would be aging a turn
+    /// the target never had.
+    pub fn age(&mut self) -> Vec<TamperKind> {
+        let mut expired = Vec::new();
+        self.entries.retain(|_, entry| {
+            if entry.fresh {
+                entry.fresh = false;
+                return true;
+            }
+            entry.remaining = entry.remaining.saturating_sub(1);
+            if entry.remaining == 0 {
+                expired.push(entry.kind);
+                false
+            } else {
+                true
+            }
+        });
+        expired
+    }
+
+    pub fn slots(&self) -> impl Iterator<Item = (TamperSlot, TamperKind)> + '_ {
+        self.entries.iter().map(|(&slot, entry)| (slot, entry.kind))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
+/// One `Tampered` slot's live state — see `Tampered::apply`.
+#[derive(Debug, Clone, Copy)]
+pub struct TamperEntry {
+    pub kind: TamperKind,
+    /// The tampered body's own turns left before this expires — see
+    /// `Tampered::age`.
+    pub remaining: u32,
+    fresh: bool,
 }
 
 /// Marks a body forked into a fight by a `Summon` routine — a wild spawn

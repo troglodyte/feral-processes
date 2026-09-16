@@ -733,7 +733,7 @@ fn the_record_outlives_the_board_that_offered_it() {
 // ------------------------------------------------------------- the trip
 
 /// A base with a squad already away, plus the members it sent.
-fn a_dispatched_sortie(seed: u32, mode: DifficultyMode) -> (Game, Vec<Entity>) {
+pub(super) fn a_dispatched_sortie(seed: u32, mode: DifficultyMode) -> (Game, Vec<Entity>) {
     let mut game = Game::new(seed, mode, &test_assets_dir()).unwrap();
     deploy_relay(&mut game);
     let depot = deploy(&mut game, "depot", 0, 1);

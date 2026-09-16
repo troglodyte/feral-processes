@@ -337,7 +337,7 @@ fn damage_in(game: &Game, needle: &str) -> Option<i32> {
 }
 
 #[test]
-fn no_wieldable_routine_is_field_only_or_decompile() {
+fn no_wieldable_routine_is_field_only_decompile_or_tactical_only() {
     let mut game = Game::new(9112, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let every: Vec<String> = game
         .world
@@ -365,6 +365,12 @@ fn no_wieldable_routine_is_field_only_or_decompile() {
         assert!(
             !matches!(def.effect, AbilityEffect::Decompile),
             "{} would spend an ICE Breaker the player never authorised",
+            def.id
+        );
+        assert!(
+            !def.effect.tactical_only(),
+            "{} only runs on a battle map, and a proc roll is exactly the kind \
+             of choice no AI makes for a Tamper",
             def.id
         );
     }

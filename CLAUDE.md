@@ -963,6 +963,16 @@ relying on one, and correct all three places if it has moved.
   reclassifying it** — `Game::tactical_auto_beat` lifts `tactical_ai_beat`'s
   `Hostile` gate and changes nothing else, and `App::tactical_auto` is cleared
   by any key and by the fight ending.
+- **`Game::decision_temperature` is the one door every tactical AI entry
+  point reads**, and `tactical_ai_turn_at` is a test hook, not a fifth door.
+- **A tamper ages on the tampered body's own hand-on, never in
+  `tick_one_combatant`.**
+- **A profiled hostile's forecast is a call into the planner its turn
+  runs**: `tactical_intent`, `scored_cells` and `chosen_target`, with
+  `argmax_scored` shared with `sample_scored`.
+- **`AbilityEffect::tactical_only` is the group model's filter, applied at
+  every chooser that is not a battle map**, and `use_ability`'s `Tamper` arm
+  is `unreachable!` because of it.
 
 ### Items, gear and economy
 

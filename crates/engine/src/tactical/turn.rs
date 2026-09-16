@@ -9,13 +9,13 @@
 use bevy_ecs::prelude::Entity;
 
 use crate::Game;
-use crate::abilities::{self, AbilityDef, AbilityEffect};
+use crate::abilities::{self, AbilityDef, AbilityEffect, AbilityShape, TamperKind};
 use crate::components::AbilityCooldowns;
-use crate::components::{Hostile, Stats};
+use crate::components::{Hostile, Player, Stats};
 use crate::game::combat_teardown::FightVerdict;
 use crate::resources::{GameClock, Party, ZoneLevel};
 use crate::tactical::map::{BattleSpec, generate};
-use crate::tactical::{TacticalBattle, deploy, reach};
+use crate::tactical::{TacticalBattle, deploy, opposes, reach};
 use crate::world::WorldMap;
 
 /// What one press of a direction did.
@@ -438,11 +438,15 @@ impl Game {
     /// **Every refusal lands before anything is spent** — the Power, the
     /// cooldown and the turn alike — which is `commit_caravan_basket`'s rule
     /// and the reason the price is charged only once the aim has been
-    /// checked. Six of them: no fight, nobody acting, the body has already
-    /// acted, no such routine, a routine that is not run in a fight at all
-    /// (a passive, or a field-only effect — `battle_special_options`' own
-    /// two exclusions), whatever `ability_unavailable` says, and an aim
-    /// outside the routine's range.
+    /// checked. Six of them are the door's own: no fight, nobody acting, the
+    /// body has already acted, no such routine, a routine that is not run in
+    /// a fight at all (a passive, or a field-only effect —
+    /// `battle_special_options`' own two exclusions), whatever
+    /// `ability_unavailable` says, and an aim outside the routine's range or
+    /// out of sight. The rest are an effect's own, each with its reason at
+    /// the site: a capture aimed at anything but a hostile, a `Summon` with
+    /// no room on the board, a `Single` tamper aimed at the player, and a
+    /// Hallucination that would seat no decoy or cover nobody.
     ///
     /// Reports whether the routine ran. The action ends the turn, so one
     /// that runs hands the turn on — unless it ended the fight.
@@ -507,6 +511,51 @@ impl Game {
         // to seat nobody is exactly the wasted round the other six refuse.
         if matches!(ability.effect, AbilityEffect::Summon { .. }) && !self.board_has_room(actor) {
             return false;
+        }
+        // The eighth refusal, and a tamper's own: it names the other side,
+        // and the player is never on it. A shaped tamper already drops the
+        // player in `Game::apply_tamper`; a `Single` aim has nothing else to
+        // drop it there, so it needs the refusal here or it would spend the
+        // Power, the cooldown and the turn tampering with nobody.
+        if matches!(ability.effect, AbilityEffect::Tamper { .. })
+            && ability.tactical_shape() == AbilityShape::Single
+            && self
+                .world
+                .resource::<TacticalBattle>()
+                .occupant(aim)
+                .is_some_and(|body| self.world.get::<Player>(body).is_some())
+        {
+            return false;
+        }
+        // The ninth and tenth, and a Hallucination's own — `board_has_room`'s
+        // argument twice more. A radius with no free cell in it seats no
+        // decoy at all, and a radius covering nobody on the other side seats
+        // decoys that `settle_decoys` drops inside the very hand-on that
+        // ended the turn, since no living body can see them. Either way 14
+        // Power, a five-round cooldown and the turn buy nothing and say
+        // nothing, which is exactly what the eight above refuse.
+        //
+        // Both questions are asked of the derivations the effect itself then
+        // runs, rather than of a second copy of them.
+        if let AbilityEffect::Tamper {
+            kind: TamperKind::Hallucinating { decoys },
+            ..
+        } = &ability.effect
+        {
+            if self
+                .hallucination_cells(actor, &ability, aim, *decoys)
+                .is_empty()
+            {
+                return false;
+            }
+            let owner_hostile = self.world.get::<Hostile>(actor).is_some();
+            if !self
+                .tamper_recipients(actor, &ability, aim)
+                .into_iter()
+                .any(|body| opposes(owner_hostile, self.world.get::<Hostile>(body).is_some()))
+            {
+                return false;
+            }
         }
         self.run_tactical_routine(actor, &ability, aim, 0);
         true
@@ -639,11 +688,36 @@ impl Game {
                     break;
                 }
             }
+        } else if let AbilityEffect::Tamper { kind, duration } = ability.effect {
+            // `Decompile`'s reason and `Summon`'s: seated by the one combat
+            // model that can resolve it rather than through `use_ability`'s
+            // recipient loop, which carries the `unreachable!` arm this
+            // branch is what makes actually unreachable.
+            self.apply_tamper(actor, ability, kind, duration, aim);
         } else {
             let shape = ability.tactical_shape();
+            // Taken **before** the routine resolves: it can kill its own
+            // invoker, and neither the cell it ran from nor the side it was on
+            // can be asked of a body the reap has taken off the board.
+            let passing = self.is_hallucinating(actor).then(|| {
+                let battle = self.world.resource::<TacticalBattle>();
+                let cells = battle
+                    .cell_of(actor)
+                    .map(|from| reach::shape_cells(&battle.board, from, aim, shape))
+                    .unwrap_or_default();
+                let line = format!(
+                    "{}'s {} passes through a decoy.",
+                    self.tamper_label(actor),
+                    ability.name
+                );
+                (self.world.get::<Hostile>(actor).is_some(), cells, line)
+            });
             let recipients =
                 reach::recipients(self.world.resource::<TacticalBattle>(), actor, aim, shape);
             self.use_ability(ability, actor, &name, &recipients);
+            if let Some((actor_hostile, cells, line)) = passing {
+                self.pass_through_decoys(actor_hostile, &cells, line);
+            }
         }
 
         // A routine can drop a body anywhere on the board — that is what
@@ -678,7 +752,22 @@ impl Game {
     /// The upkeep is the one the group model's round spends in
     /// `battle_resolve_round`'s last two lines, at the same cadence — see
     /// `tactical_round_upkeep`.
-    fn hand_on_turn(&mut self, actor: Entity, round_before: u32) {
+    pub(crate) fn hand_on_turn(&mut self, actor: Entity, round_before: u32) {
+        // **First, and only while `actor` is alive.** Duration counts the
+        // tampered body's own turns — `components::Tampered`'s reason for
+        // ageing here rather than in `Game::tick_one_combatant` — so this is
+        // the one place that turn is known to have happened. Guarded on
+        // being alive so a body that died to its own action this turn (a
+        // fumble's recoil, a blast on its own cell) doesn't age a turn it
+        // no longer has a next one to reach.
+        if self.creature_alive(actor) {
+            self.age_tamper(actor);
+        }
+        // After the ageing, so a Hallucination that has just run out stops
+        // holding its decoys up in the same hand-on — and after any strike or
+        // routine this turn, so a body that took its last decoy sees clearly
+        // before the next body acts rather than when its duration says.
+        self.settle_decoys();
         let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return;
         };
@@ -801,6 +890,10 @@ impl Game {
     /// the party fighting on, but the player is the one holding the fight
     /// open, so their leaving closes it exactly as `battle_flee` does.
     fn settle_tactical(&mut self, wild: Option<Entity>) -> bool {
+        // Every reap and every departure comes through here, including the
+        // reap in the round's upkeep that no hand-on follows — so a decoy
+        // never outlives the last body it was fooling by a turn.
+        self.settle_decoys();
         let player = self.player_entity();
         let Some(battle) = self.world.get_resource::<TacticalBattle>() else {
             return false;

@@ -1,0 +1,7 @@
+(
+    id: "attention_head",
+    name: "Attention Head",
+    description: "Researched module. Holds a strike's focus where the model's was.",
+    value: Some(25),
+    equipment: Some((Module, (accuracy: 3))),
+)

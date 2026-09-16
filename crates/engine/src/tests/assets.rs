@@ -737,7 +737,8 @@ fn every_shipped_integrity_routine_rolls_a_band() {
             | E::Jump
             | E::Symlink
             | E::Summon { .. }
-            | E::Cloak { .. } => continue,
+            | E::Cloak { .. }
+            | E::Tamper { .. } => continue,
         };
         checked += 1;
         assert!(
@@ -788,7 +789,11 @@ fn every_shipped_routine_that_rolls_to_hit_is_aimed_and_no_other_is() {
             | E::Jump
             | E::Symlink
             | E::Summon { .. }
-            | E::Cloak { .. } => false,
+            | E::Cloak { .. }
+            // A tamper always lands — the forecast is the feature, and a
+            // tamper that could fumble would turn a guaranteed read into a
+            // gamble.
+            | E::Tamper { .. } => false,
         };
         if rolls_to_hit {
             aimed += 1;
@@ -868,9 +873,9 @@ fn every_targeting_mode_derives_the_geometry_it_is_documented_to() {
     }
 }
 
-/// Nothing shipped authors a `shape:` yet — the content pass that gives the
-/// roster real geometry is not part of the mode — so every one of them
-/// resolves through the derivation, and what it resolves to has to be
+/// The five tamper routines are the first to author a `shape:`/`range:` of
+/// their own; every other shipped routine still resolves through the
+/// derivation above. Either way, what a routine resolves to has to be
 /// something a battle map can draw and aim.
 #[test]
 fn every_shipped_routine_resolves_to_a_shape_a_battle_map_can_use() {
@@ -1000,6 +1005,8 @@ fn every_shipped_routine_states_whether_it_breaks_a_cloak() {
     for def in game.world.resource::<crate::abilities::AbilityDb>().all() {
         let expected = match &def.effect {
             E::Damage { .. } | E::Drain { .. } | E::Debuff { .. } | E::Decompile => true,
+            // A tamper names the other side, `Debuff`'s reason exactly.
+            E::Tamper { .. } => true,
             E::Heal { .. }
             | E::Buff { .. }
             | E::Cleanse
@@ -1089,6 +1096,13 @@ fn scope_rank(target: crate::abilities::AbilityTarget) -> usize {
 /// design, because there is no path to it but a boss or a trader. Building
 /// three rungs of Kernel Shear so it could sit in this list would triple the
 /// exclusive pool for a reason no player would ever see.
+///
+/// **Tactical-only routines are excluded for a third reason.** The ladder
+/// exists so a hostile's species kit or the hunt pool always offers a
+/// cheaper rung below whatever a wild carrier rolls; a tamper routine is
+/// research-taught and enters neither, so Heat Injection Group and
+/// Hallucination Group are free to have no Single rung nothing would ever
+/// need.
 #[test]
 fn every_battle_ability_family_is_contiguous_from_single_upward() {
     let game = Game::new(3305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -1102,6 +1116,7 @@ fn every_battle_ability_family_is_contiguous_from_single_upward() {
             !d.effect.field_only()
                 && !d.exclusive
                 && !matches!(d.effect, crate::abilities::AbilityEffect::Summon { .. })
+                && !d.effect.tactical_only()
         })
     {
         scopes
@@ -1889,8 +1904,8 @@ fn every_zone_gated_gear_recipe_asks_for_a_zone_material() {
         }
     }
     assert_eq!(
-        checked, 10,
-        "expected every zone-gated recipe the tree unlocks — six of gear and \
+        checked, 12,
+        "expected every zone-gated recipe the tree unlocks — eight of gear and \
          four of Power cells; one that lost its recipe would drop out of this \
          scan unnoticed"
     );

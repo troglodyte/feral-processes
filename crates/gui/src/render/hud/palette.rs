@@ -91,6 +91,29 @@ pub(crate) const PLAN: Color = rgb(0x4a7fd0);
 /// nothing tactical.rs paints is [`ATTENTION`] or [`WARN`] — so there is no
 /// second thing on screen a splash's landing zone could be mistaken for.
 pub(crate) const AIM: Color = rgb(0xd6c542);
+/// orchid — **what the wild side has told you it is about to do**: a
+/// profiled hostile's published walk and the cell it will aim at, drawn on
+/// the battle map only while an `Inference Probe` entry is live.
+///
+/// A fourth thing on that grid, and none of the three already there is it.
+/// [`PLAN`] is *the player having acted* — the reach wash under the acting
+/// body and the arrow over its head are both drawn in it, and a forecast
+/// painted the same colour put a third meaning on one channel: the test for
+/// it had to blank the reach wash to see the forecast at all, which is
+/// exactly the reading the player cannot do. [`AIM`] is the player's own
+/// cursor, live only while they are aiming. And [`THREAT`] is inbound harm
+/// itself, not a preview of it — a walk that has not happened yet drawn in
+/// the colour a blow lands in would make the board read as under attack
+/// every round a probe is up.
+///
+/// Orchid because the warm half of the wheel is spoken for by the three
+/// yellows and the con ladder, and cyan by the player's own `@`; purple is
+/// what is left that separates from both [`PLAN`] and the blues behind it.
+/// Held 0.25 from every content hue and every role by
+/// `the_forecast_is_separable_from_what_it_is_drawn_over`, at the same
+/// saturation as [`glyph`]'s table so it does not read as louder than the
+/// bodies it is drawn among.
+pub(crate) const FORECAST: Color = rgb(0xb86ad0);
 /// br cyan — pane titles on their borders.
 pub(crate) const PANE_TITLE: Color = rgb(0x56d4dd);
 /// br cyan — the player's `@`, and an upgradeable item.
@@ -355,6 +378,41 @@ mod tests {
                 assert!(d > 0.25, "{an} and {bn} are too close to separate ({d:.3})");
             }
         }
+    }
+
+    /// [`FORECAST`] is drawn over the reach wash, over the map's tiles and
+    /// over the bodies themselves, so it has to separate from all three — and
+    /// from the two roles it is deliberately *not*, [`AIM`] and [`THREAT`].
+    /// `every_content_hue_is_separable_from_the_others`' margin, for the same
+    /// reason: this is a line two pixels wide over a tinted floor.
+    #[test]
+    fn the_forecast_is_separable_from_what_it_is_drawn_over() {
+        let mut over: Vec<(String, Color)> = GlyphColor::ALL
+            .into_iter()
+            .map(|c| (format!("{c:?}"), glyph(c)))
+            .collect();
+        over.push(("PLAYER".to_string(), PLAYER));
+        for (i, colour) in PLAYER_CHOICES.into_iter().enumerate() {
+            over.push((format!("PLAYER_CHOICES[{i}]"), colour));
+        }
+        for (name, role) in [
+            ("PLAN", PLAN),
+            ("AIM", AIM),
+            ("THREAT", THREAT),
+            ("ATTENTION", ATTENTION),
+            ("WARN", WARN),
+            ("EMPHASIS", EMPHASIS),
+        ] {
+            over.push((name.to_string(), role));
+        }
+        for (name, colour) in &over {
+            assert!(
+                dist(FORECAST, *colour) > 0.25,
+                "FORECAST is only {:.2} from {name}",
+                dist(FORECAST, *colour)
+            );
+        }
+        assert_eq!(FORECAST.a, 1.0, "FORECAST is not opaque");
     }
 
     /// A role at anything but full alpha draws washed into whatever is

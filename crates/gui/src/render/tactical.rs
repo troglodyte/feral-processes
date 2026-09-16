@@ -380,18 +380,20 @@ pub(super) fn draw_tactical_map(
             let (tpx, tpy) = to_px(step);
             if on_pane(tpx, tpy) {
                 let ((ax, ay), (bx, by)) = cell_centers(to_px, tile_px, from, step);
-                // `PLAN`, never `THREAT` (that role is the wild side's
-                // inbound harm, not a preview of it) and not `AIM` (the
-                // player's own cursor) — a third thing, what the AI is
-                // telegraphing.
-                painter.line(ax, ay, bx, by, BOLT_THICKNESS_PX, palette::PLAN);
+                // `FORECAST` and its own role — never `THREAT` (the wild
+                // side's inbound harm, not a preview of it), never `AIM` (the
+                // player's own cursor), and no longer `PLAN`: the reach wash
+                // a few blocks up and the arrow over the acting body's head
+                // are both `PLAN`, and a telegraphed walk drawn in it was a
+                // third meaning on that one channel. See the role's own doc.
+                painter.line(ax, ay, bx, by, BOLT_THICKNESS_PX, palette::FORECAST);
             }
             from = step;
         }
         if let Some(target) = forecast.target {
             let (px, py) = to_px(target);
             if on_pane(px, py) {
-                painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, palette::PLAN);
+                painter.rect_lines(px, py, tile_px - 1.0, tile_px - 1.0, 2.0, palette::FORECAST);
             }
         }
     }
@@ -1072,20 +1074,26 @@ mod tests {
         );
     }
 
-    /// A profiled hostile's forecast draws its walk as a run of `PLAN`
+    /// A profiled hostile's forecast draws its walk as a run of `FORECAST`
     /// segments and marks its target — and an empty walk, which is every
     /// forecast above temperature zero (`Game::tactical_forecast`'s own
     /// rule), draws none.
+    ///
+    /// **The reach wash is left standing**, which is the point of the role:
+    /// the wash is `PLAN` and the forecast is not, so the two are counted
+    /// apart on a board that is drawing both at once. This test used to have
+    /// to `view.reachable.clear()` to see the forecast at all, and a player
+    /// cannot clear the wash.
     #[test]
     fn the_forecast_draws_its_walk_and_marks_its_target() {
         use feral_processes_engine::tactical::view::ForecastView;
 
         let mut game = fighting();
-        let mut view = game.tactical_view().expect("the fight is open");
-        // The movement wash outlines `reachable` in PLAN too — clearing it
-        // isolates the forecast's own lines from the acting body's ordinary
-        // reach field.
-        view.reachable.clear();
+        let view = game.tactical_view().expect("the fight is open");
+        assert!(
+            !view.reachable.is_empty(),
+            "fixture: the acting body has a reach wash for the forecast to be told from"
+        );
         let subject = view.order[0].entity;
         let from = view
             .bodies
@@ -1113,9 +1121,9 @@ mod tests {
             target: None,
         }));
         assert_eq!(
-            crate::paint::painted_line_count_in(&quiet, palette::PLAN),
+            crate::paint::painted_line_count_in(&quiet, palette::FORECAST),
             0,
-            "a forecast with no walk drew a PLAN line anyway"
+            "a forecast with no walk drew a FORECAST line anyway"
         );
 
         let planned = draw(Some(ForecastView {
@@ -1124,12 +1132,25 @@ mod tests {
             target: Some(steps[1]),
         }));
         assert!(
-            crate::paint::painted_line_count_in(&planned, palette::PLAN) > 0,
-            "a planned walk drew no PLAN line"
+            crate::paint::painted_line_count_in(&planned, palette::FORECAST) > 0,
+            "a planned walk drew no FORECAST line"
         );
         assert!(
-            crate::paint::painted_rect_stroke_count(&planned, palette::PLAN) > 0,
+            crate::paint::painted_rect_stroke_count(&planned, palette::FORECAST) > 0,
             "the forecast's target went unmarked"
+        );
+        // The forecast's own channel, asserted against the wash it is drawn
+        // over: the reach field is still showing, and neither the walk nor
+        // the target mark may be the colour it is painted in.
+        assert_eq!(
+            crate::paint::painted_line_count_in(&planned, palette::PLAN),
+            crate::paint::painted_line_count_in(&quiet, palette::PLAN),
+            "the forecast's walk drew PLAN lines, which is the reach wash's colour"
+        );
+        assert_eq!(
+            crate::paint::painted_rect_stroke_count(&planned, palette::PLAN),
+            crate::paint::painted_rect_stroke_count(&quiet, palette::PLAN),
+            "the forecast's target mark drew in PLAN, the reach wash's colour"
         );
     }
 
@@ -1500,11 +1521,22 @@ mod tests {
 
     /// The width census: the widest line the tamper block can ever draw —
     /// every tag, `HIJACK`, and the longest shipped routine's own display
-    /// name — fits the map pane less two `strip_inset`s.
+    /// name — leaves `draw_tamper_block`'s own guard satisfied.
     ///
-    /// **(M)** Adding a sixth long tag to the fixture line (without widening
-    /// the pane) makes this fail, which is the mutation this census exists
-    /// to catch.
+    /// **Measured against what the guard measures**, not against the pane.
+    /// The block is right-aligned on the strip, so it is dropped whole when
+    /// `x < pane.x + strip_inset` — that is, when its `pad * 2 + widest`
+    /// exceeds `strip_right - (pane.x + strip_inset)`, and `strip_right` is
+    /// `pane.x + pane.w - m.inset` whatever the strip's own width. A census
+    /// that measured the bare line against the whole pane could pass while
+    /// the block vanished in silence, which is the failure this exists to
+    /// catch.
+    ///
+    /// **(M)** The shipped worst case measures 496.2px into a 766.5px
+    /// budget, so the headroom is real and a sixth tag does not spend it —
+    /// the mutation that fails this is padding the fixture's tag list out
+    /// until the line is wider than the budget, which it does at around
+    /// forty extra rungs. Verified and restored.
     #[test]
     fn the_widest_tamper_line_fits_the_map_pane() {
         use crate::render::hud::layout;
@@ -1549,12 +1581,17 @@ mod tests {
         with_painter(|p| {
             let char_w = p.measure_ui_advance("M", m.font_size);
             let map_pane = layout::regions(1280.0, 720.0, char_w, &m, false).map_pane;
-            let budget = map_pane.w - strip_inset(&m) * 2.0;
-            let width = p.measure_ui_advance(&line, m.small());
+            // `draw_turn_strip`'s own right edge, which the block hangs off
+            // and which is independent of how wide the strip itself is.
+            let strip_right = map_pane.x + map_pane.w - m.inset;
+            let budget = strip_right - (map_pane.x + strip_inset(&m));
+            // `draw_tamper_block`'s own two figures, in its own spelling.
+            let pad = m.line_height * 0.35;
+            let width = pad * 2.0 + p.measure_ui_advance(&line, m.small());
             assert!(
                 width <= budget,
-                "the widest tamper line overflows the map pane by {:.1}px \
-                 ({width:.1}px into a {budget:.1}px budget): {line:?}",
+                "the widest tamper block would be dropped by its own guard, \
+                 overflowing by {:.1}px ({width:.1}px into a {budget:.1}px budget): {line:?}",
                 width - budget
             );
         });

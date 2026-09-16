@@ -105,6 +105,81 @@ pub(super) fn game_with_a_single_program(seed: u32) -> Game {
     game_with_programs("last_program", seed, &[(false, "Lone Sparkgrub")])
 }
 
+/// A `Game` carrying one tamed program already in party slot 0, at `rarity`.
+///
+/// The only route to a rare-tier *party member*: `Game::adopt_program`
+/// spawns a fresh companion on the player's own tile, and `Game::roll_rarity`
+/// refuses to roll above `Ordinary` inside the opening ring — every fresh
+/// run's own spawn point. Splicing the tier into the save, the way
+/// `party.rs`'s `widest_subject` does for a non-party creature, is what gets
+/// a rare tag in front of a renderer at all.
+pub(super) fn game_with_a_rare_party_companion(
+    seed: u32,
+    rarity: feral_processes_engine::components::Rarity,
+) -> Game {
+    let mut game = new_game(seed);
+    let path = scratch_path("rare_party_companion", seed);
+    let _cleanup = RemoveOnDrop(&path);
+    let species = game.species_defs()[0].id.clone();
+    game.save(&path).unwrap();
+
+    let mut data = save::load_from_file(&path).unwrap();
+    let (px, py) = data.player.position;
+    data.creatures.push(CreatureSave {
+        sortie_index: None,
+        boss: false,
+        species,
+        position: (px, py),
+        hp: 10,
+        max_hp: 10,
+        atk: 3,
+        mitigation: 2,
+        tamed: true,
+        power: 100.0,
+        level: 1,
+        xp: 0,
+        xp_to_next: 10,
+        cronjob: None,
+        party_slot: Some(0),
+        wielded: false,
+        zone: 1,
+        custom_name: None,
+        hp_roll: 1.0,
+        atk_roll: 1.0,
+        def_roll: 1.0,
+        growth_roll: 1.0,
+        assembly_roll: 1.0,
+        extraction_roll: 1.0,
+        fusions: 0,
+        refactors: 0,
+        purchased_tiers: 0,
+        ring: 0,
+        talents: Vec::new(),
+        bought_stats: Default::default(),
+        routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
+        field_buffs: Vec::new(),
+        nest_position: None,
+        patrol_position: None,
+        pursuing: false,
+        carrying: None,
+        carrying_program: None,
+        rarity,
+        nemesis_grudges: 0,
+        equipment: Vec::new(),
+        program_id: 0,
+        disposition: None,
+        disgruntled: None,
+        disgruntled_stranded: false,
+        memories: Vec::new(),
+        needs: Default::default(),
+        off_shift: None,
+        staff: false,
+        downed: false,
+    });
+    save::save_to_file(&path, &data).unwrap();
+    Game::load(&path, &test_assets_dir()).unwrap()
+}
+
 /// The save-round-trip body both fixtures above share: write the fresh game
 /// out, push one `CreatureSave` per `(wielded, name)` pair, load it back.
 ///

@@ -25,8 +25,8 @@ use super::palette;
 use super::strip::Piece;
 use crate::paint::{Painter, Rect, TextRun};
 use crate::render::field::{TagStyle, buff_entries};
+use crate::render::fusion_color;
 use crate::render::popup::Row as PopupRow;
-use crate::render::{fusion_color, tier_color};
 use crate::text::Metrics;
 
 /// Stock rows shown in the PRODUCTION block before the count takes over.
@@ -490,8 +490,10 @@ fn crew_rows(d: &PaneData) -> Vec<Row> {
         // `short_name`, not `name`: the UNIT cell is 14 characters, which a
         // rare tier's text prefix alone would spend more than half of before
         // the handle that actually tells two Overclocked programs apart
-        // gets drawn — see `Game::creature_short_label`. The tier reads as
-        // the row's colour instead, `tier_color`'s own reason to exist.
+        // gets drawn — see `Game::creature_short_label`. The tier itself is
+        // not shown here at all: the roster (`party.rs`) and the battle
+        // roster (`render/battle.rs`) both carry it, and this row's colour
+        // stays what it has always been — party membership, not rarity.
         out.push(with_tail(
             vec![
                 (
@@ -500,11 +502,11 @@ fn crew_rows(d: &PaneData) -> Vec<Row> {
                         cell(&p.short_name, 14),
                         cell(&p.level.to_string(), 4)
                     ),
-                    tier_color(p.fusions, p.rarity).unwrap_or(if p.party_slot.is_some() {
+                    if p.party_slot.is_some() {
                         palette::BODY
                     } else {
                         palette::FAINT
-                    }),
+                    },
                     false,
                 ),
                 (
@@ -1113,6 +1115,48 @@ mod tests {
         assert!(
             text.contains(&handle),
             "the handle was clipped out of the CREW row: {text:?}"
+        );
+    }
+
+    /// The CREW row's colour is party membership, never rarity — a review
+    /// fix once swapped it for `tier_color`, which overrode `BODY`/`FAINT`
+    /// with a rare program's tier, drew Overclocked in the decorative
+    /// `GOLD` beside the reserved `ATTENTION` yellow, and hid the tier
+    /// entirely for a fused rare program (`fusion_color` outranks
+    /// `rarity_color` inside `tier_color`). The tier belongs to the roster
+    /// and the battle roster instead (`party.rs`, `render/battle.rs`), not
+    /// this 14-cell row.
+    #[test]
+    fn crew_row_colour_is_party_membership_not_rarity() {
+        let mut party_pet = pet("InParty", Some(0));
+        party_pet.rarity = Rarity::Gold;
+        let mut benched_pet = pet("Benched", None);
+        benched_pet.rarity = Rarity::Gold;
+        let pets = [party_pet, benched_pet];
+        let d = busy(&pets, &[], &[], &[], &[], &[]);
+
+        fn unit_color(rows: &[Row], name: &str) -> crate::paint::Color {
+            rows.iter()
+                .find_map(|r| match r {
+                    Row::Text { left, .. } => left
+                        .first()
+                        .filter(|(t, _, _)| t.contains(name))
+                        .map(|(_, c, _)| *c),
+                    Row::Rule => None,
+                })
+                .unwrap_or_else(|| panic!("no CREW row named {name}"))
+        }
+
+        let rows = crew_rows(&d);
+        assert_eq!(
+            unit_color(&rows, "InParty"),
+            palette::BODY,
+            "a party member's row must draw BODY regardless of rarity"
+        );
+        assert_eq!(
+            unit_color(&rows, "Benched"),
+            palette::FAINT,
+            "a benched member's row must draw FAINT regardless of rarity"
         );
     }
 

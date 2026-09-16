@@ -324,14 +324,18 @@ impl Game {
     /// name columns before the identity that matters (the handle) is even
     /// drawn.
     ///
-    /// Two callers, both fixed-width cells that carry `rarity` as a
+    /// Three callers. Two are fixed-width cells that carry `rarity` as a
     /// separate field precisely so the tier can be read back without text:
     /// the CREW pane's `UNIT` column (`gui/src/render/hud/panes.rs`, via
     /// `views::PetInfo`) and the party battle roster's `NAME_W` cell
     /// (`gui/src/render/battle.rs`, via `views::PartySlotView`, through
     /// `party_row` in `game/combat_round.rs`) — the hostile roster's
     /// `EnemyGroupView` reads the species directly instead, since a wild
-    /// group's species is the point of that row, not incidental to it.
+    /// group's species is the point of that row, not incidental to it. The
+    /// third is `remembered_name` (`game/memories.rs`), a memory row's
+    /// subject rather than a fixed-width cell — it carries no `rarity` of
+    /// its own to read back, since a memory's subject is who it is about,
+    /// not what tier they were when it formed.
     pub fn creature_short_label(&self, entity: Entity) -> String {
         match self.creature_name(entity) {
             Some(named) => self.zone_tagged_name(entity, named),

@@ -1174,6 +1174,70 @@ mod tests {
             "the tag trails the name, never prefixes it: {tagged:?}"
         );
     }
+
+    /// The gap `party_name_cell`'s own unit tests above cannot close:
+    /// nothing stops `draw_battle`'s call site reverting to bare `p.name`
+    /// while `party_name_cell` itself stays correct and its tests stay
+    /// green. This drives a real fight through `draw_battle` and reads the
+    /// painted text back, so a call site that regresses to `&p.name` fails
+    /// here — confirmed by reverting that one line locally and re-running
+    /// this test before writing the fix back.
+    #[test]
+    fn draw_battle_paints_a_rare_partys_tier_tag() {
+        use feral_processes_app_core::{GameKey, Mode};
+        use feral_processes_engine::components::Rarity;
+        use feral_processes_engine::{DifficultyMode, Game};
+
+        // Which way, if any, a lone wild program sits next to the player —
+        // `crates/app-core/src/tests/battle.rs`'s `battling_app_with` runs
+        // the same search over the same range for the same reason: a fresh
+        // seed's habitat spawn is not guaranteed to land one adjacent.
+        fn adjacent_hostile(game: &mut Game) -> Option<GameKey> {
+            let player = game.player_status().position;
+            game.view_entities(12, 12)
+                .into_iter()
+                .filter(|e| e.is_hostile && !e.is_tamed && !e.is_structure)
+                .find(|e| (e.pos.0 - player.0).abs() + (e.pos.1 - player.1).abs() == 1)
+                .map(|e| match (e.pos.0 - player.0, e.pos.1 - player.1) {
+                    (1, 0) => GameKey::Right,
+                    (-1, 0) => GameKey::Left,
+                    (0, 1) => GameKey::Down,
+                    _ => GameKey::Up,
+                })
+        }
+
+        let assets_dir = crate::render::test_support::test_assets_dir();
+        let (seed, direction) = (0..200u32)
+            .find_map(|seed| {
+                let mut game = Game::new(seed, DifficultyMode::Forgiving, &assets_dir).ok()?;
+                adjacent_hostile(&mut game).map(|dir| (seed, dir))
+            })
+            .expect("no seed under 200 put a wild program next to the player");
+
+        let game =
+            crate::render::test_support::game_with_a_rare_party_companion(seed, Rarity::Gold);
+        let mut app = crate::render::test_support::playing_app_around(game);
+        app.handle_key(direction);
+        assert_eq!(
+            app.mode,
+            Mode::Battle,
+            "the seeded hostile did not open a fight"
+        );
+
+        let mut fx = crate::fx::Fx::new();
+        let m = ui_metrics(900.0);
+        let (_, shapes) = crate::paint::with_painter(|p| draw_battle(&mut app, &mut fx, p, &m));
+        let texts = crate::paint::painted_text(&shapes);
+        // "[OVERC…", not the whole word: `NAME_W` clips the tag before it
+        // clips the handle (`a_clipped_tier_tag_never_clips_the_handle_it_
+        // trails` above), and a real handle plus zone already spends most
+        // of the cell. The fragment is still unambiguous — bare `p.name`
+        // prints none of it.
+        assert!(
+            texts.iter().any(|t| t.contains("[OVERC")),
+            "the party roster row should carry its rarity tag: {texts:?}"
+        );
+    }
 }
 
 #[cfg(test)]

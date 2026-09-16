@@ -1172,6 +1172,7 @@ relying on one, and correct all three places if it has moved.
 - **The memories page is one derivation and has no scroll.** `R` from the
   roster — not `M`, which has been the manifest since long before this — and
   every figure comes from `Game::memory_report` / `Game::morale`.
+- **`mood` splits one store into two reads, and `evict` reads neither.**
 
 ### Notifications
 
@@ -1213,6 +1214,8 @@ relying on one, and correct all three places if it has moved.
   `species::stat_shape_faults`.
 - **Two censuses are reported to the tuner rather than enforced on it**, and
   which is which is a cost question.
+- **A program's handle is derived from its `ProgramId` by `handles::of`,
+  never stored, and the permutation's salt is save format.**
 
 ### The HUD
 

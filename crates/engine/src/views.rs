@@ -831,6 +831,11 @@ pub struct PetInfo {
     pub glyph: char,
     pub color: GlyphColor,
     pub name: String,
+    /// `Game::creature_short_label` — no tier, no species. For a cell too
+    /// narrow for `name`'s full form; carry `rarity` alongside it (below)
+    /// to show the tier some other way, e.g. a row colour, rather than
+    /// parsing it back out of `name`.
+    pub short_name: String,
     pub level: u32,
     pub hp: i32,
     pub max_hp: i32,
@@ -1568,7 +1573,16 @@ pub struct PartySlotView {
     /// Index into `BattleState::planned` — 0 is the player.
     pub slot: usize,
     pub entity: Entity,
+    /// `Game::creature_short_label` — no tier, no species. The battle
+    /// roster's `NAME_W` cell (`gui/src/render/battle.rs`) has no room for
+    /// either; `rarity` below is what lets the renderer say the tier some
+    /// other way, a trailing tag, following `rarity_tag`'s pattern for the
+    /// hostile roster.
     pub name: String,
+    /// This slot's rare-spawn tier — see `components::Rarity`. Carried
+    /// separately from `name` for the reason `views::PetInfo::rarity` is:
+    /// the tier reads back without parsing it out of a string.
+    pub rarity: Rarity,
     pub hp: i32,
     pub max_hp: i32,
     pub atk: i32,

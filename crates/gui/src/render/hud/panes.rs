@@ -472,23 +472,34 @@ fn crew_rows(d: &PaneData) -> Vec<Row> {
     if d.pets.is_empty() {
         out.push(text(vec![dim("  nobody on the roster")]));
     }
-    // Party first: the members standing beside you are what the pane is most
-    // often opened for, and `owned_pets` is not ordered.
-    let mut roster: Vec<&PetInfo> = d.pets.iter().collect();
-    roster.sort_by_key(|p| (p.party_slot.is_none(), p.party_slot, p.name.clone()));
-    for p in roster.iter().take(CREW_ROWS) {
+    // Party first: `Game::owned_pets` already delivers that — party in slot
+    // order, then a run per `ProgramRole`, then species and `ProgramId` —
+    // so this pane draws `d.pets` as given rather than re-sorting it. A
+    // local re-sort used to run here keyed on `p.name`, which for a
+    // handle-named program is `handles::of`'s permutation and reads as
+    // arbitrary; it also silently threw away the role grouping `owned_pets`
+    // establishes among the "not in party" rows, which all shared one key
+    // once the sort stopped naming a slot.
+    for p in d.pets.iter().take(CREW_ROWS) {
         let mark = if p.party_slot.is_some() {
             "\u{00bb} "
         } else {
             "  "
         };
         let hurt = p.hp * 2 < p.max_hp.max(1);
+        // `short_name`, not `name`: the UNIT cell is 14 characters, which a
+        // rare tier's text prefix alone would spend more than half of before
+        // the handle that actually tells two Overclocked programs apart
+        // gets drawn — see `Game::creature_short_label`. The tier itself is
+        // not shown here at all: the roster (`party.rs`) and the battle
+        // roster (`render/battle.rs`) both carry it, and this row's colour
+        // stays what it has always been — party membership, not rarity.
         out.push(with_tail(
             vec![
                 (
                     format!(
                         "{mark}{}{}",
-                        cell(&p.name, 14),
+                        cell(&p.short_name, 14),
                         cell(&p.level.to_string(), 4)
                     ),
                     if p.party_slot.is_some() {
@@ -672,6 +683,7 @@ mod tests {
             glyph: 'p',
             color: GlyphColor::Green,
             name: name.to_string(),
+            short_name: name.to_string(),
             level: 12,
             hp: 120,
             max_hp: 120,
@@ -1067,6 +1079,85 @@ mod tests {
                 }
             }
         });
+    }
+
+    /// The UNIT cell is 14 characters — under half of what `"Overclocked "`
+    /// alone (12) plus a real handle (8) would need — so before
+    /// `short_name` existed, two different Overclocked programs both
+    /// truncated to the identical `"Overclocked 0x"` in this pane. The
+    /// worst case: `Rarity::Gold` ("Overclocked") and a two-digit zone, the
+    /// widest tier word paired with the widest zone tag `creature_short_
+    /// label` can print. The handle is real, from `handles::of`, never a
+    /// pasted literal — `a_clipped_handle_named_row_reserves_exactly_
+    /// name_w_of_pixel_width` in `gui/src/render/battle.rs` is the pattern.
+    #[test]
+    fn a_crew_row_draws_its_handle_whole_at_the_widest_tier() {
+        use feral_processes_engine::components::ProgramId;
+        use feral_processes_engine::handles;
+
+        let handle = handles::of(ProgramId(1));
+        let short = format!("{handle} 12");
+        // `name` is the long, tier-prefixed form the pane must NOT draw —
+        // `"Overclocked "` alone is 12 of the cell's 14 characters, so
+        // drawing this instead of `short_name` clips the handle down to two
+        // hex digits, which is the bug this test exists to catch.
+        let long = format!("Overclocked {short} Scrapper");
+        let mut worst = pet(&long, None);
+        worst.short_name = short.clone();
+        worst.rarity = Rarity::Gold;
+        let pets = [worst];
+        let d = busy(&pets, &[], &[], &[], &[], &[]);
+
+        let rows = rows(InfoTab::Crew, &d);
+        let at = Rect::new(0.0, 0.0, 400.0, 400.0);
+        let (_, shapes) = with_painter(|p| draw_rows(at, &rows, 0, p, &ui_metrics(720.0)));
+        let text = painted_text(&shapes).join(" ");
+        assert!(
+            text.contains(&handle),
+            "the handle was clipped out of the CREW row: {text:?}"
+        );
+    }
+
+    /// The CREW row's colour is party membership, never rarity — a review
+    /// fix once swapped it for `tier_color`, which overrode `BODY`/`FAINT`
+    /// with a rare program's tier, drew Overclocked in the decorative
+    /// `GOLD` beside the reserved `ATTENTION` yellow, and hid the tier
+    /// entirely for a fused rare program (`fusion_color` outranks
+    /// `rarity_color` inside `tier_color`). The tier belongs to the roster
+    /// and the battle roster instead (`party.rs`, `render/battle.rs`), not
+    /// this 14-cell row.
+    #[test]
+    fn crew_row_colour_is_party_membership_not_rarity() {
+        let mut party_pet = pet("InParty", Some(0));
+        party_pet.rarity = Rarity::Gold;
+        let mut benched_pet = pet("Benched", None);
+        benched_pet.rarity = Rarity::Gold;
+        let pets = [party_pet, benched_pet];
+        let d = busy(&pets, &[], &[], &[], &[], &[]);
+
+        fn unit_color(rows: &[Row], name: &str) -> crate::paint::Color {
+            rows.iter()
+                .find_map(|r| match r {
+                    Row::Text { left, .. } => left
+                        .first()
+                        .filter(|(t, _, _)| t.contains(name))
+                        .map(|(_, c, _)| *c),
+                    Row::Rule => None,
+                })
+                .unwrap_or_else(|| panic!("no CREW row named {name}"))
+        }
+
+        let rows = crew_rows(&d);
+        assert_eq!(
+            unit_color(&rows, "InParty"),
+            palette::BODY,
+            "a party member's row must draw BODY regardless of rarity"
+        );
+        assert_eq!(
+            unit_color(&rows, "Benched"),
+            palette::FAINT,
+            "a benched member's row must draw FAINT regardless of rarity"
+        );
     }
 
     /// Every tab summarises to something, and none of them to nothing — a

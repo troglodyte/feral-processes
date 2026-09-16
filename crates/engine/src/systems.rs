@@ -1346,6 +1346,7 @@ pub fn task_progress_system(
                             &memory_db,
                             clock.tick,
                             disposition.copied().unwrap_or_default(),
+                            crate::memories::Read::Morale,
                             |_| true,
                         )
                     })

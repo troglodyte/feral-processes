@@ -40,10 +40,12 @@ Each file is one kind:
 | `half_life` | In **ticks**: how long until intensity halves. |
 | `subject` | Which kind of thing a record of this def is about (below). |
 | `strike_cap` | How far reinforcement compounds before it stops. At least 1. |
+| `stack_decay` | Optional, default `1.0`. In `(0, 1]`: how much each strike past the first is worth relative to the one before it. `1.0` is plain linear stacking; below that, reinforcement still compounds but tapers off. **Out of range is a load-time fault, not a clamp** — `0.0` or below is skipped with a warning, the same as a file that fails to parse; `0.0` collapses the compounding formula to a cliff (worth something at one strike, nothing at any other) and anything at or below `-1.0` alternates sign every strike and grows without bound. |
+| `mood` | Optional, default `1.0`. In `[0, 1]`: the share of this def's intensity that reaches a program's Morale. `1.0` makes Morale and Opinion the same figure; lower values still show up in full when something asks this specific program's opinion of this specific subject, but count for less — or nothing, at `0.0` — toward the roster's collective mood. A `mood: 0.0` def must declare a `subject` something still reads an opinion about (`Program` or `BaseTile` today), or it is worth nothing anywhere. **Outside `[0, 1]` is a load-time fault**, skipped with a warning — a Morale reading a def's own `valence` sign disagree with is not a supported way to tune one. |
 
-All seven are required. Any field added in a later version will carry a
-default, so a file written today keeps parsing untouched — but none of these
-seven may be omitted.
+The first seven are required. `stack_decay` and `mood` were added later and
+carry a default, so a file written before they existed keeps parsing
+untouched — but none of the first seven may be omitted.
 
 Two files claiming the same `id` is not an error; the alphabetically last one
 wins, which is deliberate (a mod's `zz_stranded_at.ron` overrides the shipped
@@ -54,8 +56,13 @@ def without deleting it).
 Intensity is **derived from the game clock**, never stored:
 
 ```
-valence * min(strikes, strike_cap) * 2^-(ticks since reinforced / half_life)
+valence * (1 + r + r^2 + … + r^(n-1)) * 2^-(ticks since reinforced / half_life)
 ```
+
+for `n = min(strikes, strike_cap)` and `r = stack_decay`. At the shipped
+default `r = 1.0` this is exactly `valence * n` — today's plain linear
+stacking — and below that it is a geometric sum, so a heavily reinforced
+memory still grows with every strike but by less each time.
 
 So nothing decays on a timer and a memory cannot drift out of step with the
 clock. `tuning::MEMORY_HALF_LIFE_MULTIPLIER` scales every `half_life` in the

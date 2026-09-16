@@ -232,6 +232,8 @@ fn test_def(valence: f32, half_life: u64, strike_cap: u32) -> MemoryDef {
         half_life,
         subject: MemorySubjectKind::Nothing,
         strike_cap,
+        stack_decay: 1.0,
+        mood: 1.0,
     }
 }
 
@@ -350,6 +352,64 @@ fn the_half_life_multiplier_scales_every_grudge_at_once() {
         (m.intensity(&def, 100) - normal).abs() < 1e-6,
         "`intensity` must be `intensity_with` at the shipped dial, or the dial \
          turns nothing"
+    );
+}
+
+/// `stack_decay: 1.0` is the shipped default, and it must be bit-identical
+/// to plain linear stacking — `valence * n`, `assert_eq!` rather than
+/// approximate, because the closed form's `r == 1.0` branch exists
+/// specifically to guarantee this.
+#[test]
+fn stack_decay_of_one_is_todays_linear_stacking() {
+    let def = test_def(4.0, 100, 10);
+    let now = 0;
+
+    for strikes in [1, 2, def.strike_cap] {
+        let m = memory_at(now, strikes);
+        assert_eq!(
+            m.intensity(&def, now),
+            def.valence * strikes as f32,
+            "{strikes} strikes at stack_decay 1.0 must equal valence * n exactly"
+        );
+    }
+}
+
+/// Below 1, each strike past the first is worth `stack_decay` times the one
+/// before — a geometric sum, not the linear one.
+#[test]
+fn stack_decay_shrinks_each_strike_after_the_first() {
+    let mut def = test_def(4.0, 100, 10);
+    def.stack_decay = 0.5;
+    let m = memory_at(0, 3);
+
+    // 1 + 0.5 + 0.25 = 1.75
+    let expected = 1.75 * def.valence;
+    assert!(
+        (m.intensity(&def, 0) - expected).abs() < 1e-5,
+        "three strikes at r=0.5: got {}, wanted {expected}",
+        m.intensity(&def, 0)
+    );
+}
+
+/// The cap still binds under a decayed stack: strikes past `strike_cap` read
+/// exactly as the cap does.
+#[test]
+fn stack_decay_still_stops_at_the_cap() {
+    let mut def = test_def(4.0, 100, 3);
+    def.stack_decay = 0.5;
+    let now = 0;
+
+    let at_cap = memory_at(now, 3).intensity(&def, now);
+    let past_cap = memory_at(now, 4).intensity(&def, now);
+    let past_cap_far = memory_at(now, 40).intensity(&def, now);
+
+    assert_eq!(
+        past_cap, at_cap,
+        "one strike past the cap must read as the cap"
+    );
+    assert_eq!(
+        past_cap_far, at_cap,
+        "many strikes past the cap must still read as the cap"
     );
 }
 
@@ -731,6 +791,269 @@ fn implant(game: &mut Game, who: Entity, def: &str, subject: MemorySubject) {
         });
 }
 
+/// A scratch install with the shipped catalogue plus the memory defs in
+/// `defs` (id, body) — for a test about `mood`, which nothing shipped
+/// authors below its default.
+fn assets_with_memory_defs(tag: &str, defs: &[(&str, &str)]) -> ScratchAssets {
+    let dir = scratch_assets_dir(tag);
+    copy_shipped_assets(&dir, &[]);
+    let memories = dir.join("memories");
+    std::fs::create_dir_all(&memories).unwrap();
+    for (id, body) in defs {
+        std::fs::write(memories.join(format!("{id}.ron")), body).unwrap();
+    }
+    dir
+}
+
+/// `assets_with_memory_defs` with one def, for a test that only needs one.
+fn assets_with_memory_def(tag: &str, id: &str, body: &str) -> ScratchAssets {
+    assets_with_memory_defs(tag, &[(id, body)])
+}
+
+const GRUDGE_HALF_MOOD: &str = r#"(
+    id: "grudge_half_mood",
+    name: "Half-felt grudge",
+    blurb: "b",
+    valence: -8.0,
+    half_life: 5000,
+    subject: Program,
+    strike_cap: 3,
+    mood: 0.5,
+)"#;
+
+/// `mood` splits the one store into two reads: `Opinion` counts a record's
+/// full felt intensity, `Morale` counts it scaled by `def.mood`.
+#[test]
+fn mood_scales_morale_and_leaves_opinion_whole() {
+    let dir = assets_with_memory_def("mood_scale", "grudge_half_mood", GRUDGE_HALF_MOOD);
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &dir).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    let other = spawn_tamed(&mut game, 10, 3);
+    let subject = MemorySubject::Program(id_of(&game, other));
+    game.remember(program, "grudge_half_mood", subject.clone());
+
+    let opinion = game.opinion_of(program, &subject);
+    let morale = game.morale(program);
+
+    assert!(opinion < 0.0, "a real grudge: {opinion}");
+    assert!(
+        (morale - opinion * 0.5).abs() < 1e-5,
+        "morale {morale} must be half of opinion {opinion} at mood: 0.5"
+    );
+}
+
+/// The memories page is still the morale page: a row's intensity is already
+/// mood-scaled, so the rows sum to exactly what `morale` reports — not to
+/// `opinion_of`'s larger, unscaled figure.
+#[test]
+fn the_memories_page_rows_sum_to_its_morale() {
+    let dir = assets_with_memory_def("mood_page", "grudge_half_mood", GRUDGE_HALF_MOOD);
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &dir).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    let a = spawn_tamed(&mut game, 10, 3);
+    let b = spawn_tamed(&mut game, 10, 3);
+    game.remember(
+        program,
+        "grudge_half_mood",
+        MemorySubject::Program(id_of(&game, a)),
+    );
+    game.remember(
+        program,
+        "grudge_half_mood",
+        MemorySubject::Program(id_of(&game, b)),
+    );
+
+    let rows = game.memory_report(program);
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    let row_sum: f32 = rows.iter().map(|r| r.intensity).sum();
+    let morale = game.morale(program);
+
+    assert!(
+        (row_sum - morale).abs() < 1e-5,
+        "row sum {row_sum} must equal morale {morale}"
+    );
+}
+
+/// `evict` weighs raw intensity, never `mood` — the same reason it already
+/// ignores `Disposition`. Two memories tie on raw magnitude; only one has
+/// `mood: 0.0`. The plain one is inserted first, so a mood-blind eviction's
+/// own tie-break (ties fall to the earliest-inserted of the tied entries)
+/// drops *it*, not the muted one — the muted memory surviving is what proves
+/// eviction never touched `mood` at all. A weight that *did* read `mood`
+/// would instead score the muted entry at 0.0, strictly the smallest in the
+/// store regardless of insertion order, and drop it deterministically.
+#[test]
+fn eviction_ignores_mood() {
+    const PLAIN: &str = r#"(
+        id: "plain_tie",
+        name: "Plain",
+        blurb: "b",
+        valence: -6.0,
+        half_life: 50_000,
+        subject: Program,
+        strike_cap: 1,
+    )"#;
+    const MUTED: &str = r#"(
+        id: "muted_tie",
+        name: "Muted",
+        blurb: "b",
+        valence: -6.0,
+        half_life: 50_000,
+        subject: Program,
+        strike_cap: 1,
+        mood: 0.0,
+    )"#;
+    const FILLER: &str = r#"(
+        id: "filler",
+        name: "Filler",
+        blurb: "b",
+        valence: -40.0,
+        half_life: 50_000,
+        subject: BaseTile,
+        strike_cap: 1,
+    )"#;
+    let dir = assets_with_memory_defs(
+        "eviction_ignores_mood",
+        &[
+            ("plain_tie", PLAIN),
+            ("muted_tie", MUTED),
+            ("filler", FILLER),
+        ],
+    );
+    let mut game = Game::new(41, DifficultyMode::Forgiving, &dir).unwrap();
+    let program = spawn_tamed(&mut game, 10, 3);
+    let plain_subject = spawn_tamed(&mut game, 10, 3);
+    let muted_subject = spawn_tamed(&mut game, 10, 3);
+
+    // The plain (mood: 1.0) memory first, the muted (mood: 0.0) one second —
+    // equal raw magnitude, so a mood-blind eviction ties them and drops the
+    // earlier of the two.
+    game.remember(
+        program,
+        "plain_tie",
+        MemorySubject::Program(id_of(&game, plain_subject)),
+    );
+    game.remember(
+        program,
+        "muted_tie",
+        MemorySubject::Program(id_of(&game, muted_subject)),
+    );
+    // Fillers of much larger magnitude, so the cap's one eviction always
+    // takes one of the tied pair above rather than a filler — one short of
+    // the cap so the total lands one *over* it and exactly one entry goes.
+    for tile in 0..(MEMORY_CAP_PER_PROGRAM as i32 - 1) {
+        game.remember(program, "filler", MemorySubject::BaseTile { x: tile, y: 0 });
+    }
+
+    let held = memories_of(&game, program);
+    assert_eq!(held.len(), MEMORY_CAP_PER_PROGRAM, "{held:?}");
+    assert!(
+        held.iter().any(|m| m.def == MemoryId::from("muted_tie")),
+        "the mood: 0.0 memory must not be preferentially dropped: {held:?}"
+    );
+    assert!(
+        !held.iter().any(|m| m.def == MemoryId::from("plain_tie")),
+        "the ordinary tied memory, inserted first, is the one a mood-blind \
+         eviction drops: {held:?}"
+    );
+}
+
+/// `task_progress_system`'s `CycleModifiers::morale` has to be the same
+/// mood-scaled figure `Game::morale` reads, not the two folds quietly
+/// disagreeing — `rg -n "morale" crates/engine/src/tests/chains.rs` finds no
+/// existing parity test to extend, so this is that test.
+///
+/// `CycleModifiers` cannot be observed from a test — it is built and
+/// consumed inside the system in one call — so this goes the way the plan's
+/// own fallback describes: a hand-computed expectation from
+/// `mining_success_chance`, checked against a real cycle's output.
+///
+/// `mood: 0.0` makes the expectation exact rather than approximate: with the
+/// def correctly reaching `Read::Morale`, the memory below is worth nothing
+/// to `CycleModifiers::morale` and the roll is `mining_success_chance`'s
+/// plain baseline. If `task_progress_system` instead read `Read::Opinion`
+/// (or the pre-mood raw intensity), the same memory would pull the roll
+/// down by the full `MEMORY_MORALE_MAX_SHIFT` clamp — a ten-percentage-point
+/// gap, summed over enough independent cycles to separate from sampling
+/// noise by a wide margin.
+///
+/// The node is level 1 at zone 1, so `node_payout` is exactly 1 per success
+/// (`tier + NODE_PAYOUT_ZONE_BONUS * (zone - 1)` with `zone == 1`) — the
+/// mined total *is* the hit count, with no per-success payout size to
+/// disentangle.
+#[test]
+fn mining_morale_is_game_morale() {
+    const MOOD_ZERO: &str = r#"(
+        id: "mood_test",
+        name: "Zeroed grudge",
+        blurb: "b",
+        valence: -80.0,
+        half_life: 10_000_000,
+        subject: Program,
+        strike_cap: 1,
+        mood: 0.0,
+    )"#;
+    const SEEDS: [u32; 30] = [
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+        26, 27, 28, 29, 30,
+    ];
+    const TICKS: u32 = 180;
+
+    let dir = assets_with_memory_def("mining_morale_parity", "mood_test", MOOD_ZERO);
+    let mut hits = 0u32;
+    let mut attempts = 0u32;
+    let mut expected_chance = None;
+    for &seed in &SEEDS {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &dir).unwrap();
+        stand_in_base(&mut game);
+        let node = deploy_upgradeable_node(&mut game);
+        let worker = spawn_tamed(&mut game, 40, 4);
+        stand_player_at_post(&mut game, node);
+        game.assign_cronjob(worker, node)
+            .expect("a Mining Node takes a posted program");
+        park_at_post(&mut game, worker, node);
+        game.remember(worker, "mood_test", MemorySubject::Program(ProgramId(999)));
+        assert_eq!(
+            game.morale(worker),
+            0.0,
+            "mood: 0.0 must zero this memory's morale contribution"
+        );
+
+        let level = game
+            .world
+            .get::<crate::components::ResourceNode>(node)
+            .and_then(|n| n.level)
+            .expect("mining_node.ron declares level: Some(1)");
+        expected_chance.get_or_insert_with(|| {
+            crate::systems::mining_success_chance(
+                level,
+                0,
+                crate::tuning::DEFAULT_BASE_INT,
+                0.0,
+                0.0,
+            )
+        });
+
+        for _ in 0..TICKS {
+            game.tick();
+        }
+        hits += node_output(&game, node, ids::CORE_FRAGMENT);
+        attempts += TICKS / 10;
+    }
+
+    let expected = expected_chance.unwrap();
+    let rate = hits as f64 / attempts as f64;
+    // The gap this def is sized to produce is ten points; the floor sits
+    // partway to it, well clear of both the sampling noise around the true
+    // rate and the wrong-Read rate this def would otherwise produce.
+    assert!(
+        rate > expected - 0.06,
+        "mined {hits} of {attempts} cycles ({rate:.3}) against a \
+         hand-computed chance of {expected:.3} — task_progress_system's \
+         morale must have read the wrong `Read` variant"
+    );
+}
+
 /// The sum is **signed**, so a fondness and a grudge cancel rather than
 /// compound. Summing magnitudes would make the most miserable program in the
 /// base read exactly like the happiest one.
@@ -1012,7 +1335,7 @@ fn a_remembered_name_survives_the_program_it_names() {
     let comrade = adopt(&mut game, "glitch", 5);
     let id = id_of(&game, program);
     let comrade_id = id_of(&game, comrade);
-    let name = game.creature_label(comrade);
+    let name = game.creature_short_label(comrade);
     set_tick(&mut game, 1_000);
     game.remember(
         program,
@@ -1814,7 +2137,7 @@ fn a_destroyed_programs_name_still_reaches_the_row() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let holder = adopt(&mut game, "scrapper", 4);
     let subject = adopt(&mut game, "glitch", 5);
-    let name = game.creature_label(subject);
+    let name = game.creature_short_label(subject);
     let id = id_of(&game, subject);
 
     assert_eq!(

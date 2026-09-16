@@ -3020,6 +3020,76 @@ fn every_shipped_memory_def_is_well_formed() {
     }
 }
 
+/// `stack_decay` is a ratio in `(0, 1]`: at 1 it is inert (the linear
+/// stacking every def shipped with before this field existed), at or below 0
+/// it either divides by zero in `Memory::intensity_with`'s closed form or
+/// makes reinforcement grow rather than shrink.
+#[test]
+fn every_memory_stack_decay_is_in_range() {
+    use crate::memories::MemoryDb;
+
+    let (db, _) = MemoryDb::load_dir(&test_assets_dir().join("memories")).unwrap();
+    let mut checked = 0;
+    for def in db.all() {
+        checked += 1;
+        assert!(
+            def.stack_decay > 0.0 && def.stack_decay <= 1.0,
+            "{} has a stack_decay of {}, outside (0, 1]",
+            def.id.as_str(),
+            def.stack_decay
+        );
+    }
+    assert!(
+        checked > 0,
+        "the census must actually walk assets/memories, or it passes vacuously"
+    );
+}
+
+/// `mood` is a share in `[0, 1]` of `Read::Morale`, and a `mood` of exactly
+/// 0 says a def is worth *nothing* on that read — which is only a real
+/// statement about content when something can still read its `Opinion`.
+/// `Game::opinion_of` is only ever asked about `Program` and `BaseTile`
+/// (`base/tantrum.rs`, `base/morale.rs`'s drift rejection and
+/// `base/work_orders.rs`'s `refuses_post`), so a `mood: 0` def declaring any
+/// other subject kind is content nothing can ever read.
+///
+/// A new `opinion_of` reader must extend this list.
+const OPINION_READ_SUBJECTS: &[crate::memories::MemorySubjectKind] = &[
+    crate::memories::MemorySubjectKind::Program,
+    crate::memories::MemorySubjectKind::BaseTile,
+];
+
+#[test]
+fn every_memory_mood_is_in_range_and_read_somewhere() {
+    use crate::memories::MemoryDb;
+
+    let (db, _) = MemoryDb::load_dir(&test_assets_dir().join("memories")).unwrap();
+    let mut checked = 0;
+    for def in db.all() {
+        checked += 1;
+        assert!(
+            (0.0..=1.0).contains(&def.mood),
+            "{} has a mood of {}, outside [0, 1]",
+            def.id.as_str(),
+            def.mood
+        );
+        if def.mood == 0.0 {
+            assert!(
+                OPINION_READ_SUBJECTS.contains(&def.subject),
+                "{} has mood: 0.0 but declares subject {:?}, which no \
+                 opinion_of reader ever asks about — it would be worth \
+                 nothing on every read",
+                def.id.as_str(),
+                def.subject
+            );
+        }
+    }
+    assert!(
+        checked > 0,
+        "the census must actually walk assets/memories, or it passes vacuously"
+    );
+}
+
 /// The game has one word for the defensive stat, and it is not `Defense`.
 ///
 /// `Stats::def` became `Stats::mitigation` in the combat model rewrite and

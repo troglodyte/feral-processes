@@ -1299,13 +1299,31 @@ mod tests {
         memory_page_rows(&subject, -99.0, &entries)
     }
 
-    /// The widest thing a row's subject can be, off the assets.
+    /// The widest a row's subject can print, built through
+    /// `Game::creature_short_label` on real tamed creatures rather than a
+    /// second copy of its format.
     ///
-    /// A `Program` subject is `Game::creature_label`'s output — a rarity
-    /// tier, then a name, then a zone number — and the name is either a
-    /// species' or a custom one at `MAX_CUSTOM_NAME_LEN`. A `Species`
-    /// subject is a display name alone, so the program form dominates it and
-    /// is what this builds.
+    /// **What this checks, and what it does not.** It spawns two real
+    /// companions at the widest inputs `creature_short_label` takes — a
+    /// handle and a maxed `CustomName` — saves, reloads and reads each back
+    /// through `owned_pets()[i].short_name`. That is `creature_short_label`
+    /// itself, the formula `Game::remembered_name` (`game/memories.rs`)
+    /// calls to stamp a memory's subject at write time — but this fixture
+    /// never calls `remembered_name`, so it cannot catch that call site
+    /// regressing to `creature_label` (the tier-and-species-prefixed form)
+    /// instead. That regression is the engine's own to guard, in
+    /// `tests/memories.rs`. What this census owns is purely the layout
+    /// question: does the widest *string the formula can produce* still fit
+    /// the page.
+    ///
+    /// Two candidates, not one, because the widest is no longer always the
+    /// handle. A `CustomName` prints in place of the handle with no species
+    /// suffix (`creature_name`), so a maxed one — `MAX_CUSTOM_NAME_LEN`
+    /// (12) characters, the rename screen's own cap — plus a two-digit zone
+    /// tag is three characters wider than `handle::of`'s fixed 8 plus the
+    /// same zone tag. Picking the max of the two rather than asserting
+    /// which one wins is what keeps this census honest if either width
+    /// changes later.
     fn widest_subject(assets: &std::path::Path) -> String {
         let (abilities, _) =
             feral_processes_engine::abilities::AbilityDb::load_dir(&assets.join("abilities"))
@@ -1316,15 +1334,94 @@ mod tests {
         )
         .expect("the species load");
         assert!(warnings.is_empty(), "{warnings:?}");
-        let longest_species = species
+        let longest = species
             .all()
-            .map(|def| def.name.chars().count())
-            .max()
+            .max_by_key(|def| def.name.chars().count())
             .expect("the census must walk a real roster");
-        let name_len = longest_species.max(feral_processes_engine::MAX_CUSTOM_NAME_LEN);
-        // The widest rarity label, and the deepest zone `balance_sim` sweeps
-        // to — the two things `creature_label` wraps a name in.
-        format!("Prismatic {} 10", "M".repeat(name_len))
+
+        let seed = 901;
+        let mut game = feral_processes_engine::Game::new(
+            seed,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            assets,
+        )
+        .expect("the shipped asset tree builds a fresh game");
+        let path = crate::render::test_support::scratch_path("widest_memory_subject", seed);
+        let _cleanup = crate::render::test_support::RemoveOnDrop(&path);
+        game.save(&path).unwrap();
+
+        let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
+        let (px, py) = data.player.position;
+        let base = feral_processes_engine::save::CreatureSave {
+            sortie_index: None,
+            boss: false,
+            species: longest.id.clone(),
+            position: (px, py),
+            hp: 10,
+            max_hp: 10,
+            atk: 3,
+            mitigation: 2,
+            tamed: true,
+            power: 100.0,
+            level: 1,
+            xp: 0,
+            xp_to_next: 10,
+            cronjob: None,
+            party_slot: None,
+            wielded: false,
+            zone: 12,
+            custom_name: None,
+            hp_roll: 1.0,
+            atk_roll: 1.0,
+            def_roll: 1.0,
+            growth_roll: 1.0,
+            assembly_roll: 1.0,
+            extraction_roll: 1.0,
+            fusions: 0,
+            refactors: 0,
+            purchased_tiers: 0,
+            ring: 0,
+            talents: Vec::new(),
+            bought_stats: Default::default(),
+            routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
+            field_buffs: Vec::new(),
+            nest_position: None,
+            patrol_position: None,
+            pursuing: false,
+            carrying: None,
+            carrying_program: None,
+            rarity: feral_processes_engine::components::Rarity::Prismatic,
+            nemesis_grudges: 0,
+            equipment: Vec::new(),
+            program_id: 1,
+            disposition: None,
+            disgruntled: None,
+            disgruntled_stranded: false,
+            memories: Vec::new(),
+            needs: Default::default(),
+            off_shift: None,
+            staff: false,
+            downed: false,
+        };
+        // The handle candidate, and its `CustomName` counterpart — a maxed
+        // rename replaces the handle outright (`creature_name`), so it is a
+        // second, independent worst case rather than a wider version of the
+        // first.
+        let mut named = base.clone();
+        named.custom_name = Some("x".repeat(feral_processes_engine::MAX_CUSTOM_NAME_LEN));
+        named.program_id = 2;
+        data.creatures.push(base);
+        data.creatures.push(named);
+        feral_processes_engine::save::save_to_file(&path, &data).unwrap();
+
+        let mut loaded = feral_processes_engine::Game::load(&path, assets).unwrap();
+        loaded
+            .owned_pets()
+            .iter()
+            .max_by_key(|p| p.short_name.chars().count())
+            .expect("both candidates were just spawned")
+            .short_name
+            .clone()
     }
 
     /// **The page has no scroll.** `draw_popup` pages a `Row::Item` span and

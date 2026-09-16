@@ -103,6 +103,29 @@
   and **derive** that quotient, so a retune of either constant moves the words
   with it. `Game::morale` keeps its own name: the engine's vocabulary is not
   the screen's.
+- **`mood` splits one store into two reads, and `evict` must stay blind to
+  both of the things `felt_as`/`mood` scale.** `memories::Read::Opinion` is
+  the full felt figure; `Read::Morale` is that figure times `def.mood`,
+  `Read::weigh` the one formula both `sum_intensity` and `Game::
+  memory_report`'s row `intensity` call — restating `felt * def.mood` a
+  second time is the shape that has drifted in this repo before. `evict`
+  weighs **raw** `Memory::intensity` alone — no `felt_as`, no `mood` — for
+  the reason it already ignores `Disposition`: what a program keeps is
+  bookkeeping, not feeling, so a `mood: 0.0` grudge must be exactly as easy
+  to evict as a `mood: 1.0` one of the same magnitude, never easier. A
+  `mood`-weighted `evict` would let a low-mood grudge get evicted first
+  purely for reading light on `Morale`, while it is still full-strength on
+  `Opinion` — the read nobody thought to protect.
+- **A `mood: 0.0` def is only real content if some `opinion_of` reader can
+  still see it**, since it is worth nothing on `Morale` by construction. The
+  census is `OPINION_READ_SUBJECTS` in `tests/assets.rs`
+  (`every_memory_mood_is_in_range_and_read_somewhere`), and it is a
+  hand-maintained list of the subject kinds `Game::opinion_of` is actually
+  asked about — `base/tantrum.rs`, `base/morale.rs`'s drift rejection,
+  `base/work_orders.rs`'s `refuses_post`. **A new `opinion_of` call site
+  must extend it**, or a `mood: 0.0` def naming that subject ships as
+  content nothing can ever read, and the census stays green because it only
+  knows about the readers that existed when it was written.
 - **`ProgramManifest::mood` is `None` for "no store", never for "remembers
   nothing".** It is gated on the `Memories` component and not on `Tamed`,
   which is `remember`'s asymmetry read from the reading end — the store is

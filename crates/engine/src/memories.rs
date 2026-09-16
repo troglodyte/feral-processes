@@ -64,14 +64,20 @@ pub enum MemorySubjectKind {
     Activity,
 }
 
+/// `stack_decay` and `mood`'s shared serde default — both are `1.0`,
+/// today's behaviour.
+fn one() -> f32 {
+    1.0
+}
+
 /// One memory kind.
 ///
-/// These seven fields are the initial schema and every one of them is
+/// The original seven fields are the initial schema and every one of them is
 /// **required**: a def missing any of them is a def that cannot be scored or
 /// drawn. Any field added *later* must be `#[serde(default)]`, per the
 /// standing rule for `SpeciesDef`/`StructureDef`/`ItemDef`/`AbilityDef`, so a
 /// mod's existing files keep parsing untouched — but do not retroactively
-/// default these.
+/// default these. `stack_decay` and `mood` are that later kind.
 #[derive(Clone, Debug, Deserialize)]
 pub struct MemoryDef {
     pub id: MemoryId,
@@ -88,6 +94,41 @@ pub struct MemoryDef {
     pub subject: MemorySubjectKind,
     /// How far reinforcement compounds before it stops.
     pub strike_cap: u32,
+    /// How much each strike past the first is worth relative to the one
+    /// before it, in `(0, 1]`. `1.0` (the default) is today's plain linear
+    /// stacking; below that, reinforcement still compounds but each strike
+    /// contributes less than the last. See `components::Memory::intensity_with`.
+    #[serde(default = "one")]
+    pub stack_decay: f32,
+    /// How much of this def's intensity reaches `Read::Morale`, in
+    /// `[0, 1]`. `Read::Opinion` always counts the full figure; `1.0` (the
+    /// default) makes the two reads identical, today's behaviour. See
+    /// `memories::Read` and `Game::morale`/`Game::opinion_of`.
+    #[serde(default = "one")]
+    pub mood: f32,
+}
+
+impl MemoryDef {
+    /// A def whose `stack_decay` or `mood` falls outside its documented
+    /// range, if any — checked at load rather than trusted at read.
+    ///
+    /// `stack_decay` at or below `-1.0` is the sharp one:
+    /// `Memory::intensity_with` raises it to the strike count
+    /// (`r.powi(n)`), so a negative base alternates sign with parity and
+    /// past `-1.0` grows without bound, flipping a grudge into a fondness
+    /// (or the reverse) on some strikes rather than merely compounding
+    /// oddly. `mood` outside `[0, 1]` breaks `memories::Read`'s own
+    /// contract that `Read::Morale` is *a share of* `Read::Opinion`, never
+    /// more of it and never the opposite sign.
+    fn schema_fault(&self) -> Option<&'static str> {
+        if !(self.stack_decay > 0.0 && self.stack_decay <= 1.0) {
+            return Some("stack_decay");
+        }
+        if !(0.0..=1.0).contains(&self.mood) {
+            return Some("mood");
+        }
+        None
+    }
 }
 
 /// Every memory kind the game knows about, loaded from `assets/memories/`.
@@ -126,6 +167,12 @@ impl MemoryDb {
             let text = std::fs::read_to_string(&path)?;
             match ron::from_str::<MemoryDef>(&text) {
                 Ok(def) => {
+                    if let Some(field) = def.schema_fault() {
+                        warnings.push(format!(
+                            "skipped invalid memory file {path:?}: {field} is out of range"
+                        ));
+                        continue;
+                    }
                     db.defs.insert(def.id.clone(), def);
                 }
                 Err(e) => warnings.push(format!("skipped invalid memory file {path:?}: {e}")),
@@ -142,6 +189,36 @@ impl MemoryDb {
     /// so unstable; nothing may read it expecting an order.
     pub fn all(&self) -> impl Iterator<Item = &MemoryDef> {
         self.defs.values()
+    }
+}
+
+/// Which of a def's two dials a fold applies — `Opinion` and `Morale` are
+/// two readings of the one store, never two stores.
+///
+/// **`evict` asks neither.** It weighs raw intensity regardless of `mood`,
+/// for the reason it already ignores `Disposition`: what a program keeps is
+/// bookkeeping, not feeling.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Read {
+    /// The full felt intensity — what a program actually thinks of a
+    /// subject.
+    Opinion,
+    /// Felt intensity scaled by `def.mood` — the share of a memory that
+    /// reaches the roster's collective mood.
+    Morale,
+}
+
+impl Read {
+    /// The one formula behind both readings, so a caller outside
+    /// `sum_intensity` — `Game::memory_report`'s row `intensity`, which is
+    /// deliberately the `Read::Morale` figure `morale` itself reads (see
+    /// that function's doc) — takes it as a call rather than restating
+    /// `felt * def.mood` a second time.
+    pub(crate) fn weigh(self, def: &MemoryDef, felt: f32) -> f32 {
+        match self {
+            Read::Opinion => felt,
+            Read::Morale => felt * def.mood,
+        }
     }
 }
 
@@ -165,13 +242,18 @@ pub(crate) fn sum_intensity(
     db: &MemoryDb,
     now: u64,
     felt_as: crate::disposition::Disposition,
+    read: Read,
     keep: impl Fn(&Memory) -> bool,
 ) -> f32 {
     store
         .0
         .iter()
         .filter(|m| keep(m))
-        .filter_map(|m| Some(felt_as.felt(m.intensity(db.get(&m.def)?, now))))
+        .filter_map(|m| {
+            let def = db.get(&m.def)?;
+            let felt = felt_as.felt(m.intensity(def, now));
+            Some(read.weigh(def, felt))
+        })
         .sum()
 }
 
@@ -222,6 +304,73 @@ mod tests {
             "the good file still loads"
         );
         assert!(db.get(&MemoryId::from("broken")).is_none());
+    }
+
+    /// `-1.0` is the boundary `intensity_with`'s doc calls out — `r.powi(n)`
+    /// alternates sign and diverges past it, so a def at or below `-1.0`
+    /// must never reach a store.
+    #[test]
+    fn a_stack_decay_at_or_below_negative_one_is_skipped_and_warns() {
+        let bad = "(\n    id: \"flips\",\n    name: \"Flips\",\n    blurb: \"b\",\n    \
+                    valence: -6.0,\n    half_life: 3000,\n    subject: BaseTile,\n    \
+                    strike_cap: 3,\n    stack_decay: -1.0,\n)\n"
+            .to_string();
+        let (db, warnings) = load(&[("flips.ron", bad)]);
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(warnings[0].contains("flips.ron"), "{warnings:?}");
+        assert!(warnings[0].contains("stack_decay"), "{warnings:?}");
+        assert!(db.get(&MemoryId::from("flips")).is_none());
+    }
+
+    /// `stack_decay: 0.0` is excluded too — `(0, 1]` is half-open on
+    /// purpose, since a zero base makes `intensity_with`'s closed form
+    /// divide by `1.0 - 0.0` and evaluate `0.0.powi(0)`, which is `1.0` for
+    /// `n == 0` alone and `0.0` for every strike after — a cliff, not a
+    /// decay curve.
+    #[test]
+    fn a_stack_decay_of_zero_is_skipped_and_warns() {
+        let bad = "(\n    id: \"cliff\",\n    name: \"Cliff\",\n    blurb: \"b\",\n    \
+                    valence: -6.0,\n    half_life: 3000,\n    subject: BaseTile,\n    \
+                    strike_cap: 3,\n    stack_decay: 0.0,\n)\n"
+            .to_string();
+        let (db, warnings) = load(&[("cliff.ron", bad)]);
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(db.get(&MemoryId::from("cliff")).is_none());
+    }
+
+    /// `mood` outside `[0, 1]` breaks `memories::Read`'s contract that
+    /// `Morale` is a share of `Opinion` — never more of it, never the
+    /// opposite sign.
+    #[test]
+    fn a_mood_outside_zero_to_one_is_skipped_and_warns() {
+        let bad = "(\n    id: \"overfelt\",\n    name: \"Overfelt\",\n    blurb: \"b\",\n    \
+                    valence: -6.0,\n    half_life: 3000,\n    subject: BaseTile,\n    \
+                    strike_cap: 3,\n    mood: 1.5,\n)\n"
+            .to_string();
+        let (db, warnings) = load(&[("overfelt.ron", bad)]);
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(warnings[0].contains("overfelt.ron"), "{warnings:?}");
+        assert!(warnings[0].contains("mood"), "{warnings:?}");
+        assert!(db.get(&MemoryId::from("overfelt")).is_none());
+    }
+
+    /// The two boundaries the checks must not reject: `stack_decay: 1.0`
+    /// (today's default, plain linear stacking) and `mood` at either end of
+    /// `[0, 1]`.
+    #[test]
+    fn the_documented_boundaries_still_load() {
+        let a = "(\n    id: \"a\",\n    name: \"A\",\n    blurb: \"b\",\n    \
+                  valence: -6.0,\n    half_life: 3000,\n    subject: BaseTile,\n    \
+                  strike_cap: 3,\n    stack_decay: 1.0,\n    mood: 0.0,\n)\n"
+            .to_string();
+        let b = "(\n    id: \"b\",\n    name: \"B\",\n    blurb: \"b\",\n    \
+                  valence: -6.0,\n    half_life: 3000,\n    subject: BaseTile,\n    \
+                  strike_cap: 3,\n    stack_decay: 0.001,\n    mood: 1.0,\n)\n"
+            .to_string();
+        let (db, warnings) = load(&[("a.ron", a), ("b.ron", b)]);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert!(db.get(&MemoryId::from("a")).is_some());
+        assert!(db.get(&MemoryId::from("b")).is_some());
     }
 
     /// Deleting `assets/memories/` is a supported way to play, so an absent

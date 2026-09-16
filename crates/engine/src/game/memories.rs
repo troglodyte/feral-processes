@@ -371,7 +371,7 @@ impl crate::Game {
     /// same asymmetry `remember` makes on the write side: hostiles, structures
     /// and the player are safe here without a branch at the call site.
     pub fn morale(&self, who: Entity) -> f32 {
-        self.memory_sum(who, |_| true)
+        self.memory_sum(who, crate::memories::Read::Morale, |_| true)
     }
 
     /// Every memory `who` currently holds, as the page draws them: strongest
@@ -383,6 +383,11 @@ impl crate::Game {
     /// of the decay, which is the shape that has drifted in this repo four
     /// times.
     ///
+    /// **This is still the morale page**, so a row's `intensity` is felt
+    /// intensity scaled by `def.mood`, the same `Read::Morale` `morale`
+    /// itself reads — the rows sum to the figure the page heads with, not to
+    /// the full opinion `opinion_of` would report.
+    ///
     /// **`&self`, and it evicts nothing.** A read-only screen that rewrote
     /// the roster it is drawing would make what a program remembers depend on
     /// whether anybody looked; a faded entry is still one the program holds,
@@ -393,8 +398,14 @@ impl crate::Game {
     /// from at this end: with `assets/memories/` deleted the store is intact
     /// and the page is empty.
     ///
-    /// The order is by **magnitude**, `evict`'s rule mirrored rather than
-    /// described: a signed sort files every grudge below every fondness, so
+    /// The order is by **magnitude** of the row's own `intensity` —
+    /// `Read::Morale`-weighted (felt, then scaled by `def.mood`), **not**
+    /// `evict`'s rule. `evict` weighs raw `Memory::intensity` alone, with
+    /// neither `felt_as` nor `def.mood` in it (see its own doc) — the two
+    /// only ever agree while every def's `mood` is `1.0`, today's shipped
+    /// catalogue. A mod (or a future def) authoring `mood` below `1.0` can
+    /// sort a row below one `evict` would call weaker, or the reverse.
+    /// Either way, a signed sort files every grudge below every fondness, so
     /// the deepest scar a program carries would sit at the bottom of the page
     /// most often opened to read it.
     ///
@@ -426,7 +437,8 @@ impl crate::Game {
                     name: def.name.clone(),
                     blurb: def.blurb.clone(),
                     subject: self.subject_name(m),
-                    intensity: felt_as.felt(m.intensity(def, now)),
+                    intensity: crate::memories::Read::Morale
+                        .weigh(def, felt_as.felt(m.intensity(def, now))),
                     age: age_phrase(now.saturating_sub(m.reinforced), def.half_life),
                 })
             })
@@ -496,21 +508,11 @@ impl crate::Game {
     /// A subject nothing has happened about sums an empty set and answers
     /// zero, which is a real answer and not a missing one.
     pub(crate) fn opinion_of(&self, who: Entity, subject: &MemorySubject) -> f32 {
-        self.memory_sum(who, |m| &m.subject == subject)
+        self.memory_sum(who, crate::memories::Read::Opinion, |m| {
+            &m.subject == subject
+        })
     }
 
-    /// The one fold both readers are, with the restriction handed in.
-    ///
-    /// `opinion_of` is a *restriction* of `morale` structurally rather than by
-    /// description: two folds could disagree about whether an unresolvable def
-    /// counts, and a comment claiming one mirrors the other is the shape that
-    /// has drifted in this repo four times.
-    ///
-    /// **An entry whose def no file defines is skipped**, contributing
-    /// nothing. That is where the empty-database property comes from — with
-    /// `assets/memories/` deleted every entry is unresolvable and every reader
-    /// answers zero, without a load-time purge and without the entries being
-    /// lost if the directory comes back.
     /// How hard what `who` remembers lands on it — its `Disposition`, or the
     /// neutral `Steady` for anything that has none.
     ///
@@ -527,7 +529,28 @@ impl crate::Game {
             .unwrap_or_default()
     }
 
-    fn memory_sum(&self, who: Entity, keep: impl Fn(&Memory) -> bool) -> f32 {
+    /// The one fold both readers are, with the restriction handed in.
+    ///
+    /// `opinion_of` is a *restriction* of `morale` structurally rather than by
+    /// description: two folds could disagree about whether an unresolvable def
+    /// counts, and a comment claiming one mirrors the other is the shape that
+    /// has drifted in this repo four times.
+    ///
+    /// **An entry whose def no file defines is skipped**, contributing
+    /// nothing. That is where the empty-database property comes from — with
+    /// `assets/memories/` deleted every entry is unresolvable and every reader
+    /// answers zero, without a load-time purge and without the entries being
+    /// lost if the directory comes back.
+    ///
+    /// `read` is the caller's own restriction too: `morale` passes
+    /// `Read::Morale` (mood-scaled), `opinion_of` passes `Read::Opinion` (the
+    /// full felt figure) — see `memories::Read`.
+    fn memory_sum(
+        &self,
+        who: Entity,
+        read: crate::memories::Read,
+        keep: impl Fn(&Memory) -> bool,
+    ) -> f32 {
         let Some(store) = self.world.get::<Memories>(who) else {
             return 0.0;
         };
@@ -536,6 +559,7 @@ impl crate::Game {
             self.world.resource::<MemoryDb>(),
             self.world.resource::<GameClock>().tick,
             self.felt_as(who),
+            read,
             keep,
         )
     }
@@ -543,6 +567,13 @@ impl crate::Game {
     /// The display name to stamp on a memory of `subject`, resolved at the
     /// write rather than at the read: the program a memory is about can be
     /// destroyed, and the screen still has to say who it was.
+    ///
+    /// `creature_short_label`, not `creature_label`: the memories page has
+    /// no scroll and no horizontal clip, so a handle-named subject's species
+    /// suffix — the widest thing `creature_label` can add, and the least
+    /// necessary next to a subject line already carrying the def's own name
+    /// — is what `no_memory_row_overflows_its_popup` catches if it comes
+    /// back.
     ///
     /// `None` for every non-`Program` subject and for a program already gone —
     /// a subject that has no name is not a failure, and the two are the same
@@ -556,7 +587,7 @@ impl crate::Game {
             .iter_entities()
             .find(|e| e.get::<ProgramId>() == Some(id))?
             .id();
-        Some(self.creature_label(entity))
+        Some(self.creature_short_label(entity))
     }
 }
 

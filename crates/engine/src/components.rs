@@ -1742,7 +1742,15 @@ pub struct BuildQuality(pub f32);
 /// roster" looks like, the same way an absent `Rarity` reads as `Ordinary`.
 /// `0` is the unassigned sentinel a legacy save loads with; real ids start
 /// at 1 and `Game::load` mints one for every program carrying the sentinel.
-#[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+///
+/// `Ord` so `Game::owned_pets` can break a tie on it: sorting by the derived
+/// hex handle (`handles::of`) read as arbitrary, since the permutation that
+/// makes handles look unrelated is exactly what a stable, meaningful order
+/// needs to not do — id order is assignment order, which at least means
+/// "the one you caught first, sorts first."
+#[derive(
+    Component, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 pub struct ProgramId(pub u32);
 
 /// What one owned program remembers. Minted empty at `Game::roster_parts`
@@ -2005,8 +2013,12 @@ impl Memory {
     /// on every read.
     ///
     /// ```text
-    /// valence * min(strikes, strike_cap) * 2^-(elapsed / (half_life * MULT))
+    /// valence * (1 + r + r^2 + … + r^(n-1)) * 2^-(elapsed / (half_life * MULT))
     /// ```
+    ///
+    /// for `n = min(strikes, strike_cap)` and `r = def.stack_decay`. `r ==
+    /// 1.0` (the shipped default) collapses the geometric sum to plain `n`,
+    /// today's linear stacking.
     ///
     /// The decay is a magnitude scale and never a sign flip, because `morale`
     /// is a signed sum over this figure — a grudge that decayed into a
@@ -2033,8 +2045,16 @@ impl Memory {
         // underflow here is a panic in release arithmetic, not a wrong
         // number.
         let elapsed = now.saturating_sub(self.reinforced) as f32;
-        let strikes = self.strikes.min(def.strike_cap) as f32;
-        def.valence * strikes * 2f32.powf(-elapsed / (def.half_life as f32 * stickiness))
+        let n = self.strikes.min(def.strike_cap);
+        let r = def.stack_decay;
+        // `r == 1.0` is the shipped default and must stay bit-identical to the
+        // linear term; the closed form would also divide 0 by 0 there.
+        let stacked = if r == 1.0 {
+            n as f32
+        } else {
+            (1.0 - r.powi(n as i32)) / (1.0 - r)
+        };
+        def.valence * stacked * 2f32.powf(-elapsed / (def.half_life as f32 * stickiness))
     }
 }
 

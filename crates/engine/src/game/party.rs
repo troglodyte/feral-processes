@@ -242,41 +242,122 @@ impl Game {
     /// one (`Game::fuse_companions` or `Game::rename_companion`), else its species
     /// name (falling back to the raw species id if the species definition
     /// is somehow missing). `None` if `entity` isn't a `Creature` at all.
+    /// The naming ladder: `CustomName` › handle › species. An owned program
+    /// (anything carrying `ProgramId`) is named by its derived handle once
+    /// the player hasn't renamed it — see `handles::of` — and only a wild or
+    /// summoned body, which never passes through `roster_parts`, falls
+    /// through to its species name.
     pub(crate) fn creature_name(&self, entity: Entity) -> Option<String> {
         let c = self.world.get::<Creature>(entity)?;
         if let Some(custom) = self.world.get::<CustomName>(entity) {
             return Some(custom.0.clone());
         }
-        Some(
-            self.world
-                .resource::<SpeciesDb>()
-                .get(&c.species)
-                .map(|s| s.name.clone())
-                .unwrap_or_else(|| c.species.clone()),
-        )
+        if let Some(id) = self.world.get::<ProgramId>(entity) {
+            return Some(crate::handles::of(*id));
+        }
+        Some(self.species_display_name(c))
     }
 
-    /// `creature_name`, rare-tier prefixed and zone-tagged, falling back to
-    /// a generic label if `entity` isn't a `Creature`.
+    /// The species' display name, falling back to its raw id if the def
+    /// failed to load — `SpeciesDb::load_dir` skips a malformed file rather
+    /// than panicking, so this is the one place that fallback shows.
+    fn species_display_name(&self, c: &Creature) -> String {
+        self.world
+            .resource::<SpeciesDb>()
+            .get(&c.species)
+            .map(|s| s.name.clone())
+            .unwrap_or_else(|| c.species.clone())
+    }
+
+    /// `creature_name`, rare-tier prefixed — `creature_label`'s own step,
+    /// the point where it stops being just `creature_name`. `None` only
+    /// when `entity` isn't a `Creature` at all.
+    ///
+    /// `creature_short_label` deliberately does **not** call this: its
+    /// caller's cell is too narrow to spend on a text prefix at all, so the
+    /// tier rides along as a `Rarity` field instead (`views::PetInfo::
+    /// rarity`, `views::PartySlotView::rarity`) for the renderer to colour
+    /// or tag the row with — the same reason `PetInfo::rarity` is carried
+    /// beside `creature_label`'s own prefixed `name` rather than parsed back
+    /// out of it.
     ///
     /// The prefix goes here rather than in `zone_tagged_name` deliberately.
     /// That one is also called directly by `EnemyGroupView::species_name`
-    /// (`game/combat_round.rs`), and the battle roster draws its name into a
-    /// fixed `NAME_W` cell that "Overclocked Scrapper 2" overflows — the
-    /// roster carries the tier as its own short tag instead, outside the
-    /// column. A `CustomName` gets the prefix too, which is right: renaming
-    /// a program does not make it ordinary.
+    /// (`game/combat_round.rs`), which carries its own tier as a bracketed
+    /// tag *after* the name instead — see `gui::render::rarity_tag` — so a
+    /// prefix baked in here would double it up for a wild group's row.
+    fn tiered_name(&self, entity: Entity) -> Option<String> {
+        let name = self.creature_name(entity)?;
+        Some(match self.rarity_of(entity).label() {
+            Some(tier) => format!("{tier} {name}"),
+            None => name,
+        })
+    }
+
+    /// `creature_name`, rare-tier prefixed, species-suffixed when the name
+    /// is a handle, and zone-tagged, falling back to a generic label if
+    /// `entity` isn't a `Creature`. The long form — logs, the roster, the
+    /// manifest header and popups with wrapping rows all read this one.
+    ///
+    /// A `CustomName` gets the prefix too, which is right: renaming a
+    /// program does not make it ordinary.
+    ///
+    /// A handle names an owned program, not what it *is*, so the species
+    /// rides along after it — `Overclocked 0x435eaD Scrapper 3` — the one
+    /// place this ladder's two derived pieces print together. A
+    /// `CustomName` is the player's own choice and stays bare; the species
+    /// is on the manifest for whoever wants it.
     pub fn creature_label(&self, entity: Entity) -> String {
-        match self.creature_name(entity) {
-            Some(name) => {
-                let named = match self.rarity_of(entity).label() {
-                    Some(tier) => format!("{tier} {name}"),
-                    None => name,
-                };
+        match self.tiered_name(entity) {
+            Some(named) => {
+                let named = self.append_species_after_a_handle(entity, named);
                 self.zone_tagged_name(entity, named)
             }
             None => "Program".to_string(),
         }
+    }
+
+    /// `creature_name`, zone-tagged: no tier, no species. The ladder's
+    /// narrowest rung, for a cell too tight to hold either — a handle alone
+    /// is 8 characters, and a tier prefix (`"Overclocked "`, 12) or a
+    /// species suffix would push a realistic name well past most fixed-width
+    /// name columns before the identity that matters (the handle) is even
+    /// drawn.
+    ///
+    /// Three callers. Two are fixed-width cells that carry `rarity` as a
+    /// separate field precisely so the tier can be read back without text:
+    /// the CREW pane's `UNIT` column (`gui/src/render/hud/panes.rs`, via
+    /// `views::PetInfo`) and the party battle roster's `NAME_W` cell
+    /// (`gui/src/render/battle.rs`, via `views::PartySlotView`, through
+    /// `party_row` in `game/combat_round.rs`) — the hostile roster's
+    /// `EnemyGroupView` reads the species directly instead, since a wild
+    /// group's species is the point of that row, not incidental to it. The
+    /// third is `remembered_name` (`game/memories.rs`), a memory row's
+    /// subject rather than a fixed-width cell — it carries no `rarity` of
+    /// its own to read back, since a memory's subject is who it is about,
+    /// not what tier they were when it formed.
+    pub fn creature_short_label(&self, entity: Entity) -> String {
+        match self.creature_name(entity) {
+            Some(named) => self.zone_tagged_name(entity, named),
+            None => "Program".to_string(),
+        }
+    }
+
+    /// The one place `creature_label` reaches past `creature_name`'s return
+    /// value: it has to tell a handle from a `CustomName` to know whether
+    /// the species belongs after it, and the name alone can't say that — a
+    /// custom name and a handle are both bare strings.
+    fn append_species_after_a_handle(&self, entity: Entity, named: String) -> String {
+        if self.world.get::<CustomName>(entity).is_some() {
+            return named;
+        }
+        let (Some(c), Some(_)) = (
+            self.world.get::<Creature>(entity),
+            self.world.get::<ProgramId>(entity),
+        ) else {
+            return named;
+        };
+        format!("{named} {}", self.species_display_name(c))
     }
 
     /// The rare-spawn tier of `entity`, or `Ordinary` for anything without
@@ -463,23 +544,37 @@ impl Game {
                 .collect()
         };
         let slot_of = |entity: &Entity| party.iter().position(|p| p == entity);
-        // Grouped by role, then the party in slot order, then the name.
+        // Grouped by role, then the party in slot order, then species and
+        // id.
         //
         // The party leads because that order is mechanical: the front slot
         // draws the most fire (see `battle::slot_aggro_weight`) and the
         // companion screen exists to arrange it. Behind them the *role*
         // decides, so the roster is a run per `ProgramRole` and the screen can
         // head each run rather than mixing a program away on a sortie in
-        // among the base staff. Inside a run the name settles it, since bevy's
-        // query order is not stable and the four other screens reading this
-        // list — fuse, extract, routines, manifest — have no slot to show and
-        // were getting no order at all.
+        // among the base staff. Inside a run species groups like with like
+        // and `ProgramId` settles the tie, since bevy's query order is not
+        // stable and the four other screens reading this list — fuse,
+        // extract, routines, manifest — have no slot to show and were
+        // getting no order at all.
+        //
+        // Not `creature_label`: that starts with a handle for anything not
+        // custom-named, and a handle is `handles::of`'s permutation —
+        // deliberately unrelated to id order, so sorting by it groups
+        // nothing and reads as arbitrary. `ProgramId` is assignment order,
+        // which at least means "the one you caught first, sorts first."
         owned.sort_by_key(|e| {
+            let species = self
+                .world
+                .get::<Creature>(*e)
+                .map(|c| self.species_display_name(c));
+            let id = self.world.get::<ProgramId>(*e).copied();
             (
                 self.program_role(*e)
                     .map_or(u8::MAX, ProgramRole::roster_rank),
                 slot_of(e).unwrap_or(usize::MAX),
-                self.creature_label(*e),
+                species,
+                id,
             )
         });
         owned
@@ -497,6 +592,7 @@ impl Game {
                     glyph: glyph.map(|g| g.ch).unwrap_or('?'),
                     color: glyph.map(|g| g.color).unwrap_or(GlyphColor::White),
                     name: self.creature_label(entity),
+                    short_name: self.creature_short_label(entity),
                     level,
                     hp: stats.hp,
                     max_hp: stats.max_hp,

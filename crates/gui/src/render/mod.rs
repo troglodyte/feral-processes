@@ -1421,6 +1421,7 @@ pub(super) fn test_pet(name: &str, gear: &str) -> PetInfo {
         glyph: 'p',
         color: GlyphColor::White,
         name: name.to_string(),
+        short_name: name.to_string(),
         level: 6,
         hp: 22,
         max_hp: 28,

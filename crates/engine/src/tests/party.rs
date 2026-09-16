@@ -305,8 +305,15 @@ fn owned_pets_lists_the_party_first_in_slot_order() {
 /// to show and used to arrive in bevy query order, which is to say in no
 /// order at all, across the fuse, extract, routines and manifest pickers that
 /// read the same list.
+///
+/// Not by `name`: a handle-named program's name is `handles::of`'s
+/// permutation, deliberately unrelated to id order, so sorting by it groups
+/// nothing and looked arbitrary at the keyboard. Species groups like with
+/// like instead, so a `CustomName` no longer moves a program in this list at
+/// all — see `owned_pets_sorts_everything_behind_the_party_by_species_then_
+/// id` for the species half.
 #[test]
-fn owned_pets_sorts_everything_behind_the_party_by_name() {
+fn owned_pets_sorts_everything_behind_the_party_by_id_within_a_species() {
     let mut game = Game::new(32, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let member = spawn_tamed(&mut game, 9, 2);
     let zeta = spawn_tamed(&mut game, 9, 2);
@@ -321,8 +328,36 @@ fn owned_pets_sorts_everything_behind_the_party_by_name() {
     let names: Vec<String> = game.owned_pets().into_iter().map(|p| p.name).collect();
     assert_eq!(
         names,
-        vec!["Middle", "Alpha", "Zeta"],
-        "the party member leads on its slot, the rest sort by name"
+        vec!["Middle", "Zeta", "Alpha"],
+        "the party member leads on its slot; behind it, one species ties and \
+         id — assignment order — settles it, not the (custom) name"
+    );
+}
+
+/// The species half of the tie-break above: two different species must not
+/// interleave by name or by id, they group.
+#[test]
+fn owned_pets_sorts_everything_behind_the_party_by_species_then_id() {
+    let mut game = Game::new(33, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // "Construct" first and "Cipher" second, so an id-only sort would get
+    // this backwards — id order alone is exactly what species is meant to
+    // group ahead of.
+    let construct_a = game
+        .adopt_program("construct", 4, 4, 1.0)
+        .expect("a shipped species");
+    let cipher = game
+        .adopt_program("cipher", 5, 5, 1.0)
+        .expect("a shipped species");
+    let construct_b = game
+        .adopt_program("construct", 6, 6, 1.0)
+        .expect("a shipped species");
+
+    let order: Vec<Entity> = game.owned_pets().into_iter().map(|p| p.entity).collect();
+    assert_eq!(
+        order,
+        vec![cipher, construct_a, construct_b],
+        "'Cipher' sorts before 'Construct' regardless of id, and id — \
+         assignment order — breaks the tie inside a species"
     );
 }
 
@@ -1140,7 +1175,7 @@ fn fuse_companions_applies_a_custom_name_truncated_to_the_max_length() {
 }
 
 #[test]
-fn fuse_companions_with_no_name_or_blank_name_keeps_the_species_name() {
+fn fuse_companions_with_no_name_or_blank_name_keeps_the_handle() {
     let mut game = Game::new(91, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     // `spawn_tamed` always uses this same species, and fusing two
     // same-level, same-species programs keeps it — capturing it directly
@@ -1152,14 +1187,17 @@ fn fuse_companions_with_no_name_or_blank_name_keeps_the_species_name() {
     game.fuse_companions(a, b, None).unwrap();
     let no_name = game.owned_pets();
     assert_eq!(no_name.len(), 1);
-    // Every fused program gets `ZonePortal(1)` (see `fuse_companions`),
-    // which `creature_label`/`PetInfo::name` always zone-tags — even at
-    // zone 1, per `entity_label`'s own test coverage — so the expected
-    // fallback name carries that same " 1" suffix, not the bare species name.
-    let expected_default_name = format!("{species_name} 1");
+    // The naming ladder is `CustomName` › handle › species: with no custom
+    // name, a fused child (which carries a fresh `ProgramId` like any other
+    // roster member) is named by its handle, and `creature_label` appends
+    // the species after it — zone-tagged, since every fused program gets
+    // `ZonePortal(1)` (see `fuse_companions`), zone-tagged even at zone 1
+    // per `entity_label`'s own test coverage.
+    let id = *game.world.get::<ProgramId>(no_name[0].entity).unwrap();
+    let expected_default_name = format!("{} {species_name} 1", crate::handles::of(id));
     assert_eq!(
         no_name[0].name, expected_default_name,
-        "no name given should fall back to the (zone-tagged) species name"
+        "no name given should fall back to the handle, with the species after it"
     );
 
     let c = spawn_tamed(&mut game, 10, 3);
@@ -1167,9 +1205,11 @@ fn fuse_companions_with_no_name_or_blank_name_keeps_the_species_name() {
     game.fuse_companions(c, d, Some("   ".to_string())).unwrap();
     let pets = game.owned_pets();
     let blank_named = pets.iter().find(|p| p.entity != no_name[0].entity).unwrap();
+    let blank_id = *game.world.get::<ProgramId>(blank_named.entity).unwrap();
+    let expected_blank_name = format!("{} {species_name} 1", crate::handles::of(blank_id));
     assert_eq!(
-        blank_named.name, expected_default_name,
-        "an all-whitespace name should also fall back to the species name, not become blank"
+        blank_named.name, expected_blank_name,
+        "an all-whitespace name should also fall back to the handle, not become blank"
     );
 }
 
@@ -1450,22 +1490,24 @@ fn rename_companion_sets_the_display_name() {
 }
 
 #[test]
-fn renaming_with_a_blank_name_restores_the_species_name() {
+fn renaming_with_a_blank_name_restores_the_handle() {
     let mut game = Game::new(4202, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let species_name = generic_species().name;
     let pet = spawn_tamed(&mut game, 10, 3);
+    let id = *game.world.get::<ProgramId>(pet).unwrap();
     game.rename_companion(pet, Some("Hexed".to_string()))
         .unwrap();
 
-    // Blank is the only way back to the species name, so it clears rather
-    // than being refused as empty input — `sanitize_custom_name` returns
-    // `None` for it and this caller reads that as "drop the override".
+    // Blank is the only way back to the handle, so it clears rather than
+    // being refused as empty input — `sanitize_custom_name` returns `None`
+    // for it and this caller reads that as "drop the override". The naming
+    // ladder is `CustomName` › handle › species, so a tamed program (which
+    // carries a `ProgramId`) falls back to its handle, not its species.
     game.rename_companion(pet, Some("   ".to_string())).unwrap();
 
     assert_eq!(
         game.creature_name(pet).as_deref(),
-        Some(species_name.as_str()),
-        "a blank rename should fall back to the species name"
+        Some(crate::handles::of(id).as_str()),
+        "a blank rename should fall back to the handle"
     );
 }
 
@@ -1539,6 +1581,243 @@ fn a_renamed_program_keeps_its_name_across_a_save() {
         names,
         vec!["Hexed 1".to_string()],
         "the rename is what `CreatureSave::custom_name` is for"
+    );
+}
+
+// The naming ladder — `CustomName` › handle › species. `creature_name` is
+// the short form; `creature_label` appends the species when the name it
+// picked was a handle, because a `CustomName` already says everything the
+// player wanted said.
+
+#[test]
+fn a_tamed_program_is_named_by_its_handle() {
+    let mut game = Game::new(4300, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    let id = *game.world.get::<ProgramId>(pet).unwrap();
+
+    assert_eq!(
+        game.creature_name(pet).as_deref(),
+        Some(crate::handles::of(id).as_str())
+    );
+}
+
+#[test]
+fn a_wild_creature_and_a_summon_keep_their_species_name() {
+    let mut game = Game::new(4301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let species_name = generic_species().name;
+
+    let wild = game
+        .world
+        .spawn(Creature {
+            species: generic_species().id,
+        })
+        .id();
+    assert_eq!(
+        game.creature_name(wild).as_deref(),
+        Some(species_name.as_str())
+    );
+
+    // A summon goes through the real path, `Game::fork_programs`, rather
+    // than a hand-spawned `Creature` + `Summoned` tuple — that spawn is
+    // exactly the shape `fork_programs` builds and proves nothing about
+    // whether it still builds it. `fork_programs` rolls its own species off
+    // `GameRng`, so this reads the species back off the spawned body rather
+    // than assuming which one landed.
+    let player = game.player_entity();
+    let bodies = game.fork_programs(player, 1, 0);
+    assert_eq!(bodies.len(), 1, "one body was asked for");
+    let summon = bodies[0];
+    assert!(
+        game.world
+            .get::<crate::components::Summoned>(summon)
+            .is_some(),
+        "fork_programs is a wild spawn with Hostile/WanderAi stripped and \
+         components::Summoned added — the marker a hand-built fixture could \
+         only assert by assumption"
+    );
+    assert!(
+        game.world.get::<ProgramId>(summon).is_none(),
+        "a fork deliberately never passes through roster_parts, the same \
+         omission that keeps it out of the roster"
+    );
+    let summon_species = game.world.get::<Creature>(summon).unwrap().species.clone();
+    let summon_species_name = game
+        .species_defs()
+        .into_iter()
+        .find(|def| def.id == summon_species)
+        .expect("fork_programs only ever rolls a real, loaded species")
+        .name;
+    assert_eq!(
+        game.creature_name(summon).as_deref(),
+        Some(summon_species_name.as_str()),
+        "no ProgramId means no handle branch, so the summon falls through \
+         to its species name exactly like the hand-spawned wild body above"
+    );
+}
+
+#[test]
+fn a_custom_name_outranks_the_handle_and_drops_the_species_from_the_label() {
+    let mut game = Game::new(4302, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.rename_companion(pet, Some("Hexed".to_string()))
+        .unwrap();
+
+    assert_eq!(game.creature_name(pet).as_deref(), Some("Hexed"));
+    assert_eq!(
+        game.creature_label(pet),
+        "Hexed",
+        "the player named it — no handle and no species belong in the label"
+    );
+}
+
+#[test]
+fn a_fused_child_has_a_handle_neither_parent_had() {
+    let mut game = Game::new(4303, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    let a = spawn_tamed(&mut game, 10, 3);
+    let b = spawn_tamed(&mut game, 10, 3);
+    let handle_a = game.creature_name(a).unwrap();
+    let handle_b = game.creature_name(b).unwrap();
+
+    game.fuse_companions(a, b, None).unwrap();
+
+    let mut query = game.world.query::<(Entity, &Tamed)>();
+    let child = query
+        .iter(&game.world)
+        .find(|(_, t)| t.owner == player)
+        .map(|(e, _)| e)
+        .expect("a fused creature should exist");
+    let child_id = *game.world.get::<ProgramId>(child).unwrap();
+    let child_name = game.creature_name(child).unwrap();
+
+    assert_eq!(child_name, crate::handles::of(child_id));
+    assert_ne!(child_name, handle_a, "fusion mints a fresh ProgramId");
+    assert_ne!(child_name, handle_b, "fusion mints a fresh ProgramId");
+}
+
+#[test]
+fn a_label_carries_the_species_after_a_handle() {
+    let mut game = Game::new(4304, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(pet).insert(ZonePortal(3));
+    let id = *game.world.get::<ProgramId>(pet).unwrap();
+
+    let expected = format!("{} {} 3", crate::handles::of(id), generic_species().name);
+    assert_eq!(game.creature_label(pet), expected);
+}
+
+#[test]
+fn a_short_label_drops_the_species_a_long_label_carries() {
+    let mut game = Game::new(4306, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(pet).insert(ZonePortal(3));
+    let id = *game.world.get::<ProgramId>(pet).unwrap();
+
+    let expected_short = format!("{} 3", crate::handles::of(id));
+    assert_eq!(
+        game.creature_short_label(pet),
+        expected_short,
+        "the short label is name and zone — no tier, no species"
+    );
+    assert_ne!(
+        game.creature_short_label(pet),
+        game.creature_label(pet),
+        "the long label carries the species the short one drops"
+    );
+}
+
+#[test]
+fn a_short_label_still_carries_a_custom_name() {
+    let mut game = Game::new(4307, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.rename_companion(pet, Some("Hexed".to_string()))
+        .unwrap();
+
+    // A `CustomName` carries no species and no tier in either label, so the
+    // short and long forms agree once one is set.
+    assert_eq!(game.creature_short_label(pet), game.creature_label(pet));
+    assert_eq!(game.creature_short_label(pet), "Hexed");
+}
+
+/// The whole reason `creature_short_label` stopped calling `tiered_name`:
+/// its caller's cell (the CREW pane's `UNIT` column, the battle roster's
+/// `NAME_W`) is too narrow to spend on a text prefix at all — the tier has
+/// to read as a colour or a trailing tag instead, off `Rarity` carried
+/// alongside the label rather than parsed back out of it.
+#[test]
+fn a_short_label_drops_the_tier_too() {
+    let mut game = Game::new(4308, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.world.entity_mut(pet).insert(Rarity::Gold);
+
+    let short = game.creature_short_label(pet);
+    assert_eq!(
+        short,
+        game.creature_name(pet).unwrap(),
+        "no zone, no tier: the short label is bare here"
+    );
+    assert!(
+        !short.contains(Rarity::Gold.label().unwrap()),
+        "the tier leaked into the short label: {short:?}"
+    );
+    assert_ne!(
+        short,
+        game.creature_label(pet),
+        "the long label still carries the tier the short one drops"
+    );
+}
+
+#[test]
+fn a_program_from_a_pre_handle_save_reads_a_handle() {
+    let mut game = Game::new(4305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    // Entity identity is private to the `World` that allocated it (see
+    // `a_creatures_potential_survives_save_and_load`), so this is found
+    // again by its `Tamed` ownership after the round trip, never by the
+    // `Entity` returned here.
+    spawn_tamed(&mut game, 10, 3);
+
+    let dir = scratch_assets_dir("handle_save_roundtrip");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("save.bin");
+    game.save(&path).unwrap();
+
+    // A genuine pre-handle save, not merely a current-build round trip:
+    // `spawn_tamed`'s `roster_parts()` already minted a real, nonzero
+    // `ProgramId` the moment it spawned, long before `game.save` ever ran,
+    // so the file on disk at this point carries that id already and a load
+    // here would just trust it — exercising `Game::load`'s `else` arm, not
+    // the sentinel one. Zeroing `program_id` and `next_program_id` is what
+    // `a_legacy_save_mints_an_id_for_every_owned_program`
+    // (`tests/memories.rs`) uses to simulate a file written before either
+    // field existed — both are `#[serde(default)]` to `0` for exactly that
+    // reason (see `components::ProgramId`'s and `SaveData::next_program_id`'s
+    // own docs).
+    let mut data = crate::save::load_from_file(&path).unwrap();
+    for c in &mut data.creatures {
+        c.program_id = 0;
+    }
+    data.next_program_id = 0;
+    crate::save::save_to_file(&path, &data).unwrap();
+
+    let mut loaded = Game::load(&path, &test_assets_dir()).unwrap();
+
+    let player = loaded.player_entity();
+    let mut query = loaded.world.query::<(Entity, &Tamed)>();
+    let restored = query
+        .iter(&loaded.world)
+        .find(|(_, t)| t.owner == player)
+        .map(|(e, _)| e)
+        .expect("the tamed program should survive the round trip");
+    let restored_id = *loaded.world.get::<ProgramId>(restored).unwrap();
+    assert_ne!(
+        restored_id.0, 0,
+        "Game::load must mint a fresh id for the sentinel rather than \
+         leaving it at 0"
+    );
+
+    assert_eq!(
+        loaded.creature_name(restored).as_deref(),
+        Some(crate::handles::of(restored_id).as_str())
     );
 }
 

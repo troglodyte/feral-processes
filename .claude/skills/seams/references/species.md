@@ -34,6 +34,15 @@
   is built from `affinities` alone, and all three player-only classes damp
   an axis without raising one, so without `spike_label` the Decompiler
   advertises itself as `"Weaker damage"` and nothing else.
+- **A program's handle is derived from its `ProgramId` by `handles::of`,
+  never stored, and the permutation's salt is save format.** Nothing about a
+  Rust type says so — `SALT` and `permute`'s two-round multiply-then-xorshift
+  structure (`crates/engine/src/handles.rs`) are ordinary-looking constants,
+  and a change to either compiles clean everywhere while silently renaming
+  every program in every save that exists. `handles_are_pinned` is the only
+  barrier: five ids pinned to exact strings, and the one test in the
+  codebase allowed to paste a literal hex handle. See
+  `seam:a-handle-is-derived-and-its-salt-is-save-format` for the argument.
 - **The Invoker's routine slots are added past the cap and not re-clamped**,
   which is what the companion arm beside it has always done with
   `talent_routine_slots` — the cap bounds the level curve, not the total.

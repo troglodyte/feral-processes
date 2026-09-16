@@ -368,15 +368,32 @@ pub(super) fn research_menu_rows(
 
 pub(super) fn draw_research_menu(
     game: &mut Game,
+    tree: ResearchTree,
     selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
     let currency = game.item_name(&game.research_currency()).to_string();
-    let nodes = game.research_nodes(ResearchTree::Base);
-    let rows = research_menu_rows(&nodes, selected, &currency);
-    draw_popup("Research", PopupSize::Large, &rows, refusal, painter, m);
+    let nodes = game.research_nodes(tree);
+    let (title, rows) = match tree {
+        ResearchTree::Base => ("Research", research_menu_rows(&nodes, selected, &currency)),
+        // The routine tree's own empty line: nothing is discovered and
+        // nothing is visible, so there is nothing to number — a header and
+        // an instruction line with no rows under them would read as a
+        // broken screen rather than as "you haven't found anything yet".
+        ResearchTree::Routines if nodes.is_empty() => (
+            "Routine research",
+            vec![text_row(
+                "Recover routines from downed programs to open research here.",
+            )],
+        ),
+        ResearchTree::Routines => (
+            "Routine research",
+            research_menu_rows(&nodes, selected, &currency),
+        ),
+    };
+    draw_popup(title, PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// The one confirm page both respecs draw, so the perk wipe and the talent
@@ -835,5 +852,72 @@ mod tests {
                 assert!(measured > 0, "the {screen} picker drew no rows to measure");
             }
         });
+    }
+
+    /// A fresh run's routine tree is closed (`routine_fabrication` carries
+    /// `opens_routine_tree` and is unresearched), so `research_nodes`
+    /// returns nothing and `draw_research_menu` has to say so rather than
+    /// draw an empty numbered list — spec §4 "The routine research screen".
+    #[test]
+    fn routine_research_with_nothing_listed_draws_the_verbatim_empty_line() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let mut game =
+            Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
+        assert!(
+            game.research_nodes(ResearchTree::Routines).is_empty(),
+            "a fresh run's routine tree must start closed"
+        );
+
+        let (_, shapes) = with_painter(|p| {
+            draw_research_menu(
+                &mut game,
+                ResearchTree::Routines,
+                0,
+                None,
+                p,
+                &ui_metrics(900.0),
+            )
+        });
+        let drawn = crate::paint::painted_text(&shapes);
+        assert!(
+            drawn
+                .iter()
+                .any(|t| t.contains("Recover routines from downed programs to open research here.")),
+            "the closed-and-empty tree must draw its own line, not a blank numbered list: {drawn:?}"
+        );
+    }
+
+    /// `Mode::Research` passes `ResearchTree::Base`, and the base tree's own
+    /// nodes never include a synthesised `routine/*` one — Task 3 deleted
+    /// every base node that used to teach an ability, so the base screen's
+    /// list is unaffected by the routine tree existing at all.
+    #[test]
+    fn the_base_research_screen_draws_no_routine_node() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let mut game =
+            Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
+        let nodes = game.research_nodes(ResearchTree::Base);
+        assert!(!nodes.is_empty(), "the base tree still has nodes to draw");
+        let ids: Vec<&str> = nodes.iter().map(|n| n.id.as_str()).collect();
+        assert!(
+            ids.iter().all(|id| !id.starts_with("routine/")),
+            "a synthesised routine node leaked into the base tree's own list: {ids:?}"
+        );
+
+        let (_, shapes) = with_painter(|p| {
+            draw_research_menu(
+                &mut game,
+                ResearchTree::Base,
+                0,
+                None,
+                p,
+                &ui_metrics(900.0),
+            )
+        });
+        let drawn = crate::paint::painted_text(&shapes);
+        assert!(
+            drawn.iter().all(|t| !t.contains("routine/")),
+            "the base research screen drew a raw synthesised id: {drawn:?}"
+        );
     }
 }

@@ -174,6 +174,19 @@ const BASE_ROWS: &[GroupEntry] = &[
         },
     },
     GroupEntry {
+        label: "Routine research",
+        target: Mode::RoutineResearch,
+        locality: Locality::Anywhere,
+        // `has_research_tree`, not "is anything listed": the row must stay
+        // reachable while the tree is closed or nothing is discovered yet,
+        // because the screen behind it is what tells the player that.
+        available: |app| {
+            app.game.as_ref().is_some_and(|g| {
+                g.has_research_tree(feral_processes_engine::ResearchTree::Routines)
+            })
+        },
+    },
+    GroupEntry {
         // Not base-only, and deliberately so: mission status is the
         // question worth answering four frames down, and the board itself is
         // a property of the sector rather than of where the party is

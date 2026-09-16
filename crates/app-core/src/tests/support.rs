@@ -1960,6 +1960,52 @@ pub(crate) fn app_in_base_with_a_research_node(seed: u32) -> App {
     app
 }
 
+/// A founded base whose `routine_fabrication` node reads as researched, so
+/// the routine tree is open and its always-visible families (Symlink's
+/// among them) are listed — `routine/symlink` is the fixed point every
+/// `Mode::RoutineResearch` test picks against. Carries a Research Node so
+/// `Game::select_research` doesn't refuse a listed node for having nowhere
+/// to run — no Mining Node, since a synthesised node's bill is empty
+/// (spec §2 "Cost").
+///
+/// Built by editing a save, `app_in_base_with_a_research_node`'s reason:
+/// what these tests want is a tree already open, not the Research Node
+/// project that would earn it — `Game::select_research` and a Research
+/// Node's own progress are the engine's tests to make, not app-core's to
+/// redo through a slow tick loop.
+pub(crate) fn app_in_base_with_routine_tree_open(seed: u32) -> App {
+    let assets_dir = test_assets_dir();
+    let mut app = test_app(seed);
+    let path = scratch_path("routine_tree_open", seed);
+    found_the_base(&mut app);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let _cleanup = RemoveOnDrop(&path);
+
+    let mut data = save::load_from_file(&path).unwrap();
+    data.researched.push("routine_fabrication".to_string());
+    data.structures.push(save::StructureSave {
+        kind: "research_node".to_string(),
+        position: (2, 2),
+        durability: None,
+        tier: None,
+        stock_input: Vec::new(),
+        stock_output: Vec::new(),
+        standing_work: false,
+        standing_guard: false,
+        denied_items: Vec::new(),
+        power_fuel: feral_processes_engine::tuning::POWER_UPKEEP_TICKS,
+        build_quality: 1.0,
+        racked: Vec::new(),
+        hopper: Vec::new(),
+        hopper_progress: 0,
+        standing_tool: None,
+    });
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Some(Game::load(&path, &assets_dir).unwrap());
+    stand_in_base(&mut app);
+    app
+}
+
 /// `app_in_base_with_programs` with no programs — a base a deploy or an
 /// upgrade can be offered but never afford, for a test about the refusal
 /// rather than the spend.

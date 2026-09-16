@@ -265,3 +265,95 @@ fn esc_closes_the_screen_from_the_graph_view() {
         "the chosen view survives closing the screen"
     );
 }
+
+// ---------------------------------------------------------------------------
+// `Mode::RoutineResearch` — `Mode::Research`'s own screen, parameterised by
+// `ResearchTree::Routines`. See docs/superpowers/plans/
+// 2026-09-16-routine-research-tree.md, Task 8.
+// ---------------------------------------------------------------------------
+
+/// The routine tree's own project, as the screen would read it.
+fn active_routine_project(app: &App) -> Option<String> {
+    app.game
+        .as_ref()
+        .expect("a run")
+        .research_nodes(ResearchTree::Routines)
+        .into_iter()
+        .find(|n| n.state == feral_processes_engine::ResearchState::Active)
+        .map(|n| n.id)
+}
+
+/// The base menu's own row, gated on `has_research_tree(Routines)` rather
+/// than on anything being listed — true for any fresh run with a loaded
+/// `AbilityDb`, exactly as `has_research_tree`'s own doc explains.
+#[test]
+fn the_base_menu_opens_routine_research_and_esc_closes_it() {
+    let mut app = test_app(560);
+    open_via_menu(&mut app, 'b', "Routine research");
+    assert!(matches!(app.mode, Mode::RoutineResearch));
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::BaseMenu, "Esc walks back up one level");
+}
+
+/// Once the tree is open, the list holds only routine nodes — never a base
+/// node — and the row keys take one on exactly as the base screen's do.
+#[test]
+fn routine_research_lists_only_routine_nodes_and_row_keys_take_one_on() {
+    let mut app = app_in_base_with_routine_tree_open(561);
+    open_via_menu(&mut app, 'b', "Routine research");
+    let ids: Vec<String> = app
+        .game
+        .as_ref()
+        .unwrap()
+        .research_nodes(ResearchTree::Routines)
+        .into_iter()
+        .map(|n| n.id)
+        .collect();
+    assert!(
+        !ids.is_empty() && ids.iter().all(|id| id.starts_with("routine/")),
+        "an open tree must list only routine nodes: {ids:?}"
+    );
+    assert!(
+        ids.iter().any(|id| id == "routine/symlink"),
+        "Symlink is an always-visible root at zone 1: {ids:?}"
+    );
+
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(
+        active_routine_project(&app).as_deref(),
+        Some(ids[0].as_str()),
+        "the row key takes the highlighted node on"
+    );
+}
+
+/// The graph view's stepping and its `Enter` stay inside the same tree the
+/// list reads from — `handle_research_key`'s one `tree` argument threaded
+/// through both the list and the graph half.
+#[test]
+fn routine_research_graph_stepping_and_enter_stay_in_the_routine_tree() {
+    let mut app = app_in_base_with_routine_tree_open(562);
+    open_via_menu(&mut app, 'b', "Routine research");
+    let ids: Vec<String> = app
+        .game
+        .as_ref()
+        .unwrap()
+        .research_nodes(ResearchTree::Routines)
+        .into_iter()
+        .map(|n| n.id)
+        .collect();
+
+    app.handle_key(GameKey::Char('G'));
+    assert!(app.research_graph_view, "G toggles the graph view");
+    app.handle_key(GameKey::Right);
+    let landed = ids
+        .get(app.menu_selected)
+        .expect("the graph cursor still indexes a listed routine node");
+    assert!(landed.starts_with("routine/"));
+
+    app.handle_key(GameKey::Enter);
+    assert_eq!(
+        active_routine_project(&app).as_deref(),
+        Some(landed.as_str()),
+        "Enter takes the node under the graph cursor on, same as the list's row key"
+    );
+}

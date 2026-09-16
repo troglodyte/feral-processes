@@ -13,7 +13,6 @@ use feral_processes_app_core::{
     Staffing, SwapChoice, SwapRow, TradeChoice, TransferEntry, equip_preview_tag, equip_swap_rows,
     inventory_item_actions, item_fusion_note, menu_shortcut, qty_column, stat_summary,
 };
-use feral_processes_engine::RespecSubject;
 use feral_processes_engine::components::{GlyphColor, MachineStatus, Rarity, TaskKind};
 use feral_processes_engine::items::{EquipmentSlot, GearCopy, ItemId, QualityBand, quality_band};
 use feral_processes_engine::settlements::SettlementKey;
@@ -27,6 +26,7 @@ use feral_processes_engine::{
     LogEntry, MESSAGE_LOG_CAP, MemoryRow, MessageKind, PetInfo, ProgramSaleOption, RecipeChain,
     RecipeStep, ResearchState, SettlementView, StockRow, StructureReport, morale_band,
 };
+use feral_processes_engine::{ResearchTree, RespecSubject};
 
 mod arena;
 mod bars;
@@ -1357,10 +1357,28 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
                 draw_respec_confirm(&quote, "talent", refusal, painter, m);
             }
         }
-        Mode::Research if graph_view => {
-            research_graph::draw_research_graph(game, selected, refusal, painter, m)
+        Mode::Research if graph_view => research_graph::draw_research_graph(
+            game,
+            ResearchTree::Base,
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
+        Mode::Research => {
+            draw_research_menu(game, ResearchTree::Base, selected, refusal, painter, m)
         }
-        Mode::Research => draw_research_menu(game, selected, refusal, painter, m),
+        Mode::RoutineResearch if graph_view => research_graph::draw_research_graph(
+            game,
+            ResearchTree::Routines,
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
+        Mode::RoutineResearch => {
+            draw_research_menu(game, ResearchTree::Routines, selected, refusal, painter, m)
+        }
         Mode::Contracts => draw_contracts(
             &contract_active,
             &contract_offers,
@@ -1449,7 +1467,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 109] = [
+    const ALL_MODES: [Mode; 110] = [
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
         Mode::TacticalAim,
@@ -1537,6 +1555,7 @@ mod tests {
         Mode::RespecTalentsConfirm,
         Mode::Perks,
         Mode::Research,
+        Mode::RoutineResearch,
         Mode::Contracts,
         Mode::History,
         Mode::Compass,

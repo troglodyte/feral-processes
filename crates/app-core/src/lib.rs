@@ -1789,6 +1789,12 @@ pub enum Mode {
     /// The research tree (see `Game::research_nodes`). Stays open after each
     /// unlock so several nodes can be taken in one visit.
     Research,
+    /// The routine research tree — `Mode::Research`'s own screen, passing
+    /// `ResearchTree::Routines` instead of `ResearchTree::Base`. Opened from
+    /// its own base-menu row, gated on `Game::has_research_tree(Routines)`
+    /// rather than on anything being listed, because the empty-list line is
+    /// what tells the player the tree is there before anything is.
+    RoutineResearch,
     /// Contracts: what the run is holding, then what a Broker in range is
     /// offering. Stays open after each verb so several can be taken in one
     /// visit, as `Mode::Research` does.
@@ -2067,6 +2073,7 @@ impl Mode {
             | Mode::RouteCargo
             | Mode::Perks
             | Mode::Research
+            | Mode::RoutineResearch
             | Mode::Contracts
             | Mode::History
             | Mode::Compass

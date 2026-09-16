@@ -147,7 +147,7 @@ A synthesised node has **no base-tree prerequisite** except the gate in
 A family is **discoverable** if any of its rungs has a carrier: a positive
 `wild_weight`, or a place in some species' kit. Every other family is
 **always visible**: field routines (`FieldBuff`, `Phase`, `Jump`,
-`Symlink`), tamper routines, summons, and any family nothing carries.
+`Symlink`), tamper routines, and any family nothing carries.
 
 This split is computed, not authored. That is what stops content from
 going dead: a family nothing carries cannot be discovered, so it falls into

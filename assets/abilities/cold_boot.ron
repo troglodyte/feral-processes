@@ -7,4 +7,5 @@
     cooldown: 5,
     power_cost: 15.0,
     wild_weight: 4,
+    research_zone: 2,
 )

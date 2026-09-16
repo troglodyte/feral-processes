@@ -7,7 +7,7 @@
 //! `docs/superpowers/specs/2026-09-04-program-extraction-design.md`.
 
 use super::support::*;
-use crate::components::{Hopper, HopperEntry, Tools};
+use crate::components::{Hopper, HopperEntry, PowerReserve, Tools};
 use crate::items::DownedProgram;
 use crate::tools::{ToolCategory, ToolDb, ToolDef, ToolId};
 use crate::*;
@@ -2260,6 +2260,63 @@ fn a_routine_already_known_leaves_the_pool() {
     );
 }
 
+/// `routine_candidate_ids` must filter through `routine_tree::gets_node` —
+/// the same gate `synthesise_nodes` uses to decide which abilities get a
+/// research node at all — not merely the narrower `routine_is_exclusive`
+/// check it used to run on its own. A **passive** ability
+/// (`triggers.is_some()`) gets no node, so a modded species kit naming one
+/// must never be offered: discovering it would have nowhere to research
+/// toward, a dead end no shipped kit can produce (no shipped species
+/// declares a passive in its `abilities:`).
+#[test]
+fn routine_candidate_ids_excludes_an_ability_with_no_research_node() {
+    const FIXTURE_PASSIVE: &str = r#"(
+        id: "fixture_passive",
+        name: "Fixture Passive Single",
+        description: "A passive test fixture — triggers rather than being run.",
+        target: OneEnemyGroupFront,
+        effect: Debuff(kind: Bleed, power: 1, duration: 1),
+        cooldown: 4,
+        power_cost: 0.0,
+        triggers: Some(RoundStart),
+    )"#;
+    const FIXTURE_SPECIES: &str = r#"(
+        id: "fixture_passive_carrier",
+        name: "Fixture Passive Carrier",
+        glyph: 'x',
+        color: Yellow,
+        base_hp: 80,
+        base_atk: 12,
+        base_mitigation: 3,
+        taming_difficulty: 0.45,
+        growth_multiplier: 1.25,
+        habitats: [OpenGrid],
+        base_speed: 10,
+        base_int: 7,
+        moves: [(name: "Ram", power: 8, spread: 2)],
+        work_resource: None,
+        can_nest: false,
+        abilities: [(id: "fixture_passive", level: 1)],
+        affinities: (),
+    )"#;
+    let dir = modded_assets_dir(
+        "passive_kit",
+        &[],
+        &[],
+        &[("fixture_passive_carrier.ron", FIXTURE_SPECIES)],
+        &[],
+        &[("fixture_passive.ron", FIXTURE_PASSIVE)],
+    );
+    let game = Game::new(9170, DifficultyMode::Forgiving, &dir).unwrap();
+    let program = test_program("fixture_passive_carrier", 1);
+    assert!(
+        !game
+            .routine_candidates(&program)
+            .contains(&"fixture_passive".to_string()),
+        "a passive ability must never be offered — it has no research node to discover toward"
+    );
+}
+
 /// The refusal, asserted the way every other refusal in this feature is:
 /// nothing spent. A program consumed for a routine the player already had is
 /// the exact waste `extract_routine`'s own "already known" check exists to
@@ -2299,8 +2356,12 @@ fn a_routine_tool_teaches_a_routine_and_consumes_the_program() {
         "the program survived"
     );
     assert!(
-        pool.iter().any(|id| game.knows_routine(id)),
-        "nothing from the pool was learned"
+        pool.iter().any(|id| game
+            .world
+            .resource::<crate::resources::DiscoveredRoutines>()
+            .0
+            .contains(id)),
+        "nothing from the pool was discovered"
     );
 }
 
@@ -2373,7 +2434,12 @@ fn the_draw_favours_the_first_candidate_without_forcing_it() {
         let tool = routine_tool_id(&game);
         game.extract_program(0, &tool).expect("the extraction runs");
         for id in pool {
-            if game.knows_routine(&id) || held(&game, &ItemId::etched(&id)) > 0 {
+            let discovered = game
+                .world
+                .resource::<crate::resources::DiscoveredRoutines>()
+                .0
+                .contains(&id);
+            if discovered || held(&game, &ItemId::etched(&id)) > 0 {
                 *counts.entry(id.to_string()).or_default() += 1;
             }
         }
@@ -2400,14 +2466,102 @@ fn the_draw_favours_the_first_candidate_without_forcing_it() {
     );
 }
 
+/// The tool door's discovery log line names no routine — extraction opens a
+/// family, it does not teach one, and the next rung may sit behind a sector
+/// the player has not reached (spec §3).
+#[test]
+fn the_routine_tool_log_line_does_not_name_the_routine() {
+    let mut game = new_test_game();
+    let program = test_program("scrapper", 30);
+    let pool = game.routine_candidates(&program);
+    give_downed_program(&mut game, program);
+    install_routine_tool(&mut game);
+    let tool = routine_tool_id(&game);
+
+    game.extract_program(0, &tool).expect("the extraction runs");
+
+    let recent: Vec<String> = game
+        .message_log(5)
+        .iter()
+        .map(|line| line.text.clone())
+        .collect();
+    assert!(
+        recent
+            .iter()
+            .any(|line| line.contains("Recovered an unfamiliar routine")),
+        "the verbatim discovery line must be logged: {recent:?}"
+    );
+    for id in &pool {
+        let name = game.ability_display_name(id);
+        assert!(
+            recent.iter().all(|line| !line.contains(&name)),
+            "{name} must not appear in the log: {recent:?}"
+        );
+    }
+}
+
+/// Every family a program's pool could offer already discovered is nothing
+/// left to recover — refused before the program, the tool or anything else
+/// moves.
+#[test]
+fn the_routine_tool_refuses_a_program_with_nothing_unfamiliar() {
+    let mut game = new_test_game();
+    let program = test_program("scrapper", 30);
+    let initial_pool = game.routine_candidates(&program);
+    assert!(
+        !initial_pool.is_empty(),
+        "fixture assumption: scrapper's kit offers something at level 30"
+    );
+    for id in &initial_pool {
+        game.world
+            .resource_mut::<crate::resources::DiscoveredRoutines>()
+            .0
+            .insert(id.clone());
+    }
+    assert!(
+        game.routine_candidates(&program).is_empty(),
+        "fixture assumption: every family is now discovered"
+    );
+    give_downed_program(&mut game, program);
+    install_routine_tool(&mut game);
+    let tool = routine_tool_id(&game);
+    let tools_before = game.installed_tools();
+    let player = game.player_entity();
+    let power_before = game.world.get::<PowerReserve>(player).unwrap().get();
+
+    let err = game.extract_program(0, &tool).unwrap_err();
+
+    assert_eq!(err, "nothing unfamiliar to recover");
+    assert_eq!(
+        game.downed_program_rows().len(),
+        1,
+        "the program must survive a refused extraction"
+    );
+    assert_eq!(
+        game.installed_tools().len(),
+        tools_before.len(),
+        "the tool is untouched"
+    );
+    assert_eq!(
+        game.world.get::<PowerReserve>(player).unwrap().get(),
+        power_before,
+        "a refusal must spend nothing — not even the ticks that would have \
+         let power regenerate or drain"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Phase 3: the picker's view — `views::ExtractionOptionView` carrying the
 // tool's name, its bench-discounted tick cost and a preview the `Routines`
 // branch can answer honestly. See the phase-3 plan's Task 5.
 // ---------------------------------------------------------------------------
 
+/// The preview's count agrees with the pool it draws from and — Task 9's
+/// concealment — holds no display name of a candidate: `ExtractionPreview::
+/// Routine` is a bare `usize` now, so there is no field left for a name to
+/// leak through.
 #[test]
-fn a_routine_tools_preview_names_the_pool_it_draws_from() {
+fn a_routine_tools_preview_counts_the_pool_and_names_none_of_it() {
     let mut game = new_test_game();
     let program = test_program("scrapper", 30);
     let pool = game.routine_candidates(&program);
@@ -2422,8 +2576,8 @@ fn a_routine_tools_preview_names_the_pool_it_draws_from() {
         .expect("the routine tool is installed");
 
     match option.preview {
-        views::ExtractionPreview::Routine(names) => {
-            assert_eq!(names.len(), pool.len(), "the pool and the preview disagree")
+        views::ExtractionPreview::Routine(count) => {
+            assert_eq!(count, pool.len(), "the pool and the preview disagree")
         }
         other => panic!("expected a routine preview, got {other:?}"),
     }

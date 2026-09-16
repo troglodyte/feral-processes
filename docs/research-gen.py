@@ -22,34 +22,33 @@ N = [
  ("power_grid",          "Power Grid",           0,  10, [],                  ("structures", ["power_conduit"])),
  ("armor_bench",         "Reactive Armor",       0,  24, ["automation"],      ("structures", ["armory"])),
  ("weapon_bench",        "Weapon Fabrication",   0,  24, ["automation"],      ("structures", ["fabricator"])),
- ("routine_fabrication", "Routine Fabrication",  0,  26, ["automation"],      ("structures", ["log_scraper", "lathe", "transcriber", "disk_press"])),
+ # `routine_reader` moved here from Cortex Hacking (todo #101, 2026-09-16)
+ # — recovering from downed programs now opens at the same moment as the
+ # routine research tree itself.
+ ("routine_fabrication", "Routine Fabrication",  0,  26, ["automation"],      ("structures", ["log_scraper", "lathe", "transcriber", "disk_press"]), ["routine_reader"]),
  ("program_refactoring", "Program Refactoring",  2,  75, ["automation"],      ("structures", ["annealing_node", "refactor_bench"]), ["component_stripper"]),
  ("teardown",            "Teardown",             0,  12, ["automation"],      ("structures", ["teardown_rig"])),
  ("fortification",       "Fortification",        0,  18, ["power_grid"],      ("structures", ["shield", "patch_node"])),
  ("cache_coherence",     "Cache Coherence",      2,  40, ["power_grid"],      ("structures", ["cache_tap", "line_driver"])),
  ("dispatch",            "Dispatch Protocol",    2,  45, ["power_grid"],      ("structures", ["relay"])),
- ("self_exec",           "Self-Execution",       0,  14, ["routine_fabrication"], ("abilities", ["priority_boost"])),
- ("field_ops",           "Field Operations",     0,  20, ["self_exec"],       ("abilities", ["repair_loop", "trickle_charge"])),
- ("symbolic_links",      "Symbolic Links",       0,  22, ["self_exec"],       ("abilities", ["symlink"])),
- ("runtime_patching",    "Runtime Patching",     2,  60, ["self_exec"],       ("abilities", ["hot_patch"])),
- ("adaptive_plating",    "Adaptive Plating",     2,  70, ["field_ops"],       ("abilities", ["hardened_shell", "overclock", "ablative_layer"])),
- ("mesh_plating",        "Mesh Plating",         3, 120, ["adaptive_plating"], ("abilities", ["hardened_shell_party"])),
- ("deep_analysis",       "Deep Analysis",        3, 130, ["field_ops"],       ("abilities", ["deep_scan", "trace_analysis", "stealth_protocol", "salvage_routine"]), ["core_tap", "harness_puller"]),
- ("address_translation", "Address Translation",  3, 140, ["deep_analysis"],   ("abilities", ["buffer_overrun", "wild_jump"])),
- ("kernel_privileges",   "Kernel Privileges",    3, 135, ["runtime_patching"], ("abilities", ["null_route"])),
+ # Nine nodes that only ever unlocked a routine were deleted here
+ # (self_exec, field_ops, symbolic_links, runtime_patching,
+ # adaptive_plating, mesh_plating, address_translation, kernel_privileges,
+ # process_detachment) — todo #101, 2026-09-16. Every routine a base node
+ # used to teach is now a node of its own in a separate, derived routine
+ # research tree; see
+ # docs/superpowers/specs/2026-09-16-routine-research-tree-design.md. The
+ # "abilities" `unlocks` kind is retired along with them — no base node
+ # grants one any more, so nothing left in `N` uses it.
+ ("deep_analysis",       "Deep Analysis",        3, 130, ["routine_fabrication"], ("structures", []), ["core_tap", "harness_puller"]),
  ("firewall",            "Firewall Plating",     2,  45, ["armor_bench"],     ("recipe", ["firewall_plating", "armory", "6"])),
  ("ablative",            "Ablative Lattice",     3, 110, ["firewall"],        ("recipe", ["ablative_plating", "armory", "12"])),
  ("neural_amp",          "Neural Interfacing",   2,  55, ["weapon_bench"],    ("recipe", ["neural_amplifier", "fabricator", "6"])),
- ("cortex",              "Cortex Hacking",       3, 125, ["neural_amp"],      ("recipe", ["cortex_hack", "fabricator", "12"]), ["routine_reader"]),
+ ("cortex",              "Cortex Hacking",       3, 125, ["neural_amp"],      ("recipe", ["cortex_hack", "fabricator", "12"])),
  ("overclock",           "Overclock Cores",      2,  45, ["weapon_bench"],    ("recipe", ["overclock_core", "fabricator", "6"])),
  ("monofilament",        "Monofilament Edge",    3, 110, ["overclock"],       ("recipe", ["monofilament_whip", "fabricator", "12"])),
- # The first node to carry both grants at once: eleven routines as its
- # `unlocks`, plus the two gear recipes riding beside them in the bonus
- # `recipes` slot `tools` already set the precedent for.
  ("model_inspection",    "Model Inspection",     3, 160, ["cortex"],
-  ("abilities", ["cold_sample", "heat_injection", "inference_probe", "prompt_injection",
-                 "hallucination", "gradient_descent", "backprop", "dropout",
-                 "dropout_group", "fine_tune", "data_poisoning"]),
+  ("structures", []),
   [], [("adversarial_patch", "fabricator", "12"), ("attention_head", "fabricator", "12")]),
 ]
 # `tools` last so a 6-element tuple (a node granting none) simply stops
@@ -155,7 +154,12 @@ def unlock_text(r):
     # One "tool" label for the whole list, not one per entry: `deep_analysis`
     # grants two and read "tool `core_tap`; tool `harness_puller`", which is
     # the only row in the tree that ever exercised this.
-    bits = [main]
+    #
+    # `main` is empty for a node whose only payload is a bonus grant —
+    # `deep_analysis` and `model_inspection`, since todo #101 retired the
+    # "abilities" kind and left them with nothing to put there — so it is
+    # dropped rather than joined in empty, or the row reads a leading "; ".
+    bits = [main] if main else []
     if r["recipes"]:
         bits.append("; ".join(recipe_text(*rec) for rec in r["recipes"]))
     tools = ", ".join(f"`{t}`" for t in r["tools"])
@@ -272,9 +276,13 @@ because you want the thing rather than the branch.
 
 Under Automation the tree splits three ways and never rejoins: benches
 (Reactive Armor, Weapon Fabrication) lead to **gear recipes**, and Routine
-Fabrication leads to **routines**. Nothing in the tree requires two parents —
-every `requires` is a single id — so this is a tree in the strict sense, and
-there is no node you can reach two ways.
+Fabrication leads to Deep Analysis and its two downed-program tools —
+the routines it used to grant directly now live in a separate, derived
+routine research tree of their own (todo #101, not transcribed here; see
+`docs/superpowers/specs/2026-09-16-routine-research-tree-design.md`).
+Nothing in the tree requires two parents — every `requires` is a single
+id — so this is a tree in the strict sense, and there is no node you can
+reach two ways.
 
 ## What each node unlocks
 
@@ -302,20 +310,18 @@ standing start — {DEEP_TOTAL_HI // DEAREST}x the dearest single node in the
 tree ({DEAREST}) at the top end. The tree is not steep; it is long, and the
 zone bands are what stop that length being paid off in one sitting.
 
-## Routines against recipes
+## Recipes
 
-The two halves of the tree pay in different currencies, and that is the
-sharper divide than depth.
-
-A **routine** node hands you the knowledge outright: complete it and the
-routines are yours to install, no further materials involved. A **recipe** node hands
-you the right to *build* something, and every one of the {len(recipe_entries)} is priced in
-`{RECIPE_CURRENCY}` — the item a Stack lair guardian drops and nothing else
-in the game does, and the same one that pays for a breach. So the recipe half
-of the tree is priced in descents: every node on it competes directly with
-the portal you are saving for. `{BY["model_inspection"]["name"]}` is the one
-node that pays both ways — knowledge outright for its eleven routines, and a
-`{RECIPE_CURRENCY}` bill for the two recipes riding beside them.
+No node in this tree grants a routine any more (todo #101, 2026-09-16) —
+every routine left for a separate, derived research tree of its own; see
+`docs/superpowers/specs/2026-09-16-routine-research-tree-design.md`. What is
+left here besides structures is **recipes**: a recipe node hands you the
+right to *build* something, and every one of the {len(recipe_entries)} is
+priced in `{RECIPE_CURRENCY}` — the item a Stack lair guardian drops and
+nothing else in the game does, and the same one that pays for a breach. So
+the recipe half of the tree is priced in descents: every node on it competes
+directly with the portal you are saving for. `{BY["model_inspection"]["name"]}`
+is the one node that grants two recipes at once rather than one.
 
 {table(["Recipe node", "Builds", "At", f"`{RECIPE_CURRENCY}`"],
        [[r["name"], f"`{item}`", bench, price] for (r, item, bench, price) in recipe_entries],

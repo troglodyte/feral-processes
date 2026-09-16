@@ -345,7 +345,7 @@ fn the_hot_keys_stayed_on_the_map() {
 /// Symlink is a routine now, and `u` is not a second door to it. It was a
 /// key of its own that opened a picker of teleport-capable structures and
 /// charged Power Cells — reachable on turn one, before the run had earned
-/// anything. The way home is `symbolic_links` researched, etched, installed
+/// anything. The way home is `routine/symlink` researched, etched, installed
 /// and run from the `a` list like every other field routine.
 ///
 /// The letter itself was free from then until the compass took it, which is

@@ -7,12 +7,17 @@ use std::collections::BTreeMap;
 fn graph(seed: u32) -> ResearchGraph {
     Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir())
         .unwrap()
-        .research_graph()
+        .research_graph(ResearchTree::Base)
 }
 
 /// The shipped tree's shape, so a content change that reshapes it is a
-/// visible diff here rather than a squeezed screen nobody looked at. Six
-/// tiers by nine slots is what the graph pane is sized against.
+/// visible diff here rather than a squeezed screen nobody looked at.
+///
+/// Reshaped by todo #101: the nine base nodes that only ever granted
+/// routines are gone (`Game::research_graph(ResearchTree::Base)` no longer
+/// sees them at all — they never existed on this tree's side of the
+/// filter), so both the cell count and every tier's width below tier 0
+/// moved down from what they were.
 #[test]
 fn the_shipped_tree_has_the_shape_the_screen_is_sized_for() {
     let g = graph(901);
@@ -34,12 +39,12 @@ fn the_shipped_tree_has_the_shape_the_screen_is_sized_for() {
     );
     assert_eq!(by_tier.get(&1).map(Vec::len), Some(8));
     assert_eq!(by_tier.get(&2).map(Vec::len), Some(5));
-    assert_eq!(by_tier.get(&3).map(Vec::len), Some(9));
-    assert_eq!(by_tier.get(&4).map(Vec::len), Some(6));
-    assert_eq!(by_tier.get(&5).map(Vec::len), Some(4));
-    assert_eq!(g.cells.len(), 36, "every shipped node gets a cell");
+    assert_eq!(by_tier.get(&3).map(Vec::len), Some(5));
+    assert_eq!(by_tier.get(&4).map(Vec::len), Some(3));
+    assert_eq!(by_tier.get(&5).map(Vec::len), Some(2));
+    assert_eq!(g.cells.len(), 27, "every shipped base node gets a cell");
     assert_eq!(g.tiers, 6);
-    assert_eq!(g.widest, 9, "tier 3 is the crowded one");
+    assert_eq!(g.widest, 8, "tier 1 is the crowded one now");
 }
 
 /// Tier is the *longest* path from a root, so the diamond's short leg
@@ -80,7 +85,7 @@ fn every_edge_points_strictly_rightward() {
 #[test]
 fn the_edge_list_is_every_requires_entry_and_nothing_else() {
     let game = Game::new(903, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let g = game.research_graph();
+    let g = game.research_graph(ResearchTree::Base);
     let ids: Vec<&str> = g.cells.iter().map(|c| c.id.as_str()).collect();
     for (from, to) in &g.edges {
         assert!(ids.contains(&from.as_str()), "{from} has no cell");
@@ -122,14 +127,14 @@ fn slots_are_dense_and_unique_within_a_tier() {
 fn the_layout_is_deterministic_across_calls_and_across_games() {
     let game = Game::new(905, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     assert_eq!(
-        game.research_graph(),
-        game.research_graph(),
+        game.research_graph(ResearchTree::Base),
+        game.research_graph(ResearchTree::Base),
         "two calls on one Game must agree"
     );
     let other = Game::new(906, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     assert_eq!(
-        game.research_graph(),
-        other.research_graph(),
+        game.research_graph(ResearchTree::Base),
+        other.research_graph(ResearchTree::Base),
         "the layout is a property of the content, not of the run"
     );
 }
@@ -140,15 +145,15 @@ fn the_layout_is_deterministic_across_calls_and_across_games() {
 #[test]
 fn researching_a_node_does_not_move_the_layout() {
     let mut game = Game::new(907, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let before = game.research_graph();
+    let before = game.research_graph(ResearchTree::Base);
     let taken = game
-        .research_nodes()
+        .research_nodes(ResearchTree::Base)
         .into_iter()
         .find(|n| n.state == ResearchState::Available)
         .expect("a fresh run has something open to it");
     unlock_research_chain(&mut game, &taken.id);
     assert_eq!(
-        game.research_graph(),
+        game.research_graph(ResearchTree::Base),
         before,
         "the tree's shape is content, not progress"
     );
@@ -190,11 +195,11 @@ fn step_is_total_in_all_four_directions_from_every_node() {
 fn up_and_down_move_within_a_tier_and_clamp() {
     let g = graph(909);
     let column: Vec<&ResearchCell> = {
-        let mut c: Vec<&ResearchCell> = g.cells.iter().filter(|c| c.tier == 3).collect();
+        let mut c: Vec<&ResearchCell> = g.cells.iter().filter(|c| c.tier == 1).collect();
         c.sort_by_key(|c| c.slot);
         c
     };
-    assert_eq!(column.len(), 9, "tier 3 is the nine-slot column");
+    assert_eq!(column.len(), 8, "tier 1 is the eight-slot column");
     for pair in column.windows(2) {
         assert_eq!(
             g.step(&pair[0].id, GraphDir::Down),
@@ -222,14 +227,14 @@ fn left_and_right_move_between_tiers_landing_on_the_nearest_slot() {
     let deep = g
         .cells
         .iter()
-        .find(|c| c.tier == 3 && c.slot == 8)
-        .expect("tier 3 has a slot 8");
+        .find(|c| c.tier == 1 && c.slot == 7)
+        .expect("tier 1 has a slot 7");
     let landed = g.step(&deep.id, GraphDir::Right);
     let landed_cell = g.cell(&landed).expect("a cell");
-    assert_eq!(landed_cell.tier, 4, "right moves exactly one tier");
+    assert_eq!(landed_cell.tier, 2, "right moves exactly one tier");
     assert_eq!(
-        landed_cell.slot, 5,
-        "tier 4 has six slots, so the nearest to slot 8 is its last"
+        landed_cell.slot, 4,
+        "tier 2 has five slots, so the nearest to slot 7 is its last"
     );
     let root = g
         .cells

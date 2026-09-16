@@ -2,6 +2,7 @@
 //! idle clock that keeps the world moving between key presses.
 
 use crate::*;
+use feral_processes_engine::ResearchTree;
 
 /// Which cue a swing's band plays. Three clips, not four: `Fumble` plays
 /// `Miss` rather than a fourth sound, since both are "the swing failed" to
@@ -284,7 +285,8 @@ impl App {
             Mode::Perks => self.handle_perks_key(key),
             Mode::RespecPerksConfirm => self.handle_respec_perks_confirm_key(key),
             Mode::RespecTalentsConfirm => self.handle_respec_talents_confirm_key(key),
-            Mode::Research => self.handle_research_key(key),
+            Mode::Research => self.handle_research_key(key, ResearchTree::Base),
+            Mode::RoutineResearch => self.handle_research_key(key, ResearchTree::Routines),
             Mode::Contracts => self.handle_contracts_key(key),
             Mode::History => self.handle_history_key(key),
             Mode::Compass => self.handle_compass_key(key),

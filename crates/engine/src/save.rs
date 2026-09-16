@@ -1293,6 +1293,12 @@ pub struct SaveData {
     /// costs no version bump.
     #[serde(default)]
     pub known_tools: Vec<ToolId>,
+    /// Which routine families the player has discovered — see
+    /// `resources::DiscoveredRoutines`. `#[serde(default)]` so a save
+    /// written before todo #101 loads with an empty set: nothing was
+    /// discovered before there was anything to discover.
+    #[serde(default)]
+    pub discovered_routines: Vec<crate::abilities::AbilityId>,
     /// Every Stack entrance standing on the zone map — see
     /// `components::SurfaceLink`. Only the tile: an entrance carries no
     /// state of its own, and which stack it opens onto is a pure function
@@ -1829,6 +1835,7 @@ mod tests {
             research_progress: Vec::new(),
             known_routines: Vec::new(),
             known_tools: Vec::new(),
+            discovered_routines: Vec::new(),
             link_sites: Vec::new(),
             locale: crate::resources::Locale::Surface,
             stack_memory: crate::resources::StackMemory::default(),

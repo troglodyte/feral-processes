@@ -1,7 +1,7 @@
 //! The perk and research pickers.
 
 use crate::*;
-use feral_processes_engine::GraphDir;
+use feral_processes_engine::{GraphDir, ResearchTree};
 
 impl App {
     /// Picks a numbered perk to unlock; stays open so multiple can be
@@ -52,8 +52,11 @@ impl App {
     }
 
     /// Picks a numbered research node to unlock; stays open so several can
-    /// be taken in one visit.
-    pub(crate) fn handle_research_key(&mut self, key: GameKey) {
+    /// be taken in one visit. Shared by `Mode::Research` and
+    /// `Mode::RoutineResearch` — one handler taking the tree rather than a
+    /// copied one, since the two screens differ only in which tree
+    /// `research_nodes`/`research_graph` are asked for.
+    pub(crate) fn handle_research_key(&mut self, key: GameKey, tree: ResearchTree) {
         if key == GameKey::Esc {
             self.close_screen();
             return;
@@ -79,7 +82,7 @@ impl App {
         // `let Some(game) = &self.game` binding) ends the borrow here —
         // `selected_index` needs `&mut self`.
         let Some(ids) = self.game.as_ref().map(|g| {
-            g.research_nodes()
+            g.research_nodes(tree)
                 .into_iter()
                 .map(|n| n.id)
                 .collect::<Vec<_>>()
@@ -111,7 +114,7 @@ impl App {
             let Some(game) = self.game.as_ref() else {
                 return;
             };
-            let landed = game.research_graph().step(from, dir);
+            let landed = game.research_graph(tree).step(from, dir);
             // A scan of 34 entries per keypress. An index map would be a
             // second cursor to keep in step with `research_nodes()`, which
             // re-sorts by state.

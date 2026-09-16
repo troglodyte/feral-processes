@@ -6,4 +6,5 @@
     effect: Debuff(kind: Bleed, power: 5, duration: 3),
     cooldown: 3,
     power_cost: 8.0,
+    research_zone: 3,
 )

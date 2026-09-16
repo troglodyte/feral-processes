@@ -686,6 +686,33 @@ impl Game {
             .cloned()
     }
 
+    /// Whether `entity` is a live wild creature the Routines tool would
+    /// still find something unfamiliar on — the Alt marker's whole
+    /// derivation (spec §4 "The Alt marker", Task 10).
+    ///
+    /// **The same question `routine_candidates` asks a downed program**,
+    /// through the identical door, `routine_candidate_ids` — level, species
+    /// kit and `carried_routine`'s own prize, none of it re-derived here.
+    /// The two must never disagree about what extraction would offer, or
+    /// the marker promises more than a kill delivers.
+    pub(crate) fn unseen_routine(&self, entity: Entity) -> bool {
+        if self.program_is_owned(entity) {
+            return false;
+        }
+        let Some(species) = self
+            .world
+            .get::<Creature>(entity)
+            .map(|c| c.species.clone())
+        else {
+            return false;
+        };
+        let level = self.ability_user_level(entity);
+        let carried = self.carried_routine(entity, &species);
+        !self
+            .routine_candidate_ids(level, &species, carried.as_ref())
+            .is_empty()
+    }
+
     /// The one writer of `DownedPrograms`'s `Vec` itself — `leave_downed_program`
     /// for an ordinary kill, `grant_nest_cache` for a nest's own bonus
     /// programs, `return_sortie` for what a squad carried home. A full store

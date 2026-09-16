@@ -10,12 +10,19 @@ file.
 
 An ability is what a party member spends its round on when commanded with
 Special in battle. The two sides of the party get theirs differently: a
-companion's come from its species file — see `../species/README.md` — while
-the player's come from a research node naming them in `unlocks_abilities`,
-see `../research/README.md`. `decompile` is the one exception: it's
+companion's come from its species file — see `../species/README.md` —
+while the player's come from the routine research tree, a node synthesised
+per ability rather than authored — see "The routine research tree" below
+and `../research/README.md`. `decompile` is the one exception: it's
 pre-installed on a new game rather than researched, so the player always
 starts with a way to capture programs even before touching the research
 tree.
+
+A routine reaching that tree at all has to be *discovered* first, unless
+nothing in the field ever carries it — see "The routine research tree"
+below for the discoverable/always-visible split. Discovery comes from
+recovering the routine off a downed program with a `Routines` extraction
+tool or the Compiler's teardown, never from research directly.
 
 Neither path is how the ability *reaches* a party member, though — abilities
 are installed **routines** occupying level-derived slots (one per two
@@ -521,6 +528,14 @@ way deleting the Currency item does.
     // A carrier uses its routine against you in battle, and hands it over
     // installed if you decompile it. Killing it destroys the routine.
     wild_weight: 8,
+
+    // Optional; defaults to 0, which reads as zone 1 (ungated). The zone
+    // the party must have reached before this ability's node in the
+    // routine research tree becomes available — see "The routine research
+    // tree" below and `../research/README.md`. Not read anywhere else: a
+    // routine's own field-runnable or battle-legal gating stays
+    // level-based, same as before this field existed.
+    research_zone: 2,
 )
 ```
 
@@ -590,6 +605,33 @@ loader has no opinion about `name` beyond it being a string.
 format: `PlayerSave.known_routines` stores them directly, and each one
 mints a `routine_<id>` item that may be sitting in a player's cargo.
 Renaming one orphans both.
+
+## The routine research tree
+
+Every ability except an **exclusive** one, `decompile` (welded into the
+player's first slot rather than researched), a **passive**
+(`triggers` set) and a **`Summon`** gets a research node of its own,
+synthesised at load — see `assets/research/README.md`'s "Routines are a
+separate tree" for the node itself. What decides that node's place in the
+tree is read straight off the naming scheme above, so authoring an
+ability's `name` correctly is no longer only a census's opinion:
+
+- **family** and **scope** are exactly the two things "Naming" derives from
+  `name` and `target` above.
+- **version** is the parsed `vN.N` tag, `(1, 0)` for a name with none.
+- The node's **prerequisite** is the next lower version at the same scope,
+  or — for a scope's lowest version — the lowest version at the nearest
+  lower scope the family has any rung at. A family's Single v1.0 (or its
+  lowest existing scope) needs nothing.
+
+A family is **discoverable** if any of its rungs has a carrier — a positive
+`wild_weight`, or a place in some species' kit — and stays invisible in the
+routine tree until the player extracts one of its rungs off a downed
+program. Every other family (field routines, tactical-only routines, and
+any family nothing carries) is **always visible**, gated by `research_zone`
+alone rather than by discovery. This split is computed from the shipped set
+on every read, never authored, so a family with no carrier at all cannot go
+dead behind a discovery gate nothing can ever open.
 
 ## Magnitudes scale with level
 

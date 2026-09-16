@@ -497,6 +497,7 @@ impl Game {
         // the slot below, and knowledge is not what put it there — see
         // `resources::KnownTools`'s doc.
         world.init_resource::<KnownTools>();
+        world.init_resource::<crate::resources::DiscoveredRoutines>();
         world.insert_resource(BuybackLedger::default());
         world.insert_resource(crate::resources::CaravanMemory::default());
         world.insert_resource(ZoneLevel::default());
@@ -1115,6 +1116,9 @@ impl Game {
         });
         world.insert_resource(KnownRoutines(data.known_routines.into_iter().collect()));
         world.insert_resource(KnownTools(data.known_tools.into_iter().collect()));
+        world.insert_resource(crate::resources::DiscoveredRoutines(
+            data.discovered_routines.into_iter().collect(),
+        ));
         world.insert_resource(BuybackLedger({
             // The pre-0.8.9 shelves are drained into the current shape here
             // and read nowhere else, exactly as `fused_gear` is above.
@@ -1442,6 +1446,24 @@ impl Game {
             game.log(format!(
                 "Your {stranded} banked {name} is written off — research runs on projects now."
             ));
+        }
+        // A save's `active_research` can name a node the loaded tree no
+        // longer has — task 3 deleted nine, and a mod can delete or rename
+        // its own — and nothing ever re-selects on its own, so a stale
+        // project would stall forever with a Research Node staffed and
+        // earning nothing. Checked once, here, rather than left to
+        // `select_research`, which only ever refuses a *new* selection.
+        let active_stale = game
+            .world
+            .resource::<crate::resources::ActiveResearch>()
+            .id
+            .as_ref()
+            .is_some_and(|id| game.world.resource::<ResearchDb>().get(id).is_none());
+        if active_stale {
+            game.world
+                .resource_mut::<crate::resources::ActiveResearch>()
+                .id = None;
+            game.withdraw_research_orders();
         }
         Ok(game)
     }
@@ -2415,6 +2437,13 @@ impl Game {
             known_tools: self
                 .world
                 .resource::<KnownTools>()
+                .0
+                .iter()
+                .cloned()
+                .collect(),
+            discovered_routines: self
+                .world
+                .resource::<crate::resources::DiscoveredRoutines>()
                 .0
                 .iter()
                 .cloned()

@@ -1378,6 +1378,9 @@ relying on one, and correct all three places if it has moved.
   `Game::research_graph`, and keyed by `ResearchId`** — `views::
   ResearchGraph::step` is the one rule for what an arrow key does, and
   app-core computes no neighbours.
+- **A routine node is synthesised from `AbilityDb`, never authored, and
+  "researched" means `KnownRoutines` contains it** — `Game::node_researched`
+  is the one door every reader of a routine node's state goes through.
 
 ## Build & test
 

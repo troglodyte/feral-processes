@@ -1,9 +1,0 @@
-(
-    id: "process_detachment",
-    name: "Process Detachment",
-    description: "A battle routine that hides one ally so nothing can target it, until it acts or something hits it. Write it onto a Routine Disk to run it.",
-    cost: 46,
-    materials: [("routine_disk", 6), ("logic_wafer", 6)],
-    requires: ["self_exec"],
-    unlocks_abilities: ["detach"],
-)

@@ -90,6 +90,12 @@ const REPEATING_KEYS: &[KeyCode] = &[
 /// the same gesture as a right-handed one.
 const SHIFT_KEYS: [KeyCode; 2] = [KeyCode::ShiftLeft, KeyCode::ShiftRight];
 const CTRL_KEYS: [KeyCode; 2] = [KeyCode::ControlLeft, KeyCode::ControlRight];
+/// Held to ask the map a question rather than to press anything — the Alt
+/// marker's `reveal` flag (spec §4 "The Alt marker"). Unlike Shift and Ctrl
+/// this produces no `GameKey` at all and binds no arrow: app-core never
+/// hears about it, so there is nothing here for `App::handle_key` to strip
+/// on a screen that doesn't want it.
+const ALT_KEYS: [KeyCode; 2] = [KeyCode::AltLeft, KeyCode::AltRight];
 
 /// Folds held modifiers into the two horizontal arrows.
 ///
@@ -515,6 +521,7 @@ fn frame(
         .collect();
     let shift = input.keyboard.any_pressed(SHIFT_KEYS);
     let ctrl = input.keyboard.any_pressed(CTRL_KEYS);
+    let reveal = input.keyboard.any_pressed(ALT_KEYS);
     for key in fe.key_repeat.tick(now, &held) {
         if let Some(game_key) = map_special_key(key) {
             fe.app.handle_key(with_modifiers(game_key, shift, ctrl));
@@ -617,7 +624,7 @@ fn frame(
     // Timed whether or not the readout is on: a meter fed only while it is
     // visible reports the first second after F3 as a cold start every time.
     let started = std::time::Instant::now();
-    render::draw(&mut fe.app, &mut fe.fx, &painter);
+    render::draw(&mut fe.app, &mut fe.fx, &painter, reveal);
     fe.perf.sample(
         now,
         f64::from(input.time.delta_secs()),
@@ -971,7 +978,7 @@ mod tests {
         };
         fx.begin_frame(now, effects, transits, bolts, tactical_fx, in_battle);
         fx.observe_log(last_log.as_ref());
-        paint::with_painter(|p| render::draw(app, fx, p));
+        paint::with_painter(|p| render::draw(app, fx, p, false));
     }
 
     /// A raid's tile flash is a *base-space* cue and must be drawn in base
@@ -1014,7 +1021,7 @@ mod tests {
         let flash = fx
             .tile_flash(in_base)
             .expect("a flash queued this frame is live");
-        let (_, shapes) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p));
+        let (_, shapes) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p, false));
         assert_eq!(
             paint::painted_rect_fill_count(&shapes, flash),
             1,
@@ -1039,7 +1046,7 @@ mod tests {
         let flash = fx
             .tile_flash(on_surface)
             .expect("a flash queued this frame is live");
-        let (_, shapes) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p));
+        let (_, shapes) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p, false));
         assert_eq!(
             paint::painted_rect_fill_count(&shapes, flash),
             0,
@@ -1052,7 +1059,7 @@ mod tests {
         // sparks free to keep landing on open ground.
         let mut quiet = Fx::new();
         quiet.begin_frame(0.0, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
-        let (_, bare) = paint::with_painter(|p| render::draw(&mut app, &mut quiet, p));
+        let (_, bare) = paint::with_painter(|p| render::draw(&mut app, &mut quiet, p, false));
         assert_eq!(
             paint::painted_line_count(&shapes),
             paint::painted_line_count(&bare),
@@ -1085,7 +1092,7 @@ mod tests {
             // A frame in, so the body is off its first cell and being drawn
             // by the interpolating pass rather than sitting on a tile.
             fx.begin_frame(0.06, Vec::new(), Vec::new(), Vec::new(), Vec::new(), false);
-            let (_, shapes) = paint::with_painter(|p| render::draw(app, &mut fx, p));
+            let (_, shapes) = paint::with_painter(|p| render::draw(app, &mut fx, p, false));
             paint::painted_text(&shapes)
                 .iter()
                 .filter(|t| t.contains(MARK))
@@ -1121,7 +1128,7 @@ mod tests {
         let mut app = app_in_base(4245);
         let mut fx = Fx::new();
 
-        let (_, away) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p));
+        let (_, away) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p, false));
         assert_eq!(
             paint::painted_rect_stroke_count(&away, render::CUTTING_OUTLINE),
             0,
@@ -1132,7 +1139,7 @@ mod tests {
             app.game.as_mut().unwrap().toggle_mining(),
             "the fixture starts with the tools away"
         );
-        let (_, out) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p));
+        let (_, out) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p, false));
         assert_eq!(
             paint::painted_rect_stroke_count(&out, render::CUTTING_OUTLINE),
             1,
@@ -1140,7 +1147,7 @@ mod tests {
         );
 
         app.game.as_mut().unwrap().leave_base().unwrap();
-        let (_, surface) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p));
+        let (_, surface) = paint::with_painter(|p| render::draw(&mut app, &mut fx, p, false));
         assert_eq!(
             paint::painted_rect_stroke_count(&surface, render::CUTTING_OUTLINE),
             0,

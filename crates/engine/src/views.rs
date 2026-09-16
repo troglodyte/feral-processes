@@ -69,12 +69,12 @@ pub struct ResearchStatus {
     /// reason `blocked_by` is: a recommended node is still locked until its
     /// prerequisites are researched, and the menu says both things at once.
     pub recommended: bool,
-    /// Abilities this node hands over as routine items when researched.
+    /// The one routine this node grants, for a synthesised routine node.
     /// `cfg(test)`: read only by engine tests today, neither the renderer
     /// nor app-core touches it, and a `pub(crate)` field that's merely
     /// unread (rather than absent from non-test builds) still warns.
     #[cfg(test)]
-    pub(crate) unlocks_abilities: Vec<crate::abilities::AbilityId>,
+    pub(crate) teaches: Option<crate::abilities::AbilityId>,
 }
 
 /// What the corner over the map says about research — see
@@ -1229,6 +1229,11 @@ pub struct EntityView {
     /// correctly-built line would look identical to a broken one. A missing
     /// join therefore always means the base is laid out wrong.
     pub linked_edges: Vec<(i32, i32)>,
+    /// Whether this (creature) entity is a wild program the Alt marker
+    /// should flag — `Game::unseen_routine`, computed through the same
+    /// candidate function `routine_candidates` calls so the two can never
+    /// promise different things. Always false for anything the player owns.
+    pub unseen_routine: bool,
 }
 
 /// Whether the surface map draws this entity at all — the rule stated once
@@ -1857,17 +1862,28 @@ pub struct RecipeChain {
 /// One row of an entity's routine panel — a slot, filled or not.
 pub struct RoutineSlotView {
     pub index: usize,
-    /// `None` for a free slot.
+    /// `None` for a free slot, **and for an unseen one** — see `unseen`
+    /// below. The id is part of what conceals, not just the name: a
+    /// renderer that fell back to formatting the id would still leak it.
     pub ability: Option<crate::abilities::AbilityId>,
-    /// The ability's name, or "(empty)" for a free slot.
+    /// The ability's name, or "(empty)" for a free slot, or blank (`""`)
+    /// for an unseen one.
     pub name: String,
-    /// The ability's own authored description; empty for a free slot.
+    /// The ability's own authored description; empty for a free slot and
+    /// for an unseen one alike.
     pub description: String,
     /// Whether this slot's routine is welded in — `Game::
     /// routine_is_permanent`, resolved here so the screen can say so on the
     /// row rather than let the player find out by pressing it. False for a
     /// free slot.
     pub fixed: bool,
+    /// Whether this slot holds a routine the viewer hasn't discovered yet —
+    /// `Game::routine_view`'s concealment (spec §4 "Concealment"). True
+    /// only for a filled slot on a program that is neither `Tamed` nor the
+    /// player, whose family `Game::family_discovered` still answers false
+    /// for. Never true on a free slot: there is nothing there to conceal,
+    /// and "(empty)" already says so.
+    pub unseen: bool,
 }
 
 /// One row of the "whose routines?" picker — you and every program you own.
@@ -3087,12 +3103,14 @@ pub enum ExtractionPreview {
     /// `extraction_yield`'s own rows, granted verbatim. Empty when the
     /// grade rounds to no units at all.
     Items(Vec<(ItemId, u32)>),
-    /// A `Routines` tool: the pool the draw comes from, in
-    /// `routine_candidates`' order (the first is the favourite), as display
-    /// names. An outcome cannot be quoted — the draw has not happened, and
-    /// making it happen to fill a menu row would let looking at the menu
-    /// change what you get.
-    Routine(Vec<String>),
+    /// A `Routines` tool: how many unfamiliar routines the draw would come
+    /// from (`routine_candidates`'s pool, counted rather than named — spec
+    /// §4 "Concealment": extraction previews a downed *wild* program's kit,
+    /// so a name here is exactly the leak the inspect sheet's `unseen`
+    /// guards against). An outcome cannot be quoted either way — the draw
+    /// has not happened, and making it happen to fill a menu row would let
+    /// looking at the menu change what you get.
+    Routine(usize),
     /// A `Routines` tool with an empty pool: the refusal `extract_program`
     /// would answer with, shown before it is spent.
     NothingToLearn,

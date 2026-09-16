@@ -6,4 +6,5 @@
     effect: Heal(power: 10, spread: 2),
     cooldown: 3,
     power_cost: 12.0,
+    research_zone: 2,
 )

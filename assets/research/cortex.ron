@@ -1,12 +1,11 @@
 (
     id: "cortex",
     name: "Cortex Hacking",
-    description: "A module that makes decompiling hostile programs more likely to succeed, made at a Fabricator. Also a tool that pulls a routine out of a downed program so you can keep it.",
+    description: "A module that makes decompiling hostile programs more likely to succeed, made at a Fabricator.",
     cost: 125,
     materials: [("trace_sniffer", 6), ("logic_wafer", 12)],
     min_zone: 3,
     requires: ["neural_amp"],
-    unlocks_tools: ["routine_reader"],
     unlocks_recipes: [(
         result: "cortex_hack",
         cost: [("portal_fragment", 12), ("cache_grain", 3)],

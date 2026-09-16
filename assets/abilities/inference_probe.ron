@@ -8,4 +8,5 @@
     power_cost: 5.0,
     shape: Some(Single),
     range: Some((min: 0, max: 6)),
+    research_zone: 3,
 )

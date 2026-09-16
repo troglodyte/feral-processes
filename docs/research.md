@@ -1,7 +1,7 @@
 # Research tree
 
 Every shipped research node in feral-processes, charted from its own file in
-`assets/research/`. 27 of them.
+`assets/research/`. 19 of them.
 
 **These numbers are a transcription, not a read.** They were copied out of
 `assets/research/*.ron` on 2026-08-17 and will drift the moment one of those
@@ -24,13 +24,13 @@ earned.
 
 | | |
 |---|---|
-| nodes | 27 |
+| nodes | 19 |
 | roots (need nothing) | 3 — Automation, Isometric Commerce, Power Grid |
-| deepest chain | 6 nodes |
-| total Research Data | 1657 |
+| deepest chain | 5 nodes |
+| total Research Data | 1076 |
 | cheapest / dearest node | 8 / 160 |
-| zone bands | from turn one (11), zone 2 (8), zone 3 (8) |
-| unlocks | 17 structures, 27 routines, 8 gear recipes |
+| zone bands | from turn one (8), zone 2 (6), zone 3 (5) |
+| unlocks | 17 structures, 0 routines, 8 gear recipes |
 
 ## What the zone gates
 
@@ -42,9 +42,9 @@ ever opening a portal.
 
 | Available | Nodes | Research Data | Which |
 |:---|---:|---:|:---|
-| from turn one | 11 | 192 | Automation, Power Grid, Teardown, Isometric Commerce, Self-Execution, Fortification, Field Operations, Symbolic Links, Reactive Armor, Weapon Fabrication, Routine Fabrication |
-| zone 2 | 8 | 435 | Cache Coherence, Dispatch Protocol, Firewall Plating, Overclock Cores, Neural Interfacing, Runtime Patching, Adaptive Plating, Program Refactoring |
-| zone 3 | 8 | 1030 | Ablative Lattice, Monofilament Edge, Mesh Plating, Cortex Hacking, Deep Analysis, Kernel Privileges, Address Translation, Model Inspection |
+| from turn one | 8 | 136 | Automation, Power Grid, Teardown, Isometric Commerce, Fortification, Reactive Armor, Weapon Fabrication, Routine Fabrication |
+| zone 2 | 6 | 305 | Cache Coherence, Dispatch Protocol, Firewall Plating, Overclock Cores, Neural Interfacing, Program Refactoring |
+| zone 3 | 5 | 635 | Ablative Lattice, Monofilament Edge, Cortex Hacking, Deep Analysis, Model Inspection |
 
 The gate and the tap compound without either knowing about the other.
 `Game::upgrade_ceiling` caps a Research Node at Mk1 in zone 1, Mk2 in zone 2,
@@ -77,15 +77,7 @@ Automation (8)
 |   `-- Overclock Cores (45)
 |       `-- Monofilament Edge (110)
 |-- Routine Fabrication (26)
-|   `-- Self-Execution (14)
-|       |-- Field Operations (20)
-|       |   |-- Adaptive Plating (70)
-|       |   |   `-- Mesh Plating (120)
-|       |   `-- Deep Analysis (130)
-|       |       `-- Address Translation (140)
-|       |-- Symbolic Links (22)
-|       `-- Runtime Patching (60)
-|           `-- Kernel Privileges (135)
+|   `-- Deep Analysis (130)
 |-- Program Refactoring (75)
 `-- Teardown (12)
 
@@ -108,9 +100,13 @@ because you want the thing rather than the branch.
 
 Under Automation the tree splits three ways and never rejoins: benches
 (Reactive Armor, Weapon Fabrication) lead to **gear recipes**, and Routine
-Fabrication leads to **routines**. Nothing in the tree requires two parents —
-every `requires` is a single id — so this is a tree in the strict sense, and
-there is no node you can reach two ways.
+Fabrication leads to Deep Analysis and its two downed-program tools —
+the routines it used to grant directly now live in a separate, derived
+routine research tree of their own (todo #101, not transcribed here; see
+`docs/superpowers/specs/2026-09-16-routine-research-tree-design.md`).
+Nothing in the tree requires two parents — every `requires` is a single
+id — so this is a tree in the strict sense, and there is no node you can
+reach two ways.
 
 ## What each node unlocks
 
@@ -124,25 +120,17 @@ there is no node you can reach two ways.
 | Fortification | - | 18 | `power_grid` | `shield`, `patch_node` |
 | Program Refactoring | 2 | 75 | `automation` | `annealing_node`, `refactor_bench`; tool `component_stripper` |
 | Reactive Armor | - | 24 | `automation` | `armory` |
-| Routine Fabrication | - | 26 | `automation` | `log_scraper`, `lathe`, `transcriber`, `disk_press` |
+| Routine Fabrication | - | 26 | `automation` | `log_scraper`, `lathe`, `transcriber`, `disk_press`; tool `routine_reader` |
 | Teardown | - | 12 | `automation` | `teardown_rig` |
 | Weapon Fabrication | - | 24 | `automation` | `fabricator` |
+| Deep Analysis | 3 | 130 | `routine_fabrication` | tools `core_tap`, `harness_puller` |
 | Firewall Plating | 2 | 45 | `armor_bench` | recipe `firewall_plating` at the armory — 6 `portal_fragment` |
 | Neural Interfacing | 2 | 55 | `weapon_bench` | recipe `neural_amplifier` at the fabricator — 6 `portal_fragment` |
 | Overclock Cores | 2 | 45 | `weapon_bench` | recipe `overclock_core` at the fabricator — 6 `portal_fragment` |
-| Self-Execution | - | 14 | `routine_fabrication` | `priority_boost` |
 | Ablative Lattice | 3 | 110 | `firewall` | recipe `ablative_plating` at the armory — 12 `portal_fragment` |
-| Cortex Hacking | 3 | 125 | `neural_amp` | recipe `cortex_hack` at the fabricator — 12 `portal_fragment`; tool `routine_reader` |
-| Field Operations | - | 20 | `self_exec` | `repair_loop`, `trickle_charge` |
+| Cortex Hacking | 3 | 125 | `neural_amp` | recipe `cortex_hack` at the fabricator — 12 `portal_fragment` |
 | Monofilament Edge | 3 | 110 | `overclock` | recipe `monofilament_whip` at the fabricator — 12 `portal_fragment` |
-| Runtime Patching | 2 | 60 | `self_exec` | `hot_patch` |
-| Symbolic Links | - | 22 | `self_exec` | `symlink` |
-| Adaptive Plating | 2 | 70 | `field_ops` | `hardened_shell`, `overclock`, `ablative_layer` |
-| Deep Analysis | 3 | 130 | `field_ops` | `deep_scan`, `trace_analysis`, `stealth_protocol`, `salvage_routine`; tools `core_tap`, `harness_puller` |
-| Kernel Privileges | 3 | 135 | `runtime_patching` | `null_route` |
-| Model Inspection | 3 | 160 | `cortex` | `cold_sample`, `heat_injection`, `inference_probe`, `prompt_injection`, `hallucination`, `gradient_descent`, `backprop`, `dropout`, `dropout_group`, `fine_tune`, `data_poisoning`; recipe `adversarial_patch` at the fabricator — 12 `portal_fragment`; recipe `attention_head` at the fabricator — 12 `portal_fragment` |
-| Address Translation | 3 | 140 | `deep_analysis` | `buffer_overrun`, `wild_jump` |
-| Mesh Plating | 3 | 120 | `adaptive_plating` | `hardened_shell_party` |
+| Model Inspection | 3 | 160 | `cortex` | recipe `adversarial_patch` at the fabricator — 12 `portal_fragment`; recipe `attention_head` at the fabricator — 12 `portal_fragment` |
 
 A structure named by **no** research file is buildable from turn one — the
 tree gates the machines that automate a base, not the base itself.
@@ -164,48 +152,38 @@ Fortification          28  ###.....................................
 Reactive Armor         32  ###.....................................
 Weapon Fabrication     32  ###.....................................
 Routine Fabrication    34  ####....................................
-Self-Execution         48  #####...................................
 Cache Coherence        50  #####...................................
 Dispatch Protocol      55  ######..................................
-Field Operations       68  #######.................................
-Symbolic Links         70  ########................................
 Firewall Plating       77  ########................................
 Overclock Cores        77  ########................................
 Program Refactoring    83  #########...............................
 Neural Interfacing     87  #########...............................
-Runtime Patching      108  ############............................
-Adaptive Plating      138  ###############.........................
+Deep Analysis         164  ##################......................
 Ablative Lattice      187  ####################....................
 Monofilament Edge     187  ####################....................
-Deep Analysis         198  #####################...................
 Cortex Hacking        212  #######################.................
-Kernel Privileges     243  ##########################..............
-Mesh Plating          258  ############################............
-Address Translation   338  ####################################....
 Model Inspection      372  ########################################
 ```
 
-The shape to notice is the 7 end-of-branch nodes: Model Inspection, Address Translation, Mesh Plating, Kernel Privileges, Ablative Lattice, Monofilament Edge, Symbolic Links.
-Each carries 48-212 Research Data of prerequisites behind it before
-its own price is counted, and lands at 70-372 from a
+The shape to notice is the 3 end-of-branch nodes: Model Inspection, Ablative Lattice, Monofilament Edge.
+Each carries 77-212 Research Data of prerequisites behind it before
+its own price is counted, and lands at 187-372 from a
 standing start — 2x the dearest single node in the
 tree (160) at the top end. The tree is not steep; it is long, and the
 zone bands are what stop that length being paid off in one sitting.
 
-## Routines against recipes
+## Recipes
 
-The two halves of the tree pay in different currencies, and that is the
-sharper divide than depth.
-
-A **routine** node hands you the knowledge outright: complete it and the
-routines are yours to install, no further materials involved. A **recipe** node hands
-you the right to *build* something, and every one of the 8 is priced in
-`portal_fragment` — the item a Stack lair guardian drops and nothing else
-in the game does, and the same one that pays for a breach. So the recipe half
-of the tree is priced in descents: every node on it competes directly with
-the portal you are saving for. `Model Inspection` is the one
-node that pays both ways — knowledge outright for its eleven routines, and a
-`portal_fragment` bill for the two recipes riding beside them.
+No node in this tree grants a routine any more (todo #101, 2026-09-16) —
+every routine left for a separate, derived research tree of its own; see
+`docs/superpowers/specs/2026-09-16-routine-research-tree-design.md`. What is
+left here besides structures is **recipes**: a recipe node hands you the
+right to *build* something, and every one of the 8 is
+priced in `portal_fragment` — the item a Stack lair guardian drops and
+nothing else in the game does, and the same one that pays for a breach. So
+the recipe half of the tree is priced in descents: every node on it competes
+directly with the portal you are saving for. `Model Inspection`
+is the one node that grants two recipes at once rather than one.
 
 | Recipe node | Builds | At | `portal_fragment` |
 |:---|:---|:---|---:|

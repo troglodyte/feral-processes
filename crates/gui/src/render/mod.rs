@@ -13,7 +13,6 @@ use feral_processes_app_core::{
     Staffing, SwapChoice, SwapRow, TradeChoice, TransferEntry, equip_preview_tag, equip_swap_rows,
     inventory_item_actions, item_fusion_note, menu_shortcut, qty_column, stat_summary,
 };
-use feral_processes_engine::RespecSubject;
 use feral_processes_engine::components::{GlyphColor, MachineStatus, Rarity, TaskKind};
 use feral_processes_engine::items::{EquipmentSlot, GearCopy, ItemId, QualityBand, quality_band};
 use feral_processes_engine::settlements::SettlementKey;
@@ -27,6 +26,7 @@ use feral_processes_engine::{
     LogEntry, MESSAGE_LOG_CAP, MemoryRow, MessageKind, PetInfo, ProgramSaleOption, RecipeChain,
     RecipeStep, ResearchState, SettlementView, StockRow, StructureReport, morale_band,
 };
+use feral_processes_engine::{ResearchTree, RespecSubject};
 
 mod arena;
 mod bars;
@@ -576,7 +576,7 @@ fn draw_status_banner(status: &str, painter: &Painter, m: &Metrics) {
     painter.ui(status, m.inset, baseline, m.font_size, RED);
 }
 
-pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
+pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter, reveal: bool) {
     let m = ui_metrics(painter.screen_h());
     painter.clear(SCREEN_BG);
     // Cloned rather than borrowed because most of the arms below want `app`
@@ -614,7 +614,7 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
         // — `needs_status_banner` names it, so a refusal raised underneath
         // still reaches the strip along the bottom.
         Mode::Notification => {
-            draw_playing_base(app, fx, None, painter, &m);
+            draw_playing_base(app, fx, None, painter, &m, reveal);
             match &app.pending_notification {
                 Some(note) => notify::draw_notification(note, painter, &m),
                 // The mode is only ever entered with a subject, so this is
@@ -641,11 +641,11 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
             draw_battle_ally_menu(app, refusal, painter, &m);
         }
         Mode::Help => {
-            draw_playing_base(app, fx, None, painter, &m);
+            draw_playing_base(app, fx, None, painter, &m, reveal);
             draw_help_index(app, refusal, painter, &m);
         }
         Mode::HelpPage => {
-            draw_playing_base(app, fx, None, painter, &m);
+            draw_playing_base(app, fx, None, painter, &m, reveal);
             draw_help_page(app, refusal, painter, &m);
         }
         // Full-pane rather than a popup over the corridor: the whole point
@@ -662,7 +662,7 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
             // banner is what says it here too, rather than the two arms of
             // one mode disagreeing about where a refusal appears.
             None => {
-                draw_playing_base(app, fx, None, painter, &m);
+                draw_playing_base(app, fx, None, painter, &m, reveal);
                 draw_mode_overlay(app, None, painter, &m);
             }
         },
@@ -685,7 +685,7 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
                 // Surfacing mid-pick, the same fallback the map screen makes.
                 // `None` for `Mode::FrameMap`'s reason, one arm up.
                 _ => {
-                    draw_playing_base(app, fx, None, painter, &m);
+                    draw_playing_base(app, fx, None, painter, &m, reveal);
                     draw_mode_overlay(app, None, painter, &m);
                 }
             }
@@ -752,7 +752,7 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter) {
             } else {
                 None
             };
-            draw_playing_base(app, fx, on_the_map, painter, &m);
+            draw_playing_base(app, fx, on_the_map, painter, &m, reveal);
             draw_mode_overlay(app, refusal, painter, &m);
         }
     }
@@ -1357,10 +1357,28 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
                 draw_respec_confirm(&quote, "talent", refusal, painter, m);
             }
         }
-        Mode::Research if graph_view => {
-            research_graph::draw_research_graph(game, selected, refusal, painter, m)
+        Mode::Research if graph_view => research_graph::draw_research_graph(
+            game,
+            ResearchTree::Base,
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
+        Mode::Research => {
+            draw_research_menu(game, ResearchTree::Base, selected, refusal, painter, m)
         }
-        Mode::Research => draw_research_menu(game, selected, refusal, painter, m),
+        Mode::RoutineResearch if graph_view => research_graph::draw_research_graph(
+            game,
+            ResearchTree::Routines,
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
+        Mode::RoutineResearch => {
+            draw_research_menu(game, ResearchTree::Routines, selected, refusal, painter, m)
+        }
         Mode::Contracts => draw_contracts(
             &contract_active,
             &contract_offers,
@@ -1449,7 +1467,7 @@ mod tests {
     use super::*;
 
     /// Every `Mode`, as the status-line census below drives them.
-    const ALL_MODES: [Mode; 109] = [
+    const ALL_MODES: [Mode; 110] = [
         Mode::TacticalBattle,
         Mode::TacticalRoutine,
         Mode::TacticalAim,
@@ -1537,6 +1555,7 @@ mod tests {
         Mode::RespecTalentsConfirm,
         Mode::Perks,
         Mode::Research,
+        Mode::RoutineResearch,
         Mode::Contracts,
         Mode::History,
         Mode::Compass,
@@ -1678,7 +1697,7 @@ mod tests {
     fn refusals_drawn(app: &mut feral_processes_app_core::App, fx: &mut Fx, mode: Mode) -> usize {
         app.mode = mode;
         app.status_line = Some(CENSUS_REFUSAL.to_string());
-        let (_, shapes) = crate::paint::with_painter(|p| draw(app, fx, p));
+        let (_, shapes) = crate::paint::with_painter(|p| draw(app, fx, p, false));
         crate::paint::painted_text(&shapes)
             .iter()
             .filter(|t| t.contains(CENSUS_REFUSAL))
@@ -1724,7 +1743,7 @@ mod tests {
         let mut fx = Fx::new();
         app.mode = Mode::Research;
         app.status_line = Some(CENSUS_REFUSAL.to_string());
-        let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p));
+        let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false));
         let drawn = crate::paint::painted_text(&shapes);
 
         let at = |want: &str| drawn.iter().position(|t| t.contains(want));
@@ -1766,7 +1785,7 @@ mod tests {
             dy: 0,
         });
         app.status_line = None;
-        let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p));
+        let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false));
         let drawn = crate::paint::painted_text(&shapes);
 
         let says = |want: &str| drawn.iter().any(|t| t.contains(want));
@@ -1820,7 +1839,7 @@ mod tests {
             to_tier: 2,
         });
         app.status_line = None;
-        let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p));
+        let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false));
         let drawn = crate::paint::painted_text(&shapes);
         let says = |want: &str| drawn.iter().any(|t| t.contains(want));
         assert!(
@@ -1843,7 +1862,7 @@ mod tests {
         for mode in [Mode::Playing, Mode::Research, Mode::Inventory, Mode::Battle] {
             app.mode = mode;
             app.status_line = None;
-            let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p));
+            let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false));
             assert!(
                 !crate::paint::painted_text(&shapes)
                     .iter()

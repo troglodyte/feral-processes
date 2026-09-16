@@ -514,7 +514,7 @@ fn nothing_is_researched_at_the_start_of_a_game() {
     let game = Game::new(61, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     assert!(!game.is_researched("automation"));
     assert!(
-        game.research_nodes()
+        game.research_nodes(ResearchTree::Base)
             .iter()
             .all(|n| n.state != ResearchState::Unlocked),
         "a fresh game starts with an entirely locked tree"
@@ -556,7 +556,7 @@ fn a_completed_project_raises_a_notification_naming_what_it_unlocks() {
     game.select_research("automation").unwrap();
     fill_research_progress(&mut game, "automation");
     let row = game
-        .research_nodes()
+        .research_nodes(ResearchTree::Base)
         .into_iter()
         .find(|n| n.id == "automation")
         .unwrap();
@@ -655,37 +655,51 @@ fn completing_clears_the_project_drops_its_progress_row_and_withdraws_its_orders
     );
 }
 
-/// The shared-helper regression. The routines and tools a node hands over are
-/// granted by `grant_research_knowledge`, which the project path calls rather
-/// than keeping a copy of — a copy is what drifts.
+/// The shared-helper regression. `settle_research` writes a routine node's
+/// ability straight into `KnownRoutines` (spec §1 "Researched means
+/// known"), and `grant_research_knowledge` — the tool half — is what the
+/// project path calls rather than keeping a copy of either.
 #[test]
-fn completing_grants_the_nodes_abilities_and_tools() {
+fn completing_a_routine_node_teaches_its_ability() {
     let mut game = Game::new(725, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let taught = game
+    // `symlink` is Symlink Party's whole family, with no wild carrier and
+    // no species kit slot (see
+    // `routine_tree::hyperthread_is_discoverable_and_a_field_routine_
+    // family_is_not`), so it is always-visible rather than needing a
+    // discovery first — the one thing this test is not about.
+    let node_id = "routine/symlink".to_string();
+    let ability = "symlink".to_string();
+    // Opens the routine tree — `select_research` refuses every routine
+    // node until this is researched (spec §2 "Opening the tree").
+    unlock_research_chain(&mut game, "routine_fabrication");
+    research_prereqs_of(&mut game, &node_id);
+    let zone = game
         .world
         .resource::<ResearchDb>()
-        .all()
-        .find(|d| !d.unlocks_abilities.is_empty())
-        .map(|d| (d.id.clone(), d.unlocks_abilities.clone()))
-        .expect("the shipped tree teaches routines somewhere");
-    research_prereqs_of(&mut game, &taught.0);
+        .get(&node_id)
+        .map(|d| d.min_zone)
+        .unwrap_or(0);
+    set_zone(&mut game, zone);
     base_with_a_research_node(&mut game);
-    shelve_research_bill(&mut game, &taught.0, 8, 8);
-    game.select_research(&taught.0).unwrap();
-    fill_research_progress(&mut game, &taught.0);
+    shelve_research_bill(&mut game, &node_id, 8, 8);
+    game.select_research(&node_id).unwrap();
+    fill_research_progress(&mut game, &node_id);
 
     game.tick();
 
-    assert!(game.is_researched(&taught.0));
-    for ability in &taught.1 {
-        assert!(
-            game.world
-                .resource::<crate::resources::KnownRoutines>()
-                .0
-                .contains(ability),
-            "completing must teach {ability}, not just mark the node"
-        );
-    }
+    assert!(game.is_researched(&node_id));
+    assert!(
+        game.world
+            .resource::<crate::resources::KnownRoutines>()
+            .0
+            .contains(&ability),
+        "completing must teach {ability}, not just mark the node"
+    );
+    assert!(
+        !game.world.resource::<Research>().0.contains(&node_id),
+        "a routine node's completion must never touch `Research` — spec §1 \
+         'researched means known' is one record, not two"
+    );
 }
 
 /// Nothing in this feature may shift the seeded stream — a retune of what a
@@ -726,7 +740,7 @@ fn selecting_research_fails_while_a_prerequisite_is_missing() {
 fn a_locked_node_reports_which_prerequisites_are_missing() {
     let game = Game::new(65, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = game
-        .research_nodes()
+        .research_nodes(ResearchTree::Base)
         .into_iter()
         .find(|n| n.id == "weapon_bench")
         .unwrap();
@@ -747,7 +761,7 @@ fn a_locked_node_reports_which_prerequisites_are_missing() {
 fn a_prerequisite_free_node_is_available_immediately() {
     let game = Game::new(66, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let node = game
-        .research_nodes()
+        .research_nodes(ResearchTree::Base)
         .into_iter()
         .find(|n| n.id == "automation")
         .unwrap();
@@ -819,7 +833,7 @@ fn a_second_project_is_refused_while_one_is_running() {
     let filed = game.work_orders().len();
 
     let second = game
-        .research_nodes()
+        .research_nodes(ResearchTree::Base)
         .into_iter()
         .find(|n| n.state == ResearchState::Available && n.blocked_by.is_none())
         .expect("a fresh base has a second node open to it");
@@ -956,13 +970,13 @@ fn research_nodes_lists_active_before_available_before_locked_before_unlocked() 
     unlock_research_chain(&mut game, "automation");
     base_with_a_research_node(&mut game);
     let open = game
-        .research_nodes()
+        .research_nodes(ResearchTree::Base)
         .into_iter()
         .find(|n| n.state == ResearchState::Available && n.blocked_by.is_none())
         .expect("something is open once Automation is in");
     game.select_research(&open.id).unwrap();
     let ranks: Vec<u8> = game
-        .research_nodes()
+        .research_nodes(ResearchTree::Base)
         .iter()
         .map(|n| match n.state {
             ResearchState::Active => 0,
@@ -991,7 +1005,7 @@ fn the_data_cache_is_buildable_without_any_research() {
 #[test]
 fn no_research_node_is_left_unlocking_nothing() {
     let game = Game::new(711, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    for node in game.research_nodes() {
+    for node in game.research_nodes(ResearchTree::Base) {
         let def = game
             .world
             .resource::<ResearchDb>()
@@ -1000,7 +1014,8 @@ fn no_research_node_is_left_unlocking_nothing() {
         assert!(
             !def.unlocks_structures.is_empty()
                 || !def.unlocks_recipes.is_empty()
-                || !def.unlocks_abilities.is_empty(),
+                || !def.unlocks_tools.is_empty()
+                || def.teaches.is_some(),
             "{} unlocks nothing and is dead weight in the tree",
             node.id
         );
@@ -1014,8 +1029,14 @@ fn cheapest_gated_node(game: &Game, zone: u32) -> ResearchDef {
     game.world
         .resource::<ResearchDb>()
         .all()
-        .find(|d| d.min_zone == zone)
-        .unwrap_or_else(|| panic!("the shipped tree should band something at zone {zone}"))
+        // Base tree only: these tests are about the base tree's own zone
+        // gating, and `ResearchDb::all()` now also carries one synthesised
+        // routine node per eligible ability, many of them roots of their
+        // own family with no prerequisite — exactly what
+        // `a_node_can_report_both_a_missing_prereq_and_its_zone` needs to
+        // *not* pick.
+        .find(|d| d.min_zone == zone && d.tree == crate::research::ResearchTree::Base)
+        .unwrap_or_else(|| panic!("the shipped base tree should band something at zone {zone}"))
         .clone()
 }
 
@@ -1049,7 +1070,7 @@ fn research_prereqs_of(game: &mut Game, id: &str) {
 }
 
 fn research_state(game: &Game, id: &str) -> ResearchState {
-    game.research_nodes()
+    game.research_nodes(ResearchTree::Base)
         .into_iter()
         .find(|n| n.id == id)
         .map(|n| n.state)
@@ -1080,7 +1101,9 @@ fn a_zone_gated_node_is_still_listed() {
     let game = Game::new(716, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let gated = cheapest_gated_node(&game, 3);
     assert!(
-        game.research_nodes().iter().any(|n| n.id == gated.id),
+        game.research_nodes(ResearchTree::Base)
+            .iter()
+            .any(|n| n.id == gated.id),
         "{} must stay on the menu at zone 1 — it is what tells the player \
          there is a reason to breach",
         gated.id
@@ -1428,7 +1451,7 @@ fn a_materials_have_column_counts_a_depot_across_the_base() {
     set_inventory(&mut game, &[("core_fragment", 6), ("power_cell", 2)]);
 
     let bill = |game: &Game| {
-        game.research_nodes()
+        game.research_nodes(ResearchTree::Base)
             .into_iter()
             .find(|n| n.id == "billed")
             .unwrap()
@@ -1472,7 +1495,7 @@ fn the_active_project_is_the_first_row() {
         .progress
         .insert("automation".to_string(), 3);
 
-    let rows = game.research_nodes();
+    let rows = game.research_nodes(ResearchTree::Base);
 
     assert_eq!(rows[0].id, "automation");
     assert_eq!(rows[0].state, ResearchState::Active);
@@ -1489,7 +1512,7 @@ fn a_blocked_node_carries_the_sentence_that_would_refuse_it() {
     let refusal = game.select_research("automation").unwrap_err();
 
     let row = game
-        .research_nodes()
+        .research_nodes(ResearchTree::Base)
         .into_iter()
         .find(|n| n.id == "automation")
         .unwrap();
@@ -1558,7 +1581,7 @@ fn a_research_node_that_unlocks_no_conversion_reports_none() {
 }
 
 fn research_node(game: &Game, id: &str) -> ResearchStatus {
-    game.research_nodes()
+    game.research_nodes(ResearchTree::Base)
         .into_iter()
         .find(|n| n.id == id)
         .unwrap_or_else(|| panic!("{id:?} should be a shipped research node"))
@@ -1978,14 +2001,10 @@ fn a_research_node_reports_everything_it_hands_over() {
     );
 
     let deep = research_node(&game, "deep_analysis");
-    let line = deep.unlocks.expect("a node that teaches routines says so");
-    assert!(
-        line.starts_with("Unlocks: Deep Scan"),
-        "routines lead, in the order the node authored them: {line:?}"
-    );
-    assert!(
-        line.contains("Core Tap") && line.contains("Gear Puller"),
-        "tools are named too, after the routines: {line:?}"
+    let line = deep.unlocks.expect("a node that teaches tools says so");
+    assert_eq!(
+        line, "Unlocks: Core Tap, Gear Puller",
+        "deep_analysis grants only tools now — its routines moved to the routine tree (todo #101)"
     );
 }
 
@@ -2002,7 +2021,7 @@ fn the_research_readout_follows_the_project() {
 
     game.select_research("automation").unwrap();
     let row = game
-        .research_nodes()
+        .research_nodes(ResearchTree::Base)
         .into_iter()
         .find(|n| n.id == "automation")
         .unwrap();

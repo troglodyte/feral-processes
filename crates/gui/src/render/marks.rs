@@ -197,6 +197,41 @@ pub(super) fn draw_difficulty_mark(
     );
 }
 
+/// The Alt marker — a `?` glyph in the con earmark's own corner, drawn
+/// **in place of** the earmark for a frame `reveal` is held (spec §4 "The
+/// Alt marker"). Text and not a shape, so the two can never be confused for
+/// each other even at a glance that only catches form: the earmark answers
+/// "how dangerous", this answers "is there something to learn here", and
+/// they trigger on unrelated conditions.
+///
+/// Every corner is already taken (`difficulty_mark_points`'s own doc), so
+/// holding Alt is a deliberate question that borrows the earmark's slot for
+/// the duration — `draw_difficulty_mark`'s own caller is what suppresses the
+/// earmark while this draws, not a check made here.
+///
+/// **`Painter::map`'s `y` is a baseline, not a top edge** (`paint.rs`'s own
+/// module docs). Handing it `py + RARITY_BAR_PX + IDENTITY_MARK_INSET`
+/// directly floated the ink up into the tile *above*, since a baseline that
+/// low puts almost all of the glyph's ascent above it. Measuring first and
+/// adding the ink height is `render/base.rs`'s own pattern for placing text
+/// by its top rather than its baseline (see the glyph-centring calls
+/// there). The size is half the tile's main glyph — smaller than
+/// `draw_difficulty_mark`'s corner wedge draws, but the corner it borrows
+/// is a wedge's worth of room and a full-size glyph does not fit it.
+pub(super) fn draw_unseen_marker(painter: &Painter, px: f32, py: f32, glyph_px: u16, vig: f32) {
+    let glyph = "?";
+    let size = (glyph_px / 2).max(1);
+    let dims = painter.measure_map(glyph, size);
+    let top = py + RARITY_BAR_PX + IDENTITY_MARK_INSET;
+    painter.map(
+        glyph,
+        px + IDENTITY_MARK_INSET,
+        top + dims.height,
+        size,
+        at_level(WHITE, vig),
+    );
+}
+
 /// Which of a tile's two occupants owns the progress bar, and the hue it
 /// wears — or nothing at all where no work is being done on this cell.
 ///

@@ -3,7 +3,101 @@
 use super::support::*;
 use crate::classes::PlayerClass;
 use crate::components::Routines;
+use crate::items::DownedProgram;
 use crate::*;
+
+// ---------------------------------------------------------------------------
+// Concealment — `RoutineSlotView::unseen`. See docs/superpowers/plans/
+// 2026-09-16-routine-research-tree.md, Task 9.
+// ---------------------------------------------------------------------------
+
+/// A wild carrier's slot is unseen and blank — `Game::routine_view`, the
+/// inspect sheet's own concealment (spec §4 "Concealment").
+#[test]
+fn a_wild_carriers_slot_is_unseen_and_blank() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 3, 3);
+    game.world
+        .entity_mut(wild)
+        .insert(Routines(vec!["hot_patch".to_string()]));
+
+    let slot = &game.routine_view(wild)[0];
+    assert!(slot.unseen, "an undiscovered family must read as unseen");
+    assert_eq!(slot.ability, None, "the ability id must be blanked too");
+    assert_eq!(slot.name, "", "the name must be blanked");
+    assert_eq!(slot.description, "", "the description must be blanked");
+}
+
+/// The identical routine on a tamed program is never concealed — ownership
+/// alone clears it, with nothing discovered and nothing else different.
+#[test]
+fn the_same_species_tamed_shows_its_real_name() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(pet)
+        .insert(Routines(vec!["hot_patch".to_string()]));
+
+    let slot = &game.routine_view(pet)[0];
+    assert!(
+        !slot.unseen,
+        "an owned program's own routine is never concealed"
+    );
+    assert_eq!(slot.ability.as_deref(), Some("hot_patch"));
+    assert_eq!(slot.name, "Patch Single v1.0");
+    assert!(!slot.description.is_empty());
+}
+
+/// `Game::unseen_routine` — the Alt marker's own derivation (spec §4 "The
+/// Alt marker", Task 10) — agrees with `routine_candidates`, the exact door
+/// extraction reads, in both the flagged and the cleared case, and is false
+/// on a tamed program regardless.
+#[test]
+fn unseen_routine_agrees_with_the_candidate_function_and_is_false_when_owned() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = spawn_wild_without_routine(&mut game, "scrapper", 3, 3);
+    game.world
+        .entity_mut(wild)
+        .insert(Routines(vec!["hot_patch".to_string()]));
+    let level = game.ability_user_level(wild);
+
+    let program = DownedProgram {
+        species: "scrapper".to_string(),
+        level,
+        rarity: Rarity::Ordinary,
+        boss: false,
+        condition: 100,
+        carried: Some("hot_patch".to_string()),
+    };
+    let expected = !game.routine_candidates(&program).is_empty();
+    assert!(expected, "the fixture must actually offer a candidate");
+    assert_eq!(
+        game.unseen_routine(wild),
+        expected,
+        "the marker must agree with the same candidate function extraction reads"
+    );
+
+    // Discovering the family clears both the candidate pool and the marker.
+    game.world
+        .resource_mut::<crate::resources::DiscoveredRoutines>()
+        .0
+        .insert("hot_patch".to_string());
+    assert!(game.routine_candidates(&program).is_empty());
+    assert!(
+        !game.unseen_routine(wild),
+        "a discovered family must clear the marker"
+    );
+
+    // A tamed program is never flagged, discovered or not.
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.world
+        .entity_mut(pet)
+        .insert(Routines(vec!["hot_patch".to_string()]));
+    assert!(
+        !game.unseen_routine(pet),
+        "an owned program is never flagged"
+    );
+}
 
 /// The generic test species declares no abilities, so its kit is the
 /// fallback — which must be a real installed routine, not an empty list
@@ -542,7 +636,7 @@ fn extraction_needs_a_bench_built_somewhere_but_not_nearby() {
 }
 
 #[test]
-fn extracting_teaches_the_picked_routine_destroys_the_program_and_loses_the_rest() {
+fn extracting_discovers_the_picked_routine_destroys_the_program_and_loses_the_rest() {
     let (mut game, medic) = game_with_two_ability_companion();
     set_level(&mut game, medic, 5); // both of its unlocks installed
     spawn_structure_at(&mut game, "compiler", 30, 30);
@@ -551,19 +645,25 @@ fn extracting_teaches_the_picked_routine_destroys_the_program_and_loses_the_rest
     assert_eq!(offered.len(), 2, "both installed routines are on offer");
     assert!(
         offered.iter().all(|r| !r.known),
-        "neither is known yet, so neither row is marked"
+        "neither is familiar yet, so neither row is marked"
     );
     let kept = offered[1].ability.clone();
     let lost = offered[0].ability.clone();
 
     game.extract_routine(medic, 1).unwrap();
 
+    let discovered = |id: &str| {
+        game.world
+            .resource::<crate::resources::DiscoveredRoutines>()
+            .0
+            .contains(id)
+    };
     assert!(
-        game.knows_routine(&kept),
-        "the picked routine is learned, not stocked"
+        discovered(&kept),
+        "the picked routine is discovered, not stocked"
     );
     assert!(
-        !game.knows_routine(&lost),
+        !discovered(&lost),
         "everything else on the program is lost with it"
     );
     assert_eq!(
@@ -591,15 +691,17 @@ fn extraction_is_refused_for_a_program_you_dont_own_and_during_battle() {
     assert!(err.contains("right now"), "{err}");
 }
 
-/// Knowledge does not stack, so extracting a routine the player already
-/// knows would destroy a program for nothing. Refused before the despawn,
-/// not after.
+/// Discovery does not stack, so extracting a routine whose family is
+/// already familiar would destroy a program for nothing. Refused before the
+/// despawn, not after.
 #[test]
 fn extracting_a_routine_you_already_know_is_refused_and_the_program_survives() {
     let mut game = Game::new(34, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     spawn_structure_at(&mut game, "compiler", 30, 30);
     let pet = spawn_tamed(&mut game, 10, 3);
     let installed = game.extractable_routines(pet)[0].ability.clone();
+    // A known routine counts as its family being discovered too — see
+    // `Game::family_discovered`.
     teach_routine(&mut game, &installed);
 
     assert!(
@@ -607,24 +709,59 @@ fn extracting_a_routine_you_already_know_is_refused_and_the_program_survives() {
         "the picker must mark it before the player commits"
     );
     let err = game.extract_routine(pet, 0).unwrap_err();
-    assert!(err.contains("already know"), "{err}");
+    assert!(err.contains("familiar"), "{err}");
     assert!(
         game.world.get::<Stats>(pet).is_some(),
         "the program must survive a refused extraction"
     );
 }
 
+/// The tamed door's discovery log line, `extract_routine`'s own version of
+/// the tool door's: it names no routine either.
+#[test]
+fn extracting_a_routine_logs_no_routine_name() {
+    let mut game = Game::new(35, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    spawn_structure_at(&mut game, "compiler", 30, 30);
+    let pet = spawn_tamed(&mut game, 10, 3);
+    let ability = game.extractable_routines(pet)[0].ability.clone();
+    let name = game.ability_display_name(&ability);
+
+    game.extract_routine(pet, 0).unwrap();
+
+    let recent: Vec<String> = game
+        .message_log(5)
+        .iter()
+        .map(|line| line.text.clone())
+        .collect();
+    assert!(
+        recent
+            .iter()
+            .any(|line| line.contains("Recovered an unfamiliar routine")),
+        "the verbatim discovery line must be logged: {recent:?}"
+    );
+    assert!(
+        recent.iter().all(|line| !line.contains(&name)),
+        "{name} must not appear in the log: {recent:?}"
+    );
+}
+
 #[test]
 fn researching_a_node_teaches_the_routine_rather_than_installing_or_stocking_it() {
     let mut game = Game::new(41, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let node = game
-        .research_nodes()
-        .into_iter()
-        .find(|n| !n.unlocks_abilities.is_empty())
+    // Read straight off the db, not `research_nodes`: a fresh game's
+    // routine tree is closed and nothing is discovered yet, so nothing is
+    // *listed* — but `unlock_research_chain` below researches straight
+    // through `settle_research`, bypassing `select_research`'s visibility
+    // gate entirely, exactly as it bypasses the zone and prerequisite
+    // gates other callers of this helper rely on.
+    let (node_id, ability) = game
+        .world
+        .resource::<ResearchDb>()
+        .all()
+        .find_map(|d| d.teaches.clone().map(|a| (d.id.clone(), a)))
         .expect("some shipped node grants an ability");
-    let ability = node.unlocks_abilities[0].clone();
 
-    unlock_research_chain(&mut game, &node.id);
+    unlock_research_chain(&mut game, &node_id);
 
     assert!(game.knows_routine(&ability), "the node teaches the routine");
     assert_eq!(
@@ -1308,5 +1445,45 @@ fn starter_rows_are_priced_through_the_class() {
         striker_heal.effect, medic_heal.effect,
         "a Striker and a Medic must read checksum_repair differently — the whole point of \
          pricing rows through `class`"
+    );
+}
+
+/// The death line omits an unseen routine's name for a body that dies while
+/// standing in `Party` without being `Tamed` — a summon, not a companion —
+/// spec §4 "Concealment"'s death-line clause. `Game::apply_damage` is the
+/// real door rather than a direct HP write, so `lower_hp`'s own kill
+/// detection is what fires the announcement, exactly as a battle would.
+#[test]
+fn the_death_line_omits_an_unseen_routines_name() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let summon = game
+        .world
+        .spawn((
+            Creature {
+                species: "scrapper".to_string(),
+            },
+            Position { x: 3, y: 3 },
+            Stats {
+                hp: 1,
+                max_hp: 1,
+                atk: 5,
+                mitigation: 0,
+            },
+            Routines(vec!["hot_patch".to_string()]),
+        ))
+        .id();
+    game.world.resource_mut::<Party>().0.push(summon);
+
+    game.apply_damage(summon, 5);
+
+    let logged = game.message_log(5);
+    let line = logged
+        .iter()
+        .find(|l| l.text.contains("crashes and is deleted"))
+        .expect("the death line must be logged");
+    assert!(
+        !line.text.contains("Patch Single v1.0"),
+        "an unseen routine's display name leaked into the death line: {}",
+        line.text
     );
 }

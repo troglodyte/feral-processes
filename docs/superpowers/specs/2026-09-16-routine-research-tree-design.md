@@ -1,7 +1,8 @@
 # Routine research tree
 
 **Date:** 2026-09-16
-**Status:** design under review, not implemented.
+**Status:** design approved 2026-09-16 after a source review, not
+implemented.
 **Todo:** #101, "routine research should be its own research tree".
 
 Routines leave the base research tree and get a tree of their own. That
@@ -26,6 +27,10 @@ Alt is held, and the inspect sheet hides such routines' names.
 | Zone gates | A new per-ability field; existing gates carried over, everything else zone 1 |
 | How research is done | The existing Research Node project, one active project across both trees |
 | Map marker | A `?` drawn while Alt is held |
+| Where a name is concealed | Only where a *wild or downed* program's routine is previewed; owned programs, the battle log and market disks keep real names |
+| Passives and summons | No node for either; no content change |
+| A discovered family whose next rung is zone-gated | Listed as `Locked` with its sector, not hidden |
+| The first discovery door | `routine_reader` moves from `cortex` to `routine_fabrication` |
 
 ## 1. Architecture
 
@@ -52,8 +57,17 @@ duplicates the project machinery that shipped in
 ### Researched means known
 
 A routine node is `Unlocked` exactly when `KnownRoutines` contains its
-routine. Completing the project inserts into `KnownRoutines` and writes
-nothing to `researched`. This has two consequences:
+routine. `settle_research` inserts into `KnownRoutines` for a routine node
+and writes nothing to `Research`. Every reader of "is this node researched"
+— `is_researched`, `missing_prereqs`, `select_research`'s already-researched
+refusal — answers a routine node from `KnownRoutines`, through one helper,
+because today all three read `Research` alone.
+
+A prerequisite rung counts as met when it is known **or any higher version
+at the same scope is known**. A new game's starter Patch Single v2.0 would
+otherwise leave Patch Party v1.0 waiting on a Single v1.0 nobody needs.
+
+This has two consequences:
 
 - A save made before this change needs no migration. Every routine the
   player already knows reads as researched, including a Group rung known
@@ -64,24 +78,44 @@ nothing to `researched`. This has two consequences:
 `teaches` is the only path by which research grants a routine. Nothing in
 the save or asset parsers sets `deny_unknown_fields`, so a mod file that
 still names `unlocks_abilities` keeps parsing and the field is ignored.
-`load_dir` logs a warning for it once.
+Serde drops an unknown field silently, so there is no warning; keeping a
+dead field only to warn about it is the cruft CLAUDE.md forbids.
+
+`research_nodes` and `research_graph` both walk `ResearchDb::all()` today
+and read no shared derivation. They are made to: one function decides
+which nodes a tree lists (§2 "Visibility"), and both call it.
 
 ## 2. Deriving the tree
 
 ### Family and rung
 
 `AbilityDef::family()` moves out of `tests/assets.rs` into engine code, along
-with `scope_rank` and the version-tag parse. The existing census
+with `scope_rank` and `without_version_tag`. The existing census
 `every_battle_ability_family_is_contiguous_from_single_upward` becomes a
 caller of these functions instead of keeping its own copy.
 
 - **Family:** the display name minus its version tag and scope word.
   `"Patch Single v1.0"` and `"Patch Single v2.0"` are both family `Patch`.
-- **Scope rank:** Single 0, Party/Group 1, Everyone 2.
-- **Version:** the parsed `vN.N` tag. A name without a tag is version 1.
+- **Scope rank:** read off `AbilityTarget`, as the census does today, not
+  off the scope word: Single 0, Party/Group 1, Everyone 2.
+- **Version:** a `(major, minor)` pair parsed from the `vN.N` tag. This is
+  new code — the test file only strips the tag. The minor part is needed:
+  Patch Party ships v1.0 and v1.1 (`redundancy_sync`). A name without a tag
+  is `(1, 0)`.
 
-A node exists for every non-exclusive ability. **Exclusive routines get no
-node** — they stay boss-drop and trader-only disks, exactly as today.
+A simulation of `family()` over all 100 shipped abilities parsed cleanly
+with no collisions (review, 2026-09-16).
+
+**A node exists for every ability except four kinds:**
+
+- **exclusive** — they stay boss-drop and trader-only disks, as today;
+- **permanent** (`routine_is_permanent`, i.e. `decompile`) — every player
+  already has it;
+- **passive** — the six shipped ones (`clock_skew`, `core_dump`,
+  `hot_spare`, `interrupt_request`, `parity_guard`, `quarantine`) are gear
+  grants, and a node would make them researchable slot routines;
+- **summon** — `Fork Cluster` and `Fork Program` have no source today, and
+  this change does not add one.
 
 ### Prerequisites
 
@@ -113,7 +147,7 @@ A synthesised node has **no base-tree prerequisite** except the gate in
 A family is **discoverable** if any of its rungs has a carrier: a positive
 `wild_weight`, or a place in some species' kit. Every other family is
 **always visible**: field routines (`FieldBuff`, `Phase`, `Jump`,
-`Symlink`), tamper routines, summons, and any family nothing carries.
+`Symlink`), tamper routines, and any family nothing carries.
 
 This split is computed, not authored. That is what stops content from
 going dead: a family nothing carries cannot be discovered, so it falls into
@@ -121,20 +155,29 @@ the visible half instead of being unreachable.
 
 ### Visibility
 
-A node is **listed** in the routine tree when its zone gate is met and:
+Nothing is listed until the tree is open ("Opening the tree" below). After
+that, a node is **listed** when:
 
-- for an **always-visible** family: always. A node whose prerequisites are
-  not met shows as `Locked`, as base nodes do.
-- for a **discoverable** family: the family is discovered (§3), and the node
-  is `Unlocked`, `Active`, or `Available`. A `Locked` node in a discoverable
-  family is not listed.
+- for an **always-visible** family: its zone gate is met. A node whose
+  prerequisites are not met shows as `Locked`, as base nodes do.
+- for a **discoverable** family: the family is discovered (§3), and the
+  node's **prerequisite rungs are met**. The zone gate does not hide such a
+  node: one whose sector is too low is listed as `Locked { min_zone }`, so
+  a family discovered in zone 1 whose root is gated to zone 2 (Patch) shows
+  the player what is waiting instead of nothing.
 
 Only the next rung is ever shown. Researching Single v1 reveals Single v2
 and Group v1 at the same moment, and nothing further up.
 
-`ResearchState` gains no variant. Visibility is a filter applied before
-states are computed, inside the one derivation `research_graph` already
-reads.
+`ResearchState` gains no variant. Visibility is one filter function applied
+before states are computed. `research_nodes` and `research_graph` both call
+it, and **a listed node's unlisted parent is treated as absent** by the
+graph layout. The layout's Kahn pass over `requires` would otherwise never
+settle such a node, and it would get no cell. The reachable case is an old
+save that knows Patch Party v1.0 while `hot_patch` is still gated.
+
+`select_research` refuses a routine node that is not listed, with the same
+text as an unknown id. Leaving a hidden node off the list is not enough.
 
 ### Zone gate
 
@@ -151,7 +194,15 @@ implementation carries over the gates the current granting nodes impose:
 | `null_route` | `kernel_privileges` | 3 |
 | `hardened_shell`, `overclock`, `ablative_layer` | `adaptive_plating` | 2 |
 | `hot_patch` | `runtime_patching` | 2 |
+| `checksum_repair`, `cold_boot`, `mirror_restore`, `redundancy_sync` | (Patch's higher rungs) | 2 |
 | everything else, including `symlink`, `detach`, `priority_boost`, `repair_loop`, `trickle_charge` | — | 1 (default) |
+
+The four extra Patch rungs are not carried over from an old granting node —
+`hot_patch` was the only ability `runtime_patching` taught. They are gated
+to zone 2 anyway, because
+`no_research_node_is_gated_below_its_own_prerequisite` (`tests/assets.rs`)
+forces a whole version chain to carry at least its root's gate: a rung left
+at the zone-1 default would be a gate its own prerequisite can never fire.
 
 ### Cost
 
@@ -172,7 +223,16 @@ there is a way to install one. That guarantee is kept as data: a new
 the routine tree lists nothing, and `select_research` refuses a routine node
 with "research <name> first". If no loaded node carries the flag, the tree
 is open from the start, so a mod that deletes `routine_fabrication` is not
-stranded.
+stranded. `has_research_tree`, which gates the base-menu row, takes the tree
+as an argument.
+
+### The first discovery door
+
+`routine_reader`, the Routines extraction tool, is unlocked by `cortex`
+(zone 3) today. Before zone 3 the only way to discover would be to tame a
+carrier and dissolve it at a Compiler. The tool moves to
+`routine_fabrication`'s `unlocks_tools`, so recovering from downed programs
+opens at the same moment as the tree. `cortex` keeps its other unlocks.
 
 ## 3. Discovery and extraction
 
@@ -194,24 +254,26 @@ routine known in an existing save, count as discovered with no write.
 ordinary branch changes:
 
 - **Before:** insert into `KnownRoutines`, return `Learned`.
-- **After:** insert into `DiscoveredRoutines`, return `Discovered`. The log
-  line does not name the routine: *"Recovered an unfamiliar routine — new
-  routine research is available."*
+- **After:** insert into `DiscoveredRoutines`, return `Discovered`
+  (`RoutineTaken::Learned` is renamed). The log line does not name the
+  routine: *"Recovered an unfamiliar routine — see routine research."* It
+  makes no promise that research is available now, because the next rung
+  may be gated to a later sector.
 
 The exclusive branch is unchanged (`DiskPopped`).
 
 ### What extraction may pick
 
 `routine_candidates` and `extractable_routines` filter on
-`!family_discovered(family)` instead of `!knows_routine(id)`. A program
-whose routines all belong to discovered families has no candidates, and:
+`!family_discovered(family)` instead of `!knows_routine(id)`. Each door
+refuses **before anything is spent**, per the existing per-refusal rule, and
+each refusal gets its own test:
 
 - the downed-program tool door (`extract_program`, `Routines` category)
-- the tamed-program door (`extract_routine` at the Compiler)
-
-each refuse **before anything is spent**, per the existing per-refusal rule.
-Each refusal gets its own test. The refusal text is *"nothing unfamiliar to
-recover"*.
+  refuses a program with no candidates: *"nothing unfamiliar to recover"*;
+- the tamed-program door (`extract_routine` at the Compiler) refuses per
+  selected row, as it does today. Its "You already know that routine"
+  becomes *"that routine is already familiar"*.
 
 ## 4. What the player sees
 
@@ -230,8 +292,9 @@ recover"*.
 The base research screen passes `ResearchTree::Base` and is otherwise
 unchanged.
 
-The base-tree nodes left unlocking nothing are **deleted**:
+The nine base-tree nodes left unlocking nothing are **deleted**:
 
+- `address_translation`
 - `symbolic_links`
 - `self_exec`
 - `process_detachment`
@@ -244,22 +307,49 @@ The base-tree nodes left unlocking nothing are **deleted**:
 `deep_analysis` (which still unlocks tools) and `model_inspection` (which
 still unlocks recipes) stay. `deep_analysis`'s `requires` is re-pointed from
 `field_ops` to `routine_fabrication`, the root the deleted chain hung from.
+Its bill already matches `self_exec`'s under `routine_fabrication`, so the
+materials census stays green. The census `no_research_node_is_left_unlocking_nothing`
+counts `unlocks_tools` too, or `deep_analysis` (tools only) fails it. The
+eleven `model_inspection` routines lose their `cortex`/`neural_amp`
+prerequisite chain. They keep `research_zone: 3`, and that is accepted.
+
 Any save whose `researched` names a deleted id keeps loading, because an
-unknown id there is already inert.
+unknown id there is already inert. An `active_research` naming an id no
+loaded node has would stall forever, so load clears it, together with the
+work orders filed for it (`WorkOrder::for_research`).
 
-### The inspect sheet
+### Concealment
 
-`Game::routine_view` returns a new `RoutineSlotView::unseen: bool`, true when
-the slot's family is not discovered. For such a slot the renderer draws
-*"??? — a routine you haven't seen"*, and the engine blanks `name` and
-`description` so no renderer can leak them. The concealment is in the
-engine, not the gui.
+A routine is **unseen** when it belongs to a wild or downed program, not to
+one the player owns, and its family is not discovered. Only surfaces that
+preview such a program's routines hide the name, and the engine does the
+hiding so no renderer can leak it:
+
+- **The inspect sheet.** `Game::routine_view` returns a new
+  `RoutineSlotView::unseen: bool`. For an unseen slot the engine blanks
+  `name`, `description` and the ability id. The renderer draws *"??? — a
+  routine you haven't seen"*. A slot on an owned program is never unseen,
+  so the player's own routines menu is unchanged.
+- **The extraction preview.** `ExtractionPreview::Routine` states how many
+  unfamiliar routines there are and names none.
+- **The death line.** `announce_program_death` does not name an unseen
+  routine for a wild program.
+
+The battle log, Stack market disks and the Compiler picker (an owned
+program) keep real names. The battle log is the deliberate leak: a routine
+you watched being run is one you have seen *happen*, even if it is not
+recorded.
 
 ### The Alt marker
 
 - `EntityView::unseen_routine: bool`, true for a wild (non-tamed) creature
-  that carries at least one non-exclusive routine whose family is not
-  discovered. That is exactly "worth extracting from".
+  that would yield an extraction candidate. It is computed by **the same
+  function `routine_candidates` calls** (the level-gated kit plus
+  `carried`), not by reading live `Routines`. The two sets differ, and the
+  marker must promise what extraction delivers.
+- Surface map only. The tactical board also draws `ConRead`
+  (`render/tactical.rs`), but a fight is not where a hunt is chosen, so it
+  is out of scope.
 - gui: `crates/gui/src/lib.rs` reads `AltLeft`/`AltRight` held state beside
   `SHIFT_KEYS`/`CTRL_KEYS` and passes a `reveal: bool` into `render::draw`.
   app-core gets no new `GameKey`; this is a view gesture, not an action.
@@ -290,7 +380,8 @@ engine, not the gui.
 
 TDD with the failing test first, in `crates/engine/src/tests/`:
 
-- **Derivation:** the `Patch` family yields Single v1 → Single v2 and
+- **Derivation:** the version parse orders `v1.1` after `v1.0`. No node
+  exists for an exclusive, permanent, passive or summon ability. The `Patch` family yields Single v1 → Single v2 and
   Single v1 → Group v1, with the prerequisites above. A family rooted at
   Group has a parentless Group node.
 - **Visibility:**
@@ -298,7 +389,13 @@ TDD with the failing test first, in `crates/engine/src/tests/`:
   - discovering one rung lists only the family's root;
   - researching the root lists exactly its two children;
   - an always-visible family lists all its nodes once its zone is met, and
-    none below it.
+    none below it;
+  - a discovered family whose root is zone-gated lists the root as
+    `Locked { min_zone }`;
+  - knowing Single v2 satisfies the Party v1 prerequisite;
+  - a listed node whose parent is unlisted still gets a graph cell and is
+    reachable by `ResearchGraph::step`;
+  - `select_research` refuses an unlisted routine node.
 - **Extraction:**
   - extracting an undiscovered rung writes `DiscoveredRoutines` and not
     `KnownRoutines`;
@@ -320,8 +417,21 @@ TDD with the failing test first, in `crates/engine/src/tests/`:
   - every routine node is reachable (its prerequisite chain roots in the
     family);
   - every discoverable family has at least one carried rung.
-- **Inspect:** `routine_view` blanks `name` and `description` for an unseen
-  slot.
+- **Old save:** an `active_research` naming a deleted node is cleared on load,
+  along with its work orders.
+- **Concealment:**
+  - `routine_view` blanks name, description and id for an unseen slot on a
+    wild program, and never on an owned one;
+  - the extraction preview and the wild death line contain no unseen name;
+  - `unseen_routine` agrees with `routine_candidates` for the same creature.
+- **Existing tests to rewrite:** these read `unlocks_abilities` today:
+  - `tests/assets.rs` near 663;
+  - `every_shipped_field_routine_can_actually_be_obtained`, whose research
+    source becomes the synthesised node;
+  - `tests/research.rs` near 668;
+  - `tests/routines.rs` near 621;
+  - the test-only helper in `views.rs`;
+  - the unit tests in `research.rs`.
 - **gui:** a headless paint test asserts the `?` is drawn with reveal on and
   absent with it off. It also asserts the earmark is absent only while the
   `?` is drawn.
@@ -337,12 +447,17 @@ The full `cargo test --workspace` suite and `cargo clippy --workspace
      `opens_routine_tree`;
    - `DiscoveredRoutines` and its save field;
    - `take_routine` and candidate changes;
-   - deleting the eight base nodes and removing `unlocks_abilities`;
+   - deleting the nine base nodes and removing `unlocks_abilities`;
+   - moving `routine_reader`, and the load-time clear of a stale
+     `active_research`;
    - censuses and README updates.
 2. **Screen:** the `Mode::RoutineResearch` screen, its base-menu row, and
    the tree argument through app-core and the renderers.
-3. **Concealment:** `RoutineSlotView::unseen`, `EntityView::unseen_routine`,
-   Alt held state, and the `?` draw.
+3. **Concealment:**
+   - `RoutineSlotView::unseen`;
+   - the extraction preview and the death line;
+   - `EntityView::unseen_routine`;
+   - Alt held state and the `?` draw.
 
 Each phase leaves the game playable.
 
@@ -364,3 +479,6 @@ Each phase leaves the game playable.
   playtest will show it.
 - **A green suite is not evidence of play.** None of this will have been
   seen on a screen when phase 3 lands.
+- **Discovery pacing.** Moving `routine_reader` to `routine_fabrication`
+  opens downed-program recovery early, but how soon a player meets a
+  carrier of a support family is unmeasured.

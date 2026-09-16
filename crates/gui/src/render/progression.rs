@@ -3,7 +3,9 @@
 use super::popup::*;
 use super::*;
 use feral_processes_engine::perks::{Perk, PerkDef};
-use feral_processes_engine::{ResearchMaterial, ResearchStatus, RespecQuote, RespecSubject};
+use feral_processes_engine::{
+    ResearchMaterial, ResearchStatus, ResearchTree, RespecQuote, RespecSubject,
+};
 
 /// The perk picker's rows. A perk's description is a *dim item row* rather
 /// than a `Row::Text`, and the help line sits in the header rather than under
@@ -282,13 +284,18 @@ pub(super) fn price_tag(node: &ResearchStatus, currency: &str) -> String {
 
 /// What the base is working, as both views' header row.
 ///
-/// Derived off the rows rather than off a second `Game` call, so the header and
-/// the list under it cannot disagree about which project is running.
-pub(super) fn research_header(nodes: &[ResearchStatus]) -> String {
-    nodes
-        .iter()
-        .find(|n| n.state == ResearchState::Active)
-        .map(|n| format!("Working on: {} ({}/{})", n.name, n.progress, n.cost))
+/// **Not derived off `nodes`.** `research_nodes(tree)` walks
+/// `listed_research(tree)`, so a project belonging to the *other* tree never
+/// shows as `ResearchState::Active` among either tree's own rows — there is
+/// no id collision between a synthesised `routine/*` id and a base `.ron`
+/// id to make it match by accident. Scanning `nodes` for `Active` therefore
+/// read "No research project" on whichever screen was not running the
+/// active project. `active: Option<(String, u32, u32)>` is
+/// `Game::active_research_progress()`, unfiltered by tree, so a routine
+/// project names itself on the base screen and vice versa.
+pub(super) fn research_header(active: Option<&(String, u32, u32)>) -> String {
+    active
+        .map(|(name, earned, cost)| format!("Working on: {name} ({earned}/{cost})"))
         .unwrap_or_else(|| "No research project — pick one".to_string())
 }
 
@@ -318,13 +325,17 @@ pub(super) fn block_rows(blocked_by: Option<&String>, columns: usize) -> Vec<Row
 
 /// The research picker's rows, in the shape `perks_menu_rows` documents and
 /// for the same reason: nothing may follow the last `Row::Item`.
+///
+/// `active` is `research_header`'s own argument, threaded through rather
+/// than derived from `nodes` — see that function's doc.
 pub(super) fn research_menu_rows(
     nodes: &[ResearchStatus],
     selected: usize,
     currency: &str,
+    active: Option<&(String, u32, u32)>,
 ) -> Vec<Row> {
     let mut rows = vec![
-        Row::TextColored(research_header(nodes), CYAN),
+        Row::TextColored(research_header(active), CYAN),
         text_row("Pick a row's key to work it. A to abandon. G for the tree. Esc to close"),
         text_row(""),
     ];
@@ -366,15 +377,36 @@ pub(super) fn research_menu_rows(
 
 pub(super) fn draw_research_menu(
     game: &mut Game,
+    tree: ResearchTree,
     selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
     let currency = game.item_name(&game.research_currency()).to_string();
-    let nodes = game.research_nodes();
-    let rows = research_menu_rows(&nodes, selected, &currency);
-    draw_popup("Research", PopupSize::Large, &rows, refusal, painter, m);
+    let nodes = game.research_nodes(tree);
+    let active = game.active_research_progress();
+    let (title, rows) = match tree {
+        ResearchTree::Base => (
+            "Research",
+            research_menu_rows(&nodes, selected, &currency, active.as_ref()),
+        ),
+        // The routine tree's own empty line: nothing is discovered and
+        // nothing is visible, so there is nothing to number — a header and
+        // an instruction line with no rows under them would read as a
+        // broken screen rather than as "you haven't found anything yet".
+        ResearchTree::Routines if nodes.is_empty() => (
+            "Routine research",
+            vec![text_row(
+                "Recover routines from downed programs to open research here.",
+            )],
+        ),
+        ResearchTree::Routines => (
+            "Routine research",
+            research_menu_rows(&nodes, selected, &currency, active.as_ref()),
+        ),
+    };
+    draw_popup(title, PopupSize::Large, &rows, refusal, painter, m);
 }
 
 /// The one confirm page both respecs draw, so the perk wipe and the talent
@@ -481,7 +513,7 @@ mod tests {
             recommended: false,
         };
 
-        let rows = research_menu_rows(&[node], 0, "Research Data");
+        let rows = research_menu_rows(&[node], 0, "Research Data", None);
         let at = |needle: &str| {
             rows.iter()
                 .position(|r| matches!(r, Row::Item { text, .. } if text.contains(needle)))
@@ -521,7 +553,7 @@ mod tests {
             recommended: false,
         };
 
-        let rows = research_menu_rows(&[node], 0, "Research Data");
+        let rows = research_menu_rows(&[node], 0, "Research Data", None);
 
         let conversion = rows
             .iter()
@@ -782,7 +814,7 @@ mod tests {
     fn the_widest_progression_row_fits_the_popup_it_is_drawn_in() {
         let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
         let game = Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
-        let nodes = game.research_nodes();
+        let nodes = game.research_nodes(ResearchTree::Base);
         let perk_groups = game.perk_groups();
         let status = game.player_status();
         assert!(
@@ -793,7 +825,7 @@ mod tests {
         let screens = [
             (
                 "Research",
-                research_menu_rows(&nodes, 0, game.item_name(&game.research_currency())),
+                research_menu_rows(&nodes, 0, game.item_name(&game.research_currency()), None),
             ),
             (
                 "Perks",
@@ -833,5 +865,88 @@ mod tests {
                 assert!(measured > 0, "the {screen} picker drew no rows to measure");
             }
         });
+    }
+
+    /// The header is `research_header`'s own argument now, not a scan of
+    /// `nodes` for `ResearchState::Active` — see the function's doc for why
+    /// that scan could never find a project belonging to the other tree.
+    /// `Game::active_research_progress` (tested at the engine level, where a
+    /// real cross-tree project can be set up through `select_research`) is
+    /// what feeds it; this pins the render-side half, that the header reads
+    /// whatever tuple it is handed regardless of what `nodes` contains.
+    #[test]
+    fn research_header_reads_the_active_tuple_and_not_the_node_list() {
+        assert_eq!(
+            research_header(Some(&("Symlink Party".to_string(), 3, 22))),
+            "Working on: Symlink Party (3/22)"
+        );
+        assert_eq!(research_header(None), "No research project — pick one");
+    }
+
+    /// A fresh run's routine tree is closed (`routine_fabrication` carries
+    /// `opens_routine_tree` and is unresearched), so `research_nodes`
+    /// returns nothing and `draw_research_menu` has to say so rather than
+    /// draw an empty numbered list — spec §4 "The routine research screen".
+    #[test]
+    fn routine_research_with_nothing_listed_draws_the_verbatim_empty_line() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let mut game =
+            Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
+        assert!(
+            game.research_nodes(ResearchTree::Routines).is_empty(),
+            "a fresh run's routine tree must start closed"
+        );
+
+        let (_, shapes) = with_painter(|p| {
+            draw_research_menu(
+                &mut game,
+                ResearchTree::Routines,
+                0,
+                None,
+                p,
+                &ui_metrics(900.0),
+            )
+        });
+        let drawn = crate::paint::painted_text(&shapes);
+        assert!(
+            drawn
+                .iter()
+                .any(|t| t.contains("Recover routines from downed programs to open research here.")),
+            "the closed-and-empty tree must draw its own line, not a blank numbered list: {drawn:?}"
+        );
+    }
+
+    /// `Mode::Research` passes `ResearchTree::Base`, and the base tree's own
+    /// nodes never include a synthesised `routine/*` one — Task 3 deleted
+    /// every base node that used to teach an ability, so the base screen's
+    /// list is unaffected by the routine tree existing at all.
+    #[test]
+    fn the_base_research_screen_draws_no_routine_node() {
+        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
+        let mut game =
+            Game::new(7, DifficultyMode::Forgiving, assets).expect("shipped assets load");
+        let nodes = game.research_nodes(ResearchTree::Base);
+        assert!(!nodes.is_empty(), "the base tree still has nodes to draw");
+        let ids: Vec<&str> = nodes.iter().map(|n| n.id.as_str()).collect();
+        assert!(
+            ids.iter().all(|id| !id.starts_with("routine/")),
+            "a synthesised routine node leaked into the base tree's own list: {ids:?}"
+        );
+
+        let (_, shapes) = with_painter(|p| {
+            draw_research_menu(
+                &mut game,
+                ResearchTree::Base,
+                0,
+                None,
+                p,
+                &ui_metrics(900.0),
+            )
+        });
+        let drawn = crate::paint::painted_text(&shapes);
+        assert!(
+            drawn.iter().all(|t| !t.contains("routine/")),
+            "the base research screen drew a raw synthesised id: {drawn:?}"
+        );
     }
 }

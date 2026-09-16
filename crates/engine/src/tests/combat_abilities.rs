@@ -484,7 +484,7 @@ fn the_player_has_no_abilities_until_they_research_one() {
 #[test]
 fn researching_self_execution_grants_the_player_priority_boost() {
     let mut game = Game::new(32, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    unlock_research_chain(&mut game, "self_exec");
+    unlock_research_chain(&mut game, "routine/priority_boost");
 
     give_disks(&mut game, 1);
     let player = game.player_entity();
@@ -508,14 +508,18 @@ fn researching_self_execution_grants_the_player_priority_boost() {
 /// Two nodes may legitimately name the same ability — a mod branching the
 /// tree, say. Knowledge is a set, so the second node teaches nothing new,
 /// and installing is still a separate, deliberate act that costs a disk.
+///
+/// `teaches` is `#[serde(skip)]` — a `.ron` file cannot author it at all,
+/// only `routine_tree::synthesise_nodes` does — so this fixture builds the
+/// node in Rust and inserts it through `ResearchDb::insert_for_test` rather
+/// than through a modded file, the shape a real mod could never take.
 #[test]
 fn an_ability_granted_by_two_nodes_is_learned_once() {
     const ALSO_BOOST: &str = r#"(
         id: "also_boost",
         name: "Redundant Routine",
-        description: "Grants what self_exec already grants.",
+        description: "Grants what the routine tree's own node already grants.",
         cost: 12,
-        unlocks_abilities: ["priority_boost"],
     )"#;
     let dir = modded_assets_dir(
         "dup_ability",
@@ -526,7 +530,16 @@ fn an_ability_granted_by_two_nodes_is_learned_once() {
         &[],
     );
     let mut game = Game::new(33, DifficultyMode::Forgiving, &dir).unwrap();
-    unlock_research_chain(&mut game, "self_exec");
+    {
+        let mut db = game.world.resource_mut::<ResearchDb>();
+        let mut also_boost = db
+            .get("also_boost")
+            .expect("the fixture file loaded")
+            .clone();
+        also_boost.teaches = Some("priority_boost".to_string());
+        db.insert_for_test(also_boost);
+    }
+    unlock_research_chain(&mut game, "routine/priority_boost");
     unlock_research_chain(&mut game, "also_boost");
 
     assert_eq!(
@@ -568,7 +581,8 @@ fn an_ability_granted_by_two_nodes_is_learned_once() {
 #[test]
 fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
     let mut game = Game::new(35, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    unlock_research_chain(&mut game, "runtime_patching");
+    unlock_research_chain(&mut game, "routine/hot_patch");
+    unlock_research_chain(&mut game, "routine/priority_boost");
     let player = game.player_entity();
     // Both grants need a slot to land in beside the decompile a new game
     // installs, and `PLAYER_ROUTINE_SLOT_BASE` buys only two.
@@ -583,7 +597,7 @@ fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
         .actor_abilities(player)
         .iter()
         .position(|a| a.id == "hot_patch")
-        .expect("runtime_patching grants hot_patch");
+        .expect("routine/hot_patch grants hot_patch");
     // Not 1: initiative is a roll (`roll_initiative`), and wild spawns now
     // draw from the same `GameRng` (see `Game::roll_wild_routine`), so which
     // side goes first in this round is no longer pinned by this seed alone.
@@ -633,7 +647,7 @@ fn a_player_special_applies_its_effect_and_arms_the_players_cooldown() {
 fn a_player_special_spends_its_authored_power_cost() {
     fn round_cost(action: BattleAction) -> f32 {
         let mut game = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        unlock_research_chain(&mut game, "kernel_privileges");
+        unlock_research_chain(&mut game, "routine/null_route");
         let player = game.player_entity();
         give_disks(&mut game, 1);
         fit_routine(&mut game, player, "null_route");
@@ -649,7 +663,7 @@ fn a_player_special_spends_its_authored_power_cost() {
     }
 
     let mut probe = Game::new(39, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    unlock_research_chain(&mut probe, "kernel_privileges");
+    unlock_research_chain(&mut probe, "routine/null_route");
     give_disks(&mut probe, 1);
     let probe_player = probe.player_entity();
     fit_routine(&mut probe, probe_player, "null_route");
@@ -657,7 +671,7 @@ fn a_player_special_spends_its_authored_power_cost() {
     let index = abilities
         .iter()
         .position(|a| a.id == "null_route")
-        .expect("kernel_privileges grants null_route");
+        .expect("routine/null_route grants null_route");
     let cost = crate::abilities::routine_power_cost(&abilities[index]);
     assert!(
         cost > 0.0,
@@ -683,7 +697,8 @@ fn a_player_special_spends_its_authored_power_cost() {
 #[test]
 fn a_save_round_trip_preserves_the_players_abilities() {
     let mut game = Game::new(40, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    unlock_research_chain(&mut game, "runtime_patching");
+    unlock_research_chain(&mut game, "routine/hot_patch");
+    unlock_research_chain(&mut game, "routine/priority_boost");
     let player = game.player_entity();
     // Both grants need a slot to land in beside the decompile a new game
     // installs, and `PLAYER_ROUTINE_SLOT_BASE` buys only two.
@@ -765,6 +780,7 @@ fn drain_heals_the_user_for_a_fraction_of_the_damage_it_dealt() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
+        research_zone: 0,
         exclusive: false,
         starter: false,
         ranged: false,
@@ -811,6 +827,7 @@ fn drain_never_heals_the_user_past_its_maximum() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
+        research_zone: 0,
         exclusive: false,
         starter: false,
         ranged: false,
@@ -855,6 +872,7 @@ fn a_heal_logs_what_it_actually_restored_not_what_it_rolled() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
+        research_zone: 0,
         exclusive: false,
         starter: false,
         ranged: false,
@@ -903,6 +921,7 @@ fn a_heal_on_a_full_health_target_logs_zero() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
+        research_zone: 0,
         exclusive: false,
         starter: false,
         ranged: false,
@@ -950,6 +969,7 @@ fn drain_logs_what_it_actually_restored() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
+        research_zone: 0,
         exclusive: false,
         starter: false,
         ranged: false,
@@ -992,6 +1012,7 @@ fn cleanse_clears_an_active_status_and_is_silent_on_a_clean_target() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
+        research_zone: 0,
         exclusive: false,
         starter: false,
         ranged: false,
@@ -1044,6 +1065,7 @@ fn a_negative_power_buff_saps_effective_attack() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
+        research_zone: 0,
         exclusive: false,
         starter: false,
         ranged: false,
@@ -1087,6 +1109,7 @@ fn a_sap_landing_on_a_bracing_member_cancels_its_defend_stance() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
+        research_zone: 0,
         exclusive: false,
         starter: false,
         ranged: false,
@@ -1130,6 +1153,7 @@ fn a_heal_scales_with_the_users_level() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
+        research_zone: 0,
         exclusive: false,
         starter: false,
         ranged: false,
@@ -1176,6 +1200,7 @@ fn a_heal_rolls_a_band_rather_than_a_fixed_amount() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
+        research_zone: 0,
         exclusive: false,
         starter: false,
         ranged: false,
@@ -1228,6 +1253,7 @@ fn a_buff_stores_the_scaled_power_so_the_tick_needs_no_change() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
+        research_zone: 0,
         exclusive: false,
         starter: false,
         ranged: false,
@@ -1271,6 +1297,7 @@ fn a_bleed_debuffs_per_round_damage_scales_with_the_users_level() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
+        research_zone: 0,
         exclusive: false,
         starter: false,
         ranged: false,
@@ -1319,6 +1346,7 @@ fn ability_damage_scales_with_the_users_level() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
+        research_zone: 0,
         exclusive: false,
         starter: false,
         ranged: false,
@@ -1374,6 +1402,7 @@ fn drain_scales_with_the_users_level() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
+        research_zone: 0,
         exclusive: false,
         starter: false,
         ranged: false,
@@ -1561,6 +1590,7 @@ fn a_heal_logs_by_side_the_partys_as_heal_and_a_hostiles_as_enemy_special() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
+        research_zone: 0,
         exclusive: false,
         starter: false,
         ranged: false,
@@ -1626,6 +1656,7 @@ fn a_drain_logs_by_side_the_partys_as_heal_and_a_hostiles_as_enemy_special() {
         accuracy: 0,
         power_cost: 0.0,
         wild_weight: 0,
+        research_zone: 0,
         exclusive: false,
         starter: false,
         ranged: false,
@@ -2495,6 +2526,7 @@ fn an_aimed_routine_lands_more_often_than_an_unaimed_one() {
                 accuracy,
                 power_cost: 0.0,
                 wild_weight: 0,
+                research_zone: 0,
                 exclusive: false,
                 starter: false,
                 ranged: false,

@@ -627,8 +627,8 @@ fn an_item_with_no_authored_value_falls_back_to_the_floor_price() {
 }
 
 /// The thirty-four hunt-only routines are reachable exactly one way: off a wild
-/// carrier. A species or research file naming one would quietly restore the
-/// "just target the species" loop this set exists to break.
+/// carrier. A species file naming one would quietly restore the "just
+/// target the species" loop this set exists to break.
 ///
 /// The count is a tripwire, not a target: the pool's size is a design
 /// decision and widening it dilutes every routine already in it, since
@@ -637,8 +637,15 @@ fn an_item_with_no_authored_value_falls_back_to_the_floor_price() {
 /// (the Row Hammer ladder, Skim and Segfault's new upper rungs) took the
 /// total authored weight from 185 to 212, so each existing entry now turns
 /// up about an eighth less often.
+///
+/// **The routine-tree half of this check is gone, not weakened.** Every
+/// ability — hunt-only included — gets a synthesised research node now
+/// (`routine_tree::synthesise_nodes`), and that is by design: researching a
+/// hunt-only routine's node still requires *discovering* it first, off a
+/// carrier, exactly as this test polices for a species kit. A node existing
+/// is not a second door in.
 #[test]
-fn no_species_or_research_file_grants_a_wild_only_ability() {
+fn no_species_file_grants_a_wild_only_ability() {
     let game = Game::new(3301, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let wild_only: Vec<String> = game
         .world
@@ -656,16 +663,6 @@ fn no_species_or_research_file_grants_a_wild_only_ability() {
                 "species {:?} grants {:?}, which is meant to be findable only in the field",
                 species.id,
                 ability.id
-            );
-        }
-    }
-    for node in game.world.resource::<crate::research::ResearchDb>().all() {
-        for id in &node.unlocks_abilities {
-            assert!(
-                !wild_only.contains(id),
-                "research node {:?} unlocks {:?}, which is meant to be findable only in the field",
-                node.id,
-                id
             );
         }
     }
@@ -932,7 +929,10 @@ fn scope_word(target: crate::abilities::AbilityTarget) -> &'static str {
 }
 
 /// Strips a trailing ` vN.N` version tag, which is how two abilities in the
-/// same family at the same scope are told apart by magnitude.
+/// same family at the same scope are told apart by magnitude. A thin
+/// wrapper kept local to this test: `routine_tree::version` returns the
+/// parsed tag rather than the stripped name, which is what this file's own
+/// callers want.
 fn without_version_tag(name: &str) -> &str {
     let Some((base, tag)) = name.rsplit_once(' ') else {
         return name;
@@ -1056,27 +1056,6 @@ fn no_two_shipped_abilities_share_a_display_name() {
     }
 }
 
-/// The family an ability's display name declares — everything before the
-/// scope word, with any version tag already gone. `"Fork Bomb Group"` is
-/// `"Fork Bomb"`, and so is `"Fork Bomb Everyone"`.
-fn family(def: &crate::abilities::AbilityDef) -> String {
-    let base = without_version_tag(&def.name);
-    base.trim_end_matches(scope_word(def.target)).trim().into()
-}
-
-/// How far up the scope ladder a target reaches. The two sides share the
-/// ladder rather than having one each: one recipient, one group, the field
-/// — an ally-facing family simply has nowhere to go above rung 1, since
-/// `WholeParty` already *is* everyone on your side.
-fn scope_rank(target: crate::abilities::AbilityTarget) -> usize {
-    use crate::abilities::AbilityTarget::*;
-    match target {
-        OneAlly | OneEnemyGroupFront => 0,
-        WholeParty | WholeEnemyGroup => 1,
-        AllEnemies => 2,
-    }
-}
-
 /// A family occupies a contiguous run of scopes starting at Single. A hole
 /// is invisible in a directory listing — the files are named for flavour,
 /// so nothing about `bus_fault` sitting in `assets/abilities/` says it is
@@ -1106,7 +1085,7 @@ fn scope_rank(target: crate::abilities::AbilityTarget) -> usize {
 #[test]
 fn every_battle_ability_family_is_contiguous_from_single_upward() {
     let game = Game::new(3305, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    let mut scopes: std::collections::BTreeMap<String, std::collections::BTreeSet<usize>> =
+    let mut scopes: std::collections::BTreeMap<String, std::collections::BTreeSet<u8>> =
         std::collections::BTreeMap::new();
     for def in game
         .world
@@ -1120,12 +1099,12 @@ fn every_battle_ability_family_is_contiguous_from_single_upward() {
         })
     {
         scopes
-            .entry(family(def))
+            .entry(crate::routine_tree::family(def))
             .or_default()
-            .insert(scope_rank(def.target));
+            .insert(crate::routine_tree::scope_rank(def.target));
     }
     for (fam, ranks) in &scopes {
-        let expected: std::collections::BTreeSet<usize> = (0..ranks.len()).collect();
+        let expected: std::collections::BTreeSet<u8> = (0..ranks.len() as u8).collect();
         assert_eq!(
             ranks, &expected,
             "{fam:?} occupies scopes {ranks:?}; a family runs from Single upward with no gaps"
@@ -1554,8 +1533,7 @@ fn every_shipped_field_routine_can_actually_be_obtained() {
         .world
         .resource::<crate::research::ResearchDb>()
         .all()
-        .flat_map(|node| node.unlocks_abilities.iter())
-        .map(|id| id.as_str())
+        .filter_map(|node| node.teaches.as_deref())
         .chain(
             game.world
                 .resource::<SpeciesDb>()
@@ -4534,16 +4512,24 @@ fn every_research_material_is_reachable_through_that_nodes_own_prerequisites() {
     );
 }
 
-/// The other half: the shipped tree actually *has* bills. The census above
-/// passes vacuously against a tree with none, so a node whose `materials`
-/// line was deleted by hand would read as free rather than as a regression.
+/// The other half: the shipped **base** tree actually *has* bills. The
+/// census above passes vacuously against a tree with none, so a node whose
+/// `materials` line was deleted by hand would read as free rather than as a
+/// regression.
+///
+/// **Routine-tree nodes are excluded, by design rather than by omission.**
+/// A synthesised node carries no material bill at all (spec §2 "Cost") —
+/// there is nothing to check it against, since a derived node cannot
+/// satisfy the "a bill may only name what its own prerequisites can make"
+/// rule the way an authored node can.
 #[test]
-fn every_shipped_research_node_costs_materials() {
+fn every_shipped_base_research_node_costs_materials() {
     let game = Game::new(84, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let bare: Vec<&str> = game
         .world
         .resource::<crate::research::ResearchDb>()
         .all()
+        .filter(|d| d.tree == crate::research::ResearchTree::Base)
         .filter(|d| d.materials.is_empty())
         .map(|d| d.id.as_str())
         .collect();

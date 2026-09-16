@@ -1,9 +1,11 @@
 (
     id: "routine_fabrication",
     name: "Routine Fabrication",
-    description: "The chain of machines that makes blank Routine Disks. You need a disk to install any routine you learn.",
+    description: "The chain of machines that makes blank Routine Disks. You need a disk to install any routine you learn. Also opens routine research, and a tool that pulls a routine out of a downed program so you can keep it.",
     cost: 26,
     materials: [("bytecode_block", 12), ("charge_coil", 4)],
     requires: ["automation"],
     unlocks_structures: ["log_scraper", "lathe", "transcriber", "disk_press"],
+    unlocks_tools: ["routine_reader"],
+    opens_routine_tree: true,
 )

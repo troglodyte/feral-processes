@@ -1578,6 +1578,7 @@ mod tests {
                             name: name(i),
                             description: text(i),
                             fixed: false,
+                            unseen: false,
                         })
                         .collect::<Vec<_>>(),
                     selected,
@@ -1791,6 +1792,7 @@ mod tests {
                         .collect::<Vec<_>>(),
                     selected,
                     "Research Data",
+                    None,
                 ),
             ),
         ]

@@ -145,10 +145,14 @@ pub(super) fn extraction_options_rows(game: &Game, index: usize, selected: usize
                     Vec::new(),
                 )
             }
-            ExtractionPreview::Routine(names) => (
+            // No name, deliberately: this previews a wild program's own
+            // kit, and a display name here is exactly what `RoutineSlotView
+            // ::unseen` conceals on the inspect sheet — see
+            // `views::ExtractionPreview::Routine`'s doc comment.
+            ExtractionPreview::Routine(count) => (
                 format!(
-                    "{head_prefix}: a routine — {} {ticks_suffix}",
-                    names.join(" / ")
+                    "{head_prefix}: {count} unfamiliar routine{} {ticks_suffix}",
+                    if *count == 1 { "" } else { "s" }
                 ),
                 Vec::new(),
             ),

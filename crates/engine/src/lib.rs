@@ -16,6 +16,7 @@ pub mod difficulty;
 pub mod disposition;
 pub mod environment;
 mod game;
+pub mod handles;
 pub mod help;
 pub mod icon;
 pub mod items;

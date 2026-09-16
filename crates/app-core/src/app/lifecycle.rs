@@ -163,8 +163,22 @@ impl App {
     /// Drains every `SoundEvent` queued since the last call — a frontend
     /// with audio calls this once per frame and plays whatever comes back;
     /// one without can just drop the result.
+    ///
+    /// **A battle map's blows are drained here too**, off the engine's own
+    /// queue rather than the reveal, so each is heard in the frame it lands —
+    /// see `SwingCueQueue` for why the reveal could not carry them. First,
+    /// because a blow comes before whatever it settled.
     pub fn take_sounds(&mut self) -> Vec<SoundEvent> {
-        std::mem::take(&mut self.pending_sounds)
+        let mut sounds: Vec<SoundEvent> = self
+            .game
+            .as_mut()
+            .map(|game| game.take_swing_cues())
+            .unwrap_or_default()
+            .into_iter()
+            .map(crate::app::input::swing_sound)
+            .collect();
+        sounds.append(&mut self.pending_sounds);
+        sounds
     }
 
     /// Every `*.bin` file in the saves directory, newest first. Missing

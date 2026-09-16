@@ -941,6 +941,10 @@ relying on one, and correct all three places if it has moved.
   cued once inside `apply_damage`/`restore_hp` rather than at each call
   site** — a hit reuses `EffectKind::Hit`'s wash and burst in gui, a heal
   draws through its own `Fx::heal_marks`.
+- **A battle map's blows are heard off `SwingCueQueue`, never off the
+  reveal** — `Game::log_swing` fills it only while a `TacticalBattle` is
+  open, `App::take_sounds` drains it, and `advance_reveal`'s cue is gated on
+  `Mode::is_battle`.
 - **A summon's containment is omission and not a check** — it never passes
   through `roster_parts()`, and the two places that *are* checks
   (`finish_fight`'s sweep and its `bench_or_dissolve` skip) are both code

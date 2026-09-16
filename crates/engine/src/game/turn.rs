@@ -57,15 +57,30 @@ impl Game {
     /// blip for the whole round. The only `log_*` variant that takes an
     /// `AttackOutcome`; every call site already has one in hand from
     /// `resolve_and_apply_attack`.
+    ///
+    /// **On a battle map the cue is queued here as well**, because that
+    /// model has no reveal: its blows land one body at a time in front of
+    /// the player, and reading the round's range by position went silent
+    /// once `MESSAGE_LOG_CAP` pinned that range's length. See
+    /// `SwingCueQueue`.
     pub(crate) fn log_swing(
         &mut self,
         kind: MessageKind,
         outcome: battle::AttackOutcome,
         s: impl Into<String>,
     ) {
+        let outcome = outcome.into();
         self.world
             .resource_mut::<MessageLog>()
-            .push_swing(kind, outcome.into(), s);
+            .push_swing(kind, outcome, s);
+        if self
+            .world
+            .contains_resource::<crate::tactical::TacticalBattle>()
+        {
+            self.world
+                .resource_mut::<crate::resources::SwingCueQueue>()
+                .push(outcome);
+        }
         self.snapshot_roster();
     }
 

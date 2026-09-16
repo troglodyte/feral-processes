@@ -1155,6 +1155,27 @@
   `clear_bars()`'s own reason. See
   `seam:tacticalfxqueue-is-boltcues-pattern-for-a-bodys-own-hit-or`.
 
+- **A battle map's blows are heard off `SwingCueQueue`, never off the
+  reveal.** A tactical fight never calls `MessageLog::open_round`, so
+  `Game::battle_log` is the whole fight, and `App::advance_reveal` — which
+  steps through it *by position* — went silent mid-fight once
+  `MESSAGE_LOG_CAP` dropped lines off the front: the range's length stopped
+  moving at 100, `revealed` caught up, and nothing after was ever heard.
+  Before that it was also late, pacing blows at `REVEAL_LINES_PER_SECOND`
+  against a board paced by `TACTICAL_TURNS_PER_SECOND`. So `log_swing` — the
+  one door every swing's band goes through, both models' `use_ability`
+  included — pushes the band onto its own queue, **gated on the
+  `TacticalBattle` resource**, or the group model is heard twice.
+  `App::take_sounds` drains it (app-core owns `swing_sound`, so the engine
+  queues a `SwingOutcome` rather than naming a sound) and must be called
+  every frame, `take_bolts`' reason. The reveal's own push is gated on
+  `Mode::is_battle` for the mirror reason; the tactical modes are
+  deliberately not battle modes. **No cell** where `TacticalFxCue` has one:
+  a cue is heard, not drawn. Held by
+  `a_swing_is_heard_however_full_the_log_is` (mutation-checked) and
+  `the_reveal_is_silent_on_a_battle_map`. See
+  `seam:a-battle-maps-blows-are-heard-off-swingcuequeue-never-off-the`.
+
 - **The battle camera is held on the body that acted, and the dwell is
   derived from the turn beat.** `Game::hand_on_turn` fires inside the same
   call that resolves an attack, so `TacticalView::active` already names the

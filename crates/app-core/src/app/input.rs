@@ -10,7 +10,7 @@ use feral_processes_engine::ResearchTree;
 /// (a plain miss glances off; a fumble backfires, or worse) — a distinct
 /// fumble clip would be the one cue in the game keyed to something the
 /// player has to read the log to tell apart from a miss by sound alone.
-fn swing_sound(outcome: SwingOutcome) -> SoundEvent {
+pub(crate) fn swing_sound(outcome: SwingOutcome) -> SoundEvent {
     match outcome {
         SwingOutcome::Crit => SoundEvent::Crit,
         SwingOutcome::Hit => SoundEvent::Hit,
@@ -365,7 +365,11 @@ impl App {
         self.reveal.accumulated += dt * REVEAL_LINES_PER_SECOND;
         while self.reveal.accumulated >= 1.0 && self.reveal.revealed < total {
             self.reveal.accumulated -= 1.0;
-            if let Some(outcome) = lines[self.reveal.revealed].outcome {
+            // The group model's screens alone: a battle map hears its blows
+            // off `take_sounds`, and this would sound each one again, late.
+            if self.mode.is_battle()
+                && let Some(outcome) = lines[self.reveal.revealed].outcome
+            {
                 self.pending_sounds.push(swing_sound(outcome));
             }
             self.reveal.revealed += 1;

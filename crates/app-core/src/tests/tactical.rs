@@ -3,7 +3,7 @@
 
 use super::support::{app_with_companions_in_the_party, install_player_routines, test_app};
 use crate::{
-    App, GameKey, Mode, TACTICAL_HANDOVER_SECONDS, TACTICAL_STEPS_PER_SECOND,
+    App, GameKey, Mode, SoundEvent, TACTICAL_HANDOVER_SECONDS, TACTICAL_STEPS_PER_SECOND,
     TACTICAL_TURNS_PER_SECOND, TacticalIntent,
 };
 use feral_processes_engine::{MESSAGE_LOG_CAP, MessageKind};
@@ -620,6 +620,53 @@ fn finish_by_auto(app: &mut App) {
         // has paid for, so this runs the fight rather than watching it.
         app.advance_tactical(100.0);
     }
+}
+
+fn is_swing_cue(cue: &SoundEvent) -> bool {
+    matches!(cue, SoundEvent::Hit | SoundEvent::Crit | SoundEvent::Miss)
+}
+
+/// Runs auto-attack a beat at a time until a swing is heard, never calling
+/// `advance_reveal`, and says whether one was.
+fn auto_until_a_swing(app: &mut App) -> bool {
+    wait_for_the_player(app);
+    app.handle_key(GameKey::Char('A'));
+    for _ in 0..400 {
+        if app.mode != Mode::TacticalBattle {
+            return false;
+        }
+        app.advance_tactical(TACTICAL_HANDOVER_SECONDS);
+        if app.take_sounds().iter().any(is_swing_cue) {
+            return true;
+        }
+    }
+    false
+}
+
+/// A blow on a battle map sounds when it lands, off the engine's own queue —
+/// not whenever the group model's narration pacing reaches its line, which
+/// is how a long fight went silent once the log hit its cap.
+#[test]
+fn a_battle_map_swing_is_heard_without_the_reveal() {
+    let mut app = fighting(9134);
+    assert!(auto_until_a_swing(&mut app), "no swing was ever heard");
+}
+
+/// The reveal's cues belong to the group model's screens. On a battle map it
+/// would sound every blow a second time, late.
+#[test]
+fn the_reveal_is_silent_on_a_battle_map() {
+    let mut app = fighting(9135);
+    assert!(auto_until_a_swing(&mut app), "no swing was ever heard");
+    assert_eq!(app.mode, Mode::TacticalBattle, "the fight ended too soon");
+
+    app.advance_reveal(100.0);
+
+    let late = app.take_sounds();
+    assert!(
+        !late.iter().any(is_swing_cue),
+        "the reveal sounded blows already heard: {late:?}"
+    );
 }
 
 /// Per fight, so the next one starts hands-on however the last one ended.

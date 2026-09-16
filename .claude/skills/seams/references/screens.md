@@ -44,7 +44,9 @@
   `Game::battle_log()[revealed].outcome` as `revealed` advances — the same
   raw index `battle_rows` truncates by and `condense` folds only *after*, so
   a wipe that condenses three kills into one display row still fires three
-  cues. Six call sites set it, all through the one door, `Game::log_swing`.
+  cues — **on the group model's screens only**; a battle map is heard off
+  `SwingCueQueue` (see `references/combat.md`). Six call sites set it, all
+  through the one door, `Game::log_swing`.
   **Three cues, not four**: `SwingOutcome::Fumble` plays the same clip as
   `Miss` (`app::input::swing_sound`), since the log line already carries the
   severity a fourth sound would only duplicate. A key pressed mid-reveal is

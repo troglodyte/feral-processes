@@ -234,6 +234,16 @@ impl Game {
             .take()
     }
 
+    /// Drains the band of every swing resolved on a battle map since the
+    /// last call — what a frontend plays, one cue a blow, the moment it
+    /// lands. `App::take_sounds` is the one caller, and it must be called
+    /// every frame for `take_bolts`' reason.
+    pub fn take_swing_cues(&mut self) -> Vec<crate::resources::SwingOutcome> {
+        self.world
+            .resource_mut::<crate::resources::SwingCueQueue>()
+            .take()
+    }
+
     /// Queues `kind` at `structure`'s tile, if it has one. Raid targets are
     /// selected by `With<Durability>`, which doesn't imply `Position` —
     /// a flash on the wrong tile would be worse than none, so a positionless

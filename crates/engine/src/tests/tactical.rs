@@ -4115,3 +4115,129 @@ mod squad_effective_atk {
         assert_eq!(game.effective_atk(lone), 3);
     }
 }
+
+/// Task 4: squads actually form and fight — see
+/// `docs/superpowers/plans/2026-09-17-tactical-squads.md`.
+mod squads {
+    use super::*;
+
+    /// Nine of a species (`tactical_pack`'s own baseline: one shared
+    /// species, `atk: 1`, `mitigation: 0`) fold into one squad body and
+    /// four singles, with the stat block the spec's table describes.
+    #[test]
+    fn nine_of_a_species_fold_into_a_squad_with_the_summed_stat_block() {
+        let mut game = game();
+        let pack = tactical_fight(&mut game, 9, 10);
+
+        let board_bodies: Vec<Entity> = {
+            let battle = game.world.resource::<TacticalBattle>();
+            battle.bodies().map(|(e, _)| e).collect()
+        };
+        let squads: Vec<Entity> = board_bodies
+            .iter()
+            .copied()
+            .filter(|&e| game.world.get::<Squad>(e).is_some())
+            .collect();
+        assert_eq!(squads.len(), 1, "9 of a kind should seat exactly one squad");
+        let squad = squads[0];
+
+        let stats = *game.world.get::<Stats>(squad).unwrap();
+        assert_eq!(stats.max_hp, 50, "summed max_hp over 5 members at 10 each");
+        assert_eq!(stats.hp, 50);
+        let formation = &crate::tuning::FORMATIONS[0];
+        let expected_atk = ((5 * 1) as f32 * formation.swing_share).round() as i32;
+        assert_eq!(stats.atk, expected_atk);
+        assert_eq!(stats.mitigation, 0, "the members' highest, all zero here");
+
+        {
+            let battle = game.world.resource::<TacticalBattle>();
+            assert_eq!(battle.footprint_of(squad), formation.footprint);
+            assert_eq!(
+                battle.cells_of(squad).len(),
+                (formation.footprint as usize).pow(2)
+            );
+        }
+        assert_eq!(game.actions_per_turn(squad), formation.actions);
+
+        // The board holds the player, one squad and four leftover singles —
+        // nine wild bodies never became six board occupants by accident.
+        assert_eq!(board_bodies.len(), 1 + 1 + 4);
+        let squad_members = game.world.get::<Squad>(squad).unwrap().members.clone();
+        assert_eq!(squad_members.len(), 5);
+        for &member in &squad_members {
+            assert!(
+                pack.contains(&member),
+                "a squad's members must come from the pack it formed out of"
+            );
+            assert!(
+                !board_bodies.contains(&member),
+                "a squad's members must not also be placed on the board"
+            );
+        }
+    }
+
+    /// Four of a species is under the formation's threshold, so nothing
+    /// folds — the ordinary one-cell, one-action case.
+    #[test]
+    fn four_of_a_species_never_folds_on_a_real_board() {
+        let mut game = game();
+        tactical_fight(&mut game, 4, 10);
+        let battle = game.world.resource::<TacticalBattle>();
+        assert!(
+            battle
+                .bodies()
+                .all(|(e, _)| game.world.get::<Squad>(e).is_none())
+        );
+    }
+
+    /// A squad gets its formation's two actions before the turn is handed
+    /// on; an ordinary body still gets exactly one. `tactical_defend`
+    /// rather than a swing, since it needs no range or target — only
+    /// whether an action was spent.
+    #[test]
+    fn a_squad_spends_two_actions_before_the_turn_moves_on() {
+        let mut game = game();
+        let pack = tactical_pack(&mut game, 9, 40);
+        game.open_tactical_battle(pack);
+        let squad = {
+            let battle = game.world.resource::<TacticalBattle>();
+            battle
+                .bodies()
+                .map(|(e, _)| e)
+                .find(|&e| game.world.get::<Squad>(e).is_some())
+                .expect("9 of a kind must seat a squad")
+        };
+        assert!(
+            wait_for_turn(&mut game, squad),
+            "the squad never got a turn"
+        );
+        assert_eq!(game.world.resource::<TacticalBattle>().actions_left(), 2);
+
+        assert!(game.tactical_defend(), "the first brace was refused");
+        assert_eq!(
+            game.tactical_actor(),
+            Some(squad),
+            "one of two actions spent must not hand the turn on"
+        );
+
+        assert!(game.tactical_defend(), "the second brace was refused");
+        assert_ne!(
+            game.tactical_actor(),
+            Some(squad),
+            "both actions spent must hand the turn on"
+        );
+    }
+
+    /// A single body still gets exactly one action — the pre-squad
+    /// behaviour must survive squads existing at all.
+    #[test]
+    fn a_single_body_still_gets_one_action() {
+        let mut game = game();
+        let pack = tactical_fight(&mut game, 1, 40);
+        assert!(
+            wait_for_turn(&mut game, pack[0]),
+            "the lone body never got a turn"
+        );
+        assert_eq!(game.world.resource::<TacticalBattle>().actions_left(), 1);
+    }
+}

@@ -891,8 +891,12 @@
   because every party body is the player's to command, so a fight with nobody
   at the keyboard cannot be resolved through that door at all —
   `tactical_drive_turn` is the second door onto the same `run_tactical_turn`,
-  and `arena::run` is its only caller; from a real fight it walks a companion
-  by itself. Two traps under it, both from asking what a party body does
+  and it has two callers, `arena::run` and `Game::auto_resolve_battle` — the
+  second is `[R]`'s battle-map half, and it may drive a companion only
+  because the player pressed that key and asked for it, the consent the
+  `tactical_ai_actor` gate otherwise stands in for; called from a real fight
+  unasked, it would walk a companion by itself. Two traps under it, both
+  from asking what a party body does
   inside code written for hostiles. **`tactical_sides` had to become relative
   to the actor**: split by `Hostile` absolutely it hands a party body its own
   side to swing at, and the reproducer is the player alone against one

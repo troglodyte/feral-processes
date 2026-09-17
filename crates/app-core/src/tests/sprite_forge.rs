@@ -90,10 +90,11 @@ fn sprite_subjects_is_every_species_and_structure_plus_player_and_anchor() {
 
     assert_eq!(
         subjects.len(),
-        51,
-        "17 species + 33 structures + player + anchor, minus one shipped \
-         overlap de-duplicated away — the Home's `sprite:` names \"anchor\", \
-         see `assets/structures/home.ron`"
+        54,
+        "every species + every structure + player + anchor (minus one \
+         shipped overlap de-duplicated away — the Home's `sprite:` names \
+         \"anchor\", see `assets/structures/home.ron`) + the three shipped \
+         floor finishes"
     );
     let names: Vec<&str> = subjects.iter().map(|s| s.name.as_str()).collect();
     assert!(
@@ -114,6 +115,31 @@ fn sprite_subjects_is_every_species_and_structure_plus_player_and_anchor() {
     );
 }
 
+/// Every shipped floor finish is a sprite subject too, previewed against its
+/// own `FloorShade` rather than a `GlyphColor` — the same list a species or
+/// structure appears in, since the picker draws every name the map can draw
+/// a sprite for.
+#[test]
+fn sprite_subjects_lists_every_floor_finish_with_its_shade_tint() {
+    use feral_processes_engine::floors::FloorShade;
+
+    let mut app = app_with_sprite_forge(53);
+    let subjects = app.sprite_subjects();
+
+    for (name, label, shade) in [
+        ("cobalt_carpet", "Cobalt Carpet", FloorShade::Cobalt),
+        ("moss_weave", "Moss Weave", FloorShade::Moss),
+        ("slate_inlay", "Slate Inlay", FloorShade::Slate),
+    ] {
+        let subject = subjects
+            .iter()
+            .find(|s| s.name == name)
+            .unwrap_or_else(|| panic!("{name} must be a sprite subject"));
+        assert_eq!(subject.label, label);
+        assert_eq!(subject.tint, SubjectTint::Shade(shade));
+    }
+}
+
 /// Fix round 1: a subject's colour must be the def's own `GlyphColor`, not a
 /// placeholder — checked against two real shipped defs (`assets/species/
 /// cipher.ron`, `assets/structures/annealing_node.ron`, both `color: Cyan`)
@@ -131,17 +157,23 @@ fn sprite_subjects_carry_the_defs_own_colour_and_the_player_has_none() {
     let by_name = |name: &str| subjects.iter().find(|s| s.name == name).unwrap();
 
     assert_eq!(
-        by_name("player").color,
-        None,
+        by_name("player").tint,
+        SubjectTint::Glyph(None),
         "the player wears the PLAYER role colour, not an authored GlyphColor"
     );
     assert_eq!(
-        by_name("anchor").color,
-        Some(GlyphColor::Gray),
+        by_name("anchor").tint,
+        SubjectTint::Glyph(Some(GlyphColor::Gray)),
         "the anchor has no role override, so its colour is an ordinary lookup"
     );
-    assert_eq!(by_name("cipher").color, Some(GlyphColor::Cyan));
-    assert_eq!(by_name("annealing_node").color, Some(GlyphColor::Cyan));
+    assert_eq!(
+        by_name("cipher").tint,
+        SubjectTint::Glyph(Some(GlyphColor::Cyan))
+    );
+    assert_eq!(
+        by_name("annealing_node").tint,
+        SubjectTint::Glyph(Some(GlyphColor::Cyan))
+    );
 }
 
 #[test]

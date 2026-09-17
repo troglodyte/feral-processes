@@ -4,11 +4,12 @@
 //! cell). Both close `render::tests::every_screen_draws_a_refusal_exactly_once`'s
 //! two undrawn entries — see `render/mod.rs::ALL_MODES`.
 //!
-//! **The picker has no scroll**, unlike every menu `draw_popup` sizes: 49
-//! subjects (17 species + 30 structures + `player` + `anchor`, as of this
-//! writing) is nearly twice `popup::popup_max_rows`'s ceiling at 1280x720,
-//! so this screen is a fixed multi-column grid rather than a `draw_popup`
-//! body. `PICKER_COLUMNS` and the row height (`Metrics::line_height`) are
+//! **The picker has no scroll**, unlike every menu `draw_popup` sizes: 54
+//! subjects (every species, structure and floor finish, plus `player` and
+//! `anchor`, as of this writing) is nearly twice `popup::popup_max_rows`'s
+//! ceiling at 1280x720, so this screen is a fixed multi-column grid rather
+//! than a `draw_popup` body. `PICKER_COLUMNS` and the row height
+//! (`Metrics::line_height`) are
 //! the layout constraint the brief calls for — held by
 //! `the_picker_shows_every_subject_with_no_scroll_at_1280x720` below rather
 //! than left to a comment, the `memory-page-has-no-scroll` precedent.
@@ -38,9 +39,8 @@
 use super::canvas;
 use super::*;
 use feral_processes_app_core::{
-    CanvasFocus, PointerHit, SpriteArt, SpriteEditorView, SpriteSubject,
+    CanvasFocus, PointerHit, SpriteArt, SpriteEditorView, SpriteSubject, SubjectTint,
 };
-use feral_processes_engine::components::GlyphColor;
 
 // ---------------------------------------------------------------------
 // The picker screen
@@ -128,16 +128,20 @@ fn art_label(art: SpriteArt) -> &'static str {
 
 /// A subject's own hue — an authored `GlyphColor` through the map's one
 /// palette table (`super::glyph_color`), or the `PLAYER` role colour for the
-/// one subject that has none. `SpriteSubject::color`'s own doc comment is
-/// why `player` alone is `None`: its `@` wears a role colour, not an
+/// one subject that has none. `SpriteSubject::tint`'s own doc comment is
+/// why `player` alone is `Glyph(None)`: its `@` wears a role colour, not an
 /// authored hue, and `render/base.rs` never reads it through `glyph_color`
 /// either. `super::player_look_color(None)` is the existing door to that
 /// role colour's fallback — reused rather than naming `hud::palette::PLAYER`
 /// a second time.
-fn subject_hue(color: Option<GlyphColor>) -> Color {
-    match color {
-        Some(c) => glyph_color(c),
-        None => player_look_color(None),
+///
+/// A floor finish's `Shade` arm is not resolved yet — a finish previews as
+/// the neutral player fallback until the map itself can draw one.
+fn subject_hue(tint: SubjectTint) -> Color {
+    match tint {
+        SubjectTint::Glyph(Some(c)) => glyph_color(c),
+        SubjectTint::Glyph(None) => player_look_color(None),
+        SubjectTint::Shade(_) => player_look_color(None),
     }
 }
 
@@ -165,7 +169,7 @@ fn draw_subject_row(
             TextRun {
                 text: &subject.glyph.to_string(),
                 bold: false,
-                color: subject_hue(subject.color),
+                color: subject_hue(subject.tint),
             },
             TextRun {
                 text: &tail,
@@ -329,7 +333,7 @@ pub(super) fn draw_sprite_editor(app: &mut App, painter: &Painter, m: &Metrics) 
                 .sprite_subjects()
                 .into_iter()
                 .find(|s| s.name == view.subject)
-                .map(|s| subject_hue(s.color))
+                .map(|s| subject_hue(s.tint))
                 .unwrap_or(TEXT);
             draw_sprite_editor_session(&view, zoom, hue, painter, m);
         }
@@ -567,6 +571,7 @@ pub(crate) fn hit_rects(
 mod tests {
     use super::*;
     use feral_processes_app_core::{GameKey, Mode, PointerButton, PointerPhase};
+    use feral_processes_engine::components::GlyphColor;
     use feral_processes_engine::icon::SPRITE_PALETTE;
 
     const CENSUS_W: f32 = 1280.0;
@@ -623,19 +628,18 @@ mod tests {
     /// shipped subjects must fit inside 1280x720 with no scroll, since this
     /// screen has none — the `memory-page-has-no-scroll` precedent.
     ///
-    /// 51 is Task 4's own pinned count
-    /// (`sprite_subjects_is_every_species_and_structure_plus_player_and_anchor`),
-    /// the Home's `sprite:` field naming "anchor" and de-duplicating away;
-    /// asserted again here so a
-    /// shrinking asset tree can't silently make this census easier than the
-    /// one it is meant to hold.
+    /// 54 is `sprite_subjects_is_every_species_and_structure_plus_player_and_anchor`'s
+    /// own pinned count (the Home's `sprite:` field naming "anchor" and
+    /// de-duplicating away, plus the three shipped floor finishes), asserted
+    /// again here so a shrinking asset tree can't silently make this census
+    /// easier than the one it is meant to hold.
     #[test]
     fn the_picker_shows_every_subject_with_no_scroll_at_1280x720() {
         let mut app = sprite_forge_app();
         let subjects = app.sprite_subjects();
         assert_eq!(
             subjects.len(),
-            51,
+            54,
             "the shipped subject count moved — re-check this census's premise"
         );
 
@@ -717,8 +721,8 @@ mod tests {
             .find(|s| s.name == "cipher")
             .expect("cipher ships in assets/species");
         assert_eq!(
-            cipher.color,
-            Some(GlyphColor::Cyan),
+            cipher.tint,
+            SubjectTint::Glyph(Some(GlyphColor::Cyan)),
             "the fixture this test reads its expected colour off"
         );
 
@@ -734,7 +738,7 @@ mod tests {
     }
 
     /// The player subject wears the `PLAYER` role colour, not an authored
-    /// `GlyphColor` — `SpriteSubject::color`'s own doc comment, and the same
+    /// `GlyphColor` — `SpriteSubject::tint`'s own doc comment, and the same
     /// rule `render/base.rs` follows for the real map tile.
     #[test]
     fn the_player_row_wears_the_player_role_colour_not_an_authored_hue() {
@@ -744,7 +748,7 @@ mod tests {
             .iter()
             .find(|s| s.name == "player")
             .expect("player is one of the two hardcoded subjects");
-        assert_eq!(player.color, None);
+        assert_eq!(player.tint, SubjectTint::Glyph(None));
 
         let m = crate::text::ui_metrics(900.0);
         let (_, shapes) = crate::paint::with_painter(|p| draw_sprite_picker(&mut app, p, &m));
@@ -868,8 +872,8 @@ mod tests {
             .position(|s| s.name == "cipher")
             .expect("cipher ships in assets/species");
         assert_eq!(
-            subjects[index].color,
-            Some(GlyphColor::Cyan),
+            subjects[index].tint,
+            SubjectTint::Glyph(Some(GlyphColor::Cyan)),
             "the fixture this test's premise rests on"
         );
         open_editor(&mut app, index);

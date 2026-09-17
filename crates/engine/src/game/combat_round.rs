@@ -1089,13 +1089,35 @@ impl Game {
     /// here. A copy of this on the tactical side would be a second place a
     /// patrol kill could stop charging a town.
     pub(crate) fn finish_hostile(&mut self, victim: Entity, player: Entity) {
+        let overkill = self.overkill_term(victim);
+        self.finish_hostile_with_overkill(victim, player, overkill);
+    }
+
+    /// `finish_hostile` with the overkill fraction supplied rather than
+    /// read off `victim`'s own `Stats`.
+    ///
+    /// **The door a squad's death needs and nothing else does.** A squad
+    /// member's own `Stats` never move — the squad takes every hit on one
+    /// shared block (`Game::effective_atk`'s `Squad` arm) — so
+    /// `overkill_term(member)` would always answer `0.0` regardless of how
+    /// the squad actually died, where the squad's *own* overkill (read
+    /// before `reap_tactical_dead` despawns it) is the real figure to
+    /// share. Routed through a parameter rather than a member's `Stats`
+    /// being written to fake it, because `Game::apply_damage` stays the
+    /// only path that damages a creature.
+    pub(crate) fn finish_hostile_with_overkill(
+        &mut self,
+        victim: Entity,
+        player: Entity,
+        overkill: f32,
+    ) {
         self.log_kind(
             MessageKind::Outcome,
             "The rogue program crashes and deletes itself!",
         );
         let earned = self.kill_xp(victim);
         self.award_player_xp(player, earned);
-        self.award_loot(victim);
+        self.award_loot_with_overkill(victim, overkill);
         let nest = self.world.get::<NestGuardian>(victim).map(|g| g.nest);
         // Read beside the nest and for its reason — the tether is on the
         // body that is about to be despawned. What it costs is *that town's*

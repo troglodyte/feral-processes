@@ -1179,10 +1179,32 @@ impl Game {
             // deferral the abstract model makes, and `bench_or_dissolve` is
             // what a Forgiving death owes it.
             if self.world.get::<Hostile>(body).is_some() {
-                self.finish_hostile(body, player);
+                match self.world.get::<Squad>(body).map(|s| s.members.clone()) {
+                    Some(members) => self.reap_squad(body, &members, player),
+                    None => self.finish_hostile(body, player),
+                }
             }
         }
         self.settle_tactical(wild);
+    }
+
+    /// A squad's death pays each of its still-living members' own kill —
+    /// XP, loot, nest/patrol consequences alike, exactly the payout five
+    /// separate kills would give — and only then despawns the squad shell
+    /// itself, which draws no payout of its own.
+    ///
+    /// The squad's own overkill is read here, before the despawn takes its
+    /// `Stats` away, and shared evenly across the members being paid —
+    /// `Game::finish_hostile_with_overkill`'s reason: a member's own
+    /// `Stats` never moved, so `overkill_term` read off one directly would
+    /// always answer `0.0` regardless of how hard the squad's kill actually
+    /// landed.
+    fn reap_squad(&mut self, squad: Entity, members: &[Entity], player: Entity) {
+        let overkill = self.overkill_term(squad) / (members.len().max(1) as f32);
+        for &member in members {
+            self.finish_hostile_with_overkill(member, player, overkill);
+        }
+        self.world.despawn(squad);
     }
 
     /// Ends the fight if it is over, and reports whether it did.

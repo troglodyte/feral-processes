@@ -600,6 +600,13 @@ impl Game {
             .is_some_and(|program| self.push_downed_program(program))
     }
 
+    /// `leave_downed_program` with the overkill fraction supplied — see
+    /// `downed_program_for_with_overkill`.
+    fn leave_downed_program_with_overkill(&mut self, wild: Entity, overkill: f32) -> bool {
+        self.downed_program_for_with_overkill(wild, overkill)
+            .is_some_and(|program| self.push_downed_program(program))
+    }
+
     /// What a defeat is worth, with no opinion about where it lands — the
     /// one roll, shared by the kill in front of the player and the kill six
     /// screens away.
@@ -623,6 +630,18 @@ impl Game {
     /// afterward would leave `grade()` — which folds both — understated for
     /// exactly the bosses this floor exists to protect.
     pub(crate) fn downed_program_for(&mut self, wild: Entity) -> Option<DownedProgram> {
+        let overkill_term = self.overkill_term(wild);
+        self.downed_program_for_with_overkill(wild, overkill_term)
+    }
+
+    /// `downed_program_for` with the overkill fraction supplied rather than
+    /// read off `wild`'s own `Stats` — `Game::finish_hostile_with_overkill`'s
+    /// reason, for the same squad-member call site.
+    pub(crate) fn downed_program_for_with_overkill(
+        &mut self,
+        wild: Entity,
+        overkill_term: f32,
+    ) -> Option<DownedProgram> {
         let species = self
             .world
             .get::<Creature>(wild)
@@ -633,7 +652,6 @@ impl Game {
             rarity = rarity.max(crate::tuning::BOSS_RARITY_FLOOR);
         }
         let level = self.ability_user_level(wild);
-        let overkill_term = self.overkill_term(wild);
         let carried = self.carried_routine(wild, &species);
         let mut condition = DownedProgram::roll_condition(rarity, boss, overkill_term);
         if boss {
@@ -751,7 +769,7 @@ impl Game {
     /// directly (a test, not a live kill), which is what lets
     /// `DownedProgram::roll_condition`'s independence from it be asserted
     /// against real variation instead of a term that can never move.
-    fn overkill_term(&self, wild: Entity) -> f32 {
+    pub(crate) fn overkill_term(&self, wild: Entity) -> f32 {
         let Some(stats) = self.world.get::<Stats>(wild) else {
             return 0.0;
         };
@@ -763,6 +781,17 @@ impl Game {
     }
 
     pub(crate) fn award_loot(&mut self, wild: Entity) {
+        let overkill = self.overkill_term(wild);
+        self.award_loot_with_overkill(wild, overkill);
+    }
+
+    /// `award_loot` with the overkill fraction supplied rather than read
+    /// off `wild`'s own `Stats` — `finish_hostile_with_overkill`'s reason,
+    /// carried down to the one place inside this that actually reads it
+    /// (`leave_downed_program`'s condition roll). Everything else here —
+    /// gear drops, the lair/Trace/contract bookkeeping, boss loot — has no
+    /// opinion about overkill at all.
+    pub(crate) fn award_loot_with_overkill(&mut self, wild: Entity, overkill: f32) {
         let Some(species_id) = self.world.get::<Creature>(wild).map(|c| c.species.clone()) else {
             return;
         };
@@ -770,7 +799,7 @@ impl Game {
             return;
         };
 
-        self.leave_downed_program(wild);
+        self.leave_downed_program_with_overkill(wild, overkill);
 
         for (item, chance) in self.equipment_drops_for(&species) {
             let roll = {

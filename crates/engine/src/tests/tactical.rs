@@ -4145,7 +4145,8 @@ mod squads {
         assert_eq!(stats.max_hp, 50, "summed max_hp over 5 members at 10 each");
         assert_eq!(stats.hp, 50);
         let formation = &crate::tuning::FORMATIONS[0];
-        let expected_atk = ((5 * 1) as f32 * formation.swing_share).round() as i32;
+        // 5 members at `atk: 1` each (`tactical_pack`'s baseline).
+        let expected_atk = (5_f32 * formation.swing_share).round() as i32;
         assert_eq!(stats.atk, expected_atk);
         assert_eq!(stats.mitigation, 0, "the members' highest, all zero here");
 
@@ -4239,5 +4240,74 @@ mod squads {
             "the lone body never got a turn"
         );
         assert_eq!(game.world.resource::<TacticalBattle>().actions_left(), 1);
+    }
+
+    /// A squad's death pays each remaining member's own kill — the same XP
+    /// five separate kills would pay, not one kill priced off the squad's
+    /// inflated combined `Stats`. The player's `atk` is boosted to a
+    /// one-hit kill so `kill_xp`'s `power_ratio` denominator (the player's
+    /// own power) is identical whether read before the swing or at the
+    /// moment of death.
+    #[test]
+    fn a_squads_death_pays_five_kills_worth_of_xp() {
+        let mut game = game();
+        tactical_fight(&mut game, 9, 1);
+        let squad = {
+            let battle = game.world.resource::<TacticalBattle>();
+            battle
+                .bodies()
+                .map(|(e, _)| e)
+                .find(|&e| game.world.get::<Squad>(e).is_some())
+                .expect("9 of a kind must seat a squad")
+        };
+        let player = game.player_entity();
+        game.world.get_mut::<Stats>(player).unwrap().atk = 9999;
+
+        let members = game.world.get::<Squad>(squad).unwrap().members.clone();
+        assert_eq!(members.len(), 5);
+        let expected_xp: u32 = members.iter().map(|&m| game.kill_xp(m)).sum();
+        let xp_before = game.world.get::<Experience>(player).unwrap().xp;
+
+        for _ in 0..64 {
+            if game.world.get_resource::<TacticalBattle>().is_none() {
+                break;
+            }
+            if game
+                .world
+                .get_resource::<TacticalBattle>()
+                .unwrap()
+                .cell_of(squad)
+                .is_none()
+            {
+                break;
+            }
+            if !wait_for_turn(&mut game, player) {
+                break;
+            }
+            let at = game
+                .world
+                .resource::<TacticalBattle>()
+                .cell_of(squad)
+                .unwrap();
+            if let Some(spot) = beside(&game, at) {
+                game.world
+                    .resource_mut::<TacticalBattle>()
+                    .move_to(player, spot);
+            }
+            game.tactical_attack(squad);
+        }
+
+        assert!(
+            game.world
+                .get_resource::<TacticalBattle>()
+                .is_none_or(|b| b.cell_of(squad).is_none()),
+            "the squad never died"
+        );
+        let xp_after = game.world.get::<Experience>(player).unwrap().xp;
+        assert_eq!(
+            xp_after - xp_before,
+            expected_xp,
+            "a squad's death must pay exactly what killing its five members individually would"
+        );
     }
 }

@@ -76,6 +76,30 @@ impl Game {
             .filter(|&e| self.creature_alive(e))
             .collect();
 
+        // Folded here, after `bearing` is already in hand — squads::plan's
+        // own rule. `Game::gather_pack` answers a pack of one for an anchor
+        // with no `Position`, and `open_tactical_battle`'s own bearing is
+        // derived from `pack[0]`'s tile: folding one call earlier would let
+        // a squad reach either as its anchor, both silent-degradation sites
+        // `tactical::squads` warns about. `arena::stage` passes its bearing
+        // explicitly and is safe by construction already.
+        let pieces = crate::tactical::squads::plan(&pack, &self.world);
+        let mut wild: Vec<Entity> = Vec::new();
+        let mut wild_footprints: Vec<u8> = Vec::new();
+        for piece in pieces {
+            match piece {
+                crate::tactical::squads::Piece::Single(entity) => {
+                    wild.push(entity);
+                    wild_footprints.push(1);
+                }
+                crate::tactical::squads::Piece::Squad { members, formation } => {
+                    let squad = self.spawn_squad(&members, formation);
+                    wild_footprints.push(FORMATIONS[formation].footprint);
+                    wild.push(squad);
+                }
+            }
+        }
+
         let spec = BattleSpec {
             world_seed: self.world.resource::<WorldMap>().seed(),
             site,
@@ -89,23 +113,28 @@ impl Game {
                 .resource_mut::<WorldMap>()
                 .tile(site.0, site.1)
                 .biome,
-            bodies: (party.len() + pack.len()) as u32,
+            bodies: (party.len() + wild.len()) as u32,
         };
         let board = generate(spec);
-        let plan = deploy::plan(&board, bearing, party.len() as u32, pack.len() as u32);
+        let plan = deploy::plan(&board, bearing, party.len() as u32, &wild_footprints);
 
         let mut battle = TacticalBattle::open(spec, board);
         for (&body, &cell) in party.iter().zip(plan.party.iter()) {
             battle.place(body, cell);
         }
-        for (&body, &cell) in pack.iter().zip(plan.wild.iter()) {
+        for ((&body, &cell), &footprint) in wild.iter().zip(plan.wild.iter()).zip(&wild_footprints)
+        {
             battle.place(body, cell);
+            if footprint > 1 {
+                let actions = self.actions_per_turn(body);
+                battle.set_shape(body, footprint, actions);
+            }
         }
         // Taken at the bell, before the first blow, for the reason
         // `BattleState::outmatched` gives: by the time a fight is won the
         // question is unanswerable.
         battle.outmatched =
-            self.summed_power(pack.iter().copied()) > self.summed_power(party.iter().copied());
+            self.summed_power(wild.iter().copied()) > self.summed_power(party.iter().copied());
 
         let standing: Vec<Entity> = battle.bodies().map(|(entity, _)| entity).collect();
         battle.set_initiative(self.roll_turn_order(&standing));
@@ -129,7 +158,7 @@ impl Game {
             party: g.telemetry_party(),
             enemies: g.telemetry_enemy_groups(),
         });
-        let line = self.intercept_line(pack.first().copied(), pack.len());
+        let line = self.intercept_line(wild.first().copied(), wild.len());
         self.log(line);
     }
 
@@ -788,7 +817,7 @@ impl Game {
         };
         let taken: std::collections::BTreeSet<(i32, i32)> =
             battle.bodies().map(|(_, cell)| cell).collect();
-        crate::tactical::deploy::nearest_free(&battle.board, &taken, from).is_some()
+        crate::tactical::deploy::nearest_free(&battle.board, &taken, from, 1).is_some()
     }
 
     /// Places a forked body beside `invoker` and splices it into the turn
@@ -809,7 +838,7 @@ impl Game {
             battle.cell_of(invoker).and_then(|from| {
                 let taken: std::collections::BTreeSet<(i32, i32)> =
                     battle.bodies().map(|(_, cell)| cell).collect();
-                crate::tactical::deploy::nearest_free(&battle.board, &taken, from)
+                crate::tactical::deploy::nearest_free(&battle.board, &taken, from, 1)
             })
         }) else {
             return false;

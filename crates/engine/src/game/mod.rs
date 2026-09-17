@@ -46,6 +46,7 @@ pub(crate) mod settlement_patrol;
 pub(crate) mod settlement_relations;
 pub(crate) mod sortie;
 pub(crate) mod spawning;
+pub(crate) mod squads;
 pub(crate) mod stack;
 pub(crate) mod stack_features;
 pub(crate) mod stack_market;

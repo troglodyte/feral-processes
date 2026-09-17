@@ -1117,7 +1117,7 @@ impl Game {
         );
         let earned = self.kill_xp(victim);
         self.award_player_xp(player, earned);
-        self.award_loot_with_overkill(victim, overkill);
+        self.award_loot(victim, overkill);
         let nest = self.world.get::<NestGuardian>(victim).map(|g| g.nest);
         // Read beside the nest and for its reason — the tether is on the
         // body that is about to be despawned. What it costs is *that town's*

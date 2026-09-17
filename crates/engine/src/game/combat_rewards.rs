@@ -595,14 +595,13 @@ impl Game {
     /// *identical* one onto `Sortie::programs` (`game/sortie.rs`) rather
     /// than growing a second copy of it — `Perk::Teardown`'s old trap, and
     /// the whole reason this is one call and not two.
-    pub(crate) fn leave_downed_program(&mut self, wild: Entity) -> bool {
-        self.downed_program_for(wild)
-            .is_some_and(|program| self.push_downed_program(program))
-    }
-
-    /// `leave_downed_program` with the overkill fraction supplied — see
-    /// `downed_program_for_with_overkill`.
-    fn leave_downed_program_with_overkill(&mut self, wild: Entity, overkill: f32) -> bool {
+    ///
+    /// Takes the overkill fraction rather than reading `overkill_term(wild)`
+    /// itself — `Game::finish_hostile_with_overkill`'s reason: a squad
+    /// member's own `Stats` never move, so a read taken here would always
+    /// answer `0.0` regardless of how the squad actually died. Every other
+    /// caller passes `0.0`, `overkill_term`'s own identity value.
+    pub(crate) fn leave_downed_program(&mut self, wild: Entity, overkill: f32) -> bool {
         self.downed_program_for_with_overkill(wild, overkill)
             .is_some_and(|program| self.push_downed_program(program))
     }
@@ -780,18 +779,15 @@ impl Game {
         -(past_zero / stats.max_hp as f32)
     }
 
-    pub(crate) fn award_loot(&mut self, wild: Entity) {
-        let overkill = self.overkill_term(wild);
-        self.award_loot_with_overkill(wild, overkill);
-    }
-
-    /// `award_loot` with the overkill fraction supplied rather than read
-    /// off `wild`'s own `Stats` — `finish_hostile_with_overkill`'s reason,
-    /// carried down to the one place inside this that actually reads it
-    /// (`leave_downed_program`'s condition roll). Everything else here —
-    /// gear drops, the lair/Trace/contract bookkeeping, boss loot — has no
-    /// opinion about overkill at all.
-    pub(crate) fn award_loot_with_overkill(&mut self, wild: Entity, overkill: f32) {
+    /// Takes the overkill fraction rather than reading `overkill_term(wild)`
+    /// itself, carried down to the one place inside this that actually
+    /// reads it (`leave_downed_program`'s condition roll) —
+    /// `Game::finish_hostile_with_overkill`'s reason, the same one
+    /// `leave_downed_program` gives. Everything else here — gear drops, the
+    /// lair/Trace/contract bookkeeping, boss loot — has no opinion about
+    /// overkill at all. Every caller but a squad's own death passes `0.0`,
+    /// `overkill_term`'s own identity value.
+    pub(crate) fn award_loot(&mut self, wild: Entity, overkill: f32) {
         let Some(species_id) = self.world.get::<Creature>(wild).map(|c| c.species.clone()) else {
             return;
         };
@@ -799,7 +795,7 @@ impl Game {
             return;
         };
 
-        self.leave_downed_program_with_overkill(wild, overkill);
+        self.leave_downed_program(wild, overkill);
 
         for (item, chance) in self.equipment_drops_for(&species) {
             let roll = {

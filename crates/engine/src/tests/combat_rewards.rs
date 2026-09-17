@@ -77,7 +77,7 @@ fn a_drop_line_tags_the_items_category() {
     let boss = a_boss(&game);
 
     let wild = corpse_of(&mut game, &boss.id);
-    game.award_loot(wild);
+    game.award_loot(wild, 0.0);
 
     // Every row of the salvage tally but its header — a surface boss pays
     // gear alongside its species' own rolls, so the equipment tags are in
@@ -109,7 +109,7 @@ fn defeating_a_boss_in_the_stack_guarantees_a_cache_of_portal_fragments() {
     stand_in_the_stack(&mut game, 1);
 
     let wild = corpse_of(&mut game, &boss.id);
-    game.award_loot(wild);
+    game.award_loot(wild, 0.0);
 
     let qty = game
         .world
@@ -133,7 +133,7 @@ fn a_deeper_lair_boss_pays_more_portal_fragments() {
         let boss = a_boss(&game);
         stand_in_the_stack(&mut game, depth);
         let wild = corpse_of(&mut game, &boss.id);
-        game.award_loot(wild);
+        game.award_loot(wild, 0.0);
         game.world
             .get::<Inventory>(game.player_entity())
             .unwrap()
@@ -162,7 +162,7 @@ fn a_boss_defeated_on_the_surface_pays_no_portal_fragments() {
     );
 
     let wild = corpse_of(&mut game, &boss.id);
-    game.award_loot(wild);
+    game.award_loot(wild, 0.0);
 
     assert_eq!(
         game.world
@@ -190,7 +190,7 @@ fn an_ordinary_kill_pays_no_portal_fragments() {
     stand_in_the_stack(&mut game, 3);
 
     let wild = corpse_of(&mut game, &ordinary.id);
-    game.award_loot(wild);
+    game.award_loot(wild, 0.0);
 
     assert_eq!(
         game.world
@@ -217,7 +217,7 @@ fn no_zone_lets_a_surface_boss_pay_the_breaching_currency() {
     for zone in 1..=8 {
         set_zone(&mut game, zone);
         let wild = corpse_of(&mut game, &boss.id);
-        game.award_loot(wild);
+        game.award_loot(wild, 0.0);
         assert_eq!(
             game.world
                 .get::<Inventory>(player)
@@ -242,7 +242,7 @@ fn a_boss_defeated_on_the_surface_pays_gear_from_its_zones_band() {
     // and counting the plain store alone would read as paying nothing.
     let before: u32 = band.iter().map(|id| held_any(&game, id)).sum();
     let wild = corpse_of(&mut game, &boss.id);
-    game.award_loot(wild);
+    game.award_loot(wild, 0.0);
     let after: u32 = band.iter().map(|id| held_any(&game, id)).sum();
 
     assert!(
@@ -669,7 +669,7 @@ fn a_surface_boss_never_drops_an_ordinary_copy() {
     let species = a_boss(&game).id;
     let boss = corpse_of(&mut game, &species);
 
-    game.award_loot(boss);
+    game.award_loot(boss, 0.0);
 
     // Counted against the floor rather than asserting that *nothing*
     // ordinary arrived: `award_loot` also rolls the boss species' own
@@ -1192,7 +1192,7 @@ fn a_drop_inside_a_tactical_fight_is_held_for_the_tally() {
     game.world
         .insert_resource(TacticalBattle::open(spec, board));
 
-    game.award_loot(corpse);
+    game.award_loot(corpse, 0.0);
 
     let lines = log_texts(&game);
     assert!(
@@ -1226,7 +1226,7 @@ fn a_drop_outside_a_battle_is_announced_at_once() {
     let boss = a_boss(&game);
     let corpse = corpse_of(&mut game, &boss.id);
 
-    game.award_loot(corpse);
+    game.award_loot(corpse, 0.0);
 
     let granted = game.world.get::<GearCopies>(player).unwrap().copies.clone();
     assert!(
@@ -1388,7 +1388,7 @@ fn a_rolled_boss_pays_the_stack_boss_cache() {
 
     let wild = corpse_of(&mut game, &ordinary.id);
     game.world.entity_mut(wild).insert(Boss);
-    game.award_loot(wild);
+    game.award_loot(wild, 0.0);
 
     let qty = game
         .world
@@ -1410,7 +1410,7 @@ fn a_lair_guardian_drops_a_privilege_ring() {
     stand_in_the_stack(&mut game, 1);
 
     let wild = corpse_of(&mut game, &boss.id);
-    game.award_loot(wild);
+    game.award_loot(wild, 0.0);
 
     assert!(
         game.world
@@ -1436,7 +1436,7 @@ fn a_boss_defeated_on_the_surface_drops_no_privilege_ring() {
     );
 
     let wild = corpse_of(&mut game, &boss.id);
-    game.award_loot(wild);
+    game.award_loot(wild, 0.0);
 
     assert_eq!(
         game.world
@@ -1921,7 +1921,7 @@ fn a_kill_leaves_exactly_one_downed_program_carrying_species_level_and_rarity() 
     // would fail this rather than passing by numeric accident.
     game.world.resource_mut::<ZoneLevel>().0 = 5;
 
-    game.award_loot(wild);
+    game.award_loot(wild, 0.0);
 
     let held = &game.world.get::<DownedPrograms>(player).unwrap().0;
     assert_eq!(
@@ -1977,7 +1977,7 @@ fn a_kill_records_the_routine_its_victim_was_carrying() {
         .entity_mut(wild)
         .insert(Routines(vec![prize.clone()]));
 
-    game.award_loot(wild);
+    game.award_loot(wild, 0.0);
 
     let held = &game.world.get::<DownedPrograms>(player).unwrap().0;
     assert_eq!(
@@ -2004,7 +2004,7 @@ fn a_kill_records_no_carrier_for_a_routine_the_species_declares() {
     let wild = corpse_of(&mut game, &species.id);
     game.world.entity_mut(wild).insert(Routines(vec![declared]));
 
-    game.award_loot(wild);
+    game.award_loot(wild, 0.0);
 
     let held = &game.world.get::<DownedPrograms>(player).unwrap().0;
     assert_eq!(
@@ -2028,7 +2028,7 @@ fn a_boss_kills_program_is_at_or_above_both_floors() {
     // No `Rarity` component: `Ordinary` is the default, so a floor above
     // it — not a lucky roll — is what has to lift this program's rarity.
 
-    game.award_loot(wild);
+    game.award_loot(wild, 0.0);
 
     let held = &game.world.get::<DownedPrograms>(player).unwrap().0;
     let program = &held[0];
@@ -2078,7 +2078,7 @@ fn a_boss_programs_condition_is_consistent_with_its_stamped_rarity() {
     let wild = corpse_of(&mut game, &species.id);
     game.world.entity_mut(wild).insert(Boss);
 
-    game.award_loot(wild);
+    game.award_loot(wild, 0.0);
 
     let held = &game.world.get::<DownedPrograms>(player).unwrap().0;
     let program = &held[0];
@@ -2116,7 +2116,7 @@ fn a_full_store_refuses_the_drop_logs_and_destroys_nothing() {
         vec![filler.clone(); tuning::MAX_DOWNED_PROGRAMS];
 
     let wild = corpse_of(&mut game, &species.id);
-    let granted = game.leave_downed_program(wild);
+    let granted = game.leave_downed_program(wild, 0.0);
 
     assert!(!granted, "a full store must refuse the drop");
     let held = &game.world.get::<DownedPrograms>(player).unwrap().0;

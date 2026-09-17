@@ -1925,7 +1925,7 @@ fn a_guardian_killed_before_a_reboot_still_collapses_the_stack() {
     assert!(game.has_active_battle(), "the lair should have roused");
 
     let guardian = game.world.resource::<BattleState>().lair.unwrap().guardian;
-    game.award_loot(guardian);
+    game.award_loot(guardian, 0.0);
     let (locale, current, trace) = crate::game::stack::surfaced();
     game.world.insert_resource(locale);
     game.world.insert_resource(current);
@@ -3128,7 +3128,7 @@ fn killing_a_hostile_raises_trace() {
     descend(&mut game);
     let wild = spawn_wild_on_player_tile(&mut game);
 
-    game.award_loot(wild);
+    game.award_loot(wild, 0.0);
 
     assert_eq!(trace(&game), TRACE_PER_KILL);
 }
@@ -3141,7 +3141,7 @@ fn a_surface_kill_raises_no_trace() {
     let mut game = game();
     let wild = spawn_wild_on_player_tile(&mut game);
 
-    game.award_loot(wild);
+    game.award_loot(wild, 0.0);
 
     assert!(!game.is_underground());
     assert_eq!(trace(&game), 0);

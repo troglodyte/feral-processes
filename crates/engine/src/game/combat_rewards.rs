@@ -1238,66 +1238,8 @@ impl Game {
     /// first to resolve spends the only copy. Without this guard the second
     /// would hit an `expect` instead of a refusal.
     pub(crate) fn decompile_body(&mut self, front: Entity, player: Entity) -> bool {
-        let Some((catalyst, potency)) = self.taming_catalyst() else {
-            self.log_kind(
-                MessageKind::Outcome,
-                "No taming catalyst left — the decompile attempt fizzles.",
-            );
+        if self.roll_decompile(player, front) != Some(true) {
             return false;
-        };
-        self.world
-            .get_mut::<Inventory>(player)
-            .unwrap()
-            .take(catalyst, 1);
-
-        let bonuses = self.player_decompiler_bonuses();
-        // Read before the increment below, deliberately: the count this
-        // rolls against is the count the battle screen has been showing all
-        // along, so the odds cell is always exactly what the next attempt
-        // gets rather than what the last one got.
-        let resistance = self.target_resistance(front).unwrap();
-        let chance = taming::capture_chance(potency, resistance, bonuses);
-        let roll = {
-            let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_bool(chance as f64)
-        };
-        // The chain's decompile mission cannot be failed: a run of bad rolls
-        // would end onboarding permanently. The catalyst above is already
-        // spent, so only the roll is forced — the lesson that decompiling is
-        // priced in catalysts is the half that stays.
-        //
-        // Below the odds read, deliberately, so what the battle screen has
-        // been showing stays honest about what the roll would have been.
-        let roll = roll || self.tutorial_grants_capture();
-        let attempts = match self.decompile_attempts_mut() {
-            Some(counters) => {
-                let counter = counters.entry(front).or_insert(0);
-                *counter += 1;
-                *counter
-            }
-            None => 1,
-        };
-
-        if !roll {
-            // Naming the cap matters: without it a player reads a rising
-            // number and keeps feeding catalysts to a wall.
-            let fraying = if attempts < DECOMPILE_ATTEMPT_BONUS_CAP {
-                " Its defences fray a little."
-            } else {
-                " Its defences are as frayed as they will get."
-            };
-            let verdict = format!("The program's ICE holds — decompile failed!{fraying}");
-            // `Info`, so the prune drops the run of them; the copy held for
-            // `settle_rewards` is what reaches the summary. See
-            // `BattleRewards::decompile_verdict`.
-            self.log_kind(MessageKind::Info, verdict.clone());
-            if let Some(rewards) = self.fight_rewards_mut() {
-                rewards.decompile_verdict = Some(verdict);
-            }
-            return false;
-        }
-        if let Some(rewards) = self.fight_rewards_mut() {
-            rewards.decompile_verdict = None;
         }
         self.note_deed(crate::contracts::Deed::Tamed);
 
@@ -1345,6 +1287,169 @@ impl Game {
         // and kept because the record is what the collapse reads: a third
         // way out of a fight should not have to remember to write it.
         self.mark_lair_cleared(front);
+        true
+    }
+
+    /// The catalyst spend, the roll, and the fray/verdict messaging shared
+    /// by `decompile_body` (rolls against the target itself) and
+    /// `decompile_squad` (rolls against the squad's own Integrity fraction
+    /// while a **different** entity, the lead, is what a success actually
+    /// extracts) — CLAUDE.md's "a mirror must be a call, not a copy" rule,
+    /// the same shape `Game::decompile_body`'s own doc names for the two
+    /// combat models.
+    ///
+    /// `None` when there is no catalyst to spend at all — nothing rolled,
+    /// nothing charged, and the caller's own refusal message already logged
+    /// here. `Some(landed)` once a catalyst has been spent and a roll made.
+    fn roll_decompile(&mut self, player: Entity, resistance_of: Entity) -> Option<bool> {
+        let Some((catalyst, potency)) = self.taming_catalyst() else {
+            self.log_kind(
+                MessageKind::Outcome,
+                "No taming catalyst left — the decompile attempt fizzles.",
+            );
+            return None;
+        };
+        self.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .take(catalyst, 1);
+
+        let bonuses = self.player_decompiler_bonuses();
+        // Read before the increment below, deliberately: the count this
+        // rolls against is the count the battle screen has been showing all
+        // along, so the odds cell is always exactly what the next attempt
+        // gets rather than what the last one got.
+        let resistance = self.target_resistance(resistance_of).unwrap();
+        let chance = taming::capture_chance(potency, resistance, bonuses);
+        let roll = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            rng.0.random_bool(chance as f64)
+        };
+        // The chain's decompile mission cannot be failed: a run of bad rolls
+        // would end onboarding permanently. The catalyst above is already
+        // spent, so only the roll is forced — the lesson that decompiling is
+        // priced in catalysts is the half that stays.
+        //
+        // Below the odds read, deliberately, so what the battle screen has
+        // been showing stays honest about what the roll would have been.
+        let roll = roll || self.tutorial_grants_capture();
+        let attempts = match self.decompile_attempts_mut() {
+            Some(counters) => {
+                let counter = counters.entry(resistance_of).or_insert(0);
+                *counter += 1;
+                *counter
+            }
+            None => 1,
+        };
+
+        if !roll {
+            // Naming the cap matters: without it a player reads a rising
+            // number and keeps feeding catalysts to a wall.
+            let fraying = if attempts < DECOMPILE_ATTEMPT_BONUS_CAP {
+                " Its defences fray a little."
+            } else {
+                " Its defences are as frayed as they will get."
+            };
+            let verdict = format!("The program's ICE holds — decompile failed!{fraying}");
+            // `Info`, so the prune drops the run of them; the copy held for
+            // `settle_rewards` is what reaches the summary. See
+            // `BattleRewards::decompile_verdict`.
+            self.log_kind(MessageKind::Info, verdict.clone());
+            if let Some(rewards) = self.fight_rewards_mut() {
+                rewards.decompile_verdict = Some(verdict);
+            }
+            return Some(false);
+        }
+        if let Some(rewards) = self.fight_rewards_mut() {
+            rewards.decompile_verdict = None;
+        }
+        Some(true)
+    }
+
+    /// `decompile_body` for a squad: the roll is taken as though for the
+    /// lead at the squad's own Integrity fraction — `target_resistance`
+    /// reads the *squad's* own `Stats`, never a member's, because a
+    /// member's own `Stats` never move (all damage lands on the squad's
+    /// shared block — `Game::effective_atk`'s `Squad` arm), so
+    /// `Stats::hp_fraction` off one would always read `1.0`.
+    ///
+    /// On success, only the lead (`Squad::members[0]`) leaves the fight and
+    /// becomes a companion, captured at that same Integrity fraction; the
+    /// squad takes `max_hp / members-at-formation` damage through
+    /// `Game::apply_damage` and keeps fighting. `Squad::members` running out
+    /// is a second way a squad dies, independent of `Stats::hp` — forced
+    /// here with `Game::kill_outright` if the fifth capture empties it
+    /// without quite zeroing the squad's own Integrity — which is why a
+    /// squad supplies at most `members` captures.
+    ///
+    /// Nest and patrol handling from `decompile_body`'s tail are omitted: a
+    /// pack carrying a `NestGuardian` never reaches a battle map at all
+    /// (`fights_tactically`'s gate), so no squad member can carry one.
+    pub(crate) fn decompile_squad(&mut self, squad: Entity, player: Entity) -> bool {
+        if self.roll_decompile(player, squad) != Some(true) {
+            return false;
+        }
+        self.note_deed(crate::contracts::Deed::Tamed);
+
+        let formation = self.world.get::<Squad>(squad).map(|s| s.formation);
+        let Some(lead) = self
+            .world
+            .get_mut::<Squad>(squad)
+            .filter(|s| !s.members.is_empty())
+            .map(|mut s| s.members.remove(0))
+        else {
+            return false;
+        };
+
+        let frac = self
+            .world
+            .get::<Stats>(squad)
+            .map(|s| s.hp_fraction())
+            .unwrap_or(1.0);
+        if let Some(mut stats) = self.world.get_mut::<Stats>(lead) {
+            stats.hp = ((stats.max_hp as f32) * frac).round().max(1.0) as i32;
+        }
+
+        let earned = self.kill_xp(lead);
+        self.world
+            .entity_mut(lead)
+            .remove::<(Hostile, WanderAi, NestGuardian, TownPatrol, Pursuing)>();
+        if let Some(mut s) = self.world.get_mut::<StatusEffects>(lead) {
+            s.active = None;
+        }
+        if let Some(mut b) = self.world.get_mut::<CombatBuff>(lead) {
+            b.active = None;
+        }
+        if let Some(mut c) = self.world.get_mut::<AbilityCooldowns>(lead) {
+            c.0.clear();
+        }
+        let parts = self.roster_parts();
+        self.world.entity_mut(lead).insert(parts);
+        self.install_innate_routines(lead);
+        self.log_kind(
+            MessageKind::Outcome,
+            "ICE breached! The program now runs under your control.",
+        );
+        self.award_player_xp(player, earned);
+
+        let max_hp = self
+            .world
+            .get::<Stats>(squad)
+            .map(|s| s.max_hp)
+            .unwrap_or(0);
+        let members_at_formation = formation
+            .and_then(|f| crate::tuning::FORMATIONS.get(f))
+            .map(|f| f.members as i32)
+            .unwrap_or(1)
+            .max(1);
+        self.apply_damage(squad, max_hp / members_at_formation);
+        if self
+            .world
+            .get::<Squad>(squad)
+            .is_some_and(|s| s.members.is_empty())
+        {
+            self.kill_outright(squad);
+        }
         true
     }
 

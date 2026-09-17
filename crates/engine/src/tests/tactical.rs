@@ -4425,3 +4425,247 @@ mod disbanding {
         }
     }
 }
+
+/// A squad's capture: the roll is taken against the squad's own Integrity,
+/// only the lead leaves the fight, and a squad supplies at most five.
+mod squad_capture {
+    use super::*;
+
+    /// A 9-of-a-kind squad, with the player's decompiler primed to land
+    /// almost every attempt (`DECOMPILER_SKILL_BONUS`, `CAPTURE_CHANCE_MAX`)
+    /// so the test's own retry loop stays short.
+    fn squad_ready_to_capture(game: &mut Game) -> Entity {
+        // Capturing all five members would otherwise run into
+        // `BASE_PET_CAPACITY` (3) long before the squad runs out of
+        // members to give — a real gate this fixture must clear rather
+        // than a squad-specific limit.
+        crate::tests::support::spawn_data_cache(game, 1);
+        let pack = tactical_pack(game, 9, 40);
+        game.open_tactical_battle(pack);
+        let squad = {
+            let battle = game.world.resource::<TacticalBattle>();
+            battle
+                .bodies()
+                .map(|(e, _)| e)
+                .find(|&e| game.world.get::<Squad>(e).is_some())
+                .expect("9 of a kind must seat a squad")
+        };
+        let player = game.player_entity();
+        only_routine(game, player, "decompile");
+        // Pushed well past `CAPTURE_CHANCE_MAX`'s clamp rather than tuned to
+        // a plausible in-game figure: this fixture wants the roll to be a
+        // formality so the fixed-seed retry loop below stays short, not to
+        // model a real decompiler build.
+        game.world
+            .get_mut::<crate::components::Decompiler>(player)
+            .unwrap()
+            .skill = 2000;
+        crate::tests::support::set_inventory(game, &[(crate::items::ids::ICE_BREAKER, 50)]);
+        squad
+    }
+
+    /// One decompile attempt against `squad`, whichever cell it currently
+    /// anchors at. Returns whether a member was pulled out of it this
+    /// attempt (the squad may also have been killed by the capture's own
+    /// damage in the same swing, which reads as a member pulled too).
+    fn attempt(game: &mut Game, squad: Entity) -> bool {
+        let player = game.player_entity();
+        assert!(wait_for_turn(game, player), "the player never got a turn");
+        let Some(at) = game.world.resource::<TacticalBattle>().cell_of(squad) else {
+            return false;
+        };
+        let before = game.world.get::<Squad>(squad).map(|s| s.members.len());
+        if let Some(spot) = beside(game, at) {
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(player, spot);
+        }
+        game.tactical_use_routine(0, at);
+        game.world.get::<Squad>(squad).map(|s| s.members.len()) != before
+    }
+
+    /// A capture yields one member, at a fifth of `max_hp` off the squad —
+    /// exact here because `tactical_pack`'s `hp: 40` makes `max_hp / 5`
+    /// divide evenly, so five captures spend exactly the squad's whole
+    /// Integrity and the sixth attempt finds nothing left to aim at.
+    #[test]
+    fn a_squad_supplies_at_most_five_captures() {
+        let mut game = game();
+        let squad = squad_ready_to_capture(&mut game);
+        let max_hp = game.world.get::<Stats>(squad).unwrap().max_hp;
+        assert_eq!(max_hp, 200, "fixture: 5 members at 40 max_hp each");
+
+        let mut captures = 0;
+        for _ in 0..40 {
+            if game.world.get::<Squad>(squad).is_none() {
+                break;
+            }
+            let hp_before = game.world.get::<Stats>(squad).unwrap().hp;
+            if !attempt(&mut game, squad) {
+                continue;
+            }
+            captures += 1;
+            // The squad may have been despawned by this same capture's
+            // damage (the fifth), so a live `Stats` is required rather than
+            // assumed.
+            if let Some(hp_after) = game.world.get::<Stats>(squad).map(|s| s.hp) {
+                assert_eq!(
+                    hp_before - hp_after,
+                    max_hp / 5,
+                    "capture {captures} did not remove a fifth of max_hp"
+                );
+            }
+        }
+
+        assert_eq!(
+            captures, 5,
+            "a squad of five must supply exactly five captures"
+        );
+        assert!(
+            game.world.get::<Squad>(squad).is_none(),
+            "the squad must be gone after supplying every capture it can"
+        );
+        // The sixth attempt: nothing to aim at any more, so a further
+        // decompile against the squad's old cell finds no target and does
+        // nothing.
+        if let Some(battle) = game.world.get_resource::<TacticalBattle>() {
+            assert!(battle.cell_of(squad).is_none());
+        }
+    }
+
+    /// Each capture pulls exactly the lead out and grants it a real place
+    /// on the roster — a new `ProgramId`, `Experience`, and no longer
+    /// `Hostile`.
+    #[test]
+    fn a_capture_grants_the_lead_a_place_on_the_roster() {
+        let mut game = game();
+        let squad = squad_ready_to_capture(&mut game);
+        let lead = game.world.get::<Squad>(squad).unwrap().members[0];
+
+        let landed = (0..10).any(|_| attempt(&mut game, squad));
+        assert!(landed, "the capture never landed in 10 attempts");
+
+        assert!(
+            game.world.get::<Hostile>(lead).is_none(),
+            "the captured lead is still hostile"
+        );
+        assert!(
+            game.world
+                .get::<crate::components::ProgramId>(lead)
+                .is_some(),
+            "the captured lead was not given a roster identity"
+        );
+        assert!(
+            game.world.get::<Experience>(lead).is_some(),
+            "the captured lead was not given Experience"
+        );
+        assert!(
+            !game
+                .world
+                .get::<Squad>(squad)
+                .is_some_and(|s| s.members.contains(&lead)),
+            "the captured lead is still listed as a squad member"
+        );
+    }
+
+    /// `Squad::members` running out is a *second* way a squad dies,
+    /// independent of `Stats::hp` — the fifth capture's own damage need not
+    /// zero the squad exactly. Calling `decompile_squad` directly (rather
+    /// than through `tactical_use_routine`) needs no range or positioning
+    /// at all, since aiming is that door's own concern and not this one's.
+    #[test]
+    fn an_emptied_squad_dies_even_with_integrity_left_over() {
+        let mut game = game();
+        crate::tests::support::spawn_data_cache(&mut game, 1);
+        let species = game
+            .species_defs()
+            .into_iter()
+            .next()
+            .expect("at least one species ships")
+            .id;
+        let at = *game.world.get::<Position>(game.player_entity()).unwrap();
+        // One member one HP heavier than the rest, so `max_hp` (201) does
+        // not divide evenly by the formation's five members (share: 40,
+        // remainder 1) — the corner `kill_outright` exists for.
+        let pack: Vec<Entity> = (0..5)
+            .map(|i| {
+                let hp = if i == 0 { 41 } else { 40 };
+                game.world
+                    .spawn((
+                        Creature {
+                            species: species.clone(),
+                        },
+                        Hostile,
+                        Position { x: at.x, y: at.y },
+                        Stats {
+                            hp,
+                            max_hp: hp,
+                            atk: 1,
+                            mitigation: 0,
+                        },
+                        StatusEffects::default(),
+                    ))
+                    .id()
+            })
+            .collect();
+        game.open_tactical_battle(pack);
+        let squad = {
+            let battle = game.world.resource::<TacticalBattle>();
+            battle
+                .bodies()
+                .map(|(e, _)| e)
+                .find(|&e| game.world.get::<Squad>(e).is_some())
+                .expect("5 of a kind must seat a squad")
+        };
+        let player = game.player_entity();
+        let max_hp = game.world.get::<Stats>(squad).unwrap().max_hp;
+        assert_eq!(max_hp, 201, "fixture: 4 members at 40 plus one at 41");
+        assert_ne!(
+            max_hp % 5,
+            0,
+            "fixture: max_hp must not divide evenly by the formation size"
+        );
+
+        crate::tests::support::set_inventory(&mut game, &[(crate::items::ids::ICE_BREAKER, 50)]);
+        only_routine(&mut game, player, "decompile");
+        game.world
+            .get_mut::<crate::components::Decompiler>(player)
+            .unwrap()
+            .skill = 2000;
+
+        let mut captures = 0;
+        for _ in 0..40 {
+            if game.world.get::<Squad>(squad).is_none() {
+                break;
+            }
+            if game.decompile_squad(squad, player) {
+                captures += 1;
+            }
+            if captures >= 5 {
+                break;
+            }
+        }
+
+        assert_eq!(
+            captures, 5,
+            "a squad of five must supply exactly five captures"
+        );
+        // `decompile_squad` is called directly here rather than through
+        // `tactical_use_routine`, so the reap that would despawn a dead
+        // squad on a real turn never runs — what this pins is the
+        // precondition that reap acts on: with `Squad::members` emptied,
+        // `kill_outright` must have zeroed the one Integrity point real
+        // damage alone would have left standing.
+        assert!(
+            game.world
+                .get::<Squad>(squad)
+                .is_some_and(|s| s.members.is_empty()),
+            "the squad must have given up its last member"
+        );
+        assert_eq!(
+            game.world.get::<Stats>(squad).map(|s| s.hp),
+            Some(0),
+            "an emptied squad must have zero Integrity even though 1 point was left over"
+        );
+    }
+}

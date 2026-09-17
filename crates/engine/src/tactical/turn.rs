@@ -940,10 +940,17 @@ impl Game {
                 .resource::<TacticalBattle>()
                 .occupant(aim)
                 .filter(|&e| e != actor && self.world.get::<Hostile>(e).is_some());
-            if let Some(target) = target
-                && self.decompile_body(target, player)
-            {
-                self.world.resource_mut::<TacticalBattle>().remove(target);
+            if let Some(target) = target {
+                // A squad's capture pulls its lead out and keeps fighting —
+                // the squad itself stays on the board (unless the capture's
+                // own damage just killed it, which the ordinary reap below
+                // still catches), so it is never removed here the way an
+                // ordinary target is.
+                if self.world.get::<Squad>(target).is_some() {
+                    self.decompile_squad(target, player);
+                } else if self.decompile_body(target, player) {
+                    self.world.resource_mut::<TacticalBattle>().remove(target);
+                }
             }
         } else if let AbilityEffect::Summon {
             count,
